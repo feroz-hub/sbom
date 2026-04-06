@@ -46,7 +46,7 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
 
   return (
     <>
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-xl border border-hcl-border shadow-card overflow-hidden">
         <Table>
           <TableHead>
             <tr>
@@ -67,28 +67,28 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
               <EmptyRow cols={8} message="No SBOMs found. Upload your first SBOM!" />
             ) : (
               sboms.map((sbom) => (
-                <tr key={sbom.id} className="hover:bg-gray-50 transition-colors">
-                  <Td className="font-mono text-xs text-gray-400">#{sbom.id}</Td>
-                  <Td className="font-medium text-gray-900 max-w-[200px] truncate">
+                <tr key={sbom.id} className="hover:bg-hcl-light/40 transition-colors">
+                  <Td className="font-mono text-xs text-hcl-muted">#{sbom.id}</Td>
+                  <Td className="font-medium text-hcl-navy max-w-[200px] truncate">
                     {sbom.sbom_name}
                   </Td>
-                  <Td className="text-gray-500">{sbom.project_name || (sbom.projectid ? `#${sbom.projectid}` : '—')}</Td>
-                  <Td className="text-gray-500">{sbom.sbom_version || sbom.productver || '—'}</Td>
-                  <Td className="text-gray-500">{sbom.sbom_type || '—'}</Td>
-                  <Td className="text-gray-500">{sbom.created_by || '—'}</Td>
-                  <Td className="text-gray-500 whitespace-nowrap">{formatDate(sbom.created_on)}</Td>
+                  <Td className="text-hcl-muted">{sbom.project_name || (sbom.projectid ? `#${sbom.projectid}` : '—')}</Td>
+                  <Td className="text-hcl-muted">{sbom.sbom_version || sbom.productver || '—'}</Td>
+                  <Td className="text-hcl-muted">{sbom.sbom_type || '—'}</Td>
+                  <Td className="text-hcl-muted">{sbom.created_by || '—'}</Td>
+                  <Td className="text-hcl-muted whitespace-nowrap">{formatDate(sbom.created_on)}</Td>
                   <Td className="text-right">
                     <div className="flex items-center justify-end gap-2">
                       <button
                         onClick={() => router.push(`/sboms/${sbom.id}`)}
-                        className="p-1.5 text-gray-400 hover:text-primary hover:bg-blue-50 rounded-lg transition-colors"
+                        className="p-1.5 text-hcl-muted hover:text-hcl-blue hover:bg-hcl-light rounded-lg transition-colors"
                         aria-label="View SBOM"
                       >
                         <Eye className="h-4 w-4" />
                       </button>
                       <button
                         onClick={() => setDeleteTarget(sbom)}
-                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        className="p-1.5 text-hcl-muted hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                         aria-label="Delete SBOM"
                       >
                         <Trash2 className="h-4 w-4" />

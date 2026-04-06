@@ -17,7 +17,7 @@ export function RecentSboms({ sboms, isLoading }: RecentSbomsProps) {
         <CardTitle>Recent SBOMs</CardTitle>
         <Link
           href="/sboms"
-          className="text-xs text-primary font-medium flex items-center gap-1 hover:underline"
+          className="text-xs text-hcl-blue font-medium flex items-center gap-1 hover:text-hcl-dark hover:underline transition-colors"
         >
           View all <ArrowRight className="h-3 w-3" />
         </Link>
@@ -28,25 +28,25 @@ export function RecentSboms({ sboms, isLoading }: RecentSbomsProps) {
             <Spinner />
           </div>
         ) : !sboms?.length ? (
-          <div className="text-center py-10 text-gray-400 text-sm">No SBOMs uploaded yet</div>
+          <div className="text-center py-10 text-hcl-muted text-sm">No SBOMs uploaded yet</div>
         ) : (
           <ul className="divide-y divide-gray-100">
             {sboms.map((sbom) => (
               <li key={sbom.id}>
                 <Link
                   href={`/sboms/${sbom.id}`}
-                  className="flex items-center gap-3 px-6 py-3.5 hover:bg-gray-50 transition-colors group"
+                  className="flex items-center gap-3 px-6 py-3.5 hover:bg-hcl-light/60 transition-colors group"
                 >
-                  <div className="flex-shrink-0 w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center">
-                    <FileText className="h-4 w-4 text-blue-600" />
+                  <div className="flex-shrink-0 w-8 h-8 bg-hcl-light rounded-lg flex items-center justify-center">
+                    <FileText className="h-4 w-4 text-hcl-blue" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate group-hover:text-primary transition-colors">
+                    <p className="text-sm font-medium text-hcl-navy truncate group-hover:text-hcl-blue transition-colors">
                       {sbom.sbom_name}
                     </p>
-                    <p className="text-xs text-gray-400">{formatDate(sbom.created_on)}</p>
+                    <p className="text-xs text-hcl-muted">{formatDate(sbom.created_on)}</p>
                   </div>
-                  <ArrowRight className="h-4 w-4 text-gray-300 group-hover:text-primary transition-colors flex-shrink-0" />
+                  <ArrowRight className="h-4 w-4 text-hcl-border group-hover:text-hcl-blue transition-colors flex-shrink-0" />
                 </Link>
               </li>
             ))}

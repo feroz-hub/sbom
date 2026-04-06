@@ -12,7 +12,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
     return (
       <div className="flex flex-col gap-1.5">
         {label && (
-          <label htmlFor={inputId} className="text-sm font-medium text-gray-700">
+          <label htmlFor={inputId} className="text-sm font-medium text-hcl-navy">
             {label}
             {props.required && <span className="text-red-500 ml-1">*</span>}
           </label>
@@ -21,12 +21,12 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           ref={ref}
           id={inputId}
           className={cn(
-            'w-full rounded-lg border px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400',
-            'focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary',
-            'disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed',
+            'w-full rounded-lg border px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400',
+            'focus:outline-none focus:ring-2 focus:ring-hcl-blue/30 focus:border-hcl-blue',
+            'disabled:bg-hcl-light disabled:text-hcl-muted disabled:cursor-not-allowed',
             error
-              ? 'border-red-300 focus:ring-red-200 focus:border-red-400'
-              : 'border-gray-300',
+              ? 'border-red-300 focus:ring-red-200/50 focus:border-red-400'
+              : 'border-hcl-border',
             className
           )}
           {...props}
@@ -49,7 +49,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
     return (
       <div className="flex flex-col gap-1.5">
         {label && (
-          <label htmlFor={inputId} className="text-sm font-medium text-gray-700">
+          <label htmlFor={inputId} className="text-sm font-medium text-hcl-navy">
             {label}
             {props.required && <span className="text-red-500 ml-1">*</span>}
           </label>
@@ -58,13 +58,13 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
           ref={ref}
           id={inputId}
           className={cn(
-            'w-full rounded-lg border px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400',
-            'focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary',
-            'disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed',
+            'w-full rounded-lg border px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400',
+            'focus:outline-none focus:ring-2 focus:ring-hcl-blue/30 focus:border-hcl-blue',
+            'disabled:bg-hcl-light disabled:text-hcl-muted disabled:cursor-not-allowed',
             'resize-y min-h-[80px]',
             error
-              ? 'border-red-300 focus:ring-red-200 focus:border-red-400'
-              : 'border-gray-300',
+              ? 'border-red-300 focus:ring-red-200/50 focus:border-red-400'
+              : 'border-hcl-border',
             className
           )}
           {...props}

@@ -10,7 +10,7 @@ interface ActivityChartProps {
   isLoading: boolean;
 }
 
-const COLORS = ['#0a5db4', '#94a3b8'];
+const COLORS = ['#0067B1', '#00B2E2'];
 
 export function ActivityChart({ data, isLoading }: ActivityChartProps) {
   const chartData = data
@@ -59,7 +59,7 @@ export function ActivityChart({ data, isLoading }: ActivityChartProps) {
                 />
                 <Legend
                   formatter={(value) => (
-                    <span className="text-xs text-gray-700">{value}</span>
+                    <span className="text-xs text-slate-700">{value}</span>
                   )}
                 />
               </PieChart>
@@ -71,8 +71,8 @@ export function ActivityChart({ data, isLoading }: ActivityChartProps) {
                     className="w-2.5 h-2.5 rounded-full"
                     style={{ backgroundColor: COLORS[i] }}
                   />
-                  <span className="text-xs text-gray-600">
-                    {d.name}: <strong>{d.value}</strong>
+                  <span className="text-xs text-hcl-muted">
+                    {d.name}: <strong className="text-hcl-navy">{d.value}</strong>
                   </span>
                 </div>
               ))}

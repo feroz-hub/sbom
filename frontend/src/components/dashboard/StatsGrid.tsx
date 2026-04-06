@@ -13,15 +13,15 @@ const cards = [
     key: 'total_projects' as const,
     label: 'Total Projects',
     icon: FolderOpen,
-    accent: 'text-blue-600 bg-blue-50',
-    border: 'border-l-blue-500',
+    accent: 'text-hcl-blue bg-hcl-light',
+    border: 'border-l-hcl-blue',
   },
   {
     key: 'total_sboms' as const,
     label: 'Total SBOMs',
     icon: FileText,
-    accent: 'text-indigo-600 bg-indigo-50',
-    border: 'border-l-indigo-500',
+    accent: 'text-hcl-dark bg-hcl-light',
+    border: 'border-l-hcl-dark',
   },
   {
     key: 'total_vulnerabilities' as const,
@@ -56,12 +56,12 @@ export function StatsGrid({ stats, isLoading, error }: StatsGridProps) {
       {cards.map(({ key, label, icon: Icon, accent, border }) => (
         <div
           key={key}
-          className={`bg-white rounded-xl border border-gray-200 shadow-sm border-l-4 ${border} px-6 py-5`}
+          className={`bg-white rounded-xl border border-hcl-border shadow-card border-l-4 ${border} px-6 py-5`}
         >
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-500">{label}</p>
-              <p className="mt-1 text-3xl font-bold text-gray-900">
+              <p className="text-sm font-medium text-hcl-muted">{label}</p>
+              <p className="mt-1 text-3xl font-bold text-hcl-navy">
                 {stats?.[key]?.toLocaleString() ?? '—'}
               </p>
             </div>

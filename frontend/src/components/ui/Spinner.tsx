@@ -38,7 +38,7 @@ export function SkeletonRow({ cols }: { cols: number }) {
     <tr>
       {Array.from({ length: cols }).map((_, i) => (
         <td key={i} className="px-4 py-3">
-          <div className="h-4 bg-gray-200 rounded animate-pulse" style={{ width: `${60 + Math.random() * 40}%` }} />
+          <div className="h-4 bg-hcl-border/50 rounded animate-pulse" style={{ width: `${60 + (i * 13 % 40)}%` }} />
         </td>
       ))}
     </tr>
@@ -47,10 +47,10 @@ export function SkeletonRow({ cols }: { cols: number }) {
 
 export function SkeletonCard() {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
-      <div className="h-4 bg-gray-200 rounded animate-pulse w-1/3" />
-      <div className="h-8 bg-gray-200 rounded animate-pulse w-1/2" />
-      <div className="h-3 bg-gray-100 rounded animate-pulse w-2/3" />
+    <div className="bg-white rounded-xl border border-hcl-border shadow-card p-6 space-y-3">
+      <div className="h-4 bg-hcl-border/50 rounded animate-pulse w-1/3" />
+      <div className="h-8 bg-hcl-border/40 rounded animate-pulse w-1/2" />
+      <div className="h-3 bg-hcl-border/30 rounded animate-pulse w-2/3" />
     </div>
   );
 }

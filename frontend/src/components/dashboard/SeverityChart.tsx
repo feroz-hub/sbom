@@ -11,11 +11,11 @@ interface SeverityChartProps {
 }
 
 const COLORS: Record<string, string> = {
-  Critical: '#dc2626',
-  High: '#ea580c',
-  Medium: '#ca8a04',
-  Low: '#2563eb',
-  Unknown: '#6b7280',
+  Critical: '#C0392B',
+  High: '#D4680A',
+  Medium: '#B8860B',
+  Low: '#0067B1',
+  Unknown: '#5B7083',
 };
 
 export function SeverityChart({ data, isLoading }: SeverityChartProps) {
@@ -68,7 +68,7 @@ export function SeverityChart({ data, isLoading }: SeverityChartProps) {
                 />
                 <Legend
                   formatter={(value) => (
-                    <span className="text-xs text-gray-700">{value}</span>
+                    <span className="text-xs text-slate-700">{value}</span>
                   )}
                 />
               </PieChart>
@@ -80,8 +80,8 @@ export function SeverityChart({ data, isLoading }: SeverityChartProps) {
                     className="w-2.5 h-2.5 rounded-full flex-shrink-0"
                     style={{ backgroundColor: COLORS[d.name] }}
                   />
-                  <span className="text-xs text-gray-600">
-                    {d.name}: <strong>{d.value}</strong>
+                  <span className="text-xs text-hcl-muted">
+                    {d.name}: <strong className="text-hcl-navy">{d.value}</strong>
                   </span>
                 </div>
               ))}

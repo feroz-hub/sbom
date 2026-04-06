@@ -48,7 +48,7 @@ export function RunsTable({ runs, isLoading, error }: RunsTableProps) {
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    <div className="bg-white rounded-xl border border-hcl-border shadow-card overflow-hidden">
       <Table>
         <TableHead>
           <tr>
@@ -72,55 +72,55 @@ export function RunsTable({ runs, isLoading, error }: RunsTableProps) {
             runs.map((run) => (
               <tr
                 key={run.id}
-                className="hover:bg-gray-50 transition-colors cursor-pointer"
+                className="hover:bg-hcl-light/40 transition-colors cursor-pointer"
                 onClick={() => router.push(`/analysis/${run.id}`)}
               >
-                <Td className="font-mono text-xs text-gray-400">#{run.id}</Td>
-                <Td className="font-medium text-gray-900 max-w-[160px] truncate">
+                <Td className="font-mono text-xs text-hcl-muted">#{run.id}</Td>
+                <Td className="font-medium text-hcl-navy max-w-[160px] truncate">
                   {run.sbom_name || (run.sbom_id ? `SBOM #${run.sbom_id}` : '—')}
                 </Td>
                 <Td onClick={(e) => e.stopPropagation()}>
                   <StatusBadge status={run.run_status} />
                 </Td>
-                <Td className="text-gray-500 text-xs">{run.source || '—'}</Td>
-                <Td className="text-gray-700">{run.total_components ?? '—'}</Td>
+                <Td className="text-hcl-muted text-xs">{run.source || '—'}</Td>
+                <Td className="text-slate-700">{run.total_components ?? '—'}</Td>
                 <Td onClick={(e) => e.stopPropagation()}>
                   <div className="flex items-center gap-1 flex-wrap">
                     {run.critical_count != null && run.critical_count > 0 && (
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-red-50 text-red-700">
                         C:{run.critical_count}
                       </span>
                     )}
                     {run.high_count != null && run.high_count > 0 && (
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-700">
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-orange-50 text-orange-700">
                         H:{run.high_count}
                       </span>
                     )}
                     {run.medium_count != null && run.medium_count > 0 && (
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-700">
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-700">
                         M:{run.medium_count}
                       </span>
                     )}
                     {run.low_count != null && run.low_count > 0 && (
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-hcl-light text-hcl-blue">
                         L:{run.low_count}
                       </span>
                     )}
                     {run.total_findings === 0 && (
-                      <span className="text-xs text-gray-400">None</span>
+                      <span className="text-xs text-hcl-muted">None</span>
                     )}
                     {run.total_findings == null && (
-                      <span className="text-xs text-gray-400">—</span>
+                      <span className="text-xs text-hcl-muted">—</span>
                     )}
                   </div>
                 </Td>
-                <Td className="text-gray-500">{formatDuration(run.duration_seconds)}</Td>
-                <Td className="text-gray-500 whitespace-nowrap">{formatDate(run.started_on)}</Td>
+                <Td className="text-hcl-muted">{formatDuration(run.duration_seconds)}</Td>
+                <Td className="text-hcl-muted whitespace-nowrap">{formatDate(run.started_on)}</Td>
                 <Td className="text-right" onClick={(e) => e.stopPropagation()}>
                   <div className="flex items-center justify-end gap-2">
                     <button
                       onClick={() => router.push(`/analysis/${run.id}`)}
-                      className="p-1.5 text-gray-400 hover:text-primary hover:bg-blue-50 rounded-lg transition-colors"
+                      className="p-1.5 text-hcl-muted hover:text-hcl-blue hover:bg-hcl-light rounded-lg transition-colors"
                       aria-label="View run"
                     >
                       <Eye className="h-4 w-4" />
@@ -128,7 +128,7 @@ export function RunsTable({ runs, isLoading, error }: RunsTableProps) {
                     <button
                       onClick={() => handleDownloadPdf(run)}
                       disabled={downloadingId === run.id}
-                      className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors disabled:opacity-50"
+                      className="p-1.5 text-hcl-muted hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors disabled:opacity-50"
                       aria-label="Download PDF"
                     >
                       <Download className="h-4 w-4" />

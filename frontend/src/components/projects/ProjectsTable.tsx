@@ -47,7 +47,7 @@ export function ProjectsTable({ projects, isLoading, error }: ProjectsTableProps
 
   return (
     <>
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-xl border border-hcl-border shadow-card overflow-hidden">
         <Table>
           <TableHead>
             <tr>
@@ -67,31 +67,31 @@ export function ProjectsTable({ projects, isLoading, error }: ProjectsTableProps
               <EmptyRow cols={7} message="No projects found. Create your first project!" />
             ) : (
               projects.map((project) => (
-                <tr key={project.id} className="hover:bg-gray-50 transition-colors">
-                  <Td className="font-mono text-xs text-gray-400">#{project.id}</Td>
-                  <Td className="font-medium text-gray-900">{project.project_name}</Td>
+                <tr key={project.id} className="hover:bg-hcl-light/40 transition-colors">
+                  <Td className="font-mono text-xs text-hcl-muted">#{project.id}</Td>
+                  <Td className="font-medium text-hcl-navy">{project.project_name}</Td>
                   <Td>
                     <Badge variant={project.project_status === 'Active' ? 'success' : 'gray'}>
                       {project.project_status}
                     </Badge>
                   </Td>
-                  <Td className="max-w-xs truncate text-gray-500">
+                  <Td className="max-w-xs truncate text-hcl-muted">
                     {project.project_details || '—'}
                   </Td>
-                  <Td className="text-gray-500">{project.created_by || '—'}</Td>
-                  <Td className="text-gray-500 whitespace-nowrap">{formatDate(project.created_on)}</Td>
+                  <Td className="text-hcl-muted">{project.created_by || '—'}</Td>
+                  <Td className="text-hcl-muted whitespace-nowrap">{formatDate(project.created_on)}</Td>
                   <Td className="text-right">
                     <div className="flex items-center justify-end gap-2">
                       <button
                         onClick={() => setEditProject(project)}
-                        className="p-1.5 text-gray-400 hover:text-primary hover:bg-blue-50 rounded-lg transition-colors"
+                        className="p-1.5 text-hcl-muted hover:text-hcl-blue hover:bg-hcl-light rounded-lg transition-colors"
                         aria-label="Edit project"
                       >
                         <Pencil className="h-4 w-4" />
                       </button>
                       <button
                         onClick={() => setDeleteId(project.id)}
-                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        className="p-1.5 text-hcl-muted hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                         aria-label="Delete project"
                       >
                         <Trash2 className="h-4 w-4" />

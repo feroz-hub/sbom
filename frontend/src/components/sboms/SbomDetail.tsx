@@ -57,7 +57,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
       {/* Back button */}
       <button
         onClick={() => router.back()}
-        className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-800 transition-colors"
+        className="flex items-center gap-2 text-sm text-hcl-muted hover:text-hcl-navy transition-colors"
       >
         <ArrowLeft className="h-4 w-4" /> Back to SBOMs
       </button>
@@ -88,8 +88,8 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
               { label: 'Updated On', value: formatDate(sbom.updated_on) },
             ].map(({ label, value }) => (
               <div key={label}>
-                <dt className="text-xs font-medium text-gray-400 uppercase tracking-wide">{label}</dt>
-                <dd className="mt-1 text-sm font-medium text-gray-900 break-words">{value}</dd>
+                <dt className="text-xs font-medium text-hcl-muted uppercase tracking-wide">{label}</dt>
+                <dd className="mt-1 text-sm font-medium text-hcl-navy break-words">{value}</dd>
               </div>
             ))}
           </dl>
@@ -102,7 +102,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
           <CardTitle>
             Components{' '}
             {components && (
-              <span className="ml-2 text-sm font-normal text-gray-400">
+              <span className="ml-2 text-sm font-normal text-hcl-muted">
                 ({components.length})
               </span>
             )}
@@ -126,14 +126,14 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                 <EmptyRow cols={5} message="No components found for this SBOM" />
               ) : (
                 components.map((c) => (
-                  <tr key={c.id} className="hover:bg-gray-50">
-                    <Td className="font-medium text-gray-900">{c.name}</Td>
+                  <tr key={c.id} className="hover:bg-hcl-light/40">
+                    <Td className="font-medium text-hcl-navy">{c.name}</Td>
                     <Td className="font-mono text-xs">{c.version || '—'}</Td>
-                    <Td className="text-gray-500">{c.component_type || '—'}</Td>
-                    <Td className="font-mono text-xs text-gray-500 max-w-[180px] truncate">
+                    <Td className="text-hcl-muted">{c.component_type || '—'}</Td>
+                    <Td className="font-mono text-xs text-hcl-muted max-w-[180px] truncate">
                       {c.cpe || '—'}
                     </Td>
-                    <Td className="font-mono text-xs text-gray-500 max-w-[200px] truncate">
+                    <Td className="font-mono text-xs text-hcl-muted max-w-[200px] truncate">
                       {c.purl || '—'}
                     </Td>
                   </tr>
@@ -168,18 +168,18 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                 <EmptyRow cols={6} message="No analysis runs yet. Click 'Run Analysis' to get started." />
               ) : (
                 runs.map((run) => (
-                  <tr key={run.id} className="hover:bg-gray-50">
-                    <Td className="font-mono text-xs text-gray-400">#{run.id}</Td>
+                  <tr key={run.id} className="hover:bg-hcl-light/40">
+                    <Td className="font-mono text-xs text-hcl-muted">#{run.id}</Td>
                     <Td>
                       <StatusBadge status={run.run_status} />
                     </Td>
-                    <Td className="text-gray-700">{run.total_findings ?? '—'}</Td>
-                    <Td className="text-gray-500">{formatDuration(run.duration_seconds)}</Td>
-                    <Td className="text-gray-500 whitespace-nowrap">{formatDate(run.started_on)}</Td>
+                    <Td className="text-slate-700">{run.total_findings ?? '—'}</Td>
+                    <Td className="text-hcl-muted">{formatDuration(run.duration_seconds)}</Td>
+                    <Td className="text-hcl-muted whitespace-nowrap">{formatDate(run.started_on)}</Td>
                     <Td className="text-right">
                       <Link
                         href={`/analysis/${run.id}`}
-                        className="inline-flex items-center gap-1 text-xs text-primary hover:underline font-medium"
+                        className="inline-flex items-center gap-1 text-xs text-hcl-blue hover:underline font-medium"
                       >
                         View <ExternalLink className="h-3 w-3" />
                       </Link>

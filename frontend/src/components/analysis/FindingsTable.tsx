@@ -49,14 +49,14 @@ export function FindingsTable({
             <option value="UNKNOWN">Unknown</option>
           </Select>
           {findings && (
-            <span className="text-sm text-gray-500">
+            <span className="text-sm text-hcl-muted">
               {findings.length} finding{findings.length !== 1 ? 's' : ''}
             </span>
           )}
         </div>
       )}
 
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-xl border border-hcl-border shadow-card overflow-hidden">
         <Table>
           <TableHead>
             <tr>
@@ -77,37 +77,37 @@ export function FindingsTable({
               <EmptyRow cols={8} message="No findings found for this run." />
             ) : (
               findings.map((f) => (
-                <tr key={f.id} className="hover:bg-gray-50 transition-colors">
+                <tr key={f.id} className="hover:bg-hcl-light/40 transition-colors">
                   <Td>
                     {f.reference_url ? (
                       <a
                         href={f.reference_url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-primary font-mono text-xs hover:underline"
+                        className="inline-flex items-center gap-1 text-hcl-blue font-mono text-xs hover:underline"
                       >
                         {f.vuln_id || '—'}
                         <ExternalLink className="h-3 w-3" />
                       </a>
                     ) : (
-                      <span className="font-mono text-xs text-gray-700">{f.vuln_id || '—'}</span>
+                      <span className="font-mono text-xs text-slate-700">{f.vuln_id || '—'}</span>
                     )}
                   </Td>
                   <Td>
                     <SeverityBadge severity={f.severity} />
                   </Td>
-                  <Td className="text-gray-700">
+                  <Td className="text-slate-700">
                     {f.cvss_score != null ? f.cvss_score.toFixed(1) : '—'}
                   </Td>
-                  <Td className="font-medium text-gray-900">{f.component_name || '—'}</Td>
-                  <Td className="font-mono text-xs text-gray-500">{f.component_version || '—'}</Td>
-                  <Td className="text-gray-500 max-w-[240px]">
+                  <Td className="font-medium text-hcl-navy">{f.component_name || '—'}</Td>
+                  <Td className="font-mono text-xs text-hcl-muted">{f.component_version || '—'}</Td>
+                  <Td className="text-hcl-muted max-w-[240px]">
                     <span title={f.description || ''}>
                       {truncate(f.description, 90)}
                     </span>
                   </Td>
-                  <Td className="text-gray-500 whitespace-nowrap">{formatDateShort(f.published_on)}</Td>
-                  <Td className="font-mono text-xs text-gray-500">{f.fixed_version || '—'}</Td>
+                  <Td className="text-hcl-muted whitespace-nowrap">{formatDateShort(f.published_on)}</Td>
+                  <Td className="font-mono text-xs text-hcl-muted">{f.fixed_version || '—'}</Td>
                 </tr>
               ))
             )}

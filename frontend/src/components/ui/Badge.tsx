@@ -8,12 +8,12 @@ interface BadgeProps {
 }
 
 const variantClasses: Record<string, string> = {
-  default: 'bg-gray-100 text-gray-700 border-gray-200',
-  success: 'bg-green-100 text-green-700 border-green-200',
-  error: 'bg-red-100 text-red-700 border-red-200',
-  warning: 'bg-yellow-100 text-yellow-700 border-yellow-200',
-  info: 'bg-blue-100 text-blue-700 border-blue-200',
-  gray: 'bg-gray-100 text-gray-500 border-gray-200',
+  default: 'bg-hcl-light text-hcl-navy border-hcl-border',
+  success: 'bg-green-50 text-green-700 border-green-200',
+  error: 'bg-red-50 text-red-700 border-red-200',
+  warning: 'bg-amber-50 text-amber-700 border-amber-200',
+  info: 'bg-hcl-light text-hcl-blue border-hcl-border',
+  gray: 'bg-slate-100 text-slate-500 border-slate-200',
 };
 
 export function Badge({ children, variant = 'default', className }: BadgeProps) {
@@ -32,11 +32,11 @@ export function Badge({ children, variant = 'default', className }: BadgeProps) 
 
 export function SeverityBadge({ severity }: { severity: string }) {
   const map: Record<string, string> = {
-    CRITICAL: 'bg-red-100 text-red-700 border-red-200',
-    HIGH: 'bg-orange-100 text-orange-700 border-orange-200',
-    MEDIUM: 'bg-yellow-100 text-yellow-700 border-yellow-200',
-    LOW: 'bg-blue-100 text-blue-700 border-blue-200',
-    UNKNOWN: 'bg-gray-100 text-gray-600 border-gray-200',
+    CRITICAL: 'bg-red-50 text-red-700 border-red-200 font-semibold',
+    HIGH: 'bg-orange-50 text-orange-700 border-orange-200',
+    MEDIUM: 'bg-amber-50 text-amber-700 border-amber-200',
+    LOW: 'bg-hcl-light text-hcl-blue border-hcl-border',
+    UNKNOWN: 'bg-slate-100 text-slate-500 border-slate-200',
   };
   const cls = map[severity?.toUpperCase()] ?? map.UNKNOWN;
   return (
@@ -48,12 +48,12 @@ export function SeverityBadge({ severity }: { severity: string }) {
 
 export function StatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
-    PASS: 'bg-green-100 text-green-700 border-green-200',
-    FAIL: 'bg-red-100 text-red-700 border-red-200',
-    PARTIAL: 'bg-yellow-100 text-yellow-700 border-yellow-200',
-    ERROR: 'bg-red-100 text-red-700 border-red-200',
-    RUNNING: 'bg-blue-100 text-blue-700 border-blue-200',
-    PENDING: 'bg-gray-100 text-gray-600 border-gray-200',
+    PASS: 'bg-green-50 text-green-700 border-green-200',
+    FAIL: 'bg-red-50 text-red-700 border-red-200',
+    PARTIAL: 'bg-amber-50 text-amber-700 border-amber-200',
+    ERROR: 'bg-red-50 text-red-700 border-red-200',
+    RUNNING: 'bg-hcl-light text-hcl-blue border-hcl-border',
+    PENDING: 'bg-slate-100 text-slate-500 border-slate-200',
   };
   const cls = map[status?.toUpperCase()] ?? map.PENDING;
   return (

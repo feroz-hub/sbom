@@ -81,11 +81,11 @@ export default function AnalysisDetailPage({ params }: AnalysisDetailPageProps) 
   }
 
   const severityBreakdown = [
-    { label: 'Critical', count: run.critical_count, color: 'bg-red-100 text-red-700 border-red-200' },
-    { label: 'High', count: run.high_count, color: 'bg-orange-100 text-orange-700 border-orange-200' },
-    { label: 'Medium', count: run.medium_count, color: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
-    { label: 'Low', count: run.low_count, color: 'bg-blue-100 text-blue-700 border-blue-200' },
-    { label: 'Unknown', count: run.unknown_count, color: 'bg-gray-100 text-gray-600 border-gray-200' },
+    { label: 'Critical', count: run.critical_count, color: 'bg-red-50 text-red-700 border-red-200' },
+    { label: 'High', count: run.high_count, color: 'bg-orange-50 text-orange-700 border-orange-200' },
+    { label: 'Medium', count: run.medium_count, color: 'bg-amber-50 text-amber-700 border-amber-200' },
+    { label: 'Low', count: run.low_count, color: 'bg-hcl-light text-hcl-blue border-hcl-border' },
+    { label: 'Unknown', count: run.unknown_count, color: 'bg-slate-100 text-slate-600 border-slate-200' },
   ];
 
   return (
@@ -108,7 +108,7 @@ export default function AnalysisDetailPage({ params }: AnalysisDetailPageProps) 
         {/* Back */}
         <button
           onClick={() => router.back()}
-          className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-800 transition-colors"
+          className="flex items-center gap-2 text-sm text-hcl-muted hover:text-hcl-navy transition-colors"
         >
           <ArrowLeft className="h-4 w-4" /> Back to Analysis Runs
         </button>
@@ -131,15 +131,15 @@ export default function AnalysisDetailPage({ params }: AnalysisDetailPageProps) 
                 { label: 'Completed On', value: formatDate(run.completed_on) },
               ].map(({ label, value }) => (
                 <div key={label}>
-                  <dt className="text-xs font-medium text-gray-400 uppercase tracking-wide">{label}</dt>
-                  <dd className="mt-1 text-sm font-medium text-gray-900">{value}</dd>
+                  <dt className="text-xs font-medium text-hcl-muted uppercase tracking-wide">{label}</dt>
+                  <dd className="mt-1 text-sm font-medium text-hcl-navy">{value}</dd>
                 </div>
               ))}
             </div>
 
             {/* Severity breakdown */}
             <div>
-              <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">
+              <p className="text-xs font-medium text-hcl-muted uppercase tracking-wide mb-2">
                 Findings Breakdown
               </p>
               <div className="flex flex-wrap gap-2">
@@ -170,7 +170,7 @@ export default function AnalysisDetailPage({ params }: AnalysisDetailPageProps) 
             <CardTitle>
               Findings
               {findings && (
-                <span className="ml-2 text-sm font-normal text-gray-400">
+                <span className="ml-2 text-sm font-normal text-hcl-muted">
                   ({findings.length})
                 </span>
               )}

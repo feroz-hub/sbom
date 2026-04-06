@@ -118,19 +118,19 @@ export function SbomUploadModal({ open, onClose }: SbomUploadModalProps) {
           />
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-gray-700">
+            <label className="text-sm font-medium text-hcl-navy">
               SBOM Content (JSON) <span className="text-red-500">*</span>
             </label>
             <div className="flex items-center gap-2 mb-2">
               <button
                 type="button"
                 onClick={() => fileRef.current?.click()}
-                className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-hcl-navy bg-white border border-hcl-border rounded-lg hover:bg-hcl-light transition-colors"
               >
                 <Upload className="h-3.5 w-3.5" />
                 Upload from file
               </button>
-              <span className="text-xs text-gray-400">or paste JSON below</span>
+              <span className="text-xs text-hcl-muted">or paste JSON below</span>
               <input
                 ref={fileRef}
                 type="file"
