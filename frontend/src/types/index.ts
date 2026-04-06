@@ -65,7 +65,7 @@ export interface AnalysisFinding {
   id: number;
   analysis_run_id: number;          // backend field name
   vuln_id: string | null;
-  source: string | null;
+  source: string | null;            // e.g. "NVD", "OSV", "NVD,OSV"
   title: string | null;
   description: string | null;
   severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'UNKNOWN' | null;
@@ -76,6 +76,9 @@ export interface AnalysisFinding {
   component_version: string | null;
   published_on: string | null;
   reference_url: string | null;
+  aliases: string | null;           // JSON string e.g. '["CVE-2022-31090"]'
+  attack_vector: string | null;     // e.g. "NETWORK", "LOCAL"
+  fixed_versions: string | null;    // JSON string e.g. '["1.2.3"]'
 }
 
 export interface DashboardStats {
