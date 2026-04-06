@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"from app.main import app; print\\('Import OK'\\)\")",
+      "Bash(python -c ':*)"
+    ]
+  }
+}

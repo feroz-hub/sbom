@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>SBOM Analyzer Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700&display=swap"
+    rel="stylesheet"
+  />
+
+  <!-- jQuery UI CSS -->
+  <link rel="stylesheet" href="https://code.jquery.com/ui/1.13.3/themes/base/jquery-ui.css" />
+
+  <!-- jTable CSS -->
+  <link
+    href="https://cdn.jsdelivr.net/npm/jtable@2.6.0/lib/themes/metro/blue/jtable.min.css"
+    rel="stylesheet"
+  />
+
+  <!-- App styles -->
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">SBOM Analyzer</div>
+    <nav class="nav">
+      <a href="#" class="tablink active" data-target="#tab-home">Home</a>
+      <a href="#" class="tablink" data-target="#tab-projects">Projects</a>
+      <a href="#" class="tablink" data-target="#tab-upload">Upload SBOM</a>
+      <a href="#" class="tablink" data-target="#tab-analysis">Analysis Runs</a>
+      <a href="#" class="tablink" data-target="#tab-sboms">SBOMs</a>
+    </nav>
+  </header>
+
+  <main class="container">
+
+    <section id="tab-home" class="tab active">
+      <h2>Dashboard Overview</h2>
+
+      <div class="grid" style="grid-template-columns: repeat(3, 1fr); gap:14px;">
+        <div class="card">
+          <h3>Total Projects</h3>
+          <div id="homeTotalProjects" class="text-lg" style="font-size:32px;font-weight:800;">—</div>
+        </div>
+
+        <div class="card">
+          <h3>Total SBOMs</h3>
+          <div id="homeTotalSboms" class="text-lg" style="font-size:32px;font-weight:800;">—</div>
+        </div>
+
+        <div class="card">
+          <h3>Total Vulnerabilities</h3>
+          <div id="homeTotalVulns" class="text-lg" style="font-size:32px;font-weight:800;">—</div>
+        </div>
+      </div>
+
+      <div class="grid" style="grid-template-columns: repeat(3, 1fr); gap:14px; margin-top:18px;">
+        <div class="card" style="height:240px;">
+          <h3>Project Activity (30d)</h3>
+          <div style="position:relative;height:180px;">
+            <canvas id="homeProjectsActivityChart"></canvas>
+          </div>
+        </div>
+
+        <div class="card" style="height:240px;">
+          <h3>Vulnerabilities By Severity</h3>
+          <div style="position:relative;height:180px;">
+            <canvas id="homeSeverityChart"></canvas>
+          </div>
+        </div>
+
+        <div class="card" style="height:240px;">
+          <h3>Recent SBOM Uploads</h3>
+          <div id="homeRecentSboms" style="margin-top:10px; font-size:14px;"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Projects -->
+    <section id="tab-projects" class="tab">
+      <h2>Projects</h2>
+
+      <!-- Projects – Activity donut (≤ 30 days vs Stale) -->
+      <div class="card" id="projectsOverviewCard" style="height: 220px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <h3 style="margin:0;">Projects – Activity (≤ 30 days)</h3>
+          <span id="projectsOverviewTotal" class="text-sm" style="color:#5a6a7d;font-weight:700;"></span>
+        </div>
+        <div style="position:relative;height:160px;">
+          <canvas
+            id="projectsActivityChart"
+            aria-label="Projects activity donut showing number of projects active in the last 30 days versus stale"
+            role="img"
+          ></canvas>
+        </div>
+      </div>
+
+      <form id="formCreateProject" class="card">
+        <div class="grid">
+          <label>
+            <span>Project Name *</span>
+            <input type="text" name="project_name" required />
+            <div class="form-error" id="err_project_name"></div>
+          </label>
+          <label>
+            <span>Project Details</span>
+            <input type="text" name="project_details" />
+            <div class="form-error" id="err_project_details"></div>
+          </label>
+          <label>
+            <span>Status (1 active, 0 inactive)</span>
+            <input type="number" name="project_status" min="0" max="1" value="1" />
+            <div class="form-error" id="err_project_status"></div>
+          </label>
+          <label>
+            <span>Created By</span>
+            <input type="text" name="created_by" placeholder="user1" />
+            <div class="form-error" id="err_created_by"></div>
+          </label>
+        </div>
+        <div class="actions">
+          <button type="submit">Create Project</button>
+        </div>
+      </form>
+
+      <div id="tblProjects" class="table"></div>
+    </section>
+
+    <!-- Upload SBOM -->
+    <section id="tab-upload" class="tab">
+      <h2>Upload SBOM (CycloneDX/SPDX)</h2>
+      <form id="formUploadSBOM" class="card">
+        <div class="grid">
+          <label>
+            <span>SBOM File *</span>
+            <input type="file" id="sbomFile" accept=".json,.spdx,.xml,.cdx.json,.cdx" required />
+            <div class="form-error" id="err_sbom_file"></div>
+          </label>
+          <label>
+            <span>SBOM Name *</span>
+            <input type="text" id="sbomName" placeholder="app-sbom.json" required />
+            <div class="form-error" id="err_sbom_name"></div>
+          </label>
+          <label>
+            <span>SBOM Version</span>
+            <input type="text" id="sbomVersion" placeholder="1.0.0" />
+            <div class="form-error" id="err_sbom_version"></div>
+          </label>
+          <label>
+            <span>Product Version</span>
+            <input type="text" id="productVer" placeholder="v2.3.4" />
+            <div class="form-error" id="err_product_ver"></div>
+          </label>
+          <label>
+            <span>Created By</span>
+            <input type="text" id="createdBy" placeholder="user1" />
+            <div class="form-error" id="err_created_by_upload"></div>
+          </label>
+          <label>
+            <span>Project *</span>
+            <select id="projectSelect" required>
+              <option value="">-- select project --</option>
+            </select>
+            <div class="form-error" id="err_project_select"></div>
+          </label>
+          <label>
+            <span>SBOM Type</span>
+            <select id="sbomTypeSelect">
+              <option value="">-- auto / select --</option>
+            </select>
+            <div class="form-error" id="err_sbom_type"></div>
+          </label>
+        </div>
+        <div class="actions">
+          <button type="submit">Upload &amp; Save</button>
+        </div>
+      </form>
+
+      <div class="hint">
+        After upload, backend handles analysis &amp; database storing.
+        Use the “Analysis Runs” tab to view results.
+      </div>
+    </section>
+
+    <!-- Analysis Reports -->
+    <section id="tab-analysis" class="tab">
+      <h2>Analysis Runs</h2>
+      <p class="section-intro">Operational analytics for each SBOM scan run.</p>
+      <form id="formFilterAnalysis" class="card">
+        <div class="grid">
+          <label>
+            <span>Project ID</span>
+            <input type="number" id="filterAnalysisProjectId" min="1" placeholder="e.g. 2" />
+          </label>
+          <label>
+            <span>SBOM ID</span>
+            <input type="number" id="filterAnalysisSbomId" min="1" placeholder="e.g. 5" />
+          </label>
+          <label>
+            <span>Status</span>
+            <select id="filterAnalysisStatus">
+              <option value="">-- all --</option>
+              <option value="FAIL">FAIL</option>
+              <option value="PASS">PASS</option>
+              <option value="PARTIAL">PARTIAL</option>
+              <option value="NO_DATA">NO_DATA</option>
+              <option value="ERROR">ERROR</option>
+            </select>
+          </label>
+        </div>
+        <div class="actions-inline">
+          <button type="submit">Apply Filter</button>
+          <button type="button" id="btnResetAnalysis" class="btn-secondary">Reset</button>
+
+          <!-- Export Dropdown -->
+          <div class="dropdown-export">
+            <button type="button" class="btn-secondary" id="btnExportMenu">
+              Export Data ▼
+            </button>
+            <div class="dropdown-content" id="exportDropdown">
+              <a href="#" id="exportAnalysisPdf">Export as PDF</a>
+              <a href="#" id="exportAnalysisJson">Export as JSON</a>
+            </div>
+          </div>
+        </div>
+      </form>
+
+      <!-- KPI cards -->
+      <div id="analysisSummary" class="analysis-metrics" aria-live="polite"></div>
+
+      <!-- Sonatype-like SBOM Dashboard -->
+      <div id="sbomDashboard" class="grid" style="grid-template-columns: repeat(3, minmax(280px, 1fr)); gap:14px;">
+
+        <!-- Total SBOMs Stored -->
+        <div class="card" style="height: 160px;">
+          <h3 style="margin:0 0 6px;">Total SBOMs</h3>
+          <div id="totalSbomsCount" class="text-lg" style="font-weight:800;font-size:28px;">—</div>
+          <!-- Optional license usage bar -->
+          <div id="licenseBar" style="height:10px;border-radius:8px;background:#eef4fb;margin-top:10px;">
+            <div id="licenseFill" style="height:10px;border-radius:8px;background:#0a5db4;width:0%;"></div>
+          </div>
+          <div id="licenseNote" class="text-sm" style="color:#5a6a7d;margin-top:6px;"></div>
+        </div>
+
+        <!-- Application History -->
+        <div class="card" style="height: 220px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <h3 style="margin:0;">Application History</h3>
+            <select id="historyRange" class="mini" style="width:auto;">
+              <option value="7">7d</option>
+              <option value="30" selected>30d</option>
+              <option value="180">6m</option>
+              <option value="365">1y</option>
+            </select>
+          </div>
+          <div style="position:relative;height:160px;margin-top:6px;">
+            <canvas id="runsHistoryChart" aria-label="Runs history line chart" role="img"></canvas>
+          </div>
+        </div>
+
+        <!-- Vulnerabilities by Threat Level -->
+        <div class="card" style="height: 220px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <h3 style="margin:0;">Vulnerabilities by Threat Level</h3>
+            <span id="severityChartTotalMini" class="text-sm" style="color:#5a6a7d;font-weight:700;"></span>
+          </div>
+          <div style="position:relative;height:160px;">
+            <canvas id="severityChartMini" aria-label="Severity donut chart" role="img"></canvas>
+          </div>
+        </div>
+
+        <!-- High Priority Vulnerabilities -->
+        <div class="card" style="grid-column: span 2;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <h3 style="margin:0;">High Priority Vulnerabilities</h3>
+            <select id="topVulnCount" class="mini" style="width:auto;">
+              <option value="5" selected>Top 5</option>
+              <option value="10">Top 10</option>
+            </select>
+          </div>
+          <div id="topVulnList" style="margin-top:8px;"></div>
+        </div>
+
+        <!-- SBOM Release Status -->
+        <div class="card" style="height: 220px;">
+          <h3 style="margin:0;">SBOM Release Status</h3>
+          <div style="position:relative;height:160px;margin-top:6px;">
+            <canvas id="releaseStatusChart" aria-label="Release status donut chart" role="img"></canvas>
+          </div>
+        </div>
+
+        <!-- Recently Imported SBOMs -->
+        <div class="card" style="grid-column: span 3;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <h3 style="margin:0;">Recently Imported SBOMs</h3>
+            <select id="recentSbomsCount" class="mini" style="width:auto;">
+              <option value="5" selected>5</option>
+              <option value="10">10</option>
+              <option value="20">20</option>
+            </select>
+          </div>
+          <div id="recentSbomsTable" class="table" style="margin-top:8px;"></div>
+        </div>
+
+      </div>
+
+      <div id="tblAnalysis" class="table"></div>
+
+      <!-- Consolidated analysis -->
+      <div class="card" style="margin-top: 1.5rem;">
+        <h3 style="margin-top: 0;">Consolidated vulnerability analysis</h3>
+        <p class="section-intro">Run NVD + GHSA + OSV analysis for an SBOM and download the PDF report.</p>
+        <form id="formConsolidatedAnalysis" class="grid" style="grid-template-columns: auto 1fr auto;">
+          <label>
+            <span>SBOM ID *</span>
+            <input type="number" id="consolidatedSbomId" min="1" placeholder="e.g. 1" required />
+          </label>
+          <div class="actions-inline" style="align-items: flex-end;">
+            <button type="submit" id="btnRunConsolidated">Run consolidated analysis</button>
+            <button type="button" id="btnDownloadPdf" class="btn-secondary" disabled>Download PDF report</button>
+          </div>
+        </form>
+        <div id="consolidatedResult" class="analysis-metrics" style="margin-top: 0.75rem; display: none;"></div>
+      </div>
+    </section>
+
+    <!-- SBOMs (by User) -->
+    <section id="tab-sboms" class="tab">
+      <h2>SBOMs (by User)</h2>
+      <form id="formFilterSboms" class="card">
+        <div class="grid">
+          <label>
+            <span>User ID *</span>
+            <input type="text" id="filterUserId" placeholder="user1" required />
+            <div class="form-error" id="filterUserIdError"></div>
+          </label>
+        </div>
+        <div class="actions">
+          <button type="submit">Load SBOMs</button>
+        </div>
+      </form>
+
+      <div id="tblSboms" class="table"></div>
+    </section>
+
+  </main>
+
+  <!-- Findings dialog -->
+  <div id="dialogFindings" title="Analysis Findings" style="display:none;">
+    <form id="formFilterFindings" class="actions-inline">
+      <label class="inline-label">
+        <span>Severity</span>
+        <select id="filterFindingsSeverity">
+          <option value="">-- all --</option>
+          <option value="CRITICAL">CRITICAL</option>
+          <option value="HIGH">HIGH</option>
+          <option value="MEDIUM">MEDIUM</option>
+          <option value="LOW">LOW</option>
+          <option value="UNKNOWN">UNKNOWN</option>
+        </select>
+      </label>
+      <button type="submit">Apply</button>
+    </form>
+    <div id="tblFindings" class="table"></div>
+  </div>
+
+  <!-- Components dialog -->
+  <div id="dialogComponents" title="SBOM Components" style="display:none;">
+    <div id="tblComponents" class="table"></div>
+  </div>
+
+  <!-- Edit SBOM dialog -->
+  <div id="dialogEditSbom" title="Edit SBOM" style="display:none;">
+    <form id="formEditSbom" class="card" style="padding:0;border:none;box-shadow:none;">
+      <input type="hidden" id="editSbomId" />
+      <div class="grid">
+        <label>
+          <span>SBOM Name *</span>
+          <input type="text" id="editSbomName" required />
+          <div class="form-error" id="err_edit_sbom_name"></div>
+        </label>
+        <label>
+          <span>SBOM Version</span>
+          <input type="text" id="editSbomVersion" />
+          <div class="form-error" id="err_edit_sbom_version"></div>
+        </label>
+        <label>
+          <span>Product Name *</span>
+          <input type="text" id="editProductName" required />
+          <div class="form-error" id="err_edit_product_name"></div>
+        </label>
+        <label>
+          <span>Product Version</span>
+          <input type="text" id="editProductVer" />
+          <div class="form-error" id="err_edit_product_ver"></div>
+        </label>
+        <label>
+          <span>SBOM Type</span>
+          <select id="editSbomType"></select>
+          <div class="form-error" id="err_edit_sbom_type"></div>
+        </label>
+        <label>
+          <span>Modified By *</span>
+          <input type="text" id="editModifiedBy" required />
+          <div class="form-error" id="err_edit_modified_by"></div>
+        </label>
+      </div>
+    </form>
+  </div>
+
+  <!-- Confirm dialog -->
+  <div id="dialogConfirm" title="Please confirm" style="display:none;">
+    <p id="dialogConfirmMessage">Are you sure you want to delete this SBOM? This action cannot be undone.</p>
+  </div>
+
+  <!-- Edit Project dialog -->
+  <div id="dialogEditProject" title="Edit Project" style="display:none;">
+    <form id="formEditProject" class="card" style="padding:0;border:none;box-shadow:none;">
+      <input type="hidden" id="editProjectId" />
+      <div class="grid">
+        <label>
+          <span>Project Name* </span>
+          <input type="text" id="editProjectName" required />
+        </label>
+        <label>
+          <span>Project Details</span>
+          <input type="text" id="editProjectDetails" />
+        </label>
+        <label>
+          <span>Status (1 active, 0 inactive)</span>
+          <input type="number" id="editProjectStatus" min="0" max="1" />
+        </label>
+        <label>
+          <span>Modified By *</span>
+          <input type="text" id="editProjectModifiedBy" required />
+        </label>
+      </div>
+    </form>
+  </div>
+
+  <!-- Configure API base from ?api=... -->
+  <script>
+    (function () {
+      const apiBase = new URLSearchParams(window.location.search).get("api");
+      if (apiBase) {
+        window.SBOM_API_BASE = apiBase.replace(/\/+$/, "");
+      }
+    })();
+  </script>
+
+  <!-- Core libs (JS) -->
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js" crossorigin="anonymous"></script>
+  <script src="https://code.jquery.com/ui/1.13.3/jquery-ui.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jtable@2.6.0/lib/jquery.jtable.min.js"></script>
+
+  <!-- jsPDF + AutoTable (for exports) -->
+  <script
+    src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"
+    integrity="sha512-B97H0GJYQBiJ+Hn0dQbQ4ZpKDPcXxdbn2gNxt8wHj8bO1e9lH6v+g5tqKjhn3bH6kM0tiOrcQkLZk4y8mxCkLQ=="
+    crossorigin="anonymous"
+    referrerpolicy="no-referrer"
+  ></script>
+  <script
+    src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"
+    integrity="sha512-FmQGm6Sl2oYhF9B26+8JUi9mMMw3bV1YhX7C6yU4a6dH0l7x2q9V5F5nQ0qj1HkY5i6h8rC6wQj9C5F3qF1x9w=="
+    crossorigin="anonymous"
+    referrerpolicy="no-referrer"
+  ></script>
+
+  <!-- Chart.js (for donuts/lines) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <!-- App modules -->
+  <script src="js/api.client.js"></script>
+  <script src="js/ui.projects.js"></script>
+  <script src="js/ui.sboms.js"></script>
+  <script src="js/ui.analysis.js"></script>
+
+  <!-- App init -->
+  <script src="js/ui.home.js"></script>
+  <script src="js/app.init.js"></script>
+</body>
+</html>
