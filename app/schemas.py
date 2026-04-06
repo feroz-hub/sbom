@@ -130,9 +130,33 @@ class AnalysisFindingOut(ORMModel):
     vector: Optional[str] = None
     published_on: Optional[str] = None
     reference_url: Optional[str] = None
+    cwe: Optional[str] = None
     cpe: Optional[str] = None
     component_name: Optional[str] = None
     component_version: Optional[str] = None
+    fixed_versions: Optional[str] = None    # raw JSON string
+    attack_vector: Optional[str] = None
+    cvss_version: Optional[str] = None
+    aliases: Optional[str] = None           # JSON string
+
+
+class AnalysisRunSummary(ORMModel):
+    """Lightweight run summary for list endpoints — excludes raw_report."""
+    id: int
+    sbom_id: int
+    project_id: Optional[int] = None
+    run_status: str
+    sbom_name: Optional[str] = None
+    source: str
+    started_on: str
+    completed_on: str
+    duration_ms: int
+    total_components: int
+    total_findings: int
+    critical_count: int
+    high_count: int
+    medium_count: int
+    low_count: int
 
 
 class SBOMAnalysisReportCreate(BaseModel):

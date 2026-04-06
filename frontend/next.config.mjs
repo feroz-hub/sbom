@@ -1,26 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  async rewrites() {
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-    return [
-      {
-        source: '/api/:path*',
-        destination: `${apiBase}/api/:path*`,
-      },
-      {
-        source: '/dashboard/:path*',
-        destination: `${apiBase}/dashboard/:path*`,
-      },
-      {
-        source: '/health',
-        destination: `${apiBase}/health`,
-      },
-      {
-        source: '/analyze-:path*',
-        destination: `${apiBase}/analyze-:path*`,
-      },
-    ];
-  },
+  // No Next.js proxy rewrites — all API calls go directly to FastAPI via
+  // NEXT_PUBLIC_API_URL (http://localhost:8000 by default).
+  // Proxying caused ECONNRESET on long-running analysis calls (47-120s)
+  // because Node's http.request socket timeout killed the connection.
 };
 
 export default nextConfig;

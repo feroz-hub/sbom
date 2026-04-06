@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -13,9 +14,8 @@ from typing import Any, Optional, List, Dict, Tuple
 from urllib.parse import unquote, parse_qs
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, status, Path, Response, File, Form, UploadFile
-from fastapi.responses import JSONResponse, Response, FileResponse
+from fastapi.responses import JSONResponse, Response, FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from packaging import version
 
 from pydantic import BaseModel
@@ -61,9 +61,16 @@ from .analysis import (
     analyze_sbom_multi_source,
     extract_components,
     _augment_components_with_cpe,
+    enrich_component_for_osv,
+    osv_query_by_components,
+    github_query_by_components,
+    nvd_query_by_components_async,
+    deduplicate_findings,
 )
 
-app = FastAPI(title="SBOM & Projects API", version="2.0.0")
+APP_VERSION = "2.0.0"
+
+app = FastAPI(title="SBOM & Projects API", version=APP_VERSION)
 
 _CORS_ORIGINS = [
     o.strip() for o in os.getenv("CORS_ORIGINS", "*").split(",") if o.strip()
@@ -242,13 +249,35 @@ def public_analysis_config() -> dict:
         "analysis_sources_env": getattr(s, "analysis_sources_env", "ANALYSIS_SOURCES"),
         "max_concurrency": getattr(s, "max_concurrency", 10),
         "analysis_legacy_level": legacy_analysis_level(),
+        # Feature flags — whether optional credentials are configured
+        "github_configured": bool(os.getenv("GITHUB_TOKEN", "").strip()),
+        "nvd_key_configured": bool(os.getenv("NVD_API_KEY", "").strip()),
     }
 
 # -----------------------------
 # DB seed/backfill
 # -----------------------------
+def ensure_text_column(table_name: str, column_name: str) -> None:
+    with engine.connect() as conn:
+        existing = {
+            row[1]
+            for row in conn.execute(text(f"PRAGMA table_info({table_name})"))
+        }
+        if column_name in existing:
+            return
+        conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} TEXT"))
+        conn.commit()
+
 def ensure_seed_data() -> None:
     Base.metadata.create_all(bind=engine)
+    ensure_text_column("analysis_run", "sbom_name")
+    ensure_text_column("analysis_finding", "cwe")
+    ensure_text_column("analysis_finding", "fixed_versions")
+    ensure_text_column("analysis_finding", "attack_vector")
+    ensure_text_column("analysis_finding", "cvss_version")
+    ensure_text_column("analysis_finding", "aliases")
+    ensure_text_column("run_cache", "source")
+    ensure_text_column("run_cache", "sbom_id")
     db = SessionLocal()
     try:
         db.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_sbom_type_typename ON sbom_type(typename)"))
@@ -337,6 +366,13 @@ def upsert_components(db: Session, sbom_obj: SBOMSource, components: list[dict])
 
     return {"triplet": by_comp_triplet, "cpe": by_cpe}
 
+def sync_sbom_components(db: Session, sbom_obj: SBOMSource) -> list[dict]:
+    if not sbom_obj.sbom_data:
+        return []
+    components = extract_components(sbom_obj.sbom_data)
+    upsert_components(db, sbom_obj, components)
+    return components
+
 def resolve_component_id(finding: dict, component_maps: dict) -> Optional[int]:
     cpe = (finding.get("cpe") or "").strip() or None
     name = (finding.get("component_name") or "").strip() or None
@@ -397,6 +433,7 @@ def persist_analysis_run(
         if not isinstance(finding, dict):
             continue
 
+        fv = finding.get("fixed_versions") or []
         db.add(
             AnalysisFinding(
                 analysis_run_id=run.id,
@@ -409,11 +446,15 @@ def persist_analysis_run(
                 score=safe_float(finding.get("score")),
                 vector=finding.get("vector"),
                 published_on=finding.get("published"),
-                reference_url=finding.get("url"),
+                reference_url=(finding.get("url") or (finding.get("references") or [None])[0]),
                 cwe=",".join(finding.get("cwe", [])) if finding.get("cwe") else None,
                 cpe=finding.get("cpe"),
                 component_name=finding.get("component_name"),
                 component_version=finding.get("component_version"),
+                fixed_versions=json.dumps(fv) if fv else None,
+                attack_vector=finding.get("attack_vector"),
+                cvss_version=finding.get("cvss_version"),
+                aliases=json.dumps(finding.get("aliases") or []) if finding.get("aliases") else None,
             )
         )
 
@@ -465,7 +506,6 @@ def create_auto_report(db: Session, sbom_obj: SBOMSource) -> Optional[SBOMAnalys
             if details.get("query_errors"):
                 source = f"{source} (partial)"
         except Exception as exc:
-            components = []
             details = normalize_details({"error": str(exc)}, components)
             run_status = "ERROR"
 
@@ -1160,18 +1200,24 @@ def backfill_analytics_tables(db: Session) -> None:
     sboms = db.execute(select(SBOMSource).order_by(SBOMSource.id.asc())).scalars().all()
 
     for sbom in sboms:
+        components = []
+        has_components = db.execute(
+            select(func.count(SBOMComponent.id)).where(SBOMComponent.sbom_id == sbom.id)
+        ).scalar_one()
+
+        if sbom.sbom_data:
+            try:
+                components = extract_components(sbom.sbom_data)
+                if not has_components and components:
+                    upsert_components(db, sbom, components)
+            except Exception:
+                components = []
+
         has_run = db.execute(
             select(AnalysisRun.id).where(AnalysisRun.sbom_id == sbom.id).limit(1)
         ).scalar_one_or_none()
         if has_run is not None:
             continue
-
-        components = []
-        if sbom.sbom_data:
-            try:
-                components = extract_components(sbom.sbom_data)
-            except Exception:
-                components = []
 
         latest_legacy = db.execute(
             select(SBOMAnalysisReport)
@@ -1221,9 +1267,17 @@ def backfill_analytics_tables(db: Session) -> None:
 def on_startup() -> None:
     log.info("SBOM Analyzer starting up — initialising database …")
     ensure_seed_data()   # also calls Base.metadata.create_all — creates all tables including run_cache
-    add_sbom_name_column()
     update_sbom_names()
     log.info("Startup complete. API ready.")
+
+@app.get("/")
+def service_info() -> dict:
+    return {
+        "service": "sbom-analyzer-api",
+        "version": APP_VERSION,
+        "docs_url": app.docs_url or "/docs",
+        "health_url": "/health",
+    }
 
 @app.get("/health")
 def health() -> dict:
@@ -1282,13 +1336,20 @@ def create_sbom(payload: SBOMSourceCreate, db: Session = Depends(get_db)):
         db.refresh(obj)
         log.info("SBOM created: id=%d name='%s'", obj.id, obj.sbom_name)
 
-        # Best-effort: auto-analysis (multi-source)
+        # Persist parsed components immediately so the UI can display them
+        # even if vulnerability analysis later fails.
         try:
-            log.debug("Triggering auto-analysis for SBOM id=%d", obj.id)
-            create_auto_report(db, obj)
-            log.debug("Auto-analysis complete for SBOM id=%d", obj.id)
+            components = sync_sbom_components(db, obj)
+            db.commit()
+            log.info("SBOM components synced: sbom id=%d components=%d", obj.id, len(components))
         except Exception as exc:
-            log.warning("Auto-analysis failed for SBOM id=%d: %s", obj.id, exc)
+            db.rollback()
+            log.warning("Component sync failed for SBOM id=%d: %s", obj.id, exc)
+
+        # NOTE: Auto-analysis removed from the upload path.
+        # The frontend triggers background analysis via POST /analyze-sbom-consolidated
+        # AFTER the upload modal closes, so the user is never blocked.
+        # Keeping analysis out of this endpoint ensures the upload returns in < 1s.
 
         return obj
 
@@ -1333,7 +1394,12 @@ def run_analysis_for_sbom(sbom_id: int, db: Session = Depends(get_db)):
     if not sbom:
         log.warning("Analysis requested for unknown SBOM id=%d", sbom_id)
         raise HTTPException(status_code=404, detail="SBOM not found")
-    report = create_auto_report(db, sbom)
+    try:
+        report = create_auto_report(db, sbom)
+    except Exception as exc:
+        db.rollback()
+        log.error("Analysis run failed for SBOM id=%d: %s", sbom_id, exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="Unable to generate analysis report") from exc
     if not report:
         log.error("Analysis report generation failed for SBOM id=%d", sbom_id)
         raise HTTPException(status_code=500, detail="Unable to generate analysis report")
@@ -1348,6 +1414,204 @@ def run_analysis_for_sbom(sbom_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail="AnalysisRun record not found after creation")
     log.info("Analysis complete for SBOM id=%d → run id=%d status=%s", sbom_id, run.id, run.run_status)
     return run
+
+# -----------------------------
+# SSE streaming analysis
+# -----------------------------
+
+def _sse_event(event_type: str, data: dict) -> str:
+    """Format a single Server-Sent Event string."""
+    return f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
+
+
+class AnalyzeStreamPayload(BaseModel):
+    sources: Optional[List[str]] = ["NVD", "OSV", "GITHUB"]
+    nvd_api_key: Optional[str] = None
+    github_token: Optional[str] = None
+
+
+@app.post("/api/sboms/{sbom_id}/analyze/stream")
+async def analyze_sbom_stream(
+    sbom_id: int,
+    payload: AnalyzeStreamPayload,
+    db: Session = Depends(get_db),
+):
+    """
+    Run multi-source SBOM analysis and stream per-source progress via SSE.
+
+    SSE event types:
+      progress  — phase/source status updates (started, parsed, running, complete, error)
+      complete  — final result with runId + severity counts
+      error     — fatal error (SBOM not found, parse failure, etc.)
+    """
+    sbom_row = db.get(SBOMSource, sbom_id)
+
+    async def _stream_not_found():
+        yield _sse_event("error", {"message": f"SBOM {sbom_id} not found", "code": 404})
+
+    if not sbom_row:
+        return StreamingResponse(
+            _stream_not_found(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
+    async def event_stream():
+        started_at = time.perf_counter()
+
+        def elapsed() -> int:
+            return int((time.perf_counter() - started_at) * 1000)
+
+        try:
+            cfg = get_analysis_settings_multi()
+
+            # Override GitHub token from payload if provided
+            if payload.github_token:
+                os.environ["GITHUB_TOKEN"] = payload.github_token.strip()
+
+            sources = [s.strip().upper() for s in (payload.sources or ["NVD", "OSV", "GITHUB"])]
+
+            yield _sse_event("progress", {
+                "phase": "started",
+                "sources": sources,
+                "elapsed_ms": elapsed(),
+            })
+            await asyncio.sleep(0)
+
+            # Parse + enrich components
+            try:
+                sbom_data = sbom_row.sbom_data or ""
+                components_raw = extract_components(sbom_data)
+                components_raw = [enrich_component_for_osv(c) for c in components_raw]
+                components, _gen_cpe = _augment_components_with_cpe(components_raw)
+            except Exception as exc:
+                yield _sse_event("error", {"message": f"SBOM parse failed: {exc}", "code": 400})
+                return
+
+            yield _sse_event("progress", {
+                "phase": "parsed",
+                "components": len(components),
+                "elapsed_ms": elapsed(),
+            })
+            await asyncio.sleep(0)
+
+            all_findings: List[dict] = []
+            all_errors: List[dict] = []
+
+            # ── Run each source sequentially so SSE events stream between them ──
+            source_map = {
+                "NVD": lambda: nvd_query_by_components_async(
+                    components, cfg, nvd_api_key=payload.nvd_api_key
+                ),
+                "OSV": lambda: osv_query_by_components(components, cfg),
+                "GITHUB": lambda: github_query_by_components(components, cfg),
+            }
+
+            for source_name in sources:
+                if source_name not in source_map:
+                    continue
+
+                yield _sse_event("progress", {
+                    "source": source_name,
+                    "status": "running",
+                    "elapsed_ms": elapsed(),
+                })
+                await asyncio.sleep(0)
+
+                src_start = time.perf_counter()
+                try:
+                    findings, errors, _warnings = await source_map[source_name]()
+                    all_findings.extend(findings)
+                    all_errors.extend(errors)
+                    yield _sse_event("progress", {
+                        "source": source_name,
+                        "status": "complete",
+                        "findings": len(findings),
+                        "errors": len(errors),
+                        "source_ms": int((time.perf_counter() - src_start) * 1000),
+                        "elapsed_ms": elapsed(),
+                    })
+                except Exception as exc:
+                    err_msg = str(exc)
+                    all_errors.append({"source": source_name, "error": err_msg})
+                    yield _sse_event("progress", {
+                        "source": source_name,
+                        "status": "error",
+                        "error": err_msg,
+                        "source_ms": int((time.perf_counter() - src_start) * 1000),
+                        "elapsed_ms": elapsed(),
+                    })
+                await asyncio.sleep(0)
+
+            # Deduplicate
+            final_findings = deduplicate_findings(all_findings)
+
+            # Build details dict and persist
+            buckets = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "UNKNOWN": 0}
+            for f in final_findings:
+                sev = str((f or {}).get("severity", "UNKNOWN")).upper()
+                buckets[sev if sev in buckets else "UNKNOWN"] += 1
+
+            details: dict = {
+                "total_components": len(components),
+                "components_with_cpe": sum(1 for c in components if c.get("cpe")),
+                "total_findings": len(final_findings),
+                "critical": buckets["CRITICAL"],
+                "high": buckets["HIGH"],
+                "medium": buckets["MEDIUM"],
+                "low": buckets["LOW"],
+                "unknown": buckets["UNKNOWN"],
+                "query_errors": all_errors,
+                "findings": final_findings,
+                "analysis_metadata": {"sources": sources},
+            }
+
+            run_status = compute_report_status(len(final_findings), all_errors)
+            source_label = ",".join(sources)
+            if all_errors:
+                source_label += " (partial)"
+
+            duration_ms = elapsed()
+            run = persist_analysis_run(
+                db=db,
+                sbom_obj=sbom_row,
+                details=details,
+                components=components,
+                run_status=run_status,
+                source=source_label,
+                started_on=now_iso(),
+                completed_on=now_iso(),
+                duration_ms=duration_ms,
+            )
+            db.commit()
+
+            yield _sse_event("complete", {
+                "runId": run.id,
+                "status": run_status,
+                "total": len(final_findings),
+                "critical": buckets["CRITICAL"],
+                "high": buckets["HIGH"],
+                "medium": buckets["MEDIUM"],
+                "low": buckets["LOW"],
+                "unknown": buckets["UNKNOWN"],
+                "errors": len(all_errors),
+                "duration_ms": duration_ms,
+            })
+
+        except Exception as exc:
+            log.error("SSE stream unhandled error: %s", exc, exc_info=True)
+            yield _sse_event("error", {"message": str(exc), "code": 500})
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
 
 # -----------------------------
 # SBOM listing/filter + components
@@ -1580,15 +1844,10 @@ def delete_sbom(
 # -----------------------------
   
 def add_sbom_name_column():
-    with engine.connect() as conn:
-        try:
-            conn.execute(text("ALTER TABLE analysis_run ADD COLUMN sbom_name TEXT"))
-            print("sbom_name column added")
-        except Exception as e:
-            print("Column may already exist:", e)
+    ensure_text_column("analysis_run", "sbom_name")
 
 def update_sbom_names():
-    with engine.connect() as conn:
+    with engine.begin() as conn:
         conn.execute(text("""
             UPDATE analysis_run
             SET sbom_name = (
@@ -2549,9 +2808,14 @@ def dashboard_severity(db: Session = Depends(get_db)):
     return buckets
 
 
-# -----------------------------
-# Serve frontend at / (must be last so /api and /dashboard take precedence)
-# -----------------------------
-_FRONTEND_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frontend")
-if os.path.isdir(_FRONTEND_DIR):
-    app.mount("/", StaticFiles(directory=_FRONTEND_DIR, html=True), name="frontend")
+# -------------------------------------------------------
+# Feature routers — additive, no existing paths changed
+# -------------------------------------------------------
+from .routers import analysis as _analysis_router
+from .routers import sbom as _sbom_router
+from .routers import dashboard as _dashboard_router
+
+app.include_router(_analysis_router.router, prefix="/api/analysis-runs", tags=["analysis-export"])
+app.include_router(_sbom_router.router, prefix="/api/sboms", tags=["sbom-features"])
+app.include_router(_dashboard_router.router, prefix="/dashboard", tags=["dashboard-trend"])
+

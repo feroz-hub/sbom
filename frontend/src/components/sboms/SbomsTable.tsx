@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { Table, TableHead, TableBody, Th, Td, EmptyRow } from '@/components/ui/Table';
 import { ConfirmDialog } from '@/components/ui/Dialog';
 import { SkeletonRow } from '@/components/ui/Spinner';
+import { SbomStatusBadge } from '@/components/sboms/SbomStatusBadge';
 import { deleteSbom } from '@/lib/api';
 import { formatDate } from '@/lib/utils';
 import { useToast } from '@/hooks/useToast';
@@ -56,6 +57,7 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
               <Th>Project</Th>
               <Th>Version</Th>
               <Th>Format</Th>
+              <Th>Analysis</Th>
               <Th>Created By</Th>
               <Th>Created On</Th>
               <Th className="text-right">Actions</Th>
@@ -63,9 +65,9 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
           </TableHead>
           <TableBody>
             {isLoading ? (
-              Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} cols={8} />)
+              Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} cols={9} />)
             ) : !sboms?.length ? (
-              <EmptyRow cols={8} message="No SBOMs found. Upload your first SBOM!" />
+              <EmptyRow cols={9} message="No SBOMs found. Upload your first SBOM!" />
             ) : (
               sboms.map((sbom) => (
                 <tr key={sbom.id} className="hover:bg-hcl-light/40 transition-colors">
@@ -76,6 +78,13 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
                   <Td className="text-hcl-muted">{sbom.project_name || (sbom.projectid ? `#${sbom.projectid}` : '—')}</Td>
                   <Td className="text-hcl-muted">{sbom.sbom_version || sbom.productver || '—'}</Td>
                   <Td className="text-hcl-muted">{sbom.sbom_type || '—'}</Td>
+                  <Td>
+                    <SbomStatusBadge
+                      sbomId={sbom.id}
+                      initialStatus={sbom._analysisStatus}
+                      initialFindings={sbom._findingsCount}
+                    />
+                  </Td>
                   <Td className="text-hcl-muted">{sbom.created_by || '—'}</Td>
                   <Td className="text-hcl-muted whitespace-nowrap">{formatDate(sbom.created_on)}</Td>
                   <Td className="text-right">

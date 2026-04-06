@@ -1,21 +1,46 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Upload } from 'lucide-react';
 import { TopBar } from '@/components/layout/TopBar';
 import { Button } from '@/components/ui/Button';
 import { SbomsTable } from '@/components/sboms/SbomsTable';
 import { SbomUploadModal } from '@/components/sboms/SbomUploadModal';
 import { getSboms } from '@/lib/api';
+import { useBackgroundAnalysis } from '@/hooks/useBackgroundAnalysis';
+import { usePendingAnalysisRecovery } from '@/hooks/usePendingAnalysisRecovery';
+import type { SBOMSource } from '@/types';
 
 export default function SbomsPage() {
   const [showUpload, setShowUpload] = useState(false);
+  const queryClient = useQueryClient();
+  const { triggerBackgroundAnalysis } = useBackgroundAnalysis();
 
+  // Fetch SBOM list via React Query
   const { data: sboms, isLoading, error } = useQuery({
     queryKey: ['sboms'],
     queryFn: ({ signal }) => getSboms(1, 50, signal),
   });
+
+  // On mount: resume any analysis jobs that were running before a page refresh
+  usePendingAnalysisRecovery(triggerBackgroundAnalysis);
+
+  /**
+   * Called when the upload modal successfully creates an SBOM.
+   * 1. Inject the new SBOM into the React Query cache immediately (optimistic)
+   * 2. Fire background analysis — never blocks the user
+   */
+  const handleUploadSuccess = (newSbom: SBOMSource) => {
+    // Optimistic: add to list with ANALYSING status before any refetch
+    queryClient.setQueryData<SBOMSource[]>(['sboms'], (old) => [
+      { ...newSbom, _analysisStatus: 'ANALYSING' as const },
+      ...(old ?? []),
+    ]);
+
+    // Background analysis — toast + badge update happen automatically
+    triggerBackgroundAnalysis(newSbom.id, newSbom.sbom_name);
+  };
 
   return (
     <div className="flex flex-col flex-1">
@@ -29,16 +54,13 @@ export default function SbomsPage() {
         }
       />
       <div className="p-6">
-        <SbomsTable
-          sboms={sboms}
-          isLoading={isLoading}
-          error={error}
-        />
+        <SbomsTable sboms={sboms} isLoading={isLoading} error={error} />
       </div>
 
       <SbomUploadModal
         open={showUpload}
         onClose={() => setShowUpload(false)}
+        onSuccess={handleUploadSuccess}
       />
     </div>
   );

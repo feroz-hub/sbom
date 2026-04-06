@@ -67,7 +67,9 @@ class CVSSv2Metric:
 
 @dataclass
 class Metrics:
-    cvssMetricV2: List[CVSSv2Metric] = field(default_factory=list)
+    cvssMetricV2: List[Dict[str, Any]] = field(default_factory=list)
+    cvssMetricV31: List[Dict[str, Any]] = field(default_factory=list)
+    cvssMetricV40: List[Dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -139,11 +141,11 @@ class CVERecord:
         metrics = None
         metrics_dict = data.get("metrics")
         if metrics_dict:
-            v2 = []
-            for m in metrics_dict.get("cvssMetricV2", []) or []:
-                cvss_data = CVSSv2Data(**m["cvssData"])
-                v2.append(CVSSv2Metric(cvssData=cvss_data, **{k: v for k, v in m.items() if k != "cvssData"}))
-            metrics = Metrics(cvssMetricV2=v2)
+            metrics = Metrics(
+                cvssMetricV2=list(metrics_dict.get("cvssMetricV2") or []),
+                cvssMetricV31=list(metrics_dict.get("cvssMetricV31") or []),
+                cvssMetricV40=list(metrics_dict.get("cvssMetricV40") or []),
+            )
 
         weaknesses: List[WeaknessItem] = []
         for w in data.get("weaknesses", []) or []:
@@ -175,10 +177,25 @@ class CVERecord:
         return self.descriptions[0].value if self.descriptions else None
 
     def cvss_v2_base(self) -> Optional[float]:
-        if not self.metrics or not self.metrics.cvssMetricV2:
+        """Legacy alias — calls cvss_best_base() for backwards compatibility."""
+        return self.cvss_best_base()
+
+    def cvss_best_base(self) -> Optional[float]:
+        """Return the best CVSS base score across V40 > V31 > V2."""
+        if not self.metrics:
             return None
-        primary = next((m for m in self.metrics.cvssMetricV2 if (m.type or "").lower() == "primary"), None)
-        return (primary or self.metrics.cvssMetricV2[0]).cvssData.baseScore
+        for metric_list in [self.metrics.cvssMetricV40, self.metrics.cvssMetricV31, self.metrics.cvssMetricV2]:
+            if not metric_list:
+                continue
+            primary = next(
+                (m for m in metric_list if str((m or {}).get("type", "")).lower() == "primary"),
+                metric_list[0],
+            )
+            cvss_data = (primary or {}).get("cvssData") or {}
+            score = _safe_score(cvss_data.get("baseScore"))
+            if score is not None:
+                return score
+        return None
 
 
 # ============================================================
@@ -498,6 +515,30 @@ def _safe_score(value: Any) -> Optional[float]:
         return None
 
 
+def _parse_cvss_attack_vector(vector: Optional[str]) -> Optional[str]:
+    """Extract AV component from CVSS vector string."""
+    if not vector:
+        return None
+    for part in (vector or "").split("/"):
+        if part.startswith("AV:"):
+            return {"N": "Network", "A": "Adjacent", "L": "Local",
+                    "P": "Physical"}.get(part[3:], part[3:])
+    return None
+
+
+def _cvss_version_from_metrics(metrics: Dict[str, Any]) -> Optional[str]:
+    """Return 'V40', 'V31', or 'V2' based on which metric key has data."""
+    for key, label in (
+        ("cvssMetricV40", "V40"),
+        ("cvssMetricV31", "V31"),
+        ("cvssMetricV30", "V31"),
+        ("cvssMetricV2", "V2"),
+    ):
+        if metrics.get(key):
+            return label
+    return None
+
+
 def _extract_best_cvss(metrics: Dict[str, Any]) -> Tuple[Optional[float], Optional[str], Optional[str]]:
     if not isinstance(metrics, dict):
         return None, None, None
@@ -515,6 +556,16 @@ def _extract_best_cvss(metrics: Dict[str, Any]) -> Tuple[Optional[float], Option
     return None, None, None
 
 
+# GitHub Advisory severity normalisation: GraphQL returns "MODERATE" for medium
+_GH_SEV_NORM: Dict[str, str] = {
+    "CRITICAL": "CRITICAL",
+    "HIGH":     "HIGH",
+    "MODERATE": "MEDIUM",
+    "MEDIUM":   "MEDIUM",
+    "LOW":      "LOW",
+}
+
+
 def _sev_bucket(score: Optional[float], settings: AnalysisSettings, severity_text: Optional[str] = None) -> str:
     if score is not None:
         if score >= settings.cvss_critical_threshold:
@@ -526,8 +577,9 @@ def _sev_bucket(score: Optional[float], settings: AnalysisSettings, severity_tex
         return "LOW"
     if severity_text:
         text = severity_text.strip().upper()
-        if text in {"CRITICAL", "HIGH", "MEDIUM", "LOW"}:
-            return text
+        normalized = _GH_SEV_NORM.get(text)
+        if normalized:
+            return normalized
     return "UNKNOWN"
 
 
@@ -717,12 +769,7 @@ def nvd_query_by_cpe(cpe: str, api_key: Optional[str], settings: Optional[Analys
     }
     delay = cfg.nvd_request_delay_with_key_seconds if api_key else cfg.nvd_request_delay_without_key_seconds
     out: List[Dict] = []
-
-    _nvd_session.headers.update({"User-Agent": cfg.http_user_agent})
-    if api_key:
-        _nvd_session.headers["apiKey"] = api_key
-    elif "apiKey" in _nvd_session.headers:
-        del _nvd_session.headers["apiKey"]
+    # Headers are passed per-request — do NOT mutate _nvd_session.headers (thread-safety)
 
     while True:
         response = None
@@ -773,16 +820,12 @@ def _finding_from_raw(
 ) -> Dict[str, Any]:
     try:
         record = CVERecord.from_dict(raw)
-        score = record.cvss_v2_base()
+        score = record.cvss_best_base()
         metric_score, metric_vector, metric_severity = _extract_best_cvss(raw.get("metrics") or {})
         if score is None:
             score = metric_score
         severity = _sev_bucket(score, settings=settings, severity_text=metric_severity)
-        vector = (
-            record.metrics.cvssMetricV2[0].cvssData.vectorString
-            if record.metrics and record.metrics.cvssMetricV2
-            else metric_vector
-        )
+        vector = metric_vector  # _extract_best_cvss picks the best vector
         published = raw.get("published")
         vuln_id = record.id
         description = record.primary_english_description()
@@ -812,6 +855,8 @@ def _finding_from_raw(
         "severity": severity,
         "score": score,
         "vector": vector,
+        "attack_vector": _parse_cvss_attack_vector(vector),
+        "cvss_version": _cvss_version_from_metrics(raw.get("metrics") or {}),
         "published": published,
         "references": [r.get("url") for r in raw.get("references", [])],
         "cwe": extract_cwe_from_nvd(raw),
@@ -1036,26 +1081,37 @@ def _best_score_and_vector_from_osv(v: dict) -> Tuple[Optional[float], Optional[
     score = None
     vector = None
     severity_txt = None
+    # severity[].score is often a CVSS vector string, not a float
     for sev in v.get("severity") or []:
         t = (sev.get("type") or "").upper()
+        raw_score = sev.get("score") or ""
         if t in {"CVSS_V3", "CVSS_V4"}:
-            try:
-                s = float(sev.get("score"))
-                if score is None or s > score:
-                    score = s
-                    severity_txt = None
-            except Exception:
-                continue
+            if isinstance(raw_score, str) and raw_score.upper().startswith("CVSS:"):
+                # It's a vector string, not a number
+                if vector is None:
+                    vector = raw_score
+            else:
+                try:
+                    s = float(raw_score)
+                    if score is None or s > score:
+                        score = s
+                except (TypeError, ValueError):
+                    pass
+    # NVD-enriched OSV records populate database_specific.cvss.score as a real float
+    database_specific = v.get("database_specific") or {}
+    cvss_db = database_specific.get("cvss") or {}
     if score is None:
-        try:
-            database_specific = v.get("database_specific") or {}
-            cvss = database_specific.get("cvss") or {}
-            s = cvss.get("score")
-            if s is not None:
-                score = float(s)
-                vector = cvss.get("vectorString") or cvss.get("vector")
-        except Exception:
-            pass
+        db_score = cvss_db.get("score")
+        if db_score is not None:
+            try:
+                score = float(db_score)
+            except (TypeError, ValueError):
+                pass
+    if vector is None:
+        vector = cvss_db.get("vectorString") or cvss_db.get("vector")
+    # Text severity fallback from database_specific
+    if severity_txt is None:
+        severity_txt = database_specific.get("severity")
     return score, vector, severity_txt
 
 
@@ -1100,6 +1156,12 @@ async def osv_query_by_components(components: List[dict], settings: _MultiSettin
     findings: List[dict] = []
     query_errors: List[dict] = []
     query_warnings: List[dict] = []
+
+    # Build name-to-version lookup for comp_ver resolution (Bug A3)
+    name_to_ver: Dict[str, Optional[str]] = {
+        (c.get("name") or "").lower(): c.get("version")
+        for c in components
+    }
 
     if not queries:
         return findings, query_errors, query_warnings
@@ -1157,6 +1219,7 @@ async def osv_query_by_components(components: List[dict], settings: _MultiSettin
         if affected:
             pkg = (affected[0] or {}).get("package") or {}
             comp_name = pkg.get("name") or ""
+            comp_ver = name_to_ver.get(comp_name.lower())  # Bug A3 fix
 
         findings.append(
             {
@@ -1167,6 +1230,8 @@ async def osv_query_by_components(components: List[dict], settings: _MultiSettin
                 "severity": bucket,
                 "score": score,
                 "vector": vector,
+                "attack_vector": _parse_cvss_attack_vector(vector),
+                "cvss_version": None,
                 "published": published,
                 "references": [r.get("url") for r in references],
                 "cwe": extract_cwe_from_osv(v),
@@ -1304,6 +1369,8 @@ async def github_query_by_components(components: List[dict], settings: _MultiSet
                                 "severity": bucket,
                                 "score": score,
                                 "vector": vector,
+                                "attack_vector": _parse_cvss_attack_vector(vector),
+                                "cvss_version": None,
                                 "published": adv.get("publishedAt"),
                                 "references": [r.get("url") for r in refs if r.get("url")],
                                 "cwe": extract_cwe_from_ghsa(n),
@@ -1332,6 +1399,111 @@ class AnalysisSource(str, Enum):
     NVD = "NVD"
     OSV = "OSV"
     GITHUB = "GITHUB"
+
+
+async def nvd_query_by_components_async(
+    components: List[dict],
+    settings: _MultiSettings,
+    nvd_api_key: Optional[str] = None,
+) -> Tuple[List[dict], List[dict], List[dict]]:
+    """
+    Run NVD CPE lookups for all components concurrently.
+    Returns (findings, errors, warnings) — same shape as osv/github counterparts.
+    """
+    cpe_set: Set[str] = set()
+    name_by_cpe: Dict[str, Tuple[str, Optional[str]]] = {}
+    for comp in components:
+        cpe = comp.get("cpe")
+        if cpe:
+            cpe_set.add(cpe)
+            name_by_cpe[cpe] = (comp.get("name") or "", comp.get("version"))
+
+    if not cpe_set:
+        return [], [], []
+
+    api_key = nvd_api_key or resolve_nvd_api_key(settings)
+    loop = asyncio.get_running_loop()
+    sem = asyncio.Semaphore(settings.max_concurrency)
+
+    def _fetch_one(cpe: str) -> Tuple[str, List[dict], Optional[str]]:
+        try:
+            return cpe, nvd_query_by_cpe(cpe, api_key, settings=settings), None
+        except Exception as exc:
+            return cpe, [], str(exc)
+
+    async def _bounded(cpe: str):
+        async with sem:
+            return await loop.run_in_executor(_executor, _fetch_one, cpe)
+
+    results = await asyncio.gather(*[_bounded(cpe) for cpe in sorted(cpe_set)])
+
+    findings: List[dict] = []
+    errors: List[dict] = []
+    for cpe, raw_list, err in results:
+        if err:
+            errors.append({"source": "NVD", "cpe": cpe, "error": err})
+            continue
+        comp_name, comp_ver = name_by_cpe.get(cpe, ("", None))
+        for raw in raw_list:
+            if isinstance(raw, dict):
+                findings.append(_finding_from_raw(raw, cpe, comp_name, comp_ver, settings))
+
+    return findings, errors, []
+
+
+def deduplicate_findings(all_findings: List[dict]) -> List[dict]:
+    """
+    Two-pass CVE↔GHSA alias cross-deduplication.
+    Identical logic to what's inside analyze_sbom_multi_source_async.
+    """
+    sev_rank = {"LOW": 0, "MEDIUM": 1, "HIGH": 2, "CRITICAL": 3, "UNKNOWN": -1}
+
+    alias_index: Dict[str, str] = {}
+    for v in all_findings:
+        vid = v.get("vuln_id") or ""
+        for alias in (v.get("aliases") or []):
+            if alias and alias not in alias_index:
+                alias_index[alias] = vid
+        if vid and vid not in alias_index:
+            alias_index[vid] = vid
+
+    def _canonical_key(v: dict) -> str:
+        vid = v.get("vuln_id") or ""
+        canonical = alias_index.get(vid, vid)
+        if canonical:
+            return canonical
+        for a in (v.get("aliases") or []):
+            if a:
+                return alias_index.get(a, a)
+        return v.get("component_name") or ""
+
+    merged: Dict[str, dict] = {}
+    for v in all_findings:
+        key = _canonical_key(v)
+        if key not in merged:
+            merged[key] = dict(v)
+        else:
+            existing = merged[key]
+            existing["sources"] = list(set(existing.get("sources", []) + v.get("sources", [])))
+            existing["aliases"] = list(set(existing.get("aliases", []) + v.get("aliases", [])))
+            existing["cwe"] = list(set((existing.get("cwe") or []) + (v.get("cwe") or [])))
+            existing["references"] = list(set(
+                [r for r in (existing.get("references") or []) if r] +
+                [r for r in (v.get("references") or []) if r]
+            ))
+            existing["fixed_versions"] = list(set(
+                (existing.get("fixed_versions") or []) + (v.get("fixed_versions") or [])
+            ))
+            e_rank = sev_rank.get(str(existing.get("severity", "UNKNOWN")).upper(), -1)
+            v_rank = sev_rank.get(str(v.get("severity", "UNKNOWN")).upper(), -1)
+            if v_rank > e_rank:
+                existing["severity"] = v["severity"]
+                if v.get("score") is not None:
+                    existing["score"] = v["score"]
+            if not existing.get("attack_vector") and v.get("attack_vector"):
+                existing["attack_vector"] = v["attack_vector"]
+
+    return list(merged.values())
 
 
 async def analyze_sbom_multi_source_async(
@@ -1406,7 +1578,13 @@ async def analyze_sbom_multi_source_async(
                 LOGGER.warning("NVD: CPE '%s' query failed: %s", cpe, exc)
                 return cpe, [], str(exc)
 
-        tasks = [loop.run_in_executor(_executor, _fetch_one, cpe) for cpe in sorted(cpe_set)]
+        _nvd_sem = asyncio.Semaphore(cfg.max_concurrency)
+
+        async def _bounded_fetch(cpe: str):
+            async with _nvd_sem:
+                return await loop.run_in_executor(_executor, _fetch_one, cpe)
+
+        tasks = [_bounded_fetch(cpe) for cpe in sorted(cpe_set)]
         results = await asyncio.gather(*tasks)
         nvd_findings = 0
         for cpe, raw_list, err in results:
@@ -1456,29 +1634,44 @@ async def analyze_sbom_multi_source_async(
     if coros:
         await asyncio.gather(*coros)
 
-    # Deduplicate across sources by vuln_id → aliases → component_name
+    # Two-pass deduplication: CVE ↔ GHSA alias cross-linking (Feature B3)
+    alias_index: Dict[str, str] = {}
+    for v in all_findings:
+        vid = v.get("vuln_id") or ""
+        for alias in (v.get("aliases") or []):
+            if alias and alias not in alias_index:
+                alias_index[alias] = vid
+        if vid and vid not in alias_index:
+            alias_index[vid] = vid
+
+    def _canonical_key(v: dict) -> str:
+        vid = v.get("vuln_id") or ""
+        canonical = alias_index.get(vid, vid)
+        if canonical:
+            return canonical
+        for a in (v.get("aliases") or []):
+            if a:
+                return alias_index.get(a, a)
+        return v.get("component_name") or ""
+
     _sev_rank = {"LOW": 0, "MEDIUM": 1, "HIGH": 2, "CRITICAL": 3, "UNKNOWN": -1}
 
-    def _merge_key(v):
-        if v.get("vuln_id"):
-            return v["vuln_id"]
-        if v.get("aliases"):
-            return tuple(sorted(str(a) for a in v["aliases"] if a))
-        return v.get("component_name")
-
-    merged: Dict[Any, dict] = {}
+    merged: Dict[str, dict] = {}
     for v in all_findings:
-        key = _merge_key(v)
+        key = _canonical_key(v)
         if key not in merged:
             merged[key] = dict(v)
         else:
             existing = merged[key]
             existing["sources"] = list(set(existing.get("sources", []) + v.get("sources", [])))
             existing["aliases"] = list(set(existing.get("aliases", []) + v.get("aliases", [])))
-            existing["cwe"] = list(set(existing.get("cwe", []) + v.get("cwe", [])))
+            existing["cwe"] = list(set((existing.get("cwe") or []) + (v.get("cwe") or [])))
             existing["references"] = list(set(
-                (r for r in existing.get("references", []) if r) +
-                [r for r in v.get("references", []) if r]
+                [r for r in (existing.get("references") or []) if r] +
+                [r for r in (v.get("references") or []) if r]
+            ))
+            existing["fixed_versions"] = list(set(
+                (existing.get("fixed_versions") or []) + (v.get("fixed_versions") or [])
             ))
             e_rank = _sev_rank.get(str(existing.get("severity", "UNKNOWN")).upper(), -1)
             v_rank = _sev_rank.get(str(v.get("severity", "UNKNOWN")).upper(), -1)
@@ -1486,6 +1679,8 @@ async def analyze_sbom_multi_source_async(
                 existing["severity"] = v["severity"]
                 if v.get("score") is not None:
                     existing["score"] = v["score"]
+            if not existing.get("attack_vector") and v.get("attack_vector"):
+                existing["attack_vector"] = v["attack_vector"]
 
     findings = list(merged.values())
     LOGGER.debug(

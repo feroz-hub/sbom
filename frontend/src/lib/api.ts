@@ -18,37 +18,98 @@ import type {
   ConsolidatedAnalysisResult,
 } from '@/types';
 
+// Direct calls to FastAPI — no Next.js proxy (proxy caused ECONNRESET on
+// analysis calls that take 47-120s due to Node socket timeout).
+const BASE_URL = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000').replace(/\/$/, '');
+
+// ─── Typed HTTP error ─────────────────────────────────────────────────────────
+export class HttpError extends Error {
+  status: number;
+  code?: string;
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = 'HttpError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
+// ─── Fetch with timeout + caller-signal support ───────────────────────────────
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit & { signal?: AbortSignal } = {},
+  timeoutMs = 30_000,
+): Promise<Response> {
+  const controller = new AbortController();
+  const id = setTimeout(
+    () => controller.abort(new DOMException('Request timed out after ' + timeoutMs + 'ms', 'TimeoutError')),
+    timeoutMs,
+  );
+
+  // Forward caller's abort signal so React Query cleanup still works
+  const callerSignal = options.signal;
+  if (callerSignal) {
+    if (callerSignal.aborted) {
+      clearTimeout(id);
+      controller.abort(callerSignal.reason);
+    } else {
+      callerSignal.addEventListener('abort', () => {
+        clearTimeout(id);
+        controller.abort(callerSignal.reason);
+      }, { once: true });
+    }
+  }
+
+  try {
+    const { signal: _ignored, ...rest } = options;
+    return await fetch(url, { ...rest, signal: controller.signal });
+  } finally {
+    clearTimeout(id);
+  }
+}
+
+// ─── Core request helper ──────────────────────────────────────────────────────
 async function request<T>(
   path: string,
-  options: RequestInit & { signal?: AbortSignal } = {}
+  options: RequestInit & { signal?: AbortSignal } = {},
+  timeoutMs = 30_000,
 ): Promise<T> {
-  // Use relative paths — Next.js rewrites proxy them to the backend (no CORS)
-  const url = path;
-  const res = await fetch(url, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
+  const url = `${BASE_URL}${path}`;
+  const res = await fetchWithTimeout(
+    url,
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+      ...options,
     },
-    ...options,
-  });
+    timeoutMs,
+  );
 
   if (!res.ok) {
     let message = `HTTP ${res.status}: ${res.statusText}`;
+    let code: string | undefined;
     try {
       const body = await res.json();
       if (body?.detail) {
-        message = typeof body.detail === 'string'
-          ? body.detail
-          : Array.isArray(body.detail)
-            ? body.detail.map((e: { msg?: string; loc?: string[] }) =>
-                `${e.loc?.slice(1).join('.')} — ${e.msg}`
-              ).join('; ')
-            : JSON.stringify(body.detail);
+        if (typeof body.detail === 'string') {
+          message = body.detail;
+        } else if (typeof body.detail === 'object' && !Array.isArray(body.detail) && body.detail.message) {
+          message = body.detail.message;
+          code = body.detail.code;
+        } else if (Array.isArray(body.detail)) {
+          message = body.detail
+            .map((e: { msg?: string; loc?: string[] }) => `${e.loc?.slice(1).join('.')} — ${e.msg}`)
+            .join('; ');
+        } else {
+          message = JSON.stringify(body.detail);
+        }
       }
     } catch {
-      // ignore parse errors
+      // ignore JSON parse errors
     }
-    throw new Error(message);
+    throw new HttpError(message, res.status, code);
   }
 
   // 204 No Content
@@ -57,6 +118,18 @@ async function request<T>(
   }
 
   return res.json() as Promise<T>;
+}
+
+// ─── Analysis config ──────────────────────────────────────────────────────────
+export interface AnalysisConfig {
+  github_configured: boolean;
+  nvd_key_configured: boolean;
+  max_concurrency: number;
+  [key: string]: unknown;
+}
+
+export function getAnalysisConfig(signal?: AbortSignal) {
+  return request<AnalysisConfig>('/api/analysis/config', { signal });
 }
 
 // ─── Health ──────────────────────────────────────────────────────────────────
@@ -103,7 +176,6 @@ export function updateProject(
   payload: UpdateProjectPayload,
   signal?: AbortSignal
 ) {
-  // user_id is optional on the backend — omit it so any user can update
   return request<Project>(`/api/projects/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
@@ -163,7 +235,7 @@ export function analyzeSbom(sbomId: number, signal?: AbortSignal) {
   return request<AnalysisRun>(`/api/sboms/${sbomId}/analyze`, {
     method: 'POST',
     signal,
-  });
+  }, 180_000);  // analysis can take up to 120s
 }
 
 // ─── Consolidated Analysis ───────────────────────────────────────────────────
@@ -172,7 +244,7 @@ export function analyzeConsolidated(payload: AnalyzeSBOMPayload, signal?: AbortS
     method: 'POST',
     body: JSON.stringify(payload),
     signal,
-  });
+  }, 180_000);  // 180s — NVD alone can take 60s+
 }
 
 // ─── Analysis Runs ────────────────────────────────────────────────────────────
@@ -231,12 +303,16 @@ export async function exportRunsJson(filter: RunsFilter = {}): Promise<void> {
 
 // ─── PDF Report ───────────────────────────────────────────────────────────────
 export async function downloadPdfReport(payload: PDFReportPayload): Promise<Blob> {
-  const url = '/api/pdf-report';
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
+  const url = `${BASE_URL}/api/pdf-report`;
+  const res = await fetchWithTimeout(
+    url,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    60_000,  // PDF generation can take ~10s for large reports
+  );
   if (!res.ok) {
     let message = `HTTP ${res.status}: ${res.statusText}`;
     try {
@@ -247,7 +323,7 @@ export async function downloadPdfReport(payload: PDFReportPayload): Promise<Blob
     } catch {
       // ignore
     }
-    throw new Error(message);
+    throw new HttpError(message, res.status);
   }
   return res.blob();
 }

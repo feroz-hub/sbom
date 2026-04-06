@@ -1,4 +1,4 @@
-// File: /workspaces/sbom/frontend/src/app/sboms/page.tsx
+// File: /Users/ferozebasha/Spectra/sbom/frontend/src/app/sboms/page.tsx
 import * as entry from '../../../../src/app/sboms/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 

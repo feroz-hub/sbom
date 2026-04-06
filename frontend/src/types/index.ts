@@ -22,6 +22,9 @@ export interface SBOMSource {
   modified_on: string | null;
   productver: string | null;
   sbom_data?: string | null;
+  // Client-side only — not from API. Set during optimistic updates.
+  _analysisStatus?: 'ANALYSING' | 'PASS' | 'FAIL' | 'PARTIAL' | 'ERROR' | 'NOT_ANALYSED';
+  _findingsCount?: number;
 }
 
 export interface SBOMComponent {

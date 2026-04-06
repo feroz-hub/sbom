@@ -163,10 +163,16 @@ class AnalysisFinding(Base):
     vector = Column(String, nullable=True)
     published_on = Column(String, nullable=True)
     reference_url = Column(String, nullable=True)
+    cwe = Column(Text, nullable=True)
 
     cpe = Column(String, nullable=True, index=True)
     component_name = Column(String, nullable=True)
     component_version = Column(String, nullable=True)
+
+    fixed_versions = Column(Text, nullable=True)   # JSON array stored as string
+    attack_vector = Column(String, nullable=True)
+    cvss_version = Column(String, nullable=True)
+    aliases = Column(Text, nullable=True)           # JSON array as string
 
     analysis_run = relationship("AnalysisRun", back_populates="findings")
     component = relationship("SBOMComponent", back_populates="findings")
@@ -190,3 +196,5 @@ class RunCache(Base):
     id = Column(Integer, primary_key=True, index=True)
     run_json = Column(Text, nullable=False)
     created_on = Column(String, nullable=True)
+    source = Column(String, nullable=True)      # "consolidated"|"nvd"|"osv"|"ghsa"
+    sbom_id = Column(Integer, nullable=True)    # for cache invalidation

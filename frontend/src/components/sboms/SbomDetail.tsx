@@ -1,7 +1,6 @@
 'use client';
 
-import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Play, ArrowLeft, ExternalLink } from 'lucide-react';
@@ -9,10 +8,11 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { StatusBadge } from '@/components/ui/Badge';
 import { Table, TableHead, TableBody, Th, Td, EmptyRow } from '@/components/ui/Table';
-import { PageSpinner, SkeletonRow } from '@/components/ui/Spinner';
-import { getSbomComponents, analyzeSbom, getRuns } from '@/lib/api';
+import { SkeletonRow } from '@/components/ui/Spinner';
+import { AnalysisProgress } from '@/components/analysis/AnalysisProgress';
+import { getSbomComponents, getRuns } from '@/lib/api';
+import { useAnalysisStream } from '@/hooks/useAnalysisStream';
 import { formatDate, formatDuration } from '@/lib/utils';
-import { useToast } from '@/hooks/useToast';
 import type { SBOMSource } from '@/types';
 
 interface SbomDetailProps {
@@ -22,8 +22,7 @@ interface SbomDetailProps {
 export function SbomDetail({ sbom }: SbomDetailProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { showToast } = useToast();
-  const [analyzing, setAnalyzing] = useState(false);
+  const { state, startAnalysis, cancel, reset } = useAnalysisStream(sbom.id);
 
   const { data: components, isLoading: compLoading } = useQuery({
     queryKey: ['sbom-components', sbom.id],
@@ -33,24 +32,23 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
   const { data: runs, isLoading: runsLoading } = useQuery({
     queryKey: ['runs', { sbom_id: sbom.id }],
     queryFn: ({ signal }) => getRuns({ sbom_id: sbom.id }, signal),
+    // Refetch runs list when analysis completes so the new run appears
+    refetchInterval: state.phase === 'done' ? false : undefined,
   });
 
-  const analyzeMutation = useMutation({
-    mutationFn: () => analyzeSbom(sbom.id),
-    onMutate: () => setAnalyzing(true),
-    onSuccess: (run) => {
+  const handleRunAnalysis = () => {
+    startAnalysis({ sources: ['NVD', 'OSV', 'GITHUB'] });
+  };
+
+  // Invalidate runs list when analysis completes
+  const handleReset = () => {
+    if (state.phase === 'done') {
       queryClient.invalidateQueries({ queryKey: ['runs'] });
-      showToast('Analysis started successfully', 'success');
-      setAnalyzing(false);
-      if (run?.id) {
-        router.push(`/analysis/${run.id}`);
-      }
-    },
-    onError: (err: Error) => {
-      showToast(`Analysis failed: ${err.message}`, 'error');
-      setAnalyzing(false);
-    },
-  });
+    }
+    reset();
+  };
+
+  const isAnalyzing = state.phase === 'connecting' || state.phase === 'parsing' || state.phase === 'running';
 
   return (
     <div className="space-y-6">
@@ -67,12 +65,13 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>SBOM Details</CardTitle>
           <Button
-            onClick={() => analyzeMutation.mutate()}
-            loading={analyzing}
+            onClick={handleRunAnalysis}
+            loading={isAnalyzing}
+            disabled={isAnalyzing}
             size="sm"
           >
             <Play className="h-4 w-4" />
-            Run Analysis
+            {isAnalyzing ? 'Analyzing…' : 'Run Analysis'}
           </Button>
         </CardHeader>
         <CardContent>
@@ -95,6 +94,15 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
           </dl>
         </CardContent>
       </Card>
+
+      {/* Live analysis progress (shown while running or after completion) */}
+      {state.phase !== 'idle' && (
+        <AnalysisProgress
+          state={state}
+          onCancel={isAnalyzing ? cancel : undefined}
+          onReset={handleReset}
+        />
+      )}
 
       {/* Components Table */}
       <Card>

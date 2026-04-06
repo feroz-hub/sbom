@@ -11,6 +11,7 @@
 #     ✅ Detailed CVSS & CWE section per finding
 # ================================================================
 
+import json
 from io import BytesIO
 from datetime import datetime
 from collections import Counter
@@ -295,6 +296,56 @@ def build_pdf_from_run_bytes(run: Dict[str, Any], title: str = "SBOM Vulnerabili
     story.append(sev_table)
     story.append(Spacer(1, 8))
 
+    # Top 10 Most Critical Findings
+    story.append(Paragraph("Top 10 Most Critical Findings", styles["Section"]))
+    top10_rows_data = rows if rows else []
+
+    def _sort_key_score(r):
+        s = r.get("score")
+        return s if s is not None else -1
+
+    sorted_rows_top10 = sorted(top10_rows_data, key=_sort_key_score, reverse=True)[:10]
+    top10_header = ["Vulnerability ID", "Component", "Severity", "Score"]
+    top10_data: List[List[Any]] = [[Paragraph(h, styles["TCellBold"]) for h in top10_header]]
+    if sorted_rows_top10:
+        for r in sorted_rows_top10:
+            comp_txt = (f"{r.get('component','')}@{r.get('version','')}".strip("@")).strip()
+            sev = _severity_bucket(r.get("severity"))
+            top10_data.append([
+                Paragraph(escape(_short(r.get("id") or "", 30)), styles["TCell"]),
+                Paragraph(escape(_short(comp_txt, 40)), styles["TCell"]),
+                Paragraph(escape(sev), styles["TCellCenter"]),
+                Paragraph("" if r.get("score") is None else f"{r.get('score')}", styles["TCellRight"]),
+            ])
+    else:
+        top10_data.append([
+            Paragraph("No findings.", styles["TCellMuted"]),
+            Paragraph("", styles["TCell"]),
+            Paragraph("", styles["TCell"]),
+            Paragraph("", styles["TCell"]),
+        ])
+    top10_cw = _widths(avail * 0.7, [0.30, 0.40, 0.15, 0.15])
+    top10_table = Table(top10_data, colWidths=top10_cw, repeatRows=1, hAlign="LEFT")
+    top10_style = [
+        ("BACKGROUND", (0, 0), (-1, 0), HEADER_BG),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("TEXTCOLOR", (0, 0), (-1, 0), PRIMARY),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ALIGN", (2, 1), (2, -1), "CENTER"),
+        ("ALIGN", (3, 1), (3, -1), "RIGHT"),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), ROW_STRIPES),
+    ]
+    for i, r in enumerate(sorted_rows_top10, start=1):
+        sev = _severity_bucket(r.get("severity"))
+        col = _sev_color(sev)
+        top10_style.append(("BACKGROUND", (2, i), (2, i), col))
+        top10_style.append(("TEXTCOLOR", (2, i), (2, i),
+                            colors.white if sev in ("CRITICAL", "HIGH") else colors.black))
+    top10_table.setStyle(TableStyle(top10_style))
+    story.append(top10_table)
+    story.append(Spacer(1, 12))
 
     comps = run.get("components") or []
     story.append(Paragraph("Components (Summary)", styles["Section"]))
@@ -349,7 +400,7 @@ def build_pdf_from_run_bytes(run: Dict[str, Any], title: str = "SBOM Vulnerabili
 
     story.append(Paragraph("Findings", styles["Section"]))
 
-    find_header = ["Component", "ID", "Severity", "Score", "Published", "Sources", "URL"]
+    find_header = ["Component", "ID", "Severity", "Score", "Published", "Sources", "Fix Version"]
     find_table_data: List[List[Any]] = [[Paragraph(h, styles["TCellBold"]) for h in find_header]]
 
     # Track severity values per data row to paint color badges
@@ -358,11 +409,15 @@ def build_pdf_from_run_bytes(run: Dict[str, Any], title: str = "SBOM Vulnerabili
     if rows:
         for r in rows:
             comp_txt = (f"{r.get('component','')}@{r.get('version','')}".strip("@")).strip()
-            url_val = (r.get("url") or "").strip()
-            url_par = Paragraph(
-                f'<link href="{escape(url_val)}">{escape(_short(url_val, 70))}</link>' if url_val else "",
-                styles["TCell"]
-            )
+            fv_raw = r.get("fixed_versions") or "[]"
+            if isinstance(fv_raw, str):
+                try:
+                    fv_list = json.loads(fv_raw)
+                except Exception:
+                    fv_list = []
+            else:
+                fv_list = list(fv_raw) if fv_raw else []
+            fix_ver = fv_list[0] if fv_list else "—"
             sev = _severity_bucket(r.get("severity"))
             # Add row
             find_table_data.append([
@@ -372,7 +427,7 @@ def build_pdf_from_run_bytes(run: Dict[str, Any], title: str = "SBOM Vulnerabili
                 Paragraph("" if r.get("score") is None else f"{r.get('score')}", styles["TCellRight"]),
                 Paragraph(escape((r.get("published") or "")[:10]), styles["TCellCenter"]),
                 Paragraph(escape(_short(r.get("sources") or "", 28)), styles["TCell"]),
-                url_par,
+                Paragraph(escape(_short(str(fix_ver), 20)), styles["TCell"]),
             ])
             severity_by_row[len(find_table_data) - 1] = sev  # table row index
     else:
@@ -413,6 +468,80 @@ def build_pdf_from_run_bytes(run: Dict[str, Any], title: str = "SBOM Vulnerabili
     find_table.setStyle(TableStyle(base_style))
     story.append(find_table)
 
+    # Finding Details — mini-card per finding
+    if rows:
+        story.append(Spacer(1, 16))
+        story.append(Paragraph("Finding Details", styles["Section"]))
+        CARD_BG = colors.HexColor("#f5f7fa")
+
+        for idx, r in enumerate(rows):
+            if idx > 0 and idx % 8 == 0:
+                story.append(PageBreak())
+
+            sev = _severity_bucket(r.get("severity"))
+            sev_col = _sev_color(sev)
+
+            fv_raw = r.get("fixed_versions") or "[]"
+            if isinstance(fv_raw, str):
+                try:
+                    fv_list = json.loads(fv_raw)
+                except Exception:
+                    fv_list = []
+            else:
+                fv_list = list(fv_raw) if fv_raw else []
+            fix_ver = fv_list[0] if fv_list else "—"
+
+            url_val = (r.get("url") or "").strip()
+            cwe_val = r.get("cwe") or "—"
+            if isinstance(cwe_val, list):
+                cwe_val = ", ".join(cwe_val) or "—"
+
+            attack_vec = r.get("attack_vector") or "—"
+            description = _short(r.get("description") or "", 400)
+            comp_txt = (f"{r.get('component','')}@{r.get('version','')}".strip("@")).strip()
+
+            detail_lines = [
+                f"<b>Component:</b> {escape(_short(comp_txt, 80))}",
+                f"<b>Published:</b> {escape((r.get('published') or '')[:10] or '—')}",
+                f"<b>Attack Vector:</b> {escape(str(attack_vec))}",
+                f"<b>CWE:</b> {escape(str(cwe_val))}",
+                f"<b>Fix:</b> {escape(str(fix_ver))}",
+            ]
+            if url_val:
+                detail_lines.append(
+                    f'<b>URL:</b> <link href="{escape(url_val)}">{escape(_short(url_val, 80))}</link>'
+                )
+            if description:
+                detail_lines.append(f"<b>Description:</b> {escape(description)}")
+
+            header_label = (
+                f"{escape(r.get('id') or 'N/A')}  "
+                f"[{escape(sev)}  {r.get('score') if r.get('score') is not None else '—'}]  "
+                f"{escape(r.get('sources') or '')}"
+            )
+
+            card_content = [
+                [Paragraph(header_label, styles["TCellBold"])],
+                [Paragraph("<br/>".join(detail_lines), styles["TCell"])],
+            ]
+
+            card_style = [
+                ("BACKGROUND", (0, 0), (-1, 0), sev_col),
+                ("TEXTCOLOR", (0, 0), (-1, 0),
+                 colors.white if sev in ("CRITICAL", "HIGH") else colors.black),
+                ("BACKGROUND", (0, 1), (-1, -1), CARD_BG),
+                ("FONTSIZE", (0, 0), (-1, -1), 8.5),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                ("BOX", (0, 0), (-1, -1), 0.5, colors.grey),
+            ]
+
+            card_table = Table(card_content, colWidths=[avail], hAlign="LEFT")
+            card_table.setStyle(TableStyle(card_style))
+            story.append(card_table)
+            story.append(Spacer(1, 6))
 
     doc.build(story)
     pdf_bytes = buffer.getvalue()

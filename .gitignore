@@ -9,6 +9,7 @@
 
 # ── Python ────────────────────────────────────────────────
 __pycache__/
+**/__pycache__/
 *.py[cod]
 *.pyo
 *.pyd
@@ -27,6 +28,14 @@ venv/
 env/
 ENV/
 .virtualenv/
+
+# ── Nested app artifacts ──────────────────────────────────
+**/.next/
+**/*.tsbuildinfo
+frontend/node_modules/
+frontend/next-env.d.ts
+**/dist/
+**/build/
 
 # ── Database ──────────────────────────────────────────────
 *.db

@@ -9,7 +9,7 @@ import { Select } from '@/components/ui/Select';
 import { Input } from '@/components/ui/Input';
 import { Card, CardContent } from '@/components/ui/Card';
 import { RunsTable } from '@/components/analysis/RunsTable';
-import { getRuns, getProjects, getSboms, analyzeConsolidated, downloadPdfReport, exportRunsJson } from '@/lib/api';
+import { getRuns, getProjects, getSboms, analyzeConsolidated, downloadPdfReport, exportRunsJson, getAnalysisConfig } from '@/lib/api';
 import { downloadBlob } from '@/lib/utils';
 import { useToast } from '@/hooks/useToast';
 import type { ConsolidatedAnalysisResult } from '@/types';
@@ -26,6 +26,12 @@ export default function AnalysisPage() {
   const [consolidatedSbomId, setConsolidatedSbomId] = useState('');
   const [consolidatedResult, setConsolidatedResult] = useState<ConsolidatedAnalysisResult | null>(null);
   const [pdfDownloading, setPdfDownloading] = useState(false);
+
+  const { data: analysisConfig } = useQuery({
+    queryKey: ['analysis-config'],
+    queryFn: ({ signal }) => getAnalysisConfig(signal),
+    staleTime: 60_000,
+  });
 
   const { data: projects } = useQuery({
     queryKey: ['projects'],
@@ -219,6 +225,17 @@ export default function AnalysisPage() {
             <p className="text-sm text-hcl-muted">
               Run a full multi-source vulnerability scan against all three databases simultaneously.
             </p>
+            {analysisConfig && !analysisConfig.github_configured && (
+              <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                <span>
+                  <strong>GitHub Advisory (GHSA) requires a GitHub token.</strong>{' '}
+                  Set <code className="font-mono text-xs bg-amber-100 px-1 rounded">GITHUB_TOKEN</code> in your
+                  backend <code className="font-mono text-xs bg-amber-100 px-1 rounded">.env</code> file to include
+                  GHSA findings. Proceeding without it will skip GitHub findings.
+                </span>
+              </div>
+            )}
             <div className="flex items-end gap-3 flex-wrap">
               <div className="w-48">
                 <Input

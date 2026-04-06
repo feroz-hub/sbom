@@ -1,7 +1,6 @@
 {
-  "/analysis/page": "app/analysis/page.js",
-  "/analysis/[id]/page": "app/analysis/[id]/page.js",
+  "/page": "app/page.js",
   "/sboms/page": "app/sboms/page.js",
-  "/projects/page": "app/projects/page.js",
-  "/page": "app/page.js"
+  "/analysis/page": "app/analysis/page.js",
+  "/analysis/[id]/page": "app/analysis/[id]/page.js"
 }
