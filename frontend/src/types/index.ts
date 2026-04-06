@@ -2,22 +2,24 @@ export interface Project {
   id: number;
   project_name: string;
   project_details: string | null;
-  project_status: 'Active' | 'Inactive';
+  project_status: number;   // 1 = Active, 0 = Inactive
   created_by: string | null;
-  created_on: string;
-  updated_on: string | null;
+  created_on: string | null;
+  modified_by: string | null;
+  modified_on: string | null;
 }
 
 export interface SBOMSource {
   id: number;
   sbom_name: string;
-  sbom_type: string | null;
+  sbom_type: number | null;       // FK integer to SBOMType
   sbom_version: string | null;
   projectid: number | null;
   project_name?: string | null;
   created_by: string | null;
-  created_on: string;
-  updated_on: string | null;
+  created_on: string | null;
+  modified_by: string | null;
+  modified_on: string | null;
   productver: string | null;
   sbom_data?: string | null;
 }
@@ -30,7 +32,8 @@ export interface SBOMComponent {
   cpe: string | null;
   purl: string | null;
   component_type: string | null;
-  created_on: string;
+  scope: string | null;
+  created_on: string | null;
 }
 
 export interface AnalysisRun {
@@ -38,33 +41,38 @@ export interface AnalysisRun {
   sbom_id: number | null;
   sbom_name?: string | null;
   project_id: number | null;
-  run_status: 'PASS' | 'FAIL' | 'PARTIAL' | 'ERROR' | 'RUNNING' | 'PENDING';
+  run_status: 'PASS' | 'FAIL' | 'PARTIAL' | 'ERROR' | 'RUNNING' | 'PENDING' | 'NO_DATA';
   source: string | null;
   total_components: number | null;
+  components_with_cpe: number | null;
   total_findings: number | null;
   critical_count: number | null;
   high_count: number | null;
   medium_count: number | null;
   low_count: number | null;
   unknown_count: number | null;
+  query_error_count: number | null;
+  duration_ms: number | null;       // milliseconds (backend field name)
   started_on: string | null;
   completed_on: string | null;
-  duration_seconds: number | null;
   error_message: string | null;
 }
 
 export interface AnalysisFinding {
   id: number;
-  run_id: number;
+  analysis_run_id: number;          // backend field name
   vuln_id: string | null;
-  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'UNKNOWN';
-  cvss_score: number | null;
+  source: string | null;
+  title: string | null;
+  description: string | null;
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'UNKNOWN' | null;
+  score: number | null;             // backend field name (not cvss_score)
+  vector: string | null;
+  cpe: string | null;
   component_name: string | null;
   component_version: string | null;
-  description: string | null;
   published_on: string | null;
   reference_url: string | null;
-  fixed_version: string | null;
 }
 
 export interface DashboardStats {
@@ -97,13 +105,6 @@ export interface SBOMType {
   typename: string;
 }
 
-export interface PaginatedResponse<T> {
-  items: T[];
-  total: number;
-  page: number;
-  page_size: number;
-}
-
 export interface ApiError {
   detail: string;
 }
@@ -111,24 +112,33 @@ export interface ApiError {
 export interface CreateProjectPayload {
   project_name: string;
   project_details?: string;
-  project_status: 'Active' | 'Inactive';
+  project_status: number;   // 1 = Active, 0 = Inactive
   created_by?: string;
 }
 
 export interface UpdateProjectPayload {
   project_name?: string;
   project_details?: string;
-  project_status?: 'Active' | 'Inactive';
+  project_status?: number;
+  modified_by?: string;
 }
 
 export interface CreateSBOMPayload {
   sbom_name: string;
   sbom_data: string;
-  sbom_type?: string;
+  sbom_type?: number;       // integer FK to SBOMType
   projectid?: number;
   sbom_version?: string;
   created_by?: string;
   productver?: string;
+}
+
+export interface UpdateSBOMPayload {
+  sbom_name?: string;
+  sbom_version?: string;
+  productver?: string;
+  sbom_type?: number;
+  modified_by?: string;
 }
 
 export interface AnalyzeSBOMPayload {
@@ -143,4 +153,21 @@ export interface PDFReportPayload {
   runId: number;
   title?: string;
   filename?: string;
+}
+
+export interface ConsolidatedAnalysisResult {
+  runId: number;
+  sbom_id?: number;
+  sbom_name?: string;
+  total_components?: number;
+  components_with_cpe?: number;
+  total_findings?: number;
+  critical_count?: number;
+  high_count?: number;
+  medium_count?: number;
+  low_count?: number;
+  unknown_count?: number;
+  status?: string;
+  duration_ms?: number;
+  [key: string]: unknown;
 }

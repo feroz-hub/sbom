@@ -123,7 +123,7 @@ export default function AnalysisDetailPage({ params }: AnalysisDetailPageProps) 
               {[
                 { label: 'Status', value: <StatusBadge status={run.run_status} /> },
                 { label: 'Source', value: run.source || '—' },
-                { label: 'Duration', value: formatDuration(run.duration_seconds) },
+                { label: 'Duration', value: formatDuration(run.duration_ms) },
                 { label: 'Total Components', value: run.total_components?.toLocaleString() ?? '—' },
                 { label: 'Total Findings', value: run.total_findings?.toLocaleString() ?? '—' },
                 { label: 'SBOM', value: run.sbom_name || (run.sbom_id ? `#${run.sbom_id}` : '—') },

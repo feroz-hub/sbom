@@ -32,12 +32,15 @@ export function formatDateShort(dateStr: string | null | undefined): string {
   }
 }
 
-export function formatDuration(seconds: number | null | undefined): string {
-  if (seconds == null) return '—';
-  if (seconds < 60) return `${Math.round(seconds)}s`;
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.round(seconds % 60);
-  return `${mins}m ${secs}s`;
+/** duration_ms comes from the backend in milliseconds */
+export function formatDuration(ms: number | null | undefined): string {
+  if (ms == null) return '—';
+  if (ms < 1000) return `${ms}ms`;
+  const secs = Math.round(ms / 1000);
+  if (secs < 60) return `${secs}s`;
+  const mins = Math.floor(secs / 60);
+  const rem = secs % 60;
+  return rem > 0 ? `${mins}m ${rem}s` : `${mins}m`;
 }
 
 export function truncate(str: string | null | undefined, maxLen = 80): string {

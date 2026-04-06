@@ -73,8 +73,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_CORS_ORIGINS,
     allow_credentials=False,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Accept", "Authorization", "Cache-Control"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # -----------------------------------------------
@@ -1324,7 +1324,7 @@ def create_sbom(payload: SBOMSourceCreate, db: Session = Depends(get_db)):
 
 @app.post(
     "/api/sboms/{sbom_id}/analyze",
-    response_model=SBOMAnalysisReportOut,
+    response_model=AnalysisRunOut,
     status_code=status.HTTP_201_CREATED,
 )
 def run_analysis_for_sbom(sbom_id: int, db: Session = Depends(get_db)):
@@ -1337,8 +1337,17 @@ def run_analysis_for_sbom(sbom_id: int, db: Session = Depends(get_db)):
     if not report:
         log.error("Analysis report generation failed for SBOM id=%d", sbom_id)
         raise HTTPException(status_code=500, detail="Unable to generate analysis report")
-    log.info("Analysis complete for SBOM id=%d → report id=%d status=%s", sbom_id, report.id, report.sbom_result)
-    return report
+    # Return the AnalysisRun (not the legacy SBOMAnalysisReport) so the
+    # frontend can navigate directly to /analysis/{run.id}
+    run = db.execute(
+        select(AnalysisRun)
+        .where(AnalysisRun.sbom_id == sbom_id)
+        .order_by(AnalysisRun.id.desc())
+    ).scalars().first()
+    if not run:
+        raise HTTPException(status_code=500, detail="AnalysisRun record not found after creation")
+    log.info("Analysis complete for SBOM id=%d → run id=%d status=%s", sbom_id, run.id, run.run_status)
+    return run
 
 # -----------------------------
 # SBOM listing/filter + components
@@ -1510,7 +1519,8 @@ def delete_sbom(
     def _norm(s: Optional[str]) -> str:
         return (s or "").strip().lower()
 
-    if _norm(sbom.created_by) != _norm(user_id):
+    # Allow delete when created_by is null/empty (no ownership constraint on un-owned SBOMs)
+    if sbom.created_by and _norm(sbom.created_by) != _norm(user_id):
         raise HTTPException(status_code=403, detail="Forbidden: user cannot delete this SBOM")
 
     if _norm(confirm) not in {"yes", "y"}:

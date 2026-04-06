@@ -1,16 +1,31 @@
 'use client';
 
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useMemo } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { Play, Download, FileJson, AlertTriangle, CheckCircle2, XCircle, ActivityIcon, Layers } from 'lucide-react';
 import { TopBar } from '@/components/layout/TopBar';
+import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
+import { Input } from '@/components/ui/Input';
+import { Card, CardContent } from '@/components/ui/Card';
 import { RunsTable } from '@/components/analysis/RunsTable';
-import { getRuns, getProjects, getSboms } from '@/lib/api';
+import { getRuns, getProjects, getSboms, analyzeConsolidated, downloadPdfReport, exportRunsJson } from '@/lib/api';
+import { downloadBlob } from '@/lib/utils';
+import { useToast } from '@/hooks/useToast';
+import type { ConsolidatedAnalysisResult } from '@/types';
 
 export default function AnalysisPage() {
+  const { showToast } = useToast();
+
+  // ── Filters ────────────────────────────────────────────────────────────────
   const [projectFilter, setProjectFilter] = useState('');
   const [sbomFilter, setSbomFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+
+  // ── Consolidated analysis ──────────────────────────────────────────────────
+  const [consolidatedSbomId, setConsolidatedSbomId] = useState('');
+  const [consolidatedResult, setConsolidatedResult] = useState<ConsolidatedAnalysisResult | null>(null);
+  const [pdfDownloading, setPdfDownloading] = useState(false);
 
   const { data: projects } = useQuery({
     queryKey: ['projects'],
@@ -22,7 +37,7 @@ export default function AnalysisPage() {
     queryFn: ({ signal }) => getSboms(1, 100, signal),
   });
 
-  const { data: runs, isLoading, error } = useQuery({
+  const { data: runs, isLoading, error, refetch } = useQuery({
     queryKey: ['runs', { projectFilter, sbomFilter, statusFilter }],
     queryFn: ({ signal }) =>
       getRuns(
@@ -31,18 +46,115 @@ export default function AnalysisPage() {
           sbom_id: sbomFilter ? Number(sbomFilter) : undefined,
           run_status: statusFilter || undefined,
           page: 1,
-          page_size: 50,
+          page_size: 100,
         },
         signal
       ),
   });
 
+  // ── Summary metrics derived from loaded runs ───────────────────────────────
+  const summary = useMemo(() => {
+    if (!runs) return null;
+    return {
+      total: runs.length,
+      pass: runs.filter((r) => r.run_status === 'PASS').length,
+      fail: runs.filter((r) => r.run_status === 'FAIL').length,
+      partial: runs.filter((r) => r.run_status === 'PARTIAL').length,
+      errors: runs.filter((r) => r.run_status === 'ERROR').length,
+      findings: runs.reduce((s, r) => s + (r.total_findings ?? 0), 0),
+    };
+  }, [runs]);
+
+  // ── Consolidated analysis mutation ─────────────────────────────────────────
+  const consolidateMutation = useMutation({
+    mutationFn: () => {
+      const id = Number(consolidatedSbomId);
+      if (!id) throw new Error('Please enter a valid SBOM ID');
+      const sbom = sboms?.find((s) => s.id === id);
+      return analyzeConsolidated({ sbom_id: id, sbom_name: sbom?.sbom_name ?? `SBOM #${id}` });
+    },
+    onSuccess: (result) => {
+      setConsolidatedResult(result);
+      showToast('Consolidated analysis complete', 'success');
+      refetch();
+    },
+    onError: (err: Error) => {
+      showToast(`Analysis failed: ${err.message}`, 'error');
+    },
+  });
+
+  const handleDownloadConsolidatedPdf = async () => {
+    if (!consolidatedResult?.runId) return;
+    setPdfDownloading(true);
+    try {
+      const blob = await downloadPdfReport({
+        runId: consolidatedResult.runId,
+        title: `Consolidated Analysis — SBOM #${consolidatedSbomId}`,
+        filename: `sbom-consolidated-${consolidatedSbomId}.pdf`,
+      });
+      downloadBlob(blob, `sbom-consolidated-${consolidatedSbomId}.pdf`);
+      showToast('PDF downloaded', 'success');
+    } catch (err) {
+      showToast(`PDF failed: ${(err as Error).message}`, 'error');
+    } finally {
+      setPdfDownloading(false);
+    }
+  };
+
+  const handleExportJson = async () => {
+    try {
+      await exportRunsJson({
+        project_id: projectFilter ? Number(projectFilter) : undefined,
+        sbom_id: sbomFilter ? Number(sbomFilter) : undefined,
+        run_status: statusFilter || undefined,
+      });
+      showToast('Exported as JSON', 'success');
+    } catch (err) {
+      showToast(`Export failed: ${(err as Error).message}`, 'error');
+    }
+  };
+
   return (
     <div className="flex flex-col flex-1">
-      <TopBar title="Analysis Runs" />
-      <div className="p-6 space-y-4">
-        {/* Filters */}
-        <div className="flex flex-wrap gap-3 bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+      <TopBar
+        title="Analysis Runs"
+        action={
+          <Button variant="secondary" size="sm" onClick={handleExportJson}>
+            <FileJson className="h-4 w-4" />
+            Export JSON
+          </Button>
+        }
+      />
+      <div className="p-6 space-y-5">
+
+        {/* ── Summary metric cards ─────────────────────────────────────────── */}
+        {summary && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+            {[
+              { label: 'Total Runs',     value: summary.total,    icon: Layers,         color: 'text-hcl-blue  bg-hcl-light',  border: 'border-l-hcl-blue'  },
+              { label: 'Pass',           value: summary.pass,     icon: CheckCircle2,   color: 'text-green-600 bg-green-50',   border: 'border-l-green-500' },
+              { label: 'Fail',           value: summary.fail,     icon: XCircle,        color: 'text-red-600   bg-red-50',     border: 'border-l-red-500'   },
+              { label: 'Partial',        value: summary.partial,  icon: ActivityIcon,   color: 'text-amber-600 bg-amber-50',   border: 'border-l-amber-500' },
+              { label: 'Errors',         value: summary.errors,   icon: AlertTriangle,  color: 'text-orange-600 bg-orange-50', border: 'border-l-orange-500'},
+              { label: 'Total Findings', value: summary.findings, icon: AlertTriangle,  color: 'text-red-600   bg-red-50',     border: 'border-l-red-500'   },
+            ].map(({ label, value, icon: Icon, color, border }) => (
+              <div key={label} className={`bg-white rounded-xl border border-hcl-border shadow-card border-l-4 ${border} px-4 py-3`}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-hcl-muted">{label}</p>
+                    <p className="mt-0.5 text-2xl font-bold text-hcl-navy">{value.toLocaleString()}</p>
+                  </div>
+                  <div className={`p-2 rounded-lg ${color}`}>
+                    <Icon className="h-4 w-4" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── Filters ─────────────────────────────────────────────────────── */}
+        <div className="flex flex-wrap gap-3 bg-white rounded-xl border border-hcl-border shadow-card p-4">
           <Select
             value={projectFilter}
             onChange={(e) => setProjectFilter(e.target.value)}
@@ -78,6 +190,7 @@ export default function AnalysisPage() {
             <option value="PASS">PASS</option>
             <option value="FAIL">FAIL</option>
             <option value="PARTIAL">PARTIAL</option>
+            <option value="NO_DATA">NO_DATA</option>
             <option value="ERROR">ERROR</option>
             <option value="RUNNING">RUNNING</option>
             <option value="PENDING">PENDING</option>
@@ -85,19 +198,98 @@ export default function AnalysisPage() {
 
           {(projectFilter || sbomFilter || statusFilter) && (
             <button
-              onClick={() => {
-                setProjectFilter('');
-                setSbomFilter('');
-                setStatusFilter('');
-              }}
-              className="text-sm text-gray-500 hover:text-gray-800 underline"
+              onClick={() => { setProjectFilter(''); setSbomFilter(''); setStatusFilter(''); }}
+              className="text-sm text-hcl-muted hover:text-hcl-navy underline"
             >
               Clear filters
             </button>
           )}
         </div>
 
+        {/* ── Runs table ───────────────────────────────────────────────────── */}
         <RunsTable runs={runs} isLoading={isLoading} error={error} />
+
+        {/* ── Consolidated Analysis ────────────────────────────────────────── */}
+        <div className="bg-white rounded-xl border border-hcl-border shadow-card overflow-hidden">
+          <div className="px-6 py-4 border-b-2 border-hcl-border bg-hcl-light/40 flex items-center gap-2.5">
+            <div className="w-1 h-5 rounded-full bg-hcl-cyan shrink-0" />
+            <h2 className="text-base font-semibold text-hcl-navy">Consolidated Analysis (NVD + GHSA + OSV)</h2>
+          </div>
+          <div className="px-6 py-5 space-y-4">
+            <p className="text-sm text-hcl-muted">
+              Run a full multi-source vulnerability scan against all three databases simultaneously.
+            </p>
+            <div className="flex items-end gap-3 flex-wrap">
+              <div className="w-48">
+                <Input
+                  label="SBOM ID"
+                  placeholder="e.g. 3"
+                  value={consolidatedSbomId}
+                  onChange={(e) => setConsolidatedSbomId(e.target.value)}
+                  type="number"
+                  min="1"
+                />
+              </div>
+              {/* Quick-pick from loaded SBOMs */}
+              <div className="w-56">
+                <Select
+                  label="Or pick SBOM"
+                  placeholder="Select SBOM..."
+                  value={consolidatedSbomId}
+                  onChange={(e) => setConsolidatedSbomId(e.target.value)}
+                >
+                  {sboms?.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      #{s.id} — {s.sbom_name}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <Button
+                onClick={() => consolidateMutation.mutate()}
+                loading={consolidateMutation.isPending}
+                disabled={!consolidatedSbomId}
+              >
+                <Play className="h-4 w-4" />
+                Run Analysis
+              </Button>
+            </div>
+
+            {/* Results */}
+            {consolidatedResult && (
+              <div className="mt-2 space-y-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                  {[
+                    { label: 'Run ID',      value: consolidatedResult.runId },
+                    { label: 'Components',  value: consolidatedResult.total_components ?? '—' },
+                    { label: 'With CPE',    value: consolidatedResult.components_with_cpe ?? '—' },
+                    { label: 'Total Found', value: consolidatedResult.total_findings ?? '—' },
+                    { label: 'Critical',    value: consolidatedResult.critical_count ?? 0 },
+                    { label: 'High',        value: consolidatedResult.high_count ?? 0 },
+                  ].map(({ label, value }) => (
+                    <div key={label} className="bg-hcl-light rounded-lg px-4 py-3 border border-hcl-border">
+                      <p className="text-xs font-medium text-hcl-muted">{label}</p>
+                      <p className="mt-0.5 text-xl font-bold text-hcl-navy">{value}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleDownloadConsolidatedPdf}
+                    loading={pdfDownloading}
+                  >
+                    <Download className="h-4 w-4" />
+                    Download PDF Report
+                  </Button>
+                  <span className="text-xs text-hcl-muted">Run #{consolidatedResult.runId}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
       </div>
     </div>
   );

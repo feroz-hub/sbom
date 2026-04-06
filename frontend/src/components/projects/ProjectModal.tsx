@@ -16,11 +16,14 @@ import type { Project } from '@/types';
 const schema = z.object({
   project_name: z.string().min(1, 'Project name is required'),
   project_details: z.string().optional(),
-  project_status: z.enum(['Active', 'Inactive']),
+  project_status: z.enum(['Active', 'Inactive']),  // UI uses strings; converted to int on submit
   created_by: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof schema>;
+
+const toStatusInt = (s: 'Active' | 'Inactive') => (s === 'Active' ? 1 : 0);
+const toStatusStr = (n: number): 'Active' | 'Inactive' => (n === 1 ? 'Active' : 'Inactive');
 
 interface ProjectModalProps {
   open: boolean;
@@ -53,7 +56,7 @@ export function ProjectModal({ open, onClose, project }: ProjectModalProps) {
       reset({
         project_name: project.project_name,
         project_details: project.project_details ?? '',
-        project_status: project.project_status,
+        project_status: toStatusStr(project.project_status),
         created_by: project.created_by ?? '',
       });
     } else {
@@ -64,16 +67,16 @@ export function ProjectModal({ open, onClose, project }: ProjectModalProps) {
   const mutation = useMutation({
     mutationFn: (values: FormValues) => {
       if (isEdit && project) {
-        return updateProject(project.id, 1, {
+        return updateProject(project.id, {
           project_name: values.project_name,
           project_details: values.project_details,
-          project_status: values.project_status,
+          project_status: toStatusInt(values.project_status),
         });
       }
       return createProject({
         project_name: values.project_name,
         project_details: values.project_details,
-        project_status: values.project_status,
+        project_status: toStatusInt(values.project_status),
         created_by: values.created_by,
       });
     },

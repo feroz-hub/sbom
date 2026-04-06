@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import { ExternalLink } from 'lucide-react';
 import { Table, TableHead, TableBody, Th, Td, EmptyRow } from '@/components/ui/Table';
 import { SeverityBadge } from '@/components/ui/Badge';
@@ -65,9 +64,9 @@ export function FindingsTable({
               <Th>Score</Th>
               <Th>Component</Th>
               <Th>Version</Th>
-              <Th>Description</Th>
+              <Th>CPE</Th>
+              <Th>Title / Description</Th>
               <Th>Published</Th>
-              <Th>Fixed In</Th>
             </tr>
           </TableHead>
           <TableBody>
@@ -94,20 +93,22 @@ export function FindingsTable({
                     )}
                   </Td>
                   <Td>
-                    <SeverityBadge severity={f.severity} />
+                    <SeverityBadge severity={f.severity ?? 'UNKNOWN'} />
                   </Td>
                   <Td className="text-slate-700">
-                    {f.cvss_score != null ? f.cvss_score.toFixed(1) : '—'}
+                    {f.score != null ? f.score.toFixed(1) : '—'}
                   </Td>
                   <Td className="font-medium text-hcl-navy">{f.component_name || '—'}</Td>
                   <Td className="font-mono text-xs text-hcl-muted">{f.component_version || '—'}</Td>
-                  <Td className="text-hcl-muted max-w-[240px]">
-                    <span title={f.description || ''}>
-                      {truncate(f.description, 90)}
+                  <Td className="font-mono text-xs text-hcl-muted max-w-[160px] truncate">
+                    <span title={f.cpe || ''}>{f.cpe || '—'}</span>
+                  </Td>
+                  <Td className="text-hcl-muted max-w-[220px]">
+                    <span title={f.title || f.description || ''}>
+                      {truncate(f.title || f.description, 80)}
                     </span>
                   </Td>
                   <Td className="text-hcl-muted whitespace-nowrap">{formatDateShort(f.published_on)}</Td>
-                  <Td className="font-mono text-xs text-hcl-muted">{f.fixed_version || '—'}</Td>
                 </tr>
               ))
             )}

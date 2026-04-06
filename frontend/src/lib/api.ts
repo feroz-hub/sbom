@@ -12,17 +12,18 @@ import type {
   CreateProjectPayload,
   UpdateProjectPayload,
   CreateSBOMPayload,
+  UpdateSBOMPayload,
   AnalyzeSBOMPayload,
   PDFReportPayload,
+  ConsolidatedAnalysisResult,
 } from '@/types';
-
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 async function request<T>(
   path: string,
   options: RequestInit & { signal?: AbortSignal } = {}
 ): Promise<T> {
-  const url = `${BASE_URL}${path}`;
+  // Use relative paths — Next.js rewrites proxy them to the backend (no CORS)
+  const url = path;
   const res = await fetch(url, {
     headers: {
       'Content-Type': 'application/json',
@@ -36,7 +37,13 @@ async function request<T>(
     try {
       const body = await res.json();
       if (body?.detail) {
-        message = typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail);
+        message = typeof body.detail === 'string'
+          ? body.detail
+          : Array.isArray(body.detail)
+            ? body.detail.map((e: { msg?: string; loc?: string[] }) =>
+                `${e.loc?.slice(1).join('.')} — ${e.msg}`
+              ).join('; ')
+            : JSON.stringify(body.detail);
       }
     } catch {
       // ignore parse errors
@@ -93,11 +100,11 @@ export function createProject(payload: CreateProjectPayload, signal?: AbortSigna
 
 export function updateProject(
   id: number,
-  userId: number | string,
   payload: UpdateProjectPayload,
   signal?: AbortSignal
 ) {
-  return request<Project>(`/api/projects/${id}?user_id=${userId}`, {
+  // user_id is optional on the backend — omit it so any user can update
+  return request<Project>(`/api/projects/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
     signal,
@@ -131,7 +138,7 @@ export function createSbom(payload: CreateSBOMPayload, signal?: AbortSignal) {
 export function updateSbom(
   id: number,
   userId: number | string,
-  payload: Partial<CreateSBOMPayload>,
+  payload: UpdateSBOMPayload,
   signal?: AbortSignal
 ) {
   return request<SBOMSource>(`/api/sboms/${id}?user_id=${userId}`, {
@@ -159,9 +166,9 @@ export function analyzeSbom(sbomId: number, signal?: AbortSignal) {
   });
 }
 
-// ─── Consolidated Analysis ────────────────────────────────────────────────────
+// ─── Consolidated Analysis ───────────────────────────────────────────────────
 export function analyzeConsolidated(payload: AnalyzeSBOMPayload, signal?: AbortSignal) {
-  return request<AnalysisRun>('/analyze-sbom-consolidated', {
+  return request<ConsolidatedAnalysisResult>('/analyze-sbom-consolidated', {
     method: 'POST',
     body: JSON.stringify(payload),
     signal,
@@ -203,9 +210,28 @@ export function getRunFindings(
   return request<AnalysisFinding[]>(`/api/runs/${id}/findings?${params.toString()}`, { signal });
 }
 
+export async function exportRunsJson(filter: RunsFilter = {}): Promise<void> {
+  const params = new URLSearchParams();
+  if (filter.sbom_id !== undefined) params.set('sbom_id', String(filter.sbom_id));
+  if (filter.project_id !== undefined) params.set('project_id', String(filter.project_id));
+  if (filter.run_status) params.set('run_status', filter.run_status);
+  params.set('page', '1');
+  params.set('page_size', '1000');
+  const data = await request<AnalysisRun[]>(`/api/runs?${params.toString()}`);
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'analysis_runs.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 // ─── PDF Report ───────────────────────────────────────────────────────────────
 export async function downloadPdfReport(payload: PDFReportPayload): Promise<Blob> {
-  const url = `${BASE_URL}/api/pdf-report`;
+  const url = '/api/pdf-report';
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

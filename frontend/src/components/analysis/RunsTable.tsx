@@ -57,17 +57,19 @@ export function RunsTable({ runs, isLoading, error }: RunsTableProps) {
             <Th>Status</Th>
             <Th>Source</Th>
             <Th>Components</Th>
+            <Th>With CPE</Th>
             <Th>Findings</Th>
+            <Th>Errors</Th>
             <Th>Duration</Th>
-            <Th>Started On</Th>
+            <Th>Completed On</Th>
             <Th className="text-right">Actions</Th>
           </tr>
         </TableHead>
         <TableBody>
           {isLoading ? (
-            Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} cols={9} />)
+            Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} cols={11} />)
           ) : !runs?.length ? (
-            <EmptyRow cols={9} message="No analysis runs found. Run an analysis from an SBOM detail page." />
+            <EmptyRow cols={11} message="No analysis runs found. Run an analysis from an SBOM detail page." />
           ) : (
             runs.map((run) => (
               <tr
@@ -76,7 +78,7 @@ export function RunsTable({ runs, isLoading, error }: RunsTableProps) {
                 onClick={() => router.push(`/analysis/${run.id}`)}
               >
                 <Td className="font-mono text-xs text-hcl-muted">#{run.id}</Td>
-                <Td className="font-medium text-hcl-navy max-w-[160px] truncate">
+                <Td className="font-medium text-hcl-navy max-w-[140px] truncate">
                   {run.sbom_name || (run.sbom_id ? `SBOM #${run.sbom_id}` : '—')}
                 </Td>
                 <Td onClick={(e) => e.stopPropagation()}>
@@ -84,6 +86,7 @@ export function RunsTable({ runs, isLoading, error }: RunsTableProps) {
                 </Td>
                 <Td className="text-hcl-muted text-xs">{run.source || '—'}</Td>
                 <Td className="text-slate-700">{run.total_components ?? '—'}</Td>
+                <Td className="text-slate-700">{run.components_with_cpe ?? '—'}</Td>
                 <Td onClick={(e) => e.stopPropagation()}>
                   <div className="flex items-center gap-1 flex-wrap">
                     {run.critical_count != null && run.critical_count > 0 && (
@@ -114,8 +117,15 @@ export function RunsTable({ runs, isLoading, error }: RunsTableProps) {
                     )}
                   </div>
                 </Td>
-                <Td className="text-hcl-muted">{formatDuration(run.duration_seconds)}</Td>
-                <Td className="text-hcl-muted whitespace-nowrap">{formatDate(run.started_on)}</Td>
+                <Td className="text-slate-700">
+                  {run.query_error_count != null && run.query_error_count > 0 ? (
+                    <span className="text-xs text-orange-600 font-medium">{run.query_error_count}</span>
+                  ) : (
+                    <span className="text-hcl-muted">{run.query_error_count ?? '—'}</span>
+                  )}
+                </Td>
+                <Td className="text-hcl-muted whitespace-nowrap">{formatDuration(run.duration_ms)}</Td>
+                <Td className="text-hcl-muted whitespace-nowrap">{formatDate(run.completed_on)}</Td>
                 <Td className="text-right" onClick={(e) => e.stopPropagation()}>
                   <div className="flex items-center justify-end gap-2">
                     <button

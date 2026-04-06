@@ -1,8 +1,15 @@
 # schemas.py
 
-from typing import Optional
+from typing import Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+
+def _coerce_project_status(v) -> int:
+    """Accept 'Active'/'Inactive' strings or 0/1 integers."""
+    if isinstance(v, str):
+        return 1 if v.strip().lower() == 'active' else 0
+    return int(v)
 
 
 class ORMModel(BaseModel):
@@ -13,8 +20,13 @@ class ORMModel(BaseModel):
 class ProjectCreate(BaseModel):
     project_name: str
     project_details: Optional[str] = None
-    project_status: int = Field(1, description="1-Active, 0-Inactive", ge=0, le=1)
+    project_status: Union[int, str] = Field(1, description="1 or 'Active' / 0 or 'Inactive'")
     created_by: Optional[str] = None
+
+    @field_validator('project_status', mode='before')
+    @classmethod
+    def coerce_status(cls, v):
+        return _coerce_project_status(v)
 
 
 class ProjectOut(ORMModel):
@@ -135,8 +147,15 @@ class SBOMAnalysisReportCreate(BaseModel):
 class ProjectUpdate(BaseModel):
     project_name: Optional[str] = None
     project_details: Optional[str] = None
-    project_status: Optional[int] = Field(default=None, ge=0, le=1)
+    project_status: Optional[Union[int, str]] = Field(default=None)
     modified_by: Optional[str] = None
+
+    @field_validator('project_status', mode='before')
+    @classmethod
+    def coerce_status(cls, v):
+        if v is None:
+            return None
+        return _coerce_project_status(v)
 
 
 class SBOMSourceUpdate(BaseModel):

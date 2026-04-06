@@ -71,8 +71,8 @@ export function ProjectsTable({ projects, isLoading, error }: ProjectsTableProps
                   <Td className="font-mono text-xs text-hcl-muted">#{project.id}</Td>
                   <Td className="font-medium text-hcl-navy">{project.project_name}</Td>
                   <Td>
-                    <Badge variant={project.project_status === 'Active' ? 'success' : 'gray'}>
-                      {project.project_status}
+                    <Badge variant={project.project_status === 1 ? 'success' : 'gray'}>
+                      {project.project_status === 1 ? 'Active' : 'Inactive'}
                     </Badge>
                   </Td>
                   <Td className="max-w-xs truncate text-hcl-muted">

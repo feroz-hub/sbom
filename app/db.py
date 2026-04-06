@@ -6,8 +6,8 @@ from pathlib import Path
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-# Allow DATABASE_URL override via environment variable; default to app/sbom_api.db
-_default_db = str(Path(__file__).resolve().parent / "sbom_api.db")
+# Allow DATABASE_URL override via environment variable; default to project-root/sbom_api.db
+_default_db = str(Path(__file__).resolve().parent.parent / "sbom_api.db")
 DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{_default_db}")
 
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})

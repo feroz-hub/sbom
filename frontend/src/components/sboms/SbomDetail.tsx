@@ -85,7 +85,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
               { label: 'Project ID', value: sbom.projectid ? `#${sbom.projectid}` : '—' },
               { label: 'Created By', value: sbom.created_by || '—' },
               { label: 'Created On', value: formatDate(sbom.created_on) },
-              { label: 'Updated On', value: formatDate(sbom.updated_on) },
+              { label: 'Updated On', value: formatDate(sbom.modified_on) },
             ].map(({ label, value }) => (
               <div key={label}>
                 <dt className="text-xs font-medium text-hcl-muted uppercase tracking-wide">{label}</dt>
@@ -174,7 +174,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                       <StatusBadge status={run.run_status} />
                     </Td>
                     <Td className="text-slate-700">{run.total_findings ?? '—'}</Td>
-                    <Td className="text-hcl-muted">{formatDuration(run.duration_seconds)}</Td>
+                    <Td className="text-hcl-muted">{formatDuration(run.duration_ms)}</Td>
                     <Td className="text-hcl-muted whitespace-nowrap">{formatDate(run.started_on)}</Td>
                     <Td className="text-right">
                       <Link

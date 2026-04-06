@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import asyncio
 import concurrent.futures
@@ -19,6 +19,17 @@ try:
     import httpx  # type: ignore
 except Exception:  # pragma: no cover
     httpx = None  # type: ignore
+
+# Optional XML SBOM support
+try:
+    import xmltodict  # type: ignore
+    _XMLTODICT_AVAILABLE = True
+except ImportError:
+    _XMLTODICT_AVAILABLE = False
+
+# Module-level requests.Session for NVD connection pooling
+_nvd_session = requests.Session()
+_nvd_session.headers.update({"User-Agent": "SBOM-Analyzer/enterprise-2.0"})
 
 LOGGER = logging.getLogger(__name__)
 
@@ -313,6 +324,14 @@ def _parse_spdx(doc: Dict) -> List[Dict]:
     # SPDX-Lite or other representations
     for obj in doc.get("elements", []) or []:
         if obj.get("type") == "software:package":
+            purl = _norm(obj.get("packageUrl") or obj.get("packageURL"))
+            cpe = None
+            for ref in (obj.get("externalRefs") or obj.get("externalIdentifiers") or []):
+                rtype = (ref.get("referenceType") or ref.get("type") or "").lower()
+                if "cpe" in rtype:
+                    cpe = _norm(ref.get("referenceLocator") or ref.get("locator"))
+                if rtype == "purl" and not purl:
+                    purl = _norm(ref.get("referenceLocator") or ref.get("locator"))
             comps.append(
                 {
                     "name": _norm(obj.get("name")),
@@ -321,26 +340,148 @@ def _parse_spdx(doc: Dict) -> List[Dict]:
                     "group": None,
                     "supplier": None,
                     "scope": None,
-                    "purl": _norm(obj.get("packageUrl") or obj.get("packageURL")),
-                    "cpe": None,
+                    "purl": purl,
+                    "cpe": cpe,
                     "bom_ref": _norm(obj.get("id") or obj.get("spdx-id")),
                 }
             )
     return comps
 
 
+def _parse_cyclonedx_xml(xml_string: str) -> List[Dict]:
+    """Parse CycloneDX XML SBOM using xmltodict or xml.etree fallback."""
+    if _XMLTODICT_AVAILABLE:
+        doc = xmltodict.parse(xml_string)
+        bom = doc.get("bom") or doc
+        components_raw = bom.get("components") or {}
+        component_list = components_raw.get("component", [])
+        if isinstance(component_list, dict):
+            component_list = [component_list]
+        out = []
+        for c in component_list:
+            purl = None
+            cpe = None
+            ext_refs = c.get("externalReferences", {})
+            ref_list = ext_refs.get("reference", []) if isinstance(ext_refs, dict) else []
+            if isinstance(ref_list, dict):
+                ref_list = [ref_list]
+            for ref in ref_list:
+                rtype = (ref.get("@type") or "").lower()
+                url = ref.get("url")
+                if rtype == "purl" and url:
+                    purl = url
+                if "cpe" in rtype and url:
+                    cpe = url
+            if not purl:
+                purl = _norm(c.get("purl"))
+            if not cpe:
+                cpe = _norm(c.get("cpe"))
+            supplier_raw = c.get("supplier") or {}
+            supplier = _norm(supplier_raw.get("name") if isinstance(supplier_raw, dict) else supplier_raw)
+            out.append({
+                "name": _norm(c.get("name")),
+                "version": _norm(c.get("version")),
+                "type": _norm(c.get("@type")),
+                "group": _norm(c.get("group")),
+                "supplier": supplier,
+                "scope": _norm(c.get("@scope")),
+                "purl": purl,
+                "cpe": cpe,
+                "bom_ref": _norm(c.get("@bom-ref")),
+            })
+        return out
+    else:
+        import xml.etree.ElementTree as ET
+        ns = {"cdx": "http://cyclonedx.org/schema/bom/1"}
+        try:
+            root = ET.fromstring(xml_string)
+        except ET.ParseError as e:
+            raise ValueError(f"Invalid XML SBOM: {e}") from e
+        # Try to find namespace from root tag
+        if root.tag.startswith("{"):
+            ns_uri = root.tag.split("}")[0][1:]
+            ns = {"cdx": ns_uri}
+        out = []
+        comps_el = root.find("cdx:components", ns)
+        if comps_el is None:
+            return out
+        for comp in comps_el.findall("cdx:component", ns):
+            purl_el = comp.find("cdx:purl", ns)
+            cpe_el = comp.find("cdx:cpe", ns)
+            name_el = comp.find("cdx:name", ns)
+            ver_el = comp.find("cdx:version", ns)
+            grp_el = comp.find("cdx:group", ns)
+            out.append({
+                "name": _norm(name_el.text if name_el is not None else None),
+                "version": _norm(ver_el.text if ver_el is not None else None),
+                "type": _norm(comp.get("type")),
+                "group": _norm(grp_el.text if grp_el is not None else None),
+                "supplier": None,
+                "scope": _norm(comp.get("scope")),
+                "purl": _norm(purl_el.text if purl_el is not None else None),
+                "cpe": _norm(cpe_el.text if cpe_el is not None else None),
+                "bom_ref": _norm(comp.get("bom-ref")),
+            })
+        return out
+
+
+def _parse_spdx_xml(xml_string: str) -> List[Dict]:
+    """Parse SPDX XML (RDF/XML or tag-value as XML) — best-effort."""
+    if _XMLTODICT_AVAILABLE:
+        doc = xmltodict.parse(xml_string)
+        # SPDX RDF/XML: look for spdx:Package elements
+        # Fallback: treat as SPDX JSON-like structure after xmltodict conversion
+        return _parse_spdx(doc)
+    return []
+
+
 def extract_components(sbom_json: Any) -> List[Dict]:
-    """Accept SBOM as JSON string or already-parsed dict."""
+    """Accept SBOM as JSON string, XML string, or already-parsed dict."""
     if isinstance(sbom_json, dict):
         doc = sbom_json
-    else:
-        doc = json.loads(sbom_json)
+        if doc.get("bomFormat") == "CycloneDX":
+            return _parse_cyclonedx(doc)
+        if doc.get("spdxVersion") or doc.get("SPDXID"):
+            return _parse_spdx(doc)
+        if "components" in doc:  # best-effort CycloneDX-like
+            return _parse_cyclonedx(doc)
+        raise ValueError("Unsupported SBOM format (expect CycloneDX or SPDX)")
+
+    # Strip BOM, zero-width chars, and whitespace
+    _INVISIBLE = "\ufeff\ufffe\u200b\u200c\u200d\u2060\ufffe\u00a0"
+    text = sbom_json.strip().lstrip(_INVISIBLE).strip() if isinstance(sbom_json, str) else ""
+
+    # Try JSON first
+    if text.startswith("{") or text.startswith("["):
+        try:
+            doc = json.loads(text)
+            if doc.get("bomFormat") == "CycloneDX":
+                return _parse_cyclonedx(doc)
+            if doc.get("spdxVersion") or doc.get("SPDXID"):
+                return _parse_spdx(doc)
+            if "components" in doc:
+                return _parse_cyclonedx(doc)
+            raise ValueError("Unsupported SBOM format (expect CycloneDX or SPDX)")
+        except json.JSONDecodeError:
+            pass
+
+    # Try XML
+    if text.startswith("<"):
+        # Detect format from XML content
+        text_lower = text.lower()
+        if "cyclonedx" in text_lower or 'bomformat="cyclonedx"' in text_lower or "<bom" in text_lower:
+            return _parse_cyclonedx_xml(text)
+        if "spdx" in text_lower:
+            return _parse_spdx_xml(text)
+        # Fallback: try CycloneDX XML (most common XML SBOM format)
+        return _parse_cyclonedx_xml(text)
+
+    # Last resort: try JSON parse
+    doc = json.loads(text)
     if doc.get("bomFormat") == "CycloneDX":
         return _parse_cyclonedx(doc)
     if doc.get("spdxVersion") or doc.get("SPDXID"):
         return _parse_spdx(doc)
-    if "components" in doc:  # best-effort CycloneDX-like
-        return _parse_cyclonedx(doc)
     raise ValueError("Unsupported SBOM format (expect CycloneDX or SPDX)")
 
 
@@ -577,11 +718,17 @@ def nvd_query_by_cpe(cpe: str, api_key: Optional[str], settings: Optional[Analys
     delay = cfg.nvd_request_delay_with_key_seconds if api_key else cfg.nvd_request_delay_without_key_seconds
     out: List[Dict] = []
 
+    _nvd_session.headers.update({"User-Agent": cfg.http_user_agent})
+    if api_key:
+        _nvd_session.headers["apiKey"] = api_key
+    elif "apiKey" in _nvd_session.headers:
+        del _nvd_session.headers["apiKey"]
+
     while True:
         response = None
         for attempt in range(cfg.nvd_max_retries + 1):
             try:
-                response = requests.get(
+                response = _nvd_session.get(
                     cfg.nvd_api_base_url,
                     params=params,
                     headers=headers,
@@ -1033,22 +1180,18 @@ async def osv_query_by_components(components: List[dict], settings: _MultiSettin
     return findings, query_errors, query_warnings
 
 def enrich_component_for_osv(comp):
-    name = comp.get("name", "").lower()
+    comp = dict(comp)  # avoid mutating caller's dict
+    name = (comp.get("name") or "").lower()
     version = comp.get("version")
 
-    # Simple heuristic mapping
-    if "apache" in name or "commons" in name or "jena" in name:
-        ecosystem = "Maven"
-        purl = f"pkg:maven/{name.replace(' ', '')}/{name}@{version}"
-    elif "glibc" in name:
-        ecosystem = "Debian"
-        purl = None
-    else:
-        ecosystem = None
-        purl = None
-
-    comp["ecosystem"] = ecosystem
-    comp["purl"] = purl
+    # Only enrich if no purl already set
+    if not comp.get("purl"):
+        if "apache" in name or "commons" in name or "jena" in name:
+            comp["ecosystem"] = "Maven"
+            comp["purl"] = f"pkg:maven/{name.replace(' ', '')}/{name}@{version}"
+        elif "glibc" in name:
+            comp["ecosystem"] = "Debian"
+        # else: leave ecosystem/purl untouched
 
     return comp
 
@@ -1057,9 +1200,10 @@ def extract_fixed_versions_osv(v):
     for aff in v.get("affected", []):
         for r in aff.get("ranges", []):
             for e in r.get("events", []):
-                if "fixed" in e:
-                    fixed.append(e["fixed"])
-    return list(set(fixed))
+                fv = e.get("fixed")
+                if fv:
+                    fixed.append(fv)
+    return sorted(set(fixed))
 
 # ---------- GitHub Advisory (GHSA) ----------
 
@@ -1091,8 +1235,9 @@ async def github_query_by_components(components: List[dict], settings: _MultiSet
         return [], [], []
 
     gql = """
-    query Vulns($ecosystem: SecurityAdvisoryEcosystem!, $name: String!, $first: Int!) {
-      securityVulnerabilities(ecosystem: $ecosystem, package: $name, first: $first) {
+    query Vulns($ecosystem: SecurityAdvisoryEcosystem!, $name: String!, $first: Int!, $after: String) {
+      securityVulnerabilities(ecosystem: $ecosystem, package: $name, first: $first, after: $after) {
+        pageInfo { hasNextPage endCursor }
         nodes {
           severity
           updatedAt
@@ -1103,6 +1248,7 @@ async def github_query_by_components(components: List[dict], settings: _MultiSet
             publishedAt
             references { url }
             cvss { score vectorString }
+            cwes(first: 10) { nodes { cweId name } }
           }
           vulnerableVersionRange
           firstPatchedVersion { identifier }
@@ -1117,47 +1263,64 @@ async def github_query_by_components(components: List[dict], settings: _MultiSet
     query_errors: List[dict] = []
 
     async def _run_one(eco: str, pkg: str):
-        try:
-            async with sem:
-                data = await _async_post(url, json_body={"query": gql, "variables": {"ecosystem": eco, "name": pkg, "first": 100}}, headers=headers, timeout=settings.nvd_request_timeout_seconds)
-                if "errors" in data:
-                    query_errors.append({"source": "GITHUB", "package": f"{eco}/{pkg}", "error": data["errors"]})
-                    return
-                nodes = ((data.get("data") or {}).get("securityVulnerabilities") or {}).get("nodes") or []
-                for n in nodes:
-                    adv = n.get("advisory") or {}
-                    score = None
-                    vector = None
-                    cvss = adv.get("cvss") or {}
-                    if isinstance(cvss, dict):
-                        score = _safe_score(cvss.get("score"))
-                        vector = cvss.get("vectorString")
-                    bucket = _sev_bucket(score, settings=settings, severity_text=n.get("severity"))
-                    ref_url = None
-                    refs = adv.get("references") or []
-                    if refs:
-                        ref_url = refs[0].get("url")
-                    compname, compver = next(iter(name_for_component.get((eco, pkg), {(pkg, None)})))
-                    findings.append(
-                        {
-                            "vuln_id": adv.get("ghsaId"),
-                            "aliases": [adv.get("ghsaId")],
-                            "sources": ["GITHUB"],
-                            "description": adv.get("summary") or adv.get("description"),
-                            "severity": bucket,
-                            "score": score,
-                            "vector": vector,
-                            "published": adv.get("publishedAt"),
-                            "references": [r.get("url") for r in refs if r.get("url")],
-                            "cwe": extract_cwe_from_ghsa(n),
-                            "fixed_versions": [n.get("firstPatchedVersion", {}).get("identifier")],
-                            "component_name": compname,
-                            "component_version": compver,
-                            "cpe": None,
-                        }
+        cursor = None
+        page_size = 100
+        while True:
+            try:
+                async with sem:
+                    variables: Dict[str, Any] = {"ecosystem": eco, "name": pkg, "first": page_size}
+                    if cursor:
+                        variables["after"] = cursor
+                    data = await _async_post(
+                        url,
+                        json_body={"query": gql, "variables": variables},
+                        headers=headers,
+                        timeout=settings.nvd_request_timeout_seconds,
                     )
-        except Exception as exc:
-            query_errors.append({"source": "GITHUB", "package": f"{eco}/{pkg}", "error": str(exc)})
+                    if "errors" in data:
+                        query_errors.append({"source": "GITHUB", "package": f"{eco}/{pkg}", "error": data["errors"]})
+                        return
+                    sv = ((data.get("data") or {}).get("securityVulnerabilities") or {})
+                    nodes = sv.get("nodes") or []
+                    page_info = sv.get("pageInfo") or {}
+                    for n in nodes:
+                        adv = n.get("advisory") or {}
+                        score = None
+                        vector = None
+                        cvss = adv.get("cvss") or {}
+                        if isinstance(cvss, dict):
+                            score = _safe_score(cvss.get("score"))
+                            vector = cvss.get("vectorString")
+                        bucket = _sev_bucket(score, settings=settings, severity_text=n.get("severity"))
+                        refs = adv.get("references") or []
+                        compname, compver = next(iter(name_for_component.get((eco, pkg), {(pkg, None)})))
+                        patched = (n.get("firstPatchedVersion") or {}).get("identifier")
+                        findings.append(
+                            {
+                                "vuln_id": adv.get("ghsaId"),
+                                "aliases": [adv.get("ghsaId")] if adv.get("ghsaId") else [],
+                                "sources": ["GITHUB"],
+                                "description": adv.get("summary") or adv.get("description"),
+                                "severity": bucket,
+                                "score": score,
+                                "vector": vector,
+                                "published": adv.get("publishedAt"),
+                                "references": [r.get("url") for r in refs if r.get("url")],
+                                "cwe": extract_cwe_from_ghsa(n),
+                                "fixed_versions": [patched] if patched else [],
+                                "component_name": compname,
+                                "component_version": compver,
+                                "cpe": None,
+                            }
+                        )
+                    if not page_info.get("hasNextPage"):
+                        break
+                    cursor = page_info.get("endCursor")
+                    if not cursor:
+                        break
+            except Exception as exc:
+                query_errors.append({"source": "GITHUB", "package": f"{eco}/{pkg}", "error": str(exc)})
+                return
 
     await asyncio.gather(*[_run_one(eco, pkg) for eco, pkg in pkg_set])
     return findings, query_errors, []
@@ -1293,43 +1456,36 @@ async def analyze_sbom_multi_source_async(
     if coros:
         await asyncio.gather(*coros)
 
-    # Deduplicate across sources by (vuln_id, cpe or component_name)
-    for f in all_findings:
-        def _merge_key(v):
-            if v.get("vuln_id"):
-                return v["vuln_id"]
-            if v.get("aliases"):
-                return tuple(sorted(v["aliases"]))
-        return v.get("component_name")
-    
-    merged = {}
+    # Deduplicate across sources by vuln_id → aliases → component_name
+    _sev_rank = {"LOW": 0, "MEDIUM": 1, "HIGH": 2, "CRITICAL": 3, "UNKNOWN": -1}
 
+    def _merge_key(v):
+        if v.get("vuln_id"):
+            return v["vuln_id"]
+        if v.get("aliases"):
+            return tuple(sorted(str(a) for a in v["aliases"] if a))
+        return v.get("component_name")
+
+    merged: Dict[Any, dict] = {}
     for v in all_findings:
         key = _merge_key(v)
-
         if key not in merged:
-            merged[key] = v
+            merged[key] = dict(v)
         else:
             existing = merged[key]
-
-        # merge sources
-            existing["sources"] = list(set(existing["sources"] + v["sources"]))
-
-        # merge aliases
+            existing["sources"] = list(set(existing.get("sources", []) + v.get("sources", [])))
             existing["aliases"] = list(set(existing.get("aliases", []) + v.get("aliases", [])))
-
-        # merge CWE
             existing["cwe"] = list(set(existing.get("cwe", []) + v.get("cwe", [])))
-
-        # merge references
-            existing["references"] = list(set(existing.get("references", []) + v.get("references", [])))
-
-        # severity upgrade
-            existing["severity"] = max(
-                existing["severity"],
-                v["severity"],
-                key=lambda x: ["LOW", "MEDIUM", "HIGH", "CRITICAL"].index(x) if x in ["LOW","MEDIUM","HIGH","CRITICAL"] else -1
-            )
+            existing["references"] = list(set(
+                (r for r in existing.get("references", []) if r) +
+                [r for r in v.get("references", []) if r]
+            ))
+            e_rank = _sev_rank.get(str(existing.get("severity", "UNKNOWN")).upper(), -1)
+            v_rank = _sev_rank.get(str(v.get("severity", "UNKNOWN")).upper(), -1)
+            if v_rank > e_rank:
+                existing["severity"] = v["severity"]
+                if v.get("score") is not None:
+                    existing["score"] = v["score"]
 
     findings = list(merged.values())
     LOGGER.debug(
@@ -1409,5 +1565,12 @@ def extract_cwe_from_osv(v: Dict[str, Any]) -> List[str]:
 
 
 def extract_cwe_from_ghsa(node: Dict[str, Any]) -> List[str]:
-    # GHSA does not always provide CWE → fallback empty
-    return []
+    """Extract CWE IDs from a GitHub Advisory securityVulnerabilities node."""
+    cwes = []
+    adv = node.get("advisory") or {}
+    cwe_conn = adv.get("cwes") or {}
+    for cwe_node in (cwe_conn.get("nodes") or []):
+        cwe_id = cwe_node.get("cweId")
+        if cwe_id:
+            cwes.append(cwe_id)
+    return list(set(cwes))

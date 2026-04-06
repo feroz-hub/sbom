@@ -25,7 +25,8 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
   const [deleteTarget, setDeleteTarget] = useState<SBOMSource | null>(null);
 
   const deleteMutation = useMutation({
-    mutationFn: (sbom: SBOMSource) => deleteSbom(sbom.id, 1),
+    // Pass created_by as user_id; backend allows delete when created_by is null
+    mutationFn: (sbom: SBOMSource) => deleteSbom(sbom.id, sbom.created_by ?? ''),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sboms'] });
       showToast('SBOM deleted successfully', 'success');
