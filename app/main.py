@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 import re
@@ -11,7 +12,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional, List, Dict, Tuple
 from urllib.parse import unquote, parse_qs
 
-from fastapi import Depends, FastAPI, HTTPException, Query, status, Path, Response, File, Form, UploadFile
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, status, Path, Response, File, Form, UploadFile
 from fastapi.responses import JSONResponse, Response, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -21,6 +22,12 @@ from pydantic import BaseModel
 from sqlalchemy import select, text, delete, func
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+
+from .logger import setup_logging, get_logger
+
+# Initialise logging as early as possible so all subsequent imports inherit the config
+setup_logging()
+log = get_logger("api")
 
 from .pdf_report import build_pdf_from_run_bytes
 from .db import Base, SessionLocal, engine, get_db
@@ -69,6 +76,42 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Accept", "Authorization", "Cache-Control"],
 )
+
+# -----------------------------------------------
+# Request / Response logging middleware
+# -----------------------------------------------
+_access_log = get_logger("access")
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Log every incoming request and its response status + duration."""
+    t0 = time.perf_counter()
+    _access_log.debug(
+        "→ %s %s  client=%s",
+        request.method,
+        request.url.path,
+        request.client.host if request.client else "unknown",
+    )
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        _access_log.error(
+            "✗ %s %s  UNHANDLED %s: %s",
+            request.method, request.url.path, type(exc).__name__, exc,
+            exc_info=True,
+        )
+        raise
+    duration_ms = int((time.perf_counter() - t0) * 1000)
+    level = logging.WARNING if response.status_code >= 400 else logging.DEBUG
+    _access_log.log(
+        level,
+        "← %s %s  status=%d  %dms",
+        request.method,
+        request.url.path,
+        response.status_code,
+        duration_ms,
+    )
+    return response
 
 # -----------------------------
 # Utilities
@@ -1176,12 +1219,15 @@ def backfill_analytics_tables(db: Session) -> None:
 # -----------------------------
 @app.on_event("startup")
 def on_startup() -> None:
+    log.info("SBOM Analyzer starting up — initialising database …")
     ensure_seed_data()   # also calls Base.metadata.create_all — creates all tables including run_cache
     add_sbom_name_column()
     update_sbom_names()
+    log.info("Startup complete. API ready.")
 
 @app.get("/health")
 def health() -> dict:
+    log.debug("Health check requested")
     return {"status": "ok"}
 
 @app.get("/api/analysis/config")
@@ -1207,10 +1253,13 @@ def get_sbom(sbom_id: int, db: Session = Depends(get_db)):
 
 @app.post("/api/sboms", response_model=SBOMSourceOut, status_code=status.HTTP_201_CREATED)
 def create_sbom(payload: SBOMSourceCreate, db: Session = Depends(get_db)):
+    log.info("Creating SBOM: name='%s' project_id=%s", payload.sbom_name, payload.projectid)
     # --- Foreign key checks ---
     if payload.projectid is not None and db.get(Projects, payload.projectid) is None:
+        log.warning("create_sbom: project_id=%s not found", payload.projectid)
         raise HTTPException(status_code=404, detail="Project not found")
     if payload.sbom_type is not None and db.get(SBOMType, payload.sbom_type) is None:
+        log.warning("create_sbom: sbom_type=%s not found", payload.sbom_type)
         raise HTTPException(status_code=404, detail="SBOM type not found")
 
     # --- Preflight duplicate check on name (global uniqueness) ---
@@ -1219,6 +1268,7 @@ def create_sbom(payload: SBOMSourceCreate, db: Session = Depends(get_db)):
             select(SBOMSource.id).where(SBOMSource.sbom_name == payload.sbom_name.strip())
         ).first()
         if exists:
+            log.warning("create_sbom: duplicate name '%s'", payload.sbom_name)
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={"code": "duplicate_name", "message": f"An SBOM with name '{payload.sbom_name}' already exists."}
@@ -1230,18 +1280,22 @@ def create_sbom(payload: SBOMSourceCreate, db: Session = Depends(get_db)):
         db.flush()   # early constraint detection
         db.commit()
         db.refresh(obj)
+        log.info("SBOM created: id=%d name='%s'", obj.id, obj.sbom_name)
 
         # Best-effort: auto-analysis (multi-source)
         try:
+            log.debug("Triggering auto-analysis for SBOM id=%d", obj.id)
             create_auto_report(db, obj)
-        except Exception:
-            pass
+            log.debug("Auto-analysis complete for SBOM id=%d", obj.id)
+        except Exception as exc:
+            log.warning("Auto-analysis failed for SBOM id=%d: %s", obj.id, exc)
 
         return obj
 
     except IntegrityError as exc:
         db.rollback()
         msg = str(getattr(exc, "orig", exc))
+        log.error("create_sbom IntegrityError: %s", msg)
         if "UNIQUE" in msg.upper() and "sbom_name" in msg:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -1253,6 +1307,7 @@ def create_sbom(payload: SBOMSourceCreate, db: Session = Depends(get_db)):
         ) from exc
     except SQLAlchemyError as exc:
         db.rollback()
+        log.error("create_sbom DB error: %s", exc, exc_info=True)
         raise HTTPException(
             status_code=500,
             detail={"code": "db_error", "message": "Internal database error while creating SBOM."}
@@ -1273,12 +1328,16 @@ def create_sbom(payload: SBOMSourceCreate, db: Session = Depends(get_db)):
     status_code=status.HTTP_201_CREATED,
 )
 def run_analysis_for_sbom(sbom_id: int, db: Session = Depends(get_db)):
+    log.info("Manual analysis triggered for SBOM id=%d", sbom_id)
     sbom = db.get(SBOMSource, sbom_id)
     if not sbom:
+        log.warning("Analysis requested for unknown SBOM id=%d", sbom_id)
         raise HTTPException(status_code=404, detail="SBOM not found")
     report = create_auto_report(db, sbom)
     if not report:
+        log.error("Analysis report generation failed for SBOM id=%d", sbom_id)
         raise HTTPException(status_code=500, detail="Unable to generate analysis report")
+    log.info("Analysis complete for SBOM id=%d → report id=%d status=%s", sbom_id, report.id, report.sbom_result)
     return report
 
 # -----------------------------
@@ -1827,6 +1886,7 @@ def analyze_sbom_nvd(payload: AnalysisByRefNVD, db: Session = Depends(get_db)):
     if payload.sbom_id is None and not (payload.sbom_name and payload.sbom_name.strip()):
         raise HTTPException(status_code=422, detail="Provide 'sbom_id' or 'sbom_name' in request body")
 
+    log.info("NVD analysis started: sbom_id=%s sbom_name=%s", payload.sbom_id, payload.sbom_name)
     t0 = time.perf_counter()
 
     sbom_row, _, sbom_format, spec_version, components = _load_sbom_from_ref(
@@ -1864,6 +1924,10 @@ def analyze_sbom_nvd(payload: AnalysisByRefNVD, db: Session = Depends(get_db)):
     sev = severity_buckets(all_vulns)
     run_status = "PARTIAL" if total_errors > 0 else "PASS"
     duration_ms = int((time.perf_counter() - t0) * 1000)
+    log.info(
+        "NVD analysis complete: sbom='%s' components=%d findings=%d errors=%d status=%s duration=%dms",
+        sbom_row.sbom_name, len(components), total_cves, total_errors, run_status, duration_ms,
+    )
 
     run_record = {
         "status": run_status,
@@ -1880,6 +1944,7 @@ def analyze_sbom_nvd(payload: AnalysisByRefNVD, db: Session = Depends(get_db)):
     }
     run_id = store_run_cache(db, run_record)
     run_record["runId"] = run_id
+    log.debug("NVD run persisted: run_id=%d", run_id)
     return JSONResponse(run_record)
 
 
@@ -1888,6 +1953,7 @@ def analyze_sbom_nvd(payload: AnalysisByRefNVD, db: Session = Depends(get_db)):
 # -----------------------------
 @app.post("/analyze-sbom-github")
 def analyze_sbom_github(payload: AnalysisByRefGitHub, db: Session = Depends(get_db)):
+    log.info("GitHub Advisory analysis started: sbom_id=%s sbom_name=%s", payload.sbom_id, payload.sbom_name)
     t0 = time.perf_counter()
 
     sbom_row, _, sbom_format, spec_version, components = _load_sbom_from_ref(
@@ -1946,6 +2012,10 @@ def analyze_sbom_github(payload: AnalysisByRefGitHub, db: Session = Depends(get_
     sev = severity_buckets(all_items)
     run_status = "FAIL" if (total_errors > 0 and total_errors == len(components)) else ("PARTIAL" if total_errors > 0 else "PASS")
     duration_ms = int((time.perf_counter() - t0) * 1000)
+    log.info(
+        "GitHub analysis complete: sbom='%s' components=%d findings=%d errors=%d status=%s duration=%dms",
+        sbom_row.sbom_name, len(components), len(all_items), total_errors, run_status, duration_ms,
+    )
 
     run_record = {
         "status": run_status,
@@ -1970,6 +2040,7 @@ def analyze_sbom_github(payload: AnalysisByRefGitHub, db: Session = Depends(get_
 # -----------------------------
 @app.post("/analyze-sbom-osv")
 def analyze_sbom_osv(payload: AnalysisByRefOSV, db: Session = Depends(get_db)):
+    log.info("OSV analysis started: sbom_id=%s sbom_name=%s", payload.sbom_id, payload.sbom_name)
     t0 = time.perf_counter()
 
     sbom_row, _, sbom_format, spec_version, components = _load_sbom_from_ref(
@@ -2041,6 +2112,10 @@ def analyze_sbom_osv(payload: AnalysisByRefOSV, db: Session = Depends(get_db)):
     buckets = severity_buckets(all_items) if hydrated_map else {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "UNKNOWN": len(all_items)}
 
     duration_ms = int((time.perf_counter() - t0) * 1000)
+    log.info(
+        "OSV analysis complete: sbom='%s' components=%d findings=%d duration=%dms",
+        sbom_row.sbom_name, len(components), len(all_items), duration_ms,
+    )
 
     run_record = {
         "status": "PASS",
@@ -2065,12 +2140,14 @@ def analyze_sbom_osv(payload: AnalysisByRefOSV, db: Session = Depends(get_db)):
 # -----------------------------
 @app.post("/analyze-sbom-consolidated")
 def analyze_sbom_consolidated(payload: AnalysisByRefConsolidated, db: Session = Depends(get_db)):
+    log.info("Consolidated analysis started (NVD+GHSA+OSV): sbom_id=%s sbom_name=%s", payload.sbom_id, payload.sbom_name)
     t0 = time.perf_counter()
 
     sbom_row, _, sbom_format, spec_version, components = _load_sbom_from_ref(
         db, sbom_id=payload.sbom_id, sbom_name=payload.sbom_name
     )
     if not components:
+        log.warning("Consolidated analysis: no components found in SBOM id=%s", payload.sbom_id)
         raise HTTPException(status_code=400, detail="No components detected in SBOM.")
 
     # Augment components with CPE from PURL when missing (for NVD)
@@ -2255,6 +2332,14 @@ def analyze_sbom_consolidated(payload: AnalysisByRefConsolidated, db: Session = 
     else:
         status_consolidated = "PASS"
     duration_ms = int((time.perf_counter() - t0) * 1000)
+    total_errors_all = total_nvd_errors + total_ghsa_errors + total_osv_errors
+    log.info(
+        "Consolidated analysis complete: sbom='%s' components=%d findings=%d "
+        "errors=%d (nvd=%d ghsa=%d osv=%d) status=%s duration=%dms",
+        sbom_row.sbom_name, len(components), total_combined,
+        total_errors_all, total_nvd_errors, total_ghsa_errors, total_osv_errors,
+        status_consolidated, duration_ms,
+    )
     run_record = {
         "status": status_consolidated,
         "sbom": {"id": sbom_row.id, "name": sbom_row.sbom_name, "format": sbom_format, "specVersion": spec_version},
@@ -2263,7 +2348,7 @@ def analyze_sbom_consolidated(payload: AnalysisByRefConsolidated, db: Session = 
             "withCPE": with_cpe,
             "withPURL": with_purl,
             "findings": {"total": total_combined, "bySeverity": combined_buckets_all},
-            "errors": total_nvd_errors + total_ghsa_errors + total_osv_errors,
+            "errors": total_errors_all,
             "durationMs": duration_ms,
             "completedOn": now_iso(),
         },
@@ -2271,6 +2356,7 @@ def analyze_sbom_consolidated(payload: AnalysisByRefConsolidated, db: Session = 
     }
     run_id = store_run_cache(db, run_record)
     run_record["runId"] = run_id
+    log.debug("Consolidated run persisted: run_id=%d", run_id)
     return JSONResponse(run_record)
 
 
@@ -2300,9 +2386,11 @@ async def create_pdf_report_by_run_id(
     Accepts JSON with { runId, title?, filename? }.
     Loads the run from the database, generates a PDF and returns it as a download.
     """
+    log.info("PDF report requested: run_id=%d filename=%s", payload.runId, payload.filename)
     run_id = payload.runId
     run = load_run_cache(db, run_id)
     if run is None:
+        log.warning("PDF report: run_id=%d not found in cache", run_id)
         raise HTTPException(status_code=404, detail=f"Run {run_id} not found.")
 
     filename = payload.filename or "sbom_report.pdf"
@@ -2313,7 +2401,9 @@ async def create_pdf_report_by_run_id(
 
     try:
         pdf_bytes = build_pdf_from_run_bytes(run, title=title)
+        log.info("PDF generated: run_id=%d size=%d bytes", run_id, len(pdf_bytes))
     except Exception as e:
+        log.error("PDF generation failed: run_id=%d error=%s", run_id, e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to generate PDF: {e}")
 
     return Response(

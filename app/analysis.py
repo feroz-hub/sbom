@@ -1183,9 +1183,14 @@ async def analyze_sbom_multi_source_async(
     """
     cfg = settings or get_analysis_settings_multi()
     components = extract_components(sbom_json)
+    LOGGER.debug("Extracted %d components from SBOM", len(components))
+
     components = [enrich_component_for_osv(c) for c in components]
-    # Augment components with generated CPEs (Option A)
     components_w_cpe, generated_cpe_count = _augment_components_with_cpe(components)
+    LOGGER.debug(
+        "CPE augmentation: %d components total, %d CPEs generated",
+        len(components_w_cpe), generated_cpe_count,
+    )
 
     # Resolve selected sources
     default_sources = _env_list(cfg.analysis_sources_env, ["NVD"])
@@ -1200,7 +1205,13 @@ async def analyze_sbom_multi_source_async(
     # If no CPEs at all even after generation, skip NVD
     if not any(c.get("cpe") for c in components_w_cpe):
         if AnalysisSource.NVD in selected_enum:
+            LOGGER.info("Skipping NVD: no CPEs found in any component")
             selected_enum.remove(AnalysisSource.NVD)
+
+    LOGGER.info(
+        "Starting multi-source analysis: sources=%s components=%d",
+        [s.name for s in selected_enum], len(components_w_cpe),
+    )
 
     all_findings: List[dict] = []
     query_errors: List[dict] = []
@@ -1217,18 +1228,24 @@ async def analyze_sbom_multi_source_async(
                 cpe_set.add(cpe)
                 name_by_cpe[cpe] = (comp.get("name") or "", comp.get("version"))
         if not cpe_set:
+            LOGGER.debug("NVD: no CPEs to query — skipping")
             return
+        LOGGER.debug("NVD: querying %d unique CPEs concurrently", len(cpe_set))
         loop = asyncio.get_running_loop()
 
         def _fetch_one(cpe: str) -> Tuple[str, List[dict], Optional[str]]:
+            LOGGER.debug("NVD: fetching CPE '%s'", cpe)
             try:
                 cve_objs = nvd_query_by_cpe(cpe, resolve_nvd_api_key(cfg), settings=cfg)
+                LOGGER.debug("NVD: CPE '%s' → %d CVEs", cpe, len(cve_objs))
                 return cpe, cve_objs, None
             except Exception as exc:
+                LOGGER.warning("NVD: CPE '%s' query failed: %s", cpe, exc)
                 return cpe, [], str(exc)
 
         tasks = [loop.run_in_executor(_executor, _fetch_one, cpe) for cpe in sorted(cpe_set)]
         results = await asyncio.gather(*tasks)
+        nvd_findings = 0
         for cpe, raw_list, err in results:
             if err:
                 query_errors.append({"source": "NVD", "cpe": cpe, "error": err})
@@ -1246,17 +1263,23 @@ async def analyze_sbom_multi_source_async(
                         settings=cfg,
                     )
                 )
+                nvd_findings += 1
+        LOGGER.info("NVD complete: %d findings from %d CPEs (%d errors)", nvd_findings, len(cpe_set), len(query_errors))
 
     async def _osv():
         nonlocal all_findings, query_errors, query_warnings
+        LOGGER.debug("OSV: querying %d components", len(components))
         f, e, w = await osv_query_by_components(components, cfg)
+        LOGGER.info("OSV complete: %d findings, %d errors, %d warnings", len(f), len(e), len(w))
         all_findings.extend(f)
         query_errors.extend(e)
         query_warnings.extend(w)
 
     async def _gh():
         nonlocal all_findings, query_errors
+        LOGGER.debug("GitHub: querying %d components", len(components))
         f, e, _w = await github_query_by_components(components, cfg)
+        LOGGER.info("GitHub complete: %d findings, %d errors", len(f), len(e))
         all_findings.extend(f)
         query_errors.extend(e)
 
@@ -1309,11 +1332,21 @@ async def analyze_sbom_multi_source_async(
             )
 
     findings = list(merged.values())
+    LOGGER.debug(
+        "Deduplication: %d raw findings → %d unique findings",
+        len(all_findings), len(findings),
+    )
 
     buckets = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "UNKNOWN": 0}
     for f in findings:
         sev = str((f or {}).get("severity", "UNKNOWN")).upper()
         buckets[sev if sev in buckets else "UNKNOWN"] += 1
+
+    LOGGER.info(
+        "Multi-source analysis summary: total=%d  CRITICAL=%d HIGH=%d MEDIUM=%d LOW=%d UNKNOWN=%d  errors=%d",
+        len(findings), buckets["CRITICAL"], buckets["HIGH"], buckets["MEDIUM"],
+        buckets["LOW"], buckets["UNKNOWN"], len(query_errors),
+    )
 
     details: Dict[str, Any] = {
         "total_components": len(components),
