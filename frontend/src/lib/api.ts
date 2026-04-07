@@ -16,11 +16,26 @@ import type {
   AnalyzeSBOMPayload,
   PDFReportPayload,
   ConsolidatedAnalysisResult,
+  SBOMInfo,
+  SBOMRiskSummary,
+  DashboardTrend,
+  CompareRunsResult,
 } from '@/types';
 
 // Direct calls to FastAPI — no Next.js proxy (proxy caused ECONNRESET on
 // analysis calls that take 47-120s due to Node socket timeout).
-const BASE_URL = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000').replace(/\/$/, '');
+//
+// NEXT_PUBLIC_API_URL is REQUIRED. There is intentionally no hardcoded
+// fallback in source — a silent fallback in production used to send every
+// call to a non-existent local backend with no error surfaced to ops.
+// The development default is supplied by frontend/.env.development
+// (committed) so contributors get a working setup out of the box.
+//
+// Example: NEXT_PUBLIC_API_URL = "http://api.example.com"
+//          request("/api/sboms")  →  http://api.example.com/api/sboms
+import { resolveBaseUrl } from './env';
+
+export const BASE_URL = resolveBaseUrl();
 
 // ─── Typed HTTP error ─────────────────────────────────────────────────────────
 export class HttpError extends Error {
@@ -68,12 +83,12 @@ async function fetchWithTimeout(
   }
 }
 
-// ─── Core request helper ──────────────────────────────────────────────────────
-async function request<T>(
+// ─── Core HTTP helper (parses errors, throws HttpError) ──────────────────────
+async function performRequest(
   path: string,
   options: RequestInit & { signal?: AbortSignal } = {},
   timeoutMs = 30_000,
-): Promise<T> {
+): Promise<Response> {
   const url = `${BASE_URL}${path}`;
   const res = await fetchWithTimeout(
     url,
@@ -112,12 +127,42 @@ async function request<T>(
     throw new HttpError(message, res.status, code);
   }
 
-  // 204 No Content
-  if (res.status === 204) {
-    return undefined as unknown as T;
-  }
+  return res;
+}
 
-  return res.json() as Promise<T>;
+// JSON-returning request — for endpoints that return a typed body.
+async function request<T>(
+  path: string,
+  options: RequestInit & { signal?: AbortSignal } = {},
+  timeoutMs = 30_000,
+): Promise<T> {
+  const res = await performRequest(path, options, timeoutMs);
+  // Some endpoints (rare) may legitimately return 204 from a typed function;
+  // call sites that expect a body must not call this with a 204-returning route.
+  if (res.status === 204) {
+    throw new HttpError(
+      `Unexpected empty response from ${path} — use requestVoid for endpoints that return 204 No Content.`,
+      204,
+    );
+  }
+  return (await res.json()) as T;
+}
+
+// Void request — for endpoints that return no body (DELETE, etc.). No casts.
+async function requestVoid(
+  path: string,
+  options: RequestInit & { signal?: AbortSignal } = {},
+  timeoutMs = 30_000,
+): Promise<void> {
+  const res = await performRequest(path, options, timeoutMs);
+  // Drain the body to free the connection if the server returned one.
+  if (res.status !== 204) {
+    try {
+      await res.text();
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 // ─── Analysis config ──────────────────────────────────────────────────────────
@@ -184,7 +229,7 @@ export function updateProject(
 }
 
 export function deleteProject(id: number, signal?: AbortSignal) {
-  return request<void>(`/api/projects/${id}?confirm=yes`, {
+  return requestVoid(`/api/projects/${id}?confirm=yes`, {
     method: 'DELETE',
     signal,
   });
@@ -221,7 +266,7 @@ export function updateSbom(
 }
 
 export function deleteSbom(id: number, userId: number | string, signal?: AbortSignal) {
-  return request<void>(`/api/sboms/${id}?user_id=${userId}&confirm=yes`, {
+  return requestVoid(`/api/sboms/${id}?user_id=${userId}&confirm=yes`, {
     method: 'DELETE',
     signal,
   });
@@ -256,13 +301,32 @@ export interface RunsFilter {
   page_size?: number;
 }
 
-export function getRuns(filter: RunsFilter = {}, signal?: AbortSignal) {
+/**
+ * Build query params for /api/runs. Positive-integer filters that are NaN,
+ * zero, negative, or non-finite are silently dropped — sending them would
+ * cause a 422 from the FastAPI validator. This used to happen when a stale
+ * select value was passed through `Number()`.
+ */
+function buildRunsQuery(filter: RunsFilter): URLSearchParams {
   const params = new URLSearchParams();
-  if (filter.sbom_id !== undefined) params.set('sbom_id', String(filter.sbom_id));
-  if (filter.project_id !== undefined) params.set('project_id', String(filter.project_id));
-  if (filter.run_status) params.set('run_status', filter.run_status);
-  params.set('page', String(filter.page ?? 1));
-  params.set('page_size', String(filter.page_size ?? 50));
+  const addPositiveInt = (key: string, value: number | undefined) => {
+    if (value === undefined) return;
+    if (!Number.isFinite(value)) return; // drops NaN and ±Infinity
+    if (value <= 0) return;               // backend requires ge=1 on these
+    params.set(key, String(Math.trunc(value)));
+  };
+  addPositiveInt('sbom_id', filter.sbom_id);
+  addPositiveInt('project_id', filter.project_id);
+  if (filter.run_status && filter.run_status.trim() !== '') {
+    params.set('run_status', filter.run_status.trim());
+  }
+  addPositiveInt('page', filter.page ?? 1);
+  addPositiveInt('page_size', filter.page_size ?? 50);
+  return params;
+}
+
+export function getRuns(filter: RunsFilter = {}, signal?: AbortSignal) {
+  const params = buildRunsQuery(filter);
   return request<AnalysisRun[]>(`/api/runs?${params.toString()}`, { signal });
 }
 
@@ -282,53 +346,155 @@ export function getRunFindings(
   return request<AnalysisFinding[]>(`/api/runs/${id}/findings?${params.toString()}`, { signal });
 }
 
-export async function exportRunsJson(filter: RunsFilter = {}): Promise<void> {
-  const params = new URLSearchParams();
-  if (filter.sbom_id !== undefined) params.set('sbom_id', String(filter.sbom_id));
-  if (filter.project_id !== undefined) params.set('project_id', String(filter.project_id));
-  if (filter.run_status) params.set('run_status', filter.run_status);
-  params.set('page', '1');
-  params.set('page_size', '1000');
-  const data = await request<AnalysisRun[]>(`/api/runs?${params.toString()}`);
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+/**
+ * Download the current filtered runs list as a JSON file. Aggregates across
+ * pages (up to `maxRuns`) so filters like "all runs" don't silently cap at
+ * page_size. Uses the same safe param builder as `getRuns`, so invalid
+ * filter values can never produce a 422 that would leave the user with a
+ * silently-empty download.
+ *
+ * The backend's `/api/runs` endpoint is capped at `page_size=500`, so we
+ * paginate explicitly and stitch the pages together client-side.
+ */
+export async function exportRunsJson(
+  filter: RunsFilter = {},
+  opts: { maxRuns?: number } = {},
+): Promise<void> {
+  const maxRuns = opts.maxRuns ?? 5000;
+  const pageSize = 500; // backend hard cap
+  const all: AnalysisRun[] = [];
+
+  for (let page = 1; all.length < maxRuns; page++) {
+    const params = buildRunsQuery({ ...filter, page, page_size: pageSize });
+    const batch = await request<AnalysisRun[]>(`/api/runs?${params.toString()}`);
+    if (batch.length === 0) break;
+    all.push(...batch);
+    if (batch.length < pageSize) break; // last page
+  }
+
+  if (all.length === 0) {
+    throw new HttpError('No analysis runs match the current filters.', 404);
+  }
+
+  const payload = {
+    exported_at: new Date().toISOString(),
+    filter,
+    count: all.length,
+    runs: all,
+  };
+
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+    type: 'application/json',
+  });
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const filename = `analysis_runs_${timestamp}.json`;
+
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'analysis_runs.json';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  try {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  } finally {
+    // Revoke asynchronously so Safari/Firefox have time to start the download
+    // before the blob URL is invalidated.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
 }
 
 // ─── PDF Report ───────────────────────────────────────────────────────────────
-export async function downloadPdfReport(payload: PDFReportPayload): Promise<Blob> {
-  const url = `${BASE_URL}/api/pdf-report`;
-  const res = await fetchWithTimeout(
-    url,
+// PDF generation reads every finding for the run from the DB and renders with
+// reportlab; for runs with thousands of findings this can exceed 60s, so we
+// allow up to 180s in line with other long-running endpoints.
+export async function downloadPdfReport(
+  payload: PDFReportPayload,
+  signal?: AbortSignal,
+): Promise<Blob> {
+  const res = await performRequest(
+    '/api/pdf-report',
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
+      signal,
     },
-    60_000,  // PDF generation can take ~10s for large reports
+    180_000,
   );
-  if (!res.ok) {
-    let message = `HTTP ${res.status}: ${res.statusText}`;
-    try {
-      const body = await res.json();
-      if (body?.detail) {
-        message = typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail);
-      }
-    } catch {
-      // ignore
-    }
-    throw new HttpError(message, res.status);
-  }
   return res.blob();
 }
 
 // ─── SBOM Types ───────────────────────────────────────────────────────────────
 export function getSbomTypes(signal?: AbortSignal) {
   return request<SBOMType[]>('/api/types', { signal });
+}
+
+// ─── SBOM info / risk-summary ────────────────────────────────────────────────
+export function getSbomInfo(sbomId: number, signal?: AbortSignal) {
+  return request<SBOMInfo>(`/api/sboms/${sbomId}/info`, { signal });
+}
+
+export function getSbomRiskSummary(sbomId: number, signal?: AbortSignal) {
+  return request<SBOMRiskSummary>(`/api/sboms/${sbomId}/risk-summary`, { signal });
+}
+
+// ─── Dashboard trend ─────────────────────────────────────────────────────────
+export function getDashboardTrend(days = 30, signal?: AbortSignal) {
+  return request<DashboardTrend>(`/dashboard/trend?days=${days}`, { signal });
+}
+
+// ─── Analysis-runs export & compare ──────────────────────────────────────────
+export function compareRuns(runA: number, runB: number, signal?: AbortSignal) {
+  return request<CompareRunsResult>(
+    `/api/analysis-runs/compare?run_a=${runA}&run_b=${runB}`,
+    { signal },
+  );
+}
+
+// CSV / SARIF export endpoints stream every finding for a run; for large runs
+// this loops over thousands of rows server-side, so we use the long-running
+// timeout (180s) consistent with PDF generation and analysis endpoints.
+async function downloadBinary(
+  path: string,
+  fallbackName: string,
+  signal?: AbortSignal,
+): Promise<{ blob: Blob; filename: string }> {
+  const res = await performRequest(path, { method: 'GET', signal }, 180_000);
+  const cd = res.headers.get('Content-Disposition') || '';
+  const match = /filename="?([^"]+)"?/.exec(cd);
+  return { blob: await res.blob(), filename: match?.[1] || fallbackName };
+}
+
+export function exportRunCsv(runId: number) {
+  return downloadBinary(`/api/analysis-runs/${runId}/export/csv`, `sbom_findings_${runId}.csv`);
+}
+
+export function exportRunSarif(runId: number) {
+  return downloadBinary(`/api/analysis-runs/${runId}/export/sarif`, `sbom_findings_${runId}.sarif`);
+}
+
+// ─── Single-source analysis (power-user) ─────────────────────────────────────
+export function analyzeSbomNvd(payload: AnalyzeSBOMPayload, signal?: AbortSignal) {
+  return request<ConsolidatedAnalysisResult>('/analyze-sbom-nvd', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    signal,
+  }, 180_000);
+}
+
+export function analyzeSbomGithub(payload: AnalyzeSBOMPayload, signal?: AbortSignal) {
+  return request<ConsolidatedAnalysisResult>('/analyze-sbom-github', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    signal,
+  }, 180_000);
+}
+
+export function analyzeSbomOsv(payload: AnalyzeSBOMPayload, signal?: AbortSignal) {
+  return request<ConsolidatedAnalysisResult>('/analyze-sbom-osv', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    signal,
+  }, 180_000);
 }

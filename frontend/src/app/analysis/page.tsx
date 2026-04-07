@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { Play, Download, FileJson, AlertTriangle, CheckCircle2, XCircle, ActivityIcon, Layers } from 'lucide-react';
+import { Play, Download, FileJson, AlertTriangle, CheckCircle2, XCircle, ActivityIcon, Layers, GitCompareArrows } from 'lucide-react';
 import { TopBar } from '@/components/layout/TopBar';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
@@ -16,11 +17,38 @@ import type { ConsolidatedAnalysisResult } from '@/types';
 
 export default function AnalysisPage() {
   const { showToast } = useToast();
+  const router = useRouter();
 
   // ── Filters ────────────────────────────────────────────────────────────────
   const [projectFilter, setProjectFilter] = useState('');
   const [sbomFilter, setSbomFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+
+  // ── Multi-select state for Compare Runs ───────────────────────────────────
+  const [selectedForCompare, setSelectedForCompare] = useState<Set<number>>(new Set());
+
+  const toggleSelectForCompare = useCallback((id: number) => {
+    setSelectedForCompare((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        // Cap at 2 — oldest entry drops out so it always feels responsive.
+        if (next.size >= 2) {
+          const first = next.values().next().value;
+          if (first !== undefined) next.delete(first);
+        }
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleCompare = () => {
+    if (selectedForCompare.size !== 2) return;
+    const [a, b] = Array.from(selectedForCompare);
+    router.push(`/analysis/compare?run_a=${a}&run_b=${b}`);
+  };
 
   // ── Consolidated analysis ──────────────────────────────────────────────────
   const [consolidatedSbomId, setConsolidatedSbomId] = useState('');
@@ -125,10 +153,26 @@ export default function AnalysisPage() {
       <TopBar
         title="Analysis Runs"
         action={
-          <Button variant="secondary" size="sm" onClick={handleExportJson}>
-            <FileJson className="h-4 w-4" />
-            Export JSON
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleCompare}
+              disabled={selectedForCompare.size !== 2}
+              title={
+                selectedForCompare.size === 2
+                  ? 'Compare the two selected runs'
+                  : `Select exactly 2 runs to compare (${selectedForCompare.size}/2)`
+              }
+            >
+              <GitCompareArrows className="h-4 w-4" />
+              Compare {selectedForCompare.size > 0 ? `(${selectedForCompare.size}/2)` : ''}
+            </Button>
+            <Button variant="secondary" size="sm" onClick={handleExportJson}>
+              <FileJson className="h-4 w-4" />
+              Export JSON
+            </Button>
+          </div>
         }
       />
       <div className="p-6 space-y-5">
@@ -213,7 +257,13 @@ export default function AnalysisPage() {
         </div>
 
         {/* ── Runs table ───────────────────────────────────────────────────── */}
-        <RunsTable runs={runs} isLoading={isLoading} error={error} />
+        <RunsTable
+          runs={runs}
+          isLoading={isLoading}
+          error={error}
+          selectedIds={selectedForCompare}
+          onToggleSelect={toggleSelectForCompare}
+        />
 
         {/* ── Consolidated Analysis ────────────────────────────────────────── */}
         <div className="bg-white rounded-xl border border-hcl-border shadow-card overflow-hidden">

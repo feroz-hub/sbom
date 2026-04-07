@@ -5,12 +5,14 @@ import { TopBar } from '@/components/layout/TopBar';
 import { StatsGrid } from '@/components/dashboard/StatsGrid';
 import { SeverityChart } from '@/components/dashboard/SeverityChart';
 import { ActivityChart } from '@/components/dashboard/ActivityChart';
+import { TrendChart } from '@/components/dashboard/TrendChart';
 import { RecentSboms } from '@/components/dashboard/RecentSboms';
 import {
   getDashboardStats,
   getRecentSboms,
   getDashboardActivity,
   getDashboardSeverity,
+  getDashboardTrend,
 } from '@/lib/api';
 
 export default function DashboardPage() {
@@ -34,6 +36,11 @@ export default function DashboardPage() {
     queryFn: ({ signal }) => getDashboardSeverity(signal),
   });
 
+  const trendQuery = useQuery({
+    queryKey: ['dashboard-trend', 30],
+    queryFn: ({ signal }) => getDashboardTrend(30, signal),
+  });
+
   return (
     <div className="flex flex-col flex-1">
       <TopBar title="Dashboard" />
@@ -54,6 +61,11 @@ export default function DashboardPage() {
             isLoading={activityQuery.isLoading}
           />
         </div>
+
+        <TrendChart
+          data={trendQuery.data}
+          isLoading={trendQuery.isLoading}
+        />
 
         <RecentSboms
           sboms={recentQuery.data}

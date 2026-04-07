@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { use, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Download } from 'lucide-react';
@@ -10,16 +10,17 @@ import { Button } from '@/components/ui/Button';
 import { StatusBadge, SeverityBadge } from '@/components/ui/Badge';
 import { FindingsTable } from '@/components/analysis/FindingsTable';
 import { PageSpinner } from '@/components/ui/Spinner';
-import { getRun, getRunFindings, downloadPdfReport } from '@/lib/api';
+import { getRun, getRunFindings, downloadPdfReport, exportRunCsv, exportRunSarif } from '@/lib/api';
 import { formatDate, formatDuration, downloadBlob } from '@/lib/utils';
 import { useToast } from '@/hooks/useToast';
 
 interface AnalysisDetailPageProps {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 export default function AnalysisDetailPage({ params }: AnalysisDetailPageProps) {
-  const id = Number(params.id);
+  const { id: idParam } = use(params);
+  const id = Number(idParam);
   const router = useRouter();
   const { showToast } = useToast();
   const [severityFilter, setSeverityFilter] = useState('');
@@ -53,6 +54,28 @@ export default function AnalysisDetailPage({ params }: AnalysisDetailPageProps) 
       showToast(`Failed to download PDF: ${(err as Error).message}`, 'error');
     } finally {
       setDownloading(false);
+    }
+  };
+
+  const handleDownloadCsv = async () => {
+    if (!run) return;
+    try {
+      const { blob, filename } = await exportRunCsv(run.id);
+      downloadBlob(blob, filename);
+      showToast('CSV exported', 'success');
+    } catch (err) {
+      showToast(`Failed to export CSV: ${(err as Error).message}`, 'error');
+    }
+  };
+
+  const handleDownloadSarif = async () => {
+    if (!run) return;
+    try {
+      const { blob, filename } = await exportRunSarif(run.id);
+      downloadBlob(blob, filename);
+      showToast('SARIF exported', 'success');
+    } catch (err) {
+      showToast(`Failed to export SARIF: ${(err as Error).message}`, 'error');
     }
   };
 
@@ -93,15 +116,25 @@ export default function AnalysisDetailPage({ params }: AnalysisDetailPageProps) 
       <TopBar
         title={`Analysis Run #${run.id}`}
         action={
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={handleDownloadPdf}
-            loading={downloading}
-          >
-            <Download className="h-4 w-4" />
-            Download PDF
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" size="sm" onClick={handleDownloadCsv}>
+              <Download className="h-4 w-4" />
+              CSV
+            </Button>
+            <Button variant="secondary" size="sm" onClick={handleDownloadSarif}>
+              <Download className="h-4 w-4" />
+              SARIF
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleDownloadPdf}
+              loading={downloading}
+            >
+              <Download className="h-4 w-4" />
+              PDF
+            </Button>
+          </div>
         }
       />
       <div className="p-6 space-y-6">

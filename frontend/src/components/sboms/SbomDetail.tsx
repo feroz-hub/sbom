@@ -10,7 +10,7 @@ import { StatusBadge } from '@/components/ui/Badge';
 import { Table, TableHead, TableBody, Th, Td, EmptyRow } from '@/components/ui/Table';
 import { SkeletonRow } from '@/components/ui/Spinner';
 import { AnalysisProgress } from '@/components/analysis/AnalysisProgress';
-import { getSbomComponents, getRuns } from '@/lib/api';
+import { getSbomComponents, getRuns, getSbomInfo, getSbomRiskSummary } from '@/lib/api';
 import { useAnalysisStream } from '@/hooks/useAnalysisStream';
 import { formatDate, formatDuration } from '@/lib/utils';
 import type { SBOMSource } from '@/types';
@@ -34,6 +34,23 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
     queryFn: ({ signal }) => getRuns({ sbom_id: sbom.id }, signal),
     // Refetch runs list when analysis completes so the new run appears
     refetchInterval: state.phase === 'done' ? false : undefined,
+  });
+
+  // SBOM info card (parsed metadata) — backed by GET /api/sboms/{id}/info
+  const { data: info } = useQuery({
+    queryKey: ['sbom-info', sbom.id],
+    queryFn: ({ signal }) => getSbomInfo(sbom.id, signal),
+    // info endpoint 400s for SBOMs with no stored data — fail silently
+    retry: false,
+  });
+
+  // Risk summary — backed by GET /api/sboms/{id}/risk-summary
+  // Refetch after a new analysis run completes
+  const { data: risk } = useQuery({
+    queryKey: ['sbom-risk', sbom.id, runs?.[0]?.id ?? null],
+    queryFn: ({ signal }) => getSbomRiskSummary(sbom.id, signal),
+    enabled: !!runs && runs.length > 0,
+    retry: false,
   });
 
   const handleRunAnalysis = () => {
@@ -94,6 +111,114 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
           </dl>
         </CardContent>
       </Card>
+
+      {/* SBOM Format & Ecosystem Info — GET /api/sboms/{id}/info */}
+      {info && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Format &amp; Ecosystems</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <dl className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div>
+                <dt className="text-xs font-medium text-hcl-muted uppercase tracking-wide">Format</dt>
+                <dd className="mt-1 text-sm font-medium text-hcl-navy">{info.format}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium text-hcl-muted uppercase tracking-wide">Spec Version</dt>
+                <dd className="mt-1 text-sm font-medium text-hcl-navy">{info.spec_version || '—'}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium text-hcl-muted uppercase tracking-wide">Components</dt>
+                <dd className="mt-1 text-sm font-medium text-hcl-navy">{info.component_count.toLocaleString()}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium text-hcl-muted uppercase tracking-wide">Identifiers</dt>
+                <dd className="mt-1 text-sm font-medium text-hcl-navy">
+                  {info.has_purls && 'PURL'}
+                  {info.has_purls && info.has_cpes && ' · '}
+                  {info.has_cpes && 'CPE'}
+                  {!info.has_purls && !info.has_cpes && '—'}
+                </dd>
+              </div>
+              {info.ecosystems.length > 0 && (
+                <div className="col-span-2 md:col-span-4">
+                  <dt className="text-xs font-medium text-hcl-muted uppercase tracking-wide">Ecosystems</dt>
+                  <dd className="mt-1 flex flex-wrap gap-2">
+                    {info.ecosystems.map((eco) => (
+                      <span
+                        key={eco}
+                        className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-hcl-light text-hcl-blue border border-hcl-border"
+                      >
+                        {eco}
+                      </span>
+                    ))}
+                  </dd>
+                </div>
+              )}
+            </dl>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Risk Summary — GET /api/sboms/{id}/risk-summary */}
+      {risk && (
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              Risk Summary
+              <span
+                className={`ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
+                  risk.risk_band === 'CRITICAL'
+                    ? 'bg-red-50 text-red-700 border-red-200'
+                    : risk.risk_band === 'HIGH'
+                    ? 'bg-orange-50 text-orange-700 border-orange-200'
+                    : risk.risk_band === 'MEDIUM'
+                    ? 'bg-amber-50 text-amber-700 border-amber-200'
+                    : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                }`}
+              >
+                {risk.risk_band} · score {risk.total_risk_score.toFixed(1)}
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <div className="overflow-hidden">
+            <Table>
+              <TableHead>
+                <tr>
+                  <Th>Component</Th>
+                  <Th>Critical</Th>
+                  <Th>High</Th>
+                  <Th>Medium</Th>
+                  <Th>Low</Th>
+                  <Th className="text-right">Score</Th>
+                </tr>
+              </TableHead>
+              <TableBody>
+                {risk.components.length === 0 ? (
+                  <EmptyRow cols={6} message="No vulnerable components." />
+                ) : (
+                  risk.components.slice(0, 10).map((c) => (
+                    <tr key={`${c.name}@${c.version}`} className="hover:bg-hcl-light/40">
+                      <Td className="font-medium text-hcl-navy">
+                        {c.name}
+                        {c.version && <span className="text-hcl-muted"> @ {c.version}</span>}
+                      </Td>
+                      <Td className="text-red-700">{c.critical}</Td>
+                      <Td className="text-orange-700">{c.high}</Td>
+                      <Td className="text-amber-700">{c.medium}</Td>
+                      <Td className="text-hcl-blue">{c.low}</Td>
+                      <Td className="text-right font-mono text-xs text-hcl-navy">
+                        {c.component_score.toFixed(1)}
+                      </Td>
+                    </tr>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </Card>
+      )}
 
       {/* Live analysis progress (shown while running or after completion) */}
       {state.phase !== 'idle' && (

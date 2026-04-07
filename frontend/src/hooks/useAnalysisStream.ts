@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback } from 'react';
-
-const BASE_URL = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000').replace(/\/$/, '');
+import { BASE_URL } from '@/lib/api';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 

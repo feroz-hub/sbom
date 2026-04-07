@@ -563,6 +563,12 @@ _GH_SEV_NORM: Dict[str, str] = {
     "MODERATE": "MEDIUM",
     "MEDIUM":   "MEDIUM",
     "LOW":      "LOW",
+    # Lowercase variants for defence-in-depth (callers may skip .upper())
+    "critical": "CRITICAL",
+    "high":     "HIGH",
+    "moderate": "MEDIUM",
+    "medium":   "MEDIUM",
+    "low":      "LOW",
 }
 
 
@@ -1087,9 +1093,14 @@ def _best_score_and_vector_from_osv(v: dict) -> Tuple[Optional[float], Optional[
         raw_score = sev.get("score") or ""
         if t in {"CVSS_V3", "CVSS_V4"}:
             if isinstance(raw_score, str) and raw_score.upper().startswith("CVSS:"):
-                # It's a vector string, not a number
+                # It's a vector string, not a number – strip the "CVSS:x.y/" prefix
+                # so downstream consumers get a clean metric string (AV:N/AC:L/…).
                 if vector is None:
-                    vector = raw_score
+                    cleaned = raw_score
+                    slash_idx = cleaned.find("/")
+                    if slash_idx != -1:
+                        cleaned = cleaned[slash_idx + 1:]
+                    vector = cleaned
             else:
                 try:
                     s = float(raw_score)

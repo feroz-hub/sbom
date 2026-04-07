@@ -161,6 +161,57 @@ export interface PDFReportPayload {
   filename?: string;
 }
 
+export interface SBOMInfo {
+  sbom_id: number;
+  format: string;
+  spec_version: string | null;
+  component_count: number;
+  ecosystems: string[];
+  has_purls: boolean;
+  has_cpes: boolean;
+  components_preview: string[];
+}
+
+export interface RiskComponent {
+  name: string;
+  version: string;
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  component_score: number;
+  highest_severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'UNKNOWN';
+}
+
+export interface SBOMRiskSummary {
+  sbom_id: number;
+  total_risk_score: number;
+  risk_band: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  components: RiskComponent[];
+}
+
+export interface DashboardTrendPoint {
+  date: string;
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+}
+
+export interface DashboardTrend {
+  days: number;
+  series: DashboardTrendPoint[];
+}
+
+export interface CompareRunsResult {
+  run_a: { id: number; sbom_name: string | null; completed_on: string | null };
+  run_b: { id: number; sbom_name: string | null; completed_on: string | null };
+  new_findings: string[];
+  resolved_findings: string[];
+  common_findings: string[];
+  severity_delta: { critical: number; high: number; medium: number; low: number };
+}
+
 export interface ConsolidatedAnalysisResult {
   runId: number;
   sbom_id?: number;

@@ -15,9 +15,15 @@ interface RunsTableProps {
   runs: AnalysisRun[] | undefined;
   isLoading: boolean;
   error: Error | null;
+  /** Optional multi-select state for the Compare Runs flow. When provided,
+   *  the table renders a checkbox in the first column. */
+  selectedIds?: Set<number>;
+  onToggleSelect?: (id: number) => void;
 }
 
-export function RunsTable({ runs, isLoading, error }: RunsTableProps) {
+export function RunsTable({ runs, isLoading, error, selectedIds, onToggleSelect }: RunsTableProps) {
+  const selectable = Boolean(onToggleSelect);
+  const colCount = selectable ? 12 : 11;
   const router = useRouter();
   const { showToast } = useToast();
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
@@ -52,6 +58,7 @@ export function RunsTable({ runs, isLoading, error }: RunsTableProps) {
       <Table>
         <TableHead>
           <tr>
+            {selectable && <Th className="w-8"><span className="sr-only">Select</span></Th>}
             <Th>Run ID</Th>
             <Th>SBOM</Th>
             <Th>Status</Th>
@@ -67,9 +74,9 @@ export function RunsTable({ runs, isLoading, error }: RunsTableProps) {
         </TableHead>
         <TableBody>
           {isLoading ? (
-            Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} cols={11} />)
+            Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} cols={colCount} />)
           ) : !runs?.length ? (
-            <EmptyRow cols={11} message="No analysis runs found. Run an analysis from an SBOM detail page." />
+            <EmptyRow cols={colCount} message="No analysis runs found. Run an analysis from an SBOM detail page." />
           ) : (
             runs.map((run) => (
               <tr
@@ -77,6 +84,17 @@ export function RunsTable({ runs, isLoading, error }: RunsTableProps) {
                 className="hover:bg-hcl-light/40 transition-colors cursor-pointer"
                 onClick={() => router.push(`/analysis/${run.id}`)}
               >
+                {selectable && (
+                  <Td onClick={(e) => e.stopPropagation()} className="w-8">
+                    <input
+                      type="checkbox"
+                      aria-label={`Select run #${run.id} for comparison`}
+                      checked={selectedIds?.has(run.id) ?? false}
+                      onChange={() => onToggleSelect?.(run.id)}
+                      className="h-4 w-4 rounded border-hcl-border text-hcl-blue focus:ring-hcl-blue"
+                    />
+                  </Td>
+                )}
                 <Td className="font-mono text-xs text-hcl-muted">#{run.id}</Td>
                 <Td className="font-medium text-hcl-navy max-w-[140px] truncate">
                   {run.sbom_name || (run.sbom_id ? `SBOM #${run.sbom_id}` : '—')}
