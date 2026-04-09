@@ -1,0 +1,21 @@
+{
+  "completed_on": "<volatile>",
+  "components_with_cpe": 2,
+  "critical_count": 2,
+  "duration_ms": "<volatile>",
+  "high_count": 1,
+  "id": "<volatile>",
+  "low_count": 0,
+  "medium_count": 0,
+  "project_id": null,
+  "query_error_count": 0,
+  "raw_report": null,
+  "run_status": "FAIL",
+  "sbom_id": "<volatile>",
+  "sbom_name": null,
+  "source": "GITHUB,NVD,OSV",
+  "started_on": "<volatile>",
+  "total_components": 2,
+  "total_findings": 3,
+  "unknown_count": 0
+}

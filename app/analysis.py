@@ -506,234 +506,24 @@ def extract_components(sbom_json: Any) -> List[Dict]:
 # CVSS helpers
 # ============================================================
 
-def _safe_score(value: Any) -> Optional[float]:
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
+# ----------------------------------------------------------------------
+# Phase 1 (Finding B): the canonical bodies of the helpers below now live
+# in `app/services/sources/`. They are imported here under their legacy
+# underscore-prefixed names so the existing call sites in this file (and
+# the routers) continue to work without modification. Phase 2 source
+# adapters will import directly from `services.sources` instead.
+# ----------------------------------------------------------------------
 
-
-def _parse_cvss_attack_vector(vector: Optional[str]) -> Optional[str]:
-    """Extract AV component from CVSS vector string."""
-    if not vector:
-        return None
-    for part in (vector or "").split("/"):
-        if part.startswith("AV:"):
-            return {"N": "Network", "A": "Adjacent", "L": "Local",
-                    "P": "Physical"}.get(part[3:], part[3:])
-    return None
-
-
-def _cvss_version_from_metrics(metrics: Dict[str, Any]) -> Optional[str]:
-    """Return 'V40', 'V31', or 'V2' based on which metric key has data."""
-    for key, label in (
-        ("cvssMetricV40", "V40"),
-        ("cvssMetricV31", "V31"),
-        ("cvssMetricV30", "V31"),
-        ("cvssMetricV2", "V2"),
-    ):
-        if metrics.get(key):
-            return label
-    return None
-
-
-def _extract_best_cvss(metrics: Dict[str, Any]) -> Tuple[Optional[float], Optional[str], Optional[str]]:
-    if not isinstance(metrics, dict):
-        return None, None, None
-    metric_keys = ("cvssMetricV40", "cvssMetricV31", "cvssMetricV30", "cvssMetricV2")
-    for key in metric_keys:
-        entries = metrics.get(key) or []
-        if not entries:
-            continue
-        primary = next((m for m in entries if str((m or {}).get("type", "")).lower() == "primary"), entries[0])
-        cvss_data = (primary or {}).get("cvssData") or {}
-        score = _safe_score(cvss_data.get("baseScore"))
-        vector = cvss_data.get("vectorString")
-        severity = (primary or {}).get("baseSeverity") or cvss_data.get("baseSeverity")
-        return score, vector, severity
-    return None, None, None
-
-
-# GitHub Advisory severity normalisation: GraphQL returns "MODERATE" for medium
-_GH_SEV_NORM: Dict[str, str] = {
-    "CRITICAL": "CRITICAL",
-    "HIGH":     "HIGH",
-    "MODERATE": "MEDIUM",
-    "MEDIUM":   "MEDIUM",
-    "LOW":      "LOW",
-    # Lowercase variants for defence-in-depth (callers may skip .upper())
-    "critical": "CRITICAL",
-    "high":     "HIGH",
-    "moderate": "MEDIUM",
-    "medium":   "MEDIUM",
-    "low":      "LOW",
-}
-
-
-def _sev_bucket(score: Optional[float], settings: AnalysisSettings, severity_text: Optional[str] = None) -> str:
-    if score is not None:
-        if score >= settings.cvss_critical_threshold:
-            return "CRITICAL"
-        if score >= settings.cvss_high_threshold:
-            return "HIGH"
-        if score >= settings.cvss_medium_threshold:
-            return "MEDIUM"
-        return "LOW"
-    if severity_text:
-        text = severity_text.strip().upper()
-        normalized = _GH_SEV_NORM.get(text)
-        if normalized:
-            return normalized
-    return "UNKNOWN"
-
-
-# ============================================================
-# Robust PURL parsing (Option A requires this)
-# ============================================================
-
-def _parse_purl(purl: str) -> dict:
-    """
-    Minimal purl parser per spec:
-      pkg:<type>/<namespace>/<name>@<version>?<qualifiers>#<subpath>
-    We ignore subpath; percent-decode namespace/name; keep case for names where relevant.
-    """
-    if not purl or not purl.startswith("pkg:"):
-        return {}
-    rest = purl[4:]
-
-    # Remove subpath if present
-    if "#" in rest:
-        rest, _sub = rest.split("#", 1)
-
-    # Split query
-    qualifiers: Dict[str, str] = {}
-    if "?" in rest:
-        rest, q = rest.split("?", 1)
-        qualifiers = {k: v[0] for k, v in parse_qs(q, keep_blank_values=True).items()}
-
-    # Separate version (last '@' is version separator)
-    version = None
-    if "@" in rest:
-        rest, version = rest.rsplit("@", 1)
-        version = unquote(version) if version else None
-    parts = rest.split("/")
-    if len(parts) < 2:
-        return {}
-
-    ptype = parts[0].lower()
-    if len(parts) == 2:
-        namespace = None
-        name = unquote(parts[1])
-    else:
-        namespace = unquote("/".join(parts[1:-1])) if len(parts) > 2 else None
-        name = unquote(parts[-1])
-
-    return {"type": ptype, "namespace": namespace, "name": name, "version": version, "qualifiers": qualifiers}
-
-
-def _slug(s: Optional[str]) -> Optional[str]:
-    """
-    Sanitize vendor/product tokens for CPE (lowercase, allowed chars).
-    """
-    if not s:
-        return None
-    out = []
-    for ch in s.lower():
-        if ch.isalnum() or ch in ("_", "-", "."):
-            out.append(ch)
-        else:
-            out.append("_")
-    token = "".join(out).strip("._-")
-    return token or None
-
-
-# ============================================================
-# Heuristic CPE (2.3) generation from PURL (Option A)
-# ============================================================
-
-def _cpe23_from_purl(purl: str, version_override: Optional[str] = None) -> Optional[str]:
-    """
-    Best-effort mapping of purl -> CPE 2.3.
-    part: 'a' (application)
-    vendor/product heuristics by ecosystem; version from purl or version_override.
-    """
-    parsed = _parse_purl(purl)
-    if not parsed:
-        return None
-
-    ptype = parsed.get("type")
-    namespace = parsed.get("namespace") or ""
-    name = parsed.get("name") or ""
-    version = parsed.get("version") or version_override
-
-    vnd = None
-    prd = None
-
-    # Ecosystem-specific mappings
-    if ptype in {"pypi"}:
-        # PyPI has no organization namespace; use name as vendor+product
-        vnd = _slug(name)
-        prd = _slug(name)
-
-    elif ptype in {"npm"}:
-        # npm: namespace is '@scope' (percent-decoded already)
-        scope = namespace.split("/")[-1] if namespace else None
-        if scope and scope.startswith("@"):
-            scope = scope[1:]
-        vnd = _slug(scope or name)
-        prd = _slug(name)
-
-    elif ptype in {"maven"}:
-        # Maven: namespace = groupId, name = artifactId
-        group = namespace or ""
-        # vendor = last segment of groupId (e.g., org.apache.logging.log4j -> log4j)
-        vnd = _slug(group.split(".")[-1] if group else name)
-        prd = _slug(name)
-
-    elif ptype in {"golang", "go"}:
-        # Go: namespace name often like 'github.com/user', name='repo'
-        # vendor = user/org if present; else first host segment
-        if namespace:
-            segs = namespace.split("/")
-            vnd = _slug(segs[-1] if len(segs) >= 2 else segs[0])
-        else:
-            vnd = _slug(name)
-        prd = _slug(name)
-
-    elif ptype in {"rubygems", "gem"}:
-        vnd = _slug(name)
-        prd = _slug(name)
-
-    elif ptype in {"nuget"}:
-        vnd = _slug(name)
-        prd = _slug(name)
-
-    elif ptype in {"composer"}:
-        # Composer: namespace is vendor; name is package
-        vnd = _slug(namespace.split("/")[-1] if namespace else name)
-        prd = _slug(name)
-
-    elif ptype in {"cargo", "crates"}:
-        vnd = _slug(namespace.split("/")[-1] if namespace else name)
-        prd = _slug(name)
-
-    else:
-        # Fallback
-        vnd = _slug(namespace.split("/")[-1] if namespace else name)
-        prd = _slug(name)
-
-    if not vnd or not prd:
-        return None
-
-    # Use version from purl or override; sanitize for CPE (alphanumeric, ., -, _)
-    ver = version or "*"
-    if ver != "*":
-        ver = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in ver).strip("._-") or "*"
-    # CPE 2.3 template: cpe:2.3:<part>:<vendor>:<product>:<version>:<update>:<edition>:<language>:<sw_edition>:<target_sw>:<target_hw>:<other>
-    cpe = f"cpe:2.3:a:{vnd}:{prd}:{ver}:*:*:*:*:*:*:*"
-    return cpe
+from .sources.purl import parse_purl as _parse_purl
+from .sources.cpe import slug as _slug, cpe23_from_purl as _cpe23_from_purl
+from .sources.severity import (
+    safe_score as _safe_score,
+    parse_cvss_attack_vector as _parse_cvss_attack_vector,
+    cvss_version_from_metrics as _cvss_version_from_metrics,
+    extract_best_cvss as _extract_best_cvss,
+    sev_bucket as _sev_bucket,
+    GH_SEV_NORM as _GH_SEV_NORM,
+)
 
 
 def _augment_components_with_cpe(components: List[dict]) -> Tuple[List[dict], int]:
@@ -986,6 +776,10 @@ def analyze_sbom_against_nvd(sbom_json: str, nvd_api_key: Optional[str], setting
 class _MultiSettings(AnalysisSettings):
     gh_graphql_url: str = "https://api.github.com/graphql"
     gh_token_env: str = "GITHUB_TOKEN"
+    # Per-request override for GitHub token. When set, takes precedence over the
+    # environment variable read via `gh_token_env`. Lets request handlers pass a
+    # caller-supplied token without mutating process-global os.environ.
+    gh_token_override: Optional[str] = None
     osv_api_base_url: str = "https://api.osv.dev"
     osv_results_per_batch: int = 1000
     max_concurrency: int = 10
@@ -1284,7 +1078,10 @@ def extract_fixed_versions_osv(v):
 # ---------- GitHub Advisory (GHSA) ----------
 
 async def github_query_by_components(components: List[dict], settings: _MultiSettings) -> Tuple[List[dict], List[dict], List[dict]]:
-    token = os.getenv(settings.gh_token_env)
+    # Prefer the per-request override (passed in via dataclasses.replace) before
+    # falling back to the environment variable. This avoids mutating os.environ
+    # from request handlers under concurrency.
+    token = settings.gh_token_override or os.getenv(settings.gh_token_env)
     if not token or not token.strip():
         return [], [{"source": "GITHUB", "error": f"Missing token env: {settings.gh_token_env}"}], []
 
@@ -1462,59 +1259,10 @@ async def nvd_query_by_components_async(
     return findings, errors, []
 
 
-def deduplicate_findings(all_findings: List[dict]) -> List[dict]:
-    """
-    Two-pass CVE↔GHSA alias cross-deduplication.
-    Identical logic to what's inside analyze_sbom_multi_source_async.
-    """
-    sev_rank = {"LOW": 0, "MEDIUM": 1, "HIGH": 2, "CRITICAL": 3, "UNKNOWN": -1}
-
-    alias_index: Dict[str, str] = {}
-    for v in all_findings:
-        vid = v.get("vuln_id") or ""
-        for alias in (v.get("aliases") or []):
-            if alias and alias not in alias_index:
-                alias_index[alias] = vid
-        if vid and vid not in alias_index:
-            alias_index[vid] = vid
-
-    def _canonical_key(v: dict) -> str:
-        vid = v.get("vuln_id") or ""
-        canonical = alias_index.get(vid, vid)
-        if canonical:
-            return canonical
-        for a in (v.get("aliases") or []):
-            if a:
-                return alias_index.get(a, a)
-        return v.get("component_name") or ""
-
-    merged: Dict[str, dict] = {}
-    for v in all_findings:
-        key = _canonical_key(v)
-        if key not in merged:
-            merged[key] = dict(v)
-        else:
-            existing = merged[key]
-            existing["sources"] = list(set(existing.get("sources", []) + v.get("sources", [])))
-            existing["aliases"] = list(set(existing.get("aliases", []) + v.get("aliases", [])))
-            existing["cwe"] = list(set((existing.get("cwe") or []) + (v.get("cwe") or [])))
-            existing["references"] = list(set(
-                [r for r in (existing.get("references") or []) if r] +
-                [r for r in (v.get("references") or []) if r]
-            ))
-            existing["fixed_versions"] = list(set(
-                (existing.get("fixed_versions") or []) + (v.get("fixed_versions") or [])
-            ))
-            e_rank = sev_rank.get(str(existing.get("severity", "UNKNOWN")).upper(), -1)
-            v_rank = sev_rank.get(str(v.get("severity", "UNKNOWN")).upper(), -1)
-            if v_rank > e_rank:
-                existing["severity"] = v["severity"]
-                if v.get("score") is not None:
-                    existing["score"] = v["score"]
-            if not existing.get("attack_vector") and v.get("attack_vector"):
-                existing["attack_vector"] = v["attack_vector"]
-
-    return list(merged.values())
+# Phase 1 (Finding B): canonical implementation now lives in
+# `app/services/sources/dedupe.py`. Re-exported here so existing imports
+# (`from app.analysis import deduplicate_findings`) keep working.
+from .sources.dedupe import deduplicate_findings  # noqa: F401
 
 
 async def analyze_sbom_multi_source_async(

@@ -1,0 +1,43 @@
+{
+  "components": [
+    {
+      "advisories": [],
+      "error": null,
+      "name": "log4j-core",
+      "purl": "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1",
+      "version": "2.14.1"
+    },
+    {
+      "advisories": [],
+      "error": null,
+      "name": "requests",
+      "purl": "pkg:pypi/requests@2.19.0",
+      "version": "2.19.0"
+    }
+  ],
+  "runId": "<volatile>",
+  "sbom": {
+    "format": "cyclonedx",
+    "id": "<volatile>",
+    "name": "snapshot-fixture",
+    "specVersion": "1.5"
+  },
+  "status": "PASS",
+  "summary": {
+    "completedOn": "<volatile>",
+    "components": 2,
+    "durationMs": "<volatile>",
+    "errors": 0,
+    "findings": {
+      "bySeverity": {
+        "CRITICAL": 0,
+        "HIGH": 0,
+        "LOW": 0,
+        "MEDIUM": 0,
+        "UNKNOWN": 0
+      },
+      "total": 0
+    },
+    "withPURL": 2
+  }
+}

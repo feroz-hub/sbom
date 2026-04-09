@@ -1,0 +1,54 @@
+{
+  "components": [
+    {
+      "cpe": null,
+      "cves": [
+        {
+          "id": "<volatile>",
+          "published": "2021-12-10T10:15:00.000",
+          "score": 10.0,
+          "severity": "CRITICAL",
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2021-44228",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H"
+        }
+      ],
+      "error": null,
+      "name": "log4j-core",
+      "purl": "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1",
+      "version": "2.14.1"
+    },
+    {
+      "cpe": null,
+      "cves": [],
+      "error": null,
+      "name": "requests",
+      "purl": "pkg:pypi/requests@2.19.0",
+      "version": "2.19.0"
+    }
+  ],
+  "runId": "<volatile>",
+  "sbom": {
+    "format": "cyclonedx",
+    "id": "<volatile>",
+    "name": "snapshot-fixture",
+    "specVersion": "1.5"
+  },
+  "status": "PASS",
+  "summary": {
+    "completedOn": "<volatile>",
+    "components": 2,
+    "durationMs": "<volatile>",
+    "errors": 0,
+    "findings": {
+      "bySeverity": {
+        "CRITICAL": 1,
+        "HIGH": 0,
+        "LOW": 0,
+        "MEDIUM": 0,
+        "UNKNOWN": 0
+      },
+      "total": 1
+    },
+    "withCPE": 0
+  }
+}

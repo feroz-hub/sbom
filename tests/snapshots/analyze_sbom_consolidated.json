@@ -1,0 +1,125 @@
+{
+  "components": [
+    {
+      "combined": [
+        {
+          "aliases": [
+            "CVE-2021-44228"
+          ],
+          "id": "<volatile>",
+          "published": "2021-12-10T10:15:00.000",
+          "score": 10.0,
+          "severity": "CRITICAL",
+          "sources": [
+            "NVD"
+          ],
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2021-44228",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H"
+        },
+        {
+          "aliases": [
+            "GHSA-jfh8-c2jp-5v3q"
+          ],
+          "id": "<volatile>",
+          "published": "2021-12-10T00:00:00Z",
+          "score": 10.0,
+          "severity": "CRITICAL",
+          "sources": [
+            "GHSA"
+          ],
+          "url": "https://github.com/advisories/GHSA-jfh8-c2jp-5v3q",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H"
+        }
+      ],
+      "cpe": "cpe:2.3:a:log4j:log4j-core:2.14.1:*:*:*:*:*:*:*",
+      "name": "log4j-core",
+      "purl": "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1",
+      "score": 10.0,
+      "severity": {
+        "CRITICAL": 2,
+        "HIGH": 0,
+        "LOW": 0,
+        "MEDIUM": 0,
+        "UNKNOWN": 0
+      },
+      "source": [
+        "GHSA",
+        "NVD"
+      ],
+      "version": "2.14.1",
+      "vulnerabilities": [
+        {
+          "aliases": [
+            "CVE-2021-44228"
+          ],
+          "id": "<volatile>",
+          "published": "2021-12-10T10:15:00.000",
+          "score": 10.0,
+          "severity": "CRITICAL",
+          "sources": [
+            "NVD"
+          ],
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2021-44228",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H"
+        },
+        {
+          "aliases": [
+            "GHSA-jfh8-c2jp-5v3q"
+          ],
+          "id": "<volatile>",
+          "published": "2021-12-10T00:00:00Z",
+          "score": 10.0,
+          "severity": "CRITICAL",
+          "sources": [
+            "GHSA"
+          ],
+          "url": "https://github.com/advisories/GHSA-jfh8-c2jp-5v3q",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H"
+        }
+      ]
+    },
+    {
+      "combined": [],
+      "cpe": "cpe:2.3:a:requests:requests:2.19.0:*:*:*:*:*:*:*",
+      "name": "requests",
+      "purl": "pkg:pypi/requests@2.19.0",
+      "score": null,
+      "severity": {
+        "CRITICAL": 0,
+        "HIGH": 0,
+        "LOW": 0,
+        "MEDIUM": 0,
+        "UNKNOWN": 0
+      },
+      "source": [],
+      "version": "2.19.0",
+      "vulnerabilities": []
+    }
+  ],
+  "runId": "<volatile>",
+  "sbom": {
+    "format": "cyclonedx",
+    "id": "<volatile>",
+    "name": "snapshot-fixture",
+    "specVersion": "1.5"
+  },
+  "status": "FAIL",
+  "summary": {
+    "completedOn": "<volatile>",
+    "components": 2,
+    "durationMs": "<volatile>",
+    "errors": 0,
+    "findings": {
+      "bySeverity": {
+        "CRITICAL": 2,
+        "HIGH": 0,
+        "LOW": 0,
+        "MEDIUM": 0,
+        "UNKNOWN": 0
+      },
+      "total": 2
+    },
+    "withCPE": 2,
+    "withPURL": 2
+  }
+}

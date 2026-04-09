@@ -45,6 +45,8 @@ from ..schemas import (
     SBOMComponentOut,
     AnalysisRunOut,
 )
+from dataclasses import replace as dataclass_replace
+
 from ..analysis import (
     get_analysis_settings_multi,
     extract_components,
@@ -54,6 +56,7 @@ from ..analysis import (
     github_query_by_components,
     nvd_query_by_components_async,
     deduplicate_findings,
+    analyze_sbom_multi_source_async,
 )
 
 log = logging.getLogger(__name__)
@@ -203,7 +206,10 @@ def persist_analysis_run(
             normalized_key(cname),
             normalized_key(cversion),
         )
-        component_id = component_maps["triplet"].get(triplet)
+        # `upsert_components` returns SBOMComponent ORM rows (not ints) in the
+        # triplet map; pull the .id off so SQLAlchemy gets a real FK value.
+        triplet_row = component_maps["triplet"].get(triplet)
+        component_id = triplet_row.id if triplet_row is not None else None
         if not component_id and cpe:
             cpe_rows = component_maps["cpe"].get(normalized_key(cpe), [])
             if cpe_rows:
@@ -222,13 +228,26 @@ def persist_analysis_run(
             except (TypeError, ValueError):
                 pass
 
+        # `cwe` may arrive as a list (NVD/GHSA/OSV multi-source path) or as a
+        # legacy scalar string. Persist as a JSON-encoded list when it's a
+        # collection, otherwise fall back to the trimmed string.
+        cwe_raw = finding_raw.get("cwe")
+        if isinstance(cwe_raw, (list, tuple, set)):
+            cwe_value = json.dumps(sorted({str(x) for x in cwe_raw if x})) if cwe_raw else None
+        elif isinstance(cwe_raw, str):
+            cwe_value = cwe_raw.strip() or None
+        else:
+            cwe_value = None
+
         finding = AnalysisFinding(
             analysis_run_id=run.id,
             component_id=component_id,
             component_name=cname,
             component_version=cversion,
             cpe=cpe,
-            vuln_id=(finding_raw.get("id") or "").strip() or None,
+            # Multi-source orchestrator emits the canonical id under "vuln_id";
+            # legacy callers may still use "id". Accept both, prefer the new key.
+            vuln_id=((finding_raw.get("vuln_id") or finding_raw.get("id") or "").strip() or None),
             severity=(finding_raw.get("severity") or "UNKNOWN").upper(),
             score=finding_raw.get("score"),
             vector=(finding_raw.get("vector") or "").strip() or None,
@@ -236,7 +255,7 @@ def persist_analysis_run(
             reference_url=(finding_raw.get("url") or "").strip() or None,
             source=sources_str,
             description=(finding_raw.get("description") or "").strip() or None,
-            cwe=(finding_raw.get("cwe") or "").strip() or None,
+            cwe=cwe_value,
             attack_vector=(finding_raw.get("attack_vector") or "").strip() or None,
             aliases=aliases_json,
             fixed_versions=json.dumps(finding_raw.get("fixed_versions", [])) if finding_raw.get("fixed_versions") else None,
@@ -246,14 +265,22 @@ def persist_analysis_run(
     return run
 
 
-def create_auto_report(db: Session, sbom_obj: SBOMSource) -> Optional[AnalysisRun]:
+async def create_auto_report(db: Session, sbom_obj: SBOMSource) -> Optional[AnalysisRun]:
     """
     Trigger default multi-source analysis for an SBOM and persist the run.
-    Uses NVD + OSV + GitHub (if tokens configured).
+
+    Delegates to ``analyze_sbom_multi_source_async`` which fans NVD + OSV + GitHub
+    out concurrently with ``asyncio.gather``. Previously this function ran the
+    three sources serially via three blocking ``asyncio.run()`` calls inside a
+    sync handler, which (a) blocked the worker thread for the full sum of all
+    three round trips and (b) starved concurrent uploads.
     """
     if not sbom_obj.sbom_data:
         return None
 
+    # Extract components up front so we can short-circuit empty SBOMs without
+    # paying for any outbound HTTP, and so we can pass the same component list
+    # into ``persist_analysis_run`` for component-row upserting.
     try:
         components_raw = extract_components(sbom_obj.sbom_data)
         components_raw = [enrich_component_for_osv(c) for c in components_raw]
@@ -265,69 +292,30 @@ def create_auto_report(db: Session, sbom_obj: SBOMSource) -> Optional[AnalysisRu
     if not components:
         return None
 
+    started_on = now_iso()
     started_at = time.perf_counter()
-    all_findings: List[dict] = []
-    all_errors: List[dict] = []
-
-    sources_list = ["NVD", "OSV", "GITHUB"]
 
     try:
         cfg = get_analysis_settings_multi()
-        # NVD
-        try:
-            findings, errors, _ = asyncio.run(
-                nvd_query_by_components_async(components, cfg, nvd_api_key=None)
-            )
-            all_findings.extend(findings)
-            all_errors.extend(errors)
-        except Exception as exc:
-            log.warning("NVD query failed: %s", exc)
-            all_errors.append({"source": "NVD", "error": str(exc)})
-
-        # OSV
-        try:
-            findings, errors, _ = asyncio.run(osv_query_by_components(components, cfg))
-            all_findings.extend(findings)
-            all_errors.extend(errors)
-        except Exception as exc:
-            log.warning("OSV query failed: %s", exc)
-            all_errors.append({"source": "OSV", "error": str(exc)})
-
-        # GitHub
-        try:
-            findings, errors, _ = asyncio.run(github_query_by_components(components, cfg))
-            all_findings.extend(findings)
-            all_errors.extend(errors)
-        except Exception as exc:
-            log.warning("GitHub query failed: %s", exc)
-            all_errors.append({"source": "GITHUB", "error": str(exc)})
-
+        details = await analyze_sbom_multi_source_async(
+            sbom_obj.sbom_data,
+            sources=["NVD", "OSV", "GITHUB"],
+            settings=cfg,
+        )
     except Exception as exc:
-        log.error("Auto-analysis failed: %s", exc, exc_info=True)
+        log.error("Auto-analysis failed for SBOM id=%d: %s", sbom_obj.id, exc, exc_info=True)
         return None
 
-    final_findings = deduplicate_findings(all_findings)
-    buckets = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "UNKNOWN": 0}
-    for f in final_findings:
-        sev = str((f or {}).get("severity", "UNKNOWN")).upper()
-        buckets[sev if sev in buckets else "UNKNOWN"] += 1
-
-    details = {
-        "total_components": len(components),
-        "components_with_cpe": sum(1 for c in components if c.get("cpe")),
-        "total_findings": len(final_findings),
-        "critical": buckets["CRITICAL"],
-        "high": buckets["HIGH"],
-        "medium": buckets["MEDIUM"],
-        "low": buckets["LOW"],
-        "unknown": buckets["UNKNOWN"],
-        "query_errors": all_errors,
-        "findings": final_findings,
-        "analysis_metadata": {"sources": sources_list},
-    }
+    all_errors: List[dict] = list(details.get("query_errors") or [])
+    final_findings: List[dict] = list(details.get("findings") or [])
+    sources_used = (details.get("analysis_metadata") or {}).get("sources") or [
+        "NVD",
+        "OSV",
+        "GITHUB",
+    ]
 
     run_status = compute_report_status(len(final_findings), all_errors)
-    source_label = ",".join(sources_list)
+    source_label = ",".join(sources_used)
     if all_errors:
         source_label += " (partial)"
 
@@ -339,7 +327,7 @@ def create_auto_report(db: Session, sbom_obj: SBOMSource) -> Optional[AnalysisRu
         components=components,
         run_status=run_status,
         source=source_label,
-        started_on=now_iso(),
+        started_on=started_on,
         completed_on=now_iso(),
         duration_ms=duration_ms,
     )
@@ -661,14 +649,14 @@ def delete_sbom(
 
 
 @router.post("/sboms/{sbom_id}/analyze", response_model=AnalysisRunOut, status_code=status.HTTP_201_CREATED)
-def run_analysis_for_sbom(sbom_id: int, db: Session = Depends(get_db)):
+async def run_analysis_for_sbom(sbom_id: int, db: Session = Depends(get_db)):
     log.info("Manual analysis triggered for SBOM id=%d", sbom_id)
     sbom = db.get(SBOMSource, sbom_id)
     if not sbom:
         log.warning("Analysis requested for unknown SBOM id=%d", sbom_id)
         raise HTTPException(status_code=404, detail="SBOM not found")
     try:
-        report = create_auto_report(db, sbom)
+        report = await create_auto_report(db, sbom)
     except Exception as exc:
         db.rollback()
         log.error("Analysis run failed for SBOM id=%d: %s", sbom_id, exc, exc_info=True)
@@ -714,8 +702,12 @@ async def analyze_sbom_stream(
         try:
             cfg = get_analysis_settings_multi()
 
-            if payload.github_token:
-                os.environ["GITHUB_TOKEN"] = payload.github_token.strip()
+            # Per-request GitHub token override — never mutate os.environ from a
+            # request handler (it would race across concurrent requests). The
+            # override is preferred over the env var inside
+            # `github_query_by_components`.
+            if payload.github_token and payload.github_token.strip():
+                cfg = dataclass_replace(cfg, gh_token_override=payload.github_token.strip())
 
             sources = [s.strip().upper() for s in (payload.sources or ["NVD", "OSV", "GITHUB"])]
 
@@ -753,41 +745,90 @@ async def analyze_sbom_stream(
                 "GITHUB": lambda: github_query_by_components(components, cfg),
             }
 
-            for source_name in sources:
-                if source_name not in source_map:
-                    continue
+            # Run all selected sources CONCURRENTLY (instead of one-by-one) and
+            # surface per-source start/complete/error events as soon as they
+            # arrive via an asyncio.Queue. This converges on the same parallel
+            # pattern used by `create_auto_report` while preserving the SSE
+            # progress contract.
+            event_queue: asyncio.Queue = asyncio.Queue()
+            active_sources = [s for s in sources if s in source_map]
 
-                yield _sse_event("progress", {
-                    "source": source_name,
-                    "status": "running",
-                    "elapsed_ms": elapsed(),
-                })
-                await asyncio.sleep(0)
-
+            async def _run_source(source_name: str) -> None:
                 src_start = time.perf_counter()
+                await event_queue.put({
+                    "kind": "progress",
+                    "data": {
+                        "source": source_name,
+                        "status": "running",
+                        "elapsed_ms": elapsed(),
+                    },
+                })
                 try:
                     findings, errors, _warnings = await source_map[source_name]()
-                    all_findings.extend(findings)
-                    all_errors.extend(errors)
-                    yield _sse_event("progress", {
+                    await event_queue.put({
+                        "kind": "result",
                         "source": source_name,
-                        "status": "complete",
-                        "findings": len(findings),
-                        "errors": len(errors),
+                        "findings": findings,
+                        "errors": errors,
                         "source_ms": int((time.perf_counter() - src_start) * 1000),
-                        "elapsed_ms": elapsed(),
                     })
                 except Exception as exc:
-                    err_msg = str(exc)
-                    all_errors.append({"source": source_name, "error": err_msg})
-                    yield _sse_event("progress", {
+                    await event_queue.put({
+                        "kind": "exception",
                         "source": source_name,
-                        "status": "error",
-                        "error": err_msg,
+                        "error": str(exc),
                         "source_ms": int((time.perf_counter() - src_start) * 1000),
-                        "elapsed_ms": elapsed(),
                     })
-                await asyncio.sleep(0)
+
+            async def _orchestrate() -> None:
+                try:
+                    await asyncio.gather(
+                        *(_run_source(name) for name in active_sources),
+                        return_exceptions=False,
+                    )
+                finally:
+                    await event_queue.put({"kind": "done"})
+
+            orchestrator = asyncio.create_task(_orchestrate())
+
+            try:
+                while True:
+                    msg = await event_queue.get()
+                    kind = msg.get("kind")
+                    if kind == "done":
+                        break
+                    if kind == "progress":
+                        yield _sse_event("progress", msg["data"])
+                    elif kind == "result":
+                        findings = msg["findings"]
+                        errors = msg["errors"]
+                        all_findings.extend(findings)
+                        all_errors.extend(errors)
+                        yield _sse_event("progress", {
+                            "source": msg["source"],
+                            "status": "complete",
+                            "findings": len(findings),
+                            "errors": len(errors),
+                            "source_ms": msg["source_ms"],
+                            "elapsed_ms": elapsed(),
+                        })
+                    elif kind == "exception":
+                        all_errors.append({"source": msg["source"], "error": msg["error"]})
+                        yield _sse_event("progress", {
+                            "source": msg["source"],
+                            "status": "error",
+                            "error": msg["error"],
+                            "source_ms": msg["source_ms"],
+                            "elapsed_ms": elapsed(),
+                        })
+                    await asyncio.sleep(0)
+            finally:
+                if not orchestrator.done():
+                    orchestrator.cancel()
+                    try:
+                        await orchestrator
+                    except (asyncio.CancelledError, Exception):
+                        pass
 
             final_findings = deduplicate_findings(all_findings)
 
