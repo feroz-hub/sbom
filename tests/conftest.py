@@ -218,17 +218,18 @@ def mock_external_sources(monkeypatch):
     )
     monkeypatch.setattr(analysis_mod, "nvd_query_by_cpe", _fake_nvd_query_by_cpe)
 
-    # The router also imports nvd_query_by_components_async at module load —
-    # patch it there too in case any code path bypasses the orchestrator.
-    import app.routers.sboms_crud as crud
+    # Phase 3 (Finding B): the SSE stream + manual analyze paths now consume
+    # the source registry. Patch the underlying analysis.* coroutines that
+    # the adapters delegate to so the streaming endpoint sees the same
+    # canned data as the snapshot tests above.
+    import app.analysis as analysis_mod_for_adapters
     monkeypatch.setattr(
-        crud, "nvd_query_by_components_async", _fake_nvd_query_by_components_async
+        analysis_mod_for_adapters,
+        "nvd_query_by_components_async",
+        _fake_nvd_query_by_components_async,
     )
-    monkeypatch.setattr(
-        crud, "osv_query_by_components", _fake_osv_query_by_components
-    )
-    monkeypatch.setattr(
-        crud, "github_query_by_components", _fake_github_query_by_components
-    )
+    # osv_query_by_components / github_query_by_components are already
+    # patched on `app.analysis` above; the adapters import them lazily from
+    # the same module attribute, so the patch propagates.
 
     yield

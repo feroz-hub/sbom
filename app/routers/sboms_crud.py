@@ -45,18 +45,23 @@ from ..schemas import (
     SBOMComponentOut,
     AnalysisRunOut,
 )
-from dataclasses import replace as dataclass_replace
-
 from ..analysis import (
     get_analysis_settings_multi,
     extract_components,
     _augment_components_with_cpe,
     enrich_component_for_osv,
-    osv_query_by_components,
-    github_query_by_components,
-    nvd_query_by_components_async,
     deduplicate_findings,
     analyze_sbom_multi_source_async,
+)
+from ..sources import (
+    NvdSource,
+    OsvSource,
+    GhsaSource,
+    run_sources_concurrently,
+    EVENT_RUNNING,
+    EVENT_COMPLETE,
+    EVENT_ERROR,
+    EVENT_DONE,
 )
 
 log = logging.getLogger(__name__)
@@ -702,13 +707,6 @@ async def analyze_sbom_stream(
         try:
             cfg = get_analysis_settings_multi()
 
-            # Per-request GitHub token override — never mutate os.environ from a
-            # request handler (it would race across concurrent requests). The
-            # override is preferred over the env var inside
-            # `github_query_by_components`.
-            if payload.github_token and payload.github_token.strip():
-                cfg = dataclass_replace(cfg, gh_token_override=payload.github_token.strip())
-
             sources = [s.strip().upper() for s in (payload.sources or ["NVD", "OSV", "GITHUB"])]
 
             yield _sse_event("progress", {
@@ -734,86 +732,61 @@ async def analyze_sbom_stream(
             })
             await asyncio.sleep(0)
 
+            # Phase 3 (Finding B): build per-request VulnSource adapter
+            # instances. Credentials are bound at construction time so the
+            # request handler never has to mutate os.environ or splice
+            # `gh_token_override` onto the settings dataclass — that
+            # plumbing now lives inside the adapters themselves.
+            adapter_factories = {
+                "NVD": lambda: NvdSource(api_key=payload.nvd_api_key),
+                "OSV": lambda: OsvSource(),
+                "GITHUB": lambda: GhsaSource(token=payload.github_token),
+            }
+            active_adapters = [adapter_factories[name]() for name in sources if name in adapter_factories]
+
+            # Fan out concurrently via the shared runner. SSE progress events
+            # are forwarded as soon as the runner emits them, preserving the
+            # streaming contract while killing the inline source-dispatch loop.
             all_findings: List[dict] = []
             all_errors: List[dict] = []
-
-            source_map = {
-                "NVD": lambda: nvd_query_by_components_async(
-                    components, cfg, nvd_api_key=payload.nvd_api_key
-                ),
-                "OSV": lambda: osv_query_by_components(components, cfg),
-                "GITHUB": lambda: github_query_by_components(components, cfg),
-            }
-
-            # Run all selected sources CONCURRENTLY (instead of one-by-one) and
-            # surface per-source start/complete/error events as soon as they
-            # arrive via an asyncio.Queue. This converges on the same parallel
-            # pattern used by `create_auto_report` while preserving the SSE
-            # progress contract.
             event_queue: asyncio.Queue = asyncio.Queue()
-            active_sources = [s for s in sources if s in source_map]
 
-            async def _run_source(source_name: str) -> None:
-                src_start = time.perf_counter()
-                await event_queue.put({
-                    "kind": "progress",
-                    "data": {
-                        "source": source_name,
-                        "status": "running",
-                        "elapsed_ms": elapsed(),
-                    },
-                })
-                try:
-                    findings, errors, _warnings = await source_map[source_name]()
-                    await event_queue.put({
-                        "kind": "result",
-                        "source": source_name,
-                        "findings": findings,
-                        "errors": errors,
-                        "source_ms": int((time.perf_counter() - src_start) * 1000),
-                    })
-                except Exception as exc:
-                    await event_queue.put({
-                        "kind": "exception",
-                        "source": source_name,
-                        "error": str(exc),
-                        "source_ms": int((time.perf_counter() - src_start) * 1000),
-                    })
+            async def _drive_runner() -> None:
+                f, e, _w = await run_sources_concurrently(
+                    sources=active_adapters,
+                    components=components,
+                    settings=cfg,
+                    progress_queue=event_queue,
+                )
+                # Stash final aggregates on the queue itself so the consumer
+                # loop below can pick them up after EVENT_DONE.
+                all_findings.extend(f)
+                all_errors.extend(e)
 
-            async def _orchestrate() -> None:
-                try:
-                    await asyncio.gather(
-                        *(_run_source(name) for name in active_sources),
-                        return_exceptions=False,
-                    )
-                finally:
-                    await event_queue.put({"kind": "done"})
-
-            orchestrator = asyncio.create_task(_orchestrate())
+            orchestrator = asyncio.create_task(_drive_runner())
 
             try:
                 while True:
                     msg = await event_queue.get()
                     kind = msg.get("kind")
-                    if kind == "done":
+                    if kind == EVENT_DONE:
                         break
-                    if kind == "progress":
-                        yield _sse_event("progress", msg["data"])
-                    elif kind == "result":
-                        findings = msg["findings"]
-                        errors = msg["errors"]
-                        all_findings.extend(findings)
-                        all_errors.extend(errors)
+                    if kind == EVENT_RUNNING:
+                        yield _sse_event("progress", {
+                            "source": msg["source"],
+                            "status": "running",
+                            "elapsed_ms": elapsed(),
+                        })
+                    elif kind == EVENT_COMPLETE:
                         yield _sse_event("progress", {
                             "source": msg["source"],
                             "status": "complete",
-                            "findings": len(findings),
-                            "errors": len(errors),
+                            "findings": msg["findings"],
+                            "errors": msg["errors"],
                             "source_ms": msg["source_ms"],
                             "elapsed_ms": elapsed(),
                         })
-                    elif kind == "exception":
-                        all_errors.append({"source": msg["source"], "error": msg["error"]})
+                    elif kind == EVENT_ERROR:
                         yield _sse_event("progress", {
                             "source": msg["source"],
                             "status": "error",
@@ -829,6 +802,12 @@ async def analyze_sbom_stream(
                         await orchestrator
                     except (asyncio.CancelledError, Exception):
                         pass
+
+            # Make sure the orchestrator task finished cleanly so its
+            # `all_findings`/`all_errors` mutations are visible.
+            if orchestrator.done() and not orchestrator.cancelled():
+                # Surface any unhandled exception from inside _drive_runner.
+                orchestrator.result()
 
             final_findings = deduplicate_findings(all_findings)
 

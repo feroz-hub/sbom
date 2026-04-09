@@ -29,7 +29,24 @@ from .severity import (
 )
 from .dedupe import deduplicate_findings
 
+# Phase 2: source adapter classes + registry
+from .base import SourceResult, VulnSource, empty_result
+from .nvd import NvdSource
+from .osv import OsvSource
+from .ghsa import GhsaSource
+from .registry import SOURCE_REGISTRY, get_source
+
+# Phase 3: shared concurrent fan-out runner
+from .runner import (
+    run_sources_concurrently,
+    EVENT_RUNNING,
+    EVENT_COMPLETE,
+    EVENT_ERROR,
+    EVENT_DONE,
+)
+
 __all__ = [
+    # Phase 1 utilities
     "parse_purl",
     "slug",
     "cpe23_from_purl",
@@ -40,4 +57,19 @@ __all__ = [
     "sev_bucket",
     "GH_SEV_NORM",
     "deduplicate_findings",
+    # Phase 2 source adapters
+    "SourceResult",
+    "VulnSource",
+    "empty_result",
+    "NvdSource",
+    "OsvSource",
+    "GhsaSource",
+    "SOURCE_REGISTRY",
+    "get_source",
+    # Phase 3 runner
+    "run_sources_concurrently",
+    "EVENT_RUNNING",
+    "EVENT_COMPLETE",
+    "EVENT_ERROR",
+    "EVENT_DONE",
 ]
