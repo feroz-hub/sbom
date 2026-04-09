@@ -10,6 +10,7 @@ from typing import Optional, Dict, Any
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -113,7 +114,7 @@ def _rebuild_run_from_db(db: Session, run_id: int) -> Optional[dict]:
     }
 
 
-@router.post("/pdf-report", response_class=None)
+@router.post("/pdf-report", response_class=Response)
 async def create_pdf_report_by_run_id(
     payload: PdfReportByIdRequest,
     db: Session = Depends(get_db),
@@ -123,7 +124,6 @@ async def create_pdf_report_by_run_id(
     Loads the run from the database, generates a PDF and returns it as a download.
     Tries RunCache first; falls back to reconstructing from AnalysisRun + findings.
     """
-    from fastapi.responses import Response
     from ..services.pdf_service import load_run_cache
 
     log.info("PDF report requested: run_id=%d filename=%s", payload.runId, payload.filename)
