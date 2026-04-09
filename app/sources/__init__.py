@@ -1,20 +1,33 @@
 """
 Vulnerability source adapter package — peer of ``app/services/``.
 
-Phase 1 (current): hosts the canonical, settings-free helpers that were
-previously inlined inside ``app/analysis.py`` and partially duplicated in
-``app/services/vuln_sources.py``. ``analysis.py`` re-exports these symbols
-under their legacy underscore-prefixed names so existing call sites continue
-to work without modification.
+Hosts the canonical implementations of the helpers that were previously
+inlined inside ``app/analysis.py`` plus the per-source adapter classes
+(``NvdSource``, ``OsvSource``, ``GhsaSource``), the registry that maps
+canonical source names to those classes, and the concurrent fan-out
+runner used by every analyze endpoint.
+
+Layout:
+
+    purl.py        — `parse_purl` (PURL spec parser)
+    cpe.py         — `slug`, `cpe23_from_purl` (PURL → CPE 2.3 generator)
+    severity.py    — CVSS helpers, severity bucketing, GH severity normaliser
+    dedupe.py      — two-pass CVE↔GHSA alias cross-deduplication
+    base.py        — `VulnSource` Protocol + `SourceResult` TypedDict
+    nvd.py         — `NvdSource(api_key=...)`
+    osv.py         — `OsvSource()`
+    ghsa.py        — `GhsaSource(token=...)`
+    registry.py    — `SOURCE_REGISTRY`, `get_source(name)`
+    runner.py      — `run_sources_concurrently(sources, components, settings, ...)`
 
 This package lives at ``app.sources`` (a top-level peer of ``app.services``)
 rather than under ``app.services`` because ``app.services.__init__`` eagerly
 imports ``analysis_service``, which would create a circular import any time
 ``app.analysis`` was loaded as a module entrypoint.
 
-Phase 2 (upcoming) will add per-source adapters here:
-``nvd.py``, ``osv.py``, ``ghsa.py``, each implementing a uniform
-``async query(components, cfg) -> SourceResult`` contract.
+Adding a fourth source (e.g. Snyk, OSS Index) is a one-line change in
+``registry.py`` plus one new module here. Neither the routers nor the
+shared runner need to know about it.
 """
 
 from .purl import parse_purl

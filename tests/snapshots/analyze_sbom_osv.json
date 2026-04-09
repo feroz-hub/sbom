@@ -1,28 +1,27 @@
 {
-  "components": [
-    {
-      "advisories": [],
-      "error": null,
-      "name": "log4j-core",
-      "purl": "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1",
-      "version": "2.14.1"
-    },
-    {
-      "advisories": [],
-      "error": null,
-      "name": "requests",
-      "purl": "pkg:pypi/requests@2.19.0",
-      "version": "2.19.0"
-    }
-  ],
+  "completed_on": "<volatile>",
+  "components_with_cpe": 2,
+  "critical_count": 0,
+  "duration_ms": "<volatile>",
+  "high_count": 1,
+  "id": "<volatile>",
+  "low_count": 0,
+  "medium_count": 0,
+  "project_id": null,
+  "query_error_count": 0,
   "runId": "<volatile>",
+  "run_status": "FAIL",
   "sbom": {
     "format": "cyclonedx",
     "id": "<volatile>",
     "name": "snapshot-fixture",
     "specVersion": "1.5"
   },
-  "status": "PASS",
+  "sbom_id": "<volatile>",
+  "sbom_name": "snapshot-fixture",
+  "source": "OSV",
+  "started_on": "<volatile>",
+  "status": "FAIL",
   "summary": {
     "completedOn": "<volatile>",
     "components": 2,
@@ -31,13 +30,16 @@
     "findings": {
       "bySeverity": {
         "CRITICAL": 0,
-        "HIGH": 0,
+        "HIGH": 1,
         "LOW": 0,
         "MEDIUM": 0,
         "UNKNOWN": 0
       },
-      "total": 0
+      "total": 1
     },
-    "withPURL": 2
-  }
+    "withCPE": 2
+  },
+  "total_components": 2,
+  "total_findings": 1,
+  "unknown_count": 0
 }

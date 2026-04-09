@@ -1,11 +1,6 @@
 """
 PURL (package URL) parsing helpers.
 
-Canonical extraction from ``app/analysis.py`` (the production multi-source
-path). ``app/services/vuln_sources.py`` historically carried a near-duplicate
-``_parse_purl``; that copy will be removed when Phase 4 cuts over the legacy
-``/analyze-sbom-*`` endpoints.
-
 Keep this module dependency-free — no settings, no logging, no HTTP. It is
 imported by every source adapter.
 """

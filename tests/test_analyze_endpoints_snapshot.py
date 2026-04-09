@@ -1,11 +1,12 @@
 """
-Snapshot regression tests for the legacy `/analyze-sbom-*` ad-hoc endpoints.
+Snapshot regression tests for the four `/analyze-sbom-*` ad-hoc endpoints.
 
-These exist primarily to gate Finding B's refactor: when
-`app/services/vuln_sources.py` is replaced by `app/services/sources/`
-adapters, the JSON shapes returned here must NOT change. Each test uploads
-the same fixture SBOM, hits the endpoint with mocked external HTTP, and
-diffs the normalised JSON against a captured baseline.
+Each test uploads the same fixture SBOM, hits one endpoint with mocked
+external HTTP, and diffs the normalised JSON against a captured baseline.
+The baselines were re-captured during the Finding B Phase 4 cut-over to
+match the new flat `AnalysisRunOut`-shaped response (which preserves a
+backward-compatible `summary.findings.bySeverity` block for the
+defensive frontend reader).
 """
 
 from __future__ import annotations

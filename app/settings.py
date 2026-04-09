@@ -69,6 +69,23 @@ class Settings(BaseSettings):
         description="Legacy analysis level (0=new, 1+=compatibility)"
     )
 
+    # Authentication Configuration (Finding A — opt-in bearer token auth)
+    #
+    # `api_auth_mode` is "none" by default so existing dev environments are
+    # not broken. Set it to "bearer" in production to require an
+    # `Authorization: Bearer <token>` header on every state-touching or
+    # data-exposing endpoint. `api_auth_tokens` is a comma-separated allowlist
+    # of valid tokens — multiple values let you rotate per-client without
+    # downtime.
+    api_auth_mode: str = Field(
+        default="none",
+        description="Authentication mode for /api/*, /analyze-*, /dashboard/* routes. One of 'none' or 'bearer'.",
+    )
+    api_auth_tokens: str = Field(
+        default="",
+        description="Comma-separated allowlist of valid bearer tokens. Required when api_auth_mode='bearer'.",
+    )
+
     # Logging Configuration
     log_level: str = Field(default="INFO", description="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)")
     log_format: str = Field(default="text", description="Log format (text or json)")
@@ -150,6 +167,14 @@ class Settings(BaseSettings):
             return ["*"]
         origins = [o.strip() for o in self.cors_origins.split(",") if o.strip()]
         return origins or ["*"]
+
+    # NOTE: ``api_auth_mode`` / ``api_auth_tokens`` exist as documentation
+    # only. The auth dependency in ``app/auth.py`` reads ``os.environ``
+    # directly because this codebase does not currently install
+    # ``pydantic-settings`` — the import-time fallback in this file makes
+    # ``BaseSettings`` collapse to a plain ``BaseModel`` that ignores env
+    # vars entirely. Future work: install ``pydantic-settings`` and route
+    # every settings read through one place.
 
 
 # =========================================================================

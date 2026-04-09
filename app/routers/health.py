@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..auth import require_auth
 from ..db import get_db
 from ..models import SBOMType
 from ..schemas import SBOMTypeOut
@@ -91,12 +92,19 @@ def health() -> dict:
     return {"status": "ok"}
 
 
-@router.get("/api/analysis/config")
+# Finding A: `/api/analysis/config` and `/api/types` carry route-level
+# auth so they are protected while the sibling `/` and `/health` routes
+# in this same router stay open for liveness probes and FastAPI `/docs`.
+@router.get("/api/analysis/config", dependencies=[Depends(require_auth)])
 def get_analysis_config() -> dict:
     return public_analysis_config()
 
 
-@router.get("/api/types", response_model=List[SBOMTypeOut])
+@router.get(
+    "/api/types",
+    response_model=List[SBOMTypeOut],
+    dependencies=[Depends(require_auth)],
+)
 def list_sbom_types(db: Session = Depends(get_db)):
     """List SBOM types (e.g. CycloneDX, SPDX) for upload/edit dropdowns."""
     return db.execute(select(SBOMType).order_by(SBOMType.typename.asc())).scalars().all()

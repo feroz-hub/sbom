@@ -1,10 +1,11 @@
 """
 CPE 2.3 generation helpers.
 
-Canonical extraction from ``app/analysis.py``. The legacy
-``app/services/vuln_sources.py`` carries a slightly different ``generate_cpe``
-that does NOT do per-ecosystem vendor heuristics; the analysis.py version
-(this one) is the production behaviour and the one Phase 4 will keep.
+The vendor/product heuristics here are intentionally per-ecosystem because
+NVD's CPE dictionary uses radically different conventions across Maven
+(group's last segment), npm (scope), Composer (vendor/package), Go (last
+namespace segment), etc. ``cpe23_from_purl`` returns ``None`` if either
+side cannot be derived — callers must handle that.
 """
 
 from __future__ import annotations

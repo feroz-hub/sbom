@@ -663,109 +663,11 @@ def _finding_from_raw(
     }
 
 
-def analyze_sbom_against_nvd(sbom_json: str, nvd_api_key: Optional[str], settings: Optional[AnalysisSettings] = None) -> Dict:
-    """
-    Legacy single-source analyzer (NVD by CPE).
-    Now benefits from best-effort CPE generation from purl when CPEs are absent.
-    """
-    cfg = settings or get_analysis_settings()
-    components = extract_components(sbom_json)
-    components, generated_cpe_count = _augment_components_with_cpe(components)
-
-    cpe_set: Set[str] = set()
-    comp_by_cpe: Dict[str, Tuple[str, Optional[str]]] = {}
-    for comp in components:
-        cpe = comp.get("cpe")
-        if cpe:
-            cpe_set.add(cpe)
-            comp_by_cpe[cpe] = (comp.get("name") or "", comp.get("version"))
-
-    findings: List[Dict] = []
-    query_errors: List[Dict] = []
-    query_warnings: List[Dict] = []
-
-    for cpe in sorted(cpe_set):
-        try:
-            cve_objs = nvd_query_by_cpe(cpe, nvd_api_key, settings=cfg)
-        except Exception as exc:
-            query_errors.append({"source": "NVD", "cpe": cpe, "error": str(exc)})
-            continue
-
-        if cfg.analysis_max_findings_per_cpe > 0 and len(cve_objs) > cfg.analysis_max_findings_per_cpe:
-            query_warnings.append(
-                {
-                    "source": "NVD",
-                    "cpe": cpe,
-                    "warning": "Per-CPE findings limit applied",
-                    "returned": len(cve_objs),
-                    "used": cfg.analysis_max_findings_per_cpe,
-                }
-            )
-            cve_objs = cve_objs[: cfg.analysis_max_findings_per_cpe]
-
-        comp_name, comp_ver = comp_by_cpe.get(cpe, ("", None))
-        for raw in (cve_objs or []):
-            if isinstance(raw, dict):
-                findings.append(
-                    _finding_from_raw(
-                        raw=raw,
-                        cpe=cpe,
-                        component_name=comp_name,
-                        component_version=comp_ver,
-                        settings=cfg,
-                    )
-                )
-
-        if cfg.analysis_max_findings_total > 0 and len(findings) >= cfg.analysis_max_findings_total:
-            query_warnings.append({"source": "NVD", "warning": "Global findings limit applied", "used": cfg.analysis_max_findings_total})
-            findings = findings[: cfg.analysis_max_findings_total]
-            break
-
-    # Dedup by (vuln_id, cpe)
-    deduped = {}
-    for f in findings:
-        key = (f.get("vuln_id"), f.get("cpe"))
-        deduped[key] = f
-    findings = list(deduped.values())
-
-    buckets = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "UNKNOWN": 0}
-    for f in findings:
-        sev = str(f.get("severity", "UNKNOWN")).upper()
-        buckets[sev if sev in buckets else "UNKNOWN"] += 1
-
-    details: Dict[str, Any] = {
-        "total_components": len(components),
-        "components_with_cpe": len({c.get("cpe") for c in components if c.get("cpe")}),
-        "total_findings": len(findings),
-        "critical": buckets["CRITICAL"],
-        "high": buckets["HIGH"],
-        "medium": buckets["MEDIUM"],
-        "low": buckets["LOW"],
-        "unknown": buckets["UNKNOWN"],
-        "query_errors": query_errors,
-        "query_warnings": query_warnings,
-        "findings": findings,
-        "analysis_metadata": {
-            "source": "NVD",
-            "generated_cpe_count": generated_cpe_count,
-            "nvd_api_base_url": cfg.nvd_api_base_url,
-            "nvd_results_per_page": cfg.nvd_results_per_page,
-            "nvd_request_timeout_seconds": cfg.nvd_request_timeout_seconds,
-            "nvd_max_retries": cfg.nvd_max_retries,
-            "cvss_thresholds": {
-                "critical": cfg.cvss_critical_threshold,
-                "high": cfg.cvss_high_threshold,
-                "medium": cfg.cvss_medium_threshold,
-            },
-            "analysis_max_findings_per_cpe": cfg.analysis_max_findings_per_cpe,
-            "analysis_max_findings_total": cfg.analysis_max_findings_total,
-        },
-    }
-    if not cpe_set:
-        details["message"] = "No CPE values found (original or generated). NVD correlation skipped."
-    elif generated_cpe_count > 0:
-        details["note"] = f"Generated {generated_cpe_count} CPEs from package URLs to query NVD."
-    return details
+# Phase 5 cleanup note: the legacy single-source `analyze_sbom_against_nvd`
+# function lived here. It had zero callers anywhere in the codebase
+# (verified by grep across `app/` and `tests/`) — the production NVD path
+# goes through `nvd_query_by_components_async` (called by `NvdSource` and
+# the multi-source orchestrator). The dead function was removed.
 
 
 # ============================================================
@@ -1485,18 +1387,11 @@ async def analyze_sbom_multi_source_async(
     return details
 
 
-def analyze_sbom_multi_source(
-    sbom_json: str,
-    sources: Optional[List[str]] = None,
-    settings: Optional[_MultiSettings] = None,
-) -> dict:
-    try:
-        return asyncio.run(analyze_sbom_multi_source_async(sbom_json, sources=sources, settings=settings))
-    except RuntimeError:
-        # If already inside an event loop, create a new loop in a worker
-        def _run_in_thread() -> dict:
-            return asyncio.run(analyze_sbom_multi_source_async(sbom_json, sources=sources, settings=settings))
-        return concurrent.futures.ThreadPoolExecutor(max_workers=1).submit(_run_in_thread).result()
+# Phase 5 cleanup note: the sync wrapper `analyze_sbom_multi_source(...)`
+# lived here. Its only caller was the now-deleted
+# `services.analysis_service.create_auto_report`. Production code uses
+# `analyze_sbom_multi_source_async` directly, awaited from async handlers.
+# The sync wrapper was removed.
 
 # -----------------------------
 # CWE EXTRACTION

@@ -61,8 +61,10 @@ The root API endpoint returns this shape:
 sbom/
 ├── run.py                  # Entry point
 ├── requirements.txt        # Python dependencies
+├── pytest.ini              # Pytest configuration
 ├── .env.example            # Environment variable template
 ├── samples/                # Sample SBOM payloads for local testing
+├── tests/                  # Pytest snapshot regression suite (see "Tests")
 ├── frontend/               # Primary Next.js dashboard
 │   ├── package.json
 │   ├── next.config.mjs     # API rewrites to the FastAPI backend
@@ -71,14 +73,84 @@ sbom/
 │       ├── components/     # UI building blocks and feature components
 │       └── lib/            # API client and shared utilities
 └── app/
-    ├── main.py             # FastAPI application & all API routes
-    ├── analysis.py         # Multi-source vulnerability analysis engine
+    ├── main.py             # FastAPI application wiring + startup hook
+    ├── settings.py         # Pydantic Settings singleton
+    ├── analysis.py         # SBOM parsers + multi-source orchestrator
     ├── models.py           # SQLAlchemy ORM models
     ├── schemas.py          # Pydantic request/response schemas
     ├── db.py               # Database setup (repo-root SQLite by default)
     ├── pdf_report.py       # PDF report generation (ReportLab)
-    └── logger.py           # Structured/text logging setup
+    ├── logger.py           # Structured/text logging setup
+    ├── routers/            # HTTP handlers (sboms_crud, analyze_endpoints,
+    │                       #  runs, projects, pdf, dashboard, health, ...)
+    ├── services/           # Business logic + persistence helpers
+    └── sources/            # Vulnerability source adapter package
+        ├── base.py         # `VulnSource` Protocol + `SourceResult` TypedDict
+        ├── nvd.py          # `NvdSource(api_key=...)`
+        ├── osv.py          # `OsvSource()`
+        ├── ghsa.py         # `GhsaSource(token=...)`
+        ├── registry.py     # name → adapter class lookup
+        ├── runner.py       # `run_sources_concurrently(...)` fan-out
+        ├── purl.py         # PURL parser
+        ├── cpe.py          # PURL → CPE 2.3 generator
+        ├── severity.py     # CVSS helpers + severity bucketing
+        └── dedupe.py       # Two-pass CVE↔GHSA cross-deduplication
 ```
+
+Every analyze endpoint — `POST /api/sboms/{id}/analyze`, `POST /api/sboms/{id}/analyze/stream`,
+and the four `POST /analyze-sbom-{nvd,github,osv,consolidated}` ad-hoc routes — fans
+out through the `app.sources` adapter registry via `run_sources_concurrently`.
+Adding a fourth source (e.g. Snyk, OSS Index) is a one-line change in
+`app/sources/registry.py` plus a new module under `app/sources/`.
+
+## Tests
+
+```bash
+.venv/bin/python -m pytest tests/
+```
+
+The suite is a deterministic snapshot regression net: every analyze endpoint
+is exercised against an isolated temp SQLite database with the underlying
+NVD/GHSA/OSV coroutines monkeypatched to return canned data, and the JSON
+responses are diffed against locked baseline files in
+`tests/snapshots/`. To intentionally re-baseline a snapshot, delete its
+file under `tests/snapshots/` and re-run pytest — the next run captures
+the new shape and the run after that asserts it stays stable.
+
+---
+
+## Authentication
+
+Bearer-token authentication is **opt-in** via environment variable so
+existing dev environments are not broken. To enable it in production:
+
+```bash
+export API_AUTH_MODE=bearer
+export API_AUTH_TOKENS=tok-strong-random-1,tok-strong-random-2
+python run.py
+```
+
+The server will refuse to start if `API_AUTH_MODE=bearer` is set but
+`API_AUTH_TOKENS` is empty — that combination would otherwise silently
+let every request through.
+
+**Protected routes** (require `Authorization: Bearer <token>`):
+
+- All `/api/*` routes (sboms, projects, runs, findings, components,
+  PDF, analysis runs, analysis-runs export, sboms feature endpoints,
+  `/api/analysis/config`, `/api/types`)
+- All `/analyze-sbom-*` ad-hoc routes
+- All `/dashboard/*` routes
+
+**Open routes** (no auth required, for liveness probes and `/docs`):
+
+- `GET /`
+- `GET /health`
+- `GET /docs`, `GET /openapi.json`, `GET /redoc`
+
+Multiple tokens in `API_AUTH_TOKENS` (comma-separated) lets you rotate
+per-client without downtime: add a new one, redeploy clients, then
+remove the old one.
 
 ---
 
@@ -92,6 +164,9 @@ sbom/
 | GET | `/dashboard/recent-sboms` | Recently uploaded SBOMs |
 | GET | `/dashboard/activity` | Active vs stale SBOM chart data |
 | GET | `/dashboard/severity` | Vulnerability severity breakdown |
+
+> Every row below requires `Authorization: Bearer <token>` when
+> `API_AUTH_MODE=bearer`. See the **Authentication** section above.
 | GET/POST | `/api/projects` | List / create projects |
 | GET/PATCH/DELETE | `/api/projects/{id}` | Get / update / delete project |
 | GET/POST | `/api/sboms` | List / upload SBOMs; upload also persists extracted components |
@@ -120,6 +195,8 @@ Full interactive docs: **http://localhost:8000/docs**
 | `GITHUB_TOKEN` | *(none)* | GitHub token for GHSA queries |
 | `ANALYSIS_SOURCES` | `NVD,OSV,GITHUB` | Sources to use |
 | `CORS_ORIGINS` | `*` runtime fallback | Comma-separated allowed origins |
+| `API_AUTH_MODE` | `none` | `none` or `bearer`; see **Authentication** above |
+| `API_AUTH_TOKENS` | *(none)* | Comma-separated bearer token allowlist (required when `API_AUTH_MODE=bearer`) |
 | `DATABASE_URL` | repo-root `sbom_api.db` | SQLAlchemy database URL override |
 | `HOST` | `0.0.0.0` | Server host |
 | `PORT` | `8000` | Server port |

@@ -1,5 +1,110 @@
 # PROJECT LENS REPORT — SBOM Analyzer
 
+> ## 🚨 CRITICAL — Live secrets committed in `.env`
+>
+> While implementing Finding A's authentication work I discovered that
+> the repo's tracked `.env` file contains **live production credentials**:
+>
+> - A real **NVD API key** (`1ba51a0e-…`)
+> - A real **GitHub Personal Access Token** (`ghp_duLNWHy…`)
+>
+> Both are world-readable in any clone of the repo and in every commit
+> that has touched `.env`. The committed `.env.example` is correctly
+> empty, so the leak is in the un-templated `.env` only.
+>
+> **Required action (out of scope for the auth work itself):**
+>
+> 1. **Revoke both credentials immediately** — go to nvd.nist.gov and
+>    rotate the API key, go to github.com/settings/tokens and revoke
+>    the PAT.
+> 2. **Add `.env` to `.gitignore`** (it currently isn't — verify with
+>    `git check-ignore .env`).
+> 3. **Purge the file from git history** with `git filter-repo` or BFG
+>    repo cleaner. A simple `git rm` only removes it from HEAD; the
+>    secrets stay in every prior commit.
+> 4. **Force-push to origin** after history rewrite (coordinate with
+>    every collaborator first — they'll need to re-clone).
+> 5. **Audit access logs** for the rotated credentials in the period
+>    they were exposed.
+>
+> This is the highest-severity finding in the entire codebase right
+> now and supersedes every other priority. The auth work below is the
+> *second* most important fix — it closes the door on future leaks
+> through unauthenticated API access, but it does nothing about
+> credentials that are already in git history.
+
+> ## Status — Finding B refactor complete (Phases 0–5)
+>
+> The Finding B source-adapter consolidation is finished. All five phases
+> shipped, all 13 tests green, ~3,500 LOC of dead/duplicate code deleted,
+> and three latent persistence bugs caught + fixed by the snapshot suite
+> along the way.
+>
+> | Phase | What landed |
+> |---|---|
+> | 0 | `pytest` infrastructure + 6 baseline snapshots locking every analyze endpoint |
+> | 1 | Canonical PURL/CPE/severity/dedupe helpers extracted into `app/sources/` |
+> | 2 | `VulnSource` Protocol + `NvdSource`/`OsvSource`/`GhsaSource` adapter classes + registry |
+> | 3 | `analyze_sbom_stream` cut over to the registry + shared `run_sources_concurrently` runner; `os.environ` mutation killed |
+> | 4 | All four `/analyze-sbom-*` endpoints rewritten as thin wrappers (~250 LOC removed); `vuln_sources.py` becomes an orphan |
+> | 5 | `vuln_sources.py` + `main.py.bak` + duplicate `create_auto_report` deleted; ~3,500 LOC removed total |
+>
+> Persistence audit caught **three latent production bugs** in
+> `routers/sboms_crud.py:persist_analysis_run` that the test suite is now
+> green against:
+>
+> 1. `cwe` field crash on list-typed inputs (`'list' object has no attribute 'strip'`)
+> 2. SBOMComponent ORM row assigned to integer FK column (`type 'SBOMComponent' is not supported`)
+> 3. NOT NULL constraint violation because the persist code read `id` instead of the orchestrator's canonical `vuln_id`
+>
+> See [tests/snapshots/](tests/snapshots/) for the locked baselines and
+> [tests/conftest.py](tests/conftest.py) for the source-fetcher patch
+> points.
+
+> ## ⚠ BREAKING CHANGE — `/analyze-sbom-*` response shape (Phase 4 cut-over)
+>
+> As part of the Finding-B refactor, the four legacy ad-hoc endpoints
+> `/analyze-sbom-nvd`, `/analyze-sbom-github`, `/analyze-sbom-osv`, and
+> `/analyze-sbom-consolidated` no longer return the per-component-nested
+> shape (`components[*].cves[]` / `components[*].advisories[]`) emitted by
+> the old `vuln_sources.py` code path. They now return the **flat
+> `AnalysisRunOut`-shaped dict** that `POST /api/sboms/{id}/analyze`
+> returns, plus a backward-compatible `summary.findings.bySeverity` block
+> for the existing defensive frontend reader.
+>
+> **What changed**
+> - Top-level `total_findings`, `critical_count`, `high_count`,
+>   `medium_count`, `low_count`, `unknown_count`, `total_components`,
+>   `components_with_cpe`, `duration_ms`, `started_on`, `completed_on`,
+>   `id`, `runId`, `sbom_id`, `sbom_name`, `run_status`, `status`, `source`
+>   are now present on every response (matching the production endpoint).
+> - The legacy `sbom: { id, name, format, specVersion }` and
+>   `summary: { components, withCPE, findings: { total, bySeverity }, errors,
+>   durationMs, completedOn }` blocks are still present.
+> - **The per-component `cves[]` / `advisories[]` arrays are gone.** Use
+>   `GET /api/runs/{run_id}/findings` (already in the API) for the
+>   per-finding detail that those arrays previously carried.
+> - `withCPE` will now reflect *generated* CPEs (via PURL → CPE
+>   augmentation), so the count is typically higher than before. NVD now
+>   actually finds vulnerabilities for components that only carry a PURL.
+> - `status` now uses the same three-value vocabulary as the production
+>   endpoint (`PASS` / `FAIL` / `PARTIAL`) instead of the old two-value
+>   (`PASS` / `PARTIAL`). The status is `FAIL` whenever findings exist.
+>
+> **Impact**
+> The Next.js frontend's only consumer of these endpoints
+> ([frontend/src/hooks/useBackgroundAnalysis.ts:65](frontend/src/hooks/useBackgroundAnalysis.ts#L65))
+> already reads the response with a defensive
+> `result.summary.findings.total ?? result.total_findings` shim because
+> the comment notes the shape was unstable. It continues to work
+> unchanged. The other three single-source endpoints
+> (`analyzeSbomNvd`/`analyzeSbomGithub`/`analyzeSbomOsv`) are exported in
+> [frontend/src/lib/api.ts](frontend/src/lib/api.ts) but never called from
+> any component or hook — zero blast radius.
+>
+> External API consumers that depend on the old per-component nested shape
+> must migrate to `GET /api/runs/{run_id}/findings` for finding detail.
+
 ## Assumptions
 
 - The repository at `/workspaces/sbom` on branch `main` is the canonical state; the snapshot at the time of analysis is authoritative.

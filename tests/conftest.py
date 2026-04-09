@@ -1,18 +1,17 @@
 """
-Phase-0 snapshot test infrastructure.
+Snapshot test infrastructure.
 
 Goals:
-  * Spin the FastAPI app against an isolated temp SQLite database (no global
-    state pollution from `sbom_api.db` checked into the repo).
-  * Provide a TestClient fixture that runs the startup hook (table creation,
-    seed types, ad-hoc migrations).
-  * Provide a `mock_external_sources` fixture that monkeypatches every
-    outbound source-fetcher to return canned data — both the legacy
-    `vuln_sources` path (used by `/analyze-sbom-*`) and the
-    `app.analysis.*_query_by_components` path (used by
-    `POST /api/sboms/{id}/analyze`). This is the boundary that Finding B's
-    refactor will move; mocking here lets the snapshot tests stay valid
-    across that refactor.
+  * Spin the FastAPI app against an isolated temp SQLite database (no
+    global state pollution from `sbom_api.db` checked into the repo).
+  * Provide a TestClient fixture that runs the startup hook (table
+    creation, seed types, ad-hoc migrations).
+  * Provide a `mock_external_sources` fixture that monkeypatches the
+    `app.analysis.*_query_by_components*` coroutines with deterministic
+    fakes. Every analyze endpoint — production and ad-hoc — now goes
+    through the `app.sources` adapter registry, and every adapter
+    delegates lazily into those coroutines, so a single set of patches
+    covers the whole surface.
 
 Why we don't use respx / requests-mock:
   The codebase has zero existing test infra and no lockfile. Adding
@@ -53,6 +52,11 @@ def app(_tmp_database_path: str):
     # Avoid CORS noise + force deterministic settings.
     os.environ.setdefault("CORS_ORIGINS", "http://testserver")
     os.environ.setdefault("ANALYSIS_SOURCES", "NVD,OSV,GITHUB")
+    # Finding A: lock the existing snapshot suite to mode=none so the
+    # bearer-auth dependency is a no-op for these tests. The dedicated
+    # auth tests in test_auth.py override this per-test via monkeypatch.
+    os.environ["API_AUTH_MODE"] = "none"
+    os.environ.pop("API_AUTH_TOKENS", None)
     # Don't let a real GitHub token in the dev shell leak into tests.
     os.environ.pop("GITHUB_TOKEN", None)
     os.environ.pop("NVD_API_KEY", None)
@@ -116,37 +120,11 @@ def seeded_sbom(app, sample_sbom_dict) -> Dict[str, Any]:
 from .fixtures import canned_responses as canned  # noqa: E402
 
 
-def _fake_nvd_fetch(name, version_str, cpe, nvd_api_key, results_per_page=20):
-    if "log4j" in (name or "").lower():
-        return canned.NVD_LOG4J_RESPONSE
-    return canned.NVD_EMPTY_RESPONSE
-
-
-def _fake_github_fetch_advisories(ecosystem, pkg_name, token, first=100):
-    if "log4j" in (pkg_name or "").lower():
-        return canned.GHSA_LOG4J_RESPONSE
-    return canned.GHSA_EMPTY_RESPONSE
-
-
-def _fake_osv_querybatch(queries):
-    # Return one canned vuln per query so each component sees an advisory.
-    out: List[Dict[str, Any]] = []
-    for q in queries:
-        pkg = (q.get("package") or {}).get("name", "")
-        if "log4j" in pkg.lower():
-            out.append({"vulns": [{"id": "GHSA-jfh8-c2jp-5v3q", "modified": "2024-01-01T00:00:00Z"}]})
-        elif "requests" in pkg.lower():
-            out.append({"vulns": [{"id": "PYSEC-2018-28", "modified": "2024-01-01T00:00:00Z"}]})
-        else:
-            out.append({"vulns": []})
-    return out
-
-
-def _fake_osv_get_vuln_by_id(osv_id):
-    return canned.OSV_VULN_DETAIL.get(osv_id, {"id": osv_id})
-
-
 # ---- Async source-fetcher fakes for app.analysis.* ----
+# Every analyze endpoint (production + ad-hoc) routes through the
+# `app.sources` adapter registry, and every adapter delegates lazily into
+# the coroutines below. Patching here covers the entire surface in one
+# place.
 
 async def _fake_nvd_query_by_components_async(components, settings, nvd_api_key=None):
     findings: List[Dict[str, Any]] = []
@@ -184,31 +162,20 @@ def _fake_nvd_query_by_cpe(cpe, api_key, settings=None):
 @pytest.fixture()
 def mock_external_sources(monkeypatch):
     """
-    Patch every outbound source-fetcher with deterministic fakes.
+    Patch the underlying source-fetch coroutines with deterministic fakes.
 
-    This fixture intentionally patches at *both* layers:
+    Every analyze endpoint goes through the same registry-driven path:
 
-      1. `app.routers.analyze_endpoints.<name>` for the legacy
-         `/analyze-sbom-*` endpoints (which import the helpers from
-         `app.services.vuln_sources`).
-      2. `app.analysis.<name>` for the production multi-source path used
-         by `POST /api/sboms/{id}/analyze` (which goes through
-         `analyze_sbom_multi_source_async`).
+        endpoint → NvdSource/OsvSource/GhsaSource → app.analysis.*_query_by_*
 
-    After Finding B lands, layer (1) will move into the new
-    `services/sources/` adapters. Tests that exercise the *legacy* response
-    shapes will need to be updated then; tests that exercise the production
-    multi-source path keep working as long as the orchestrator's contract
-    stays the same.
+    Patching at the `app.analysis` module level catches all four
+    `/analyze-sbom-*` ad-hoc endpoints, the production
+    `POST /api/sboms/{id}/analyze`, and the streaming
+    `POST /api/sboms/{id}/analyze/stream` in one shot.
     """
-    # ---- Legacy /analyze-sbom-* path ----
-    import app.routers.analyze_endpoints as legacy
-    monkeypatch.setattr(legacy, "nvd_fetch", _fake_nvd_fetch)
-    monkeypatch.setattr(legacy, "github_fetch_advisories", _fake_github_fetch_advisories)
-    monkeypatch.setattr(legacy, "osv_querybatch", _fake_osv_querybatch)
-    monkeypatch.setattr(legacy, "osv_get_vuln_by_id", _fake_osv_get_vuln_by_id)
-
-    # ---- Production multi-source path ----
+    # ---- Production multi-source path (now ALSO used by /analyze-sbom-*
+    # after the Phase 4 cut-over — both routes go through the registry
+    # adapters, which delegate lazily into app.analysis.* coroutines) ----
     import app.analysis as analysis_mod
     monkeypatch.setattr(
         analysis_mod, "osv_query_by_components", _fake_osv_query_by_components

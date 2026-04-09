@@ -7,13 +7,12 @@ from __future__ import annotations
 import json
 import logging
 import os
-import time
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..analysis import analyze_sbom_multi_source, extract_components, get_analysis_settings_multi
+from ..analysis import extract_components
 from ..models import AnalysisRun, SBOMAnalysisReport, SBOMComponent, SBOMSource
 from .sbom_service import now_iso, safe_int, resolve_component_id, _upsert_components
 
@@ -217,109 +216,19 @@ def _safe_float(value: Any) -> Optional[float]:
 
 
 # ============================================================
-# Report Creation
-# ============================================================
-
-def create_legacy_report_from_run(
-    db: Session,
-    sbom_obj: SBOMSource,
-    run: AnalysisRun
-) -> SBOMAnalysisReport:
-    """
-    Create a legacy-style analysis report from an AnalysisRun.
-
-    Args:
-        db: Database session
-        sbom_obj: SBOM source object
-        run: AnalysisRun object to convert
-
-    Returns:
-        Newly created SBOMAnalysisReport object
-    """
-    report = SBOMAnalysisReport(
-        sbom_ref_id=sbom_obj.id,
-        sbom_result=run.run_status,
-        project_id=str(sbom_obj.projectid) if sbom_obj.projectid is not None else None,
-        created_on=run.completed_on,
-        analysis_details=run.raw_report,
-        reference_source=run.source,
-        sbom_analysis_level=legacy_analysis_level(),
-    )
-    db.add(report)
-    return report
-
-
-def create_auto_report(db: Session, sbom_obj: SBOMSource) -> Optional[SBOMAnalysisReport]:
-    """
-    Generate an analysis run + legacy report using the new multi-source analyzer.
-
-    Performs vulnerability analysis using multiple sources (NVD, OSV, GitHub).
-    Creates both an AnalysisRun (new structured format) and a legacy
-    SBOMAnalysisReport for backward compatibility.
-
-    Args:
-        db: Database session
-        sbom_obj: SBOM source object to analyze
-
-    Returns:
-        Newly created SBOMAnalysisReport, or None if analysis failed completely
-    """
-    started_on = now_iso()
-    start_time = time.perf_counter()
-
-    settings = get_analysis_settings_multi()
-    source = "MULTI"
-
-    if not sbom_obj.sbom_data:
-        details = normalize_details({"message": "SBOM data missing. Analysis skipped."}, [])
-        run_status = "NO_DATA"
-        components = []
-    else:
-        try:
-            components = extract_components(sbom_obj.sbom_data)
-            details = analyze_sbom_multi_source(
-                sbom_json=sbom_obj.sbom_data,
-                sources=["NVD", "OSV", "GITHUB"],
-                settings=settings,
-            )
-            details = normalize_details(details, components)
-            run_status = compute_report_status(
-                safe_int(details.get("total_findings")), details.get("query_errors") or []
-            )
-            used = (details.get("analysis_metadata") or {}).get("sources") or []
-            if used:
-                source = ",".join(used)
-            if details.get("query_errors"):
-                source = f"{source} (partial)"
-        except Exception as exc:
-            log.error("Auto-analysis failed for SBOM id=%d: %s", sbom_obj.id, exc, exc_info=True)
-            details = normalize_details({"error": str(exc)}, components)
-            run_status = "ERROR"
-
-    completed_on = now_iso()
-    duration_ms = max(0, int((time.perf_counter() - start_time) * 1000))
-
-    run = persist_analysis_run(
-        db=db,
-        sbom_obj=sbom_obj,
-        details=details,
-        components=components,
-        run_status=run_status,
-        source=source,
-        started_on=started_on,
-        completed_on=completed_on,
-        duration_ms=duration_ms,
-    )
-
-    report = create_legacy_report_from_run(db, sbom_obj, run)
-    db.commit()
-    db.refresh(report)
-    return report
-
-
-# ============================================================
 # Backfill Analytics
 # ============================================================
+#
+# Phase 5 cleanup note: this module previously also exported
+# `create_auto_report`, `create_legacy_report_from_run`, and the sync
+# wrapper `analyze_sbom_multi_source`. None of them had any callers
+# outside the dead code path itself — the production
+# `POST /api/sboms/{id}/analyze` flow lives in
+# `app/routers/sboms_crud.py:create_auto_report` and uses its own
+# `persist_analysis_run`. The legacy helpers were removed.
+# `persist_analysis_run` here is kept because `backfill_analytics_tables`
+# (called from `app/main.py:on_startup`) still consumes it to migrate
+# legacy SBOMAnalysisReport rows into the AnalysisRun table on first run.
 
 def backfill_analytics_tables(db: Session) -> None:
     """

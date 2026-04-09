@@ -21,8 +21,6 @@ from .sbom_service import (
 from .analysis_service import (
     backfill_analytics_tables,
     compute_report_status,
-    create_auto_report,
-    create_legacy_report_from_run,
     legacy_analysis_level,
     normalize_details,
     persist_analysis_run,
@@ -61,8 +59,6 @@ __all__ = [
     # Analysis Service
     "backfill_analytics_tables",
     "compute_report_status",
-    "create_auto_report",
-    "create_legacy_report_from_run",
     "legacy_analysis_level",
     "normalize_details",
     "persist_analysis_run",

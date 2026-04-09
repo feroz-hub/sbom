@@ -26,7 +26,7 @@ import logging
 import time
 from typing import Optional
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
@@ -36,6 +36,7 @@ from .logger import setup_logging, get_logger
 setup_logging()
 log = get_logger("api")
 
+from .auth import require_auth, validate_auth_setup
 from .db import Base, SessionLocal, engine
 from .settings import get_settings
 from .services.analysis_service import backfill_analytics_tables
@@ -203,34 +204,51 @@ def on_startup() -> None:
     log.info("SBOM Analyzer starting up — initialising database …")
     _ensure_seed_data()
     _update_sbom_names()
+    # Refuse to come up if API_AUTH_MODE='bearer' is set without any
+    # tokens configured. Better to crash loudly than silently let every
+    # request through.
+    validate_auth_setup()
     log.info("Startup complete. API ready.")
 
 
 # --- Router registration -------------------------------------------------
 # Routers already declare their own prefixes where appropriate, so we
 # include them here without overriding.
+#
+# Finding A: every router below carries `dependencies=[Depends(require_auth)]`
+# so the bearer-token check runs on every request before the route handler.
+# `health.router` is the deliberate exception — it serves the unauthenticated
+# `/`, `/health`, `/api/analysis/config`, and `/api/types` endpoints used by
+# liveness probes and the FastAPI `/docs` page. When `API_AUTH_MODE=none`
+# (the default) the dependency is a cheap no-op, so applying it everywhere
+# costs essentially nothing in dev but makes production a one-env-var flip.
 
-app.include_router(health.router)
-app.include_router(sboms_crud.router)
-app.include_router(runs.router)
-app.include_router(projects.router)
-app.include_router(analyze_endpoints.router)
-app.include_router(pdf.router)
-app.include_router(dashboard_main.router)
+_protected = [Depends(require_auth)]
+
+app.include_router(health.router)  # intentionally unprotected
+app.include_router(sboms_crud.router, dependencies=_protected)
+app.include_router(runs.router, dependencies=_protected)
+app.include_router(projects.router, dependencies=_protected)
+app.include_router(analyze_endpoints.router, dependencies=_protected)
+app.include_router(pdf.router, dependencies=_protected)
+app.include_router(dashboard_main.router, dependencies=_protected)
 
 # Feature routers (kept from earlier refactor) — additive paths.
 app.include_router(
     analysis_export_router.router,
     prefix="/api/analysis-runs",
     tags=["analysis-export"],
+    dependencies=_protected,
 )
 app.include_router(
     sbom_features_router.router,
     prefix="/api/sboms",
     tags=["sbom-features"],
+    dependencies=_protected,
 )
 app.include_router(
     dashboard_trend_router.router,
     prefix="/dashboard",
     tags=["dashboard-trend"],
+    dependencies=_protected,
 )

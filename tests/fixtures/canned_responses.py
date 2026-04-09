@@ -1,11 +1,21 @@
 """
 Canned external API payloads used by every snapshot test.
 
-These shapes are deliberately small but realistic — they exercise the same
-extractor branches that the production source fetchers exercise. Keeping them
-in one module means that all snapshot tests see the same input, so any drift
-between the legacy `vuln_sources.py` path and the future `services/sources/`
-adapters can be diffed deterministically.
+These shapes are deliberately small but realistic — they exercise the
+same extractor branches that the production source fetchers exercise.
+Keeping them in one module means that every snapshot test sees the same
+input, so the locked baselines remain meaningful regression nets.
+
+Two layers of fixtures live here:
+
+  * Raw NVD/GHSA/OSV API payloads — historically consumed by the
+    per-component fetchers. Retained for completeness but no longer
+    actively patched in by ``conftest.py`` (kept for any future
+    extractor-level unit tests that want a realistic upstream shape).
+  * ``ASYNC_NVD_FINDING`` / ``ASYNC_OSV_FINDING_REQUESTS`` /
+    ``ASYNC_GHSA_FINDING`` — pre-shaped multi-source finding dicts that
+    the conftest fakes return directly. This is the boundary the
+    snapshot tests actually mock.
 """
 
 from __future__ import annotations
@@ -14,7 +24,7 @@ from typing import Any, Dict, List
 
 
 # ---------------------------------------------------------------------------
-# NVD — REST 2.0 shape used by `vuln_sources.nvd_fetch`
+# NVD — raw REST 2.0 shape (kept as a realistic upstream sample)
 # ---------------------------------------------------------------------------
 NVD_LOG4J_RESPONSE: Dict[str, Any] = {
     "resultsPerPage": 1,
@@ -200,10 +210,11 @@ OSV_VULN_DETAIL: Dict[str, Dict[str, Any]] = {
 # ---------------------------------------------------------------------------
 # Pre-shaped finding lists for `app.analysis.*_query_by_components` mocks.
 #
-# These match the dict shape that the real coroutines return: a 3-tuple of
-# (findings, query_errors, query_warnings). They are intentionally tiny —
-# the goal is to lock the orchestration / persistence path, not to test the
-# extractors (which the legacy `vuln_sources` path covers via canned HTTP).
+# These match the dict shape that the real coroutines return: a 3-tuple
+# of (findings, query_errors, query_warnings). They are intentionally
+# tiny — the goal is to lock the orchestration / persistence / response
+# path, not to test the per-source extractors (which would deserve their
+# own focused unit tests).
 # ---------------------------------------------------------------------------
 ASYNC_NVD_FINDING: Dict[str, Any] = {
     "vuln_id": "CVE-2021-44228",
