@@ -7,10 +7,21 @@ Initialised on app startup via FastAPI lifespan; closed on shutdown.
 from __future__ import annotations
 
 import os
+import ssl
 
+import certifi
 import httpx
 
 _async_client: httpx.AsyncClient | None = None
+_tls_context: ssl.SSLContext | None = None
+
+
+def tls_ssl_context() -> ssl.SSLContext:
+    """Mozilla CA bundle via certifi (avoids missing system certs in slim images)."""
+    global _tls_context
+    if _tls_context is None:
+        _tls_context = ssl.create_default_context(cafile=certifi.where())
+    return _tls_context
 
 
 def get_async_http_client() -> httpx.AsyncClient:
@@ -32,6 +43,7 @@ async def init_async_http_client() -> None:
             max_keepalive_connections=max_keepalive,
             max_connections=max_conn,
         ),
+        verify=tls_ssl_context(),
         # http2=True requires optional `h2` package — opt in via HTTPX_HTTP2=1
         http2=os.getenv("HTTPX_HTTP2", "").lower() in {"1", "true", "yes"},
     )

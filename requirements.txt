@@ -13,6 +13,7 @@ psycopg[binary]==3.3.3
 alembic==1.18.4
 requests==2.33.1
 httpx==0.28.1
+certifi==2026.2.25
 reportlab==4.4.10
 packaging==26.0
 python-multipart==0.0.26

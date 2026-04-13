@@ -18,10 +18,12 @@ try:
 except Exception:  # pragma: no cover
     httpx = None  # type: ignore
 
+from .http_client import tls_ssl_context
 from .parsing import extract_components  # noqa: F401 — re-exported for callers
 
 # Module-level requests.Session for NVD connection pooling
 _nvd_session = requests.Session()
+_nvd_session.verify = tls_ssl_context()
 _nvd_session.headers.update({"User-Agent": "SBOM-Analyzer/enterprise-2.0"})
 
 LOGGER = logging.getLogger(__name__)
@@ -517,7 +519,9 @@ async def _async_get(url: str, headers: dict | None = None, params: dict | None 
 
             client = get_async_http_client()
         except RuntimeError:
-            async with httpx.AsyncClient(timeout=timeout, headers=headers) as client:
+            async with httpx.AsyncClient(
+                timeout=timeout, headers=headers, verify=tls_ssl_context()
+            ) as client:
                 r = await client.get(url, params=params, headers=headers)
                 r.raise_for_status()
                 return r.json()
@@ -527,7 +531,14 @@ async def _async_get(url: str, headers: dict | None = None, params: dict | None 
             return r.json()
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(
-        _executor, lambda: requests.get(url, headers=headers, params=params, timeout=timeout).json()
+        _executor,
+        lambda: requests.get(
+            url,
+            headers=headers,
+            params=params,
+            timeout=timeout,
+            verify=tls_ssl_context(),
+        ).json(),
     )
 
 
@@ -538,7 +549,9 @@ async def _async_post(url: str, json_body: dict, headers: dict | None = None, ti
 
             client = get_async_http_client()
         except RuntimeError:
-            async with httpx.AsyncClient(timeout=timeout, headers=headers) as client:
+            async with httpx.AsyncClient(
+                timeout=timeout, headers=headers, verify=tls_ssl_context()
+            ) as client:
                 r = await client.post(url, json=json_body, headers=headers)
                 r.raise_for_status()
                 return r.json()
@@ -548,7 +561,14 @@ async def _async_post(url: str, json_body: dict, headers: dict | None = None, ti
             return r.json()
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(
-        _executor, lambda: requests.post(url, json=json_body, headers=headers, timeout=timeout).json()
+        _executor,
+        lambda: requests.post(
+            url,
+            json=json_body,
+            headers=headers,
+            timeout=timeout,
+            verify=tls_ssl_context(),
+        ).json(),
     )
 
 
