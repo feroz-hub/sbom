@@ -1,14 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Pencil, Trash2 } from 'lucide-react';
+import { Alert } from '@/components/ui/Alert';
+import { Select } from '@/components/ui/Select';
 import { Table, TableHead, TableBody, Th, Td, EmptyRow } from '@/components/ui/Table';
+import { TableFilterBar, TableSearchInput } from '@/components/ui/TableFilterBar';
 import { Badge } from '@/components/ui/Badge';
 import { ConfirmDialog } from '@/components/ui/Dialog';
 import { SkeletonRow } from '@/components/ui/Spinner';
 import { ProjectModal } from './ProjectModal';
 import { deleteProject } from '@/lib/api';
+import { matchesMultiField } from '@/lib/tableFilters';
 import { formatDate } from '@/lib/utils';
 import { useToast } from '@/hooks/useToast';
 import type { Project } from '@/types';
@@ -24,6 +28,8 @@ export function ProjectsTable({ projects, isLoading, error }: ProjectsTableProps
   const { showToast } = useToast();
   const [editProject, setEditProject] = useState<Project | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => deleteProject(id),
@@ -37,18 +43,76 @@ export function ProjectsTable({ projects, isLoading, error }: ProjectsTableProps
     },
   });
 
+  const filteredProjects = useMemo(() => {
+    if (!projects?.length) return [];
+    let rows = projects;
+    if (statusFilter === 'active') rows = rows.filter((p) => p.project_status === 1);
+    if (statusFilter === 'inactive') rows = rows.filter((p) => p.project_status !== 1);
+    if (search.trim()) {
+      rows = rows.filter((p) =>
+        matchesMultiField(search, [
+          String(p.id),
+          p.project_name,
+          p.project_details,
+          p.created_by,
+          formatDate(p.created_on),
+          p.project_status === 1 ? 'active' : 'inactive',
+        ]),
+      );
+    }
+    return rows;
+  }, [projects, search, statusFilter]);
+
+  const filtersActive = Boolean(search.trim() || statusFilter !== 'all');
+  const clearFilters = () => {
+    setSearch('');
+    setStatusFilter('all');
+  };
+
   if (error) {
     return (
-      <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
-        Failed to load projects: {error.message}
-      </div>
+      <Alert variant="error" title="Could not load projects">
+        {error.message}
+      </Alert>
     );
   }
 
+  const total = projects?.length ?? 0;
+  const shown = filteredProjects.length;
+
   return (
     <>
-      <div className="bg-white rounded-xl border border-hcl-border shadow-card overflow-hidden">
-        <Table>
+      <div className="overflow-hidden rounded-xl border border-hcl-border bg-surface shadow-card">
+        {!isLoading && total > 0 ? (
+          <TableFilterBar
+            onClear={clearFilters}
+            clearDisabled={!filtersActive}
+            resultHint={
+              filtersActive ? `Showing ${shown} of ${total}` : `${total} project${total === 1 ? '' : 's'}`
+            }
+          >
+            <TableSearchInput
+              value={search}
+              onChange={setSearch}
+              placeholder="Name, details, ID, author…"
+              label="Search"
+            />
+            <div className="w-full min-w-[10rem] sm:w-44">
+              <Select
+                label="Status"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'inactive')}
+                className="w-full"
+              >
+                <option value="all">All statuses</option>
+                <option value="active">Active only</option>
+                <option value="inactive">Inactive only</option>
+              </Select>
+            </div>
+          </TableFilterBar>
+        ) : null}
+
+        <Table striped>
           <TableHead>
             <tr>
               <Th>ID</Th>
@@ -65,9 +129,14 @@ export function ProjectsTable({ projects, isLoading, error }: ProjectsTableProps
               Array.from({ length: 4 }).map((_, i) => <SkeletonRow key={i} cols={7} />)
             ) : !projects?.length ? (
               <EmptyRow cols={7} message="No projects found. Create your first project!" />
+            ) : !filteredProjects.length ? (
+              <EmptyRow
+                cols={7}
+                message="No projects match your filters. Try adjusting search or clear filters."
+              />
             ) : (
-              projects.map((project) => (
-                <tr key={project.id} className="hover:bg-hcl-light/40 transition-colors">
+              filteredProjects.map((project) => (
+                <tr key={project.id} className="transition-colors hover:bg-hcl-light/40">
                   <Td className="font-mono text-xs text-hcl-muted">#{project.id}</Td>
                   <Td className="font-medium text-hcl-navy">{project.project_name}</Td>
                   <Td>
@@ -79,19 +148,19 @@ export function ProjectsTable({ projects, isLoading, error }: ProjectsTableProps
                     {project.project_details || '—'}
                   </Td>
                   <Td className="text-hcl-muted">{project.created_by || '—'}</Td>
-                  <Td className="text-hcl-muted whitespace-nowrap">{formatDate(project.created_on)}</Td>
+                  <Td className="whitespace-nowrap text-hcl-muted">{formatDate(project.created_on)}</Td>
                   <Td className="text-right">
                     <div className="flex items-center justify-end gap-2">
                       <button
                         onClick={() => setEditProject(project)}
-                        className="p-1.5 text-hcl-muted hover:text-hcl-blue hover:bg-hcl-light rounded-lg transition-colors"
+                        className="rounded-lg p-1.5 text-hcl-muted transition-colors hover:bg-hcl-light hover:text-hcl-blue"
                         aria-label="Edit project"
                       >
                         <Pencil className="h-4 w-4" />
                       </button>
                       <button
                         onClick={() => setDeleteId(project.id)}
-                        className="p-1.5 text-hcl-muted hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        className="rounded-lg p-1.5 text-hcl-muted transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
                         aria-label="Delete project"
                       >
                         <Trash2 className="h-4 w-4" />

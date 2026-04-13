@@ -6,14 +6,15 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import UTC
+from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..analysis import extract_components
-from ..db import SessionLocal
 from ..models import SBOMComponent, SBOMSource
+from ..parsing import detect_sbom_format
 
 log = logging.getLogger(__name__)
 
@@ -22,13 +23,15 @@ log = logging.getLogger(__name__)
 # Utility Functions
 # ============================================================
 
+
 def now_iso() -> str:
     """Get current UTC time in ISO format without microseconds."""
-    from datetime import datetime, timezone
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    from datetime import datetime
+
+    return datetime.now(UTC).replace(microsecond=0).isoformat()
 
 
-def normalized_key(value: Optional[str]) -> str:
+def normalized_key(value: str | None) -> str:
     """Normalize a string for comparison (lowercase, stripped)."""
     return (value or "").strip().lower()
 
@@ -45,7 +48,8 @@ def safe_int(value: Any, default: int = 0) -> int:
 # SBOM Data Coercion
 # ============================================================
 
-def coerce_sbom_data(value: Any) -> Optional[str]:
+
+def coerce_sbom_data(value: Any) -> str | None:
     """
     Ensure sbom_data is always stored as a JSON string in the DB Text column,
     even if the client sends a dict/list. Leave strings as-is.
@@ -93,7 +97,8 @@ def load_json_bytes_with_fallback(data: bytes) -> Any:
 # Component Management
 # ============================================================
 
-def sync_sbom_components(db: Session, sbom_obj: SBOMSource) -> List[Dict]:
+
+def sync_sbom_components(db: Session, sbom_obj: SBOMSource) -> list[dict]:
     """
     Extract components from SBOM data and upsert them into the database.
 
@@ -112,7 +117,7 @@ def sync_sbom_components(db: Session, sbom_obj: SBOMSource) -> List[Dict]:
     return components
 
 
-def _upsert_components(db: Session, sbom_obj: SBOMSource, components: List[Dict]) -> Dict:
+def _upsert_components(db: Session, sbom_obj: SBOMSource, components: list[dict]) -> dict:
     """
     Internal: Upsert components into the database, avoiding duplicates.
 
@@ -124,12 +129,10 @@ def _upsert_components(db: Session, sbom_obj: SBOMSource, components: List[Dict]
     Returns:
         Dictionary with 'triplet' and 'cpe' maps for lookup
     """
-    existing_rows = db.execute(
-        select(SBOMComponent).where(SBOMComponent.sbom_id == sbom_obj.id)
-    ).scalars().all()
+    existing_rows = db.execute(select(SBOMComponent).where(SBOMComponent.sbom_id == sbom_obj.id)).scalars().all()
 
-    by_comp_triplet: Dict = {}
-    by_cpe: Dict = {}
+    by_comp_triplet: dict = {}
+    by_cpe: dict = {}
 
     # Build lookup maps from existing components
     for row in existing_rows:
@@ -179,7 +182,7 @@ def _upsert_components(db: Session, sbom_obj: SBOMSource, components: List[Dict]
     return {"triplet": by_comp_triplet, "cpe": by_cpe}
 
 
-def resolve_component_id(finding: Dict, component_maps: Dict) -> Optional[int]:
+def resolve_component_id(finding: dict, component_maps: dict) -> int | None:
     """
     Resolve a finding to a component ID using the component maps.
 
@@ -218,11 +221,10 @@ def resolve_component_id(finding: Dict, component_maps: Dict) -> Optional[int]:
 # SBOM Loading
 # ============================================================
 
+
 def load_sbom_from_ref(
-    db: Session,
-    sbom_id: Optional[int] = None,
-    sbom_name: Optional[str] = None
-) -> Tuple[SBOMSource, Dict, str, str, List[Dict]]:
+    db: Session, sbom_id: int | None = None, sbom_name: str | None = None
+) -> tuple[SBOMSource, dict, str, str, list[dict]]:
     """
     Load an SBOM from the database by ID or name and extract its components.
 
@@ -242,7 +244,7 @@ def load_sbom_from_ref(
         raise ValueError("Provide 'sbom_id' or 'sbom_name'")
 
     # Lookup by id first (if given)
-    sbom_row: Optional[SBOMSource] = None
+    sbom_row: SBOMSource | None = None
     if sbom_id is not None:
         try:
             sbom_row = db.get(SBOMSource, int(sbom_id))
@@ -253,17 +255,13 @@ def load_sbom_from_ref(
 
     # If not found and name provided, lookup by name
     if sbom_row is None and sbom_name:
-        sbom_row = db.execute(
-            select(SBOMSource).where(SBOMSource.sbom_name == sbom_name.strip())
-        ).scalars().first()
+        sbom_row = db.execute(select(SBOMSource).where(SBOMSource.sbom_name == sbom_name.strip())).scalars().first()
         if sbom_row is None:
             raise ValueError(f"SBOM with name '{sbom_name}' not found")
 
     # If both id and name provided, ensure they match the same row
     if sbom_id is not None and sbom_name and sbom_row and sbom_row.sbom_name != sbom_name.strip():
-        raise ValueError(
-            f"SBOM mismatch: id={sbom_id} does not match name='{sbom_name}'."
-        )
+        raise ValueError(f"SBOM mismatch: id={sbom_id} does not match name='{sbom_name}'.")
 
     # Ensure content present
     if not sbom_row or not sbom_row.sbom_data:
@@ -283,37 +281,8 @@ def load_sbom_from_ref(
     # Extract and detect SBOM format
     try:
         components = extract_components(sbom_dict)
-        sbom_format, spec_version = _detect_sbom_format(sbom_dict)
+        sbom_format, spec_version = detect_sbom_format(sbom_dict)
     except Exception as e:
         raise ValueError(f"SBOM parsing error: {e}")
 
     return sbom_row, sbom_dict, sbom_format, spec_version, components
-
-
-def _detect_sbom_format(sbom: Dict[str, Any]) -> Tuple[str, str]:
-    """
-    Detect SBOM format (CycloneDX or SPDX) and return format and version.
-
-    Args:
-        sbom: Parsed SBOM dictionary
-
-    Returns:
-        Tuple of (format, version) where format is 'cyclonedx' or 'spdx'
-
-    Raises:
-        ValueError: If format cannot be detected
-    """
-    # CycloneDX indicators
-    if (isinstance(sbom.get("bomFormat"), str) and sbom.get("bomFormat").lower() == "cyclonedx") \
-       or ("components" in sbom and isinstance(sbom["components"], list)):
-        version_str = sbom.get("specVersion") or sbom.get("version") or "unknown"
-        return "cyclonedx", str(version_str)
-
-    # SPDX indicators
-    if "spdxVersion" in sbom or "packages" in sbom:
-        version_str = sbom.get("spdxVersion", "unknown")
-        return "spdx", str(version_str)
-
-    raise ValueError(
-        "Unable to detect SBOM format. Expected CycloneDX (bomFormat/components) or SPDX (spdxVersion/packages)."
-    )

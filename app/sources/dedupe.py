@@ -9,13 +9,10 @@ of this function.
 
 from __future__ import annotations
 
-from typing import Dict, List
-
-
 _SEV_RANK = {"LOW": 0, "MEDIUM": 1, "HIGH": 2, "CRITICAL": 3, "UNKNOWN": -1}
 
 
-def deduplicate_findings(all_findings: List[dict]) -> List[dict]:
+def deduplicate_findings(all_findings: list[dict]) -> list[dict]:
     """
     Two-pass CVE ↔ GHSA alias cross-deduplication.
 
@@ -24,10 +21,10 @@ def deduplicate_findings(all_findings: List[dict]) -> List[dict]:
     merges colliding records, taking the union of sources / aliases /
     references / fixed_versions / cwe and the worst severity / score.
     """
-    alias_index: Dict[str, str] = {}
+    alias_index: dict[str, str] = {}
     for v in all_findings:
         vid = v.get("vuln_id") or ""
-        for alias in (v.get("aliases") or []):
+        for alias in v.get("aliases") or []:
             if alias and alias not in alias_index:
                 alias_index[alias] = vid
         if vid and vid not in alias_index:
@@ -38,12 +35,12 @@ def deduplicate_findings(all_findings: List[dict]) -> List[dict]:
         canonical = alias_index.get(vid, vid)
         if canonical:
             return canonical
-        for a in (v.get("aliases") or []):
+        for a in v.get("aliases") or []:
             if a:
                 return alias_index.get(a, a)
         return v.get("component_name") or ""
 
-    merged: Dict[str, dict] = {}
+    merged: dict[str, dict] = {}
     for v in all_findings:
         key = _canonical_key(v)
         if key not in merged:
@@ -55,14 +52,9 @@ def deduplicate_findings(all_findings: List[dict]) -> List[dict]:
         existing["aliases"] = list(set(existing.get("aliases", []) + v.get("aliases", [])))
         existing["cwe"] = list(set((existing.get("cwe") or []) + (v.get("cwe") or [])))
         existing["references"] = list(
-            set(
-                [r for r in (existing.get("references") or []) if r]
-                + [r for r in (v.get("references") or []) if r]
-            )
+            set([r for r in (existing.get("references") or []) if r] + [r for r in (v.get("references") or []) if r])
         )
-        existing["fixed_versions"] = list(
-            set((existing.get("fixed_versions") or []) + (v.get("fixed_versions") or []))
-        )
+        existing["fixed_versions"] = list(set((existing.get("fixed_versions") or []) + (v.get("fixed_versions") or [])))
         e_rank = _SEV_RANK.get(str(existing.get("severity", "UNKNOWN")).upper(), -1)
         v_rank = _SEV_RANK.get(str(v.get("severity", "UNKNOWN")).upper(), -1)
         if v_rank > e_rank:

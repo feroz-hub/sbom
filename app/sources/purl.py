@@ -7,7 +7,6 @@ imported by every source adapter.
 
 from __future__ import annotations
 
-from typing import Dict
 from urllib.parse import parse_qs, unquote
 
 
@@ -29,7 +28,7 @@ def parse_purl(purl: str) -> dict:
         rest, _sub = rest.split("#", 1)
 
     # Split query
-    qualifiers: Dict[str, str] = {}
+    qualifiers: dict[str, str] = {}
     if "?" in rest:
         rest, q = rest.split("?", 1)
         qualifiers = {k: v[0] for k, v in parse_qs(q, keep_blank_values=True).items()}

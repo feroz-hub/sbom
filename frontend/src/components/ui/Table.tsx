@@ -5,22 +5,26 @@ import type { ReactNode } from 'react';
 interface TableProps {
   children: ReactNode;
   className?: string;
-  /** Accessible name read by screen readers. Appears as a visually-hidden caption. */
   ariaLabel?: string;
+  /** Alternating row background for long scannable lists. */
+  striped?: boolean;
 }
 
-// The overflow-x-auto wrapper is tabindex=0 so keyboard-only users can scroll
-// horizontal overflow (WCAG 2.1.1 Keyboard). role="region" + aria-label turns
-// it into a navigable landmark for screen readers.
-export function Table({ children, className, ariaLabel }: TableProps) {
+export function Table({ children, className, ariaLabel, striped }: TableProps) {
   return (
     <div
-      className="overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/40 rounded-lg"
+      className="overflow-x-auto rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
       role={ariaLabel ? 'region' : undefined}
       aria-label={ariaLabel}
       tabIndex={ariaLabel ? 0 : undefined}
     >
-      <table className={cn('w-full text-sm', className)}>
+      <table
+        className={cn(
+          'w-full text-sm',
+          striped && '[&_tbody_tr:nth-child(even)]:bg-surface-muted/50',
+          className,
+        )}
+      >
         {ariaLabel && <caption className="sr-only">{ariaLabel}</caption>}
         {children}
       </table>
@@ -30,14 +34,14 @@ export function Table({ children, className, ariaLabel }: TableProps) {
 
 export function TableHead({ children }: { children: ReactNode }) {
   return (
-    <thead className="bg-hcl-light border-b-2 border-hcl-border">
+    <thead className="sticky top-0 z-[1] border-b-2 border-border bg-surface-muted">
       {children}
     </thead>
   );
 }
 
 export function TableBody({ children }: { children: ReactNode }) {
-  return <tbody className="divide-y divide-hcl-border/60">{children}</tbody>;
+  return <tbody className="divide-y divide-border/70">{children}</tbody>;
 }
 
 export function Th({
@@ -53,7 +57,7 @@ export function Th({
     <th
       scope={scope}
       className={cn(
-        'px-4 py-3 text-left text-xs font-semibold text-hcl-navy uppercase tracking-wide',
+        'px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-hcl-navy',
         className,
       )}
     >
@@ -72,7 +76,10 @@ export function Td({
   onClick?: (e: React.MouseEvent<HTMLTableCellElement>) => void;
 }) {
   return (
-    <td className={cn('px-4 py-3 text-slate-700 align-middle', className)} onClick={onClick}>
+    <td
+      className={cn('px-4 py-3 align-middle text-foreground/90', className)}
+      onClick={onClick}
+    >
       {children}
     </td>
   );
@@ -81,8 +88,8 @@ export function Td({
 export function EmptyRow({ cols, message }: { cols: number; message: string }) {
   return (
     <tr>
-      <td colSpan={cols} className="px-4 py-12 text-center text-hcl-muted text-sm">
-        {message}
+      <td colSpan={cols} className="px-4 py-14 text-center">
+        <p className="mx-auto max-w-sm text-sm leading-relaxed text-hcl-muted">{message}</p>
       </td>
     </tr>
   );

@@ -12,7 +12,7 @@ OSV needs no credentials, so the constructor takes no arguments.
 
 from __future__ import annotations
 
-from typing import Any, List
+from typing import Any
 
 from .base import SourceResult, empty_result
 
@@ -29,7 +29,7 @@ class OsvSource:
 
     async def query(
         self,
-        components: List[dict],
+        components: list[dict],
         settings: Any,
     ) -> SourceResult:
         if not components:

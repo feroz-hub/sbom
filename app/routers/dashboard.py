@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
@@ -23,11 +23,9 @@ def dashboard_trend(
     db: Session = Depends(get_db),
 ):
     """Return daily finding counts for the last N days grouped by severity."""
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    cutoff = (datetime.now(UTC) - timedelta(days=days)).isoformat()
 
-    runs = db.execute(
-        select(AnalysisRun).where(AnalysisRun.started_on >= cutoff)
-    ).scalars().all()
+    runs = db.execute(select(AnalysisRun).where(AnalysisRun.started_on >= cutoff)).scalars().all()
 
     if not runs:
         return {"days": days, "series": []}
@@ -35,9 +33,7 @@ def dashboard_trend(
     run_ids = [r.id for r in runs]
     run_date_map = {r.id: (r.started_on or "")[:10] for r in runs}
 
-    findings = db.execute(
-        select(AnalysisFinding).where(AnalysisFinding.analysis_run_id.in_(run_ids))
-    ).scalars().all()
+    findings = db.execute(select(AnalysisFinding).where(AnalysisFinding.analysis_run_id.in_(run_ids))).scalars().all()
 
     daily: dict = defaultdict(lambda: {"critical": 0, "high": 0, "medium": 0, "low": 0})
     for f in findings:
@@ -47,9 +43,6 @@ def dashboard_trend(
             if sev in ("critical", "high", "medium", "low"):
                 daily[date][sev] += 1
 
-    series = [
-        {"date": date, **counts}
-        for date, counts in sorted(daily.items())
-    ]
+    series = [{"date": date, **counts} for date, counts in sorted(daily.items())]
 
     return {"days": days, "series": series}

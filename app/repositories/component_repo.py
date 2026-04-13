@@ -1,14 +1,12 @@
 """Repository for SBOMComponent entity."""
 
-from typing import Optional
-
-from sqlalchemy import func, delete
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..models import SBOMComponent
 
 
-def _normalized_key(value: Optional[str]) -> str:
+def _normalized_key(value: str | None) -> str:
     """Normalize a string key for deduplication.
 
     Args:
@@ -24,9 +22,7 @@ class ComponentRepository:
     """Repository for SBOM component operations."""
 
     @staticmethod
-    def list_components(
-        db: Session, sbom_id: int, page: int = 1, page_size: int = 50
-    ) -> list[SBOMComponent]:
+    def list_components(db: Session, sbom_id: int, page: int = 1, page_size: int = 50) -> list[SBOMComponent]:
         """List components for a specific SBOM with pagination.
 
         Args:
@@ -38,17 +34,13 @@ class ComponentRepository:
         Returns:
             List of SBOMComponent objects
         """
-        query = db.query(SBOMComponent).filter(
-            SBOMComponent.sbom_id == sbom_id
-        )
+        query = db.query(SBOMComponent).filter(SBOMComponent.sbom_id == sbom_id)
 
         offset = (page - 1) * page_size
         return query.offset(offset).limit(page_size).all()
 
     @staticmethod
-    def upsert_components(
-        db: Session, sbom_id: int, components: list[dict]
-    ) -> dict:
+    def upsert_components(db: Session, sbom_id: int, components: list[dict]) -> dict:
         """Upsert components for an SBOM.
 
         Creates or updates components based on purl (package URL).
@@ -149,8 +141,4 @@ class ComponentRepository:
         Returns:
             Total number of components
         """
-        return (
-            db.query(func.count(SBOMComponent.id))
-            .filter(SBOMComponent.sbom_id == sbom_id)
-            .scalar()
-        )
+        return db.query(func.count(SBOMComponent.id)).filter(SBOMComponent.sbom_id == sbom_id).scalar()

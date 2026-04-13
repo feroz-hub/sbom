@@ -1,37 +1,9 @@
 """
-Bearer-token authentication dependency.
+Authentication dependency: none | bearer allowlist | JWT (HS256).
 
-Finding A from the Project Lens audit closed the largest unmitigated risk
-in the codebase: every backend route was reachable unauthenticated. This
-module adds an opt-in bearer-token allowlist that ops enables in
-production by setting two env vars:
-
-    API_AUTH_MODE=bearer
-    API_AUTH_TOKENS=tok-abc,tok-def
-
-Default mode is ``none`` so existing dev environments are not broken.
-
-Design notes
-------------
-* The dependency is applied at router-include time in ``app/main.py`` via
-  ``dependencies=[Depends(require_auth)]``. One diff = the whole posture
-  changes. ``health.py`` is intentionally excluded so liveness probes
-  and the FastAPI ``/docs`` page remain reachable.
-* Token comparison uses ``hmac.compare_digest`` to avoid timing-attack
-  leaks on the equality check. The set membership lookup also goes
-  through ``compare_digest`` rather than a plain ``in`` operator.
-* When ``API_AUTH_MODE=bearer`` is set but ``API_AUTH_TOKENS`` is empty,
-  ``validate_auth_setup()`` raises at startup. Better to refuse to start
-  than silently let every request through.
-* The dependency does not look at the ``user_id`` query param — that's a
-  ``created_by`` filter for soft ownership, an orthogonal concern.
-* We read ``os.environ`` directly (not via ``app.settings.get_settings``)
-  because the project does not currently install ``pydantic-settings``,
-  so ``BaseSettings`` silently falls back to plain ``BaseModel`` and
-  Field defaults — no env loading happens. The Settings fields for
-  ``api_auth_mode`` / ``api_auth_tokens`` exist as documentation only.
-  Future work: install ``pydantic-settings`` and route every settings
-  read through one place.
+Reads ``API_AUTH_MODE`` from the environment each request so tests can
+monkeypatch without cache issues. JWT parameters also come from
+``get_settings()`` (pydantic-settings / .env).
 """
 
 from __future__ import annotations
@@ -39,139 +11,150 @@ from __future__ import annotations
 import hmac
 import logging
 import os
-from typing import Optional
+from typing import Any
 
+import jwt
 from fastapi import Header, HTTPException, status
+from jwt import InvalidTokenError
 
 log = logging.getLogger(__name__)
 
-
-_BEARER_PREFIX = "bearer "  # case-insensitive prefix per RFC 6750
+_BEARER_PREFIX = "bearer "
 
 
 def _read_mode() -> str:
-    """Read ``API_AUTH_MODE`` from the live process env, normalised."""
     return (os.getenv("API_AUTH_MODE") or "none").strip().lower() or "none"
 
 
 def _read_tokens() -> set[str]:
-    """Parse ``API_AUTH_TOKENS`` from the live process env into a set."""
     raw = os.getenv("API_AUTH_TOKENS") or ""
     return {t.strip() for t in raw.split(",") if t.strip()}
 
 
 class AuthConfigError(RuntimeError):
-    """Raised at startup if API_AUTH_MODE='bearer' but no tokens are configured."""
+    """Raised at startup if auth env is inconsistent."""
+
+
+def _jwt_settings() -> tuple[str, str, str | None, str | None]:
+    from .settings import get_settings
+
+    s = get_settings()
+    secret = (s.jwt_secret_key or os.getenv("JWT_SECRET_KEY") or "").strip()
+    alg = (s.jwt_algorithm or "HS256").strip()
+    aud = (s.jwt_audience or "").strip() or None
+    iss = (s.jwt_issuer or "").strip() or None
+    return secret, alg, aud, iss
 
 
 def validate_auth_setup() -> None:
-    """
-    Called from the FastAPI startup hook. Refuses to let the app come up
-    in a state where ``API_AUTH_MODE=bearer`` is set but no tokens are
-    configured — that combination would otherwise silently let every
-    request through, which is the worst possible failure mode.
-    """
     mode = _read_mode()
     if mode == "none":
         log.warning(
-            "API_AUTH_MODE=none — every /api/*, /analyze-*, /dashboard/* "
-            "endpoint is reachable without authentication. This is fine "
-            "for local development but MUST be set to 'bearer' in any "
-            "shared environment.",
+            "API_AUTH_MODE=none — protected routes are open. Use bearer or jwt in production.",
         )
         return
-    if mode != "bearer":
-        raise AuthConfigError(
-            f"Unsupported API_AUTH_MODE='{os.getenv('API_AUTH_MODE')}'. "
-            "Expected 'none' or 'bearer'."
-        )
-    tokens = _read_tokens()
-    if not tokens:
-        raise AuthConfigError(
-            "API_AUTH_MODE='bearer' is set but API_AUTH_TOKENS is empty. "
-            "Configure at least one token (comma-separated) before starting "
-            "the server, or set API_AUTH_MODE='none' for unauthenticated mode."
-        )
-    log.info(
-        "Bearer authentication enabled (%d token%s configured).",
-        len(tokens),
-        "s" if len(tokens) != 1 else "",
+    if mode == "bearer":
+        tokens = _read_tokens()
+        if not tokens:
+            raise AuthConfigError(
+                "API_AUTH_MODE='bearer' is set but API_AUTH_TOKENS is empty. "
+                "Configure at least one token or set API_AUTH_MODE='none'."
+            )
+        log.info("Bearer authentication enabled (%d token(s)).", len(tokens))
+        return
+    if mode == "jwt":
+        secret, _, _, _ = _jwt_settings()
+        if not secret:
+            raise AuthConfigError("API_AUTH_MODE='jwt' but jwt_secret_key / JWT_SECRET_KEY is empty.")
+        log.info("JWT authentication enabled (algorithm from settings).")
+        return
+    raise AuthConfigError(
+        f"Unsupported API_AUTH_MODE='{os.getenv('API_AUTH_MODE')}'. Expected 'none', 'bearer', or 'jwt'."
     )
 
 
 def _token_in_allowlist(presented: str, allowlist: set[str]) -> bool:
-    """
-    Constant-time membership check.
-
-    A plain ``presented in allowlist`` would short-circuit on the first
-    matching prefix and leak timing information. Iterating with
-    ``hmac.compare_digest`` against every entry costs O(N) per request,
-    but N is tiny (a handful of tokens) and the safety wins.
-    """
     presented_bytes = presented.encode("utf-8")
     matched = False
     for candidate in allowlist:
         if hmac.compare_digest(presented_bytes, candidate.encode("utf-8")):
             matched = True
-            # Don't early-exit — keep the comparison work constant.
     return matched
 
 
-def require_auth(authorization: Optional[str] = Header(default=None)) -> None:
-    """
-    FastAPI dependency that enforces the configured auth mode.
-
-    Mode ``none``: this is a no-op. The dependency still runs (FastAPI
-    needs *something* to plumb in via ``Depends``) but it always passes,
-    so the routes are wide open and the per-request cost is a single
-    settings lookup.
-
-    Mode ``bearer``: requires a valid ``Authorization: Bearer <token>``
-    header. Missing header → 401 with ``WWW-Authenticate: Bearer``.
-    Malformed header → 401 with the same challenge. Unknown token →
-    401 with the same challenge. We deliberately do NOT distinguish
-    between "no header" / "wrong format" / "unknown token" in the
-    response body to avoid handing an attacker a discriminator.
-    """
-    mode = _read_mode()
-    if mode == "none":
-        return
-    if mode != "bearer":
-        # validate_auth_setup() catches this at startup, but defend in
-        # depth in case someone calls require_auth in isolation (e.g. tests).
+def _decode_jwt(token: str) -> dict[str, Any]:
+    secret, alg, aud, iss = _jwt_settings()
+    if not secret:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Server auth misconfigured",
         )
-
-    challenge = {"WWW-Authenticate": 'Bearer realm="sbom-analyzer"'}
-
-    if not authorization:
+    options = {"verify_signature": True, "verify_exp": True}
+    kwargs: dict[str, Any] = {
+        "algorithms": [alg],
+        "options": options,
+    }
+    if aud:
+        kwargs["audience"] = aud
+    if iss:
+        kwargs["issuer"] = iss
+    try:
+        return jwt.decode(token, secret, **kwargs)
+    except InvalidTokenError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required",
-            headers=challenge,
-        )
+            headers={"WWW-Authenticate": 'Bearer realm="sbom-analyzer"'},
+        ) from None
 
-    if not authorization.lower().startswith(_BEARER_PREFIX):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required",
-            headers=challenge,
-        )
 
-    presented = authorization[len(_BEARER_PREFIX):].strip()
-    if not presented:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required",
-            headers=challenge,
-        )
+def require_auth(authorization: str | None = Header(default=None)) -> None:
+    mode = _read_mode()
+    if mode == "none":
+        return
 
-    if not _token_in_allowlist(presented, _read_tokens()):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required",
-            headers=challenge,
-        )
-    # Authenticated — fall through.
+    challenge_bearer = {"WWW-Authenticate": 'Bearer realm="sbom-analyzer"'}
+
+    if mode == "bearer":
+        if not authorization:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required",
+                headers=challenge_bearer,
+            )
+        if not authorization.lower().startswith(_BEARER_PREFIX):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required",
+                headers=challenge_bearer,
+            )
+        presented = authorization[len(_BEARER_PREFIX) :].strip()
+        if not presented or not _token_in_allowlist(presented, _read_tokens()):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required",
+                headers=challenge_bearer,
+            )
+        return
+
+    if mode == "jwt":
+        if not authorization or not authorization.lower().startswith(_BEARER_PREFIX):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required",
+                headers=challenge_bearer,
+            )
+        token = authorization[len(_BEARER_PREFIX) :].strip()
+        if not token:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required",
+                headers=challenge_bearer,
+            )
+        _decode_jwt(token)
+        return
+
+    raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail="Server auth misconfigured",
+    )

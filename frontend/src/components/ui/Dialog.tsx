@@ -11,10 +11,6 @@ interface DialogProps {
   title: string;
   children: ReactNode;
   maxWidth?: 'sm' | 'md' | 'lg' | 'xl';
-  /**
-   * When true, clicking the backdrop closes the dialog. Default: true.
-   * Disable for forms where data loss would be frustrating.
-   */
   dismissOnBackdrop?: boolean;
 }
 
@@ -25,10 +21,6 @@ const maxWidthClasses: Record<string, string> = {
   xl: 'max-w-2xl',
 };
 
-// ── Focus-trap helpers ───────────────────────────────────────────────────────
-// Native <dialog> has focus trapping but it interferes with portaled content.
-// This hand-rolled trap is small and framework-agnostic — Tab/Shift+Tab cycle
-// inside the panel, never escaping to background DOM.
 const FOCUSABLE = [
   'a[href]',
   'button:not([disabled])',
@@ -52,13 +44,10 @@ export function Dialog({
   maxWidth = 'md',
   dismissOnBackdrop = true,
 }: DialogProps) {
-  // Unique IDs per dialog instance — prevents aria collisions when multiple
-  // dialogs exist in the DOM (e.g. confirm-delete over an edit dialog).
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
 
-  // ── Key handling: Escape to close, Tab to trap focus ──────────────────────
   useEffect(() => {
     if (!open) return;
 
@@ -91,7 +80,6 @@ export function Dialog({
     return () => document.removeEventListener('keydown', handler);
   }, [open, onClose]);
 
-  // ── Body scroll lock ──────────────────────────────────────────────────────
   useEffect(() => {
     if (open) {
       document.body.style.overflow = 'hidden';
@@ -103,13 +91,9 @@ export function Dialog({
     };
   }, [open]);
 
-  // ── Focus management ──────────────────────────────────────────────────────
-  // On open: remember the caller's focused element, move focus into the panel.
-  // On close: restore focus. Respects WCAG 2.4.3 Focus Order + 3.2.1 On Focus.
   useEffect(() => {
     if (open) {
       previouslyFocused.current = (document.activeElement as HTMLElement) ?? null;
-      // Defer to give the panel a chance to mount before focusing.
       const raf = requestAnimationFrame(() => {
         if (panelRef.current) {
           const focusable = getFocusable(panelRef.current);
@@ -118,7 +102,6 @@ export function Dialog({
       });
       return () => cancelAnimationFrame(raf);
     }
-    // When closing, restore focus to the trigger.
     if (previouslyFocused.current && previouslyFocused.current.isConnected) {
       previouslyFocused.current.focus();
     }
@@ -127,10 +110,7 @@ export function Dialog({
   if (!open) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      role="presentation"
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="presentation">
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm dialog-scrim-in motion-reduce:animate-none"
         onClick={dismissOnBackdrop ? onClose : undefined}
@@ -143,16 +123,16 @@ export function Dialog({
         aria-labelledby={titleId}
         tabIndex={-1}
         className={cn(
-          'relative w-full bg-white rounded-xl shadow-xl overflow-hidden',
+          'relative w-full overflow-hidden rounded-xl border border-border bg-surface shadow-xl',
           'dialog-panel-in motion-reduce:animate-none',
           'focus-visible:outline-none',
           maxWidthClasses[maxWidth],
         )}
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b-2 border-hcl-border bg-hcl-light/40">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-1 h-5 rounded-full bg-hcl-blue shrink-0" />
-            <h2 id={titleId} className="text-lg font-semibold text-hcl-navy truncate">
+        <div className="flex items-center justify-between border-b-2 border-border bg-surface-muted/80 px-6 py-4">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div className="h-5 w-1 shrink-0 rounded-full bg-gradient-to-b from-hcl-blue to-hcl-cyan" />
+            <h2 id={titleId} className="truncate text-lg font-semibold text-hcl-navy">
               {title}
             </h2>
           </div>
@@ -160,16 +140,15 @@ export function Dialog({
             type="button"
             onClick={onClose}
             className={cn(
-              'text-hcl-muted hover:text-hcl-navy transition-colors rounded-lg p-2',
-              'hover:bg-hcl-border/40',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/60',
+              'rounded-lg p-2 text-hcl-muted transition-colors hover:bg-border-subtle hover:text-hcl-navy',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/50',
             )}
             aria-label="Close dialog"
           >
             <X className="h-5 w-5" aria-hidden="true" />
           </button>
         </div>
-        <div className="overflow-y-auto max-h-[calc(100vh-12rem)]">{children}</div>
+        <div className="max-h-[calc(100vh-12rem)] overflow-y-auto">{children}</div>
       </div>
     </div>
   );
@@ -181,7 +160,7 @@ export function DialogBody({ children, className }: { children: ReactNode; class
 
 export function DialogFooter({ children }: { children: ReactNode }) {
   return (
-    <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-hcl-border bg-hcl-light/40">
+    <div className="flex items-center justify-end gap-3 border-t border-border bg-surface-muted/80 px-6 py-4">
       {children}
     </div>
   );
@@ -195,7 +174,6 @@ interface ConfirmDialogProps {
   message: string;
   confirmLabel?: string;
   loading?: boolean;
-  /** "danger" (default — red) or "primary" — for destructive vs benign confirms. */
   variant?: 'danger' | 'primary';
 }
 
@@ -212,7 +190,7 @@ export function ConfirmDialog({
   return (
     <Dialog open={open} onClose={onClose} title={title} maxWidth="sm" dismissOnBackdrop={!loading}>
       <DialogBody>
-        <p className="text-sm text-slate-600">{message}</p>
+        <p className="text-sm text-hcl-muted">{message}</p>
       </DialogBody>
       <DialogFooter>
         <Button variant="secondary" onClick={onClose} disabled={loading}>

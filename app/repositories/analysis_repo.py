@@ -1,25 +1,23 @@
 """Repository for AnalysisRun, AnalysisFinding, and RunCache entities."""
 
 import json
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
-from sqlalchemy import select, func, delete
 from sqlalchemy.orm import Session
 
-from ..models import AnalysisRun, AnalysisFinding, RunCache
+from ..models import AnalysisFinding, AnalysisRun, RunCache
 
 
 def _now_iso() -> str:
     """Return current UTC timestamp in ISO format without microseconds."""
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    return datetime.now(UTC).replace(microsecond=0).isoformat()
 
 
 class AnalysisRepository:
     """Repository for analysis run and finding operations."""
 
     @staticmethod
-    def get_run(db: Session, run_id: int) -> Optional[AnalysisRun]:
+    def get_run(db: Session, run_id: int) -> AnalysisRun | None:
         """Get a single analysis run by ID.
 
         Args:
@@ -34,10 +32,10 @@ class AnalysisRepository:
     @staticmethod
     def list_runs(
         db: Session,
-        sbom_id: Optional[int] = None,
-        project_id: Optional[int] = None,
-        status: Optional[str] = None,
-        source: Optional[str] = None,
+        sbom_id: int | None = None,
+        project_id: int | None = None,
+        status: str | None = None,
+        source: str | None = None,
         sort_by: str = "id",
         sort_dir: str = "desc",
         page: int = 1,
@@ -125,7 +123,7 @@ class AnalysisRepository:
     def list_findings(
         db: Session,
         run_id: int,
-        severity: Optional[str] = None,
+        severity: str | None = None,
         page: int = 1,
         page_size: int = 200,
     ) -> list[AnalysisFinding]:
@@ -141,9 +139,7 @@ class AnalysisRepository:
         Returns:
             List of AnalysisFinding objects
         """
-        query = db.query(AnalysisFinding).filter(
-            AnalysisFinding.run_id == run_id
-        )
+        query = db.query(AnalysisFinding).filter(AnalysisFinding.run_id == run_id)
 
         if severity is not None:
             query = query.filter(AnalysisFinding.severity == severity)
@@ -156,8 +152,8 @@ class AnalysisRepository:
     def store_run_cache(
         db: Session,
         run_json: str,
-        source: Optional[str] = None,
-        sbom_id: Optional[int] = None,
+        source: str | None = None,
+        sbom_id: int | None = None,
     ) -> int:
         """Store run results in cache and commit.
 
@@ -181,7 +177,7 @@ class AnalysisRepository:
         return cache_entry.id
 
     @staticmethod
-    def load_run_cache(db: Session, run_id: int) -> Optional[dict]:
+    def load_run_cache(db: Session, run_id: int) -> dict | None:
         """Load and parse run results from cache.
 
         Args:
@@ -191,9 +187,7 @@ class AnalysisRepository:
         Returns:
             Parsed JSON dict or None if not found
         """
-        cache_entry = (
-            db.query(RunCache).filter(RunCache.id == run_id).first()
-        )
+        cache_entry = db.query(RunCache).filter(RunCache.id == run_id).first()
         if not cache_entry:
             return None
 

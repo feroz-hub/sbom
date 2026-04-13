@@ -8,18 +8,18 @@ Routes:
   PATCH /api/projects/{project_id}      update project
   DELETE /api/projects/{project_id}     delete project with cascade
 """
-from datetime import datetime, timezone
-from typing import Optional
+
 import logging
 import re
+from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Path, status
-from sqlalchemy import select, func
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..models import Projects, SBOMSource, AnalysisRun
+from ..models import AnalysisRun, Projects, SBOMSource
 from ..schemas import ProjectCreate, ProjectOut, ProjectUpdate
 
 log = logging.getLogger(__name__)
@@ -28,13 +28,13 @@ router = APIRouter(prefix="/api", tags=["projects"])
 
 
 def now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    return datetime.now(UTC).replace(microsecond=0).isoformat()
 
 
 _USER_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 
 
-def _validate_user_id(raw: Optional[str]) -> Optional[str]:
+def _validate_user_id(raw: str | None) -> str | None:
     if raw is None:
         return None
     user_id = raw.strip()
@@ -59,15 +59,10 @@ def _validate_positive_int(value: int, param_name: str = "id") -> int:
 @router.post("/projects", response_model=ProjectOut, status_code=status.HTTP_201_CREATED)
 def create_project(payload: ProjectCreate, db: Session = Depends(get_db)):
     try:
-        existing_project = db.query(Projects).filter(
-            Projects.project_name == payload.project_name
-        ).first()
+        existing_project = db.query(Projects).filter(Projects.project_name == payload.project_name).first()
 
         if existing_project:
-            raise HTTPException(
-                status_code=400,
-                detail="Project with this name already exists"
-            )
+            raise HTTPException(status_code=400, detail="Project with this name already exists")
 
         obj = Projects(**payload.model_dump(), created_on=now_iso())
         db.add(obj)
@@ -78,23 +73,16 @@ def create_project(payload: ProjectCreate, db: Session = Depends(get_db)):
 
     except IntegrityError:
         db.rollback()
-        raise HTTPException(
-            status_code=400,
-            detail="Duplicate project name not allowed"
-        )
+        raise HTTPException(status_code=400, detail="Duplicate project name not allowed")
 
     except Exception as e:
         db.rollback()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Something went wrong: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Something went wrong: {str(e)}")
 
 
 @router.get("/projects/{project_id}", response_model=ProjectOut)
 def get_project_details(
-    project_id: int = Path(..., description="Project ID (positive integer)"),
-    db: Session = Depends(get_db)
+    project_id: int = Path(..., description="Project ID (positive integer)"), db: Session = Depends(get_db)
 ):
     project_id = _validate_positive_int(project_id)
     try:
@@ -117,9 +105,8 @@ def list_projects(db: Session = Depends(get_db)):
 def update_project(
     project_id: int = Path(..., description="Project ID (positive integer)"),
     payload: ProjectUpdate = ...,
-    user_id: Optional[str] = Query(
-        None,
-        description="Optional: if provided, must match Projects.created_by (letters/digits/_/./-, 1–64)"
+    user_id: str | None = Query(
+        None, description="Optional: if provided, must match Projects.created_by (letters/digits/_/./-, 1–64)"
     ),
     db: Session = Depends(get_db),
 ):
@@ -157,10 +144,7 @@ def update_project(
 @router.delete("/projects/{project_id}", status_code=status.HTTP_200_OK)
 def delete_project(
     project_id: int,
-    user_id: Optional[str] = Query(
-        None,
-        description="Optional: if provided, must match Projects.created_by"
-    ),
+    user_id: str | None = Query(None, description="Optional: if provided, must match Projects.created_by"),
     confirm: str = Query("no", description="Set to 'yes' to confirm deletion"),
     db: Session = Depends(get_db),
 ):
@@ -180,20 +164,16 @@ def delete_project(
     ).scalar_one_or_none()
     if has_sboms or has_runs:
         raise HTTPException(
-            status_code=409,
-            detail="Cannot delete Project: SBOMs or Analysis Runs exist. Delete/reassign them first."
+            status_code=409, detail="Cannot delete Project: SBOMs or Analysis Runs exist. Delete/reassign them first."
         )
 
     if (confirm or "").strip().lower() not in {"yes", "y"}:
         return {
             "status": "pending_confirmation",
             "message": "This will permanently delete the Project. Re-send with confirm=yes to proceed.",
-            "example": f"/api/projects/{project_id}?confirm=yes"
+            "example": f"/api/projects/{project_id}?confirm=yes",
         }
 
     db.delete(project)
     db.commit()
-    return {
-        "status": "deleted",
-        "message": f"Project {project_id} deleted successfully."
-    }
+    return {"status": "deleted", "message": f"Project {project_id} deleted successfully."}

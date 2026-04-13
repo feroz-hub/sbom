@@ -2,6 +2,7 @@
 
 import { CheckCircle2, XCircle, Loader2, Clock, AlertTriangle, ChevronRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
 import { formatDuration } from '@/lib/utils';
 import type { AnalysisStreamState, SourceProgress } from '@/hooks/useAnalysisStream';
@@ -49,7 +50,7 @@ function SourceRow({ source }: { source: SourceProgress }) {
         ? 'bg-green-50 border-green-200'
         : source.status === 'error'
           ? 'bg-red-50 border-red-200'
-          : 'bg-white border-hcl-border';
+          : 'bg-surface border-hcl-border';
 
   return (
     <div className={`flex items-center gap-3 px-4 py-3 rounded-lg border ${rowBg} transition-colors`}>
@@ -115,7 +116,7 @@ export function AnalysisProgress({ state, onCancel, onReset }: AnalysisProgressP
   };
 
   return (
-    <div className="rounded-xl border border-hcl-border bg-white shadow-card overflow-hidden">
+    <div className="rounded-xl border border-hcl-border bg-surface shadow-card overflow-hidden">
       {/* Header */}
       <div className="px-5 py-4 border-b border-hcl-border bg-hcl-light/40 flex items-center gap-3">
         <div className="w-1 h-5 rounded-full bg-hcl-blue shrink-0" />
@@ -154,9 +155,9 @@ export function AnalysisProgress({ state, onCancel, onReset }: AnalysisProgressP
       {/* Error state */}
       {isError && error && (
         <div className="px-4 pb-4">
-          <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+          <Alert variant="error" title="Analysis failed">
             {error}
-          </div>
+          </Alert>
         </div>
       )}
 

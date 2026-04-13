@@ -16,20 +16,18 @@ import logging
 import logging.handlers
 import os
 import sys
-from datetime import datetime, timezone
-from typing import Optional
-
+from datetime import UTC, datetime
 
 # ── ANSI colour codes (disabled automatically on non-TTY) ──────────────────────
 _COLOURS = {
-    "DEBUG":    "\033[36m",   # cyan
-    "INFO":     "\033[32m",   # green
-    "WARNING":  "\033[33m",   # yellow
-    "ERROR":    "\033[31m",   # red
-    "CRITICAL": "\033[35m",   # magenta
+    "DEBUG": "\033[36m",  # cyan
+    "INFO": "\033[32m",  # green
+    "WARNING": "\033[33m",  # yellow
+    "ERROR": "\033[31m",  # red
+    "CRITICAL": "\033[35m",  # magenta
 }
 _RESET = "\033[0m"
-_BOLD  = "\033[1m"
+_BOLD = "\033[1m"
 
 
 def _supports_colour(stream) -> bool:
@@ -37,6 +35,7 @@ def _supports_colour(stream) -> bool:
 
 
 # ── Formatters ─────────────────────────────────────────────────────────────────
+
 
 class ColourTextFormatter(logging.Formatter):
     """Human-readable coloured log lines for terminal output."""
@@ -49,22 +48,17 @@ class ColourTextFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         colour = _COLOURS.get(record.levelname, "") if self._use_colour else ""
-        reset  = _RESET if self._use_colour else ""
-        bold   = _BOLD  if self._use_colour else ""
-        grey   = "\033[90m" if self._use_colour else ""
+        reset = _RESET if self._use_colour else ""
+        bold = _BOLD if self._use_colour else ""
+        grey = "\033[90m" if self._use_colour else ""
 
-        ts  = datetime.fromtimestamp(record.created, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        ts = datetime.fromtimestamp(record.created, tz=UTC).strftime("%Y-%m-%d %H:%M:%S")
         msg = record.getMessage()
 
         if record.exc_info:
             msg += "\n" + self.formatException(record.exc_info)
 
-        return (
-            f"{colour}{bold}[{record.levelname:<8}]{reset} "
-            f"{grey}{ts}{reset}  "
-            f"{record.name}  "
-            f"{colour}{msg}{reset}"
-        )
+        return f"{colour}{bold}[{record.levelname:<8}]{reset} {grey}{ts}{reset}  {record.name}  {colour}{msg}{reset}"
 
 
 class JsonFormatter(logging.Formatter):
@@ -72,13 +66,13 @@ class JsonFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         payload: dict = {
-            "ts":      datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
-            "level":   record.levelname,
-            "logger":  record.name,
+            "ts": datetime.fromtimestamp(record.created, tz=UTC).isoformat(),
+            "level": record.levelname,
+            "logger": record.name,
             "message": record.getMessage(),
-            "module":  record.module,
-            "func":    record.funcName,
-            "line":    record.lineno,
+            "module": record.module,
+            "func": record.funcName,
+            "line": record.lineno,
         }
         if record.exc_info:
             payload["exc"] = self.formatException(record.exc_info)
@@ -87,10 +81,11 @@ class JsonFormatter(logging.Formatter):
 
 # ── Public setup function ──────────────────────────────────────────────────────
 
+
 def setup_logging(
-    level: Optional[str] = None,
-    fmt: Optional[str] = None,
-    log_file: Optional[str] = None,
+    level: str | None = None,
+    fmt: str | None = None,
+    log_file: str | None = None,
     max_bytes: int = 0,
     backup_count: int = 5,
 ) -> None:
@@ -104,12 +99,12 @@ def setup_logging(
         max_bytes:    Override per-file size limit (bytes).
         backup_count: Override LOG_BACKUPS env var.
     """
-    level_str    = (level or os.getenv("LOG_LEVEL", "INFO")).upper()
-    fmt_str      = (fmt   or os.getenv("LOG_FORMAT", "text")).lower()
-    file_path    = log_file or os.getenv("LOG_FILE", "")
-    max_mb       = int(os.getenv("LOG_MAX_MB", "10"))
-    backups      = int(os.getenv("LOG_BACKUPS", str(backup_count)))
-    max_bytes_   = max_bytes or max_mb * 1024 * 1024
+    level_str = (level or os.getenv("LOG_LEVEL", "INFO")).upper()
+    fmt_str = (fmt or os.getenv("LOG_FORMAT", "text")).lower()
+    file_path = log_file or os.getenv("LOG_FILE", "")
+    max_mb = int(os.getenv("LOG_MAX_MB", "10"))
+    backups = int(os.getenv("LOG_BACKUPS", str(backup_count)))
+    max_bytes_ = max_bytes or max_mb * 1024 * 1024
 
     numeric_level = getattr(logging, level_str, logging.INFO)
 
@@ -150,11 +145,14 @@ def setup_logging(
     log = logging.getLogger("sbom.logger")
     log.debug(
         "Logging initialised — level=%s  format=%s  file=%s",
-        level_str, fmt_str, file_path or "(console only)",
+        level_str,
+        fmt_str,
+        file_path or "(console only)",
     )
 
 
 # ── Convenience getter ─────────────────────────────────────────────────────────
+
 
 def get_logger(name: str) -> logging.Logger:
     """Return a logger namespaced under 'sbom.<name>'."""

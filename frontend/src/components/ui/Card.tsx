@@ -1,24 +1,29 @@
 import { cn } from '@/lib/utils';
 import type { ReactNode } from 'react';
 
+type CardVariant = 'elevated' | 'inset';
+
 interface CardProps {
   children: ReactNode;
   className?: string;
-  /**
-   * When true, adds a subtle hover lift (translateY + shadow) for clickable
-   * cards. Respects prefers-reduced-motion.
-   */
   interactive?: boolean;
+  /** `inset` uses a flatter, panel-like surface for nested groups. */
+  variant?: CardVariant;
 }
 
-export function Card({ children, className, interactive = false }: CardProps) {
+const variantClasses: Record<CardVariant, string> = {
+  elevated: 'bg-surface border border-border shadow-card',
+  inset: 'bg-surface-muted border border-border-subtle shadow-none',
+};
+
+export function Card({ children, className, interactive = false, variant = 'elevated' }: CardProps) {
   return (
     <div
       className={cn(
-        'bg-white rounded-xl border border-hcl-border shadow-card',
-        'transition-[box-shadow,transform] duration-200 motion-reduce:transition-none',
+        'rounded-xl transition-[box-shadow,transform] duration-200 motion-reduce:transition-none',
+        variantClasses[variant],
         interactive &&
-          'hover:shadow-card-hover hover:-translate-y-0.5 motion-reduce:hover:translate-y-0 cursor-pointer',
+          'cursor-pointer hover:-translate-y-0.5 hover:shadow-card-hover motion-reduce:hover:translate-y-0',
         className,
       )}
     >
@@ -29,7 +34,7 @@ export function Card({ children, className, interactive = false }: CardProps) {
 
 export function CardHeader({ children, className }: CardProps) {
   return (
-    <div className={cn('px-6 py-4 border-b border-hcl-border', className)}>
+    <div className={cn('border-b border-border px-6 py-4', className)}>
       {children}
     </div>
   );
@@ -44,9 +49,5 @@ export function CardTitle({ children, className }: CardProps) {
 }
 
 export function CardContent({ children, className }: CardProps) {
-  return (
-    <div className={cn('px-6 py-4', className)}>
-      {children}
-    </div>
-  );
+  return <div className={cn('px-6 py-4', className)}>{children}</div>;
 }

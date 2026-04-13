@@ -5,7 +5,8 @@ Dashboard Service Layer - Aggregated metrics and statistics for the dashboard.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from datetime import UTC
+from typing import Any
 
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
@@ -19,7 +20,8 @@ log = logging.getLogger(__name__)
 # Statistics Aggregation
 # ============================================================
 
-def get_stats(db: Session) -> Dict[str, Any]:
+
+def get_stats(db: Session) -> dict[str, Any]:
     """
     Get overall dashboard statistics.
 
@@ -33,21 +35,13 @@ def get_stats(db: Session) -> Dict[str, Any]:
             - total_vulnerabilities: Sum of findings across all runs
             - total_runs: Count of analysis runs
     """
-    total_projects = db.execute(
-        select(func.count(Projects.id)).where(Projects.project_status == 1)
-    ).scalar_one() or 0
+    total_projects = db.execute(select(func.count(Projects.id)).where(Projects.project_status == 1)).scalar_one() or 0
 
-    total_sboms = db.execute(
-        select(func.count(SBOMSource.id))
-    ).scalar_one() or 0
+    total_sboms = db.execute(select(func.count(SBOMSource.id))).scalar_one() or 0
 
-    total_vulns = db.execute(
-        select(func.sum(AnalysisRun.total_findings))
-    ).scalar_one() or 0
+    total_vulns = db.execute(select(func.sum(AnalysisRun.total_findings))).scalar_one() or 0
 
-    total_runs = db.execute(
-        select(func.count(AnalysisRun.id))
-    ).scalar_one() or 0
+    total_runs = db.execute(select(func.count(AnalysisRun.id))).scalar_one() or 0
 
     return {
         "total_projects": total_projects,
@@ -61,7 +55,8 @@ def get_stats(db: Session) -> Dict[str, Any]:
 # Recent Activity
 # ============================================================
 
-def get_recent_sboms(db: Session, limit: int = 5) -> List[Dict[str, Any]]:
+
+def get_recent_sboms(db: Session, limit: int = 5) -> list[dict[str, Any]]:
     """
     Get the most recently created or modified SBOMs.
 
@@ -72,48 +67,52 @@ def get_recent_sboms(db: Session, limit: int = 5) -> List[Dict[str, Any]]:
     Returns:
         List of SBOM dictionaries with id, name, project, created_on, component_count, latest_run
     """
-    sboms = db.execute(
-        select(SBOMSource)
-        .order_by(SBOMSource.created_on.desc())
-        .limit(limit)
-    ).scalars().all()
+    sboms = db.execute(select(SBOMSource).order_by(SBOMSource.created_on.desc()).limit(limit)).scalars().all()
 
     results = []
     for sbom in sboms:
         # Get component count
-        comp_count = db.execute(
-            select(func.count(SBOMComponent.id)).where(SBOMComponent.sbom_id == sbom.id)
-        ).scalar_one() or 0
+        comp_count = (
+            db.execute(select(func.count(SBOMComponent.id)).where(SBOMComponent.sbom_id == sbom.id)).scalar_one() or 0
+        )
 
         # Get latest run
-        latest_run = db.execute(
-            select(AnalysisRun)
-            .where(AnalysisRun.sbom_id == sbom.id)
-            .order_by(AnalysisRun.completed_on.desc())
-            .limit(1)
-        ).scalars().first()
+        latest_run = (
+            db.execute(
+                select(AnalysisRun)
+                .where(AnalysisRun.sbom_id == sbom.id)
+                .order_by(AnalysisRun.completed_on.desc())
+                .limit(1)
+            )
+            .scalars()
+            .first()
+        )
 
         project_name = None
         if sbom.project:
             project_name = sbom.project.project_name
 
-        results.append({
-            "id": sbom.id,
-            "name": sbom.sbom_name,
-            "project": project_name,
-            "created_on": sbom.created_on,
-            "component_count": comp_count,
-            "latest_run": {
-                "status": latest_run.run_status if latest_run else None,
-                "completed_on": latest_run.completed_on if latest_run else None,
-                "total_findings": latest_run.total_findings if latest_run else 0,
-            } if latest_run else None,
-        })
+        results.append(
+            {
+                "id": sbom.id,
+                "name": sbom.sbom_name,
+                "project": project_name,
+                "created_on": sbom.created_on,
+                "component_count": comp_count,
+                "latest_run": {
+                    "status": latest_run.run_status if latest_run else None,
+                    "completed_on": latest_run.completed_on if latest_run else None,
+                    "total_findings": latest_run.total_findings if latest_run else 0,
+                }
+                if latest_run
+                else None,
+            }
+        )
 
     return results
 
 
-def get_activity(db: Session) -> Dict[str, Any]:
+def get_activity(db: Session) -> dict[str, Any]:
     """
     Get activity summary: counts of active vs stale SBOMs and projects.
 
@@ -130,30 +129,34 @@ def get_activity(db: Session) -> Dict[str, Any]:
             - active_projects: Count of projects with recent runs
             - stale_projects: Count of projects without recent runs
     """
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime
 
-    thirty_days_ago = datetime.now(timezone.utc).replace(microsecond=0).isoformat()[:10]
+    thirty_days_ago = datetime.now(UTC).replace(microsecond=0).isoformat()[:10]
 
     # SBOMs with runs in last 30 days
-    active_sbom_ids = db.execute(
-        select(AnalysisRun.sbom_id.distinct())
-        .where(AnalysisRun.completed_on >= thirty_days_ago)
-    ).scalars().all()
+    active_sbom_ids = (
+        db.execute(select(AnalysisRun.sbom_id.distinct()).where(AnalysisRun.completed_on >= thirty_days_ago))
+        .scalars()
+        .all()
+    )
 
     active_sboms = len(set(active_sbom_ids)) if active_sbom_ids else 0
     total_sboms = db.execute(select(func.count(SBOMSource.id))).scalar_one() or 0
     stale_sboms = total_sboms - active_sboms
 
     # Projects with runs in last 30 days
-    active_project_ids = db.execute(
-        select(AnalysisRun.project_id.distinct())
-        .where(and_(AnalysisRun.project_id != None, AnalysisRun.completed_on >= thirty_days_ago))
-    ).scalars().all()
+    active_project_ids = (
+        db.execute(
+            select(AnalysisRun.project_id.distinct()).where(
+                and_(AnalysisRun.project_id != None, AnalysisRun.completed_on >= thirty_days_ago)
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     active_projects = len(set(active_project_ids)) if active_project_ids else 0
-    total_projects = db.execute(
-        select(func.count(Projects.id)).where(Projects.project_status == 1)
-    ).scalar_one() or 0
+    total_projects = db.execute(select(func.count(Projects.id)).where(Projects.project_status == 1)).scalar_one() or 0
     stale_projects = total_projects - active_projects
 
     return {
@@ -168,7 +171,8 @@ def get_activity(db: Session) -> Dict[str, Any]:
 # Severity Distribution
 # ============================================================
 
-def get_severity_distribution(db: Session) -> Dict[str, int]:
+
+def get_severity_distribution(db: Session) -> dict[str, int]:
     """
     Get the distribution of vulnerability severities across all runs.
 
@@ -217,7 +221,8 @@ def get_severity_distribution(db: Session) -> Dict[str, int]:
 # Component Statistics
 # ============================================================
 
-def get_component_stats(db: Session) -> Dict[str, Any]:
+
+def get_component_stats(db: Session) -> dict[str, Any]:
     """
     Get component statistics: total components and those with CPE coverage.
 
@@ -230,14 +235,11 @@ def get_component_stats(db: Session) -> Dict[str, Any]:
             - components_with_cpe: Count of components with CPE defined
             - cpe_coverage_percentage: CPE coverage percentage
     """
-    total_components = db.execute(
-        select(func.count(SBOMComponent.id))
-    ).scalar_one() or 0
+    total_components = db.execute(select(func.count(SBOMComponent.id))).scalar_one() or 0
 
-    components_with_cpe = db.execute(
-        select(func.count(SBOMComponent.id))
-        .where(SBOMComponent.cpe != None)
-    ).scalar_one() or 0
+    components_with_cpe = (
+        db.execute(select(func.count(SBOMComponent.id)).where(SBOMComponent.cpe != None)).scalar_one() or 0
+    )
 
     cpe_coverage = 0.0
     if total_components > 0:
@@ -254,7 +256,8 @@ def get_component_stats(db: Session) -> Dict[str, Any]:
 # Run Statistics
 # ============================================================
 
-def get_run_status_distribution(db: Session) -> Dict[str, int]:
+
+def get_run_status_distribution(db: Session) -> dict[str, int]:
     """
     Get the distribution of analysis run statuses (PASS, FAIL, ERROR, etc.).
 
@@ -265,8 +268,7 @@ def get_run_status_distribution(db: Session) -> Dict[str, int]:
         Dictionary with status counts
     """
     result = db.execute(
-        select(AnalysisRun.run_status, func.count(AnalysisRun.id).label("count"))
-        .group_by(AnalysisRun.run_status)
+        select(AnalysisRun.run_status, func.count(AnalysisRun.id).label("count")).group_by(AnalysisRun.run_status)
     ).all()
 
     distribution = {}
@@ -276,7 +278,7 @@ def get_run_status_distribution(db: Session) -> Dict[str, int]:
     return distribution
 
 
-def get_top_vulnerable_components(db: Session, limit: int = 10) -> List[Dict[str, Any]]:
+def get_top_vulnerable_components(db: Session, limit: int = 10) -> list[dict[str, Any]]:
     """
     Get the components with the most vulnerabilities.
 
@@ -306,17 +308,19 @@ def get_top_vulnerable_components(db: Session, limit: int = 10) -> List[Dict[str
 
     components = []
     for name, version, cpe, count in result:
-        components.append({
-            "name": name,
-            "version": version,
-            "cpe": cpe,
-            "vulnerability_count": count,
-        })
+        components.append(
+            {
+                "name": name,
+                "version": version,
+                "cpe": cpe,
+                "vulnerability_count": count,
+            }
+        )
 
     return components
 
 
-def get_top_vulnerabilities(db: Session, limit: int = 10) -> List[Dict[str, Any]]:
+def get_top_vulnerabilities(db: Session, limit: int = 10) -> list[dict[str, Any]]:
     """
     Get the most frequently occurring vulnerabilities across all components.
 
@@ -345,11 +349,13 @@ def get_top_vulnerabilities(db: Session, limit: int = 10) -> List[Dict[str, Any]
 
     vulns = []
     for vuln_id, title, severity, count in result:
-        vulns.append({
-            "vuln_id": vuln_id,
-            "title": title,
-            "severity": severity,
-            "occurrence_count": count,
-        })
+        vulns.append(
+            {
+                "vuln_id": vuln_id,
+                "title": title,
+                "severity": severity,
+                "occurrence_count": count,
+            }
+        )
 
     return vulns

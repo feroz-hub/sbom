@@ -1,3 +1,4 @@
+import { runStatusDescription, runStatusShortLabel } from '@/lib/analysisRunStatusLabels';
 import { cn } from '@/lib/utils';
 import type { ReactNode } from 'react';
 
@@ -9,11 +10,13 @@ interface BadgeProps {
 
 const variantClasses: Record<string, string> = {
   default: 'bg-hcl-light text-hcl-navy border-hcl-border',
-  success: 'bg-green-50 text-green-700 border-green-200',
-  error: 'bg-red-50 text-red-700 border-red-200',
-  warning: 'bg-amber-50 text-amber-700 border-amber-200',
+  success:
+    'bg-green-50 text-green-800 border-green-200 dark:bg-emerald-950/50 dark:text-emerald-200 dark:border-emerald-800',
+  error: 'bg-red-50 text-red-800 border-red-200 dark:bg-red-950/50 dark:text-red-200 dark:border-red-800',
+  warning:
+    'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/50 dark:text-amber-200 dark:border-amber-800',
   info: 'bg-hcl-light text-hcl-blue border-hcl-border',
-  gray: 'bg-slate-100 text-slate-600 border-slate-200',
+  gray: 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-600',
 };
 
 const BASE =
@@ -23,23 +26,20 @@ export function Badge({ children, variant = 'default', className }: BadgeProps) 
   return <span className={cn(BASE, variantClasses[variant], className)}>{children}</span>;
 }
 
-// ── Severity styling map ─────────────────────────────────────────────────────
-// Two cues per level: colour + a leading dot. Colour-only would fail WCAG 1.4.1
-// (Use of Color) for users with low-contrast vision or colour blindness.
 const severityMap: Record<string, { cls: string; dot: string; label: string }> = {
   CRITICAL: {
-    cls: 'bg-red-50 text-red-800 border-red-300 font-semibold',
-    dot: 'bg-red-600',
+    cls: 'bg-red-50 text-red-900 border-red-300 dark:bg-red-950/60 dark:text-red-100 dark:border-red-700 font-semibold',
+    dot: 'bg-red-600 dark:bg-red-400',
     label: 'Critical severity',
   },
   HIGH: {
-    cls: 'bg-orange-50 text-orange-800 border-orange-300 font-semibold',
-    dot: 'bg-orange-500',
+    cls: 'bg-orange-50 text-orange-900 border-orange-300 dark:bg-orange-950/50 dark:text-orange-100 dark:border-orange-700 font-semibold',
+    dot: 'bg-orange-500 dark:bg-orange-400',
     label: 'High severity',
   },
   MEDIUM: {
-    cls: 'bg-amber-50 text-amber-800 border-amber-300',
-    dot: 'bg-amber-500',
+    cls: 'bg-amber-50 text-amber-900 border-amber-300 dark:bg-amber-950/50 dark:text-amber-100 dark:border-amber-700',
+    dot: 'bg-amber-500 dark:bg-amber-400',
     label: 'Medium severity',
   },
   LOW: {
@@ -48,8 +48,8 @@ const severityMap: Record<string, { cls: string; dot: string; label: string }> =
     label: 'Low severity',
   },
   UNKNOWN: {
-    cls: 'bg-slate-100 text-slate-600 border-slate-200',
-    dot: 'bg-slate-400',
+    cls: 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-600',
+    dot: 'bg-slate-400 dark:bg-slate-500',
     label: 'Unknown severity',
   },
 };
@@ -65,23 +65,50 @@ export function SeverityBadge({ severity }: { severity: string }) {
   );
 }
 
-// ── Status styling map ───────────────────────────────────────────────────────
-const statusMap: Record<string, { cls: string; dot: string; label: string }> = {
-  PASS:    { cls: 'bg-green-50 text-green-800 border-green-200',   dot: 'bg-green-500', label: 'Passed' },
-  FAIL:    { cls: 'bg-red-50 text-red-800 border-red-200',         dot: 'bg-red-500',   label: 'Failed' },
-  PARTIAL: { cls: 'bg-amber-50 text-amber-800 border-amber-200',   dot: 'bg-amber-500', label: 'Partial' },
-  ERROR:   { cls: 'bg-red-50 text-red-800 border-red-200',         dot: 'bg-red-500',   label: 'Error' },
-  RUNNING: { cls: 'bg-hcl-light text-hcl-blue border-hcl-border',  dot: 'bg-hcl-blue animate-pulse motion-reduce:animate-none', label: 'Running' },
-  PENDING: { cls: 'bg-slate-100 text-slate-600 border-slate-200',  dot: 'bg-slate-400', label: 'Pending' },
+const statusMap: Record<string, { cls: string; dot: string }> = {
+  PASS: {
+    cls: 'bg-green-50 text-green-800 border-green-200 dark:bg-emerald-950/50 dark:text-emerald-200 dark:border-emerald-800',
+    dot: 'bg-green-500',
+  },
+  FAIL: {
+    cls: 'bg-red-50 text-red-800 border-red-200 dark:bg-red-950/50 dark:text-red-200 dark:border-red-800',
+    dot: 'bg-red-500',
+  },
+  PARTIAL: {
+    cls: 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/50 dark:text-amber-200 dark:border-amber-800',
+    dot: 'bg-amber-500',
+  },
+  ERROR: {
+    cls: 'bg-red-50 text-red-800 border-red-200 dark:bg-red-950/50 dark:text-red-200 dark:border-red-800',
+    dot: 'bg-red-500',
+  },
+  RUNNING: {
+    cls: 'bg-hcl-light text-hcl-blue border-hcl-border',
+    dot: 'bg-hcl-blue animate-pulse motion-reduce:animate-none',
+  },
+  PENDING: {
+    cls: 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600',
+    dot: 'bg-slate-400 dark:bg-slate-500',
+  },
+  NO_DATA: {
+    cls: 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600',
+    dot: 'bg-slate-400 dark:bg-slate-500',
+  },
 };
 
 export function StatusBadge({ status }: { status: string }) {
   const key = status?.toUpperCase() ?? 'PENDING';
   const entry = statusMap[key] ?? statusMap.PENDING;
+  const short = runStatusShortLabel(status);
+  const help = runStatusDescription(status);
   return (
-    <span className={cn(BASE, 'gap-1.5', entry.cls)} aria-label={entry.label}>
-      <span className={cn('h-1.5 w-1.5 rounded-full', entry.dot)} aria-hidden="true" />
-      {status}
+    <span
+      className={cn(BASE, 'max-w-full cursor-help gap-1.5', entry.cls)}
+      title={help}
+      aria-label={help}
+    >
+      <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', entry.dot)} aria-hidden="true" />
+      <span className="min-w-0 truncate">{short}</span>
     </span>
   );
 }

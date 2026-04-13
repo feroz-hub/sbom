@@ -1,11 +1,12 @@
 'use client';
 
-import { useMemo } from 'react';
+import { Suspense, useMemo } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, GitCompareArrows, Minus, Plus } from 'lucide-react';
 import { TopBar } from '@/components/layout/TopBar';
+import { Alert } from '@/components/ui/Alert';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { PageSpinner } from '@/components/ui/Spinner';
 import { compareRuns } from '@/lib/api';
@@ -17,7 +18,7 @@ function parseRunId(value: string | null): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-export default function CompareRunsPage() {
+function CompareRunsPageInner() {
   const params = useSearchParams();
   const router = useRouter();
 
@@ -44,7 +45,13 @@ export default function CompareRunsPage() {
 
   return (
     <div className="flex flex-col flex-1">
-      <TopBar title="Compare Analysis Runs" />
+      <TopBar
+        title="Compare Analysis Runs"
+        breadcrumbs={[
+          { label: 'Analysis Runs', href: '/analysis' },
+          { label: 'Compare' },
+        ]}
+      />
       <div className="p-6 space-y-6">
         <button
           onClick={() => router.back()}
@@ -82,9 +89,9 @@ export default function CompareRunsPage() {
         )}
 
         {canQuery && error && (
-          <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
-            Failed to compare runs: {(error as Error).message}
-          </div>
+          <Alert variant="error" title="Could not compare runs">
+            {(error as Error).message}
+          </Alert>
         )}
 
         {canQuery && data && (
@@ -190,13 +197,36 @@ export default function CompareRunsPage() {
                 title="Common"
                 items={data.common_findings}
                 emptyMsg="No overlap."
-                accent="text-slate-700"
+                accent="text-foreground/90"
               />
             </div>
           </>
         )}
       </div>
     </div>
+  );
+}
+
+export default function CompareRunsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex flex-1 flex-col">
+          <TopBar
+        title="Compare Analysis Runs"
+        breadcrumbs={[
+          { label: 'Analysis Runs', href: '/analysis' },
+          { label: 'Compare' },
+        ]}
+      />
+          <div className="p-6">
+            <PageSpinner />
+          </div>
+        </div>
+      }
+    >
+      <CompareRunsPageInner />
+    </Suspense>
   );
 }
 
@@ -213,10 +243,10 @@ function SummaryTile({
 }) {
   const toneClass =
     tone === 'negative'
-      ? 'bg-red-50 border-red-200 text-red-700'
+      ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200'
       : tone === 'positive'
-        ? 'bg-green-50 border-green-200 text-green-700'
-        : 'bg-slate-50 border-slate-200 text-slate-700';
+        ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200'
+        : 'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-600 dark:bg-slate-800/80 dark:text-slate-200';
   return (
     <Card>
       <CardContent>

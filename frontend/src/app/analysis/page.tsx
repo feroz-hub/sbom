@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/Input';
 import { Card, CardContent } from '@/components/ui/Card';
 import { RunsTable } from '@/components/analysis/RunsTable';
 import { getRuns, getProjects, getSboms, analyzeConsolidated, downloadPdfReport, exportRunsJson, getAnalysisConfig } from '@/lib/api';
+import { runStatusShortLabel } from '@/lib/analysisRunStatusLabels';
 import { downloadBlob } from '@/lib/utils';
 import { useToast } from '@/hooks/useToast';
 import type { ConsolidatedAnalysisResult } from '@/types';
@@ -181,16 +182,62 @@ export default function AnalysisPage() {
         {summary && (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
             {[
-              { label: 'Total Runs',     value: summary.total,    icon: Layers,         color: 'text-hcl-blue  bg-hcl-light',  border: 'border-l-hcl-blue'  },
-              { label: 'Pass',           value: summary.pass,     icon: CheckCircle2,   color: 'text-green-600 bg-green-50',   border: 'border-l-green-500' },
-              { label: 'Fail',           value: summary.fail,     icon: XCircle,        color: 'text-red-600   bg-red-50',     border: 'border-l-red-500'   },
-              { label: 'Partial',        value: summary.partial,  icon: ActivityIcon,   color: 'text-amber-600 bg-amber-50',   border: 'border-l-amber-500' },
-              { label: 'Errors',         value: summary.errors,   icon: AlertTriangle,  color: 'text-orange-600 bg-orange-50', border: 'border-l-orange-500'},
-              { label: 'Total Findings', value: summary.findings, icon: AlertTriangle,  color: 'text-red-600   bg-red-50',     border: 'border-l-red-500'   },
-            ].map(({ label, value, icon: Icon, color, border }) => (
-              <div key={label} className={`bg-white rounded-xl border border-hcl-border shadow-card border-l-4 ${border} px-4 py-3`}>
+              {
+                label: 'Total runs',
+                hint: 'All loaded runs in the table below.',
+                value: summary.total,
+                icon: Layers,
+                color: 'text-hcl-blue  bg-hcl-light',
+                border: 'border-l-hcl-blue',
+              },
+              {
+                label: 'Runs — no issues',
+                hint: 'Runs that reported zero vulnerabilities (PASS).',
+                value: summary.pass,
+                icon: CheckCircle2,
+                color: 'text-green-600 bg-green-50',
+                border: 'border-l-green-500',
+              },
+              {
+                label: 'Runs — with findings',
+                hint: 'Runs where at least one vulnerability was reported (FAIL). Not a system failure.',
+                value: summary.fail,
+                icon: XCircle,
+                color: 'text-red-600   bg-red-50',
+                border: 'border-l-red-500',
+              },
+              {
+                label: 'Runs — source errors',
+                hint: 'Runs with lookup/API issues; findings may be incomplete (PARTIAL).',
+                value: summary.partial,
+                icon: ActivityIcon,
+                color: 'text-amber-600 bg-amber-50',
+                border: 'border-l-amber-500',
+              },
+              {
+                label: 'Runs — failed',
+                hint: 'Runs that ended in ERROR.',
+                value: summary.errors,
+                icon: AlertTriangle,
+                color: 'text-orange-600 bg-orange-50',
+                border: 'border-l-orange-500',
+              },
+              {
+                label: 'Total findings',
+                hint: 'Sum of vulnerability counts across loaded runs.',
+                value: summary.findings,
+                icon: AlertTriangle,
+                color: 'text-red-600   bg-red-50',
+                border: 'border-l-red-500',
+              },
+            ].map(({ label, hint, value, icon: Icon, color, border }) => (
+              <div
+                key={label}
+                title={hint}
+                className={`bg-surface rounded-xl border border-hcl-border shadow-card border-l-4 ${border} px-4 py-3`}
+              >
                 <div className="flex items-center justify-between">
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-xs font-medium text-hcl-muted">{label}</p>
                     <p className="mt-0.5 text-2xl font-bold text-hcl-navy">{value.toLocaleString()}</p>
                   </div>
@@ -204,7 +251,7 @@ export default function AnalysisPage() {
         )}
 
         {/* ── Filters ─────────────────────────────────────────────────────── */}
-        <div className="flex flex-wrap gap-3 bg-white rounded-xl border border-hcl-border shadow-card p-4">
+        <div className="flex flex-wrap gap-3 bg-surface rounded-xl border border-hcl-border shadow-card p-4">
           <Select
             value={projectFilter}
             onChange={(e) => setProjectFilter(e.target.value)}
@@ -234,16 +281,17 @@ export default function AnalysisPage() {
           <Select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="w-44"
-            placeholder="All Statuses"
+            className="w-56"
+            placeholder="All outcomes"
           >
-            <option value="PASS">PASS</option>
-            <option value="FAIL">FAIL</option>
-            <option value="PARTIAL">PARTIAL</option>
-            <option value="NO_DATA">NO_DATA</option>
-            <option value="ERROR">ERROR</option>
-            <option value="RUNNING">RUNNING</option>
-            <option value="PENDING">PENDING</option>
+            <option value="">All outcomes</option>
+            <option value="PASS">{runStatusShortLabel('PASS')}</option>
+            <option value="FAIL">{runStatusShortLabel('FAIL')}</option>
+            <option value="PARTIAL">{runStatusShortLabel('PARTIAL')}</option>
+            <option value="NO_DATA">{runStatusShortLabel('NO_DATA')}</option>
+            <option value="ERROR">{runStatusShortLabel('ERROR')}</option>
+            <option value="RUNNING">{runStatusShortLabel('RUNNING')}</option>
+            <option value="PENDING">{runStatusShortLabel('PENDING')}</option>
           </Select>
 
           {(projectFilter || sbomFilter || statusFilter) && (
@@ -266,7 +314,7 @@ export default function AnalysisPage() {
         />
 
         {/* ── Consolidated Analysis ────────────────────────────────────────── */}
-        <div className="bg-white rounded-xl border border-hcl-border shadow-card overflow-hidden">
+        <div className="bg-surface rounded-xl border border-hcl-border shadow-card overflow-hidden">
           <div className="px-6 py-4 border-b-2 border-hcl-border bg-hcl-light/40 flex items-center gap-2.5">
             <div className="w-1 h-5 rounded-full bg-hcl-cyan shrink-0" />
             <h2 className="text-base font-semibold text-hcl-navy">Consolidated Analysis (NVD + GHSA + OSV)</h2>

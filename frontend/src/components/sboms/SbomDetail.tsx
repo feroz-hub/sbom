@@ -183,7 +183,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
             </CardTitle>
           </CardHeader>
           <div className="overflow-hidden">
-            <Table>
+            <Table striped>
               <TableHead>
                 <tr>
                   <Th>Component</Th>
@@ -242,7 +242,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
           </CardTitle>
         </CardHeader>
         <div className="overflow-hidden">
-          <Table>
+          <Table striped>
             <TableHead>
               <tr>
                 <Th>Name</Th>
@@ -283,7 +283,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
           <CardTitle>Analysis Runs</CardTitle>
         </CardHeader>
         <div className="overflow-hidden">
-          <Table>
+          <Table striped>
             <TableHead>
               <tr>
                 <Th>Run ID</Th>
@@ -306,7 +306,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                     <Td>
                       <StatusBadge status={run.run_status} />
                     </Td>
-                    <Td className="text-slate-700">{run.total_findings ?? '—'}</Td>
+                    <Td className="text-foreground/90">{run.total_findings ?? '—'}</Td>
                     <Td className="text-hcl-muted">{formatDuration(run.duration_ms)}</Td>
                     <Td className="text-hcl-muted whitespace-nowrap">{formatDate(run.started_on)}</Td>
                     <Td className="text-right">

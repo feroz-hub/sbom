@@ -29,7 +29,9 @@ function Shell({ children }: { children: React.ReactNode }) {
           'focus-visible:outline-none',
         )}
       >
-        {children}
+        <div className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col min-h-0">
+          {children}
+        </div>
       </main>
     </div>
   );

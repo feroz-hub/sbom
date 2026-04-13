@@ -3,6 +3,7 @@
 import { use } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { TopBar } from '@/components/layout/TopBar';
+import { Alert } from '@/components/ui/Alert';
 import { PageSpinner } from '@/components/ui/Spinner';
 import { SbomDetail } from '@/components/sboms/SbomDetail';
 import { getSbom } from '@/lib/api';
@@ -35,11 +36,11 @@ export default function SbomDetailPage({ params }: SbomDetailPageProps) {
   if (error || !sbom) {
     return (
       <div className="flex flex-col flex-1">
-        <TopBar title="SBOM Detail" />
+        <TopBar title="SBOM Detail" breadcrumbs={[{ label: 'SBOMs', href: '/sboms' }]} />
         <div className="p-6">
-          <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
-            {error ? `Failed to load SBOM: ${error.message}` : 'SBOM not found'}
-          </div>
+          <Alert variant="error" title={error ? 'Could not load SBOM' : 'Not found'}>
+            {error ? error.message : 'This SBOM does not exist or was removed.'}
+          </Alert>
         </div>
       </div>
     );
@@ -47,7 +48,7 @@ export default function SbomDetailPage({ params }: SbomDetailPageProps) {
 
   return (
     <div className="flex flex-col flex-1">
-      <TopBar title={sbom.sbom_name} />
+      <TopBar title={sbom.sbom_name} breadcrumbs={[{ label: 'SBOMs', href: '/sboms' }]} />
       <div className="p-6">
         <SbomDetail sbom={sbom} />
       </div>

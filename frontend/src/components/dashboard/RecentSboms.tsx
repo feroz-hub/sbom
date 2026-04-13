@@ -17,7 +17,7 @@ export function RecentSboms({ sboms, isLoading }: RecentSbomsProps) {
         <CardTitle>Recent SBOMs</CardTitle>
         <Link
           href="/sboms"
-          className="text-xs text-hcl-blue font-medium flex items-center gap-1 hover:text-hcl-dark hover:underline transition-colors"
+          className="flex items-center gap-1 text-xs font-medium text-primary transition-colors hover:text-hcl-dark hover:underline"
         >
           View all <ArrowRight className="h-3 w-3" />
         </Link>
@@ -30,7 +30,7 @@ export function RecentSboms({ sboms, isLoading }: RecentSbomsProps) {
         ) : !sboms?.length ? (
           <div className="text-center py-10 text-hcl-muted text-sm">No SBOMs uploaded yet</div>
         ) : (
-          <ul className="divide-y divide-gray-100">
+          <ul className="divide-y divide-border">
             {sboms.map((sbom) => (
               <li key={sbom.id}>
                 <Link

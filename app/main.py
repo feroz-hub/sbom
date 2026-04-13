@@ -24,13 +24,16 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Optional
+from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy import text
+from starlette.middleware.gzip import GZipMiddleware
 
-from .logger import setup_logging, get_logger
+from .logger import get_logger, setup_logging
 
 # Initialise logging FIRST so subsequent imports inherit the config.
 setup_logging()
@@ -38,85 +41,37 @@ log = get_logger("api")
 
 from .auth import require_auth, validate_auth_setup
 from .db import Base, SessionLocal, engine
-from .settings import get_settings
-from .services.analysis_service import backfill_analytics_tables
-from .services.sbom_service import now_iso  # re-exported for tests/back-compat
+from .http_client import close_async_http_client, init_async_http_client
+from .rate_limit import limiter, rate_limit_exceeded_handler
+from .routers import analysis as analysis_export_router
 
 # --- Routers --------------------------------------------------------------
 from .routers import (
-    health,
-    sboms_crud,
-    runs,
-    projects,
     analyze_endpoints,
-    pdf,
     dashboard_main,
+    health,
+    pdf,
+    projects,
+    runs,
+    sboms_crud,
 )
-from .routers import analysis as analysis_export_router
-from .routers import sbom as sbom_features_router
 from .routers import dashboard as dashboard_trend_router
+from .routers import sbom as sbom_features_router
+from .services.analysis_service import backfill_analytics_tables
+from .services.sbom_service import now_iso  # re-exported for tests/back-compat
+from .settings import get_settings
 
 # --- App construction ----------------------------------------------------
 settings = get_settings()
 APP_VERSION = settings.APP_VERSION
 
-app = FastAPI(title="SBOM & Projects API", version=APP_VERSION)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins_list,
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# --- Request / response logging middleware ------------------------------
-_access_log = get_logger("access")
-
-
-@app.middleware("http")
-async def log_requests(request: Request, call_next):
-    """Log every incoming request and its response status + duration."""
-    t0 = time.perf_counter()
-    _access_log.debug(
-        "→ %s %s  client=%s",
-        request.method,
-        request.url.path,
-        request.client.host if request.client else "unknown",
-    )
-    try:
-        response = await call_next(request)
-    except Exception as exc:
-        _access_log.error(
-            "✗ %s %s  UNHANDLED %s: %s",
-            request.method,
-            request.url.path,
-            type(exc).__name__,
-            exc,
-            exc_info=True,
-        )
-        raise
-    duration_ms = int((time.perf_counter() - t0) * 1000)
-    level = logging.WARNING if response.status_code >= 400 else logging.DEBUG
-    _access_log.log(
-        level,
-        "← %s %s  status=%d  %dms",
-        request.method,
-        request.url.path,
-        response.status_code,
-        duration_ms,
-    )
-    return response
-
-
-# --- DB schema migrations / seed ----------------------------------------
 def _ensure_text_column(table_name: str, column_name: str) -> None:
     """Idempotent ALTER TABLE … ADD COLUMN for SQLite text columns."""
+    if engine.dialect.name != "sqlite":
+        return
     with engine.connect() as conn:
-        existing = {
-            row[1]
-            for row in conn.execute(text(f"PRAGMA table_info({table_name})"))
-        }
+        existing = {row[1] for row in conn.execute(text(f"PRAGMA table_info({table_name})"))}
         if column_name in existing:
             return
         conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} TEXT"))
@@ -139,21 +94,14 @@ def _ensure_seed_data() -> None:
 
     db = SessionLocal()
     try:
-        db.execute(
-            text(
-                "CREATE UNIQUE INDEX IF NOT EXISTS uq_sbom_type_typename "
-                "ON sbom_type(typename)"
-            )
-        )
+        db.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_sbom_type_typename ON sbom_type(typename)"))
 
         # Seed default SBOM types
         from sqlalchemy import select
+
         from .models import SBOMType
 
-        existing = {
-            (row.typename or "").strip().lower()
-            for row in db.execute(select(SBOMType)).scalars().all()
-        }
+        existing = {(row.typename or "").strip().lower() for row in db.execute(select(SBOMType)).scalars().all()}
         seeds = []
         if "cyclonedx" not in existing:
             seeds.append(
@@ -199,16 +147,72 @@ def _update_sbom_names() -> None:
         )
 
 
-@app.on_event("startup")
-def on_startup() -> None:
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await init_async_http_client()
     log.info("SBOM Analyzer starting up — initialising database …")
     _ensure_seed_data()
     _update_sbom_names()
-    # Refuse to come up if API_AUTH_MODE='bearer' is set without any
-    # tokens configured. Better to crash loudly than silently let every
-    # request through.
     validate_auth_setup()
     log.info("Startup complete. API ready.")
+    yield
+    await close_async_http_client()
+    log.info("Async HTTP client closed.")
+
+
+app = FastAPI(title="SBOM & Projects API", version=APP_VERSION, lifespan=lifespan)
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins_list,
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+# --- Request / response logging middleware ------------------------------
+_access_log = get_logger("access")
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Log every incoming request and its response status + duration."""
+    t0 = time.perf_counter()
+    _access_log.debug(
+        "→ %s %s  client=%s",
+        request.method,
+        request.url.path,
+        request.client.host if request.client else "unknown",
+    )
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        _access_log.error(
+            "✗ %s %s  UNHANDLED %s: %s",
+            request.method,
+            request.url.path,
+            type(exc).__name__,
+            exc,
+            exc_info=True,
+        )
+        raise
+    duration_ms = int((time.perf_counter() - t0) * 1000)
+    level = logging.WARNING if response.status_code >= 400 else logging.DEBUG
+    _access_log.log(
+        level,
+        "← %s %s  status=%d  %dms",
+        request.method,
+        request.url.path,
+        response.status_code,
+        duration_ms,
+    )
+    return response
 
 
 # --- Router registration -------------------------------------------------

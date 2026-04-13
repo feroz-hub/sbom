@@ -16,15 +16,14 @@ Covers:
       - mode=bearer + no tokens → AuthConfigError
       - unknown mode → AuthConfigError
 
-The auth dependency reads ``os.environ`` directly each request (see the
-"why we don't use Settings" note at the top of ``app/auth.py``), so
-``monkeypatch.setenv`` is sufficient — no settings cache reset is needed.
+``API_AUTH_MODE`` / ``API_AUTH_TOKENS`` are read from ``os.environ`` each
+request so ``monkeypatch.setenv`` works. JWT validation reads secrets from
+``get_settings()`` — call ``reset_settings()`` when tests change JWT env vars.
 """
 
 from __future__ import annotations
 
 import pytest
-
 from app.auth import AuthConfigError, _read_tokens, validate_auth_setup
 
 
@@ -41,6 +40,7 @@ def _set_auth_env(monkeypatch, *, mode: str, tokens: str = "") -> None:
 # Mode = none
 # ---------------------------------------------------------------------------
 
+
 def test_mode_none_lets_unauthenticated_requests_through(client, monkeypatch):
     _set_auth_env(monkeypatch, mode="none")
     resp = client.get("/api/types")
@@ -50,6 +50,7 @@ def test_mode_none_lets_unauthenticated_requests_through(client, monkeypatch):
 # ---------------------------------------------------------------------------
 # Mode = bearer
 # ---------------------------------------------------------------------------
+
 
 def test_mode_bearer_rejects_missing_authorization_header(client, monkeypatch):
     _set_auth_env(monkeypatch, mode="bearer", tokens="tok-good-1,tok-good-2")
@@ -103,6 +104,7 @@ def test_mode_bearer_accepts_token_with_case_insensitive_scheme(client, monkeypa
 # Unprotected endpoints stay reachable in mode=bearer
 # ---------------------------------------------------------------------------
 
+
 def test_unprotected_routes_stay_open_in_bearer_mode(client, monkeypatch):
     """
     `/`, `/health` are unprotected by design — liveness probes and
@@ -123,6 +125,7 @@ def test_unprotected_routes_stay_open_in_bearer_mode(client, monkeypatch):
 # Protected endpoints in health.py also enforce auth
 # ---------------------------------------------------------------------------
 
+
 def test_analysis_config_endpoint_is_protected(client, monkeypatch):
     """
     `/api/analysis/config` exposes feature flags and env-var names — it
@@ -142,6 +145,7 @@ def test_analysis_config_endpoint_is_protected(client, monkeypatch):
 # ---------------------------------------------------------------------------
 # Startup validator
 # ---------------------------------------------------------------------------
+
 
 def test_validate_auth_setup_raises_when_bearer_mode_has_no_tokens(monkeypatch):
     """
@@ -174,3 +178,65 @@ def test_validate_auth_setup_no_op_in_none_mode(monkeypatch):
     monkeypatch.setenv("API_AUTH_MODE", "none")
     monkeypatch.delenv("API_AUTH_TOKENS", raising=False)
     validate_auth_setup()  # must not raise
+
+
+# ---------------------------------------------------------------------------
+# Mode = jwt
+# ---------------------------------------------------------------------------
+
+
+def test_validate_auth_setup_passes_when_jwt_mode_has_secret(monkeypatch):
+    monkeypatch.setenv("API_AUTH_MODE", "jwt")
+    monkeypatch.setenv("JWT_SECRET_KEY", "ok-secret")
+    from app.settings import reset_settings
+
+    reset_settings()
+    validate_auth_setup()
+
+
+def test_validate_auth_setup_jwt_requires_secret(monkeypatch):
+    monkeypatch.setenv("API_AUTH_MODE", "jwt")
+    monkeypatch.delenv("JWT_SECRET_KEY", raising=False)
+    from app.settings import reset_settings
+
+    reset_settings()
+    with pytest.raises(AuthConfigError, match="JWT_SECRET_KEY"):
+        validate_auth_setup()
+
+
+def test_mode_jwt_accepts_valid_token(app, monkeypatch):
+    import jwt as pyjwt
+
+    monkeypatch.setenv("API_AUTH_MODE", "jwt")
+    monkeypatch.setenv("JWT_SECRET_KEY", "unit-test-secret")
+    from app.settings import reset_settings
+
+    reset_settings()
+    token = pyjwt.encode({"sub": "test"}, "unit-test-secret", algorithm="HS256")
+    if isinstance(token, bytes):
+        token = token.decode("utf-8")
+
+    from fastapi.testclient import TestClient
+
+    with TestClient(app) as client:
+        resp = client.get("/api/types", headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 200, resp.text
+
+
+def test_mode_jwt_rejects_bad_signature(app, monkeypatch):
+    import jwt as pyjwt
+
+    monkeypatch.setenv("API_AUTH_MODE", "jwt")
+    monkeypatch.setenv("JWT_SECRET_KEY", "unit-test-secret")
+    from app.settings import reset_settings
+
+    reset_settings()
+    token = pyjwt.encode({"sub": "x"}, "wrong-secret", algorithm="HS256")
+    if isinstance(token, bytes):
+        token = token.decode("utf-8")
+
+    from fastapi.testclient import TestClient
+
+    with TestClient(app) as client:
+        resp = client.get("/api/types", headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 401

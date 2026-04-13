@@ -204,7 +204,7 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
                 type="button"
                 onClick={() => fileRef.current?.click()}
                 disabled={uploading}
-                className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-hcl-navy bg-white border border-hcl-border rounded-lg hover:bg-hcl-light transition-colors disabled:opacity-50"
+                className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-hcl-navy bg-surface border border-hcl-border rounded-lg hover:bg-hcl-light transition-colors disabled:opacity-50"
               >
                 <Upload className="h-3.5 w-3.5" />
                 Upload from file

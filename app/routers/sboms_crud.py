@@ -11,57 +11,65 @@ Routes:
   POST /api/sboms/{sbom_id}/analyze     trigger manual analysis
   POST /api/sboms/{sbom_id}/analyze/stream   streaming analysis with SSE
 """
+
 import asyncio
 import json
 import logging
-import os
 import re
 import time
-from datetime import datetime, timezone
-from typing import Any, Optional, List, Dict, Tuple
-from urllib.parse import unquote
+from datetime import UTC, datetime
+from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status, Path, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query, Request, Response, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import select, delete, func
-from sqlalchemy.orm import Session
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.orm import Session
 
+from ..analysis import (
+    _augment_components_with_cpe,
+    analyze_sbom_multi_source_async,
+    deduplicate_findings,
+    enrich_component_for_osv,
+    extract_components,
+    get_analysis_settings_multi,
+)
+from ..credentials import github_token_for_adapters, nvd_api_key_for_adapters
 from ..db import get_db
+from ..idempotency import (
+    analysis_run_to_dict,
+    get_cached,
+    normalize_idempotency_key,
+    put_cached,
+    run_idempotent,
+)
 from ..models import (
+    AnalysisFinding,
+    AnalysisRun,
     Projects,
+    SBOMAnalysisReport,
+    SBOMComponent,
     SBOMSource,
     SBOMType,
-    SBOMComponent,
-    AnalysisRun,
-    AnalysisFinding,
-    SBOMAnalysisReport,
 )
+from ..rate_limit import analyze_route_limit
 from ..schemas import (
+    AnalysisRunOut,
+    SBOMComponentOut,
     SBOMSourceCreate,
     SBOMSourceOut,
     SBOMSourceUpdate,
-    SBOMComponentOut,
-    AnalysisRunOut,
-)
-from ..analysis import (
-    get_analysis_settings_multi,
-    extract_components,
-    _augment_components_with_cpe,
-    enrich_component_for_osv,
-    deduplicate_findings,
-    analyze_sbom_multi_source_async,
 )
 from ..sources import (
+    EVENT_COMPLETE,
+    EVENT_DONE,
+    EVENT_ERROR,
+    EVENT_RUNNING,
+    GhsaSource,
     NvdSource,
     OsvSource,
-    GhsaSource,
     run_sources_concurrently,
-    EVENT_RUNNING,
-    EVENT_COMPLETE,
-    EVENT_ERROR,
-    EVENT_DONE,
 )
 
 log = logging.getLogger(__name__)
@@ -71,11 +79,12 @@ router = APIRouter(prefix="/api", tags=["sboms"])
 
 # ---- Helper Functions ----
 
+
 def now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    return datetime.now(UTC).replace(microsecond=0).isoformat()
 
 
-def _coerce_sbom_data(value: Any) -> Optional[str]:
+def _coerce_sbom_data(value: Any) -> str | None:
     """
     Ensure sbom_data is always stored as a JSON string in the DB Text column,
     even if the client sends a dict/list. Leave strings as-is.
@@ -87,14 +96,12 @@ def _coerce_sbom_data(value: Any) -> Optional[str]:
     return value if isinstance(value, str) else str(value)
 
 
-def normalized_key(value: Optional[str]) -> str:
+def normalized_key(value: str | None) -> str:
     return (value or "").strip().lower()
 
 
 def upsert_components(db: Session, sbom_obj: SBOMSource, components: list[dict]) -> dict:
-    existing_rows = db.execute(
-        select(SBOMComponent).where(SBOMComponent.sbom_id == sbom_obj.id)
-    ).scalars().all()
+    existing_rows = db.execute(select(SBOMComponent).where(SBOMComponent.sbom_id == sbom_obj.id)).scalars().all()
 
     by_comp_triplet = {}
     by_cpe = {}
@@ -263,14 +270,16 @@ def persist_analysis_run(
             cwe=cwe_value,
             attack_vector=(finding_raw.get("attack_vector") or "").strip() or None,
             aliases=aliases_json,
-            fixed_versions=json.dumps(finding_raw.get("fixed_versions", [])) if finding_raw.get("fixed_versions") else None,
+            fixed_versions=json.dumps(finding_raw.get("fixed_versions", []))
+            if finding_raw.get("fixed_versions")
+            else None,
         )
         db.add(finding)
 
     return run
 
 
-async def create_auto_report(db: Session, sbom_obj: SBOMSource) -> Optional[AnalysisRun]:
+async def create_auto_report(db: Session, sbom_obj: SBOMSource) -> AnalysisRun | None:
     """
     Trigger default multi-source analysis for an SBOM and persist the run.
 
@@ -311,8 +320,8 @@ async def create_auto_report(db: Session, sbom_obj: SBOMSource) -> Optional[Anal
         log.error("Auto-analysis failed for SBOM id=%d: %s", sbom_obj.id, exc, exc_info=True)
         return None
 
-    all_errors: List[dict] = list(details.get("query_errors") or [])
-    final_findings: List[dict] = list(details.get("findings") or [])
+    all_errors: list[dict] = list(details.get("query_errors") or [])
+    final_findings: list[dict] = list(details.get("findings") or [])
     sources_used = (details.get("analysis_metadata") or {}).get("sources") or [
         "NVD",
         "OSV",
@@ -346,9 +355,7 @@ def _sse_event(event_type: str, data: dict) -> str:
 
 
 class AnalyzeStreamPayload(BaseModel):
-    sources: Optional[List[str]] = ["NVD", "OSV", "GITHUB"]
-    nvd_api_key: Optional[str] = None
-    github_token: Optional[str] = None
+    sources: list[str] | None = ["NVD", "OSV", "GITHUB"]
 
 
 # ---- Validation Helper ----
@@ -356,7 +363,7 @@ class AnalyzeStreamPayload(BaseModel):
 _USER_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 
 
-def _validate_user_id(raw: Optional[str]) -> Optional[str]:
+def _validate_user_id(raw: str | None) -> str | None:
     if raw is None:
         return None
     user_id = raw.strip()
@@ -380,6 +387,7 @@ def _validate_positive_int(value: int, param_name: str = "id") -> int:
 
 # ---- Routes ----
 
+
 @router.get("/sboms/{sbom_id}", response_model=SBOMSourceOut)
 def get_sbom(sbom_id: int, db: Session = Depends(get_db)):
     sbom = db.get(SBOMSource, sbom_id)
@@ -401,14 +409,15 @@ def create_sbom(payload: SBOMSourceCreate, db: Session = Depends(get_db)):
 
     # --- Preflight duplicate check on name (global uniqueness) ---
     if payload.sbom_name:
-        exists = db.execute(
-            select(SBOMSource.id).where(SBOMSource.sbom_name == payload.sbom_name.strip())
-        ).first()
+        exists = db.execute(select(SBOMSource.id).where(SBOMSource.sbom_name == payload.sbom_name.strip())).first()
         if exists:
             log.warning("create_sbom: duplicate name '%s'", payload.sbom_name)
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail={"code": "duplicate_name", "message": f"An SBOM with name '{payload.sbom_name}' already exists."}
+                detail={
+                    "code": "duplicate_name",
+                    "message": f"An SBOM with name '{payload.sbom_name}' already exists.",
+                },
             )
 
     try:
@@ -437,18 +446,20 @@ def create_sbom(payload: SBOMSourceCreate, db: Session = Depends(get_db)):
         if "UNIQUE" in msg.upper() and "sbom_name" in msg:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail={"code": "duplicate_name", "message": f"An SBOM with name '{payload.sbom_name}' already exists."}
+                detail={
+                    "code": "duplicate_name",
+                    "message": f"An SBOM with name '{payload.sbom_name}' already exists.",
+                },
             ) from exc
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail={"code": "integrity_error", "message": "Integrity constraint violated while creating SBOM."}
+            detail={"code": "integrity_error", "message": "Integrity constraint violated while creating SBOM."},
         ) from exc
     except SQLAlchemyError as exc:
         db.rollback()
         log.error("create_sbom DB error: %s", exc, exc_info=True)
         raise HTTPException(
-            status_code=500,
-            detail={"code": "db_error", "message": "Internal database error while creating SBOM."}
+            status_code=500, detail={"code": "db_error", "message": "Internal database error while creating SBOM."}
         ) from exc
     except HTTPException:
         db.rollback()
@@ -456,23 +467,25 @@ def create_sbom(payload: SBOMSourceCreate, db: Session = Depends(get_db)):
     except Exception:
         db.rollback()
         raise HTTPException(
-            status_code=500,
-            detail={"code": "unexpected", "message": "Unexpected error while creating SBOM."}
+            status_code=500, detail={"code": "unexpected", "message": "Unexpected error while creating SBOM."}
         )
 
 
-@router.get("/sboms", response_model=List[SBOMSourceOut])
+@router.get("/sboms", response_model=list[SBOMSourceOut])
 def get_sbom_details(
-    user_id: Optional[str] = Query(None, description="Filter by CreatedBy (letters/digits/_/./-, 1–64 chars)"),
-    page: int = Query(1, ge=1, description="Page number (>=1)"),
+    user_id: str | None = Query(None, description="Filter by CreatedBy (letters/digits/_/./-, 1–64 chars)"),
+    page: int = Query(1, ge=1, description="Page number (offset mode; ignored when cursor is set)"),
     page_size: int = Query(50, ge=1, le=500, description="Items per page (1..500)"),
+    cursor: int | None = Query(
+        None,
+        description="Keyset pagination: return SBOMs with id strictly less than this value (desc by id). When set, page offset is ignored.",
+    ),
     response: Response = None,
     db: Session = Depends(get_db),
 ):
     user_id = _validate_user_id(user_id)
     page = 1 if page < 1 else page
     page_size = max(1, min(page_size, 500))
-    offset = (page - 1) * page_size
 
     try:
         stmt = select(SBOMSource)
@@ -483,11 +496,21 @@ def get_sbom_details(
 
         total = db.execute(count_stmt).scalar_one()
 
-        stmt = stmt.order_by(SBOMSource.id.desc()).limit(page_size).offset(offset)
+        if cursor is not None:
+            if cursor < 1:
+                raise HTTPException(status_code=422, detail="cursor must be >= 1")
+            stmt = stmt.where(SBOMSource.id < cursor)
+            stmt = stmt.order_by(SBOMSource.id.desc()).limit(page_size)
+        else:
+            offset = (page - 1) * page_size
+            stmt = stmt.order_by(SBOMSource.id.desc()).limit(page_size).offset(offset)
+
         items = db.execute(stmt).scalars().all()
 
         if response is not None:
             response.headers["X-Total-Count"] = str(total)
+            if items and len(items) == page_size:
+                response.headers["X-Next-Cursor"] = str(items[-1].id)
 
         return items
     except SQLAlchemyError as exc:
@@ -512,9 +535,7 @@ def get_sbom_components(
         if not sbom:
             raise HTTPException(status_code=404, detail="SBOM not found")
 
-        total = db.execute(
-            select(func.count(SBOMComponent.id)).where(SBOMComponent.sbom_id == sbom_id)
-        ).scalar_one()
+        total = db.execute(select(func.count(SBOMComponent.id)).where(SBOMComponent.sbom_id == sbom_id)).scalar_one()
 
         stmt = (
             select(SBOMComponent)
@@ -594,7 +615,7 @@ def delete_sbom(
     if not sbom:
         raise HTTPException(status_code=404, detail="SBOM not found")
 
-    def _norm(s: Optional[str]) -> str:
+    def _norm(s: str | None) -> str:
         return (s or "").strip().lower()
 
     if sbom.created_by and _norm(sbom.created_by) != _norm(user_id):
@@ -611,9 +632,7 @@ def delete_sbom(
         }
 
     try:
-        run_ids = db.execute(
-            select(AnalysisRun.id).where(AnalysisRun.sbom_id == sbom_id)
-        ).scalars().all()
+        run_ids = db.execute(select(AnalysisRun.id).where(AnalysisRun.sbom_id == sbom_id)).scalars().all()
 
         if run_ids:
             db.execute(
@@ -623,14 +642,10 @@ def delete_sbom(
             )
 
         db.execute(
-            delete(AnalysisRun)
-            .where(AnalysisRun.sbom_id == sbom_id)
-            .execution_options(synchronize_session=False)
+            delete(AnalysisRun).where(AnalysisRun.sbom_id == sbom_id).execution_options(synchronize_session=False)
         )
         db.execute(
-            delete(SBOMComponent)
-            .where(SBOMComponent.sbom_id == sbom_id)
-            .execution_options(synchronize_session=False)
+            delete(SBOMComponent).where(SBOMComponent.sbom_id == sbom_id).execution_options(synchronize_session=False)
         )
         db.execute(
             delete(SBOMAnalysisReport)
@@ -654,28 +669,45 @@ def delete_sbom(
 
 
 @router.post("/sboms/{sbom_id}/analyze", response_model=AnalysisRunOut, status_code=status.HTTP_201_CREATED)
-async def run_analysis_for_sbom(sbom_id: int, db: Session = Depends(get_db)):
-    log.info("Manual analysis triggered for SBOM id=%d", sbom_id)
-    sbom = db.get(SBOMSource, sbom_id)
-    if not sbom:
-        log.warning("Analysis requested for unknown SBOM id=%d", sbom_id)
-        raise HTTPException(status_code=404, detail="SBOM not found")
-    try:
-        report = await create_auto_report(db, sbom)
-    except Exception as exc:
-        db.rollback()
-        log.error("Analysis run failed for SBOM id=%d: %s", sbom_id, exc, exc_info=True)
-        raise HTTPException(status_code=500, detail="Unable to generate analysis report") from exc
-    if not report:
-        log.error("Analysis report generation failed for SBOM id=%d", sbom_id)
-        raise HTTPException(status_code=500, detail="Unable to generate analysis report")
-    return report
+@analyze_route_limit
+async def run_analysis_for_sbom(
+    request: Request,
+    sbom_id: int,
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
+    db: Session = Depends(get_db),
+):
+    async def _execute() -> dict:
+        log.info("Manual analysis triggered for SBOM id=%d", sbom_id)
+        sbom = db.get(SBOMSource, sbom_id)
+        if not sbom:
+            log.warning("Analysis requested for unknown SBOM id=%d", sbom_id)
+            raise HTTPException(status_code=404, detail="SBOM not found")
+        try:
+            report = await create_auto_report(db, sbom)
+        except Exception as exc:
+            db.rollback()
+            log.error("Analysis run failed for SBOM id=%d: %s", sbom_id, exc, exc_info=True)
+            raise HTTPException(status_code=500, detail="Unable to generate analysis report") from exc
+        if not report:
+            log.error("Analysis report generation failed for SBOM id=%d", sbom_id)
+            raise HTTPException(status_code=500, detail="Unable to generate analysis report")
+        return analysis_run_to_dict(report)
+
+    key = normalize_idempotency_key(idempotency_key)
+    if key:
+        data = await run_idempotent(f"post_analyze:{sbom_id}", key, _execute)
+    else:
+        data = await _execute()
+    return AnalysisRunOut.model_validate(data)
 
 
 @router.post("/sboms/{sbom_id}/analyze/stream")
+@analyze_route_limit
 async def analyze_sbom_stream(
+    request: Request,
     sbom_id: int,
     payload: AnalyzeStreamPayload,
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     db: Session = Depends(get_db),
 ):
     """
@@ -686,6 +718,7 @@ async def analyze_sbom_stream(
       complete  — final result with runId + severity counts
       error     — fatal error (SBOM not found, parse failure, etc.)
     """
+    idem = normalize_idempotency_key(idempotency_key)
     sbom_row = db.get(SBOMSource, sbom_id)
 
     async def _stream_not_found():
@@ -698,6 +731,23 @@ async def analyze_sbom_stream(
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
+    if idem:
+        cached_complete = await get_cached(f"analyze_stream:{sbom_id}", idem)
+        if cached_complete:
+
+            async def _replay_cached():
+                yield _sse_event("complete", cached_complete)
+
+            return StreamingResponse(
+                _replay_cached(),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "X-Accel-Buffering": "no",
+                    "Connection": "keep-alive",
+                },
+            )
+
     async def event_stream():
         started_at = time.perf_counter()
 
@@ -709,11 +759,14 @@ async def analyze_sbom_stream(
 
             sources = [s.strip().upper() for s in (payload.sources or ["NVD", "OSV", "GITHUB"])]
 
-            yield _sse_event("progress", {
-                "phase": "started",
-                "sources": sources,
-                "elapsed_ms": elapsed(),
-            })
+            yield _sse_event(
+                "progress",
+                {
+                    "phase": "started",
+                    "sources": sources,
+                    "elapsed_ms": elapsed(),
+                },
+            )
             await asyncio.sleep(0)
 
             try:
@@ -725,11 +778,14 @@ async def analyze_sbom_stream(
                 yield _sse_event("error", {"message": f"SBOM parse failed: {exc}", "code": 400})
                 return
 
-            yield _sse_event("progress", {
-                "phase": "parsed",
-                "components": len(components),
-                "elapsed_ms": elapsed(),
-            })
+            yield _sse_event(
+                "progress",
+                {
+                    "phase": "parsed",
+                    "components": len(components),
+                    "elapsed_ms": elapsed(),
+                },
+            )
             await asyncio.sleep(0)
 
             # Phase 3 (Finding B): build per-request VulnSource adapter
@@ -738,17 +794,17 @@ async def analyze_sbom_stream(
             # `gh_token_override` onto the settings dataclass — that
             # plumbing now lives inside the adapters themselves.
             adapter_factories = {
-                "NVD": lambda: NvdSource(api_key=payload.nvd_api_key),
+                "NVD": lambda: NvdSource(api_key=nvd_api_key_for_adapters()),
                 "OSV": lambda: OsvSource(),
-                "GITHUB": lambda: GhsaSource(token=payload.github_token),
+                "GITHUB": lambda: GhsaSource(token=github_token_for_adapters()),
             }
             active_adapters = [adapter_factories[name]() for name in sources if name in adapter_factories]
 
             # Fan out concurrently via the shared runner. SSE progress events
             # are forwarded as soon as the runner emits them, preserving the
             # streaming contract while killing the inline source-dispatch loop.
-            all_findings: List[dict] = []
-            all_errors: List[dict] = []
+            all_findings: list[dict] = []
+            all_errors: list[dict] = []
             event_queue: asyncio.Queue = asyncio.Queue()
 
             async def _drive_runner() -> None:
@@ -772,28 +828,37 @@ async def analyze_sbom_stream(
                     if kind == EVENT_DONE:
                         break
                     if kind == EVENT_RUNNING:
-                        yield _sse_event("progress", {
-                            "source": msg["source"],
-                            "status": "running",
-                            "elapsed_ms": elapsed(),
-                        })
+                        yield _sse_event(
+                            "progress",
+                            {
+                                "source": msg["source"],
+                                "status": "running",
+                                "elapsed_ms": elapsed(),
+                            },
+                        )
                     elif kind == EVENT_COMPLETE:
-                        yield _sse_event("progress", {
-                            "source": msg["source"],
-                            "status": "complete",
-                            "findings": msg["findings"],
-                            "errors": msg["errors"],
-                            "source_ms": msg["source_ms"],
-                            "elapsed_ms": elapsed(),
-                        })
+                        yield _sse_event(
+                            "progress",
+                            {
+                                "source": msg["source"],
+                                "status": "complete",
+                                "findings": msg["findings"],
+                                "errors": msg["errors"],
+                                "source_ms": msg["source_ms"],
+                                "elapsed_ms": elapsed(),
+                            },
+                        )
                     elif kind == EVENT_ERROR:
-                        yield _sse_event("progress", {
-                            "source": msg["source"],
-                            "status": "error",
-                            "error": msg["error"],
-                            "source_ms": msg["source_ms"],
-                            "elapsed_ms": elapsed(),
-                        })
+                        yield _sse_event(
+                            "progress",
+                            {
+                                "source": msg["source"],
+                                "status": "error",
+                                "error": msg["error"],
+                                "source_ms": msg["source_ms"],
+                                "elapsed_ms": elapsed(),
+                            },
+                        )
                     await asyncio.sleep(0)
             finally:
                 if not orchestrator.done():
@@ -849,7 +914,7 @@ async def analyze_sbom_stream(
             )
             db.commit()
 
-            yield _sse_event("complete", {
+            complete_payload = {
                 "runId": run.id,
                 "status": run_status,
                 "total": len(final_findings),
@@ -860,7 +925,10 @@ async def analyze_sbom_stream(
                 "unknown": buckets["UNKNOWN"],
                 "errors": len(all_errors),
                 "duration_ms": duration_ms,
-            })
+            }
+            if idem:
+                put_cached(f"analyze_stream:{sbom_id}", idem, complete_payload)
+            yield _sse_event("complete", complete_payload)
 
         except Exception as exc:
             log.error("SSE stream unhandled error: %s", exc, exc_info=True)

@@ -18,7 +18,6 @@ import pytest
 
 from ._normalize import normalize
 
-
 SNAPSHOT_DIR = Path(__file__).parent / "snapshots"
 SNAPSHOT_DIR.mkdir(exist_ok=True)
 
@@ -35,7 +34,7 @@ def _load_or_write(name: str, actual: dict) -> dict:
 def test_analyze_sbom_nvd(client, seeded_sbom, mock_external_sources):
     resp = client.post(
         "/analyze-sbom-nvd",
-        json={"sbom_id": seeded_sbom["id"], "nvd_api_key": "test-key"},
+        json={"sbom_id": seeded_sbom["id"]},
     )
     assert resp.status_code == 200, resp.text
     actual = normalize(resp.json())
@@ -47,7 +46,7 @@ def test_analyze_sbom_nvd(client, seeded_sbom, mock_external_sources):
 def test_analyze_sbom_github(client, seeded_sbom, mock_external_sources):
     resp = client.post(
         "/analyze-sbom-github",
-        json={"sbom_id": seeded_sbom["id"], "github_token": "test-token"},
+        json={"sbom_id": seeded_sbom["id"]},
     )
     assert resp.status_code == 200, resp.text
     actual = normalize(resp.json())
@@ -73,8 +72,6 @@ def test_analyze_sbom_consolidated(client, seeded_sbom, mock_external_sources):
         "/analyze-sbom-consolidated",
         json={
             "sbom_id": seeded_sbom["id"],
-            "nvd_api_key": "test-key",
-            "github_token": "test-token",
             "osv_hydrate": True,
         },
     )

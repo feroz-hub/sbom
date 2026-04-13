@@ -31,10 +31,10 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Any, List, Optional, Sequence, Tuple
+from collections.abc import Sequence
+from typing import Any
 
 from .base import VulnSource
-
 
 # ---- Progress event constants ---------------------------------------
 EVENT_RUNNING = "running"
@@ -45,10 +45,10 @@ EVENT_DONE = "done"
 
 async def run_sources_concurrently(
     sources: Sequence[VulnSource],
-    components: List[dict],
+    components: list[dict],
     settings: Any,
-    progress_queue: Optional[asyncio.Queue] = None,
-) -> Tuple[List[dict], List[dict], List[dict]]:
+    progress_queue: asyncio.Queue | None = None,
+) -> tuple[list[dict], list[dict], list[dict]]:
     """
     Run every adapter's ``query()`` in parallel and aggregate the results.
 
@@ -68,9 +68,9 @@ async def run_sources_concurrently(
             await progress_queue.put({"kind": EVENT_DONE})
         return [], [], []
 
-    all_findings: List[dict] = []
-    all_errors: List[dict] = []
-    all_warnings: List[dict] = []
+    all_findings: list[dict] = []
+    all_errors: list[dict] = []
+    all_warnings: list[dict] = []
 
     async def _run_one(source: VulnSource) -> None:
         src_start = time.perf_counter()
@@ -86,24 +86,28 @@ async def run_sources_concurrently(
             all_errors.extend(errors)
             all_warnings.extend(warnings)
             if progress_queue is not None:
-                await progress_queue.put({
-                    "kind": EVENT_COMPLETE,
-                    "source": source.name,
-                    "findings": len(findings),
-                    "errors": len(errors),
-                    "source_ms": elapsed_ms,
-                })
+                await progress_queue.put(
+                    {
+                        "kind": EVENT_COMPLETE,
+                        "source": source.name,
+                        "findings": len(findings),
+                        "errors": len(errors),
+                        "source_ms": elapsed_ms,
+                    }
+                )
         except Exception as exc:
             elapsed_ms = int((time.perf_counter() - src_start) * 1000)
             err_msg = str(exc)
             all_errors.append({"source": source.name, "error": err_msg})
             if progress_queue is not None:
-                await progress_queue.put({
-                    "kind": EVENT_ERROR,
-                    "source": source.name,
-                    "error": err_msg,
-                    "source_ms": elapsed_ms,
-                })
+                await progress_queue.put(
+                    {
+                        "kind": EVENT_ERROR,
+                        "source": source.name,
+                        "error": err_msg,
+                        "source_ms": elapsed_ms,
+                    }
+                )
 
     try:
         await asyncio.gather(

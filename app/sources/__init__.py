@@ -30,32 +30,31 @@ Adding a fourth source (e.g. Snyk, OSS Index) is a one-line change in
 shared runner need to know about it.
 """
 
-from .purl import parse_purl
-from .cpe import slug, cpe23_from_purl
-from .severity import (
-    safe_score,
-    parse_cvss_attack_vector,
-    cvss_version_from_metrics,
-    extract_best_cvss,
-    sev_bucket,
-    GH_SEV_NORM,
-)
-from .dedupe import deduplicate_findings
-
 # Phase 2: source adapter classes + registry
 from .base import SourceResult, VulnSource, empty_result
+from .cpe import cpe23_from_purl, slug
+from .dedupe import deduplicate_findings
+from .ghsa import GhsaSource
 from .nvd import NvdSource
 from .osv import OsvSource
-from .ghsa import GhsaSource
+from .purl import parse_purl
 from .registry import SOURCE_REGISTRY, get_source
 
 # Phase 3: shared concurrent fan-out runner
 from .runner import (
-    run_sources_concurrently,
-    EVENT_RUNNING,
     EVENT_COMPLETE,
-    EVENT_ERROR,
     EVENT_DONE,
+    EVENT_ERROR,
+    EVENT_RUNNING,
+    run_sources_concurrently,
+)
+from .severity import (
+    GH_SEV_NORM,
+    cvss_version_from_metrics,
+    extract_best_cvss,
+    parse_cvss_attack_vector,
+    safe_score,
+    sev_bucket,
 )
 
 __all__ = [

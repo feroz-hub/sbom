@@ -10,12 +10,10 @@ side cannot be derived — callers must handle that.
 
 from __future__ import annotations
 
-from typing import Optional
-
 from .purl import parse_purl
 
 
-def slug(s: Optional[str]) -> Optional[str]:
+def slug(s: str | None) -> str | None:
     """
     Sanitise a vendor / product token for CPE: lowercase, alphanumerics,
     dot, dash, underscore. Anything else collapses to ``_``. Trailing
@@ -33,7 +31,7 @@ def slug(s: Optional[str]) -> Optional[str]:
     return token or None
 
 
-def cpe23_from_purl(purl: str, version_override: Optional[str] = None) -> Optional[str]:
+def cpe23_from_purl(purl: str, version_override: str | None = None) -> str | None:
     """
     Best-effort mapping of a PURL to a CPE 2.3 string.
 
@@ -52,8 +50,8 @@ def cpe23_from_purl(purl: str, version_override: Optional[str] = None) -> Option
     name = parsed.get("name") or ""
     version = parsed.get("version") or version_override
 
-    vnd: Optional[str] = None
-    prd: Optional[str] = None
+    vnd: str | None = None
+    prd: str | None = None
 
     # Ecosystem-specific mappings
     if ptype in {"pypi"}:

@@ -11,10 +11,10 @@ config object that satisfies this duck-typed contract.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 
-def safe_score(value: Any) -> Optional[float]:
+def safe_score(value: Any) -> float | None:
     """Coerce a CVSS score-like value to ``float``, returning ``None`` on failure."""
     if value is None:
         return None
@@ -24,7 +24,7 @@ def safe_score(value: Any) -> Optional[float]:
         return None
 
 
-def parse_cvss_attack_vector(vector: Optional[str]) -> Optional[str]:
+def parse_cvss_attack_vector(vector: str | None) -> str | None:
     """Extract the AV: component from a CVSS vector string."""
     if not vector:
         return None
@@ -39,7 +39,7 @@ def parse_cvss_attack_vector(vector: Optional[str]) -> Optional[str]:
     return None
 
 
-def cvss_version_from_metrics(metrics: Dict[str, Any]) -> Optional[str]:
+def cvss_version_from_metrics(metrics: dict[str, Any]) -> str | None:
     """Return ``'V40'``, ``'V31'``, or ``'V2'`` based on which metric key has data."""
     for key, label in (
         ("cvssMetricV40", "V40"),
@@ -53,8 +53,8 @@ def cvss_version_from_metrics(metrics: Dict[str, Any]) -> Optional[str]:
 
 
 def extract_best_cvss(
-    metrics: Dict[str, Any],
-) -> Tuple[Optional[float], Optional[str], Optional[str]]:
+    metrics: dict[str, Any],
+) -> tuple[float | None, str | None, str | None]:
     """
     Pick the best available CVSS triple ``(score, vector, baseSeverity)``
     from an NVD-style metrics dict, preferring v4.0 → v3.1 → v3.0 → v2.
@@ -79,25 +79,25 @@ def extract_best_cvss(
 
 
 # GitHub Advisory severity normalisation: GraphQL returns "MODERATE" for medium.
-GH_SEV_NORM: Dict[str, str] = {
+GH_SEV_NORM: dict[str, str] = {
     "CRITICAL": "CRITICAL",
-    "HIGH":     "HIGH",
+    "HIGH": "HIGH",
     "MODERATE": "MEDIUM",
-    "MEDIUM":   "MEDIUM",
-    "LOW":      "LOW",
+    "MEDIUM": "MEDIUM",
+    "LOW": "LOW",
     # Lowercase variants for defence-in-depth (callers may skip .upper())
     "critical": "CRITICAL",
-    "high":     "HIGH",
+    "high": "HIGH",
     "moderate": "MEDIUM",
-    "medium":   "MEDIUM",
-    "low":      "LOW",
+    "medium": "MEDIUM",
+    "low": "LOW",
 }
 
 
 def sev_bucket(
-    score: Optional[float],
+    score: float | None,
     settings: Any,
-    severity_text: Optional[str] = None,
+    severity_text: str | None = None,
 ) -> str:
     """
     Bucket a CVSS score into ``CRITICAL`` / ``HIGH`` / ``MEDIUM`` / ``LOW``

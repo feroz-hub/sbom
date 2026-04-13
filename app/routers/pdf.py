@@ -4,19 +4,17 @@ PDF Report Generation router.
 Routes:
   POST /api/pdf-report  generate PDF from run ID
 """
+
 import json
 import logging
-from typing import Optional, Dict, Any
-from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..models import AnalysisRun, AnalysisFinding, SBOMSource
+from ..models import AnalysisFinding, AnalysisRun, SBOMSource
 from ..pdf_report import build_pdf_from_run_bytes
 
 log = logging.getLogger(__name__)
@@ -26,26 +24,22 @@ router = APIRouter(prefix="/api", tags=["pdf"])
 
 class PdfReportByIdRequest(BaseModel):
     runId: int
-    title: Optional[str] = "SBOM Vulnerability Report"
-    filename: Optional[str] = "sbom_report.pdf"
+    title: str | None = "SBOM Vulnerability Report"
+    filename: str | None = "sbom_report.pdf"
 
 
-def _rebuild_run_from_db(db: Session, run_id: int) -> Optional[dict]:
+def _rebuild_run_from_db(db: Session, run_id: int) -> dict | None:
     """
     Reconstruct a consolidated-style run dict from AnalysisRun + AnalysisFinding
     rows. This is the fallback when RunCache has no entry (e.g. runs created by
     the multi-source auto-analysis path which writes to analysis_run/finding but
     not to run_cache).
     """
-    run_row: Optional[AnalysisRun] = db.get(AnalysisRun, run_id)
+    run_row: AnalysisRun | None = db.get(AnalysisRun, run_id)
     if run_row is None:
         return None
 
-    findings = (
-        db.query(AnalysisFinding)
-        .filter(AnalysisFinding.analysis_run_id == run_id)
-        .all()
-    )
+    findings = db.query(AnalysisFinding).filter(AnalysisFinding.analysis_run_id == run_id).all()
 
     sbom_row = db.get(SBOMSource, run_row.sbom_id) if run_row.sbom_id else None
 
@@ -68,20 +62,22 @@ def _rebuild_run_from_db(db: Session, run_id: int) -> Optional[dict]:
             except (json.JSONDecodeError, TypeError):
                 pass
         sources = [s.strip() for s in (f.source or "").split(",") if s.strip()]
-        comp_map[key]["combined"].append({
-            "id": f.vuln_id,
-            "severity": (f.severity or "UNKNOWN").upper(),
-            "score": f.score,
-            "vector": f.vector,
-            "published": f.published_on,
-            "url": f.reference_url,
-            "sources": sources,
-            "aliases": aliases,
-            "description": f.description,
-            "cwe": [c.strip() for c in (f.cwe or "").split(",") if c.strip()],
-            "attack_vector": f.attack_vector,
-            "fixed_versions": json.loads(f.fixed_versions) if f.fixed_versions else [],
-        })
+        comp_map[key]["combined"].append(
+            {
+                "id": f.vuln_id,
+                "severity": (f.severity or "UNKNOWN").upper(),
+                "score": f.score,
+                "vector": f.vector,
+                "published": f.published_on,
+                "url": f.reference_url,
+                "sources": sources,
+                "aliases": aliases,
+                "description": f.description,
+                "cwe": [c.strip() for c in (f.cwe or "").split(",") if c.strip()],
+                "attack_vector": f.attack_vector,
+                "fixed_versions": json.loads(f.fixed_versions) if f.fixed_versions else [],
+            }
+        )
         # Inherit CPE from finding if component-level is missing
         if not comp_map[key]["cpe"] and f.cpe:
             comp_map[key]["cpe"] = f.cpe

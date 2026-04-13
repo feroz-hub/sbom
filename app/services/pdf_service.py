@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Optional, Tuple
+from datetime import UTC
 
 from sqlalchemy.orm import Session
 
@@ -20,7 +20,8 @@ log = logging.getLogger(__name__)
 # Run Cache Management
 # ============================================================
 
-def load_run_cache(db: Session, run_id: int) -> Optional[dict]:
+
+def load_run_cache(db: Session, run_id: int) -> dict | None:
     """
     Load a previously persisted ad-hoc run from the cache, or return None.
 
@@ -41,7 +42,7 @@ def load_run_cache(db: Session, run_id: int) -> Optional[dict]:
         return None
 
 
-def store_run_cache(db: Session, run_record: dict, source: str = "consolidated", sbom_id: Optional[int] = None) -> int:
+def store_run_cache(db: Session, run_record: dict, source: str = "consolidated", sbom_id: int | None = None) -> int:
     """
     Persist an ad-hoc analysis run to the cache and return the DB-assigned ID.
 
@@ -68,15 +69,17 @@ def store_run_cache(db: Session, run_record: dict, source: str = "consolidated",
 
 def _now_iso() -> str:
     """Get current UTC time in ISO format without microseconds."""
-    from datetime import datetime, timezone
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    from datetime import datetime
+
+    return datetime.now(UTC).replace(microsecond=0).isoformat()
 
 
 # ============================================================
 # Run Reconstruction
 # ============================================================
 
-def rebuild_run_from_db(db: Session, run_id: int) -> Optional[dict]:
+
+def rebuild_run_from_db(db: Session, run_id: int) -> dict | None:
     """
     Reconstruct a consolidated-style run dict from AnalysisRun + AnalysisFinding rows.
 
@@ -106,16 +109,12 @@ def rebuild_run_from_db(db: Session, run_id: int) -> Optional[dict]:
             "components": [...],
         }
     """
-    run_row: Optional[AnalysisRun] = db.get(AnalysisRun, run_id)
+    run_row: AnalysisRun | None = db.get(AnalysisRun, run_id)
     if run_row is None:
         log.warning("AnalysisRun id=%d not found", run_id)
         return None
 
-    findings = (
-        db.query(AnalysisFinding)
-        .filter(AnalysisFinding.analysis_run_id == run_id)
-        .all()
-    )
+    findings = db.query(AnalysisFinding).filter(AnalysisFinding.analysis_run_id == run_id).all()
 
     sbom_row = db.get(SBOMSource, run_row.sbom_id) if run_row.sbom_id else None
 
@@ -138,20 +137,22 @@ def rebuild_run_from_db(db: Session, run_id: int) -> Optional[dict]:
             except (json.JSONDecodeError, TypeError):
                 pass
         sources = [s.strip() for s in (f.source or "").split(",") if s.strip()]
-        comp_map[key]["combined"].append({
-            "id": f.vuln_id,
-            "severity": (f.severity or "UNKNOWN").upper(),
-            "score": f.score,
-            "vector": f.vector,
-            "published": f.published_on,
-            "url": f.reference_url,
-            "sources": sources,
-            "aliases": aliases,
-            "description": f.description,
-            "cwe": [c.strip() for c in (f.cwe or "").split(",") if c.strip()],
-            "attack_vector": f.attack_vector,
-            "fixed_versions": json.loads(f.fixed_versions) if f.fixed_versions else [],
-        })
+        comp_map[key]["combined"].append(
+            {
+                "id": f.vuln_id,
+                "severity": (f.severity or "UNKNOWN").upper(),
+                "score": f.score,
+                "vector": f.vector,
+                "published": f.published_on,
+                "url": f.reference_url,
+                "sources": sources,
+                "aliases": aliases,
+                "description": f.description,
+                "cwe": [c.strip() for c in (f.cwe or "").split(",") if c.strip()],
+                "attack_vector": f.attack_vector,
+                "fixed_versions": json.loads(f.fixed_versions) if f.fixed_versions else [],
+            }
+        )
         # Inherit CPE from finding if component-level is missing
         if not comp_map[key]["cpe"] and f.cpe:
             comp_map[key]["cpe"] = f.cpe
@@ -188,12 +189,13 @@ def rebuild_run_from_db(db: Session, run_id: int) -> Optional[dict]:
 # PDF Generation
 # ============================================================
 
+
 def generate_pdf_report(
     db: Session,
     run_id: int,
     title: str = "SBOM Vulnerability Report",
     filename: str = "sbom_report.pdf",
-) -> Tuple[bytes, str]:
+) -> tuple[bytes, str]:
     """
     Generate a PDF report for a given analysis run.
 

@@ -25,15 +25,16 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Tuple
+from typing import Any
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Database isolation — must run BEFORE any `app.*` import.
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(scope="session")
 def _tmp_database_path() -> Iterator[str]:
@@ -57,6 +58,7 @@ def app(_tmp_database_path: str):
     # auth tests in test_auth.py override this per-test via monkeypatch.
     os.environ["API_AUTH_MODE"] = "none"
     os.environ.pop("API_AUTH_TOKENS", None)
+    os.environ["API_RATE_LIMIT_ENABLED"] = "false"
     # Don't let a real GitHub token in the dev shell leak into tests.
     os.environ.pop("GITHUB_TOKEN", None)
     os.environ.pop("NVD_API_KEY", None)
@@ -64,17 +66,20 @@ def app(_tmp_database_path: str):
     # Reset cached settings singleton if it exists.
     try:
         from app.settings import reset_settings
+
         reset_settings()
     except Exception:
         pass
 
     from app.main import app as fastapi_app
+
     return fastapi_app
 
 
 @pytest.fixture()
 def client(app):
     from fastapi.testclient import TestClient
+
     with TestClient(app) as c:
         yield c
 
@@ -87,12 +92,12 @@ _SAMPLE_PATH = Path(__file__).parent / "fixtures" / "sample_sbom.json"
 
 
 @pytest.fixture(scope="session")
-def sample_sbom_dict() -> Dict[str, Any]:
+def sample_sbom_dict() -> dict[str, Any]:
     return json.loads(_SAMPLE_PATH.read_text())
 
 
 @pytest.fixture(scope="session")
-def seeded_sbom(app, sample_sbom_dict) -> Dict[str, Any]:
+def seeded_sbom(app, sample_sbom_dict) -> dict[str, Any]:
     """
     Upload the fixture SBOM exactly once per test session and return the row.
 
@@ -119,15 +124,15 @@ def seeded_sbom(app, sample_sbom_dict) -> Dict[str, Any]:
 
 from .fixtures import canned_responses as canned  # noqa: E402
 
-
 # ---- Async source-fetcher fakes for app.analysis.* ----
 # Every analyze endpoint (production + ad-hoc) routes through the
 # `app.sources` adapter registry, and every adapter delegates lazily into
 # the coroutines below. Patching here covers the entire surface in one
 # place.
 
+
 async def _fake_nvd_query_by_components_async(components, settings, nvd_api_key=None):
-    findings: List[Dict[str, Any]] = []
+    findings: list[dict[str, Any]] = []
     for c in components:
         if "log4j" in (c.get("name") or "").lower():
             findings.append(dict(canned.ASYNC_NVD_FINDING))
@@ -135,7 +140,7 @@ async def _fake_nvd_query_by_components_async(components, settings, nvd_api_key=
 
 
 async def _fake_osv_query_by_components(components, settings):
-    findings: List[Dict[str, Any]] = []
+    findings: list[dict[str, Any]] = []
     for c in components:
         if "requests" in (c.get("name") or "").lower():
             findings.append(dict(canned.ASYNC_OSV_FINDING_REQUESTS))
@@ -143,7 +148,7 @@ async def _fake_osv_query_by_components(components, settings):
 
 
 async def _fake_github_query_by_components(components, settings):
-    findings: List[Dict[str, Any]] = []
+    findings: list[dict[str, Any]] = []
     for c in components:
         if "log4j" in (c.get("name") or "").lower():
             findings.append(dict(canned.ASYNC_GHSA_FINDING))
@@ -177,12 +182,9 @@ def mock_external_sources(monkeypatch):
     # after the Phase 4 cut-over — both routes go through the registry
     # adapters, which delegate lazily into app.analysis.* coroutines) ----
     import app.analysis as analysis_mod
-    monkeypatch.setattr(
-        analysis_mod, "osv_query_by_components", _fake_osv_query_by_components
-    )
-    monkeypatch.setattr(
-        analysis_mod, "github_query_by_components", _fake_github_query_by_components
-    )
+
+    monkeypatch.setattr(analysis_mod, "osv_query_by_components", _fake_osv_query_by_components)
+    monkeypatch.setattr(analysis_mod, "github_query_by_components", _fake_github_query_by_components)
     monkeypatch.setattr(analysis_mod, "nvd_query_by_cpe", _fake_nvd_query_by_cpe)
 
     # Phase 3 (Finding B): the SSE stream + manual analyze paths now consume
@@ -190,6 +192,7 @@ def mock_external_sources(monkeypatch):
     # the adapters delegate to so the streaming endpoint sees the same
     # canned data as the snapshot tests above.
     import app.analysis as analysis_mod_for_adapters
+
     monkeypatch.setattr(
         analysis_mod_for_adapters,
         "nvd_query_by_components_async",

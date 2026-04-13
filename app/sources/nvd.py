@@ -13,7 +13,7 @@ construction time and threaded explicitly through to the underlying call.
 
 from __future__ import annotations
 
-from typing import Any, List, Optional
+from typing import Any
 
 from .base import SourceResult, empty_result
 
@@ -23,12 +23,12 @@ class NvdSource:
 
     name: str = "NVD"
 
-    def __init__(self, api_key: Optional[str] = None) -> None:
+    def __init__(self, api_key: str | None = None) -> None:
         self.api_key = (api_key or "").strip() or None
 
     async def query(
         self,
-        components: List[dict],
+        components: list[dict],
         settings: Any,
     ) -> SourceResult:
         if not components:

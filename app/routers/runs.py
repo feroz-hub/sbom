@@ -6,23 +6,23 @@ Routes:
   GET /api/runs/{run_id}                get single run
   GET /api/runs/{run_id}/findings       list findings with severity filter and pagination
 """
-from typing import Optional, List
+
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..models import AnalysisRun, AnalysisFinding, SBOMSource
-from ..schemas import AnalysisRunOut, AnalysisFindingOut
+from ..models import AnalysisFinding, AnalysisRun, SBOMSource
+from ..schemas import AnalysisFindingOut, AnalysisRunOut
 
 log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["runs"])
 
 
-def _coerce_optional_int(raw: Optional[str]) -> Optional[int]:
+def _coerce_optional_int(raw: str | None) -> int | None:
     """Lenient integer coercion for optional query params.
 
     Accepts None, empty string, whitespace, and junk like 'NaN'/'undefined'
@@ -53,11 +53,15 @@ def _coerce_optional_int(raw: Optional[str]) -> Optional[int]:
 
 @router.get("/runs", response_model=list[AnalysisRunOut])
 def list_analysis_runs(
-    sbom_id: Optional[str] = Query(None),
-    project_id: Optional[str] = Query(None),
-    run_status: Optional[str] = Query(None),
+    sbom_id: str | None = Query(None),
+    project_id: str | None = Query(None),
+    run_status: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=500),
+    cursor: int | None = Query(
+        None,
+        description="Keyset pagination: return runs with id strictly less than this value (desc by id). When set, page offset is ignored.",
+    ),
     response: Response = None,
     db: Session = Depends(get_db),
 ):
@@ -65,19 +69,12 @@ def list_analysis_runs(
     project_id = _coerce_optional_int(project_id)
     page = 1 if page < 1 else page
     page_size = max(1, min(page_size, 500))
-    offset = (page - 1) * page_size
 
     # Subquery: get sbom_name. Use an OUTER join below so that runs whose
     # parent SBOM has been deleted (orphaned runs) still appear in the list
     # — otherwise an inner join silently drops them and the user can no
     # longer access the historical findings/PDF for those runs.
-    sbom_subq = (
-        db.query(
-            SBOMSource.id.label("sbom_id"),
-            SBOMSource.sbom_name.label("sbom_name")
-        )
-        .subquery()
-    )
+    sbom_subq = db.query(SBOMSource.id.label("sbom_id"), SBOMSource.sbom_name.label("sbom_name")).subquery()
 
     # Base queries
     base = select(AnalysisRun)
@@ -101,13 +98,18 @@ def list_analysis_runs(
 
     # Main query with subquery LEFT OUTER join — preserves orphaned runs.
     stmt = (
-        base
-        .outerjoin(sbom_subq, AnalysisRun.sbom_id == sbom_subq.c.sbom_id)
+        base.outerjoin(sbom_subq, AnalysisRun.sbom_id == sbom_subq.c.sbom_id)
         .add_columns(sbom_subq.c.sbom_name)
         .order_by(AnalysisRun.id.desc())
-        .limit(page_size)
-        .offset(offset)
     )
+    if cursor is not None:
+        if cursor < 1:
+            raise HTTPException(status_code=422, detail="cursor must be >= 1")
+        stmt = stmt.where(AnalysisRun.id < cursor)
+        stmt = stmt.limit(page_size)
+    else:
+        offset = (page - 1) * page_size
+        stmt = stmt.limit(page_size).offset(offset)
 
     # Execute
     rows = db.execute(stmt).all()
@@ -123,6 +125,11 @@ def list_analysis_runs(
     # Header
     if response is not None:
         response.headers["X-Total-Count"] = str(total)
+        if items and len(items) == page_size:
+            last = items[-1]
+            rid = last.get("id") if isinstance(last, dict) else getattr(last, "id", None)
+            if rid is not None:
+                response.headers["X-Next-Cursor"] = str(rid)
 
     return items
 
@@ -138,7 +145,7 @@ def get_analysis_run(run_id: int, db: Session = Depends(get_db)):
 @router.get("/runs/{run_id}/findings", response_model=list[AnalysisFindingOut])
 def list_run_findings(
     run_id: int,
-    severity: Optional[str] = Query(None),
+    severity: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(100, ge=1, le=1000),
     response: Response = None,

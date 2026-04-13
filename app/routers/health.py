@@ -7,36 +7,26 @@ Routes:
   GET /api/analysis/config   analysis configuration
   GET /api/types  list SBOM types
 """
-from typing import List
+
+import logging
+import os
+
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..analysis import get_analysis_settings_multi
 from ..auth import require_auth
 from ..db import get_db
 from ..models import SBOMType
 from ..schemas import SBOMTypeOut
-from ..settings import get_settings
-from ..analysis import get_analysis_settings_multi
-import os
-import logging
+from ..settings import get_analysis_legacy_level, get_settings
 
 log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["health"])
 _settings = get_settings()
 APP_VERSION = _settings.APP_VERSION
-
-
-def legacy_analysis_level() -> int:
-    """Get legacy analysis level from environment."""
-    import os
-    raw_value = os.getenv("ANALYSIS_LEGACY_LEVEL", "1")
-    try:
-        parsed = int(raw_value)
-    except ValueError:
-        return 1
-    return parsed if parsed > 0 else 1
 
 
 def public_analysis_config() -> dict:
@@ -69,7 +59,7 @@ def public_analysis_config() -> dict:
         "gh_token_env": getattr(s, "gh_token_env", "GITHUB_TOKEN"),
         "analysis_sources_env": getattr(s, "analysis_sources_env", "ANALYSIS_SOURCES"),
         "max_concurrency": getattr(s, "max_concurrency", 10),
-        "analysis_legacy_level": legacy_analysis_level(),
+        "analysis_legacy_level": get_analysis_legacy_level(),
         # Feature flags — whether optional credentials are configured
         "github_configured": bool(os.getenv("GITHUB_TOKEN", "").strip()),
         "nvd_key_configured": bool(os.getenv("NVD_API_KEY", "").strip()),
@@ -102,7 +92,7 @@ def get_analysis_config() -> dict:
 
 @router.get(
     "/api/types",
-    response_model=List[SBOMTypeOut],
+    response_model=list[SBOMTypeOut],
     dependencies=[Depends(require_auth)],
 )
 def list_sbom_types(db: Session = Depends(get_db)):

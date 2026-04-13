@@ -14,7 +14,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 # Field names that vary per run and must never appear in a snapshot.
 _VOLATILE_KEYS = {
     "completedOn",
@@ -33,10 +32,7 @@ _VOLATILE_KEYS = {
 def normalize(value: Any) -> Any:
     """Recursively replace volatile fields with sentinel placeholders."""
     if isinstance(value, dict):
-        return {
-            k: ("<volatile>" if k in _VOLATILE_KEYS else normalize(v))
-            for k, v in value.items()
-        }
+        return {k: ("<volatile>" if k in _VOLATILE_KEYS else normalize(v)) for k, v in value.items()}
     if isinstance(value, list):
         return [normalize(item) for item in value]
     return value

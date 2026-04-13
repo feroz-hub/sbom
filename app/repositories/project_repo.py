@@ -1,18 +1,16 @@
 """Repository for Projects entity."""
 
-from typing import Optional
-
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
-from ..models import Projects, SBOMSource, AnalysisRun, AnalysisFinding
+from ..models import AnalysisFinding, AnalysisRun, Projects, SBOMSource
 
 
 class ProjectRepository:
     """Repository for project operations."""
 
     @staticmethod
-    def get_project(db: Session, project_id: int) -> Optional[Projects]:
+    def get_project(db: Session, project_id: int) -> Projects | None:
         """Get a single project by ID.
 
         Args:
@@ -53,9 +51,7 @@ class ProjectRepository:
         return project
 
     @staticmethod
-    def update_project(
-        db: Session, project_id: int, update_dict: dict
-    ) -> Projects:
+    def update_project(db: Session, project_id: int, update_dict: dict) -> Projects:
         """Update an existing project.
 
         Args:
@@ -94,62 +90,38 @@ class ProjectRepository:
             db: Database session
             project_id: Project ID
         """
-        project = (
-            db.query(Projects).filter(Projects.id == project_id).first()
-        )
+        project = db.query(Projects).filter(Projects.id == project_id).first()
         if not project:
             raise ValueError(f"Project {project_id} not found")
 
         from ..models import (
-            SBOMComponent,
             SBOMAnalysisReport,
+            SBOMComponent,
         )
 
         # Get all SBOMs for this project
-        sbom_ids = (
-            db.query(SBOMSource.id)
-            .filter(SBOMSource.project_id == project_id)
-            .all()
-        )
+        sbom_ids = db.query(SBOMSource.id).filter(SBOMSource.project_id == project_id).all()
         sbom_ids = [s[0] for s in sbom_ids]
 
         if sbom_ids:
             # Delete findings for runs associated with these SBOMs
             db.execute(
                 delete(AnalysisFinding).where(
-                    AnalysisFinding.run_id.in_(
-                        db.query(AnalysisRun.id).filter(
-                            AnalysisRun.sbom_id.in_(sbom_ids)
-                        )
-                    )
+                    AnalysisFinding.run_id.in_(db.query(AnalysisRun.id).filter(AnalysisRun.sbom_id.in_(sbom_ids)))
                 )
             )
 
             # Delete runs
-            db.execute(
-                delete(AnalysisRun).where(AnalysisRun.sbom_id.in_(sbom_ids))
-            )
+            db.execute(delete(AnalysisRun).where(AnalysisRun.sbom_id.in_(sbom_ids)))
 
             # Delete components
-            db.execute(
-                delete(SBOMComponent).where(
-                    SBOMComponent.sbom_id.in_(sbom_ids)
-                )
-            )
+            db.execute(delete(SBOMComponent).where(SBOMComponent.sbom_id.in_(sbom_ids)))
 
             # Delete reports
-            db.execute(
-                delete(SBOMAnalysisReport).where(
-                    SBOMAnalysisReport.sbom_id.in_(sbom_ids)
-                )
-            )
+            db.execute(delete(SBOMAnalysisReport).where(SBOMAnalysisReport.sbom_id.in_(sbom_ids)))
 
             # Delete SBOMs
-            db.execute(
-                delete(SBOMSource).where(
-                    SBOMSource.project_id == project_id
-                )
-            )
+            db.execute(delete(SBOMSource).where(SBOMSource.project_id == project_id))
 
         # Delete the project itself
         db.delete(project)

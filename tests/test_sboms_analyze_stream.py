@@ -38,9 +38,9 @@ def _parse_sse_events(body: str) -> list[dict]:
         data_lines: list[str] = []
         for line in chunk.splitlines():
             if line.startswith("event:"):
-                event_type = line[len("event:"):].strip()
+                event_type = line[len("event:") :].strip()
             elif line.startswith("data:"):
-                data_lines.append(line[len("data:"):].strip())
+                data_lines.append(line[len("data:") :].strip())
         if not data_lines:
             continue
         try:
@@ -52,17 +52,13 @@ def _parse_sse_events(body: str) -> list[dict]:
 
 
 @pytest.mark.snapshot
-def test_analyze_stream_uses_registry_and_emits_per_source_progress(
-    client, seeded_sbom, mock_external_sources
-):
+def test_analyze_stream_uses_registry_and_emits_per_source_progress(client, seeded_sbom, mock_external_sources):
     sbom_id = seeded_sbom["id"]
 
     resp = client.post(
         f"/api/sboms/{sbom_id}/analyze/stream",
         json={
             "sources": ["NVD", "OSV", "GITHUB"],
-            "nvd_api_key": "test-nvd-key",
-            "github_token": "ghp_test-token",
         },
     )
 
@@ -73,11 +69,7 @@ def test_analyze_stream_uses_registry_and_emits_per_source_progress(
     assert events, "stream produced zero SSE events"
 
     # ---- Phase order ----
-    phases = [
-        e["data"].get("phase")
-        for e in events
-        if e["event"] == "progress" and e["data"].get("phase")
-    ]
+    phases = [e["data"].get("phase") for e in events if e["event"] == "progress" and e["data"].get("phase")]
     assert phases[:2] == ["started", "parsed"], f"unexpected phase order: {phases}"
 
     # ---- Per-source running + complete events ----
@@ -90,9 +82,7 @@ def test_analyze_stream_uses_registry_and_emits_per_source_progress(
         if src and status:
             by_source.setdefault(src, []).append(status)
 
-    assert set(by_source) == {"NVD", "OSV", "GITHUB"}, (
-        f"missing sources in stream events: {by_source}"
-    )
+    assert set(by_source) == {"NVD", "OSV", "GITHUB"}, f"missing sources in stream events: {by_source}"
     for src, statuses in by_source.items():
         assert "running" in statuses, f"{src} never emitted running"
         assert "complete" in statuses, f"{src} never emitted complete"

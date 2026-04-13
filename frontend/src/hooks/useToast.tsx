@@ -136,20 +136,22 @@ function ToastContainer({ toasts, dismiss }: { toasts: ToastItem[]; dismiss: (id
 
 const variantStyles: Record<ToastVariant, { container: string; icon: ReactNode }> = {
   success: {
-    container: 'bg-white border border-green-200 shadow-lg',
-    icon: <CheckCircle className="h-5 w-5 text-green-500 shrink-0" />,
+    container:
+      'bg-surface border border-green-200 shadow-lg dark:border-emerald-800 dark:bg-surface-muted',
+    icon: <CheckCircle className="h-5 w-5 shrink-0 text-green-500 dark:text-emerald-400" />,
   },
   error: {
-    container: 'bg-white border border-red-200 shadow-lg',
-    icon: <AlertCircle className="h-5 w-5 text-red-500 shrink-0" />,
+    container: 'bg-surface border border-red-200 shadow-lg dark:border-red-800 dark:bg-surface-muted',
+    icon: <AlertCircle className="h-5 w-5 shrink-0 text-red-500 dark:text-red-400" />,
   },
   info: {
-    container: 'bg-white border border-blue-200 shadow-lg',
-    icon: <Info className="h-5 w-5 text-blue-500 shrink-0" />,
+    container:
+      'bg-surface border border-primary/25 shadow-lg dark:border-primary/40 dark:bg-surface-muted',
+    icon: <Info className="h-5 w-5 shrink-0 text-primary" />,
   },
   loading: {
-    container: 'bg-white border border-slate-200 shadow-lg',
-    icon: <Loader2 className="h-5 w-5 text-hcl-blue shrink-0 animate-spin" />,
+    container: 'bg-surface border border-border shadow-lg dark:bg-surface-muted',
+    icon: <Loader2 className="h-5 w-5 shrink-0 animate-spin text-primary" />,
   },
 };
 
@@ -162,11 +164,11 @@ function ToastItemView({ toast, dismiss }: { toast: ToastItem; dismiss: (id: str
     >
       {icon}
       <div className="flex-1 min-w-0">
-        <p className="text-sm text-gray-800">{toast.message}</p>
+        <p className="text-sm text-foreground">{toast.message}</p>
         {toast.action && (
           <button
             onClick={() => { toast.action!.onClick(); dismiss(toast.id); }}
-            className="mt-1.5 text-xs font-medium text-hcl-blue hover:underline"
+            className="mt-1.5 text-xs font-medium text-primary hover:underline"
           >
             {toast.action.label} →
           </button>
@@ -174,7 +176,7 @@ function ToastItemView({ toast, dismiss }: { toast: ToastItem; dismiss: (id: str
       </div>
       <button
         onClick={() => dismiss(toast.id)}
-        className="text-gray-400 hover:text-gray-600 transition-colors shrink-0"
+        className="shrink-0 text-hcl-muted transition-colors hover:text-foreground"
         aria-label="Dismiss"
       >
         <X className="h-4 w-4" />

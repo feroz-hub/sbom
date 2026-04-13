@@ -1,0 +1,83 @@
+[build-system]
+requires = ["setuptools>=82", "wheel>=0.46"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sbom-analyzer"
+version = "2.0.0"
+description = "SBOM Analyzer API — modular monolith (FastAPI, Celery, PostgreSQL)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.135.3",
+    "uvicorn[standard]>=0.44.0",
+    "sqlalchemy>=2.0.49",
+    "pydantic>=2.13.0",
+    "pydantic-settings>=2.13.1",
+    "psycopg[binary]>=3.3.3",
+    "alembic>=1.18.4",
+    "requests>=2.33.1",
+    "httpx>=0.28.1",
+    "reportlab>=4.4.10",
+    "packaging>=26.0",
+    "python-multipart>=0.0.26",
+    "python-dotenv>=1.2.2",
+    "slowapi>=0.1.9",
+    "celery[redis]>=5.6.3",
+    "redis>=6.4.0",
+    "PyJWT>=2.12.1",
+    "boto3>=1.42.88",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.0.3",
+    "pytest-asyncio>=1.3.0",
+    "ruff>=0.9.0",
+    "mypy>=1.14.0",
+    "import-linter>=2.0",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+src = ["app", "tests"]
+exclude = ["alembic"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = [
+    "E501",
+    "B008",
+    "E402",
+    "B904",
+    "E711",
+    "F841",
+    "UP042",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"app/parsing/xml_support.py" = ["F401"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+explicit_package_bases = true
+
+[tool.importlinter]
+root_package = "app"
+
+[[tool.importlinter.contracts]]
+name = "Parsing does not depend on HTTP or routers"
+type = "forbidden"
+source_modules = [
+    "app.parsing",
+]
+forbidden_modules = [
+    "app.routers",
+    "app.main",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]

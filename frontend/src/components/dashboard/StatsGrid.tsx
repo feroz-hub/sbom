@@ -27,7 +27,7 @@ const cards = [
     key: 'total_vulnerabilities' as const,
     label: 'Total Vulnerabilities',
     icon: AlertTriangle,
-    accent: 'text-red-600 bg-red-50',
+    accent: 'text-red-600 bg-red-50 dark:bg-red-950/50 dark:text-red-400',
     border: 'border-l-red-500',
   },
 ];
@@ -45,7 +45,7 @@ export function StatsGrid({ stats, isLoading, error }: StatsGridProps) {
 
   if (error) {
     return (
-      <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+      <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
         Failed to load stats: {error.message}
       </div>
     );
@@ -56,7 +56,7 @@ export function StatsGrid({ stats, isLoading, error }: StatsGridProps) {
       {cards.map(({ key, label, icon: Icon, accent, border }) => (
         <div
           key={key}
-          className={`bg-white rounded-xl border border-hcl-border shadow-card border-l-4 ${border} px-6 py-5`}
+          className={`rounded-xl border border-border bg-surface shadow-card border-l-4 ${border} px-6 py-5`}
         >
           <div className="flex items-start justify-between">
             <div>

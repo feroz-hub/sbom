@@ -28,15 +28,15 @@ Why a TypedDict instead of a dataclass:
 
 from __future__ import annotations
 
-from typing import Any, List, Protocol, TypedDict, runtime_checkable
+from typing import Any, Protocol, TypedDict, runtime_checkable
 
 
 class SourceResult(TypedDict):
     """Uniform return shape for every ``VulnSource.query`` call."""
 
-    findings: List[dict]
-    errors: List[dict]
-    warnings: List[dict]
+    findings: list[dict]
+    errors: list[dict]
+    warnings: list[dict]
 
 
 def empty_result() -> SourceResult:
@@ -61,7 +61,6 @@ class VulnSource(Protocol):
 
     async def query(
         self,
-        components: List[dict],
+        components: list[dict],
         settings: Any,
-    ) -> SourceResult:
-        ...
+    ) -> SourceResult: ...

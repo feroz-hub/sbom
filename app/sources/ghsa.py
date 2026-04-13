@@ -18,7 +18,7 @@ straight off ``self`` instead of via the settings object.
 from __future__ import annotations
 
 from dataclasses import replace as dataclass_replace
-from typing import Any, List, Optional
+from typing import Any
 
 from .base import SourceResult, empty_result
 
@@ -28,12 +28,12 @@ class GhsaSource:
 
     name: str = "GITHUB"
 
-    def __init__(self, token: Optional[str] = None) -> None:
+    def __init__(self, token: str | None = None) -> None:
         self.token = (token or "").strip() or None
 
     async def query(
         self,
-        components: List[dict],
+        components: list[dict],
         settings: Any,
     ) -> SourceResult:
         if not components:
@@ -56,7 +56,5 @@ class GhsaSource:
                 # through and let the coroutine read GITHUB_TOKEN from env.
                 effective_settings = settings
 
-        findings, errors, warnings = await github_query_by_components(
-            components, effective_settings
-        )
+        findings, errors, warnings = await github_query_by_components(components, effective_settings)
         return SourceResult(findings=findings, errors=errors, warnings=warnings)

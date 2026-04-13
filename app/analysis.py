@@ -2,15 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
-import json
 import logging
 import os
 import time
-from dataclasses import dataclass, field, fields, asdict, replace
+from dataclasses import asdict, dataclass, field
 from enum import Enum
 from functools import lru_cache
-from typing import Any, Dict, List, Optional, Set, Tuple
-from urllib.parse import parse_qs, unquote
+from typing import Any
 
 import requests
 
@@ -20,12 +18,7 @@ try:
 except Exception:  # pragma: no cover
     httpx = None  # type: ignore
 
-# Optional XML SBOM support
-try:
-    import xmltodict  # type: ignore
-    _XMLTODICT_AVAILABLE = True
-except ImportError:
-    _XMLTODICT_AVAILABLE = False
+from .parsing import extract_components  # noqa: F401 — re-exported for callers
 
 # Module-level requests.Session for NVD connection pooling
 _nvd_session = requests.Session()
@@ -37,17 +30,18 @@ LOGGER = logging.getLogger(__name__)
 # CVE MODEL (kept inline for self-contained file)
 # ============================================================
 
+
 @dataclass
 class CVSSv2Data:
     version: str
     vectorString: str
     baseScore: float
-    accessVector: Optional[str] = None
-    accessComplexity: Optional[str] = None
-    authentication: Optional[str] = None
-    confidentialityImpact: Optional[str] = None
-    integrityImpact: Optional[str] = None
-    availabilityImpact: Optional[str] = None
+    accessVector: str | None = None
+    accessComplexity: str | None = None
+    authentication: str | None = None
+    confidentialityImpact: str | None = None
+    integrityImpact: str | None = None
+    availabilityImpact: str | None = None
 
 
 @dataclass
@@ -55,21 +49,21 @@ class CVSSv2Metric:
     source: str
     type: str
     cvssData: CVSSv2Data
-    baseSeverity: Optional[str] = None
-    exploitabilityScore: Optional[float] = None
-    impactScore: Optional[float] = None
-    acInsufInfo: Optional[bool] = None
-    obtainAllPrivilege: Optional[bool] = None
-    obtainUserPrivilege: Optional[bool] = None
-    obtainOtherPrivilege: Optional[bool] = None
-    userInteractionRequired: Optional[bool] = None
+    baseSeverity: str | None = None
+    exploitabilityScore: float | None = None
+    impactScore: float | None = None
+    acInsufInfo: bool | None = None
+    obtainAllPrivilege: bool | None = None
+    obtainUserPrivilege: bool | None = None
+    obtainOtherPrivilege: bool | None = None
+    userInteractionRequired: bool | None = None
 
 
 @dataclass
 class Metrics:
-    cvssMetricV2: List[Dict[str, Any]] = field(default_factory=list)
-    cvssMetricV31: List[Dict[str, Any]] = field(default_factory=list)
-    cvssMetricV40: List[Dict[str, Any]] = field(default_factory=list)
+    cvssMetricV2: list[dict[str, Any]] = field(default_factory=list)
+    cvssMetricV31: list[dict[str, Any]] = field(default_factory=list)
+    cvssMetricV40: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -88,54 +82,54 @@ class WeaknessDescription:
 class WeaknessItem:
     source: str
     type: str
-    description: List[WeaknessDescription] = field(default_factory=list)
+    description: list[WeaknessDescription] = field(default_factory=list)
 
 
 @dataclass
 class CPEMatch:
     vulnerable: bool
     criteria: str
-    matchCriteriaId: Optional[str] = None
-    versionStartIncluding: Optional[str] = None
-    versionStartExcluding: Optional[str] = None
-    versionEndIncluding: Optional[str] = None
-    versionEndExcluding: Optional[str] = None
+    matchCriteriaId: str | None = None
+    versionStartIncluding: str | None = None
+    versionStartExcluding: str | None = None
+    versionEndIncluding: str | None = None
+    versionEndExcluding: str | None = None
 
 
 @dataclass
 class ConfigNode:
     operator: str  # "OR" / "AND"
     negate: bool
-    cpeMatch: List[CPEMatch] = field(default_factory=list)
+    cpeMatch: list[CPEMatch] = field(default_factory=list)
 
 
 @dataclass
 class Configuration:
-    nodes: List[ConfigNode] = field(default_factory=list)
+    nodes: list[ConfigNode] = field(default_factory=list)
 
 
 @dataclass
 class Reference:
     url: str
-    source: Optional[str] = None
+    source: str | None = None
 
 
 @dataclass
 class CVERecord:
     id: str
-    sourceIdentifier: Optional[str] = None
-    published: Optional[str] = None
-    lastModified: Optional[str] = None
-    vulnStatus: Optional[str] = None
-    cveTags: List[str] = field(default_factory=list)
-    descriptions: List[LangDescription] = field(default_factory=list)
-    metrics: Optional[Metrics] = None
-    weaknesses: List[WeaknessItem] = field(default_factory=list)
-    configurations: List[Configuration] = field(default_factory=list)
-    references: List[Reference] = field(default_factory=list)
+    sourceIdentifier: str | None = None
+    published: str | None = None
+    lastModified: str | None = None
+    vulnStatus: str | None = None
+    cveTags: list[str] = field(default_factory=list)
+    descriptions: list[LangDescription] = field(default_factory=list)
+    metrics: Metrics | None = None
+    weaknesses: list[WeaknessItem] = field(default_factory=list)
+    configurations: list[Configuration] = field(default_factory=list)
+    references: list[Reference] = field(default_factory=list)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "CVERecord":
+    def from_dict(cls, data: dict[str, Any]) -> CVERecord:
         descriptions = [LangDescription(**d) for d in data.get("descriptions", [])]
 
         metrics = None
@@ -147,7 +141,7 @@ class CVERecord:
                 cvssMetricV40=list(metrics_dict.get("cvssMetricV40") or []),
             )
 
-        weaknesses: List[WeaknessItem] = []
+        weaknesses: list[WeaknessItem] = []
         for w in data.get("weaknesses", []) or []:
             descs = [WeaknessDescription(**wd) for wd in w.get("description", []) or []]
             weaknesses.append(WeaknessItem(source=w.get("source", ""), type=w.get("type", ""), description=descs))
@@ -170,17 +164,17 @@ class CVERecord:
         )
 
     # Helpers
-    def primary_english_description(self) -> Optional[str]:
+    def primary_english_description(self) -> str | None:
         for d in self.descriptions:
             if d.lang and d.lang.lower().startswith("en"):
                 return d.value
         return self.descriptions[0].value if self.descriptions else None
 
-    def cvss_v2_base(self) -> Optional[float]:
+    def cvss_v2_base(self) -> float | None:
         """Legacy alias — calls cvss_best_base() for backwards compatibility."""
         return self.cvss_best_base()
 
-    def cvss_best_base(self) -> Optional[float]:
+    def cvss_best_base(self) -> float | None:
         """Return the best CVSS base score across V40 > V31 > V2."""
         if not self.metrics:
             return None
@@ -202,6 +196,7 @@ class CVERecord:
 # Settings / env helpers
 # ============================================================
 
+
 @dataclass(frozen=True)
 class AnalysisSettings:
     source_name: str = "NVD"
@@ -220,10 +215,6 @@ class AnalysisSettings:
     cvss_medium_threshold: float = 4.0
     analysis_max_findings_per_cpe: int = 5000
     analysis_max_findings_total: int = 50000
-
-
-def _norm(s: Optional[str]) -> Optional[str]:
-    return s.strip() if isinstance(s, str) and s.strip() else None
 
 
 def _env_str(name: str, default: str) -> str:
@@ -278,228 +269,12 @@ def get_analysis_settings() -> AnalysisSettings:
     )
 
 
-def resolve_nvd_api_key(settings: Optional[AnalysisSettings] = None) -> Optional[str]:
+def resolve_nvd_api_key(settings: AnalysisSettings | None = None) -> str | None:
     cfg = settings or get_analysis_settings()
     key = os.getenv(cfg.nvd_api_key_env)
     if key and key.strip():
         return key.strip()
     return None
-
-
-# ============================================================
-# SBOM parsing: CycloneDX / SPDX
-# ============================================================
-
-def _parse_cyclonedx(doc: Dict) -> List[Dict]:
-    comps = []
-    for c in doc.get("components", []) or []:
-        comps.append(
-            {
-                "name": _norm(c.get("name")),
-                "version": _norm(c.get("version")),
-                "type": _norm(c.get("type")),
-                "group": _norm(c.get("group")),
-                "supplier": _norm((c.get("supplier") or {}).get("name")) if isinstance(c.get("supplier"), dict) else _norm(c.get("supplier")),
-                "scope": _norm(c.get("scope")),
-                "purl": _norm(c.get("purl")),
-                "cpe": _norm(c.get("cpe")),
-                "bom_ref": _norm(c.get("bom-ref") or c.get("bomRef")),
-            }
-        )
-    return comps
-
-
-def _parse_spdx(doc: Dict) -> List[Dict]:
-    comps = []
-    # SPDX 2.x "packages"
-    for pkg in doc.get("packages", []) or []:
-        purl = None
-        cpe = None
-        for ref in (pkg.get("externalRefs") or []):
-            rtype = (ref.get("referenceType") or "").lower()
-            if rtype == "purl":
-                purl = _norm(ref.get("referenceLocator"))
-            if "cpe" in rtype:
-                cpe = _norm(ref.get("referenceLocator"))
-        supplier = None
-        supplier_info = pkg.get("supplier")
-        if isinstance(supplier_info, str):
-            supplier = _norm(supplier_info)
-        comps.append(
-            {
-                "name": _norm(pkg.get("name")),
-                "version": _norm(pkg.get("versionInfo")),
-                "type": "library",
-                "group": None,
-                "supplier": supplier,
-                "scope": None,
-                "purl": purl,
-                "cpe": cpe,
-                "bom_ref": _norm(pkg.get("SPDXID")),
-            }
-        )
-    # SPDX-Lite or other representations
-    for obj in doc.get("elements", []) or []:
-        if obj.get("type") == "software:package":
-            purl = _norm(obj.get("packageUrl") or obj.get("packageURL"))
-            cpe = None
-            for ref in (obj.get("externalRefs") or obj.get("externalIdentifiers") or []):
-                rtype = (ref.get("referenceType") or ref.get("type") or "").lower()
-                if "cpe" in rtype:
-                    cpe = _norm(ref.get("referenceLocator") or ref.get("locator"))
-                if rtype == "purl" and not purl:
-                    purl = _norm(ref.get("referenceLocator") or ref.get("locator"))
-            comps.append(
-                {
-                    "name": _norm(obj.get("name")),
-                    "version": _norm(obj.get("version")),
-                    "type": "library",
-                    "group": None,
-                    "supplier": None,
-                    "scope": None,
-                    "purl": purl,
-                    "cpe": cpe,
-                    "bom_ref": _norm(obj.get("id") or obj.get("spdx-id")),
-                }
-            )
-    return comps
-
-
-def _parse_cyclonedx_xml(xml_string: str) -> List[Dict]:
-    """Parse CycloneDX XML SBOM using xmltodict or xml.etree fallback."""
-    if _XMLTODICT_AVAILABLE:
-        doc = xmltodict.parse(xml_string)
-        bom = doc.get("bom") or doc
-        components_raw = bom.get("components") or {}
-        component_list = components_raw.get("component", [])
-        if isinstance(component_list, dict):
-            component_list = [component_list]
-        out = []
-        for c in component_list:
-            purl = None
-            cpe = None
-            ext_refs = c.get("externalReferences", {})
-            ref_list = ext_refs.get("reference", []) if isinstance(ext_refs, dict) else []
-            if isinstance(ref_list, dict):
-                ref_list = [ref_list]
-            for ref in ref_list:
-                rtype = (ref.get("@type") or "").lower()
-                url = ref.get("url")
-                if rtype == "purl" and url:
-                    purl = url
-                if "cpe" in rtype and url:
-                    cpe = url
-            if not purl:
-                purl = _norm(c.get("purl"))
-            if not cpe:
-                cpe = _norm(c.get("cpe"))
-            supplier_raw = c.get("supplier") or {}
-            supplier = _norm(supplier_raw.get("name") if isinstance(supplier_raw, dict) else supplier_raw)
-            out.append({
-                "name": _norm(c.get("name")),
-                "version": _norm(c.get("version")),
-                "type": _norm(c.get("@type")),
-                "group": _norm(c.get("group")),
-                "supplier": supplier,
-                "scope": _norm(c.get("@scope")),
-                "purl": purl,
-                "cpe": cpe,
-                "bom_ref": _norm(c.get("@bom-ref")),
-            })
-        return out
-    else:
-        import xml.etree.ElementTree as ET
-        ns = {"cdx": "http://cyclonedx.org/schema/bom/1"}
-        try:
-            root = ET.fromstring(xml_string)
-        except ET.ParseError as e:
-            raise ValueError(f"Invalid XML SBOM: {e}") from e
-        # Try to find namespace from root tag
-        if root.tag.startswith("{"):
-            ns_uri = root.tag.split("}")[0][1:]
-            ns = {"cdx": ns_uri}
-        out = []
-        comps_el = root.find("cdx:components", ns)
-        if comps_el is None:
-            return out
-        for comp in comps_el.findall("cdx:component", ns):
-            purl_el = comp.find("cdx:purl", ns)
-            cpe_el = comp.find("cdx:cpe", ns)
-            name_el = comp.find("cdx:name", ns)
-            ver_el = comp.find("cdx:version", ns)
-            grp_el = comp.find("cdx:group", ns)
-            out.append({
-                "name": _norm(name_el.text if name_el is not None else None),
-                "version": _norm(ver_el.text if ver_el is not None else None),
-                "type": _norm(comp.get("type")),
-                "group": _norm(grp_el.text if grp_el is not None else None),
-                "supplier": None,
-                "scope": _norm(comp.get("scope")),
-                "purl": _norm(purl_el.text if purl_el is not None else None),
-                "cpe": _norm(cpe_el.text if cpe_el is not None else None),
-                "bom_ref": _norm(comp.get("bom-ref")),
-            })
-        return out
-
-
-def _parse_spdx_xml(xml_string: str) -> List[Dict]:
-    """Parse SPDX XML (RDF/XML or tag-value as XML) — best-effort."""
-    if _XMLTODICT_AVAILABLE:
-        doc = xmltodict.parse(xml_string)
-        # SPDX RDF/XML: look for spdx:Package elements
-        # Fallback: treat as SPDX JSON-like structure after xmltodict conversion
-        return _parse_spdx(doc)
-    return []
-
-
-def extract_components(sbom_json: Any) -> List[Dict]:
-    """Accept SBOM as JSON string, XML string, or already-parsed dict."""
-    if isinstance(sbom_json, dict):
-        doc = sbom_json
-        if doc.get("bomFormat") == "CycloneDX":
-            return _parse_cyclonedx(doc)
-        if doc.get("spdxVersion") or doc.get("SPDXID"):
-            return _parse_spdx(doc)
-        if "components" in doc:  # best-effort CycloneDX-like
-            return _parse_cyclonedx(doc)
-        raise ValueError("Unsupported SBOM format (expect CycloneDX or SPDX)")
-
-    # Strip BOM, zero-width chars, and whitespace
-    _INVISIBLE = "\ufeff\ufffe\u200b\u200c\u200d\u2060\ufffe\u00a0"
-    text = sbom_json.strip().lstrip(_INVISIBLE).strip() if isinstance(sbom_json, str) else ""
-
-    # Try JSON first
-    if text.startswith("{") or text.startswith("["):
-        try:
-            doc = json.loads(text)
-            if doc.get("bomFormat") == "CycloneDX":
-                return _parse_cyclonedx(doc)
-            if doc.get("spdxVersion") or doc.get("SPDXID"):
-                return _parse_spdx(doc)
-            if "components" in doc:
-                return _parse_cyclonedx(doc)
-            raise ValueError("Unsupported SBOM format (expect CycloneDX or SPDX)")
-        except json.JSONDecodeError:
-            pass
-
-    # Try XML
-    if text.startswith("<"):
-        # Detect format from XML content
-        text_lower = text.lower()
-        if "cyclonedx" in text_lower or 'bomformat="cyclonedx"' in text_lower or "<bom" in text_lower:
-            return _parse_cyclonedx_xml(text)
-        if "spdx" in text_lower:
-            return _parse_spdx_xml(text)
-        # Fallback: try CycloneDX XML (most common XML SBOM format)
-        return _parse_cyclonedx_xml(text)
-
-    # Last resort: try JSON parse
-    doc = json.loads(text)
-    if doc.get("bomFormat") == "CycloneDX":
-        return _parse_cyclonedx(doc)
-    if doc.get("spdxVersion") or doc.get("SPDXID"):
-        return _parse_spdx(doc)
-    raise ValueError("Unsupported SBOM format (expect CycloneDX or SPDX)")
 
 
 # ============================================================
@@ -514,19 +289,26 @@ def extract_components(sbom_json: Any) -> List[Dict]:
 # adapters will import directly from `services.sources` instead.
 # ----------------------------------------------------------------------
 
+from .sources.cpe import cpe23_from_purl as _cpe23_from_purl
 from .sources.purl import parse_purl as _parse_purl
-from .sources.cpe import slug as _slug, cpe23_from_purl as _cpe23_from_purl
+from .sources.severity import (
+    cvss_version_from_metrics as _cvss_version_from_metrics,
+)
+from .sources.severity import (
+    extract_best_cvss as _extract_best_cvss,
+)
+from .sources.severity import (
+    parse_cvss_attack_vector as _parse_cvss_attack_vector,
+)
 from .sources.severity import (
     safe_score as _safe_score,
-    parse_cvss_attack_vector as _parse_cvss_attack_vector,
-    cvss_version_from_metrics as _cvss_version_from_metrics,
-    extract_best_cvss as _extract_best_cvss,
+)
+from .sources.severity import (
     sev_bucket as _sev_bucket,
-    GH_SEV_NORM as _GH_SEV_NORM,
 )
 
 
-def _augment_components_with_cpe(components: List[dict]) -> Tuple[List[dict], int]:
+def _augment_components_with_cpe(components: list[dict]) -> tuple[list[dict], int]:
     """
     Return a new list where missing CPEs are best-effort generated from PURLs.
     Uses component version when PURL has no version. Returns (components_with_possible_cpe, count_generated).
@@ -551,7 +333,8 @@ def _augment_components_with_cpe(components: List[dict]) -> Tuple[List[dict], in
 # NVD â€” sync (called in parallel across CPEs)
 # ============================================================
 
-def nvd_query_by_cpe(cpe: str, api_key: Optional[str], settings: Optional[AnalysisSettings] = None) -> List[Dict]:
+
+def nvd_query_by_cpe(cpe: str, api_key: str | None, settings: AnalysisSettings | None = None) -> list[dict]:
     cfg = settings or get_analysis_settings()
     if not cpe:
         return []
@@ -564,7 +347,7 @@ def nvd_query_by_cpe(cpe: str, api_key: Optional[str], settings: Optional[Analys
         "startIndex": 0,
     }
     delay = cfg.nvd_request_delay_with_key_seconds if api_key else cfg.nvd_request_delay_without_key_seconds
-    out: List[Dict] = []
+    out: list[dict] = []
     # Headers are passed per-request — do NOT mutate _nvd_session.headers (thread-safety)
 
     while True:
@@ -608,12 +391,12 @@ def nvd_query_by_cpe(cpe: str, api_key: Optional[str], settings: Optional[Analys
 
 
 def _finding_from_raw(
-    raw: Dict[str, Any],
-    cpe: Optional[str],
+    raw: dict[str, Any],
+    cpe: str | None,
     component_name: str,
-    component_version: Optional[str],
+    component_version: str | None,
     settings: AnalysisSettings,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     try:
         record = CVERecord.from_dict(raw)
         score = record.cvss_best_base()
@@ -674,6 +457,7 @@ def _finding_from_raw(
 # Multi-source (async) with OSV and GitHub Advisory
 # ============================================================
 
+
 @dataclass(frozen=True)
 class _MultiSettings(AnalysisSettings):
     gh_graphql_url: str = "https://api.github.com/graphql"
@@ -681,7 +465,7 @@ class _MultiSettings(AnalysisSettings):
     # Per-request override for GitHub token. When set, takes precedence over the
     # environment variable read via `gh_token_env`. Lets request handlers pass a
     # caller-supplied token without mutating process-global os.environ.
-    gh_token_override: Optional[str] = None
+    gh_token_override: str | None = None
     osv_api_base_url: str = "https://api.osv.dev"
     osv_results_per_batch: int = 1000
     max_concurrency: int = 10
@@ -696,7 +480,7 @@ def _env_bool(name: str, default: bool) -> bool:
     return str(v).strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
-def _env_list(name: str, default: List[str]) -> List[str]:
+def _env_list(name: str, default: list[str]) -> list[str]:
     v = os.getenv(name)
     if not v:
         return default
@@ -726,10 +510,19 @@ def get_analysis_settings_multi() -> _MultiSettings:
 _executor = concurrent.futures.ThreadPoolExecutor(max_workers=max(4, os.cpu_count() or 4))
 
 
-async def _async_get(url: str, headers: Optional[dict] = None, params: Optional[dict] = None, timeout: int = 60):
+async def _async_get(url: str, headers: dict | None = None, params: dict | None = None, timeout: int = 60):
     if httpx is not None:
-        async with httpx.AsyncClient(timeout=timeout, headers=headers) as client:
-            r = await client.get(url, params=params)
+        try:
+            from .http_client import get_async_http_client
+
+            client = get_async_http_client()
+        except RuntimeError:
+            async with httpx.AsyncClient(timeout=timeout, headers=headers) as client:
+                r = await client.get(url, params=params, headers=headers)
+                r.raise_for_status()
+                return r.json()
+        else:
+            r = await client.get(url, params=params, headers=headers, timeout=timeout)
             r.raise_for_status()
             return r.json()
     loop = asyncio.get_running_loop()
@@ -738,10 +531,19 @@ async def _async_get(url: str, headers: Optional[dict] = None, params: Optional[
     )
 
 
-async def _async_post(url: str, json_body: dict, headers: Optional[dict] = None, timeout: int = 60):
+async def _async_post(url: str, json_body: dict, headers: dict | None = None, timeout: int = 60):
     if httpx is not None:
-        async with httpx.AsyncClient(timeout=timeout, headers=headers) as client:
-            r = await client.post(url, json=json_body)
+        try:
+            from .http_client import get_async_http_client
+
+            client = get_async_http_client()
+        except RuntimeError:
+            async with httpx.AsyncClient(timeout=timeout, headers=headers) as client:
+                r = await client.post(url, json=json_body, headers=headers)
+                r.raise_for_status()
+                return r.json()
+        else:
+            r = await client.post(url, json=json_body, headers=headers, timeout=timeout)
             r.raise_for_status()
             return r.json()
     loop = asyncio.get_running_loop()
@@ -754,13 +556,14 @@ async def _async_post(url: str, json_body: dict, headers: Optional[dict] = None,
 # Ecosystem helpers
 # -----------------------
 
-def _github_ecosystem_from_purl_type(ptype: str) -> Optional[str]:
+
+def _github_ecosystem_from_purl_type(ptype: str) -> str | None:
     """
     GitHub Advisory GraphQL ecosystems.
     """
     mapping = {
         "npm": "NPM",
-        "pypi": "PIP",       # GH uses PIP for PyPI
+        "pypi": "PIP",  # GH uses PIP for PyPI
         "maven": "MAVEN",
         "nuget": "NUGET",
         "golang": "GO",
@@ -779,7 +582,8 @@ def _github_ecosystem_from_purl_type(ptype: str) -> Optional[str]:
 
 # ---------- OSV ----------
 
-def _best_score_and_vector_from_osv(v: dict) -> Tuple[Optional[float], Optional[str], Optional[str]]:
+
+def _best_score_and_vector_from_osv(v: dict) -> tuple[float | None, str | None, str | None]:
     score = None
     vector = None
     severity_txt = None
@@ -795,7 +599,7 @@ def _best_score_and_vector_from_osv(v: dict) -> Tuple[Optional[float], Optional[
                     cleaned = raw_score
                     slash_idx = cleaned.find("/")
                     if slash_idx != -1:
-                        cleaned = cleaned[slash_idx + 1:]
+                        cleaned = cleaned[slash_idx + 1 :]
                     vector = cleaned
             else:
                 try:
@@ -822,14 +626,16 @@ def _best_score_and_vector_from_osv(v: dict) -> Tuple[Optional[float], Optional[
     return score, vector, severity_txt
 
 
-async def osv_query_by_components(components: List[dict], settings: _MultiSettings) -> Tuple[List[dict], List[dict], List[dict]]:
+async def osv_query_by_components(
+    components: list[dict], settings: _MultiSettings
+) -> tuple[list[dict], list[dict], list[dict]]:
     if not components:
         return [], [], []
     base = settings.osv_api_base_url.rstrip("/")
     batch_url = f"{base}/v1/querybatch"
     get_url = f"{base}/v1/vulns"
 
-    queries: List[dict] = []
+    queries: list[dict] = []
     for comp in components:
         purl = comp.get("purl")
         name = comp.get("name") or ""
@@ -860,25 +666,26 @@ async def osv_query_by_components(components: List[dict], settings: _MultiSettin
         if q:
             queries.append(q)
 
-    findings: List[dict] = []
-    query_errors: List[dict] = []
-    query_warnings: List[dict] = []
+    findings: list[dict] = []
+    query_errors: list[dict] = []
+    query_warnings: list[dict] = []
 
     # Build name-to-version lookup for comp_ver resolution (Bug A3)
-    name_to_ver: Dict[str, Optional[str]] = {
-        (c.get("name") or "").lower(): c.get("version")
-        for c in components
-    }
+    name_to_ver: dict[str, str | None] = {(c.get("name") or "").lower(): c.get("version") for c in components}
 
     if not queries:
         return findings, query_errors, query_warnings
 
-    batches = [queries[i: i + settings.osv_results_per_batch] for i in range(0, len(queries), settings.osv_results_per_batch)]
+    batches = [
+        queries[i : i + settings.osv_results_per_batch] for i in range(0, len(queries), settings.osv_results_per_batch)
+    ]
 
-    async def _fetch_batch(batch: List[dict]) -> List[str]:
+    async def _fetch_batch(batch: list[dict]) -> list[str]:
         try:
-            res = await _async_post(batch_url, json_body={"queries": batch}, timeout=settings.nvd_request_timeout_seconds)
-            ids: List[str] = []
+            res = await _async_post(
+                batch_url, json_body={"queries": batch}, timeout=settings.nvd_request_timeout_seconds
+            )
+            ids: list[str] = []
             for item in res.get("results", []) or []:
                 for v in item.get("vulns", []) or []:
                     vid = v.get("id")
@@ -894,7 +701,7 @@ async def osv_query_by_components(components: List[dict], settings: _MultiSettin
 
     sem = asyncio.Semaphore(settings.max_concurrency)
 
-    async def _fetch_vuln(vid: str) -> Optional[dict]:
+    async def _fetch_vuln(vid: str) -> dict | None:
         url = f"{get_url}/{vid}"
         try:
             async with sem:
@@ -951,6 +758,7 @@ async def osv_query_by_components(components: List[dict], settings: _MultiSettin
 
     return findings, query_errors, query_warnings
 
+
 def enrich_component_for_osv(comp):
     comp = dict(comp)  # avoid mutating caller's dict
     name = (comp.get("name") or "").lower()
@@ -967,6 +775,7 @@ def enrich_component_for_osv(comp):
 
     return comp
 
+
 def extract_fixed_versions_osv(v):
     fixed = []
     for aff in v.get("affected", []):
@@ -977,9 +786,13 @@ def extract_fixed_versions_osv(v):
                     fixed.append(fv)
     return sorted(set(fixed))
 
+
 # ---------- GitHub Advisory (GHSA) ----------
 
-async def github_query_by_components(components: List[dict], settings: _MultiSettings) -> Tuple[List[dict], List[dict], List[dict]]:
+
+async def github_query_by_components(
+    components: list[dict], settings: _MultiSettings
+) -> tuple[list[dict], list[dict], list[dict]]:
     # Prefer the per-request override (passed in via dataclasses.replace) before
     # falling back to the environment variable. This avoids mutating os.environ
     # from request handlers under concurrency.
@@ -990,8 +803,8 @@ async def github_query_by_components(components: List[dict], settings: _MultiSet
     headers = {"Authorization": f"bearer {token.strip()}", "User-Agent": settings.http_user_agent}
     url = settings.gh_graphql_url
 
-    pkg_set: Set[Tuple[str, str]] = set()
-    name_for_component: Dict[Tuple[str, str], Set[Tuple[str, Optional[str]]]] = {}
+    pkg_set: set[tuple[str, str]] = set()
+    name_for_component: dict[tuple[str, str], set[tuple[str, str | None]]] = {}
 
     for comp in components:
         purl = comp.get("purl")
@@ -1034,8 +847,8 @@ async def github_query_by_components(components: List[dict], settings: _MultiSet
     """
 
     sem = asyncio.Semaphore(settings.max_concurrency)
-    findings: List[dict] = []
-    query_errors: List[dict] = []
+    findings: list[dict] = []
+    query_errors: list[dict] = []
 
     async def _run_one(eco: str, pkg: str):
         cursor = None
@@ -1043,7 +856,7 @@ async def github_query_by_components(components: List[dict], settings: _MultiSet
         while True:
             try:
                 async with sem:
-                    variables: Dict[str, Any] = {"ecosystem": eco, "name": pkg, "first": page_size}
+                    variables: dict[str, Any] = {"ecosystem": eco, "name": pkg, "first": page_size}
                     if cursor:
                         variables["after"] = cursor
                     data = await _async_post(
@@ -1055,7 +868,7 @@ async def github_query_by_components(components: List[dict], settings: _MultiSet
                     if "errors" in data:
                         query_errors.append({"source": "GITHUB", "package": f"{eco}/{pkg}", "error": data["errors"]})
                         return
-                    sv = ((data.get("data") or {}).get("securityVulnerabilities") or {})
+                    sv = (data.get("data") or {}).get("securityVulnerabilities") or {}
                     nodes = sv.get("nodes") or []
                     page_info = sv.get("pageInfo") or {}
                     for n in nodes:
@@ -1105,6 +918,7 @@ async def github_query_by_components(components: List[dict], settings: _MultiSet
 
 # ---------- Multi-source orchestrator ----------
 
+
 class AnalysisSource(str, Enum):
     NVD = "NVD"
     OSV = "OSV"
@@ -1112,16 +926,16 @@ class AnalysisSource(str, Enum):
 
 
 async def nvd_query_by_components_async(
-    components: List[dict],
+    components: list[dict],
     settings: _MultiSettings,
-    nvd_api_key: Optional[str] = None,
-) -> Tuple[List[dict], List[dict], List[dict]]:
+    nvd_api_key: str | None = None,
+) -> tuple[list[dict], list[dict], list[dict]]:
     """
     Run NVD CPE lookups for all components concurrently.
     Returns (findings, errors, warnings) — same shape as osv/github counterparts.
     """
-    cpe_set: Set[str] = set()
-    name_by_cpe: Dict[str, Tuple[str, Optional[str]]] = {}
+    cpe_set: set[str] = set()
+    name_by_cpe: dict[str, tuple[str, str | None]] = {}
     for comp in components:
         cpe = comp.get("cpe")
         if cpe:
@@ -1135,7 +949,7 @@ async def nvd_query_by_components_async(
     loop = asyncio.get_running_loop()
     sem = asyncio.Semaphore(settings.max_concurrency)
 
-    def _fetch_one(cpe: str) -> Tuple[str, List[dict], Optional[str]]:
+    def _fetch_one(cpe: str) -> tuple[str, list[dict], str | None]:
         try:
             return cpe, nvd_query_by_cpe(cpe, api_key, settings=settings), None
         except Exception as exc:
@@ -1147,8 +961,8 @@ async def nvd_query_by_components_async(
 
     results = await asyncio.gather(*[_bounded(cpe) for cpe in sorted(cpe_set)])
 
-    findings: List[dict] = []
-    errors: List[dict] = []
+    findings: list[dict] = []
+    errors: list[dict] = []
     for cpe, raw_list, err in results:
         if err:
             errors.append({"source": "NVD", "cpe": cpe, "error": err})
@@ -1169,222 +983,17 @@ from .sources.dedupe import deduplicate_findings  # noqa: F401
 
 async def analyze_sbom_multi_source_async(
     sbom_json: str,
-    sources: Optional[List[str]] = None,
-    settings: Optional[_MultiSettings] = None,
+    sources: list[str] | None = None,
+    settings: _MultiSettings | None = None,
 ) -> dict:
     """
     Asynchronously analyze an SBOM against the selected sources.
     sources: ["NVD","OSV","GITHUB"]; if None, read env ANALYSIS_SOURCES or default ["NVD"].
     Returns a normalized dict compatible with your pipeline.
     """
-    cfg = settings or get_analysis_settings_multi()
-    components = extract_components(sbom_json)
-    LOGGER.debug("Extracted %d components from SBOM", len(components))
+    from .pipeline.multi_source import run_multi_source_analysis_async
 
-    components = [enrich_component_for_osv(c) for c in components]
-    components_w_cpe, generated_cpe_count = _augment_components_with_cpe(components)
-    LOGGER.debug(
-        "CPE augmentation: %d components total, %d CPEs generated",
-        len(components_w_cpe), generated_cpe_count,
-    )
-
-    # Resolve selected sources
-    default_sources = _env_list(cfg.analysis_sources_env, ["NVD"])
-    selected = [s.strip().upper() for s in (sources or default_sources)]
-    selected_enum: Set[AnalysisSource] = set()
-    for s in selected:
-        try:
-            selected_enum.add(AnalysisSource[s])
-        except KeyError:
-            LOGGER.warning("Unknown analysis source ignored: %s", s)
-
-    # If no CPEs at all even after generation, skip NVD
-    if not any(c.get("cpe") for c in components_w_cpe):
-        if AnalysisSource.NVD in selected_enum:
-            LOGGER.info("Skipping NVD: no CPEs found in any component")
-            selected_enum.remove(AnalysisSource.NVD)
-
-    LOGGER.info(
-        "Starting multi-source analysis: sources=%s components=%d",
-        [s.name for s in selected_enum], len(components_w_cpe),
-    )
-
-    all_findings: List[dict] = []
-    query_errors: List[dict] = []
-    query_warnings: List[dict] = []
-
-    # NVD in parallel across CPEs (threaded)
-    async def _nvd():
-        nonlocal all_findings, query_errors
-        cpe_set: Set[str] = set()
-        name_by_cpe: Dict[str, Tuple[str, Optional[str]]] = {}
-        for comp in components_w_cpe:
-            cpe = comp.get("cpe")
-            if cpe:
-                cpe_set.add(cpe)
-                name_by_cpe[cpe] = (comp.get("name") or "", comp.get("version"))
-        if not cpe_set:
-            LOGGER.debug("NVD: no CPEs to query — skipping")
-            return
-        LOGGER.debug("NVD: querying %d unique CPEs concurrently", len(cpe_set))
-        loop = asyncio.get_running_loop()
-
-        def _fetch_one(cpe: str) -> Tuple[str, List[dict], Optional[str]]:
-            LOGGER.debug("NVD: fetching CPE '%s'", cpe)
-            try:
-                cve_objs = nvd_query_by_cpe(cpe, resolve_nvd_api_key(cfg), settings=cfg)
-                LOGGER.debug("NVD: CPE '%s' → %d CVEs", cpe, len(cve_objs))
-                return cpe, cve_objs, None
-            except Exception as exc:
-                LOGGER.warning("NVD: CPE '%s' query failed: %s", cpe, exc)
-                return cpe, [], str(exc)
-
-        _nvd_sem = asyncio.Semaphore(cfg.max_concurrency)
-
-        async def _bounded_fetch(cpe: str):
-            async with _nvd_sem:
-                return await loop.run_in_executor(_executor, _fetch_one, cpe)
-
-        tasks = [_bounded_fetch(cpe) for cpe in sorted(cpe_set)]
-        results = await asyncio.gather(*tasks)
-        nvd_findings = 0
-        for cpe, raw_list, err in results:
-            if err:
-                query_errors.append({"source": "NVD", "cpe": cpe, "error": err})
-                continue
-            comp_name, comp_ver = name_by_cpe.get(cpe, ("", None))
-            for raw in raw_list:
-                if not isinstance(raw, dict):
-                    continue
-                all_findings.append(
-                    _finding_from_raw(
-                        raw=raw,
-                        cpe=cpe,
-                        component_name=comp_name,
-                        component_version=comp_ver,
-                        settings=cfg,
-                    )
-                )
-                nvd_findings += 1
-        LOGGER.info("NVD complete: %d findings from %d CPEs (%d errors)", nvd_findings, len(cpe_set), len(query_errors))
-
-    async def _osv():
-        nonlocal all_findings, query_errors, query_warnings
-        LOGGER.debug("OSV: querying %d components", len(components))
-        f, e, w = await osv_query_by_components(components, cfg)
-        LOGGER.info("OSV complete: %d findings, %d errors, %d warnings", len(f), len(e), len(w))
-        all_findings.extend(f)
-        query_errors.extend(e)
-        query_warnings.extend(w)
-
-    async def _gh():
-        nonlocal all_findings, query_errors
-        LOGGER.debug("GitHub: querying %d components", len(components))
-        f, e, _w = await github_query_by_components(components, cfg)
-        LOGGER.info("GitHub complete: %d findings, %d errors", len(f), len(e))
-        all_findings.extend(f)
-        query_errors.extend(e)
-
-    coros = []
-    if AnalysisSource.NVD in selected_enum:
-        coros.append(_nvd())
-    if AnalysisSource.OSV in selected_enum:
-        coros.append(_osv())
-    if AnalysisSource.GITHUB in selected_enum:
-        coros.append(_gh())
-    if coros:
-        await asyncio.gather(*coros)
-
-    # Two-pass deduplication: CVE ↔ GHSA alias cross-linking (Feature B3)
-    alias_index: Dict[str, str] = {}
-    for v in all_findings:
-        vid = v.get("vuln_id") or ""
-        for alias in (v.get("aliases") or []):
-            if alias and alias not in alias_index:
-                alias_index[alias] = vid
-        if vid and vid not in alias_index:
-            alias_index[vid] = vid
-
-    def _canonical_key(v: dict) -> str:
-        vid = v.get("vuln_id") or ""
-        canonical = alias_index.get(vid, vid)
-        if canonical:
-            return canonical
-        for a in (v.get("aliases") or []):
-            if a:
-                return alias_index.get(a, a)
-        return v.get("component_name") or ""
-
-    _sev_rank = {"LOW": 0, "MEDIUM": 1, "HIGH": 2, "CRITICAL": 3, "UNKNOWN": -1}
-
-    merged: Dict[str, dict] = {}
-    for v in all_findings:
-        key = _canonical_key(v)
-        if key not in merged:
-            merged[key] = dict(v)
-        else:
-            existing = merged[key]
-            existing["sources"] = list(set(existing.get("sources", []) + v.get("sources", [])))
-            existing["aliases"] = list(set(existing.get("aliases", []) + v.get("aliases", [])))
-            existing["cwe"] = list(set((existing.get("cwe") or []) + (v.get("cwe") or [])))
-            existing["references"] = list(set(
-                [r for r in (existing.get("references") or []) if r] +
-                [r for r in (v.get("references") or []) if r]
-            ))
-            existing["fixed_versions"] = list(set(
-                (existing.get("fixed_versions") or []) + (v.get("fixed_versions") or [])
-            ))
-            e_rank = _sev_rank.get(str(existing.get("severity", "UNKNOWN")).upper(), -1)
-            v_rank = _sev_rank.get(str(v.get("severity", "UNKNOWN")).upper(), -1)
-            if v_rank > e_rank:
-                existing["severity"] = v["severity"]
-                if v.get("score") is not None:
-                    existing["score"] = v["score"]
-            if not existing.get("attack_vector") and v.get("attack_vector"):
-                existing["attack_vector"] = v["attack_vector"]
-
-    findings = list(merged.values())
-    LOGGER.debug(
-        "Deduplication: %d raw findings → %d unique findings",
-        len(all_findings), len(findings),
-    )
-
-    buckets = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "UNKNOWN": 0}
-    for f in findings:
-        sev = str((f or {}).get("severity", "UNKNOWN")).upper()
-        buckets[sev if sev in buckets else "UNKNOWN"] += 1
-
-    LOGGER.info(
-        "Multi-source analysis summary: total=%d  CRITICAL=%d HIGH=%d MEDIUM=%d LOW=%d UNKNOWN=%d  errors=%d",
-        len(findings), buckets["CRITICAL"], buckets["HIGH"], buckets["MEDIUM"],
-        buckets["LOW"], buckets["UNKNOWN"], len(query_errors),
-    )
-
-    details: Dict[str, Any] = {
-        "total_components": len(components),
-        "components_with_cpe": len({c.get("cpe") for c in components_w_cpe if c.get("cpe")}),
-        "total_findings": len(findings),
-        "critical": buckets["CRITICAL"],
-        "high": buckets["HIGH"],
-        "medium": buckets["MEDIUM"],
-        "low": buckets["LOW"],
-        "unknown": buckets["UNKNOWN"],
-        "query_errors": query_errors,
-        "query_warnings": query_warnings,
-        "findings": findings,
-        "analysis_metadata": {
-            "sources": sorted([s.value for s in selected_enum]),
-            "generated_cpe_count": generated_cpe_count,
-            "nvd_api_base_url": getattr(cfg, "nvd_api_base_url", None),
-            "osv_api_base_url": getattr(cfg, "osv_api_base_url", None),
-            "gh_graphql_url": getattr(cfg, "gh_graphql_url", None),
-        },
-    }
-    if generated_cpe_count > 0:
-        details["note"] = f"Generated {generated_cpe_count} CPEs from package URLs to enable NVD correlation."
-    if AnalysisSource.NVD in selected_enum and details["components_with_cpe"] == 0:
-        details["message"] = "No CPE values could be generated; NVD correlation not executed."
-    return details
+    return await run_multi_source_analysis_async(sbom_json, sources=sources, settings=settings)
 
 
 # Phase 5 cleanup note: the sync wrapper `analyze_sbom_multi_source(...)`
@@ -1393,10 +1002,11 @@ async def analyze_sbom_multi_source_async(
 # `analyze_sbom_multi_source_async` directly, awaited from async handlers.
 # The sync wrapper was removed.
 
+
 # -----------------------------
 # CWE EXTRACTION
 # -----------------------------
-def extract_cwe_from_nvd(raw: Dict[str, Any]) -> List[str]:
+def extract_cwe_from_nvd(raw: dict[str, Any]) -> list[str]:
     cwes = []
     for w in raw.get("weaknesses", []) or []:
         for d in w.get("description", []) or []:
@@ -1406,19 +1016,19 @@ def extract_cwe_from_nvd(raw: Dict[str, Any]) -> List[str]:
     return list(set(cwes))
 
 
-def extract_cwe_from_osv(v: Dict[str, Any]) -> List[str]:
+def extract_cwe_from_osv(v: dict[str, Any]) -> list[str]:
     cwes = []
     db = v.get("database_specific") or {}
     cwes.extend(db.get("cwe_ids", []))
     return list(set(cwes))
 
 
-def extract_cwe_from_ghsa(node: Dict[str, Any]) -> List[str]:
+def extract_cwe_from_ghsa(node: dict[str, Any]) -> list[str]:
     """Extract CWE IDs from a GitHub Advisory securityVulnerabilities node."""
     cwes = []
     adv = node.get("advisory") or {}
     cwe_conn = adv.get("cwes") or {}
-    for cwe_node in (cwe_conn.get("nodes") or []):
+    for cwe_node in cwe_conn.get("nodes") or []:
         cwe_id = cwe_node.get("cweId")
         if cwe_id:
             cwes.append(cwe_id)

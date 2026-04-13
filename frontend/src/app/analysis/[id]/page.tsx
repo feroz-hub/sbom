@@ -5,12 +5,14 @@ import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Download } from 'lucide-react';
 import { TopBar } from '@/components/layout/TopBar';
+import { Alert } from '@/components/ui/Alert';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { StatusBadge, SeverityBadge } from '@/components/ui/Badge';
 import { FindingsTable } from '@/components/analysis/FindingsTable';
 import { PageSpinner } from '@/components/ui/Spinner';
 import { getRun, getRunFindings, downloadPdfReport, exportRunCsv, exportRunSarif } from '@/lib/api';
+import { runStatusDescription } from '@/lib/analysisRunStatusLabels';
 import { formatDate, formatDuration, downloadBlob } from '@/lib/utils';
 import { useToast } from '@/hooks/useToast';
 
@@ -82,7 +84,10 @@ export default function AnalysisDetailPage({ params }: AnalysisDetailPageProps) 
   if (runLoading) {
     return (
       <div className="flex flex-col flex-1">
-        <TopBar title="Analysis Detail" />
+        <TopBar
+          title="Analysis Detail"
+          breadcrumbs={[{ label: 'Analysis Runs', href: '/analysis' }]}
+        />
         <div className="p-6">
           <PageSpinner />
         </div>
@@ -93,28 +98,52 @@ export default function AnalysisDetailPage({ params }: AnalysisDetailPageProps) 
   if (runError || !run) {
     return (
       <div className="flex flex-col flex-1">
-        <TopBar title="Analysis Detail" />
+        <TopBar
+          title="Analysis Detail"
+          breadcrumbs={[{ label: 'Analysis Runs', href: '/analysis' }]}
+        />
         <div className="p-6">
-          <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
-            {runError ? `Failed to load run: ${runError.message}` : 'Run not found'}
-          </div>
+          <Alert variant="error" title={runError ? 'Could not load run' : 'Not found'}>
+            {runError ? runError.message : 'This analysis run does not exist or was removed.'}
+          </Alert>
         </div>
       </div>
     );
   }
 
   const severityBreakdown = [
-    { label: 'Critical', count: run.critical_count, color: 'bg-red-50 text-red-700 border-red-200' },
-    { label: 'High', count: run.high_count, color: 'bg-orange-50 text-orange-700 border-orange-200' },
-    { label: 'Medium', count: run.medium_count, color: 'bg-amber-50 text-amber-700 border-amber-200' },
-    { label: 'Low', count: run.low_count, color: 'bg-hcl-light text-hcl-blue border-hcl-border' },
-    { label: 'Unknown', count: run.unknown_count, color: 'bg-slate-100 text-slate-600 border-slate-200' },
+    {
+      label: 'Critical',
+      count: run.critical_count,
+      color:
+        'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200',
+    },
+    {
+      label: 'High',
+      count: run.high_count,
+      color:
+        'border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-800 dark:bg-orange-950/40 dark:text-orange-200',
+    },
+    {
+      label: 'Medium',
+      count: run.medium_count,
+      color:
+        'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200',
+    },
+    { label: 'Low', count: run.low_count, color: 'border-hcl-border bg-hcl-light text-hcl-blue' },
+    {
+      label: 'Unknown',
+      count: run.unknown_count,
+      color:
+        'border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300',
+    },
   ];
 
   return (
     <div className="flex flex-col flex-1">
       <TopBar
         title={`Analysis Run #${run.id}`}
+        breadcrumbs={[{ label: 'Analysis Runs', href: '/analysis' }]}
         action={
           <div className="flex items-center gap-2">
             <Button variant="secondary" size="sm" onClick={handleDownloadCsv}>
@@ -152,9 +181,13 @@ export default function AnalysisDetailPage({ params }: AnalysisDetailPageProps) 
             <CardTitle>Run Summary</CardTitle>
           </CardHeader>
           <CardContent>
+            <p className="mb-4 text-xs leading-relaxed text-hcl-muted">
+              Outcome:{' '}
+              <span className="text-foreground">{runStatusDescription(run.run_status)}</span>
+            </p>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
               {[
-                { label: 'Status', value: <StatusBadge status={run.run_status} /> },
+                { label: 'Outcome', value: <StatusBadge status={run.run_status} /> },
                 { label: 'Source', value: run.source || '—' },
                 { label: 'Duration', value: formatDuration(run.duration_ms) },
                 { label: 'Total Components', value: run.total_components?.toLocaleString() ?? '—' },
@@ -190,8 +223,10 @@ export default function AnalysisDetailPage({ params }: AnalysisDetailPageProps) 
             </div>
 
             {run.error_message && (
-              <div className="mt-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
-                <strong>Error:</strong> {run.error_message}
+              <div className="mt-4">
+                <Alert variant="error" title="Run error">
+                  {run.error_message}
+                </Alert>
               </div>
             )}
           </CardContent>

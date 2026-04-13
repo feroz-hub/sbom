@@ -21,7 +21,6 @@ import pytest
 
 from ._normalize import normalize
 
-
 SNAPSHOT_DIR = Path(__file__).parent / "snapshots"
 SNAPSHOT_DIR.mkdir(exist_ok=True)
 

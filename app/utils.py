@@ -1,23 +1,19 @@
 # utils.py — Shared utilities for SBOM Analyzer API
 from __future__ import annotations
 
-import os
-from datetime import datetime, timezone
-from typing import Any, Optional, List
+from datetime import UTC, datetime
+from typing import Any
 
 
 def now_iso() -> str:
     """Return current UTC time as ISO 8601 string."""
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    return datetime.now(UTC).replace(microsecond=0).isoformat()
 
 
 def legacy_analysis_level() -> int:
-    raw_value = os.getenv("ANALYSIS_LEGACY_LEVEL", "1")
-    try:
-        parsed = int(raw_value)
-    except ValueError:
-        return 1
-    return parsed if parsed > 0 else 1
+    from .settings import get_analysis_legacy_level
+
+    return get_analysis_legacy_level()
 
 
 def safe_int(value: Any, default: int = 0) -> int:
@@ -27,7 +23,7 @@ def safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
-def safe_float(value: Any) -> Optional[float]:
+def safe_float(value: Any) -> float | None:
     try:
         if value is None:
             return None
@@ -36,11 +32,11 @@ def safe_float(value: Any) -> Optional[float]:
         return None
 
 
-def normalized_key(value: Optional[str]) -> str:
+def normalized_key(value: str | None) -> str:
     return (value or "").strip().lower()
 
 
-def compute_report_status(total_findings: int, query_errors: List[dict]) -> str:
+def compute_report_status(total_findings: int, query_errors: list[dict]) -> str:
     if total_findings > 0:
         return "FAIL"
     if query_errors:
@@ -48,7 +44,7 @@ def compute_report_status(total_findings: int, query_errors: List[dict]) -> str:
     return "PASS"
 
 
-def normalize_details(details: Optional[dict], components: List[dict]) -> dict:
+def normalize_details(details: dict | None, components: list[dict]) -> dict:
     """
     Preserve analyzer-provided totals if present; only compute from raw components
     as a fallback. Always recompute severity buckets from the 'findings' list.

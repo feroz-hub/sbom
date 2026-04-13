@@ -26,32 +26,33 @@ All four endpoints are thin wrappers around a single shared helper
      ``frontend/src/hooks/useBackgroundAnalysis.ts:65`` keeps working.
 """
 
-from __future__ import annotations
-
 import logging
 import time
-from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ..db import get_db
-from ..settings import get_settings
-from ..services.sbom_service import now_iso, load_sbom_from_ref as _load_sbom_from_ref
 from ..analysis import (
-    get_analysis_settings_multi,
-    enrich_component_for_osv,
     _augment_components_with_cpe,
     deduplicate_findings,
+    enrich_component_for_osv,
+    get_analysis_settings_multi,
 )
+from ..credentials import github_token_for_adapters, nvd_api_key_for_adapters
+from ..db import get_db
+from ..idempotency import normalize_idempotency_key, run_idempotent
+from ..rate_limit import analyze_route_limit
+from ..services.sbom_service import load_sbom_from_ref as _load_sbom_from_ref
+from ..services.sbom_service import now_iso
+from ..settings import get_settings
 from ..sources import (
+    GhsaSource,
     NvdSource,
     OsvSource,
-    GhsaSource,
     run_sources_concurrently,
 )
-from .sboms_crud import persist_analysis_run, compute_report_status
+from .sboms_crud import compute_report_status, persist_analysis_run
 
 DEFAULT_RESULTS_PER_PAGE = get_settings().DEFAULT_RESULTS_PER_PAGE
 
@@ -62,46 +63,42 @@ router = APIRouter(tags=["analyze"])
 
 # ---- Request models -------------------------------------------------------
 
+
 class AnalysisByRefNVD(BaseModel):
-    sbom_id: Optional[int] = None
-    sbom_name: Optional[str] = None
-    nvd_api_key: Optional[str] = None
+    sbom_id: int | None = None
+    sbom_name: str | None = None
     results_per_page: int = DEFAULT_RESULTS_PER_PAGE
 
 
 class AnalysisByRefGitHub(BaseModel):
-    sbom_id: Optional[int] = None
-    sbom_name: Optional[str] = None
-    github_token: Optional[str] = None  # falls back to env if None
+    sbom_id: int | None = None
+    sbom_name: str | None = None
     first: int = 100
 
 
 class AnalysisByRefOSV(BaseModel):
-    sbom_id: Optional[int] = None
-    sbom_name: Optional[str] = None
+    sbom_id: int | None = None
+    sbom_name: str | None = None
     hydrate: bool = True
 
 
 class AnalysisByRefConsolidated(BaseModel):
-    sbom_id: Optional[int] = None
-    sbom_name: Optional[str] = None
-    nvd_api_key: Optional[str] = None
+    sbom_id: int | None = None
+    sbom_name: str | None = None
     results_per_page: int = DEFAULT_RESULTS_PER_PAGE
-    github_token: Optional[str] = None
     first: int = 100
     osv_hydrate: bool = True
 
 
 # ---- Shared runner --------------------------------------------------------
 
+
 async def _run_legacy_analysis(
     db: Session,
     *,
-    sbom_id: Optional[int],
-    sbom_name: Optional[str],
-    sources_list: List[str],
-    nvd_api_key: Optional[str] = None,
-    github_token: Optional[str] = None,
+    sbom_id: int | None,
+    sbom_name: str | None,
+    sources_list: list[str],
 ) -> dict:
     """
     Shared body for the four legacy ad-hoc endpoints.
@@ -132,9 +129,9 @@ async def _run_legacy_analysis(
     # 3. Build per-request adapters. Credentials are bound at construction
     #    time so the request handler never has to mutate os.environ.
     adapter_map = {
-        "NVD": lambda: NvdSource(api_key=nvd_api_key),
+        "NVD": lambda: NvdSource(api_key=nvd_api_key_for_adapters()),
         "OSV": lambda: OsvSource(),
-        "GITHUB": lambda: GhsaSource(token=github_token),
+        "GITHUB": lambda: GhsaSource(token=github_token_for_adapters()),
     }
     adapters = [adapter_map[name]() for name in sources_list if name in adapter_map]
     if not adapters:
@@ -262,58 +259,108 @@ async def _run_legacy_analysis(
 
 # ---- NVD ------------------------------------------------------------------
 
+
 @router.post("/analyze-sbom-nvd")
-async def analyze_sbom_nvd(payload: AnalysisByRefNVD, db: Session = Depends(get_db)):
+@analyze_route_limit
+async def analyze_sbom_nvd(
+    request: Request,
+    payload: AnalysisByRefNVD = Body(...),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
+    db: Session = Depends(get_db),
+):
     """Run NVD-only analysis on an SBOM (by id or name)."""
     if payload.sbom_id is None and not (payload.sbom_name and payload.sbom_name.strip()):
         raise HTTPException(status_code=422, detail="Provide 'sbom_id' or 'sbom_name' in request body")
     log.info("NVD analysis started: sbom_id=%s sbom_name=%s", payload.sbom_id, payload.sbom_name)
-    return await _run_legacy_analysis(
-        db,
-        sbom_id=payload.sbom_id,
-        sbom_name=payload.sbom_name,
-        sources_list=["NVD"],
-        nvd_api_key=payload.nvd_api_key,
-    )
+
+    async def _inner() -> dict:
+        return await _run_legacy_analysis(
+            db,
+            sbom_id=payload.sbom_id,
+            sbom_name=payload.sbom_name,
+            sources_list=["NVD"],
+        )
+
+    key = normalize_idempotency_key(idempotency_key)
+    scope = f"legacy_nvd:{payload.sbom_id}:{payload.sbom_name or ''}"
+    if key:
+        return await run_idempotent(scope, key, _inner)
+    return await _inner()
 
 
 # ---- GitHub Advisories ----------------------------------------------------
 
+
 @router.post("/analyze-sbom-github")
-async def analyze_sbom_github(payload: AnalysisByRefGitHub, db: Session = Depends(get_db)):
+@analyze_route_limit
+async def analyze_sbom_github(
+    request: Request,
+    payload: AnalysisByRefGitHub = Body(...),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
+    db: Session = Depends(get_db),
+):
     """Run GitHub Security Advisory analysis on an SBOM (by id or name)."""
     if payload.sbom_id is None and not (payload.sbom_name and payload.sbom_name.strip()):
         raise HTTPException(status_code=422, detail="Provide 'sbom_id' or 'sbom_name' in request body")
     log.info("GHSA analysis started: sbom_id=%s sbom_name=%s", payload.sbom_id, payload.sbom_name)
-    return await _run_legacy_analysis(
-        db,
-        sbom_id=payload.sbom_id,
-        sbom_name=payload.sbom_name,
-        sources_list=["GITHUB"],
-        github_token=payload.github_token,
-    )
+
+    async def _inner() -> dict:
+        return await _run_legacy_analysis(
+            db,
+            sbom_id=payload.sbom_id,
+            sbom_name=payload.sbom_name,
+            sources_list=["GITHUB"],
+        )
+
+    key = normalize_idempotency_key(idempotency_key)
+    scope = f"legacy_github:{payload.sbom_id}:{payload.sbom_name or ''}"
+    if key:
+        return await run_idempotent(scope, key, _inner)
+    return await _inner()
 
 
 # ---- OSV ------------------------------------------------------------------
 
+
 @router.post("/analyze-sbom-osv")
-async def analyze_sbom_osv(payload: AnalysisByRefOSV, db: Session = Depends(get_db)):
+@analyze_route_limit
+async def analyze_sbom_osv(
+    request: Request,
+    payload: AnalysisByRefOSV = Body(...),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
+    db: Session = Depends(get_db),
+):
     """Run OSV analysis on an SBOM (by id or name)."""
     if payload.sbom_id is None and not (payload.sbom_name and payload.sbom_name.strip()):
         raise HTTPException(status_code=422, detail="Provide 'sbom_id' or 'sbom_name' in request body")
     log.info("OSV analysis started: sbom_id=%s sbom_name=%s", payload.sbom_id, payload.sbom_name)
-    return await _run_legacy_analysis(
-        db,
-        sbom_id=payload.sbom_id,
-        sbom_name=payload.sbom_name,
-        sources_list=["OSV"],
-    )
+
+    async def _inner() -> dict:
+        return await _run_legacy_analysis(
+            db,
+            sbom_id=payload.sbom_id,
+            sbom_name=payload.sbom_name,
+            sources_list=["OSV"],
+        )
+
+    key = normalize_idempotency_key(idempotency_key)
+    scope = f"legacy_osv:{payload.sbom_id}:{payload.sbom_name or ''}"
+    if key:
+        return await run_idempotent(scope, key, _inner)
+    return await _inner()
 
 
 # ---- Consolidated (NVD + GHSA + OSV) --------------------------------------
 
+
 @router.post("/analyze-sbom-consolidated")
-async def analyze_sbom_consolidated(payload: AnalysisByRefConsolidated, db: Session = Depends(get_db)):
+@analyze_route_limit
+async def analyze_sbom_consolidated(
+    request: Request,
+    payload: AnalysisByRefConsolidated = Body(...),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
+    db: Session = Depends(get_db),
+):
     """Run consolidated analysis (NVD + GHSA + OSV) on an SBOM (by id or name)."""
     if payload.sbom_id is None and not (payload.sbom_name and payload.sbom_name.strip()):
         raise HTTPException(status_code=422, detail="Provide 'sbom_id' or 'sbom_name' in request body")
@@ -322,11 +369,17 @@ async def analyze_sbom_consolidated(payload: AnalysisByRefConsolidated, db: Sess
         payload.sbom_id,
         payload.sbom_name,
     )
-    return await _run_legacy_analysis(
-        db,
-        sbom_id=payload.sbom_id,
-        sbom_name=payload.sbom_name,
-        sources_list=["NVD", "OSV", "GITHUB"],
-        nvd_api_key=payload.nvd_api_key,
-        github_token=payload.github_token,
-    )
+
+    async def _inner() -> dict:
+        return await _run_legacy_analysis(
+            db,
+            sbom_id=payload.sbom_id,
+            sbom_name=payload.sbom_name,
+            sources_list=["NVD", "OSV", "GITHUB"],
+        )
+
+    key = normalize_idempotency_key(idempotency_key)
+    scope = f"legacy_consolidated:{payload.sbom_id}:{payload.sbom_name or ''}"
+    if key:
+        return await run_idempotent(scope, key, _inner)
+    return await _inner()

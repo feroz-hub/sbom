@@ -3,11 +3,6 @@ import { cn } from '@/lib/utils';
 interface SpinnerProps {
   size?: 'sm' | 'md' | 'lg';
   className?: string;
-  /**
-   * Accessible label. When omitted, the spinner is treated as decorative
-   * (aria-hidden) — use this when the surrounding context already communicates
-   * the loading state (e.g. a button with aria-busy).
-   */
   label?: string;
 }
 
@@ -25,7 +20,7 @@ export function Spinner({ size = 'md', className, label }: SpinnerProps) {
     <svg
       {...a11yProps}
       className={cn(
-        'animate-spin motion-reduce:animate-none text-hcl-blue',
+        'animate-spin motion-reduce:animate-none text-primary',
         sizeClasses[size],
         className,
       )}
@@ -43,7 +38,7 @@ export function PageSpinner({ label = 'Loading' }: { label?: string }) {
     <div
       role="status"
       aria-live="polite"
-      className="flex flex-col items-center justify-center h-64 gap-3"
+      className="flex h-64 flex-col items-center justify-center gap-3"
     >
       <Spinner size="lg" />
       <span className="sr-only">{label}</span>
@@ -70,11 +65,11 @@ export function SkeletonCard() {
   return (
     <div
       aria-hidden="true"
-      className="bg-white rounded-xl border border-hcl-border shadow-card p-6 space-y-3"
+      className="space-y-3 rounded-xl border border-border bg-surface p-6 shadow-card"
     >
-      <div className="h-4 rounded shimmer w-1/3" />
-      <div className="h-8 rounded shimmer w-1/2" />
-      <div className="h-3 rounded shimmer w-2/3" />
+      <div className="h-4 w-1/3 rounded shimmer" />
+      <div className="h-8 w-1/2 rounded shimmer" />
+      <div className="h-3 w-2/3 rounded shimmer" />
     </div>
   );
 }

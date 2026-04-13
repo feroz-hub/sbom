@@ -4,14 +4,13 @@ from __future__ import annotations
 import json
 import logging
 from collections import defaultdict
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..models import AnalysisFinding, AnalysisRun, SBOMComponent, SBOMSource
+from ..models import AnalysisFinding, AnalysisRun, SBOMSource
 
 log = logging.getLogger("sbom.api.sbom")
 
@@ -25,17 +24,15 @@ def get_sbom_risk_summary(sbom_id: int, db: Session = Depends(get_db)):
     if not sbom:
         raise HTTPException(status_code=404, detail="SBOM not found")
 
-    run = db.execute(
-        select(AnalysisRun)
-        .where(AnalysisRun.sbom_id == sbom_id)
-        .order_by(AnalysisRun.id.desc())
-    ).scalars().first()
+    run = (
+        db.execute(select(AnalysisRun).where(AnalysisRun.sbom_id == sbom_id).order_by(AnalysisRun.id.desc()))
+        .scalars()
+        .first()
+    )
     if not run:
         raise HTTPException(status_code=404, detail="No analysis run found for this SBOM")
 
-    findings = db.execute(
-        select(AnalysisFinding).where(AnalysisFinding.analysis_run_id == run.id)
-    ).scalars().all()
+    findings = db.execute(select(AnalysisFinding).where(AnalysisFinding.analysis_run_id == run.id)).scalars().all()
 
     comp_findings: dict = defaultdict(list)
     for f in findings:
@@ -63,23 +60,22 @@ def get_sbom_risk_summary(sbom_id: int, db: Session = Depends(get_db)):
 
         exploitability = 1.5 if has_network else 1.0
         score = (
-            counts["CRITICAL"] * 10
-            + counts["HIGH"] * 7
-            + counts["MEDIUM"] * 4
-            + counts["LOW"] * 1
+            counts["CRITICAL"] * 10 + counts["HIGH"] * 7 + counts["MEDIUM"] * 4 + counts["LOW"] * 1
         ) * exploitability
         total_risk += score
 
-        component_scores.append({
-            "name": cname,
-            "version": cver,
-            "critical": counts["CRITICAL"],
-            "high": counts["HIGH"],
-            "medium": counts["MEDIUM"],
-            "low": counts["LOW"],
-            "component_score": round(score, 2),
-            "highest_severity": highest_sev,
-        })
+        component_scores.append(
+            {
+                "name": cname,
+                "version": cver,
+                "critical": counts["CRITICAL"],
+                "high": counts["HIGH"],
+                "medium": counts["MEDIUM"],
+                "low": counts["LOW"],
+                "component_score": round(score, 2),
+                "highest_severity": highest_sev,
+            }
+        )
 
     component_scores.sort(key=lambda x: x["component_score"], reverse=True)
 
@@ -128,7 +124,8 @@ def get_sbom_info(sbom_id: int, db: Session = Depends(get_db)):
         spec_version = sbom_dict.get("spdxVersion")
 
     try:
-        from ..analysis import extract_components, _parse_purl
+        from ..analysis import _parse_purl, extract_components
+
         components = extract_components(sbom_dict)
     except Exception:
         components = []
@@ -141,6 +138,7 @@ def get_sbom_info(sbom_id: int, db: Session = Depends(get_db)):
             has_purls = True
             try:
                 from ..analysis import _parse_purl
+
                 parsed = _parse_purl(c["purl"])
                 if parsed.get("type"):
                     ecosystems.add(parsed["type"].lower())

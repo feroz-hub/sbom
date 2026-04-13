@@ -7,19 +7,19 @@ Provides a single source of truth for application configuration.
 Supports both pydantic v2 with pydantic-settings and standalone pydantic v2.
 """
 
-from typing import Optional, List
-import os
+from typing import Any
 
-from pydantic import Field, field_validator, BaseModel
-
+from pydantic import BaseModel, Field, field_validator
 
 # Detect and import BaseSettings
 try:
     from pydantic_settings import BaseSettings, SettingsConfigDict
+
     HAS_SETTINGS_CONFIG_DICT = True
 except ImportError:
     try:
         from pydantic.settings import BaseSettings, SettingsConfigDict
+
         HAS_SETTINGS_CONFIG_DICT = True
     except ImportError:
         # Fallback: BaseSettings is just BaseModel, no SettingsConfigDict
@@ -42,32 +42,25 @@ class Settings(BaseSettings):
 
     # Analysis Configuration
     analysis_sources: str = Field(
-        default="NVD",
-        description="Comma-separated list of analysis sources (NVD, OSV, GITHUB)"
+        default="NVD", description="Comma-separated list of analysis sources (NVD, OSV, GITHUB)"
     )
 
     # CORS Configuration
-    cors_origins: str = Field(
-        default="*",
-        description="Comma-separated list of allowed CORS origins"
-    )
+    cors_origins: str = Field(default="*", description="Comma-separated list of allowed CORS origins")
 
     # Server Configuration
     host: str = Field(default="0.0.0.0", description="Server bind address")
     port: int = Field(default=8000, description="Server port")
     reload: bool = Field(default=False, description="Enable auto-reload on code changes")
 
-    # Database Configuration
+    # Database Configuration (postgresql+psycopg:// or sqlite:///…)
     database_url: str = Field(
-        default="sqlite:///./sbom_analyzer.db",
-        description="SQLAlchemy database URL"
+        default="",
+        description="SQLAlchemy database URL; empty uses sbom_api.db SQLite beside project root",
     )
 
     # Analysis Settings
-    analysis_legacy_level: int = Field(
-        default=1,
-        description="Legacy analysis level (0=new, 1+=compatibility)"
-    )
+    analysis_legacy_level: int = Field(default=1, description="Legacy analysis level (0=new, 1+=compatibility)")
 
     # Authentication Configuration (Finding A — opt-in bearer token auth)
     #
@@ -79,11 +72,34 @@ class Settings(BaseSettings):
     # downtime.
     api_auth_mode: str = Field(
         default="none",
-        description="Authentication mode for /api/*, /analyze-*, /dashboard/* routes. One of 'none' or 'bearer'.",
+        description="Auth: none | bearer (allowlist) | jwt (HS256 via JWT_SECRET_KEY).",
     )
     api_auth_tokens: str = Field(
         default="",
         description="Comma-separated allowlist of valid bearer tokens. Required when api_auth_mode='bearer'.",
+    )
+
+    # JWT (when api_auth_mode=jwt)
+    jwt_secret_key: str = Field(default="", description="HMAC secret for JWT validation (HS256)")
+    jwt_algorithm: str = Field(default="HS256", description="JWT algorithm")
+    jwt_audience: str = Field(default="", description="Optional expected aud claim")
+    jwt_issuer: str = Field(default="", description="Optional expected iss claim")
+
+    # Celery / Redis
+    redis_url: str = Field(default="redis://localhost:6379/0", description="Redis URL for Celery broker/backend")
+    celery_broker_url: str = Field(
+        default="",
+        description="Override broker; defaults to redis_url when empty",
+    )
+
+    # S3-compatible object storage (optional)
+    aws_access_key_id: str = Field(default="", description="S3 access key")
+    aws_secret_access_key: str = Field(default="", description="S3 secret key")
+    aws_region: str = Field(default="us-east-1", description="AWS region")
+    aws_s3_bucket: str = Field(default="", description="SBOM artifact bucket")
+    aws_s3_endpoint_url: str = Field(
+        default="",
+        description="Custom S3 endpoint (MinIO, etc.); empty uses AWS default",
     )
 
     # Logging Configuration
@@ -96,12 +112,10 @@ class Settings(BaseSettings):
     # Configure model for environment variable loading
     if HAS_SETTINGS_CONFIG_DICT:
         model_config = SettingsConfigDict(
-            env_file=".env",
-            env_file_encoding="utf-8",
-            case_sensitive=False,
-            extra="ignore"
+            env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="ignore"
         )
     else:
+
         class Config:
             env_file = ".env"
             env_file_encoding = "utf-8"
@@ -138,6 +152,18 @@ class Settings(BaseSettings):
             return v.lower() in ("true", "1", "yes", "on")
         return False
 
+    @field_validator("analysis_legacy_level", mode="before")
+    @classmethod
+    def validate_analysis_legacy_level(cls, v: Any) -> int:
+        """Coerce ANALYSIS_LEGACY_LEVEL to a positive int (default 1)."""
+        if v is None:
+            return 1
+        try:
+            n = int(v)
+        except (TypeError, ValueError):
+            return 1
+        return n if n > 0 else 1
+
     # =========================================================================
     # Computed/Derived Properties
     # =========================================================================
@@ -153,7 +179,7 @@ class Settings(BaseSettings):
         return bool(self.github_token.strip())
 
     @property
-    def analysis_sources_list(self) -> List[str]:
+    def analysis_sources_list(self) -> list[str]:
         """Parse ANALYSIS_SOURCES into a list of source names."""
         if not self.analysis_sources:
             return ["NVD"]
@@ -161,20 +187,12 @@ class Settings(BaseSettings):
         return sources or ["NVD"]
 
     @property
-    def cors_origins_list(self) -> List[str]:
+    def cors_origins_list(self) -> list[str]:
         """Parse CORS_ORIGINS into a list of allowed origins."""
         if not self.cors_origins or self.cors_origins == "*":
             return ["*"]
         origins = [o.strip() for o in self.cors_origins.split(",") if o.strip()]
         return origins or ["*"]
-
-    # NOTE: ``api_auth_mode`` / ``api_auth_tokens`` exist as documentation
-    # only. The auth dependency in ``app/auth.py`` reads ``os.environ``
-    # directly because this codebase does not currently install
-    # ``pydantic-settings`` — the import-time fallback in this file makes
-    # ``BaseSettings`` collapse to a plain ``BaseModel`` that ignores env
-    # vars entirely. Future work: install ``pydantic-settings`` and route
-    # every settings read through one place.
 
 
 # =========================================================================
@@ -207,7 +225,12 @@ Settings.APP_VERSION = "2.0.0"
 # Singleton Factory
 # =========================================================================
 
-_settings_instance: Optional[Settings] = None
+_settings_instance: Settings | None = None
+
+
+def get_analysis_legacy_level() -> int:
+    """Single source for legacy analysis level (maps env ANALYSIS_LEGACY_LEVEL via Settings)."""
+    return get_settings().analysis_legacy_level
 
 
 def get_settings() -> Settings:

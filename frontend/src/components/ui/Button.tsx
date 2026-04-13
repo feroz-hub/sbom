@@ -5,34 +5,28 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'danger' | 'ghost' | 'outline';
   size?: 'sm' | 'md' | 'lg' | 'icon';
   loading?: boolean;
-  /**
-   * When true, hides the loading spinner's label from assistive tech callers
-   * (use when the button already conveys busy state in its parent container).
-   */
   loadingLabel?: string;
   children: ReactNode;
 }
 
 const variantClasses: Record<string, string> = {
   primary:
-    'bg-hcl-blue text-white hover:bg-hcl-dark active:bg-hcl-dark border-transparent shadow-sm',
+    'bg-primary text-white hover:bg-hcl-dark active:bg-hcl-dark border-transparent shadow-sm',
   secondary:
-    'bg-white text-hcl-navy hover:bg-hcl-light active:bg-hcl-border/40 border-hcl-border',
+    'bg-surface text-hcl-navy hover:bg-surface-muted active:bg-border-subtle/60 border-border',
   danger:
     'bg-red-600 text-white hover:bg-red-700 active:bg-red-800 border-transparent shadow-sm',
   ghost:
-    'bg-transparent text-hcl-navy hover:bg-hcl-light active:bg-hcl-border/40 border-transparent',
+    'bg-transparent text-hcl-navy hover:bg-surface-muted active:bg-border-subtle/60 border-transparent',
   outline:
-    'bg-transparent text-hcl-blue border-hcl-blue hover:bg-hcl-blue hover:text-white active:bg-hcl-dark active:text-white',
+    'bg-transparent text-primary border-primary hover:bg-primary hover:text-white active:bg-hcl-dark active:text-white',
 };
 
-// Fitts's law: minimum comfortable touch target is ~36-44px. `sm` stays tight
-// for toolbars but raises to 32px, `md` hits 40px, `lg` hits 44px.
 const sizeClasses: Record<string, string> = {
-  sm:   'h-8 min-w-[2rem] px-3 text-xs gap-1.5 rounded-md',
-  md:   'h-10 min-w-[2.5rem] px-4 text-sm gap-2 rounded-lg',
-  lg:   'h-11 min-w-[2.75rem] px-5 text-base gap-2 rounded-lg',
-  icon: 'h-10 w-10 p-0 rounded-lg', // square icon button, meets 40px target
+  sm: 'h-8 min-w-[2rem] px-3 text-xs gap-1.5 rounded-md',
+  md: 'h-10 min-w-[2.5rem] px-4 text-sm gap-2 rounded-lg',
+  lg: 'h-11 min-w-[2.75rem] px-5 text-base gap-2 rounded-lg',
+  icon: 'h-10 w-10 p-0 rounded-lg',
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
@@ -62,7 +56,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
         'transition-[background-color,color,border-color,box-shadow,transform] duration-150',
         'active:translate-y-px',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
-        'focus-visible:ring-hcl-blue/60',
+        'focus-visible:ring-hcl-blue/50 focus-visible:ring-offset-background',
         'disabled:opacity-50 disabled:cursor-not-allowed disabled:active:translate-y-0',
         'motion-reduce:transition-none motion-reduce:active:translate-y-0',
         variantClasses[variant],
@@ -74,7 +68,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       {loading && (
         <>
           <svg
-            className="animate-spin motion-reduce:animate-none h-4 w-4 shrink-0"
+            className="h-4 w-4 shrink-0 animate-spin motion-reduce:animate-none"
             fill="none"
             viewBox="0 0 24 24"
             aria-hidden="true"

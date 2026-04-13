@@ -5,7 +5,6 @@ import csv
 import io
 import json
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
@@ -35,12 +34,8 @@ def compare_analysis_runs(
     if not run_b_obj:
         raise HTTPException(status_code=404, detail=f"Run {run_b} not found")
 
-    findings_a = db.execute(
-        select(AnalysisFinding).where(AnalysisFinding.analysis_run_id == run_a)
-    ).scalars().all()
-    findings_b = db.execute(
-        select(AnalysisFinding).where(AnalysisFinding.analysis_run_id == run_b)
-    ).scalars().all()
+    findings_a = db.execute(select(AnalysisFinding).where(AnalysisFinding.analysis_run_id == run_a)).scalars().all()
+    findings_b = db.execute(select(AnalysisFinding).where(AnalysisFinding.analysis_run_id == run_b)).scalars().all()
 
     ids_a = {f.vuln_id for f in findings_a if f.vuln_id}
     ids_b = {f.vuln_id for f in findings_b if f.vuln_id}
@@ -86,9 +81,7 @@ def export_sarif(run_id: int, db: Session = Depends(get_db)):
     if not run:
         raise HTTPException(status_code=404, detail="Analysis run not found")
 
-    findings = db.execute(
-        select(AnalysisFinding).where(AnalysisFinding.analysis_run_id == run_id)
-    ).scalars().all()
+    findings = db.execute(select(AnalysisFinding).where(AnalysisFinding.analysis_run_id == run_id)).scalars().all()
 
     def _sev_to_level(sev: str) -> str:
         s = (sev or "").upper()
@@ -124,36 +117,44 @@ def export_sarif(run_id: int, db: Session = Depends(get_db)):
             if comp:
                 purl = comp.purl
 
-        results.append({
-            "ruleId": f.vuln_id or "UNKNOWN",
-            "level": _sev_to_level(f.severity),
-            "message": {"text": f.description or f.title or f.vuln_id or ""},
-            "locations": [{
-                "logicalLocations": [{
-                    "name": f.component_name or "unknown",
-                    "fullyQualifiedName": purl or f.component_name or "unknown",
-                }]
-            }],
-            "properties": {
-                "score": f.score,
-                "cpe": f.cpe,
-                "published": f.published_on,
-            },
-        })
+        results.append(
+            {
+                "ruleId": f.vuln_id or "UNKNOWN",
+                "level": _sev_to_level(f.severity),
+                "message": {"text": f.description or f.title or f.vuln_id or ""},
+                "locations": [
+                    {
+                        "logicalLocations": [
+                            {
+                                "name": f.component_name or "unknown",
+                                "fullyQualifiedName": purl or f.component_name or "unknown",
+                            }
+                        ]
+                    }
+                ],
+                "properties": {
+                    "score": f.score,
+                    "cpe": f.cpe,
+                    "published": f.published_on,
+                },
+            }
+        )
 
     sarif = {
         "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
         "version": "2.1.0",
-        "runs": [{
-            "tool": {
-                "driver": {
-                    "name": "SBOM-Analyzer",
-                    "version": "2.0.0",
-                    "rules": list(rules_map.values()),
-                }
-            },
-            "results": results,
-        }],
+        "runs": [
+            {
+                "tool": {
+                    "driver": {
+                        "name": "SBOM-Analyzer",
+                        "version": "2.0.0",
+                        "rules": list(rules_map.values()),
+                    }
+                },
+                "results": results,
+            }
+        ],
     }
 
     return Response(
@@ -170,19 +171,36 @@ def export_csv(run_id: int, db: Session = Depends(get_db)):
     if not run:
         raise HTTPException(status_code=404, detail="Analysis run not found")
 
-    findings = db.execute(
-        select(AnalysisFinding)
-        .where(AnalysisFinding.analysis_run_id == run_id)
-        .order_by(AnalysisFinding.score.desc())
-    ).scalars().all()
+    findings = (
+        db.execute(
+            select(AnalysisFinding)
+            .where(AnalysisFinding.analysis_run_id == run_id)
+            .order_by(AnalysisFinding.score.desc())
+        )
+        .scalars()
+        .all()
+    )
 
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow([
-        "vuln_id", "severity", "score", "component_name", "component_version",
-        "cpe", "purl", "published_on", "attack_vector", "cwe",
-        "fixed_versions", "reference_url", "source", "description",
-    ])
+    writer.writerow(
+        [
+            "vuln_id",
+            "severity",
+            "score",
+            "component_name",
+            "component_version",
+            "cpe",
+            "purl",
+            "published_on",
+            "attack_vector",
+            "cwe",
+            "fixed_versions",
+            "reference_url",
+            "source",
+            "description",
+        ]
+    )
 
     for f in findings:
         purl = None
@@ -191,22 +209,24 @@ def export_csv(run_id: int, db: Session = Depends(get_db)):
             if comp:
                 purl = comp.purl
 
-        writer.writerow([
-            f.vuln_id or "",
-            f.severity or "",
-            f.score if f.score is not None else "",
-            f.component_name or "",
-            f.component_version or "",
-            f.cpe or "",
-            purl or "",
-            f.published_on or "",
-            getattr(f, "attack_vector", None) or "",
-            f.cwe or "",
-            getattr(f, "fixed_versions", None) or "",
-            f.reference_url or "",
-            f.source or "",
-            (f.description or "").replace("\n", " "),
-        ])
+        writer.writerow(
+            [
+                f.vuln_id or "",
+                f.severity or "",
+                f.score if f.score is not None else "",
+                f.component_name or "",
+                f.component_version or "",
+                f.cpe or "",
+                purl or "",
+                f.published_on or "",
+                getattr(f, "attack_vector", None) or "",
+                f.cwe or "",
+                getattr(f, "fixed_versions", None) or "",
+                f.reference_url or "",
+                f.source or "",
+                (f.description or "").replace("\n", " "),
+            ]
+        )
 
     content = output.getvalue()
     return Response(

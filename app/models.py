@@ -169,18 +169,16 @@ class AnalysisFinding(Base):
     component_name = Column(String, nullable=True)
     component_version = Column(String, nullable=True)
 
-    fixed_versions = Column(Text, nullable=True)   # JSON array stored as string
+    fixed_versions = Column(Text, nullable=True)  # JSON array stored as string
     attack_vector = Column(String, nullable=True)
     cvss_version = Column(String, nullable=True)
-    aliases = Column(Text, nullable=True)           # JSON array as string
+    aliases = Column(Text, nullable=True)  # JSON array as string
 
     analysis_run = relationship("AnalysisRun", back_populates="findings")
     component = relationship("SBOMComponent", back_populates="findings")
 
     __table_args__ = (
-        UniqueConstraint(
-            "analysis_run_id", "vuln_id", "cpe", name="uq_analysis_finding_run_vuln_cpe"
-        ),
+        UniqueConstraint("analysis_run_id", "vuln_id", "cpe", name="uq_analysis_finding_run_vuln_cpe"),
         Index("ix_analysis_finding_run_severity", "analysis_run_id", "severity"),
     )
 
@@ -191,10 +189,11 @@ class RunCache(Base):
     (NVD / GitHub / OSV / Consolidated).  The id returned here IS the runId
     clients use to request a PDF report — no more in-memory-only storage.
     """
+
     __tablename__ = "run_cache"
 
     id = Column(Integer, primary_key=True, index=True)
     run_json = Column(Text, nullable=False)
     created_on = Column(String, nullable=True)
-    source = Column(String, nullable=True)      # "consolidated"|"nvd"|"osv"|"ghsa"
-    sbom_id = Column(Integer, nullable=True)    # for cache invalidation
+    source = Column(String, nullable=True)  # "consolidated"|"nvd"|"osv"|"ghsa"
+    sbom_id = Column(Integer, nullable=True)  # for cache invalidation

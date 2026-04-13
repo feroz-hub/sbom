@@ -3,6 +3,7 @@
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Spinner } from '@/components/ui/Spinner';
+import { useTheme } from '@/components/theme/ThemeProvider';
 import type { SeverityData } from '@/types';
 
 interface SeverityChartProps {
@@ -19,6 +20,15 @@ const COLORS: Record<string, string> = {
 };
 
 export function SeverityChart({ data, isLoading }: SeverityChartProps) {
+  const { resolvedTheme } = useTheme();
+  const tooltipStyle = {
+    borderRadius: 8,
+    fontSize: 12,
+    backgroundColor: resolvedTheme === 'dark' ? '#1e293b' : '#ffffff',
+    border: resolvedTheme === 'dark' ? '1px solid #475569' : '1px solid #e2e8f0',
+    color: resolvedTheme === 'dark' ? '#f1f5f9' : '#0f172a',
+  };
+
   const chartData = data
     ? [
         { name: 'Critical', value: data.critical },
@@ -38,11 +48,11 @@ export function SeverityChart({ data, isLoading }: SeverityChartProps) {
       </CardHeader>
       <CardContent>
         {isLoading ? (
-          <div className="flex items-center justify-center h-48">
+          <div className="flex h-48 items-center justify-center">
             <Spinner />
           </div>
         ) : total === 0 ? (
-          <div className="flex items-center justify-center h-48 text-gray-400 text-sm">
+          <div className="flex h-48 items-center justify-center text-sm text-hcl-muted">
             No vulnerability data available
           </div>
         ) : (
@@ -62,13 +72,10 @@ export function SeverityChart({ data, isLoading }: SeverityChartProps) {
                     <Cell key={entry.name} fill={COLORS[entry.name]} />
                   ))}
                 </Pie>
-                <Tooltip
-                  formatter={(value: number) => [value.toLocaleString(), 'Count']}
-                  contentStyle={{ borderRadius: '8px', fontSize: '12px' }}
-                />
+                <Tooltip formatter={(value: number) => [value.toLocaleString(), 'Count']} contentStyle={tooltipStyle} />
                 <Legend
                   formatter={(value) => (
-                    <span className="text-xs text-slate-700">{value}</span>
+                    <span className="text-xs text-foreground">{value}</span>
                   )}
                 />
               </PieChart>
@@ -77,7 +84,7 @@ export function SeverityChart({ data, isLoading }: SeverityChartProps) {
               {chartData.map((d) => (
                 <div key={d.name} className="flex items-center gap-2">
                   <span
-                    className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                    className="h-2.5 w-2.5 flex-shrink-0 rounded-full"
                     style={{ backgroundColor: COLORS[d.name] }}
                   />
                   <span className="text-xs text-hcl-muted">

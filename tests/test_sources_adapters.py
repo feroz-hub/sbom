@@ -15,13 +15,11 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-
 from app.sources import (
+    SOURCE_REGISTRY,
     GhsaSource,
     NvdSource,
     OsvSource,
-    SOURCE_REGISTRY,
-    SourceResult,
     VulnSource,
     empty_result,
     get_source,
@@ -103,6 +101,7 @@ def test_adapters_route_through_underlying_analysis_functions(monkeypatch):
         return [{"vuln_id": "GHSA-Z"}], [], []
 
     import app.analysis as analysis_mod
+
     monkeypatch.setattr(analysis_mod, "nvd_query_by_components_async", fake_nvd)
     monkeypatch.setattr(analysis_mod, "osv_query_by_components", fake_osv)
     monkeypatch.setattr(analysis_mod, "github_query_by_components", fake_ghsa)

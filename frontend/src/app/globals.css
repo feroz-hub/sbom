@@ -1,81 +1,109 @@
-/* ── Google Fonts (must precede all other rules per CSS spec) ── */
-@import url('https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600;700&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* ── HCLTech Design Tokens ─────────────────────────────── */
+/* ── Semantic design tokens (light / dark) ─────────────────────────────── */
 :root {
-  --color-primary:    #0067B1;
-  --color-sidebar:    #1A2B4A;
-  --color-background: #F0F4F8;
-  --color-cyan:       #00B2E2;
-  --color-border:     #C8DCED;
-  --font-rubik: 'Rubik', 'Inter', system-ui, sans-serif;
+  --color-background: #f0f4f8;
+  --color-foreground: #0f172a;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f8fafc;
+  --color-border: #c8dced;
+  --color-border-subtle: #e2e8f0;
 
-  /* ── Motion tokens (Doherty threshold: <400ms for perceived responsiveness) ── */
-  --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
-  --duration-fast:   150ms;
-  --duration-base:   200ms;
-  --duration-slow:   300ms;
+  --color-hcl-navy: #1a2b4a;
+  --color-hcl-muted: #5b7083;
+  --color-hcl-border: #c8dced;
+  --color-hcl-light: #e6f2fa;
+  --color-hcl-dark: #003087;
+  --color-hcl-blue: #0067b1;
+  --color-hcl-cyan: #00b2e2;
 
-  /* ── Focus ring tokens (WCAG 2.4.7 Focus Visible) ── */
-  --focus-ring-color: #0067B1;
+  --color-sidebar: #1a2b4a;
+
+  --focus-ring-color: #0067b1;
   --focus-ring-width: 2px;
   --focus-ring-offset: 2px;
+
+  --shadow-card: 0 1px 4px 0 rgba(0, 103, 177, 0.08), 0 1px 2px 0 rgba(26, 43, 74, 0.06);
+  --shadow-card-hover: 0 4px 16px 0 rgba(0, 103, 177, 0.14), 0 2px 6px 0 rgba(26, 43, 74, 0.08);
+  --shadow-topbar: 0 1px 4px 0 rgba(26, 43, 74, 0.1);
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --duration-fast: 150ms;
+  --duration-base: 200ms;
+  --duration-slow: 300ms;
+}
+
+.dark {
+  --color-background: #0f172a;
+  --color-foreground: #f1f5f9;
+  --color-surface: #1e293b;
+  --color-surface-muted: #172033;
+  --color-border: #334155;
+  --color-border-subtle: #475569;
+
+  --color-hcl-navy: #f1f5f9;
+  --color-hcl-muted: #94a3b8;
+  --color-hcl-border: #475569;
+  --color-hcl-light: #334155;
+  --color-hcl-dark: #003087;
+  --color-hcl-blue: #0067b1;
+  --color-hcl-cyan: #00b2e2;
+
+  --color-sidebar: #0c1220;
+
+  --focus-ring-color: #38bdf8;
+
+  --shadow-card: 0 1px 4px 0 rgba(0, 0, 0, 0.35), 0 1px 2px 0 rgba(0, 0, 0, 0.25);
+  --shadow-card-hover: 0 8px 24px 0 rgba(0, 0, 0, 0.4), 0 2px 8px 0 rgba(0, 0, 0, 0.3);
+  --shadow-topbar: 0 1px 4px 0 rgba(0, 0, 0, 0.45);
 }
 
 @layer base {
   html {
-    font-family: var(--font-rubik);
+    font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    /* Prevent iOS zoom on input focus */
     -webkit-text-size-adjust: 100%;
   }
 
   body {
-    background-color: #F0F4F8;
-    color: #1E293B;
+    background-color: var(--color-background);
+    color: var(--color-foreground);
   }
 
-  * { box-sizing: border-box; }
+  * {
+    box-sizing: border-box;
+  }
 
-  /* HCLTech-style focus ring — only when focus is visible (keyboard) */
   :focus-visible {
     outline: var(--focus-ring-width) solid var(--focus-ring-color);
     outline-offset: var(--focus-ring-offset);
     border-radius: 4px;
   }
 
-  /* Remove mouse-click focus rings to reduce visual noise */
   :focus:not(:focus-visible) {
     outline: none;
   }
 
-  /* Accessible hit target helper — honor the spec's 24x24 AA minimum */
-  [role="button"],
+  [role='button'],
   button:not(:disabled),
   a[href] {
     touch-action: manipulation;
   }
 }
 
-/* ── HCLTech utility classes ───────────────────────────── */
 @layer utilities {
-  /* blue left-border accent on cards */
   .card-accent {
-    border-left: 4px solid #0067B1;
+    border-left: 4px solid var(--color-hcl-blue);
   }
 
-  /* subtle blue gradient background for section headers */
   .hcl-section-header {
-    background: linear-gradient(90deg, #1A2B4A 0%, #0067B1 100%);
+    background: linear-gradient(90deg, var(--color-sidebar) 0%, var(--color-hcl-blue) 100%);
   }
 
-  /* page fade-in */
   .animate-in {
     animation: animateIn var(--duration-base) var(--ease-out);
   }
@@ -88,7 +116,6 @@
     animation: slideInFromBottom var(--duration-base) var(--ease-out);
   }
 
-  /* Dialog enter animations (scrim + panel) */
   .dialog-scrim-in {
     animation: fadeIn var(--duration-base) var(--ease-out);
   }
@@ -96,11 +123,13 @@
     animation: scaleFadeIn var(--duration-base) var(--ease-out);
   }
 
-  /* Shimmer skeleton — more engaging than a plain pulse */
   .shimmer {
     position: relative;
     overflow: hidden;
-    background-color: rgba(200, 220, 237, 0.5);
+    background-color: color-mix(in srgb, var(--color-hcl-border) 45%, transparent);
+  }
+  .dark .shimmer {
+    background-color: color-mix(in srgb, var(--color-hcl-border) 35%, transparent);
   }
   .shimmer::after {
     content: '';
@@ -110,13 +139,20 @@
     background: linear-gradient(
       90deg,
       transparent 0%,
-      rgba(255, 255, 255, 0.55) 50%,
+      color-mix(in srgb, var(--color-surface) 70%, white) 50%,
       transparent 100%
     );
     animation: shimmerSweep 1.4s infinite;
   }
+  .dark .shimmer::after {
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in srgb, var(--color-foreground) 12%, transparent) 50%,
+      transparent 100%
+    );
+  }
 
-  /* Screen-reader-only helper */
   .sr-only {
     position: absolute;
     width: 1px;
@@ -129,7 +165,6 @@
     border: 0;
   }
 
-  /* Skip-to-content link (WCAG 2.4.1 Bypass Blocks) */
   .skip-link {
     position: absolute;
     left: -9999px;
@@ -140,13 +175,12 @@
     left: 8px;
     top: 8px;
     padding: 8px 16px;
-    background: #0067B1;
+    background: var(--color-hcl-blue);
     color: #fff;
     border-radius: 6px;
     font-weight: 600;
   }
 
-  /* Truncate multi-line text */
   .line-clamp-2 {
     display: -webkit-box;
     -webkit-line-clamp: 2;
@@ -156,36 +190,67 @@
 }
 
 @keyframes animateIn {
-  from { opacity: 0; transform: translateY(-6px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes slideInFromRight {
-  from { opacity: 0; transform: translateX(20px); }
-  to   { opacity: 1; transform: translateX(0); }
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 @keyframes slideInFromBottom {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to   { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes scaleFadeIn {
-  from { opacity: 0; transform: scale(0.96) translateY(4px); }
-  to   { opacity: 1; transform: scale(1)    translateY(0);   }
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 
 @keyframes shimmerSweep {
-  0%   { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
 }
 
-/* ── Reduced motion: respect user preference (WCAG 2.3.3) ── */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -195,14 +260,22 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
-  .shimmer::after { animation: none !important; }
+  .shimmer::after {
+    animation: none !important;
+  }
 }
 
-/* ── Scrollbar ─────────────────────────────────────────── */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
 ::-webkit-scrollbar-thumb {
-  background-color: #C8DCED;
+  background-color: var(--color-hcl-border);
   border-radius: 3px;
 }
-::-webkit-scrollbar-thumb:hover { background-color: #0067B1; }
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-hcl-blue);
+}

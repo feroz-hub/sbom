@@ -15,27 +15,21 @@ both consume the registry to fan out concurrent ``query()`` calls via
 
 from __future__ import annotations
 
-from typing import Dict, Type
-
 from .base import VulnSource
 from .ghsa import GhsaSource
 from .nvd import NvdSource
 from .osv import OsvSource
 
-
-SOURCE_REGISTRY: Dict[str, Type[VulnSource]] = {
+SOURCE_REGISTRY: dict[str, type[VulnSource]] = {
     NvdSource.name: NvdSource,
     OsvSource.name: OsvSource,
     GhsaSource.name: GhsaSource,
 }
 
 
-def get_source(name: str) -> Type[VulnSource]:
+def get_source(name: str) -> type[VulnSource]:
     """Look up an adapter class by canonical source name (case-insensitive)."""
     key = (name or "").strip().upper()
     if key not in SOURCE_REGISTRY:
-        raise KeyError(
-            f"Unknown vulnerability source '{name}'. "
-            f"Registered sources: {sorted(SOURCE_REGISTRY)}"
-        )
+        raise KeyError(f"Unknown vulnerability source '{name}'. Registered sources: {sorted(SOURCE_REGISTRY)}")
     return SOURCE_REGISTRY[key]

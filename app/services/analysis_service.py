@@ -6,15 +6,15 @@ from __future__ import annotations
 
 import json
 import logging
-import os
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..analysis import extract_components
 from ..models import AnalysisRun, SBOMAnalysisReport, SBOMComponent, SBOMSource
-from .sbom_service import now_iso, safe_int, resolve_component_id, _upsert_components
+from ..settings import get_analysis_legacy_level
+from .sbom_service import _upsert_components, now_iso, resolve_component_id, safe_int
 
 log = logging.getLogger(__name__)
 
@@ -23,21 +23,18 @@ log = logging.getLogger(__name__)
 # Configuration
 # ============================================================
 
+
 def legacy_analysis_level() -> int:
-    """Get the legacy analysis level from environment or default to 1."""
-    raw_value = os.getenv("ANALYSIS_LEGACY_LEVEL", "1")
-    try:
-        parsed = int(raw_value)
-    except ValueError:
-        return 1
-    return parsed if parsed > 0 else 1
+    """Get the legacy analysis level from Settings (env ANALYSIS_LEGACY_LEVEL)."""
+    return get_analysis_legacy_level()
 
 
 # ============================================================
 # Details Normalization
 # ============================================================
 
-def normalize_details(details: Optional[Dict], components: List[Dict]) -> Dict:
+
+def normalize_details(details: dict | None, components: list[dict]) -> dict:
     """
     Normalize and validate analysis details.
 
@@ -96,7 +93,7 @@ def normalize_details(details: Optional[Dict], components: List[Dict]) -> Dict:
     return data
 
 
-def compute_report_status(total_findings: int, query_errors: List[Dict]) -> str:
+def compute_report_status(total_findings: int, query_errors: list[dict]) -> str:
     """
     Compute the overall report status based on findings and errors.
 
@@ -118,11 +115,12 @@ def compute_report_status(total_findings: int, query_errors: List[Dict]) -> str:
 # Analysis Run Persistence
 # ============================================================
 
+
 def persist_analysis_run(
     db: Session,
     sbom_obj: SBOMSource,
-    details: Dict,
-    components: List[Dict],
+    details: dict,
+    components: list[dict],
     run_status: str,
     source: str,
     started_on: str,
@@ -205,7 +203,7 @@ def persist_analysis_run(
     return run
 
 
-def _safe_float(value: Any) -> Optional[float]:
+def _safe_float(value: Any) -> float | None:
     """Safely convert value to float, return None on failure."""
     try:
         if value is None:
@@ -229,6 +227,7 @@ def _safe_float(value: Any) -> Optional[float]:
 # `persist_analysis_run` here is kept because `backfill_analytics_tables`
 # (called from `app/main.py:on_startup`) still consumes it to migrate
 # legacy SBOMAnalysisReport rows into the AnalysisRun table on first run.
+
 
 def backfill_analytics_tables(db: Session) -> None:
     """
@@ -259,18 +258,20 @@ def backfill_analytics_tables(db: Session) -> None:
                 components = []
 
         # Check if analysis run already exists
-        has_run = db.execute(
-            select(AnalysisRun.id).where(AnalysisRun.sbom_id == sbom.id).limit(1)
-        ).scalar_one_or_none()
+        has_run = db.execute(select(AnalysisRun.id).where(AnalysisRun.sbom_id == sbom.id).limit(1)).scalar_one_or_none()
         if has_run is not None:
             continue
 
         # Look for legacy report to backfill from
-        latest_legacy = db.execute(
-            select(SBOMAnalysisReport)
-            .where(SBOMAnalysisReport.sbom_ref_id == sbom.id)
-            .order_by(SBOMAnalysisReport.id.desc())
-        ).scalars().first()
+        latest_legacy = (
+            db.execute(
+                select(SBOMAnalysisReport)
+                .where(SBOMAnalysisReport.sbom_ref_id == sbom.id)
+                .order_by(SBOMAnalysisReport.id.desc())
+            )
+            .scalars()
+            .first()
+        )
 
         if latest_legacy:
             try:

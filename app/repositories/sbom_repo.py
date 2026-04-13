@@ -1,25 +1,24 @@
 """Repository for SBOMSource and SBOMType entities."""
 
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
-from sqlalchemy import select, func, delete
-from sqlalchemy.orm import Session
+from sqlalchemy import delete, func
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from ..models import SBOMSource, SBOMType
 
 
 def _now_iso() -> str:
     """Return current UTC timestamp in ISO format without microseconds."""
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    return datetime.now(UTC).replace(microsecond=0).isoformat()
 
 
 class SBOMRepository:
     """Repository for SBOM operations."""
 
     @staticmethod
-    def get_sbom(db: Session, sbom_id: int) -> Optional[SBOMSource]:
+    def get_sbom(db: Session, sbom_id: int) -> SBOMSource | None:
         """Get a single SBOM by ID.
 
         Args:
@@ -34,8 +33,8 @@ class SBOMRepository:
     @staticmethod
     def list_sboms(
         db: Session,
-        project_id: Optional[int] = None,
-        created_by: Optional[str] = None,
+        project_id: int | None = None,
+        created_by: str | None = None,
         sort_by: str = "id",
         sort_dir: str = "desc",
         page: int = 1,
@@ -156,18 +155,14 @@ class SBOMRepository:
         from ..models import (
             AnalysisFinding,
             AnalysisRun,
-            SBOMComponent,
             SBOMAnalysisReport,
+            SBOMComponent,
         )
 
         # Delete findings for runs associated with this SBOM
         db.execute(
             delete(AnalysisFinding).where(
-                AnalysisFinding.run_id.in_(
-                    db.query(AnalysisRun.id).filter(
-                        AnalysisRun.sbom_id == sbom_id
-                    )
-                )
+                AnalysisFinding.run_id.in_(db.query(AnalysisRun.id).filter(AnalysisRun.sbom_id == sbom_id))
             )
         )
 
@@ -175,16 +170,10 @@ class SBOMRepository:
         db.execute(delete(AnalysisRun).where(AnalysisRun.sbom_id == sbom_id))
 
         # Delete components
-        db.execute(
-            delete(SBOMComponent).where(SBOMComponent.sbom_id == sbom_id)
-        )
+        db.execute(delete(SBOMComponent).where(SBOMComponent.sbom_id == sbom_id))
 
         # Delete reports
-        db.execute(
-            delete(SBOMAnalysisReport).where(
-                SBOMAnalysisReport.sbom_id == sbom_id
-            )
-        )
+        db.execute(delete(SBOMAnalysisReport).where(SBOMAnalysisReport.sbom_id == sbom_id))
 
         # Delete the SBOM itself
         db.delete(sbom)
@@ -201,11 +190,7 @@ class SBOMRepository:
         Returns:
             True if name exists, False otherwise
         """
-        count = (
-            db.query(func.count(SBOMSource.id))
-            .filter(SBOMSource.name == name)
-            .scalar()
-        )
+        count = db.query(func.count(SBOMSource.id)).filter(SBOMSource.name == name).scalar()
         return count > 0
 
     @staticmethod

@@ -20,13 +20,12 @@ Two layers of fixtures live here:
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
-
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # NVD — raw REST 2.0 shape (kept as a realistic upstream sample)
 # ---------------------------------------------------------------------------
-NVD_LOG4J_RESPONSE: Dict[str, Any] = {
+NVD_LOG4J_RESPONSE: dict[str, Any] = {
     "resultsPerPage": 1,
     "startIndex": 0,
     "totalResults": 1,
@@ -65,15 +64,13 @@ NVD_LOG4J_RESPONSE: Dict[str, Any] = {
                         "description": [{"lang": "en", "value": "CWE-502"}],
                     }
                 ],
-                "references": [
-                    {"url": "https://logging.apache.org/log4j/2.x/security.html"}
-                ],
+                "references": [{"url": "https://logging.apache.org/log4j/2.x/security.html"}],
             }
         }
     ],
 }
 
-NVD_EMPTY_RESPONSE: Dict[str, Any] = {
+NVD_EMPTY_RESPONSE: dict[str, Any] = {
     "resultsPerPage": 0,
     "startIndex": 0,
     "totalResults": 0,
@@ -84,7 +81,7 @@ NVD_EMPTY_RESPONSE: Dict[str, Any] = {
 # ---------------------------------------------------------------------------
 # GitHub Security Advisories — GraphQL shape returned by `github_fetch_advisories`
 # ---------------------------------------------------------------------------
-GHSA_LOG4J_RESPONSE: Dict[str, Any] = {
+GHSA_LOG4J_RESPONSE: dict[str, Any] = {
     "data": {
         "securityVulnerabilities": {
             "pageInfo": {"hasNextPage": False, "endCursor": None},
@@ -103,9 +100,7 @@ GHSA_LOG4J_RESPONSE: Dict[str, Any] = {
                         "summary": "Remote code execution in Log4j 2.x",
                         "description": "Log4j JNDI lookup feature allows remote code execution.",
                         "publishedAt": "2021-12-10T00:00:00Z",
-                        "references": [
-                            {"url": "https://github.com/advisories/GHSA-jfh8-c2jp-5v3q"}
-                        ],
+                        "references": [{"url": "https://github.com/advisories/GHSA-jfh8-c2jp-5v3q"}],
                         "cvss": {
                             "score": 10.0,
                             "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H",
@@ -118,7 +113,7 @@ GHSA_LOG4J_RESPONSE: Dict[str, Any] = {
     }
 }
 
-GHSA_EMPTY_RESPONSE: Dict[str, Any] = {
+GHSA_EMPTY_RESPONSE: dict[str, Any] = {
     "data": {
         "securityVulnerabilities": {
             "pageInfo": {"hasNextPage": False, "endCursor": None},
@@ -131,20 +126,12 @@ GHSA_EMPTY_RESPONSE: Dict[str, Any] = {
 # ---------------------------------------------------------------------------
 # OSV — batch + single-vuln shapes used by `osv_querybatch` / `osv_get_vuln_by_id`
 # ---------------------------------------------------------------------------
-OSV_BATCH_RESPONSE: List[Dict[str, Any]] = [
-    {
-        "vulns": [
-            {"id": "GHSA-jfh8-c2jp-5v3q", "modified": "2024-01-01T00:00:00Z"}
-        ]
-    },
-    {
-        "vulns": [
-            {"id": "PYSEC-2018-28", "modified": "2024-01-01T00:00:00Z"}
-        ]
-    },
+OSV_BATCH_RESPONSE: list[dict[str, Any]] = [
+    {"vulns": [{"id": "GHSA-jfh8-c2jp-5v3q", "modified": "2024-01-01T00:00:00Z"}]},
+    {"vulns": [{"id": "PYSEC-2018-28", "modified": "2024-01-01T00:00:00Z"}]},
 ]
 
-OSV_VULN_DETAIL: Dict[str, Dict[str, Any]] = {
+OSV_VULN_DETAIL: dict[str, dict[str, Any]] = {
     "GHSA-jfh8-c2jp-5v3q": {
         "id": "GHSA-jfh8-c2jp-5v3q",
         "summary": "Remote code execution in Log4j 2.x",
@@ -172,9 +159,7 @@ OSV_VULN_DETAIL: Dict[str, Dict[str, Any]] = {
                 ],
             }
         ],
-        "references": [
-            {"type": "WEB", "url": "https://github.com/advisories/GHSA-jfh8-c2jp-5v3q"}
-        ],
+        "references": [{"type": "WEB", "url": "https://github.com/advisories/GHSA-jfh8-c2jp-5v3q"}],
     },
     "PYSEC-2018-28": {
         "id": "PYSEC-2018-28",
@@ -200,9 +185,7 @@ OSV_VULN_DETAIL: Dict[str, Dict[str, Any]] = {
                 ],
             }
         ],
-        "references": [
-            {"type": "WEB", "url": "https://nvd.nist.gov/vuln/detail/CVE-2018-18074"}
-        ],
+        "references": [{"type": "WEB", "url": "https://nvd.nist.gov/vuln/detail/CVE-2018-18074"}],
     },
 }
 
@@ -216,7 +199,7 @@ OSV_VULN_DETAIL: Dict[str, Dict[str, Any]] = {
 # path, not to test the per-source extractors (which would deserve their
 # own focused unit tests).
 # ---------------------------------------------------------------------------
-ASYNC_NVD_FINDING: Dict[str, Any] = {
+ASYNC_NVD_FINDING: dict[str, Any] = {
     "vuln_id": "CVE-2021-44228",
     "aliases": ["CVE-2021-44228"],
     "sources": ["NVD"],
@@ -235,7 +218,7 @@ ASYNC_NVD_FINDING: Dict[str, Any] = {
     "cpe": "cpe:2.3:a:log4j-core:log4j-core:2.14.1:*:*:*:*:*:*:*",
 }
 
-ASYNC_OSV_FINDING_REQUESTS: Dict[str, Any] = {
+ASYNC_OSV_FINDING_REQUESTS: dict[str, Any] = {
     "vuln_id": "PYSEC-2018-28",
     "aliases": ["CVE-2018-18074", "PYSEC-2018-28"],
     "sources": ["OSV"],
@@ -254,7 +237,7 @@ ASYNC_OSV_FINDING_REQUESTS: Dict[str, Any] = {
     "cpe": None,
 }
 
-ASYNC_GHSA_FINDING: Dict[str, Any] = {
+ASYNC_GHSA_FINDING: dict[str, Any] = {
     "vuln_id": "GHSA-jfh8-c2jp-5v3q",
     "aliases": ["GHSA-jfh8-c2jp-5v3q"],
     "sources": ["GITHUB"],
