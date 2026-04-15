@@ -674,8 +674,16 @@ async def osv_query_by_components(
                     q = {"package": {"purl": purl}}
 
         if not q and name:
-            parsed = _parse_purl(purl) if purl else {}
-            eco = (parsed.get("type") or "").capitalize() if parsed else None
+            # Last-resort: ecosystem+name(+version). OSV matching is much better
+            # with an ecosystem than with name-only.
+            eco = (comp.get("ecosystem") or "").strip()
+            if not eco:
+                # Infer from group heuristics when present (common for Maven-like SBOMs)
+                grp = (comp.get("group") or "").strip()
+                if grp and ("." in grp or grp.lower().startswith(("org.", "com.", "net.", "io."))):
+                    eco = "Maven"
+                elif name.startswith("@") and "/" in name:
+                    eco = "npm"
             pkg = {"name": name}
             if eco:
                 pkg["ecosystem"] = eco
@@ -781,17 +789,36 @@ async def osv_query_by_components(
 
 def enrich_component_for_osv(comp):
     comp = dict(comp)  # avoid mutating caller's dict
-    name = (comp.get("name") or "").lower()
+    name_raw = (comp.get("name") or "").strip()
+    name = name_raw.lower()
     version = comp.get("version")
+    group = (comp.get("group") or "").strip()
 
     # Only enrich if no purl already set
     if not comp.get("purl"):
-        if "apache" in name or "commons" in name or "jena" in name:
-            comp["ecosystem"] = "Maven"
-            comp["purl"] = f"pkg:maven/{name.replace(' ', '')}/{name}@{version}"
-        elif "glibc" in name:
+        # Prefer deterministic reconstruction from SBOM fields when possible.
+        #
+        # CycloneDX commonly provides Maven coordinates split across `group`
+        # and `name` when `purl` is absent.
+        if group and version:
+            # Heuristic: group with dots is strongly Maven-like (e.g. org.apache.*).
+            if "." in group or group.lower().startswith(("org.", "com.", "net.", "io.")):
+                comp["ecosystem"] = "Maven"
+                comp["purl"] = f"pkg:maven/{group}/{name_raw}@{version}"
+                return comp
+
+        # npm scoped packages may appear as "@scope/name"
+        if version and name_raw.startswith("@") and "/" in name_raw:
+            scope, pkg = name_raw.split("/", 1)
+            # purl spec expects '@' in namespace to be percent-encoded (%40)
+            scope_enc = "%40" + scope[1:]
+            comp["ecosystem"] = "npm"
+            comp["purl"] = f"pkg:npm/{scope_enc}/{pkg}@{version}"
+            return comp
+
+        # A small legacy heuristic retained for Linux distro components
+        if "glibc" in name:
             comp["ecosystem"] = "Debian"
-        # else: leave ecosystem/purl untouched
 
     return comp
 
