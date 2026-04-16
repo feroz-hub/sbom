@@ -69,10 +69,18 @@ def cpe23_from_purl(purl: str, version_override: str | None = None) -> str | Non
 
     elif ptype in {"maven"}:
         # Maven: namespace = groupId, name = artifactId.
-        # vendor = last segment of groupId (e.g., org.apache.logging.log4j -> log4j)
-        group = namespace or ""
-        vnd = slug(group.split(".")[-1] if group else name)
-        prd = slug(name)
+        # NVD typically uses vendor "apache" for org.apache.* and product "log4j"
+        # for log4j-core / log4j-api (not artifactId verbatim).
+        group = (namespace or "").strip()
+        artifact = name or ""
+        if group.startswith("org.apache.") or group == "org.apache":
+            vnd = slug("apache")
+        else:
+            vnd = slug(group.split(".")[-1] if group else name)
+        if artifact.startswith("log4j-"):
+            prd = slug("log4j")
+        else:
+            prd = slug(artifact)
 
     elif ptype in {"golang", "go"}:
         # Go: namespace often like 'github.com/user', name='repo'

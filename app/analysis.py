@@ -336,21 +336,43 @@ def _augment_components_with_cpe(components: list[dict]) -> tuple[list[dict], in
 # ============================================================
 
 
-def nvd_query_by_cpe(cpe: str, api_key: str | None, settings: AnalysisSettings | None = None) -> list[dict]:
-    cfg = settings or get_analysis_settings()
-    if not cpe:
-        return []
-    headers = {"User-Agent": cfg.http_user_agent}
-    if api_key:
-        headers["apiKey"] = api_key
-    params = {
-        "cpeName": cpe,
+def _cpe23_virtual_match_wildcard_vendor(cpe: str) -> str | None:
+    """cpe:2.3:a:vendor:product:version:... -> wildcard vendor only (NVD virtualMatchString)."""
+    parts = cpe.split(":")
+    if len(parts) < 6:
+        return None
+    parts[3] = "*"
+    return ":".join(parts)
+
+
+def _cpe23_virtual_match_wildcard_vendor_product(cpe: str) -> str | None:
+    """cpe:2.3:a:vendor:product:version:... -> wildcard vendor and product; version fixed."""
+    parts = cpe.split(":")
+    if len(parts) < 6:
+        return None
+    parts[3] = "*"
+    parts[4] = "*"
+    return ":".join(parts)
+
+
+def _nvd_fetch_cves_paginated(
+    cfg: AnalysisSettings,
+    headers: dict,
+    search_params: dict[str, str],
+    *,
+    delay: float,
+    log_label: str,
+) -> list[dict]:
+    """
+    Query NVD CVE 2.0 API with either cpeName=... or virtualMatchString=... (not both).
+    Paginates through all results.
+    """
+    params: dict[str, Any] = {
+        **search_params,
         "resultsPerPage": cfg.nvd_results_per_page,
         "startIndex": 0,
     }
-    delay = cfg.nvd_request_delay_with_key_seconds if api_key else cfg.nvd_request_delay_without_key_seconds
     out: list[dict] = []
-    # Headers are passed per-request — do NOT mutate _nvd_session.headers (thread-safety)
 
     while True:
         response = None
@@ -368,14 +390,14 @@ def nvd_query_by_cpe(cpe: str, api_key: str | None, settings: AnalysisSettings |
                 break
             except requests.RequestException as exc:
                 if attempt >= cfg.nvd_max_retries:
-                    raise RuntimeError(f"NVD query failed for CPE '{cpe}': {exc}") from exc
+                    raise RuntimeError(f"NVD query failed for {log_label}: {exc}") from exc
                 backoff = cfg.nvd_retry_backoff_seconds * (attempt + 1)
-                LOGGER.warning("NVD request retry %s for CPE %s due to: %s", attempt + 1, cpe, exc)
+                LOGGER.warning("NVD request retry %s for %s due to: %s", attempt + 1, log_label, exc)
                 if backoff > 0:
                     time.sleep(backoff)
 
         if response is None:
-            raise RuntimeError(f"NVD query returned no response for CPE '{cpe}'")
+            raise RuntimeError(f"NVD query returned no response for {log_label}")
 
         data = response.json()
         vulnerabilities = data.get("vulnerabilities", []) or []
@@ -389,6 +411,37 @@ def nvd_query_by_cpe(cpe: str, api_key: str | None, settings: AnalysisSettings |
         params["startIndex"] = start + size
         if delay > 0:
             time.sleep(delay)
+    return out
+
+
+def nvd_query_by_cpe(cpe: str, api_key: str | None, settings: AnalysisSettings | None = None) -> list[dict]:
+    cfg = settings or get_analysis_settings()
+    if not cpe:
+        return []
+    headers = {"User-Agent": cfg.http_user_agent}
+    if api_key:
+        headers["apiKey"] = api_key
+    delay = cfg.nvd_request_delay_with_key_seconds if api_key else cfg.nvd_request_delay_without_key_seconds
+
+    out = _nvd_fetch_cves_paginated(
+        cfg, headers, {"cpeName": cpe}, delay=delay, log_label=f"cpeName={cpe!r}"
+    )
+    if out:
+        return out
+
+    v1 = _cpe23_virtual_match_wildcard_vendor(cpe)
+    if v1:
+        out = _nvd_fetch_cves_paginated(
+            cfg, headers, {"virtualMatchString": v1}, delay=delay, log_label=f"virtualMatchString={v1!r}"
+        )
+        if out:
+            return out
+
+    v2 = _cpe23_virtual_match_wildcard_vendor_product(cpe)
+    if v2:
+        out = _nvd_fetch_cves_paginated(
+            cfg, headers, {"virtualMatchString": v2}, delay=delay, log_label=f"virtualMatchString={v2!r}"
+        )
     return out
 
 
@@ -741,6 +794,35 @@ async def osv_query_by_components(
 
     hydrated = await asyncio.gather(*[_fetch_vuln(vid) for vid in unique_ids])
     hydrated = [h for h in hydrated if h]
+
+    # Fallback: some environments see empty `querybatch` results (or hydration
+    # yielding zero usable records) without explicit transport errors. When
+    # we had at least one purl-based query but ended up with no hydrated vulns,
+    # fall back to the per-component `/v1/query` endpoint (ported from the
+    # user's standalone osv_scan.py).
+    if not hydrated and any((c.get("purl") or "").strip() for c in components):
+        try:
+            from .sources.osv_fallback import osv_query_via_query_endpoint
+
+            f2, e2, w2 = await osv_query_via_query_endpoint(
+                components,
+                settings,
+                post_json_fn=_async_post,
+                best_score_and_vector_fn=_best_score_and_vector_from_osv,
+                severity_bucket_fn=_sev_bucket,
+                attack_vector_fn=_parse_cvss_attack_vector,
+                extract_cwe_fn=extract_cwe_from_osv,
+                extract_fixed_versions_fn=extract_fixed_versions_osv,
+            )
+            if f2:
+                findings.extend(f2)
+            if e2:
+                query_errors.extend(e2)
+            if w2:
+                query_warnings.extend(w2)
+            return findings, query_errors, query_warnings
+        except Exception as exc:
+            query_errors.append({"source": "OSV", "error": f"Fallback /v1/query failed: {exc}"})
 
     cfg = settings
     for v in hydrated:

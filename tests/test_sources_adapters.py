@@ -137,3 +137,54 @@ def test_adapters_route_through_underlying_analysis_functions(monkeypatch):
     assert ghsa_components == components
     assert getattr(ghsa_settings, "gh_token_override", None) == "ghp_abc"
     assert ghsa_result["findings"] == [{"vuln_id": "GHSA-Z"}]
+
+
+def test_osv_fallback_query_endpoint_used_when_batch_empty(monkeypatch):
+    """
+    If OSV `/v1/querybatch` returns zero vuln ids (common "missing OSV" symptom),
+    the implementation should fall back to `/v1/query` per-PURL and still emit
+    canonical findings.
+    """
+    import app.analysis as analysis_mod
+
+    async def fake_post(url: str, json_body: dict, headers=None, timeout: int = 60):
+        if url.endswith("/v1/querybatch"):
+            return {"results": [{"vulns": []}]}
+        if url.endswith("/v1/query"):
+            # Minimal OSV "vuln" object; scoring is optional.
+            return {
+                "vulns": [
+                    {
+                        "id": "OSV-FAKE-1",
+                        "summary": "Example vuln",
+                        "published": "2025-01-01T00:00:00Z",
+                        "references": [{"url": "https://example.invalid/osv"}],
+                        "database_specific": {"severity": "HIGH", "cwe_ids": ["CWE-79"]},
+                        "affected": [
+                            {
+                                "ranges": [
+                                    {"events": [{"introduced": "0"}, {"fixed": "1.2.3"}]},
+                                ]
+                            }
+                        ],
+                    }
+                ]
+            }
+        raise AssertionError(f"Unexpected OSV POST url: {url}")
+
+    monkeypatch.setattr(analysis_mod, "_async_post", fake_post)
+
+    cfg = analysis_mod.get_analysis_settings_multi()
+    components = [{"name": "lodash", "version": "4.17.15", "purl": "pkg:npm/lodash@4.17.15"}]
+
+    async def _run():
+        return await analysis_mod.osv_query_by_components(components, cfg)
+
+    findings, errors, warnings = asyncio.run(_run())
+    assert errors == []
+    assert warnings == []
+    assert len(findings) == 1
+    assert findings[0]["vuln_id"] == "OSV-FAKE-1"
+    assert findings[0]["component_name"] == "lodash"
+    assert findings[0]["component_version"] == "4.17.15"
+    assert findings[0]["severity"] in {"HIGH", "CRITICAL", "MEDIUM", "LOW", "UNKNOWN"}
