@@ -10,6 +10,7 @@ from enum import Enum
 from functools import lru_cache
 from typing import Any
 
+import certifi
 import requests
 
 # Optional async HTTP client; we fall back to requests in a thread if missing
@@ -21,9 +22,21 @@ except Exception:  # pragma: no cover
 from .parsing import extract_components  # noqa: F401 — re-exported for callers
 
 # Module-level requests.Session for NVD connection pooling.
-# No custom SSL config: requests' default (verify=True) already uses
-# certifi's CA bundle and talks to services.nvd.nist.gov fine.
+#
+# SSL: explicitly point at certifi's CA bundle via a PATH STRING.
+#   * On macOS, the requests default (``verify=True``) usually finds certifi
+#     via the OS/Python bundle lookup, so NVD worked out of the box.
+#   * On Windows (venv install, or behind a corporate proxy) that lookup can
+#     fail with "unable to get local issuer certificate" on every NVD call.
+#     Pointing at ``certifi.where()`` explicitly makes it work on both.
+#   * ``requests`` accepts ``verify`` as ``True | False | str``. We pass a
+#     path STRING — never an ``ssl.SSLContext`` — because passing an
+#     SSLContext here is what caused the original
+#     ``TypeError: stat: path should be string, bytes, ... not SSLContext``
+#     cascade that broke every NVD request for weeks. A path string cannot
+#     retrigger that bug.
 _nvd_session = requests.Session()
+_nvd_session.verify = certifi.where()
 _nvd_session.headers.update({"User-Agent": "SBOM-Analyzer/enterprise-2.0"})
 
 LOGGER = logging.getLogger(__name__)

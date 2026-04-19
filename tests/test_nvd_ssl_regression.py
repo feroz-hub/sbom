@@ -12,16 +12,27 @@ Root cause: ``app/analysis.py`` was injecting an ``ssl.SSLContext`` into
 then did ``os.stat(verify)`` and raised the TypeError on every CPE — so NVD
 enrichment returned 0 findings and N errors.
 
-Fix: **delete** the custom SSL plumbing from the NVD path. The default
-behaviour of ``requests`` (``verify=True``) and ``httpx`` already uses
-certifi's CA bundle and works fine against ``services.nvd.nist.gov``.
+Fix: the NVD ``requests.Session`` points ``verify`` at a **path string**
+produced by ``certifi.where()`` — nothing fancier. A path string cannot
+retrigger the SSLContext TypeError by construction, and it makes NVD work
+on Windows (venv / corporate network) where the plain ``verify=True``
+lookup fails with "unable to get local issuer certificate".
+
+Things that are still FORBIDDEN in the NVD path (what the deletion guards
+below pin):
+
+    * ``ssl.SSLContext`` — any form, any helper (``tls_ssl_context``,
+      ``ssl.create_default_context``, ``truststore``, …).
+    * ``verify=...`` passed as a kwarg to ``requests.get/post`` — the
+      session already carries verify; per-call overrides are additive
+      config and exactly what caused the 10 previous failed fixes.
 
 The standalone script that always worked is the reference shape:
 
     response = requests.get(NVD_API_URL, params={...})   # no verify=, no ssl_context
 
-These assertions keep the NVD path free of SSL plumbing so the bug
-cannot regress.
+These assertions keep the NVD path free of ad-hoc SSL plumbing so the
+bug cannot regress.
 """
 
 from __future__ import annotations
@@ -41,19 +52,45 @@ from requests.adapters import HTTPAdapter
 
 
 def test_nvd_analysis_module_has_no_sslcontext_references():
-    """SSLContext in the NVD path is what caused the 10+ failed fixes.
-    Keep the module free of it so the bug cannot regress."""
-    from app import analysis as nvd_mod
+    """
+    SSLContext in the NVD path is what caused the 10+ failed fixes. Keep the
+    module's EXECUTABLE code free of it so the bug cannot regress.
 
-    src = inspect.getsource(nvd_mod)
-    assert "SSLContext" not in src, "NVD client must not use SSLContext"
-    assert "create_default_context" not in src, (
-        "NVD client must not build a custom SSL context — default SSL already uses certifi"
+    We scan non-comment lines only — the module is allowed (and encouraged)
+    to mention SSLContext in comments that document why we avoid it.
+    """
+    src_path = pathlib.Path(__file__).resolve().parents[1] / "app" / "analysis.py"
+    text = src_path.read_text()
+
+    forbidden = (
+        ("SSLContext", "NVD client must not use SSLContext"),
+        (
+            "create_default_context",
+            "NVD client must not build a custom SSL context — "
+            "certifi.where() is all we need",
+        ),
+        ("truststore", "NVD client must not depend on truststore"),
+        (
+            "tls_ssl_context",
+            "tls_ssl_context() returns an SSLContext — "
+            "it must never reach the NVD code path",
+        ),
     )
-    assert "truststore" not in src, "NVD client must not depend on truststore"
-    assert "tls_ssl_context" not in src, (
-        "tls_ssl_context() returns an SSLContext — it must never reach the NVD code path"
-    )
+
+    def _is_executable(line: str) -> bool:
+        stripped = line.lstrip()
+        return bool(stripped) and not stripped.startswith("#")
+
+    for needle, message in forbidden:
+        offenders = [
+            (i + 1, ln)
+            for i, ln in enumerate(text.splitlines())
+            if needle in ln and _is_executable(ln)
+        ]
+        assert not offenders, (
+            f"{message}. Offending executable line(s):\n  "
+            + "\n  ".join(f"{n}: {ln}" for n, ln in offenders)
+        )
 
 
 def test_nvd_analysis_module_has_no_verify_kwargs():
@@ -77,17 +114,53 @@ def test_nvd_analysis_module_has_no_verify_kwargs():
     )
 
 
-def test_nvd_session_uses_default_verification():
+def test_nvd_session_verify_is_certifi_path_string():
     """
-    ``_nvd_session.verify`` must be the requests default (``True``). Anything
-    else — an SSLContext, a path string, False — is additive SSL config and
-    either reintroduces the TypeError or disables verification.
+    ``_nvd_session.verify`` must be a filesystem PATH STRING to certifi's
+    CA bundle — never ``True``, never ``False``, never an ``ssl.SSLContext``.
+
+    Why a path and not just ``True``:
+
+      * macOS + most dev machines: plain ``verify=True`` happens to find
+        certifi via Python's bundle lookup, so NVD worked.
+      * Windows in a venv, or any machine behind a corporate TLS proxy:
+        that lookup silently falls back to an empty trust store and every
+        NVD call fails with ``SSLCertVerificationError: unable to get
+        local issuer certificate``. Pointing at ``certifi.where()`` makes
+        it deterministic on every OS.
+      * A path STRING is the only shape we can safely use here —
+        ``ssl.SSLContext`` would retrigger the original TypeError, and
+        ``False`` would disable verification entirely.
     """
+    import certifi
     from app import analysis
 
-    assert analysis._nvd_session.verify is True, (
-        f"_nvd_session.verify should be the requests default True, "
-        f"got {analysis._nvd_session.verify!r}. Remove the .verify assignment."
+    verify = analysis._nvd_session.verify
+
+    # Must not be the failure modes.
+    assert verify is not True, (
+        "_nvd_session.verify must be an explicit path — bare True silently "
+        "breaks on Windows (venv / corporate CA)."
+    )
+    assert verify is not False, (
+        "_nvd_session.verify must not disable verification."
+    )
+    assert not isinstance(verify, ssl.SSLContext), (
+        f"_nvd_session.verify must never be an SSLContext "
+        f"(retriggers the original TypeError), got {type(verify).__name__}"
+    )
+
+    # Must be a path string pointing at certifi's bundle.
+    assert isinstance(verify, str), (
+        f"_nvd_session.verify must be a path STRING, "
+        f"got {type(verify).__name__}: {verify!r}"
+    )
+    assert pathlib.Path(verify).is_file(), (
+        f"_nvd_session.verify should point to a readable CA bundle, got {verify!r}"
+    )
+    assert verify == certifi.where(), (
+        f"_nvd_session.verify should be certifi.where() "
+        f"(= {certifi.where()!r}), got {verify!r}"
     )
 
 
