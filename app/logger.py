@@ -137,13 +137,27 @@ def setup_logging(
         file_handler.setFormatter(JsonFormatter())
         root.addHandler(file_handler)
 
-    # ── Silence noisy third-party loggers at WARNING unless debug ──────────────
+    # ── Re-home uvicorn / fastapi loggers on the root handler ─────────────────
+    # Uvicorn installs its own handlers on "uvicorn", "uvicorn.access",
+    # "uvicorn.error" and disables propagation — which means NONE of our
+    # formatted / filed log lines include its startup or request logs.
+    # Clear those handlers and force propagation so every line flows through
+    # the single root handler we just configured above.
+    for _name in ("uvicorn", "uvicorn.access", "uvicorn.error", "fastapi"):
+        _lg = logging.getLogger(_name)
+        _lg.handlers.clear()
+        _lg.propagate = True
+        _lg.setLevel(numeric_level)
+
+    # ── Silence genuinely noisy third-party loggers unless running in DEBUG ───
+    # NOTE: uvicorn.access is intentionally NOT silenced here — we want the
+    # request line on every call. Only network-layer chatter is throttled.
     if numeric_level > logging.DEBUG:
-        for noisy in ("uvicorn.access", "httpx", "httpcore"):
+        for noisy in ("httpx", "httpcore", "urllib3", "asyncio"):
             logging.getLogger(noisy).setLevel(logging.WARNING)
 
     log = logging.getLogger("sbom.logger")
-    log.debug(
+    log.info(
         "Logging initialised — level=%s  format=%s  file=%s",
         level_str,
         fmt_str,

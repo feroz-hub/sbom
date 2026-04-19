@@ -5,7 +5,7 @@ import concurrent.futures
 import logging
 import os
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from enum import Enum
 from functools import lru_cache
 from typing import Any
@@ -18,12 +18,12 @@ try:
 except Exception:  # pragma: no cover
     httpx = None  # type: ignore
 
-from .http_client import tls_ssl_context
 from .parsing import extract_components  # noqa: F401 — re-exported for callers
 
-# Module-level requests.Session for NVD connection pooling
+# Module-level requests.Session for NVD connection pooling.
+# No custom SSL config: requests' default (verify=True) already uses
+# certifi's CA bundle and talks to services.nvd.nist.gov fine.
 _nvd_session = requests.Session()
-_nvd_session.verify = tls_ssl_context()
 _nvd_session.headers.update({"User-Agent": "SBOM-Analyzer/enterprise-2.0"})
 
 LOGGER = logging.getLogger(__name__)
@@ -210,8 +210,29 @@ class AnalysisSettings:
     nvd_request_timeout_seconds: int = 60
     nvd_max_retries: int = 3
     nvd_retry_backoff_seconds: float = 1.5
-    nvd_request_delay_with_key_seconds: float = 0.7
+    # NVD public rate limits (https://nvd.nist.gov/developers/start-here#RateLimits):
+    #   no key  → 5 requests / 30 s  → ≥ 6.0 s between calls
+    #   w/ key  → 50 requests / 30 s → ≥ 0.6 s between calls
+    nvd_request_delay_with_key_seconds: float = 0.6
     nvd_request_delay_without_key_seconds: float = 6.0
+    # Max inflight NVD CPE queries at once. The key allows 10x faster
+    # issuance, so we raise concurrency proportionally. Caller can still
+    # cap this via ANALYSIS_MAX_CONCURRENCY.
+    nvd_concurrency_with_key: int = 10
+    nvd_concurrency_without_key: int = 2
+    # Fallback: when a component has no usable CPE (neither in the SBOM
+    # nor derivable from its PURL), fall back to NVD's free-text
+    # `keywordSearch` query — mirroring the standalone nvd_scan.py. The
+    # keyword path is noisier than CPE matching, so results are capped
+    # per component to limit blast radius.
+    nvd_keyword_results_limit: int = 5
+    nvd_keyword_fallback_enabled: bool = True
+    # Per-component pagination cap. A single NVD CPE query should never
+    # return thousands of results — if it does, the CPE is wildcarded
+    # and the query is noise. Guards against run-away pagination that
+    # can stall the whole phase for 10+ minutes.
+    nvd_max_pages_per_query: int = 3
+    nvd_max_total_results_per_query: int = 500
     cvss_critical_threshold: float = 9.0
     cvss_high_threshold: float = 7.0
     cvss_medium_threshold: float = 4.0
@@ -249,6 +270,15 @@ def _env_float(name: str, default: float, minimum: float = 0.0) -> float:
     return max(minimum, parsed)
 
 
+def _env_bool_top(name: str, default: bool) -> bool:
+    """Top-level bool parser. Mirrors ``_env_bool`` later in the file but
+    must be defined here so ``get_analysis_settings()`` can call it."""
+    v = os.getenv(name)
+    if v is None:
+        return default
+    return str(v).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
 @lru_cache(maxsize=1)
 def get_analysis_settings() -> AnalysisSettings:
     return AnalysisSettings(
@@ -261,8 +291,14 @@ def get_analysis_settings() -> AnalysisSettings:
         nvd_request_timeout_seconds=_env_int("NVD_REQUEST_TIMEOUT_SECONDS", 60, minimum=1),
         nvd_max_retries=_env_int("NVD_MAX_RETRIES", 3, minimum=0),
         nvd_retry_backoff_seconds=_env_float("NVD_RETRY_BACKOFF_SECONDS", 1.5, minimum=0.0),
-        nvd_request_delay_with_key_seconds=_env_float("NVD_REQUEST_DELAY_WITH_KEY_SECONDS", 0.7, minimum=0.0),
+        nvd_request_delay_with_key_seconds=_env_float("NVD_REQUEST_DELAY_WITH_KEY_SECONDS", 0.6, minimum=0.0),
         nvd_request_delay_without_key_seconds=_env_float("NVD_REQUEST_DELAY_WITHOUT_KEY_SECONDS", 6.0, minimum=0.0),
+        nvd_concurrency_with_key=_env_int("NVD_CONCURRENCY_WITH_KEY", 10, minimum=1),
+        nvd_concurrency_without_key=_env_int("NVD_CONCURRENCY_WITHOUT_KEY", 2, minimum=1),
+        nvd_keyword_results_limit=_env_int("NVD_KEYWORD_RESULTS_LIMIT", 5, minimum=1),
+        nvd_keyword_fallback_enabled=_env_bool_top("NVD_KEYWORD_FALLBACK_ENABLED", True),
+        nvd_max_pages_per_query=_env_int("NVD_MAX_PAGES_PER_QUERY", 3, minimum=1),
+        nvd_max_total_results_per_query=_env_int("NVD_MAX_TOTAL_RESULTS_PER_QUERY", 500, minimum=1),
         cvss_critical_threshold=_env_float("CVSS_CRITICAL_THRESHOLD", 9.0, minimum=0.0),
         cvss_high_threshold=_env_float("CVSS_HIGH_THRESHOLD", 7.0, minimum=0.0),
         cvss_medium_threshold=_env_float("CVSS_MEDIUM_THRESHOLD", 4.0, minimum=0.0),
@@ -373,6 +409,7 @@ def _nvd_fetch_cves_paginated(
         "startIndex": 0,
     }
     out: list[dict] = []
+    pages_fetched = 0
 
     while True:
         response = None
@@ -391,8 +428,21 @@ def _nvd_fetch_cves_paginated(
             except requests.RequestException as exc:
                 if attempt >= cfg.nvd_max_retries:
                     raise RuntimeError(f"NVD query failed for {log_label}: {exc}") from exc
+                # On 429 prefer the server's Retry-After — our own linear
+                # backoff can undercut it and immediately hit another 429.
                 backoff = cfg.nvd_retry_backoff_seconds * (attempt + 1)
-                LOGGER.warning("NVD request retry %s for %s due to: %s", attempt + 1, log_label, exc)
+                resp = getattr(exc, "response", None)
+                if resp is not None and resp.status_code == 429:
+                    ra = resp.headers.get("Retry-After")
+                    try:
+                        if ra is not None:
+                            backoff = max(backoff, float(ra))
+                    except (TypeError, ValueError):
+                        pass
+                LOGGER.warning(
+                    "NVD request retry %s for %s (sleep %.2fs) due to: %s",
+                    attempt + 1, log_label, backoff, exc,
+                )
                 if backoff > 0:
                     time.sleep(backoff)
 
@@ -402,12 +452,33 @@ def _nvd_fetch_cves_paginated(
         data = response.json()
         vulnerabilities = data.get("vulnerabilities", []) or []
         out.extend([item.get("cve") for item in vulnerabilities if item.get("cve")])
+        pages_fetched += 1
 
         total = int(data.get("totalResults", len(out)))
         start = int(params["startIndex"])
         size = int(data.get("resultsPerPage") or params["resultsPerPage"] or 0)
         if size <= 0 or start + size >= total:
             break
+
+        # --- Safety caps -------------------------------------------------
+        # Either bound hit = the CPE/match pattern is too broad to be
+        # useful. Stop paginating and keep what we already have; this
+        # prevents one runaway query from freezing the whole phase.
+        if pages_fetched >= cfg.nvd_max_pages_per_query:
+            LOGGER.warning(
+                "NVD pagination cap hit for %s — fetched %d pages, totalResults=%d, "
+                "stopping (cap=%d). Result may be partial.",
+                log_label, pages_fetched, total, cfg.nvd_max_pages_per_query,
+            )
+            break
+        if total > cfg.nvd_max_total_results_per_query:
+            LOGGER.warning(
+                "NVD totalResults=%d exceeds cap=%d for %s — CPE/match pattern is too "
+                "broad; stopping after %d results.",
+                total, cfg.nvd_max_total_results_per_query, log_label, len(out),
+            )
+            break
+
         params["startIndex"] = start + size
         if delay > 0:
             time.sleep(delay)
@@ -415,6 +486,19 @@ def _nvd_fetch_cves_paginated(
 
 
 def nvd_query_by_cpe(cpe: str, api_key: str | None, settings: AnalysisSettings | None = None) -> list[dict]:
+    """
+    Exact-CPE lookup only. No virtualMatchString fallbacks.
+
+    Why: the previous wildcard-vendor-and-product fallback
+    (``cpe:2.3:a:*:*:<version>:*``) matches every CVE at the given
+    version across the entire NVD database — easily tens of thousands
+    of rows paginated 2000 at a time with a 0.6s inter-page sleep.
+    A single such component could freeze the NVD phase for 10+ minutes
+    while producing only noise (CVEs for unrelated products).
+
+    When the SBOM's CPE is wrong, OSV (PURL-based) and GHSA already
+    cover the gap. Exact-only keeps the phase bounded.
+    """
     cfg = settings or get_analysis_settings()
     if not cpe:
         return []
@@ -423,26 +507,90 @@ def nvd_query_by_cpe(cpe: str, api_key: str | None, settings: AnalysisSettings |
         headers["apiKey"] = api_key
     delay = cfg.nvd_request_delay_with_key_seconds if api_key else cfg.nvd_request_delay_without_key_seconds
 
-    out = _nvd_fetch_cves_paginated(
+    return _nvd_fetch_cves_paginated(
         cfg, headers, {"cpeName": cpe}, delay=delay, log_label=f"cpeName={cpe!r}"
     )
-    if out:
-        return out
 
-    v1 = _cpe23_virtual_match_wildcard_vendor(cpe)
-    if v1:
-        out = _nvd_fetch_cves_paginated(
-            cfg, headers, {"virtualMatchString": v1}, delay=delay, log_label=f"virtualMatchString={v1!r}"
-        )
-        if out:
-            return out
 
-    v2 = _cpe23_virtual_match_wildcard_vendor_product(cpe)
-    if v2:
-        out = _nvd_fetch_cves_paginated(
-            cfg, headers, {"virtualMatchString": v2}, delay=delay, log_label=f"virtualMatchString={v2!r}"
-        )
-    return out
+def nvd_query_by_keyword(
+    name: str,
+    version: str | None,
+    api_key: str | None,
+    settings: AnalysisSettings | None = None,
+) -> list[dict]:
+    """
+    Query NVD CVE 2.0 API using the free-text ``keywordSearch`` parameter.
+
+    Used as a fallback for components that have no usable CPE and whose
+    PURL cannot be mapped to a CPE 2.3 string. Mirrors the standalone
+    ``nvd_scan.py`` behaviour.
+
+    Because keyword search matches CVE description text (not CPE
+    configuration), results are capped at
+    ``settings.nvd_keyword_results_limit`` per component to bound noise.
+    """
+    cfg = settings or get_analysis_settings()
+    if not name:
+        return []
+    stripped_name = name.strip()
+    if not stripped_name:
+        return []
+    stripped_version = (version or "").strip()
+    keyword = f"{stripped_name} {stripped_version}".strip() if stripped_version else stripped_name
+
+    headers = {"User-Agent": cfg.http_user_agent}
+    if api_key:
+        headers["apiKey"] = api_key
+    delay = cfg.nvd_request_delay_with_key_seconds if api_key else cfg.nvd_request_delay_without_key_seconds
+    limit = max(1, int(cfg.nvd_keyword_results_limit))
+
+    params: dict[str, Any] = {
+        "keywordSearch": keyword,
+        "resultsPerPage": limit,
+        "startIndex": 0,
+    }
+
+    response = None
+    for attempt in range(cfg.nvd_max_retries + 1):
+        try:
+            response = _nvd_session.get(
+                cfg.nvd_api_base_url,
+                params=params,
+                headers=headers,
+                timeout=cfg.nvd_request_timeout_seconds,
+            )
+            if response.status_code == 429 or response.status_code >= 500:
+                raise requests.HTTPError(f"NVD HTTP {response.status_code}", response=response)
+            response.raise_for_status()
+            break
+        except requests.RequestException as exc:
+            if attempt >= cfg.nvd_max_retries:
+                raise RuntimeError(f"NVD keyword query failed for {keyword!r}: {exc}") from exc
+            backoff = cfg.nvd_retry_backoff_seconds * (attempt + 1)
+            resp = getattr(exc, "response", None)
+            if resp is not None and resp.status_code == 429:
+                ra = resp.headers.get("Retry-After")
+                try:
+                    if ra is not None:
+                        backoff = max(backoff, float(ra))
+                except (TypeError, ValueError):
+                    pass
+            LOGGER.warning(
+                "NVD keyword retry %s for %r (sleep %.2fs) due to: %s",
+                attempt + 1, keyword, backoff, exc,
+            )
+            if backoff > 0:
+                time.sleep(backoff)
+
+    if response is None:
+        return []
+
+    data = response.json()
+    vulnerabilities = data.get("vulnerabilities", []) or []
+    out = [item.get("cve") for item in vulnerabilities if item.get("cve")]
+    if delay > 0:
+        time.sleep(delay)
+    return out[:limit]
 
 
 def _finding_from_raw(
@@ -572,9 +720,7 @@ async def _async_get(url: str, headers: dict | None = None, params: dict | None 
 
             client = get_async_http_client()
         except RuntimeError:
-            async with httpx.AsyncClient(
-                timeout=timeout, headers=headers, verify=tls_ssl_context()
-            ) as client:
+            async with httpx.AsyncClient(timeout=timeout, headers=headers) as client:
                 r = await client.get(url, params=params, headers=headers)
                 r.raise_for_status()
                 return r.json()
@@ -590,7 +736,6 @@ async def _async_get(url: str, headers: dict | None = None, params: dict | None 
             headers=headers,
             params=params,
             timeout=timeout,
-            verify=tls_ssl_context(),
         ).json(),
     )
 
@@ -602,9 +747,7 @@ async def _async_post(url: str, json_body: dict, headers: dict | None = None, ti
 
             client = get_async_http_client()
         except RuntimeError:
-            async with httpx.AsyncClient(
-                timeout=timeout, headers=headers, verify=tls_ssl_context()
-            ) as client:
+            async with httpx.AsyncClient(timeout=timeout, headers=headers) as client:
                 r = await client.post(url, json=json_body, headers=headers)
                 r.raise_for_status()
                 return r.json()
@@ -620,7 +763,6 @@ async def _async_post(url: str, json_body: dict, headers: dict | None = None, ti
             json=json_body,
             headers=headers,
             timeout=timeout,
-            verify=tls_ssl_context(),
         ).json(),
     )
 
@@ -1060,47 +1202,130 @@ async def nvd_query_by_components_async(
     nvd_api_key: str | None = None,
 ) -> tuple[list[dict], list[dict], list[dict]]:
     """
-    Run NVD CPE lookups for all components concurrently.
-    Returns (findings, errors, warnings) — same shape as osv/github counterparts.
+    Run NVD CPE lookups for every component with a CPE — SEQUENTIALLY.
+
+    Why sequential (not fan-out):
+        NVD's public rate limit is a *global* token bucket — 50 req / 30 s
+        with a key, 5 req / 30 s without. A concurrent fan-out with a
+        per-worker sleep violates that ceiling (N workers × 1/sleep req/s),
+        which produces a pile of 429 Retry-Afters and stalls the phase.
+        One request at a time with a fixed inter-request sleep stays under
+        the ceiling by construction: 45 comps × 0.6 s ≈ 27 s with a key.
+
+    Components **without** a CPE are skipped on purpose — OSV and GHSA
+    already cover them via PURL, and NVD's keyword-search path is noisy
+    and burns rate-limit for low-value results. Before we decide what is
+    "without a CPE" we try to **derive one from the PURL**: for example,
+    ``pkg:pypi/requests@2.31.0`` becomes
+    ``cpe:2.3:a:requests:requests:2.31.0:*:*:*:*:*:*:*``.
+
+    The multi-source orchestrator already augments upstream, but doing it
+    here too keeps this function correct when called directly.
+
+    Returns ``(findings, errors, warnings)`` — same shape as osv/github.
     """
-    cpe_set: set[str] = set()
+    # Best-effort PURL → CPE derivation before the inventory pass. When
+    # multi_source already augmented, this is a no-op (components that
+    # already have ``cpe`` are passed through unchanged).
+    normalized_components, generated_cpe_count = _augment_components_with_cpe(components)
+
+    # CPE inventory + skipped count (preserve insertion order so progress
+    # logs map 1:1 to the SBOM input ordering in logs/sbom.log).
+    cpe_order: list[str] = []
+    seen: set[str] = set()
     name_by_cpe: dict[str, tuple[str, str | None]] = {}
-    for comp in components:
+    queried = 0
+    skipped = 0
+    for comp in normalized_components:
         cpe = comp.get("cpe")
         if cpe:
-            cpe_set.add(cpe)
-            name_by_cpe[cpe] = (comp.get("name") or "", comp.get("version"))
+            queried += 1
+            if cpe not in seen:
+                seen.add(cpe)
+                cpe_order.append(cpe)
+                name_by_cpe[cpe] = (comp.get("name") or "", comp.get("version"))
+        else:
+            skipped += 1
+            LOGGER.debug(
+                "Skipping NVD for %s@%s: no CPE",
+                comp.get("name") or "?",
+                comp.get("version") or "?",
+            )
 
-    if not cpe_set:
+    LOGGER.info(
+        "NVD: %d queried, %d skipped (no CPE), %d CPEs derived from PURL",
+        queried, skipped, generated_cpe_count,
+    )
+
+    if not cpe_order:
         return [], [], []
 
     api_key = nvd_api_key or resolve_nvd_api_key(settings)
-    loop = asyncio.get_running_loop()
-    sem = asyncio.Semaphore(settings.max_concurrency)
 
-    def _fetch_one(cpe: str) -> tuple[str, list[dict], str | None]:
-        try:
-            return cpe, nvd_query_by_cpe(cpe, api_key, settings=settings), None
-        except Exception as exc:
-            return cpe, [], str(exc)
+    cfg_base = get_analysis_settings()
+    sleep_s = (
+        cfg_base.nvd_request_delay_with_key_seconds
+        if api_key
+        else cfg_base.nvd_request_delay_without_key_seconds
+    )
 
-    async def _bounded(cpe: str):
-        async with sem:
-            return await loop.run_in_executor(_executor, _fetch_one, cpe)
+    # Tighter per-request budget for the sequential path: long timeouts and
+    # multi-attempt backoffs just pile on top of NVD's 429 Retry-After and
+    # stretch the phase out. Cap timeout at 20s and allow at most one retry.
+    cfg = replace(
+        cfg_base,
+        nvd_request_timeout_seconds=min(cfg_base.nvd_request_timeout_seconds, 20),
+        nvd_max_retries=min(cfg_base.nvd_max_retries, 1),
+    )
 
-    results = await asyncio.gather(*[_bounded(cpe) for cpe in sorted(cpe_set)])
+    total = len(cpe_order)
+    LOGGER.info(
+        "NVD client: api_key=%s, sleep=%.2fs, sequential, cpe_targets=%d",
+        bool(api_key),
+        sleep_s,
+        total,
+    )
 
     findings: list[dict] = []
     errors: list[dict] = []
-    for cpe, raw_list, err in results:
-        if err:
-            errors.append({"source": "NVD", "cpe": cpe, "error": err})
-            continue
-        comp_name, comp_ver = name_by_cpe.get(cpe, ("", None))
-        for raw in raw_list:
-            if isinstance(raw, dict):
-                findings.append(_finding_from_raw(raw, cpe, comp_name, comp_ver, settings))
+    succeeded = 0
 
+    loop = asyncio.get_running_loop()
+    for idx, cpe in enumerate(cpe_order, 1):
+        try:
+            # Run sync requests.Session call in the shared executor so we
+            # do not block the event loop, but serialize the submissions.
+            raw_list = await loop.run_in_executor(
+                _executor, nvd_query_by_cpe, cpe, api_key, cfg
+            )
+        except Exception as exc:
+            LOGGER.warning(
+                "NVD CPE query failed — cpe=%r error=%s: %s",
+                cpe, type(exc).__name__, exc,
+            )
+            errors.append(
+                {"source": "NVD", "cpe": cpe, "error": f"{type(exc).__name__}: {exc}"}
+            )
+        else:
+            succeeded += 1
+            comp_name, comp_ver = name_by_cpe.get(cpe, ("", None))
+            for raw in raw_list:
+                if isinstance(raw, dict):
+                    findings.append(
+                        _finding_from_raw(raw, cpe, comp_name, comp_ver, settings)
+                    )
+
+        if idx % 5 == 0 or idx == total:
+            LOGGER.info("NVD progress: %d/%d", idx, total)
+
+        # Inter-request sleep (only between components, not after the last).
+        if idx < total and sleep_s > 0:
+            await asyncio.sleep(sleep_s)
+
+    LOGGER.info(
+        "NVD phase complete: %d/%d succeeded (findings=%d errors=%d skipped_no_cpe=%d)",
+        succeeded, total, len(findings), len(errors), skipped,
+    )
     return findings, errors, []
 
 

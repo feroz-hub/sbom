@@ -37,6 +37,7 @@ async def run_multi_source_analysis_async(
         get_analysis_settings_multi,
         github_query_by_components,
         nvd_query_by_cpe,
+        nvd_query_by_keyword,
         osv_query_by_components,
         resolve_nvd_api_key,
     )
@@ -62,10 +63,14 @@ async def run_multi_source_analysis_async(
         except KeyError:
             LOGGER.warning("Unknown analysis source ignored: %s", s)
 
-    if not any(c.get("cpe") for c in components_w_cpe):
-        if AnalysisSource.NVD in selected_enum:
-            LOGGER.info("Skipping NVD: no CPEs found in any component")
-            selected_enum.remove(AnalysisSource.NVD)
+    # NOTE: historically NVD was removed from `selected_enum` when no
+    # component had a CPE. That produced the "NVD returns 0 findings"
+    # behaviour for SBOMs whose components ship only name+version (e.g.
+    # minimal SPDX) or PURLs whose type is not in `cpe23_from_purl`'s
+    # switch. The new keyword-search fallback inside `_nvd()` can still
+    # return findings for those components, so we keep NVD selected and
+    # let `_nvd()` decide per-component whether to use cpeName/virtualMatch
+    # or keywordSearch.
 
     LOGGER.info(
         "Starting multi-source analysis: sources=%s components=%d",
@@ -79,6 +84,8 @@ async def run_multi_source_analysis_async(
 
     async def _nvd() -> None:
         nonlocal all_findings, query_errors
+
+        # Phase 1 — CPE inventory (precise lookups via cpeName / virtualMatchString).
         cpe_set: set[str] = set()
         name_by_cpe: dict[str, tuple[str, str | None]] = {}
         for comp in components_w_cpe:
@@ -86,32 +93,79 @@ async def run_multi_source_analysis_async(
             if cpe:
                 cpe_set.add(cpe)
                 name_by_cpe[cpe] = (comp.get("name") or "", comp.get("version"))
-        if not cpe_set:
-            LOGGER.debug("NVD: no CPEs to query — skipping")
-            return
-        LOGGER.debug("NVD: querying %d unique CPEs concurrently", len(cpe_set))
-        loop = asyncio.get_running_loop()
 
-        def _fetch_one(cpe: str) -> tuple[str, list[dict], str | None]:
+        # Phase 2 — keyword inventory (fallback for components with no CPE).
+        # Mirrors the standalone ``nvd_scan.py`` behaviour so SBOMs whose
+        # components lack a CPE / mappable PURL still get findings.
+        keyword_targets: dict[tuple[str, str | None], tuple[str, str | None]] = {}
+        if getattr(cfg, "nvd_keyword_fallback_enabled", True):
+            for comp in components_w_cpe:
+                if comp.get("cpe"):
+                    continue
+                raw_name = (comp.get("name") or "").strip()
+                if not raw_name:
+                    continue
+                version_raw = comp.get("version")
+                version = (version_raw or "").strip() or None
+                dedup_key = (raw_name.lower(), (version or "").lower() or None)
+                if dedup_key in keyword_targets:
+                    continue
+                keyword_targets[dedup_key] = (raw_name, version)
+
+        if not cpe_set and not keyword_targets:
+            LOGGER.debug("NVD: no CPEs and no keyword targets to query — skipping")
+            return
+
+        LOGGER.debug(
+            "NVD: querying %d CPEs + %d keyword targets concurrently",
+            len(cpe_set),
+            len(keyword_targets),
+        )
+        loop = asyncio.get_running_loop()
+        api_key = resolve_nvd_api_key(cfg)
+
+        def _fetch_cpe(cpe: str) -> tuple[str, list[dict], str | None]:
             LOGGER.debug("NVD: fetching CPE '%s'", cpe)
             try:
-                cve_objs = nvd_query_by_cpe(cpe, resolve_nvd_api_key(cfg), settings=cfg)
+                cve_objs = nvd_query_by_cpe(cpe, api_key, settings=cfg)
                 LOGGER.debug("NVD: CPE '%s' → %d CVEs", cpe, len(cve_objs))
                 return cpe, cve_objs, None
             except Exception as exc:
                 LOGGER.warning("NVD: CPE '%s' query failed: %s", cpe, exc)
                 return cpe, [], str(exc)
 
+        def _fetch_keyword(
+            name: str, version: str | None
+        ) -> tuple[str, str | None, list[dict], str | None]:
+            LOGGER.debug("NVD: fetching keyword '%s %s'", name, version or "")
+            try:
+                cve_objs = nvd_query_by_keyword(name, version, api_key, settings=cfg)
+                LOGGER.debug(
+                    "NVD: keyword '%s %s' → %d CVEs", name, version or "", len(cve_objs)
+                )
+                return name, version, cve_objs, None
+            except Exception as exc:
+                LOGGER.warning("NVD: keyword '%s %s' query failed: %s", name, version or "", exc)
+                return name, version, [], str(exc)
+
         _nvd_sem = asyncio.Semaphore(cfg.max_concurrency)
 
-        async def _bounded_fetch(cpe: str):
+        async def _bounded_cpe(cpe: str):
             async with _nvd_sem:
-                return await loop.run_in_executor(_executor, _fetch_one, cpe)
+                return await loop.run_in_executor(_executor, _fetch_cpe, cpe)
 
-        tasks = [_bounded_fetch(cpe) for cpe in sorted(cpe_set)]
-        results = await asyncio.gather(*tasks)
+        async def _bounded_keyword(name: str, version: str | None):
+            async with _nvd_sem:
+                return await loop.run_in_executor(_executor, _fetch_keyword, name, version)
+
+        cpe_tasks = [_bounded_cpe(cpe) for cpe in sorted(cpe_set)]
+        kw_tasks = [_bounded_keyword(n, v) for (n, v) in keyword_targets.values()]
+
+        cpe_results = await asyncio.gather(*cpe_tasks) if cpe_tasks else []
+        kw_results = await asyncio.gather(*kw_tasks) if kw_tasks else []
+
         nvd_findings = 0
-        for cpe, raw_list, err in results:
+        for cpe, raw_list, err in cpe_results:
             if err:
                 query_errors.append({"source": "NVD", "cpe": cpe, "error": err})
                 continue
@@ -129,11 +183,33 @@ async def run_multi_source_analysis_async(
                     )
                 )
                 nvd_findings += 1
+
+        for name, version, raw_list, err in kw_results:
+            if err:
+                query_errors.append(
+                    {"source": "NVD", "keyword": f"{name} {version or ''}".strip(), "error": err}
+                )
+                continue
+            for raw in raw_list:
+                if not isinstance(raw, dict):
+                    continue
+                all_findings.append(
+                    _finding_from_raw(
+                        raw=raw,
+                        cpe=None,
+                        component_name=name,
+                        component_version=version,
+                        settings=cfg,
+                    )
+                )
+                nvd_findings += 1
+
         LOGGER.info(
-            "NVD complete: %d findings from %d CPEs (%d errors)",
+            "NVD complete: %d findings from %d CPEs + %d keyword targets (%d errors)",
             nvd_findings,
             len(cpe_set),
-            len(query_errors),
+            len(keyword_targets),
+            sum(1 for e in query_errors if e.get("source") == "NVD"),
         )
 
     async def _osv() -> None:
@@ -209,5 +285,17 @@ async def run_multi_source_analysis_async(
     if generated_cpe_count > 0:
         details["note"] = f"Generated {generated_cpe_count} CPEs from package URLs to enable NVD correlation."
     if AnalysisSource.NVD in selected_enum and details["components_with_cpe"] == 0:
-        details["message"] = "No CPE values could be generated; NVD correlation not executed."
+        # CPE-based correlation wasn't possible, but the keyword-search
+        # fallback may still have produced findings — only surface the
+        # warning message when NVD yielded nothing at all.
+        nvd_any = any("NVD" in (f.get("sources") or []) for f in findings)
+        if not nvd_any:
+            details["message"] = (
+                "No CPE values could be generated; NVD keyword-search fallback returned no matches."
+            )
+        else:
+            details["note"] = (
+                "No CPE values available; NVD findings produced via keyword-search fallback "
+                "(lower precision than CPE-based correlation)."
+            )
     return details

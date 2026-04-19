@@ -29,9 +29,15 @@ if __name__ == "__main__":
     reload = os.getenv("RELOAD", "false").lower() == "true"
 
     log.info("Starting SBOM Analyzer on http://%s:%d  (reload=%s)", host, port, reload)
+    # log_config=None  → keep OUR logger configuration; don't let uvicorn
+    #                    replace the root handlers with its default config.
+    # access_log=False → our FastAPI middleware already logs every request
+    #                    with timing, so uvicorn's access log would duplicate.
     uvicorn.run(
         "app.main:app",
         host=host,
         port=port,
         reload=reload,
+        log_config=None,
+        access_log=False,
     )

@@ -17,7 +17,19 @@ def test_maven_non_apache_group_unchanged_last_segment_vendor():
     assert cpe == "cpe:2.3:a:example:demo-lib:1.0.0:*:*:*:*:*:*:*"
 
 
-def test_nvd_query_by_cpe_uses_virtual_match_when_cpe_name_empty(monkeypatch):
+def test_nvd_query_by_cpe_is_exact_only_no_virtual_match_fallback(monkeypatch):
+    """
+    Historically ``nvd_query_by_cpe`` fell back to ``virtualMatchString=…``
+    when exact ``cpeName=…`` returned nothing. That fallback is deleted
+    because the wildcard-vendor-wildcard-product shape
+    (``cpe:2.3:a:*:*:<version>:*``) matches every CVE at the given
+    version across the entire NVD database — tens of thousands of rows
+    paginated at 2000/page × 0.6s sleep = 10+ min per component. One
+    runaway query would freeze the whole NVD phase.
+
+    Guard: when exact CPE returns empty, ``nvd_query_by_cpe`` must
+    return ``[]`` and MUST NOT issue a ``virtualMatchString`` query.
+    """
     import app.analysis as analysis_mod
     from tests.fixtures import canned_responses as canned
 
@@ -27,6 +39,7 @@ def test_nvd_query_by_cpe_uses_virtual_match_when_cpe_name_empty(monkeypatch):
         def __init__(self, data: dict):
             self._data = data
             self.status_code = 200
+            self.headers = {}
 
         def raise_for_status(self) -> None:
             pass
@@ -36,11 +49,9 @@ def test_nvd_query_by_cpe_uses_virtual_match_when_cpe_name_empty(monkeypatch):
 
     def fake_get(url, params=None, headers=None, timeout=None):
         calls.append(dict(params or {}))
-        p = params or {}
-        if p.get("cpeName") is not None:
-            return Resp(canned.NVD_EMPTY_RESPONSE)
-        if p.get("virtualMatchString") is not None:
-            return Resp(canned.NVD_LOG4J_RESPONSE)
+        # Exact CPE → empty. If the wildcard fallback reappears, the
+        # next call will land here with a virtualMatchString key and
+        # the assertion below will fail.
         return Resp(canned.NVD_EMPTY_RESPONSE)
 
     monkeypatch.setattr(analysis_mod._nvd_session, "get", fake_get)
@@ -48,10 +59,14 @@ def test_nvd_query_by_cpe_uses_virtual_match_when_cpe_name_empty(monkeypatch):
     cpe = "cpe:2.3:a:log4j:log4j-core:2.14.1:*:*:*:*:*:*:*"
     out = analysis_mod.nvd_query_by_cpe(cpe, None, analysis_mod.get_analysis_settings())
 
-    assert len(out) >= 1
-    assert out[0].get("id") == "CVE-2021-44228"
-    assert any("cpeName" in c for c in calls)
-    assert any("virtualMatchString" in c for c in calls)
+    assert out == []
+    assert len(calls) == 1, (
+        f"expected exactly ONE HTTP call (exact CPE only), got {len(calls)}: {calls}"
+    )
+    assert "cpeName" in calls[0]
+    assert "virtualMatchString" not in calls[0], (
+        "virtualMatchString fallback is deleted — nvd_query_by_cpe must not issue it"
+    )
 
 
 def test_nvd_virtual_match_helpers():

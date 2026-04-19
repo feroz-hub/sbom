@@ -149,6 +149,12 @@ def _update_sbom_names() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Re-apply logging config AFTER uvicorn has fully initialised. Uvicorn
+    # runs `logging.config.dictConfig(LOGGING_CONFIG)` during its own
+    # startup which replaces the root logger's handlers — without this
+    # re-apply step, our formatter and rotating file handler would be lost
+    # for the remainder of the process.
+    setup_logging()
     await init_async_http_client()
     log.info("SBOM Analyzer starting up — initialising database …")
     _ensure_seed_data()
@@ -184,7 +190,7 @@ _access_log = get_logger("access")
 async def log_requests(request: Request, call_next):
     """Log every incoming request and its response status + duration."""
     t0 = time.perf_counter()
-    _access_log.debug(
+    _access_log.info(
         "→ %s %s  client=%s",
         request.method,
         request.url.path,
@@ -203,7 +209,9 @@ async def log_requests(request: Request, call_next):
         )
         raise
     duration_ms = int((time.perf_counter() - t0) * 1000)
-    level = logging.WARNING if response.status_code >= 400 else logging.DEBUG
+    # Every completed request is logged at INFO; 4xx/5xx escalate to WARNING
+    # so they remain visible even if operators run at WARNING-only in prod.
+    level = logging.WARNING if response.status_code >= 400 else logging.INFO
     _access_log.log(
         level,
         "← %s %s  status=%d  %dms",
