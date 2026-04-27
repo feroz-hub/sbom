@@ -20,20 +20,22 @@ from app.sources import (
     GhsaSource,
     NvdSource,
     OsvSource,
+    VulnDbSource,
     VulnSource,
     empty_result,
     get_source,
 )
 
 
-def test_registry_contains_all_three_sources():
-    assert set(SOURCE_REGISTRY) == {"NVD", "OSV", "GITHUB"}
+def test_registry_contains_all_sources():
+    assert set(SOURCE_REGISTRY) == {"NVD", "OSV", "GITHUB", "VULNDB"}
 
 
 def test_get_source_is_case_insensitive():
     assert get_source("nvd") is NvdSource
     assert get_source("Osv") is OsvSource
     assert get_source("GITHUB") is GhsaSource
+    assert get_source("vulndb") is VulnDbSource
 
 
 def test_get_source_unknown_raises():
@@ -50,11 +52,12 @@ def test_every_adapter_satisfies_protocol():
     assert isinstance(NvdSource(api_key="x"), VulnSource)
     assert isinstance(OsvSource(), VulnSource)
     assert isinstance(GhsaSource(token="x"), VulnSource)
+    assert isinstance(VulnDbSource(api_key="x"), VulnSource)
 
 
 def test_adapters_short_circuit_on_empty_components():
     """
-    All three adapters MUST short-circuit when components is empty so the
+    All adapters MUST short-circuit when components is empty so the
     orchestrator can call them blindly without checking. This is also the
     only ``query()`` path we can exercise here without monkeypatching the
     underlying analysis.* coroutines.
@@ -66,6 +69,7 @@ def test_adapters_short_circuit_on_empty_components():
             await NvdSource(api_key=None).query([], cfg),
             await OsvSource().query([], cfg),
             await GhsaSource(token=None).query([], cfg),
+            await VulnDbSource(api_key=None).query([], cfg),
         ]
 
     results = asyncio.run(_run())
@@ -137,6 +141,98 @@ def test_adapters_route_through_underlying_analysis_functions(monkeypatch):
     assert ghsa_components == components
     assert getattr(ghsa_settings, "gh_token_override", None) == "ghp_abc"
     assert ghsa_result["findings"] == [{"vuln_id": "GHSA-Z"}]
+
+
+def test_vulndb_adapter_skips_without_api_key():
+    cfg = type("Cfg", (), {"vulndb_api_key_env": "VULNDB_API_KEY"})()
+
+    async def _run():
+        return await VulnDbSource(api_key=None).query([{"name": "openssl", "version": "1.1.1"}], cfg)
+
+    result = asyncio.run(_run())
+    assert result["findings"] == []
+    assert result["errors"] == []
+    assert result["warnings"] == [{"source": "VULNDB", "warning": "Missing API key env: VULNDB_API_KEY"}]
+
+
+def test_vulndb_adapter_maps_api_results(monkeypatch):
+    import app.sources.vulndb as vulndb_mod
+
+    captured: dict = {}
+
+    async def fake_post(url: str, data: dict, timeout: int):
+        captured["url"] = url
+        captured["data"] = data
+        captured["timeout"] = timeout
+        return {
+            "status": 200,
+            "request": {"apikey": "valid"},
+            "result": [
+                {
+                    "entry": {
+                        "id": "67685",
+                        "title": "OpenSSL 1.1.1 example vulnerability",
+                    },
+                    "vulnerability": {
+                        "risk": {"name": "high"},
+                        "cwe": "CWE-295",
+                        "cvss2": {"nvd": {"basescore": "7.5"}},
+                    },
+                    "advisory": {"date": "1704067200"},
+                    "source": {"cve": {"id": "CVE-2099-0001"}},
+                }
+            ],
+        }
+
+    monkeypatch.setattr(vulndb_mod, "_post_vulndb_form", fake_post)
+    cfg = type(
+        "Cfg",
+        (),
+        {
+            "vulndb_api_base_url": "https://vuldb.test/api",
+            "vulndb_api_version": 3,
+            "vulndb_limit": 5,
+            "vulndb_max_components": 10,
+            "vulndb_request_timeout_seconds": 12,
+            "vulndb_request_delay_seconds": 0,
+            "vulndb_details": False,
+        },
+    )()
+    components = [{"name": "openssl", "version": "1.1.1", "cpe": "cpe:2.3:a:openssl:openssl:1.1.1:*:*:*:*:*:*:*"}]
+
+    async def _run():
+        return await VulnDbSource(api_key="vuldb-key").query(components, cfg)
+
+    result = asyncio.run(_run())
+    assert captured["url"] == "https://vuldb.test/api"
+    assert captured["data"]["apikey"] == "vuldb-key"
+    assert captured["data"]["version"] == "3"
+    assert captured["data"]["search"].startswith("cpe:2.3:a:openssl")
+    assert captured["timeout"] == 12
+
+    assert result["errors"] == []
+    assert result["warnings"] == []
+    assert result["findings"] == [
+        {
+            "vuln_id": "CVE-2099-0001",
+            "aliases": ["CVE-2099-0001", "VULDB-67685"],
+            "sources": ["VULNDB"],
+            "description": "OpenSSL 1.1.1 example vulnerability",
+            "severity": "HIGH",
+            "score": 7.5,
+            "vector": None,
+            "attack_vector": None,
+            "cvss_version": "2.0",
+            "published": "2024-01-01T00:00:00+00:00",
+            "references": ["https://vuldb.com/?id.67685", "https://nvd.nist.gov/vuln/detail/CVE-2099-0001"],
+            "url": "https://vuldb.com/?id.67685",
+            "cwe": ["CWE-295"],
+            "fixed_versions": [],
+            "component_name": "openssl",
+            "component_version": "1.1.1",
+            "cpe": "cpe:2.3:a:openssl:openssl:1.1.1:*:*:*:*:*:*:*",
+        }
+    ]
 
 
 def test_osv_fallback_query_endpoint_used_when_batch_empty(monkeypatch):

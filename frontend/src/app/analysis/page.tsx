@@ -317,11 +317,11 @@ export default function AnalysisPage() {
         <div className="bg-surface rounded-xl border border-hcl-border shadow-card overflow-hidden">
           <div className="px-6 py-4 border-b-2 border-hcl-border bg-hcl-light/40 flex items-center gap-2.5">
             <div className="w-1 h-5 rounded-full bg-hcl-cyan shrink-0" />
-            <h2 className="text-base font-semibold text-hcl-navy">Consolidated Analysis (NVD + GHSA + OSV)</h2>
+            <h2 className="text-base font-semibold text-hcl-navy">Consolidated Analysis (NVD + GHSA + OSV + VulDB)</h2>
           </div>
           <div className="px-6 py-5 space-y-4">
             <p className="text-sm text-hcl-muted">
-              Run a full multi-source vulnerability scan against all three databases simultaneously.
+              Run a full multi-source vulnerability scan against the configured databases simultaneously.
             </p>
             {analysisConfig && !analysisConfig.github_configured && (
               <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -331,6 +331,17 @@ export default function AnalysisPage() {
                   Set <code className="font-mono text-xs bg-amber-100 px-1 rounded">GITHUB_TOKEN</code> in your
                   backend <code className="font-mono text-xs bg-amber-100 px-1 rounded">.env</code> file to include
                   GHSA findings. Proceeding without it will skip GitHub findings.
+                </span>
+              </div>
+            )}
+            {analysisConfig && !analysisConfig.vulndb_configured && (
+              <div className="flex items-start gap-2 rounded-lg border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-900">
+                <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                <span>
+                  <strong>VulDB requires an API key.</strong>{' '}
+                  Set <code className="font-mono text-xs bg-cyan-100 px-1 rounded">VULNDB_API_KEY</code> in your
+                  backend <code className="font-mono text-xs bg-cyan-100 px-1 rounded">.env</code> file to include
+                  VulDB findings.
                 </span>
               </div>
             )}

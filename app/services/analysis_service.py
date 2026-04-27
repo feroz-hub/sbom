@@ -136,7 +136,7 @@ def persist_analysis_run(
         details: Analysis details dict containing findings, totals, etc.
         components: List of component dictionaries
         run_status: Overall status (PASS, FAIL, ERROR, etc.)
-        source: Source identifier (NVD, OSV, GITHUB, MULTI, etc.)
+        source: Source identifier (NVD, OSV, GITHUB, VULNDB, MULTI, etc.)
         started_on: ISO timestamp when analysis started
         completed_on: ISO timestamp when analysis completed
         duration_ms: Duration in milliseconds

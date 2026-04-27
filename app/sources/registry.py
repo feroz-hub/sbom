@@ -19,11 +19,13 @@ from .base import VulnSource
 from .ghsa import GhsaSource
 from .nvd import NvdSource
 from .osv import OsvSource
+from .vulndb import VulnDbSource
 
 SOURCE_REGISTRY: dict[str, type[VulnSource]] = {
     NvdSource.name: NvdSource,
     OsvSource.name: OsvSource,
     GhsaSource.name: GhsaSource,
+    VulnDbSource.name: VulnDbSource,
 }
 
 

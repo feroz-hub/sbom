@@ -29,13 +29,11 @@ from sqlalchemy.orm import Session
 
 from ..analysis import (
     _augment_components_with_cpe,
-    analyze_sbom_multi_source_async,
     deduplicate_findings,
     enrich_component_for_osv,
     extract_components,
     get_analysis_settings_multi,
 )
-from ..credentials import github_token_for_adapters, nvd_api_key_for_adapters
 from ..db import get_db
 from ..idempotency import (
     analysis_run_to_dict,
@@ -66,9 +64,9 @@ from ..sources import (
     EVENT_DONE,
     EVENT_ERROR,
     EVENT_RUNNING,
-    GhsaSource,
-    NvdSource,
-    OsvSource,
+    build_source_adapters,
+    configured_default_sources,
+    normalize_source_names,
     run_sources_concurrently,
 )
 
@@ -283,11 +281,9 @@ async def create_auto_report(db: Session, sbom_obj: SBOMSource) -> AnalysisRun |
     """
     Trigger default multi-source analysis for an SBOM and persist the run.
 
-    Delegates to ``analyze_sbom_multi_source_async`` which fans NVD + OSV + GitHub
-    out concurrently with ``asyncio.gather``. Previously this function ran the
-    three sources serially via three blocking ``asyncio.run()`` calls inside a
-    sync handler, which (a) blocked the worker thread for the full sum of all
-    three round trips and (b) starved concurrent uploads.
+    Uses the shared ``app.sources`` adapter runner so configured sources
+    (NVD, OSV, GitHub, VulDB, etc.) are fanned out consistently with the
+    streaming and ad-hoc analysis endpoints.
     """
     if not sbom_obj.sbom_data:
         return None
@@ -309,24 +305,39 @@ async def create_auto_report(db: Session, sbom_obj: SBOMSource) -> AnalysisRun |
     started_on = now_iso()
     started_at = time.perf_counter()
 
+    cfg = get_analysis_settings_multi()
+    sources_used = configured_default_sources()
     try:
-        cfg = get_analysis_settings_multi()
-        details = await analyze_sbom_multi_source_async(
-            sbom_obj.sbom_data,
-            sources=["NVD", "OSV", "GITHUB"],
+        raw_findings, all_errors, all_warnings = await run_sources_concurrently(
+            sources=build_source_adapters(sources_used),
+            components=components,
             settings=cfg,
         )
     except Exception as exc:
         log.error("Auto-analysis failed for SBOM id=%d: %s", sbom_obj.id, exc, exc_info=True)
         return None
 
-    all_errors: list[dict] = list(details.get("query_errors") or [])
-    final_findings: list[dict] = list(details.get("findings") or [])
-    sources_used = (details.get("analysis_metadata") or {}).get("sources") or [
-        "NVD",
-        "OSV",
-        "GITHUB",
-    ]
+    final_findings: list[dict] = deduplicate_findings(raw_findings)
+
+    buckets = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "UNKNOWN": 0}
+    for f in final_findings:
+        sev = str((f or {}).get("severity", "UNKNOWN")).upper()
+        buckets[sev if sev in buckets else "UNKNOWN"] += 1
+
+    details: dict = {
+        "total_components": len(components),
+        "components_with_cpe": sum(1 for c in components if c.get("cpe")),
+        "total_findings": len(final_findings),
+        "critical": buckets["CRITICAL"],
+        "high": buckets["HIGH"],
+        "medium": buckets["MEDIUM"],
+        "low": buckets["LOW"],
+        "unknown": buckets["UNKNOWN"],
+        "query_errors": all_errors,
+        "query_warnings": all_warnings,
+        "findings": final_findings,
+        "analysis_metadata": {"sources": sources_used},
+    }
 
     run_status = compute_report_status(len(final_findings), all_errors)
     source_label = ",".join(sources_used)
@@ -355,7 +366,7 @@ def _sse_event(event_type: str, data: dict) -> str:
 
 
 class AnalyzeStreamPayload(BaseModel):
-    sources: list[str] | None = ["NVD", "OSV", "GITHUB"]
+    sources: list[str] | None = None
 
 
 # ---- Validation Helper ----
@@ -757,7 +768,7 @@ async def analyze_sbom_stream(
         try:
             cfg = get_analysis_settings_multi()
 
-            sources = [s.strip().upper() for s in (payload.sources or ["NVD", "OSV", "GITHUB"])]
+            sources = normalize_source_names(payload.sources, default=configured_default_sources())
 
             yield _sse_event(
                 "progress",
@@ -788,17 +799,10 @@ async def analyze_sbom_stream(
             )
             await asyncio.sleep(0)
 
-            # Phase 3 (Finding B): build per-request VulnSource adapter
-            # instances. Credentials are bound at construction time so the
-            # request handler never has to mutate os.environ or splice
-            # `gh_token_override` onto the settings dataclass — that
-            # plumbing now lives inside the adapters themselves.
-            adapter_factories = {
-                "NVD": lambda: NvdSource(api_key=nvd_api_key_for_adapters()),
-                "OSV": lambda: OsvSource(),
-                "GITHUB": lambda: GhsaSource(token=github_token_for_adapters()),
-            }
-            active_adapters = [adapter_factories[name]() for name in sources if name in adapter_factories]
+            # Build per-request VulnSource adapter instances. Credentials are
+            # bound at construction time so the request handler never mutates
+            # process-global environment.
+            active_adapters = build_source_adapters(sources)
 
             # Fan out concurrently via the shared runner. SSE progress events
             # are forwarded as soon as the runner emits them, preserving the

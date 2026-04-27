@@ -1,7 +1,7 @@
 """
 Source adapter contract.
 
-Every vulnerability source (NVD, OSV, GitHub Advisories, future Snyk / OSS Index)
+Every vulnerability source (NVD, OSV, GitHub Advisories, VulDB, future Snyk / OSS Index)
 implements the same shape:
 
     class XSource:

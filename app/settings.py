@@ -39,10 +39,12 @@ class Settings(BaseSettings):
     # API Keys and Credentials
     nvd_api_key: str = Field(default="", description="NVD API key for enhanced rate limits")
     github_token: str = Field(default="", description="GitHub token for GraphQL API access")
+    vulndb_api_key: str = Field(default="", description="VulDB API key for VulnDB/VulDB vulnerability lookups")
 
     # Analysis Configuration
     analysis_sources: str = Field(
-        default="NVD", description="Comma-separated list of analysis sources (NVD, OSV, GITHUB)"
+        default="NVD,OSV,GITHUB",
+        description="Comma-separated list of analysis sources (NVD, OSV, GITHUB, VULNDB)",
     )
 
     # CORS Configuration
@@ -132,7 +134,7 @@ class Settings(BaseSettings):
         """Ensure analysis_sources is a valid comma-separated string."""
         if not isinstance(v, str):
             return str(v)
-        return v.strip() if v else "NVD"
+        return v.strip() if v else "NVD,OSV,GITHUB"
 
     @field_validator("cors_origins", mode="after")
     @classmethod
@@ -179,12 +181,17 @@ class Settings(BaseSettings):
         return bool(self.github_token.strip())
 
     @property
+    def vulndb_configured(self) -> bool:
+        """Whether VULNDB_API_KEY is configured and non-empty."""
+        return bool(self.vulndb_api_key.strip())
+
+    @property
     def analysis_sources_list(self) -> list[str]:
         """Parse ANALYSIS_SOURCES into a list of source names."""
         if not self.analysis_sources:
-            return ["NVD"]
+            return ["NVD", "OSV", "GITHUB"]
         sources = [s.strip().upper() for s in self.analysis_sources.split(",") if s.strip()]
-        return sources or ["NVD"]
+        return sources or ["NVD", "OSV", "GITHUB"]
 
     @property
     def cors_origins_list(self) -> list[str]:
@@ -207,6 +214,9 @@ Settings.GITHUB_GRAPHQL = "https://api.github.com/graphql"
 
 # OSV API endpoint
 Settings.OSV_API = "https://api.osv.dev/v1"
+
+# VulDB API endpoint
+Settings.VULNDB_API = "https://vuldb.com/?api"
 
 # OSV batch query limit
 Settings.OSV_MAX_BATCH = 1000

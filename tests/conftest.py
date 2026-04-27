@@ -62,6 +62,7 @@ def app(_tmp_database_path: str):
     # Don't let a real GitHub token in the dev shell leak into tests.
     os.environ.pop("GITHUB_TOKEN", None)
     os.environ.pop("NVD_API_KEY", None)
+    os.environ.pop("VULNDB_API_KEY", None)
 
     # Reset cached settings singleton if it exists.
     try:

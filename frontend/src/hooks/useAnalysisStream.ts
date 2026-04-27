@@ -95,7 +95,7 @@ export function useAnalysisStream(sbomId: number) {
       const controller = new AbortController();
       abortRef.current = controller;
 
-      const initialSources = (options.sources ?? ['NVD', 'OSV', 'GITHUB']).map((s) => s.toUpperCase());
+      const initialSources = (options.sources ?? ['NVD', 'OSV', 'GITHUB', 'VULNDB']).map((s) => s.toUpperCase());
 
       // Seed source entries so the UI can show all sources immediately
       const sourcesMap: Record<string, SourceProgress> = {};

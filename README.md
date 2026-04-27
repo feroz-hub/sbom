@@ -2,7 +2,7 @@
 
 A full-stack **Software Bill of Materials (SBOM) vulnerability analysis platform**.
 
-Upload SBOMs, persist extracted components, scan them against NVD, GitHub Security Advisories, and OSV, and generate PDF vulnerability reports from a Next.js dashboard backed by FastAPI.
+Upload SBOMs, persist extracted components, scan them against NVD, GitHub Security Advisories, OSV, and VulDB, and generate PDF vulnerability reports from a Next.js dashboard backed by FastAPI.
 
 ---
 
@@ -89,6 +89,7 @@ sbom/
         ├── nvd.py          # `NvdSource(api_key=...)`
         ├── osv.py          # `OsvSource()`
         ├── ghsa.py         # `GhsaSource(token=...)`
+        ├── vulndb.py       # `VulnDbSource(api_key=...)`
         ├── registry.py     # name → adapter class lookup
         ├── runner.py       # `run_sources_concurrently(...)` fan-out
         ├── purl.py         # PURL parser
@@ -98,7 +99,7 @@ sbom/
 ```
 
 Every analyze endpoint — `POST /api/sboms/{id}/analyze`, `POST /api/sboms/{id}/analyze/stream`,
-and the four `POST /analyze-sbom-{nvd,github,osv,consolidated}` ad-hoc routes — fans
+and the five `POST /analyze-sbom-{nvd,github,osv,vulndb,consolidated}` ad-hoc routes — fans
 out through the `app.sources` adapter registry via `run_sources_concurrently`.
 Adding a fourth source (e.g. Snyk, OSS Index) is a one-line change in
 `app/sources/registry.py` plus a new module under `app/sources/`.
@@ -178,7 +179,8 @@ remove the old one.
 | POST | `/analyze-sbom-nvd` | NVD-only ad-hoc scan |
 | POST | `/analyze-sbom-github` | GitHub Advisory ad-hoc scan |
 | POST | `/analyze-sbom-osv` | OSV ad-hoc scan |
-| POST | `/analyze-sbom-consolidated` | Combined NVD + GHSA + OSV scan |
+| POST | `/analyze-sbom-vulndb` | VulDB / VulnDB ad-hoc scan |
+| POST | `/analyze-sbom-consolidated` | Combined NVD + GHSA + OSV + VulDB scan |
 | POST | `/api/pdf-report` | Generate PDF for a completed run |
 
 Full interactive docs: **http://localhost:8000/docs**
@@ -193,7 +195,11 @@ Full interactive docs: **http://localhost:8000/docs**
 |----------|---------|-------------|
 | `NVD_API_KEY` | *(none)* | NIST NVD API key (faster rate limit) |
 | `GITHUB_TOKEN` | *(none)* | GitHub token for GHSA queries |
-| `ANALYSIS_SOURCES` | `NVD,OSV,GITHUB` | Sources to use |
+| `VULNDB_API_KEY` | *(none)* | VulDB API key for VulDB / VulnDB queries |
+| `VULNDB_API_BASE_URL` | `https://vuldb.com/?api` | VulDB API endpoint |
+| `VULNDB_LIMIT` | `5` | Max VulDB results returned per component query |
+| `VULNDB_DETAILS` | `false` | Request detailed VulDB results; consumes more VulDB credits |
+| `ANALYSIS_SOURCES` | `NVD,OSV,GITHUB,VULNDB` | Sources to use |
 | `CORS_ORIGINS` | `*` runtime fallback | Comma-separated allowed origins |
 | `API_AUTH_MODE` | `none` | `none` or `bearer`; see **Authentication** above |
 | `API_AUTH_TOKENS` | *(none)* | Comma-separated bearer token allowlist (required when `API_AUTH_MODE=bearer`) |

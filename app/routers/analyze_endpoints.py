@@ -5,7 +5,8 @@ Routes:
   POST /analyze-sbom-nvd             NVD-only analysis
   POST /analyze-sbom-github          GitHub Advisory analysis
   POST /analyze-sbom-osv             OSV analysis
-  POST /analyze-sbom-consolidated    Combined NVD + GHSA + OSV analysis
+  POST /analyze-sbom-vulndb          VulDB / VulnDB analysis
+  POST /analyze-sbom-consolidated    Combined NVD + GHSA + OSV + VulDB analysis
 
 Architecture
 ------------
@@ -39,7 +40,6 @@ from ..analysis import (
     enrich_component_for_osv,
     get_analysis_settings_multi,
 )
-from ..credentials import github_token_for_adapters, nvd_api_key_for_adapters
 from ..db import get_db
 from ..idempotency import normalize_idempotency_key, run_idempotent
 from ..rate_limit import analyze_route_limit
@@ -47,9 +47,7 @@ from ..services.sbom_service import load_sbom_from_ref as _load_sbom_from_ref
 from ..services.sbom_service import now_iso
 from ..settings import get_settings
 from ..sources import (
-    GhsaSource,
-    NvdSource,
-    OsvSource,
+    build_source_adapters,
     run_sources_concurrently,
 )
 from .sboms_crud import compute_report_status, persist_analysis_run
@@ -80,6 +78,11 @@ class AnalysisByRefOSV(BaseModel):
     sbom_id: int | None = None
     sbom_name: str | None = None
     hydrate: bool = True
+
+
+class AnalysisByRefVulnDb(BaseModel):
+    sbom_id: int | None = None
+    sbom_name: str | None = None
 
 
 class AnalysisByRefConsolidated(BaseModel):
@@ -128,12 +131,7 @@ async def _run_legacy_analysis(
 
     # 3. Build per-request adapters. Credentials are bound at construction
     #    time so the request handler never has to mutate os.environ.
-    adapter_map = {
-        "NVD": lambda: NvdSource(api_key=nvd_api_key_for_adapters()),
-        "OSV": lambda: OsvSource(),
-        "GITHUB": lambda: GhsaSource(token=github_token_for_adapters()),
-    }
-    adapters = [adapter_map[name]() for name in sources_list if name in adapter_map]
+    adapters = build_source_adapters(sources_list)
     if not adapters:
         raise HTTPException(
             status_code=400,
@@ -350,7 +348,40 @@ async def analyze_sbom_osv(
     return await _inner()
 
 
-# ---- Consolidated (NVD + GHSA + OSV) --------------------------------------
+# ---- VulDB / VulnDB --------------------------------------------------------
+
+
+@router.post("/analyze-sbom-vulndb")
+@analyze_route_limit
+async def analyze_sbom_vulndb(
+    request: Request,
+    payload: AnalysisByRefVulnDb = Body(...),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
+    db: Session = Depends(get_db),
+):
+    """Run VulDB / VulnDB analysis on an SBOM (by id or name)."""
+    if payload.sbom_id is None and not (payload.sbom_name and payload.sbom_name.strip()):
+        raise HTTPException(status_code=422, detail="Provide 'sbom_id' or 'sbom_name' in request body")
+    if not get_settings().vulndb_configured:
+        raise HTTPException(status_code=400, detail="VULNDB_API_KEY is required for VulDB-only analysis.")
+    log.info("VulDB analysis started: sbom_id=%s sbom_name=%s", payload.sbom_id, payload.sbom_name)
+
+    async def _inner() -> dict:
+        return await _run_legacy_analysis(
+            db,
+            sbom_id=payload.sbom_id,
+            sbom_name=payload.sbom_name,
+            sources_list=["VULNDB"],
+        )
+
+    key = normalize_idempotency_key(idempotency_key)
+    scope = f"legacy_vulndb:{payload.sbom_id}:{payload.sbom_name or ''}"
+    if key:
+        return await run_idempotent(scope, key, _inner)
+    return await _inner()
+
+
+# ---- Consolidated (NVD + GHSA + OSV + VulDB) -------------------------------
 
 
 @router.post("/analyze-sbom-consolidated")
@@ -361,11 +392,11 @@ async def analyze_sbom_consolidated(
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     db: Session = Depends(get_db),
 ):
-    """Run consolidated analysis (NVD + GHSA + OSV) on an SBOM (by id or name)."""
+    """Run consolidated analysis (NVD + GHSA + OSV + VulDB) on an SBOM (by id or name)."""
     if payload.sbom_id is None and not (payload.sbom_name and payload.sbom_name.strip()):
         raise HTTPException(status_code=422, detail="Provide 'sbom_id' or 'sbom_name' in request body")
     log.info(
-        "Consolidated analysis started (NVD+GHSA+OSV): sbom_id=%s sbom_name=%s",
+        "Consolidated analysis started (NVD+GHSA+OSV+VulDB): sbom_id=%s sbom_name=%s",
         payload.sbom_id,
         payload.sbom_name,
     )
@@ -375,7 +406,7 @@ async def analyze_sbom_consolidated(
             db,
             sbom_id=payload.sbom_id,
             sbom_name=payload.sbom_name,
-            sources_list=["NVD", "OSV", "GITHUB"],
+            sources_list=["NVD", "OSV", "GITHUB", "VULNDB"],
         )
 
     key = normalize_idempotency_key(idempotency_key)

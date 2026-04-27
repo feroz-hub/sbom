@@ -21,6 +21,7 @@ const SOURCE_LABELS: Record<string, string> = {
   NVD: 'NVD (NIST)',
   OSV: 'OSV Database',
   GITHUB: 'GitHub Advisories',
+  VULNDB: 'VulDB',
 };
 
 // ─── SourceRow ────────────────────────────────────────────────────────────────

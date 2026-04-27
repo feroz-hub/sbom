@@ -9,7 +9,6 @@ Routes:
 """
 
 import logging
-import os
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
@@ -31,9 +30,10 @@ APP_VERSION = _settings.APP_VERSION
 
 def public_analysis_config() -> dict:
     """
-    Expose multi-source analysis settings (NVD + OSV + GHSA + concurrency).
+    Expose multi-source analysis settings (NVD + OSV + GHSA + VulDB + concurrency).
     """
     s = get_analysis_settings_multi()
+    app_settings = get_settings()
     return {
         # Legacy-ish keys still useful in UI
         "source_name": getattr(s, "source_name", "NVD"),
@@ -57,12 +57,16 @@ def public_analysis_config() -> dict:
         "osv_results_per_batch": getattr(s, "osv_results_per_batch", 1000),
         "gh_graphql_url": getattr(s, "gh_graphql_url", None),
         "gh_token_env": getattr(s, "gh_token_env", "GITHUB_TOKEN"),
+        "vulndb_api_base_url": getattr(s, "vulndb_api_base_url", None),
+        "vulndb_api_key_env": getattr(s, "vulndb_api_key_env", "VULNDB_API_KEY"),
+        "vulndb_limit": getattr(s, "vulndb_limit", 5),
         "analysis_sources_env": getattr(s, "analysis_sources_env", "ANALYSIS_SOURCES"),
         "max_concurrency": getattr(s, "max_concurrency", 10),
         "analysis_legacy_level": get_analysis_legacy_level(),
         # Feature flags — whether optional credentials are configured
-        "github_configured": bool(os.getenv("GITHUB_TOKEN", "").strip()),
-        "nvd_key_configured": bool(os.getenv("NVD_API_KEY", "").strip()),
+        "github_configured": app_settings.github_configured,
+        "nvd_key_configured": app_settings.nvd_key_configured,
+        "vulndb_configured": app_settings.vulndb_configured,
     }
 
 

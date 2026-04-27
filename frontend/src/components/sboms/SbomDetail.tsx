@@ -54,7 +54,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
   });
 
   const handleRunAnalysis = () => {
-    startAnalysis({ sources: ['NVD', 'OSV', 'GITHUB'] });
+    startAnalysis({ sources: ['NVD', 'OSV', 'GITHUB', 'VULNDB'] });
   };
 
   // Invalidate runs list when analysis completes

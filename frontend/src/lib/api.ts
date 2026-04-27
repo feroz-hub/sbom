@@ -169,6 +169,7 @@ async function requestVoid(
 export interface AnalysisConfig {
   github_configured: boolean;
   nvd_key_configured: boolean;
+  vulndb_configured: boolean;
   max_concurrency: number;
   [key: string]: unknown;
 }
@@ -493,6 +494,14 @@ export function analyzeSbomGithub(payload: AnalyzeSBOMPayload, signal?: AbortSig
 
 export function analyzeSbomOsv(payload: AnalyzeSBOMPayload, signal?: AbortSignal) {
   return request<ConsolidatedAnalysisResult>('/analyze-sbom-osv', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    signal,
+  }, 180_000);
+}
+
+export function analyzeSbomVulnDb(payload: AnalyzeSBOMPayload, signal?: AbortSignal) {
+  return request<ConsolidatedAnalysisResult>('/analyze-sbom-vulndb', {
     method: 'POST',
     body: JSON.stringify(payload),
     signal,

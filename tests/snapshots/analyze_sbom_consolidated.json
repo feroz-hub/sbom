@@ -19,7 +19,7 @@
   },
   "sbom_id": "<volatile>",
   "sbom_name": "snapshot-fixture",
-  "source": "NVD,OSV,GITHUB",
+  "source": "NVD,OSV,GITHUB,VULNDB",
   "started_on": "<volatile>",
   "status": "FAIL",
   "summary": {

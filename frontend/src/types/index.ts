@@ -152,6 +152,7 @@ export interface AnalyzeSBOMPayload {
   sbom_name: string;
   nvd_api_key?: string;
   github_token?: string;
+  vulndb_api_key?: string;
   osv_hydrate?: boolean;
 }
 

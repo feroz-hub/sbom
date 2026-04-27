@@ -3,7 +3,7 @@ Vulnerability source adapter package — peer of ``app/services/``.
 
 Hosts the canonical implementations of the helpers that were previously
 inlined inside ``app/analysis.py`` plus the per-source adapter classes
-(``NvdSource``, ``OsvSource``, ``GhsaSource``), the registry that maps
+(``NvdSource``, ``OsvSource``, ``GhsaSource``, ``VulnDbSource``), the registry that maps
 canonical source names to those classes, and the concurrent fan-out
 runner used by every analyze endpoint.
 
@@ -17,6 +17,8 @@ Layout:
     nvd.py         — `NvdSource(api_key=...)`
     osv.py         — `OsvSource()`
     ghsa.py        — `GhsaSource(token=...)`
+    vulndb.py      — `VulnDbSource(api_key=...)`
+    factory.py     — adapter construction helpers
     registry.py    — `SOURCE_REGISTRY`, `get_source(name)`
     runner.py      — `run_sources_concurrently(sources, components, settings, ...)`
 
@@ -34,11 +36,19 @@ shared runner need to know about it.
 from .base import SourceResult, VulnSource, empty_result
 from .cpe import cpe23_from_purl, slug
 from .dedupe import deduplicate_findings
+from .factory import (
+    DEFAULT_ANALYSIS_SOURCES,
+    SUPPORTED_ANALYSIS_SOURCES,
+    build_source_adapters,
+    configured_default_sources,
+    normalize_source_names,
+)
 from .ghsa import GhsaSource
 from .nvd import NvdSource
 from .osv import OsvSource
 from .purl import parse_purl
 from .registry import SOURCE_REGISTRY, get_source
+from .vulndb import VulnDbSource
 
 # Phase 3: shared concurrent fan-out runner
 from .runner import (
@@ -76,6 +86,12 @@ __all__ = [
     "NvdSource",
     "OsvSource",
     "GhsaSource",
+    "VulnDbSource",
+    "DEFAULT_ANALYSIS_SOURCES",
+    "SUPPORTED_ANALYSIS_SOURCES",
+    "build_source_adapters",
+    "configured_default_sources",
+    "normalize_source_names",
     "SOURCE_REGISTRY",
     "get_source",
     # Phase 3 runner

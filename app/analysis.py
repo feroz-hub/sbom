@@ -684,9 +684,17 @@ class _MultiSettings(AnalysisSettings):
     gh_token_override: str | None = None
     osv_api_base_url: str = "https://api.osv.dev"
     osv_results_per_batch: int = 1000
+    vulndb_api_base_url: str = "https://vuldb.com/?api"
+    vulndb_api_key_env: str = "VULNDB_API_KEY"
+    vulndb_api_version: int = 3
+    vulndb_limit: int = 5
+    vulndb_details: bool = False
+    vulndb_request_timeout_seconds: int = 30
+    vulndb_request_delay_seconds: float = 0.0
+    vulndb_max_components: int = 100
     max_concurrency: int = 10
     prefer_async_httpx: bool = True
-    analysis_sources_env: str = "ANALYSIS_SOURCES"  # e.g., "NVD,OSV,GITHUB"
+    analysis_sources_env: str = "ANALYSIS_SOURCES"  # e.g., "NVD,OSV,GITHUB,VULNDB"
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -713,6 +721,14 @@ def get_analysis_settings_multi() -> _MultiSettings:
         gh_token_env=_env_str("GH_TOKEN_ENV", "GITHUB_TOKEN"),
         osv_api_base_url=_env_str("OSV_API_BASE_URL", "https://api.osv.dev"),
         osv_results_per_batch=_env_int("OSV_RESULTS_PER_BATCH", 1000, minimum=1),
+        vulndb_api_base_url=_env_str("VULNDB_API_BASE_URL", "https://vuldb.com/?api"),
+        vulndb_api_key_env=_env_str("VULNDB_API_KEY_ENV", "VULNDB_API_KEY"),
+        vulndb_api_version=_env_int("VULNDB_API_VERSION", 3, minimum=1),
+        vulndb_limit=_env_int("VULNDB_LIMIT", 5, minimum=1),
+        vulndb_details=_env_bool("VULNDB_DETAILS", False),
+        vulndb_request_timeout_seconds=_env_int("VULNDB_REQUEST_TIMEOUT_SECONDS", 30, minimum=1),
+        vulndb_request_delay_seconds=_env_float("VULNDB_REQUEST_DELAY_SECONDS", 0.0, minimum=0.0),
+        vulndb_max_components=_env_int("VULNDB_MAX_COMPONENTS", 100, minimum=1),
         max_concurrency=_env_int("ANALYSIS_MAX_CONCURRENCY", 10, minimum=1),
         prefer_async_httpx=_env_bool("ANALYSIS_PREFER_ASYNC_HTTPX", True),
         analysis_sources_env=_env_str("ANALYSIS_SOURCES_ENV", "ANALYSIS_SOURCES"),
@@ -1207,6 +1223,7 @@ class AnalysisSource(str, Enum):
     NVD = "NVD"
     OSV = "OSV"
     GITHUB = "GITHUB"
+    VULNDB = "VULNDB"
 
 
 async def nvd_query_by_components_async(
@@ -1355,7 +1372,7 @@ async def analyze_sbom_multi_source_async(
 ) -> dict:
     """
     Asynchronously analyze an SBOM against the selected sources.
-    sources: ["NVD","OSV","GITHUB"]; if None, read env ANALYSIS_SOURCES or default ["NVD"].
+    sources: ["NVD","OSV","GITHUB","VULNDB"]; if None, read env ANALYSIS_SOURCES or default ["NVD","OSV","GITHUB"].
     Returns a normalized dict compatible with your pipeline.
     """
     from .pipeline.multi_source import run_multi_source_analysis_async

@@ -22,7 +22,7 @@ async def run_multi_source_analysis_async(
     """
     Asynchronously analyze an SBOM against the selected sources.
 
-    sources: ["NVD","OSV","GITHUB"]; if None, read env ANALYSIS_SOURCES or default ["NVD"].
+    sources: ["NVD","OSV","GITHUB","VULNDB"]; if None, read env ANALYSIS_SOURCES or default ["NVD","OSV","GITHUB"].
     Returns a normalized dict compatible with the existing API.
     """
     # Late import: ``analysis`` must be fully initialized (this module is loaded from it).
@@ -41,6 +41,8 @@ async def run_multi_source_analysis_async(
         osv_query_by_components,
         resolve_nvd_api_key,
     )
+    from ..credentials import vulndb_api_key_for_adapters
+    from ..sources.vulndb import VulnDbSource
 
     cfg = settings or get_analysis_settings_multi()
     components = extract_components(sbom_json)
@@ -54,7 +56,7 @@ async def run_multi_source_analysis_async(
         generated_cpe_count,
     )
 
-    default_sources = _env_list(cfg.analysis_sources_env, ["NVD"])
+    default_sources = _env_list(cfg.analysis_sources_env, ["NVD", "OSV", "GITHUB"])
     selected = [s.strip().upper() for s in (sources or default_sources)]
     selected_enum: set[AnalysisSource] = set()
     for s in selected:
@@ -229,6 +231,18 @@ async def run_multi_source_analysis_async(
         all_findings.extend(f)
         query_errors.extend(e)
 
+    async def _vulndb() -> None:
+        nonlocal all_findings, query_errors, query_warnings
+        LOGGER.debug("VulDB: querying %d components", len(components_w_cpe))
+        result = await VulnDbSource(api_key=vulndb_api_key_for_adapters()).query(components_w_cpe, cfg)
+        f = result.get("findings", [])
+        e = result.get("errors", [])
+        w = result.get("warnings", [])
+        LOGGER.info("VulDB complete: %d findings, %d errors, %d warnings", len(f), len(e), len(w))
+        all_findings.extend(f)
+        query_errors.extend(e)
+        query_warnings.extend(w)
+
     coros = []
     if AnalysisSource.NVD in selected_enum:
         coros.append(_nvd())
@@ -236,6 +250,8 @@ async def run_multi_source_analysis_async(
         coros.append(_osv())
     if AnalysisSource.GITHUB in selected_enum:
         coros.append(_gh())
+    if AnalysisSource.VULNDB in selected_enum:
+        coros.append(_vulndb())
     if coros:
         await asyncio.gather(*coros)
 
@@ -280,6 +296,7 @@ async def run_multi_source_analysis_async(
             "nvd_api_base_url": getattr(cfg, "nvd_api_base_url", None),
             "osv_api_base_url": getattr(cfg, "osv_api_base_url", None),
             "gh_graphql_url": getattr(cfg, "gh_graphql_url", None),
+            "vulndb_api_base_url": getattr(cfg, "vulndb_api_base_url", None),
         },
     }
     if generated_cpe_count > 0:
