@@ -39,6 +39,7 @@ from .logger import get_logger, setup_logging
 setup_logging()
 log = get_logger("api")
 
+from . import error_handlers
 from .auth import require_auth, validate_auth_setup
 from .db import Base, SessionLocal, engine
 from .http_client import close_async_http_client, init_async_http_client
@@ -230,6 +231,13 @@ async def log_requests(request: Request, call_next):
 # OUTERMOST in the stack — oversize requests are rejected with 413
 # before any other middleware spends cycles on them.
 app.add_middleware(MaxBodySizeMiddleware, max_bytes=settings.MAX_UPLOAD_BYTES)
+
+# --- Global exception handler (BE-002) ----------------------------------
+# Converts unhandled exceptions into a canonical, non-leaky 500 envelope
+# with a correlation_id linking the response to the server log line.
+# HTTPException + RequestValidationError continue to use FastAPI's
+# default handlers — we only intercept Exception.
+error_handlers.install(app)
 
 
 # --- Router registration -------------------------------------------------

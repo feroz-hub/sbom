@@ -366,6 +366,7 @@ def create_sbom(payload: SBOMSourceCreate, db: Session = Depends(get_db)):
         raise
     except Exception:
         db.rollback()
+        log.exception("create_sbom unexpected error: name=%s", payload.sbom_name)
         raise HTTPException(
             status_code=500, detail={"code": "unexpected", "message": "Unexpected error while creating SBOM."}
         )
@@ -496,9 +497,13 @@ def update_sbom(
         db.commit()
         db.refresh(sbom)
         return sbom
-    except Exception as exc:
+    except Exception:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to update SBOM: {exc}") from exc
+        log.exception("update_sbom failed: sbom_id=%s user=%s", sbom_id, user_id)
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "internal_error", "message": "Internal server error."},
+        )
 
 
 @router.delete("/sboms/{sbom_id}", status_code=status.HTTP_200_OK)
@@ -563,9 +568,13 @@ def delete_sbom(
             "sbom_id": sbom_id,
             "requested_by": user_id,
         }
-    except Exception as exc:
+    except Exception:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to delete SBOM: {exc}") from exc
+        log.exception("delete_sbom failed: sbom_id=%s user=%s", sbom_id, user_id)
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "internal_error", "message": "Internal server error."},
+        )
 
 
 @router.post("/sboms/{sbom_id}/analyze", response_model=AnalysisRunOut, status_code=status.HTTP_201_CREATED)

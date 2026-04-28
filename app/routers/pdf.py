@@ -146,9 +146,12 @@ async def create_pdf_report_by_run_id(
     try:
         pdf_bytes = build_pdf_from_run_bytes(run, title=title)
         log.info("PDF generated: run_id=%d size=%d bytes", run_id, len(pdf_bytes))
-    except Exception as e:
-        log.error("PDF generation failed: run_id=%d error=%s", run_id, e, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to generate PDF: {e}")
+    except Exception:
+        log.exception("PDF generation failed: run_id=%d", run_id)
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "internal_error", "message": "Internal server error."},
+        )
 
     return Response(
         content=pdf_bytes,

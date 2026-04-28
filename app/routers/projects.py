@@ -75,9 +75,13 @@ def create_project(payload: ProjectCreate, db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(status_code=400, detail="Duplicate project name not allowed")
 
-    except Exception as e:
+    except Exception:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Something went wrong: {str(e)}")
+        log.exception("create_project failed: project_name=%s", payload.project_name)
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "internal_error", "message": "Internal server error."},
+        )
 
 
 @router.get("/projects/{project_id}", response_model=ProjectOut)

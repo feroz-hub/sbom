@@ -1,14 +1,21 @@
 """
 Regression tests for BE-002: 500 information disclosure.
 
-Three independent cases:
+Four independent cases:
 
-  1. SQLAlchemy IntegrityError raised inside a route → 500 must NOT leak
-     the SQLAlchemy class name, statement, or "synthetic" text.
-  2. Generic RuntimeError raised inside a route → 500 must NOT leak the
-     exception message ("LEAKABLE_TOKEN_xyz123") or the class name.
+  1. SQLAlchemy IntegrityError caught by a route's broad except → 500
+     must NOT leak the SQLAlchemy class name, statement, or "synthetic"
+     text. Envelope must be the structured `{detail: {code, message}}`
+     form. caplog must show the server-side log line.
+  2. Generic RuntimeError caught by the same broad except → 500 must
+     NOT leak the exception message ("LEAKABLE_TOKEN_xyz123") or class
+     name.
   3. Pydantic validation 422 must remain UNCHANGED — the global handler
-     must intercept Exception only, not HTTPException / RequestValidationError.
+     must intercept Exception only, not HTTPException /
+     RequestValidationError.
+  4. Exception that escapes the route entirely → caught by the global
+     handler. Envelope MUST include `correlation_id` linking to the
+     server log line. Verifies the safety net.
 
 The "leakable token" assertions are the smallest possible leak detector:
 if the response body contains the literal "LEAKABLE_TOKEN_xyz123", the
@@ -81,10 +88,9 @@ def test_500_from_db_error_returns_generic_envelope(
     detail = payload.get("detail")
     assert isinstance(detail, dict), f"expected structured detail; got {detail!r}"
     assert detail.get("code") == "internal_error", f"500 envelope drifted: {detail!r}"
-    assert detail.get("correlation_id"), f"missing correlation_id in 500 envelope: {detail!r}"
 
     server_log = "\n".join(rec.getMessage() for rec in caplog.records)
-    assert "synthetic" in server_log or "IntegrityError" in server_log or "update" in server_log.lower(), (
+    assert "update_sbom failed" in server_log or "IntegrityError" in server_log, (
         f"server-side log did not capture the failure; records: {[r.getMessage() for r in caplog.records]!r}"
     )
 
@@ -112,7 +118,6 @@ def test_500_from_generic_exception_returns_generic_envelope(
     detail = payload.get("detail")
     assert isinstance(detail, dict), f"expected structured detail; got {detail!r}"
     assert detail.get("code") == "internal_error", f"500 envelope drifted: {detail!r}"
-    assert detail.get("correlation_id"), f"missing correlation_id in 500 envelope: {detail!r}"
 
 
 def test_4xx_validation_errors_unchanged(client):
@@ -135,3 +140,62 @@ def test_4xx_validation_errors_unchanged(client):
     # handler hasn't redacted legitimate client-facing detail.
     flat = json.dumps(detail)
     assert "sbom_name" in flat, f"422 detail did not mention the missing field: {flat[:300]!r}"
+
+
+@pytest.fixture()
+def synthetic_boom_route(app):
+    """Register a temporary route that raises a RuntimeError directly.
+    Exercises the global Exception handler — no broad-except in the
+    route catches this — so the response goes through error_handlers."""
+
+    async def _boom():
+        raise RuntimeError(_LEAKABLE_TOKEN)
+
+    app.add_api_route("/__test_internal_error__", _boom, methods=["GET"])
+    yield
+    # Best-effort teardown — Starlette doesn't expose a public removal
+    # API, so just filter the route out by path.
+    app.router.routes = [
+        r for r in app.router.routes
+        if getattr(r, "path", None) != "/__test_internal_error__"
+    ]
+
+
+def test_global_handler_500_includes_correlation_id(
+    app, synthetic_boom_route, caplog
+):
+    # ServerErrorMiddleware catches the exception, calls our handler, and
+    # returns the 500 response — but it ALSO re-raises so test runners can
+    # see the original. raise_server_exceptions=False suppresses the re-raise
+    # so we can assert on the handler's response. Construct WITHOUT `with`
+    # so we don't re-trigger lifespan startup (which calls setup_logging()
+    # → root.handlers.clear() → wipes caplog's handler).
+    from fastapi.testclient import TestClient
+
+    tc = TestClient(app, raise_server_exceptions=False)
+    with caplog.at_level(logging.ERROR):
+        resp = tc.get("/__test_internal_error__")
+
+    assert resp.status_code == 500, f"got {resp.status_code}: {resp.text[:200]!r}"
+    assert _LEAKABLE_TOKEN not in resp.text, (
+        f"global handler leaked exception message: {resp.text[:300]!r}"
+    )
+    assert "RuntimeError" not in resp.text, (
+        f"global handler leaked class name: {resp.text[:300]!r}"
+    )
+
+    payload = resp.json()
+    detail = payload.get("detail")
+    assert isinstance(detail, dict), f"expected structured detail; got {detail!r}"
+    assert detail.get("code") == "internal_error", f"500 envelope drifted: {detail!r}"
+
+    cid = detail.get("correlation_id")
+    assert cid and len(cid) == 12, f"missing/short correlation_id: {detail!r}"
+
+    # The correlation_id MUST appear in the server log so an operator
+    # who receives a user-reported ID can grep the logs to the cause.
+    server_log = "\n".join(rec.getMessage() for rec in caplog.records)
+    assert cid in server_log, (
+        f"correlation_id={cid} not found in server log; records: "
+        f"{[r.getMessage() for r in caplog.records]!r}"
+    )
