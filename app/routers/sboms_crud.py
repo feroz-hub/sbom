@@ -59,6 +59,7 @@ from ..schemas import (
     SBOMSourceOut,
     SBOMSourceUpdate,
 )
+from ..services.analysis_service import compute_report_status, persist_analysis_run
 from ..sources import (
     EVENT_COMPLETE,
     EVENT_DONE,
@@ -163,118 +164,6 @@ def safe_int(value: Any, default: int = 0) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
-
-
-def compute_report_status(total_findings: int, query_errors: list[dict]) -> str:
-    if total_findings > 0:
-        return "FAIL"
-    if query_errors:
-        return "PARTIAL"
-    return "PASS"
-
-
-def persist_analysis_run(
-    db: Session,
-    sbom_obj: SBOMSource,
-    details: dict,
-    components: list[dict],
-    run_status: str,
-    source: str,
-    started_on: str,
-    completed_on: str,
-    duration_ms: int,
-) -> AnalysisRun:
-    component_maps = upsert_components(db, sbom_obj, components)
-
-    run = AnalysisRun(
-        sbom_id=sbom_obj.id,
-        project_id=sbom_obj.projectid,
-        run_status=run_status,
-        source=source,
-        started_on=started_on,
-        completed_on=completed_on,
-        duration_ms=duration_ms,
-        total_components=safe_int(details.get("total_components")),
-        components_with_cpe=safe_int(details.get("components_with_cpe")),
-        total_findings=safe_int(details.get("total_findings")),
-        critical_count=safe_int(details.get("critical")),
-        high_count=safe_int(details.get("high")),
-        medium_count=safe_int(details.get("medium")),
-        low_count=safe_int(details.get("low")),
-        unknown_count=safe_int(details.get("unknown")),
-    )
-    db.add(run)
-    db.flush()
-
-    for finding_raw in details.get("findings", []):
-        cpe = (finding_raw.get("cpe") or "").strip() or None
-        cname = (finding_raw.get("component_name") or "").strip() or None
-        cversion = (finding_raw.get("component_version") or "").strip() or None
-
-        triplet = (
-            normalized_key(cpe),
-            normalized_key(cname),
-            normalized_key(cversion),
-        )
-        # `upsert_components` returns SBOMComponent ORM rows (not ints) in the
-        # triplet map; pull the .id off so SQLAlchemy gets a real FK value.
-        triplet_row = component_maps["triplet"].get(triplet)
-        component_id = triplet_row.id if triplet_row is not None else None
-        if not component_id and cpe:
-            cpe_rows = component_maps["cpe"].get(normalized_key(cpe), [])
-            if cpe_rows:
-                component_id = cpe_rows[0].id
-
-        sources = finding_raw.get("sources", [])
-        if isinstance(sources, list):
-            sources_str = ",".join(str(s) for s in sources)
-        else:
-            sources_str = str(sources) if sources else ""
-
-        aliases_json = None
-        if finding_raw.get("aliases"):
-            try:
-                aliases_json = json.dumps(finding_raw["aliases"])
-            except (TypeError, ValueError):
-                pass
-
-        # `cwe` may arrive as a list (NVD/GHSA/OSV multi-source path) or as a
-        # legacy scalar string. Persist as a JSON-encoded list when it's a
-        # collection, otherwise fall back to the trimmed string.
-        cwe_raw = finding_raw.get("cwe")
-        if isinstance(cwe_raw, (list, tuple, set)):
-            cwe_value = json.dumps(sorted({str(x) for x in cwe_raw if x})) if cwe_raw else None
-        elif isinstance(cwe_raw, str):
-            cwe_value = cwe_raw.strip() or None
-        else:
-            cwe_value = None
-
-        finding = AnalysisFinding(
-            analysis_run_id=run.id,
-            component_id=component_id,
-            component_name=cname,
-            component_version=cversion,
-            cpe=cpe,
-            # Multi-source orchestrator emits the canonical id under "vuln_id";
-            # legacy callers may still use "id". Accept both, prefer the new key.
-            vuln_id=((finding_raw.get("vuln_id") or finding_raw.get("id") or "").strip() or None),
-            severity=(finding_raw.get("severity") or "UNKNOWN").upper(),
-            score=finding_raw.get("score"),
-            vector=(finding_raw.get("vector") or "").strip() or None,
-            published_on=(finding_raw.get("published") or "").strip() or None,
-            reference_url=(finding_raw.get("url") or "").strip() or None,
-            source=sources_str,
-            description=(finding_raw.get("description") or "").strip() or None,
-            cwe=cwe_value,
-            attack_vector=(finding_raw.get("attack_vector") or "").strip() or None,
-            aliases=aliases_json,
-            fixed_versions=json.dumps(finding_raw.get("fixed_versions", []))
-            if finding_raw.get("fixed_versions")
-            else None,
-        )
-        db.add(finding)
-
-    return run
 
 
 async def create_auto_report(db: Session, sbom_obj: SBOMSource) -> AnalysisRun | None:

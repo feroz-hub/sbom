@@ -50,7 +50,7 @@ from ..sources import (
     build_source_adapters,
     run_sources_concurrently,
 )
-from .sboms_crud import compute_report_status, persist_analysis_run
+from ..services.analysis_service import compute_report_status, persist_analysis_run
 
 DEFAULT_RESULTS_PER_PAGE = get_settings().DEFAULT_RESULTS_PER_PAGE
 

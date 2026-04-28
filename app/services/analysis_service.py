@@ -175,28 +175,70 @@ def persist_analysis_run(
         if not isinstance(finding, dict):
             continue
 
+        # Multi-source orchestrator emits the canonical id under "vuln_id";
+        # legacy callers may still use "id". Accept both, prefer the new
+        # key. Hard-fallback to "UNKNOWN-CVE" because the column is NOT NULL.
+        vuln_id = (finding.get("vuln_id") or finding.get("id") or "").strip() or "UNKNOWN-CVE"
+
+        sources = finding.get("sources", [])
+        if isinstance(sources, list):
+            sources_str = ",".join(str(s) for s in sources)
+        else:
+            sources_str = str(sources) if sources else ""
+
+        # `cwe` may arrive as a list (NVD/GHSA/OSV multi-source path) or
+        # as a legacy scalar string. Persist as a JSON-encoded sorted list
+        # when it's a collection, otherwise fall back to the trimmed
+        # string. Mirrors the storage convention used for `aliases` and
+        # `fixed_versions` in adjacent Text columns.
+        cwe_raw = finding.get("cwe")
+        if isinstance(cwe_raw, (list, tuple, set)):
+            cwe_value = json.dumps(sorted({str(x) for x in cwe_raw if x})) if cwe_raw else None
+        elif isinstance(cwe_raw, str):
+            cwe_value = cwe_raw.strip() or None
+        else:
+            cwe_value = None
+
+        aliases_json = None
+        if finding.get("aliases"):
+            try:
+                aliases_json = json.dumps(finding["aliases"])
+            except (TypeError, ValueError):
+                aliases_json = None
+
         fv = finding.get("fixed_versions") or []
+
+        # Reference URL: prefer explicit `url`, fall back to first entry
+        # of `references[]` (VulDB/OSV adapters populate references but
+        # may leave url empty).
+        reference_url = (finding.get("url") or "").strip()
+        if not reference_url:
+            refs = finding.get("references") or []
+            if refs:
+                reference_url = refs[0]
+        reference_url = reference_url or None
+
         db.add(
             AnalysisFinding(
                 analysis_run_id=run.id,
                 component_id=resolve_component_id(finding, component_maps),
-                vuln_id=str(finding.get("vuln_id") or "UNKNOWN-CVE"),
-                source=",".join(finding.get("sources", ["NVD"])),
+                vuln_id=vuln_id,
+                source=sources_str,
                 title=(finding.get("title") or finding.get("vuln_id")),
-                description=finding.get("description"),
-                severity=finding.get("severity"),
+                description=(finding.get("description") or "").strip() or None,
+                severity=(finding.get("severity") or "UNKNOWN").upper(),
                 score=_safe_float(finding.get("score")),
-                vector=finding.get("vector"),
-                published_on=finding.get("published"),
-                reference_url=(finding.get("url") or (finding.get("references") or [None])[0]),
-                cwe=",".join(finding.get("cwe", [])) if finding.get("cwe") else None,
-                cpe=finding.get("cpe"),
-                component_name=finding.get("component_name"),
-                component_version=finding.get("component_version"),
+                vector=(finding.get("vector") or "").strip() or None,
+                published_on=(finding.get("published") or "").strip() or None,
+                reference_url=reference_url,
+                cwe=cwe_value,
+                cpe=(finding.get("cpe") or "").strip() or None,
+                component_name=(finding.get("component_name") or "").strip() or None,
+                component_version=(finding.get("component_version") or "").strip() or None,
                 fixed_versions=json.dumps(fv) if fv else None,
-                attack_vector=finding.get("attack_vector"),
+                attack_vector=(finding.get("attack_vector") or "").strip() or None,
                 cvss_version=finding.get("cvss_version"),
-                aliases=json.dumps(finding.get("aliases") or []) if finding.get("aliases") else None,
+                aliases=aliases_json,
             )
         )
 
