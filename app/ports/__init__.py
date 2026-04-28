@@ -1,5 +1,3 @@
 """Hexagonal port interfaces (Protocols)."""
 
-from .storage import StoragePort
-
-__all__ = ["StoragePort"]
+__all__: list[str] = []

@@ -94,16 +94,6 @@ class Settings(BaseSettings):
         description="Override broker; defaults to redis_url when empty",
     )
 
-    # S3-compatible object storage (optional)
-    aws_access_key_id: str = Field(default="", description="S3 access key")
-    aws_secret_access_key: str = Field(default="", description="S3 secret key")
-    aws_region: str = Field(default="us-east-1", description="AWS region")
-    aws_s3_bucket: str = Field(default="", description="SBOM artifact bucket")
-    aws_s3_endpoint_url: str = Field(
-        default="",
-        description="Custom S3 endpoint (MinIO, etc.); empty uses AWS default",
-    )
-
     # Logging Configuration
     log_level: str = Field(default="INFO", description="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)")
     log_format: str = Field(default="text", description="Log format (text or json)")
