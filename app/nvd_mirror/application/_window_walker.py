@@ -17,6 +17,7 @@ from ..domain.models import (
     NvdSettingsSnapshot,
     SyncReport,
 )
+from ..observability import increment as _metric
 from ..ports import (
     ClockPort,
     CveRepositoryPort,
@@ -91,7 +92,9 @@ async def walk_windows(
             async for batch in remote.fetch_window(window, page_size=snapshot.page_size):
                 if not batch.records:
                     continue
-                window_upserts += cve_repo.upsert_batch(batch.records)
+                upserted = cve_repo.upsert_batch(batch.records)
+                window_upserts += upserted
+                _metric("nvd.cves.upserted", upserted)
                 rejected_ids = _collect_rejected(batch.records)
                 if rejected_ids:
                     window_rejected += cve_repo.soft_mark_rejected(rejected_ids)
@@ -107,6 +110,7 @@ async def walk_windows(
                 },
             )
             errors.append(f"{type(exc).__name__}: {exc}")
+            _metric("nvd.windows.failure")
             sync_run_repo.finish(
                 run_id, status="failed", upserts=window_upserts, error=str(exc)
             )
@@ -123,6 +127,7 @@ async def walk_windows(
             run_id, status="success", upserts=window_upserts, error=None
         )
         commit()
+        _metric("nvd.windows.success")
 
         upserts_total += window_upserts
         rejected_total += window_rejected

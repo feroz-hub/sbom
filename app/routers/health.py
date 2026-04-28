@@ -81,9 +81,68 @@ def service_info() -> dict:
 
 
 @router.get("/health")
-def health() -> dict:
+def health(db: Session = Depends(get_db)) -> dict:
     log.debug("Health check requested")
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "nvd_mirror": _nvd_mirror_health(db),
+    }
+
+
+def _nvd_mirror_health(db: Session) -> dict:
+    """Lightweight mirror status for liveness/readiness probes.
+
+    Wrapped in try/except so any DB or import error returns
+    ``{"available": False}`` rather than failing the whole health check —
+    /health must NEVER be the reason a deploy rolls back.
+    """
+    from datetime import datetime, timezone
+
+    try:
+        from ..nvd_mirror.adapters.secrets import (
+            FernetSecretsAdapter,
+            MissingFernetKeyError,
+        )
+        from ..nvd_mirror.adapters.settings_repository import (
+            SqlAlchemySettingsRepository,
+        )
+        from ..nvd_mirror.application.freshness import compute_freshness
+        from ..nvd_mirror.observability import mirror_counters
+        from ..nvd_mirror.settings import load_mirror_settings_from_env
+        from ..nvd_mirror.tasks import _StubSecrets
+
+        env_defaults = load_mirror_settings_from_env()
+        try:
+            secrets = FernetSecretsAdapter.from_env(
+                env_var=env_defaults.fernet_key_env_var
+            )
+        except MissingFernetKeyError:
+            secrets = _StubSecrets(env_defaults.fernet_key_env_var)
+
+        repo = SqlAlchemySettingsRepository(db, secrets, env_defaults=env_defaults)
+        snap = repo.load()
+        # Don't commit a seed write inside /health — let the next admin
+        # call do it. Health stays read-only as far as caller observation
+        # goes; the SQLAlchemy Session may flush the seed but that's a
+        # transient detail.
+
+        verdict = compute_freshness(snap, datetime.now(tz=timezone.utc))
+        return {
+            "enabled": snap.enabled,
+            "last_success_at": (
+                snap.last_successful_sync_at.isoformat()
+                if snap.last_successful_sync_at
+                else None
+            ),
+            "watermark": (
+                snap.last_modified_utc.isoformat() if snap.last_modified_utc else None
+            ),
+            "stale": not verdict.is_fresh,
+            "counters": mirror_counters.snapshot(),
+        }
+    except Exception as exc:
+        log.warning("nvd_mirror_health_unavailable", extra={"error": str(exc)})
+        return {"available": False, "error": str(exc)}
 
 
 # Finding A: `/api/analysis/config` and `/api/types` carry route-level

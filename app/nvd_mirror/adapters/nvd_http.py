@@ -31,6 +31,7 @@ from tenacity import (
 
 from ..domain.mappers import map_batch
 from ..domain.models import CveBatch, MirrorWindow
+from ..observability import increment as _metric
 
 log = logging.getLogger(__name__)
 
@@ -198,6 +199,7 @@ class NvdHttpAdapter:
                         self._endpoint, params=params, headers=self._headers()
                     )
                     if response.status_code == 429:
+                        _metric("nvd.api.429_count")
                         retry_after = _retry_after_seconds(response)
                         if retry_after and retry_after > 0:
                             log.info(

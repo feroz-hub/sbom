@@ -126,10 +126,21 @@ async def run_multi_source_analysis_async(
         loop = asyncio.get_running_loop()
         api_key = resolve_nvd_api_key(cfg)
 
+        # Phase 5: route CPE lookups through the mirror+live facade. The
+        # facade decides per request whether to serve from the local
+        # mirror or fall through to ``nvd_query_by_cpe``. Output shape is
+        # identical (``list[dict]`` of raw NVD CVE JSON) so
+        # ``_finding_from_raw`` keeps working unchanged.
+        from ..nvd_mirror.application import build_nvd_lookup_for_pipeline
+
+        nvd_lookup_service = build_nvd_lookup_for_pipeline()
+
         def _fetch_cpe(cpe: str) -> tuple[str, list[dict], str | None]:
             LOGGER.debug("NVD: fetching CPE '%s'", cpe)
             try:
-                cve_objs = nvd_query_by_cpe(cpe, api_key, settings=cfg)
+                cve_objs = nvd_lookup_service.query_legacy(
+                    cpe, api_key=api_key, settings=cfg
+                )
                 LOGGER.debug("NVD: CPE '%s' → %d CVEs", cpe, len(cve_objs))
                 return cpe, cve_objs, None
             except Exception as exc:

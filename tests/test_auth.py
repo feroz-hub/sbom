@@ -118,7 +118,10 @@ def test_unprotected_routes_stay_open_in_bearer_mode(client, monkeypatch):
 
     resp = client.get("/health")
     assert resp.status_code == 200
-    assert resp.json() == {"status": "ok"}
+    # Phase 6.2: /health was extended with an `nvd_mirror` status block.
+    # This auth test only checks reachability + overall status — the
+    # health-shape contract lives in tests/nvd_mirror/test_health_endpoint.py.
+    assert resp.json().get("status") == "ok"
 
 
 # ---------------------------------------------------------------------------
