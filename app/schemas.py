@@ -39,12 +39,6 @@ class ProjectOut(ORMModel):
     modified_by: str | None = None
 
 
-class SBOMTypeCreate(BaseModel):
-    typename: str
-    type_details: str | None = None
-    created_by: str | None = None
-
-
 class SBOMTypeOut(ORMModel):
     id: int
     typename: str
@@ -139,35 +133,6 @@ class AnalysisFindingOut(ORMModel):
     aliases: str | None = None  # JSON string
 
 
-class AnalysisRunSummary(ORMModel):
-    """Lightweight run summary for list endpoints — excludes raw_report."""
-
-    id: int
-    sbom_id: int
-    project_id: int | None = None
-    run_status: str
-    sbom_name: str | None = None
-    source: str
-    started_on: str
-    completed_on: str
-    duration_ms: int
-    total_components: int
-    total_findings: int
-    critical_count: int
-    high_count: int
-    medium_count: int
-    low_count: int
-
-
-class SBOMAnalysisReportCreate(BaseModel):
-    sbom_ref_id: int | None = None
-    sbom_result: str | None = None
-    project_id: str | None = None
-    analysis_details: str | None = None
-    reference_source: str | None = None
-    sbom_analysis_level: int | None = None
-
-
 class ProjectUpdate(BaseModel):
     project_name: str | None = None
     project_details: str | None = None
@@ -190,14 +155,3 @@ class SBOMSourceUpdate(BaseModel):
     sbom_version: str | None = None
     productver: str | None = None
     modified_by: str | None = None
-
-
-class SBOMAnalysisReportOut(ORMModel):
-    id: int
-    sbom_ref_id: int | None = None
-    sbom_result: str | None = None
-    project_id: str | None = None
-    created_on: str | None = None
-    analysis_details: str | None = None
-    reference_source: str | None = None
-    sbom_analysis_level: int | None = None
