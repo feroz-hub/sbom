@@ -15,18 +15,6 @@ from .analysis_service import (
     persist_analysis_run,
 )
 
-# Dashboard Service
-from .dashboard_service import (
-    get_activity,
-    get_component_stats,
-    get_recent_sboms,
-    get_run_status_distribution,
-    get_severity_distribution,
-    get_stats,
-    get_top_vulnerabilities,
-    get_top_vulnerable_components,
-)
-
 # PDF Service
 from .pdf_service import (
     generate_pdf_report,
@@ -66,13 +54,4 @@ __all__ = [
     "load_run_cache",
     "rebuild_run_from_db",
     "store_run_cache",
-    # Dashboard Service
-    "get_activity",
-    "get_component_stats",
-    "get_recent_sboms",
-    "get_run_status_distribution",
-    "get_severity_distribution",
-    "get_stats",
-    "get_top_vulnerable_components",
-    "get_top_vulnerabilities",
 ]
