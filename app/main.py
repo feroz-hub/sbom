@@ -42,6 +42,7 @@ log = get_logger("api")
 from .auth import require_auth, validate_auth_setup
 from .db import Base, SessionLocal, engine
 from .http_client import close_async_http_client, init_async_http_client
+from .middleware import MaxBodySizeMiddleware
 from .rate_limit import limiter, rate_limit_exceeded_handler
 from .routers import analysis as analysis_export_router
 
@@ -222,6 +223,13 @@ async def log_requests(request: Request, call_next):
         duration_ms,
     )
     return response
+
+
+# --- Body-size enforcement (BE-001) -------------------------------------
+# Added LAST so Starlette's `add_middleware` (insert-at-0) puts this
+# OUTERMOST in the stack — oversize requests are rejected with 413
+# before any other middleware spends cycles on them.
+app.add_middleware(MaxBodySizeMiddleware, max_bytes=settings.MAX_UPLOAD_BYTES)
 
 
 # --- Router registration -------------------------------------------------
