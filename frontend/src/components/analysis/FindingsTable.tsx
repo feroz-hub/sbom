@@ -24,13 +24,23 @@ interface FindingsTableProps {
 function extractCveAlias(aliases: string | null | undefined): string | null {
   if (!aliases) return null;
   try {
-    const parsed: string[] = JSON.parse(aliases);
-    const cve = parsed.find((a) => a.startsWith('CVE-'));
+    const parsed: unknown[] = JSON.parse(aliases);
+    if (!Array.isArray(parsed)) return null;
+    const cve = parsed.find((a): a is string => typeof a === 'string' && a.startsWith('CVE-'));
     if (cve) return cve;
-    return parsed.find((a) => !a.startsWith('GHSA-')) ?? null;
+    return parsed.find((a): a is string => typeof a === 'string' && !a.startsWith('GHSA-')) ?? null;
   } catch {
     return null;
   }
+}
+
+/** Generate a canonical URL for a vuln ID (GHSA or CVE). */
+function vulnUrl(vulnId: string | null, referenceUrl: string | null): string | null {
+  if (referenceUrl) return referenceUrl;
+  if (!vulnId) return null;
+  if (vulnId.startsWith('GHSA-')) return `https://github.com/advisories/${vulnId}`;
+  if (vulnId.startsWith('CVE-')) return `https://nvd.nist.gov/vuln/detail/${vulnId}`;
+  return null;
 }
 
 /** Map raw source string to short coloured badge. */
@@ -213,7 +223,7 @@ export function FindingsTable({
               />
             ) : (
               filteredFindings.map((f) => {
-                const cveAlias = extractCveAlias(f.aliases);
+                const cveAlias = extractCveAlias(f.aliases) ?? (f.vuln_id?.startsWith('CVE-') ? f.vuln_id : null);
                 const displayTitle =
                   f.description && f.description !== f.vuln_id
                     ? f.description
@@ -224,19 +234,22 @@ export function FindingsTable({
                 return (
                   <tr key={f.id} className="transition-colors hover:bg-hcl-light/40">
                     <Td>
-                      {f.reference_url ? (
-                        <a
-                          href={f.reference_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 font-mono text-xs text-hcl-blue hover:underline"
-                        >
-                          {f.vuln_id || '—'}
-                          <ExternalLink className="h-3 w-3" />
-                        </a>
-                      ) : (
-                        <span className="font-mono text-xs text-foreground/90">{f.vuln_id || '—'}</span>
-                      )}
+                      {(() => {
+                        const url = vulnUrl(f.vuln_id, f.reference_url);
+                        return url ? (
+                          <a
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 font-mono text-xs text-hcl-blue hover:underline"
+                          >
+                            {f.vuln_id || '—'}
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        ) : (
+                          <span className="font-mono text-xs text-foreground/90">{f.vuln_id || '—'}</span>
+                        );
+                      })()}
                     </Td>
                     <Td>
                       {cveAlias ? (

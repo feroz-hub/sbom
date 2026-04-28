@@ -1137,6 +1137,7 @@ async def github_query_by_components(
             references { url }
             cvss { score vectorString }
             cwes(first: 10) { nodes { cweId name } }
+            identifiers { type value }
           }
           vulnerableVersionRange
           firstPatchedVersion { identifier }
@@ -1186,7 +1187,12 @@ async def github_query_by_components(
                         findings.append(
                             {
                                 "vuln_id": adv.get("ghsaId"),
-                                "aliases": [adv.get("ghsaId")] if adv.get("ghsaId") else [],
+                                "aliases": list({
+                                    v for v in [
+                                        adv.get("ghsaId"),
+                                        *[i["value"] for i in (adv.get("identifiers") or []) if i.get("type") in ("CVE", "GHSA")],
+                                    ] if v
+                                }),
                                 "sources": ["GITHUB"],
                                 "description": adv.get("summary") or adv.get("description"),
                                 "severity": bucket,
