@@ -32,6 +32,30 @@ from typing import Any
 import pytest
 
 # ---------------------------------------------------------------------------
+# Module-level: set DATABASE_URL BEFORE any test imports from ``app.db``.
+#
+# Why: ``app.db`` creates its engine at module-import time using whatever
+# DATABASE_URL is in the environment. If the env var is unset, it falls
+# back to ``./sbom_api.db`` (a path inside the repo). Tests that imported
+# ``app.db`` before the session-scoped ``app`` fixture set DATABASE_URL
+# would lock the engine onto that real on-disk file, polluting it with
+# test rows that survived across pytest runs.
+#
+# The set runs at conftest module-import — pytest imports conftest BEFORE
+# collecting any test modules, so this DATABASE_URL is present when any
+# subsequent ``from app.db import ...`` happens.
+# ---------------------------------------------------------------------------
+_SESSION_DB_FD, _SESSION_DB_PATH = tempfile.mkstemp(
+    prefix="sbom_test_session_", suffix=".db"
+)
+os.close(_SESSION_DB_FD)
+Path(_SESSION_DB_PATH).unlink(missing_ok=True)
+# Use ``setdefault`` so an explicit DATABASE_URL set by the user (or by an
+# outer test runner) wins.
+os.environ.setdefault("DATABASE_URL", f"sqlite:///{_SESSION_DB_PATH}")
+
+
+# ---------------------------------------------------------------------------
 # Database isolation — must run BEFORE any `app.*` import.
 # ---------------------------------------------------------------------------
 

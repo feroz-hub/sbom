@@ -28,6 +28,8 @@ dependencies = [
     "redis>=4.5.2,<6.5",
     "PyJWT>=2.12.1",
     "boto3>=1.42.88",
+    "cryptography>=44.0.0",
+    "tenacity>=9.0.0",
 ]
 
 [project.optional-dependencies]

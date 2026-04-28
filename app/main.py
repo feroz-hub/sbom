@@ -46,6 +46,7 @@ from .rate_limit import limiter, rate_limit_exceeded_handler
 from .routers import analysis as analysis_export_router
 
 # --- Routers --------------------------------------------------------------
+from .nvd_mirror.api import router as nvd_mirror_admin_router
 from .routers import (
     analyze_endpoints,
     dashboard_main,
@@ -264,3 +265,7 @@ app.include_router(
     tags=["dashboard-trend"],
     dependencies=_protected,
 )
+
+# NVD mirror admin router. Auth via require_auth (binary none/bearer/jwt
+# per app.auth). Admin-role split is a TODO (see app/nvd_mirror/api.py).
+app.include_router(nvd_mirror_admin_router, dependencies=_protected)

@@ -19,6 +19,10 @@ try:
 except Exception:  # pragma: no cover
     httpx = None  # type: ignore
 
+from .nvd_mirror.settings import (
+    NvdMirrorSettings,
+    load_mirror_settings_from_env,
+)
 from .parsing import extract_components  # noqa: F401 — re-exported for callers
 
 # Module-level requests.Session for NVD connection pooling.
@@ -695,6 +699,9 @@ class _MultiSettings(AnalysisSettings):
     max_concurrency: int = 10
     prefer_async_httpx: bool = True
     analysis_sources_env: str = "ANALYSIS_SOURCES"  # e.g., "NVD,OSV,GITHUB,VULNDB"
+    # NVD mirror config — env-driven defaults; DB-backed `nvd_settings` row
+    # is the runtime source of truth once seeded. See app/nvd_mirror/settings.py.
+    mirror: NvdMirrorSettings = field(default_factory=NvdMirrorSettings)
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -732,6 +739,7 @@ def get_analysis_settings_multi() -> _MultiSettings:
         max_concurrency=_env_int("ANALYSIS_MAX_CONCURRENCY", 10, minimum=1),
         prefer_async_httpx=_env_bool("ANALYSIS_PREFER_ASYNC_HTTPX", True),
         analysis_sources_env=_env_str("ANALYSIS_SOURCES_ENV", "ANALYSIS_SOURCES"),
+        mirror=load_mirror_settings_from_env(),
     )
 
 

@@ -12,6 +12,7 @@ from sqlalchemy import pool
 from app.db import Base, DATABASE_URL
 
 import app.models  # noqa: F401 — register tables on Base.metadata
+import app.nvd_mirror.db.models  # noqa: F401 — register mirror tables on Base.metadata
 
 config = context.config
 if config.config_file_name is not None:
