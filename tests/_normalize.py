@@ -26,6 +26,10 @@ _VOLATILE_KEYS = {
     "id",  # AnalysisRunOut.id is auto-increment
     "sbom_id",  # depends on test seed order
     "lastModified",
+    # Raw analysis details JSON — embeds non-deterministic timestamps and
+    # full per-finding payloads. Persistence is asserted by the dedicated
+    # regression test in test_persist_run_query_errors_regression.py.
+    "raw_report",
 }
 
 
