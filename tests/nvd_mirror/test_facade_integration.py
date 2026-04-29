@@ -1,9 +1,11 @@
-"""Phase 5 — integration: multi_source orchestrator routes NVD queries
+"""Phase 5 — integration: the production orchestrator routes NVD queries
 through ``NvdLookupService``.
 
-We don't reach for the FastAPI app here — the orchestrator is callable
-directly. We patch ``app.analysis.nvd_query_by_cpe`` with a sentinel
-that proves the facade's *live* path was taken (default disabled state).
+R6 collapse: the production path is now ``run_sources_concurrently +
+build_source_adapters([\"NVD\"])`` — the runner wires the facade into
+``NvdSource`` via ``build_nvd_lookup_for_pipeline()`` at adapter-build
+time. We patch ``app.analysis.nvd_query_by_cpe`` with a sentinel that
+proves the facade's *live* path was taken (default disabled state).
 A second test enables the mirror and seeds the local table to prove
 the *mirror* path is taken instead.
 """
@@ -95,6 +97,40 @@ def isolated_session(monkeypatch: pytest.MonkeyPatch):
     Path(path).unlink(missing_ok=True)
 
 
+# ---------------------------------------------------------------------------
+# Runner-based call helper (R6: replaces direct pipeline invocations)
+# ---------------------------------------------------------------------------
+
+
+def _run_nvd_via_runner(sbom_json: str) -> tuple[list[dict], list[dict], list[dict]]:
+    """Drive the production runner+factory path with a single SBOM and
+    the ``NVD`` source. Returns ``(findings, errors, warnings)`` — the
+    same triple the runner emits.
+
+    Replicates the parse + CPE-augmentation steps that
+    ``run_multi_source_analysis_async`` used to perform internally, so
+    the migrated tests stay focused on facade behaviour rather than
+    parser details.
+    """
+    from app.analysis import (
+        _augment_components_with_cpe,
+        enrich_component_for_osv,
+        get_analysis_settings_multi,
+    )
+    from app.parsing import extract_components
+    from app.sources.factory import build_source_adapters
+    from app.sources.runner import run_sources_concurrently
+
+    components_raw = extract_components(sbom_json)
+    components_raw = [enrich_component_for_osv(c) for c in components_raw]
+    components, _ = _augment_components_with_cpe(components_raw)
+
+    cfg = get_analysis_settings_multi()
+    adapters = build_source_adapters(["NVD"])
+
+    return asyncio.run(run_sources_concurrently(adapters, components, cfg))
+
+
 # --- Mirror disabled (default) → live path used ---------------------------
 
 
@@ -136,18 +172,11 @@ def test_orchestrator_uses_live_when_mirror_disabled(
     monkeypatch.setattr(analysis_mod, "osv_query_by_components", _empty_pair)
     monkeypatch.setattr(analysis_mod, "github_query_by_components", _empty_pair)
 
-    from app.pipeline.multi_source import run_multi_source_analysis_async
-
-    result = asyncio.run(
-        run_multi_source_analysis_async(
-            _minimal_sbom(), sources=["NVD"]
-        )
-    )
+    findings, _errors, _warnings = _run_nvd_via_runner(_minimal_sbom())
 
     # The patched live function was called with the requests CPE.
     assert any("requests:requests" in c for c in captured), captured
-    # The fake live result flowed through the pipeline.
-    findings = result["findings"]
+    # The fake live result flowed through the runner+adapter chain.
     assert any(f.get("vuln_id") == "CVE-LIVE-1" for f in findings)
 
 
@@ -244,13 +273,8 @@ def test_orchestrator_uses_mirror_when_enabled_and_fresh(
     monkeypatch.setattr(analysis_mod, "osv_query_by_components", _empty_pair)
     monkeypatch.setattr(analysis_mod, "github_query_by_components", _empty_pair)
 
-    from app.pipeline.multi_source import run_multi_source_analysis_async
+    findings, _errors, _warnings = _run_nvd_via_runner(_minimal_sbom())
 
-    result = asyncio.run(
-        run_multi_source_analysis_async(_minimal_sbom(), sources=["NVD"])
-    )
-
-    findings = result["findings"]
     vuln_ids = {f.get("vuln_id") for f in findings}
     assert "CVE-MIRROR-1" in vuln_ids
     # Live must not have been called for the matched CPE.
@@ -312,9 +336,7 @@ def test_orchestrator_falls_back_to_live_when_mirror_stale(
     monkeypatch.setattr(analysis_mod, "osv_query_by_components", _empty_pair)
     monkeypatch.setattr(analysis_mod, "github_query_by_components", _empty_pair)
 
-    from app.pipeline.multi_source import run_multi_source_analysis_async
-
-    asyncio.run(run_multi_source_analysis_async(_minimal_sbom(), sources=["NVD"]))
+    _run_nvd_via_runner(_minimal_sbom())
 
     # Stale path: live was called (the warning log was checked in the
     # port-based facade tests).
