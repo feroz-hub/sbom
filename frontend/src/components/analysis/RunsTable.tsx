@@ -211,7 +211,7 @@ export function RunsTable({ runs, isLoading, error, selectedIds, onToggleSelect 
         </TableFilterBar>
       ) : null}
 
-      <Table striped>
+      <Table striped ariaLabel="Analysis runs table">
         <TableHead>
           <tr>
             {selectable && (

@@ -251,7 +251,7 @@ export function FindingsTable({
           </TableFilterBar>
         ) : null}
 
-        <Table striped>
+        <Table striped ariaLabel="Vulnerability findings">
           <TableHead>
             <tr>
               <SortableTh

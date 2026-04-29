@@ -8,6 +8,7 @@ import {
   FolderOpen,
   FileText,
   Activity,
+  GitCompareArrows,
   ChevronLeft,
   ChevronRight,
   X,
@@ -20,6 +21,7 @@ const navItems = [
   { href: '/projects', label: 'Projects', icon: FolderOpen },
   { href: '/sboms', label: 'SBOMs', icon: FileText },
   { href: '/analysis', label: 'Analysis Runs', icon: Activity },
+  { href: '/analysis/compare', label: 'Compare Runs', icon: GitCompareArrows },
 ];
 
 export function Sidebar() {
@@ -55,7 +57,7 @@ export function Sidebar() {
       >
         <div
           className={cn(
-            'flex shrink-0 items-center border-b border-white/10 bg-gradient-to-r from-sidebar to-primary-900',
+            'flex shrink-0 items-center border-b border-white/10 sidebar-brand-bar',
             collapsed ? 'md:justify-center md:px-0 md:py-4' : '',
             'gap-3 px-4 py-4',
           )}
@@ -84,7 +86,14 @@ export function Sidebar() {
 
         <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-3" aria-label="Main">
           {navItems.map(({ href, label, icon: Icon }) => {
-            const isActive = href === '/' ? pathname === '/' : pathname.startsWith(href);
+            const isActive =
+              href === '/'
+                ? pathname === '/'
+                : href === '/analysis/compare'
+                  ? pathname.startsWith('/analysis/compare')
+                  : href === '/analysis'
+                    ? pathname.startsWith('/analysis') && !pathname.startsWith('/analysis/compare')
+                    : pathname.startsWith(href);
             return (
               <Link
                 key={href}

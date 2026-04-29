@@ -1,13 +1,22 @@
 import type { Metadata } from 'next';
 import Script from 'next/script';
-import { Plus_Jakarta_Sans } from 'next/font/google';
+import { IBM_Plex_Sans, IBM_Plex_Mono } from 'next/font/google';
 import './globals.css';
 import { Providers } from './providers';
 import { AppShell } from '@/components/layout/AppShell';
 
-const plusJakarta = Plus_Jakarta_Sans({
+/** HCLTech-grade UI: IBM Plex Sans (corporate / tech), Plex Mono for IDs and metrics. */
+const plexSans = IBM_Plex_Sans({
   subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
   variable: '--font-sans',
+  display: 'swap',
+});
+
+const plexMono = IBM_Plex_Mono({
+  subsets: ['latin'],
+  weight: ['400', '500', '600'],
+  variable: '--font-mono',
   display: 'swap',
 });
 
@@ -24,7 +33,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={plusJakarta.variable} suppressHydrationWarning>
+    <html lang="en" className={`${plexSans.variable} ${plexMono.variable}`} suppressHydrationWarning>
       <body className="bg-background min-h-screen font-sans antialiased text-foreground">
         <Script id="spectra-theme-init" strategy="beforeInteractive">
           {themeInitScript}

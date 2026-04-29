@@ -1,13 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { Upload } from 'lucide-react';
 import { TopBar } from '@/components/layout/TopBar';
 import { Button } from '@/components/ui/Button';
 import { SbomsTable } from '@/components/sboms/SbomsTable';
 import { SbomUploadModal } from '@/components/sboms/SbomUploadModal';
-import { getSboms } from '@/lib/api';
+import { useSbomsList } from '@/hooks/useSbomsList';
 import { useBackgroundAnalysis } from '@/hooks/useBackgroundAnalysis';
 import { usePendingAnalysisRecovery } from '@/hooks/usePendingAnalysisRecovery';
 import type { SBOMSource } from '@/types';
@@ -17,11 +17,7 @@ export default function SbomsPage() {
   const queryClient = useQueryClient();
   const { triggerBackgroundAnalysis } = useBackgroundAnalysis();
 
-  // Fetch SBOM list via React Query
-  const { data: sboms, isLoading, error } = useQuery({
-    queryKey: ['sboms'],
-    queryFn: ({ signal }) => getSboms(1, 50, signal),
-  });
+  const { data: sboms, isLoading, error } = useSbomsList();
 
   // On mount: resume any analysis jobs that were running before a page refresh
   usePendingAnalysisRecovery(triggerBackgroundAnalysis);

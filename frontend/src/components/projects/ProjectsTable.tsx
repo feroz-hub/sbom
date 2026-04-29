@@ -144,7 +144,7 @@ export function ProjectsTable({ projects, isLoading, error }: ProjectsTableProps
           </TableFilterBar>
         ) : null}
 
-        <Table striped>
+        <Table striped ariaLabel="Projects table">
           <TableHead>
             <tr>
               <SortableTh

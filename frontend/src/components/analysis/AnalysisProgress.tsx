@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { CheckCircle2, XCircle, Loader2, Clock, AlertTriangle, ChevronRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Alert } from '@/components/ui/Alert';
@@ -155,10 +156,17 @@ export function AnalysisProgress({ state, onCancel, onReset }: AnalysisProgressP
 
       {/* Error state */}
       {isError && error && (
-        <div className="px-4 pb-4">
+        <div className="px-4 pb-4 space-y-3">
           <Alert variant="error" title="Analysis failed">
             {error}
           </Alert>
+          <p className="text-xs text-hcl-muted leading-relaxed">
+            The live connection was interrupted, but the server may still finish the job. Check{' '}
+            <Link href="/analysis?tab=runs" className="font-medium text-primary underline hover:text-hcl-dark">
+              Analysis runs
+            </Link>{' '}
+            for a new entry when processing completes, or run the analysis again from this page.
+          </p>
         </div>
       )}
 

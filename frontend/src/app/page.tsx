@@ -7,6 +7,7 @@ import { SeverityChart } from '@/components/dashboard/SeverityChart';
 import { ActivityChart } from '@/components/dashboard/ActivityChart';
 import { TrendChart } from '@/components/dashboard/TrendChart';
 import { RecentSboms } from '@/components/dashboard/RecentSboms';
+import { DashboardQuickActions } from '@/components/dashboard/DashboardQuickActions';
 import {
   getDashboardStats,
   getRecentSboms,
@@ -45,6 +46,7 @@ export default function DashboardPage() {
     <div className="flex flex-col flex-1">
       <TopBar title="Dashboard" />
       <div className="p-6 space-y-6">
+        <DashboardQuickActions />
         <StatsGrid
           stats={statsQuery.data}
           isLoading={statsQuery.isLoading}

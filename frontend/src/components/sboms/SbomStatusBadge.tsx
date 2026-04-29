@@ -1,6 +1,5 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
 import { sbomAnalysisDescription, sbomAnalysisShortLabel } from '@/lib/analysisRunStatusLabels';
 import type { AnalysisStatus } from '@/hooks/useBackgroundAnalysis';
@@ -20,25 +19,12 @@ const STATUS_STYLES: Record<AnalysisStatus, string> = {
   NOT_ANALYSED: 'border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400',
 };
 
+/**
+ * Displays analysis status from parent row data. Updates when the SBOM list query cache changes.
+ */
 export function SbomStatusBadge({ sbomId, initialStatus, initialFindings }: SbomStatusBadgeProps) {
-  const [status, setStatus] = useState<AnalysisStatus>(initialStatus ?? 'NOT_ANALYSED');
-  const [findings, setFindings] = useState<number | undefined>(initialFindings);
-
-  useEffect(() => {
-    if (initialStatus) setStatus(initialStatus);
-  }, [initialStatus]);
-
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent<{ sbomId: number; status: AnalysisStatus; findingsCount?: number }>).detail;
-      if (detail.sbomId === sbomId) {
-        setStatus(detail.status);
-        if (detail.findingsCount !== undefined) setFindings(detail.findingsCount);
-      }
-    };
-    window.addEventListener('sbom-analysis-update', handler);
-    return () => window.removeEventListener('sbom-analysis-update', handler);
-  }, [sbomId]);
+  const status: AnalysisStatus = initialStatus ?? 'NOT_ANALYSED';
+  const findings = initialFindings;
 
   if (status === 'NOT_ANALYSED') {
     return <span className="text-xs text-hcl-muted">—</span>;
@@ -52,7 +38,7 @@ export function SbomStatusBadge({ sbomId, initialStatus, initialFindings }: Sbom
     <span
       className={`inline-flex max-w-full cursor-help items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${styles}`}
       title={help}
-      aria-label={help}
+      aria-label={`SBOM ${sbomId}: ${help}`}
     >
       {status === 'ANALYSING' && <Loader2 className="h-3 w-3 shrink-0 animate-spin" aria-hidden />}
       <span className="min-w-0 truncate">{label}</span>

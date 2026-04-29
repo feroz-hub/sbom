@@ -295,7 +295,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
             )}
           </CardHeader>
           <div className="overflow-hidden">
-            <Table striped>
+            <Table striped ariaLabel="Risk by vulnerable component">
               <TableHead>
                 <tr>
                   <Th>Component</Th>
@@ -303,7 +303,9 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                   <Th>High</Th>
                   <Th>Medium</Th>
                   <Th>Low</Th>
-                  <Th title="Findings on the CISA Known Exploited Vulnerabilities catalog">KEV</Th>
+                  <Th>
+                    <span title="Findings on the CISA Known Exploited Vulnerabilities catalog">KEV</span>
+                  </Th>
                   <Th className="text-right">Score</Th>
                 </tr>
               </TableHead>
@@ -372,7 +374,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
           </CardTitle>
         </CardHeader>
         <div className="overflow-hidden">
-          <Table striped>
+          <Table striped ariaLabel="SBOM components">
             <TableHead>
               <tr>
                 <SortableTh
@@ -464,7 +466,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
           <CardTitle>Analysis Runs</CardTitle>
         </CardHeader>
         <div className="overflow-hidden">
-          <Table striped>
+          <Table striped ariaLabel="Analysis runs for this SBOM">
             <TableHead>
               <tr>
                 <SortableTh

@@ -197,7 +197,7 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
           </TableFilterBar>
         ) : null}
 
-        <Table striped>
+        <Table striped ariaLabel="SBOM inventory table">
           <TableHead>
             <tr>
               <SortableTh

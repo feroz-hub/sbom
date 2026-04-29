@@ -1,32 +1,59 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { Suspense, useCallback, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { Play, Download, FileJson, AlertTriangle, CheckCircle2, XCircle, ActivityIcon, Layers, GitCompareArrows } from 'lucide-react';
+import {
+  Play,
+  FileJson,
+  AlertTriangle,
+  CheckCircle2,
+  XCircle,
+  ActivityIcon,
+  Layers,
+  GitCompareArrows,
+} from 'lucide-react';
 import { TopBar } from '@/components/layout/TopBar';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
-import { Input } from '@/components/ui/Input';
-import { Card, CardContent } from '@/components/ui/Card';
 import { RunsTable } from '@/components/analysis/RunsTable';
-import { getRuns, getProjects, getSboms, analyzeConsolidated, downloadPdfReport, exportRunsJson, getAnalysisConfig } from '@/lib/api';
+import { ConsolidatedAnalysisPanel } from '@/components/analysis/ConsolidatedAnalysisPanel';
+import { AnalysisHubTabs } from '@/components/analysis/AnalysisHubTabs';
+import { PageSpinner } from '@/components/ui/Spinner';
+import {
+  getRuns,
+  getProjects,
+  analyzeConsolidated,
+  downloadPdfReport,
+  exportRunsJson,
+  getAnalysisConfig,
+} from '@/lib/api';
 import { runStatusShortLabel } from '@/lib/analysisRunStatusLabels';
 import { downloadBlob } from '@/lib/utils';
 import { useToast } from '@/hooks/useToast';
+import { useAnalysisUrlState } from '@/hooks/useAnalysisUrlState';
+import { useSbomsList } from '@/hooks/useSbomsList';
 import type { ConsolidatedAnalysisResult } from '@/types';
 
-export default function AnalysisPage() {
+function AnalysisPageInner() {
   const { showToast } = useToast();
   const router = useRouter();
 
-  // ── Filters ────────────────────────────────────────────────────────────────
-  const [projectFilter, setProjectFilter] = useState('');
-  const [sbomFilter, setSbomFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const {
+    projectFilter,
+    sbomFilter,
+    statusFilter,
+    hubTab,
+    setProjectFilter,
+    setSbomFilter,
+    setStatusFilter,
+    setHubTab,
+    clearFilters,
+  } = useAnalysisUrlState();
 
-  // ── Multi-select state for Compare Runs ───────────────────────────────────
   const [selectedForCompare, setSelectedForCompare] = useState<Set<number>>(new Set());
+  const [consolidatedResult, setConsolidatedResult] = useState<ConsolidatedAnalysisResult | null>(null);
+  const [pdfDownloading, setPdfDownloading] = useState(false);
 
   const toggleSelectForCompare = useCallback((id: number) => {
     setSelectedForCompare((prev) => {
@@ -34,7 +61,6 @@ export default function AnalysisPage() {
       if (next.has(id)) {
         next.delete(id);
       } else {
-        // Cap at 2 — oldest entry drops out so it always feels responsive.
         if (next.size >= 2) {
           const first = next.values().next().value;
           if (first !== undefined) next.delete(first);
@@ -51,11 +77,6 @@ export default function AnalysisPage() {
     router.push(`/analysis/compare?run_a=${a}&run_b=${b}`);
   };
 
-  // ── Consolidated analysis ──────────────────────────────────────────────────
-  const [consolidatedSbomId, setConsolidatedSbomId] = useState('');
-  const [consolidatedResult, setConsolidatedResult] = useState<ConsolidatedAnalysisResult | null>(null);
-  const [pdfDownloading, setPdfDownloading] = useState(false);
-
   const { data: analysisConfig } = useQuery({
     queryKey: ['analysis-config'],
     queryFn: ({ signal }) => getAnalysisConfig(signal),
@@ -67,10 +88,7 @@ export default function AnalysisPage() {
     queryFn: ({ signal }) => getProjects(signal),
   });
 
-  const { data: sboms } = useQuery({
-    queryKey: ['sboms'],
-    queryFn: ({ signal }) => getSboms(1, 100, signal),
-  });
+  const { data: sboms } = useSbomsList();
 
   const { data: runs, isLoading, error, refetch } = useQuery({
     queryKey: ['runs', { projectFilter, sbomFilter, statusFilter }],
@@ -83,11 +101,10 @@ export default function AnalysisPage() {
           page: 1,
           page_size: 100,
         },
-        signal
+        signal,
       ),
   });
 
-  // ── Summary metrics derived from loaded runs ───────────────────────────────
   const summary = useMemo(() => {
     if (!runs) return null;
     return {
@@ -100,10 +117,9 @@ export default function AnalysisPage() {
     };
   }, [runs]);
 
-  // ── Consolidated analysis mutation ─────────────────────────────────────────
   const consolidateMutation = useMutation({
     mutationFn: () => {
-      const id = Number(consolidatedSbomId);
+      const id = Number(sbomFilter);
       if (!id) throw new Error('Please enter a valid SBOM ID');
       const sbom = sboms?.find((s) => s.id === id);
       return analyzeConsolidated({ sbom_id: id, sbom_name: sbom?.sbom_name ?? `SBOM #${id}` });
@@ -124,10 +140,10 @@ export default function AnalysisPage() {
     try {
       const blob = await downloadPdfReport({
         runId: consolidatedResult.runId,
-        title: `Consolidated Analysis — SBOM #${consolidatedSbomId}`,
-        filename: `sbom-consolidated-${consolidatedSbomId}.pdf`,
+        title: `Consolidated Analysis — SBOM #${sbomFilter}`,
+        filename: `sbom-consolidated-${sbomFilter}.pdf`,
       });
-      downloadBlob(blob, `sbom-consolidated-${consolidatedSbomId}.pdf`);
+      downloadBlob(blob, `sbom-consolidated-${sbomFilter}.pdf`);
       showToast('PDF downloaded', 'success');
     } catch (err) {
       showToast(`PDF failed: ${(err as Error).message}`, 'error');
@@ -177,246 +193,188 @@ export default function AnalysisPage() {
         }
       />
       <div className="p-6 space-y-5">
+        <AnalysisHubTabs active={hubTab} onChange={setHubTab} />
 
-        {/* ── Summary metric cards ─────────────────────────────────────────── */}
-        {summary && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-            {[
-              {
-                label: 'Total runs',
-                hint: 'All loaded runs in the table below.',
-                value: summary.total,
-                icon: Layers,
-                color: 'text-hcl-blue  bg-hcl-light',
-                border: 'border-l-hcl-blue',
-              },
-              {
-                label: 'Runs — no issues',
-                hint: 'Runs that reported zero vulnerabilities (PASS).',
-                value: summary.pass,
-                icon: CheckCircle2,
-                color: 'text-green-600 bg-green-50',
-                border: 'border-l-green-500',
-              },
-              {
-                label: 'Runs — with findings',
-                hint: 'Runs where at least one vulnerability was reported (FAIL). Not a system failure.',
-                value: summary.fail,
-                icon: XCircle,
-                color: 'text-red-600   bg-red-50',
-                border: 'border-l-red-500',
-              },
-              {
-                label: 'Runs — source errors',
-                hint: 'Runs with lookup/API issues; findings may be incomplete (PARTIAL).',
-                value: summary.partial,
-                icon: ActivityIcon,
-                color: 'text-amber-600 bg-amber-50',
-                border: 'border-l-amber-500',
-              },
-              {
-                label: 'Runs — failed',
-                hint: 'Runs that ended in ERROR.',
-                value: summary.errors,
-                icon: AlertTriangle,
-                color: 'text-orange-600 bg-orange-50',
-                border: 'border-l-orange-500',
-              },
-              {
-                label: 'Total findings',
-                hint: 'Sum of vulnerability counts across loaded runs.',
-                value: summary.findings,
-                icon: AlertTriangle,
-                color: 'text-red-600   bg-red-50',
-                border: 'border-l-red-500',
-              },
-            ].map(({ label, hint, value, icon: Icon, color, border }) => (
-              <div
-                key={label}
-                title={hint}
-                className={`bg-surface rounded-xl border border-hcl-border shadow-card border-l-4 ${border} px-4 py-3`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="min-w-0">
-                    <p className="text-xs font-medium text-hcl-muted">{label}</p>
-                    <p className="mt-0.5 text-2xl font-bold text-hcl-navy">{value.toLocaleString()}</p>
-                  </div>
-                  <div className={`p-2 rounded-lg ${color}`}>
-                    <Icon className="h-4 w-4" />
-                  </div>
-                </div>
-              </div>
-            ))}
+        {hubTab === 'consolidated' && (
+          <div
+            role="tabpanel"
+            id="analysis-panel-consolidated"
+            aria-labelledby="analysis-tab-consolidated"
+          >
+            <ConsolidatedAnalysisPanel
+              analysisConfig={analysisConfig}
+              sboms={sboms}
+              consolidatedSbomId={sbomFilter}
+              onConsolidatedSbomIdChange={setSbomFilter}
+              consolidatedResult={consolidatedResult}
+              onRunAnalysis={() => consolidateMutation.mutate()}
+              analysisPending={consolidateMutation.isPending}
+              runDisabled={!sbomFilter}
+              onDownloadPdf={handleDownloadConsolidatedPdf}
+              pdfDownloading={pdfDownloading}
+            />
           </div>
         )}
 
-        {/* ── Filters ─────────────────────────────────────────────────────── */}
-        <div className="flex flex-wrap gap-3 bg-surface rounded-xl border border-hcl-border shadow-card p-4">
-          <Select
-            value={projectFilter}
-            onChange={(e) => setProjectFilter(e.target.value)}
-            className="w-52"
-            placeholder="All Projects"
+        {hubTab === 'runs' && (
+          <div
+            role="tabpanel"
+            id="analysis-panel-runs"
+            aria-labelledby="analysis-tab-runs"
+            className="space-y-5"
           >
-            {projects?.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.project_name}
-              </option>
-            ))}
-          </Select>
-
-          <Select
-            value={sbomFilter}
-            onChange={(e) => setSbomFilter(e.target.value)}
-            className="w-52"
-            placeholder="All SBOMs"
-          >
-            {sboms?.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.sbom_name}
-              </option>
-            ))}
-          </Select>
-
-          <Select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="w-56"
-            placeholder="All outcomes"
-          >
-            <option value="">All outcomes</option>
-            <option value="PASS">{runStatusShortLabel('PASS')}</option>
-            <option value="FAIL">{runStatusShortLabel('FAIL')}</option>
-            <option value="PARTIAL">{runStatusShortLabel('PARTIAL')}</option>
-            <option value="NO_DATA">{runStatusShortLabel('NO_DATA')}</option>
-            <option value="ERROR">{runStatusShortLabel('ERROR')}</option>
-            <option value="RUNNING">{runStatusShortLabel('RUNNING')}</option>
-            <option value="PENDING">{runStatusShortLabel('PENDING')}</option>
-          </Select>
-
-          {(projectFilter || sbomFilter || statusFilter) && (
-            <button
-              onClick={() => { setProjectFilter(''); setSbomFilter(''); setStatusFilter(''); }}
-              className="text-sm text-hcl-muted hover:text-hcl-navy underline"
-            >
-              Clear filters
-            </button>
-          )}
-        </div>
-
-        {/* ── Runs table ───────────────────────────────────────────────────── */}
-        <RunsTable
-          runs={runs}
-          isLoading={isLoading}
-          error={error}
-          selectedIds={selectedForCompare}
-          onToggleSelect={toggleSelectForCompare}
-        />
-
-        {/* ── Consolidated Analysis ────────────────────────────────────────── */}
-        <div className="bg-surface rounded-xl border border-hcl-border shadow-card overflow-hidden">
-          <div className="px-6 py-4 border-b-2 border-hcl-border bg-hcl-light/40 flex items-center gap-2.5">
-            <div className="w-1 h-5 rounded-full bg-hcl-cyan shrink-0" />
-            <h2 className="text-base font-semibold text-hcl-navy">Consolidated Analysis (NVD + GHSA + OSV + VulDB)</h2>
-          </div>
-          <div className="px-6 py-5 space-y-4">
-            <p className="text-sm text-hcl-muted">
-              Run a full multi-source vulnerability scan against the configured databases simultaneously.
-            </p>
-            {analysisConfig && !analysisConfig.github_configured && (
-              <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-                <span>
-                  <strong>GitHub Advisory (GHSA) requires a GitHub token.</strong>{' '}
-                  Set <code className="font-mono text-xs bg-amber-100 px-1 rounded">GITHUB_TOKEN</code> in your
-                  backend <code className="font-mono text-xs bg-amber-100 px-1 rounded">.env</code> file to include
-                  GHSA findings. Proceeding without it will skip GitHub findings.
-                </span>
+            {summary && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+                {[
+                  {
+                    label: 'Total runs',
+                    hint: 'All loaded runs in the table below.',
+                    value: summary.total,
+                    icon: Layers,
+                    color: 'text-hcl-blue  bg-hcl-light',
+                    border: 'border-l-hcl-blue',
+                  },
+                  {
+                    label: 'Runs — no issues',
+                    hint: 'Runs that reported zero vulnerabilities (PASS).',
+                    value: summary.pass,
+                    icon: CheckCircle2,
+                    color: 'text-green-600 bg-green-50',
+                    border: 'border-l-green-500',
+                  },
+                  {
+                    label: 'Runs — with findings',
+                    hint: 'Runs where at least one vulnerability was reported (FAIL). Not a system failure.',
+                    value: summary.fail,
+                    icon: XCircle,
+                    color: 'text-red-600   bg-red-50',
+                    border: 'border-l-red-500',
+                  },
+                  {
+                    label: 'Runs — source errors',
+                    hint: 'Runs with lookup/API issues; findings may be incomplete (PARTIAL).',
+                    value: summary.partial,
+                    icon: ActivityIcon,
+                    color: 'text-amber-600 bg-amber-50',
+                    border: 'border-l-amber-500',
+                  },
+                  {
+                    label: 'Runs — failed',
+                    hint: 'Runs that ended in ERROR.',
+                    value: summary.errors,
+                    icon: AlertTriangle,
+                    color: 'text-orange-600 bg-orange-50',
+                    border: 'border-l-orange-500',
+                  },
+                  {
+                    label: 'Total findings',
+                    hint: 'Sum of vulnerability counts across loaded runs.',
+                    value: summary.findings,
+                    icon: AlertTriangle,
+                    color: 'text-red-600   bg-red-50',
+                    border: 'border-l-red-500',
+                  },
+                ].map(({ label, hint, value, icon: Icon, color, border }) => (
+                  <div
+                    key={label}
+                    title={hint}
+                    className={`bg-surface rounded-xl border border-hcl-border shadow-card border-l-4 ${border} px-4 py-3`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-hcl-muted">{label}</p>
+                        <p className="mt-0.5 text-2xl font-bold text-hcl-navy">{value.toLocaleString()}</p>
+                      </div>
+                      <div className={`p-2 rounded-lg ${color}`}>
+                        <Icon className="h-4 w-4" />
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
-            {analysisConfig && !analysisConfig.vulndb_configured && (
-              <div className="flex items-start gap-2 rounded-lg border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-900">
-                <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-                <span>
-                  <strong>VulDB requires an API key.</strong>{' '}
-                  Set <code className="font-mono text-xs bg-cyan-100 px-1 rounded">VULNDB_API_KEY</code> in your
-                  backend <code className="font-mono text-xs bg-cyan-100 px-1 rounded">.env</code> file to include
-                  VulDB findings.
-                </span>
-              </div>
-            )}
-            <div className="flex items-end gap-3 flex-wrap">
-              <div className="w-48">
-                <Input
-                  label="SBOM ID"
-                  placeholder="e.g. 3"
-                  value={consolidatedSbomId}
-                  onChange={(e) => setConsolidatedSbomId(e.target.value)}
-                  type="number"
-                  min="1"
-                />
-              </div>
-              {/* Quick-pick from loaded SBOMs */}
-              <div className="w-56">
-                <Select
-                  label="Or pick SBOM"
-                  placeholder="Select SBOM..."
-                  value={consolidatedSbomId}
-                  onChange={(e) => setConsolidatedSbomId(e.target.value)}
-                >
-                  {sboms?.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      #{s.id} — {s.sbom_name}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-              <Button
-                onClick={() => consolidateMutation.mutate()}
-                loading={consolidateMutation.isPending}
-                disabled={!consolidatedSbomId}
+
+            <div className="flex flex-wrap gap-3 bg-surface rounded-xl border border-hcl-border shadow-card p-4">
+              <Select
+                value={projectFilter}
+                onChange={(e) => setProjectFilter(e.target.value)}
+                className="w-52"
+                placeholder="All Projects"
               >
-                <Play className="h-4 w-4" />
-                Run Analysis
-              </Button>
+                {projects?.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.project_name}
+                  </option>
+                ))}
+              </Select>
+
+              <Select
+                value={sbomFilter}
+                onChange={(e) => setSbomFilter(e.target.value)}
+                className="w-52"
+                placeholder="All SBOMs"
+              >
+                {sboms?.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.sbom_name}
+                  </option>
+                ))}
+              </Select>
+
+              <Select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="w-56"
+                placeholder="All outcomes"
+              >
+                <option value="">All outcomes</option>
+                <option value="PASS">{runStatusShortLabel('PASS')}</option>
+                <option value="FAIL">{runStatusShortLabel('FAIL')}</option>
+                <option value="PARTIAL">{runStatusShortLabel('PARTIAL')}</option>
+                <option value="NO_DATA">{runStatusShortLabel('NO_DATA')}</option>
+                <option value="ERROR">{runStatusShortLabel('ERROR')}</option>
+                <option value="RUNNING">{runStatusShortLabel('RUNNING')}</option>
+                <option value="PENDING">{runStatusShortLabel('PENDING')}</option>
+              </Select>
+
+              {(projectFilter || sbomFilter || statusFilter) && (
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="text-sm text-hcl-muted hover:text-hcl-navy underline"
+                >
+                  Clear filters
+                </button>
+              )}
             </div>
 
-            {/* Results */}
-            {consolidatedResult && (
-              <div className="mt-2 space-y-3">
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                  {[
-                    { label: 'Run ID',      value: consolidatedResult.runId },
-                    { label: 'Components',  value: consolidatedResult.total_components ?? '—' },
-                    { label: 'With CPE',    value: consolidatedResult.components_with_cpe ?? '—' },
-                    { label: 'Total Found', value: consolidatedResult.total_findings ?? '—' },
-                    { label: 'Critical',    value: consolidatedResult.critical_count ?? 0 },
-                    { label: 'High',        value: consolidatedResult.high_count ?? 0 },
-                  ].map(({ label, value }) => (
-                    <div key={label} className="bg-hcl-light rounded-lg px-4 py-3 border border-hcl-border">
-                      <p className="text-xs font-medium text-hcl-muted">{label}</p>
-                      <p className="mt-0.5 text-xl font-bold text-hcl-navy">{value}</p>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={handleDownloadConsolidatedPdf}
-                    loading={pdfDownloading}
-                  >
-                    <Download className="h-4 w-4" />
-                    Download PDF Report
-                  </Button>
-                  <span className="text-xs text-hcl-muted">Run #{consolidatedResult.runId}</span>
-                </div>
-              </div>
-            )}
+            <RunsTable
+              runs={runs}
+              isLoading={isLoading}
+              error={error}
+              selectedIds={selectedForCompare}
+              onToggleSelect={toggleSelectForCompare}
+            />
           </div>
-        </div>
-
+        )}
       </div>
     </div>
+  );
+}
+
+export default function AnalysisPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex flex-col flex-1">
+          <TopBar title="Analysis Runs" />
+          <div className="flex flex-1 items-center justify-center p-12">
+            <PageSpinner />
+          </div>
+        </div>
+      }
+    >
+      <AnalysisPageInner />
+    </Suspense>
   );
 }

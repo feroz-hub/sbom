@@ -1,4 +1,5 @@
-import { FolderOpen, FileText, AlertTriangle } from 'lucide-react';
+import Link from 'next/link';
+import { FolderOpen, FileText, AlertTriangle, ArrowUpRight } from 'lucide-react';
 import { SkeletonCard } from '@/components/ui/Spinner';
 import type { DashboardStats } from '@/types';
 
@@ -15,6 +16,8 @@ const cards = [
     icon: FolderOpen,
     accent: 'text-hcl-blue bg-hcl-light',
     border: 'border-l-hcl-blue',
+    href: '/projects',
+    linkLabel: 'Open projects',
   },
   {
     key: 'total_sboms' as const,
@@ -22,6 +25,8 @@ const cards = [
     icon: FileText,
     accent: 'text-hcl-dark bg-hcl-light',
     border: 'border-l-hcl-dark',
+    href: '/sboms',
+    linkLabel: 'Open SBOMs',
   },
   {
     key: 'total_vulnerabilities' as const,
@@ -29,6 +34,8 @@ const cards = [
     icon: AlertTriangle,
     accent: 'text-red-600 bg-red-50 dark:bg-red-950/50 dark:text-red-400',
     border: 'border-l-red-500',
+    href: '/analysis?tab=runs&status=FAIL',
+    linkLabel: 'View runs with findings',
   },
 ];
 
@@ -53,23 +60,29 @@ export function StatsGrid({ stats, isLoading, error }: StatsGridProps) {
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-      {cards.map(({ key, label, icon: Icon, accent, border }) => (
-        <div
+      {cards.map(({ key, label, icon: Icon, accent, border, href, linkLabel }) => (
+        <Link
           key={key}
-          className={`rounded-xl border border-border bg-surface shadow-card border-l-4 ${border} px-6 py-5`}
+          href={href}
+          aria-label={`${label}: ${stats?.[key]?.toLocaleString() ?? '—'}. ${linkLabel}`}
+          className={`group rounded-xl border border-border bg-surface shadow-card border-l-4 ${border} px-6 py-5 transition-shadow hover:shadow-card-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/40`}
         >
-          <div className="flex items-start justify-between">
-            <div>
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
               <p className="text-sm font-medium text-hcl-muted">{label}</p>
               <p className="mt-1 text-3xl font-bold text-hcl-navy">
                 {stats?.[key]?.toLocaleString() ?? '—'}
               </p>
+              <span className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                {linkLabel}
+                <ArrowUpRight className="h-3 w-3" aria-hidden />
+              </span>
             </div>
-            <div className={`p-2.5 rounded-lg ${accent}`}>
-              <Icon className="h-5 w-5" />
+            <div className={`shrink-0 p-2.5 rounded-lg ${accent}`}>
+              <Icon className="h-5 w-5" aria-hidden />
             </div>
           </div>
-        </div>
+        </Link>
       ))}
     </div>
   );

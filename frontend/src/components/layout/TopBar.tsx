@@ -84,7 +84,7 @@ export function TopBar({ title, action, subtitle, breadcrumbs }: TopBarProps) {
               </ol>
             </nav>
           )}
-          <h1 className="truncate text-lg font-semibold tracking-tight text-hcl-navy md:text-xl">
+          <h1 className="truncate text-lg font-semibold tracking-display text-hcl-navy md:text-display-sm">
             {title}
           </h1>
           {subtitle && (

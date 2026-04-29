@@ -54,7 +54,18 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans: ['var(--font-sans)', 'Inter', 'system-ui', 'sans-serif'],
+        sans: ['var(--font-sans)', 'IBM Plex Sans', 'system-ui', 'sans-serif'],
+        mono: ['var(--font-mono)', 'IBM Plex Mono', 'ui-monospace', 'monospace'],
+        display: ['var(--font-sans)', 'IBM Plex Sans', 'system-ui', 'sans-serif'],
+      },
+      letterSpacing: {
+        tight: '-0.025em',
+        display: '-0.03em',
+      },
+      fontSize: {
+        'display-sm': ['1.125rem', { lineHeight: '1.4', letterSpacing: '-0.02em' }],
+        display: ['1.5rem', { lineHeight: '1.25', letterSpacing: '-0.03em' }],
+        'display-lg': ['1.875rem', { lineHeight: '1.2', letterSpacing: '-0.035em' }],
       },
       boxShadow: {
         card: 'var(--shadow-card)',

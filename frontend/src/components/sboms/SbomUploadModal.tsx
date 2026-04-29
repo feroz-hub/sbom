@@ -10,8 +10,9 @@ import { Dialog, DialogBody, DialogFooter } from '@/components/ui/Dialog';
 import { Input, Textarea } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
-import { createSbom, getProjects, getSbomTypes, getSboms, HttpError } from '@/lib/api';
+import { createSbom, getProjects, getSbomTypes, HttpError } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
+import { useSbomsList } from '@/hooks/useSbomsList';
 import type { SBOMSource } from '@/types';
 
 const schema = z.object({
@@ -69,11 +70,7 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
     enabled: open,
   });
 
-  const { data: existingSboms } = useQuery({
-    queryKey: ['sboms', { page: 1, pageSize: 500 }],
-    queryFn: ({ signal }) => getSboms(1, 500, signal),
-    enabled: open,
-  });
+  const { data: existingSboms } = useSbomsList({ enabled: open });
 
   const { data: sbomTypes } = useQuery({
     queryKey: ['sbom-types'],
