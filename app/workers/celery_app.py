@@ -1,7 +1,6 @@
 """Celery application — broker/backend from settings (Redis).
 
 Tasks live in:
-  * ``app.workers.tasks``      — SBOM analysis (run_sbom_analysis)
   * ``app.nvd_mirror.tasks``   — NVD mirror (mirror_nvd)
 
 Beat schedule:
@@ -27,7 +26,7 @@ celery_app = Celery(
     "sbom_analyzer",
     broker=_broker_url(),
     backend=_broker_url(),
-    include=["app.workers.tasks", "app.nvd_mirror.tasks"],
+    include=["app.nvd_mirror.tasks"],
 )
 
 celery_app.conf.update(
