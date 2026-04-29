@@ -1098,7 +1098,14 @@ async def github_query_by_components(
     # from request handlers under concurrency.
     token = settings.gh_token_override or os.getenv(settings.gh_token_env)
     if not token or not token.strip():
-        return [], [{"source": "GITHUB", "error": f"Missing token env: {settings.gh_token_env}"}], []
+        msg = (
+            f"GitHub token not configured. Set {settings.gh_token_env} in .env "
+            f"(or as an environment variable) and restart the server. "
+            f"GitHub Security Advisories are best-effort — drop GITHUB from "
+            f"ANALYSIS_SOURCES if you don't have a token."
+        )
+        LOGGER.warning("GitHub: %s", msg)
+        return [], [{"source": "GITHUB", "error": msg}], []
 
     headers = {"Authorization": f"bearer {token.strip()}", "User-Agent": settings.http_user_agent}
     url = settings.gh_graphql_url
@@ -1167,7 +1174,16 @@ async def github_query_by_components(
                         timeout=settings.nvd_request_timeout_seconds,
                     )
                     if "errors" in data:
-                        query_errors.append({"source": "GITHUB", "package": f"{eco}/{pkg}", "error": data["errors"]})
+                        err_text = "; ".join(
+                            (e.get("message") or str(e)) for e in (data["errors"] or [])
+                        ) or str(data["errors"])
+                        LOGGER.warning(
+                            "GitHub GraphQL returned errors — package=%s/%s: %s",
+                            eco, pkg, err_text,
+                        )
+                        query_errors.append(
+                            {"source": "GITHUB", "package": f"{eco}/{pkg}", "error": err_text}
+                        )
                         return
                     sv = (data.get("data") or {}).get("securityVulnerabilities") or {}
                     nodes = sv.get("nodes") or []
@@ -1215,7 +1231,13 @@ async def github_query_by_components(
                     if not cursor:
                         break
             except Exception as exc:
-                query_errors.append({"source": "GITHUB", "package": f"{eco}/{pkg}", "error": str(exc)})
+                LOGGER.warning(
+                    "GitHub query failed — package=%s/%s error=%s: %s",
+                    eco, pkg, type(exc).__name__, exc,
+                )
+                query_errors.append(
+                    {"source": "GITHUB", "package": f"{eco}/{pkg}", "error": f"{type(exc).__name__}: {exc}"}
+                )
                 return
 
     await asyncio.gather(*[_run_one(eco, pkg) for eco, pkg in pkg_set])

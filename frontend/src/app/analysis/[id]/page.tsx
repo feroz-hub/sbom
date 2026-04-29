@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Download } from 'lucide-react';
@@ -17,12 +17,11 @@ import { formatDate, formatDuration, downloadBlob } from '@/lib/utils';
 import { useToast } from '@/hooks/useToast';
 
 interface AnalysisDetailPageProps {
-  params: Promise<{ id: string }>;
+  params: { id: string };
 }
 
 export default function AnalysisDetailPage({ params }: AnalysisDetailPageProps) {
-  const { id: idParam } = use(params);
-  const id = Number(idParam);
+  const id = Number(params.id);
   const router = useRouter();
   const { showToast } = useToast();
   const [severityFilter, setSeverityFilter] = useState('');

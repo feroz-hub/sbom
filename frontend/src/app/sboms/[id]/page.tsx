@@ -1,6 +1,5 @@
 'use client';
 
-import { use } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { TopBar } from '@/components/layout/TopBar';
 import { Alert } from '@/components/ui/Alert';
@@ -9,12 +8,11 @@ import { SbomDetail } from '@/components/sboms/SbomDetail';
 import { getSbom } from '@/lib/api';
 
 interface SbomDetailPageProps {
-  params: Promise<{ id: string }>;
+  params: { id: string };
 }
 
 export default function SbomDetailPage({ params }: SbomDetailPageProps) {
-  const { id: idParam } = use(params);
-  const id = Number(idParam);
+  const id = Number(params.id);
 
   const { data: sbom, isLoading, error } = useQuery({
     queryKey: ['sbom', id],
