@@ -3,17 +3,24 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useEffect, useMemo } from 'react';
 import { Play, ArrowLeft, ExternalLink } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { StatusBadge } from '@/components/ui/Badge';
-import { Table, TableHead, TableBody, Th, Td, EmptyRow } from '@/components/ui/Table';
+import { Table, TableHead, TableBody, Th, SortableTh, Td, EmptyRow } from '@/components/ui/Table';
 import { SkeletonRow } from '@/components/ui/Spinner';
+import { Pagination } from '@/components/ui/Pagination';
 import { AnalysisProgress } from '@/components/analysis/AnalysisProgress';
 import { getSbomComponents, getRuns, getSbomInfo, getSbomRiskSummary } from '@/lib/api';
 import { useAnalysisStream } from '@/hooks/useAnalysisStream';
+import { useTableSort } from '@/hooks/useTableSort';
+import { usePagination } from '@/hooks/usePagination';
 import { formatDate, formatDuration } from '@/lib/utils';
-import type { SBOMSource } from '@/types';
+import type { SBOMSource, SBOMComponent, AnalysisRun } from '@/types';
+
+type ComponentSortKey = 'name' | 'version' | 'component_type' | 'cpe' | 'purl';
+type RunSortKey = 'id' | 'run_status' | 'total_findings' | 'duration_ms' | 'started_on';
 
 interface SbomDetailProps {
   sbom: SBOMSource;
@@ -52,6 +59,67 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
     enabled: !!runs && runs.length > 0,
     retry: false,
   });
+
+  // Components table: in-memory sort + paginate over the fetched list.
+  const componentRows = useMemo<SBOMComponent[]>(() => components ?? [], [components]);
+  const componentSortAccessors = useMemo(
+    () => ({
+      name: (c: SBOMComponent) => (c.name ?? '').toLowerCase(),
+      version: (c: SBOMComponent) => c.version ?? '',
+      component_type: (c: SBOMComponent) => (c.component_type ?? '').toLowerCase(),
+      cpe: (c: SBOMComponent) => (c.cpe ?? '').toLowerCase(),
+      purl: (c: SBOMComponent) => (c.purl ?? '').toLowerCase(),
+    }),
+    [],
+  );
+  const {
+    sort: compSort,
+    sortedRows: sortedComponents,
+    toggle: toggleCompSort,
+  } = useTableSort<SBOMComponent, ComponentSortKey>(componentRows, componentSortAccessors, {
+    initialKey: 'name',
+    initialDirection: 'asc',
+  });
+  const compPagination = usePagination<SBOMComponent>(sortedComponents, {
+    defaultPageSize: 25,
+    storageKey: 'sbom-components',
+  });
+
+  // Analysis runs (per-SBOM): same pattern.
+  const runRows = useMemo<AnalysisRun[]>(() => runs ?? [], [runs]);
+  const runSortAccessors = useMemo(
+    () => ({
+      id: (r: AnalysisRun) => r.id,
+      run_status: (r: AnalysisRun) => r.run_status ?? '',
+      total_findings: (r: AnalysisRun) => r.total_findings ?? -1,
+      duration_ms: (r: AnalysisRun) => r.duration_ms ?? -1,
+      started_on: (r: AnalysisRun) => r.started_on ?? '',
+    }),
+    [],
+  );
+  const {
+    sort: runSort,
+    sortedRows: sortedRuns,
+    toggle: toggleRunSort,
+  } = useTableSort<AnalysisRun, RunSortKey>(runRows, runSortAccessors, {
+    initialKey: 'id',
+    initialDirection: 'desc',
+  });
+  const runPagination = usePagination<AnalysisRun>(sortedRuns, {
+    defaultPageSize: 10,
+    storageKey: 'sbom-detail-runs',
+  });
+
+  // When the underlying lists change (new analysis lands, components refetched
+  // post-cleanup), reset to the first page so the new top-most row is visible.
+  useEffect(() => {
+    compPagination.resetPage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [components?.length]);
+  useEffect(() => {
+    runPagination.resetPage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runs?.length]);
 
   const handleRunAnalysis = () => {
     startAnalysis({ sources: ['NVD', 'OSV', 'GITHUB', 'VULNDB'] });
@@ -177,10 +245,54 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                     ? 'bg-amber-50 text-amber-700 border-amber-200'
                     : 'bg-emerald-50 text-emerald-700 border-emerald-200'
                 }`}
+                title={
+                  risk.methodology
+                    ? `${risk.methodology.name} v${risk.methodology.version}\n` +
+                      `Formula: ${risk.methodology.formula}\n` +
+                      `Aggregation: ${risk.methodology.aggregation}\n` +
+                      `Sources: CVSS, EPSS (FIRST.org), KEV (CISA)`
+                    : undefined
+                }
               >
                 {risk.risk_band} · score {risk.total_risk_score.toFixed(1)}
               </span>
+              {risk.methodology && (
+                <span className="ml-2 text-xs font-normal text-hcl-muted">
+                  · {risk.methodology.name} v{risk.methodology.version}
+                </span>
+              )}
             </CardTitle>
+            {(risk.kev_count !== undefined || risk.epss_avg !== undefined || risk.worst_finding) && (
+              <div className="mt-2 flex flex-wrap gap-3 text-xs text-hcl-muted">
+                {risk.kev_count !== undefined && (
+                  <span className={risk.kev_count > 0 ? 'text-red-700 font-medium' : ''}>
+                    KEV findings: <span className="font-mono">{risk.kev_count}</span>
+                  </span>
+                )}
+                {risk.epss_avg !== undefined && (
+                  <span>
+                    Avg EPSS: <span className="font-mono">{(risk.epss_avg * 100).toFixed(2)}%</span>
+                  </span>
+                )}
+                {risk.worst_finding && (
+                  <span>
+                    Worst CVE:{' '}
+                    <span className="font-mono">{risk.worst_finding.vuln_id}</span>{' '}
+                    on{' '}
+                    <span className="font-medium text-hcl-navy">
+                      {risk.worst_finding.component_name}
+                    </span>
+                    {' '}(score {risk.worst_finding.score.toFixed(1)}
+                    {risk.worst_finding.in_kev && (
+                      <span className="ml-1 inline-flex items-center px-1.5 py-0 rounded text-[10px] font-bold bg-red-100 text-red-700 border border-red-200">
+                        KEV
+                      </span>
+                    )}
+                    )
+                  </span>
+                )}
+              </div>
+            )}
           </CardHeader>
           <div className="overflow-hidden">
             <Table striped>
@@ -191,12 +303,13 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                   <Th>High</Th>
                   <Th>Medium</Th>
                   <Th>Low</Th>
+                  <Th title="Findings on the CISA Known Exploited Vulnerabilities catalog">KEV</Th>
                   <Th className="text-right">Score</Th>
                 </tr>
               </TableHead>
               <TableBody>
                 {risk.components.length === 0 ? (
-                  <EmptyRow cols={6} message="No vulnerable components." />
+                  <EmptyRow cols={7} message="No vulnerable components." />
                 ) : (
                   risk.components.slice(0, 10).map((c) => (
                     <tr key={`${c.name}@${c.version}`} className="hover:bg-hcl-light/40">
@@ -208,6 +321,15 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                       <Td className="text-orange-700">{c.high}</Td>
                       <Td className="text-amber-700">{c.medium}</Td>
                       <Td className="text-hcl-blue">{c.low}</Td>
+                      <Td
+                        className={
+                          c.kev_count && c.kev_count > 0
+                            ? 'text-red-700 font-semibold'
+                            : 'text-hcl-muted'
+                        }
+                      >
+                        {c.kev_count ?? 0}
+                      </Td>
                       <Td className="text-right font-mono text-xs text-hcl-navy">
                         {c.component_score.toFixed(1)}
                       </Td>
@@ -217,6 +339,14 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
               </TableBody>
             </Table>
           </div>
+          {risk.methodology && (
+            <div className="px-4 py-2 text-xs text-hcl-muted border-t border-hcl-border bg-hcl-light/30">
+              <span className="font-medium">How is this calculated?</span>{' '}
+              <span className="font-mono">{risk.methodology.formula}</span>
+              {' · '}
+              Sources: CVSS (per-finding), EPSS (FIRST.org, exploit-likelihood), KEV (CISA, known-exploited).
+            </div>
+          )}
         </Card>
       )}
 
@@ -245,11 +375,46 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
           <Table striped>
             <TableHead>
               <tr>
-                <Th>Name</Th>
-                <Th>Version</Th>
-                <Th>Type</Th>
-                <Th>CPE</Th>
-                <Th>PURL</Th>
+                <SortableTh
+                  sortKey="name"
+                  activeKey={compSort.key}
+                  direction={compSort.direction}
+                  onToggle={(k) => toggleCompSort(k as ComponentSortKey)}
+                >
+                  Name
+                </SortableTh>
+                <SortableTh
+                  sortKey="version"
+                  activeKey={compSort.key}
+                  direction={compSort.direction}
+                  onToggle={(k) => toggleCompSort(k as ComponentSortKey)}
+                >
+                  Version
+                </SortableTh>
+                <SortableTh
+                  sortKey="component_type"
+                  activeKey={compSort.key}
+                  direction={compSort.direction}
+                  onToggle={(k) => toggleCompSort(k as ComponentSortKey)}
+                >
+                  Type
+                </SortableTh>
+                <SortableTh
+                  sortKey="cpe"
+                  activeKey={compSort.key}
+                  direction={compSort.direction}
+                  onToggle={(k) => toggleCompSort(k as ComponentSortKey)}
+                >
+                  CPE
+                </SortableTh>
+                <SortableTh
+                  sortKey="purl"
+                  activeKey={compSort.key}
+                  direction={compSort.direction}
+                  onToggle={(k) => toggleCompSort(k as ComponentSortKey)}
+                >
+                  PURL
+                </SortableTh>
               </tr>
             </TableHead>
             <TableBody>
@@ -258,7 +423,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
               ) : !components?.length ? (
                 <EmptyRow cols={5} message="No components found for this SBOM" />
               ) : (
-                components.map((c) => (
+                compPagination.pageItems.map((c) => (
                   <tr key={c.id} className="hover:bg-hcl-light/40">
                     <Td className="font-medium text-hcl-navy">{c.name}</Td>
                     <Td className="font-mono text-xs">{c.version || '—'}</Td>
@@ -274,6 +439,22 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
               )}
             </TableBody>
           </Table>
+
+          {!compLoading && componentRows.length > 0 ? (
+            <Pagination
+              page={compPagination.page}
+              pageSize={compPagination.pageSize}
+              total={compPagination.total}
+              totalPages={compPagination.totalPages}
+              rangeStart={compPagination.rangeStart}
+              rangeEnd={compPagination.rangeEnd}
+              hasPrev={compPagination.hasPrev}
+              hasNext={compPagination.hasNext}
+              onPageChange={compPagination.setPage}
+              onPageSizeChange={compPagination.setPageSize}
+              itemNoun="component"
+            />
+          ) : null}
         </div>
       </Card>
 
@@ -286,11 +467,46 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
           <Table striped>
             <TableHead>
               <tr>
-                <Th>Run ID</Th>
-                <Th>Status</Th>
-                <Th>Findings</Th>
-                <Th>Duration</Th>
-                <Th>Started On</Th>
+                <SortableTh
+                  sortKey="id"
+                  activeKey={runSort.key}
+                  direction={runSort.direction}
+                  onToggle={(k) => toggleRunSort(k as RunSortKey)}
+                >
+                  Run ID
+                </SortableTh>
+                <SortableTh
+                  sortKey="run_status"
+                  activeKey={runSort.key}
+                  direction={runSort.direction}
+                  onToggle={(k) => toggleRunSort(k as RunSortKey)}
+                >
+                  Status
+                </SortableTh>
+                <SortableTh
+                  sortKey="total_findings"
+                  activeKey={runSort.key}
+                  direction={runSort.direction}
+                  onToggle={(k) => toggleRunSort(k as RunSortKey)}
+                >
+                  Findings
+                </SortableTh>
+                <SortableTh
+                  sortKey="duration_ms"
+                  activeKey={runSort.key}
+                  direction={runSort.direction}
+                  onToggle={(k) => toggleRunSort(k as RunSortKey)}
+                >
+                  Duration
+                </SortableTh>
+                <SortableTh
+                  sortKey="started_on"
+                  activeKey={runSort.key}
+                  direction={runSort.direction}
+                  onToggle={(k) => toggleRunSort(k as RunSortKey)}
+                >
+                  Started On
+                </SortableTh>
                 <Th className="text-right">Actions</Th>
               </tr>
             </TableHead>
@@ -300,7 +516,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
               ) : !runs?.length ? (
                 <EmptyRow cols={6} message="No analysis runs yet. Click 'Run Analysis' to get started." />
               ) : (
-                runs.map((run) => (
+                runPagination.pageItems.map((run) => (
                   <tr key={run.id} className="hover:bg-hcl-light/40">
                     <Td className="font-mono text-xs text-hcl-muted">#{run.id}</Td>
                     <Td>
@@ -322,6 +538,23 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
               )}
             </TableBody>
           </Table>
+
+          {!runsLoading && runRows.length > 0 ? (
+            <Pagination
+              page={runPagination.page}
+              pageSize={runPagination.pageSize}
+              total={runPagination.total}
+              totalPages={runPagination.totalPages}
+              rangeStart={runPagination.rangeStart}
+              rangeEnd={runPagination.rangeEnd}
+              hasPrev={runPagination.hasPrev}
+              hasNext={runPagination.hasNext}
+              onPageChange={runPagination.setPage}
+              onPageSizeChange={runPagination.setPageSize}
+              itemNoun="run"
+              pageSizeOptions={[5, 10, 25, 50]}
+            />
+          ) : null}
         </div>
       </Card>
     </div>

@@ -1,20 +1,33 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Eye, Download } from 'lucide-react';
 import { Alert } from '@/components/ui/Alert';
 import { Select } from '@/components/ui/Select';
-import { Table, TableHead, TableBody, Th, Td, EmptyRow } from '@/components/ui/Table';
+import { Table, TableHead, TableBody, Th, SortableTh, Td, EmptyRow } from '@/components/ui/Table';
 import { TableFilterBar, TableSearchInput } from '@/components/ui/TableFilterBar';
 import { StatusBadge } from '@/components/ui/Badge';
 import { SkeletonRow } from '@/components/ui/Spinner';
+import { Pagination } from '@/components/ui/Pagination';
 import { downloadPdfReport } from '@/lib/api';
 import { runStatusShortLabel } from '@/lib/analysisRunStatusLabels';
 import { matchesMultiField } from '@/lib/tableFilters';
 import { formatDate, formatDuration, downloadBlob } from '@/lib/utils';
 import { useToast } from '@/hooks/useToast';
+import { useTableSort } from '@/hooks/useTableSort';
+import { usePagination } from '@/hooks/usePagination';
 import type { AnalysisRun } from '@/types';
+
+type RunSortKey =
+  | 'id'
+  | 'sbom_name'
+  | 'run_status'
+  | 'total_components'
+  | 'total_findings'
+  | 'query_error_count'
+  | 'duration_ms'
+  | 'completed_on';
 
 interface RunsTableProps {
   runs: AnalysisRun[] | undefined;
@@ -108,6 +121,36 @@ export function RunsTable({ runs, isLoading, error, selectedIds, onToggleSelect 
     setSourceFilter('');
   };
 
+  const sortAccessors = useMemo(
+    () => ({
+      id: (r: AnalysisRun) => r.id,
+      sbom_name: (r: AnalysisRun) => (r.sbom_name ?? '').toLowerCase(),
+      run_status: (r: AnalysisRun) => r.run_status ?? '',
+      total_components: (r: AnalysisRun) => r.total_components ?? -1,
+      total_findings: (r: AnalysisRun) => r.total_findings ?? -1,
+      query_error_count: (r: AnalysisRun) => r.query_error_count ?? -1,
+      duration_ms: (r: AnalysisRun) => r.duration_ms ?? -1,
+      completed_on: (r: AnalysisRun) => r.completed_on ?? '',
+    }),
+    [],
+  );
+
+  const { sort, sortedRows, toggle: toggleSort } = useTableSort<AnalysisRun, RunSortKey>(
+    filteredRuns,
+    sortAccessors,
+    { initialKey: 'id', initialDirection: 'desc' },
+  );
+
+  const pagination = usePagination<AnalysisRun>(sortedRows, {
+    defaultPageSize: 25,
+    storageKey: 'runs',
+  });
+
+  useEffect(() => {
+    pagination.resetPage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, statusFilter, sourceFilter]);
+
   if (error) {
     return (
       <Alert variant="error" title="Could not load analysis runs">
@@ -176,16 +219,72 @@ export function RunsTable({ runs, isLoading, error, selectedIds, onToggleSelect 
                 <span className="sr-only">Select</span>
               </Th>
             )}
-            <Th>Run ID</Th>
-            <Th>SBOM</Th>
-            <Th>Status</Th>
+            <SortableTh
+              sortKey="id"
+              activeKey={sort.key}
+              direction={sort.direction}
+              onToggle={(k) => toggleSort(k as RunSortKey)}
+            >
+              Run ID
+            </SortableTh>
+            <SortableTh
+              sortKey="sbom_name"
+              activeKey={sort.key}
+              direction={sort.direction}
+              onToggle={(k) => toggleSort(k as RunSortKey)}
+            >
+              SBOM
+            </SortableTh>
+            <SortableTh
+              sortKey="run_status"
+              activeKey={sort.key}
+              direction={sort.direction}
+              onToggle={(k) => toggleSort(k as RunSortKey)}
+            >
+              Status
+            </SortableTh>
             <Th>Source</Th>
-            <Th>Components</Th>
+            <SortableTh
+              sortKey="total_components"
+              activeKey={sort.key}
+              direction={sort.direction}
+              onToggle={(k) => toggleSort(k as RunSortKey)}
+            >
+              Components
+            </SortableTh>
             <Th>With CPE</Th>
-            <Th>Findings</Th>
-            <Th>Errors</Th>
-            <Th>Duration</Th>
-            <Th>Completed On</Th>
+            <SortableTh
+              sortKey="total_findings"
+              activeKey={sort.key}
+              direction={sort.direction}
+              onToggle={(k) => toggleSort(k as RunSortKey)}
+            >
+              Findings
+            </SortableTh>
+            <SortableTh
+              sortKey="query_error_count"
+              activeKey={sort.key}
+              direction={sort.direction}
+              onToggle={(k) => toggleSort(k as RunSortKey)}
+            >
+              Errors
+            </SortableTh>
+            <SortableTh
+              sortKey="duration_ms"
+              activeKey={sort.key}
+              direction={sort.direction}
+              onToggle={(k) => toggleSort(k as RunSortKey)}
+            >
+              Duration
+            </SortableTh>
+            <SortableTh
+              sortKey="completed_on"
+              activeKey={sort.key}
+              direction={sort.direction}
+              onToggle={(k) => toggleSort(k as RunSortKey)}
+            >
+              Completed On
+            </SortableTh>
             <Th className="text-right">Actions</Th>
           </tr>
         </TableHead>
@@ -203,7 +302,7 @@ export function RunsTable({ runs, isLoading, error, selectedIds, onToggleSelect 
               message="No runs match your filters. Try adjusting search or clear filters."
             />
           ) : (
-            filteredRuns.map((run) => (
+            pagination.pageItems.map((run) => (
               <tr
                 key={run.id}
                 className="cursor-pointer transition-colors hover:bg-hcl-light/40"
@@ -293,6 +392,22 @@ export function RunsTable({ runs, isLoading, error, selectedIds, onToggleSelect 
           )}
         </TableBody>
       </Table>
+
+      {!isLoading && filteredRuns.length > 0 ? (
+        <Pagination
+          page={pagination.page}
+          pageSize={pagination.pageSize}
+          total={pagination.total}
+          totalPages={pagination.totalPages}
+          rangeStart={pagination.rangeStart}
+          rangeEnd={pagination.rangeEnd}
+          hasPrev={pagination.hasPrev}
+          hasNext={pagination.hasNext}
+          onPageChange={pagination.setPage}
+          onPageSizeChange={pagination.setPageSize}
+          itemNoun="run"
+        />
+      ) : null}
     </div>
   );
 }

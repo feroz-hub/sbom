@@ -132,6 +132,7 @@ def _upsert_components(db: Session, sbom_obj: SBOMSource, components: list[dict]
     existing_rows = db.execute(select(SBOMComponent).where(SBOMComponent.sbom_id == sbom_obj.id)).scalars().all()
 
     by_comp_triplet: dict = {}
+    by_name_version: dict = {}
     by_cpe: dict = {}
 
     # Build lookup maps from existing components
@@ -142,6 +143,8 @@ def _upsert_components(db: Session, sbom_obj: SBOMSource, components: list[dict]
             normalized_key(row.version),
         )
         by_comp_triplet.setdefault(triplet, row)
+        nv = (normalized_key(row.name), normalized_key(row.version))
+        by_name_version.setdefault(nv, []).append(row)
         if row.cpe:
             by_cpe.setdefault(normalized_key(row.cpe), []).append(row)
 
@@ -158,6 +161,31 @@ def _upsert_components(db: Session, sbom_obj: SBOMSource, components: list[dict]
 
         if triplet in by_comp_triplet:
             continue
+
+        # Backfill case: an existing row has the same (name, version) but
+        # no CPE, and the incoming component now provides one (e.g. CPE
+        # generated from PURL by `_augment_components_with_cpe` at analyze
+        # time after the row was first stored at create time without CPE).
+        # Update the existing row in place instead of inserting a logical
+        # duplicate that would inflate `Components (N)` counts and split
+        # findings across two rows for the same component.
+        if cpe:
+            nv_key = (normalized_key(name), normalized_key(version))
+            backfill_target = next(
+                (r for r in by_name_version.get(nv_key, []) if not (r.cpe or "").strip()),
+                None,
+            )
+            if backfill_target is not None:
+                backfill_target.cpe = cpe
+                db.add(backfill_target)
+                db.flush()
+                # Maintain lookup maps so subsequent components in the
+                # same call see the freshly-augmented row.
+                empty_triplet = (normalized_key(None), normalized_key(name), normalized_key(version))
+                by_comp_triplet.pop(empty_triplet, None)
+                by_comp_triplet[triplet] = backfill_target
+                by_cpe.setdefault(normalized_key(cpe), []).append(backfill_target)
+                continue
 
         row = SBOMComponent(
             sbom_id=sbom_obj.id,
@@ -176,6 +204,8 @@ def _upsert_components(db: Session, sbom_obj: SBOMSource, components: list[dict]
         db.flush()
 
         by_comp_triplet[triplet] = row
+        nv_key = (normalized_key(name), normalized_key(version))
+        by_name_version.setdefault(nv_key, []).append(row)
         if cpe:
             by_cpe.setdefault(normalized_key(cpe), []).append(row)
 

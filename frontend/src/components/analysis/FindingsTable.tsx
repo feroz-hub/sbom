@@ -1,16 +1,37 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ExternalLink } from 'lucide-react';
 import { Alert } from '@/components/ui/Alert';
-import { Table, TableHead, TableBody, Th, Td, EmptyRow } from '@/components/ui/Table';
+import { Table, TableHead, TableBody, Th, SortableTh, Td, EmptyRow } from '@/components/ui/Table';
 import { TableFilterBar, TableSearchInput } from '@/components/ui/TableFilterBar';
 import { SeverityBadge } from '@/components/ui/Badge';
 import { Select } from '@/components/ui/Select';
 import { SkeletonRow } from '@/components/ui/Spinner';
+import { Pagination } from '@/components/ui/Pagination';
 import { matchesMultiField } from '@/lib/tableFilters';
 import { formatDateShort, truncate } from '@/lib/utils';
+import { useTableSort } from '@/hooks/useTableSort';
+import { usePagination } from '@/hooks/usePagination';
 import type { AnalysisFinding } from '@/types';
+
+// Severity order — drives the "Severity" column sort numerically rather than
+// alphabetically (so Critical sorts above High, not below).
+const SEVERITY_RANK: Record<string, number> = {
+  CRITICAL: 5,
+  HIGH: 4,
+  MEDIUM: 3,
+  LOW: 2,
+  UNKNOWN: 1,
+};
+
+type FindingSortKey =
+  | 'vuln_id'
+  | 'severity'
+  | 'score'
+  | 'component_name'
+  | 'component_version'
+  | 'published_on';
 
 interface FindingsTableProps {
   findings: AnalysisFinding[] | undefined;
@@ -132,6 +153,40 @@ export function FindingsTable({
     setSourceFilter('');
   };
 
+  // Sort + paginate the filtered view. Sorting first means pagination
+  // operates on a stable order; resetting page-1 when filters change keeps
+  // the user from staring at an empty page after they narrow results.
+  const sortAccessors = useMemo(
+    () => ({
+      vuln_id: (f: AnalysisFinding) => f.vuln_id ?? '',
+      severity: (f: AnalysisFinding) => SEVERITY_RANK[(f.severity ?? 'UNKNOWN').toUpperCase()] ?? 0,
+      score: (f: AnalysisFinding) => f.score ?? -1,
+      component_name: (f: AnalysisFinding) => (f.component_name ?? '').toLowerCase(),
+      component_version: (f: AnalysisFinding) => f.component_version ?? '',
+      published_on: (f: AnalysisFinding) => f.published_on ?? '',
+    }),
+    [],
+  );
+
+  const { sort, sortedRows, toggle: toggleSort } = useTableSort<AnalysisFinding, FindingSortKey>(
+    filteredFindings,
+    sortAccessors,
+    { initialKey: 'severity', initialDirection: 'desc' },
+  );
+
+  const pagination = usePagination<AnalysisFinding>(sortedRows, {
+    defaultPageSize: 25,
+    storageKey: 'findings',
+  });
+
+  // Reset to page 1 whenever the visible row count contracts because of a
+  // filter change. Without this the user can land on an empty trailing page
+  // after narrowing a search.
+  useEffect(() => {
+    pagination.resetPage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, sourceFilter, severityFilter]);
+
   if (error) {
     return (
       <Alert variant="error" title="Could not load findings">
@@ -199,16 +254,58 @@ export function FindingsTable({
         <Table striped>
           <TableHead>
             <tr>
-              <Th>Vuln ID</Th>
+              <SortableTh
+                sortKey="vuln_id"
+                activeKey={sort.key}
+                direction={sort.direction}
+                onToggle={(k) => toggleSort(k as FindingSortKey)}
+              >
+                Vuln ID
+              </SortableTh>
               <Th>CVE / Alias</Th>
-              <Th>Severity</Th>
-              <Th>Score</Th>
-              <Th>Component</Th>
-              <Th>Version</Th>
+              <SortableTh
+                sortKey="severity"
+                activeKey={sort.key}
+                direction={sort.direction}
+                onToggle={(k) => toggleSort(k as FindingSortKey)}
+              >
+                Severity
+              </SortableTh>
+              <SortableTh
+                sortKey="score"
+                activeKey={sort.key}
+                direction={sort.direction}
+                onToggle={(k) => toggleSort(k as FindingSortKey)}
+              >
+                Score
+              </SortableTh>
+              <SortableTh
+                sortKey="component_name"
+                activeKey={sort.key}
+                direction={sort.direction}
+                onToggle={(k) => toggleSort(k as FindingSortKey)}
+              >
+                Component
+              </SortableTh>
+              <SortableTh
+                sortKey="component_version"
+                activeKey={sort.key}
+                direction={sort.direction}
+                onToggle={(k) => toggleSort(k as FindingSortKey)}
+              >
+                Version
+              </SortableTh>
               <Th>CPE</Th>
               <Th>Source</Th>
               <Th>Title / Description</Th>
-              <Th>Published</Th>
+              <SortableTh
+                sortKey="published_on"
+                activeKey={sort.key}
+                direction={sort.direction}
+                onToggle={(k) => toggleSort(k as FindingSortKey)}
+              >
+                Published
+              </SortableTh>
             </tr>
           </TableHead>
           <TableBody>
@@ -222,7 +319,7 @@ export function FindingsTable({
                 message="No findings match your search or source filter. Clear filters to see all loaded rows."
               />
             ) : (
-              filteredFindings.map((f) => {
+              pagination.pageItems.map((f) => {
                 const cveAlias = extractCveAlias(f.aliases) ?? (f.vuln_id?.startsWith('CVE-') ? f.vuln_id : null);
                 const displayTitle =
                   f.description && f.description !== f.vuln_id
@@ -290,6 +387,22 @@ export function FindingsTable({
             )}
           </TableBody>
         </Table>
+
+        {!isLoading && filteredFindings.length > 0 ? (
+          <Pagination
+            page={pagination.page}
+            pageSize={pagination.pageSize}
+            total={pagination.total}
+            totalPages={pagination.totalPages}
+            rangeStart={pagination.rangeStart}
+            rangeEnd={pagination.rangeEnd}
+            hasPrev={pagination.hasPrev}
+            hasNext={pagination.hasNext}
+            onPageChange={pagination.setPage}
+            onPageSizeChange={pagination.setPageSize}
+            itemNoun="finding"
+          />
+        ) : null}
       </div>
     </div>
   );

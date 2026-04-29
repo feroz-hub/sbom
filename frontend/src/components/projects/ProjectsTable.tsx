@@ -1,21 +1,26 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Pencil, Trash2 } from 'lucide-react';
 import { Alert } from '@/components/ui/Alert';
 import { Select } from '@/components/ui/Select';
-import { Table, TableHead, TableBody, Th, Td, EmptyRow } from '@/components/ui/Table';
+import { Table, TableHead, TableBody, Th, SortableTh, Td, EmptyRow } from '@/components/ui/Table';
 import { TableFilterBar, TableSearchInput } from '@/components/ui/TableFilterBar';
 import { Badge } from '@/components/ui/Badge';
 import { ConfirmDialog } from '@/components/ui/Dialog';
 import { SkeletonRow } from '@/components/ui/Spinner';
+import { Pagination } from '@/components/ui/Pagination';
 import { ProjectModal } from './ProjectModal';
 import { deleteProject } from '@/lib/api';
 import { matchesMultiField } from '@/lib/tableFilters';
 import { formatDate } from '@/lib/utils';
 import { useToast } from '@/hooks/useToast';
+import { useTableSort } from '@/hooks/useTableSort';
+import { usePagination } from '@/hooks/usePagination';
 import type { Project } from '@/types';
+
+type ProjectSortKey = 'id' | 'project_name' | 'project_status' | 'created_by' | 'created_on';
 
 interface ProjectsTableProps {
   projects: Project[] | undefined;
@@ -69,6 +74,33 @@ export function ProjectsTable({ projects, isLoading, error }: ProjectsTableProps
     setStatusFilter('all');
   };
 
+  const sortAccessors = useMemo(
+    () => ({
+      id: (p: Project) => p.id,
+      project_name: (p: Project) => (p.project_name ?? '').toLowerCase(),
+      project_status: (p: Project) => (p.project_status === 1 ? 1 : 0),
+      created_by: (p: Project) => (p.created_by ?? '').toLowerCase(),
+      created_on: (p: Project) => p.created_on ?? '',
+    }),
+    [],
+  );
+
+  const { sort, sortedRows, toggle: toggleSort } = useTableSort<Project, ProjectSortKey>(
+    filteredProjects,
+    sortAccessors,
+    { initialKey: 'id', initialDirection: 'desc' },
+  );
+
+  const pagination = usePagination<Project>(sortedRows, {
+    defaultPageSize: 25,
+    storageKey: 'projects',
+  });
+
+  useEffect(() => {
+    pagination.resetPage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, statusFilter]);
+
   if (error) {
     return (
       <Alert variant="error" title="Could not load projects">
@@ -115,12 +147,47 @@ export function ProjectsTable({ projects, isLoading, error }: ProjectsTableProps
         <Table striped>
           <TableHead>
             <tr>
-              <Th>ID</Th>
-              <Th>Name</Th>
-              <Th>Status</Th>
+              <SortableTh
+                sortKey="id"
+                activeKey={sort.key}
+                direction={sort.direction}
+                onToggle={(k) => toggleSort(k as ProjectSortKey)}
+              >
+                ID
+              </SortableTh>
+              <SortableTh
+                sortKey="project_name"
+                activeKey={sort.key}
+                direction={sort.direction}
+                onToggle={(k) => toggleSort(k as ProjectSortKey)}
+              >
+                Name
+              </SortableTh>
+              <SortableTh
+                sortKey="project_status"
+                activeKey={sort.key}
+                direction={sort.direction}
+                onToggle={(k) => toggleSort(k as ProjectSortKey)}
+              >
+                Status
+              </SortableTh>
               <Th>Details</Th>
-              <Th>Created By</Th>
-              <Th>Created On</Th>
+              <SortableTh
+                sortKey="created_by"
+                activeKey={sort.key}
+                direction={sort.direction}
+                onToggle={(k) => toggleSort(k as ProjectSortKey)}
+              >
+                Created By
+              </SortableTh>
+              <SortableTh
+                sortKey="created_on"
+                activeKey={sort.key}
+                direction={sort.direction}
+                onToggle={(k) => toggleSort(k as ProjectSortKey)}
+              >
+                Created On
+              </SortableTh>
               <Th className="text-right">Actions</Th>
             </tr>
           </TableHead>
@@ -135,7 +202,7 @@ export function ProjectsTable({ projects, isLoading, error }: ProjectsTableProps
                 message="No projects match your filters. Try adjusting search or clear filters."
               />
             ) : (
-              filteredProjects.map((project) => (
+              pagination.pageItems.map((project) => (
                 <tr key={project.id} className="transition-colors hover:bg-hcl-light/40">
                   <Td className="font-mono text-xs text-hcl-muted">#{project.id}</Td>
                   <Td className="font-medium text-hcl-navy">{project.project_name}</Td>
@@ -172,6 +239,22 @@ export function ProjectsTable({ projects, isLoading, error }: ProjectsTableProps
             )}
           </TableBody>
         </Table>
+
+        {!isLoading && filteredProjects.length > 0 ? (
+          <Pagination
+            page={pagination.page}
+            pageSize={pagination.pageSize}
+            total={pagination.total}
+            totalPages={pagination.totalPages}
+            rangeStart={pagination.rangeStart}
+            rangeEnd={pagination.rangeEnd}
+            hasPrev={pagination.hasPrev}
+            hasNext={pagination.hasNext}
+            onPageChange={pagination.setPage}
+            onPageSizeChange={pagination.setPageSize}
+            itemNoun="project"
+          />
+        ) : null}
       </div>
 
       {editProject && (

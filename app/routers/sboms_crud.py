@@ -103,6 +103,7 @@ def upsert_components(db: Session, sbom_obj: SBOMSource, components: list[dict])
     existing_rows = db.execute(select(SBOMComponent).where(SBOMComponent.sbom_id == sbom_obj.id)).scalars().all()
 
     by_comp_triplet = {}
+    by_name_version: dict = {}
     by_cpe = {}
 
     for row in existing_rows:
@@ -112,6 +113,8 @@ def upsert_components(db: Session, sbom_obj: SBOMSource, components: list[dict])
             normalized_key(row.version),
         )
         by_comp_triplet.setdefault(triplet, row)
+        nv = (normalized_key(row.name), normalized_key(row.version))
+        by_name_version.setdefault(nv, []).append(row)
         if row.cpe:
             by_cpe.setdefault(normalized_key(row.cpe), []).append(row)
 
@@ -127,6 +130,27 @@ def upsert_components(db: Session, sbom_obj: SBOMSource, components: list[dict])
 
         if triplet in by_comp_triplet:
             continue
+
+        # Backfill: existing row with same (name, version) and no CPE is
+        # the same logical component now augmented with a derived CPE.
+        # Update in place instead of inserting a duplicate. (See
+        # services/sbom_service._upsert_components for the canonical
+        # version of this logic — both copies fix the same bug.)
+        if cpe:
+            nv_key = (normalized_key(name), normalized_key(version))
+            backfill_target = next(
+                (r for r in by_name_version.get(nv_key, []) if not (r.cpe or "").strip()),
+                None,
+            )
+            if backfill_target is not None:
+                backfill_target.cpe = cpe
+                db.add(backfill_target)
+                db.flush()
+                empty_triplet = (normalized_key(None), normalized_key(name), normalized_key(version))
+                by_comp_triplet.pop(empty_triplet, None)
+                by_comp_triplet[triplet] = backfill_target
+                by_cpe.setdefault(normalized_key(cpe), []).append(backfill_target)
+                continue
 
         row = SBOMComponent(
             sbom_id=sbom_obj.id,
@@ -145,6 +169,8 @@ def upsert_components(db: Session, sbom_obj: SBOMSource, components: list[dict])
         db.flush()
 
         by_comp_triplet[triplet] = row
+        nv_key = (normalized_key(name), normalized_key(version))
+        by_name_version.setdefault(nv_key, []).append(row)
         if cpe:
             by_cpe.setdefault(normalized_key(cpe), []).append(row)
 

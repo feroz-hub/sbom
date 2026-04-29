@@ -180,15 +180,44 @@ export interface RiskComponent {
   high: number;
   medium: number;
   low: number;
+  // v2 scorer additions — present from /risk-summary v2 onward
+  kev_count?: number;
+  worst_finding_score?: number;
   component_score: number;
   highest_severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'UNKNOWN';
 }
 
+export interface RiskWorstFinding {
+  vuln_id: string | null;
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'UNKNOWN';
+  cvss: number;
+  epss: number;
+  in_kev: boolean;
+  score: number;
+  component_name: string;
+  component_version: string;
+}
+
+export interface RiskMethodology {
+  version: string;
+  name: string;
+  formula: string;
+  aggregation: string;
+  bands: Record<string, string>;
+  sources: Record<string, string>;
+}
+
 export interface SBOMRiskSummary {
   sbom_id: number;
+  run_id?: number;
   total_risk_score: number;
   risk_band: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
   components: RiskComponent[];
+  // v2 scorer additions
+  worst_finding?: RiskWorstFinding | null;
+  kev_count?: number;
+  epss_avg?: number;
+  methodology?: RiskMethodology;
 }
 
 export interface DashboardTrendPoint {

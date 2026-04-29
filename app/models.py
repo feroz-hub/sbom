@@ -197,3 +197,48 @@ class RunCache(Base):
     created_on = Column(String, nullable=True)
     source = Column(String, nullable=True)  # "consolidated"|"nvd"|"osv"|"ghsa"
     sbom_id = Column(Integer, nullable=True)  # for cache invalidation
+
+
+class KevEntry(Base):
+    """
+    Cached row from the CISA Known Exploited Vulnerabilities catalog
+    (https://www.cisa.gov/known-exploited-vulnerabilities-catalog).
+
+    We refresh once per 24h. Presence of a row implies the CVE is on the
+    KEV list — which is the single highest-signal exploitability indicator
+    in public vulnerability data.
+    """
+
+    __tablename__ = "kev_entry"
+
+    cve_id = Column(String, primary_key=True, index=True)
+    vendor_project = Column(String, nullable=True)
+    product = Column(String, nullable=True)
+    vulnerability_name = Column(String, nullable=True)
+    date_added = Column(String, nullable=True)
+    short_description = Column(Text, nullable=True)
+    required_action = Column(Text, nullable=True)
+    due_date = Column(String, nullable=True)
+    known_ransomware_use = Column(String, nullable=True)  # "Known"/"Unknown"
+    refreshed_at = Column(String, nullable=False)  # ISO timestamp
+
+
+class EpssScore(Base):
+    """
+    Cached EPSS (Exploit Prediction Scoring System) score for a CVE.
+    Source: FIRST.org EPSS API (https://api.first.org/data/v1/epss).
+
+    Each row is a per-CVE snapshot. We refresh per-CVE on-demand on a
+    24h TTL to keep the cache hot for active SBOMs without bulk-syncing
+    the full ~250k-CVE catalog. Missing rows = "not yet looked up" — the
+    scorer treats them as 0.0 (median EPSS is ~0.001 anyway, so the
+    impact of a miss is small).
+    """
+
+    __tablename__ = "epss_score"
+
+    cve_id = Column(String, primary_key=True, index=True)
+    epss = Column(Float, nullable=False, default=0.0)  # probability 0..1
+    percentile = Column(Float, nullable=True)  # 0..1
+    score_date = Column(String, nullable=True)  # date EPSS published
+    refreshed_at = Column(String, nullable=False)  # ISO timestamp of our pull

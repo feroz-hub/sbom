@@ -1,23 +1,28 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Eye, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Alert } from '@/components/ui/Alert';
 import { Select } from '@/components/ui/Select';
-import { Table, TableHead, TableBody, Th, Td, EmptyRow } from '@/components/ui/Table';
+import { Table, TableHead, TableBody, Th, SortableTh, Td, EmptyRow } from '@/components/ui/Table';
 import { TableFilterBar, TableSearchInput } from '@/components/ui/TableFilterBar';
 import { ConfirmDialog } from '@/components/ui/Dialog';
 import { SkeletonRow } from '@/components/ui/Spinner';
+import { Pagination } from '@/components/ui/Pagination';
 import { SbomStatusBadge } from '@/components/sboms/SbomStatusBadge';
 import { deleteSbom } from '@/lib/api';
 import { matchesMultiField } from '@/lib/tableFilters';
 import { formatDate } from '@/lib/utils';
 import { useToast } from '@/hooks/useToast';
+import { useTableSort } from '@/hooks/useTableSort';
+import { usePagination } from '@/hooks/usePagination';
 import { sbomAnalysisShortLabel } from '@/lib/analysisRunStatusLabels';
 import type { AnalysisStatus } from '@/hooks/useBackgroundAnalysis';
 import type { SBOMSource } from '@/types';
+
+type SbomSortKey = 'id' | 'sbom_name' | 'project' | 'created_by' | 'created_on';
 
 interface SbomsTableProps {
   sboms: SBOMSource[] | undefined;
@@ -105,6 +110,33 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
     setAnalysisFilter('');
   };
 
+  const sortAccessors = useMemo(
+    () => ({
+      id: (sb: SBOMSource) => sb.id,
+      sbom_name: (sb: SBOMSource) => (sb.sbom_name ?? '').toLowerCase(),
+      project: (sb: SBOMSource) => displayProject(sb).toLowerCase(),
+      created_by: (sb: SBOMSource) => (sb.created_by ?? '').toLowerCase(),
+      created_on: (sb: SBOMSource) => sb.created_on ?? '',
+    }),
+    [],
+  );
+
+  const { sort, sortedRows, toggle: toggleSort } = useTableSort<SBOMSource, SbomSortKey>(
+    filteredSboms,
+    sortAccessors,
+    { initialKey: 'id', initialDirection: 'desc' },
+  );
+
+  const pagination = usePagination<SBOMSource>(sortedRows, {
+    defaultPageSize: 25,
+    storageKey: 'sboms',
+  });
+
+  useEffect(() => {
+    pagination.resetPage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, projectFilter, analysisFilter]);
+
   if (error) {
     return (
       <Alert variant="error" title="Could not load SBOMs">
@@ -168,14 +200,49 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
         <Table striped>
           <TableHead>
             <tr>
-              <Th>ID</Th>
-              <Th>Name</Th>
-              <Th>Project</Th>
+              <SortableTh
+                sortKey="id"
+                activeKey={sort.key}
+                direction={sort.direction}
+                onToggle={(k) => toggleSort(k as SbomSortKey)}
+              >
+                ID
+              </SortableTh>
+              <SortableTh
+                sortKey="sbom_name"
+                activeKey={sort.key}
+                direction={sort.direction}
+                onToggle={(k) => toggleSort(k as SbomSortKey)}
+              >
+                Name
+              </SortableTh>
+              <SortableTh
+                sortKey="project"
+                activeKey={sort.key}
+                direction={sort.direction}
+                onToggle={(k) => toggleSort(k as SbomSortKey)}
+              >
+                Project
+              </SortableTh>
               <Th>Version</Th>
               <Th>Format</Th>
               <Th>Analysis</Th>
-              <Th>Created By</Th>
-              <Th>Created On</Th>
+              <SortableTh
+                sortKey="created_by"
+                activeKey={sort.key}
+                direction={sort.direction}
+                onToggle={(k) => toggleSort(k as SbomSortKey)}
+              >
+                Created By
+              </SortableTh>
+              <SortableTh
+                sortKey="created_on"
+                activeKey={sort.key}
+                direction={sort.direction}
+                onToggle={(k) => toggleSort(k as SbomSortKey)}
+              >
+                Created On
+              </SortableTh>
               <Th className="text-right">Actions</Th>
             </tr>
           </TableHead>
@@ -190,7 +257,7 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
                 message="No SBOMs match your filters. Try adjusting search or clear filters."
               />
             ) : (
-              filteredSboms.map((sbom) => (
+              pagination.pageItems.map((sbom) => (
                 <tr key={sbom.id} className="transition-colors hover:bg-hcl-light/40">
                   <Td className="font-mono text-xs text-hcl-muted">#{sbom.id}</Td>
                   <Td className="max-w-[200px] truncate font-medium text-hcl-navy">{sbom.sbom_name}</Td>
@@ -229,6 +296,22 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
             )}
           </TableBody>
         </Table>
+
+        {!isLoading && filteredSboms.length > 0 ? (
+          <Pagination
+            page={pagination.page}
+            pageSize={pagination.pageSize}
+            total={pagination.total}
+            totalPages={pagination.totalPages}
+            rangeStart={pagination.rangeStart}
+            rangeEnd={pagination.rangeEnd}
+            hasPrev={pagination.hasPrev}
+            hasNext={pagination.hasNext}
+            onPageChange={pagination.setPage}
+            onPageSizeChange={pagination.setPageSize}
+            itemNoun="SBOM"
+          />
+        ) : null}
       </div>
 
       <ConfirmDialog

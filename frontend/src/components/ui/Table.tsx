@@ -1,4 +1,5 @@
 import React from 'react';
+import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ReactNode } from 'react';
 
@@ -82,6 +83,65 @@ export function Td({
     >
       {children}
     </td>
+  );
+}
+
+interface SortableThProps {
+  children: ReactNode;
+  /** Column key — must match a key registered with `useTableSort`. */
+  sortKey: string;
+  /** Currently active sort key on the table (null if none). */
+  activeKey: string | null;
+  /** Direction of the active sort. Ignored when `activeKey !== sortKey`. */
+  direction: 'asc' | 'desc';
+  onToggle: (key: string) => void;
+  className?: string;
+  /** Hint shown on hover, e.g. "Sort by severity". */
+  ariaLabel?: string;
+}
+
+export function SortableTh({
+  children,
+  sortKey,
+  activeKey,
+  direction,
+  onToggle,
+  className,
+  ariaLabel,
+}: SortableThProps) {
+  const isActive = activeKey === sortKey;
+  const ariaSort = isActive ? (direction === 'asc' ? 'ascending' : 'descending') : 'none';
+
+  const Icon = isActive ? (direction === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown;
+
+  return (
+    <th
+      scope="col"
+      aria-sort={ariaSort}
+      className={cn(
+        'px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-hcl-navy',
+        className,
+      )}
+    >
+      <button
+        type="button"
+        onClick={() => onToggle(sortKey)}
+        aria-label={ariaLabel ?? `Sort by ${typeof children === 'string' ? children : sortKey}`}
+        className={cn(
+          'group inline-flex items-center gap-1 rounded-sm transition-colors hover:text-hcl-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/30',
+          isActive && 'text-hcl-blue',
+        )}
+      >
+        <span>{children}</span>
+        <Icon
+          className={cn(
+            'h-3 w-3 transition-opacity',
+            isActive ? 'opacity-100' : 'opacity-30 group-hover:opacity-70',
+          )}
+          aria-hidden="true"
+        />
+      </button>
+    </th>
   );
 }
 
