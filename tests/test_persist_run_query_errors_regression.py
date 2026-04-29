@@ -22,7 +22,7 @@ import json
 import pytest
 
 
-async def _fake_nvd_with_error(components, settings, nvd_api_key=None):
+async def _fake_nvd_with_error(components, settings, nvd_api_key=None, lookup_service=None):
     return (
         [],
         [{"source": "NVD", "message": "synthetic error for r2 regression"}],

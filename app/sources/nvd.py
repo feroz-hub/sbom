@@ -23,8 +23,20 @@ class NvdSource:
 
     name: str = "NVD"
 
-    def __init__(self, api_key: str | None = None) -> None:
+    def __init__(
+        self,
+        api_key: str | None = None,
+        *,
+        lookup_service: Any = None,
+    ) -> None:
         self.api_key = (api_key or "").strip() or None
+        # Optional per-CPE callable with shape `(cpe, api_key, settings)
+        # -> list[dict]`. When provided (production wiring through
+        # `build_source_adapters`), NVD lookups consult the local mirror
+        # first and fall back to live NVD per the facade's 5-branch
+        # decision logic. When None, the underlying coroutine hits live
+        # NVD directly — the path tests use.
+        self._lookup_service = lookup_service
 
     async def query(
         self,
@@ -43,5 +55,6 @@ class NvdSource:
             components,
             settings,
             nvd_api_key=self.api_key,
+            lookup_service=self._lookup_service,
         )
         return SourceResult(findings=findings, errors=errors, warnings=warnings)

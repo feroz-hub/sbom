@@ -90,7 +90,7 @@ def test_adapters_route_through_underlying_analysis_functions(monkeypatch):
     """
     captured: dict = {}
 
-    async def fake_nvd(components, settings, nvd_api_key=None):
+    async def fake_nvd(components, settings, nvd_api_key=None, lookup_service=None):
         captured["nvd_args"] = (components, settings, nvd_api_key)
         return [{"vuln_id": "CVE-X"}], [{"source": "NVD", "error": "warn"}], []
 

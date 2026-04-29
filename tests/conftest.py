@@ -156,7 +156,14 @@ from .fixtures import canned_responses as canned  # noqa: E402
 # place.
 
 
-async def _fake_nvd_query_by_components_async(components, settings, nvd_api_key=None):
+async def _fake_nvd_query_by_components_async(
+    components, settings, nvd_api_key=None, lookup_service=None
+):
+    # `lookup_service` is the R6 mirror-facade hook. The fake intentionally
+    # ignores it: snapshot tests assert on the orchestrator-level shape,
+    # not on whether the mirror branch was taken — that's covered by the
+    # dedicated tests in test_nvd_source_uses_lookup_service.py and
+    # tests/nvd_mirror/test_facade_integration.py.
     findings: list[dict[str, Any]] = []
     for c in components:
         if "log4j" in (c.get("name") or "").lower():

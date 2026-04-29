@@ -1244,6 +1244,7 @@ async def nvd_query_by_components_async(
     components: list[dict],
     settings: _MultiSettings,
     nvd_api_key: str | None = None,
+    lookup_service: Any = None,
 ) -> tuple[list[dict], list[dict], list[dict]]:
     """
     Run NVD CPE lookups for every component with a CPE — SEQUENTIALLY.
@@ -1335,12 +1336,17 @@ async def nvd_query_by_components_async(
     succeeded = 0
 
     loop = asyncio.get_running_loop()
+    # Per-CPE callable: when a lookup_service is wired (R6: NvdSource +
+    # mirror facade), route through it; otherwise hit live NVD directly.
+    # Both have the same `(cpe, api_key, settings) -> list[dict]` shape,
+    # so the executor call is a single drop-in substitution.
+    query_callable = lookup_service if lookup_service is not None else nvd_query_by_cpe
     for idx, cpe in enumerate(cpe_order, 1):
         try:
             # Run sync requests.Session call in the shared executor so we
             # do not block the event loop, but serialize the submissions.
             raw_list = await loop.run_in_executor(
-                _executor, nvd_query_by_cpe, cpe, api_key, cfg
+                _executor, query_callable, cpe, api_key, cfg
             )
         except Exception as exc:
             LOGGER.warning(
