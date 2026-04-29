@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Pencil, Trash2 } from 'lucide-react';
+import { CalendarClock, Pencil, Trash2 } from 'lucide-react';
 import { Alert } from '@/components/ui/Alert';
 import { Select } from '@/components/ui/Select';
 import { Table, TableHead, TableBody, Th, SortableTh, Td, EmptyRow } from '@/components/ui/Table';
@@ -12,6 +12,7 @@ import { ConfirmDialog } from '@/components/ui/Dialog';
 import { SkeletonRow } from '@/components/ui/Spinner';
 import { Pagination } from '@/components/ui/Pagination';
 import { ProjectModal } from './ProjectModal';
+import { ProjectScheduleDialog } from '@/components/schedules/ProjectScheduleDialog';
 import { deleteProject } from '@/lib/api';
 import { matchesMultiField } from '@/lib/tableFilters';
 import { formatDate } from '@/lib/utils';
@@ -32,6 +33,7 @@ export function ProjectsTable({ projects, isLoading, error }: ProjectsTableProps
   const queryClient = useQueryClient();
   const { showToast } = useToast();
   const [editProject, setEditProject] = useState<Project | null>(null);
+  const [scheduleProject, setScheduleProject] = useState<Project | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
@@ -219,6 +221,14 @@ export function ProjectsTable({ projects, isLoading, error }: ProjectsTableProps
                   <Td className="text-right">
                     <div className="flex items-center justify-end gap-2">
                       <button
+                        onClick={() => setScheduleProject(project)}
+                        className="rounded-lg p-1.5 text-hcl-muted transition-colors hover:bg-hcl-light hover:text-hcl-blue"
+                        aria-label="Configure periodic analysis schedule"
+                        title="Periodic analysis schedule"
+                      >
+                        <CalendarClock className="h-4 w-4" />
+                      </button>
+                      <button
                         onClick={() => setEditProject(project)}
                         className="rounded-lg p-1.5 text-hcl-muted transition-colors hover:bg-hcl-light hover:text-hcl-blue"
                         aria-label="Edit project"
@@ -262,6 +272,14 @@ export function ProjectsTable({ projects, isLoading, error }: ProjectsTableProps
           open={!!editProject}
           onClose={() => setEditProject(null)}
           project={editProject}
+        />
+      )}
+
+      {scheduleProject && (
+        <ProjectScheduleDialog
+          open={!!scheduleProject}
+          onClose={() => setScheduleProject(null)}
+          project={scheduleProject}
         />
       )}
 

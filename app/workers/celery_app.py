@@ -1,11 +1,17 @@
 """Celery application — broker/backend from settings (Redis).
 
 Tasks live in:
-  * ``app.nvd_mirror.tasks``   — NVD mirror (mirror_nvd)
+  * ``app.nvd_mirror.tasks``           — NVD mirror (mirror_nvd)
+  * ``app.workers.scheduled_analysis`` — periodic SBOM rescans
+                                          (tick + per-SBOM worker)
 
 Beat schedule:
   * ``nvd-mirror-hourly`` — fires ``mirror_nvd`` at minute 15 every hour.
-    Beat must run as a SINGLE instance (deploy as its own process).
+  * ``analysis-schedule-tick`` — fires every 15 minutes; reads the
+    analysis_schedule table and enqueues per-SBOM analyze tasks for any
+    rows whose next_run_at has passed.
+
+Beat must run as a SINGLE instance (deploy as its own process).
 """
 
 from __future__ import annotations
@@ -26,7 +32,10 @@ celery_app = Celery(
     "sbom_analyzer",
     broker=_broker_url(),
     backend=_broker_url(),
-    include=["app.nvd_mirror.tasks"],
+    include=[
+        "app.nvd_mirror.tasks",
+        "app.workers.scheduled_analysis",
+    ],
 )
 
 celery_app.conf.update(
@@ -42,5 +51,12 @@ celery_app.conf.beat_schedule = {
     "nvd-mirror-hourly": {
         "task": "nvd_mirror.mirror_nvd",
         "schedule": crontab(minute=15),
+    },
+    "analysis-schedule-tick": {
+        "task": "scheduled_analysis.tick",
+        # Every 15 minutes — granularity of how soon a "due" schedule
+        # actually fires after its next_run_at passes. Tighter = more
+        # responsive but more idle DB scans; 15 min is the sweet spot.
+        "schedule": crontab(minute="*/15"),
     },
 }

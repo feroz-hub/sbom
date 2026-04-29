@@ -261,6 +261,58 @@ export interface CompareRunsResult {
   severity_delta: { critical: number; high: number; medium: number; low: number };
 }
 
+// ─── Periodic analysis schedules ─────────────────────────────────────────────
+export type ScheduleCadence =
+  | 'DAILY'
+  | 'WEEKLY'
+  | 'BIWEEKLY'
+  | 'MONTHLY'
+  | 'QUARTERLY'
+  | 'CUSTOM';
+
+export type ScheduleScope = 'PROJECT' | 'SBOM';
+
+export interface AnalysisSchedule {
+  id: number;
+  scope: ScheduleScope;
+  project_id: number | null;
+  sbom_id: number | null;
+  cadence: ScheduleCadence;
+  cron_expression: string | null;
+  day_of_week: number | null;   // 0=Mon..6=Sun
+  day_of_month: number | null;  // 1..28
+  hour_utc: number;             // 0..23
+  timezone: string;             // IANA, display only
+  enabled: boolean;
+  next_run_at: string | null;
+  last_run_at: string | null;
+  last_run_status: string | null;
+  last_run_id: number | null;
+  consecutive_failures: number;
+  min_gap_minutes: number;
+  created_on: string | null;
+  created_by: string | null;
+  modified_on: string | null;
+  modified_by: string | null;
+}
+
+export interface SbomScheduleResolved {
+  inherited: boolean;
+  schedule: AnalysisSchedule | null;
+}
+
+export interface ScheduleUpsertPayload {
+  cadence: ScheduleCadence;
+  cron_expression?: string | null;
+  day_of_week?: number | null;
+  day_of_month?: number | null;
+  hour_utc?: number;
+  timezone?: string;
+  enabled?: boolean;
+  min_gap_minutes?: number;
+  modified_by?: string;
+}
+
 export interface ConsolidatedAnalysisResult {
   runId: number;
   sbom_id?: number;

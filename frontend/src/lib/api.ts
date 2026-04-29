@@ -21,6 +21,9 @@ import type {
   SBOMRiskSummary,
   DashboardTrend,
   CompareRunsResult,
+  AnalysisSchedule,
+  SbomScheduleResolved,
+  ScheduleUpsertPayload,
 } from '@/types';
 
 // Direct calls to FastAPI — no Next.js proxy (proxy caused ECONNRESET on
@@ -622,4 +625,119 @@ export function analyzeSbomVulnDb(payload: AnalyzeSBOMPayload, signal?: AbortSig
     body: JSON.stringify(payload),
     signal,
   }, 180_000);
+}
+
+// ─── Periodic analysis schedules ─────────────────────────────────────────────
+// See app/routers/schedules.py for the server contract.
+
+export function getProjectSchedule(projectId: number, signal?: AbortSignal) {
+  return request<AnalysisSchedule>(`/api/projects/${projectId}/schedule`, { signal });
+}
+
+export function upsertProjectSchedule(
+  projectId: number,
+  payload: ScheduleUpsertPayload,
+  signal?: AbortSignal,
+) {
+  return request<AnalysisSchedule>(`/api/projects/${projectId}/schedule`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    signal,
+  });
+}
+
+export function patchProjectSchedule(
+  projectId: number,
+  payload: Partial<ScheduleUpsertPayload>,
+  signal?: AbortSignal,
+) {
+  return request<AnalysisSchedule>(`/api/projects/${projectId}/schedule`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+    signal,
+  });
+}
+
+export function deleteProjectSchedule(projectId: number, signal?: AbortSignal) {
+  return requestVoid(`/api/projects/${projectId}/schedule`, {
+    method: 'DELETE',
+    signal,
+  });
+}
+
+export function getSbomSchedule(sbomId: number, signal?: AbortSignal) {
+  return request<SbomScheduleResolved>(`/api/sboms/${sbomId}/schedule`, { signal });
+}
+
+export function upsertSbomSchedule(
+  sbomId: number,
+  payload: ScheduleUpsertPayload,
+  signal?: AbortSignal,
+) {
+  return request<AnalysisSchedule>(`/api/sboms/${sbomId}/schedule`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    signal,
+  });
+}
+
+export function patchSbomSchedule(
+  sbomId: number,
+  payload: Partial<ScheduleUpsertPayload>,
+  signal?: AbortSignal,
+) {
+  return request<AnalysisSchedule>(`/api/sboms/${sbomId}/schedule`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+    signal,
+  });
+}
+
+export function deleteSbomSchedule(sbomId: number, signal?: AbortSignal) {
+  return requestVoid(`/api/sboms/${sbomId}/schedule`, {
+    method: 'DELETE',
+    signal,
+  });
+}
+
+export interface ListSchedulesFilter {
+  scope?: 'PROJECT' | 'SBOM';
+  enabled?: boolean;
+  project_id?: number;
+}
+
+export function listSchedules(filter: ListSchedulesFilter = {}, signal?: AbortSignal) {
+  const qs = new URLSearchParams();
+  if (filter.scope) qs.set('scope', filter.scope);
+  if (filter.enabled !== undefined) qs.set('enabled', String(filter.enabled));
+  if (filter.project_id) qs.set('project_id', String(filter.project_id));
+  const tail = qs.toString() ? `?${qs.toString()}` : '';
+  return request<AnalysisSchedule[]>(`/api/schedules${tail}`, { signal });
+}
+
+export function pauseSchedule(scheduleId: number, signal?: AbortSignal) {
+  return request<AnalysisSchedule>(`/api/schedules/${scheduleId}/pause`, {
+    method: 'POST',
+    signal,
+  });
+}
+
+export function resumeSchedule(scheduleId: number, signal?: AbortSignal) {
+  return request<AnalysisSchedule>(`/api/schedules/${scheduleId}/resume`, {
+    method: 'POST',
+    signal,
+  });
+}
+
+export interface RunNowResult {
+  status: string;
+  schedule_id: number;
+  sbom_ids: number[];
+}
+
+export function runScheduleNow(scheduleId: number, signal?: AbortSignal) {
+  return request<RunNowResult>(`/api/schedules/${scheduleId}/run-now`, {
+    method: 'POST',
+    signal,
+  });
 }

@@ -155,3 +155,83 @@ class SBOMSourceUpdate(BaseModel):
     sbom_version: str | None = None
     productver: str | None = None
     modified_by: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Periodic analysis schedules
+# ---------------------------------------------------------------------------
+
+_VALID_CADENCES = {"DAILY", "WEEKLY", "BIWEEKLY", "MONTHLY", "QUARTERLY", "CUSTOM"}
+
+
+class ScheduleUpsert(BaseModel):
+    """
+    Friendly create/update payload — the API accepts cadence presets and
+    derives the cron expression server-side. CUSTOM cadence is for power
+    users only and surfaces under an "Advanced" disclosure in the UI.
+    """
+
+    cadence: str = Field(..., description="DAILY|WEEKLY|BIWEEKLY|MONTHLY|QUARTERLY|CUSTOM")
+    cron_expression: str | None = Field(None, description="5-field cron, only when cadence=CUSTOM")
+    day_of_week: int | None = Field(None, ge=0, le=6, description="0=Mon..6=Sun (WEEKLY/BIWEEKLY)")
+    day_of_month: int | None = Field(None, ge=1, le=28, description="1..28 (MONTHLY/QUARTERLY)")
+    hour_utc: int = Field(2, ge=0, le=23)
+    timezone: str = Field("UTC", description="IANA name; display only — firing is computed in UTC")
+    enabled: bool = True
+    min_gap_minutes: int = Field(
+        60,
+        ge=0,
+        le=24 * 60,
+        description="Skip a tick if a manual or prior run completed within this many minutes",
+    )
+    modified_by: str | None = None
+
+    @field_validator("cadence", mode="before")
+    @classmethod
+    def _upper_cadence(cls, v: str) -> str:
+        if not isinstance(v, str):
+            return v
+        return v.strip().upper()
+
+    @field_validator("cadence")
+    @classmethod
+    def _check_cadence(cls, v: str) -> str:
+        if v not in _VALID_CADENCES:
+            raise ValueError(f"cadence must be one of {sorted(_VALID_CADENCES)}")
+        return v
+
+
+class ScheduleOut(ORMModel):
+    id: int
+    scope: str  # 'PROJECT' | 'SBOM'
+    project_id: int | None = None
+    sbom_id: int | None = None
+    cadence: str
+    cron_expression: str | None = None
+    day_of_week: int | None = None
+    day_of_month: int | None = None
+    hour_utc: int
+    timezone: str
+    enabled: bool
+    next_run_at: str | None = None
+    last_run_at: str | None = None
+    last_run_status: str | None = None
+    last_run_id: int | None = None
+    consecutive_failures: int = 0
+    min_gap_minutes: int = 60
+    created_on: str | None = None
+    created_by: str | None = None
+    modified_on: str | None = None
+    modified_by: str | None = None
+
+
+class ScheduleResolved(BaseModel):
+    """
+    Returned by ``GET /api/sboms/{id}/schedule``. The ``schedule`` field
+    is the effective row (own override or inherited from project), or
+    ``None`` if neither exists. ``inherited`` is true when the SBOM is
+    currently following its project's cascade.
+    """
+
+    inherited: bool
+    schedule: ScheduleOut | None = None

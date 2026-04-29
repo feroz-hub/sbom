@@ -48,6 +48,34 @@ export function truncate(str: string | null | undefined, maxLen = 80): string {
   return str.length > maxLen ? `${str.slice(0, maxLen)}…` : str;
 }
 
+/**
+ * Render the time between an ISO timestamp and now as "in 3d 4h" / "5m ago".
+ * Used by the periodic-analysis schedule UI for "Next run" hints.
+ */
+export function formatRelative(dateStr: string | null | undefined): string {
+  if (!dateStr) return '—';
+  try {
+    const target = new Date(dateStr).getTime();
+    const now = Date.now();
+    const diffSec = Math.round((target - now) / 1000);
+    const sign = diffSec >= 0 ? 'in ' : '';
+    const suffix = diffSec >= 0 ? '' : ' ago';
+    const abs = Math.abs(diffSec);
+
+    if (abs < 60) return `${sign}<1m${suffix}`;
+    const m = Math.floor(abs / 60);
+    if (m < 60) return `${sign}${m}m${suffix}`;
+    const h = Math.floor(m / 60);
+    const remM = m % 60;
+    if (h < 24) return `${sign}${h}h${remM ? ` ${remM}m` : ''}${suffix}`;
+    const d = Math.floor(h / 24);
+    const remH = h % 24;
+    return `${sign}${d}d${remH ? ` ${remH}h` : ''}${suffix}`;
+  } catch {
+    return dateStr;
+  }
+}
+
 export function severityColor(severity: string): string {
   switch (severity?.toUpperCase()) {
     case 'CRITICAL': return 'text-red-600';

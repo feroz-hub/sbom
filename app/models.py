@@ -1,6 +1,8 @@
 # models.py
 
 from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
     Column,
     Float,
     ForeignKey,
@@ -221,6 +223,71 @@ class KevEntry(Base):
     due_date = Column(String, nullable=True)
     known_ransomware_use = Column(String, nullable=True)  # "Known"/"Unknown"
     refreshed_at = Column(String, nullable=False)  # ISO timestamp
+
+
+class AnalysisSchedule(Base):
+    """
+    Periodic analysis schedule. One row per scope target (PROJECT or SBOM).
+
+    A project-level row applies to every SBOM in the project at tick time;
+    an SBOM-level row overrides the cascade for that one SBOM.
+    """
+
+    __tablename__ = "analysis_schedule"
+
+    id = Column(Integer, primary_key=True, index=True)
+    scope = Column(String(16), nullable=False)  # 'PROJECT' | 'SBOM'
+
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True)
+    sbom_id = Column(Integer, ForeignKey("sbom_source.id", ondelete="CASCADE"), nullable=True, index=True)
+
+    cadence = Column(String(16), nullable=False)  # DAILY|WEEKLY|BIWEEKLY|MONTHLY|QUARTERLY|CUSTOM
+    cron_expression = Column(String(128), nullable=True)  # set only when cadence='CUSTOM'
+    day_of_week = Column(Integer, nullable=True)  # 0=Mon..6=Sun for WEEKLY/BIWEEKLY
+    day_of_month = Column(Integer, nullable=True)  # 1..28 for MONTHLY/QUARTERLY
+    hour_utc = Column(Integer, nullable=False, default=2)
+    timezone = Column(String(64), nullable=False, default="UTC")
+
+    enabled = Column(Boolean, nullable=False, default=True)
+
+    next_run_at = Column(String, nullable=True, index=True)
+    last_run_at = Column(String, nullable=True)
+    last_run_status = Column(String(16), nullable=True)
+    last_run_id = Column(Integer, ForeignKey("analysis_run.id", ondelete="SET NULL"), nullable=True)
+
+    consecutive_failures = Column(Integer, nullable=False, default=0)
+    min_gap_minutes = Column(Integer, nullable=False, default=60)
+
+    created_on = Column(String, nullable=True)
+    created_by = Column(String, nullable=True)
+    modified_on = Column(String, nullable=True)
+    modified_by = Column(String, nullable=True)
+
+    project = relationship("Projects", foreign_keys=[project_id])
+    sbom = relationship("SBOMSource", foreign_keys=[sbom_id])
+
+    __table_args__ = (
+        CheckConstraint("scope IN ('PROJECT','SBOM')", name="ck_analysis_schedule_scope"),
+        CheckConstraint(
+            "cadence IN ('DAILY','WEEKLY','BIWEEKLY','MONTHLY','QUARTERLY','CUSTOM')",
+            name="ck_analysis_schedule_cadence",
+        ),
+        CheckConstraint(
+            "(scope = 'PROJECT' AND project_id IS NOT NULL AND sbom_id IS NULL) "
+            "OR (scope = 'SBOM' AND sbom_id IS NOT NULL AND project_id IS NULL)",
+            name="ck_analysis_schedule_target",
+        ),
+        CheckConstraint("hour_utc BETWEEN 0 AND 23", name="ck_analysis_schedule_hour_range"),
+        CheckConstraint(
+            "day_of_week IS NULL OR day_of_week BETWEEN 0 AND 6",
+            name="ck_analysis_schedule_dow_range",
+        ),
+        CheckConstraint(
+            "day_of_month IS NULL OR day_of_month BETWEEN 1 AND 28",
+            name="ck_analysis_schedule_dom_range",
+        ),
+        Index("ix_analysis_schedule_due", "enabled", "next_run_at"),
+    )
 
 
 class EpssScore(Base):

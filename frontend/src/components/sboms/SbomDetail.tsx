@@ -12,6 +12,7 @@ import { Table, TableHead, TableBody, Th, SortableTh, Td, EmptyRow } from '@/com
 import { SkeletonRow } from '@/components/ui/Spinner';
 import { Pagination } from '@/components/ui/Pagination';
 import { AnalysisProgress } from '@/components/analysis/AnalysisProgress';
+import { ScheduleCard } from '@/components/schedules/ScheduleCard';
 import { getSbomComponents, getRuns, getSbomInfo, getSbomRiskSummary } from '@/lib/api';
 import { useAnalysisStream } from '@/hooks/useAnalysisStream';
 import { useTableSort } from '@/hooks/useTableSort';
@@ -179,6 +180,9 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
           </dl>
         </CardContent>
       </Card>
+
+      {/* Periodic analysis schedule (own override or inherited from project) */}
+      <ScheduleCard scope="SBOM" targetId={sbom.id} />
 
       {/* SBOM Format & Ecosystem Info — GET /api/sboms/{id}/info */}
       {info && (

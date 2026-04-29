@@ -57,6 +57,7 @@ from .routers import (
     projects,
     runs,
     sboms_crud,
+    schedules,
 )
 from .routers import dashboard as dashboard_trend_router
 from .routers import sbom as sbom_features_router
@@ -261,6 +262,7 @@ app.include_router(projects.router, dependencies=_protected)
 app.include_router(analyze_endpoints.router, dependencies=_protected)
 app.include_router(pdf.router, dependencies=_protected)
 app.include_router(dashboard_main.router, dependencies=_protected)
+app.include_router(schedules.router, dependencies=_protected)
 
 # Feature routers (kept from earlier refactor) — additive paths.
 app.include_router(

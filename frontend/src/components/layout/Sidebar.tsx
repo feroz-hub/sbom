@@ -6,6 +6,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Activity,
+  CalendarClock,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -50,6 +51,7 @@ const NAV_ITEMS: NavItem[] = [
       { href: '/analysis/compare', label: 'Compare' },
     ],
   },
+  { href: '/schedules', label: 'Schedules', icon: CalendarClock },
 ];
 
 function isActiveItem(item: NavItem, pathname: string): boolean {
