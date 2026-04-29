@@ -2,9 +2,8 @@
 
 import { Suspense, useCallback, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import {
-  Play,
   FileJson,
   AlertTriangle,
   CheckCircle2,
@@ -17,23 +16,24 @@ import { TopBar } from '@/components/layout/TopBar';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
 import { RunsTable } from '@/components/analysis/RunsTable';
-import { ConsolidatedAnalysisPanel } from '@/components/analysis/ConsolidatedAnalysisPanel';
+import {
+  ConsolidatedAnalysisPanel,
+  type SourceKey,
+} from '@/components/analysis/ConsolidatedAnalysisPanel';
 import { AnalysisHubTabs } from '@/components/analysis/AnalysisHubTabs';
 import { PageSpinner } from '@/components/ui/Spinner';
 import {
   getRuns,
   getProjects,
-  analyzeConsolidated,
-  downloadPdfReport,
   exportRunsJson,
   getAnalysisConfig,
 } from '@/lib/api';
 import { runStatusShortLabel } from '@/lib/analysisRunStatusLabels';
-import { downloadBlob } from '@/lib/utils';
 import { useToast } from '@/hooks/useToast';
 import { useAnalysisUrlState } from '@/hooks/useAnalysisUrlState';
 import { useSbomsList } from '@/hooks/useSbomsList';
-import type { ConsolidatedAnalysisResult } from '@/types';
+
+const DEFAULT_SOURCES: SourceKey[] = ['NVD', 'OSV', 'GITHUB', 'VULNDB'];
 
 function AnalysisPageInner() {
   const { showToast } = useToast();
@@ -52,8 +52,7 @@ function AnalysisPageInner() {
   } = useAnalysisUrlState();
 
   const [selectedForCompare, setSelectedForCompare] = useState<Set<number>>(new Set());
-  const [consolidatedResult, setConsolidatedResult] = useState<ConsolidatedAnalysisResult | null>(null);
-  const [pdfDownloading, setPdfDownloading] = useState(false);
+  const [selectedSources, setSelectedSources] = useState<SourceKey[]>(DEFAULT_SOURCES);
 
   const toggleSelectForCompare = useCallback((id: number) => {
     setSelectedForCompare((prev) => {
@@ -117,40 +116,13 @@ function AnalysisPageInner() {
     };
   }, [runs]);
 
-  const consolidateMutation = useMutation({
-    mutationFn: () => {
-      const id = Number(sbomFilter);
-      if (!id) throw new Error('Please enter a valid SBOM ID');
-      const sbom = sboms?.find((s) => s.id === id);
-      return analyzeConsolidated({ sbom_id: id, sbom_name: sbom?.sbom_name ?? `SBOM #${id}` });
-    },
-    onSuccess: (result) => {
-      setConsolidatedResult(result);
-      showToast('Consolidated analysis complete', 'success');
+  const handleAnalysisComplete = useCallback(
+    (runId: number) => {
+      showToast(`Run #${runId} complete`, 'success');
       refetch();
     },
-    onError: (err: Error) => {
-      showToast(`Analysis failed: ${err.message}`, 'error');
-    },
-  });
-
-  const handleDownloadConsolidatedPdf = async () => {
-    if (!consolidatedResult?.runId) return;
-    setPdfDownloading(true);
-    try {
-      const blob = await downloadPdfReport({
-        runId: consolidatedResult.runId,
-        title: `Consolidated Analysis — SBOM #${sbomFilter}`,
-        filename: `sbom-consolidated-${sbomFilter}.pdf`,
-      });
-      downloadBlob(blob, `sbom-consolidated-${sbomFilter}.pdf`);
-      showToast('PDF downloaded', 'success');
-    } catch (err) {
-      showToast(`PDF failed: ${(err as Error).message}`, 'error');
-    } finally {
-      setPdfDownloading(false);
-    }
-  };
+    [showToast, refetch],
+  );
 
   const handleExportJson = async () => {
     try {
@@ -206,12 +178,9 @@ function AnalysisPageInner() {
               sboms={sboms}
               consolidatedSbomId={sbomFilter}
               onConsolidatedSbomIdChange={setSbomFilter}
-              consolidatedResult={consolidatedResult}
-              onRunAnalysis={() => consolidateMutation.mutate()}
-              analysisPending={consolidateMutation.isPending}
-              runDisabled={!sbomFilter}
-              onDownloadPdf={handleDownloadConsolidatedPdf}
-              pdfDownloading={pdfDownloading}
+              selectedSources={selectedSources}
+              onSelectedSourcesChange={setSelectedSources}
+              onComplete={handleAnalysisComplete}
             />
           </div>
         )}

@@ -8,6 +8,7 @@ import { Select } from '@/components/ui/Select';
 import { Table, TableHead, TableBody, Th, SortableTh, Td, EmptyRow } from '@/components/ui/Table';
 import { TableFilterBar, TableSearchInput } from '@/components/ui/TableFilterBar';
 import { StatusBadge } from '@/components/ui/Badge';
+import { PinButton } from '@/components/ui/PinButton';
 import { SkeletonRow } from '@/components/ui/Spinner';
 import { Pagination } from '@/components/ui/Pagination';
 import { downloadPdfReport } from '@/lib/api';
@@ -305,7 +306,7 @@ export function RunsTable({ runs, isLoading, error, selectedIds, onToggleSelect 
             pagination.pageItems.map((run) => (
               <tr
                 key={run.id}
-                className="cursor-pointer transition-colors hover:bg-hcl-light/40"
+                className="group cursor-pointer transition-colors hover:bg-hcl-light/40"
                 onClick={() => router.push(`/analysis/${run.id}`)}
               >
                 {selectable && (
@@ -319,7 +320,19 @@ export function RunsTable({ runs, isLoading, error, selectedIds, onToggleSelect 
                     />
                   </Td>
                 )}
-                <Td className="font-mono text-xs text-hcl-muted">#{run.id}</Td>
+                <Td className="font-mono text-xs text-hcl-muted">
+                  <div className="flex items-center gap-1.5">
+                    <span>#{run.id}</span>
+                    <PinButton
+                      kind="run"
+                      id={run.id}
+                      label={run.sbom_name ? `${run.sbom_name} · #${run.id}` : `Run #${run.id}`}
+                      href={`/analysis/${run.id}`}
+                      compact
+                      hoverOnly
+                    />
+                  </div>
+                </Td>
                 <Td className="max-w-[140px] truncate font-medium text-hcl-navy">
                   {run.sbom_name || (run.sbom_id ? `SBOM #${run.sbom_id}` : '—')}
                 </Td>

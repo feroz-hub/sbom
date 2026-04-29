@@ -5,6 +5,7 @@ import { useState, type ReactNode } from 'react';
 import { ToastProvider } from '@/hooks/useToast';
 import { ThemeProvider } from '@/components/theme/ThemeProvider';
 import { CommandPalette } from '@/components/layout/CommandPalette';
+import { KeyboardCheatsheet } from '@/components/layout/KeyboardCheatsheet';
 
 export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(
@@ -25,6 +26,7 @@ export function Providers({ children }: { children: ReactNode }) {
         <ToastProvider>
           {children}
           <CommandPalette />
+          <KeyboardCheatsheet />
         </ToastProvider>
       </ThemeProvider>
     </QueryClientProvider>

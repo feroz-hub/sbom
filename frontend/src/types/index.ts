@@ -64,6 +64,7 @@ export interface AnalysisRun {
 export interface AnalysisFinding {
   id: number;
   analysis_run_id: number;          // backend field name
+  component_id?: number | null;
   vuln_id: string | null;
   source: string | null;            // e.g. "NVD", "OSV", "NVD,OSV"
   title: string | null;
@@ -79,6 +80,24 @@ export interface AnalysisFinding {
   aliases: string | null;           // JSON string e.g. '["CVE-2022-31090"]'
   attack_vector: string | null;     // e.g. "NETWORK", "LOCAL"
   fixed_versions: string | null;    // JSON string e.g. '["1.2.3"]'
+  cwe?: string | null;              // comma-separated, e.g. "CWE-79,CWE-89"
+  cvss_version?: string | null;     // e.g. "3.1", "4.0"
+}
+
+/**
+ * Findings enriched with per-CVE KEV, EPSS, and composite risk score.
+ * Returned by GET /api/runs/{id}/findings-enriched.
+ */
+export interface EnrichedFinding extends AnalysisFinding {
+  in_kev: boolean;
+  /** EPSS probability of exploitation (0..1). 0 = not in EPSS catalog. */
+  epss: number;
+  /** Percentile rank within EPSS catalog (0..1), null when uncached. */
+  epss_percentile: number | null;
+  /** Composite finding score: cvss * (1 + 5*epss) * (kev ? 2 : 1). 0..120. */
+  risk_score: number;
+  /** All CVE aliases discovered on the finding (vuln_id + parsed aliases). */
+  cve_aliases: string[];
 }
 
 export interface DashboardStats {

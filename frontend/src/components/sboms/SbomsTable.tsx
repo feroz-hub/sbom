@@ -12,6 +12,7 @@ import { ConfirmDialog } from '@/components/ui/Dialog';
 import { SkeletonRow } from '@/components/ui/Spinner';
 import { Pagination } from '@/components/ui/Pagination';
 import { SbomStatusBadge } from '@/components/sboms/SbomStatusBadge';
+import { PinButton } from '@/components/ui/PinButton';
 import { deleteSbom } from '@/lib/api';
 import { matchesMultiField } from '@/lib/tableFilters';
 import { formatDate } from '@/lib/utils';
@@ -258,9 +259,23 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
               />
             ) : (
               pagination.pageItems.map((sbom) => (
-                <tr key={sbom.id} className="transition-colors hover:bg-hcl-light/40">
+                <tr key={sbom.id} className="group transition-colors hover:bg-hcl-light/40">
                   <Td className="font-mono text-xs text-hcl-muted">#{sbom.id}</Td>
-                  <Td className="max-w-[200px] truncate font-medium text-hcl-navy">{sbom.sbom_name}</Td>
+                  <Td className="max-w-[220px] font-medium text-hcl-navy">
+                    <div className="flex items-center gap-1.5">
+                      <span className="min-w-0 flex-1 truncate" title={sbom.sbom_name}>
+                        {sbom.sbom_name}
+                      </span>
+                      <PinButton
+                        kind="sbom"
+                        id={sbom.id}
+                        label={sbom.sbom_name}
+                        href={`/sboms/${sbom.id}`}
+                        compact
+                        hoverOnly
+                      />
+                    </div>
+                  </Td>
                   <Td className="text-hcl-muted">{displayProject(sbom)}</Td>
                   <Td className="text-hcl-muted">{sbom.sbom_version || sbom.productver || '—'}</Td>
                   <Td className="text-hcl-muted">{sbom.sbom_type || '—'}</Td>

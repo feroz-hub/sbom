@@ -2,17 +2,19 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { TopBar } from '@/components/layout/TopBar';
+import { Motion } from '@/components/ui/Motion';
+import { HeroRiskPulse } from '@/components/dashboard/HeroRiskPulse';
 import { StatsGrid } from '@/components/dashboard/StatsGrid';
 import { SeverityChart } from '@/components/dashboard/SeverityChart';
 import { ActivityChart } from '@/components/dashboard/ActivityChart';
 import { TrendChart } from '@/components/dashboard/TrendChart';
-import { RecentSboms } from '@/components/dashboard/RecentSboms';
+import { TopVulnerableSboms } from '@/components/dashboard/TopVulnerableSboms';
+import { ActivityFeed } from '@/components/dashboard/ActivityFeed';
 import { DashboardQuickActions } from '@/components/dashboard/DashboardQuickActions';
 import {
-  getDashboardStats,
-  getRecentSboms,
   getDashboardActivity,
   getDashboardSeverity,
+  getDashboardStats,
   getDashboardTrend,
 } from '@/lib/api';
 
@@ -20,11 +22,6 @@ export default function DashboardPage() {
   const statsQuery = useQuery({
     queryKey: ['dashboard-stats'],
     queryFn: ({ signal }) => getDashboardStats(signal),
-  });
-
-  const recentQuery = useQuery({
-    queryKey: ['recent-sboms'],
-    queryFn: ({ signal }) => getRecentSboms(5, signal),
   });
 
   const activityQuery = useQuery({
@@ -42,37 +39,72 @@ export default function DashboardPage() {
     queryFn: ({ signal }) => getDashboardTrend(30, signal),
   });
 
-  return (
-    <div className="flex flex-col flex-1">
-      <TopBar title="Dashboard" />
-      <div className="p-6 space-y-6">
-        <DashboardQuickActions />
-        <StatsGrid
-          stats={statsQuery.data}
-          isLoading={statsQuery.isLoading}
-          error={statsQuery.error}
-        />
+  const isAnySyncing =
+    statsQuery.isFetching ||
+    severityQuery.isFetching ||
+    activityQuery.isFetching ||
+    trendQuery.isFetching;
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <SeverityChart
-            data={severityQuery.data}
-            isLoading={severityQuery.isLoading}
+  const heroLoading =
+    statsQuery.isLoading || severityQuery.isLoading || trendQuery.isLoading;
+
+  return (
+    <div className="flex flex-1 flex-col">
+      <TopBar
+        title="Dashboard"
+        subtitle="Real-time security posture across your SBOM portfolio"
+      />
+      <div className="space-y-6 p-6">
+        <Motion preset="rise">
+          <HeroRiskPulse
+            stats={statsQuery.data}
+            severity={severityQuery.data}
+            trend={trendQuery.data}
+            isLoading={heroLoading}
+            isSyncing={isAnySyncing && !heroLoading}
           />
-          <ActivityChart
-            data={activityQuery.data}
-            isLoading={activityQuery.isLoading}
+        </Motion>
+
+        <Motion preset="rise" delay={80}>
+          <DashboardQuickActions />
+        </Motion>
+
+        <Motion preset="rise" delay={140}>
+          <StatsGrid
+            stats={statsQuery.data}
+            trend={trendQuery.data}
+            isLoading={statsQuery.isLoading}
+            error={statsQuery.error}
           />
+        </Motion>
+
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <Motion preset="rise" delay={200}>
+            <SeverityChart
+              data={severityQuery.data}
+              isLoading={severityQuery.isLoading}
+            />
+          </Motion>
+          <Motion preset="rise" delay={260}>
+            <ActivityChart
+              data={activityQuery.data}
+              isLoading={activityQuery.isLoading}
+            />
+          </Motion>
         </div>
 
-        <TrendChart
-          data={trendQuery.data}
-          isLoading={trendQuery.isLoading}
-        />
+        <Motion preset="rise" delay={320}>
+          <TrendChart data={trendQuery.data} isLoading={trendQuery.isLoading} />
+        </Motion>
 
-        <RecentSboms
-          sboms={recentQuery.data}
-          isLoading={recentQuery.isLoading}
-        />
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <Motion preset="rise" delay={380}>
+            <TopVulnerableSboms />
+          </Motion>
+          <Motion preset="rise" delay={440}>
+            <ActivityFeed />
+          </Motion>
+        </div>
       </div>
     </div>
   );

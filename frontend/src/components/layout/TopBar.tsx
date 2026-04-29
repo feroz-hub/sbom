@@ -1,9 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { ChevronRight, Menu } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { ChevronRight, Menu, Search } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useSidebar } from './SidebarContext';
+import { openCommandPalette } from './CommandPalette';
 import { ThemeToggle } from '@/components/theme/ThemeToggle';
 import { cn } from '@/lib/utils';
 
@@ -23,6 +24,13 @@ interface TopBarProps {
 
 export function TopBar({ title, action, subtitle, breadcrumbs }: TopBarProps) {
   const { openMobile } = useSidebar();
+  const [isMac, setIsMac] = useState(false);
+
+  // Detect platform on mount so we can show ⌘K vs Ctrl K accurately.
+  useEffect(() => {
+    if (typeof navigator === 'undefined') return;
+    setIsMac(/mac|iphone|ipad|ipod/i.test(navigator.platform || navigator.userAgent || ''));
+  }, []);
 
   return (
     <header
@@ -94,6 +102,41 @@ export function TopBar({ title, action, subtitle, breadcrumbs }: TopBarProps) {
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
+        <button
+          type="button"
+          onClick={openCommandPalette}
+          aria-label="Open command palette"
+          title="Search · Cmd+K"
+          className={cn(
+            'group hidden items-center gap-2 rounded-lg border border-border bg-surface/70 px-3 h-10 sm:inline-flex',
+            'text-xs text-hcl-muted transition-all duration-base ease-spring',
+            'hover:-translate-y-px hover:border-hcl-blue/50 hover:bg-surface hover:text-hcl-navy hover:shadow-elev-2',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/40',
+          )}
+        >
+          <Search className="h-3.5 w-3.5 transition-colors group-hover:text-primary" aria-hidden />
+          <span className="hidden md:inline">Search anything…</span>
+          <span className="ml-1 hidden items-center gap-0.5 lg:flex">
+            <kbd className="font-mono inline-flex h-5 min-w-[1.1rem] items-center justify-center rounded border border-border bg-surface-muted px-1 text-[10px] font-semibold text-hcl-navy">
+              {isMac ? '⌘' : 'Ctrl'}
+            </kbd>
+            <kbd className="font-mono inline-flex h-5 min-w-[1.1rem] items-center justify-center rounded border border-border bg-surface-muted px-1 text-[10px] font-semibold text-hcl-navy">
+              K
+            </kbd>
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={openCommandPalette}
+          aria-label="Open command palette"
+          className={cn(
+            'inline-flex sm:hidden h-10 w-10 items-center justify-center rounded-lg',
+            'text-hcl-navy hover:bg-surface-muted transition-colors',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/50',
+          )}
+        >
+          <Search className="h-4 w-4" aria-hidden />
+        </button>
         {action}
         <ThemeToggle />
       </div>

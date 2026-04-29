@@ -3,17 +3,29 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Download } from 'lucide-react';
+import {
+  ArrowLeft,
+  FileBarChart,
+  FileCode2,
+  FileSpreadsheet,
+} from 'lucide-react';
 import { TopBar } from '@/components/layout/TopBar';
 import { Alert } from '@/components/ui/Alert';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
-import { StatusBadge, SeverityBadge } from '@/components/ui/Badge';
+import { ExportMenu } from '@/components/ui/ExportMenu';
+import { Surface, SurfaceContent, SurfaceHeader } from '@/components/ui/Surface';
+import { Motion } from '@/components/ui/Motion';
 import { FindingsTable } from '@/components/analysis/FindingsTable';
-import { PageSpinner } from '@/components/ui/Spinner';
-import { getRun, getAllRunFindings, downloadPdfReport, exportRunCsv, exportRunSarif } from '@/lib/api';
+import { RunDetailHero } from '@/components/analysis/RunDetailHero';
+import { PageSpinner, SkeletonTable } from '@/components/ui/Spinner';
+import {
+  getRun,
+  getAllEnrichedRunFindings,
+  downloadPdfReport,
+  exportRunCsv,
+  exportRunSarif,
+} from '@/lib/api';
 import { runStatusDescription } from '@/lib/analysisRunStatusLabels';
-import { formatDate, formatDuration, downloadBlob } from '@/lib/utils';
+import { downloadBlob } from '@/lib/utils';
 import { useToast } from '@/hooks/useToast';
 
 interface AnalysisDetailPageProps {
@@ -25,7 +37,9 @@ export default function AnalysisDetailPage({ params }: AnalysisDetailPageProps) 
   const router = useRouter();
   const { showToast } = useToast();
   const [severityFilter, setSeverityFilter] = useState('');
-  const [downloading, setDownloading] = useState(false);
+  const [pdfDownloading, setPdfDownloading] = useState(false);
+  const [csvDownloading, setCsvDownloading] = useState(false);
+  const [sarifDownloading, setSarifDownloading] = useState(false);
 
   const { data: run, isLoading: runLoading, error: runError } = useQuery({
     queryKey: ['run', id],
@@ -34,9 +48,9 @@ export default function AnalysisDetailPage({ params }: AnalysisDetailPageProps) 
   });
 
   const { data: findingsData, isLoading: findingsLoading, error: findingsError } = useQuery({
-    queryKey: ['findings', id, severityFilter],
+    queryKey: ['findings-enriched', id, severityFilter],
     queryFn: ({ signal }) =>
-      getAllRunFindings(id, { severity: severityFilter || undefined }, signal),
+      getAllEnrichedRunFindings(id, { severity: severityFilter || undefined }, signal),
     enabled: !isNaN(id),
   });
   const findings = findingsData?.findings;
@@ -44,49 +58,55 @@ export default function AnalysisDetailPage({ params }: AnalysisDetailPageProps) 
 
   const handleDownloadPdf = async () => {
     if (!run) return;
-    setDownloading(true);
+    setPdfDownloading(true);
     try {
       const blob = await downloadPdfReport({
         runId: run.id,
-        title: `Analysis Report - Run #${run.id}`,
+        title: `Analysis Report — Run #${run.id}`,
         filename: `sbom-analysis-run-${run.id}.pdf`,
       });
       downloadBlob(blob, `sbom-analysis-run-${run.id}.pdf`);
       showToast('PDF report downloaded', 'success');
     } catch (err) {
-      showToast(`Failed to download PDF: ${(err as Error).message}`, 'error');
+      showToast(`PDF export failed: ${(err as Error).message}`, 'error');
     } finally {
-      setDownloading(false);
+      setPdfDownloading(false);
     }
   };
 
   const handleDownloadCsv = async () => {
     if (!run) return;
+    setCsvDownloading(true);
     try {
       const { blob, filename } = await exportRunCsv(run.id);
       downloadBlob(blob, filename);
       showToast('CSV exported', 'success');
     } catch (err) {
-      showToast(`Failed to export CSV: ${(err as Error).message}`, 'error');
+      showToast(`CSV export failed: ${(err as Error).message}`, 'error');
+    } finally {
+      setCsvDownloading(false);
     }
   };
 
   const handleDownloadSarif = async () => {
     if (!run) return;
+    setSarifDownloading(true);
     try {
       const { blob, filename } = await exportRunSarif(run.id);
       downloadBlob(blob, filename);
       showToast('SARIF exported', 'success');
     } catch (err) {
-      showToast(`Failed to export SARIF: ${(err as Error).message}`, 'error');
+      showToast(`SARIF export failed: ${(err as Error).message}`, 'error');
+    } finally {
+      setSarifDownloading(false);
     }
   };
 
   if (runLoading) {
     return (
-      <div className="flex flex-col flex-1">
+      <div className="flex flex-1 flex-col">
         <TopBar
-          title="Analysis Detail"
+          title="Analysis run"
           breadcrumbs={[{ label: 'Analysis Runs', href: '/analysis' }]}
         />
         <div className="p-6">
@@ -98,9 +118,9 @@ export default function AnalysisDetailPage({ params }: AnalysisDetailPageProps) 
 
   if (runError || !run) {
     return (
-      <div className="flex flex-col flex-1">
+      <div className="flex flex-1 flex-col">
         <TopBar
-          title="Analysis Detail"
+          title="Analysis run"
           breadcrumbs={[{ label: 'Analysis Runs', href: '/analysis' }]}
         />
         <div className="p-6">
@@ -112,149 +132,106 @@ export default function AnalysisDetailPage({ params }: AnalysisDetailPageProps) 
     );
   }
 
-  const severityBreakdown = [
+  const exportItems = [
     {
-      label: 'Critical',
-      count: run.critical_count,
-      color:
-        'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200',
+      key: 'pdf',
+      label: 'PDF report',
+      description: 'Polished narrative report — best for sharing',
+      Icon: FileBarChart,
+      onSelect: handleDownloadPdf,
+      loading: pdfDownloading,
+      disabled: !run,
     },
     {
-      label: 'High',
-      count: run.high_count,
-      color:
-        'border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-800 dark:bg-orange-950/40 dark:text-orange-200',
+      key: 'csv',
+      label: 'CSV',
+      description: 'All findings — best for spreadsheets',
+      Icon: FileSpreadsheet,
+      onSelect: handleDownloadCsv,
+      loading: csvDownloading,
+      disabled: !run,
     },
     {
-      label: 'Medium',
-      count: run.medium_count,
-      color:
-        'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200',
-    },
-    { label: 'Low', count: run.low_count, color: 'border-hcl-border bg-hcl-light text-hcl-blue' },
-    {
-      label: 'Unknown',
-      count: run.unknown_count,
-      color:
-        'border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300',
+      key: 'sarif',
+      label: 'SARIF',
+      description: 'SARIF 2.1.0 — best for code-scanning tools',
+      Icon: FileCode2,
+      onSelect: handleDownloadSarif,
+      loading: sarifDownloading,
+      disabled: !run,
     },
   ];
 
   return (
-    <div className="flex flex-col flex-1">
+    <div className="flex flex-1 flex-col">
       <TopBar
-        title={`Analysis Run #${run.id}`}
-        breadcrumbs={[{ label: 'Analysis Runs', href: '/analysis' }]}
-        action={
-          <div className="flex items-center gap-2">
-            <Button variant="secondary" size="sm" onClick={handleDownloadCsv}>
-              <Download className="h-4 w-4" />
-              CSV
-            </Button>
-            <Button variant="secondary" size="sm" onClick={handleDownloadSarif}>
-              <Download className="h-4 w-4" />
-              SARIF
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleDownloadPdf}
-              loading={downloading}
-            >
-              <Download className="h-4 w-4" />
-              PDF
-            </Button>
-          </div>
-        }
+        title={`Run #${run.id}`}
+        subtitle={run.sbom_name ?? `SBOM #${run.sbom_id ?? '—'}`}
+        breadcrumbs={[
+          { label: 'Analysis Runs', href: '/analysis' },
+          { label: `Run #${run.id}` },
+        ]}
+        action={<ExportMenu items={exportItems} />}
       />
-      <div className="p-6 space-y-6">
+      <div className="space-y-6 p-6">
         {/* Back */}
         <button
           onClick={() => router.back()}
-          className="flex items-center gap-2 text-sm text-hcl-muted hover:text-hcl-navy transition-colors"
+          className="inline-flex items-center gap-2 text-sm text-hcl-muted transition-colors hover:text-hcl-navy"
         >
-          <ArrowLeft className="h-4 w-4" /> Back to Analysis Runs
+          <ArrowLeft className="h-4 w-4" /> Back
         </button>
 
-        {/* Summary Card */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Run Summary</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="mb-4 text-xs leading-relaxed text-hcl-muted">
-              Outcome:{' '}
-              <span className="text-foreground">{runStatusDescription(run.run_status)}</span>
-            </p>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-              {[
-                { label: 'Outcome', value: <StatusBadge status={run.run_status} /> },
-                { label: 'Source', value: run.source || '—' },
-                { label: 'Duration', value: formatDuration(run.duration_ms) },
-                { label: 'Total Components', value: run.total_components?.toLocaleString() ?? '—' },
-                { label: 'Total Findings', value: run.total_findings?.toLocaleString() ?? '—' },
-                { label: 'SBOM', value: run.sbom_name || (run.sbom_id ? `#${run.sbom_id}` : '—') },
-                { label: 'Started On', value: formatDate(run.started_on) },
-                { label: 'Completed On', value: formatDate(run.completed_on) },
-              ].map(({ label, value }) => (
-                <div key={label}>
-                  <dt className="text-xs font-medium text-hcl-muted uppercase tracking-wide">{label}</dt>
-                  <dd className="mt-1 text-sm font-medium text-hcl-navy">{value}</dd>
-                </div>
-              ))}
-            </div>
+        {/* Hero */}
+        <Motion preset="rise">
+          <RunDetailHero run={run} findings={findings} />
+        </Motion>
 
-            {/* Severity breakdown */}
-            <div>
-              <p className="text-xs font-medium text-hcl-muted uppercase tracking-wide mb-2">
-                Findings Breakdown
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {severityBreakdown.map(({ label, count, color }) =>
-                  count != null ? (
-                    <span
-                      key={label}
-                      className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border ${color}`}
-                    >
-                      {label}: {count}
-                    </span>
-                  ) : null
-                )}
-              </div>
-            </div>
+        {/* Run error message — surfaces above findings */}
+        {run.error_message && (
+          <Alert variant="error" title="Run error">
+            {run.error_message}
+          </Alert>
+        )}
 
-            {run.error_message && (
-              <div className="mt-4">
-                <Alert variant="error" title="Run error">
-                  {run.error_message}
-                </Alert>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        {/* Outcome footnote */}
+        <p className="text-xs leading-relaxed text-hcl-muted">
+          Outcome: <span className="text-foreground">{runStatusDescription(run.run_status)}</span>
+        </p>
 
         {/* Findings */}
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              Findings
-              {findingsData != null && (
-                <span className="ml-2 text-sm font-normal text-hcl-muted">
-                  ({findingsTotalCount?.toLocaleString() ?? findings?.length ?? 0})
-                </span>
+        <Motion preset="rise" delay={80}>
+          <Surface variant="elevated">
+            <SurfaceHeader>
+              <div>
+                <h3 className="text-base font-semibold text-hcl-navy">
+                  Findings
+                  {findingsData != null && (
+                    <span className="ml-2 font-metric text-sm font-normal tabular-nums text-hcl-muted">
+                      {findingsTotalCount?.toLocaleString() ?? findings?.length ?? 0}
+                    </span>
+                  )}
+                </h3>
+                <p className="mt-0.5 text-xs text-hcl-muted">
+                  Sortable by risk · expand any row for description, CWE, fix versions.
+                </p>
+              </div>
+            </SurfaceHeader>
+            <SurfaceContent className="px-4 py-4">
+              {findingsLoading ? (
+                <SkeletonTable rows={6} cols={9} />
+              ) : (
+                <FindingsTable
+                  findings={findings}
+                  isLoading={false}
+                  error={findingsError}
+                  onSeverityChange={setSeverityFilter}
+                  severityFilter={severityFilter}
+                />
               )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0 pb-4 px-4">
-            <FindingsTable
-              findings={findings}
-              isLoading={findingsLoading}
-              error={findingsError}
-              onSeverityChange={setSeverityFilter}
-              severityFilter={severityFilter}
-            />
-          </CardContent>
-        </Card>
+            </SurfaceContent>
+          </Surface>
+        </Motion>
       </div>
     </div>
   );

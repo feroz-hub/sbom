@@ -4,6 +4,7 @@ import type {
   SBOMComponent,
   AnalysisRun,
   AnalysisFinding,
+  EnrichedFinding,
   DashboardStats,
   RecentSbom,
   ActivityData,
@@ -179,8 +180,20 @@ export function getAnalysisConfig(signal?: AbortSignal) {
 }
 
 // ─── Health ──────────────────────────────────────────────────────────────────
+export interface HealthResponse {
+  status: string;
+  nvd_mirror?: {
+    available?: boolean;
+    enabled?: boolean;
+    last_success_at?: string | null;
+    watermark?: string | null;
+    stale?: boolean;
+    error?: string;
+  };
+}
+
 export function getHealth(signal?: AbortSignal) {
-  return request<{ status: string }>('/health', { signal });
+  return request<HealthResponse>('/health', { signal });
 }
 
 // ─── Dashboard ───────────────────────────────────────────────────────────────
@@ -350,6 +363,69 @@ export function getRunFindings(
 /** Backend caps page_size at 1000; reads ``X-Total-Count`` and follows pages until all rows are loaded. */
 const RUN_FINDINGS_PAGE_SIZE = 1000;
 const RUN_FINDINGS_MAX_PAGES = 500;
+
+/**
+ * Enriched findings — same shape as `getRunFindings` plus per-finding KEV
+ * flag, EPSS score/percentile, and the composite risk score from the v2
+ * scorer (`cvss * (1 + 5*epss) * (kev ? 2 : 1)`).
+ *
+ * Hits POST-warmed KEV/EPSS caches on the backend, so subsequent calls for
+ * the same CVEs are served in-memory.
+ */
+export function getEnrichedRunFindings(
+  id: number,
+  opts: { severity?: string; page?: number; page_size?: number } = {},
+  signal?: AbortSignal,
+) {
+  const params = new URLSearchParams();
+  if (opts.severity) params.set('severity', opts.severity);
+  params.set('page', String(opts.page ?? 1));
+  params.set('page_size', String(opts.page_size ?? 100));
+  return request<EnrichedFinding[]>(
+    `/api/runs/${id}/findings-enriched?${params.toString()}`,
+    { signal },
+  );
+}
+
+/** Paginate every enriched finding for a run, mirroring `getAllRunFindings`. */
+export async function getAllEnrichedRunFindings(
+  id: number,
+  opts: { severity?: string } = {},
+  signal?: AbortSignal,
+): Promise<{ findings: EnrichedFinding[]; totalCount: number }> {
+  const all: EnrichedFinding[] = [];
+  let totalCount = 0;
+
+  for (let page = 1; page <= RUN_FINDINGS_MAX_PAGES; page++) {
+    const params = new URLSearchParams();
+    if (opts.severity) params.set('severity', opts.severity);
+    params.set('page', String(page));
+    params.set('page_size', String(RUN_FINDINGS_PAGE_SIZE));
+
+    const res = await performRequest(
+      `/api/runs/${id}/findings-enriched?${params.toString()}`,
+      { signal },
+    );
+    const hdr = res.headers.get('X-Total-Count');
+    const parsed = hdr != null && hdr !== '' ? Number.parseInt(hdr, 10) : NaN;
+    if (Number.isFinite(parsed)) {
+      totalCount = parsed;
+    }
+
+    const batch = (await res.json()) as EnrichedFinding[];
+    all.push(...batch);
+
+    if (batch.length === 0) break;
+    if (totalCount > 0 && all.length >= totalCount) break;
+    if (batch.length < RUN_FINDINGS_PAGE_SIZE) break;
+  }
+
+  if (totalCount <= 0) {
+    totalCount = all.length;
+  }
+
+  return { findings: all, totalCount };
+}
 
 export async function getAllRunFindings(
   id: number,

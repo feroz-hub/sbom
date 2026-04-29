@@ -2,20 +2,31 @@
 Analysis runs and findings router.
 
 Routes:
-  GET /api/runs                         list analysis runs with filtering/pagination
-  GET /api/runs/{run_id}                get single run
-  GET /api/runs/{run_id}/findings       list findings with severity filter and pagination
+  GET /api/runs                                  list analysis runs with filtering/pagination
+  GET /api/runs/{run_id}                         get single run
+  GET /api/runs/{run_id}/findings                list findings with severity filter and pagination
+  GET /api/runs/{run_id}/findings-enriched       list findings + per-CVE KEV/EPSS/composite risk score
 """
 
+import json
 import logging
+import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..models import AnalysisFinding, AnalysisRun, SBOMSource
+from ..models import AnalysisFinding, AnalysisRun, EpssScore, SBOMSource
 from ..schemas import AnalysisFindingOut, AnalysisRunOut
+from ..services.risk_score import (
+    EPSS_AMPLIFIER,
+    KEV_MULTIPLIER,
+    _resolve_cvss,
+)
+from ..sources.kev import lookup_kev_set_memoized
+
+_CVE_RE = re.compile(r"CVE-\d{4}-\d{4,7}", re.IGNORECASE)
 
 log = logging.getLogger(__name__)
 
@@ -171,6 +182,143 @@ def list_run_findings(
 
     stmt = base.order_by(AnalysisFinding.score.desc()).limit(page_size).offset(offset)
     items = db.execute(stmt).scalars().all()
+
+    if response is not None:
+        response.headers["X-Total-Count"] = str(total)
+
+    return items
+
+
+def _cve_aliases_for(finding: AnalysisFinding) -> list[str]:
+    """Pull every CVE ID we can find on a finding (vuln_id + aliases JSON)."""
+    ids: list[str] = []
+    if finding.vuln_id:
+        ids.extend(_CVE_RE.findall(finding.vuln_id))
+    if finding.aliases:
+        try:
+            parsed = json.loads(finding.aliases)
+            if isinstance(parsed, list):
+                for a in parsed:
+                    if isinstance(a, str):
+                        ids.extend(_CVE_RE.findall(a))
+        except (TypeError, ValueError):
+            ids.extend(_CVE_RE.findall(finding.aliases))
+    return sorted({i.upper() for i in ids if i})
+
+
+@router.get("/runs/{run_id}/findings-enriched")
+def list_run_findings_enriched(
+    run_id: int,
+    severity: str | None = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(100, ge=1, le=1000),
+    response: Response = None,
+    db: Session = Depends(get_db),
+):
+    """
+    Findings list enriched with per-CVE KEV flag, EPSS score/percentile, and the
+    composite risk score used by ``/api/sboms/{id}/risk-summary``.
+
+    Same paging/filtering surface as ``/api/runs/{run_id}/findings``; intended
+    for the next-gen findings table that surfaces exploit-likelihood signals
+    inline. KEV / EPSS lookups are cached (24h DB cache + 60s in-process memo)
+    so the hot path is cheap on warm caches.
+    """
+    run = db.get(AnalysisRun, run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Analysis run not found")
+
+    page = 1 if page < 1 else page
+    page_size = max(1, min(page_size, 1000))
+    offset = (page - 1) * page_size
+
+    base = select(AnalysisFinding).where(AnalysisFinding.analysis_run_id == run_id)
+    count = select(func.count(AnalysisFinding.id)).where(AnalysisFinding.analysis_run_id == run_id)
+
+    if severity:
+        norm = severity.strip().upper()
+        base = base.where(AnalysisFinding.severity == norm)
+        count = count.where(AnalysisFinding.severity == norm)
+
+    total = db.execute(count).scalar_one()
+
+    stmt = base.order_by(AnalysisFinding.score.desc()).limit(page_size).offset(offset)
+    findings = db.execute(stmt).scalars().all()
+
+    # Collect every CVE alias on the page so KEV/EPSS lookups are batched.
+    finding_cves: dict[int, list[str]] = {f.id: _cve_aliases_for(f) for f in findings}
+    all_cves: set[str] = set()
+    for cves in finding_cves.values():
+        all_cves.update(cves)
+    cve_list = sorted(all_cves)
+
+    kev_set: set[str] = lookup_kev_set_memoized(db, cve_list) if cve_list else set()
+    # Read percentile + epss directly so we get the full row (memoized helper
+    # only returns probability, no percentile).
+    epss_map: dict[str, dict[str, float | None]] = {}
+    if cve_list:
+        rows = db.execute(
+            select(EpssScore.cve_id, EpssScore.epss, EpssScore.percentile).where(
+                EpssScore.cve_id.in_(cve_list)
+            )
+        ).all()
+        for cve_id, epss_val, percentile in rows:
+            epss_map[cve_id] = {"epss": epss_val, "percentile": percentile}
+
+    items: list[dict] = []
+    for f in findings:
+        cves = finding_cves.get(f.id, [])
+        # Per-finding EPSS = max EPSS across any CVE alias on the finding.
+        epss = 0.0
+        epss_percentile: float | None = None
+        for c in cves:
+            entry = epss_map.get(c)
+            if entry is None:
+                continue
+            v = entry.get("epss") or 0.0
+            if v > epss:
+                epss = float(v)
+                p = entry.get("percentile")
+                epss_percentile = float(p) if p is not None else None
+
+        in_kev = any(c in kev_set for c in cves)
+        cvss = _resolve_cvss(f)
+        exploit_factor = 1.0 + EPSS_AMPLIFIER * epss
+        kev_multiplier = KEV_MULTIPLIER if in_kev else 1.0
+        risk_score = round(cvss * exploit_factor * kev_multiplier, 2)
+
+        items.append(
+            {
+                "id": f.id,
+                "analysis_run_id": f.analysis_run_id,
+                "component_id": f.component_id,
+                "vuln_id": f.vuln_id,
+                "source": f.source,
+                "title": f.title,
+                "description": f.description,
+                "severity": f.severity,
+                "score": f.score,
+                "vector": f.vector,
+                "published_on": f.published_on,
+                "reference_url": f.reference_url,
+                "cwe": f.cwe,
+                "cpe": f.cpe,
+                "component_name": f.component_name,
+                "component_version": f.component_version,
+                "fixed_versions": f.fixed_versions,
+                "attack_vector": f.attack_vector,
+                "cvss_version": f.cvss_version,
+                "aliases": f.aliases,
+                # Enriched fields
+                "in_kev": in_kev,
+                "epss": round(epss, 4),
+                "epss_percentile": (
+                    round(epss_percentile, 4) if epss_percentile is not None else None
+                ),
+                "risk_score": risk_score,
+                "cve_aliases": cves,
+            }
+        )
 
     if response is not None:
         response.headers["X-Total-Count"] = str(total)

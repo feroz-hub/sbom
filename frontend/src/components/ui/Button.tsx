@@ -6,20 +6,30 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   size?: 'sm' | 'md' | 'lg' | 'icon';
   loading?: boolean;
   loadingLabel?: string;
+  /** Adds a subtle glow halo on hover/focus. Use sparingly on hero CTAs. */
+  glow?: boolean;
   children: ReactNode;
 }
 
 const variantClasses: Record<string, string> = {
   primary:
-    'bg-primary text-white hover:bg-hcl-dark active:bg-hcl-dark border-transparent shadow-sm',
+    'bg-primary text-white hover:bg-hcl-dark active:bg-hcl-dark border-transparent shadow-elev-1',
   secondary:
     'bg-surface text-hcl-navy hover:bg-surface-muted active:bg-border-subtle/60 border-border',
   danger:
-    'bg-red-600 text-white hover:bg-red-700 active:bg-red-800 border-transparent shadow-sm',
+    'bg-red-600 text-white hover:bg-red-700 active:bg-red-800 border-transparent shadow-elev-1',
   ghost:
     'bg-transparent text-hcl-navy hover:bg-surface-muted active:bg-border-subtle/60 border-transparent',
   outline:
     'bg-transparent text-primary border-primary hover:bg-primary hover:text-white active:bg-hcl-dark active:text-white',
+};
+
+const glowVariantClasses: Record<string, string> = {
+  primary: 'hover:shadow-glow-primary focus-visible:shadow-glow-primary',
+  secondary: 'hover:shadow-glow-cyan focus-visible:shadow-glow-cyan',
+  danger: 'hover:shadow-glow-critical focus-visible:shadow-glow-critical',
+  ghost: 'hover:shadow-glow-cyan focus-visible:shadow-glow-cyan',
+  outline: 'hover:shadow-glow-primary focus-visible:shadow-glow-primary',
 };
 
 const sizeClasses: Record<string, string> = {
@@ -35,6 +45,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     size = 'md',
     loading = false,
     loadingLabel = 'Loading',
+    glow = false,
     children,
     className,
     disabled,
@@ -52,14 +63,18 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       aria-busy={loading || undefined}
       aria-disabled={isDisabled || undefined}
       className={cn(
-        'inline-flex items-center justify-center font-medium border',
-        'transition-[background-color,color,border-color,box-shadow,transform] duration-150',
-        'active:translate-y-px',
+        'group/btn inline-flex items-center justify-center font-medium border',
+        'transition-[background-color,color,border-color,box-shadow,transform] duration-base ease-spring',
+        'will-change-transform',
+        'hover:-translate-y-px active:translate-y-0 active:scale-[0.97]',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
         'focus-visible:ring-hcl-blue/50 focus-visible:ring-offset-background',
-        'disabled:opacity-50 disabled:cursor-not-allowed disabled:active:translate-y-0',
-        'motion-reduce:transition-none motion-reduce:active:translate-y-0',
+        'disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:active:translate-y-0 disabled:active:scale-100',
+        'motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:translate-y-0 motion-reduce:active:scale-100',
+        '[&_svg]:transition-transform [&_svg]:duration-base [&_svg]:ease-spring',
+        'hover:[&_svg]:scale-110 motion-reduce:hover:[&_svg]:scale-100',
         variantClasses[variant],
+        glow && glowVariantClasses[variant],
         sizeClasses[size],
         className,
       )}
