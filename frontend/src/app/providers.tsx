@@ -13,7 +13,17 @@ export function Providers({ children }: { children: ReactNode }) {
       new QueryClient({
         defaultOptions: {
           queries: {
-            staleTime: 30_000,
+            // 30s was too aggressive: navigating away for >30s and back
+            // triggered a full skeleton cycle on return because the
+            // cache was already stale. Dashboard counts / trend data
+            // change minute-to-minute at most, so 5 min is the right
+            // budget. Routes that need fresher data (analysis runs in
+            // flight) can override per-query.
+            staleTime: 5 * 60_000,
+            // Window-focus refetch double-counts work when the same tab
+            // navigates away and back — the route remount already
+            // refetches when staleTime expires.
+            refetchOnWindowFocus: false,
             retry: 1,
           },
         },

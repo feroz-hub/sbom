@@ -23,7 +23,17 @@ export interface SBOMSource {
   productver: string | null;
   sbom_data?: string | null;
   // Client-side only — not from API. Set during optimistic updates.
-  _analysisStatus?: 'ANALYSING' | 'PASS' | 'FAIL' | 'PARTIAL' | 'ERROR' | 'NOT_ANALYSED';
+  // ADR-0001: OK / FINDINGS are the canonical names. PASS / FAIL accepted as
+  // legacy aliases during the deprecation window.
+  _analysisStatus?:
+    | 'ANALYSING'
+    | 'OK'
+    | 'FINDINGS'
+    | 'PARTIAL'
+    | 'ERROR'
+    | 'NOT_ANALYSED'
+    | 'PASS' // legacy alias for OK
+    | 'FAIL'; // legacy alias for FINDINGS
   _findingsCount?: number;
 }
 
@@ -44,7 +54,18 @@ export interface AnalysisRun {
   sbom_id: number | null;
   sbom_name?: string | null;
   project_id: number | null;
-  run_status: 'PASS' | 'FAIL' | 'PARTIAL' | 'ERROR' | 'RUNNING' | 'PENDING' | 'NO_DATA';
+  // ADR-0001: OK / FINDINGS are canonical. PASS / FAIL accepted as legacy
+  // aliases during the deprecation window — see docs/terminology.md.
+  run_status:
+    | 'OK'
+    | 'FINDINGS'
+    | 'PARTIAL'
+    | 'ERROR'
+    | 'RUNNING'
+    | 'PENDING'
+    | 'NO_DATA'
+    | 'PASS' // legacy alias for OK
+    | 'FAIL'; // legacy alias for FINDINGS
   source: string | null;
   total_components: number | null;
   components_with_cpe: number | null;
@@ -101,9 +122,41 @@ export interface EnrichedFinding extends AnalysisFinding {
 }
 
 export interface DashboardStats {
-  total_projects: number;
+  // ADR-0001 / docs/terminology.md — canonical fields:
+  total_active_projects: number;
   total_sboms: number;
-  total_vulnerabilities: number;
+  /** Distinct CVE-equivalent identifiers in scope (latest successful run per SBOM). */
+  total_distinct_vulnerabilities: number;
+  /** Finding rows in scope (one CVE × N components × latest run = N findings). */
+  total_findings: number;
+  // Legacy aliases (one-release deprecation window). Older bundles keyed off
+  // these names. Kept so optional chaining at the call-site keeps working.
+  total_projects?: number;
+  total_vulnerabilities?: number;
+}
+
+export interface HealthResponse {
+  status: string;
+  nvd_mirror?: {
+    available?: boolean;
+    enabled?: boolean;
+    last_success_at?: string | null;
+    watermark?: string | null;
+    stale?: boolean;
+    error?: string;
+  };
+}
+
+export interface DashboardPosture {
+  severity: SeverityData;
+  /** Distinct vulns in scope that appear in the CISA KEV catalog. */
+  kev_count: number;
+  /** Distinct vulns in scope with a non-empty fixed_versions array. */
+  fix_available_count: number;
+  /** ISO timestamp of the most recent successful run, or null if none. */
+  last_successful_run_at: string | null;
+  total_sboms: number;
+  total_active_projects: number;
 }
 
 export interface RecentSbom {

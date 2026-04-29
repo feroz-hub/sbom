@@ -10,6 +10,7 @@ import {
   CircleDashed,
   FileText,
   ScanSearch,
+  ShieldAlert,
   XCircle,
   type LucideIcon,
 } from 'lucide-react';
@@ -51,12 +52,19 @@ function formatRelative(input: string | null | undefined): string {
   return formatDate(input);
 }
 
+// ADR-0001: FINDINGS replaces FAIL and paints amber (not red) — a successful
+// scan that found vulns is not a pipeline failure. ERROR remains the only
+// red status. Legacy keys (PASS/FAIL) kept for one deprecation cycle.
+const _OK_GLYPH = { Icon: CheckCircle2, tone: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/40', label: 'Clean' };
+const _FINDINGS_GLYPH = { Icon: ShieldAlert, tone: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-950/40', label: 'Findings detected' };
 const statusGlyph: Record<
   AnalysisRun['run_status'],
   { Icon: LucideIcon; tone: string; bg: string; label: string }
 > = {
-  PASS: { Icon: CheckCircle2, tone: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/40', label: 'Passed' },
-  FAIL: { Icon: XCircle, tone: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-950/40', label: 'Findings detected' },
+  OK: _OK_GLYPH,
+  PASS: _OK_GLYPH, // legacy alias
+  FINDINGS: _FINDINGS_GLYPH,
+  FAIL: _FINDINGS_GLYPH, // legacy alias
   PARTIAL: { Icon: CircleDashed, tone: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-950/40', label: 'Partial' },
   ERROR: { Icon: XCircle, tone: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-950/40', label: 'Errored' },
   RUNNING: { Icon: ScanSearch, tone: 'text-sky-600 dark:text-sky-400', bg: 'bg-sky-50 dark:bg-sky-950/40', label: 'Running' },

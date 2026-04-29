@@ -81,8 +81,10 @@ def test_post_sbom_analyze_severity_buckets_and_status(client, seeded_sbom, mock
     assert body["critical_count"] >= 1
     assert body["high_count"] >= 1
 
-    # Run status is FAIL because there are findings (no errors).
-    assert body["run_status"] == "FAIL"
+    # Run status is FINDINGS because there are findings (no errors). ADR-0001
+    # renamed this from FAIL — a successful scan that found CVEs is not a
+    # pipeline failure.
+    assert body["run_status"] == "FINDINGS"
 
     # Source label must enumerate every source the orchestrator actually used.
     assert "NVD" in body["source"]

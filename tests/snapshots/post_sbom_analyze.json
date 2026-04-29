@@ -10,7 +10,7 @@
   "project_id": null,
   "query_error_count": 0,
   "raw_report": "<volatile>",
-  "run_status": "FAIL",
+  "run_status": "FINDINGS",
   "sbom_id": "<volatile>",
   "sbom_name": null,
   "source": "NVD,OSV,GITHUB",

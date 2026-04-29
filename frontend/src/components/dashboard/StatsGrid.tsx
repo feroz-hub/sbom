@@ -22,7 +22,8 @@ interface StatsGridProps {
 }
 
 interface StatCardConfig {
-  key: keyof DashboardStats;
+  /** Function that pulls the displayed number from the stats payload. */
+  valueFrom: (stats: DashboardStats) => number | undefined;
   label: string;
   icon: LucideIcon;
   iconClass: string;
@@ -33,11 +34,23 @@ interface StatCardConfig {
   trendSelector?: (trend: DashboardTrend) => number[];
   /** Tone class for the sparkline color. */
   sparkColor: string;
+  /** Tooltip / aria description that names exactly what this counts. */
+  tooltip: string;
+  /** Used to flip delta tone (up=bad on vulns; up=neutral on counts). */
+  isVulnCard?: boolean;
 }
 
+// ADR-0001 / docs/terminology.md:
+//   * "Active Projects" filters project_status=1 (server-enforced).
+//   * "Distinct Vulnerabilities" replaces "Total Vulnerabilities" — counts
+//     distinct CVE/GHSA ids in scope (latest successful run per SBOM), not
+//     finding rows. The two numbers are different and one CVE can produce
+//     many findings.
+//   * Deep-link to the runs view filtered by FINDINGS, not the legacy
+//     overloaded FAIL alias.
 const cards: StatCardConfig[] = [
   {
-    key: 'total_projects',
+    valueFrom: (s) => s.total_active_projects ?? s.total_projects,
     label: 'Active Projects',
     icon: FolderOpen,
     iconClass: 'bg-hcl-light text-hcl-blue',
@@ -45,9 +58,10 @@ const cards: StatCardConfig[] = [
     href: '/projects',
     linkLabel: 'Open projects',
     sparkColor: 'var(--color-hcl-blue)',
+    tooltip: 'Projects with status = active. Inactive projects are excluded.',
   },
   {
-    key: 'total_sboms',
+    valueFrom: (s) => s.total_sboms,
     label: 'Total SBOMs',
     icon: FileText,
     iconClass: 'bg-hcl-light text-hcl-dark dark:text-hcl-blue',
@@ -55,18 +69,22 @@ const cards: StatCardConfig[] = [
     href: '/sboms',
     linkLabel: 'Open SBOMs',
     sparkColor: 'var(--color-hcl-cyan)',
+    tooltip: 'All SBOM documents uploaded across all projects.',
   },
   {
-    key: 'total_vulnerabilities',
-    label: 'Total Vulnerabilities',
+    valueFrom: (s) => s.total_distinct_vulnerabilities ?? s.total_vulnerabilities,
+    label: 'Distinct Vulnerabilities',
     icon: AlertTriangle,
     iconClass: 'bg-red-50 text-red-600 dark:bg-red-950/50 dark:text-red-400',
     borderClass: 'border-l-red-500',
-    href: '/analysis?tab=runs&status=FAIL',
+    href: '/analysis?tab=runs&status=FINDINGS',
     linkLabel: 'View runs with findings',
     trendSelector: (t) =>
       t.series.map((p) => p.critical + p.high + p.medium + p.low),
     sparkColor: '#dc2626',
+    tooltip:
+      'Distinct CVE / advisory identifiers in scope (latest successful run per SBOM). One CVE on three components is one vulnerability and three findings.',
+    isVulnCard: true,
   },
 ];
 
@@ -115,24 +133,25 @@ export function StatsGrid({ stats, trend, isLoading, error }: StatsGridProps) {
 
   return (
     <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-      {cards.map(({ key, label, icon: Icon, iconClass, borderClass, href, linkLabel, trendSelector, sparkColor }) => {
-        const value = stats?.[key];
-        const series = trend && trendSelector ? trendSelector(trend) : [];
+      {cards.map((card) => {
+        const value = stats ? card.valueFrom(stats) : undefined;
+        const series = trend && card.trendSelector ? card.trendSelector(trend) : [];
         const delta = computeDelta(series);
         return (
           <StatCard
-            key={key}
-            label={label}
+            key={card.label}
+            label={card.label}
             value={value}
-            icon={Icon}
-            iconClass={iconClass}
-            borderClass={borderClass}
-            href={href}
-            linkLabel={linkLabel}
+            icon={card.icon}
+            iconClass={card.iconClass}
+            borderClass={card.borderClass}
+            href={card.href}
+            linkLabel={card.linkLabel}
             series={series}
             delta={delta}
-            sparkColor={sparkColor}
-            isVulnCard={key === 'total_vulnerabilities'}
+            sparkColor={card.sparkColor}
+            isVulnCard={card.isVulnCard ?? false}
+            tooltip={card.tooltip}
           />
         );
       })}
@@ -152,6 +171,7 @@ interface StatCardProps {
   delta: { pct: number; direction: 'up' | 'down' | 'flat' } | null;
   sparkColor: string;
   isVulnCard: boolean;
+  tooltip: string;
 }
 
 function StatCard({
@@ -166,6 +186,7 @@ function StatCard({
   delta,
   sparkColor,
   isVulnCard,
+  tooltip,
 }: StatCardProps) {
   // For vuln card, "up" is bad (red); for others, "up" is neutral/positive.
   const deltaTone = useMemo(() => {
@@ -181,7 +202,8 @@ function StatCard({
   return (
     <Link
       href={href}
-      aria-label={`${label}: ${value?.toLocaleString() ?? '—'}. ${linkLabel}`}
+      title={tooltip}
+      aria-label={`${label}: ${value?.toLocaleString() ?? '—'}. ${tooltip} ${linkLabel}`}
       className={cn(
         'group relative overflow-hidden rounded-xl border border-l-4 border-border bg-surface px-6 py-5 shadow-card',
         'transition-all duration-base ease-spring',

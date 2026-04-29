@@ -13,9 +13,10 @@ import { ActivityFeed } from '@/components/dashboard/ActivityFeed';
 import { DashboardQuickActions } from '@/components/dashboard/DashboardQuickActions';
 import {
   getDashboardActivity,
-  getDashboardSeverity,
+  getDashboardPosture,
   getDashboardStats,
   getDashboardTrend,
+  getHealth,
 } from '@/lib/api';
 
 export default function DashboardPage() {
@@ -29,9 +30,11 @@ export default function DashboardPage() {
     queryFn: ({ signal }) => getDashboardActivity(signal),
   });
 
-  const severityQuery = useQuery({
-    queryKey: ['dashboard-severity'],
-    queryFn: ({ signal }) => getDashboardSeverity(signal),
+  // Posture — single source of truth for hero band, KEV count, fix-available
+  // count, and last-successful-run timestamp. ADR-0001.
+  const postureQuery = useQuery({
+    queryKey: ['dashboard-posture'],
+    queryFn: ({ signal }) => getDashboardPosture(signal),
   });
 
   const trendQuery = useQuery({
@@ -39,14 +42,24 @@ export default function DashboardPage() {
     queryFn: ({ signal }) => getDashboardTrend(30, signal),
   });
 
+  // Health — drives the hero "LIVE / Degraded" pill and the posture state
+  // machine's degraded gate. Polled to keep the pill honest.
+  const healthQuery = useQuery({
+    queryKey: ['dashboard-health'],
+    queryFn: ({ signal }) => getHealth(signal),
+    refetchInterval: 30_000,
+    staleTime: 5_000,
+    retry: 1,
+  });
+
   const isAnySyncing =
     statsQuery.isFetching ||
-    severityQuery.isFetching ||
+    postureQuery.isFetching ||
     activityQuery.isFetching ||
     trendQuery.isFetching;
 
   const heroLoading =
-    statsQuery.isLoading || severityQuery.isLoading || trendQuery.isLoading;
+    statsQuery.isLoading || postureQuery.isLoading || trendQuery.isLoading;
 
   return (
     <div className="flex flex-1 flex-col">
@@ -58,8 +71,9 @@ export default function DashboardPage() {
         <Motion preset="rise">
           <HeroRiskPulse
             stats={statsQuery.data}
-            severity={severityQuery.data}
+            posture={postureQuery.data}
             trend={trendQuery.data}
+            health={healthQuery.data}
             isLoading={heroLoading}
             isSyncing={isAnySyncing && !heroLoading}
           />
@@ -81,8 +95,8 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <Motion preset="rise" delay={200}>
             <SeverityChart
-              data={severityQuery.data}
-              isLoading={severityQuery.isLoading}
+              data={postureQuery.data?.severity}
+              isLoading={postureQuery.isLoading}
             />
           </Motion>
           <Motion preset="rise" delay={260}>

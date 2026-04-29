@@ -97,14 +97,26 @@ export function severityBg(severity: string): string {
 }
 
 export function statusBg(status: string): string {
+  // ADR-0001: FINDINGS (formerly FAIL) is *not* a pipeline failure — it's a
+  // successful scan that found vulnerabilities. It paints amber to break the
+  // visual conflation with ERROR, which is the only "real" failure (red).
   switch (status?.toUpperCase()) {
-    case 'PASS': return 'bg-green-100 text-green-700 border-green-200';
-    case 'FAIL': return 'bg-red-100 text-red-700 border-red-200';
-    case 'PARTIAL': return 'bg-yellow-100 text-yellow-700 border-yellow-200';
-    case 'ERROR': return 'bg-red-100 text-red-700 border-red-200';
-    case 'RUNNING': return 'bg-blue-100 text-blue-700 border-blue-200';
-    case 'PENDING': return 'bg-gray-100 text-gray-600 border-gray-200';
-    default: return 'bg-gray-100 text-gray-600 border-gray-200';
+    case 'OK':
+    case 'PASS':  // legacy alias
+      return 'bg-green-100 text-green-700 border-green-200';
+    case 'FINDINGS':
+    case 'FAIL':  // legacy alias
+      return 'bg-amber-100 text-amber-700 border-amber-200';
+    case 'PARTIAL':
+      return 'bg-yellow-100 text-yellow-700 border-yellow-200';
+    case 'ERROR':
+      return 'bg-red-100 text-red-700 border-red-200';
+    case 'RUNNING':
+      return 'bg-blue-100 text-blue-700 border-blue-200';
+    case 'PENDING':
+      return 'bg-gray-100 text-gray-600 border-gray-200';
+    default:
+      return 'bg-gray-100 text-gray-600 border-gray-200';
   }
 }
 

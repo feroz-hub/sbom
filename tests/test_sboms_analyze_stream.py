@@ -99,6 +99,6 @@ def test_analyze_stream_uses_registry_and_emits_per_source_progress(client, seed
     assert final["total"] >= 2
     assert final["critical"] >= 1
     assert final["high"] >= 1
-    assert final["status"] == "FAIL"
+    assert final["status"] == "FINDINGS"  # ADR-0001 (was FAIL)
     assert isinstance(final["runId"], int)
     assert final["errors"] == 0

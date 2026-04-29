@@ -55,11 +55,12 @@ function aggregateRuns(runs: AnalysisRun[]): SbomBucket[] {
 }
 
 export function TopVulnerableSboms() {
-  // Pull the most recent FAIL runs — those are the ones with findings.
+  // Pull the most recent runs that produced findings.
+  // ADR-0001 renamed this status from FAIL to FINDINGS.
   const runsQuery = useQuery({
     queryKey: ['top-vulnerable-runs'],
     queryFn: ({ signal }) =>
-      getRuns({ run_status: 'FAIL', page: 1, page_size: 100 }, signal),
+      getRuns({ run_status: 'FINDINGS', page: 1, page_size: 100 }, signal),
   });
 
   const top = useMemo(() => aggregateRuns(runsQuery.data ?? []), [runsQuery.data]);

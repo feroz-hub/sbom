@@ -100,7 +100,8 @@ def list_analysis_runs(
         count = count.where(AnalysisRun.project_id == project_id)
 
     if run_status:
-        norm = run_status.strip().upper()
+        from ..services.analysis_service import normalize_run_status
+        norm = normalize_run_status(run_status)
         base = base.where(AnalysisRun.run_status == norm)
         count = count.where(AnalysisRun.run_status == norm)
 

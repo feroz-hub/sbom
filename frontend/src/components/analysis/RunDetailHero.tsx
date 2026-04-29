@@ -26,24 +26,30 @@ import type { AnalysisRun, EnrichedFinding } from '@/types';
 
 type RunStatus = AnalysisRun['run_status'];
 
+// ADR-0001: FINDINGS replaces FAIL (legacy alias kept). FINDINGS is amber —
+// a successful scan that produced security output, NOT a pipeline failure.
+const _OK_META = {
+  label: 'Clean',
+  tone: 'text-emerald-700 dark:text-emerald-300',
+  chip: 'bg-emerald-100 text-emerald-800 ring-emerald-300/60 dark:bg-emerald-950/60 dark:text-emerald-200 dark:ring-emerald-900/60',
+  Icon: CheckCircle2,
+  ambient: 'bg-emerald-300/30 dark:bg-emerald-700/20',
+};
+const _FINDINGS_META = {
+  label: 'Findings detected',
+  tone: 'text-amber-700 dark:text-amber-300',
+  chip: 'bg-amber-100 text-amber-800 ring-amber-300/60 dark:bg-amber-950/60 dark:text-amber-200 dark:ring-amber-900/60',
+  Icon: ShieldAlert,
+  ambient: 'bg-amber-300/30 dark:bg-amber-700/20',
+};
 const STATUS_META: Record<
   RunStatus,
   { label: string; tone: string; chip: string; Icon: LucideIcon; ambient: string }
 > = {
-  PASS: {
-    label: 'Passed',
-    tone: 'text-emerald-700 dark:text-emerald-300',
-    chip: 'bg-emerald-100 text-emerald-800 ring-emerald-300/60 dark:bg-emerald-950/60 dark:text-emerald-200 dark:ring-emerald-900/60',
-    Icon: CheckCircle2,
-    ambient: 'bg-emerald-300/30 dark:bg-emerald-700/20',
-  },
-  FAIL: {
-    label: 'Findings detected',
-    tone: 'text-red-700 dark:text-red-300',
-    chip: 'bg-red-100 text-red-800 ring-red-300/60 dark:bg-red-950/60 dark:text-red-200 dark:ring-red-900/60',
-    Icon: XCircle,
-    ambient: 'bg-red-300/30 dark:bg-red-700/20',
-  },
+  OK: _OK_META,
+  PASS: _OK_META, // legacy alias
+  FINDINGS: _FINDINGS_META,
+  FAIL: _FINDINGS_META, // legacy alias
   PARTIAL: {
     label: 'Partial',
     tone: 'text-amber-700 dark:text-amber-300',

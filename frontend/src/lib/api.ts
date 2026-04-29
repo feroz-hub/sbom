@@ -6,6 +6,7 @@ import type {
   AnalysisFinding,
   EnrichedFinding,
   DashboardStats,
+  DashboardPosture,
   RecentSbom,
   ActivityData,
   SeverityData,
@@ -183,17 +184,11 @@ export function getAnalysisConfig(signal?: AbortSignal) {
 }
 
 // ─── Health ──────────────────────────────────────────────────────────────────
-export interface HealthResponse {
-  status: string;
-  nvd_mirror?: {
-    available?: boolean;
-    enabled?: boolean;
-    last_success_at?: string | null;
-    watermark?: string | null;
-    stale?: boolean;
-    error?: string;
-  };
-}
+// Re-exported for backward-compat with existing call-sites. Canonical type
+// now lives in @/types so other modules can consume it without importing
+// from @/lib/api (which would pull request infra into pure helpers).
+export type { HealthResponse } from '@/types';
+import type { HealthResponse } from '@/types';
 
 export function getHealth(signal?: AbortSignal) {
   return request<HealthResponse>('/health', { signal });
@@ -214,6 +209,16 @@ export function getDashboardActivity(signal?: AbortSignal) {
 
 export function getDashboardSeverity(signal?: AbortSignal) {
   return request<SeverityData>('/dashboard/severity', { signal });
+}
+
+/**
+ * ADR-0001 — single source of truth for the home hero. Returns severity
+ * counts, KEV count, fix-available count, and freshness so the hero
+ * posture state machine can derive the band without joining multiple
+ * payloads.
+ */
+export function getDashboardPosture(signal?: AbortSignal) {
+  return request<DashboardPosture>('/dashboard/posture', { signal });
 }
 
 // ─── Projects ────────────────────────────────────────────────────────────────

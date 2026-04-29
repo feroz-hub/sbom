@@ -93,22 +93,43 @@ def normalize_details(details: dict | None, components: list[dict]) -> dict:
     return data
 
 
+# Run-status enum (ADR-0001). One word, one meaning.
+RUN_STATUS_OK = "OK"            # completed cleanly, zero findings
+RUN_STATUS_FINDINGS = "FINDINGS"  # completed cleanly, >=1 finding (NOT a pipeline failure)
+RUN_STATUS_PARTIAL = "PARTIAL"  # completed but some upstream feeds errored
+RUN_STATUS_ERROR = "ERROR"      # technical failure
+RUN_STATUS_RUNNING = "RUNNING"
+RUN_STATUS_PENDING = "PENDING"
+RUN_STATUS_NO_DATA = "NO_DATA"
+
+# Anything in this set counts as a successful run for dashboard scoping.
+SUCCESSFUL_RUN_STATUSES = (RUN_STATUS_OK, RUN_STATUS_FINDINGS, RUN_STATUS_PARTIAL)
+
+# Legacy aliases accepted as inbound-only (one-release deprecation window).
+# Outbound payloads always emit the canonical names above.
+_LEGACY_STATUS_ALIASES = {"FAIL": RUN_STATUS_FINDINGS, "PASS": RUN_STATUS_OK}
+
+
+def normalize_run_status(value: str | None) -> str | None:
+    """Map a legacy run-status string to its canonical form. Idempotent."""
+    if value is None:
+        return None
+    upper = value.strip().upper()
+    return _LEGACY_STATUS_ALIASES.get(upper, upper)
+
+
 def compute_report_status(total_findings: int, query_errors: list[dict]) -> str:
-    """
-    Compute the overall report status based on findings and errors.
+    """Compute the overall run status from findings + upstream errors.
 
-    Args:
-        total_findings: Number of vulnerabilities found
-        query_errors: List of query error dictionaries
-
-    Returns:
-        Status string: "FAIL" (findings), "PARTIAL" (errors), or "PASS"
+    Returns one of: ``OK`` (clean), ``FINDINGS`` (vulns detected — *successful*
+    scan), ``PARTIAL`` (some upstream feed errored). See ADR-0001 for the
+    rename history (``FAIL`` → ``FINDINGS``, ``PASS`` → ``OK``).
     """
     if total_findings > 0:
-        return "FAIL"
+        return RUN_STATUS_FINDINGS
     if query_errors:
-        return "PARTIAL"
-    return "PASS"
+        return RUN_STATUS_PARTIAL
+    return RUN_STATUS_OK
 
 
 # ============================================================

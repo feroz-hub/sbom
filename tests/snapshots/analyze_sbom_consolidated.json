@@ -10,7 +10,7 @@
   "project_id": null,
   "query_error_count": 0,
   "runId": "<volatile>",
-  "run_status": "FAIL",
+  "run_status": "FINDINGS",
   "sbom": {
     "format": "cyclonedx",
     "id": "<volatile>",
@@ -21,7 +21,7 @@
   "sbom_name": "snapshot-fixture",
   "source": "NVD,OSV,GITHUB,VULNDB",
   "started_on": "<volatile>",
-  "status": "FAIL",
+  "status": "FINDINGS",
   "summary": {
     "completedOn": "<volatile>",
     "components": 2,

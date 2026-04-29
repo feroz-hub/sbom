@@ -62,8 +62,8 @@ export function SeverityChart({ data, isLoading }: SeverityChartProps) {
 
   const handleSliceClick = (datum: ChartDatum) => {
     // Navigate to runs view, filtered to runs that produced findings.
-    // Severity hint is passed so a future filter can pick it up.
-    router.push(`/analysis?tab=runs&status=FAIL&severity=${datum.key.toUpperCase()}`);
+    // ADR-0001: status=FINDINGS replaces the old overloaded FAIL.
+    router.push(`/analysis?tab=runs&status=FINDINGS&severity=${datum.key.toUpperCase()}`);
   };
 
   return (

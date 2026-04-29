@@ -8,13 +8,16 @@ import { useToast } from '@/hooks/useToast';
 import { addPendingAnalysis, removePendingAnalysis } from '@/lib/pendingAnalysis';
 import type { SBOMSource } from '@/types';
 
+// ADR-0001 — canonical names + legacy aliases (deprecation window).
 export type AnalysisStatus =
   | 'ANALYSING'
-  | 'PASS'
-  | 'FAIL'
+  | 'OK'
+  | 'FINDINGS'
   | 'PARTIAL'
   | 'ERROR'
-  | 'NOT_ANALYSED';
+  | 'NOT_ANALYSED'
+  | 'PASS' // legacy alias for OK
+  | 'FAIL'; // legacy alias for FINDINGS
 
 /**
  * Provides `triggerBackgroundAnalysis(sbomId, sbomName)`.
