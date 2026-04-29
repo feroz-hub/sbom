@@ -347,6 +347,46 @@ export function getRunFindings(
   return request<AnalysisFinding[]>(`/api/runs/${id}/findings?${params.toString()}`, { signal });
 }
 
+/** Backend caps page_size at 1000; reads ``X-Total-Count`` and follows pages until all rows are loaded. */
+const RUN_FINDINGS_PAGE_SIZE = 1000;
+const RUN_FINDINGS_MAX_PAGES = 500;
+
+export async function getAllRunFindings(
+  id: number,
+  opts: { severity?: string } = {},
+  signal?: AbortSignal,
+): Promise<{ findings: AnalysisFinding[]; totalCount: number }> {
+  const all: AnalysisFinding[] = [];
+  let totalCount = 0;
+
+  for (let page = 1; page <= RUN_FINDINGS_MAX_PAGES; page++) {
+    const params = new URLSearchParams();
+    if (opts.severity) params.set('severity', opts.severity);
+    params.set('page', String(page));
+    params.set('page_size', String(RUN_FINDINGS_PAGE_SIZE));
+
+    const res = await performRequest(`/api/runs/${id}/findings?${params.toString()}`, { signal });
+    const hdr = res.headers.get('X-Total-Count');
+    const parsed = hdr != null && hdr !== '' ? Number.parseInt(hdr, 10) : NaN;
+    if (Number.isFinite(parsed)) {
+      totalCount = parsed;
+    }
+
+    const batch = (await res.json()) as AnalysisFinding[];
+    all.push(...batch);
+
+    if (batch.length === 0) break;
+    if (totalCount > 0 && all.length >= totalCount) break;
+    if (batch.length < RUN_FINDINGS_PAGE_SIZE) break;
+  }
+
+  if (totalCount <= 0) {
+    totalCount = all.length;
+  }
+
+  return { findings: all, totalCount };
+}
+
 /**
  * Download the current filtered runs list as a JSON file. Aggregates across
  * pages (up to `maxRuns`) so filters like "all runs" don't silently cap at

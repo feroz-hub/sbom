@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/Button';
 import { StatusBadge, SeverityBadge } from '@/components/ui/Badge';
 import { FindingsTable } from '@/components/analysis/FindingsTable';
 import { PageSpinner } from '@/components/ui/Spinner';
-import { getRun, getRunFindings, downloadPdfReport, exportRunCsv, exportRunSarif } from '@/lib/api';
+import { getRun, getAllRunFindings, downloadPdfReport, exportRunCsv, exportRunSarif } from '@/lib/api';
 import { runStatusDescription } from '@/lib/analysisRunStatusLabels';
 import { formatDate, formatDuration, downloadBlob } from '@/lib/utils';
 import { useToast } from '@/hooks/useToast';
@@ -33,12 +33,14 @@ export default function AnalysisDetailPage({ params }: AnalysisDetailPageProps) 
     enabled: !isNaN(id),
   });
 
-  const { data: findings, isLoading: findingsLoading, error: findingsError } = useQuery({
+  const { data: findingsData, isLoading: findingsLoading, error: findingsError } = useQuery({
     queryKey: ['findings', id, severityFilter],
     queryFn: ({ signal }) =>
-      getRunFindings(id, { severity: severityFilter || undefined, page: 1, page_size: 200 }, signal),
+      getAllRunFindings(id, { severity: severityFilter || undefined }, signal),
     enabled: !isNaN(id),
   });
+  const findings = findingsData?.findings;
+  const findingsTotalCount = findingsData?.totalCount;
 
   const handleDownloadPdf = async () => {
     if (!run) return;
@@ -236,9 +238,9 @@ export default function AnalysisDetailPage({ params }: AnalysisDetailPageProps) 
           <CardHeader>
             <CardTitle>
               Findings
-              {findings && (
+              {findingsData != null && (
                 <span className="ml-2 text-sm font-normal text-hcl-muted">
-                  ({findings.length})
+                  ({findingsTotalCount?.toLocaleString() ?? findings?.length ?? 0})
                 </span>
               )}
             </CardTitle>
