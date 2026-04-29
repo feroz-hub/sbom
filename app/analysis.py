@@ -6,7 +6,6 @@ import logging
 import os
 import time
 from dataclasses import asdict, dataclass, field, replace
-from enum import Enum
 from functools import lru_cache
 from typing import Any
 
@@ -711,13 +710,6 @@ def _env_bool(name: str, default: bool) -> bool:
     return str(v).strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
-def _env_list(name: str, default: list[str]) -> list[str]:
-    v = os.getenv(name)
-    if not v:
-        return default
-    return [s.strip().upper() for s in v.split(",") if s.strip()]
-
-
 @lru_cache(maxsize=1)
 def get_analysis_settings_multi() -> _MultiSettings:
     base = get_analysis_settings()
@@ -1230,16 +1222,6 @@ async def github_query_by_components(
     return findings, query_errors, []
 
 
-# ---------- Multi-source orchestrator ----------
-
-
-class AnalysisSource(str, Enum):
-    NVD = "NVD"
-    OSV = "OSV"
-    GITHUB = "GITHUB"
-    VULNDB = "VULNDB"
-
-
 async def nvd_query_by_components_async(
     components: list[dict],
     settings: _MultiSettings,
@@ -1383,28 +1365,6 @@ async def nvd_query_by_components_async(
 # `app/services/sources/dedupe.py`. Re-exported here so existing imports
 # (`from app.analysis import deduplicate_findings`) keep working.
 from .sources.dedupe import deduplicate_findings  # noqa: F401
-
-
-async def analyze_sbom_multi_source_async(
-    sbom_json: str,
-    sources: list[str] | None = None,
-    settings: _MultiSettings | None = None,
-) -> dict:
-    """
-    Asynchronously analyze an SBOM against the selected sources.
-    sources: ["NVD","OSV","GITHUB","VULNDB"]; if None, read env ANALYSIS_SOURCES or default ["NVD","OSV","GITHUB"].
-    Returns a normalized dict compatible with your pipeline.
-    """
-    from .pipeline.multi_source import run_multi_source_analysis_async
-
-    return await run_multi_source_analysis_async(sbom_json, sources=sources, settings=settings)
-
-
-# Phase 5 cleanup note: the sync wrapper `analyze_sbom_multi_source(...)`
-# lived here. Its only caller was the now-deleted
-# `services.analysis_service.create_auto_report`. Production code uses
-# `analyze_sbom_multi_source_async` directly, awaited from async handlers.
-# The sync wrapper was removed.
 
 
 # -----------------------------

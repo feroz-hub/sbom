@@ -107,10 +107,9 @@ def _run_nvd_via_runner(sbom_json: str) -> tuple[list[dict], list[dict], list[di
     the ``NVD`` source. Returns ``(findings, errors, warnings)`` — the
     same triple the runner emits.
 
-    Replicates the parse + CPE-augmentation steps that
-    ``run_multi_source_analysis_async`` used to perform internally, so
-    the migrated tests stay focused on facade behaviour rather than
-    parser details.
+    Replicates the parse + CPE-augmentation steps the SBOM pipeline does
+    upstream of source dispatch so the migrated tests stay focused on
+    facade behaviour rather than parser details.
     """
     from app.analysis import (
         _augment_components_with_cpe,

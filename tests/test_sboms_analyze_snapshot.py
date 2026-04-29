@@ -2,14 +2,15 @@
 Snapshot regression test for the production multi-source analyze endpoint.
 
 This is the path that Finding A converted from three blocking ``asyncio.run()``
-calls to a single ``analyze_sbom_multi_source_async`` ``asyncio.gather`` call.
-The snapshot below is the new contract; the test will go red if a future
-refactor changes the persisted JSON shape.
+calls to a single ``asyncio.gather`` over per-source adapters. R6 then
+collapsed the second orchestrator (``app/pipeline/multi_source.py``) so
+the runner + adapter chain is the only path. The snapshot below is the
+contract; the test will go red if a future refactor changes the
+persisted JSON shape.
 
 It also serves as the regression net for Finding B (source-adapter
 consolidation): the source fetchers are mocked at the boundary, so any drift
-between the legacy ``analysis.py`` orchestrator and the future
-``services/sources/`` adapters will surface here.
+between ``analysis.py`` and the ``app.sources.*`` adapters surfaces here.
 """
 
 from __future__ import annotations

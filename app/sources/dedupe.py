@@ -1,10 +1,10 @@
 """
 Cross-source finding deduplication.
 
-Canonical extraction from ``app/analysis.py``. Performs the same two-pass
-CVE ↔ GHSA alias cross-merge that ``analyze_sbom_multi_source_async``
-performs inline; ``app.analysis.deduplicate_findings`` is now a re-export
-of this function.
+Canonical extraction from ``app/analysis.py``. Performs the two-pass
+CVE ↔ GHSA alias cross-merge that the runner+adapter chain consumes;
+``app.analysis.deduplicate_findings`` is now a re-export of this
+function.
 """
 
 from __future__ import annotations

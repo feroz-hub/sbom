@@ -188,8 +188,9 @@ async def _fake_github_query_by_components(components, settings):
 
 
 def _fake_nvd_query_by_cpe(cpe, api_key, settings=None):
-    """`analyze_sbom_multi_source_async._nvd` calls this per CPE.
-    Return a minimal raw NVD record so `_finding_from_raw` produces a
+    """``nvd_query_by_components_async`` calls this per CPE (or the
+    mirror facade does, then falls back here on cache miss). Return a
+    minimal raw NVD record so ``_finding_from_raw`` produces a
     deterministic finding."""
     if cpe and "log4j" in cpe.lower():
         return [canned.NVD_LOG4J_RESPONSE["vulnerabilities"][0]["cve"]]
