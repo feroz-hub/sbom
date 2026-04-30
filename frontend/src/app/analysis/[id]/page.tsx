@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { use, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import {
@@ -29,11 +29,12 @@ import { downloadBlob } from '@/lib/utils';
 import { useToast } from '@/hooks/useToast';
 
 interface AnalysisDetailPageProps {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 export default function AnalysisDetailPage({ params }: AnalysisDetailPageProps) {
-  const id = Number(params.id);
+  const { id: idParam } = use(params);
+  const id = Number(idParam);
   const router = useRouter();
   const { showToast } = useToast();
   const [severityFilter, setSeverityFilter] = useState('');
