@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<!DOCTYPE bom [
+  <!ENTITY lol "lol">
+  <!ENTITY lol2 "&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;">
+  <!ENTITY lol3 "&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;">
+  <!ENTITY lol4 "&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;">
+]>
+<bom xmlns="http://cyclonedx.org/schema/bom/1.6" version="1">
+  <components><component type="library"><name>&lol4;</name><version>1.0.0</version></component></components>
+</bom>

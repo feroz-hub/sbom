@@ -56,6 +56,7 @@ from .routers import (
     pdf,
     projects,
     runs,
+    sbom_upload,
     sboms_crud,
     schedules,
 )
@@ -257,6 +258,9 @@ _protected = [Depends(require_auth)]
 
 app.include_router(health.router)  # intentionally unprotected
 app.include_router(sboms_crud.router, dependencies=_protected)
+# New multipart upload route running the eight-stage validation pipeline.
+# Path /api/sboms/upload — see ADR-0007.
+app.include_router(sbom_upload.router, dependencies=_protected)
 app.include_router(runs.router, dependencies=_protected)
 app.include_router(projects.router, dependencies=_protected)
 app.include_router(analyze_endpoints.router, dependencies=_protected)

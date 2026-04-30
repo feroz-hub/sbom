@@ -30,6 +30,15 @@ dependencies = [
     "boto3>=1.42.88",
     "cryptography>=44.0.0",
     "tenacity>=9.0.0",
+    # SBOM validation pipeline (ADR-0007) — eight-stage layered validator.
+    "jsonschema>=4.21,<5",
+    "lxml>=5,<6",
+    "defusedxml>=0.7,<1",
+    "ruamel.yaml>=0.18,<1",
+    "packageurl-python>=0.15,<1",
+    "license-expression>=30,<32",
+    "spdx-tools>=0.8,<1",
+    "cyclonedx-python-lib>=8,<10",
 ]
 
 [project.optional-dependencies]
@@ -79,6 +88,35 @@ source_modules = [
 forbidden_modules = [
     "app.routers",
     "app.main",
+]
+
+# ADR-0007: validation must be side-effect-free. Stages talk to settings
+# only, never to routers / services / DB / models. Schemas are vendored,
+# never fetched at runtime.
+[[tool.importlinter.contracts]]
+name = "Validation never imports HTTP, services, models, or DB"
+type = "forbidden"
+source_modules = [
+    "app.validation",
+]
+forbidden_modules = [
+    "app.routers",
+    "app.main",
+    "app.services",
+    "app.db",
+    "app.models",
+]
+
+[[tool.importlinter.contracts]]
+name = "Validation never makes runtime HTTP requests"
+type = "forbidden"
+source_modules = [
+    "app.validation",
+]
+forbidden_modules = [
+    "requests",
+    "httpx",
+    "urllib.request",
 ]
 
 [tool.setuptools.packages.find]

@@ -170,7 +170,8 @@ remove the old one.
 > `API_AUTH_MODE=bearer`. See the **Authentication** section above.
 | GET/POST | `/api/projects` | List / create projects |
 | GET/PATCH/DELETE | `/api/projects/{id}` | Get / update / delete project |
-| GET/POST | `/api/sboms` | List / upload SBOMs; upload also persists extracted components |
+| POST | `/api/sboms/upload` | Multipart upload through the [eight-stage validator](docs/adr/0007-sbom-validation-architecture.md). Recommended for new integrations. |
+| GET/POST | `/api/sboms` | List / upload SBOMs (legacy JSON-string field; deprecated, still validated by the same pipeline) |
 | GET/PATCH/DELETE | `/api/sboms/{id}` | Get / update / delete SBOM |
 | GET | `/api/sboms/{id}/components` | List components extracted from an SBOM |
 | POST | `/api/sboms/{id}/analyze` | Trigger or re-run multi-source analysis |
@@ -217,6 +218,37 @@ Full interactive docs: **http://localhost:8000/docs**
 
 ## Supported SBOM Formats
 
-- **CycloneDX** (JSON and XML)
-- **SPDX** (JSON)
-- **SPDX XML** is parsed on a best-effort basis where supported by the backend parser
+The eight-stage validation pipeline ([ADR-0007](docs/adr/0007-sbom-validation-architecture.md))
+gates every upload. Formats marked ❌ are **rejected at the ingress** with a
+structured `SBOM_VAL_E013_SPEC_VERSION_UNSUPPORTED` so callers can branch on the
+code rather than on a free-text error.
+
+| Format        | Version | JSON | XML  | Tag-Value | YAML | Protobuf |
+|---------------|---------|:----:|:----:|:---------:|:----:|:--------:|
+| **SPDX**      | 2.2     |  ✅  |  ❌¹ |    ✅²    |  ❌  |    —     |
+| SPDX          | 2.3     |  ✅  |  ❌¹ |    ✅²    |  ❌  |    —     |
+| SPDX          | 3.0     |  ❌³ |  ❌  |     —     |  ❌  |    —     |
+| **CycloneDX** | 1.4     |  ✅  |  ✅  |     —     |  ❌  |    ❌⁴   |
+| CycloneDX     | 1.5     |  ✅  |  ✅  |     —     |  ❌  |    ❌⁴   |
+| CycloneDX     | 1.6     |  ✅  |  ✅  |     —     |  ❌  |    ❌⁴   |
+
+¹ SPDX RDF/XML is deferred — re-export as JSON or Tag-Value.
+² Tag-Value uses `spdx-tools` and is then re-validated against the JSON Schema.
+³ SPDX 3.0 (JSON-LD) is deferred — see
+  [`app/validation/schemas/spdx/SOURCE.md`](app/validation/schemas/spdx/SOURCE.md).
+⁴ CycloneDX Protobuf is deferred — re-export as JSON or XML.
+
+Validation contract:
+
+- Hard size cap: **50 MB** uploaded, **200 MB** decompressed (`gzip` / `deflate`
+  with a 100:1 ratio cap).
+- Every rejection produces a stable error code from the
+  [error-code reference](docs/validation-error-codes.md).
+- p95 < 500 ms on a 5 MB SBOM; larger payloads route through the async path.
+- Validation is **side-effect free** — the SBOM is persisted only after the
+  pipeline returns 202.
+
+Use the multipart `POST /api/sboms/upload` endpoint for new integrations.
+The legacy `POST /api/sboms` (JSON-string `sbom_data` field) keeps working
+for one release but flows through the same pipeline and is deprecated in
+the OpenAPI doc.

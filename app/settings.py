@@ -211,8 +211,29 @@ Settings.VULNDB_API = "https://vuldb.com/?api"
 # OSV batch query limit
 Settings.OSV_MAX_BATCH = 1000
 
-# Maximum upload size (20 MB)
-Settings.MAX_UPLOAD_BYTES = 20 * 1024 * 1024
+# Maximum uploaded SBOM size — raised to 50 MB per ADR-0007 §4.1.
+# Bodies above this are rejected at the ASGI middleware with HTTP 413.
+Settings.MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+
+# Maximum decompressed SBOM size — defends against decompression bombs.
+# Stage 1 (ingress) tracks gzip / deflate output incrementally and aborts
+# as soon as the cumulative byte count exceeds this number.
+Settings.MAX_DECOMPRESSED_BYTES = 200 * 1024 * 1024
+
+# Maximum compression-ratio (decompressed / compressed) accepted by stage 1.
+# Real SBOMs are between 2:1 and 20:1; 100:1 is well above any legitimate
+# document and well below the ratios produced by zip / gzip bombs.
+Settings.MAX_DECOMPRESSION_RATIO = 100
+
+# Below this byte count, validation runs synchronously inside the request.
+# Above it, the request handler enqueues a Celery job and returns 202 with
+# a ``validation_job_id`` so the user is not blocked. (Phase 4 perf-tests
+# pin the threshold; ADR-0007 §6 makes it a knob, not a constant.)
+Settings.SBOM_SYNC_VALIDATION_BYTES = 5 * 1024 * 1024
+
+# Stage 8 feature flag. When false, the signature stage is a no-op even on
+# documents that carry a signature block. Default OFF in v1.
+Settings.SBOM_SIGNATURE_VERIFICATION = False
 
 # Default pagination size
 Settings.DEFAULT_RESULTS_PER_PAGE = 20

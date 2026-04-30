@@ -1,0 +1,96 @@
+%% SBOM validation pipeline — eight-stage sequence
+%% Companion to docs/adr/0007-sbom-validation-architecture.md
+%%
+%% Render with: any Mermaid renderer (GitHub native, mermaid-cli, mermaid.live).
+%% Each stage is a participant. Notes mark short-circuit exits with their HTTP status.
+
+sequenceDiagram
+    autonumber
+    participant Client
+    participant ASGI as MaxBodySizeMiddleware
+    participant API as POST /api/sboms/upload
+    participant S1 as Stage 1<br/>Ingress guard
+    participant S2 as Stage 2<br/>Format & version
+    participant S3 as Stage 3<br/>Structural schema
+    participant S4 as Stage 4<br/>Semantic
+    participant S5 as Stage 5<br/>Cross-ref integrity
+    participant S6 as Stage 6<br/>Security checks
+    participant S7 as Stage 7<br/>NTIA elements
+    participant S8 as Stage 8<br/>Signature
+    participant Q as Celery scan queue
+
+    Client->>ASGI: POST /api/sboms/upload<br/>multipart bytes
+    ASGI-->>Client: 413 if Content-Length > MAX_UPLOAD_BYTES
+    ASGI->>API: scope, receive (size-guarded)
+
+    API->>S1: ctx(raw_bytes)
+    Note over S1: size ≤ 50 MB (uploaded)<br/>≤ 200 MB (decompressed)<br/>UTF-8 / BOM / decompression-bomb
+    alt stage 1 errors
+        S1-->>API: report(error, http=413)
+        API-->>Client: 413 SBOM_VAL_E001..E006
+    else stage 1 ok
+        S1->>S2: ctx(text)
+    end
+
+    Note over S2: structural fingerprint —<br/>SPDX vs CycloneDX × json/xml/yaml/tag-value
+    alt format unknown / ambiguous / unsupported
+        S2-->>API: report(error, http=415)
+        API-->>Client: 415 SBOM_VAL_E010..E013
+    else stage 2 ok
+        S2->>S3: ctx(spec, version, encoding)
+    end
+
+    Note over S3: vendored JSON Schema /<br/>XSD per (spec, version)<br/>defusedxml + lxml safe-parse<br/>aggregate up to 100 errors
+    alt parse failure
+        S3-->>API: report(error, http=400)
+        API-->>Client: 400 SBOM_VAL_E020..E024
+    else schema violations
+        S3-->>API: report(error, http=422)
+        API-->>Client: 422 SBOM_VAL_E025..E029
+    else stage 3 ok
+        S3->>S4: ctx(parsed_dict)
+    end
+
+    Note over S4: SPDX: SPDXID, namespace,<br/>dataLicense, licence-expression,<br/>checksum length, timestamp,<br/>DESCRIBES relationship<br/>CycloneDX: serialNumber URN,<br/>bom-ref uniqueness, PURL,<br/>CPE 2.3, hash length, timestamp
+    alt semantic violations
+        S4-->>API: report(error, http=422)
+        API-->>Client: 422 SBOM_VAL_E040..E057
+    else stage 4 ok
+        S4->>S5: ctx(internal_model)
+    end
+
+    Note over S5: dependency / relationship<br/>refs resolve; cycles → warning;<br/>orphans → info
+    alt unresolved refs
+        S5-->>API: report(error, http=422)
+        API-->>Client: 422 SBOM_VAL_E070..E073
+    else stage 5 ok (cycles / orphans = warnings)
+        S5->>S6: ctx(internal_model)
+    end
+
+    Note over S6: JSON depth ≤ 64,<br/>array ≤ 1e6, string ≤ 64 KB;<br/>XML DTD/external entity forbidden;<br/>YAML safe-only;<br/>prototype-pollution keys rejected
+    alt security guard tripped
+        S6-->>API: report(error, http=400 or 413)
+        API-->>Client: 400/413 SBOM_VAL_E080..E089
+    else stage 6 ok
+        S6->>S7: ctx(internal_model)
+    end
+
+    Note over S7: NTIA minimum elements:<br/>supplier, name, version, id,<br/>relationship, author, timestamp.<br/>Default = warnings;<br/>?strict=true → errors
+    alt NTIA strict + missing
+        S7-->>API: report(error, http=422)
+        API-->>Client: 422 SBOM_VAL_E100..E106
+    else stage 7 default
+        S7->>S8: ctx(internal_model, ntia_warnings)
+    end
+
+    Note over S8: Feature-flagged.<br/>CycloneDX JSF / SPDX external sig.<br/>Default OFF in v1.
+    alt signature flag on AND signature invalid
+        S8-->>API: report(error, http=422)
+        API-->>Client: 422 SBOM_VAL_E110..E112
+    else stage 8 ok / flag off
+        S8->>API: ctx(internal_model, warnings, info)
+    end
+
+    API->>Q: enqueue_scan(internal_model)
+    Q-->>API: job_id
+    API-->>Client: 202 Accepted<br/>{ job_id, warnings, info }
