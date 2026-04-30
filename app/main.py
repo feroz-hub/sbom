@@ -51,6 +51,8 @@ from .routers import analysis as analysis_export_router
 from .nvd_mirror.api import router as nvd_mirror_admin_router
 from .routers import (
     analyze_endpoints,
+    compare,
+    cves,
     dashboard_main,
     health,
     pdf,
@@ -267,6 +269,8 @@ app.include_router(analyze_endpoints.router, dependencies=_protected)
 app.include_router(pdf.router, dependencies=_protected)
 app.include_router(dashboard_main.router, dependencies=_protected)
 app.include_router(schedules.router, dependencies=_protected)
+app.include_router(cves.router, dependencies=_protected)
+app.include_router(compare.router, dependencies=_protected)
 
 # Feature routers (kept from earlier refactor) — additive paths.
 app.include_router(

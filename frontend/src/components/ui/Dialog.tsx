@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from './Button';
@@ -10,15 +11,24 @@ interface DialogProps {
   onClose: () => void;
   title: string;
   children: ReactNode;
-  maxWidth?: 'sm' | 'md' | 'lg' | 'xl';
+  /** Optional sticky footer rendered below the scrollable body. */
+  footer?: ReactNode;
+  /**
+   * Desktop max-width (≥640px). On mobile the dialog is always a bottom
+   * sheet and ignores this. Default: ``md`` (max-w-md).
+   */
+  maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
   dismissOnBackdrop?: boolean;
+  /** id of an element inside the dialog body that summarises its contents (WCAG 2.2 — pairs with aria-labelledby for screen-reader announcement). */
+  describedBy?: string;
 }
 
 const maxWidthClasses: Record<string, string> = {
-  sm: 'max-w-sm',
-  md: 'max-w-md',
-  lg: 'max-w-lg',
-  xl: 'max-w-2xl',
+  sm: 'sm:max-w-sm',
+  md: 'sm:max-w-md',
+  lg: 'sm:max-w-lg',
+  xl: 'sm:max-w-2xl',
+  '2xl': 'sm:max-w-4xl',
 };
 
 const FOCUSABLE = [
@@ -41,12 +51,29 @@ export function Dialog({
   onClose,
   title,
   children,
+  footer,
   maxWidth = 'md',
   dismissOnBackdrop = true,
+  describedBy,
 }: DialogProps) {
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
+
+  // Scroll-shadow signal on the body. The header/footer cast a subtle
+  // shadow when the body has hidden content above/below them. Driven by
+  // ``data-scroll-state`` so the CSS lives next to each component.
+  const [scrollState, setScrollState] = useState<'atTop' | 'atBottom' | 'middle' | 'both'>('both');
+
+  const updateScrollState = useCallback(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    const { scrollTop, scrollHeight, clientHeight } = el;
+    const atTop = scrollTop <= 1;
+    const atBottom = scrollTop + clientHeight >= scrollHeight - 1;
+    setScrollState(atTop && atBottom ? 'both' : atTop ? 'atTop' : atBottom ? 'atBottom' : 'middle');
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -70,6 +97,8 @@ export function Dialog({
         if (e.shiftKey && active === first) {
           e.preventDefault();
           last.focus();
+        } else if (!e.shiftKey && active === first) {
+          // first is now focused; nothing to do (RTL pattern handled below)
         } else if (!e.shiftKey && active === last) {
           e.preventDefault();
           first.focus();
@@ -80,14 +109,20 @@ export function Dialog({
     return () => document.removeEventListener('keydown', handler);
   }, [open, onClose]);
 
+  // Body lock + ``data-dialog-open`` flag. The flag lets surfaces outside
+  // the dialog (toasts, the right-edge action rail when one exists) react
+  // via plain CSS without a new context provider.
   useEffect(() => {
     if (open) {
       document.body.style.overflow = 'hidden';
+      document.body.dataset.dialogOpen = 'true';
     } else {
       document.body.style.overflow = '';
+      delete document.body.dataset.dialogOpen;
     }
     return () => {
       document.body.style.overflow = '';
+      delete document.body.dataset.dialogOpen;
     };
   }, [open]);
 
@@ -98,6 +133,8 @@ export function Dialog({
         if (panelRef.current) {
           const focusable = getFocusable(panelRef.current);
           (focusable[0] ?? panelRef.current).focus();
+          // Initial scroll state once the body has rendered.
+          updateScrollState();
         }
       });
       return () => cancelAnimationFrame(raf);
@@ -105,12 +142,30 @@ export function Dialog({
     if (previouslyFocused.current && previouslyFocused.current.isConnected) {
       previouslyFocused.current.focus();
     }
-  }, [open]);
+  }, [open, updateScrollState]);
 
   if (!open) return null;
+  // SSR guard — ``'use client'`` keeps this off the server, but RTL and
+  // any future SSR-of-client-component path would still execute the
+  // render before mount; ``document`` is the only honest gate.
+  if (typeof document === 'undefined') return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="presentation">
+  // Render the overlay + panel via a Portal mounted directly on
+  // ``document.body``. This is load-bearing — ``position: fixed`` does not
+  // mean "viewport-relative" if any ancestor has an active ``transform`` /
+  // ``filter`` / ``perspective`` (CSS containing-block rule). The findings
+  // table is wrapped in a ``.motion-rise`` card whose entry animation
+  // leaves ``transform: matrix(1,0,0,1,0,0)`` in the computed style; an
+  // inline-rendered fixed overlay would be sized against that card
+  // (~2,641 px tall) instead of the viewport (~954 px). The portal moves
+  // us to a body-level subtree where no ancestor has a transform, so
+  // ``inset-0`` finally means what it says.
+  const dialogTree = (
+    // Outer wrapper: bottom-anchored on mobile (items-end), centered on sm+.
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4"
+      role="presentation"
+    >
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm dialog-scrim-in motion-reduce:animate-none"
         onClick={dismissOnBackdrop ? onClose : undefined}
@@ -121,15 +176,31 @@ export function Dialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        aria-describedby={describedBy}
         tabIndex={-1}
         className={cn(
-          'relative w-full overflow-hidden rounded-xl border border-border bg-surface shadow-xl',
+          // Layout: three-region flex column. Outer panel clips, body scrolls.
+          'relative flex w-full flex-col overflow-hidden border border-border bg-surface shadow-xl',
           'dialog-panel-in motion-reduce:animate-none',
           'focus-visible:outline-none',
+          // Mobile: bottom sheet — full-width, 90dvh tall, only top corners rounded.
+          'max-h-[90dvh] rounded-t-xl rounded-b-none',
+          // Desktop: centered card — bounded width, dvh-aware max-height capped at 800px,
+          // fully rounded.
+          'sm:w-[min(92vw,720px)] sm:max-h-[min(calc(100dvh-4rem),800px)] sm:rounded-xl',
+          // The maxWidth prop only applies on sm+ (mobile is full-width).
           maxWidthClasses[maxWidth],
         )}
       >
-        <div className="flex items-center justify-between border-b-2 border-border bg-surface-muted/80 px-6 py-4">
+        {/* Sticky title bar — never scrolls. Casts a subtle shadow when
+            content is hidden above the visible body. */}
+        <div
+          className={cn(
+            'flex shrink-0 items-center justify-between border-b border-border bg-surface-muted/80 px-6 py-4 transition-shadow',
+            scrollState !== 'atTop' && scrollState !== 'both' &&
+              'shadow-[0_4px_8px_-6px_rgba(0,0,0,0.15)]',
+          )}
+        >
           <div className="flex min-w-0 items-center gap-2.5">
             <div className="h-5 w-1 shrink-0 rounded-full bg-gradient-to-b from-hcl-blue to-hcl-cyan" />
             <h2 id={titleId} className="truncate text-lg font-semibold text-hcl-navy">
@@ -148,10 +219,35 @@ export function Dialog({
             <X className="h-5 w-5" aria-hidden="true" />
           </button>
         </div>
-        <div className="max-h-[calc(100vh-12rem)] overflow-y-auto">{children}</div>
+        {/* Scrollable body — the only scroll region inside the dialog.
+            ``overscroll-contain`` stops scroll-chaining into the locked
+            page when content bottoms out. */}
+        <div
+          ref={bodyRef}
+          data-scroll-state={scrollState}
+          onScroll={updateScrollState}
+          className="flex-1 overflow-y-auto overscroll-contain"
+        >
+          {children}
+        </div>
+        {/* Sticky footer — optional. Casts a subtle shadow when content
+            is hidden below the visible body. */}
+        {footer ? (
+          <div
+            className={cn(
+              'shrink-0 border-t border-border bg-surface-muted/80 transition-shadow',
+              scrollState !== 'atBottom' && scrollState !== 'both' &&
+                'shadow-[0_-4px_8px_-6px_rgba(0,0,0,0.15)]',
+            )}
+          >
+            {footer}
+          </div>
+        ) : null}
       </div>
     </div>
   );
+
+  return createPortal(dialogTree, document.body);
 }
 
 export function DialogBody({ children, className }: { children: ReactNode; className?: string }) {
@@ -159,6 +255,11 @@ export function DialogBody({ children, className }: { children: ReactNode; class
 }
 
 export function DialogFooter({ children }: { children: ReactNode }) {
+  // Self-styled — three legacy callers (ProjectModal / SbomUploadModal /
+  // ScheduleEditor) render this *inside* ``children`` to keep the form's
+  // submit button associated with the form. The new Dialog ``footer``
+  // prop is the preferred path for sticky footers; this helper remains so
+  // those forms don't need to migrate.
   return (
     <div className="flex items-center justify-end gap-3 border-t border-border bg-surface-muted/80 px-6 py-4">
       {children}
@@ -188,18 +289,26 @@ export function ConfirmDialog({
   variant = 'danger',
 }: ConfirmDialogProps) {
   return (
-    <Dialog open={open} onClose={onClose} title={title} maxWidth="sm" dismissOnBackdrop={!loading}>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title={title}
+      maxWidth="sm"
+      dismissOnBackdrop={!loading}
+      footer={
+        <DialogFooter>
+          <Button variant="secondary" onClick={onClose} disabled={loading}>
+            Cancel
+          </Button>
+          <Button variant={variant} onClick={onConfirm} loading={loading}>
+            {confirmLabel}
+          </Button>
+        </DialogFooter>
+      }
+    >
       <DialogBody>
         <p className="text-sm text-hcl-muted">{message}</p>
       </DialogBody>
-      <DialogFooter>
-        <Button variant="secondary" onClick={onClose} disabled={loading}>
-          Cancel
-        </Button>
-        <Button variant={variant} onClick={onConfirm} loading={loading}>
-          {confirmLabel}
-        </Button>
-      </DialogFooter>
     </Dialog>
   );
 }

@@ -18,6 +18,7 @@ import { FindingsTable } from '@/components/analysis/FindingsTable';
 import { RunDetailHero } from '@/components/analysis/RunDetailHero';
 import { PageSpinner, SkeletonTable } from '@/components/ui/Spinner';
 import {
+  getAnalysisConfig,
   getRun,
   getAllEnrichedRunFindings,
   downloadPdfReport,
@@ -56,6 +57,17 @@ export default function AnalysisDetailPage({ params }: AnalysisDetailPageProps) 
   });
   const findings = findingsData?.findings;
   const findingsTotalCount = findingsData?.totalCount;
+
+  // Pulls the in-app CVE modal feature flag from /api/analysis/config. We
+  // default to ``true`` while the config is in flight so the dialog isn't
+  // missing on first paint; the flag only flips behaviour when the server
+  // explicitly returns ``false`` (rollback path).
+  const { data: analysisConfig } = useQuery({
+    queryKey: ['analysis-config'],
+    queryFn: ({ signal }) => getAnalysisConfig(signal),
+    staleTime: 60_000,
+  });
+  const cveModalEnabled = analysisConfig?.cve_modal_enabled !== false;
 
   const handleDownloadPdf = async () => {
     if (!run) return;
@@ -228,6 +240,9 @@ export default function AnalysisDetailPage({ params }: AnalysisDetailPageProps) 
                   error={findingsError}
                   onSeverityChange={setSeverityFilter}
                   severityFilter={severityFilter}
+                  runId={id}
+                  scanName={run?.sbom_name ?? null}
+                  cveModalEnabled={cveModalEnabled}
                 />
               )}
             </SurfaceContent>

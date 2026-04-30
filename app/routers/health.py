@@ -67,6 +67,8 @@ def public_analysis_config() -> dict:
         "github_configured": app_settings.github_configured,
         "nvd_key_configured": app_settings.nvd_key_configured,
         "vulndb_configured": app_settings.vulndb_configured,
+        # Feature flag for the in-app CVE detail modal (Phase 5 rollback path).
+        "cve_modal_enabled": app_settings.cve_modal_enabled,
     }
 
 

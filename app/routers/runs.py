@@ -146,6 +146,116 @@ def list_analysis_runs(
     return items
 
 
+# -----------------------------------------------------------------------------
+# Compare picker support (ADR-0008 §5 Region 1)
+# -----------------------------------------------------------------------------
+# Both endpoints sit BEFORE ``/runs/{run_id}`` because FastAPI matches in
+# declaration order. Putting them after would route ``/runs/recent`` into the
+# path-param route and fail with a 422 on the int coercion.
+
+
+@router.get("/runs/recent", response_model=list)
+def list_recent_runs(
+    limit: int = Query(20, ge=1, le=50),
+    db: Session = Depends(get_db),
+):
+    """Most recent analysis runs (any status). Powers the picker's default open state."""
+    from ..models import Projects
+    from ..schemas_compare import RunSummary
+
+    sbom_subq = (
+        db.query(SBOMSource.id.label("sbom_id"), SBOMSource.sbom_name.label("sbom_name"))
+        .subquery()
+    )
+    proj_subq = (
+        db.query(Projects.id.label("project_id"), Projects.project_name.label("project_name"))
+        .subquery()
+    )
+    stmt = (
+        select(AnalysisRun, sbom_subq.c.sbom_name, proj_subq.c.project_name)
+        .outerjoin(sbom_subq, AnalysisRun.sbom_id == sbom_subq.c.sbom_id)
+        .outerjoin(proj_subq, AnalysisRun.project_id == proj_subq.c.project_id)
+        .order_by(AnalysisRun.id.desc())
+        .limit(limit)
+    )
+    rows = db.execute(stmt).all()
+    return [
+        RunSummary(
+            id=run.id,
+            sbom_id=run.sbom_id,
+            sbom_name=sbom_name or run.sbom_name,
+            project_id=run.project_id,
+            project_name=project_name,
+            run_status=(run.run_status or "").upper(),
+            completed_on=run.completed_on,
+            started_on=run.started_on,
+            total_findings=int(run.total_findings or 0),
+            total_components=int(run.total_components or 0),
+        ).model_dump()
+        for run, sbom_name, project_name in rows
+    ]
+
+
+@router.get("/runs/search", response_model=list)
+def search_runs(
+    q: str = Query("", description="Substring match on sbom_name, project_name, or run id"),
+    limit: int = Query(20, ge=1, le=50),
+    db: Session = Depends(get_db),
+):
+    """Picker autocomplete. Empty ``q`` falls through to the recent-runs ordering."""
+    from sqlalchemy import or_
+
+    from ..models import Projects
+    from ..schemas_compare import RunSummary
+
+    needle = (q or "").strip()
+    sbom_subq = (
+        db.query(SBOMSource.id.label("sbom_id"), SBOMSource.sbom_name.label("sbom_name"))
+        .subquery()
+    )
+    proj_subq = (
+        db.query(Projects.id.label("project_id"), Projects.project_name.label("project_name"))
+        .subquery()
+    )
+    stmt = (
+        select(AnalysisRun, sbom_subq.c.sbom_name, proj_subq.c.project_name)
+        .outerjoin(sbom_subq, AnalysisRun.sbom_id == sbom_subq.c.sbom_id)
+        .outerjoin(proj_subq, AnalysisRun.project_id == proj_subq.c.project_id)
+    )
+    if needle:
+        like = f"%{needle}%"
+        run_id_clause: list = []
+        try:
+            rid = int(needle)
+            run_id_clause.append(AnalysisRun.id == rid)
+        except ValueError:
+            pass
+        stmt = stmt.where(
+            or_(
+                sbom_subq.c.sbom_name.ilike(like),
+                proj_subq.c.project_name.ilike(like),
+                *run_id_clause,
+            )
+        )
+    stmt = stmt.order_by(AnalysisRun.id.desc()).limit(limit)
+    rows = db.execute(stmt).all()
+    return [
+        RunSummary(
+            id=run.id,
+            sbom_id=run.sbom_id,
+            sbom_name=sbom_name or run.sbom_name,
+            project_id=run.project_id,
+            project_name=project_name,
+            run_status=(run.run_status or "").upper(),
+            completed_on=run.completed_on,
+            started_on=run.started_on,
+            total_findings=int(run.total_findings or 0),
+            total_components=int(run.total_components or 0),
+        ).model_dump()
+        for run, sbom_name, project_name in rows
+    ]
+
+
 @router.get("/runs/{run_id}", response_model=AnalysisRunOut)
 def get_analysis_run(run_id: int, db: Session = Depends(get_db)):
     run = db.get(AnalysisRun, run_id)

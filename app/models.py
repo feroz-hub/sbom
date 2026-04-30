@@ -1,6 +1,7 @@
 # models.py
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     CheckConstraint,
     Column,
@@ -309,3 +310,46 @@ class EpssScore(Base):
     percentile = Column(Float, nullable=True)  # 0..1
     score_date = Column(String, nullable=True)  # date EPSS published
     refreshed_at = Column(String, nullable=False)  # ISO timestamp of our pull
+
+
+class CveCache(Base):
+    """
+    Merged CVE detail payload (OSV + GHSA + NVD + EPSS + KEV).
+
+    Keyed by canonical ``CVE-YYYY-NNNN+`` ID. Holds the full ``CveDetail``
+    JSON the modal renders. TTL is enforced at upsert time by
+    ``CveDetailService`` — readers just compare ``expires_at`` to ``now()``.
+    A row with non-null ``fetch_error`` is a negative cache entry kept for a
+    short window (15 min) so we don't hammer upstreams during outages.
+    """
+
+    __tablename__ = "cve_cache"
+
+    cve_id = Column(String(32), primary_key=True, index=True)
+    payload = Column(JSON, nullable=False)
+    sources_used = Column(String(128), nullable=False)  # comma-joined
+    fetched_at = Column(String, nullable=False)
+    expires_at = Column(String, nullable=False, index=True)
+    fetch_error = Column(Text, nullable=True)
+    schema_version = Column(Integer, nullable=False, default=1)
+
+
+class CompareCache(Base):
+    """
+    Cached ``CompareResult`` payload (ADR-0008).
+
+    Keyed by ``sha256(f"{min(a,b)}:{max(a,b)}")`` so the same cache row is
+    reused regardless of which order the user picks the runs. Run-id indices
+    on both sides support O(1) invalidation when either run is reanalysed
+    (Celery completion hook deletes ``WHERE run_a_id = :id OR run_b_id = :id``).
+    """
+
+    __tablename__ = "compare_cache"
+
+    cache_key = Column(String(64), primary_key=True)
+    run_a_id = Column(Integer, nullable=False, index=True)
+    run_b_id = Column(Integer, nullable=False, index=True)
+    payload = Column(JSON, nullable=False)
+    computed_at = Column(String, nullable=False)
+    expires_at = Column(String, nullable=False, index=True)
+    schema_version = Column(Integer, nullable=False, default=1)

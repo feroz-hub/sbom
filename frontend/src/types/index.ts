@@ -382,3 +382,18 @@ export interface ConsolidatedAnalysisResult {
   duration_ms?: number;
   [key: string]: unknown;
 }
+
+export type {
+  CveSeverity,
+  CveSourceName,
+  CveReferenceType,
+  CveResultStatus,
+  CveUnrecognizedIdEnvelope,
+  CveFixVersion,
+  CveReference,
+  CveExploitation,
+  CveDetail,
+  CveScanContext,
+  CveCurrentVersionStatus,
+  CveDetailWithContext,
+} from './cve';

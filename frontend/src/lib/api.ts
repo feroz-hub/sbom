@@ -176,6 +176,12 @@ export interface AnalysisConfig {
   nvd_key_configured: boolean;
   vulndb_configured: boolean;
   max_concurrency: number;
+  /**
+   * Feature flag for the in-app CVE detail modal. When false, the findings
+   * table reverts to the legacy ``<a target="_blank">`` outbound link to
+   * GHSA / NVD. Default: true.
+   */
+  cve_modal_enabled?: boolean;
   [key: string]: unknown;
 }
 
@@ -577,6 +583,57 @@ export function compareRuns(runA: number, runB: number, signal?: AbortSignal) {
   );
 }
 
+// ─── Compare v2 (ADR-0008) ───────────────────────────────────────────────────
+// `compareRunsV2` is the canonical method going forward. The v1 export
+// `compareRuns` remains until the deprecated endpoint is removed (see
+// ADR-0008 §1.2).
+import type {
+  CompareExportFormat,
+  CompareRequest,
+  CompareResult,
+  RunSummary,
+} from '@/types/compare';
+
+export function compareRunsV2(body: CompareRequest, signal?: AbortSignal) {
+  return request<CompareResult>('/api/v1/compare', {
+    method: 'POST',
+    body: JSON.stringify(body),
+    signal,
+  });
+}
+
+export function recentRuns(limit = 20, signal?: AbortSignal) {
+  return request<RunSummary[]>(`/api/runs/recent?limit=${limit}`, { signal });
+}
+
+export function searchRuns(q: string, limit = 20, signal?: AbortSignal) {
+  const params = new URLSearchParams({ q, limit: String(limit) });
+  return request<RunSummary[]>(`/api/runs/search?${params.toString()}`, { signal });
+}
+
+/** Server-side compare export. Returns a typed Blob + filename pair. */
+export async function exportCompare(
+  cacheKey: string,
+  format: CompareExportFormat,
+  signal?: AbortSignal,
+): Promise<{ blob: Blob; filename: string }> {
+  const res = await performRequest(
+    `/api/v1/compare/${cacheKey}/export`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ format }),
+      signal,
+    },
+    60_000,
+  );
+  const cd = res.headers.get('Content-Disposition') || '';
+  const match = /filename="?([^"]+)"?/.exec(cd);
+  return {
+    blob: await res.blob(),
+    filename: match?.[1] || `compare.${format === 'markdown' ? 'md' : format}`,
+  };
+}
+
 // CSV / SARIF export endpoints stream every finding for a run; for large runs
 // this loops over thousands of rows server-side, so we use the long-running
 // timeout (180s) consistent with PDF generation and analysis endpoints.
@@ -745,4 +802,25 @@ export function runScheduleNow(scheduleId: number, signal?: AbortSignal) {
     method: 'POST',
     signal,
   });
+}
+
+// ─── CVE detail modal ────────────────────────────────────────────────────────
+import type { CveDetail, CveDetailWithContext } from '@/types';
+
+/**
+ * Fetch a single CVE's enriched detail payload.
+ *
+ * When ``scanId`` is supplied the scan-aware variant is used, which adds
+ * component context + the recommended-upgrade callout. Without it, we
+ * call the global endpoint.
+ */
+export function getCveDetail(
+  args: { cveId: string; scanId?: number | null },
+  signal?: AbortSignal,
+): Promise<CveDetail | CveDetailWithContext> {
+  const id = encodeURIComponent(args.cveId.trim().toUpperCase());
+  if (args.scanId != null) {
+    return request<CveDetailWithContext>(`/api/v1/scans/${args.scanId}/cves/${id}`, { signal });
+  }
+  return request<CveDetail>(`/api/v1/cves/${id}`, { signal });
 }

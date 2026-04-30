@@ -94,6 +94,95 @@ class Settings(BaseSettings):
         description="Override broker; defaults to redis_url when empty",
     )
 
+    # CVE Detail Modal — enrichment service knobs
+    #
+    # The ``CveDetailService`` aggregates OSV / GHSA / NVD / EPSS / KEV into a
+    # single normalised payload, cached in the ``cve_cache`` table. These
+    # knobs tune TTLs, source enablement, the NVD throttle, and the kill
+    # switch for the in-app modal. Defaults are tuned for staging; bumps
+    # belong in environment overrides.
+    cve_modal_enabled: bool = Field(
+        default=True,
+        description="Feature flag for the in-app CVE detail modal. When false, the frontend keeps the old GitHub/NVD external link.",
+    )
+    cve_sources_enabled: str = Field(
+        default="osv,ghsa,nvd,epss,kev",
+        description="Comma-separated list of enabled CVE detail sources.",
+    )
+    cve_cache_ttl_kev_seconds: int = Field(
+        default=6 * 60 * 60,
+        description="Cache TTL for CVEs that are on the CISA KEV list.",
+    )
+    cve_cache_ttl_recent_seconds: int = Field(
+        default=24 * 60 * 60,
+        description="Cache TTL for recent CVEs (published within cve_recent_window_days).",
+    )
+    cve_cache_ttl_stable_seconds: int = Field(
+        default=7 * 24 * 60 * 60,
+        description="Cache TTL for older CVEs.",
+    )
+    cve_cache_ttl_error_seconds: int = Field(
+        default=15 * 60,
+        description="Negative-cache TTL for fetch errors (avoid hammering upstream during outages).",
+    )
+    cve_recent_window_days: int = Field(
+        default=90,
+        description="A CVE published this many days ago or less is treated as 'recent' for TTL bucketing.",
+    )
+    cve_http_connect_timeout: float = Field(
+        default=3.0,
+        description="Connect timeout for outbound CVE source HTTP calls.",
+    )
+    cve_http_read_timeout: float = Field(
+        default=5.0,
+        description="Read timeout for outbound CVE source HTTP calls.",
+    )
+    cve_http_retries: int = Field(
+        default=2,
+        description="Per-call retry budget on transient failures (5xx, timeouts).",
+    )
+    cve_circuit_breaker_threshold: int = Field(
+        default=5,
+        description="Consecutive failures that trip a source's circuit breaker.",
+    )
+    cve_circuit_breaker_reset_seconds: float = Field(
+        default=60.0,
+        description="How long an open circuit stays open before half-open probing.",
+    )
+    cve_nvd_unauth_throttle_seconds: float = Field(
+        default=6.0,
+        description="Min spacing between NVD calls when no API key is set (NVD allows 5 req / 30s).",
+    )
+    cve_nvd_auth_throttle_seconds: float = Field(
+        default=0.6,
+        description="Min spacing between NVD calls with an API key (50 req / 30s).",
+    )
+
+    # Compare Runs v2 (ADR-0008) — knobs and kill-switches
+    #
+    # ``compare_v1_fallback`` is the operational kill-switch. It is read by the
+    # frontend (via ``NEXT_PUBLIC_COMPARE_V1_FALLBACK``) at build time AND by
+    # this backend so ``GET /health`` can echo the current value back to ops
+    # for staging verification. When true, the frontend renders the preserved
+    # v1 implementation at ``frontend/src/app/analysis/compare/_v1/page.tsx``
+    # instead of the v2 page. See ADR-0008 §1 and the runbook.
+    compare_v1_fallback: bool = Field(
+        default=False,
+        description="Operational kill-switch: when true, frontend renders the preserved v1 compare page. Must be set on BOTH backend (this) and frontend (NEXT_PUBLIC_COMPARE_V1_FALLBACK) to take effect.",
+    )
+    compare_license_hash_enabled: bool = Field(
+        default=False,
+        description="When false, license_changed and hash_changed component change_kinds NEVER fire even if the underlying columns get added. Hard guard on stubbed change_kinds. ADR-0008 §10 OOS.",
+    )
+    compare_streaming_threshold: int = Field(
+        default=5000,
+        description="If findings_a + findings_b + components_a + components_b exceeds this, the API streams via SSE instead of returning a single JSON response. Tunable without code change.",
+    )
+    compare_cache_ttl_seconds: int = Field(
+        default=24 * 60 * 60,
+        description="TTL for compare_cache rows. Cache is also invalidated immediately when either run is reanalyzed (Celery hook).",
+    )
+
     # Logging Configuration
     log_level: str = Field(default="INFO", description="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)")
     log_format: str = Field(default="text", description="Log format (text or json)")
@@ -182,6 +271,15 @@ class Settings(BaseSettings):
             return ["NVD", "OSV", "GITHUB"]
         sources = [s.strip().upper() for s in self.analysis_sources.split(",") if s.strip()]
         return sources or ["NVD", "OSV", "GITHUB"]
+
+    @property
+    def cve_sources_enabled_list(self) -> list[str]:
+        """Parse cve_sources_enabled into a normalised lowercase list."""
+        if not self.cve_sources_enabled:
+            return []
+        out = [s.strip().lower() for s in self.cve_sources_enabled.split(",") if s.strip()]
+        valid = {"osv", "ghsa", "nvd", "epss", "kev"}
+        return [s for s in out if s in valid]
 
     @property
     def cors_origins_list(self) -> list[str]:

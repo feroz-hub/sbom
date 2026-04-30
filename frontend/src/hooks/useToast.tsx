@@ -123,8 +123,16 @@ export function useToast() {
 
 function ToastContainer({ toasts, dismiss }: { toasts: ToastItem[]; dismiss: (id: string) => void }) {
   if (toasts.length === 0) return null;
+  // ``z-60`` sits above any open dialog (dialog overlay + content live at
+  // z-50) so a toast triggered from inside a dialog (e.g. "Copied CVE id"
+  // confirmation) stays on top. While a dialog is open we dim the
+  // container so it doesn't compete with the modal — the
+  // ``body[data-dialog-open]`` selector is set by the Dialog primitive.
   return (
-    <div className="fixed top-4 right-4 z-50 flex flex-col gap-2 w-80 max-h-[calc(100vh-2rem)] overflow-y-auto">
+    <div
+      data-toast-container
+      className="fixed top-4 right-4 z-[60] flex w-80 max-h-[calc(100dvh-2rem)] flex-col gap-2 overflow-y-auto transition-opacity"
+    >
       {toasts.map((t) => (
         <ToastItemView key={t.id} toast={t} dismiss={dismiss} />
       ))}

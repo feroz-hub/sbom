@@ -263,6 +263,21 @@ def persist_analysis_run(
             )
         )
 
+    # CACHE INVALIDATION CONTRACT (ADR-0008)
+    #
+    # ``compare_cache`` is keyed by (run_a_id, run_b_id). Because this
+    # function only CREATES new runs (immutable, append-only — every
+    # analysis produces a new ``analysis_run`` row), no existing cache
+    # entries reference the new ``run.id`` and there is nothing to
+    # invalidate here.
+    #
+    # If a future code path MUTATES an existing run (re-running findings
+    # against the same run_id) or DELETES a run, that path MUST call
+    # ``CompareService(db).invalidate_for_run(run_id)`` in the same
+    # transaction. Skipping it leaves stale rows in compare_cache that
+    # the 24h TTL will eventually clean up — but until then, users would
+    # see a CompareResult containing references to the mutated/deleted
+    # run, which is a correctness bug.
     return run
 
 

@@ -61,6 +61,24 @@
   --duration-base: 200ms;
   --duration-slow: 300ms;
   --duration-slower: 480ms;
+
+  /* ── Compare-page UI uplift (ADR-0008 + compare-ui-redesign.md) ── */
+  /* Hero typography — clamp() so we don't bloat the Tailwind type ramp */
+  --hero-headline-size: clamp(1.5rem, 2.5vw, 2.25rem);    /* 24-36px */
+  --hero-bignumber-size: clamp(2.5rem, 5vw, 3.75rem);     /* 40-60px */
+  --hero-headline-tracking: -0.025em;
+
+  /* Distribution bar — promoted from h-3 (12px) to a true visual element */
+  --distribution-bar-height: 28px;
+  --distribution-bar-radius: 999px;
+
+  /* Severity gradient stops — additive on the findings row left edge.
+   * Reuses the existing severity.* palette in fade form; no new severity colors. */
+  --severity-critical-fade: rgba(192, 57, 43, 0.10);
+  --severity-high-fade: rgba(212, 104, 10, 0.10);
+  --severity-medium-fade: rgba(184, 134, 11, 0.08);
+  --severity-low-fade: rgba(0, 103, 177, 0.06);
+  --severity-unknown-fade: rgba(107, 122, 141, 0.05);
 }
 
 .dark {
@@ -104,6 +122,13 @@
   --glow-cyan: 0 0 0 1px rgba(56, 212, 255, 0.45), 0 0 26px -4px rgba(56, 212, 255, 0.6);
   --glow-critical: 0 0 0 1px rgba(248, 113, 113, 0.5), 0 0 22px -2px rgba(248, 113, 113, 0.45);
   --glow-success: 0 0 0 1px rgba(74, 222, 128, 0.45), 0 0 18px -2px rgba(74, 222, 128, 0.4);
+
+  /* Compare-page severity gradient stops — dark variants */
+  --severity-critical-fade: rgba(248, 113, 113, 0.12);
+  --severity-high-fade: rgba(251, 146, 60, 0.10);
+  --severity-medium-fade: rgba(251, 191, 36, 0.10);
+  --severity-low-fade: rgba(96, 165, 250, 0.08);
+  --severity-unknown-fade: rgba(148, 163, 184, 0.06);
 }
 
 @layer base {
@@ -213,6 +238,16 @@
   }
   .dialog-panel-in {
     animation: scaleFadeIn var(--duration-base) var(--ease-out);
+  }
+
+  /* Dim ambient surfaces (toast container, future right-rail) while any
+     dialog is open. The ``[data-dialog-open]`` attribute is set on
+     ``<body>`` by ``components/ui/Dialog.tsx``. Using a CSS rule rather
+     than a context provider keeps this primitive-free — every existing
+     toast call site picks it up automatically. */
+  body[data-dialog-open] [data-toast-container] {
+    opacity: 0.4;
+    pointer-events: none;
   }
 
   .shimmer {
@@ -387,6 +422,22 @@
   }
 }
 
+/* CSS containing-block rule: any element with a non-``none`` transform
+ * (or filter / perspective / contain: paint) becomes the containing
+ * block for ``position: fixed`` descendants. With ``animation-fill-mode:
+ * both`` the final keyframe's transform persists in the computed style,
+ * so ``transform: translateY(0)`` (an identity transform — but still
+ * non-none) is enough to corrupt fixed-positioned descendants. We end
+ * every entry animation at ``transform: none`` so the computed style is
+ * empty post-animation; interpolation between the start transform and
+ * ``none`` is the same as interpolating to the identity, so the visual
+ * is unchanged. Affected animations: animateIn, slideInFromRight,
+ * slideInFromBottom, scaleFadeIn (dialog panel itself), motionRise,
+ * motionGlide. shimmerSweep / pulseRing / glowPulse are intentionally
+ * left as-is — they animate continuously and their containing-block
+ * effect is by-design.
+ */
+
 @keyframes animateIn {
   from {
     opacity: 0;
@@ -394,7 +445,7 @@
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: none;
   }
 }
 
@@ -405,7 +456,7 @@
   }
   to {
     opacity: 1;
-    transform: translateX(0);
+    transform: none;
   }
 }
 
@@ -416,7 +467,7 @@
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: none;
   }
 }
 
@@ -436,7 +487,7 @@
   }
   to {
     opacity: 1;
-    transform: scale(1) translateY(0);
+    transform: none;
   }
 }
 
@@ -465,7 +516,7 @@
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: none;
   }
 }
 
@@ -476,7 +527,7 @@
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: none;
   }
 }
 
@@ -502,6 +553,14 @@
   50% {
     box-shadow: 0 0 0 1px rgba(192, 57, 43, 0.6), 0 0 28px 0 rgba(192, 57, 43, 0.55);
   }
+}
+
+/* Compare-page sparkline draw-on. Reduced-motion disables via the global
+ * `*` selector below, but for safety the rule itself produces the same
+ * end-state from frame 1 too. */
+@keyframes compare-sparkline-draw {
+  from { stroke-dashoffset: 1000; }
+  to   { stroke-dashoffset: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {

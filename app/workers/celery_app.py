@@ -35,6 +35,7 @@ celery_app = Celery(
     include=[
         "app.nvd_mirror.tasks",
         "app.workers.scheduled_analysis",
+        "app.workers.cve_refresh",
     ],
 )
 
@@ -58,5 +59,18 @@ celery_app.conf.beat_schedule = {
         # actually fires after its next_run_at passes. Tighter = more
         # responsive but more idle DB scans; 15 min is the sweet spot.
         "schedule": crontab(minute="*/15"),
+    },
+    # CVE detail modal cache hygiene
+    "cve-refresh-kev": {
+        # Every 6 hours — KEV catalog updates infrequently (a few entries
+        # a week) so 6h keeps "Actively exploited" badges current without
+        # spamming CISA's CDN.
+        "task": "cve_refresh.refresh_kev_cache",
+        "schedule": crontab(minute=10, hour="*/6"),
+    },
+    "cve-cache-purge": {
+        # Daily — drop rows whose expires_at is more than 24 h in the past.
+        "task": "cve_refresh.purge_expired",
+        "schedule": crontab(minute=30, hour=3),
     },
 }

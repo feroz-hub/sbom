@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ChevronDown,
   ChevronRight,
@@ -11,6 +11,11 @@ import {
   Wrench,
 } from 'lucide-react';
 import { Alert } from '@/components/ui/Alert';
+import {
+  CveDetailDialog,
+  useCveHoverPrefetch,
+  type CveRowSeed,
+} from '@/components/vulnerabilities/CveDetailDialog';
 import {
   EmptyRow,
   SortableTh,
@@ -77,6 +82,45 @@ interface FindingsTableProps {
   error: Error | null;
   onSeverityChange?: (severity: string) => void;
   severityFilter?: string;
+  /** Analysis run id — when present, the modal uses the scan-aware variant (component context + recommended upgrade). */
+  runId?: number;
+  /** Human-friendly scan label (typically the SBOM name) shown in the modal's component-context line. */
+  scanName?: string | null;
+  /**
+   * Feature flag — when false, the findings table reverts to the legacy
+   * ``<a target="_blank">`` outbound link to GHSA / NVD. Drives the
+   * Phase-5 rollback path. Default: ``true``.
+   */
+  cveModalEnabled?: boolean;
+}
+
+/**
+ * Outbound link for the legacy "open in GHSA / NVD" path used when the
+ * in-app modal is disabled by feature flag (rollback). GHSA IDs go to
+ * github.com; CVE IDs go to nvd.nist.gov. Returns ``null`` when neither
+ * pattern matches, so the call site can render plain text.
+ */
+function legacyVulnUrl(vulnId: string | null, referenceUrl: string | null): string | null {
+  if (referenceUrl) return referenceUrl;
+  if (!vulnId) return null;
+  if (vulnId.startsWith('GHSA-')) return `https://github.com/advisories/${vulnId}`;
+  if (vulnId.startsWith('CVE-')) return `https://nvd.nist.gov/vuln/detail/${vulnId}`;
+  return null;
+}
+
+function findingToSeed(f: EnrichedFinding): CveRowSeed {
+  return {
+    vuln_id: f.vuln_id,
+    severity: f.severity,
+    score: f.score,
+    cvss_version: f.cvss_version,
+    in_kev: f.in_kev,
+    epss: f.epss,
+    epss_percentile: f.epss_percentile,
+    component_name: f.component_name,
+    component_version: f.component_version,
+    source: f.source,
+  };
 }
 
 function parseJsonStringList(raw: string | null | undefined): string[] {
@@ -87,14 +131,6 @@ function parseJsonStringList(raw: string | null | undefined): string[] {
   } catch {
     return [];
   }
-}
-
-function vulnUrl(vulnId: string | null, referenceUrl: string | null): string | null {
-  if (referenceUrl) return referenceUrl;
-  if (!vulnId) return null;
-  if (vulnId.startsWith('GHSA-')) return `https://github.com/advisories/${vulnId}`;
-  if (vulnId.startsWith('CVE-')) return `https://nvd.nist.gov/vuln/detail/${vulnId}`;
-  return null;
 }
 
 function loadDensity(): Density {
@@ -197,6 +233,9 @@ export function FindingsTable({
   error,
   onSeverityChange,
   severityFilter = '',
+  runId,
+  scanName,
+  cveModalEnabled = true,
 }: FindingsTableProps) {
   const [filter, setFilter] = useState<FindingsFilterState>(() => ({
     ...DEFAULT_FILTERS,
@@ -204,6 +243,19 @@ export function FindingsTable({
   }));
   const [density, setDensity] = useState<Density>('comfortable');
   const [expandedRows, setExpandedRows] = useState<Record<number, boolean>>({});
+
+  // Active CVE for the in-app detail modal. We keep a single page-level
+  // dialog instance and swap the active CVE — one query at a time, no
+  // per-row dialog mount.
+  const [activeCve, setActiveCve] = useState<{ id: string; seed: CveRowSeed } | null>(null);
+  const { onHoverStart, onHoverEnd } = useCveHoverPrefetch();
+  const openCve = useCallback(
+    (f: EnrichedFinding) => {
+      if (!f.vuln_id) return;
+      setActiveCve({ id: f.vuln_id, seed: findingToSeed(f) });
+    },
+    [],
+  );
 
   // Hydrate density from localStorage after mount.
   useEffect(() => {
@@ -406,7 +458,6 @@ export function FindingsTable({
             ) : (
               pagination.pageItems.flatMap((f) => {
                 const isExpanded = !!expandedRows[f.id];
-                const url = vulnUrl(f.vuln_id, f.reference_url);
                 const aliases = f.cve_aliases.filter((a) => a !== f.vuln_id);
                 const cwes = (f.cwe ?? '').split(',').map((s) => s.trim()).filter(Boolean);
                 const fixedVersions = parseJsonStringList(f.fixed_versions);
@@ -438,19 +489,41 @@ export function FindingsTable({
                     <td className={cn('px-4 align-top', cellPadding)}>
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-1.5">
-                          {url ? (
-                            <a
-                              href={url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 font-mono text-xs font-semibold text-hcl-blue hover:underline"
-                            >
-                              {f.vuln_id || '—'}
-                              <ExternalLink className="h-3 w-3" aria-hidden />
-                            </a>
+                          {f.vuln_id ? (
+                            cveModalEnabled ? (
+                              <button
+                                type="button"
+                                onClick={() => openCve(f)}
+                                onMouseEnter={onHoverStart(f.vuln_id, runId ?? null)}
+                                onMouseLeave={onHoverEnd}
+                                onFocus={onHoverStart(f.vuln_id, runId ?? null)}
+                                onBlur={onHoverEnd}
+                                className="inline-flex items-center gap-1 rounded font-mono text-xs font-semibold text-hcl-blue hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/40"
+                                aria-label={`Open CVE detail for ${f.vuln_id}`}
+                              >
+                                {f.vuln_id}
+                              </button>
+                            ) : (() => {
+                              const legacyUrl = legacyVulnUrl(f.vuln_id, f.reference_url);
+                              return legacyUrl ? (
+                                <a
+                                  href={legacyUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 font-mono text-xs font-semibold text-hcl-blue hover:underline"
+                                >
+                                  {f.vuln_id}
+                                  <ExternalLink className="h-3 w-3" aria-hidden />
+                                </a>
+                              ) : (
+                                <span className="font-mono text-xs font-semibold text-foreground/90">
+                                  {f.vuln_id}
+                                </span>
+                              );
+                            })()
                           ) : (
                             <span className="font-mono text-xs font-semibold text-foreground/90">
-                              {f.vuln_id || '—'}
+                              —
                             </span>
                           )}
                           {f.in_kev && <KevBadge compact={density === 'compact'} />}
@@ -510,6 +583,12 @@ export function FindingsTable({
                           aliases={aliases}
                           cwes={cwes}
                           fixedVersions={fixedVersions}
+                          onAliasOpen={(alias) =>
+                            setActiveCve({
+                              id: alias,
+                              seed: { ...findingToSeed(f), vuln_id: alias },
+                            })
+                          }
                         />
                       </td>
                     </tr>
@@ -536,6 +615,22 @@ export function FindingsTable({
           />
         ) : null}
       </div>
+
+      {cveModalEnabled ? (
+        <CveDetailDialog
+          cveId={activeCve?.id ?? null}
+          seed={activeCve?.seed ?? null}
+          scanId={runId ?? null}
+          scanName={scanName ?? null}
+          open={activeCve !== null}
+          onOpenChange={(open) => {
+            if (!open) setActiveCve(null);
+          }}
+          onSwitchCve={(newId) =>
+            setActiveCve((prev) => (prev ? { id: newId, seed: prev.seed } : prev))
+          }
+        />
+      ) : null}
     </div>
   );
 }
@@ -545,9 +640,11 @@ interface ExpandedDetailProps {
   aliases: string[];
   cwes: string[];
   fixedVersions: string[];
+  /** Open the CVE detail modal for an alternate ID. */
+  onAliasOpen?: (alias: string) => void;
 }
 
-function ExpandedDetail({ finding: f, aliases, cwes, fixedVersions }: ExpandedDetailProps) {
+function ExpandedDetail({ finding: f, aliases, cwes, fixedVersions, onAliasOpen }: ExpandedDetailProps) {
   const description =
     f.description && f.description !== f.vuln_id
       ? f.description
@@ -680,22 +777,26 @@ function ExpandedDetail({ finding: f, aliases, cwes, fixedVersions }: ExpandedDe
               All aliases
             </p>
             <div className="mt-1 flex flex-wrap gap-1">
-              {aliases.map((a) => (
-                <a
-                  key={a}
-                  href={
-                    a.startsWith('GHSA-')
-                      ? `https://github.com/advisories/${a}`
-                      : `https://nvd.nist.gov/vuln/detail/${a}`
-                  }
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-mono inline-flex items-center gap-1 rounded border border-border-subtle bg-surface px-1.5 py-0.5 text-[11px] text-hcl-blue hover:underline"
-                >
-                  {a}
-                  <ExternalLink className="h-2.5 w-2.5" aria-hidden />
-                </a>
-              ))}
+              {aliases.map((a) =>
+                onAliasOpen ? (
+                  <button
+                    key={a}
+                    type="button"
+                    onClick={() => onAliasOpen(a)}
+                    className="font-mono inline-flex items-center gap-1 rounded border border-border-subtle bg-surface px-1.5 py-0.5 text-[11px] text-hcl-blue hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/40"
+                    aria-label={`Open CVE detail for ${a}`}
+                  >
+                    {a}
+                  </button>
+                ) : (
+                  <span
+                    key={a}
+                    className="font-mono inline-flex items-center gap-1 rounded border border-border-subtle bg-surface px-1.5 py-0.5 text-[11px] text-foreground/80"
+                  >
+                    {a}
+                  </span>
+                ),
+              )}
             </div>
           </div>
         )}
