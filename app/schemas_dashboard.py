@@ -50,10 +50,15 @@ class LifetimeMetrics(BaseModel):
     sboms_scanned_total: int = 0
     projects_total: int = 0
     runs_executed_total: int = 0
+    # Successful-only run count — the new field per spec §3.6 / Q3.
+    runs_completed_total: int = 0
+    # Distinct calendar dates with ≥1 successful run; gates the trend empty
+    # state so same-day runs don't trigger it incorrectly (Bug 6 lock).
+    runs_distinct_dates: int = 0
     runs_executed_this_week: int = 0
     # Distinct ``(vuln_id, component_name, component_version)`` tuples ever
-    # detected — across all runs, not the latest-successful-run scope. This
-    # is intentionally broader than the in-scope KPIs the hero shows.
+    # detected — across all *successful* runs (Q2 lock; ERROR runs no longer
+    # inflate the cumulative tile). See spec §3.4.
     findings_surfaced_total: int = 0
     # Findings present in run N but absent from run N+1 of the same SBOM,
     # summed across all consecutive successful run pairs. Expensive query;
@@ -104,6 +109,11 @@ class FindingsTrendResponse(BaseModel):
     so the v1 frontend (under feature flag) continues to render until Phase 4
     ships. Both arrays carry the same data — the alias is removed in the
     follow-up cleanup release per the redesign doc §9.2.
+
+    ``runs_total`` and ``runs_distinct_dates`` are the canonical inputs the
+    FE empty-state needs; they replace the FE-side ``populatedDays`` heuristic
+    that mis-counted runs as days (Bug 2 / Bug 6 lock — see
+    ``docs/dashboard-metrics-spec.md`` §5).
     """
 
     days: int
@@ -112,6 +122,9 @@ class FindingsTrendResponse(BaseModel):
     annotations: list[TrendAnnotation] = Field(default_factory=list)
     avg_total: float = 0.0
     earliest_run_date: str | None = None
+    # Canonical run counts for the empty-state copy/condition.
+    runs_total: int = 0
+    runs_distinct_dates: int = 0
     schema_version: int = 1
 
 
@@ -137,14 +150,32 @@ PrimaryAction = Literal[
 ]
 
 
+class NetChange(BaseModel):
+    """Time-windowed delta with explicit first-period signaling.
+
+    ``is_first_period`` is the lock for Bug 5: when no successful run
+    completed strictly before ``today − window_days``, the comparison is
+    undefined. The FE renders "first scan this week — comparison available
+    next week" instead of ``+N / −0``.
+
+    See ``docs/dashboard-metrics-spec.md`` §3.7.
+    """
+
+    added: int = 0
+    resolved: int = 0
+    is_first_period: bool = False
+    window_days: int = 7
+
+
 class DashboardPostureResponse(BaseModel):
     """v2 posture envelope.
 
     Adds the fields the v2 hero needs to render without a second round-trip:
     ``total_findings``, ``distinct_vulnerabilities`` (previously on
-    ``/dashboard/stats``), ``net_7day_*`` (new), and the server-computed
-    ``headline_state`` + ``primary_action`` rules. Original fields preserved
-    so v1 consumers (sidebar, sparkline) keep working unchanged.
+    ``/dashboard/stats``), ``net_7day`` envelope (with ``is_first_period``),
+    and the server-computed ``headline_state`` + ``primary_action`` rules.
+    The flat ``net_7day_added`` / ``net_7day_resolved`` fields are preserved
+    for one release while the FE migrates to the envelope.
     """
 
     # Original v1 fields — preserved for back-compat.
@@ -158,6 +189,9 @@ class DashboardPostureResponse(BaseModel):
     # New in v2 — see ``docs/dashboard-redesign.md`` §9.3.
     total_findings: int = 0
     distinct_vulnerabilities: int = 0
+    # Envelope (canonical). Carries is_first_period for honest first-scan copy.
+    net_7day: NetChange = Field(default_factory=NetChange)
+    # Flat aliases — kept for one-release back-compat with existing FE bundles.
     net_7day_added: int = 0
     net_7day_resolved: int = 0
     headline_state: HeadlineState = "no_data"

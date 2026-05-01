@@ -7,6 +7,7 @@ Routes:
   GET /dashboard/activity           active vs stale SBOM counts
   GET /dashboard/severity           aggregate severity counts
   GET /dashboard/posture            posture band + KEV/fix counts (ADR-0001)
+  GET /dashboard/lifetime           "Your Analyzer, So Far" cumulative metrics
 
 Scoping rule (ADR-0001 / docs/terminology.md):
   All aggregate counts are computed over the *latest successful run per SBOM*,
@@ -14,6 +15,10 @@ Scoping rule (ADR-0001 / docs/terminology.md):
   runs do not contribute to severity, finding, or vulnerability counts —
   their numbers may be partial or wrong, and surfacing them on the home
   dashboard would inflate or contradict the headline.
+
+All numbers come from ``app.metrics`` — see
+``docs/dashboard-metrics-spec.md`` for definitions and reconciliation
+invariants. **Do not add inline metric SQL here.**
 """
 
 import logging
@@ -23,21 +28,18 @@ from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from .. import metrics
 from ..db import get_db
 from ..etag import maybe_not_modified
-from ..models import (
-    AnalysisFinding,
-    AnalysisRun,
-    KevEntry,
-    Projects,
-    SBOMSource,
+from ..models import SBOMSource
+from ..schemas_dashboard import (
+    DashboardPostureResponse,
+    LifetimeMetrics,
+    NetChange,
 )
-from ..schemas_dashboard import DashboardPostureResponse, LifetimeMetrics
-from ..services.analysis_service import SUCCESSFUL_RUN_STATUSES
 from ..services.dashboard_metrics import (
     compute_headline_state,
     compute_lifetime_metrics,
-    compute_net_7day_change,
 )
 
 log = logging.getLogger(__name__)
@@ -45,56 +47,21 @@ log = logging.getLogger(__name__)
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 
-def _latest_successful_run_ids_subq():
-    """SQL subquery: ids of the latest *successful* (OK/FINDINGS/PARTIAL) run per SBOM.
-
-    Implemented as ``MAX(id) GROUP BY sbom_id`` filtered to successful statuses.
-    ``id`` is monotonic with ``started_on`` for our writer (single-process
-    per-SBOM serialisation), so this is safe and avoids a self-join.
-    """
-    return (
-        select(func.max(AnalysisRun.id))
-        .where(AnalysisRun.run_status.in_(SUCCESSFUL_RUN_STATUSES))
-        .group_by(AnalysisRun.sbom_id)
-        .scalar_subquery()
-    )
-
-
 @router.get("/stats")
 def dashboard_stats(request: Request, response: Response, db: Session = Depends(get_db)):
     """KPI counts for the home dashboard.
 
-    Definitions (locked in ``docs/terminology.md``):
-      * ``total_active_projects`` — projects with ``project_status = 1``
-      * ``total_sboms`` — count of SBOM sources
-      * ``total_distinct_vulnerabilities`` — distinct CVE-equivalent identifiers
-        in the latest successful run per SBOM (one CVE → one count regardless
-        of how many components it affects)
-      * ``total_findings`` — distinct (run_id, vuln_id, component) tuples in
-        the latest successful run per SBOM (this is what the severity bar sums)
+    Definitions (locked in ``docs/dashboard-metrics-spec.md`` §3):
+      * ``total_active_projects`` — ``projects.active_total``
+      * ``total_sboms`` — ``sboms.total``
+      * ``total_findings`` — ``findings.latest_per_sbom.total``
+      * ``total_distinct_vulnerabilities`` — ``findings.latest_per_sbom.distinct_vulnerabilities``
     """
-    latest_runs = _latest_successful_run_ids_subq()
-
-    total_active_projects = db.execute(
-        select(func.count(Projects.id)).where(Projects.project_status == 1)
-    ).scalar_one()
-    total_sboms = db.execute(select(func.count(SBOMSource.id))).scalar_one()
-
-    total_findings = (
-        db.execute(
-            select(func.count(AnalysisFinding.id)).where(
-                AnalysisFinding.analysis_run_id.in_(latest_runs)
-            )
-        ).scalar_one()
-        or 0
-    )
+    total_active_projects = metrics.projects_active_total(db)
+    total_sboms = metrics.sboms_total(db)
+    total_findings = metrics.findings_latest_per_sbom_total(db)
     total_distinct_vulnerabilities = (
-        db.execute(
-            select(func.count(func.distinct(AnalysisFinding.vuln_id))).where(
-                AnalysisFinding.analysis_run_id.in_(latest_runs)
-            )
-        ).scalar_one()
-        or 0
+        metrics.findings_latest_per_sbom_distinct_vulnerabilities(db)
     )
 
     payload = {
@@ -144,19 +111,7 @@ def dashboard_severity(request: Request, response: Response, db: Session = Depen
     UNKNOWN is returned as-is for the data-quality pill on the hero — it is NOT
     a severity tier and the UI must render it separately (see ADR-0001).
     """
-    latest_runs = _latest_successful_run_ids_subq()
-    rows = db.execute(
-        select(AnalysisFinding.severity, func.count(AnalysisFinding.id))
-        .where(AnalysisFinding.analysis_run_id.in_(latest_runs))
-        .group_by(AnalysisFinding.severity)
-    ).all()
-    buckets: dict[str, int] = {"critical": 0, "high": 0, "medium": 0, "low": 0, "unknown": 0}
-    for sev, cnt in rows:
-        key = (sev or "unknown").lower()
-        if key in buckets:
-            buckets[key] += cnt
-        else:
-            buckets["unknown"] += cnt
+    buckets = metrics.findings_latest_per_sbom_severity_distribution(db)
     nm = maybe_not_modified(request, response, buckets)
     if nm is not None:
         return nm
@@ -171,85 +126,36 @@ def dashboard_posture(request: Request, response: Response, db: Session = Depend
 
     * ``total_findings`` / ``distinct_vulnerabilities`` — previously on
       ``/dashboard/stats`` so the hero needed two requests; now folded in.
-    * ``net_7day_added`` / ``net_7day_resolved`` — vuln-id deltas vs 7 days ago.
+    * ``net_7day`` — vuln-id deltas vs 7 days ago, with ``is_first_period``
+      flag (Bug 5 lock).
     * ``headline_state`` / ``primary_action`` — server-computed rules so the
       hero, sidebar, and (future) digest emails all agree on the framing.
 
     Original v1 fields are preserved unchanged — the v1 hero sparkline and
     sidebar consumers keep working through the deprecation window.
+
+    Every numeric field comes from ``app.metrics``. KEV uses the canonical
+    alias-aware predicate — same logic as the run-detail KEV badge (Bug 1
+    lock). See ``docs/dashboard-metrics-spec.md`` §3.3 / §4 invariant I3.
     """
-    latest_runs = _latest_successful_run_ids_subq()
-
-    # Severity counts (scoped). Reuses the severity logic above.
-    severity_rows = db.execute(
-        select(AnalysisFinding.severity, func.count(AnalysisFinding.id))
-        .where(AnalysisFinding.analysis_run_id.in_(latest_runs))
-        .group_by(AnalysisFinding.severity)
-    ).all()
-    severity = {"critical": 0, "high": 0, "medium": 0, "low": 0, "unknown": 0}
-    for sev, cnt in severity_rows:
-        key = (sev or "unknown").lower()
-        if key in severity:
-            severity[key] += cnt
-        else:
-            severity["unknown"] += cnt
-
-    # KEV count: distinct vuln_ids in scope that match a row in kev_entry.
-    kev_count = (
-        db.execute(
-            select(func.count(func.distinct(AnalysisFinding.vuln_id)))
-            .join(KevEntry, KevEntry.cve_id == AnalysisFinding.vuln_id)
-            .where(AnalysisFinding.analysis_run_id.in_(latest_runs))
-        ).scalar_one()
-        or 0
-    )
-
-    # Fix-available count: distinct vuln_ids in scope where fixed_versions is
-    # a non-empty JSON array. We treat "[]" and "" as no-fix so that the
-    # writers can use either convention without affecting this count.
-    fix_available_count = (
-        db.execute(
-            select(func.count(func.distinct(AnalysisFinding.vuln_id))).where(
-                AnalysisFinding.analysis_run_id.in_(latest_runs),
-                AnalysisFinding.fixed_versions.is_not(None),
-                AnalysisFinding.fixed_versions != "",
-                AnalysisFinding.fixed_versions != "[]",
-            )
-        ).scalar_one()
-        or 0
-    )
-
-    # Freshness: most recent completed_on across successful runs.
-    last_successful_run_at = db.execute(
-        select(func.max(AnalysisRun.completed_on)).where(
-            AnalysisRun.run_status.in_(SUCCESSFUL_RUN_STATUSES)
-        )
-    ).scalar_one_or_none()
-
-    total_active_projects = db.execute(
-        select(func.count(Projects.id)).where(Projects.project_status == 1)
-    ).scalar_one()
-    total_sboms = db.execute(select(func.count(SBOMSource.id))).scalar_one()
-
-    # v2 — fold in the counts the v1 hero used to fetch separately.
-    total_findings = (
-        db.execute(
-            select(func.count(AnalysisFinding.id)).where(
-                AnalysisFinding.analysis_run_id.in_(latest_runs)
-            )
-        ).scalar_one()
-        or 0
-    )
+    severity = metrics.findings_latest_per_sbom_severity_distribution(db)
+    kev_count = metrics.findings_kev_in_scope(db, scope="latest_per_sbom")
+    fix_available_count = metrics.findings_latest_per_sbom_fix_available(db)
+    total_findings = metrics.findings_latest_per_sbom_total(db)
     distinct_vulnerabilities = (
-        db.execute(
-            select(func.count(func.distinct(AnalysisFinding.vuln_id))).where(
-                AnalysisFinding.analysis_run_id.in_(latest_runs)
-            )
-        ).scalar_one()
-        or 0
+        metrics.findings_latest_per_sbom_distinct_vulnerabilities(db)
     )
+    total_active_projects = metrics.projects_active_total(db)
+    total_sboms = metrics.sboms_total(db)
+    last_successful_run_at = _last_successful_completed_at(db)
 
-    net_7day_added, net_7day_resolved = compute_net_7day_change(db)
+    net = metrics.findings_net_change(db, days=7)
+    net_envelope = NetChange(
+        added=net.added,
+        resolved=net.resolved,
+        is_first_period=net.is_first_period,
+        window_days=net.window_days,
+    )
 
     headline_state, primary_action = compute_headline_state(
         total_sboms=int(total_sboms),
@@ -268,8 +174,11 @@ def dashboard_posture(request: Request, response: Response, db: Session = Depend
         "total_active_projects": total_active_projects,
         "total_findings": int(total_findings),
         "distinct_vulnerabilities": int(distinct_vulnerabilities),
-        "net_7day_added": int(net_7day_added),
-        "net_7day_resolved": int(net_7day_resolved),
+        # Canonical envelope.
+        "net_7day": net_envelope.model_dump(),
+        # Back-compat flat aliases — drop after the v2 FE bundle ships.
+        "net_7day_added": net.added,
+        "net_7day_resolved": net.resolved,
         "headline_state": headline_state,
         "primary_action": primary_action,
         "schema_version": 1,
@@ -288,12 +197,38 @@ def dashboard_lifetime(request: Request, response: Response, db: Session = Depen
     for me." Computation is cached in-process for 15 minutes keyed by the
     cheapest invalidation tuple (max run id, run count, sbom count) — so a
     new run completing busts the cache immediately. See
-    ``docs/dashboard-redesign.md`` §6 for the panel rationale and §9.3 for
-    the caching choice.
+    ``docs/dashboard-redesign.md`` §6 for the panel rationale and
+    ``docs/dashboard-metrics-spec.md`` §3 for canonical definitions.
     """
-    metrics = compute_lifetime_metrics(db)
-    payload = metrics.model_dump()
+    base = compute_lifetime_metrics(db)
+    # Augment with the canonical run counts (Bug 6 lock for the trend
+    # empty-state). ``runs_completed_total`` is successful-only;
+    # ``runs_distinct_dates`` is what gates the trend chart visibility.
+    runs_completed_total = metrics.runs_completed_lifetime(db)
+    runs_distinct_dates = metrics.runs_distinct_dates_with_data(db)
+
+    payload = base.model_dump()
+    payload["runs_completed_total"] = int(runs_completed_total)
+    payload["runs_distinct_dates"] = int(runs_distinct_dates)
+
     nm = maybe_not_modified(request, response, payload)
     if nm is not None:
         return nm
     return payload
+
+
+def _last_successful_completed_at(db: Session) -> str | None:
+    """Most recent ``completed_on`` across successful runs.
+
+    Inlined here because there's no canonical metric for "latest activity
+    timestamp" — it's a freshness display, not a count. Add to spec §3 if a
+    second consumer ever needs it.
+    """
+    from ..models import AnalysisRun
+    from ..services.analysis_service import SUCCESSFUL_RUN_STATUSES
+
+    return db.execute(
+        select(func.max(AnalysisRun.completed_on)).where(
+            AnalysisRun.run_status.in_(SUCCESSFUL_RUN_STATUSES)
+        )
+    ).scalar_one_or_none()

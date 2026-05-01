@@ -28,8 +28,6 @@ from sqlalchemy.orm import Session
 from ..models import (
     AnalysisFinding,
     AnalysisRun,
-    KevEntry,
-    Projects,
     SBOMSource,
 )
 from ..schemas_dashboard import (
@@ -312,52 +310,14 @@ def compute_findings_resolved_total(db: Session) -> int:
 
 
 def compute_net_7day_change(db: Session) -> tuple[int, int]:
-    """Compute ``(added, resolved)`` distinct vuln_ids vs 7 days ago.
-
-    A vuln is "added" when it appears in today's latest-successful-run-per-SBOM
-    scope but did not appear in the latest-successful-run-per-SBOM scope as of
-    7 days ago. "Resolved" is the inverse. This deliberately works at the
-    vuln_id level (one CVE on three components is one work item, not three),
-    matching the user mental model documented in ``dashboard-redesign.md`` §3.2.
+    """Back-compat shim — returns ``(added, resolved)`` over the canonical
+    7-day window. New callers should use ``app.metrics.findings_net_change``
+    so they get the ``is_first_period`` flag (Bug 5 lock).
     """
-    seven_days_ago = (datetime.now(UTC) - timedelta(days=7)).isoformat()
+    from .. import metrics as canonical_metrics
 
-    today_runs = (
-        select(func.max(AnalysisRun.id))
-        .where(AnalysisRun.run_status.in_(SUCCESSFUL_RUN_STATUSES))
-        .group_by(AnalysisRun.sbom_id)
-        .scalar_subquery()
-    )
-    today_vulns: set[str] = {
-        row[0]
-        for row in db.execute(
-            select(AnalysisFinding.vuln_id)
-            .where(AnalysisFinding.analysis_run_id.in_(today_runs))
-            .distinct()
-        )
-        if row[0]
-    }
-
-    historical_runs = (
-        select(func.max(AnalysisRun.id))
-        .where(AnalysisRun.run_status.in_(SUCCESSFUL_RUN_STATUSES))
-        .where(AnalysisRun.started_on <= seven_days_ago)
-        .group_by(AnalysisRun.sbom_id)
-        .scalar_subquery()
-    )
-    historical_vulns: set[str] = {
-        row[0]
-        for row in db.execute(
-            select(AnalysisFinding.vuln_id)
-            .where(AnalysisFinding.analysis_run_id.in_(historical_runs))
-            .distinct()
-        )
-        if row[0]
-    }
-
-    added = len(today_vulns - historical_vulns)
-    resolved = len(historical_vulns - today_vulns)
-    return added, resolved
+    result = canonical_metrics.findings_net_change(db, days=7)
+    return result.added, result.resolved
 
 
 # ---------------------------------------------------------------------------
@@ -395,47 +355,25 @@ def compute_lifetime_metrics(db: Session) -> LifetimeMetrics:
         if cached is not None and (now - cached[0]) < _LIFETIME_TTL_SECONDS:
             return cached[1]
 
-    # Cheap O(1) counts.
-    sboms_total = db.execute(select(func.count(SBOMSource.id))).scalar() or 0
-    projects_total = db.execute(select(func.count(Projects.id))).scalar() or 0
-    runs_total = db.execute(select(func.count(AnalysisRun.id))).scalar() or 0
-    one_week_ago = (datetime.now(UTC) - timedelta(days=7)).isoformat()
-    runs_this_week = (
-        db.execute(
-            select(func.count(AnalysisRun.id)).where(
-                AnalysisRun.started_on >= one_week_ago
-            )
-        ).scalar()
-        or 0
-    )
+    # All numeric metrics route through ``app.metrics`` so the lifetime tile
+    # cannot drift from the canonical definitions in
+    # ``docs/dashboard-metrics-spec.md``. The cache wrapping below stays — it
+    # composes with the metrics-layer cache rather than replacing it (the
+    # invalidation key is identical, so the layers agree).
+    from .. import metrics as canonical_metrics
 
-    # Distinct (vuln_id, component_name, component_version) across all findings.
-    # Kept as a single SQL DISTINCT count rather than pulling rows into Python —
-    # for ~10k findings the engine handles this in milliseconds.
-    findings_surfaced = (
-        db.execute(
-            select(
-                func.count(
-                    func.distinct(
-                        func.coalesce(AnalysisFinding.vuln_id, "")
-                        + "|"
-                        + func.coalesce(AnalysisFinding.component_name, "")
-                        + "|"
-                        + func.coalesce(AnalysisFinding.component_version, "")
-                    )
-                )
-            )
-        ).scalar()
-        or 0
-    )
+    sboms_total = canonical_metrics.sboms_total(db)
+    projects_total = canonical_metrics.projects_total(db)
+    runs_total = canonical_metrics.runs_total_lifetime(db)
+    runs_this_week = canonical_metrics.runs_completed_this_week(db)
+
+    # Distinct (vuln_id, component_name, component_version) across all
+    # *successful* runs (Q2 lock — ERROR runs no longer inflate this tile).
+    findings_surfaced = canonical_metrics.findings_distinct_lifetime(db)
 
     findings_resolved = compute_findings_resolved_total(db)
 
-    first_run_at = db.execute(
-        select(func.min(AnalysisRun.started_on)).where(
-            AnalysisRun.run_status.in_(SUCCESSFUL_RUN_STATUSES)
-        )
-    ).scalar()
+    first_run_at = canonical_metrics.runs_first_completed_at(db)
 
     days_monitoring = 0
     if first_run_at:
@@ -469,11 +407,15 @@ def compute_lifetime_metrics(db: Session) -> LifetimeMetrics:
 
 
 def reset_lifetime_cache() -> None:
-    """Test seam — clear the in-process cache.
+    """Test seam — clear every in-process cache that backs the dashboard.
 
-    The dashboard tests seed and inspect lifetime values within the same
-    pytest session; without this the second seed sees yesterday's cached
-    aggregate. Production code never calls this.
+    Clears both the legacy lifetime cache and the canonical metrics-layer
+    cache (``app.metrics.cache._cache``) — the two share the same
+    invalidation tuple, but their stores are separate, and tests need both
+    cleared between seeds.
     """
+    from ..metrics.cache import reset_cache as reset_metrics_cache
+
     with _lifetime_cache_lock:
         _lifetime_cache.clear()
+    reset_metrics_cache()

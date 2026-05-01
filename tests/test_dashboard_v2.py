@@ -128,7 +128,20 @@ def test_trend_returns_exactly_days_points_zero_filled(client, db):
 
 
 def test_trend_zero_fills_days_with_no_data(client, db):
-    """A single day of findings → 30 points, 29 zeros + 1 populated row."""
+    """A single day of findings → 30 points returned (zero-fill works).
+
+    The specific "29 zeros" assumption from v1 no longer holds: under the
+    canonical as-of semantics (``findings.daily_distinct_active`` per
+    spec §3.4), each day shows the distinct findings active in the
+    latest-successful-run-per-SBOM-as-of-that-day. Findings from prior
+    tests' SBOMs carry forward to later days for *their* SBOMs, so we
+    can't assume any specific middle day is zero in a shared session DB.
+
+    What this test still locks down:
+      * The endpoint always returns exactly ``days`` points.
+      * Today's bucket reflects the seeded finding (the new run is the
+        latest-as-of-today for its SBOM).
+    """
     today = _now_iso()
     sbom, proj = _seed_sbom_and_project(db, name="zerofill")
     _seed_run(
@@ -146,11 +159,6 @@ def test_trend_zero_fills_days_with_no_data(client, db):
     by_date = {p["date"]: p for p in body["points"]}
     assert today_key in by_date
     assert by_date[today_key]["high"] >= 1
-    # Find a day in the middle of the window that we did NOT seed and
-    # confirm it's a zero point — proves the fill.
-    middle_day = body["points"][15]["date"]
-    if middle_day != today_key:
-        assert body["points"][15]["total"] == 0
 
 
 def test_trend_includes_avg_total_and_earliest_run_date(client, db):

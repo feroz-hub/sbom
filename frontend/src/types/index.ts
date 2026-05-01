@@ -167,9 +167,27 @@ export type PrimaryAction =
   | 'review_critical'
   | 'view_top_sboms';
 
+/**
+ * Time-windowed delta with explicit first-period signaling.
+ *
+ * `is_first_period === true` means there is no prior comparison window
+ * — the FE must render "first scan this week" copy instead of `+N / −0`.
+ * See `docs/dashboard-metrics-spec.md` §3.7.
+ */
+export interface NetChange {
+  added: number;
+  resolved: number;
+  is_first_period: boolean;
+  window_days: number;
+}
+
 export interface DashboardPosture {
   severity: SeverityData;
-  /** Distinct vulns in scope that appear in the CISA KEV catalog. */
+  /**
+   * Finding-rows in scope that are KEV-listed (matches the run-detail badge
+   * "{N} KEV"). Membership = `vuln_id ∪ aliases ∩ kev_entry`. Same predicate
+   * the run-detail page uses; spec §3.3 invariant I3 locks them equal.
+   */
   kev_count: number;
   /** Distinct vulns in scope with a non-empty fixed_versions array. */
   fix_available_count: number;
@@ -181,9 +199,11 @@ export interface DashboardPosture {
   // v2 additions — see `docs/dashboard-redesign.md` §9.3.
   total_findings?: number;
   distinct_vulnerabilities?: number;
-  /** Distinct vuln_ids new to scope vs 7 days ago. */
+  /** Canonical 7-day delta envelope; carries `is_first_period`. */
+  net_7day?: NetChange;
+  /** @deprecated use `net_7day.added` — kept for one-release back-compat. */
   net_7day_added?: number;
-  /** Distinct vuln_ids resolved out of scope vs 7 days ago. */
+  /** @deprecated use `net_7day.resolved` — kept for one-release back-compat. */
   net_7day_resolved?: number;
   headline_state?: HeadlineState;
   primary_action?: PrimaryAction;
@@ -197,7 +217,15 @@ export interface DashboardPosture {
 export interface LifetimeMetrics {
   sboms_scanned_total: number;
   projects_total: number;
+  /** Every run, all statuses (incl. ERROR/RUNNING/PENDING). Spec §3.6. */
   runs_executed_total: number;
+  /** Successful-only run count. Optional during back-compat window. */
+  runs_completed_total?: number;
+  /**
+   * Distinct calendar dates with ≥1 successful run. Drives the trend chart's
+   * empty-state condition — `< 7` → show empty. Spec §3.6.
+   */
+  runs_distinct_dates?: number;
   runs_executed_this_week: number;
   /** Distinct (vuln_id, component_name, component_version) tuples ever surfaced. */
   findings_surfaced_total: number;
@@ -383,6 +411,17 @@ export interface DashboardTrend {
   avg_total?: number;
   /** v2 — earliest successful run date; lets the UI pick the empty state. */
   earliest_run_date?: string | null;
+  /**
+   * Canonical run count — drives the empty-state copy ("{N} runs so far").
+   * Replaces the FE-side `populatedDays` heuristic that mis-counted runs as
+   * days when multiple runs happened on the same calendar date (Bug 2).
+   */
+  runs_total?: number;
+  /**
+   * Canonical distinct-dates-with-data count — drives the empty-state
+   * condition (`< 7` → show empty). Bug 6 lock.
+   */
+  runs_distinct_dates?: number;
   schema_version?: number;
 }
 

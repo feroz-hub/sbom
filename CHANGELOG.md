@@ -7,8 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Dashboard data consistency: KEV count, trend totals, lifetime metrics now reconcile across all surfaces.**
+  Six P0/P1 contradictions where the same database returned different numbers
+  on the dashboard, run-detail page, and lifetime panel. Root cause was the
+  absence of a canonical metric layer — every endpoint reinvented its
+  aggregation. Fixed by introducing [app/metrics/](app/metrics/) as the single
+  source of truth, with a shared KEV-membership predicate, a shared
+  latest-run-per-SBOM CTE, and the `findings.daily_distinct_active` query for
+  the trend chart (replacing the broken raw-row sum).
+  - **Bug 1 (P0):** dashboard "KEV exposed" silently returned `0` while the
+    run-detail badge showed `6 KEV`. The dashboard query joined only on
+    `vuln_id`, missing findings whose `aliases` contained the KEV-listed CVE.
+    Now both surfaces use [`findings.kev_in_scope`](app/metrics/kev.py),
+    locked by spec invariant I3.
+  - **Bug 2 (P1):** trend empty-state copy reported "1 run so far" with 4
+    same-day runs, because the FE counted distinct calendar dates as runs.
+    Server now ships canonical `runs_total` on `/dashboard/trend`.
+  - **Bug 3 (P0):** trend legend totaled 1,259 findings when lifetime distinct
+    was 513 — mathematically impossible. Old query summed raw finding-rows
+    across runs in the window. New query snapshots distinct findings as-of
+    end-of-day per SBOM. Locked by invariant I4.
+  - **Bug 4 (P1):** lifetime "Findings surfaced" included findings from
+    ERROR runs, conflating ad-hoc partial output with cumulative truth. Now
+    filtered to successful runs only.
+  - **Bug 5 (P1):** "Net 7-day change" rendered `+513 / −0` on a first scan,
+    treating the absent prior period as zero. The metric now returns an
+    explicit `is_first_period` flag and the FE renders "first scan this week"
+    copy with an em-dash.
+  - **Bug 6 (P2):** trend empty state fired even with 4 runs because the
+    condition tested distinct calendar dates < 7. Now uses
+    `runs_distinct_dates` from the server.
+
 ### Added
 
+- **Canonical metrics layer** under [app/metrics/](app/metrics/). Eight modules,
+  one function per metric, every function references its catalog entry in
+  [docs/dashboard-metrics-spec.md](docs/dashboard-metrics-spec.md). All
+  dashboard, run-detail, and lifetime numbers route through this layer; inline
+  metric SQL in router files is now forbidden (spec §8 deny list).
+- **Cross-surface consistency tests** at
+  [tests/test_metric_consistency.py](tests/test_metric_consistency.py),
+  covering twelve invariants from spec §4 (one per Bug 1–6 plus six structural
+  reconciliations). Marked `metric_consistency` for the CI gate.
+- **`net_7day` envelope** on `/dashboard/posture` carrying `is_first_period`
+  and `window_days`. Flat aliases (`net_7day_added`, `net_7day_resolved`)
+  preserved for one release of FE back-compat.
+- **`runs_total` and `runs_distinct_dates`** on `/dashboard/trend`; new
+  `runs_completed_total` and `runs_distinct_dates` on `/dashboard/lifetime`.
+- **Audit, spec, and runbook docs:**
+  [docs/dashboard-metrics-audit.md](docs/dashboard-metrics-audit.md) (Phase 1
+  diagnosis), [docs/dashboard-metrics-spec.md](docs/dashboard-metrics-spec.md)
+  (canonical catalog), [docs/runbook-metric-debugging.md](docs/runbook-metric-debugging.md)
+  (triage decision tree).
 - **Eight-stage SBOM validation pipeline** ([ADR-0007](docs/adr/0007-sbom-validation-architecture.md)).
   Closes the eight P0 / 27 P1 gaps documented in [docs/validation-audit.md](docs/validation-audit.md).
   The pipeline is implemented under [app/validation/](app/validation/) and consists of

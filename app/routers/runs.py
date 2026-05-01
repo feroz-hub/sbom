@@ -8,15 +8,14 @@ Routes:
   GET /api/runs/{run_id}/findings-enriched       list findings + per-CVE KEV/EPSS/composite risk score
 """
 
-import json
 import logging
-import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
+from ..metrics._helpers import cves_for_finding
 from ..models import AnalysisFinding, AnalysisRun, EpssScore, SBOMSource
 from ..schemas import AnalysisFindingOut, AnalysisRunOut
 from ..services.risk_score import (
@@ -25,8 +24,6 @@ from ..services.risk_score import (
     _resolve_cvss,
 )
 from ..sources.kev import lookup_kev_set_memoized
-
-_CVE_RE = re.compile(r"CVE-\d{4}-\d{4,7}", re.IGNORECASE)
 
 log = logging.getLogger(__name__)
 
@@ -301,20 +298,14 @@ def list_run_findings(
 
 
 def _cve_aliases_for(finding: AnalysisFinding) -> list[str]:
-    """Pull every CVE ID we can find on a finding (vuln_id + aliases JSON)."""
-    ids: list[str] = []
-    if finding.vuln_id:
-        ids.extend(_CVE_RE.findall(finding.vuln_id))
-    if finding.aliases:
-        try:
-            parsed = json.loads(finding.aliases)
-            if isinstance(parsed, list):
-                for a in parsed:
-                    if isinstance(a, str):
-                        ids.extend(_CVE_RE.findall(a))
-        except (TypeError, ValueError):
-            ids.extend(_CVE_RE.findall(finding.aliases))
-    return sorted({i.upper() for i in ids if i})
+    """Thin adapter to the canonical CVE-extraction helper.
+
+    Single source of truth lives in ``app.metrics._helpers.cves_for_finding``
+    so the dashboard KEV count and the run-detail KEV badge see the exact
+    same set of CVE ids per finding (Bug 1 lock — see
+    ``docs/dashboard-metrics-spec.md`` §3.5).
+    """
+    return cves_for_finding(finding.vuln_id, finding.aliases)
 
 
 @router.get("/runs/{run_id}/findings-enriched")

@@ -133,13 +133,19 @@ export function FindingsTrendChart({ data, isLoading }: FindingsTrendChartProps)
   const annotations = data?.annotations ?? [];
   const avgTotal = data?.avg_total ?? 0;
 
-  // Empty state when there's <7 days of data. We use the earliest_run_date
-  // hint when the backend ships it; otherwise count populated days.
+  // Empty-state condition uses the server-supplied
+  // `runs_distinct_dates` (canonical: count of distinct calendar dates with
+  // ≥1 successful run). Falls back to the FE-derived `populatedDays` heuristic
+  // only if the server hasn't shipped the new field yet (back-compat window).
+  // The empty-state copy uses `runs_total` so same-day runs report honestly.
+  // See `docs/dashboard-metrics-spec.md` §3.6 — Bug 2 + Bug 6 lock.
   const populatedDays = useMemo(
     () => points.filter((p) => (p.total ?? 0) > 0).length,
     [points],
   );
-  const showEmptyState = populatedDays > 0 && populatedDays < 7;
+  const distinctDates = data?.runs_distinct_dates ?? populatedDays;
+  const runsTotal = data?.runs_total ?? populatedDays;
+  const showEmptyState = distinctDates > 0 && distinctDates < 7;
 
   const totals: Record<SeriesKey, number> = useMemo(() => {
     const acc: Record<SeriesKey, number> = {
@@ -235,7 +241,7 @@ export function FindingsTrendChart({ data, isLoading }: FindingsTrendChartProps)
             <Spinner />
           </div>
         ) : showEmptyState ? (
-          <EmptyTrendState runsSoFar={populatedDays} />
+          <EmptyTrendState runsSoFar={runsTotal} />
         ) : (
           <ResponsiveContainer width="100%" height={320}>
             <AreaChart

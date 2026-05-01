@@ -26,17 +26,28 @@ export function HeroMetricRow({ posture, trend }: HeroMetricRowProps) {
   const kev = posture?.kev_count ?? 0;
   const fix = posture?.fix_available_count ?? 0;
   const distinct = posture?.distinct_vulnerabilities ?? 0;
-  const added = posture?.net_7day_added ?? 0;
-  const resolved = posture?.net_7day_resolved ?? 0;
+  // Prefer the canonical envelope; fall back to the flat aliases for the
+  // back-compat window. The envelope also carries `is_first_period`.
+  const added = posture?.net_7day?.added ?? posture?.net_7day_added ?? 0;
+  const resolved =
+    posture?.net_7day?.resolved ?? posture?.net_7day_resolved ?? 0;
+  const isFirstPeriod = posture?.net_7day?.is_first_period ?? false;
 
   const kevTone: HeroMetricTone = kev > 0 ? 'red' : 'neutral';
   const fixTone: HeroMetricTone = fix > 0 ? 'sky' : 'neutral';
 
   // Net 7d colour: green when net negative (we're shrinking the backlog),
-  // red when net positive (it's growing), neutral when zero.
+  // red when net positive (it's growing), neutral when zero. In a first
+  // period (no prior comparison window), the metric is informational only —
+  // render neutral and avoid the up/down arrow.
   const net = added - resolved;
-  const netTone: HeroMetricTone =
-    net > 0 ? 'red' : net < 0 ? 'emerald' : 'neutral';
+  const netTone: HeroMetricTone = isFirstPeriod
+    ? 'neutral'
+    : net > 0
+      ? 'red'
+      : net < 0
+        ? 'emerald'
+        : 'neutral';
 
   const points = trend?.points ?? trend?.series ?? [];
 
@@ -67,7 +78,9 @@ export function HeroMetricRow({ posture, trend }: HeroMetricRowProps) {
       <HeroMetric
         label="Net 7-day change"
         icon={
-          net > 0 ? (
+          isFirstPeriod ? (
+            <Minus className="h-3.5 w-3.5" aria-hidden />
+          ) : net > 0 ? (
             <ArrowUp className="h-3.5 w-3.5" aria-hidden />
           ) : net < 0 ? (
             <ArrowDown className="h-3.5 w-3.5" aria-hidden />
@@ -76,12 +89,22 @@ export function HeroMetricRow({ posture, trend }: HeroMetricRowProps) {
           )
         }
         tone={netTone}
-        tooltip="Distinct vuln_ids new to scope minus those resolved out of scope, vs 7 days ago."
-        caption="vs prior 7 days"
+        tooltip={
+          isFirstPeriod
+            ? 'No prior week to compare against — comparison available next week.'
+            : 'Distinct vuln_ids new to scope minus those resolved out of scope, vs 7 days ago.'
+        }
+        caption={isFirstPeriod ? 'first scan this week' : 'vs prior 7 days'}
       >
-        +{added.toLocaleString()}
-        <span className="px-1 text-hcl-muted">/</span>
-        −{resolved.toLocaleString()}
+        {isFirstPeriod ? (
+          <span className="text-base font-medium text-hcl-muted">—</span>
+        ) : (
+          <>
+            +{added.toLocaleString()}
+            <span className="px-1 text-hcl-muted">/</span>
+            −{resolved.toLocaleString()}
+          </>
+        )}
       </HeroMetric>
 
       <HeroMiniTrend points={points} daysLabel={trend?.days ?? 30} />

@@ -7,24 +7,20 @@
 # chart can tell a complete story without a second round-trip.
 #
 # Wire format and rules locked in ``docs/dashboard-redesign.md`` §9.2.
+# Metric definitions live in ``docs/dashboard-metrics-spec.md``.
 from __future__ import annotations
 
 import logging
 from statistics import fmean
 
 from fastapi import APIRouter, Depends, Query, Request, Response
-from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from .. import metrics
 from ..db import get_db
 from ..etag import maybe_not_modified
-from ..models import AnalysisRun
 from ..schemas_dashboard import FindingsTrendResponse
-from ..services.analysis_service import SUCCESSFUL_RUN_STATUSES
-from ..services.dashboard_metrics import (
-    build_trend_annotations,
-    build_trend_points,
-)
+from ..services.dashboard_metrics import build_trend_annotations
 
 log = logging.getLogger("sbom.api.dashboard")
 
@@ -40,39 +36,50 @@ def dashboard_trend(
 ):
     """Return zero-filled daily severity counts + annotations for the chart.
 
-    The shape always carries exactly ``days`` points so the frontend can
-    render an honest time-series — including the long stretches of zero
-    that "we just started using this tool" looks like in the first weeks.
+    Each day's severity counts come from ``findings.daily_distinct_active``
+    (spec §3.4) — distinct ``(vuln_id, component_name, component_version)``
+    tuples in the latest successful run of each SBOM as-of-end-of-day. This
+    replaces the old "sum raw rows across runs" implementation that
+    over-counted by orders of magnitude (Bug 3).
 
-    ``points`` is the canonical field; ``series`` is a one-release alias kept
-    so the v1 hero sparkline renders unchanged until Phase 4 ships. Both
-    arrays carry the same data.
+    ``runs_total`` and ``runs_distinct_dates`` are exposed so the FE
+    empty-state copy/condition stops lying about run counts (Bug 2 / Bug 6).
     """
-    points = build_trend_points(db, days=days)
+    points = metrics.findings_daily_distinct_active(db, days=days)
     annotations = build_trend_annotations(db, days=days)
 
     avg_total = fmean(p.total for p in points) if points else 0.0
 
-    # Earliest-run-date hint — the frontend uses this to decide between the
-    # populated chart and an explanatory empty state ("Trend will appear
-    # after a week of regular scanning"). Computed in scope so it matches
-    # the trend itself; failed/pending runs don't count.
-    earliest_iso = db.execute(
-        select(func.min(AnalysisRun.started_on)).where(
-            AnalysisRun.run_status.in_(SUCCESSFUL_RUN_STATUSES)
-        )
-    ).scalar()
+    earliest_iso = metrics.runs_first_completed_at(db)
     earliest_run_date = earliest_iso[:10] if earliest_iso else None
+
+    runs_total = metrics.runs_total_lifetime(db)
+    runs_distinct_dates = metrics.runs_distinct_dates_with_data(db)
+
+    point_dicts = [
+        {
+            "date": p.date,
+            "critical": p.critical,
+            "high": p.high,
+            "medium": p.medium,
+            "low": p.low,
+            "unknown": p.unknown,
+            "total": p.total,
+        }
+        for p in points
+    ]
 
     payload_dict = {
         "days": days,
-        "points": [p.model_dump() for p in points],
+        "points": point_dicts,
         # series alias — same data, same field shape. Removed in a follow-up
         # release once the v2 frontend ships and the v1 bundle is retired.
-        "series": [p.model_dump() for p in points],
+        "series": point_dicts,
         "annotations": [a.model_dump() for a in annotations],
         "avg_total": round(avg_total, 2),
         "earliest_run_date": earliest_run_date,
+        "runs_total": int(runs_total),
+        "runs_distinct_dates": int(runs_distinct_dates),
         "schema_version": 1,
     }
 
