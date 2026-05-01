@@ -1,9 +1,16 @@
-# routers/dashboard.py — Dashboard trend endpoint (B10)
+# routers/dashboard.py — Findings Trend endpoint (v2)
+#
+# v1 returned only days that had findings, which made Recharts render
+# isolated dots when only one day was populated. v2 always returns exactly
+# ``days`` data points (zero-filled), restores ``unknown`` as a first-class
+# bucket, and ships annotations + 30-day average + earliest-run hint so the
+# chart can tell a complete story without a second round-trip.
+#
+# Wire format and rules locked in ``docs/dashboard-redesign.md`` §9.2.
 from __future__ import annotations
 
 import logging
-from collections import defaultdict
-from datetime import UTC, datetime, timedelta
+from statistics import fmean
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlalchemy import func, select
@@ -11,73 +18,65 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..etag import maybe_not_modified
-from ..models import AnalysisFinding, AnalysisRun
+from ..models import AnalysisRun
+from ..schemas_dashboard import FindingsTrendResponse
 from ..services.analysis_service import SUCCESSFUL_RUN_STATUSES
+from ..services.dashboard_metrics import (
+    build_trend_annotations,
+    build_trend_points,
+)
 
 log = logging.getLogger("sbom.api.dashboard")
 
 router = APIRouter()
 
 
-@router.get("/trend", status_code=200)
+@router.get("/trend", response_model=FindingsTrendResponse, status_code=200)
 def dashboard_trend(
     request: Request,
     response: Response,
     days: int = Query(30, ge=1, le=365, description="Number of days to look back"),
     db: Session = Depends(get_db),
 ):
-    """Return daily finding counts for the last N days grouped by severity.
+    """Return zero-filled daily severity counts + annotations for the chart.
 
-    Performance: this used to fetch every AnalysisFinding row in the window
-    as a hydrated ORM object and aggregate in Python — fine for tiny demo
-    DBs, painful as soon as the project accumulates real data because the
-    dashboard renders this on every visit. We now push the aggregation to
-    SQL: a single GROUP BY (date(started_on), severity) returns at most
-    ``days * |severities|`` rows, which the API just shapes into the
-    series the chart expects.
+    The shape always carries exactly ``days`` points so the frontend can
+    render an honest time-series — including the long stretches of zero
+    that "we just started using this tool" looks like in the first weeks.
+
+    ``points`` is the canonical field; ``series`` is a one-release alias kept
+    so the v1 hero sparkline renders unchanged until Phase 4 ships. Both
+    arrays carry the same data.
     """
-    cutoff = (datetime.now(UTC) - timedelta(days=days)).isoformat()
+    points = build_trend_points(db, days=days)
+    annotations = build_trend_annotations(db, days=days)
 
-    # SQL-level aggregation. ``substr(started_on, 1, 10)`` extracts the
-    # YYYY-MM-DD prefix from the ISO string we store in started_on; this
-    # works on both SQLite and Postgres without a dialect-specific date
-    # cast. Joining to AnalysisRun is what keys the day to a real run;
-    # findings without a parent run are filtered out by the inner join.
-    # ADR-0001: exclude ERROR/RUNNING/PENDING/NO_DATA runs — their findings
-    # may be partial or wrong and shouldn't shape a trend chart.
-    date_expr = func.substr(AnalysisRun.started_on, 1, 10).label("date")
-    rows = db.execute(
-        select(
-            date_expr,
-            AnalysisFinding.severity.label("severity"),
-            func.count(AnalysisFinding.id).label("count"),
+    avg_total = fmean(p.total for p in points) if points else 0.0
+
+    # Earliest-run-date hint — the frontend uses this to decide between the
+    # populated chart and an explanatory empty state ("Trend will appear
+    # after a week of regular scanning"). Computed in scope so it matches
+    # the trend itself; failed/pending runs don't count.
+    earliest_iso = db.execute(
+        select(func.min(AnalysisRun.started_on)).where(
+            AnalysisRun.run_status.in_(SUCCESSFUL_RUN_STATUSES)
         )
-        .join(AnalysisRun, AnalysisRun.id == AnalysisFinding.analysis_run_id)
-        .where(
-            AnalysisRun.started_on >= cutoff,
-            AnalysisRun.run_status.in_(SUCCESSFUL_RUN_STATUSES),
-        )
-        .group_by(date_expr, AnalysisFinding.severity)
-    ).all()
+    ).scalar()
+    earliest_run_date = earliest_iso[:10] if earliest_iso else None
 
-    if not rows:
-        payload = {"days": days, "series": []}
-        nm = maybe_not_modified(request, response, payload)
-        return nm if nm is not None else payload
+    payload_dict = {
+        "days": days,
+        "points": [p.model_dump() for p in points],
+        # series alias — same data, same field shape. Removed in a follow-up
+        # release once the v2 frontend ships and the v1 bundle is retired.
+        "series": [p.model_dump() for p in points],
+        "annotations": [a.model_dump() for a in annotations],
+        "avg_total": round(avg_total, 2),
+        "earliest_run_date": earliest_run_date,
+        "schema_version": 1,
+    }
 
-    daily: dict = defaultdict(lambda: {"critical": 0, "high": 0, "medium": 0, "low": 0})
-    for date, severity, count in rows:
-        if not date:
-            continue
-        sev = (severity or "unknown").lower()
-        if sev in ("critical", "high", "medium", "low"):
-            daily[date][sev] += count
-
-    series = [{"date": date, **counts} for date, counts in sorted(daily.items())]
-    payload = {"days": days, "series": series}
-
-    # ETag — stable hash of the payload. The dashboard refetches on every
-    # navigation; serving a 304 to an unchanged window costs ~one round
-    # trip and zero query work.
-    nm = maybe_not_modified(request, response, payload)
-    return nm if nm is not None else payload
+    nm = maybe_not_modified(request, response, payload_dict)
+    if nm is not None:
+        return nm
+    return payload_dict

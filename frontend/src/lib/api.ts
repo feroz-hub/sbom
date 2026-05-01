@@ -7,6 +7,7 @@ import type {
   EnrichedFinding,
   DashboardStats,
   DashboardPosture,
+  LifetimeMetrics,
   RecentSbom,
   ActivityData,
   SeverityData,
@@ -573,6 +574,16 @@ export function getSbomRiskSummary(sbomId: number, signal?: AbortSignal) {
 // ─── Dashboard trend ─────────────────────────────────────────────────────────
 export function getDashboardTrend(days = 30, signal?: AbortSignal) {
   return request<DashboardTrend>(`/dashboard/trend?days=${days}`, { signal });
+}
+
+// ─── Dashboard lifetime ──────────────────────────────────────────────────────
+/**
+ * Cumulative ("Your Analyzer, So Far") metrics. New in v2 — answers the
+ * implicit "has the tool been working for me?" question. See
+ * `docs/dashboard-redesign.md` §6.
+ */
+export function getDashboardLifetime(signal?: AbortSignal) {
+  return request<LifetimeMetrics>('/dashboard/lifetime', { signal });
 }
 
 // ─── Analysis-runs export & compare ──────────────────────────────────────────

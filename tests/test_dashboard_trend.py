@@ -124,8 +124,14 @@ def test_trend_excludes_runs_outside_window(client, db):
     assert far_past[:10] not in by_date
 
 
-def test_trend_unknown_severity_is_dropped(client, db):
-    """Unknown / null severities are not part of the chart's bucket set."""
+def test_trend_unknown_severity_is_first_class(client, db):
+    """v2 (redesign §9.2): ``unknown`` is a first-class field on each point.
+
+    v1 silently dropped unknown findings from the trend chart, which meant
+    a 1,000-finding run with mostly-unscored CVSS scores rendered as zero —
+    the audit §3.3 #2 flagged this as a quiet correctness bug. v2 restores
+    the bucket so the chart matches the hero severity bar.
+    """
     today = _now_iso()
     _seed_run_with_findings(db, started_on=today, severity_counts={"UNKNOWN": 4})
 
@@ -133,12 +139,13 @@ def test_trend_unknown_severity_is_dropped(client, db):
     assert resp.status_code == 200
     body = resp.json()
     today_key = today[:10]
-    matching = [r for r in body["series"] if r["date"] == today_key]
-    if matching:
-        # If a bucket exists, UNKNOWN must not have inflated any of the
-        # four severity counts.
-        for row in matching:
-            assert "unknown" not in row  # field is silently dropped
+    matching = [r for r in body["points"] if r["date"] == today_key]
+    assert matching, "today's point must be present (zero-filled or populated)"
+    for row in matching:
+        assert "unknown" in row, "v2 contract: unknown is first-class"
+        # The severity-tier columns must not have absorbed unknown rows.
+        assert row["unknown"] >= 4
+        assert row["total"] >= 4
 
 
 def test_trend_returns_etag_and_serves_304_on_match(client, db):

@@ -32,7 +32,13 @@ from ..models import (
     Projects,
     SBOMSource,
 )
+from ..schemas_dashboard import DashboardPostureResponse, LifetimeMetrics
 from ..services.analysis_service import SUCCESSFUL_RUN_STATUSES
+from ..services.dashboard_metrics import (
+    compute_headline_state,
+    compute_lifetime_metrics,
+    compute_net_7day_change,
+)
 
 log = logging.getLogger(__name__)
 
@@ -157,15 +163,20 @@ def dashboard_severity(request: Request, response: Response, db: Session = Depen
     return buckets
 
 
-@router.get("/posture")
+@router.get("/posture", response_model=DashboardPostureResponse)
 def dashboard_posture(request: Request, response: Response, db: Session = Depends(get_db)):
-    """Compute the dashboard posture inputs in one place (ADR-0001).
+    """Compute the dashboard posture envelope — single round-trip for the v2 hero.
 
-    Returns the ingredients the hero state machine needs to derive the band:
-    severity counts, KEV count, fix-available count, and the ISO timestamp of
-    the most recent successful run. The band itself is computed client-side
-    so the hero, sidebar, and any other consumer all derive from the same
-    rules without a server-side cache.
+    v2 additions (see ``docs/dashboard-redesign.md`` §9.3):
+
+    * ``total_findings`` / ``distinct_vulnerabilities`` — previously on
+      ``/dashboard/stats`` so the hero needed two requests; now folded in.
+    * ``net_7day_added`` / ``net_7day_resolved`` — vuln-id deltas vs 7 days ago.
+    * ``headline_state`` / ``primary_action`` — server-computed rules so the
+      hero, sidebar, and (future) digest emails all agree on the framing.
+
+    Original v1 fields are preserved unchanged — the v1 hero sparkline and
+    sidebar consumers keep working through the deprecation window.
     """
     latest_runs = _latest_successful_run_ids_subq()
 
@@ -220,6 +231,34 @@ def dashboard_posture(request: Request, response: Response, db: Session = Depend
     ).scalar_one()
     total_sboms = db.execute(select(func.count(SBOMSource.id))).scalar_one()
 
+    # v2 — fold in the counts the v1 hero used to fetch separately.
+    total_findings = (
+        db.execute(
+            select(func.count(AnalysisFinding.id)).where(
+                AnalysisFinding.analysis_run_id.in_(latest_runs)
+            )
+        ).scalar_one()
+        or 0
+    )
+    distinct_vulnerabilities = (
+        db.execute(
+            select(func.count(func.distinct(AnalysisFinding.vuln_id))).where(
+                AnalysisFinding.analysis_run_id.in_(latest_runs)
+            )
+        ).scalar_one()
+        or 0
+    )
+
+    net_7day_added, net_7day_resolved = compute_net_7day_change(db)
+
+    headline_state, primary_action = compute_headline_state(
+        total_sboms=int(total_sboms),
+        total_findings=int(total_findings),
+        critical=severity["critical"],
+        high=severity["high"],
+        kev_count=int(kev_count),
+    )
+
     payload = {
         "severity": severity,
         "kev_count": kev_count,
@@ -227,7 +266,33 @@ def dashboard_posture(request: Request, response: Response, db: Session = Depend
         "last_successful_run_at": last_successful_run_at,
         "total_sboms": total_sboms,
         "total_active_projects": total_active_projects,
+        "total_findings": int(total_findings),
+        "distinct_vulnerabilities": int(distinct_vulnerabilities),
+        "net_7day_added": int(net_7day_added),
+        "net_7day_resolved": int(net_7day_resolved),
+        "headline_state": headline_state,
+        "primary_action": primary_action,
+        "schema_version": 1,
     }
+    nm = maybe_not_modified(request, response, payload)
+    if nm is not None:
+        return nm
+    return payload
+
+
+@router.get("/lifetime", response_model=LifetimeMetrics)
+def dashboard_lifetime(request: Request, response: Response, db: Session = Depends(get_db)):
+    """Cumulative "Your Analyzer, So Far" metrics — growth, not snapshot.
+
+    These numbers only go up and tell the user "the tool has been working
+    for me." Computation is cached in-process for 15 minutes keyed by the
+    cheapest invalidation tuple (max run id, run count, sbom count) — so a
+    new run completing busts the cache immediately. See
+    ``docs/dashboard-redesign.md`` §6 for the panel rationale and §9.3 for
+    the caching choice.
+    """
+    metrics = compute_lifetime_metrics(db)
+    payload = metrics.model_dump()
     nm = maybe_not_modified(request, response, payload)
     if nm is not None:
         return nm

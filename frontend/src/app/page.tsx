@@ -3,35 +3,36 @@
 import { useQuery } from '@tanstack/react-query';
 import { TopBar } from '@/components/layout/TopBar';
 import { Motion } from '@/components/ui/Motion';
-import { HeroRiskPulse } from '@/components/dashboard/HeroRiskPulse';
-import { StatsGrid } from '@/components/dashboard/StatsGrid';
-import { SeverityChart } from '@/components/dashboard/SeverityChart';
-import { ActivityChart } from '@/components/dashboard/ActivityChart';
-import { TrendChart } from '@/components/dashboard/TrendChart';
+import { HeroPostureCard } from '@/components/dashboard/HeroPostureCard/HeroPostureCard';
+import { QuickActionsV2 } from '@/components/dashboard/QuickActionsV2/QuickActionsV2';
+import { FindingsTrendChart } from '@/components/dashboard/FindingsTrendChart/FindingsTrendChart';
+import { LifetimeStats } from '@/components/dashboard/LifetimeStats/LifetimeStats';
 import { TopVulnerableSboms } from '@/components/dashboard/TopVulnerableSboms';
 import { ActivityFeed } from '@/components/dashboard/ActivityFeed';
-import { DashboardQuickActions } from '@/components/dashboard/DashboardQuickActions';
 import {
-  getDashboardActivity,
+  getDashboardLifetime,
   getDashboardPosture,
-  getDashboardStats,
   getDashboardTrend,
-  getHealth,
 } from '@/lib/api';
 
+/**
+ * v2 dashboard — calm posture, real trend, value delivered.
+ *
+ * Layout (top to bottom):
+ *  1. HeroPostureCard — adaptive headline + severity bar + 4-tile metric row
+ *  2. QuickActionsV2 — primary CTA swaps based on posture state
+ *  3. FindingsTrendChart — zero-filled stacked area + annotations + ref line
+ *  4. LifetimeStats — cumulative growth metrics ("Your Analyzer, So Far")
+ *  5. TopVulnerableSboms + ActivityFeed — preserved unchanged
+ *
+ * Removed in v2: SECURITY POSTURE LIVE pill, three counter cards
+ * (Active Projects / Total SBOMs / Distinct Vulnerabilities), the two
+ * donuts (Vulnerability Severity / SBOM Activity), and the "Degraded · NVD
+ * mirror disabled" sidebar leak. Spec: ``docs/dashboard-redesign.md``.
+ */
 export default function DashboardPage() {
-  const statsQuery = useQuery({
-    queryKey: ['dashboard-stats'],
-    queryFn: ({ signal }) => getDashboardStats(signal),
-  });
-
-  const activityQuery = useQuery({
-    queryKey: ['dashboard-activity'],
-    queryFn: ({ signal }) => getDashboardActivity(signal),
-  });
-
-  // Posture — single source of truth for hero band, KEV count, fix-available
-  // count, and last-successful-run timestamp. ADR-0001.
+  // Single posture round-trip — ADR-0001 carried KEV/Fix/severity, v2 adds
+  // total_findings, distinct_vulns, net_7day_*, headline_state, primary_action.
   const postureQuery = useQuery({
     queryKey: ['dashboard-posture'],
     queryFn: ({ signal }) => getDashboardPosture(signal),
@@ -42,24 +43,12 @@ export default function DashboardPage() {
     queryFn: ({ signal }) => getDashboardTrend(30, signal),
   });
 
-  // Health — drives the hero "LIVE / Degraded" pill and the posture state
-  // machine's degraded gate. Polled to keep the pill honest.
-  const healthQuery = useQuery({
-    queryKey: ['dashboard-health'],
-    queryFn: ({ signal }) => getHealth(signal),
-    refetchInterval: 30_000,
-    staleTime: 5_000,
-    retry: 1,
+  const lifetimeQuery = useQuery({
+    queryKey: ['dashboard-lifetime'],
+    queryFn: ({ signal }) => getDashboardLifetime(signal),
   });
 
-  const isAnySyncing =
-    statsQuery.isFetching ||
-    postureQuery.isFetching ||
-    activityQuery.isFetching ||
-    trendQuery.isFetching;
-
-  const heroLoading =
-    statsQuery.isLoading || postureQuery.isLoading || trendQuery.isLoading;
+  const heroLoading = postureQuery.isLoading || trendQuery.isLoading;
 
   return (
     <div className="flex flex-1 flex-col">
@@ -69,53 +58,30 @@ export default function DashboardPage() {
       />
       <div className="space-y-6 p-6">
         <Motion preset="rise">
-          <HeroRiskPulse
-            stats={statsQuery.data}
+          <HeroPostureCard
             posture={postureQuery.data}
             trend={trendQuery.data}
-            health={healthQuery.data}
             isLoading={heroLoading}
-            isSyncing={isAnySyncing && !heroLoading}
           />
         </Motion>
 
         <Motion preset="rise" delay={80}>
-          <DashboardQuickActions />
+          <QuickActionsV2 primaryAction={postureQuery.data?.primary_action} />
         </Motion>
 
-        <Motion preset="rise" delay={140}>
-          <StatsGrid
-            stats={statsQuery.data}
-            trend={trendQuery.data}
-            isLoading={statsQuery.isLoading}
-            error={statsQuery.error}
-          />
+        <Motion preset="rise" delay={160}>
+          <FindingsTrendChart data={trendQuery.data} isLoading={trendQuery.isLoading} />
         </Motion>
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <Motion preset="rise" delay={200}>
-            <SeverityChart
-              data={postureQuery.data?.severity}
-              isLoading={postureQuery.isLoading}
-            />
-          </Motion>
-          <Motion preset="rise" delay={260}>
-            <ActivityChart
-              data={activityQuery.data}
-              isLoading={activityQuery.isLoading}
-            />
-          </Motion>
-        </div>
-
-        <Motion preset="rise" delay={320}>
-          <TrendChart data={trendQuery.data} isLoading={trendQuery.isLoading} />
+        <Motion preset="rise" delay={240}>
+          <LifetimeStats data={lifetimeQuery.data} isLoading={lifetimeQuery.isLoading} />
         </Motion>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <Motion preset="rise" delay={380}>
+          <Motion preset="rise" delay={320}>
             <TopVulnerableSboms />
           </Motion>
-          <Motion preset="rise" delay={440}>
+          <Motion preset="rise" delay={400}>
             <ActivityFeed />
           </Motion>
         </div>

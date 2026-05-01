@@ -69,20 +69,26 @@ export function SidebarStatus({ compact = false }: SidebarStatusProps) {
     staleTime: 5_000,
   });
 
+  // v2 (redesign §7.1): user-facing status reflects API connectivity *only*.
+  // The NVD mirror is an admin-controlled feed and its enabled/stale state has
+  // no bearing on whether the user's analysis runs are accurate — they hit
+  // public NVD regardless. Surfacing mirror state here trained the user to
+  // treat "Degraded" as background noise. Mirror visibility lives on the
+  // future /admin/health surface (out of scope for this redesign).
   const status: Status = useMemo(() => {
     if (isLoading) return 'unknown';
     if (isError) return 'down';
     if (!data) return 'unknown';
-    if (data.status !== 'ok') return 'degraded';
-    if (data.nvd_mirror?.stale) return 'degraded';
+    if (data.status !== 'ok') return 'down';
     return 'healthy';
   }, [data, isLoading, isError]);
 
   const meta = STATUS_META[status];
   const lastChecked = relativeTime(new Date(dataUpdatedAt).toISOString());
-  const mirrorRel = relativeTime(data?.nvd_mirror?.last_success_at ?? null);
 
   if (compact) {
+    // Single neutral dot — never amber. We never want the collapsed sidebar
+    // to escalate visual tone for an operator concern.
     return (
       <div
         className="flex h-8 items-center justify-center"
@@ -91,7 +97,11 @@ export function SidebarStatus({ compact = false }: SidebarStatusProps) {
       >
         <span
           aria-hidden
-          className={cn('inline-flex h-2 w-2 rounded-full', meta.dotClass, status !== 'down' && 'pulse-dot')}
+          className={cn(
+            'inline-flex h-2 w-2 rounded-full',
+            meta.dotClass,
+            status !== 'down' && 'pulse-dot',
+          )}
         />
       </div>
     );
@@ -117,15 +127,7 @@ export function SidebarStatus({ compact = false }: SidebarStatusProps) {
       <div className="min-w-0 flex-1">
         <p className={cn('truncate font-semibold', meta.tone)}>{meta.label}</p>
         <p className="truncate text-[10px] text-slate-500 font-metric tabular-nums">
-          {data?.nvd_mirror?.available === false
-            ? 'NVD mirror unavailable'
-            : mirrorRel
-              ? `NVD synced ${mirrorRel}`
-              : data?.nvd_mirror?.enabled === false
-                ? 'NVD mirror disabled'
-                : lastChecked
-                  ? `Checked ${lastChecked}`
-                  : 'Live polling'}
+          {lastChecked ? `Checked ${lastChecked}` : 'Live polling'}
         </p>
       </div>
     </div>
