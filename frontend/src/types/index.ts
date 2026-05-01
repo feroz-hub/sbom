@@ -147,6 +147,26 @@ export interface HealthResponse {
   };
 }
 
+/**
+ * Six possible posture framings, computed server-side and returned on
+ * `/dashboard/posture`. The frontend never derives this — it just renders
+ * the matching copy from `headlineCopy.ts`. See `docs/dashboard-redesign.md` §2.
+ */
+export type HeadlineState =
+  | 'no_data'
+  | 'clean'
+  | 'kev_present'
+  | 'criticals_no_kev'
+  | 'high_only'
+  | 'low_volume';
+
+/** Adaptive primary CTA — server-decided from the same payload. */
+export type PrimaryAction =
+  | 'upload'
+  | 'review_kev'
+  | 'review_critical'
+  | 'view_top_sboms';
+
 export interface DashboardPosture {
   severity: SeverityData;
   /** Distinct vulns in scope that appear in the CISA KEV catalog. */
@@ -157,6 +177,37 @@ export interface DashboardPosture {
   last_successful_run_at: string | null;
   total_sboms: number;
   total_active_projects: number;
+
+  // v2 additions — see `docs/dashboard-redesign.md` §9.3.
+  total_findings?: number;
+  distinct_vulnerabilities?: number;
+  /** Distinct vuln_ids new to scope vs 7 days ago. */
+  net_7day_added?: number;
+  /** Distinct vuln_ids resolved out of scope vs 7 days ago. */
+  net_7day_resolved?: number;
+  headline_state?: HeadlineState;
+  primary_action?: PrimaryAction;
+  schema_version?: number;
+}
+
+/**
+ * Cumulative "Your Analyzer, So Far" panel. Numbers only go up — by design.
+ * No deltas, no comparisons. See `docs/dashboard-redesign.md` §6.
+ */
+export interface LifetimeMetrics {
+  sboms_scanned_total: number;
+  projects_total: number;
+  runs_executed_total: number;
+  runs_executed_this_week: number;
+  /** Distinct (vuln_id, component_name, component_version) tuples ever surfaced. */
+  findings_surfaced_total: number;
+  /** Findings present in run N but absent from run N+1, summed across pairs. */
+  findings_resolved_total: number;
+  /** ISO 8601 timestamp string. `null` until the first successful run. */
+  first_run_at: string | null;
+  /** Days since the first successful run; 0 when none. */
+  days_monitoring: number;
+  schema_version?: number;
 }
 
 export interface RecentSbom {
@@ -298,11 +349,41 @@ export interface DashboardTrendPoint {
   high: number;
   medium: number;
   low: number;
+  /** v2 — first-class bucket. v1 silently dropped these. */
+  unknown?: number;
+  /** v2 — convenience aggregate; same as sum of severities. */
+  total?: number;
+}
+
+export type TrendAnnotationKind =
+  | 'sbom_uploaded'
+  | 'remediation'
+  | 'kev_first_seen';
+
+export interface TrendAnnotation {
+  date: string;
+  kind: TrendAnnotationKind;
+  label: string;
+  /** Number of underlying events; lets the chart stack same-day markers. */
+  count?: number;
 }
 
 export interface DashboardTrend {
   days: number;
+  /**
+   * v1 alias — same shape as `points`. Kept for one release so the legacy
+   * hero sparkline keeps working until the v1 dashboard is retired.
+   */
   series: DashboardTrendPoint[];
+  /** v2 canonical points array. */
+  points?: DashboardTrendPoint[];
+  /** v2 — event markers (uploads, remediations) overlaid on the chart. */
+  annotations?: TrendAnnotation[];
+  /** v2 — 30-day average of `point.total`, for the dashed reference line. */
+  avg_total?: number;
+  /** v2 — earliest successful run date; lets the UI pick the empty state. */
+  earliest_run_date?: string | null;
+  schema_version?: number;
 }
 
 export interface CompareRunsResult {
