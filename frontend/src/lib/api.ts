@@ -183,6 +183,21 @@ export interface AnalysisConfig {
    * GHSA / NVD. Default: true.
    */
   cve_modal_enabled?: boolean;
+  /**
+   * Master flag for the AI fix generator. When true the per-finding "AI
+   * remediation" section and the run-level batch banner render. When
+   * false (default), the AI surface is hidden — the rest of the app
+   * keeps working unchanged.
+   */
+  ai_fixes_enabled?: boolean;
+  /** Default provider name shown in the empty-state CTA copy. */
+  ai_default_provider?: string;
+  /**
+   * Phase 4 rollout flag — true when the Settings → AI UI surface is
+   * enabled. False keeps the route accessible but renders a "feature
+   * not enabled" notice instead of the editable surface.
+   */
+  ai_ui_config_enabled?: boolean;
   [key: string]: unknown;
 }
 
@@ -813,6 +828,266 @@ export function runScheduleNow(scheduleId: number, signal?: AbortSignal) {
     method: 'POST',
     signal,
   });
+}
+
+// ─── AI fix generator ────────────────────────────────────────────────────────
+import type {
+  AiBatchDurationEstimate,
+  AiBatchProgress,
+  AiConnectionTestResult,
+  AiCredential,
+  AiCredentialCreateRequest,
+  AiCredentialSettings,
+  AiCredentialSettingsUpdateRequest,
+  AiCredentialUpdateRequest,
+  AiFindingFixEnvelope,
+  AiFindingFixListResponse,
+  AiPricingEntry,
+  AiProviderCatalogEntry,
+  AiProviderInfo,
+  AiTestConnectionRequest,
+  AiTopCachedItem,
+  AiTriggerBatchRequest,
+  AiTriggerBatchResponse,
+  AiUsageSummary,
+  AiUsageTrendResponse,
+} from '@/types/ai';
+
+/**
+ * Fetch (or generate on demand) the AI fix bundle for a single finding.
+ *
+ * The orchestrator returns the bundle from cache when available — this
+ * call is fast even on cache misses, but expect 3–8s latency on cold
+ * cache against a cloud provider.
+ */
+export function getFindingAiFix(
+  findingId: number,
+  args: { providerName?: string | null } = {},
+  signal?: AbortSignal,
+): Promise<AiFindingFixEnvelope> {
+  const qs = args.providerName
+    ? `?provider_name=${encodeURIComponent(args.providerName)}`
+    : '';
+  return request<AiFindingFixEnvelope>(`/api/v1/findings/${findingId}/ai-fix${qs}`, { signal });
+}
+
+/** Force a regenerate (bypass cache) for one finding. */
+export function regenerateFindingAiFix(
+  findingId: number,
+  args: { providerName?: string | null } = {},
+  signal?: AbortSignal,
+): Promise<AiFindingFixEnvelope> {
+  const qs = args.providerName
+    ? `?provider_name=${encodeURIComponent(args.providerName)}`
+    : '';
+  return request<AiFindingFixEnvelope>(
+    `/api/v1/findings/${findingId}/ai-fix:regenerate${qs}`,
+    { signal, method: 'POST' },
+  );
+}
+
+/** Trigger batch AI fix generation for an entire run. */
+export function triggerRunAiFixes(
+  runId: number,
+  payload: AiTriggerBatchRequest = {},
+  signal?: AbortSignal,
+): Promise<AiTriggerBatchResponse> {
+  return request<AiTriggerBatchResponse>(`/api/v1/runs/${runId}/ai-fixes`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal,
+  });
+}
+
+/** Cooperative cancel — sets a flag the worker checks before each LLM call. */
+export function cancelRunAiFixes(
+  runId: number,
+  signal?: AbortSignal,
+): Promise<{ run_id: number; cancel_requested: boolean }> {
+  return request(`/api/v1/runs/${runId}/ai-fixes/cancel`, {
+    method: 'POST',
+    signal,
+  });
+}
+
+/** Snapshot for clients that prefer polling over SSE. */
+export function getRunAiFixProgress(
+  runId: number,
+  signal?: AbortSignal,
+): Promise<AiBatchProgress> {
+  return request<AiBatchProgress>(`/api/v1/runs/${runId}/ai-fixes/progress`, { signal });
+}
+
+/** List cached fix bundles for a run (table view). */
+export function listRunAiFixes(
+  runId: number,
+  signal?: AbortSignal,
+): Promise<AiFindingFixListResponse> {
+  return request<AiFindingFixListResponse>(`/api/v1/runs/${runId}/ai-fixes`, { signal });
+}
+
+/** SSE URL — passed to ``EventSource``; full URL so the worker process and
+ *  the browser don't have to share an origin in dev. */
+export function aiFixStreamUrl(runId: number): string {
+  return `${BASE_URL}/api/v1/runs/${runId}/ai-fixes/stream`;
+}
+
+/** Provider list for the Settings page (cached / displayed verbatim). */
+export function listAiProviders(signal?: AbortSignal): Promise<AiProviderInfo[]> {
+  return request<AiProviderInfo[]>(`/api/v1/ai/providers`, { signal });
+}
+
+export function listAiPricing(signal?: AbortSignal): Promise<AiPricingEntry[]> {
+  return request<AiPricingEntry[]>(`/api/v1/ai/pricing`, { signal });
+}
+
+export function getAiUsageSummary(signal?: AbortSignal): Promise<AiUsageSummary> {
+  return request<AiUsageSummary>(`/api/v1/ai/usage`, { signal });
+}
+
+/** Per-day cost / call / cache-hit series for the dashboard sparkline. */
+export function getAiUsageTrend(
+  args: { days?: number } = {},
+  signal?: AbortSignal,
+): Promise<AiUsageTrendResponse> {
+  const days = args.days ?? 30;
+  return request<AiUsageTrendResponse>(`/api/v1/ai/usage/trend?days=${days}`, { signal });
+}
+
+/** Top N most expensive cache entries — leaderboard tile. */
+export function getAiTopCachedFixes(
+  args: { limit?: number } = {},
+  signal?: AbortSignal,
+): Promise<AiTopCachedItem[]> {
+  const limit = args.limit ?? 20;
+  return request<AiTopCachedItem[]>(`/api/v1/ai/usage/top-cached?limit=${limit}`, { signal });
+}
+
+// ─── Phase 3 — credential CRUD + settings ────────────────────────────────
+
+/** List every saved AI provider credential. */
+export function listAiCredentials(signal?: AbortSignal): Promise<AiCredential[]> {
+  return request<AiCredential[]>(`/api/v1/ai/credentials`, { signal });
+}
+
+export function getAiCredential(id: number, signal?: AbortSignal): Promise<AiCredential> {
+  return request<AiCredential>(`/api/v1/ai/credentials/${id}`, { signal });
+}
+
+export function createAiCredential(
+  body: AiCredentialCreateRequest,
+  signal?: AbortSignal,
+): Promise<AiCredential> {
+  return request<AiCredential>(`/api/v1/ai/credentials`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+    signal,
+  });
+}
+
+export function updateAiCredential(
+  id: number,
+  body: AiCredentialUpdateRequest,
+  signal?: AbortSignal,
+): Promise<AiCredential> {
+  return request<AiCredential>(`/api/v1/ai/credentials/${id}`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+    signal,
+  });
+}
+
+export function deleteAiCredential(id: number, signal?: AbortSignal): Promise<void> {
+  return requestVoid(`/api/v1/ai/credentials/${id}`, { method: 'DELETE', signal });
+}
+
+export function setAiCredentialDefault(
+  id: number,
+  signal?: AbortSignal,
+): Promise<AiCredential> {
+  return request<AiCredential>(`/api/v1/ai/credentials/${id}/set-default`, {
+    method: 'PUT',
+    signal,
+  });
+}
+
+export function setAiCredentialFallback(
+  id: number,
+  signal?: AbortSignal,
+): Promise<AiCredential> {
+  return request<AiCredential>(`/api/v1/ai/credentials/${id}/set-fallback`, {
+    method: 'PUT',
+    signal,
+  });
+}
+
+/** Test an unsaved credential — used by the AddProviderDialog before Save. */
+export function testAiCredentialUnsaved(
+  body: AiTestConnectionRequest,
+  signal?: AbortSignal,
+): Promise<AiConnectionTestResult> {
+  return request<AiConnectionTestResult>(`/api/v1/ai/credentials/test`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+    signal,
+  });
+}
+
+/** Re-test a saved credential — used by the ProviderCard "Test" button. */
+export function testAiCredentialSaved(
+  id: number,
+  signal?: AbortSignal,
+): Promise<AiConnectionTestResult> {
+  return request<AiConnectionTestResult>(`/api/v1/ai/credentials/${id}/test`, {
+    method: 'POST',
+    signal,
+  });
+}
+
+export function getAiCredentialSettings(signal?: AbortSignal): Promise<AiCredentialSettings> {
+  return request<AiCredentialSettings>(`/api/v1/ai/settings`, { signal });
+}
+
+export function updateAiCredentialSettings(
+  body: AiCredentialSettingsUpdateRequest,
+  signal?: AbortSignal,
+): Promise<AiCredentialSettings> {
+  return request<AiCredentialSettings>(`/api/v1/ai/settings`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+    signal,
+  });
+}
+
+/** Static catalog driving the AddProviderDialog dropdown + form. */
+export function listAiProviderCatalog(signal?: AbortSignal): Promise<AiProviderCatalogEntry[]> {
+  return request<AiProviderCatalogEntry[]>(`/api/v1/ai/providers/available`, { signal });
+}
+
+export function getAiProviderCatalogEntry(
+  name: string,
+  signal?: AbortSignal,
+): Promise<AiProviderCatalogEntry> {
+  return request<AiProviderCatalogEntry>(
+    `/api/v1/ai/providers/available/${encodeURIComponent(name)}`,
+    { signal },
+  );
+}
+
+/** Free-tier batch duration estimate (Phase 1 endpoint, used by FreeTierWarningDialog). */
+export function getRunBatchEstimate(
+  runId: number,
+  signal?: AbortSignal,
+): Promise<AiBatchDurationEstimate> {
+  return request<AiBatchDurationEstimate>(
+    `/api/v1/runs/${runId}/ai-fixes/estimate`,
+    { signal },
+  );
 }
 
 // ─── CVE detail modal ────────────────────────────────────────────────────────

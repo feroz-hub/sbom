@@ -92,6 +92,13 @@ interface FindingsTableProps {
    * Phase-5 rollback path. Default: ``true``.
    */
   cveModalEnabled?: boolean;
+  /**
+   * Master flag for the AI remediation section inside the CVE modal.
+   * When true the section renders alongside the deterministic CVE data.
+   */
+  aiFixesEnabled?: boolean;
+  /** Provider name shown in the empty-state CTA copy. */
+  aiProviderLabel?: string;
 }
 
 /**
@@ -236,6 +243,8 @@ export function FindingsTable({
   runId,
   scanName,
   cveModalEnabled = true,
+  aiFixesEnabled = false,
+  aiProviderLabel,
 }: FindingsTableProps) {
   const [filter, setFilter] = useState<FindingsFilterState>(() => ({
     ...DEFAULT_FILTERS,
@@ -247,12 +256,18 @@ export function FindingsTable({
   // Active CVE for the in-app detail modal. We keep a single page-level
   // dialog instance and swap the active CVE — one query at a time, no
   // per-row dialog mount.
-  const [activeCve, setActiveCve] = useState<{ id: string; seed: CveRowSeed } | null>(null);
+  const [activeCve, setActiveCve] = useState<
+    { id: string; seed: CveRowSeed; findingId: number | null } | null
+  >(null);
   const { onHoverStart, onHoverEnd } = useCveHoverPrefetch();
   const openCve = useCallback(
     (f: EnrichedFinding) => {
       if (!f.vuln_id) return;
-      setActiveCve({ id: f.vuln_id, seed: findingToSeed(f) });
+      setActiveCve({
+        id: f.vuln_id,
+        seed: findingToSeed(f),
+        findingId: typeof f.id === 'number' ? f.id : null,
+      });
     },
     [],
   );
@@ -587,6 +602,7 @@ export function FindingsTable({
                             setActiveCve({
                               id: alias,
                               seed: { ...findingToSeed(f), vuln_id: alias },
+                              findingId: typeof f.id === 'number' ? f.id : null,
                             })
                           }
                         />
@@ -627,8 +643,13 @@ export function FindingsTable({
             if (!open) setActiveCve(null);
           }}
           onSwitchCve={(newId) =>
-            setActiveCve((prev) => (prev ? { id: newId, seed: prev.seed } : prev))
+            setActiveCve((prev) =>
+              prev ? { id: newId, seed: prev.seed, findingId: prev.findingId } : prev,
+            )
           }
+          findingId={activeCve?.findingId ?? null}
+          aiFixesEnabled={aiFixesEnabled}
+          aiProviderLabel={aiProviderLabel}
         />
       ) : null}
     </div>

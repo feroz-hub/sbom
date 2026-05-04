@@ -65,6 +65,16 @@ export interface CveDetailDialogProps {
    * fatal banners points at — typically a GitHub Issues URL or mailto.
    */
   reportIssueHref?: string;
+  /**
+   * Finding row id this dialog represents within the active scan. When
+   * present alongside ``aiFixesEnabled``, the body renders the AI
+   * remediation section (Phase 4 §4.1, Integration 1).
+   */
+  findingId?: number | null;
+  /** Master flag for the AI remediation section. Sourced from server config. */
+  aiFixesEnabled?: boolean;
+  /** Provider name shown on the empty-state CTA. */
+  aiProviderLabel?: string;
 }
 
 /**
@@ -118,6 +128,9 @@ export function CveDetailDialog({
   onOpenChange,
   onSwitchCve,
   reportIssueHref,
+  findingId,
+  aiFixesEnabled = false,
+  aiProviderLabel,
 }: CveDetailDialogProps) {
   const summaryId = useId();
   const query = useCveDetail({ cveId, scanId, enabled: open });
@@ -184,6 +197,9 @@ export function CveDetailDialog({
           detail={detail}
           scanName={scanName}
           describedById={summaryId}
+          findingId={findingId ?? null}
+          aiFixesEnabled={aiFixesEnabled}
+          aiProviderLabel={aiProviderLabel}
         />
       ) : null}
     </Dialog>

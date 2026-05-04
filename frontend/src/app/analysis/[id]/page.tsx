@@ -14,6 +14,7 @@ import { Alert } from '@/components/ui/Alert';
 import { ExportMenu } from '@/components/ui/ExportMenu';
 import { Surface, SurfaceContent, SurfaceHeader } from '@/components/ui/Surface';
 import { Motion } from '@/components/ui/Motion';
+import { RunBatchProgress } from '@/components/ai-fixes/RunBatchProgress';
 import { FindingsTable } from '@/components/analysis/FindingsTable';
 import { RunDetailHero } from '@/components/analysis/RunDetailHero';
 import { PageSpinner, SkeletonTable } from '@/components/ui/Spinner';
@@ -212,6 +213,13 @@ export default function AnalysisDetailPage({ params }: AnalysisDetailPageProps) 
           Outcome: <span className="text-foreground">{runStatusDescription(run.run_status)}</span>
         </p>
 
+        {/* AI remediation banner — only when the feature flag is enabled. */}
+        {analysisConfig?.ai_fixes_enabled ? (
+          <Motion preset="rise" delay={40}>
+            <RunBatchProgress runId={id} />
+          </Motion>
+        ) : null}
+
         {/* Findings */}
         <Motion preset="rise" delay={80}>
           <Surface variant="elevated">
@@ -243,6 +251,8 @@ export default function AnalysisDetailPage({ params }: AnalysisDetailPageProps) 
                   runId={id}
                   scanName={run?.sbom_name ?? null}
                   cveModalEnabled={cveModalEnabled}
+                  aiFixesEnabled={Boolean(analysisConfig?.ai_fixes_enabled)}
+                  aiProviderLabel={analysisConfig?.ai_default_provider ?? undefined}
                 />
               )}
             </SurfaceContent>
