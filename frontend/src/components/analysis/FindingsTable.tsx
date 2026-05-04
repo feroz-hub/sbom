@@ -8,6 +8,7 @@ import {
   Layers,
   Rows3,
   Rows4,
+  Sparkles,
   Wrench,
 } from 'lucide-react';
 import { Alert } from '@/components/ui/Alert';
@@ -40,7 +41,16 @@ import {
 import { formatDateShort, truncate, cn } from '@/lib/utils';
 import { useTableSort } from '@/hooks/useTableSort';
 import { usePagination } from '@/hooks/usePagination';
+import { useRunAiFixList } from '@/hooks/useAiFix';
 import type { EnrichedFinding } from '@/types';
+
+function aiFixLookupKey(
+  vulnId: string | null | undefined,
+  componentName: string | null | undefined,
+  componentVersion: string | null | undefined,
+): string {
+  return `${vulnId ?? ''}|${componentName ?? ''}|${componentVersion ?? ''}`;
+}
 
 const SEVERITY_RANK: Record<string, number> = {
   CRITICAL: 5,
@@ -348,10 +358,26 @@ export function FindingsTable({
     );
   }
 
+  // AI fix indicator column — only fetched when the feature is on AND we
+  // have a runId. Builds an O(1) lookup keyed on the same triple the
+  // backend uses for cache keys, so each row's check stays cheap.
+  const aiFixListEnabled = Boolean(aiFixesEnabled && runId != null);
+  const { data: aiFixList } = useRunAiFixList(runId ?? null, { enabled: aiFixListEnabled });
+  const aiFixKeys = useMemo<Set<string>>(() => {
+    if (!aiFixListEnabled || !aiFixList) return new Set();
+    return new Set(
+      aiFixList.items.map((it) =>
+        aiFixLookupKey(it.vuln_id, it.component_name, it.component_version),
+      ),
+    );
+  }, [aiFixListEnabled, aiFixList]);
+  const showAiCol = aiFixListEnabled;
+
   const total = findings?.length ?? 0;
   const shown = filteredFindings.length;
   const cellPadding = DENSITY_CLASS[density];
-  const COL_COUNT = 9; // chevron + vuln + severity + cvss + epss + risk + component + sources + fix
+  // chevron + vuln + severity + cvss + epss + risk + component + sources + (ai?) + fix
+  const COL_COUNT = showAiCol ? 10 : 9;
 
   const toggleExpand = (id: number) => {
     setExpandedRows((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -457,6 +483,11 @@ export function FindingsTable({
                 Component
               </SortableTh>
               <Th>Sources</Th>
+              {showAiCol ? (
+                <Th className="w-10 text-center">
+                  <span aria-label="AI remediation" title="AI remediation">AI</span>
+                </Th>
+              ) : null}
               <Th>Fix</Th>
             </tr>
           </TableHead>
@@ -586,6 +617,25 @@ export function FindingsTable({
                     <td className={cn('px-4 align-top', cellPadding)}>
                       <SourceChips source={f.source} />
                     </td>
+                    {showAiCol ? (
+                      <td className={cn('px-2 align-top text-center', cellPadding)}>
+                        {aiFixKeys.has(
+                          aiFixLookupKey(f.vuln_id, f.component_name, f.component_version),
+                        ) ? (
+                          <button
+                            type="button"
+                            onClick={() => openCve(f)}
+                            aria-label={`Open AI remediation for ${f.vuln_id ?? 'this finding'}`}
+                            title="AI remediation generated"
+                            className="inline-flex h-6 w-6 items-center justify-center rounded-md text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/30"
+                          >
+                            <Sparkles className="h-3.5 w-3.5" aria-hidden />
+                          </button>
+                        ) : (
+                          <span aria-hidden className="text-hcl-muted/40">·</span>
+                        )}
+                      </td>
+                    ) : null}
                     <td className={cn('px-4 align-top', cellPadding)}>
                       <FixedVersionPills raw={f.fixed_versions} />
                     </td>

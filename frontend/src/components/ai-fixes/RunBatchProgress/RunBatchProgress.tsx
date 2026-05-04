@@ -1,14 +1,15 @@
 'use client';
 
+import Link from 'next/link';
 import { Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { useRunBatchEstimate } from '@/hooks/useAiCredentials';
 import {
-  useAiBatchProgress,
   useCancelAiFixes,
   useTriggerAiFixes,
 } from '@/hooks/useAiFix';
-import type { AiBatchProgress } from '@/types/ai';
+import { useGlobalAiBatchProgress } from '@/components/ai-fixes/GlobalAiBatchProgress';
+import type { AiBatchDurationEstimate, AiBatchProgress } from '@/types/ai';
 import { FreeTierWarningDialog } from '../FreeTierWarningDialog';
 import { BatchControls } from './BatchControls';
 import { BatchProgressBar } from './BatchProgressBar';
@@ -27,6 +28,66 @@ function formatRemainingTime(seconds: number | null | undefined): string | null 
   if (seconds < 60) return `~${seconds}s remaining`;
   if (seconds < 3600) return `~${Math.floor(seconds / 60)}m remaining`;
   return `~${Math.floor(seconds / 3600)}h remaining`;
+}
+
+function formatDuration(seconds: number | null | undefined): string {
+  if (seconds == null || seconds <= 0) return 'instant';
+  if (seconds < 60) return `~${seconds}s`;
+  if (seconds < 3600) return `~${Math.round(seconds / 60)}m`;
+  return `~${Math.round((seconds / 3600) * 10) / 10}h`;
+}
+
+function formatCost(usd: number, isFree: boolean): string {
+  if (isFree) return 'free';
+  if (usd < 0.01) return `~$${usd.toFixed(4)}`;
+  if (usd < 1) return `~$${usd.toFixed(2)}`;
+  return `~$${usd.toFixed(2)}`;
+}
+
+function PreFlightEstimateLine({ estimate }: { estimate: AiBatchDurationEstimate }) {
+  const isFree = estimate.tier === 'free' && !estimate.is_local;
+  const calls = estimate.findings_to_generate;
+  const cached = estimate.cached_count;
+  const provider = estimate.provider !== 'unknown' ? estimate.provider : null;
+  const duration = formatDuration(estimate.estimated_seconds);
+  const cost = formatCost(estimate.estimated_cost_usd, isFree);
+
+  return (
+    <p className="font-metric text-xs tabular-nums text-hcl-muted">
+      <span className="text-hcl-navy">Estimated:</span>{' '}
+      <span>{calls.toLocaleString()} LLM call{calls === 1 ? '' : 's'}</span>
+      {' · '}
+      <span>{cost}</span>
+      {' · '}
+      <span>
+        {duration}
+        {isFree ? ' (rate-limited)' : ''}
+      </span>
+      {provider ? (
+        <>
+          {' · '}
+          <span>{provider}</span>
+        </>
+      ) : null}
+      {cached > 0 ? (
+        <>
+          {' · '}
+          <span className="text-emerald-700">{cached.toLocaleString()} from cache</span>
+        </>
+      ) : null}
+      {isFree ? (
+        <>
+          {' · '}
+          <Link
+            href="/settings/ai"
+            className="font-medium text-primary underline-offset-2 hover:underline"
+          >
+            Switch to paid?
+          </Link>
+        </>
+      ) : null}
+    </p>
+  );
 }
 
 function statusCopy(status: AiBatchProgress['status']): string {
@@ -54,7 +115,10 @@ function statusCopy(status: AiBatchProgress['status']): string {
  * three numbers (cache / generated / failed) and the cumulative cost.
  */
 export function RunBatchProgress({ runId, enabled = true }: RunBatchProgressProps) {
-  const { data: progress } = useAiBatchProgress(runId, { enabled });
+  // Subscribe via the global provider so the SSE stream stays open when
+  // the user navigates away from this page and back. The provider also
+  // drives the sticky banner shown across other routes.
+  const { data: progress } = useGlobalAiBatchProgress(runId, { enabled });
   const trigger = useTriggerAiFixes(runId);
   const cancel = useCancelAiFixes(runId);
   // Phase 3 §3.5 — fetch the duration projection for the active provider.
@@ -92,28 +156,39 @@ export function RunBatchProgress({ runId, enabled = true }: RunBatchProgressProp
   const hasEverRun =
     progress.total > 0 || progress.from_cache > 0 || progress.generated > 0 || progress.failed > 0;
   if (!hasEverRun && progress.status === 'pending') {
-    // Show a minimal "Generate" CTA on first visit.
+    // Idle CTA — surfaces the pre-flight estimate so the user sees the
+    // call count, cost, duration, and provider before clicking Generate.
+    // Falls back to a minimal copy line when the estimate is still loading
+    // so the banner doesn't pop from one shape to another.
+    const totalFindings = estimate?.findings_total ?? null;
     return (
       <>
         <div
-          className="flex items-center justify-between gap-3 rounded-lg border border-border-subtle bg-surface px-4 py-3 shadow-card"
+          className="flex flex-col gap-2 rounded-lg border border-border-subtle bg-surface px-4 py-3 shadow-card"
           data-testid="ai-batch-banner"
           role="region"
           aria-label="AI remediation"
         >
-          <div className="flex items-center gap-2 text-sm text-hcl-navy">
-            <Sparkles className="h-4 w-4 text-primary" aria-hidden />
-            <span>
-              Generate AI remediation for every finding in this run.
-            </span>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1 space-y-1">
+              <div className="flex items-center gap-2 text-sm font-medium text-hcl-navy">
+                <Sparkles className="h-4 w-4 text-primary" aria-hidden />
+                <span>
+                  {totalFindings != null
+                    ? `Generate AI remediation for ${totalFindings.toLocaleString()} finding${totalFindings === 1 ? '' : 's'} in this run.`
+                    : 'Generate AI remediation for every finding in this run.'}
+                </span>
+              </div>
+              {estimate ? <PreFlightEstimateLine estimate={estimate} /> : null}
+            </div>
+            <BatchControls
+              progress={progress}
+              onTrigger={handleTrigger}
+              onCancel={() => cancel.mutate()}
+              triggering={trigger.isPending}
+              cancelling={cancel.isPending}
+            />
           </div>
-          <BatchControls
-            progress={progress}
-            onTrigger={handleTrigger}
-            onCancel={() => cancel.mutate()}
-            triggering={trigger.isPending}
-            cancelling={cancel.isPending}
-          />
         </div>
         <FreeTierWarningDialog
           open={showWarning}
