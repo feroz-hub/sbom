@@ -418,7 +418,134 @@ The next batch run picks up env config automatically.
 
 ---
 
-## 8. Tracked follow-ups
+## 8. Multi-batch + scope-aware rollout (Phase 4)
+
+The scope-aware AI fix generation feature adds three composing
+extensions on top of the Phase 3 baseline: filter-driven scope, row
+selection, and concurrent batches per run. These ride on the same
+master `AI_FIXES_ENABLED` flag — there is no separate gate.
+
+### 8.1 Pre-flight
+
+| Item | Where | Confirm |
+|---|---|---|
+| Migration `011_ai_fix_batch` applied | infra | `alembic current` shows `011_ai_fix_batch` (head) |
+| `ai_fix_batch` table populated by trigger | DB | `SELECT COUNT(*) FROM ai_fix_batch WHERE created_at > now() - interval '1 day'` returns rows after a smoke trigger |
+| Redis lock primitive operational | infra | Generation under contention dedupes (see §8.4 verification scenario 5) |
+| Frontend bundle includes scope helpers | infra | `next build` output includes `lib/aiFixScope.js` |
+
+### 8.2 Phased ramp
+
+The feature is fully backward-compatible:
+
+* `POST /api/v1/runs/{run_id}/ai-fixes` with no `scope` body still
+  fires a "all findings" batch — old clients work unchanged.
+* `GET /api/v1/runs/{run_id}/ai-fixes/estimate` (legacy) still
+  returns the run-wide estimate.
+* `GET /api/v1/runs/{run_id}/ai-fixes/{progress,stream,cancel}`
+  endpoints return the most-recent batch's data and remain wired.
+
+Because of this, no canary gate is needed for the scope-aware path
+itself — it ships as a transparent extension. The frontend release
+ships the new CTA + selection UI in the same bundle as the next
+release after this work merges.
+
+**Day 0**: ship to staging. Run the 10 verification scenarios
+(§8.4). Smoke-test the multi-batch concurrency cap (4th batch
+returns 409). Confirm the global progress banner shows scope labels
+on each row.
+
+**Day 1**: ship to production. Monitor:
+* `ai_fix_batch` row count growth (should match real usage; no
+  spike from accidental loops)
+* Redis `ai_fix_gen:*` lock count over 5-minute window (should
+  stay near 0 outside active batches; sustained contention = a
+  workload pattern worth investigating)
+* Provider rate-limit error rate (no change vs Phase 3 baseline —
+  the singleton limiter still serializes across concurrent
+  batches in-process)
+
+**Day 7+**: enable a 30-day deprecation timer on the legacy
+endpoints (see §8.5).
+
+### 8.3 Cost projection (multi-batch)
+
+With concurrent batches sharing the cache layer:
+
+* **Worst case (no overlap):** N parallel batches × M findings
+  each = N × M LLM calls if every cache key is unique.
+  Multi-batch is no worse than serial here.
+* **Best case (full overlap):** Two parallel batches over the same
+  scope make ~M LLM calls total (the second batch finds the cache
+  populated by the first, even mid-run, via the per-key Redis lock).
+* **Typical case (KEV ⊂ Critical):** "KEV" batch (6 findings) fired
+  while "Critical" (53 findings) is running → ~6 cache contentions,
+  the KEV batch effectively sees a 100% cache hit ratio for the
+  overlapping rows. The Critical batch makes 53 calls total; the
+  KEV batch makes 0 net-new.
+
+The 3-batch-per-run cap exists because all batches share the
+provider rate-limit budget — beyond 3, the marginal benefit is small
+and the risk of saturating a free-tier provider is high.
+
+### 8.4 Verification scenarios
+
+Before flipping in production, walk these on staging:
+
+| # | Scenario | Pass criteria |
+|---|---|---|
+| 1 | **Filter-driven first batch** — open a 500-finding run, click "Critical" filter chip, click Generate | Banner appears with "Critical findings" scope label; batch processes only Critical findings; cache + cost match the pre-flight estimate ±10% |
+| 2 | **Multi-batch parallel** — while batch #1 runs, change filter to "KEV only" and click Generate | Two banners visible simultaneously, each updating independently; both reach completion |
+| 3 | **Selection-driven** — clear filters, multi-select 12 specific rows, click Generate | CTA reads "Generate AI fixes for 12 selected findings"; banner shows "Selected (12)"; the 12 selected `finding_ids` are the body POSTed to `/ai-fixes` |
+| 4 | **Cache overlap** — run a Critical batch to completion, then run High+Critical | Second batch reports the 53 Critical findings as cache hits; cost reflects only the new High findings |
+| 5 | **Concurrent cache contention** — start two parallel batches with overlapping scope simultaneously | The LLM is called exactly once per unique `(vuln_id, component, version)` key (verified via `ai_usage_log` row count) |
+| 6 | **Max concurrent** — start 3 batches in quick succession, attempt a 4th | 4th request returns `409 TOO_MANY_ACTIVE_BATCHES`; CTA on the page disables with "wait for one to complete" copy |
+| 7 | **Free-tier shared rate limit** — configure Gemini free, run two parallel ~50-finding batches | Combined throughput stays at ≤15 req/min; the in-process singleton limiter serializes them |
+| 8 | **Cancel one of multiple** — run two parallel batches, click Cancel on one | Cancelled batch halts (status → `cancelled`); other batch continues unaffected |
+| 9 | **Selection persists across filter** — filter to Critical, select 5 rows, switch filter to High, select 3 more | Bulk toolbar shows "8 selected"; firing generation processes all 8 across both severities |
+| 10 | **All-cached scope** — run a Critical batch to completion, re-apply the Critical filter | CTA shows "All N findings already have cached AI fixes" with the Generate button disabled |
+
+Scenarios 1, 2, 3, 6, 8, 9, 10 are covered by automated tests
+(backend integration in `tests/ai/test_scope_and_multi_batch.py`,
+frontend in `FindingsTable.selection.test.tsx` +
+`RunBatchProgress.test.tsx`). Scenarios 4, 5, 7 depend on real
+provider behaviour and are best run against staging.
+
+### 8.5 Legacy endpoint deprecation
+
+The Phase 3 single-batch endpoints stay live for **30 days** after
+production rollout to give external consumers (any direct API users
+beyond the in-app frontend) time to migrate.
+
+Endpoints kept as deprecated aliases:
+* `GET /api/v1/runs/{run_id}/ai-fixes/estimate` (legacy GET)
+* `GET /api/v1/runs/{run_id}/ai-fixes/progress`
+* `GET /api/v1/runs/{run_id}/ai-fixes/stream`
+* `POST /api/v1/runs/{run_id}/ai-fixes/cancel`
+
+OpenAPI marks these `deprecated: true`. Server logs the legacy
+endpoint usage at INFO so you can see who's still on them before
+removal.
+
+After 30 days, remove the deprecated routes in a follow-up PR.
+
+### 8.6 Rollback
+
+The scope-aware feature is incremental — there is no separate
+flag to flip off. Rollback options:
+
+* **Frontend-only rollback**: revert the frontend bundle. The
+  backend's new endpoints stay live but only the legacy single-batch
+  flow is exercised. Effectively a rollback to Phase 3 UX with no
+  data loss.
+* **Full rollback**: revert backend to pre-Phase-4 commit AND
+  drop the `ai_fix_batch` table. The migration's `downgrade()` is
+  reversible. Existing batch rows are lost; in-flight batches
+  return errors. **Avoid this unless the new endpoints are
+  actively breaking** — frontend-only rollback is safer.
+
+
+## 9. Tracked follow-ups
 
 These are NOT in the v1 rollout but are referenced in `docs/architecture/ai-pipeline.md` §11:
 

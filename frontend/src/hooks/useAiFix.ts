@@ -24,22 +24,29 @@ import {
 } from '@tanstack/react-query';
 import {
   aiFixStreamUrl,
+  cancelRunAiBatch,
   cancelRunAiFixes,
+  estimateRunAiFixesScoped,
   getAiUsageSummary,
   getFindingAiFix,
   getRunAiFixProgress,
   listAiPricing,
   listAiProviders,
+  listRunAiBatches,
   listRunAiFixes,
   regenerateFindingAiFix,
   triggerRunAiFixes,
 } from '@/lib/api';
+import { scopeCacheKey } from '@/lib/aiFixScope';
 import type {
+  AiBatchListResponse,
   AiBatchProgress,
   AiFindingFixEnvelope,
   AiFindingFixListResponse,
+  AiFixGenerationScope,
   AiPricingEntry,
   AiProviderInfo,
+  AiScopedEstimateResponse,
   AiTriggerBatchRequest,
   AiUsageSummary,
 } from '@/types/ai';
@@ -209,6 +216,99 @@ export function useRunAiFixList(
     queryKey: ['ai-fix-list', runId],
     queryFn: ({ signal }) => listRunAiFixes(runId as number, signal),
     enabled: enabled && runId != null,
+  });
+}
+
+
+// ─── Multi-batch + scope-aware (Phase 4) ─────────────────────────────────────
+
+
+/**
+ * Scope-aware pre-flight estimate. Debounced internally so a user
+ * fiddling with filter chips doesn't fire a request per keystroke.
+ *
+ * The query key includes a stable hash of the scope so two equivalent
+ * scopes (e.g. severities=[CRITICAL,HIGH] vs [HIGH,CRITICAL]) share a
+ * cache entry.
+ */
+export function useScopedRunBatchEstimate(
+  runId: number | null,
+  scope: AiFixGenerationScope | null,
+  args: { enabled?: boolean; debounceMs?: number } = {},
+) {
+  const { enabled = true, debounceMs = 300 } = args;
+  const [debouncedScope, setDebouncedScope] = useState(scope);
+  const scopeKey = scopeCacheKey(scope);
+
+  // Re-debounce only when the scope's stable hash changes — this stops
+  // a parent re-render with an equivalent (but new-reference) scope
+  // from re-triggering the timer.
+  useEffect(() => {
+    const handle = setTimeout(() => setDebouncedScope(scope), debounceMs);
+    return () => clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- scopeKey captures scope identity
+  }, [scopeKey, debounceMs]);
+
+  const debouncedKey = scopeCacheKey(debouncedScope);
+
+  return useQuery<AiScopedEstimateResponse>({
+    queryKey: ['ai', 'run-batch-estimate', runId, debouncedKey],
+    queryFn: ({ signal }) =>
+      estimateRunAiFixesScoped(runId as number, debouncedScope, signal),
+    enabled: enabled && runId != null,
+    staleTime: 30_000,
+  });
+}
+
+
+/**
+ * Trigger generation with an optional scope. Returns the new
+ * ``batch_id`` in ``onSuccess``; consumers register that with the
+ * global progress provider so the banner picks it up.
+ */
+export function useTriggerScopedAiFixes(runId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: AiTriggerBatchRequest = {}) => triggerRunAiFixes(runId, body),
+    onSuccess: (resp) => {
+      // Seed both the batch-keyed and the legacy run-keyed cache so
+      // any consumer that hasn't migrated to the multi-batch keys
+      // still sees fresh data.
+      qc.setQueryData(['ai-batch-progress', runId], resp.progress);
+      if (resp.batch_id) {
+        qc.setQueryData(['ai-batch-progress', runId, resp.batch_id], resp.progress);
+      }
+      qc.invalidateQueries({ queryKey: ['ai-fix-list', runId] });
+      qc.invalidateQueries({ queryKey: ['ai-batch-list', runId] });
+    },
+  });
+}
+
+
+/** List every batch (active + historical) for a run. */
+export function useRunAiBatches(
+  runId: number | null,
+  args: { enabled?: boolean; refetchIntervalMs?: number } = {},
+) {
+  const { enabled = true, refetchIntervalMs } = args;
+  return useQuery<AiBatchListResponse>({
+    queryKey: ['ai-batch-list', runId],
+    queryFn: ({ signal }) => listRunAiBatches(runId as number, signal),
+    enabled: enabled && runId != null,
+    refetchInterval: refetchIntervalMs ?? false,
+  });
+}
+
+
+/** Cancel one specific batch. */
+export function useCancelAiBatch(runId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (batchId: string) => cancelRunAiBatch(runId, batchId),
+    onSuccess: (_resp, batchId) => {
+      qc.invalidateQueries({ queryKey: ['ai-batch-progress', runId, batchId] });
+      qc.invalidateQueries({ queryKey: ['ai-batch-list', runId] });
+    },
   });
 }
 

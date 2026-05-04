@@ -46,6 +46,70 @@ pieces of contextual remediation guidance:
    complete (we paid for those tokens); subsequent findings are
    skipped.
 
+### Scoping a batch (filters or selection)
+
+A run with hundreds of findings doesn't need every finding processed
+at once. Three ways to scope a batch:
+
+* **Filter chips on the findings table.** Click a severity tab,
+  toggle "KEV only" or "Fix available", or type into search. The CTA
+  card above the table reactively updates: the label shows the
+  active scope ("Critical findings", "KEV findings", "Findings
+  matching 'log4j'"), the estimate recomputes (count, cache hits,
+  cost, ETA), and clicking Generate fires a batch over only those
+  findings.
+* **Row checkboxes.** Tick the checkbox column to multi-select
+  specific rows. The CTA flips to "Generate AI fixes for N selected
+  findings" — selection takes precedence over filters when both are
+  active. A bulk toolbar shows the count and "across X severities";
+  click "Clear selection" or use the "Clear selection to use filters"
+  link on the CTA to revert to filter-driven scope.
+* **No scope (default).** Empty filter, no selection → the batch
+  covers every finding in the run.
+
+Filter and selection state are page-local; refreshing the page
+resets them. Selection persists across filter changes (selecting
+Critical rows then narrowing to Medium does NOT deselect the
+Criticals — they remain selected even when not visible).
+
+### Multiple concurrent batches per run
+
+Up to **3** scope-aware batches can run in parallel for a single
+run. The cache layer is shared, so a second batch with overlapping
+scope picks up the first batch's results as cache hits in real time.
+
+* Fire "Generate for Criticals" first. While it's running, change
+  the filter to "KEV only" and fire a second batch — both run in
+  parallel, both appear as separate rows in the global progress
+  banner with their scope label visible.
+* The 4th concurrent batch returns a typed 409 error
+  (`TOO_MANY_ACTIVE_BATCHES`); the CTA disables itself with a
+  "wait for one to complete" message until an active batch
+  terminates.
+* Cancel one batch via its individual Cancel button; other active
+  batches on the same run keep running.
+
+The banner shows up to 3 rows in full, with overflow collapsed
+behind "+N more AI batches in progress."
+
+### Cost optimization patterns
+
+* **Triage-first.** On a 500-finding run with a paid provider, fire
+  the Criticals batch first (~50 findings, ~$0.30, ~12 seconds).
+  Validate the output, then expand to High + Medium with a second
+  batch. The CTA's pre-flight estimate makes the cost trade-off
+  explicit before you click Generate.
+* **Free-tier batching.** Gemini's free tier caps at 15 RPM, so a
+  500-finding batch takes ~33 minutes serial. A KEV-only batch
+  ($0, ~30 sec for 6 findings) gets the highest-priority guidance
+  in under a minute. Then run a paid Criticals batch in parallel
+  for everything else.
+* **Cache-aware re-runs.** Re-firing the same scope after a partial
+  cancel costs nothing for the rows that completed — the cache
+  layer dedups by `(vuln_id, component_name, component_version)`
+  regardless of run id, so two scope-overlapping batches on the
+  same run never call the LLM twice for the same finding.
+
 ---
 
 ## What "grounded" means

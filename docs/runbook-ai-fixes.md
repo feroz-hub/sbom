@@ -203,6 +203,58 @@ journalctl -u sbom-api | jq 'select(.finding_cache_key == "abc123")'
   the environment. No-op otherwise.
 * **No per-tenant budget caps.** Caps are org-wide only. Per-tenant is
   Phase 6 scope.
+* **Cross-process generation lock requires Redis.** `app/ai/cache_lock.py`
+  falls back to a process-local `asyncio.Lock` when Redis is down. In
+  multi-worker deployments without Redis, two parallel batches that
+  scope-overlap on the same finding may each call the LLM (paying
+  twice). Mitigation: keep Redis healthy. The fallback is sufficient
+  for dev / single-node test environments.
+* **Provider rate limiters are per-process singletons.** With N
+  workers the effective RPM is N × `AI_<PROVIDER>_RPM`. For free-tier
+  providers this can breach the upstream limit. Mitigation: scale
+  worker count down for free-tier deployments, or set per-worker RPM
+  to `configured_rpm / worker_count`. A Redis-backed token bucket is
+  on the backlog.
+
+## 8.1 Multi-batch operations (Phase 4 scope-aware)
+
+Each run now supports up to 3 concurrent batches (
+`MAX_ACTIVE_BATCHES_PER_RUN` in `app/ai/batches.py`). Batches are
+identified by UUID and persisted in `ai_fix_batch`.
+
+**Triage flow when a user reports "Generate did nothing":**
+
+1. `GET /api/v1/runs/{run_id}/ai-fixes/batches` — every batch (active
+   + historical) for the run, newest-first. The `status` column on
+   each row tells you whether the batch is queued / running / failed.
+2. If `status='queued'` for > 5 min, the Celery worker is not picking
+   the task up. Check `celery-worker` logs and confirm the broker is
+   reachable.
+3. If `status='in_progress'` but progress hasn't moved, check the
+   provider's rate-limit headers (free-tier Gemini at 15 RPM means a
+   100-finding batch takes ~7 minutes — that's normal, not stuck).
+4. If `status='failed'`, the row's `last_error` carries the truncated
+   reason. Cross-reference with `ai_usage_log` (`error_code` column)
+   for the structured failure.
+
+**Cancel one batch without affecting others:**
+
+```
+POST /api/v1/runs/{run_id}/ai-fixes/batches/{batch_id}/cancel
+```
+
+Cooperative — in-flight LLM calls finish, subsequent findings skip.
+The legacy `POST /runs/{run_id}/ai-fixes/cancel` cancels every batch
+on the run (kept for the deprecated single-batch surface).
+
+**4th batch returns 409:**
+
+The router refuses a 4th concurrent batch with
+`error_code=TOO_MANY_ACTIVE_BATCHES`, `retryable=true`. Frontend
+surfaces a "wait for one to complete" message. To unblock, cancel an
+active batch or wait for one to terminate. The cap exists to bound
+provider rate-limit contention — raising it without addressing the
+per-process limiter (above) won't increase throughput.
 
 ---
 

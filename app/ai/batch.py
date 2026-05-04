@@ -4,6 +4,11 @@ Phase 3 §3.1-3.6 distilled into one class. The pipeline is pure async
 (no Celery, no FastAPI imports) so it's testable in isolation. The
 Celery task and the REST router both call into it.
 
+Scope-aware (Phase 4 multi-batch): a single run may have multiple
+concurrent batches in flight, each with its own resolved finding set
+and ``batch_id``. Progress writes carry the ``batch_id`` so two batches
+on the same run don't clobber each other's snapshots.
+
 Concurrency:
 
   * Cache hits are returned immediately, no semaphore.
@@ -11,12 +16,18 @@ Concurrency:
   * The orchestrator's per-finding work already includes its own provider
     rate-limiter; the semaphore here just bounds simultaneous in-flight
     LLM calls so we don't blow past the provider's tier limit.
+  * Cross-batch dedup happens inside :class:`AiFixGenerator` via
+    :class:`~app.ai.cache_lock.CacheLock`. When two batches scope-overlap
+    on the same finding, the lock guarantees exactly one LLM call.
 
 Cancellation:
 
   * Cooperative — the cancel flag is checked before each semaphore
     acquisition. In-flight calls run to completion (we don't kill HTTP
     mid-flight); subsequent findings are skipped.
+  * Per-batch: ``store.is_cancel_requested(run_id, batch_id)`` checks
+    the batch-scoped flag first, then the legacy run-level flag (which
+    cancels every batch on the run).
 """
 
 from __future__ import annotations
@@ -32,6 +43,7 @@ from sqlalchemy.orm import Session
 
 from ..models import AnalysisFinding
 from . import cache as cache_mod
+from .batches import update_batch_from_progress
 from .cost import BudgetGuard
 from .fix_generator import AiFixGenerator
 from .grounding import build_grounding_context
@@ -108,22 +120,40 @@ class AiFixBatchPipeline:
         *,
         provider_name: str | None = None,
         force_refresh: bool = False,
+        finding_ids: list[int] | None = None,
+        batch_id: str | None = None,
+        scope_label: str | None = None,
     ) -> BatchSummary:
-        """Generate AI fixes for every finding in ``run_id``.
+        """Generate AI fixes for findings in ``run_id``.
 
         Idempotent: a second invocation hits the cache for everything the
         first one wrote, so the throughput is bound by DB reads, not LLM
         latency. Cost is essentially zero on the second run.
+
+        ``finding_ids``: when provided, restricts the batch to these
+        findings (intersected with ``run_id`` for safety). When ``None``,
+        processes every finding in the run (legacy behaviour).
+
+        ``batch_id`` / ``scope_label``: when provided, propagated into
+        progress writes so the SSE stream can be scoped to a single
+        batch. ``None`` is the legacy single-batch mode.
         """
-        findings = self._load_findings(run_id)
-        progress = initial_progress(run_id, total=len(findings))
+        findings = self._load_findings(run_id, finding_ids=finding_ids)
+        progress = initial_progress(
+            run_id,
+            total=len(findings),
+            batch_id=batch_id,
+            scope_label=scope_label,
+        )
         progress.started_at = _now_iso()
         self._store.write(progress)
+        self._sync_batch_row(progress, batch_id)
 
         if not findings:
             progress.status = "complete"
             progress.finished_at = _now_iso()
             self._store.write(progress)
+            self._sync_batch_row(progress, batch_id)
             return BatchSummary(results=[], errors=[], progress=progress)
 
         try:
@@ -135,6 +165,7 @@ class AiFixBatchPipeline:
             progress.last_error = str(exc)
             progress.finished_at = _now_iso()
             self._store.write(progress)
+            self._sync_batch_row(progress, batch_id)
             return BatchSummary(results=[], errors=[], progress=progress)
 
         progress.provider_used = provider.name
@@ -160,6 +191,7 @@ class AiFixBatchPipeline:
             progress.status = "complete"
             progress.finished_at = _now_iso()
             self._store.write(progress)
+            self._sync_batch_row(progress, batch_id)
             return BatchSummary(results=results, errors=errors, progress=progress)
 
         # Phase 2: bounded-concurrency miss path.
@@ -169,10 +201,10 @@ class AiFixBatchPipeline:
         start_perf = time.perf_counter()
 
         async def _one(finding: AnalysisFinding) -> AiFixResult | AiFixError | None:
-            if self._store.is_cancel_requested(run_id):
+            if self._store.is_cancel_requested(run_id, batch_id):
                 return None
             async with semaphore:
-                if self._store.is_cancel_requested(run_id):
+                if self._store.is_cancel_requested(run_id, batch_id):
                     return None
                 return await gen.generate_for_finding(
                     finding,
@@ -204,10 +236,12 @@ class AiFixBatchPipeline:
 
             if budget_halted:
                 # Cancel the rest — they would all bounce off the same cap.
-                self._store.request_cancel(run_id)
+                # Per-batch cancel: only this batch halts; any other
+                # active batches on the run are unaffected.
+                self._store.request_cancel(run_id, batch_id)
 
         # Final status.
-        if self._store.is_cancel_requested(run_id):
+        if self._store.is_cancel_requested(run_id, batch_id):
             progress.status = "paused_budget" if budget_halted else "cancelled"
             progress.cancel_requested = True
         else:
@@ -215,6 +249,7 @@ class AiFixBatchPipeline:
         progress.finished_at = _now_iso()
         progress.remaining = 0
         self._store.write(progress)
+        self._sync_batch_row(progress, batch_id)
 
         # Telemetry: publish the cache-hit ratio for this run as a gauge
         # so the dashboard's "cache hit ratio trend" sparkline picks it up.
@@ -229,12 +264,25 @@ class AiFixBatchPipeline:
     # Internals
     # ------------------------------------------------------------------
 
-    def _load_findings(self, run_id: int) -> list[AnalysisFinding]:
-        return list(
-            self._db.execute(
-                select(AnalysisFinding).where(AnalysisFinding.analysis_run_id == run_id)
-            ).scalars()
-        )
+    def _load_findings(
+        self,
+        run_id: int,
+        *,
+        finding_ids: list[int] | None,
+    ) -> list[AnalysisFinding]:
+        """Load the findings to process.
+
+        Always constrained by ``analysis_run_id == run_id`` for safety
+        (the same defence-in-depth applied at the router's
+        :func:`resolve_scope_findings` layer; we re-check here so the
+        pipeline is safe to call without going through the router).
+        """
+        stmt = select(AnalysisFinding).where(AnalysisFinding.analysis_run_id == run_id)
+        if finding_ids is not None:
+            if not finding_ids:
+                return []
+            stmt = stmt.where(AnalysisFinding.id.in_(finding_ids))
+        return list(self._db.execute(stmt).scalars())
 
     def _partition_cache_hits(
         self,
@@ -298,6 +346,18 @@ class AiFixBatchPipeline:
         progress.estimated_remaining_seconds = int(misses_left / rate) if rate > 0 else None
         avg_cost = progress.cost_so_far_usd / done_misses if done_misses > 0 else 0.0
         progress.estimated_remaining_cost_usd = round(avg_cost * misses_left, 6)
+
+    def _sync_batch_row(self, progress: BatchProgress, batch_id: str | None) -> None:
+        """Mirror progress to the durable ``ai_fix_batch`` row.
+
+        Best-effort: a logging warning on failure, no exception
+        propagation. The progress store remains the source of truth for
+        in-flight UI; the row is the source of truth for historical
+        lookups. They converge at terminal status.
+        """
+        if batch_id is None:
+            return
+        update_batch_from_progress(self._db, batch_id=batch_id, progress=progress)
 
 
 __all__ = ["AiFixBatchPipeline", "BatchSummary"]

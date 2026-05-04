@@ -928,9 +928,65 @@ export function listRunAiFixes(
 }
 
 /** SSE URL — passed to ``EventSource``; full URL so the worker process and
- *  the browser don't have to share an origin in dev. */
+ *  the browser don't have to share an origin in dev.
+ *
+ *  Legacy run-scoped stream — yields the most-recent batch's progress.
+ *  Use ``aiFixBatchStreamUrl`` for per-batch SSE in the multi-batch flow. */
 export function aiFixStreamUrl(runId: number): string {
   return `${BASE_URL}/api/v1/runs/${runId}/ai-fixes/stream`;
+}
+
+/** Per-batch SSE URL. Pin a stream to one batch_id so concurrent batches
+ *  on the same run don't share an event source. */
+export function aiFixBatchStreamUrl(runId: number, batchId: string): string {
+  return `${BASE_URL}/api/v1/runs/${runId}/ai-fixes/batches/${batchId}/stream`;
+}
+
+/** List every batch (active + historical) for a run, newest-first. */
+export function listRunAiBatches(
+  runId: number,
+  signal?: AbortSignal,
+): Promise<import('@/types/ai').AiBatchListResponse> {
+  return request(`/api/v1/runs/${runId}/ai-fixes/batches`, { signal });
+}
+
+/** One batch's durable record + live progress envelope. */
+export function getRunAiBatch(
+  runId: number,
+  batchId: string,
+  signal?: AbortSignal,
+): Promise<import('@/types/ai').AiBatchDetailResponse> {
+  return request(`/api/v1/runs/${runId}/ai-fixes/batches/${batchId}`, { signal });
+}
+
+/** Cooperative per-batch cancel. */
+export function cancelRunAiBatch(
+  runId: number,
+  batchId: string,
+  signal?: AbortSignal,
+): Promise<{ run_id: number; batch_id: string; cancel_requested: boolean }> {
+  return request(`/api/v1/runs/${runId}/ai-fixes/batches/${batchId}/cancel`, {
+    method: 'POST',
+    signal,
+  });
+}
+
+/** Scope-aware pre-flight estimate. Replaces the legacy GET variant.
+ *
+ *  Backend resolves the scope to a finding-id list, counts cache hits
+ *  via a single SQL join, and returns the duration / cost projection
+ *  along with the multi-batch contention signal. */
+export function estimateRunAiFixesScoped(
+  runId: number,
+  scope: import('@/types/ai').AiFixGenerationScope | null = null,
+  signal?: AbortSignal,
+): Promise<import('@/types/ai').AiScopedEstimateResponse> {
+  return request(`/api/v1/runs/${runId}/ai-fixes/estimate`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ scope }),
+    signal,
+  });
 }
 
 /** Provider list for the Settings page (cached / displayed verbatim). */

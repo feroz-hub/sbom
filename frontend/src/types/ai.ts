@@ -106,6 +106,7 @@ export interface AiFindingFixEnvelope {
 
 export type AiBatchStatus =
   | 'pending'
+  | 'queued'
   | 'in_progress'
   | 'paused_budget'
   | 'complete'
@@ -114,6 +115,10 @@ export type AiBatchStatus =
 
 export interface AiBatchProgress {
   run_id: number;
+  /** Phase 4 multi-batch — null on legacy single-batch envelopes. */
+  batch_id?: string | null;
+  /** Human-readable scope description ("Critical findings", "Selected (12)"). */
+  scope_label?: string | null;
   status: AiBatchStatus;
   total: number;
   from_cache: number;
@@ -131,15 +136,91 @@ export interface AiBatchProgress {
   model_used: string | null;
 }
 
+/**
+ * Scope spec sent to the backend's POST /ai-fixes and POST /estimate
+ * endpoints. Mirrors ``app.ai.scope.AiFixGenerationScope``.
+ *
+ * Precedence:
+ *   1. ``finding_ids`` non-empty → explicit selection (rest ignored).
+ *   2. Filter predicates apply conjunctively.
+ *   3. All fields empty / undefined → entire run.
+ */
+export interface AiFixGenerationScope {
+  severities?: Array<'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'UNKNOWN'>;
+  kev_only?: boolean;
+  fix_available_only?: boolean;
+  search_query?: string | null;
+  finding_ids?: number[];
+  /** Display label that surfaces in the progress banner. */
+  label?: string | null;
+}
+
 export interface AiTriggerBatchRequest {
   provider_name?: string | null;
   force_refresh?: boolean;
   budget_usd?: number | null;
+  scope?: AiFixGenerationScope | null;
 }
 
 export interface AiTriggerBatchResponse {
   progress: AiBatchProgress;
+  batch_id: string;
   enqueued: boolean;
+  total: number;
+  cached_count: number;
+  scope_label?: string | null;
+}
+
+export interface AiBatchListItem {
+  batch_id: string;
+  run_id: number;
+  status: AiBatchStatus;
+  scope_label?: string | null;
+  provider_name: string;
+  total: number;
+  cached_count: number;
+  generated_count: number;
+  failed_count: number;
+  cost_usd: number;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  last_error: string | null;
+}
+
+export interface AiBatchListResponse {
+  run_id: number;
+  items: AiBatchListItem[];
+  total: number;
+}
+
+export interface AiBatchDetailResponse {
+  batch: AiBatchListItem;
+  progress: AiBatchProgress | null;
+}
+
+/**
+ * Scope-aware pre-flight estimate (POST /ai-fixes/estimate). Includes
+ * the resolved scope count, cache hit count, and provider contention
+ * signal so the CTA can render an honest ETA.
+ */
+export interface AiScopedEstimateResponse {
+  run_id: number;
+  scope_label?: string | null;
+  total_findings_in_scope: number;
+  cached_count: number;
+  llm_call_count: number;
+  estimated_cost_usd: number;
+  estimated_seconds: number;
+  provider_name: string;
+  provider_tier: string;
+  is_local: boolean;
+  rate_per_minute: number;
+  bottleneck: string;
+  warning_recommended: boolean;
+  active_batches_using_provider: number;
+  blocked: boolean;
+  blocked_reason: string | null;
 }
 
 export interface AiFindingFixListItem {

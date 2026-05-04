@@ -37,6 +37,7 @@ from sqlalchemy.orm import Session
 from ..models import AnalysisFinding
 from ..settings import get_settings
 from . import cache as cache_mod
+from .cache_lock import CacheLock, get_cache_lock
 from .cost import (
     BudgetCaps,
     BudgetGuard,
@@ -102,10 +103,16 @@ class AiFixGenerator:
         *,
         registry: ProviderRegistry | None = None,
         budget: BudgetGuard | None = None,
+        cache_lock: CacheLock | None = None,
     ) -> None:
         self._db = db
         self._registry = registry or get_registry(db)
         self._budget = budget or BudgetGuard(_budget_caps_from_settings())
+        # Generation lock — prevents two concurrent batches from making
+        # duplicate LLM calls for the same cache key. Falls back to a
+        # process-local lock when Redis is unreachable; documented in
+        # the runbook as a multi-worker caveat.
+        self._cache_lock = cache_lock or get_cache_lock()
 
     @property
     def registry(self) -> ProviderRegistry:
@@ -211,13 +218,31 @@ class AiFixGenerator:
         except ProviderUnavailableError as exc:
             return self._error(finding, ctx, "provider_unavailable", str(exc))
 
-        return await self._generate_uncached(
-            finding=finding,
-            ctx=ctx,
-            cache_key=cache_key,
-            provider=provider,
-            scan_id=scan_id,
-        )
+        # Cross-batch dedup: hold a lock keyed on the cache key while we
+        # generate. Two concurrent batches that scope-overlap on this
+        # finding will hit this gate; the second waits, re-checks the
+        # cache after acquiring the lock, and returns the first batch's
+        # result instead of paying twice for the same LLM call.
+        async with self._cache_lock.acquire(cache_key) as acquired:
+            if acquired and not force_refresh:
+                # Re-check the cache: another worker may have written
+                # while we waited on the lock.
+                hit2 = cache_mod.read_cache(self._db, cache_key=cache_key)
+                if hit2 is not None:
+                    cache_mod.touch_last_accessed(self._db, cache_key=cache_key)
+                    return hit2.model_copy(update={"finding_id": finding.id})
+
+            # Either we acquired the lock and are the generator, or we
+            # timed out waiting and proceed best-effort. The latter is
+            # rare (30s default) and at worst pays for a duplicate call;
+            # we never block the user beyond the lock TTL.
+            return await self._generate_uncached(
+                finding=finding,
+                ctx=ctx,
+                cache_key=cache_key,
+                provider=provider,
+                scan_id=scan_id,
+            )
 
     async def generate_for_findings(
         self,

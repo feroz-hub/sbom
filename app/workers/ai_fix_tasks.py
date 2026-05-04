@@ -34,8 +34,11 @@ def generate_run_fixes(
     provider_name: str | None = None,
     force_refresh: bool = False,
     budget_usd: float | None = None,
+    finding_ids: list[int] | None = None,
+    batch_id: str | None = None,
+    scope_label: str | None = None,
 ) -> dict:
-    """Generate AI fix bundles for every finding in a run.
+    """Generate AI fix bundles for findings in a run.
 
     Idempotent at the cache layer — re-running this is essentially free
     if the previous run completed. ``force_refresh=True`` bypasses the
@@ -43,15 +46,23 @@ def generate_run_fixes(
 
     ``budget_usd`` overrides the per-scan cap from Settings (lets an
     admin bump it for an unusually large scan from the UI).
+
+    Scope-aware (Phase 4 multi-batch): ``finding_ids`` narrows the set
+    to a specific subset (else all findings in the run). ``batch_id`` /
+    ``scope_label`` distinguish concurrent batches on the same run in
+    progress writes and the durable ``ai_fix_batch`` row.
     """
     from ..db import SessionLocal
 
     log.info(
-        "ai.task.generate_run_fixes.start: run=%s provider=%s force=%s budget=%s",
+        "ai.task.generate_run_fixes.start: run=%s batch=%s provider=%s force=%s budget=%s scope=%s findings=%s",
         run_id,
+        batch_id,
         provider_name,
         force_refresh,
         budget_usd,
+        scope_label,
+        len(finding_ids) if finding_ids is not None else "all",
     )
 
     s = get_settings()
@@ -59,6 +70,8 @@ def generate_run_fixes(
         store = get_progress_store()
         prog = BatchProgress(
             run_id=run_id,
+            batch_id=batch_id,
+            scope_label=scope_label,
             status="failed",
             last_error="AI fixes kill switch is enabled",
         )
@@ -84,12 +97,21 @@ def generate_run_fixes(
                 run_id,
                 provider_name=provider_name,
                 force_refresh=force_refresh,
+                finding_ids=finding_ids,
+                batch_id=batch_id,
+                scope_label=scope_label,
             )
         )
     except Exception as exc:  # noqa: BLE001
-        log.exception("ai.task.generate_run_fixes.failed: run=%s err=%s", run_id, exc)
+        log.exception("ai.task.generate_run_fixes.failed: run=%s batch=%s err=%s", run_id, batch_id, exc)
         store = get_progress_store()
-        prog = BatchProgress(run_id=run_id, status="failed", last_error=str(exc)[:240])
+        prog = BatchProgress(
+            run_id=run_id,
+            batch_id=batch_id,
+            scope_label=scope_label,
+            status="failed",
+            last_error=str(exc)[:240],
+        )
         store.write(prog)
         return prog.model_dump(mode="json")
     finally:

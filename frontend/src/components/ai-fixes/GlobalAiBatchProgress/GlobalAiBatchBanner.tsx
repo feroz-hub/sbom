@@ -4,9 +4,16 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { CheckCircle2, Loader2, Sparkles, XCircle } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { cancelRunAiFixes, getRunAiFixProgress } from '@/lib/api';
+import {
+  cancelRunAiBatch,
+  cancelRunAiFixes,
+  getRunAiBatch,
+  getRunAiFixProgress,
+} from '@/lib/api';
 import type { AiBatchProgress } from '@/types/ai';
 import { useTrackedAiBatches } from './useGlobalAiBatchProgress';
+import { batchProgressQueryKey } from './AiBatchProgressProvider';
+import type { AiBatchTrackingKey } from './AiBatchProgressContext';
 
 const MAX_VISIBLE = 3;
 
@@ -40,27 +47,43 @@ function progressPct(p: AiBatchProgress): number {
 }
 
 interface RowProps {
-  runId: number;
-  /** When true, render compactly — used when stacked behind a "+N more" cluster. */
+  entry: AiBatchTrackingKey;
+  /** Render compactly when stacked behind a "+N more" cluster. */
   compact?: boolean;
 }
 
-function GlobalBatchRow({ runId, compact = false }: RowProps) {
+function GlobalBatchRow({ entry, compact = false }: RowProps) {
   const qc = useQueryClient();
+  const { runId, batchId, scopeLabel } = entry;
+  const queryKey = batchProgressQueryKey(runId, batchId);
   const { data: progress } = useQuery<AiBatchProgress>({
-    queryKey: ['ai-batch-progress', runId],
-    queryFn: ({ signal }) => getRunAiFixProgress(runId, signal),
+    queryKey,
+    queryFn: ({ signal }) => {
+      if (batchId == null) return getRunAiFixProgress(runId, signal);
+      return getRunAiBatch(runId, batchId, signal).then(
+        (detail) => detail.progress as AiBatchProgress,
+      );
+    },
   });
 
   if (!progress) return null;
 
   const inFlight = !isTerminal(progress.status);
   const pct = progressPct(progress);
+  // The banner row's scope label prefers the live progress payload
+  // (which the worker may have refined) but falls back to whatever the
+  // CTA registered at trigger time so the row never goes blank
+  // mid-stream.
+  const label = progress.scope_label ?? scopeLabel ?? null;
 
   const onCancel = async () => {
     try {
-      await cancelRunAiFixes(runId);
-      qc.invalidateQueries({ queryKey: ['ai-batch-progress', runId] });
+      if (batchId == null) {
+        await cancelRunAiFixes(runId);
+      } else {
+        await cancelRunAiBatch(runId, batchId);
+      }
+      qc.invalidateQueries({ queryKey });
     } catch {
       /* user can retry — toast on the originating page already covers errors */
     }
@@ -71,7 +94,11 @@ function GlobalBatchRow({ runId, compact = false }: RowProps) {
       role={progress.status === 'failed' ? 'alert' : 'status'}
       aria-live="polite"
       className="flex items-center gap-3 rounded-lg border border-border-subtle bg-surface px-3 py-2 shadow-card dark:bg-surface"
-      data-testid={`global-ai-batch-row-${runId}`}
+      data-testid={
+        batchId == null
+          ? `global-ai-batch-row-${runId}`
+          : `global-ai-batch-row-${runId}-${batchId}`
+      }
     >
       {statusIcon(progress.status)}
       <div className="min-w-0 flex-1">
@@ -83,6 +110,11 @@ function GlobalBatchRow({ runId, compact = false }: RowProps) {
           >
             Run #{runId}
           </Link>
+          {label ? (
+            <span className="truncate rounded-md bg-surface-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-hcl-muted">
+              {label}
+            </span>
+          ) : null}
           {!compact ? (
             <span className="truncate text-[11px] text-hcl-muted">
               {summaryLine(progress)}
@@ -113,12 +145,16 @@ function GlobalBatchRow({ runId, compact = false }: RowProps) {
 }
 
 /**
- * Renders inside the AppShell at the top of <main>. Persists across route
- * changes; up to MAX_VISIBLE rows show in full, additional batches collapse
- * behind a "+N more" affordance. When the user is sitting on the
- * /analysis/[id] page that matches a tracked run, that run is hidden from
- * the global banner — the page's own RunBatchProgress is the canonical
- * surface for it.
+ * Renders inside the AppShell at the top of <main>. Persists across
+ * route changes; up to MAX_VISIBLE rows show in full, additional batches
+ * collapse behind a "+N more" affordance. When the user is on the
+ * /analysis/[id] page that matches a tracked run, that run's batches
+ * are hidden from the global banner — the page's own RunBatchProgress
+ * is the canonical surface for them.
+ *
+ * Multi-batch (Phase 4): the same run may contribute multiple rows,
+ * each labelled by its scope ("Critical", "KEV", "Selected (12)") so
+ * they're distinguishable at a glance.
  */
 export function GlobalAiBatchBanner() {
   const tracked = useTrackedAiBatches();
@@ -126,11 +162,11 @@ export function GlobalAiBatchBanner() {
 
   if (tracked.length === 0) return null;
 
-  // If the user is on /analysis/<id> for one of the tracked runs, drop
-  // it from the global view to avoid duplication with the page banner.
+  // If the user is on /analysis/<id> for a tracked run, drop every
+  // entry for that run so the page banner is the canonical surface.
   const onRunDetailMatch = pathname?.match(/^\/analysis\/(\d+)/);
   const currentRunId = onRunDetailMatch ? Number(onRunDetailMatch[1]) : null;
-  const visible = tracked.filter((id) => id !== currentRunId);
+  const visible = tracked.filter((entry) => entry.runId !== currentRunId);
 
   if (visible.length === 0) return null;
 
@@ -142,8 +178,11 @@ export function GlobalAiBatchBanner() {
       className="sticky top-0 z-20 space-y-1 border-b border-border-subtle bg-background/95 px-4 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80"
       aria-label="AI batch progress"
     >
-      {head.map((runId) => (
-        <GlobalBatchRow key={runId} runId={runId} />
+      {head.map((entry) => (
+        <GlobalBatchRow
+          key={entry.batchId == null ? `legacy-${entry.runId}` : `${entry.runId}-${entry.batchId}`}
+          entry={entry}
+        />
       ))}
       {overflow > 0 ? (
         <p className="px-1 text-[11px] text-hcl-muted">
