@@ -183,6 +183,171 @@ class Settings(BaseSettings):
         description="TTL for compare_cache rows. Cache is also invalidated immediately when either run is reanalyzed (Celery hook).",
     )
 
+    # =========================================================================
+    # AI-driven remediation (Phase 1 — provider abstraction & cost model)
+    # =========================================================================
+    #
+    # Foundational settings for the AI fix generator. Phase 1 ships the
+    # provider layer + cost ledger + budget caps. Higher-level orchestrator
+    # / cache settings land in Phase 2.
+    #
+    # Design intent:
+    #   * ``ai_default_provider`` is the only knob most operators ever touch.
+    #     Switching from Anthropic to OpenAI to local Ollama is a single env
+    #     change with zero code edits.
+    #   * Per-provider knobs (model, concurrency, rpm) are provider-scoped so
+    #     defaults can move independently as upstream APIs evolve.
+    #   * Budget caps default to conservative values; production rollout
+    #     starts with even tighter values per the rollout plan in §6.
+
+    ai_fixes_enabled: bool = Field(
+        default=False,
+        description="Master feature flag for the AI fix generator. Phase 1 ships off-by-default.",
+    )
+    ai_fixes_kill_switch: bool = Field(
+        default=False,
+        description="When true, every AI call is rejected at the registry. Operator panic button.",
+    )
+    ai_fixes_ui_config_enabled: bool = Field(
+        default=False,
+        description=(
+            "Phase 4 §4.3 rollout flag. When true the Settings → AI UI surface "
+            "(/settings/ai) is enabled and DB-backed credentials are the "
+            "primary source. When false the frontend shows a 'not enabled' "
+            "fallback and the registry continues to read env config. The "
+            "API-side credential endpoints work either way so admin tooling "
+            "and the migration script can run before the flag is flipped."
+        ),
+    )
+    ai_default_provider: str = Field(
+        default="anthropic",
+        description="Provider name used when LlmRequest.provider_name is None.",
+    )
+    ai_providers: str = Field(
+        default="anthropic,openai,gemini,grok,ollama,vllm,custom_openai",
+        description="Comma-separated list of providers to wire up. Disabled providers are reported but not callable.",
+    )
+
+    # Anthropic
+    anthropic_api_key: str = Field(default="", description="Anthropic Messages API key.")
+    ai_anthropic_model: str = Field(default="claude-sonnet-4-5", description="Default Anthropic model.")
+    ai_anthropic_max_concurrent: int = Field(default=10, description="Max in-flight requests for Anthropic.")
+    ai_anthropic_rpm: float = Field(default=50.0, description="Requests per minute soft limit for Anthropic.")
+
+    # OpenAI / OpenAI-compatible
+    openai_api_key: str = Field(default="", description="OpenAI API key.")
+    ai_openai_model: str = Field(default="gpt-4o-mini", description="Default OpenAI model.")
+    ai_openai_base_url: str = Field(
+        default="https://api.openai.com/v1",
+        description="Override for OpenAI-compatible endpoints (Together, Groq, Azure).",
+    )
+    ai_openai_organization: str = Field(default="", description="Optional OpenAI org id.")
+    ai_openai_max_concurrent: int = Field(default=20, description="Max in-flight requests for OpenAI.")
+    ai_openai_rpm: float = Field(default=200.0, description="Requests per minute soft limit for OpenAI.")
+
+    # Ollama
+    ollama_base_url: str = Field(
+        default="http://localhost:11434",
+        description="Ollama HTTP API base URL. Empty disables Ollama.",
+    )
+    ai_ollama_model: str = Field(default="llama3.3:70b", description="Default Ollama model.")
+    ai_ollama_max_concurrent: int = Field(
+        default=8,
+        description="Max in-flight requests for Ollama. Local inference is GPU-bound; over-saturation hurts.",
+    )
+    ai_ollama_rpm: float = Field(default=1000.0, description="Effectively unlimited; local infra dictates throughput.")
+
+    # vLLM
+    vllm_base_url: str = Field(default="", description="Self-hosted vLLM base URL. Empty disables vLLM.")
+    vllm_api_key: str = Field(default="EMPTY", description="vLLM accepts any non-empty token by default.")
+    ai_vllm_model: str = Field(default="meta-llama/Meta-Llama-3.1-70B-Instruct", description="Default vLLM model.")
+    ai_vllm_max_concurrent: int = Field(default=32, description="Max in-flight requests for vLLM.")
+    ai_vllm_rpm: float = Field(default=5000.0, description="vLLM batches efficiently on GPU.")
+
+    # Google Gemini
+    gemini_api_key: str = Field(default="", description="Google AI Studio API key.")
+    ai_gemini_model: str = Field(default="gemini-2.5-flash", description="Default Gemini model.")
+    ai_gemini_tier: str = Field(
+        default="free",
+        description="Gemini tier ('free' or 'paid'). Free tier clamps RPM to 15.",
+    )
+    ai_gemini_max_concurrent: int = Field(default=4, description="Max in-flight requests for Gemini.")
+    ai_gemini_rpm: float = Field(
+        default=15.0,
+        description="RPM cap. Free tier clamps to 15; bump for paid tier (default ~1500 paid).",
+    )
+
+    # xAI Grok
+    grok_api_key: str = Field(default="", description="xAI Grok API key.")
+    ai_grok_model: str = Field(default="grok-2-mini", description="Default Grok model.")
+    ai_grok_tier: str = Field(
+        default="free",
+        description="Grok tier ('free' or 'paid'). Free tier clamps RPM to 60.",
+    )
+    ai_grok_max_concurrent: int = Field(default=4, description="Max in-flight requests for Grok.")
+    ai_grok_rpm: float = Field(default=60.0, description="RPM cap. Free tier clamps to 60.")
+
+    # Custom OpenAI-compatible (LM Studio / LocalAI / LiteLLM proxy / etc.)
+    ai_custom_openai_base_url: str = Field(
+        default="",
+        description="Base URL for the custom endpoint. Empty disables. Must start with https:// or http://localhost.",
+    )
+    ai_custom_openai_api_key: str = Field(
+        default="EMPTY",
+        description="Optional API key. Most local setups don't need one.",
+    )
+    ai_custom_openai_model: str = Field(
+        default="",
+        description="Free-text model name as understood by the custom endpoint.",
+    )
+    ai_custom_openai_max_concurrent: int = Field(default=8, description="Max in-flight requests.")
+    ai_custom_openai_rpm: float = Field(default=5000.0, description="RPM cap. No limit by default.")
+    ai_custom_openai_cost_per_1k_input: float = Field(
+        default=0.0,
+        description="Optional per-1k-token input cost (USD). Defaults to $0 since most local setups are free.",
+    )
+    ai_custom_openai_cost_per_1k_output: float = Field(
+        default=0.0,
+        description="Optional per-1k-token output cost (USD).",
+    )
+    ai_custom_openai_is_local: bool = Field(
+        default=True,
+        description="Treat as local for cost reporting. Set false for remote (paid) endpoints.",
+    )
+
+    # Budget caps (USD)
+    ai_budget_per_request_usd: float = Field(
+        default=0.10,
+        description="Hard cap on a single LLM call. Estimated cost > cap → request rejected pre-flight.",
+    )
+    ai_budget_per_scan_usd: float = Field(
+        default=5.00,
+        description="Hard cap on a single batch generate-fixes job.",
+    )
+    ai_budget_per_day_org_usd: float = Field(
+        default=5.00,
+        description=(
+            "Daily org-wide cap. Reset at UTC midnight. Defaults to $5 "
+            "for the first 14 days of rollout per the §6.3 cost guardrail; "
+            "raise to $50+ once telemetry shows steady-state behaviour."
+        ),
+    )
+
+    # Phased rollout knob — see app/ai/rollout.py and docs/rollout-ai-fixes.md.
+    # 0   → AI returns 409 even with the master flag on (canary not yet started)
+    # 100 → AI returns to all eligible callers
+    # 1-99 → deterministic hash of the rollout key (run / finding / user) decides
+    ai_canary_percentage: int = Field(
+        default=100,
+        ge=0,
+        le=100,
+        description=(
+            "Canary rollout percentage (0-100). Hashes the rollout key "
+            "for stable per-key inclusion. Default 100 ships everything; "
+            "set to 10 / 50 during the canary ramp."
+        ),
+    )
+
     # Logging Configuration
     log_level: str = Field(default="INFO", description="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)")
     log_format: str = Field(default="text", description="Log format (text or json)")

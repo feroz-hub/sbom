@@ -353,3 +353,188 @@ class CompareCache(Base):
     computed_at = Column(String, nullable=False)
     expires_at = Column(String, nullable=False, index=True)
     schema_version = Column(Integer, nullable=False, default=1)
+
+
+class AiUsageLog(Base):
+    """
+    Append-only ledger of every LLM call (success and failure).
+
+    Phase 1 of the AI-driven remediation feature. Every provider call —
+    cache hit, cache miss, or failure — writes one row. Reads are always
+    aggregations (cost dashboards, daily totals, cache hit ratio); the
+    table is therefore optimised for fast inserts and time-range scans.
+    """
+
+    __tablename__ = "ai_usage_log"
+
+    id = Column(Integer, primary_key=True, index=True)
+    request_id = Column(String(64), nullable=False)
+    provider = Column(String(32), nullable=False, index=True)
+    model = Column(String(96), nullable=False)
+    purpose = Column(String(48), nullable=False, index=True)
+    finding_cache_key = Column(String(64), nullable=True, index=True)
+    input_tokens = Column(Integer, nullable=False, default=0)
+    output_tokens = Column(Integer, nullable=False, default=0)
+    cost_usd = Column(Float, nullable=False, default=0.0)
+    latency_ms = Column(Integer, nullable=False, default=0)
+    cache_hit = Column(Boolean, nullable=False, default=False)
+    error = Column(Text, nullable=True)
+    created_at = Column(String, nullable=False, index=True)
+
+
+class AiProviderConfig(Base):
+    """
+    Per-provider runtime overrides for the AI subsystem.
+
+    Env vars in ``Settings`` provide the safe defaults; rows in this table
+    let an admin toggle providers, change models, or adjust concurrency
+    without a redeploy. Secrets (API keys) deliberately do NOT live here —
+    they remain in env / vault, see ``ProviderRegistry.apply_db_overrides``.
+    """
+
+    __tablename__ = "ai_provider_config"
+
+    provider_name = Column(String(32), primary_key=True)
+    enabled = Column(Boolean, nullable=True)
+    default_model = Column(String(96), nullable=True)
+    base_url = Column(String(256), nullable=True)
+    max_concurrent = Column(Integer, nullable=True)
+    rate_per_minute = Column(Float, nullable=True)
+    notes = Column(Text, nullable=True)
+    updated_at = Column(String, nullable=True)
+    updated_by = Column(String, nullable=True)
+
+
+class AiFixCache(Base):
+    """
+    Cached AI fix bundle, keyed on (vuln_id, component, version, prompt_version).
+
+    The cache is tenant-shared by design — the AI advice for
+    ``CVE-2021-44832`` on ``log4j-core@2.16.0`` is the same regardless of
+    which user asks. This is the lever that makes the feature affordable:
+    a 1,000-finding scan typically reduces to ~50-150 net-new generations
+    with even a modest population of historical runs.
+
+    TTL policy enforced at upsert time:
+      * KEV-listed CVE → 7 days  (KEV status / exploitability narrative
+                                  may change)
+      * Non-KEV        → 30 days
+      * Negative cache → 1 hour  (LLM call failed; retry sooner)
+    """
+
+    __tablename__ = "ai_fix_cache"
+
+    cache_key = Column(String(64), primary_key=True)
+    vuln_id = Column(String(64), nullable=False, index=True)
+    component_name = Column(String(255), nullable=False)
+    component_version = Column(String(128), nullable=False)
+    prompt_version = Column(String(32), nullable=False)
+    schema_version = Column(Integer, nullable=False, default=1)
+
+    remediation_prose = Column(JSON, nullable=False)
+    upgrade_command = Column(JSON, nullable=False)
+    decision_recommendation = Column(JSON, nullable=False)
+
+    provider_used = Column(String(32), nullable=False)
+    model_used = Column(String(96), nullable=False)
+    total_cost_usd = Column(Float, nullable=False, default=0.0)
+
+    generated_at = Column(String, nullable=False)
+    expires_at = Column(String, nullable=False, index=True)
+    last_accessed_at = Column(String, nullable=False)
+
+    __table_args__ = (
+        Index(
+            "ix_ai_fix_cache_vuln_component",
+            "vuln_id",
+            "component_name",
+            "component_version",
+        ),
+    )
+
+
+class AiProviderCredential(Base):
+    """
+    AES-GCM-encrypted API credential for one AI provider (Phase 2 §2.2).
+
+    Tenant-shared by design (single-admin v1). The ``label`` column
+    scaffolds for the future "multiple keys per provider" feature; v1
+    UI keeps every row at ``label='default'``.
+
+    Hard rule: ``api_key_encrypted`` must NEVER be returned by any
+    endpoint. The router exposes ``api_key_preview`` (first 6 + last 4)
+    and ``api_key_present`` only.
+    """
+
+    __tablename__ = "ai_provider_credential"
+
+    id = Column(Integer, primary_key=True, index=True)
+    provider_name = Column(String(32), nullable=False, index=True)
+    label = Column(String(64), nullable=False, default="default")
+    api_key_encrypted = Column(Text, nullable=True)
+    base_url = Column(String(512), nullable=True)
+    default_model = Column(String(128), nullable=True)
+    tier = Column(String(16), nullable=False, default="paid")
+    is_default = Column(Boolean, nullable=False, default=False)
+    is_fallback = Column(Boolean, nullable=False, default=False)
+    enabled = Column(Boolean, nullable=False, default=True)
+    cost_per_1k_input_usd = Column(Float, nullable=False, default=0.0)
+    cost_per_1k_output_usd = Column(Float, nullable=False, default=0.0)
+    is_local = Column(Boolean, nullable=False, default=False)
+    max_concurrent = Column(Integer, nullable=True)
+    rate_per_minute = Column(Float, nullable=True)
+    created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=False)
+    last_test_at = Column(String, nullable=True)
+    last_test_success = Column(Boolean, nullable=True)
+    last_test_error = Column(Text, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("provider_name", "label", name="uq_ai_provider_credential_provider_label"),
+    )
+
+
+class AiSettings(Base):
+    """
+    Singleton AI settings row (Phase 2 §2.3).
+
+    Enforced via ``CHECK (id = 1)`` and the migration's ``INSERT`` of
+    the seed row. Reads always succeed; writes update the singleton in
+    place.
+    """
+
+    __tablename__ = "ai_settings"
+
+    id = Column(Integer, primary_key=True, default=1)
+    feature_enabled = Column(Boolean, nullable=False, default=True)
+    kill_switch_active = Column(Boolean, nullable=False, default=False)
+    budget_per_request_usd = Column(Float, nullable=False, default=0.10)
+    budget_per_scan_usd = Column(Float, nullable=False, default=5.00)
+    budget_daily_usd = Column(Float, nullable=False, default=5.00)
+    updated_at = Column(String, nullable=False)
+    updated_by_user_id = Column(String, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("id = 1", name="ck_ai_settings_singleton"),
+    )
+
+
+class AiCredentialAuditLog(Base):
+    """
+    Append-only audit trail for credential / settings mutations
+    (Phase 2 §2.6).
+
+    Hard rule: this table NEVER stores credential payloads. Only the
+    user, action, target, provider name, and a short context string.
+    """
+
+    __tablename__ = "ai_credential_audit_log"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String(128), nullable=True)
+    action = Column(String(48), nullable=False)
+    target_kind = Column(String(24), nullable=False)  # "credential" | "settings"
+    target_id = Column(Integer, nullable=True)
+    provider_name = Column(String(32), nullable=True)
+    detail = Column(String(240), nullable=True)
+    created_at = Column(String, nullable=False, index=True)
