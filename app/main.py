@@ -44,12 +44,14 @@ from .auth import require_auth, validate_auth_setup
 from .db import Base, SessionLocal, engine
 from .http_client import close_async_http_client, init_async_http_client
 from .middleware import MaxBodySizeMiddleware
-from .rate_limit import limiter, rate_limit_exceeded_handler
-from .routers import analysis as analysis_export_router
 
 # --- Routers --------------------------------------------------------------
 from .nvd_mirror.api import router as nvd_mirror_admin_router
+from .rate_limit import limiter, rate_limit_exceeded_handler
 from .routers import (
+    ai_credentials,
+    ai_fixes,
+    ai_usage,
     analyze_endpoints,
     compare,
     cves,
@@ -62,6 +64,7 @@ from .routers import (
     sboms_crud,
     schedules,
 )
+from .routers import analysis as analysis_export_router
 from .routers import dashboard as dashboard_trend_router
 from .routers import sbom as sbom_features_router
 from .services.analysis_service import backfill_analytics_tables
@@ -271,6 +274,9 @@ app.include_router(dashboard_main.router, dependencies=_protected)
 app.include_router(schedules.router, dependencies=_protected)
 app.include_router(cves.router, dependencies=_protected)
 app.include_router(compare.router, dependencies=_protected)
+app.include_router(ai_usage.router, dependencies=_protected)
+app.include_router(ai_fixes.router, dependencies=_protected)
+app.include_router(ai_credentials.router, dependencies=_protected)
 
 # Feature routers (kept from earlier refactor) — additive paths.
 app.include_router(

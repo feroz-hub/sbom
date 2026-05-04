@@ -9,6 +9,7 @@ Routes:
 """
 
 import logging
+from datetime import UTC
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
@@ -69,6 +70,14 @@ def public_analysis_config() -> dict:
         "vulndb_configured": app_settings.vulndb_configured,
         # Feature flag for the in-app CVE detail modal (Phase 5 rollback path).
         "cve_modal_enabled": app_settings.cve_modal_enabled,
+        # AI fix generator master flag + default provider name. When the
+        # flag is false the frontend hides the AI surface entirely. Default
+        # provider is surfaced for the empty-state CTA copy.
+        "ai_fixes_enabled": app_settings.ai_fixes_enabled and not app_settings.ai_fixes_kill_switch,
+        "ai_default_provider": app_settings.ai_default_provider,
+        # Phase 4 rollout flag — true when the Settings → AI UI surface is
+        # available. Frontend reads this to gate /settings/ai.
+        "ai_ui_config_enabled": bool(app_settings.ai_fixes_ui_config_enabled),
     }
 
 
@@ -98,7 +107,7 @@ def _nvd_mirror_health(db: Session) -> dict:
     ``{"available": False}`` rather than failing the whole health check —
     /health must NEVER be the reason a deploy rolls back.
     """
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     try:
         from ..nvd_mirror.adapters.secrets import (
@@ -128,7 +137,7 @@ def _nvd_mirror_health(db: Session) -> dict:
         # goes; the SQLAlchemy Session may flush the seed but that's a
         # transient detail.
 
-        verdict = compute_freshness(snap, datetime.now(tz=timezone.utc))
+        verdict = compute_freshness(snap, datetime.now(tz=UTC))
         return {
             "enabled": snap.enabled,
             "last_success_at": (
