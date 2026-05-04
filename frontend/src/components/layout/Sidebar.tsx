@@ -13,6 +13,7 @@ import {
   FileText,
   FolderOpen,
   LayoutDashboard,
+  Settings as SettingsIcon,
   Sparkles,
   Star,
   X,
@@ -52,6 +53,15 @@ const NAV_ITEMS: NavItem[] = [
     ],
   },
   { href: '/schedules', label: 'Schedules', icon: CalendarClock },
+  {
+    href: '/settings',
+    label: 'Settings',
+    icon: SettingsIcon,
+    children: [
+      { href: '/settings/ai', label: 'AI configuration' },
+      { href: '/admin/ai-usage', label: 'AI usage' },
+    ],
+  },
 ];
 
 function isActiveItem(item: NavItem, pathname: string): boolean {
@@ -59,6 +69,11 @@ function isActiveItem(item: NavItem, pathname: string): boolean {
   if (item.href === '/analysis/compare') return pathname.startsWith('/analysis/compare');
   if (item.href === '/analysis') {
     return pathname.startsWith('/analysis') && !pathname.startsWith('/analysis/compare');
+  }
+  // Settings is the parent for both /settings/* and the AI cost dashboard
+  // /admin/ai-usage — both are operator-side configuration surfaces.
+  if (item.href === '/settings') {
+    return pathname.startsWith('/settings') || pathname.startsWith('/admin/ai-usage');
   }
   return pathname.startsWith(item.href);
 }
