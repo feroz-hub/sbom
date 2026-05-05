@@ -1,0 +1,198 @@
+{
+  "spdxVersion": "SPDX-2.3",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "name": "ControlSW.out",
+  "documentNamespace": "https://spdx.org/spdxdocs/ControlSW.out-2026-04-17",
+  "creationInfo": {
+    "created": "2026-04-17T15:14:31Z",
+    "creators": [
+      "Organization: HCLTech",
+      "Tool: map-to-spdx-sbom"
+    ]
+  },
+  "documentDescribes": [
+    "SPDXRef-Package-Executable"
+  ],
+  "packages": [
+    {
+      "SPDXID": "SPDXRef-Package-Executable",
+      "name": "ControlSW.out",
+      "primaryPackagePurpose": "APPLICATION",
+      "versionInfo": "10.8",
+      "supplier": "Organization: Internal",
+      "downloadLocation": "INTERNAL_REPOSITORY",
+      "filesAnalyzed": false,
+      "licenseDeclared": "LicenseRef-Proprietary",
+      "licenseConcluded": "LicenseRef-Proprietary",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:generic/hcltech/controlsw.out@10.8"
+        }
+      ],
+      "packageVerificationCode": {
+        "packageVerificationCodeValue": "d7886b1258e32a88"
+      },
+      "packageComment": "End-of-Support (EOS) and End-of-Life (EOL) information for this component is maintained externally as part of supplier and product lifecycle management processes. Refer to the manufacturer\u2019s official lifecycle policy or internal lifecycle records for authoritative EOS/EOL dates and support status."
+    },
+    {
+      "SPDXID": "SPDXRef-Package-Lib-1",
+      "name": "libCommon.a",
+      "primaryPackagePurpose": "LIBRARY",
+      "versionInfo": "10.8",
+      "supplier": "Organization: Internal",
+      "downloadLocation": "INTERNAL_REPOSITORY",
+      "filesAnalyzed": false,
+      "licenseDeclared": "LicenseRef-Proprietary",
+      "licenseConcluded": "LicenseRef-Proprietary",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:generic/hcltech/libcommon.a@10.8#C%3A/Console/Control/Common/Debug/libCommon.a"
+        }
+      ],
+      "packageVerificationCode": {
+        "packageVerificationCodeValue": "95b61b533187cd86"
+      },
+      "packageComment": "End-of-Support (EOS) and End-of-Life (EOL) information for this component is maintained externally as part of supplier and product lifecycle management processes. Refer to the manufacturer\u2019s official lifecycle policy or internal lifecycle records for authoritative EOS/EOL dates and support status."
+    },
+    {
+      "SPDXID": "SPDXRef-Package-Lib-2",
+      "name": "libnucleus.a",
+      "primaryPackagePurpose": "LIBRARY",
+      "versionInfo": "2016.5.0",
+      "supplier": "Organization: Siemens (Mentor Graphics) - Nucleus RTOS",
+      "downloadLocation": "https://www.siemens.com/embedded",
+      "filesAnalyzed": false,
+      "licenseDeclared": "LicenseRef-Nucleus-RTOS-Proprietary",
+      "licenseConcluded": "LicenseRef-Nucleus-RTOS-Proprietary",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:generic/libnucleus.a@2016.5.0#C%3A/Console/Control/SysPrjct/output/csgnu_arm/twrk70f120m/Debug/lib/libnucleus.a"
+        }
+      ],
+      "packageVerificationCode": {
+        "packageVerificationCodeValue": "d30edda378856a00"
+      },
+      "packageComment": "End-of-Support (EOS) and End-of-Life (EOL) information for this component is maintained externally as part of supplier and product lifecycle management processes. Refer to the manufacturer\u2019s official lifecycle policy or internal lifecycle records for authoritative EOS/EOL dates and support status."
+    },
+    {
+      "SPDXID": "SPDXRef-Package-Lib-3",
+      "name": "libc.a",
+      "primaryPackagePurpose": "LIBRARY",
+      "versionInfo": "5.2.0",
+      "supplier": "Organization: GNU Arm Embedded Toolchain",
+      "downloadLocation": "https://developer.arm.com/tools-and-software/open-source-software",
+      "filesAnalyzed": false,
+      "licenseDeclared": "GPL-3.0-with-GCC-exception",
+      "licenseConcluded": "GPL-3.0-with-GCC-exception",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:generic/libc.a@5.2.0?arch=armv7e-m&toolchain=arm-none-eabi"
+        }
+      ],
+      "packageVerificationCode": {
+        "packageVerificationCodeValue": "a643de70a8d373cf"
+      },
+      "packageComment": "End-of-Support (EOS) and End-of-Life (EOL) information for this component is maintained externally as part of supplier and product lifecycle management processes. Refer to the manufacturer\u2019s official lifecycle policy or internal lifecycle records for authoritative EOS/EOL dates and support status."
+    },
+    {
+      "SPDXID": "SPDXRef-Package-Lib-4",
+      "name": "libm.a",
+      "primaryPackagePurpose": "LIBRARY",
+      "versionInfo": "5.2.0",
+      "supplier": "Organization: GNU Arm Embedded Toolchain",
+      "downloadLocation": "https://developer.arm.com/tools-and-software/open-source-software",
+      "filesAnalyzed": false,
+      "licenseDeclared": "GPL-3.0-with-GCC-exception",
+      "licenseConcluded": "GPL-3.0-with-GCC-exception",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:generic/libm.a@5.2.0?arch=armv7e-m&toolchain=arm-none-eabi"
+        }
+      ],
+      "packageVerificationCode": {
+        "packageVerificationCodeValue": "4eccbf6b051c03de"
+      },
+      "packageComment": "End-of-Support (EOS) and End-of-Life (EOL) information for this component is maintained externally as part of supplier and product lifecycle management processes. Refer to the manufacturer\u2019s official lifecycle policy or internal lifecycle records for authoritative EOS/EOL dates and support status."
+    },
+    {
+      "SPDXID": "SPDXRef-Package-Lib-5",
+      "name": "libgcc.a",
+      "primaryPackagePurpose": "LIBRARY",
+      "versionInfo": "5.2.0",
+      "supplier": "Organization: GNU Arm Embedded Toolchain",
+      "downloadLocation": "https://developer.arm.com/tools-and-software/open-source-software",
+      "filesAnalyzed": false,
+      "licenseDeclared": "GPL-3.0-with-GCC-exception",
+      "licenseConcluded": "GPL-3.0-with-GCC-exception",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:generic/libgcc.a@5.2.0?arch=armv7e-m&toolchain=arm-none-eabi"
+        }
+      ],
+      "packageVerificationCode": {
+        "packageVerificationCodeValue": "acd4522a37fe976a"
+      },
+      "packageComment": "End-of-Support (EOS) and End-of-Life (EOL) information for this component is maintained externally as part of supplier and product lifecycle management processes. Refer to the manufacturer\u2019s official lifecycle policy or internal lifecycle records for authoritative EOS/EOL dates and support status."
+    }
+  ],
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-Package-Executable",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-Lib-1"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-Executable",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-Lib-2"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-Executable",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-Lib-3"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-Executable",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-Lib-4"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-Executable",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-Lib-5"
+    }
+  ],
+  "annotations": [
+    {
+      "annotationDate": "2026-04-24T05:56:08Z",
+      "annotationType": "OTHER",
+      "annotator": "Organization: HCLTech",
+      "comment": "Known vulnerabilities for components are managed via external VEX and vulnerability tracking system linked to this SBOM."
+    }
+  ],
+  "hasExtractedLicensingInfos": [
+    {
+      "licenseId": "LicenseRef-Proprietary",
+      "extractedText": "Proprietary software license. Redistribution and modification are restricted by the manufacturer.",
+      "name": "Proprietary Software License"
+    },
+    {
+      "licenseId": "LicenseRef-Nucleus-RTOS-Proprietary",
+      "extractedText": "Commercial proprietary license for Siemens (Mentor Graphics) Nucleus RTOS.",
+      "name": "Nucleus RTOS Proprietary License"
+    }
+  ]
+}

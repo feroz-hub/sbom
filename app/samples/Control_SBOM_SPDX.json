@@ -1,0 +1,153 @@
+{
+  "spdxVersion": "SPDX-2.3",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "name": "ControlSW.out",
+  "documentNamespace": "https://spdx.org/spdxdocs/ControlSW.out-2026-04-17",
+  "creationInfo": {
+    "created": "2026-04-17T15:14:31Z",
+    "creators": [
+      "Tool: map-to-spdx-sbom"
+    ]
+  },
+  "documentDescribes": [
+    "SPDXRef-Package-Executable"
+  ],
+  "packages": [
+    {
+      "SPDXID": "SPDXRef-Package-Executable",
+      "name": "ControlSW.out",
+      "primaryPackagePurpose": "APPLICATION",
+      "versionInfo": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "NOASSERTION",
+      "licenseConcluded": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:generic/ControlSW.out@NOASSERTION"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Package-Lib-1",
+      "name": "libCommon.a",
+      "primaryPackagePurpose": "LIBRARY",
+      "versionInfo": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "NOASSERTION",
+      "licenseConcluded": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:generic/libCommon.a@NOASSERTION?path=C:/Console/Control/Common/Debug/libCommon.a"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Package-Lib-2",
+      "name": "libnucleus.a",
+      "primaryPackagePurpose": "LIBRARY",
+      "versionInfo": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "NOASSERTION",
+      "licenseConcluded": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:generic/libnucleus.a@NOASSERTION?path=C:/Console/Control/SysPrjct/output/csgnu_arm/twrk70f120m/Debug/lib/libnucleus.a"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Package-Lib-3",
+      "name": "libc.a",
+      "primaryPackagePurpose": "LIBRARY",
+      "versionInfo": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "NOASSERTION",
+      "licenseConcluded": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:generic/libc.a@NOASSERTION?toolchain=arm-none-eabi&arch=armv7e-m"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Package-Lib-4",
+      "name": "libm.a",
+      "primaryPackagePurpose": "LIBRARY",
+      "versionInfo": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "NOASSERTION",
+      "licenseConcluded": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:generic/libm.a@NOASSERTION?toolchain=arm-none-eabi&arch=armv7e-m"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Package-Lib-5",
+      "name": "libgcc.a",
+      "primaryPackagePurpose": "LIBRARY",
+      "versionInfo": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "NOASSERTION",
+      "licenseConcluded": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:generic/libgcc.a@NOASSERTION?toolchain=arm-none-eabi&arch=armv7e-m"
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-Package-Executable",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-Package-Lib-1"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-Executable",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-Package-Lib-2"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-Executable",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-Package-Lib-3"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-Executable",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-Package-Lib-4"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-Executable",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-Package-Lib-5"
+    }
+  ]
+}
