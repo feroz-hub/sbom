@@ -6,6 +6,7 @@ import { ToastProvider } from '@/hooks/useToast';
 import { ThemeProvider } from '@/components/theme/ThemeProvider';
 import { CommandPalette } from '@/components/layout/CommandPalette';
 import { KeyboardCheatsheet } from '@/components/layout/KeyboardCheatsheet';
+import { AiBatchProgressProvider } from '@/components/ai-fixes/GlobalAiBatchProgress';
 
 export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(
@@ -34,9 +35,11 @@ export function Providers({ children }: { children: ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <ToastProvider>
-          {children}
-          <CommandPalette />
-          <KeyboardCheatsheet />
+          <AiBatchProgressProvider>
+            {children}
+            <CommandPalette />
+            <KeyboardCheatsheet />
+          </AiBatchProgressProvider>
         </ToastProvider>
       </ThemeProvider>
     </QueryClientProvider>

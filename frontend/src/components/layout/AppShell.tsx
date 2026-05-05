@@ -2,6 +2,7 @@
 
 import { Sidebar } from './Sidebar';
 import { SidebarProvider, useSidebar } from './SidebarContext';
+import { GlobalAiBatchBanner } from '@/components/ai-fixes/GlobalAiBatchProgress';
 import { cn } from '@/lib/utils';
 
 function Shell({ children }: { children: React.ReactNode }) {
@@ -30,6 +31,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         )}
       >
         <div className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col min-h-0">
+          <GlobalAiBatchBanner />
           {children}
         </div>
       </main>

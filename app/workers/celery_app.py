@@ -36,6 +36,7 @@ celery_app = Celery(
         "app.nvd_mirror.tasks",
         "app.workers.scheduled_analysis",
         "app.workers.cve_refresh",
+        "app.workers.ai_fix_tasks",
     ],
 )
 

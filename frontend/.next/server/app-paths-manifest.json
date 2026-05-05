@@ -1,6 +1,7 @@
 {
-  "/_not-found/page": "app/_not-found/page.js",
   "/_global-error/page": "app/_global-error/page.js",
+  "/_not-found/page": "app/_not-found/page.js",
+  "/admin/ai-usage/page": "app/admin/ai-usage/page.js",
   "/analysis/[id]/page": "app/analysis/[id]/page.js",
   "/analysis/compare/page": "app/analysis/compare/page.js",
   "/analysis/page": "app/analysis/page.js",
@@ -8,5 +9,7 @@
   "/projects/page": "app/projects/page.js",
   "/sboms/[id]/page": "app/sboms/[id]/page.js",
   "/sboms/page": "app/sboms/page.js",
-  "/schedules/page": "app/schedules/page.js"
+  "/schedules/page": "app/schedules/page.js",
+  "/settings/ai/page": "app/settings/ai/page.js",
+  "/settings/page": "app/settings/page.js"
 }

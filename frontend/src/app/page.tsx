@@ -9,6 +9,7 @@ import { FindingsTrendChart } from '@/components/dashboard/FindingsTrendChart/Fi
 import { LifetimeStats } from '@/components/dashboard/LifetimeStats/LifetimeStats';
 import { TopVulnerableSboms } from '@/components/dashboard/TopVulnerableSboms';
 import { ActivityFeed } from '@/components/dashboard/ActivityFeed';
+import { AiConfigBanner } from '@/components/dashboard/AiConfigBanner';
 import {
   getDashboardLifetime,
   getDashboardPosture,
@@ -57,6 +58,8 @@ export default function DashboardPage() {
         subtitle="Real-time security posture across your SBOM portfolio"
       />
       <div className="space-y-6 p-6">
+        <AiConfigBanner />
+
         <Motion preset="rise">
           <HeroPostureCard
             posture={postureQuery.data}

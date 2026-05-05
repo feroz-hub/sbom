@@ -14,9 +14,11 @@ import { Alert } from '@/components/ui/Alert';
 import { ExportMenu } from '@/components/ui/ExportMenu';
 import { Surface, SurfaceContent, SurfaceHeader } from '@/components/ui/Surface';
 import { Motion } from '@/components/ui/Motion';
+import { RunBatchProgress } from '@/components/ai-fixes/RunBatchProgress';
 import { FindingsTable } from '@/components/analysis/FindingsTable';
 import { RunDetailHero } from '@/components/analysis/RunDetailHero';
 import { PageSpinner, SkeletonTable } from '@/components/ui/Spinner';
+import { DEFAULT_FILTERS, type FindingsFilterState } from '@/lib/findingFilters';
 import {
   getAnalysisConfig,
   getRun,
@@ -39,6 +41,25 @@ export default function AnalysisDetailPage({ params }: AnalysisDetailPageProps) 
   const router = useRouter();
   const { showToast } = useToast();
   const [severityFilter, setSeverityFilter] = useState('');
+  // Lifted filter state — drives both the findings table and the
+  // scope-aware AI fix CTA. The findings table operates in controlled
+  // mode; the CTA reads ``filter`` directly to compose its scope.
+  const [filter, setFilter] = useState<FindingsFilterState>(() => ({
+    ...DEFAULT_FILTERS,
+  }));
+  // Lifted row-selection state. Persists across filter changes (the
+  // table doesn't deselect when filters narrow). Selection takes
+  // precedence over filters in the CTA's scope resolution.
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<number>>(
+    () => new Set(),
+  );
+  // Keep the page-level severity dropdown in sync with the filter
+  // object so server-side severity narrowing (a query param) and
+  // client-side scope (sent to /ai-fixes) stay aligned.
+  const handleFilterChange = (next: FindingsFilterState) => {
+    setFilter(next);
+    setSeverityFilter(next.severityFilter);
+  };
   const [pdfDownloading, setPdfDownloading] = useState(false);
   const [csvDownloading, setCsvDownloading] = useState(false);
   const [sarifDownloading, setSarifDownloading] = useState(false);
@@ -212,6 +233,22 @@ export default function AnalysisDetailPage({ params }: AnalysisDetailPageProps) 
           Outcome: <span className="text-foreground">{runStatusDescription(run.run_status)}</span>
         </p>
 
+        {/* AI remediation banner — only when the feature flag is enabled.
+            Filter + selection state is lifted to this page so the CTA can
+            derive its scope (POST /ai-fixes body) from the same filter
+            chips and row checkboxes the findings table renders.
+            Selection takes precedence over filters when non-empty. */}
+        {analysisConfig?.ai_fixes_enabled ? (
+          <Motion preset="rise" delay={40}>
+            <RunBatchProgress
+              runId={id}
+              filter={filter}
+              selectedIds={Array.from(selectedIds)}
+              onClearSelection={() => setSelectedIds(new Set())}
+            />
+          </Motion>
+        ) : null}
+
         {/* Findings */}
         <Motion preset="rise" delay={80}>
           <Surface variant="elevated">
@@ -240,9 +277,19 @@ export default function AnalysisDetailPage({ params }: AnalysisDetailPageProps) 
                   error={findingsError}
                   onSeverityChange={setSeverityFilter}
                   severityFilter={severityFilter}
+                  filter={filter}
+                  onFilterChange={handleFilterChange}
+                  selectedIds={
+                    analysisConfig?.ai_fixes_enabled ? selectedIds : undefined
+                  }
+                  onSelectionChange={
+                    analysisConfig?.ai_fixes_enabled ? setSelectedIds : undefined
+                  }
                   runId={id}
                   scanName={run?.sbom_name ?? null}
                   cveModalEnabled={cveModalEnabled}
+                  aiFixesEnabled={Boolean(analysisConfig?.ai_fixes_enabled)}
+                  aiProviderLabel={analysisConfig?.ai_default_provider ?? undefined}
                 />
               )}
             </SurfaceContent>

@@ -8,6 +8,7 @@ import {
   Layers,
   Rows3,
   Rows4,
+  Sparkles,
   Wrench,
 } from 'lucide-react';
 import { Alert } from '@/components/ui/Alert';
@@ -29,9 +30,11 @@ import { SeverityBadge } from '@/components/ui/Badge';
 import { CvssMeter } from '@/components/ui/CvssMeter';
 import { KevBadge } from '@/components/ui/KevBadge';
 import { EpssChip } from '@/components/ui/EpssChip';
+import { SelectionCheckbox } from '@/components/ui/SelectionCheckbox';
 import { SkeletonRow } from '@/components/ui/Spinner';
 import { Pagination } from '@/components/ui/Pagination';
 import { FindingFilterPanel } from '@/components/analysis/FindingFilterPanel';
+import { SelectionToolbar } from '@/components/analysis/SelectionToolbar';
 import {
   DEFAULT_FILTERS,
   matchesFindingFilter,
@@ -40,7 +43,16 @@ import {
 import { formatDateShort, truncate, cn } from '@/lib/utils';
 import { useTableSort } from '@/hooks/useTableSort';
 import { usePagination } from '@/hooks/usePagination';
+import { useRunAiFixList } from '@/hooks/useAiFix';
 import type { EnrichedFinding } from '@/types';
+
+function aiFixLookupKey(
+  vulnId: string | null | undefined,
+  componentName: string | null | undefined,
+  componentVersion: string | null | undefined,
+): string {
+  return `${vulnId ?? ''}|${componentName ?? ''}|${componentVersion ?? ''}`;
+}
 
 const SEVERITY_RANK: Record<string, number> = {
   CRITICAL: 5,
@@ -82,6 +94,25 @@ interface FindingsTableProps {
   error: Error | null;
   onSeverityChange?: (severity: string) => void;
   severityFilter?: string;
+  /**
+   * Controlled filter state. When supplied, the table uses ``filter`` as
+   * the source of truth and calls ``onFilterChange`` on every mutation
+   * (filter chips, search, advanced panel). When omitted the table
+   * keeps its internal ``useState`` (legacy uncontrolled mode). The
+   * controlled mode is what the multi-batch CTA card on the run detail
+   * page uses to drive scope-aware AI fix generation.
+   */
+  filter?: FindingsFilterState;
+  onFilterChange?: (next: FindingsFilterState) => void;
+  /**
+   * Controlled row-selection state. When supplied, the table renders a
+   * checkbox column with a tri-state header and persists the selection
+   * across filter changes (selecting Critical rows then switching to
+   * Medium does NOT deselect). When omitted, no selection UI is
+   * rendered.
+   */
+  selectedIds?: ReadonlySet<number>;
+  onSelectionChange?: (next: ReadonlySet<number>) => void;
   /** Analysis run id — when present, the modal uses the scan-aware variant (component context + recommended upgrade). */
   runId?: number;
   /** Human-friendly scan label (typically the SBOM name) shown in the modal's component-context line. */
@@ -92,6 +123,13 @@ interface FindingsTableProps {
    * Phase-5 rollback path. Default: ``true``.
    */
   cveModalEnabled?: boolean;
+  /**
+   * Master flag for the AI remediation section inside the CVE modal.
+   * When true the section renders alongside the deterministic CVE data.
+   */
+  aiFixesEnabled?: boolean;
+  /** Provider name shown in the empty-state CTA copy. */
+  aiProviderLabel?: string;
 }
 
 /**
@@ -233,26 +271,64 @@ export function FindingsTable({
   error,
   onSeverityChange,
   severityFilter = '',
+  filter: filterProp,
+  onFilterChange,
+  selectedIds,
+  onSelectionChange,
   runId,
   scanName,
   cveModalEnabled = true,
+  aiFixesEnabled = false,
+  aiProviderLabel,
 }: FindingsTableProps) {
-  const [filter, setFilter] = useState<FindingsFilterState>(() => ({
+  const selectionEnabled = selectedIds !== undefined && onSelectionChange !== undefined;
+  // Controlled mode: when ``filterProp`` is supplied, defer to the
+  // parent's source of truth. The internal state still exists as a
+  // fallback for callers that haven't migrated.
+  const isControlled = filterProp !== undefined;
+  const [internalFilter, setInternalFilter] = useState<FindingsFilterState>(() => ({
     ...DEFAULT_FILTERS,
     severityFilter,
   }));
+  const filter = isControlled ? filterProp : internalFilter;
+  const setFilter = useCallback(
+    (
+      update:
+        | FindingsFilterState
+        | ((prev: FindingsFilterState) => FindingsFilterState),
+    ) => {
+      if (isControlled) {
+        const next =
+          typeof update === 'function'
+            ? (update as (prev: FindingsFilterState) => FindingsFilterState)(
+                filter as FindingsFilterState,
+              )
+            : update;
+        onFilterChange?.(next);
+        return;
+      }
+      setInternalFilter(update);
+    },
+    [isControlled, filter, onFilterChange],
+  );
   const [density, setDensity] = useState<Density>('comfortable');
   const [expandedRows, setExpandedRows] = useState<Record<number, boolean>>({});
 
   // Active CVE for the in-app detail modal. We keep a single page-level
   // dialog instance and swap the active CVE — one query at a time, no
   // per-row dialog mount.
-  const [activeCve, setActiveCve] = useState<{ id: string; seed: CveRowSeed } | null>(null);
+  const [activeCve, setActiveCve] = useState<
+    { id: string; seed: CveRowSeed; findingId: number | null } | null
+  >(null);
   const { onHoverStart, onHoverEnd } = useCveHoverPrefetch();
   const openCve = useCallback(
     (f: EnrichedFinding) => {
       if (!f.vuln_id) return;
-      setActiveCve({ id: f.vuln_id, seed: findingToSeed(f) });
+      setActiveCve({
+        id: f.vuln_id,
+        seed: findingToSeed(f),
+        findingId: typeof f.id === 'number' ? f.id : null,
+      });
     },
     [],
   );
@@ -333,14 +409,83 @@ export function FindingsTable({
     );
   }
 
+  // AI fix indicator column — only fetched when the feature is on AND we
+  // have a runId. Builds an O(1) lookup keyed on the same triple the
+  // backend uses for cache keys, so each row's check stays cheap.
+  const aiFixListEnabled = Boolean(aiFixesEnabled && runId != null);
+  const { data: aiFixList } = useRunAiFixList(runId ?? null, { enabled: aiFixListEnabled });
+  const aiFixKeys = useMemo<Set<string>>(() => {
+    if (!aiFixListEnabled || !aiFixList) return new Set();
+    return new Set(
+      aiFixList.items.map((it) =>
+        aiFixLookupKey(it.vuln_id, it.component_name, it.component_version),
+      ),
+    );
+  }, [aiFixListEnabled, aiFixList]);
+  const showAiCol = aiFixListEnabled;
+
   const total = findings?.length ?? 0;
   const shown = filteredFindings.length;
   const cellPadding = DENSITY_CLASS[density];
-  const COL_COUNT = 9; // chevron + vuln + severity + cvss + epss + risk + component + sources + fix
+  // (select?) + chevron + vuln + severity + cvss + epss + risk + component + sources + (ai?) + fix
+  const COL_COUNT =
+    (selectionEnabled ? 1 : 0) + (showAiCol ? 10 : 9);
 
   const toggleExpand = (id: number) => {
     setExpandedRows((prev) => ({ ...prev, [id]: !prev[id] }));
   };
+
+  // Tri-state computed against the *filtered* (not paginated) view —
+  // "Select all on filtered view" is the bulk-actions UX expectation.
+  // Selection state lives in IDs so rows on other paginated pages
+  // count too.
+  const filteredIds = useMemo(
+    () => filteredFindings.map((f) => f.id),
+    [filteredFindings],
+  );
+  const headerSelectionState: 'all' | 'some' | 'none' = useMemo(() => {
+    if (!selectionEnabled || filteredIds.length === 0 || !selectedIds) return 'none';
+    let selectedCount = 0;
+    for (const id of filteredIds) {
+      if (selectedIds.has(id)) selectedCount++;
+    }
+    if (selectedCount === 0) return 'none';
+    if (selectedCount === filteredIds.length) return 'all';
+    return 'some';
+  }, [selectionEnabled, selectedIds, filteredIds]);
+
+  const handleHeaderToggle = useCallback(
+    (next: boolean) => {
+      if (!selectionEnabled || !selectedIds || !onSelectionChange) return;
+      const updated = new Set(selectedIds);
+      if (next) {
+        // "all" or "some" → "all": add every visible filtered row.
+        for (const id of filteredIds) updated.add(id);
+      } else {
+        // "all" → "none": remove every visible filtered row.
+        // (Selection on rows outside the current filter persists.)
+        for (const id of filteredIds) updated.delete(id);
+      }
+      onSelectionChange(updated);
+    },
+    [selectionEnabled, selectedIds, onSelectionChange, filteredIds],
+  );
+
+  const handleRowToggle = useCallback(
+    (findingId: number, next: boolean) => {
+      if (!selectionEnabled || !selectedIds || !onSelectionChange) return;
+      const updated = new Set(selectedIds);
+      if (next) updated.add(findingId);
+      else updated.delete(findingId);
+      onSelectionChange(updated);
+    },
+    [selectionEnabled, selectedIds, onSelectionChange],
+  );
+
+  const handleClearSelection = useCallback(() => {
+    if (!onSelectionChange) return;
+    onSelectionChange(new Set());
+  }, [onSelectionChange]);
 
   return (
     <div className="space-y-3">
@@ -359,6 +504,14 @@ export function FindingsTable({
         totalCount={total}
         filteredCount={shown}
       />
+
+      {selectionEnabled && selectedIds ? (
+        <SelectionToolbar
+          selectedIds={selectedIds}
+          findings={findings}
+          onClear={handleClearSelection}
+        />
+      ) : null}
 
       {/* Density toggle */}
       <div className="flex items-center justify-end gap-1.5 px-1">
@@ -392,6 +545,20 @@ export function FindingsTable({
         <Table striped ariaLabel="Vulnerability findings">
           <TableHead>
             <tr>
+              {selectionEnabled ? (
+                <Th className="w-10 px-2">
+                  <SelectionCheckbox
+                    state={headerSelectionState}
+                    onChange={handleHeaderToggle}
+                    label={
+                      headerSelectionState === 'all'
+                        ? 'Deselect all visible findings'
+                        : 'Select all visible findings'
+                    }
+                    testId="findings-select-all"
+                  />
+                </Th>
+              ) : null}
               <Th className="w-8 px-2"><span className="sr-only">Expand</span></Th>
               <SortableTh
                 sortKey="vuln_id"
@@ -442,6 +609,11 @@ export function FindingsTable({
                 Component
               </SortableTh>
               <Th>Sources</Th>
+              {showAiCol ? (
+                <Th className="w-10 text-center">
+                  <span aria-label="AI remediation" title="AI remediation">AI</span>
+                </Th>
+              ) : null}
               <Th>Fix</Th>
             </tr>
           </TableHead>
@@ -462,6 +634,7 @@ export function FindingsTable({
                 const cwes = (f.cwe ?? '').split(',').map((s) => s.trim()).filter(Boolean);
                 const fixedVersions = parseJsonStringList(f.fixed_versions);
 
+                const isSelected = selectionEnabled && selectedIds?.has(f.id) === true;
                 return [
                   <tr
                     key={f.id}
@@ -469,8 +642,19 @@ export function FindingsTable({
                       'group transition-colors hover:bg-hcl-light/40',
                       f.in_kev && 'bg-red-50/30 dark:bg-red-950/10',
                       isExpanded && 'bg-surface-muted/50',
+                      isSelected && 'bg-primary/5 dark:bg-primary/10',
                     )}
                   >
+                    {selectionEnabled ? (
+                      <td className={cn('px-2 align-top', cellPadding)}>
+                        <SelectionCheckbox
+                          state={isSelected ? 'all' : 'none'}
+                          onChange={(next) => handleRowToggle(f.id, next)}
+                          label={`Select finding ${f.vuln_id ?? f.id}`}
+                          testId={`finding-select-${f.id}`}
+                        />
+                      </td>
+                    ) : null}
                     <td className={cn('px-2 align-top', cellPadding)}>
                       <button
                         type="button"
@@ -571,6 +755,25 @@ export function FindingsTable({
                     <td className={cn('px-4 align-top', cellPadding)}>
                       <SourceChips source={f.source} />
                     </td>
+                    {showAiCol ? (
+                      <td className={cn('px-2 align-top text-center', cellPadding)}>
+                        {aiFixKeys.has(
+                          aiFixLookupKey(f.vuln_id, f.component_name, f.component_version),
+                        ) ? (
+                          <button
+                            type="button"
+                            onClick={() => openCve(f)}
+                            aria-label={`Open AI remediation for ${f.vuln_id ?? 'this finding'}`}
+                            title="AI remediation generated"
+                            className="inline-flex h-6 w-6 items-center justify-center rounded-md text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/30"
+                          >
+                            <Sparkles className="h-3.5 w-3.5" aria-hidden />
+                          </button>
+                        ) : (
+                          <span aria-hidden className="text-hcl-muted/40">·</span>
+                        )}
+                      </td>
+                    ) : null}
                     <td className={cn('px-4 align-top', cellPadding)}>
                       <FixedVersionPills raw={f.fixed_versions} />
                     </td>
@@ -587,6 +790,7 @@ export function FindingsTable({
                             setActiveCve({
                               id: alias,
                               seed: { ...findingToSeed(f), vuln_id: alias },
+                              findingId: typeof f.id === 'number' ? f.id : null,
                             })
                           }
                         />
@@ -627,8 +831,13 @@ export function FindingsTable({
             if (!open) setActiveCve(null);
           }}
           onSwitchCve={(newId) =>
-            setActiveCve((prev) => (prev ? { id: newId, seed: prev.seed } : prev))
+            setActiveCve((prev) =>
+              prev ? { id: newId, seed: prev.seed, findingId: prev.findingId } : prev,
+            )
           }
+          findingId={activeCve?.findingId ?? null}
+          aiFixesEnabled={aiFixesEnabled}
+          aiProviderLabel={aiProviderLabel}
         />
       ) : null}
     </div>

@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **AI provider configuration via UI + free-tier provider additions (Phases 1-4 of the AI-config feature).**
+  Three new providers (Google Gemini, xAI Grok, Custom OpenAI-compatible)
+  joined the registry. AES-256-GCM at-rest credential encryption + a
+  DB-first config loader with env fallback now back the runtime. The
+  editable Settings → AI surface (`/settings/ai`) ships behind the
+  `AI_FIXES_UI_CONFIG_ENABLED` rollout flag (default `false`).
+  - **New providers:** Gemini Flash 2.5 (free tier — 15 req/min,
+    1M tokens/day), Grok 2 Mini (free tier — 60 req/min, 25k
+    tokens/day), Custom OpenAI-compatible (escape hatch for LM Studio,
+    LocalAI, LiteLLM proxies, etc.). Each implements the existing
+    `LlmProvider` protocol — no special-casing in the orchestrator.
+  - **Free-tier-aware UX:** Settings cards show "free (15 req/min)"
+    badges with tooltips. The new `/runs/{id}/ai-fixes/estimate`
+    endpoint projects batch wall-clock + cost so the frontend can
+    warn before kicking off a multi-hour Gemini-free batch.
+  - **`test_connection` on every provider:** typed `error_kind` enum
+    (auth / network / rate_limit / model_not_found / invalid_response /
+    unknown). The Settings UI's Save button is gated on a successful
+    test.
+  - **Encryption:** API keys are AES-256-GCM-encrypted with a master
+    key sourced from `AI_CONFIG_ENCRYPTION_KEY`. Generation script:
+    `python scripts/generate_encryption_key.py`. Rotation procedure
+    in [docs/runbook-ai-credentials.md §1](docs/runbook-ai-credentials.md).
+  - **No raw-key leaks.** Read endpoints expose `api_key_preview`
+    (first 6 + last 4 with ellipsis) and `api_key_present` only.
+    Sentinel-key sweep tests across log capture + DB rows verify
+    the property
+    (`tests/ai/test_credentials_router.py::test_no_raw_key_leaks_into_log_records`).
+  - **Audit trail.** Every mutation writes one row to
+    `ai_credential_audit_log` with detail passed through a regex
+    redactor (`sk-` / `AIzaSy` / `xai-` / long base64 → `[REDACTED]`).
+  - **Migration playbook:** `scripts/migrate_env_to_db.py` is
+    idempotent. Env-fallback ensures zero downtime — the DB path is
+    opt-in via `AI_FIXES_UI_CONFIG_ENABLED=true`. See
+    [docs/rollout-ai-fixes.md §7](docs/rollout-ai-fixes.md) for the
+    phased rollout playbook.
+
+  Documentation:
+  - User-facing: [docs/features/ai-configuration.md](docs/features/ai-configuration.md)
+  - Operator runbook: [docs/runbook-ai-credentials.md](docs/runbook-ai-credentials.md)
+  - Per-provider quick-starts: [docs/quickstart/](docs/quickstart/)
+    (Gemini free / Anthropic Claude / Ollama local / Custom OpenAI-compatible)
+  - Updated provider list: [docs/ai-providers.md](docs/ai-providers.md)
+
 ### Fixed
 
 - **Dashboard data consistency: KEV count, trend totals, lifetime metrics now reconcile across all surfaces.**
