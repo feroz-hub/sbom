@@ -29,6 +29,26 @@ _settings = get_settings()
 APP_VERSION = _settings.APP_VERSION
 
 
+def _resolve_default_ai_provider(app_settings) -> str:
+    """Read the live default provider name (DB-first, env fallback).
+
+    The Settings UI persists the default to ``ai_provider_credential`` via
+    the credential loader. The legacy ``AI_DEFAULT_PROVIDER`` env var is the
+    fallback for deployments still on the env-only migration path. If the
+    loader can't run (DB down / decrypt failure), surface the env value so
+    this endpoint never 500s on a config issue.
+    """
+    try:
+        from ..ai.config_loader import get_loader
+        from ..ai.registry import _resolve_default_provider_name
+
+        configs = get_loader().resolve_configs()
+        return _resolve_default_provider_name(configs)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("public_analysis_config.default_provider_resolve_failed: %s", exc)
+        return app_settings.ai_default_provider
+
+
 def public_analysis_config() -> dict:
     """
     Expose multi-source analysis settings (NVD + OSV + GHSA + VulDB + concurrency).
@@ -74,7 +94,7 @@ def public_analysis_config() -> dict:
         # flag is false the frontend hides the AI surface entirely. Default
         # provider is surfaced for the empty-state CTA copy.
         "ai_fixes_enabled": app_settings.ai_fixes_enabled and not app_settings.ai_fixes_kill_switch,
-        "ai_default_provider": app_settings.ai_default_provider,
+        "ai_default_provider": _resolve_default_ai_provider(app_settings),
         # Phase 4 rollout flag — true when the Settings → AI UI surface is
         # available. Frontend reads this to gate /settings/ai.
         "ai_ui_config_enabled": bool(app_settings.ai_fixes_ui_config_enabled),

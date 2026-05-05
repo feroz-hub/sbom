@@ -134,16 +134,24 @@ export interface TestConnectionState {
 
 /** Hook used inside the Add dialog's "Test connection" button. */
 export function useTestConnection() {
+  const qc = useQueryClient();
+
   const unsaved = useMutation<
     AiConnectionTestResult,
     Error,
     AiTestConnectionRequest
   >({
     mutationFn: (body) => testAiCredentialUnsaved(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: aiCredentialsQueryKey });
+    },
   });
 
   const saved = useMutation<AiConnectionTestResult, Error, number>({
     mutationFn: (id) => testAiCredentialSaved(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: aiCredentialsQueryKey });
+    },
   });
 
   return { unsaved, saved };

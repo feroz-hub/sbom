@@ -395,6 +395,10 @@ def apply_db_overrides(
 
 _registry_lock = threading.Lock()
 _registry: ProviderRegistry | None = None
+# Loader version observed when ``_registry`` was last (re)built. Compared
+# against the loader's current version on every ``get_registry`` call so
+# credential / settings writes propagate without a process restart.
+_registry_version: int = -1
 
 
 def _resolve_default_provider_name(configs: list[ProviderConfig]) -> str:
@@ -417,31 +421,45 @@ def _resolve_default_provider_name(configs: list[ProviderConfig]) -> str:
 
 
 def get_registry(db: Session | None = None) -> ProviderRegistry:
-    """Return the process-wide registry, building it on first call.
+    """Return the process-wide registry, rebuilding when config changes.
 
     Resolves provider configs via the Phase 2 :class:`AiConfigLoader`
-    (DB-first, env fallback). ``db`` is accepted for backward compat
-    but no longer used directly — the loader owns the session.
+    (DB-first, env fallback). The registry is cached, but its snapshot
+    is keyed on the loader's cross-process version counter — credential
+    or settings writes bump that counter and we rebuild on the next
+    call so the new default propagates without a process restart.
+    ``db`` is accepted for backward compat but no longer used directly —
+    the loader owns the session.
     """
-    global _registry
+    global _registry, _registry_version
     with _registry_lock:
-        if _registry is None:
-            try:
-                from .config_loader import get_loader
+        try:
+            from .config_loader import get_loader
 
-                configs = get_loader().resolve_configs()
-            except Exception as exc:  # noqa: BLE001
-                # Fall back to env-only when the loader can't construct
-                # (e.g. in early-boot test scenarios with no DB).
+            loader = get_loader()
+            current_version = loader.current_version()
+            if _registry is None or current_version != _registry_version:
+                configs = loader.resolve_configs()
+                default = _resolve_default_provider_name(configs)
+                _registry = ProviderRegistry(configs, default_provider=default)
+                _registry_version = current_version
+        except Exception as exc:  # noqa: BLE001
+            # Fall back to env-only when the loader can't construct
+            # (e.g. in early-boot test scenarios with no DB). We hold
+            # onto whatever registry we already had; if there's none,
+            # build one from env so callers don't get None.
+            if _registry is None:
                 log.warning("ai.registry.loader_unavailable: %s — env fallback", exc)
                 configs = build_configs_from_settings()
-            default = _resolve_default_provider_name(configs)
-            _registry = ProviderRegistry(configs, default_provider=default)
+                default = _resolve_default_provider_name(configs)
+                _registry = ProviderRegistry(configs, default_provider=default)
+                _registry_version = -1
         return _registry
 
 
 def reset_registry() -> None:
     """Drop the cached singleton (testing / config-reload helper)."""
-    global _registry
+    global _registry, _registry_version
     with _registry_lock:
         _registry = None
+        _registry_version = -1

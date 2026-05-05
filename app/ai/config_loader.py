@@ -167,6 +167,15 @@ class AiConfigLoader:
         # Bump the version so other processes drop their caches too.
         self._version.bump()
 
+    def current_version(self) -> int:
+        """Read the cross-process version counter without bumping.
+
+        Downstream caches (e.g. the provider registry) compare against
+        this to detect that a credential / settings write has landed and
+        rebuild their own snapshots.
+        """
+        return self._version.get()
+
     def _cache_is_fresh(self) -> bool:
         if self._cache is None:
             return False
