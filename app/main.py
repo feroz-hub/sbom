@@ -133,6 +133,19 @@ def _ensure_seed_data() -> None:
     _ensure_column("sbom_source", "warning_count", "INTEGER", "0")
     _ensure_column("sbom_source", "validated_at", "TEXT")
 
+    # Migration 013 — reclassify legacy rows that predate the validator
+    # wiring as 'pending' (validation_at IS NULL is the unambiguous tell).
+    # Idempotent: the WHERE clause excludes already-reclassified rows.
+    if engine.dialect.name == "sqlite":
+        with engine.connect() as conn:
+            conn.execute(
+                text(
+                    "UPDATE sbom_source SET status = 'pending' "
+                    "WHERE validated_at IS NULL AND status = 'validated'"
+                )
+            )
+            conn.commit()
+
     db = SessionLocal()
     try:
         db.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_sbom_type_typename ON sbom_type(typename)"))

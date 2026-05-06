@@ -725,6 +725,81 @@ def delete_sbom(
         )
 
 
+@router.post("/sboms/{sbom_id}/revalidate", response_model=SBOMSourceOut)
+def revalidate_sbom(
+    sbom_id: int = Path(..., description="SBOM ID (positive integer)"),
+    db: Session = Depends(get_db),
+):
+    """Re-run the 8-stage validator against the stored ``sbom_data``.
+
+    Brings legacy rows (uploaded before validation was wired into
+    ``create_sbom``) onto the same status convention as freshly-uploaded
+    rows. The endpoint is also a generic idempotent revalidation hook —
+    re-running is safe and produces the same result for any given body.
+
+    Response shape mirrors :func:`create_sbom`: 200 with
+    :class:`SBOMSourceOut` on a clean report, or 4xx with the structured
+    ``detail`` (sbom_id, status, failed_stage, entries, …) when the
+    report carries any error-severity entry. NTIA-only warnings keep
+    ``status='validated'`` and return 200 with ``warning_count > 0``.
+    """
+    sbom_id = _validate_positive_int(sbom_id, param_name="sbom_id")
+    sbom = db.get(SBOMSource, sbom_id)
+    if not sbom:
+        raise HTTPException(status_code=404, detail="SBOM not found")
+
+    body = sbom.sbom_data
+    if not body:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "sbom_data_missing",
+                "message": (
+                    "Cannot revalidate this SBOM — no document body is stored "
+                    "on the row. Re-upload the SBOM to populate it."
+                ),
+            },
+        )
+
+    raw = body.encode("utf-8") if isinstance(body, str) else bytes(body)
+    report = run_validation(raw)
+    sbom_status = _classify_status(report)
+    serialized_entries = [e.model_dump() for e in report.entries] if report.entries else None
+
+    sbom.status = sbom_status
+    sbom.failed_stage = report.first_error_stage
+    sbom.validation_errors = serialized_entries
+    sbom.error_count = report.error_count
+    sbom.warning_count = report.warning_count
+    sbom.validated_at = now_iso()
+
+    try:
+        db.add(sbom)
+        db.commit()
+        db.refresh(sbom)
+    except SQLAlchemyError as exc:
+        db.rollback()
+        log.error("revalidate_sbom DB error sbom_id=%d: %s", sbom_id, exc, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "db_error", "message": "Failed to persist revalidation."},
+        ) from exc
+
+    log.info(
+        "SBOM revalidated: id=%d name='%s' status=%s errors=%d warnings=%d",
+        sbom_id,
+        sbom.sbom_name,
+        sbom_status,
+        report.error_count,
+        report.warning_count,
+    )
+
+    if report.has_errors():
+        raise _validation_failure_response(int(sbom.id), report, str(sbom.sbom_name))
+
+    return sbom
+
+
 @router.post("/sboms/{sbom_id}/analyze", response_model=AnalysisRunOut, status_code=status.HTTP_201_CREATED)
 @analyze_route_limit
 async def run_analysis_for_sbom(

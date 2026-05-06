@@ -2,9 +2,12 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Copy, Check, Download, AlertOctagon, AlertTriangle, Info, Upload, ExternalLink, BookOpen } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { Copy, Check, Download, AlertOctagon, AlertTriangle, Info, Upload, ExternalLink, BookOpen, PlayCircle, Clock } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { HttpError, revalidateSbom } from '@/lib/api';
+import { useToast } from '@/hooks/useToast';
 import {
   groupEntriesByStage,
   severityChipClasses,
@@ -13,7 +16,15 @@ import {
   validationStatusMeta,
 } from '@/lib/sbomValidation';
 import { validationCodeAnchor } from '@/lib/validationCodeReference';
-import type { ValidationErrorEntry, ValidationReport } from '@/types';
+import type { SbomValidationFailureDetail, ValidationErrorEntry, ValidationReport } from '@/types';
+
+function isValidationFailureDetail(detail: unknown): detail is SbomValidationFailureDetail {
+  return (
+    typeof detail === 'object' &&
+    detail !== null &&
+    (detail as { code?: unknown }).code === 'sbom_validation_failed'
+  );
+}
 
 interface ValidationReportSectionProps {
   report: ValidationReport;
@@ -138,10 +149,39 @@ function EntryCard({ entry }: { entry: ValidationErrorEntry }) {
 }
 
 export function ValidationReportSection({ report, onReupload }: ValidationReportSectionProps) {
+  const queryClient = useQueryClient();
+  const { showToast } = useToast();
+  const [revalidating, setRevalidating] = useState(false);
+
   const meta = validationStatusMeta(report.status, report.warning_count);
   const grouped = useMemo(() => groupEntriesByStage(report.entries), [report.entries]);
   const isFailed = report.status === 'failed' || report.status === 'quarantined';
+  const isPending = report.status === 'pending';
   const isClean = report.status === 'validated' && report.warning_count === 0;
+
+  const handleRevalidate = async () => {
+    setRevalidating(true);
+    try {
+      await revalidateSbom(report.sbom_id);
+    } catch (err) {
+      // A 4xx with ``code: sbom_validation_failed`` is the expected return
+      // when the report has errors — the operation succeeded; the SBOM
+      // simply didn't pass. Refresh the page state and let the report
+      // section re-render in its failed form.
+      if (err instanceof HttpError && isValidationFailureDetail(err.detail)) {
+        // expected outcome — fall through to invalidation below
+      } else {
+        const message = err instanceof Error ? err.message : 'Validation failed to run.';
+        showToast(`Could not re-run validation: ${message}`, 'error');
+        setRevalidating(false);
+        return;
+      }
+    }
+    queryClient.invalidateQueries({ queryKey: ['sbom-validation-report', report.sbom_id] });
+    queryClient.invalidateQueries({ queryKey: ['sbom', report.sbom_id] });
+    queryClient.invalidateQueries({ queryKey: ['sbom-info', report.sbom_id] });
+    setRevalidating(false);
+  };
 
   const headlineCounts: string[] = [];
   if (report.error_count > 0) headlineCounts.push(`${report.error_count} error${report.error_count === 1 ? '' : 's'}`);
@@ -196,6 +236,19 @@ export function ValidationReportSection({ report, onReupload }: ValidationReport
               Download report (JSON)
             </Button>
           )}
+          {isPending && (
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleRevalidate}
+              loading={revalidating}
+              disabled={revalidating}
+              aria-label="Run validation against the stored SBOM body"
+            >
+              <PlayCircle className="h-4 w-4" aria-hidden />
+              {revalidating ? 'Validating…' : 'Run validation'}
+            </Button>
+          )}
           {isFailed && onReupload && (
             <Button type="button" size="sm" onClick={onReupload}>
               <Upload className="h-4 w-4" aria-hidden />
@@ -206,7 +259,21 @@ export function ValidationReportSection({ report, onReupload }: ValidationReport
       </CardHeader>
 
       <CardContent>
-        {isClean ? (
+        {isPending ? (
+          <div className="flex items-start gap-3 rounded-md border border-hcl-border bg-hcl-light/40 px-4 py-3">
+            <Clock className="h-4 w-4 mt-0.5 shrink-0 text-hcl-muted" aria-hidden />
+            <div className="text-sm text-hcl-navy">
+              <p>
+                This SBOM was uploaded before validation became available. Run validation now
+                to check format, schema, and compliance against the 8-stage pipeline.
+              </p>
+              <p className="mt-1 text-xs text-hcl-muted">
+                The stored SBOM body is unchanged by this operation. The result is persisted
+                so a refresh will keep showing the report.
+              </p>
+            </div>
+          </div>
+        ) : isClean ? (
           <p className="text-sm text-hcl-muted">
             No issues found. This SBOM passed all 8 validation stages cleanly.
           </p>

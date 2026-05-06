@@ -64,11 +64,20 @@ class SBOMSource(Base):
     modified_by = Column(String, nullable=True)
 
     # 8-stage validation outcome — see migration 012.
-    status = Column(String(24), nullable=False, default="validated", index=True)
+    # ``server_default`` mirrors migration 012's literals so test-path
+    # schemas built via ``Base.metadata.create_all`` carry the same
+    # NOT NULL safety net that production migrations install.
+    status = Column(
+        String(24),
+        nullable=False,
+        default="validated",
+        server_default="validated",
+        index=True,
+    )
     failed_stage = Column(String(32), nullable=True, index=True)
     validation_errors = Column(JSON, nullable=True)
-    error_count = Column(Integer, nullable=False, default=0)
-    warning_count = Column(Integer, nullable=False, default=0)
+    error_count = Column(Integer, nullable=False, default=0, server_default="0")
+    warning_count = Column(Integer, nullable=False, default=0, server_default="0")
     validated_at = Column(String, nullable=True)
 
     project = relationship("Projects", back_populates="sboms")

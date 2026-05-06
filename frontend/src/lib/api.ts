@@ -602,6 +602,21 @@ export function getSbomValidationReport(sbomId: number, signal?: AbortSignal) {
   return request<ValidationReport>(`/api/sboms/${sbomId}/validation-report`, { signal });
 }
 
+/**
+ * Re-run the 8-stage validator against the stored SBOM body and persist
+ * the outcome on the row. Used by the "Run validation" affordance on
+ * legacy ``status === 'pending'`` rows. The response body matches the
+ * upload endpoint: 200 + ``SBOMSource`` on a clean report, 4xx with
+ * ``HttpError.detail`` carrying the structured failure when the report
+ * has any error-severity entry.
+ */
+export function revalidateSbom(sbomId: number, signal?: AbortSignal) {
+  return request<SBOMSource>(`/api/sboms/${sbomId}/revalidate`, {
+    method: 'POST',
+    signal,
+  });
+}
+
 // ─── Dashboard trend ─────────────────────────────────────────────────────────
 export function getDashboardTrend(days = 30, signal?: AbortSignal) {
   return request<DashboardTrend>(`/dashboard/trend?days=${days}`, { signal });
