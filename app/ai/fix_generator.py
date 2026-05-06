@@ -25,7 +25,6 @@ The Phase 3 batch worker treats those as per-finding skips.
 
 from __future__ import annotations
 
-import json
 import logging
 import time
 import uuid
@@ -52,6 +51,7 @@ from .observability import (
     record_call,
 )
 from .prompts import PROMPT_VERSION, system_prompt, user_prompt
+from .parse import ParseError, parse_llm_json
 from .providers.base import (
     AiProviderError,
     BudgetExceededError,
@@ -59,13 +59,16 @@ from .providers.base import (
     LlmProvider,
     LlmRequest,
     ProviderUnavailableError,
+    UpstreamFailure,
 )
 from .registry import ProviderRegistry, get_registry
 from .schemas import (
     AiFixBundle,
     AiFixError,
+    AiFixErrorCode,
     AiFixResult,
     bundle_json_schema,
+    humanize_retry_after,
 )
 
 log = logging.getLogger("sbom.ai.fix_generator")
@@ -216,7 +219,13 @@ class AiFixGenerator:
                 self._registry.get(provider_name) if provider_name else self._registry.get_default()
             )
         except ProviderUnavailableError as exc:
-            return self._error(finding, ctx, "provider_unavailable", str(exc))
+            return self._error(
+                finding,
+                ctx,
+                "provider_unavailable",
+                str(exc),
+                provider_name=provider_name,
+            )
 
         # Cross-batch dedup: hold a lock keyed on the cache key while we
         # generate. Two concurrent batches that scope-overlap on this
@@ -289,7 +298,15 @@ class AiFixGenerator:
         usr_p = user_prompt(grounding_json=ctx.model_dump_for_prompt(), schema=schema)
         request_id = str(uuid.uuid4())
         # Pre-flight cost estimation.
-        max_output_tokens = 1024
+        # 3000 tokens of headroom (Phase 5): a complete bundle is
+        # ~600-900 visible tokens, but Gemini 2.5 Flash spends hidden
+        # "thinking" tokens against the same ``max_tokens`` budget. With
+        # the previous 1024-token cap, thinking ate the budget and the
+        # visible output truncated mid-JSON, surfacing as
+        # ``schema_parse_failed`` despite the model having an answer.
+        # Cost stays bounded — providers only bill for tokens actually
+        # produced, not the headroom.
+        max_output_tokens = 3000
         estimated_input = estimate_tokens(sys_p) + estimate_tokens(usr_p)
         estimated_cost = estimate_cost_usd(
             provider=provider.name,
@@ -308,7 +325,14 @@ class AiFixGenerator:
                 cache_key=cache_key,
                 error=f"budget_exceeded:{exc.scope}",
             )
-            return self._error(finding, ctx, "budget_exceeded", str(exc))
+            return self._error(
+                finding,
+                ctx,
+                "budget_exceeded",
+                str(exc),
+                provider_name=provider.name,
+                model_name=provider.default_model,
+            )
 
         req = LlmRequest(
             system=sys_p,
@@ -338,27 +362,60 @@ class AiFixGenerator:
                 cache_key=cache_key,
                 error=f"circuit_breaker_open:{exc}",
             )
-            return self._error(finding, ctx, "circuit_breaker_open", str(exc))
+            return self._error(
+                finding,
+                ctx,
+                "circuit_breaker_open",
+                str(exc),
+                provider_name=provider.name,
+                model_name=provider.default_model,
+            )
         except AiProviderError as exc:
+            error_code = _failure_to_error_code(exc.failure)
             self._log_failed_call(
                 request_id=request_id,
                 provider=provider.name,
                 model=provider.default_model,
                 cache_key=cache_key,
-                error=f"provider_error:{exc}",
+                error=f"{error_code}:{exc}",
             )
-            return self._error(finding, ctx, "provider_unavailable", str(exc))
+            return self._error(
+                finding,
+                ctx,
+                error_code,
+                str(exc),
+                provider_name=provider.name,
+                model_name=provider.default_model,
+                failure=exc.failure,
+            )
 
         latency_ms = int((time.perf_counter() - t0) * 1000)
 
-        bundle, parse_error = self._parse_bundle(resp.text, resp.parsed)
+        # Lenient parse — strips fences, trims preamble/trailing text,
+        # tries brace-extracted JSON. The strict schema is unchanged;
+        # we only tolerate cosmetic wrapping. See ``app.ai.parse``.
+        bundle, parse_error = self._parse_response(resp.text, resp.parsed)
+
+        # One retry — and only one. The retry message echoes a preview
+        # of the prior bad response so the model has the diagnostic
+        # context it needs to correct itself; without that, the retry
+        # is just a coin flip on the same prompt. Hard cap at exactly
+        # one retry: parse failures never burn more than 2 LLM calls.
         if bundle is None and parse_error is not None:
-            # Single retry with stricter instructions (Phase 2 §3.4).
-            log.info("ai.generate.parse_retry: finding=%s err=%s", finding.id, parse_error)
+            bad_preview = (resp.text or "")[:240]
+            log.info(
+                "ai.generate.parse_retry: finding=%s err=%s preview=%r",
+                finding.id,
+                parse_error,
+                bad_preview,
+            )
             retry_user = (
                 usr_p
-                + "\n\nYour previous response was not valid JSON conforming to the schema. "
-                "Reply with the JSON only — no prose, no code fences."
+                + "\n\nYour previous response could not be parsed as JSON.\n"
+                f"You returned (first 240 chars):\n{bad_preview}\n\n"
+                "Return ONLY a JSON object matching the schema. No markdown "
+                "fences, no commentary, no preamble. Start your response "
+                "with `{` and end with `}`."
             )
             retry_req = req.model_copy(update={"user": retry_user, "request_id": str(uuid.uuid4())})
             try:
@@ -370,24 +427,39 @@ class AiFixGenerator:
                     model=provider.default_model,
                     cache_key=cache_key,
                     error=f"retry_failed:{exc}",
+                    raw_response=bad_preview,
                 )
-                return self._error(finding, ctx, "schema_parse_failed", str(exc))
+                return self._error(
+                    finding,
+                    ctx,
+                    "schema_parse_failed",
+                    str(exc),
+                    provider_name=provider.name,
+                    model_name=provider.default_model,
+                    failure=getattr(exc, "failure", None),
+                    upstream_response=bad_preview,
+                )
             latency_ms += int((time.perf_counter() - t0) * 1000)
-            bundle, parse_error = self._parse_bundle(resp.text, resp.parsed)
+            bundle, parse_error = self._parse_response(resp.text, resp.parsed)
 
         if bundle is None:
+            raw_preview = (resp.text or "")[:500]
             self._log_failed_call(
                 request_id=request_id,
                 provider=provider.name,
                 model=provider.default_model,
                 cache_key=cache_key,
                 error=f"schema_parse_failed:{parse_error}",
+                raw_response=raw_preview,
             )
             return self._error(
                 finding,
                 ctx,
                 "schema_parse_failed",
                 parse_error or "model returned non-conforming JSON",
+                provider_name=provider.name,
+                model_name=provider.default_model,
+                upstream_response=raw_preview,
             )
 
         validated = self._post_validate(bundle, ctx)
@@ -453,33 +525,42 @@ class AiFixGenerator:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _parse_bundle(text: str, parsed: dict[str, Any] | None) -> tuple[AiFixBundle | None, str | None]:
-        """Parse the LLM output into an :class:`AiFixBundle`."""
-        candidates: list[Any] = []
-        if isinstance(parsed, dict):
-            candidates.append(parsed)
-        if text:
-            stripped = text.strip()
-            if stripped.startswith("```"):
-                # Strip any code fences the model snuck in.
-                stripped = stripped.strip("`")
-                if stripped.lower().startswith("json"):
-                    stripped = stripped[4:]
-            try:
-                candidates.append(json.loads(stripped))
-            except json.JSONDecodeError:
-                pass
+    def _parse_response(
+        text: str, parsed: dict[str, Any] | None
+    ) -> tuple[AiFixBundle | None, str | None]:
+        """Parse the LLM output into a strict :class:`AiFixBundle`.
 
-        last_err: str | None = "no JSON candidates produced"
-        for cand in candidates:
-            if not isinstance(cand, dict):
-                continue
+        Two paths:
+
+        1. The provider's structured-output mode succeeded and gave us
+           a pre-parsed dict in ``parsed`` — try strict validation
+           against that first.
+        2. Otherwise (or on validation failure of #1) hand the raw
+           text to :func:`parse_llm_json`, which strips fences,
+           trims preamble/trailing text, and brace-extracts the
+           first complete JSON object before strict-validating.
+
+        Returns ``(bundle, None)`` on success or ``(None, error_str)``
+        on every-candidate-failed.
+        """
+        if isinstance(parsed, dict):
             try:
-                return AiFixBundle.model_validate(cand), None
-            except Exception as exc:  # noqa: BLE001 — surface the validation error
-                last_err = str(exc)
-                continue
-        return None, last_err
+                return AiFixBundle.model_validate(parsed), None
+            except Exception as exc:  # noqa: BLE001 — try the text path next
+                last_struct_err: str | None = str(exc)
+        else:
+            last_struct_err = None
+
+        if not text:
+            return None, last_struct_err or "no response text and no parsed candidate"
+
+        try:
+            return parse_llm_json(text, AiFixBundle), None
+        except ParseError as exc:
+            ve = exc.last_validation_error
+            if ve is not None:
+                return None, str(ve)
+            return None, str(exc)
 
     @staticmethod
     def _post_validate(bundle: AiFixBundle, ctx: GroundingContext) -> AiFixBundle:
@@ -536,16 +617,39 @@ class AiFixGenerator:
         self,
         finding: AnalysisFinding,
         ctx: GroundingContext,
-        code: str,
+        code: AiFixErrorCode,
         message: str,
+        *,
+        provider_name: str | None = None,
+        model_name: str | None = None,
+        failure: UpstreamFailure | None = None,
+        upstream_response: str | None = None,
     ) -> AiFixError:
+        retry_after = failure.retry_after_seconds if failure else None
+        upstream_status = failure.upstream_status if failure else None
+        # ``upstream_message`` carries the actionable upstream context for
+        # the modal. For HTTP errors it's the provider's error message
+        # (e.g. "You exceeded your current quota"); for parse failures
+        # it's a 500-char preview of the model's raw output so an
+        # operator can debug without opening the ledger.
+        upstream_message = (failure.upstream_message if failure else None) or upstream_response
+        # Provider name on the failure wins over the orchestrator's hint —
+        # it reflects the wrapping provider's identity (e.g. "gemini") set
+        # by ``_inner.name`` overrides on the wrapper classes.
+        resolved_provider = (failure.provider_name if failure else None) or provider_name
         return AiFixError(
             finding_id=finding.id,
             vuln_id=ctx.cve_id,
             component_name=ctx.component.name,
             component_version=ctx.component.version,
-            error_code=code,  # type: ignore[arg-type]
+            error_code=code,
             message=message,
+            provider_name=resolved_provider,
+            model_name=model_name,
+            upstream_status_code=upstream_status,
+            upstream_message=upstream_message,
+            retry_after_seconds=retry_after,
+            retry_after_human=humanize_retry_after(retry_after),
         )
 
     def _log_failed_call(
@@ -556,7 +660,18 @@ class AiFixGenerator:
         model: str,
         cache_key: str,
         error: str,
+        raw_response: str | None = None,
     ) -> None:
+        # When ``raw_response`` is supplied (every parse failure), embed
+        # a 500-char preview directly into ``ai_usage_log.error`` so a
+        # SQL query against the ledger surfaces what the model actually
+        # produced — essential for ongoing pattern analysis without
+        # touching the running app.
+        if raw_response:
+            preview = raw_response[:500].replace("\n", " ")
+            ledger_error = f"{error[:200]} | raw={preview}"
+        else:
+            ledger_error = error
         write_usage_log_row(
             self._db,
             request_id=request_id,
@@ -569,7 +684,7 @@ class AiFixGenerator:
             cost_usd=0.0,
             latency_ms=0,
             cache_hit=False,
-            error=error[:500],
+            error=ledger_error[:500],
         )
         # Telemetry + audit: bucket the outcome by failure family so the
         # dashboard can show "12 budget halts, 3 provider errors today"
@@ -596,9 +711,30 @@ class AiFixGenerator:
             latency_ms=0,
             cache_hit=False,
             outcome=outcome,
-            response_text=None,
-            error=error,
+            # Pass the raw response into the structured audit log too —
+            # ``log_ai_call`` already hashes it (response_sha256) and
+            # records the byte count, so future deduplication / trend
+            # analysis works even when the raw text is dropped on rotation.
+            response_text=raw_response,
+            error=ledger_error,
         )
+
+
+_PROVIDER_ERROR_PREFIXES = frozenset(
+    {
+        "provider_error",
+        "retry_failed",
+        "quota_exceeded",
+        "rate_limited",
+        "auth_failed",
+        "model_not_found",
+        "network_unreachable",
+        "provider_down",
+        "invalid_request",
+        "unknown",
+        "provider_unavailable",
+    }
+)
 
 
 def _classify_failure(error: str) -> str:
@@ -606,8 +742,10 @@ def _classify_failure(error: str) -> str:
 
     Inspecting the prefix is good enough — :meth:`AiFixGenerator._log_failed_call`
     is called from a handful of well-known sites that prefix their messages
-    with the family (``budget_exceeded:``, ``circuit_breaker_open:``,
-    ``provider_error:``, ``schema_parse_failed:``, ``retry_failed:``).
+    with the family. The Phase 5 typed prefixes (``quota_exceeded``,
+    ``rate_limited``, ``auth_failed``, …) bucket as ``provider_error`` for
+    the existing telemetry surface; the ``error_code`` carried on
+    :class:`~app.ai.schemas.AiFixError` is the authoritative typed value.
     """
     if not error:
         return "provider_error"
@@ -618,9 +756,20 @@ def _classify_failure(error: str) -> str:
         return "circuit_open"
     if head == "schema_parse_failed":
         return "schema_parse_failed"
-    if head in {"retry_failed", "provider_error"}:
+    if head in _PROVIDER_ERROR_PREFIXES:
         return "provider_error"
     return "provider_error"
+
+
+def _failure_to_error_code(failure: UpstreamFailure | None) -> AiFixErrorCode:
+    """Map an :class:`UpstreamFailure` kind onto an :data:`AiFixErrorCode`.
+
+    Returns ``"provider_unavailable"`` when no structured failure info is
+    attached — preserves the legacy code path's externally-visible code.
+    """
+    if failure is None:
+        return "provider_unavailable"
+    return failure.kind
 
 
 __all__ = [

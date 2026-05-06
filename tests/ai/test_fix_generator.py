@@ -309,12 +309,83 @@ async def test_provider_error_becomes_structured_error(_seeded):
     finally:
         db.close()
     assert isinstance(result, AiFixError)
+    # Plain AiProviderError without a structured ``failure`` falls back to
+    # the legacy code so older callers / tests don't break.
     assert result.error_code == "provider_unavailable"
+    assert result.provider_name == "fake"  # threaded from the orchestrator
+    assert result.upstream_status_code is None
+
+
+@pytest.mark.asyncio
+async def test_quota_exceeded_propagates_structured_fields_to_ai_fix_error(_seeded):
+    """End-to-end: provider raises AiProviderError(failure=quota_exceeded) →
+    AiFixError carries error_code, retry_after_seconds, retry_after_human,
+    upstream_status_code, upstream_message, and provider_name."""
+    from app.ai.providers.base import UpstreamFailure
+
+    failure = UpstreamFailure(
+        kind="quota_exceeded",
+        provider_name="gemini",
+        upstream_status=429,
+        upstream_message="You exceeded your current quota.",
+        retry_after_seconds=14400,  # 4 hours
+    )
+    fake = FakeProvider([AiProviderError("gemini: HTTP 429 — quota", failure=failure)])
+    db = SessionLocal()
+    try:
+        gen = AiFixGenerator(db, registry=_registry_with(fake))
+        f = db.query(AnalysisFinding).filter_by(id=_seeded["kev"]).one()
+        result = await gen.generate_for_finding(f)
+    finally:
+        db.close()
+
+    assert isinstance(result, AiFixError)
+    assert result.error_code == "quota_exceeded"
+    assert result.upstream_status_code == 429
+    assert result.upstream_message == "You exceeded your current quota."
+    assert result.retry_after_seconds == 14400
+    assert result.retry_after_human == "in 4 hours"
+    # Provider on the failure wins over the orchestrator's hint —
+    # reflects the wrapping provider's identity, not the inner OpenAi.
+    assert result.provider_name == "gemini"
+    assert result.model_name == "fake-1"
+
+
+@pytest.mark.asyncio
+async def test_quota_exceeded_writes_typed_prefix_to_usage_log(_seeded):
+    """Verification step 2.4: ai_usage_log.error has the typed prefix."""
+    from app.ai.providers.base import UpstreamFailure
+
+    failure = UpstreamFailure(
+        kind="quota_exceeded",
+        provider_name="gemini",
+        upstream_status=429,
+        upstream_message="quota",
+        retry_after_seconds=60,
+    )
+    fake = FakeProvider([AiProviderError("gemini: HTTP 429 — quota", failure=failure)])
+    db = SessionLocal()
+    try:
+        gen = AiFixGenerator(db, registry=_registry_with(fake))
+        f = db.query(AnalysisFinding).filter_by(id=_seeded["kev"]).one()
+        await gen.generate_for_finding(f)
+    finally:
+        db.close()
+
+    db = SessionLocal()
+    try:
+        rows = db.query(AiUsageLog).order_by(AiUsageLog.id.desc()).limit(1).all()
+    finally:
+        db.close()
+    assert rows, "expected a usage-log row for the failed call"
+    assert rows[0].error and rows[0].error.startswith("quota_exceeded:"), rows[0].error
 
 
 @pytest.mark.asyncio
 async def test_unparseable_response_with_retry_then_failure(_seeded):
     # Both attempts return garbage → final result is a structured error.
+    # HARD INVARIANT (Phase 5): exactly 2 calls — never more, even with
+    # back-to-back parse failures. Quota cost is bounded.
     fake = FakeProvider(["not a JSON", "still not JSON"])
     db = SessionLocal()
     try:
@@ -325,7 +396,7 @@ async def test_unparseable_response_with_retry_then_failure(_seeded):
         db.close()
     assert isinstance(result, AiFixError)
     assert result.error_code == "schema_parse_failed"
-    assert len(fake.calls) == 2  # one retry attempted
+    assert len(fake.calls) == 2  # one retry attempted, never more
 
 
 @pytest.mark.asyncio
@@ -340,6 +411,190 @@ async def test_unparseable_first_then_valid_retry(_seeded):
         db.close()
     assert isinstance(result, AiFixResult)
     assert len(fake.calls) == 2
+
+
+# ======================================================== Phase 5 — schema_parse_failed surface
+
+
+@pytest.mark.asyncio
+async def test_parse_failure_includes_prior_bad_response_in_retry_user_prompt(_seeded):
+    """The retry message must echo a preview of the bad response so the
+    model has corrective context. Without this the retry is a coin flip.
+    """
+    bad_first = "Here you go, hope this helps! it's not really JSON though."
+    fake = FakeProvider([bad_first, EX1_CRITICAL_KEV_WITH_FIX_BUNDLE])
+    db = SessionLocal()
+    try:
+        gen = AiFixGenerator(db, registry=_registry_with(fake))
+        f = db.query(AnalysisFinding).filter_by(id=_seeded["kev"]).one()
+        result = await gen.generate_for_finding(f)
+    finally:
+        db.close()
+    assert isinstance(result, AiFixResult)
+    assert len(fake.calls) == 2
+    retry_call = fake.calls[1]
+    assert "could not be parsed" in retry_call.user
+    # The retry user prompt MUST contain a preview of the bad first
+    # response — otherwise the model has no diagnostic signal.
+    assert bad_first in retry_call.user
+
+
+@pytest.mark.asyncio
+async def test_parse_failure_writes_raw_response_preview_to_ledger(_seeded):
+    """The 500-char raw preview must reach ai_usage_log.error so an
+    operator can SQL the row and see what the model actually produced.
+    """
+    bad_first = "blah blah definitely not JSON " + ("x" * 100)
+    bad_second = "still nope " + ("y" * 100)
+    fake = FakeProvider([bad_first, bad_second])
+    db = SessionLocal()
+    try:
+        gen = AiFixGenerator(db, registry=_registry_with(fake))
+        f = db.query(AnalysisFinding).filter_by(id=_seeded["kev"]).one()
+        await gen.generate_for_finding(f)
+    finally:
+        db.close()
+
+    db = SessionLocal()
+    try:
+        rows = (
+            db.query(AiUsageLog)
+            .order_by(AiUsageLog.id.desc())
+            .limit(1)
+            .all()
+        )
+    finally:
+        db.close()
+    assert rows
+    err = rows[0].error or ""
+    assert err.startswith("schema_parse_failed:"), err
+    # Raw preview lands in the ledger via the ``raw=`` suffix.
+    assert "raw=" in err
+    # And it includes a meaningful slice of the model's output.
+    assert "still nope" in err or "yyyy" in err
+
+
+@pytest.mark.asyncio
+async def test_parse_failure_populates_upstream_message_with_raw_preview(_seeded):
+    """The AiFixError surfaces the raw response on ``upstream_message``
+    so the modal can show admins what came back from the model."""
+    bad = "not even close to JSON, sorry"
+    fake = FakeProvider([bad, bad])
+    db = SessionLocal()
+    try:
+        gen = AiFixGenerator(db, registry=_registry_with(fake))
+        f = db.query(AnalysisFinding).filter_by(id=_seeded["kev"]).one()
+        result = await gen.generate_for_finding(f)
+    finally:
+        db.close()
+    assert isinstance(result, AiFixError)
+    assert result.error_code == "schema_parse_failed"
+    assert result.upstream_message is not None
+    assert bad in result.upstream_message
+
+
+@pytest.mark.asyncio
+async def test_parse_succeeds_when_response_is_fenced(_seeded):
+    """End-to-end Gemini quirk: the model wrapped its valid JSON in
+    ```json fences. Lenient parsing strips the fence; one call total."""
+    import json as _json
+
+    fenced = "```json\n" + _json.dumps(EX1_CRITICAL_KEV_WITH_FIX_BUNDLE) + "\n```"
+    fake = FakeProvider([fenced])
+    db = SessionLocal()
+    try:
+        gen = AiFixGenerator(db, registry=_registry_with(fake))
+        f = db.query(AnalysisFinding).filter_by(id=_seeded["kev"]).one()
+        result = await gen.generate_for_finding(f)
+    finally:
+        db.close()
+    assert isinstance(result, AiFixResult)
+    assert len(fake.calls) == 1  # NO retry — fence was stripped, parsed first try
+
+
+@pytest.mark.asyncio
+async def test_parse_succeeds_when_response_has_preamble(_seeded):
+    """End-to-end: leading 'Sure, here's the JSON:' preamble is
+    extracted by the brace-counting candidate."""
+    import json as _json
+
+    preambled = (
+        "Sure, here's the structured remediation:\n\n"
+        + _json.dumps(EX1_CRITICAL_KEV_WITH_FIX_BUNDLE)
+        + "\n\nLet me know if you need clarifications."
+    )
+    fake = FakeProvider([preambled])
+    db = SessionLocal()
+    try:
+        gen = AiFixGenerator(db, registry=_registry_with(fake))
+        f = db.query(AnalysisFinding).filter_by(id=_seeded["kev"]).one()
+        result = await gen.generate_for_finding(f)
+    finally:
+        db.close()
+    assert isinstance(result, AiFixResult)
+    assert len(fake.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_parse_succeeds_with_capitalised_enums(_seeded):
+    """End-to-end: model returned ``"High"`` / ``"Major"`` / ``"Urgent"``
+    instead of the lowercase enums. Schema-level normalisation accepts.
+
+    (We avoid asserting against ``actively_exploited`` here because
+    post-validation correctly demotes it when the grounding context
+    doesn't carry a KEV flag — that's separate behavior, tested
+    elsewhere.)
+    """
+    import copy as _copy
+    import json as _json
+
+    bundle = _copy.deepcopy(EX1_CRITICAL_KEV_WITH_FIX_BUNDLE)
+    bundle["remediation_prose"]["exploitation_likelihood"] = "High"  # capitalised
+    bundle["remediation_prose"]["confidence"] = "High"
+    bundle["upgrade_command"]["breaking_change_risk"] = "Major"
+    bundle["decision_recommendation"]["priority"] = "Urgent"
+    bundle["decision_recommendation"]["citations"] = ["KEV", "NVD", "EPSS", "fix_version_data"]
+    fake = FakeProvider([_json.dumps(bundle)])
+    db = SessionLocal()
+    try:
+        gen = AiFixGenerator(db, registry=_registry_with(fake))
+        f = db.query(AnalysisFinding).filter_by(id=_seeded["kev"]).one()
+        result = await gen.generate_for_finding(f)
+    finally:
+        db.close()
+    assert isinstance(result, AiFixResult)
+    assert len(fake.calls) == 1
+    assert result.bundle.remediation_prose.exploitation_likelihood == "high"
+    assert result.bundle.remediation_prose.confidence == "high"
+    assert result.bundle.upgrade_command.breaking_change_risk == "major"
+    assert result.bundle.decision_recommendation.priority == "urgent"
+    # Schema lowercased + citation-pruning may drop ones not in
+    # grounding.sources_used. The surviving citations must all be
+    # lowercase enum values (no "KEV", "NVD", "EPSS" leakage).
+    surviving = result.bundle.decision_recommendation.citations
+    assert all(c == c.lower() for c in surviving), surviving
+    assert "fix_version_data" in surviving
+
+
+@pytest.mark.asyncio
+async def test_parse_failure_quota_cost_is_exactly_two_calls(_seeded):
+    """Hard quota invariant: a parse-failure-then-failure sequence must
+    NEVER cost more than 2 LLM calls. This is the dominant cost-control
+    knob for the schema_parse_failed family."""
+    fake = FakeProvider(["nope " + ("a" * 50)] * 5)  # queue 5; only 2 should be consumed
+    db = SessionLocal()
+    try:
+        gen = AiFixGenerator(db, registry=_registry_with(fake))
+        f = db.query(AnalysisFinding).filter_by(id=_seeded["kev"]).one()
+        result = await gen.generate_for_finding(f)
+    finally:
+        db.close()
+    assert isinstance(result, AiFixError)
+    assert result.error_code == "schema_parse_failed"
+    assert len(fake.calls) == 2, (
+        f"Hard cap broken: {len(fake.calls)} calls (expected exactly 2). "
+        "Each extra call burns a quota slot for free."
+    )
 
 
 @pytest.mark.asyncio

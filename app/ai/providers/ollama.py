@@ -29,6 +29,8 @@ from .base import (
     LlmResponse,
     LlmUsage,
     ProviderInfo,
+    classify_http_failure,
+    classify_network_failure,
 )
 
 log = logging.getLogger("sbom.ai.providers.ollama")
@@ -81,7 +83,7 @@ class OllamaProvider(LlmProvider):
             out_tok = int(data.get("eval_count") or 0)
         except Exception as exc:
             self._breaker.record_failure()
-            raise AiProviderError(f"ollama: malformed response — {exc}") from exc
+            raise AiProviderError(f"{self.name}: malformed response — {exc}") from exc
 
         self._breaker.record_success()
         usage = LlmUsage(
@@ -194,31 +196,62 @@ class OllamaProvider(LlmProvider):
     async def _post_with_retries(self, client: httpx.AsyncClient, body: dict[str, Any]) -> dict[str, Any]:
         attempt = 0
         backoff = 0.5
-        last_exc: Exception | None = None
+        last_failure = None
+        last_message: str | None = None
         url = f"{self._base_url}/api/chat"
         while attempt <= self._max_retries:
             try:
                 resp = await client.post(url, json=body, timeout=self._timeout)
-                if resp.status_code == 429 or 500 <= resp.status_code < 600:
-                    raise httpx.HTTPStatusError(
-                        f"ollama transient {resp.status_code}",
-                        request=resp.request,
-                        response=resp,
-                    )
-                if resp.status_code >= 400:
-                    self._breaker.record_failure()
-                    raise AiProviderError(f"ollama: HTTP {resp.status_code} — {resp.text[:200]}")
-                return resp.json()
-            except (httpx.HTTPStatusError, httpx.RequestError) as exc:
-                last_exc = exc
+            except (httpx.HTTPError, httpx.RequestError) as exc:
+                last_failure = classify_network_failure(provider_name=self.name, exc=exc)
+                last_message = f"{self.name}: network error — {exc}"
                 attempt += 1
                 if attempt > self._max_retries:
                     self._breaker.record_failure()
-                    raise AiProviderError(f"ollama: retries exhausted — {exc}") from exc
+                    raise AiProviderError(last_message, failure=last_failure) from exc
                 await asyncio.sleep(backoff)
                 backoff *= 2
+                continue
+
+            if resp.status_code == 429 or 500 <= resp.status_code < 600:
+                last_failure = classify_http_failure(
+                    provider_name=self.name,
+                    status=resp.status_code,
+                    body=resp.text,
+                    retry_after_header=resp.headers.get("Retry-After"),
+                )
+                last_message = f"{self.name}: HTTP {resp.status_code} — {(resp.text or '')[:200]}"
+                if last_failure.kind == "quota_exceeded":
+                    self._breaker.record_failure()
+                    raise AiProviderError(last_message, failure=last_failure)
+                attempt += 1
+                if attempt > self._max_retries:
+                    self._breaker.record_failure()
+                    raise AiProviderError(last_message, failure=last_failure)
+                await asyncio.sleep(backoff)
+                backoff *= 2
+                continue
+
+            if resp.status_code >= 400:
+                failure = classify_http_failure(
+                    provider_name=self.name,
+                    status=resp.status_code,
+                    body=resp.text,
+                    retry_after_header=resp.headers.get("Retry-After"),
+                )
+                self._breaker.record_failure()
+                raise AiProviderError(
+                    f"{self.name}: HTTP {resp.status_code} — {(resp.text or '')[:200]}",
+                    failure=failure,
+                )
+
+            return resp.json()
+
         self._breaker.record_failure()
-        raise AiProviderError(f"ollama: unreachable code — {last_exc}")
+        raise AiProviderError(
+            f"{self.name}: unreachable code — {last_message or 'no attempts succeeded'}",
+            failure=last_failure,
+        )
 
     @staticmethod
     def _maybe_parse(text: str, schema: dict[str, Any] | None) -> dict[str, Any] | None:

@@ -3,6 +3,7 @@
 import { Loader2, Sparkles } from 'lucide-react';
 import { useAiFix } from '@/hooks/useAiFix';
 import type { AiFixError } from '@/types/ai';
+import { GENERATE_DISABLED_CODES } from '@/types/ai';
 import { AiFixGenerateButton } from './AiFixGenerateButton';
 import { AiFixMetadata } from './AiFixMetadata';
 import { DecisionRecommendationCard } from './DecisionRecommendationCard';
@@ -19,14 +20,73 @@ interface AiFixSectionProps {
   timeEstimate?: string;
 }
 
-const ERROR_MESSAGES: Record<AiFixError['error_code'], string> = {
-  schema_parse_failed: 'The AI provider returned an unexpected response. Try regenerating.',
-  provider_unavailable: 'The AI provider is unreachable. Try again or switch provider in Settings.',
-  circuit_breaker_open: 'The AI provider is temporarily disabled after repeated failures. Try again in a minute.',
-  budget_exceeded: 'Daily AI budget reached. Increase the cap in Settings or wait until tomorrow.',
-  grounding_missing: 'No vulnerability data is available for this finding yet.',
-  internal_error: 'Something went wrong while contacting the AI provider.',
-};
+/**
+ * Render copy for a structured backend error.
+ *
+ * Phase 5: each ``error_code`` gets a typed copy template that
+ * interpolates the structured fields the backend now propagates
+ * (``provider_name``, ``model_name``, ``retry_after_human``,
+ * ``retry_after_seconds``, ``upstream_message``). The Generate button is
+ * separately disabled per :data:`GENERATE_DISABLED_CODES` for codes that
+ * cannot be resolved by clicking again.
+ */
+export function aiFixErrorCopy(err: AiFixError, providerLabelFallback?: string): string {
+  const provider = err.provider_name ?? providerLabelFallback ?? 'the AI provider';
+  const model = err.model_name ?? 'the configured model';
+  const retryHuman = err.retry_after_human ?? null;
+  const retrySec = err.retry_after_seconds ?? null;
+  const upstream = err.upstream_message ?? err.message;
+
+  switch (err.error_code) {
+    case 'quota_exceeded':
+      return `Daily quota exhausted for ${provider} (${model}). ${
+        retryHuman ? `Resets ${retryHuman}, ` : ''
+      }or switch provider in Settings.`;
+    case 'rate_limited':
+      return `Rate limit hit for ${provider}. ${
+        retrySec ? `Retry in ${retrySec}s.` : 'Retry in a moment.'
+      }`;
+    case 'auth_failed':
+      return `Invalid API key for ${provider}. Update in Settings.`;
+    case 'model_not_found':
+      return `Model ${model} not available. Update in Settings.`;
+    case 'network_unreachable':
+      return `Couldn't reach ${provider}. Check network or try again.`;
+    case 'provider_down':
+      return `${provider} is currently unavailable.`;
+    case 'invalid_request':
+      return `Request was rejected by ${provider}: ${upstream}`;
+    case 'unknown':
+      return `Unexpected error: ${upstream}`;
+    // Legacy codes — kept stable for already-cached events.
+    case 'schema_parse_failed': {
+      // Phase 5: include a preview of what the model actually produced
+      // so admins can debug from the modal. ``upstream_message`` is now
+      // populated with the first 500 chars of the raw response.
+      const preview = err.upstream_message?.trim();
+      if (preview) {
+        const short = preview.length > 200 ? preview.slice(0, 200) + '…' : preview;
+        return `The AI provider returned a response that didn't match the expected schema. Try regenerating.\nResponse preview: ${short}`;
+      }
+      return 'The AI provider returned an unexpected response. Try regenerating.';
+    }
+    case 'provider_unavailable':
+      return 'The AI provider is unreachable. Try again or switch provider in Settings.';
+    case 'circuit_breaker_open':
+      return 'The AI provider is temporarily disabled after repeated failures. Try again in a minute.';
+    case 'budget_exceeded':
+      return 'Daily AI budget reached. Increase the cap in Settings or wait until tomorrow.';
+    case 'grounding_missing':
+      return 'No vulnerability data is available for this finding yet.';
+    case 'internal_error':
+      return 'Something went wrong while contacting the AI provider.';
+    default: {
+      // Defensive: future codes still render a useful message.
+      const _exhaustive: never = err.error_code;
+      return upstream || 'Unexpected error.';
+    }
+  }
+}
 
 /**
  * The "AI remediation" section embedded inside the CVE detail modal.
@@ -109,12 +169,13 @@ export function AiFixSection({
       {/* Structured backend error (status 200 with ``error`` populated). */}
       {apiError && !result ? (
         <AiFixGenerateButton
-          providerLabel={providerLabel}
+          providerLabel={apiError.provider_name ?? providerLabel}
           costEstimate={costEstimate}
           timeEstimate={timeEstimate}
           loading={regenerate.isPending}
           onGenerate={() => regenerate.mutate()}
-          errorMessage={ERROR_MESSAGES[apiError.error_code] ?? apiError.message}
+          errorMessage={aiFixErrorCopy(apiError, providerLabel)}
+          disabledByError={GENERATE_DISABLED_CODES.includes(apiError.error_code)}
         />
       ) : null}
 

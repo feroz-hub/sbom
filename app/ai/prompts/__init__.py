@@ -20,7 +20,10 @@ from typing import Any
 
 # Bumping this is a hard cache invalidation. Keep stable; bump only when a
 # prompt change would alter the output meaningfully.
-PROMPT_VERSION: str = "v1"
+# v1 → v2 (Phase 5): explicit format-only instructions (no fences, no
+# preamble, snake_case enums) added to address Gemini-side malformed
+# output that surfaced as ``schema_parse_failed``.
+PROMPT_VERSION: str = "v2"
 
 _PROMPTS_DIR = Path(__file__).parent
 

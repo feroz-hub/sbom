@@ -82,12 +82,23 @@ export interface AiFixResult {
 }
 
 export type AiFixErrorCode =
+  // Original codes — kept for back-compat with cached events.
   | 'schema_parse_failed'
   | 'provider_unavailable'
   | 'circuit_breaker_open'
   | 'budget_exceeded'
   | 'grounding_missing'
-  | 'internal_error';
+  | 'internal_error'
+  // Phase 5 — typed upstream-failure surface; the modal renders distinct
+  // copy and disables the Generate button per ``GENERATE_DISABLED_CODES``.
+  | 'quota_exceeded'
+  | 'rate_limited'
+  | 'auth_failed'
+  | 'model_not_found'
+  | 'network_unreachable'
+  | 'provider_down'
+  | 'invalid_request'
+  | 'unknown';
 
 export interface AiFixError {
   finding_id: number | null;
@@ -96,7 +107,30 @@ export interface AiFixError {
   component_version: string;
   error_code: AiFixErrorCode;
   message: string;
+  /** Wrapping provider's name (gemini / grok / openai / …) when known. */
+  provider_name?: string | null;
+  model_name?: string | null;
+  upstream_status_code?: number | null;
+  upstream_message?: string | null;
+  /** Seconds until the upstream allows another request (header or body-derived). */
+  retry_after_seconds?: number | null;
+  /** Coarse human form ("in 4 hours", "in 35s"); ``null`` when not applicable. */
+  retry_after_human?: string | null;
 }
+
+/**
+ * Error codes for which the Generate button must remain disabled until
+ * the user fixes the underlying condition (settings change for the
+ * first three; provider recovery for the last). ``rate_limited`` is
+ * NOT in this set — clicking again after ``retry_after_seconds`` is
+ * the right thing to do.
+ */
+export const GENERATE_DISABLED_CODES: readonly AiFixErrorCode[] = [
+  'quota_exceeded',
+  'auth_failed',
+  'model_not_found',
+  'provider_down',
+] as const;
 
 /** Response envelope used by ``GET /findings/{id}/ai-fix`` and the regenerate endpoint. */
 export interface AiFindingFixEnvelope {

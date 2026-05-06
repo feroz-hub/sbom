@@ -24,6 +24,8 @@ from .base import (
     LlmUsage,
     ProviderInfo,
     ProviderUnavailableError,
+    classify_http_failure,
+    classify_network_failure,
 )
 
 log = logging.getLogger("sbom.ai.providers.openai")
@@ -56,7 +58,7 @@ class OpenAiProvider(LlmProvider):
         request_timeout_seconds: float = 30.0,
     ) -> None:
         if not api_key:
-            raise ProviderUnavailableError("openai: api_key is required")
+            raise ProviderUnavailableError(f"{self.name}: api_key is required")
         self._api_key = api_key
         self.default_model = default_model
         self._base_url = base_url.rstrip("/")
@@ -89,7 +91,7 @@ class OpenAiProvider(LlmProvider):
             out_tok = int(usage_obj.get("completion_tokens") or 0)
         except Exception as exc:
             self._breaker.record_failure()
-            raise AiProviderError(f"openai: malformed response — {exc}") from exc
+            raise AiProviderError(f"{self.name}: malformed response — {exc}") from exc
 
         self._breaker.record_success()
         usage = LlmUsage(
@@ -254,31 +256,65 @@ class OpenAiProvider(LlmProvider):
     async def _post_with_retries(self, client: httpx.AsyncClient, body: dict[str, Any]) -> dict[str, Any]:
         attempt = 0
         backoff = 1.0
-        last_exc: Exception | None = None
+        last_failure = None
+        last_message: str | None = None
         url = f"{self._base_url}/chat/completions"
         while attempt <= self._max_retries:
             try:
                 resp = await client.post(url, headers=self._headers(), json=body, timeout=self._timeout)
-                if resp.status_code == 429 or 500 <= resp.status_code < 600:
-                    raise httpx.HTTPStatusError(
-                        f"openai transient {resp.status_code}",
-                        request=resp.request,
-                        response=resp,
-                    )
-                if resp.status_code >= 400:
-                    self._breaker.record_failure()
-                    raise AiProviderError(f"openai: HTTP {resp.status_code} — {resp.text[:200]}")
-                return resp.json()
-            except (httpx.HTTPStatusError, httpx.RequestError) as exc:
-                last_exc = exc
+            except (httpx.HTTPError, httpx.RequestError) as exc:
+                last_failure = classify_network_failure(provider_name=self.name, exc=exc)
+                last_message = f"{self.name}: network error — {exc}"
                 attempt += 1
                 if attempt > self._max_retries:
                     self._breaker.record_failure()
-                    raise AiProviderError(f"openai: retries exhausted — {exc}") from exc
+                    raise AiProviderError(last_message, failure=last_failure) from exc
                 await asyncio.sleep(backoff)
                 backoff *= 2
+                continue
+
+            if resp.status_code == 429 or 500 <= resp.status_code < 600:
+                last_failure = classify_http_failure(
+                    provider_name=self.name,
+                    status=resp.status_code,
+                    body=resp.text,
+                    retry_after_header=resp.headers.get("Retry-After"),
+                )
+                last_message = f"{self.name}: HTTP {resp.status_code} — {(resp.text or '')[:200]}"
+                # Daily-quota exhaustion is not transient — retrying just
+                # burns more allowance without recovering. Short-circuit
+                # so the failure surfaces immediately.
+                if last_failure.kind == "quota_exceeded":
+                    self._breaker.record_failure()
+                    raise AiProviderError(last_message, failure=last_failure)
+                attempt += 1
+                if attempt > self._max_retries:
+                    self._breaker.record_failure()
+                    raise AiProviderError(last_message, failure=last_failure)
+                await asyncio.sleep(backoff)
+                backoff *= 2
+                continue
+
+            if resp.status_code >= 400:
+                failure = classify_http_failure(
+                    provider_name=self.name,
+                    status=resp.status_code,
+                    body=resp.text,
+                    retry_after_header=resp.headers.get("Retry-After"),
+                )
+                self._breaker.record_failure()
+                raise AiProviderError(
+                    f"{self.name}: HTTP {resp.status_code} — {(resp.text or '')[:200]}",
+                    failure=failure,
+                )
+
+            return resp.json()
+
         self._breaker.record_failure()
-        raise AiProviderError(f"openai: unreachable code — {last_exc}")
+        raise AiProviderError(
+            f"{self.name}: unreachable code — {last_message or 'no attempts succeeded'}",
+            failure=last_failure,
+        )
 
     @staticmethod
     def _maybe_parse(text: str, schema: dict[str, Any] | None) -> dict[str, Any] | None:

@@ -233,6 +233,233 @@ def test_openai_requires_api_key():
         OpenAiProvider(api_key="")
 
 
+# ============================================================ OpenAI — typed upstream failures (Phase 5)
+
+
+_GEMINI_QUOTA_BODY = (
+    '{"error":{"code":429,"message":"You exceeded your current quota. '
+    "* Quota exceeded for metric: generativelanguage.googleapis.com/"
+    "generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash"
+    '","status":"RESOURCE_EXHAUSTED",'
+    '"details":[{"@type":"type.googleapis.com/google.rpc.RetryInfo",'
+    '"retryDelay":"35s"}]}}'
+)
+
+
+@pytest.mark.asyncio
+async def test_openai_429_resource_exhausted_classified_as_quota_exceeded_and_short_circuits():
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(429, text=_GEMINI_QUOTA_BODY)
+
+    provider = OpenAiProvider(
+        api_key="sk-test",
+        client_factory=lambda: _make_client(handler),
+        max_retries=3,
+    )
+    with pytest.raises(AiProviderError) as ei:
+        await provider.generate(_llm_req())
+
+    # Quota errors short-circuit (no retries — would just burn more quota).
+    assert calls["n"] == 1
+    failure = ei.value.failure
+    assert failure is not None
+    assert failure.kind == "quota_exceeded"
+    assert failure.upstream_status == 429
+    assert failure.retry_after_seconds == 35
+    assert failure.upstream_message and "exceeded your current quota" in failure.upstream_message
+    # The error string must NOT be tagged "openai" when the wrapping
+    # provider has overridden ``self.name`` (we simulate a Gemini wrap
+    # by mutating the inner provider's name attribute below).
+
+
+@pytest.mark.asyncio
+async def test_openai_inner_name_override_propagates_into_error_strings():
+    """Wrappers (Gemini, Grok, custom) override ``inner.name`` after construction.
+    Error strings emitted by the inner OpenAi must carry the new name.
+    """
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(429, text=_GEMINI_QUOTA_BODY)
+
+    provider = OpenAiProvider(
+        api_key="sk-test",
+        client_factory=lambda: _make_client(handler),
+        max_retries=2,
+    )
+    provider.name = "gemini"  # what GeminiProvider does in its __init__
+
+    with pytest.raises(AiProviderError) as ei:
+        await provider.generate(_llm_req())
+
+    # The error string starts with the wrapping provider's name, not "openai:".
+    assert str(ei.value).startswith("gemini:")
+    assert "openai" not in str(ei.value).lower()
+    assert ei.value.failure is not None
+    assert ei.value.failure.provider_name == "gemini"
+
+
+@pytest.mark.asyncio
+async def test_openai_429_plain_rate_limit_classified_as_rate_limited_and_retries():
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        # 429 with no quota signals — plain RPS throttle.
+        return httpx.Response(
+            429,
+            headers={"Retry-After": "2"},
+            json={"error": {"message": "slow down"}},
+        )
+
+    provider = OpenAiProvider(
+        api_key="sk-test",
+        client_factory=lambda: _make_client(handler),
+        max_retries=2,
+    )
+    with pytest.raises(AiProviderError) as ei:
+        await provider.generate(_llm_req())
+
+    # rate_limited is genuinely transient → retried (1 + max_retries).
+    assert calls["n"] == 3
+    assert ei.value.failure is not None
+    assert ei.value.failure.kind == "rate_limited"
+    assert ei.value.failure.retry_after_seconds == 2
+
+
+@pytest.mark.asyncio
+async def test_openai_401_classified_as_auth_failed():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(401, json={"error": {"message": "Invalid API key."}})
+
+    provider = OpenAiProvider(
+        api_key="sk-test",
+        client_factory=lambda: _make_client(handler),
+        max_retries=2,
+    )
+    with pytest.raises(AiProviderError) as ei:
+        await provider.generate(_llm_req())
+    assert ei.value.failure is not None
+    assert ei.value.failure.kind == "auth_failed"
+    assert ei.value.failure.upstream_status == 401
+    assert ei.value.failure.upstream_message == "Invalid API key."
+
+
+@pytest.mark.asyncio
+async def test_openai_404_with_model_in_body_classified_as_model_not_found():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            404,
+            json={"error": {"message": "The model 'gpt-9000' does not exist"}},
+        )
+
+    provider = OpenAiProvider(
+        api_key="sk-test",
+        client_factory=lambda: _make_client(handler),
+        max_retries=2,
+    )
+    with pytest.raises(AiProviderError) as ei:
+        await provider.generate(_llm_req())
+    assert ei.value.failure is not None
+    assert ei.value.failure.kind == "model_not_found"
+
+
+@pytest.mark.asyncio
+async def test_openai_503_classified_as_provider_down():
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(503, text="upstream unavailable")
+
+    provider = OpenAiProvider(
+        api_key="sk-test",
+        client_factory=lambda: _make_client(handler),
+        max_retries=2,
+    )
+    with pytest.raises(AiProviderError) as ei:
+        await provider.generate(_llm_req())
+    # 5xx is transient → retries before failing.
+    assert calls["n"] == 3
+    assert ei.value.failure is not None
+    assert ei.value.failure.kind == "provider_down"
+
+
+@pytest.mark.asyncio
+async def test_openai_400_classified_as_invalid_request():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            400,
+            json={"error": {"message": "Unsupported response_format"}},
+        )
+
+    provider = OpenAiProvider(
+        api_key="sk-test",
+        client_factory=lambda: _make_client(handler),
+        max_retries=2,
+    )
+    with pytest.raises(AiProviderError) as ei:
+        await provider.generate(_llm_req())
+    assert ei.value.failure is not None
+    assert ei.value.failure.kind == "invalid_request"
+    assert ei.value.failure.upstream_status == 400
+
+
+@pytest.mark.asyncio
+async def test_openai_network_error_classified_as_network_unreachable():
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("no route to host")
+
+    provider = OpenAiProvider(
+        api_key="sk-test",
+        client_factory=lambda: _make_client(handler),
+        max_retries=2,
+    )
+    with pytest.raises(AiProviderError) as ei:
+        await provider.generate(_llm_req())
+    assert ei.value.failure is not None
+    assert ei.value.failure.kind == "network_unreachable"
+    assert ei.value.failure.upstream_status is None
+
+
+def test_classify_http_failure_unit_quota_keywords():
+    """Unit-level: the classifier accepts several quota-like phrasings."""
+    from app.ai.providers.base import classify_http_failure
+
+    for body in (
+        '{"error":{"status":"RESOURCE_EXHAUSTED"}}',
+        '{"error":{"message":"You exceeded your current quota"}}',
+        '{"error":{"message":"daily quota reached"}}',
+    ):
+        f = classify_http_failure(provider_name="gemini", status=429, body=body)
+        assert f.kind == "quota_exceeded", body
+
+
+def test_classify_http_failure_unit_retry_after_parsing():
+    from app.ai.providers.base import classify_http_failure
+
+    # Header form (RFC 7231 — integer seconds).
+    f1 = classify_http_failure(
+        provider_name="openai", status=429, body="too many", retry_after_header="42"
+    )
+    assert f1.retry_after_seconds == 42
+    # Body form (Gemini structured retryDelay).
+    f2 = classify_http_failure(
+        provider_name="gemini",
+        status=429,
+        body='{"error":{"status":"RESOURCE_EXHAUSTED"},"details":[{"retryDelay":"60s"}]}',
+    )
+    assert f2.retry_after_seconds == 60
+    # Body form (Gemini prose).
+    f3 = classify_http_failure(
+        provider_name="gemini",
+        status=429,
+        body="Quota exceeded. Please retry in 35.6s.",
+    )
+    assert f3.retry_after_seconds == 35
+
+
 # ============================================================ Ollama
 
 

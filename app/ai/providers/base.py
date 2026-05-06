@@ -15,6 +15,7 @@ No callers outside this package change.
 
 from __future__ import annotations
 
+import re
 from typing import Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -138,6 +139,169 @@ class ConnectionTestResult(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Structured upstream-failure value object
+# ---------------------------------------------------------------------------
+
+
+UpstreamFailureKind = _Literal[
+    "quota_exceeded",
+    "rate_limited",
+    "auth_failed",
+    "model_not_found",
+    "network_unreachable",
+    "provider_down",
+    "invalid_request",
+    "unknown",
+]
+
+
+class UpstreamFailure(BaseModel):
+    """Provider-side failure metadata captured at the HTTP boundary.
+
+    Attached to :class:`AiProviderError` so the orchestrator can build a
+    typed :class:`~app.ai.schemas.AiFixError` without parsing strings.
+
+    ``upstream_body`` is truncated; the full body is logged to the
+    structured ledger but never returned to the UI.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: UpstreamFailureKind
+    provider_name: str
+    upstream_status: int | None = None
+    upstream_body: str | None = None
+    upstream_message: str | None = None
+    retry_after_seconds: int | None = None
+
+
+# Pattern matches both Gemini's prose ("Please retry in 35.60207746s.") and
+# the structured ``retryDelay: "35s"`` form Google embeds in the JSON body.
+_RETRY_AFTER_BODY_RE = re.compile(
+    r'(?:please\s+retry\s+in|retrydelay["\']?\s*[:=]?\s*["\']?)\s*([\d.]+)\s*s',
+    re.IGNORECASE,
+)
+
+
+def _parse_retry_after_header(value: str | None) -> int | None:
+    if not value:
+        return None
+    try:
+        return max(0, int(float(value.strip())))
+    except (ValueError, TypeError):
+        return None
+
+
+def _parse_retry_after_body(body: str | None) -> int | None:
+    if not body:
+        return None
+    m = _RETRY_AFTER_BODY_RE.search(body)
+    if not m:
+        return None
+    try:
+        return max(0, int(float(m.group(1))))
+    except ValueError:
+        return None
+
+
+def _extract_upstream_message(body: str | None) -> str | None:
+    """Pull a human-readable error message out of a JSON body when present."""
+    if not body:
+        return None
+    snippet = body.strip()
+    if not snippet.startswith("{") and not snippet.startswith("["):
+        return snippet[:240] or None
+    import json as _json
+
+    try:
+        data: Any = _json.loads(snippet)
+    except (ValueError, TypeError):
+        return snippet[:240] or None
+    if isinstance(data, list) and data:
+        data = data[0]
+    if isinstance(data, dict):
+        err = data.get("error")
+        if isinstance(err, dict):
+            msg = err.get("message")
+            if isinstance(msg, str) and msg.strip():
+                return msg.strip()[:240]
+        msg = data.get("message")
+        if isinstance(msg, str) and msg.strip():
+            return msg.strip()[:240]
+    return snippet[:240] or None
+
+
+def classify_http_failure(
+    *,
+    provider_name: str,
+    status: int,
+    body: str | None,
+    retry_after_header: str | None = None,
+) -> "UpstreamFailure":
+    """Map an HTTP error response to an :class:`UpstreamFailure`.
+
+    The classification rules:
+      * 429 with ``RESOURCE_EXHAUSTED`` / "quota" / "exceeded your" in the
+        body → :data:`quota_exceeded` (daily / monthly project cap)
+      * other 429 → :data:`rate_limited` (rolling RPS-style throttle)
+      * 401 / 403 → :data:`auth_failed`
+      * 404 mentioning ``model`` → :data:`model_not_found`
+      * 5xx → :data:`provider_down`
+      * other 4xx → :data:`invalid_request`
+      * everything else → :data:`unknown`
+    """
+    body_lc = (body or "").lower()
+    retry_after = _parse_retry_after_header(retry_after_header) or _parse_retry_after_body(body_lc)
+    upstream_msg = _extract_upstream_message(body)
+
+    kind: UpstreamFailureKind
+    if status == 429:
+        if (
+            "resource_exhausted" in body_lc
+            or "quota" in body_lc
+            or "exceeded your" in body_lc
+        ):
+            kind = "quota_exceeded"
+        else:
+            kind = "rate_limited"
+    elif status in (401, 403):
+        kind = "auth_failed"
+    elif status == 404 and "model" in body_lc:
+        kind = "model_not_found"
+    elif 500 <= status < 600:
+        kind = "provider_down"
+    elif 400 <= status < 500:
+        kind = "invalid_request"
+    else:
+        kind = "unknown"
+
+    return UpstreamFailure(
+        kind=kind,
+        provider_name=provider_name,
+        upstream_status=status,
+        upstream_body=(body or "")[:1000] or None,
+        upstream_message=upstream_msg,
+        retry_after_seconds=retry_after,
+    )
+
+
+def classify_network_failure(
+    *,
+    provider_name: str,
+    exc: Exception,
+) -> "UpstreamFailure":
+    """Map an :class:`httpx.RequestError` to a network-unreachable failure."""
+    return UpstreamFailure(
+        kind="network_unreachable",
+        provider_name=provider_name,
+        upstream_status=None,
+        upstream_body=None,
+        upstream_message=str(exc)[:240] or None,
+        retry_after_seconds=None,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Errors
 # ---------------------------------------------------------------------------
 
@@ -147,7 +311,17 @@ class AiProviderError(RuntimeError):
 
     Subclasses are caught by the orchestrator (Phase 2) and converted into
     structured failures rather than exceptions in user-facing surfaces.
+
+    When a concrete provider has structured information about the upstream
+    failure (HTTP status, response body, Retry-After), it attaches an
+    :class:`UpstreamFailure` via :attr:`failure`. The orchestrator reads
+    this directly to populate the typed :class:`~app.ai.schemas.AiFixError`
+    instead of regex-ing error strings.
     """
+
+    def __init__(self, message: str, *, failure: "UpstreamFailure | None" = None) -> None:
+        super().__init__(message)
+        self.failure = failure
 
 
 class ProviderUnavailableError(AiProviderError):

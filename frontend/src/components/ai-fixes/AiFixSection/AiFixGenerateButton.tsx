@@ -12,6 +12,13 @@ interface AiFixGenerateButtonProps {
   onGenerate: () => void;
   loading?: boolean;
   errorMessage?: string;
+  /**
+   * When true, the button is disabled because clicking it cannot resolve
+   * the underlying error (quota / auth / model-not-found / provider-down).
+   * The user must change settings or wait for the upstream provider to
+   * recover. Distinct from ``loading`` (in-flight retry).
+   */
+  disabledByError?: boolean;
 }
 
 /**
@@ -29,14 +36,17 @@ export function AiFixGenerateButton({
   onGenerate,
   loading,
   errorMessage,
+  disabledByError = false,
 }: AiFixGenerateButtonProps) {
+  const isDisabled = Boolean(loading) || disabledByError;
   return (
     <div className="flex flex-col items-start gap-2 rounded-lg border border-dashed border-border bg-surface-muted p-4">
       <button
         type="button"
         onClick={onGenerate}
-        disabled={loading}
-        className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-white shadow-elev-1 hover:bg-hcl-dark disabled:cursor-progress disabled:opacity-70"
+        disabled={isDisabled}
+        aria-disabled={isDisabled}
+        className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-white shadow-elev-1 hover:bg-hcl-dark disabled:cursor-not-allowed disabled:opacity-50"
       >
         <Sparkles className="h-4 w-4" aria-hidden />
         {loading
