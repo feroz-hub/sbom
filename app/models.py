@@ -63,6 +63,14 @@ class SBOMSource(Base):
     modified_on = Column(String, nullable=True)
     modified_by = Column(String, nullable=True)
 
+    # 8-stage validation outcome — see migration 012.
+    status = Column(String(24), nullable=False, default="validated", index=True)
+    failed_stage = Column(String(32), nullable=True, index=True)
+    validation_errors = Column(JSON, nullable=True)
+    error_count = Column(Integer, nullable=False, default=0)
+    warning_count = Column(Integer, nullable=False, default=0)
+    validated_at = Column(String, nullable=True)
+
     project = relationship("Projects", back_populates="sboms")
     sbom_type_rel = relationship("SBOMType", back_populates="sboms")
     analysis_reports = relationship("SBOMAnalysisReport", back_populates="sbom")

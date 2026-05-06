@@ -70,6 +70,8 @@ from ..sources import (
     normalize_source_names,
     run_sources_concurrently,
 )
+from ..validation import ErrorReport
+from ..validation import run as run_validation
 
 log = logging.getLogger(__name__)
 
@@ -93,6 +95,50 @@ def _coerce_sbom_data(value: Any) -> str | None:
     if isinstance(value, (dict, list)):
         return json.dumps(value, ensure_ascii=False)
     return value if isinstance(value, str) else str(value)
+
+
+def _classify_status(report: ErrorReport) -> str:
+    """Map an ErrorReport to one of the canonical sbom_source.status values.
+
+    ``quarantined`` is reserved for security-stage errors (XXE, depth bombs,
+    prototype-pollution keys) — they require admin attention rather than
+    a re-upload. Everything else with errors is ``failed``; clean reports
+    (errors-free, regardless of warnings) are ``validated``.
+    """
+    if not report.has_errors():
+        return "validated"
+    for entry in report.errors:
+        if entry.stage == "security":
+            return "quarantined"
+    return "failed"
+
+
+def _validation_failure_response(
+    sbom_id: int, report: ErrorReport, sbom_name: str
+) -> HTTPException:
+    """Build the structured 4xx response for a rejected upload.
+
+    The ``detail`` shape mirrors ``ErrorReport.to_dict()`` plus the bits
+    the frontend needs to navigate to the persisted row: ``sbom_id``,
+    ``status``, ``failed_stage``, and the count summary.
+    """
+    return HTTPException(
+        status_code=report.http_status,
+        detail={
+            "code": "sbom_validation_failed",
+            "message": (
+                f"SBOM '{sbom_name}' did not pass validation; "
+                f"{report.error_count} error(s) at stage '{report.first_error_stage}'."
+            ),
+            "sbom_id": sbom_id,
+            "status": _classify_status(report),
+            "failed_stage": report.first_error_stage,
+            "error_count": report.error_count,
+            "warning_count": report.warning_count,
+            "entries": [e.model_dump() for e in report.entries],
+            "truncated": report.truncated,
+        },
+    )
 
 
 def normalized_key(value: str | None) -> str:
@@ -346,15 +392,50 @@ def create_sbom(payload: SBOMSourceCreate, db: Session = Depends(get_db)):
                 },
             )
 
+    # --- Run the 8-stage validator BEFORE the insert. The row is written
+    # whether the report is clean or rejected — failed uploads must have a
+    # persistent home so the user can navigate back to the report. The
+    # validator is CPU-bound and fast (≤ a few hundred ms for SBOMs that
+    # fit MAX_UPLOAD_BYTES); running synchronously here keeps the create
+    # endpoint atomic. ---
+    raw_text = _coerce_sbom_data(payload.sbom_data) or ""
+    report = run_validation(raw_text.encode("utf-8"))
+    sbom_status = _classify_status(report)
+    serialized_entries = [e.model_dump() for e in report.entries] if report.entries else None
+
     try:
-        obj = SBOMSource(**payload.model_dump(), created_on=now_iso())
+        data = payload.model_dump()
+        data["sbom_data"] = raw_text or None
+        obj = SBOMSource(
+            **data,
+            created_on=now_iso(),
+            status=sbom_status,
+            failed_stage=report.first_error_stage,
+            validation_errors=serialized_entries,
+            error_count=report.error_count,
+            warning_count=report.warning_count,
+            validated_at=now_iso(),
+        )
         db.add(obj)
         db.flush()
         db.commit()
         db.refresh(obj)
-        log.info("SBOM created: id=%d name='%s'", obj.id, obj.sbom_name)
+        log.info(
+            "SBOM created: id=%d name='%s' status=%s errors=%d warnings=%d",
+            obj.id,
+            obj.sbom_name,
+            sbom_status,
+            report.error_count,
+            report.warning_count,
+        )
 
-        # Persist parsed components immediately so the UI can display them
+        # On hard failure, surface the report alongside the persisted
+        # row id so the UI can navigate to it. We commit the row first
+        # so the id is stable even after the HTTPException unwinds.
+        if report.has_errors():
+            raise _validation_failure_response(int(obj.id), report, str(obj.sbom_name))
+
+        # Clean SBOM (or warnings only) — sync components for the UI.
         try:
             components = sync_sbom_components(db, obj)
             db.commit()
@@ -388,7 +469,9 @@ def create_sbom(payload: SBOMSourceCreate, db: Session = Depends(get_db)):
             status_code=500, detail={"code": "db_error", "message": "Internal database error while creating SBOM."}
         ) from exc
     except HTTPException:
-        db.rollback()
+        # Validation-failure responses fall through here without rollback —
+        # the row was already committed and is the navigation target the
+        # frontend report links to.
         raise
     except Exception:
         db.rollback()
@@ -398,9 +481,31 @@ def create_sbom(payload: SBOMSourceCreate, db: Session = Depends(get_db)):
         )
 
 
+_ALLOWED_STATUSES = {"validated", "failed", "quarantined", "pending"}
+_ALLOWED_STAGES = {
+    "ingress",
+    "detect",
+    "schema",
+    "semantic",
+    "integrity",
+    "security",
+    "ntia",
+    "signature",
+}
+
+
 @router.get("/sboms", response_model=list[SBOMSourceOut])
 def get_sbom_details(
     user_id: str | None = Query(None, description="Filter by CreatedBy (letters/digits/_/./-, 1–64 chars)"),
+    status_filter: str | None = Query(
+        None,
+        alias="status",
+        description="Filter by validation status: validated | failed | quarantined | pending.",
+    ),
+    stage: str | None = Query(
+        None,
+        description="Filter by failed_stage (ingress | detect | schema | semantic | integrity | security | ntia | signature).",
+    ),
     page: int = Query(1, ge=1, description="Page number (offset mode; ignored when cursor is set)"),
     page_size: int = Query(50, ge=1, le=500, description="Items per page (1..500)"),
     cursor: int | None = Query(
@@ -414,12 +519,29 @@ def get_sbom_details(
     page = 1 if page < 1 else page
     page_size = max(1, min(page_size, 500))
 
+    if status_filter is not None and status_filter not in _ALLOWED_STATUSES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"status must be one of {sorted(_ALLOWED_STATUSES)}",
+        )
+    if stage is not None and stage not in _ALLOWED_STAGES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"stage must be one of {sorted(_ALLOWED_STAGES)}",
+        )
+
     try:
         stmt = select(SBOMSource)
         count_stmt = select(func.count(SBOMSource.id))
         if user_id is not None:
             stmt = stmt.where(SBOMSource.created_by == user_id)
             count_stmt = count_stmt.where(SBOMSource.created_by == user_id)
+        if status_filter is not None:
+            stmt = stmt.where(SBOMSource.status == status_filter)
+            count_stmt = count_stmt.where(SBOMSource.status == status_filter)
+        if stage is not None:
+            stmt = stmt.where(SBOMSource.failed_stage == stage)
+            count_stmt = count_stmt.where(SBOMSource.failed_stage == stage)
 
         total = db.execute(count_stmt).scalar_one()
 

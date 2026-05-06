@@ -80,6 +80,18 @@ class GeminiProvider(LlmProvider):
 
         # Internal OpenAI-compatible client. The cost lookup picks the
         # Gemini PRICING table by way of ``provider="gemini"``.
+        #
+        # ``structured_output_mode="json_object"`` is the surgical bug
+        # fix: Gemini's OpenAI-compat endpoint does NOT support the
+        # ``json_schema`` strict mode that real OpenAI accepts. Passing
+        # it through silently degrades to free-form generation, which
+        # has been surfacing as ``schema_parse_failed`` errors in the
+        # ledger (Gemini returns prose because it interpreted the
+        # unsupported field as "respond freely"). ``json_object`` is the
+        # only ``response_format`` Gemini honors here; the strict prompt
+        # already in place + the lenient ``parse_llm_json`` layer enforce
+        # the schema shape on top of valid-JSON-ness.
+        # Reference: https://ai.google.dev/gemini-api/docs/openai
         self._inner = OpenAiProvider(
             api_key=api_key,
             default_model=default_model,
@@ -91,6 +103,7 @@ class GeminiProvider(LlmProvider):
             breaker_threshold=breaker_threshold,
             breaker_reset_seconds=breaker_reset_seconds,
             request_timeout_seconds=request_timeout_seconds,
+            structured_output_mode="json_object",
         )
         # Override the inner provider's identity so cost / metrics /
         # ledger rows attribute to "gemini", not "openai".

@@ -1,11 +1,12 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useQuery } from '@tanstack/react-query';
-import { Upload, AlertCircle } from 'lucide-react';
+import { Upload, AlertCircle, AlertOctagon, ArrowRight } from 'lucide-react';
 import { Dialog, DialogBody, DialogFooter } from '@/components/ui/Dialog';
 import { Input, Textarea } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
@@ -13,7 +14,17 @@ import { Button } from '@/components/ui/Button';
 import { createSbom, getProjects, getSbomTypes, HttpError } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
 import { useSbomsList } from '@/hooks/useSbomsList';
-import type { SBOMSource } from '@/types';
+import { stageLabel, stageNumber } from '@/lib/sbomValidation';
+import type { SBOMSource, SbomValidationFailureDetail } from '@/types';
+
+function isValidationFailureDetail(detail: unknown): detail is SbomValidationFailureDetail {
+  return (
+    typeof detail === 'object' &&
+    detail !== null &&
+    (detail as { code?: unknown }).code === 'sbom_validation_failed' &&
+    typeof (detail as { sbom_id?: unknown }).sbom_id === 'number'
+  );
+}
 
 const schema = z.object({
   sbom_name: z.string().min(1, 'Name is required'),
@@ -61,6 +72,7 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [validationFailure, setValidationFailure] = useState<SbomValidationFailureDetail | null>(null);
   const [duplicateNameError, setDuplicateNameError] = useState<string | null>(null);
   const { showToast } = useToast();
 
@@ -126,6 +138,7 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
   const onSubmit = async (values: FormValues) => {
     setUploading(true);
     setUploadError(null);
+    setValidationFailure(null);
 
     let sbom: SBOMSource;
     try {
@@ -139,8 +152,16 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
         productver: values.productver || undefined,
       });
     } catch (err) {
-      // Upload failed — stay in modal, show inline error. No toast.
-      setUploadError(formatUploadError(err));
+      // Validation failure (4xx with structured detail) → render the
+      // structured rejection card with stage info + "View full report" link.
+      if (err instanceof HttpError && isValidationFailureDetail(err.detail)) {
+        setValidationFailure(err.detail);
+        setUploadError(null);
+      } else {
+        // Generic upload failure (network, 409 duplicate, 413 too-large) —
+        // fall back to the existing one-line error banner.
+        setUploadError(formatUploadError(err));
+      }
       setUploading(false);
       return; // modal stays open
     }
@@ -150,6 +171,7 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
     setUploading(false);
     reset();
     setUploadError(null);
+    setValidationFailure(null);
     setDuplicateNameError(null);
     onClose(); // ← CLOSE HERE (line order matters — before onSuccess triggers analysis)
 
@@ -164,6 +186,7 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
     if (uploading) return; // don't close mid-upload
     reset();
     setUploadError(null);
+    setValidationFailure(null);
     setDuplicateNameError(null);
     onClose();
   };
@@ -173,8 +196,74 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
       <form onSubmit={handleSubmit(onSubmit)}>
         <DialogBody className="space-y-4">
 
-          {/* Inline upload error — shown only for upload failures (NOT analysis failures) */}
-          {uploadError && (
+          {/* Structured validation failure — surfaces the persisted report
+              and offers a one-click jump to the full detail page. */}
+          {validationFailure && (
+            <div
+              className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm dark:border-red-800 dark:bg-red-950/40"
+              role="alert"
+            >
+              <div className="flex items-start gap-2">
+                <AlertOctagon className="h-4 w-4 mt-0.5 shrink-0 text-red-600 dark:text-red-400" aria-hidden />
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-red-700 dark:text-red-300">
+                    Upload rejected — {validationFailure.error_count} error
+                    {validationFailure.error_count === 1 ? '' : 's'} found
+                  </p>
+                  <p className="mt-0.5 text-xs text-red-700/90 dark:text-red-300/90">
+                    {validationFailure.failed_stage ? (
+                      <>
+                        Stopped at: <span className="font-medium">Stage {stageNumber(validationFailure.failed_stage)} — {stageLabel(validationFailure.failed_stage)}</span>
+                      </>
+                    ) : (
+                      'Validation halted before any stage completed.'
+                    )}
+                    {validationFailure.warning_count > 0 && (
+                      <> · {validationFailure.warning_count} warning{validationFailure.warning_count === 1 ? '' : 's'}</>
+                    )}
+                  </p>
+                  {/* Show the first error inline so the user has immediate
+                      context without opening the full detail page. */}
+                  {validationFailure.entries[0] && (
+                    <div className="mt-2 rounded-md border border-red-200 bg-white/60 px-3 py-2 text-xs dark:border-red-800 dark:bg-red-950/20">
+                      <p className="font-mono font-semibold text-red-800 dark:text-red-300 break-all">
+                        {validationFailure.entries[0].code}
+                      </p>
+                      {validationFailure.entries[0].path && (
+                        <p className="mt-0.5 font-mono text-[11px] text-red-700/80 dark:text-red-300/80 break-all">
+                          {validationFailure.entries[0].path}
+                        </p>
+                      )}
+                      <p className="mt-1 text-red-800 dark:text-red-200 break-words">
+                        {validationFailure.entries[0].message}
+                      </p>
+                    </div>
+                  )}
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <Link
+                      href={`/sboms/${validationFailure.sbom_id}#validation-report`}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-red-700 hover:underline dark:text-red-300"
+                      onClick={handleClose}
+                    >
+                      View full report
+                      <ArrowRight className="h-3 w-3" aria-hidden />
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => fileRef.current?.click()}
+                      className="text-xs font-medium text-hcl-muted hover:text-hcl-navy hover:underline"
+                    >
+                      Choose another file
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Inline upload error — shown only for non-validation failures
+              (network errors, 409 duplicate, 413 too-large). */}
+          {uploadError && !validationFailure && (
             <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
               <span>{uploadError}</span>

@@ -21,6 +21,7 @@ import type {
   ConsolidatedAnalysisResult,
   SBOMInfo,
   SBOMRiskSummary,
+  ValidationReport,
   DashboardTrend,
   CompareRunsResult,
   AnalysisSchedule,
@@ -47,11 +48,20 @@ export const BASE_URL = resolveBaseUrl();
 export class HttpError extends Error {
   status: number;
   code?: string;
-  constructor(message: string, status: number, code?: string) {
+  /**
+   * Structured server-side detail payload, when present. The 4xx envelope
+   * for sbom validation failures lives here verbatim — see
+   * ``SbomValidationFailureDetail`` in @/types. Keeping the raw object
+   * around lets the upload modal render the structured rejection card
+   * (stage / error count / "View full report" link) without re-fetching.
+   */
+  detail?: unknown;
+  constructor(message: string, status: number, code?: string, detail?: unknown) {
     super(message);
     this.name = 'HttpError';
     this.status = status;
     this.code = code;
+    this.detail = detail;
   }
 }
 
@@ -111,9 +121,11 @@ async function performRequest(
   if (!res.ok) {
     let message = `HTTP ${res.status}: ${res.statusText}`;
     let code: string | undefined;
+    let rawDetail: unknown;
     try {
       const body = await res.json();
       if (body?.detail) {
+        rawDetail = body.detail;
         if (typeof body.detail === 'string') {
           message = body.detail;
         } else if (typeof body.detail === 'object' && !Array.isArray(body.detail) && body.detail.message) {
@@ -130,7 +142,7 @@ async function performRequest(
     } catch {
       // ignore JSON parse errors
     }
-    throw new HttpError(message, res.status, code);
+    throw new HttpError(message, res.status, code, rawDetail);
   }
 
   return res;
@@ -584,6 +596,10 @@ export function getSbomInfo(sbomId: number, signal?: AbortSignal) {
 
 export function getSbomRiskSummary(sbomId: number, signal?: AbortSignal) {
   return request<SBOMRiskSummary>(`/api/sboms/${sbomId}/risk-summary`, { signal });
+}
+
+export function getSbomValidationReport(sbomId: number, signal?: AbortSignal) {
+  return request<ValidationReport>(`/api/sboms/${sbomId}/validation-report`, { signal });
 }
 
 // ─── Dashboard trend ─────────────────────────────────────────────────────────

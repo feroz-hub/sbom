@@ -208,6 +208,93 @@ async def test_openai_response_format_with_schema():
 
 
 @pytest.mark.asyncio
+async def test_openai_structured_output_mode_json_object_sends_only_type():
+    """Provider-aware response_format: ``json_object`` mode sends ``{"type": "json_object"}``.
+
+    Schema is NOT inlined — Gemini's OpenAI-compat endpoint rejects
+    ``json_schema`` and silently degrades on the inlined schema. Only
+    the type marker is sent; schema enforcement is delegated to prompts +
+    post-validation.
+    """
+    schema = {"type": "object", "properties": {"x": {"type": "integer"}}}
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content.decode())
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{"message": {"content": '{"x": 1}'}}],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+            },
+        )
+
+    provider = OpenAiProvider(
+        api_key="sk-test",
+        client_factory=lambda: _make_client(handler),
+        structured_output_mode="json_object",
+    )
+    await provider.generate(_llm_req(response_schema=schema))
+    rf = captured["body"]["response_format"]
+    assert rf == {"type": "json_object"}
+    # Must NOT leak the schema body — that's the Gemini failure mode.
+    assert "json_schema" not in rf
+    serialised = json.dumps(captured["body"])
+    assert "json_schema" not in serialised
+
+
+@pytest.mark.asyncio
+async def test_openai_structured_output_mode_none_omits_response_format():
+    """``none`` mode suppresses response_format entirely (custom-proxy escape hatch)."""
+    schema = {"type": "object", "properties": {"x": {"type": "integer"}}}
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content.decode())
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{"message": {"content": '{"x": 1}'}}],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+            },
+        )
+
+    provider = OpenAiProvider(
+        api_key="sk-test",
+        client_factory=lambda: _make_client(handler),
+        structured_output_mode="none",
+    )
+    await provider.generate(_llm_req(response_schema=schema))
+    assert "response_format" not in captured["body"]
+
+
+@pytest.mark.asyncio
+async def test_openai_no_schema_means_no_response_format_in_any_mode():
+    """When the request carries no schema, no response_format is sent regardless of mode."""
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content.decode())
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{"message": {"content": "free-text reply"}}],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+            },
+        )
+
+    for mode in ("json_schema_strict", "json_object", "none"):
+        captured.clear()
+        provider = OpenAiProvider(
+            api_key="sk-test",
+            client_factory=lambda: _make_client(handler),
+            structured_output_mode=mode,  # type: ignore[arg-type]
+        )
+        await provider.generate(_llm_req())  # no response_schema
+        assert "response_format" not in captured["body"], f"mode={mode}"
+
+
+@pytest.mark.asyncio
 async def test_openai_unknown_model_warns_and_costs_zero(caplog):
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(

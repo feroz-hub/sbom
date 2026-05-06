@@ -20,8 +20,9 @@ import { useToast } from '@/hooks/useToast';
 import { useTableSort } from '@/hooks/useTableSort';
 import { usePagination } from '@/hooks/usePagination';
 import { sbomAnalysisShortLabel } from '@/lib/analysisRunStatusLabels';
+import { stageLabel, validationStatusMeta } from '@/lib/sbomValidation';
 import type { AnalysisStatus } from '@/hooks/useBackgroundAnalysis';
-import type { SBOMSource } from '@/types';
+import type { SBOMSource, SbomValidationStatus } from '@/types';
 
 type SbomSortKey = 'id' | 'sbom_name' | 'project' | 'created_by' | 'created_on';
 
@@ -51,6 +52,36 @@ const ANALYSIS_OPTIONS: { value: string; label: string }[] = [
   { value: 'ERROR', label: sbomAnalysisShortLabel('ERROR') },
 ];
 
+const VALIDATION_OPTIONS: { value: string; label: string }[] = [
+  { value: '', label: 'All upload states' },
+  { value: 'validated', label: 'Validated' },
+  { value: 'validated_warnings', label: 'Validated · with warnings' },
+  { value: 'failed', label: 'Validation failed' },
+  { value: 'quarantined', label: 'Quarantined' },
+];
+
+function ValidationCell({ sbom }: { sbom: SBOMSource }) {
+  const status = (sbom.status ?? 'validated') as SbomValidationStatus;
+  const warnings = sbom.warning_count ?? 0;
+  const errors = sbom.error_count ?? 0;
+  const meta = validationStatusMeta(status, warnings);
+  const tooltip =
+    status === 'failed' || status === 'quarantined'
+      ? `${meta.description} Stopped at: ${stageLabel(sbom.failed_stage ?? null)}.`
+      : meta.description;
+  return (
+    <span
+      className={`inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${meta.classes}`}
+      title={tooltip}
+    >
+      <span className="min-w-0 truncate">{meta.label}</span>
+      {(status === 'failed' || status === 'quarantined') && errors > 0 && (
+        <span className="font-bold tabular-nums">{errors}</span>
+      )}
+    </span>
+  );
+}
+
 export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -59,6 +90,7 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
   const [search, setSearch] = useState('');
   const [projectFilter, setProjectFilter] = useState('');
   const [analysisFilter, setAnalysisFilter] = useState('');
+  const [validationFilter, setValidationFilter] = useState('');
 
   const deleteMutation = useMutation({
     mutationFn: (sbom: SBOMSource) => deleteSbom(sbom.id, sbom.created_by ?? ''),
@@ -101,14 +133,30 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
     if (analysisFilter) {
       rows = rows.filter((sb) => normalizeAnalysis(sb) === analysisFilter);
     }
+    if (validationFilter) {
+      rows = rows.filter((sb) => {
+        const status = sb.status ?? 'validated';
+        const warnings = sb.warning_count ?? 0;
+        if (validationFilter === 'validated_warnings') {
+          return status === 'validated' && warnings > 0;
+        }
+        if (validationFilter === 'validated') {
+          return status === 'validated' && warnings === 0;
+        }
+        return status === validationFilter;
+      });
+    }
     return rows;
-  }, [sboms, search, projectFilter, analysisFilter]);
+  }, [sboms, search, projectFilter, analysisFilter, validationFilter]);
 
-  const filtersActive = Boolean(search.trim() || projectFilter || analysisFilter);
+  const filtersActive = Boolean(
+    search.trim() || projectFilter || analysisFilter || validationFilter,
+  );
   const clearFilters = () => {
     setSearch('');
     setProjectFilter('');
     setAnalysisFilter('');
+    setValidationFilter('');
   };
 
   const sortAccessors = useMemo(
@@ -136,7 +184,7 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
   useEffect(() => {
     pagination.resetPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, projectFilter, analysisFilter]);
+  }, [search, projectFilter, analysisFilter, validationFilter]);
 
   if (error) {
     return (
@@ -195,6 +243,20 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
                 ))}
               </Select>
             </div>
+            <div className="w-full min-w-[10rem] sm:w-52">
+              <Select
+                label="Upload validation"
+                value={validationFilter}
+                onChange={(e) => setValidationFilter(e.target.value)}
+                className="w-full"
+              >
+                {VALIDATION_OPTIONS.map(({ value, label }) => (
+                  <option key={value || '__all-validation__'} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </Select>
+            </div>
           </TableFilterBar>
         ) : null}
 
@@ -227,6 +289,7 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
               </SortableTh>
               <Th>Version</Th>
               <Th>Format</Th>
+              <Th>Upload</Th>
               <Th>Analysis</Th>
               <SortableTh
                 sortKey="created_by"
@@ -249,12 +312,12 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
           </TableHead>
           <TableBody>
             {isLoading ? (
-              Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} cols={9} />)
+              Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} cols={10} />)
             ) : !sboms?.length ? (
-              <EmptyRow cols={9} message="No SBOMs found. Upload your first SBOM!" />
+              <EmptyRow cols={10} message="No SBOMs found. Upload your first SBOM!" />
             ) : !filteredSboms.length ? (
               <EmptyRow
-                cols={9}
+                cols={10}
                 message="No SBOMs match your filters. Try adjusting search or clear filters."
               />
             ) : (
@@ -279,6 +342,16 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
                   <Td className="text-hcl-muted">{displayProject(sbom)}</Td>
                   <Td className="text-hcl-muted">{sbom.sbom_version || sbom.productver || '—'}</Td>
                   <Td className="text-hcl-muted">{sbom.sbom_type || '—'}</Td>
+                  <Td>
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/sboms/${sbom.id}#validation-report`)}
+                      className="cursor-pointer text-left"
+                      aria-label={`View validation report for ${sbom.sbom_name}`}
+                    >
+                      <ValidationCell sbom={sbom} />
+                    </button>
+                  </Td>
                   <Td>
                     <SbomStatusBadge
                       sbomId={sbom.id}

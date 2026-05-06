@@ -5,6 +5,8 @@ Same MockTransport pattern as ``test_providers.py`` — no real network.
 
 from __future__ import annotations
 
+import json
+
 import httpx
 import pytest
 from app.ai.providers.base import (
@@ -109,6 +111,54 @@ async def test_gemini_paid_tier_honors_rate():
 def test_gemini_requires_api_key():
     with pytest.raises(ProviderUnavailableError):
         GeminiProvider(api_key="")
+
+
+@pytest.mark.asyncio
+async def test_gemini_sends_json_object_mode_not_json_schema():
+    """Surgical fix: Gemini must send ``response_format={"type": "json_object"}``.
+
+    Gemini's OpenAI-compat endpoint silently degrades on the
+    ``json_schema`` strict mode that real OpenAI accepts — it produces
+    free-form prose instead of structured JSON, which is the root cause
+    of ``schema_parse_failed`` rows in the production ledger. The provider
+    must downgrade to ``json_object`` (the only structured mode Gemini
+    honors here); schema shape is enforced by prompt + ``parse_llm_json``.
+    """
+    schema = {"type": "object", "properties": {"summary": {"type": "string"}}}
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["url"] = str(request.url)
+        captured["body"] = json.loads(request.content.decode())
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{"message": {"content": '{"summary": "ok"}'}}],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+            },
+        )
+
+    provider = GeminiProvider(
+        api_key="AIzaSy-test",
+        client_factory=lambda: _make_client(handler),
+        tier="free",
+    )
+    resp = await provider.generate(_llm_req(response_schema=schema))
+
+    body = captured["body"]
+    rf = body["response_format"]
+    # The fix: json_object only.
+    assert rf == {"type": "json_object"}
+    # Regression guard: schema must NOT be inlined in the request body —
+    # this was the broken state pre-fix that caused Gemini to fall back
+    # to prose generation.
+    assert "json_schema" not in rf
+    assert "json_schema" not in json.dumps(body)
+    # Hits the Gemini OpenAI-compat endpoint, not real OpenAI.
+    assert "generativelanguage.googleapis.com/v1beta/openai" in captured["url"]
+    # Sanity: the response still parses fine for downstream callers
+    # (the strict-prompt path is unaffected).
+    assert resp.text == '{"summary": "ok"}'
 
 
 # ============================================================ Grok

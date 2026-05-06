@@ -72,6 +72,61 @@ class SBOMSourceOut(ORMModel):
     modified_on: str | None = None
     modified_by: str | None = None
 
+    # 8-stage validation outcome — populated by POST /api/sboms and
+    # POST /api/sboms/upload. Older rows that predate migration 012 carry
+    # the server defaults: status='validated', counts=0, validation_errors
+    # absent.
+    status: str = "validated"
+    failed_stage: str | None = None
+    validation_errors: list[dict] | None = None
+    error_count: int = 0
+    warning_count: int = 0
+    validated_at: str | None = None
+
+
+class ValidationErrorEntry(BaseModel):
+    """One entry of the persisted validation report, enriched for the UI.
+
+    Mirrors :class:`app.validation.errors.ValidationError` plus
+    ``stage_number`` (1-8 from the canonical pipeline). The frontend's
+    error card renders these fields verbatim — every field on this model
+    must reach the DOM somewhere.
+    """
+
+    code: str
+    severity: str
+    stage: str
+    stage_number: int
+    path: str
+    message: str
+    remediation: str
+    spec_reference: str | None = None
+
+
+class ValidationReportResponse(BaseModel):
+    """Full validation report for an SBOM detail page.
+
+    The detail page leads with this when ``status != 'validated'``. The
+    summary aggregations (``severity_summary`` / ``stage_summary``) are
+    pre-computed server-side so the UI can render badges without
+    re-walking ``entries`` for 100+-error reports.
+    """
+
+    sbom_id: int
+    filename: str
+    status: str
+    failed_stage: str | None = None
+    error_count: int = 0
+    warning_count: int = 0
+    info_count: int = 0
+    entries: list[ValidationErrorEntry] = []
+    validated_at: str | None = None
+    spec_detected: str | None = None
+    spec_version_detected: str | None = None
+    severity_summary: dict[str, int] = Field(default_factory=dict)
+    stage_summary: dict[str, int] = Field(default_factory=dict)
+    truncated: bool = False
+
 
 class SBOMComponentOut(ORMModel):
     id: int

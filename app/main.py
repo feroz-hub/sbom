@@ -88,6 +88,26 @@ def _ensure_text_column(table_name: str, column_name: str) -> None:
         conn.commit()
 
 
+def _ensure_column(table_name: str, column_name: str, type_sql: str, default_sql: str | None = None) -> None:
+    """Idempotent ALTER TABLE for SQLite columns of an arbitrary type.
+
+    SQLite forbids non-constant defaults in ``ADD COLUMN``; the caller
+    must pass a literal (e.g. ``"'validated'"``, ``"0"``) when the
+    column is ``NOT NULL``.
+    """
+    if engine.dialect.name != "sqlite":
+        return
+    with engine.connect() as conn:
+        existing = {row[1] for row in conn.execute(text(f"PRAGMA table_info({table_name})"))}
+        if column_name in existing:
+            return
+        ddl = f"ALTER TABLE {table_name} ADD COLUMN {column_name} {type_sql}"
+        if default_sql is not None:
+            ddl += f" DEFAULT {default_sql}"
+        conn.execute(text(ddl))
+        conn.commit()
+
+
 def _ensure_seed_data() -> None:
     """Create tables, run lightweight migrations, seed reference data."""
     Base.metadata.create_all(bind=engine)
@@ -101,6 +121,17 @@ def _ensure_seed_data() -> None:
     _ensure_text_column("analysis_finding", "aliases")
     _ensure_text_column("run_cache", "source")
     _ensure_text_column("run_cache", "sbom_id")
+
+    # Migration 012 — sbom_source validation columns. Idempotent for
+    # SQLite dev DBs that predate the Alembic chain. NOT NULL columns
+    # carry literal defaults so existing rows (legacy uploads) get a
+    # safe "validated" status.
+    _ensure_column("sbom_source", "status", "TEXT", "'validated'")
+    _ensure_column("sbom_source", "failed_stage", "TEXT")
+    _ensure_column("sbom_source", "validation_errors", "TEXT")
+    _ensure_column("sbom_source", "error_count", "INTEGER", "0")
+    _ensure_column("sbom_source", "warning_count", "INTEGER", "0")
+    _ensure_column("sbom_source", "validated_at", "TEXT")
 
     db = SessionLocal()
     try:

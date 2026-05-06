@@ -13,7 +13,8 @@ import { SkeletonRow } from '@/components/ui/Spinner';
 import { Pagination } from '@/components/ui/Pagination';
 import { AnalysisProgress } from '@/components/analysis/AnalysisProgress';
 import { ScheduleCard } from '@/components/schedules/ScheduleCard';
-import { getSbomComponents, getRuns, getSbomInfo, getSbomRiskSummary } from '@/lib/api';
+import { ValidationReportSection } from '@/components/sboms/ValidationReportSection';
+import { getSbomComponents, getRuns, getSbomInfo, getSbomRiskSummary, getSbomValidationReport } from '@/lib/api';
 import { useAnalysisStream } from '@/hooks/useAnalysisStream';
 import { useTableSort } from '@/hooks/useTableSort';
 import { usePagination } from '@/hooks/usePagination';
@@ -49,6 +50,15 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
     queryKey: ['sbom-info', sbom.id],
     queryFn: ({ signal }) => getSbomInfo(sbom.id, signal),
     // info endpoint 400s for SBOMs with no stored data — fail silently
+    retry: false,
+  });
+
+  // 8-stage validation report — always present; the failed-state surface
+  // leads with this section, the validated-clean state renders a single
+  // green confirmation line.
+  const { data: validationReport } = useQuery({
+    queryKey: ['sbom-validation-report', sbom.id],
+    queryFn: ({ signal }) => getSbomValidationReport(sbom.id, signal),
     retry: false,
   });
 
@@ -145,6 +155,16 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
       >
         <ArrowLeft className="h-4 w-4" /> Back to SBOMs
       </button>
+
+      {/* 8-stage validation report — leads the page so failed uploads
+          surface the rejection reason before any other detail. The deep-link
+          anchor lets the upload-modal "View full report" button scroll to
+          the right place. */}
+      {validationReport && (
+        <div id="validation-report">
+          <ValidationReportSection report={validationReport} />
+        </div>
+      )}
 
       {/* SBOM Metadata Card */}
       <Card>

@@ -301,6 +301,22 @@ class ErrorReport(BaseModel):
         return [e for e in self.entries if e.severity is Severity.INFO]
 
     @property
+    def first_error_stage(self) -> str | None:
+        """Return the ``stage`` of the first error-severity entry, or None."""
+        for e in self.entries:
+            if e.severity is Severity.ERROR:
+                return e.stage
+        return None
+
+    @property
+    def error_count(self) -> int:
+        return sum(1 for e in self.entries if e.severity is Severity.ERROR)
+
+    @property
+    def warning_count(self) -> int:
+        return sum(1 for e in self.entries if e.severity is Severity.WARNING)
+
+    @property
     def http_status(self) -> int:
         """Return the highest-priority HTTP status across error-severity entries.
 

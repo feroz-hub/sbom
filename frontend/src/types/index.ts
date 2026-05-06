@@ -9,6 +9,8 @@ export interface Project {
   modified_on: string | null;
 }
 
+export type SbomValidationStatus = 'validated' | 'failed' | 'quarantined' | 'pending';
+
 export interface SBOMSource {
   id: number;
   sbom_name: string;
@@ -22,6 +24,13 @@ export interface SBOMSource {
   modified_on: string | null;
   productver: string | null;
   sbom_data?: string | null;
+  // 8-stage validation outcome — populated by POST /api/sboms.
+  status?: SbomValidationStatus;
+  failed_stage?: string | null;
+  validation_errors?: ValidationErrorEntry[] | null;
+  error_count?: number;
+  warning_count?: number;
+  validated_at?: string | null;
   // Client-side only — not from API. Set during optimistic updates.
   // ADR-0001: OK / FINDINGS are the canonical names. PASS / FAIL accepted as
   // legacy aliases during the deprecation window.
@@ -35,6 +44,47 @@ export interface SBOMSource {
     | 'PASS' // legacy alias for OK
     | 'FAIL'; // legacy alias for FINDINGS
   _findingsCount?: number;
+}
+
+export interface ValidationErrorEntry {
+  code: string;
+  severity: 'error' | 'warning' | 'info';
+  stage: string;
+  stage_number?: number;
+  path: string;
+  message: string;
+  remediation: string;
+  spec_reference: string | null;
+}
+
+export interface ValidationReport {
+  sbom_id: number;
+  filename: string;
+  status: SbomValidationStatus;
+  failed_stage: string | null;
+  error_count: number;
+  warning_count: number;
+  info_count: number;
+  entries: ValidationErrorEntry[];
+  validated_at: string | null;
+  spec_detected: string | null;
+  spec_version_detected: string | null;
+  severity_summary: Record<string, number>;
+  stage_summary: Record<string, number>;
+  truncated: boolean;
+}
+
+/** Body of a 4xx response from POST /api/sboms when validation fails. */
+export interface SbomValidationFailureDetail {
+  code: 'sbom_validation_failed';
+  message: string;
+  sbom_id: number;
+  status: SbomValidationStatus;
+  failed_stage: string | null;
+  error_count: number;
+  warning_count: number;
+  entries: ValidationErrorEntry[];
+  truncated: boolean;
 }
 
 export interface SBOMComponent {

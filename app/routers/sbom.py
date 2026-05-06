@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections import Counter
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -10,7 +11,9 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..models import AnalysisFinding, AnalysisRun, SBOMSource
+from ..schemas import ValidationErrorEntry, ValidationReportResponse
 from ..services.risk_score import score_findings
+from ..validation.stages import STAGE_NUMBERS
 
 log = logging.getLogger("sbom.api.sbom")
 
@@ -66,6 +69,94 @@ def get_sbom_risk_summary(sbom_id: int, db: Session = Depends(get_db)):
         "run_id": run.id,
         **summary,
     }
+
+
+def _detect_format_from_data(sbom_data: str | None) -> tuple[str | None, str | None]:
+    """Best-effort (format, spec_version) extraction from a stored SBOM.
+
+    Returns ``(None, None)`` for non-JSON or malformed bodies. The
+    validation-report endpoint surfaces this so the UI can label "Stopped
+    at: Schema validation · CycloneDX 1.6" without re-running the
+    detection stage.
+    """
+    if not sbom_data:
+        return None, None
+    try:
+        as_dict = json.loads(sbom_data) if isinstance(sbom_data, str) else sbom_data
+    except (json.JSONDecodeError, TypeError):
+        return None, None
+    if not isinstance(as_dict, dict):
+        return None, None
+    if as_dict.get("bomFormat") == "CycloneDX":
+        return "cyclonedx", str(as_dict.get("specVersion") or "") or None
+    if "spdxVersion" in as_dict:
+        return "spdx", str(as_dict.get("spdxVersion") or "") or None
+    return None, None
+
+
+@router.get(
+    "/{sbom_id}/validation-report",
+    status_code=200,
+    response_model=ValidationReportResponse,
+)
+def get_sbom_validation_report(sbom_id: int, db: Session = Depends(get_db)):
+    """Return the persisted 8-stage validation report for an SBOM.
+
+    Always returns a row for any ``SBOMSource`` that exists, even rows
+    that predate migration 012 (those report ``status='validated'`` with
+    empty entries). The frontend's detail-page report section is the
+    primary consumer; the JSON download affordance also calls this
+    endpoint and serialises the response verbatim.
+    """
+    sbom = db.get(SBOMSource, sbom_id)
+    if not sbom:
+        raise HTTPException(status_code=404, detail="SBOM not found")
+
+    raw_entries: list[dict] = list(sbom.validation_errors or [])
+    enriched: list[ValidationErrorEntry] = []
+    severity_summary: Counter[str] = Counter()
+    stage_summary: Counter[str] = Counter()
+    info_count = 0
+    for raw in raw_entries:
+        if not isinstance(raw, dict):
+            continue
+        stage = str(raw.get("stage") or "")
+        severity = str(raw.get("severity") or "")
+        enriched.append(
+            ValidationErrorEntry(
+                code=str(raw.get("code") or ""),
+                severity=severity,
+                stage=stage,
+                stage_number=STAGE_NUMBERS.get(stage, 0),
+                path=str(raw.get("path") or ""),
+                message=str(raw.get("message") or ""),
+                remediation=str(raw.get("remediation") or ""),
+                spec_reference=raw.get("spec_reference"),
+            )
+        )
+        severity_summary[severity] += 1
+        stage_summary[stage] += 1
+        if severity == "info":
+            info_count += 1
+
+    spec_detected, spec_version_detected = _detect_format_from_data(sbom.sbom_data)
+
+    return ValidationReportResponse(
+        sbom_id=int(sbom.id),
+        filename=str(sbom.sbom_name),
+        status=str(sbom.status or "validated"),
+        failed_stage=sbom.failed_stage,
+        error_count=int(sbom.error_count or 0),
+        warning_count=int(sbom.warning_count or 0),
+        info_count=info_count,
+        entries=enriched,
+        validated_at=sbom.validated_at,
+        spec_detected=spec_detected,
+        spec_version_detected=spec_version_detected,
+        severity_summary=dict(severity_summary),
+        stage_summary=dict(stage_summary),
+        truncated=False,
+    )
 
 
 @router.get("/{sbom_id}/info", status_code=200)

@@ -9,7 +9,7 @@ import asyncio
 import json
 import logging
 import time
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 
@@ -31,6 +31,21 @@ from .base import (
 log = logging.getLogger("sbom.ai.providers.openai")
 
 _DEFAULT_BASE_URL = "https://api.openai.com/v1"
+
+# Structured-output modes — different OpenAI-compatible backends honor
+# different ``response_format`` shapes. The provider picks the right
+# shape per its endpoint; mismatched shapes are silently ignored by
+# Gemini (producing prose) and 400-rejected by some custom proxies.
+#
+# * ``json_schema_strict`` — true OpenAI Chat Completions + Anthropic
+#   passthroughs that speak the OpenAI dialect. Full schema enforcement.
+# * ``json_object`` — Gemini's OpenAI-compat endpoint. Enforces "valid
+#   JSON" but ignores the schema body; the strict prompt + post-validation
+#   layer carries the schema shape.
+# * ``none`` — emit no ``response_format`` at all. Conservative default
+#   for unknown OpenAI-compat backends (LM Studio, LocalAI, vLLM with
+#   older builds) that 400 on unrecognised ``response_format`` types.
+StructuredOutputMode = Literal["json_schema_strict", "json_object", "none"]
 
 
 class OpenAiProvider(LlmProvider):
@@ -56,6 +71,7 @@ class OpenAiProvider(LlmProvider):
         breaker_threshold: int = 5,
         breaker_reset_seconds: float = 60.0,
         request_timeout_seconds: float = 30.0,
+        structured_output_mode: StructuredOutputMode = "json_schema_strict",
     ) -> None:
         if not api_key:
             raise ProviderUnavailableError(f"{self.name}: api_key is required")
@@ -71,6 +87,7 @@ class OpenAiProvider(LlmProvider):
         self._breaker = CircuitBreaker(threshold=breaker_threshold, reset_seconds=breaker_reset_seconds)
         self._max_retries = max_retries
         self._timeout = request_timeout_seconds
+        self._structured_output_mode: StructuredOutputMode = structured_output_mode
 
     async def generate(self, req: LlmRequest) -> LlmResponse:
         self._breaker.allow()
@@ -241,17 +258,40 @@ class OpenAiProvider(LlmProvider):
             ],
         }
         if req.response_schema is not None:
-            # Use the strict json_schema response format. Falls back to
-            # plain JSON mode on older models — see Phase 2 prompt notes.
-            body["response_format"] = {
+            rf = self._build_response_format(req.response_schema)
+            if rf is not None:
+                body["response_format"] = rf
+        return body
+
+    def _build_response_format(self, schema: dict[str, Any]) -> dict[str, Any] | None:
+        """Pick the ``response_format`` shape this endpoint actually honors.
+
+        Real OpenAI Chat Completions and Anthropic-via-OpenAI accept the
+        full ``json_schema`` strict mode. Gemini's OpenAI-compat endpoint
+        does NOT — passing ``json_schema`` there silently degrades to
+        unconstrained generation, which is the root cause of the
+        ``schema_parse_failed`` rate observed in production. ``json_object``
+        is the only mode Gemini honors through this endpoint; the strict
+        prompt + post-validation layer enforces schema shape.
+
+        ``none`` returns no ``response_format`` at all — for backends that
+        400 on unrecognised types (some custom proxies). Schema enforcement
+        falls entirely on the prompt + parser.
+        """
+        mode = self._structured_output_mode
+        if mode == "json_schema_strict":
+            return {
                 "type": "json_schema",
                 "json_schema": {
                     "name": "structured_output",
                     "strict": True,
-                    "schema": req.response_schema,
+                    "schema": schema,
                 },
             }
-        return body
+        if mode == "json_object":
+            return {"type": "json_object"}
+        # mode == "none" — emit no response_format; let prompts do the work.
+        return None
 
     async def _post_with_retries(self, client: httpx.AsyncClient, body: dict[str, Any]) -> dict[str, Any]:
         attempt = 0

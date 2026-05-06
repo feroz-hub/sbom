@@ -2,6 +2,8 @@
 
 This document is the **authoritative source** for every error / warning / info code emitted by the validation pipeline. The descriptive tables (message templates, remediation copy, spec references) are hand-maintained; the **machine table** at the end is auto-generated from [app/validation/errors.py](../app/validation/errors.py) by [`scripts/gen_error_code_reference.py`](../scripts/gen_error_code_reference.py) and asserted in CI via `python scripts/gen_error_code_reference.py --check`.
 
+> **In-app reference.** A curated subset of the most-encountered codes is rendered at `/docs/sbom-validation-errors` in the running web app. The validation-report chip on a failed SBOM links straight there using the lowercased code as the anchor (e.g. `/docs/sbom-validation-errors#sbom_val_e052_purl_invalid`). The source data for that page lives at [`frontend/src/lib/validationCodeReference.ts`](../frontend/src/lib/validationCodeReference.ts) and is kept in sync with this file by hand.
+
 ## Conventions
 
 - **Code shape:** `SBOM_VAL_<sev><nnn>_<NAME>` where `<sev>` is `E` (error), `W` (warning), or `I` (info), `<nnn>` is a stage-banded number, and `<NAME>` is `SCREAMING_SNAKE_CASE`.

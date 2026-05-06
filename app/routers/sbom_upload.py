@@ -8,10 +8,10 @@ multipart upload, runs :func:`app.validation.run`, and either:
   / info entries (so the frontend can surface NTIA hints), or
 * responds 400 / 413 / 415 / 422 with the structured ``ErrorReport``.
 
-The legacy JSON-string endpoint (``POST /api/sboms``) keeps working
-unchanged — see :mod:`app.routers.sboms_crud`. New integrations should
-prefer the multipart shape; the JSON-string shape is marked deprecated in
-the OpenAPI doc.
+In both branches the ``SBOMSource`` row is persisted, so the frontend has
+a stable navigation target for the validation report. The legacy
+JSON-string endpoint (``POST /api/sboms``) follows the same persist-then-
+respond pattern; see :mod:`app.routers.sboms_crud`.
 """
 
 from __future__ import annotations
@@ -110,15 +110,18 @@ async def upload_sbom(
         verify_signature=bool(getattr(settings, "SBOM_SIGNATURE_VERIFICATION", False)),
     )
 
-    if report.has_errors():
-        raise HTTPException(status_code=report.http_status, detail=report.to_dict())
-
-    # Persist. The body bytes (decoded as UTF-8) are stored as a JSON / XML /
-    # tag-value string on `SBOMSource.sbom_data`. The legacy ``parse``
-    # pipeline keeps working against this column for one release.
     body_text = raw.decode("utf-8", errors="replace")
     if body_text.startswith("﻿"):
         body_text = body_text.lstrip("﻿")
+
+    sbom_status = "validated"
+    if report.has_errors():
+        sbom_status = (
+            "quarantined"
+            if any(e.stage == "security" for e in report.errors)
+            else "failed"
+        )
+    serialized_entries = [e.model_dump() for e in report.entries] if report.entries else None
 
     obj = SBOMSource(
         sbom_name=sbom_name.strip(),
@@ -127,6 +130,12 @@ async def upload_sbom(
         projectid=project_id,
         created_by=created_by,
         created_on=_now_iso(),
+        status=sbom_status,
+        failed_stage=report.first_error_stage,
+        validation_errors=serialized_entries,
+        error_count=report.error_count,
+        warning_count=report.warning_count,
+        validated_at=_now_iso(),
     )
     try:
         db.add(obj)
@@ -137,13 +146,33 @@ async def upload_sbom(
         log.exception("upload_sbom: persist failed for name=%s", sbom_name)
         raise HTTPException(
             status_code=500,
-            detail={"code": "internal_error", "message": "Failed to persist validated SBOM."},
+            detail={"code": "internal_error", "message": "Failed to persist SBOM."},
+        )
+
+    if report.has_errors():
+        # Persist-then-reject: the row is committed, so the frontend can
+        # navigate straight to the validation report on the detail page.
+        raise HTTPException(
+            status_code=report.http_status,
+            detail={
+                "code": "sbom_validation_failed",
+                "message": (
+                    f"SBOM '{sbom_name}' did not pass validation; "
+                    f"{report.error_count} error(s) at stage '{report.first_error_stage}'."
+                ),
+                "sbom_id": obj.id,
+                "status": sbom_status,
+                "failed_stage": report.first_error_stage,
+                "error_count": report.error_count,
+                "warning_count": report.warning_count,
+                "entries": [e.model_dump() for e in report.entries],
+                "truncated": report.truncated,
+            },
         )
 
     spec = ""
     spec_version = ""
     components_count = 0
-    parsed = report.entries  # noqa: F841 — used to silence linter; real data below
     # The pipeline does not expose the internal model on ErrorReport; for the
     # response shape we re-derive minimal stats from the parsed dict by
     # re-parsing the body. This is cheap on the success path because the
