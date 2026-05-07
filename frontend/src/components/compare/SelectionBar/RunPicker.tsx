@@ -11,6 +11,13 @@ import type { RunSummary } from '@/types/compare';
 interface RunPickerProps {
   label: string;
   selectedRunId: number | null;
+  /**
+   * Canonical summary for the currently-selected run. Comes from the parent
+   * (compare query result, then the picker's own callback). Used for the
+   * trigger label so users arriving via a shareable URL see the run name
+   * even when the id isn't in the recent/search response.
+   */
+  selectedRunSummary?: RunSummary | null;
   onSelect: (run: RunSummary) => void;
   /**
    * When provided, the dropdown shows a "Same project as Run A" filter chip
@@ -30,6 +37,7 @@ interface RunPickerProps {
 export function RunPicker({
   label,
   selectedRunId,
+  selectedRunSummary,
   onSelect,
   pairedRunProjectId,
   align = 'left',
@@ -69,10 +77,16 @@ export function RunPicker({
     return baseOptions.filter((r) => r.project_id === pairedRunProjectId);
   }, [baseOptions, sameProjectOnly, pairedRunProjectId]);
 
-  const selectedRun = useMemo(
-    () => baseOptions.find((r) => r.id === selectedRunId),
-    [baseOptions, selectedRunId],
-  );
+  // Prefer the parent-supplied summary so the trigger label is correct on
+  // shareable URLs where the run id may not be in the recent/search list.
+  // Fall back to the loaded options for the case where a run was just picked.
+  const selectedRun = useMemo(() => {
+    if (selectedRunId == null) return undefined;
+    if (selectedRunSummary && selectedRunSummary.id === selectedRunId) {
+      return selectedRunSummary;
+    }
+    return baseOptions.find((r) => r.id === selectedRunId);
+  }, [baseOptions, selectedRunId, selectedRunSummary]);
 
   // Close on outside click.
   useEffect(() => {

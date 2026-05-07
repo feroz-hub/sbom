@@ -208,6 +208,20 @@ def test_days_between_handles_unparseable_inputs():
     assert _days_between(a, "not-a-date") is None
 
 
+def test_format_time_gap_buckets_match_relationship_descriptor():
+    # B-9 — sub-day reversals previously formatted as "0.0 days" which is
+    # confusing; the buckets must now mirror the frontend's
+    # RelationshipDescriptor thresholds.
+    from app.services.compare_service import _format_time_gap
+
+    assert _format_time_gap(0.0) == "less than an hour"
+    assert _format_time_gap(0.01) == "less than an hour"  # ~14 minutes
+    assert _format_time_gap(2 / 24) == "2 hours"
+    assert _format_time_gap(1 / 24) == "1 hour"
+    assert _format_time_gap(1.5) == "1.5 days"
+    assert _format_time_gap(15.0) == "15 days"
+
+
 # =============================================================================
 # Service end-to-end
 # =============================================================================

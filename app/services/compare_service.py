@@ -627,7 +627,7 @@ class CompareService:
         if days_between is not None:
             if _parse_iso(run_b.completed_on) < _parse_iso(run_a.completed_on):
                 direction_warning = (
-                    f"Run B is older than Run A by {abs(days_between):.1f} days "
+                    f"Run B is older than Run A by {_format_time_gap(abs(days_between))} "
                     f"— did you mean to swap?"
                 )
         return RunRelationship(
@@ -789,6 +789,20 @@ def _days_between(a_iso: str | None, b_iso: str | None) -> float | None:
         return None
     delta = b - a
     return round(delta.total_seconds() / 86400.0, 2)
+
+
+def _format_time_gap(days: float) -> str:
+    """Bucketed time gap copy for the direction_warning string.
+
+    Mirrors the frontend ``RelationshipDescriptor`` thresholds so the
+    warning never produces "0.0 days" for sub-day reversals.
+    """
+    if days < 1 / 24:
+        return "less than an hour"
+    if days < 1:
+        hours = round(days * 24)
+        return f"{hours} hour{'s' if hours != 1 else ''}"
+    return f"{days:.1f} days" if days < 10 else f"{round(days)} days"
 
 
 def _present_in_a(f: FindingDiffRow) -> bool:

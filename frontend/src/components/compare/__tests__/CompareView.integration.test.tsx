@@ -95,15 +95,48 @@ describe('CompareView — error envelopes', () => {
     );
   });
 
+  it('forwards structured detail (run id + status) into the not-ready banner', async () => {
+    // B-5 — backend's error envelope carries run_id and status; without the
+    // forward the banner used to render "Status: unknown" / "One of the
+    // runs". Now it should render the actual values.
+    currentParams = new URLSearchParams('run_a=1&run_b=2');
+    compareRunsV2.mockRejectedValue(
+      new HttpError(
+        'run 2 status=RUNNING is not comparable',
+        409,
+        'COMPARE_E002_RUN_NOT_READY',
+        { run_id: 2, status: 'RUNNING', error_code: 'COMPARE_E002_RUN_NOT_READY' },
+      ),
+    );
+    renderWithCompareProviders(<CompareView />);
+    await waitFor(() =>
+      expect(screen.getByText(/Run #2 isn't ready yet/i)).toBeInTheDocument(),
+    );
+    expect(screen.getByText(/RUNNING/)).toBeInTheDocument();
+    // B-4 — the misleading "auto-retry shortly" copy is gone; a manual
+    // Retry button takes its place.
+    expect(screen.queryByText(/auto-retry/i)).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Retry/i }),
+    ).toBeInTheDocument();
+  });
+
   it('maps run-not-found (E001) into the error banner', async () => {
     currentParams = new URLSearchParams('run_a=1&run_b=2');
     compareRunsV2.mockRejectedValue(
-      new HttpError('not found', 404, 'COMPARE_E001_RUN_NOT_FOUND'),
+      new HttpError(
+        'not found',
+        404,
+        'COMPARE_E001_RUN_NOT_FOUND',
+        { run_id: 99, error_code: 'COMPARE_E001_RUN_NOT_FOUND' },
+      ),
     );
     renderWithCompareProviders(<CompareView />);
     await waitFor(() =>
       expect(screen.getByText(/Run not found/i)).toBeInTheDocument(),
     );
+    // B-5 — id from detail is rendered, not the placeholder "Run #?".
+    expect(screen.getByText(/Run #99 no longer exists/i)).toBeInTheDocument();
   });
 });
 

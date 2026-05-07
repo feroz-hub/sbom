@@ -50,6 +50,7 @@ export function SelectionBar({
           <RunPicker
             label="Run A · baseline"
             selectedRunId={runAId}
+            selectedRunSummary={runASummary}
             onSelect={onSelectRunA}
           />
           <div
@@ -61,6 +62,7 @@ export function SelectionBar({
           <RunPicker
             label="Run B · candidate"
             selectedRunId={runBId}
+            selectedRunSummary={runBSummary}
             onSelect={onSelectRunB}
             pairedRunProjectId={runASummary?.project_id ?? null}
             align="right"

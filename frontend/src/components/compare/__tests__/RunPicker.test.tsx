@@ -151,6 +151,36 @@ describe('RunPicker', () => {
     expect(searchRuns.mock.calls.at(-1)?.[0]).toBe('log4j');
   });
 
+  it('uses the parent-supplied summary for the trigger label when the id is not in the recent list', async () => {
+    // Repro for B-1: a shareable URL drops the user on a compare for a run
+    // that isn't in the most-recent-20. Without the prop, the trigger reads
+    // "Choose a run…" even though selectedRunId is set; with it, the trigger
+    // reads the canonical name from the compare API response.
+    recentRuns.mockResolvedValue([]); // simulate empty recent list
+    const summary: RunSummary = {
+      id: 999,
+      sbom_id: 7,
+      sbom_name: 'archived-service',
+      project_id: 42,
+      project_name: 'Legacy',
+      run_status: 'FINDINGS',
+      completed_on: '2026-01-15T08:00:00Z',
+      started_on: '2026-01-15T07:50:00Z',
+      total_findings: 3,
+      total_components: 19,
+    };
+    renderWithCompareProviders(
+      <RunPicker
+        label="Run A · baseline"
+        selectedRunId={999}
+        selectedRunSummary={summary}
+        onSelect={() => {}}
+      />,
+    );
+    expect(screen.getByRole('button')).toHaveTextContent(/archived-service/);
+    expect(screen.getByRole('button')).toHaveTextContent(/#999/);
+  });
+
   it('renders "Same project as Run A" filter chip when paired project is given', async () => {
     const user = userEvent.setup();
     renderWithCompareProviders(

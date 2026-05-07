@@ -3,6 +3,7 @@
 import { Surface, SurfaceContent } from '@/components/ui/Surface';
 import { Skeleton, SkeletonText } from '@/components/ui/Spinner';
 import { Alert } from '@/components/ui/Alert';
+import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 
 /**
@@ -75,11 +76,30 @@ export function SameRunPickedState({ runId }: { runId: number }) {
   );
 }
 
-export function RunNotReadyState({ status }: { status?: string }) {
+export function RunNotReadyState({
+  status,
+  runId,
+  onRetry,
+}: {
+  status?: string;
+  runId?: number;
+  onRetry?: () => void;
+}) {
+  const runLabel = runId != null ? `Run #${runId}` : 'One of the runs';
+  const statusLabel = status ?? 'unknown';
   return (
-    <Alert variant="warning" title="One of the runs isn't ready yet">
-      Status: <strong>{status ?? 'unknown'}</strong>. Comparison will be available
-      once the analysis finishes. We'll auto-retry shortly.
+    <Alert variant="warning" title={`${runLabel} isn't ready yet`}>
+      <div className="flex flex-wrap items-center gap-3">
+        <span>
+          Status: <strong>{statusLabel}</strong>. Comparison will be available
+          once the analysis finishes.
+        </span>
+        {onRetry && (
+          <Button variant="secondary" onClick={onRetry} className="text-xs">
+            Retry
+          </Button>
+        )}
+      </div>
     </Alert>
   );
 }
@@ -93,9 +113,10 @@ export function PermissionDeniedState() {
 }
 
 export function RunNotFoundState({ runId }: { runId?: number }) {
+  const idLabel = runId != null ? `Run #${runId}` : 'A run from this URL';
   return (
     <Alert variant="error" title="Run not found">
-      Run #{runId ?? '?'} no longer exists — it may have been deleted.
+      {idLabel} no longer exists — it may have been deleted.
     </Alert>
   );
 }

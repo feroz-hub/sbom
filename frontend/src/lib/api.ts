@@ -130,7 +130,9 @@ async function performRequest(
           message = body.detail;
         } else if (typeof body.detail === 'object' && !Array.isArray(body.detail) && body.detail.message) {
           message = body.detail.message;
-          code = body.detail.code;
+          // Routers vary: some emit `code`, others (compare, cves) emit
+          // `error_code`. Read both so the discriminator survives.
+          code = body.detail.error_code ?? body.detail.code;
         } else if (Array.isArray(body.detail)) {
           message = body.detail
             .map((e: { msg?: string; loc?: string[] }) => `${e.loc?.slice(1).join('.')} — ${e.msg}`)

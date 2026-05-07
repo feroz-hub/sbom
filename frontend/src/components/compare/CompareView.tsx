@@ -45,7 +45,7 @@ export function CompareView() {
     urlState.runB != null &&
     urlState.runA !== urlState.runB;
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['compare', 'v2', urlState.runA, urlState.runB],
     queryFn: ({ signal }) =>
       compareRunsV2(
@@ -87,19 +87,31 @@ export function CompareView() {
 
   // Surface specific error envelopes — the API returns structured detail
   // objects per ADR-0008. Anything we don't recognise falls through to the
-  // generic alert.
+  // generic alert. The detail payload carries `run_id` and `status` for the
+  // not-ready / not-found envelopes; we lift them so the user sees the real
+  // values instead of "Status: unknown" / "Run #?".
   const errorView = (() => {
     if (!error) return null;
     if (error instanceof HttpError) {
-      const code = (error as HttpError).code;
+      const code = error.code;
+      const detail = (error.detail ?? {}) as {
+        run_id?: number;
+        status?: string;
+      };
       if (code === COMPARE_ERR_SAME_RUN) {
-        return <SameRunPickedState runId={urlState.runA ?? 0} />;
+        return <SameRunPickedState runId={detail.run_id ?? urlState.runA ?? 0} />;
       }
       if (code === COMPARE_ERR_RUN_NOT_FOUND) {
-        return <RunNotFoundState />;
+        return <RunNotFoundState runId={detail.run_id ?? undefined} />;
       }
       if (code === COMPARE_ERR_RUN_NOT_READY) {
-        return <RunNotReadyState />;
+        return (
+          <RunNotReadyState
+            runId={detail.run_id ?? undefined}
+            status={detail.status}
+            onRetry={() => refetch()}
+          />
+        );
       }
       if (code === COMPARE_ERR_PERMISSION_DENIED) {
         return <PermissionDeniedState />;

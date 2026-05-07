@@ -1,10 +1,12 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { ArrowDown, ArrowUp, Search, ShieldAlert } from 'lucide-react';
 import { Surface, SurfaceContent } from '@/components/ui/Surface';
 import { cn } from '@/lib/utils';
+import { compareVersions } from '@/lib/compareVersions';
 import type { CompareResult, ComponentChangeKind, ComponentDiffRow } from '@/types/compare';
+import { useCompareUrlState } from '@/hooks/useCompareUrlState';
 import { ComponentChangeKindChip } from '../FindingsTab/ChangeKindChip';
 
 interface Props {
@@ -51,8 +53,9 @@ function versionTransition(c: ComponentDiffRow): string {
 }
 
 export function ComponentsTab({ result }: Props) {
-  const [needle, setNeedle] = useState('');
-  const [showUnchanged, setShowUnchanged] = useState(false);
+  const urlState = useCompareUrlState();
+  const needle = urlState.q;
+  const showUnchanged = urlState.showUnchanged;
   const visible = useMemo(
     () => applyFilters(result.components, needle, showUnchanged),
     [result.components, needle, showUnchanged],
@@ -83,7 +86,7 @@ export function ComponentsTab({ result }: Props) {
             <input
               type="search"
               value={needle}
-              onChange={(e) => setNeedle(e.target.value)}
+              onChange={(e) => urlState.setQ(e.target.value)}
               placeholder="Filter by component name, ecosystem, or PURL…"
               aria-label="Filter components"
               className="h-10 w-full rounded-lg border border-border bg-surface pl-9 pr-3 text-sm text-hcl-navy placeholder:text-hcl-muted focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/30"
@@ -93,7 +96,7 @@ export function ComponentsTab({ result }: Props) {
             <input
               type="checkbox"
               checked={showUnchanged}
-              onChange={(e) => setShowUnchanged(e.target.checked)}
+              onChange={(e) => urlState.setShowUnchanged(e.target.checked)}
               className="h-4 w-4 rounded border-border accent-hcl-blue"
             />
             Show unchanged
@@ -120,7 +123,7 @@ export function ComponentsTab({ result }: Props) {
                 {visible.map((row) => {
                   const direction =
                     row.change_kind === 'version_bumped'
-                      ? (row.version_b ?? '') > (row.version_a ?? '')
+                      ? compareVersions(row.version_b ?? '', row.version_a ?? '') >= 0
                         ? 'up'
                         : 'down'
                       : null;
