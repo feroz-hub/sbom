@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import Script from 'next/script';
 import { IBM_Plex_Sans, IBM_Plex_Mono } from 'next/font/google';
 import './globals.css';
 import { Providers } from './providers';
@@ -34,10 +33,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${plexSans.variable} ${plexMono.variable}`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body className="bg-background min-h-screen font-sans antialiased text-foreground">
-        <Script id="spectra-theme-init" strategy="beforeInteractive">
-          {themeInitScript}
-        </Script>
         <Providers>
           <AppShell>{children}</AppShell>
         </Providers>

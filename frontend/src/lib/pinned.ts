@@ -104,11 +104,15 @@ export function usePinned(kind: PinnedKind): {
   toggle: (item: Omit<PinnedItem, 'pinnedAt'>) => boolean;
   remove: (id: number) => void;
 } {
-  const [items, setItems] = useState<PinnedItem[]>(() => listPinned(kind));
+  // Initial state must match the server render (empty) — `listPinned`
+  // reads localStorage, which is unavailable during SSR. The mount
+  // effect below hydrates from storage on the client.
+  const [items, setItems] = useState<PinnedItem[]>([]);
 
   // Refresh on cross-component pin/unpin events.
   useEffect(() => {
     const refresh = () => setItems(listPinned(kind));
+    refresh();
     window.addEventListener(CHANGE_EVENT[kind], refresh);
     // Cross-tab sync: storage event fires when another tab writes.
     const onStorage = (e: StorageEvent) => {
