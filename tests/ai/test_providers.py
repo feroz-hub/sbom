@@ -387,6 +387,90 @@ async def test_openai_inner_name_override_propagates_into_error_strings():
     assert ei.value.failure.provider_name == "gemini"
 
 
+# Real shape Gemini's OpenAI-compat endpoint sometimes returns: HTTP 200,
+# but the assistant message is the plain-text quota error rather than a
+# remediation bundle. ``parse_llm_json`` then fails on the prose, which
+# previously surfaced as ``schema_parse_failed`` with the prose leaked
+# into the modal.
+_GEMINI_QUOTA_AS_200_BODY = json.dumps(
+    {
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": (
+                        "You exceeded your current quota, please check your "
+                        "plan and billing details. For more information on "
+                        "this error, head to: "
+                        "https://ai.google.dev/gemini-api/docs/rate-limits. "
+                        "Please retry in 35.6s."
+                    ),
+                },
+                "finish_reason": "stop",
+            }
+        ],
+        "usage": {"prompt_tokens": 12, "completion_tokens": 60},
+    }
+)
+
+
+@pytest.mark.asyncio
+async def test_openai_200_with_quota_prose_classified_as_quota_exceeded():
+    """HTTP 200 + quota text in the body must surface as quota_exceeded
+    rather than reaching the parser as a schema failure.
+    """
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(200, text=_GEMINI_QUOTA_AS_200_BODY)
+
+    provider = OpenAiProvider(
+        api_key="sk-test",
+        client_factory=lambda: _make_client(handler),
+        max_retries=3,
+    )
+    with pytest.raises(AiProviderError) as ei:
+        await provider.generate(_llm_req())
+
+    # No retries: quota errors are non-transient regardless of status code.
+    assert calls["n"] == 1
+    failure = ei.value.failure
+    assert failure is not None
+    assert failure.kind == "quota_exceeded"
+    assert failure.upstream_status == 200
+    assert failure.retry_after_seconds == 35
+    # The matched substring + ±50 chars context lands in upstream_message.
+    assert failure.upstream_message and "rate-limits" in failure.upstream_message
+
+
+def test_detect_quota_in_2xx_body_signals():
+    from app.ai.providers.base import detect_quota_in_2xx_body
+
+    # The Gemini docs URL is the strongest single signal.
+    f = detect_quota_in_2xx_body(
+        "...see https://ai.google.dev/gemini-api/docs/rate-limits for details...",
+        provider_name="gemini",
+        status=200,
+    )
+    assert f is not None and f.kind == "quota_exceeded"
+
+    # Quota prose phrasings.
+    for body in (
+        "You exceeded your current quota, please retry later.",
+        "model returned RESOURCE_EXHAUSTED on this request",
+        '{"error":{"status":"quotaExceeded"}}',
+    ):
+        f = detect_quota_in_2xx_body(body, provider_name="gemini", status=200)
+        assert f is not None, body
+        assert f.kind == "quota_exceeded"
+
+    # Benign body (e.g. a model talking about software security topics)
+    # must not false-positive. "rate limit" alone is not a signal.
+    benign = "Configure a rate limit on the auth endpoint to prevent abuse."
+    assert detect_quota_in_2xx_body(benign, provider_name="gemini", status=200) is None
+
+
 @pytest.mark.asyncio
 async def test_openai_429_plain_rate_limit_classified_as_rate_limited_and_retries():
     calls = {"n": 0}

@@ -129,6 +129,33 @@ class AiFixGenerator:
     # Public API
     # ------------------------------------------------------------------
 
+    def read_cached_for_finding(
+        self,
+        finding: AnalysisFinding,
+    ) -> AiFixResult | None:
+        """Cache-only read for one finding. Never invokes a provider.
+
+        Returns ``None`` on cache miss so the read-only HTTP endpoint can
+        surface a 404 without touching LLM budget.
+        """
+        s = get_settings()
+        if s.ai_fixes_kill_switch:
+            return None
+        try:
+            ctx = build_grounding_context(finding, db=self._db)
+        except Exception:  # noqa: BLE001
+            return None
+        cache_key = cache_mod.make_cache_key(
+            vuln_id=ctx.cve_id,
+            component_name=ctx.component.name,
+            component_version=ctx.component.version,
+        )
+        hit = cache_mod.read_cache(self._db, cache_key=cache_key)
+        if hit is None:
+            return None
+        cache_mod.touch_last_accessed(self._db, cache_key=cache_key)
+        return hit.model_copy(update={"finding_id": finding.id})
+
     async def generate_for_finding(
         self,
         finding: AnalysisFinding,

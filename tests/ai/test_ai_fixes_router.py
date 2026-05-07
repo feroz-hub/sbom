@@ -235,20 +235,42 @@ def test_list_run_fixes_after_generation(client, _seeded_run, _enable_ai, _fake_
     assert "total" in body
 
 
-def test_get_finding_fix_returns_result(client, _seeded_run, _enable_ai, _fake_registry, _memory_store):
+def test_get_finding_fix_404_when_no_cached_bundle(
+    client, _seeded_run, _enable_ai, _fake_registry, _memory_store
+):
+    """Read-only contract: GET must NOT spend LLM budget on cache miss."""
     finding_id = _seeded_run["solo_id"]
+    pre_calls = _fake_registry.calls
     resp = client.get(f"/api/v1/findings/{finding_id}/ai-fix")
+    assert resp.status_code == 404
+    # Critical: no provider call was made just because we opened the modal.
+    assert _fake_registry.calls == pre_calls
+
+
+def test_post_generate_then_get_returns_cached(
+    client, _seeded_run, _enable_ai, _fake_registry, _memory_store
+):
+    finding_id = _seeded_run["solo_id"]
+    # POST = explicit Generate click → spends budget, populates cache.
+    resp = client.post(f"/api/v1/findings/{finding_id}/ai-fix")
     assert resp.status_code == 200
     body = resp.json()
     assert body["error"] is None
     assert body["result"] is not None
     assert body["result"]["bundle"]["upgrade_command"]["target_version"] == "2.17.1"
+    post_calls = _fake_registry.calls
+
+    # Subsequent GET = modal re-open → returns cached bundle, no provider call.
+    resp = client.get(f"/api/v1/findings/{finding_id}/ai-fix")
+    assert resp.status_code == 200
+    assert resp.json()["result"]["bundle"]["upgrade_command"]["target_version"] == "2.17.1"
+    assert _fake_registry.calls == post_calls
 
 
 def test_regenerate_finding_fix_force_refreshes(client, _seeded_run, _enable_ai, _fake_registry, _memory_store):
     finding_id = _seeded_run["solo_id"]
-    # First call seeds the cache.
-    client.get(f"/api/v1/findings/{finding_id}/ai-fix")
+    # First call (POST generate) seeds the cache.
+    client.post(f"/api/v1/findings/{finding_id}/ai-fix")
     pre_calls = _fake_registry.calls
     # Second call (regenerate) → must hit the provider again.
     resp = client.post(f"/api/v1/findings/{finding_id}/ai-fix:regenerate")

@@ -138,6 +138,23 @@ describe('aiFixErrorCopy', () => {
     expect(aiFixErrorCopy(err)).toBe('Unexpected error: something happened');
   });
 
+  it('schema_parse_failed never leaks the raw provider response into the modal', () => {
+    const err = makeError({
+      error_code: 'schema_parse_failed',
+      // Even with a quota-prose response stuffed into upstream_message,
+      // the user-facing copy must stay generic. Raw text belongs in
+      // ai_usage_log, not the UI.
+      upstream_message:
+        'You exceeded your current quota, please check your plan and billing details.',
+    }).error!;
+    const copy = aiFixErrorCopy(err);
+    expect(copy).toBe(
+      'The AI returned an unexpected response. Try regenerating, or switch provider in Settings.',
+    );
+    expect(copy).not.toContain('quota');
+    expect(copy).not.toContain('Response preview');
+  });
+
   it('falls back to providerLabelFallback when provider_name is missing', () => {
     const err = makeError({ error_code: 'auth_failed', provider_name: null }).error!;
     expect(aiFixErrorCopy(err, 'openai')).toBe('Invalid API key for openai. Update in Settings.');

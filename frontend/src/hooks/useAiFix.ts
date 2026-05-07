@@ -1,10 +1,11 @@
 /**
  * Hooks for the AI fix surface.
  *
- *   * ``useAiFix`` — fetch (or generate) the bundle for one finding, plus
- *     a ``regenerate`` mutation. Keys the cache on (findingId, provider)
- *     so switching providers in Settings invalidates per-finding cache
- *     entries naturally.
+ *   * ``useAiFix`` — read-only cache lookup for one finding (safe to fire
+ *     on modal mount), plus ``generate`` and ``regenerate`` mutations
+ *     that fire only on explicit user click. Keys the cache on
+ *     (findingId, provider) so switching providers in Settings
+ *     invalidates per-finding cache entries naturally.
  *
  *   * ``useAiBatchProgress`` — subscribe to a run's batch state. Tries
  *     SSE first (live updates with no polling spend); falls back to
@@ -27,6 +28,7 @@ import {
   cancelRunAiBatch,
   cancelRunAiFixes,
   estimateRunAiFixesScoped,
+  generateFindingAiFix,
   getAiUsageSummary,
   getFindingAiFix,
   getRunAiFixProgress,
@@ -68,15 +70,25 @@ export function useAiFix(
   const { providerName = null, enabled = true } = args;
   const qc = useQueryClient();
 
-  const query = useQuery<AiFindingFixEnvelope>({
+  // Read-only cache lookup — fires on mount but ``getFindingAiFix``
+  // returns ``null`` on 404 instead of throwing, so opening the modal
+  // for a finding that has never been generated is silent (no LLM
+  // spend, no error UI). Generation only happens via the ``generate``
+  // mutation below.
+  const query = useQuery<AiFindingFixEnvelope | null>({
     queryKey: aiFixQueryKey(findingId ?? -1, providerName),
     queryFn: ({ signal }) =>
       getFindingAiFix(findingId as number, { providerName }, signal),
     enabled: enabled && findingId != null,
-    // Cached fix bundles have a TTL of 7-30 days at the server; on the
-    // client we keep them for 5 minutes before refetching so a re-open
-    // of the modal feels instant.
     staleTime: 5 * 60_000,
+  });
+
+  const generate = useMutation<AiFindingFixEnvelope, Error, void>({
+    mutationFn: () =>
+      generateFindingAiFix(findingId as number, { providerName }),
+    onSuccess: (data) => {
+      qc.setQueryData(aiFixQueryKey(findingId ?? -1, providerName), data);
+    },
   });
 
   const regenerate = useMutation<AiFindingFixEnvelope, Error, void>({
@@ -87,7 +99,7 @@ export function useAiFix(
     },
   });
 
-  return { ...query, regenerate };
+  return { ...query, generate, regenerate };
 }
 
 

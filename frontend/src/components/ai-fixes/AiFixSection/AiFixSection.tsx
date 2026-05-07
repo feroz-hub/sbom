@@ -59,17 +59,13 @@ export function aiFixErrorCopy(err: AiFixError, providerLabelFallback?: string):
     case 'unknown':
       return `Unexpected error: ${upstream}`;
     // Legacy codes — kept stable for already-cached events.
-    case 'schema_parse_failed': {
-      // Phase 5: include a preview of what the model actually produced
-      // so admins can debug from the modal. ``upstream_message`` is now
-      // populated with the first 500 chars of the raw response.
-      const preview = err.upstream_message?.trim();
-      if (preview) {
-        const short = preview.length > 200 ? preview.slice(0, 200) + '…' : preview;
-        return `The AI provider returned a response that didn't match the expected schema. Try regenerating.\nResponse preview: ${short}`;
-      }
-      return 'The AI provider returned an unexpected response. Try regenerating.';
-    }
+    case 'schema_parse_failed':
+      // The raw provider response is internal diagnostic data — it
+      // belongs in ``ai_usage_log.error`` for operators, not in the
+      // user modal. Earlier copy leaked it as "Response preview: …",
+      // which surfaced quota prose (and any other provider noise)
+      // verbatim to users.
+      return 'The AI returned an unexpected response. Try regenerating, or switch provider in Settings.';
     case 'provider_unavailable':
       return 'The AI provider is unreachable. Try again or switch provider in Settings.';
     case 'circuit_breaker_open':
@@ -102,7 +98,7 @@ export function AiFixSection({
   costEstimate = '~$0.005',
   timeEstimate = '3–8 seconds',
 }: AiFixSectionProps) {
-  const { data, isFetching, isError, error, refetch, regenerate } = useAiFix(findingId, {
+  const { data, isFetching, isError, error, refetch, generate, regenerate } = useAiFix(findingId, {
     enabled: enabled && findingId != null,
   });
 
@@ -127,6 +123,11 @@ export function AiFixSection({
 
   const result = data?.result ?? null;
   const apiError = data?.error ?? null;
+  // ``data === null`` means the read-only GET returned 404 (no cached
+  // bundle). This is the idle empty state — show the Generate button
+  // and wait for an explicit user click.
+  const noCache = data === null;
+  const generating = generate.isPending;
 
   return (
     <section
@@ -144,18 +145,38 @@ export function AiFixSection({
         </h3>
       </header>
 
-      {/* Loading skeleton (only when there's no prior data on first open). */}
-      {isFetching && !result && !apiError ? (
+      {/* Initial cache-check spinner (very short — just a DB read). */}
+      {isFetching && !data && !isError ? (
         <div className="flex items-center gap-2 rounded-lg border border-dashed border-border bg-surface-muted p-4 text-sm text-hcl-muted">
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-          <span>
-            Asking {providerLabel ?? 'AI provider'}…
-          </span>
+          <span>Checking for cached remediation…</span>
         </div>
       ) : null}
 
-      {/* Network-level error (HttpError thrown by the api client). */}
-      {isError && !result && !apiError ? (
+      {/* Generation in progress (user clicked Generate). */}
+      {generating ? (
+        <div className="flex items-center gap-2 rounded-lg border border-dashed border-border bg-surface-muted p-4 text-sm text-hcl-muted">
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+          <span>Asking {providerLabel ?? 'AI provider'}…</span>
+        </div>
+      ) : null}
+
+      {/* Idle empty state — no cached fix exists. */}
+      {noCache && !generating ? (
+        <AiFixGenerateButton
+          providerLabel={providerLabel}
+          costEstimate={costEstimate}
+          timeEstimate={timeEstimate}
+          loading={false}
+          onGenerate={() => generate.mutate()}
+          errorMessage={
+            generate.isError ? (generate.error as Error)?.message : undefined
+          }
+        />
+      ) : null}
+
+      {/* Network-level error reading the cache. */}
+      {isError && !data && !generating ? (
         <AiFixGenerateButton
           providerLabel={providerLabel}
           costEstimate={costEstimate}
@@ -166,7 +187,7 @@ export function AiFixSection({
         />
       ) : null}
 
-      {/* Structured backend error (status 200 with ``error`` populated). */}
+      {/* Structured backend error from a previous generation attempt. */}
       {apiError && !result ? (
         <AiFixGenerateButton
           providerLabel={apiError.provider_name ?? providerLabel}

@@ -18,6 +18,7 @@ import {
 } from './test-utils';
 
 const getFindingAiFix = vi.fn();
+const generateFindingAiFix = vi.fn();
 const regenerateFindingAiFix = vi.fn();
 
 vi.mock('@/lib/api', () => ({
@@ -26,6 +27,11 @@ vi.mock('@/lib/api', () => ({
     args: { providerName?: string | null },
     signal?: AbortSignal,
   ) => getFindingAiFix(id, args, signal),
+  generateFindingAiFix: (
+    id: number,
+    args: { providerName?: string | null },
+    signal?: AbortSignal,
+  ) => generateFindingAiFix(id, args, signal),
   regenerateFindingAiFix: (
     id: number,
     args: { providerName?: string | null },
@@ -35,7 +41,12 @@ vi.mock('@/lib/api', () => ({
 
 beforeEach(() => {
   getFindingAiFix.mockReset();
+  generateFindingAiFix.mockReset();
   regenerateFindingAiFix.mockReset();
+  // Default: no cached fix exists. The read-only GET resolves to null
+  // (its 404→null handling lives in the api layer). Tests that need a
+  // cached bundle override this.
+  getFindingAiFix.mockResolvedValue(null);
 });
 
 afterEach(() => {
@@ -88,5 +99,39 @@ describe('AiFixSection', () => {
   it('does NOT call the API when findingId is null', () => {
     renderWithProviders(<AiFixSection findingId={null} />);
     expect(getFindingAiFix).not.toHaveBeenCalled();
+  });
+
+  it('shows the idle Generate button on cache miss without spending budget', async () => {
+    // getFindingAiFix already mocked to return null (default).
+    renderWithProviders(<AiFixSection findingId={1} providerLabel="gemini" />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: /Generate AI remediation/i }),
+      ).toBeInTheDocument();
+    });
+    // The read GET fired (it's safe), but no generate / regenerate.
+    expect(getFindingAiFix).toHaveBeenCalledTimes(1);
+    expect(generateFindingAiFix).not.toHaveBeenCalled();
+    expect(regenerateFindingAiFix).not.toHaveBeenCalled();
+  });
+
+  it('only calls generate POST when the user clicks Generate', async () => {
+    generateFindingAiFix.mockResolvedValue(SAMPLE_FIX_ENVELOPE_OK);
+    renderWithProviders(<AiFixSection findingId={1} providerLabel="gemini" />);
+
+    const button = await screen.findByRole('button', {
+      name: /Generate AI remediation/i,
+    });
+    expect(generateFindingAiFix).not.toHaveBeenCalled();
+
+    await userEvent.click(button);
+    await waitFor(() => expect(generateFindingAiFix).toHaveBeenCalledTimes(1));
+    // Result renders after the click.
+    await waitFor(() =>
+      expect(
+        screen.getByText(/actively-exploited remote code execution/i),
+      ).toBeInTheDocument(),
+    );
   });
 });

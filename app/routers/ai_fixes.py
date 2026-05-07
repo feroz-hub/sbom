@@ -29,10 +29,16 @@ Routes (multi-batch — current):
             renders). Unchanged.
 
   GET    /api/v1/findings/{finding_id}/ai-fix
-            Single-finding fetch for the CVE detail modal. Unchanged.
+            Read-only cache check for the CVE detail modal. Returns the
+            cached bundle or 404. Never spends LLM budget — opening the
+            modal does not trigger generation.
+
+  POST   /api/v1/findings/{finding_id}/ai-fix
+            Generate the bundle for one finding (idempotent — returns
+            cached if present). Called from the Generate button.
 
   POST   /api/v1/findings/{finding_id}/ai-fix:regenerate
-            Force a refresh on one finding. Unchanged.
+            Force a refresh on one finding (bypasses cache).
 
 Deprecated aliases (kept for 30 days post-rollout):
 
@@ -842,10 +848,34 @@ def _load_finding(db: Session, finding_id: int) -> AnalysisFinding:
 @router.get("/findings/{finding_id}/ai-fix", response_model=FindingFixResponse)
 async def get_finding_fix(
     finding_id: int,
+    provider_name: str | None = None,  # noqa: ARG001 — reserved for future per-provider cache keys
+    db: Session = Depends(get_db),
+) -> FindingFixResponse:
+    """Read-only: return the cached AI fix for this finding, or 404 if none.
+
+    Never spends LLM budget. POST to the same path to generate.
+    """
+    _require_ai_enabled(rollout_key=f"finding:{finding_id}")
+    finding = _load_finding(db, finding_id)
+    gen = AiFixGenerator(db)
+    cached = gen.read_cached_for_finding(finding)
+    if cached is None:
+        raise HTTPException(status_code=404, detail="No cached AI fix for this finding.")
+    return _envelope(cached)
+
+
+@router.post("/findings/{finding_id}/ai-fix", response_model=FindingFixResponse)
+async def generate_finding_fix(
+    finding_id: int,
     provider_name: str | None = None,
     db: Session = Depends(get_db),
 ) -> FindingFixResponse:
-    """Fetch (or generate) the AI fix bundle for a single finding."""
+    """Generate the AI fix for one finding (idempotent — returns cached if present).
+
+    Explicit write — only called by the Generate button. The matching GET
+    is read-only and returns 404 on cache miss, so opening the modal does
+    not spend LLM budget.
+    """
     _require_ai_enabled(rollout_key=f"finding:{finding_id}")
     finding = _load_finding(db, finding_id)
     gen = AiFixGenerator(db)

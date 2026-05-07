@@ -26,6 +26,7 @@ from .base import (
     ProviderUnavailableError,
     classify_http_failure,
     classify_network_failure,
+    detect_quota_in_2xx_body,
 )
 
 log = logging.getLogger("sbom.ai.providers.openai")
@@ -346,6 +347,21 @@ class OpenAiProvider(LlmProvider):
                 raise AiProviderError(
                     f"{self.name}: HTTP {resp.status_code} — {(resp.text or '')[:200]}",
                     failure=failure,
+                )
+
+            # Gemini's OpenAI-compat endpoint returns quota errors as
+            # HTTP 200 with the quota text embedded in the assistant
+            # message. Without this scan the prose flows through to
+            # ``parse_llm_json`` and surfaces as ``schema_parse_failed``.
+            quota_failure = detect_quota_in_2xx_body(
+                resp.text, provider_name=self.name, status=resp.status_code
+            )
+            if quota_failure is not None:
+                self._breaker.record_failure()
+                raise AiProviderError(
+                    f"{self.name}: HTTP {resp.status_code} quota — "
+                    f"{(quota_failure.upstream_message or '')[:200]}",
+                    failure=quota_failure,
                 )
 
             return resp.json()

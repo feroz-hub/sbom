@@ -301,6 +301,56 @@ def classify_network_failure(
     )
 
 
+# Substrings that indicate quota exhaustion when a provider returns the
+# error in a 2xx response body instead of the conventional 429. Gemini's
+# OpenAI-compat endpoint does this — the wrapper returns 200 with the
+# quota error embedded in the assistant message text. The URL is the
+# strongest signal: it appears nowhere else in normal model output.
+_QUOTA_BODY_SIGNALS: tuple[str, ...] = (
+    "ai.google.dev/gemini-api/docs/rate-limits",
+    "exceeded your current quota",
+    "exceeded your quota",
+    "resource_exhausted",
+    "quotaexceeded",
+)
+
+
+def detect_quota_in_2xx_body(body: str | None, *, provider_name: str, status: int) -> "UpstreamFailure | None":
+    """Return a :class:`UpstreamFailure` when ``body`` shows quota exhaustion.
+
+    Some providers (Gemini's OpenAI-compat endpoint) embed quota errors
+    in successful HTTP responses, so :func:`classify_http_failure` never
+    sees them. This is the second line of defence: scan the body text
+    for known quota markers even on 2xx, and surface the same typed
+    failure the 429 path produces.
+
+    The substring set is intentionally narrow — generic phrases like
+    "rate limit" appear too often in legitimate model output about
+    security topics to be safe signals.
+    """
+    if not body:
+        return None
+    body_lc = body.lower()
+    for signal in _QUOTA_BODY_SIGNALS:
+        idx = body_lc.find(signal)
+        if idx == -1:
+            continue
+        # Surrounding ±50 chars of original-case context so the modal
+        # message and ledger row preserve readable substring.
+        start = max(0, idx - 50)
+        end = min(len(body), idx + len(signal) + 50)
+        context = body[start:end].strip()
+        return UpstreamFailure(
+            kind="quota_exceeded",
+            provider_name=provider_name,
+            upstream_status=status,
+            upstream_body=body[:1000],
+            upstream_message=context[:240] or None,
+            retry_after_seconds=_parse_retry_after_body(body_lc),
+        )
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Errors
 # ---------------------------------------------------------------------------

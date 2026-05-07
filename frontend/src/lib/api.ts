@@ -885,13 +885,34 @@ import type {
 } from '@/types/ai';
 
 /**
- * Fetch (or generate on demand) the AI fix bundle for a single finding.
- *
- * The orchestrator returns the bundle from cache when available — this
- * call is fast even on cache misses, but expect 3–8s latency on cold
- * cache against a cloud provider.
+ * Read-only cache lookup for one finding. Returns ``null`` on 404
+ * (no cached bundle) so callers can render an idle Generate state
+ * without throwing. Never spends LLM budget — generation happens via
+ * ``generateFindingAiFix`` (POST), which is only invoked on user click.
  */
-export function getFindingAiFix(
+export async function getFindingAiFix(
+  findingId: number,
+  args: { providerName?: string | null } = {},
+  signal?: AbortSignal,
+): Promise<AiFindingFixEnvelope | null> {
+  const qs = args.providerName
+    ? `?provider_name=${encodeURIComponent(args.providerName)}`
+    : '';
+  try {
+    return await request<AiFindingFixEnvelope>(
+      `/api/v1/findings/${findingId}/ai-fix${qs}`,
+      { signal },
+    );
+  } catch (err) {
+    if (err instanceof HttpError && err.status === 404) {
+      return null;
+    }
+    throw err;
+  }
+}
+
+/** Generate the AI fix for one finding (idempotent — returns cached if present). */
+export function generateFindingAiFix(
   findingId: number,
   args: { providerName?: string | null } = {},
   signal?: AbortSignal,
@@ -899,7 +920,10 @@ export function getFindingAiFix(
   const qs = args.providerName
     ? `?provider_name=${encodeURIComponent(args.providerName)}`
     : '';
-  return request<AiFindingFixEnvelope>(`/api/v1/findings/${findingId}/ai-fix${qs}`, { signal });
+  return request<AiFindingFixEnvelope>(
+    `/api/v1/findings/${findingId}/ai-fix${qs}`,
+    { signal, method: 'POST' },
+  );
 }
 
 /** Force a regenerate (bypass cache) for one finding. */
