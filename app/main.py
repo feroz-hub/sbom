@@ -219,6 +219,44 @@ def _update_sbom_names() -> None:
         )
 
 
+def _reconcile_zombie_ai_fix_batches() -> None:
+    """Mark batches that were in-flight when the previous process exited
+    as failed.
+
+    The progress store is in-memory by default, so a restart loses every
+    live progress envelope. Without this pass, the durable ``ai_fix_batch``
+    row stays in (queued|pending|in_progress|paused_budget) forever,
+    keeping the run-detail page's banner stuck on a worker that no longer
+    exists.
+
+    Threshold: 5 minutes since ``created_at``. Anything younger is
+    plausibly a worker that's still booting; anything older has missed
+    every realistic deadline (the inline-fallback path completes in
+    seconds; even a slow paid batch finishes well inside 5 min).
+    """
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(tz=timezone.utc)
+    threshold = (now - timedelta(minutes=5)).isoformat()
+    with engine.begin() as conn:
+        result = conn.execute(
+            text(
+                """
+                UPDATE ai_fix_batch
+                SET status = 'failed',
+                    completed_at = :now,
+                    last_error = 'reconciled at startup; previous process exited unexpectedly'
+                WHERE status IN ('queued', 'pending', 'in_progress', 'paused_budget')
+                  AND created_at < :threshold
+                  AND completed_at IS NULL
+                """
+            ),
+            {"now": now.isoformat(), "threshold": threshold},
+        )
+        if result.rowcount:
+            log.info("ai.startup.reconciled_zombie_batches: count=%d", result.rowcount)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Re-apply logging config AFTER uvicorn has fully initialised. Uvicorn
@@ -231,6 +269,7 @@ async def lifespan(app: FastAPI):
     log.info("SBOM Analyzer starting up — initialising database …")
     _ensure_seed_data()
     _update_sbom_names()
+    _reconcile_zombie_ai_fix_batches()
     validate_auth_setup()
     log.info("Startup complete. API ready.")
     yield

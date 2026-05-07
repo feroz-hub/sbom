@@ -215,12 +215,49 @@ def test_progress_endpoint_round_trips(client, _seeded_run, _enable_ai, _fake_re
     assert body["status"] in {"pending", "in_progress", "complete"}
 
 
+def test_progress_endpoint_returns_404_when_no_batch(client, _seeded_run, _memory_store):
+    """Phantom-banner regression: with no batch ever created, /progress
+    must surface that fact instead of fabricating a pending envelope —
+    otherwise a tab that registered on mount stays subscribed forever."""
+    resp = client.get(f"/api/v1/runs/{_seeded_run['run_id']}/ai-fixes/progress")
+    assert resp.status_code == 404
+    body = resp.json()
+    assert body["detail"]["error_code"] == "NO_BATCH"
+
+
 def test_cancel_endpoint_sets_flag(client, _seeded_run, _enable_ai, _memory_store):
     resp = client.post(f"/api/v1/runs/{_seeded_run['run_id']}/ai-fixes/cancel")
     assert resp.status_code == 202
     body = resp.json()
     assert body["cancel_requested"] is True
     assert _memory_store.is_cancel_requested(_seeded_run["run_id"]) is True
+
+
+def test_cancel_writes_terminal_envelope_for_phantom(client, _seeded_run, _enable_ai, _memory_store):
+    """Phantom-banner regression: cancel on a run with no live batch
+    must leave a terminal envelope behind so the next /progress poll
+    drives the client into unregister rather than re-rendering a stuck
+    pending row."""
+    run_id = _seeded_run["run_id"]
+    resp = client.post(f"/api/v1/runs/{run_id}/ai-fixes/cancel")
+    assert resp.status_code == 202
+    snap = _memory_store.read(run_id)
+    assert snap is not None
+    assert snap.status == "cancelled"
+
+
+def test_legacy_stream_phantom_fast_path(client, _seeded_run, _memory_store):
+    """No batch + no envelope ⇒ stream emits one terminal event and ends.
+    Without this, the SSE generator would poll silently for 600s while
+    the client banner stays parked."""
+    with client.stream(
+        "GET", f"/api/v1/runs/{_seeded_run['run_id']}/ai-fixes/stream"
+    ) as resp:
+        assert resp.status_code == 200
+        body = resp.read().decode()
+    assert "event: progress" in body
+    assert '"status": "cancelled"' in body
+    assert "event: end" in body
 
 
 def test_list_run_fixes_after_generation(client, _seeded_run, _enable_ai, _fake_registry, _memory_store):

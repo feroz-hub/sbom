@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useContext } from 'react';
 import { CheckCircle2, Loader2, Sparkles, XCircle } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -13,7 +14,7 @@ import {
 import type { AiBatchProgress } from '@/types/ai';
 import { useTrackedAiBatches } from './useGlobalAiBatchProgress';
 import { batchProgressQueryKey } from './AiBatchProgressProvider';
-import type { AiBatchTrackingKey } from './AiBatchProgressContext';
+import { AiBatchProgressContext, type AiBatchTrackingKey } from './AiBatchProgressContext';
 
 const MAX_VISIBLE = 3;
 
@@ -54,6 +55,7 @@ interface RowProps {
 
 function GlobalBatchRow({ entry, compact = false }: RowProps) {
   const qc = useQueryClient();
+  const ctx = useContext(AiBatchProgressContext);
   const { runId, batchId, scopeLabel } = entry;
   const queryKey = batchProgressQueryKey(runId, batchId);
   const { data: progress } = useQuery<AiBatchProgress>({
@@ -77,6 +79,12 @@ function GlobalBatchRow({ entry, compact = false }: RowProps) {
   const label = progress.scope_label ?? scopeLabel ?? null;
 
   const onCancel = async () => {
+    // Optimistic dismiss: the user clicked Cancel, so the row should
+    // disappear regardless of what the backend does next. The cancel
+    // POST runs in the background; if there was a real worker, its
+    // own terminal envelope will still update any other surfaces
+    // (run-detail page, batches list).
+    ctx?.unregister(runId, batchId);
     try {
       if (batchId == null) {
         await cancelRunAiFixes(runId);

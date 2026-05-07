@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
+  HttpError,
   aiFixBatchStreamUrl,
   aiFixStreamUrl,
   getRunAiBatch,
@@ -17,6 +18,11 @@ import {
 
 const POLL_FALLBACK_MS = 2_000;
 const TERMINAL_LINGER_MS = 8_000;
+// Defensive watchdog: an entry tracked this long without ever reaching
+// a terminal status is almost certainly a leak (e.g. a backend that
+// silently never emits ``complete``). Force-unregister so the banner
+// row can't survive across an entire workday.
+const STALE_TRACKING_TIMEOUT_MS = 60 * 60_000;
 
 function isTerminal(status: AiBatchProgress['status']): boolean {
   return status === 'complete' || status === 'failed' || status === 'cancelled';
@@ -74,8 +80,16 @@ function BatchStreamSubscription({
           qc.setQueryData(batchProgressQueryKey(runId, batchId), detail.progress);
           if (isTerminal(detail.progress.status)) onTerminalRef.current();
         }
-      } catch {
-        /* SSE/poll loop fills in once the network recovers. */
+      } catch (err) {
+        if (cancelled) return;
+        // 404 = phantom subscriber (registered for a run with no batch).
+        // Treat as terminal so the provider's linger timer unregisters
+        // the entry and the banner row goes away.
+        if (err instanceof HttpError && err.status === 404) {
+          onTerminalRef.current();
+          return;
+        }
+        /* other errors: SSE/poll loop fills in once the network recovers. */
       }
     };
     fetchInitial();
@@ -163,6 +177,15 @@ function BatchStreamSubscription({
     es.addEventListener('end', () => {
       es?.close();
       es = null;
+      // Server signalled "no more events." Whether the run reached a
+      // terminal status or the legacy phantom-fast-path fired, the
+      // subscriber should unregister rather than sit on a closed
+      // socket. Without this, prior to the fix, an `end` after a
+      // synthesised `pending` envelope left the entry tracked forever.
+      if (!stopped) {
+        stopped = true;
+        onTerminalRef.current();
+      }
     });
 
     es.onerror = () => {
@@ -202,6 +225,9 @@ export function AiBatchProgressProvider({ children }: ProviderProps) {
   const lingerTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(
     new Map(),
   );
+  const staleTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(
+    new Map(),
+  );
 
   const register = useCallback((entry: AiBatchTrackingKey) => {
     const id = trackingKeyId(entry);
@@ -224,6 +250,26 @@ export function AiBatchProgressProvider({ children }: ProviderProps) {
       clearTimeout(timer);
       lingerTimers.current.delete(id);
     }
+    // Arm the stale watchdog. Cleared when the entry transitions to
+    // terminal (handleTerminal) or is explicitly unregistered.
+    if (!staleTimers.current.has(id)) {
+      const t = setTimeout(() => {
+        staleTimers.current.delete(id);
+        // Inline drop to avoid a stale closure over `unregister`.
+        setTracked((prev) => {
+          if (!prev.has(id)) return prev;
+          const next = new Map(prev);
+          next.delete(id);
+          return next;
+        });
+        const lt = lingerTimers.current.get(id);
+        if (lt) {
+          clearTimeout(lt);
+          lingerTimers.current.delete(id);
+        }
+      }, STALE_TRACKING_TIMEOUT_MS);
+      staleTimers.current.set(id, t);
+    }
   }, []);
 
   const unregister = useCallback((runId: number, batchId: string | null) => {
@@ -238,6 +284,11 @@ export function AiBatchProgressProvider({ children }: ProviderProps) {
     if (timer) {
       clearTimeout(timer);
       lingerTimers.current.delete(id);
+    }
+    const stale = staleTimers.current.get(id);
+    if (stale) {
+      clearTimeout(stale);
+      staleTimers.current.delete(id);
     }
   }, []);
 
@@ -257,10 +308,13 @@ export function AiBatchProgressProvider({ children }: ProviderProps) {
 
   // Cleanup pending timers on provider unmount (HMR / route refresh).
   useEffect(() => {
-    const map = lingerTimers.current;
+    const linger = lingerTimers.current;
+    const stale = staleTimers.current;
     return () => {
-      map.forEach((t) => clearTimeout(t));
-      map.clear();
+      linger.forEach((t) => clearTimeout(t));
+      linger.clear();
+      stale.forEach((t) => clearTimeout(t));
+      stale.clear();
     };
   }, []);
 

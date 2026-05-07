@@ -269,6 +269,47 @@ def _row_to_list_item(row: AiFixBatch) -> BatchListItem:
     )
 
 
+def _row_to_progress(row: AiFixBatch) -> BatchProgress:
+    """Materialise a durable batch row into the live progress envelope shape.
+
+    Used by the legacy /progress endpoint when the in-memory store is
+    empty (e.g. after a server restart) so terminal state stays
+    observable — without this, restarting the API would resurrect the
+    "Run #N 0/0" phantom for any client that still has the run page open.
+    """
+    total = int(row.total or 0)
+    cached = int(row.cached_count or 0)
+    generated = int(row.generated_count or 0)
+    failed = int(row.failed_count or 0)
+    return BatchProgress(
+        run_id=row.run_id,
+        batch_id=row.id,
+        scope_label=row.scope_label,
+        status=row.status,
+        total=total,
+        from_cache=cached,
+        generated=generated,
+        failed=failed,
+        remaining=max(total - cached - generated - failed, 0),
+        cost_so_far_usd=float(row.cost_usd or 0.0),
+        started_at=row.started_at,
+        finished_at=row.completed_at,
+        last_error=row.last_error,
+    )
+
+
+def _latest_batch_row(db: Session, run_id: int) -> AiFixBatch | None:
+    return (
+        db.execute(
+            select(AiFixBatch)
+            .where(AiFixBatch.run_id == run_id)
+            .order_by(AiFixBatch.created_at.desc())
+            .limit(1)
+        )
+        .scalar_one_or_none()
+    )
+
+
 # ---------------------------------------------------------------------------
 # Batch trigger endpoint (multi-batch + scope-aware)
 # ---------------------------------------------------------------------------
@@ -714,16 +755,30 @@ def get_progress(run_id: int, db: Session = Depends(get_db)) -> BatchProgress:
 
     Frontends migrating to the multi-batch surface should call
     ``/batches/{batch_id}`` instead.
+
+    Returns 404 when the run has no batch at all. Earlier the endpoint
+    fabricated a ``pending`` envelope for this case, which trapped any
+    subscriber forever — the frontend has no way to tell synthesised
+    "nothing here" apart from real "queued, waiting to start." A
+    structured 404 lets the client unregister the phantom.
     """
     _ensure_run_exists(db, run_id)
     store = get_progress_store()
     snap = store.read(run_id)
     if snap is not None:
         return snap
-    snap = store.latest_for_run(run_id)
-    if snap is not None:
-        return snap
-    return initial_progress(run_id, total=0)
+    # Store is empty (cold start, or never any batch). Surface the most
+    # recent durable row so terminal state survives a restart.
+    last_row = _latest_batch_row(db, run_id)
+    if last_row is not None:
+        return _row_to_progress(last_row)
+    raise HTTPException(
+        status_code=404,
+        detail={
+            "error_code": "NO_BATCH",
+            "message": f"No AI fix batch exists for run {run_id}.",
+        },
+    )
 
 
 @router.post(
@@ -737,9 +792,19 @@ def cancel_run_fixes_legacy(run_id: int, db: Session = Depends(get_db)) -> dict:
     The legacy cancel flag is honoured by every batch's pipeline loop;
     in practice this halts the in-flight semaphore work for all
     concurrent batches.
+
+    Idempotent. When no live progress entry exists (e.g. a phantom
+    subscriber on a run that has no batch), writes a synthetic terminal
+    envelope to the legacy slot so the client's next poll/SSE message
+    returns ``cancelled`` and the banner row dismisses itself. Active
+    workers write batch-keyed entries, so the synthetic legacy write
+    can't clobber a real in-flight batch's state.
     """
     _ensure_run_exists(db, run_id)
-    get_progress_store().request_cancel(run_id)
+    store = get_progress_store()
+    store.request_cancel(run_id)
+    if store.read(run_id) is None:
+        store.write(initial_progress(run_id, total=0, status="cancelled"))
     return {"run_id": run_id, "cancel_requested": True}
 
 
@@ -753,9 +818,35 @@ def stream_progress_legacy(run_id: int, db: Session = Depends(get_db)) -> Stream
     Multi-batch frontends should subscribe to
     ``/batches/{batch_id}/stream`` instead — the legacy stream is
     indeterminate when multiple batches run on one run.
+
+    Phantom-fast-path: if the run has no live progress AND no durable
+    batch row, the subscriber is stale (e.g. a tab that registered on
+    mount before any generation was triggered). Emit one terminal
+    ``cancelled`` event and end the stream so the client unregisters
+    immediately, instead of polling silently for 10 minutes.
     """
     _ensure_run_exists(db, run_id)
+    store = get_progress_store()
+    if store.read(run_id) is None and _latest_batch_row(db, run_id) is None:
+        return _phantom_terminal_sse(run_id)
     return _sse_response(run_id, batch_id=None)
+
+
+def _phantom_terminal_sse(run_id: int) -> StreamingResponse:
+    """One-shot SSE — yield a terminal envelope and end.
+
+    Symmetric with the GET /progress 404: both paths tell a phantom
+    subscriber "there's nothing here, stop tracking."
+    """
+    terminal = initial_progress(run_id, total=0, status="cancelled")
+    payload = json.dumps(terminal.model_dump(mode="json"))
+
+    def _gen():
+        yield ":ok\n\n"
+        yield f"event: progress\ndata: {payload}\n\n"
+        yield "event: end\ndata: {}\n\n"
+
+    return StreamingResponse(_gen(), media_type="text/event-stream")
 
 
 def _sse_response(run_id: int, *, batch_id: str | None) -> StreamingResponse:
