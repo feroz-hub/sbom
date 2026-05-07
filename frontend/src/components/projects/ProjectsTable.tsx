@@ -1,19 +1,19 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarClock, Pencil, Trash2 } from 'lucide-react';
 import { Alert } from '@/components/ui/Alert';
 import { Select } from '@/components/ui/Select';
 import { Table, TableHead, TableBody, Th, SortableTh, Td, EmptyRow } from '@/components/ui/Table';
 import { TableFilterBar, TableSearchInput } from '@/components/ui/TableFilterBar';
 import { Badge } from '@/components/ui/Badge';
-import { ConfirmDialog } from '@/components/ui/Dialog';
+import { DeleteConfirmDialog } from '@/components/ui/DeleteConfirmDialog';
 import { SkeletonRow } from '@/components/ui/Spinner';
 import { Pagination } from '@/components/ui/Pagination';
 import { ProjectModal } from './ProjectModal';
 import { ProjectScheduleDialog } from '@/components/schedules/ProjectScheduleDialog';
-import { deleteProject } from '@/lib/api';
+import { deleteProject, getProjectDeleteImpact } from '@/lib/api';
 import { matchesMultiField } from '@/lib/tableFilters';
 import { formatDate } from '@/lib/utils';
 import { useToast } from '@/hooks/useToast';
@@ -34,16 +34,28 @@ export function ProjectsTable({ projects, isLoading, error }: ProjectsTableProps
   const { showToast } = useToast();
   const [editProject, setEditProject] = useState<Project | null>(null);
   const [scheduleProject, setScheduleProject] = useState<Project | null>(null);
-  const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
 
+  // Pre-flight cascade impact, fetched only while the dialog is open.
+  const impactQuery = useQuery({
+    queryKey: ['project-delete-impact', deleteTarget?.id],
+    queryFn: ({ signal }) => getProjectDeleteImpact(deleteTarget!.id, signal),
+    enabled: deleteTarget !== null,
+    staleTime: 0,
+  });
+
   const deleteMutation = useMutation({
-    mutationFn: (id: number) => deleteProject(id),
-    onSuccess: () => {
+    mutationFn: ({ id, permanent }: { id: number; permanent: boolean }) =>
+      deleteProject(id, { permanent }),
+    onSuccess: (_data, { permanent }) => {
       queryClient.invalidateQueries({ queryKey: ['projects'] });
-      showToast('Project deleted successfully', 'success');
-      setDeleteId(null);
+      showToast(
+        permanent ? 'Project permanently deleted' : 'Project moved to deleted',
+        'success',
+      );
+      setDeleteTarget(null);
     },
     onError: (err: Error) => {
       showToast(`Delete failed: ${err.message}`, 'error');
@@ -236,7 +248,7 @@ export function ProjectsTable({ projects, isLoading, error }: ProjectsTableProps
                         <Pencil className="h-4 w-4" />
                       </button>
                       <button
-                        onClick={() => setDeleteId(project.id)}
+                        onClick={() => setDeleteTarget(project)}
                         className="rounded-lg p-1.5 text-hcl-muted transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
                         aria-label="Delete project"
                       >
@@ -283,14 +295,25 @@ export function ProjectsTable({ projects, isLoading, error }: ProjectsTableProps
         />
       )}
 
-      <ConfirmDialog
-        open={deleteId !== null}
-        onClose={() => setDeleteId(null)}
-        onConfirm={() => deleteId !== null && deleteMutation.mutate(deleteId)}
-        title="Delete Project"
-        message="Are you sure you want to delete this project? This action cannot be undone."
-        confirmLabel="Delete Project"
+      <DeleteConfirmDialog
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={({ permanent }) =>
+          deleteTarget && deleteMutation.mutate({ id: deleteTarget.id, permanent })
+        }
         loading={deleteMutation.isPending}
+        recordName={deleteTarget?.project_name ?? ''}
+        recordKind="project"
+        cascadeImpact={
+          impactQuery.data
+            ? [
+                { label: 'SBOM', count: impactQuery.data.sboms },
+                { label: 'run', count: impactQuery.data.runs },
+                { label: 'finding', count: impactQuery.data.findings },
+                { label: 'schedule', count: impactQuery.data.schedules },
+              ]
+            : []
+        }
       />
     </>
   );

@@ -59,7 +59,9 @@ from ..schemas import (
     SBOMSourceOut,
     SBOMSourceUpdate,
 )
+from ..services import audit_log
 from ..services.analysis_service import compute_report_status, persist_analysis_run
+from ..services.soft_delete import SoftDeleteService
 from ..sources import (
     EVENT_COMPLETE,
     EVENT_DONE,
@@ -654,11 +656,62 @@ def update_sbom(
         )
 
 
+@router.get("/sboms/{sbom_id}/delete-impact", status_code=status.HTTP_200_OK)
+def sbom_delete_impact(
+    sbom_id: int = Path(..., ge=1),
+    db: Session = Depends(get_db),
+):
+    """Pre-flight cascade preview for the SBOM delete confirmation modal.
+
+    Phase 4 §4.2: returns the count of dependent rows that a soft-delete
+    on this SBOM would tombstone. Counts respect Option C — only
+    currently-active rows are counted.
+    """
+    sbom = db.get(SBOMSource, sbom_id)
+    if sbom is None:
+        raise HTTPException(status_code=404, detail="SBOM not found")
+
+    run_ids = (
+        db.execute(select(AnalysisRun.id).where(AnalysisRun.sbom_id == sbom_id))
+        .scalars()
+        .all()
+    )
+    components = db.execute(
+        select(func.count(SBOMComponent.id)).where(SBOMComponent.sbom_id == sbom_id)
+    ).scalar()
+    findings = (
+        db.execute(
+            select(func.count(AnalysisFinding.id)).where(
+                AnalysisFinding.analysis_run_id.in_(run_ids)
+            )
+        ).scalar()
+        if run_ids
+        else 0
+    )
+
+    return {
+        "sbom_id": sbom_id,
+        "sbom_name": sbom.sbom_name,
+        "components": int(components or 0),
+        "runs": len(run_ids),
+        "findings": int(findings or 0),
+    }
+
+
 @router.delete("/sboms/{sbom_id}", status_code=status.HTTP_200_OK)
 def delete_sbom(
     sbom_id: int,
     user_id: str = Query(..., description="CreatedBy user id; must match SBOM.created_by"),
     confirm: str = Query("no", description="Set to 'yes' to confirm deletion"),
+    permanent: bool = Query(
+        False,
+        description=(
+            "If true, permanently delete the SBOM and every dependent row. "
+            "If false (default), soft-delete: mark the SBOM and its runs / "
+            "components / findings as inactive, leaving rows in place for "
+            "recovery."
+        ),
+    ),
     db: Session = Depends(get_db),
 ):
     if sbom_id is None or not isinstance(sbom_id, int) or sbom_id <= 0:
@@ -678,51 +731,132 @@ def delete_sbom(
         return {
             "status": "pending_confirmation",
             "message": (
-                "This operation will permanently delete the SBOM and all related analysis data. "
-                "To proceed, resend the request with confirm=yes."
+                "This operation will delete the SBOM and all related analysis data. "
+                "To proceed, resend the request with confirm=yes "
+                "(and add permanent=true to bypass soft delete)."
             ),
             "example": f"/api/sboms/{sbom_id}?user_id={user_id}&confirm=yes",
         }
 
-    try:
-        run_ids = db.execute(select(AnalysisRun.id).where(AnalysisRun.sbom_id == sbom_id)).scalars().all()
+    service = SoftDeleteService(db)
 
-        if run_ids:
-            db.execute(
-                delete(AnalysisFinding)
-                .where(AnalysisFinding.analysis_run_id.in_(run_ids))
-                .execution_options(synchronize_session=False)
+    if permanent:
+        try:
+            run_ids = (
+                db.execute(
+                    select(AnalysisRun.id)
+                    .where(AnalysisRun.sbom_id == sbom_id)
+                    .execution_options(include_deleted=True)
+                )
+                .scalars()
+                .all()
             )
 
-        db.execute(
-            delete(AnalysisRun).where(AnalysisRun.sbom_id == sbom_id).execution_options(synchronize_session=False)
-        )
-        db.execute(
-            delete(SBOMComponent).where(SBOMComponent.sbom_id == sbom_id).execution_options(synchronize_session=False)
-        )
-        db.execute(
-            delete(SBOMAnalysisReport)
-            .where(SBOMAnalysisReport.sbom_ref_id == sbom_id)
-            .execution_options(synchronize_session=False)
-        )
-        db.flush()
+            if run_ids:
+                db.execute(
+                    delete(AnalysisFinding)
+                    .where(AnalysisFinding.analysis_run_id.in_(run_ids))
+                    .execution_options(synchronize_session=False)
+                )
 
-        db.delete(sbom)
-        db.commit()
+            db.execute(
+                delete(AnalysisRun).where(AnalysisRun.sbom_id == sbom_id).execution_options(synchronize_session=False)
+            )
+            db.execute(
+                delete(SBOMComponent).where(SBOMComponent.sbom_id == sbom_id).execution_options(synchronize_session=False)
+            )
+            db.execute(
+                delete(SBOMAnalysisReport)
+                .where(SBOMAnalysisReport.sbom_ref_id == sbom_id)
+                .execution_options(synchronize_session=False)
+            )
+            db.flush()
 
+            service.hard_delete(sbom)
+            db.commit()
+        except Exception:
+            db.rollback()
+            log.exception("permanent delete_sbom failed: sbom_id=%s user=%s", sbom_id, user_id)
+            raise HTTPException(
+                status_code=500,
+                detail={"code": "internal_error", "message": "Internal server error."},
+            )
+
+        audit_log.record(
+            db,
+            user_id=user_id,
+            action="sbom.permanent_delete",
+            target_kind="sbom",
+            target_id=sbom_id,
+            detail=f"runs={len(run_ids)}",
+            metadata={"run_ids": list(run_ids)},
+        )
         return {
             "status": "deleted",
-            "message": f"SBOM {sbom_id} and related data have been deleted successfully.",
+            "permanent": True,
+            "message": f"SBOM {sbom_id} and related data have been permanently deleted.",
             "sbom_id": sbom_id,
             "requested_by": user_id,
         }
+
+    try:
+        cascaded_count = service.soft_delete(sbom, user_id=user_id, cascade=True)
+        db.commit()
     except Exception:
         db.rollback()
-        log.exception("delete_sbom failed: sbom_id=%s user=%s", sbom_id, user_id)
+        log.exception("soft delete_sbom failed: sbom_id=%s user=%s", sbom_id, user_id)
         raise HTTPException(
             status_code=500,
             detail={"code": "internal_error", "message": "Internal server error."},
         )
+
+    audit_log.record(
+        db,
+        user_id=user_id,
+        action="sbom.soft_delete",
+        target_kind="sbom",
+        target_id=sbom_id,
+        detail=f"cascaded={cascaded_count}",
+        metadata={"cascaded_count": cascaded_count},
+    )
+    return {
+        "status": "deleted",
+        "permanent": False,
+        "cascaded_count": cascaded_count,
+        "sbom_id": sbom_id,
+        "requested_by": user_id,
+        "message": f"SBOM {sbom_id} moved to deleted (recoverable).",
+    }
+
+
+@router.post("/sboms/{sbom_id}/restore", status_code=status.HTTP_200_OK)
+def restore_sbom(
+    sbom_id: int = Path(..., ge=1),
+    user_id: str | None = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Restore a soft-deleted SBOM. Does not cascade — children must be
+    restored individually. Phase 3.4 admin recovery surface."""
+    sbom = db.execute(
+        select(SBOMSource)
+        .where(SBOMSource.id == sbom_id)
+        .execution_options(include_deleted=True)
+    ).scalar_one_or_none()
+    if sbom is None:
+        raise HTTPException(status_code=404, detail="SBOM not found")
+    if sbom.is_active:
+        return {"status": "already_active", "id": sbom_id}
+
+    SoftDeleteService(db).restore(sbom)
+    db.commit()
+    audit_log.record(
+        db,
+        user_id=user_id,
+        action="sbom.restore",
+        target_kind="sbom",
+        target_id=sbom_id,
+    )
+    return {"status": "restored", "id": sbom_id}
 
 
 @router.post("/sboms/{sbom_id}/revalidate", response_model=SBOMSourceOut)

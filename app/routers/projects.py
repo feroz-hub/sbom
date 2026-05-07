@@ -14,13 +14,23 @@ import re
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..models import AnalysisRun, Projects, SBOMSource
+from ..models import (
+    AnalysisFinding,
+    AnalysisRun,
+    AnalysisSchedule,
+    Projects,
+    SBOMAnalysisReport,
+    SBOMComponent,
+    SBOMSource,
+)
 from ..schemas import ProjectCreate, ProjectOut, ProjectUpdate
+from ..services import audit_log
+from ..services.soft_delete import SoftDeleteService
 
 log = logging.getLogger(__name__)
 
@@ -145,11 +155,83 @@ def update_project(
         raise HTTPException(status_code=500, detail="Internal database error while updating project.") from exc
 
 
+@router.get("/projects/{project_id}/delete-impact", status_code=status.HTTP_200_OK)
+def project_delete_impact(
+    project_id: int = Path(..., ge=1),
+    db: Session = Depends(get_db),
+):
+    """Pre-flight cascade preview for the delete confirmation modal.
+
+    Phase 4 §4.2: returns the count of dependent rows that a soft-delete
+    on this project would tombstone. Counts respect Option C — only
+    currently-active rows are counted, so a re-run after a partial
+    cascade reflects what's still left to remove.
+    """
+    project = db.get(Projects, project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    from sqlalchemy import func
+
+    sbom_ids = (
+        db.execute(select(SBOMSource.id).where(SBOMSource.projectid == project_id))
+        .scalars()
+        .all()
+    )
+    run_ids = (
+        db.execute(select(AnalysisRun.id).where(AnalysisRun.project_id == project_id))
+        .scalars()
+        .all()
+    )
+    components = (
+        db.execute(
+            select(func.count(SBOMComponent.id)).where(
+                SBOMComponent.sbom_id.in_(sbom_ids) if sbom_ids else False
+            )
+        ).scalar()
+        if sbom_ids
+        else 0
+    )
+    findings = (
+        db.execute(
+            select(func.count(AnalysisFinding.id)).where(
+                AnalysisFinding.analysis_run_id.in_(run_ids) if run_ids else False
+            )
+        ).scalar()
+        if run_ids
+        else 0
+    )
+    schedules = db.execute(
+        select(func.count(AnalysisSchedule.id)).where(
+            AnalysisSchedule.project_id == project_id
+        )
+    ).scalar()
+
+    return {
+        "project_id": project_id,
+        "project_name": project.project_name,
+        "sboms": len(sbom_ids),
+        "components": int(components or 0),
+        "runs": len(run_ids),
+        "findings": int(findings or 0),
+        "schedules": int(schedules or 0),
+    }
+
+
 @router.delete("/projects/{project_id}", status_code=status.HTTP_200_OK)
 def delete_project(
     project_id: int,
     user_id: str | None = Query(None, description="Optional: if provided, must match Projects.created_by"),
     confirm: str = Query("no", description="Set to 'yes' to confirm deletion"),
+    permanent: bool = Query(
+        False,
+        description=(
+            "If true, permanently remove the project and every dependent row "
+            "(SBOMs, components, runs, findings, schedules, AI fix batches). "
+            "If false (default), soft-delete: mark the project and its "
+            "ownership tree as inactive, leaving rows in place for recovery."
+        ),
+    ),
     db: Session = Depends(get_db),
 ):
     project = db.get(Projects, project_id)
@@ -160,24 +242,144 @@ def delete_project(
         if (project.created_by or "").strip().lower() != (user_id or "").strip().lower():
             raise HTTPException(status_code=403, detail="Forbidden: user cannot delete this Project")
 
-    has_sboms = db.execute(
-        select(SBOMSource.id).where(SBOMSource.projectid == project_id).limit(1)
-    ).scalar_one_or_none()
-    has_runs = db.execute(
-        select(AnalysisRun.id).where(AnalysisRun.project_id == project_id).limit(1)
-    ).scalar_one_or_none()
-    if has_sboms or has_runs:
-        raise HTTPException(
-            status_code=409, detail="Cannot delete Project: SBOMs or Analysis Runs exist. Delete/reassign them first."
-        )
-
     if (confirm or "").strip().lower() not in {"yes", "y"}:
         return {
             "status": "pending_confirmation",
-            "message": "This will permanently delete the Project. Re-send with confirm=yes to proceed.",
+            "message": (
+                "This will delete the Project. Re-send with confirm=yes "
+                "to proceed (and add permanent=true to bypass soft delete)."
+            ),
             "example": f"/api/projects/{project_id}?confirm=yes",
         }
 
-    db.delete(project)
+    service = SoftDeleteService(db)
+
+    if permanent:
+        # Hard delete with explicit cascade. Existing FKs do NOT carry
+        # ON DELETE CASCADE for SBOM children (only schedules and AI
+        # fix batches do), so we walk the tree manually. Mirrors the
+        # SBOM hard-delete pattern in sboms_crud.py.
+        try:
+            sbom_ids = (
+                db.execute(
+                    select(SBOMSource.id)
+                    .where(SBOMSource.projectid == project_id)
+                    .execution_options(include_deleted=True)
+                )
+                .scalars()
+                .all()
+            )
+            run_ids = (
+                db.execute(
+                    select(AnalysisRun.id)
+                    .where(AnalysisRun.project_id == project_id)
+                    .execution_options(include_deleted=True)
+                )
+                .scalars()
+                .all()
+            )
+            if run_ids:
+                db.execute(
+                    delete(AnalysisFinding)
+                    .where(AnalysisFinding.analysis_run_id.in_(run_ids))
+                    .execution_options(synchronize_session=False)
+                )
+                db.execute(
+                    delete(AnalysisRun)
+                    .where(AnalysisRun.id.in_(run_ids))
+                    .execution_options(synchronize_session=False)
+                )
+            if sbom_ids:
+                db.execute(
+                    delete(SBOMComponent)
+                    .where(SBOMComponent.sbom_id.in_(sbom_ids))
+                    .execution_options(synchronize_session=False)
+                )
+                db.execute(
+                    delete(SBOMAnalysisReport)
+                    .where(SBOMAnalysisReport.sbom_ref_id.in_(sbom_ids))
+                    .execution_options(synchronize_session=False)
+                )
+                db.execute(
+                    delete(SBOMSource)
+                    .where(SBOMSource.id.in_(sbom_ids))
+                    .execution_options(synchronize_session=False)
+                )
+            db.flush()
+            service.hard_delete(project)
+            db.commit()
+        except Exception:
+            db.rollback()
+            log.exception("permanent delete_project failed: project_id=%s", project_id)
+            raise HTTPException(status_code=500, detail="Internal database error during permanent delete.")
+
+        audit_log.record(
+            db,
+            user_id=user_id,
+            action="project.permanent_delete",
+            target_kind="project",
+            target_id=project_id,
+            detail=f"sboms={len(sbom_ids)} runs={len(run_ids)}",
+            metadata={"sbom_ids": list(sbom_ids), "run_ids": list(run_ids)},
+        )
+        return {
+            "status": "deleted",
+            "permanent": True,
+            "message": f"Project {project_id} permanently deleted.",
+        }
+
+    # Soft delete with cascade through the ownership tree.
+    try:
+        cascaded_count = service.soft_delete(project, user_id=user_id, cascade=True)
+        db.commit()
+    except Exception:
+        db.rollback()
+        log.exception("soft delete_project failed: project_id=%s", project_id)
+        raise HTTPException(status_code=500, detail="Internal database error during soft delete.")
+
+    audit_log.record(
+        db,
+        user_id=user_id,
+        action="project.soft_delete",
+        target_kind="project",
+        target_id=project_id,
+        detail=f"cascaded={cascaded_count}",
+        metadata={"cascaded_count": cascaded_count},
+    )
+    return {
+        "status": "deleted",
+        "permanent": False,
+        "cascaded_count": cascaded_count,
+        "message": f"Project {project_id} moved to deleted (recoverable).",
+    }
+
+
+@router.post("/projects/{project_id}/restore", status_code=status.HTTP_200_OK)
+def restore_project(
+    project_id: int = Path(..., ge=1),
+    user_id: str | None = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Restore a soft-deleted project. Does not cascade — children must
+    be restored individually if also tombstoned. (Phase 3.4: admin
+    recovery surface; UI affordance ships in a follow-up PR.)"""
+    project = db.execute(
+        select(Projects)
+        .where(Projects.id == project_id)
+        .execution_options(include_deleted=True)
+    ).scalar_one_or_none()
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if project.is_active:
+        return {"status": "already_active", "id": project_id}
+
+    SoftDeleteService(db).restore(project)
     db.commit()
-    return {"status": "deleted", "message": f"Project {project_id} deleted successfully."}
+    audit_log.record(
+        db,
+        user_id=user_id,
+        action="project.restore",
+        target_kind="project",
+        target_id=project_id,
+    )
+    return {"status": "restored", "id": project_id}

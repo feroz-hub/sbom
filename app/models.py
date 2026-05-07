@@ -16,9 +16,10 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 
 from .db import Base
+from .models_mixins import SoftDeleteMixin
 
 
-class Projects(Base):
+class Projects(Base, SoftDeleteMixin):
     __tablename__ = "projects"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -32,6 +33,11 @@ class Projects(Base):
 
     sboms = relationship("SBOMSource", back_populates="project")
     analysis_runs = relationship("AnalysisRun", back_populates="project")
+    schedules = relationship(
+        "AnalysisSchedule",
+        primaryjoin="Projects.id == foreign(AnalysisSchedule.project_id)",
+        viewonly=True,
+    )
 
 
 class SBOMType(Base):
@@ -48,7 +54,7 @@ class SBOMType(Base):
     sboms = relationship("SBOMSource", back_populates="sbom_type_rel")
 
 
-class SBOMSource(Base):
+class SBOMSource(Base, SoftDeleteMixin):
     __tablename__ = "sbom_source"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -85,9 +91,14 @@ class SBOMSource(Base):
     analysis_reports = relationship("SBOMAnalysisReport", back_populates="sbom")
     components = relationship("SBOMComponent", back_populates="sbom")
     analysis_runs = relationship("AnalysisRun", back_populates="sbom")
+    schedules = relationship(
+        "AnalysisSchedule",
+        primaryjoin="SBOMSource.id == foreign(AnalysisSchedule.sbom_id)",
+        viewonly=True,
+    )
 
 
-class SBOMAnalysisReport(Base):
+class SBOMAnalysisReport(Base, SoftDeleteMixin):
     __tablename__ = "sbom_analysis_report"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -102,7 +113,7 @@ class SBOMAnalysisReport(Base):
     sbom = relationship("SBOMSource", back_populates="analysis_reports")
 
 
-class SBOMComponent(Base):
+class SBOMComponent(Base, SoftDeleteMixin):
     __tablename__ = "sbom_component"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -134,7 +145,7 @@ class SBOMComponent(Base):
     )
 
 
-class AnalysisRun(Base):
+class AnalysisRun(Base, SoftDeleteMixin):
     __tablename__ = "analysis_run"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -165,9 +176,14 @@ class AnalysisRun(Base):
     sbom = relationship("SBOMSource", back_populates="analysis_runs")
     project = relationship("Projects", back_populates="analysis_runs")
     findings = relationship("AnalysisFinding", back_populates="analysis_run")
+    ai_fix_batches = relationship(
+        "AiFixBatch",
+        primaryjoin="AnalysisRun.id == foreign(AiFixBatch.run_id)",
+        viewonly=True,
+    )
 
 
-class AnalysisFinding(Base):
+class AnalysisFinding(Base, SoftDeleteMixin):
     __tablename__ = "analysis_finding"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -243,7 +259,7 @@ class KevEntry(Base):
     refreshed_at = Column(String, nullable=False)  # ISO timestamp
 
 
-class AnalysisSchedule(Base):
+class AnalysisSchedule(Base, SoftDeleteMixin):
     """
     Periodic analysis schedule. One row per scope target (PROJECT or SBOM).
 
@@ -470,7 +486,7 @@ class AiFixCache(Base):
     )
 
 
-class AiFixBatch(Base):
+class AiFixBatch(Base, SoftDeleteMixin):
     """
     Durable record of a scope-aware AI fix batch (Phase 2 multi-batch).
 
@@ -600,4 +616,38 @@ class AiCredentialAuditLog(Base):
     target_id = Column(Integer, nullable=True)
     provider_name = Column(String(32), nullable=True)
     detail = Column(String(240), nullable=True)
+    created_at = Column(String, nullable=False, index=True)
+
+
+class AuditLog(Base):
+    """
+    Append-only general-purpose audit trail.
+
+    Distinct from ``AiCredentialAuditLog`` (which is the
+    security-specific surface for credential/settings mutations).
+    This table records lifecycle events on user-owned data —
+    soft-deletes, permanent deletes, and restores — so an admin can
+    answer "what happened to project X" after the fact.
+
+    Action vocabulary (Phase 3 of the soft-delete refactor):
+
+      * ``project.soft_delete`` / ``project.permanent_delete`` /
+        ``project.restore``
+      * ``sbom.soft_delete`` / ``sbom.permanent_delete`` / ``sbom.restore``
+      * ``schedule.soft_delete`` / ``schedule.permanent_delete``
+
+    The cascade row count is stored in ``metadata_json`` so an admin
+    can answer "how many findings were tombstoned with this run" without
+    re-walking the tree.
+    """
+
+    __tablename__ = "audit_log"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String(128), nullable=True)
+    action = Column(String(48), nullable=False, index=True)
+    target_kind = Column(String(24), nullable=False, index=True)
+    target_id = Column(Integer, nullable=True, index=True)
+    detail = Column(String(240), nullable=True)
+    metadata_json = Column(JSON, nullable=True)
     created_at = Column(String, nullable=False, index=True)

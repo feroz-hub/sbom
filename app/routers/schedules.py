@@ -35,6 +35,7 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..models import AnalysisSchedule, Projects, SBOMSource
 from ..schemas import ScheduleOut, ScheduleResolved, ScheduleUpsert
+from ..services import audit_log
 from ..services.schedule_resolver import resolve_for_sbom
 from ..services.scheduling import (
     ScheduleSpec,
@@ -43,6 +44,7 @@ from ..services.scheduling import (
     to_iso,
     validate_spec,
 )
+from ..services.soft_delete import SoftDeleteService
 
 log = logging.getLogger(__name__)
 
@@ -248,7 +250,19 @@ def patch_project_schedule(
 
 
 @router.delete("/projects/{project_id}/schedule", status_code=status.HTTP_200_OK)
-def delete_project_schedule(project_id: int = Path(..., ge=1), db: Session = Depends(get_db)):
+def delete_project_schedule(
+    project_id: int = Path(..., ge=1),
+    permanent: bool = Query(
+        False,
+        description=(
+            "If true, permanently remove the schedule row. If false "
+            "(default), soft-delete: leave the row in place but mark "
+            "it inactive."
+        ),
+    ),
+    user_id: str | None = Query(None),
+    db: Session = Depends(get_db),
+):
     _get_project_or_404(db, project_id)
     row = db.execute(
         select(AnalysisSchedule).where(
@@ -258,9 +272,25 @@ def delete_project_schedule(project_id: int = Path(..., ge=1), db: Session = Dep
     ).scalar_one_or_none()
     if row is None:
         return {"status": "no_schedule"}
-    db.delete(row)
+
+    schedule_id = row.id
+    service = SoftDeleteService(db)
+    if permanent:
+        service.hard_delete(row)
+        action = "schedule.permanent_delete"
+    else:
+        service.soft_delete(row, user_id=user_id, cascade=False)
+        action = "schedule.soft_delete"
     db.commit()
-    return {"status": "deleted", "id": row.id}
+    audit_log.record(
+        db,
+        user_id=user_id,
+        action=action,
+        target_kind="schedule",
+        target_id=schedule_id,
+        detail=f"scope=PROJECT project_id={project_id}",
+    )
+    return {"status": "deleted", "permanent": permanent, "id": schedule_id}
 
 
 # ---------------------------------------------------------------------------
@@ -359,7 +389,12 @@ def patch_sbom_schedule(
 
 
 @router.delete("/sboms/{sbom_id}/schedule", status_code=status.HTTP_200_OK)
-def delete_sbom_schedule(sbom_id: int = Path(..., ge=1), db: Session = Depends(get_db)):
+def delete_sbom_schedule(
+    sbom_id: int = Path(..., ge=1),
+    permanent: bool = Query(False),
+    user_id: str | None = Query(None),
+    db: Session = Depends(get_db),
+):
     _get_sbom_or_404(db, sbom_id)
     row = db.execute(
         select(AnalysisSchedule).where(
@@ -369,9 +404,25 @@ def delete_sbom_schedule(sbom_id: int = Path(..., ge=1), db: Session = Depends(g
     ).scalar_one_or_none()
     if row is None:
         return {"status": "no_override"}
-    db.delete(row)
+
+    schedule_id = row.id
+    service = SoftDeleteService(db)
+    if permanent:
+        service.hard_delete(row)
+        action = "schedule.permanent_delete"
+    else:
+        service.soft_delete(row, user_id=user_id, cascade=False)
+        action = "schedule.soft_delete"
     db.commit()
-    return {"status": "deleted", "id": row.id}
+    audit_log.record(
+        db,
+        user_id=user_id,
+        action=action,
+        target_kind="schedule",
+        target_id=schedule_id,
+        detail=f"scope=SBOM sbom_id={sbom_id}",
+    )
+    return {"status": "deleted", "permanent": permanent, "id": schedule_id}
 
 
 # ---------------------------------------------------------------------------

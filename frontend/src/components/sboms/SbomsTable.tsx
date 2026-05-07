@@ -1,19 +1,19 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Eye, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Alert } from '@/components/ui/Alert';
 import { Select } from '@/components/ui/Select';
 import { Table, TableHead, TableBody, Th, SortableTh, Td, EmptyRow } from '@/components/ui/Table';
 import { TableFilterBar, TableSearchInput } from '@/components/ui/TableFilterBar';
-import { ConfirmDialog } from '@/components/ui/Dialog';
+import { DeleteConfirmDialog } from '@/components/ui/DeleteConfirmDialog';
 import { SkeletonRow } from '@/components/ui/Spinner';
 import { Pagination } from '@/components/ui/Pagination';
 import { SbomStatusBadge } from '@/components/sboms/SbomStatusBadge';
 import { PinButton } from '@/components/ui/PinButton';
-import { deleteSbom } from '@/lib/api';
+import { deleteSbom, getSbomDeleteImpact } from '@/lib/api';
 import { matchesMultiField } from '@/lib/tableFilters';
 import { formatDate } from '@/lib/utils';
 import { useToast } from '@/hooks/useToast';
@@ -92,11 +92,27 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
   const [analysisFilter, setAnalysisFilter] = useState('');
   const [validationFilter, setValidationFilter] = useState('');
 
+  const impactQuery = useQuery({
+    queryKey: ['sbom-delete-impact', deleteTarget?.id],
+    queryFn: ({ signal }) => getSbomDeleteImpact(deleteTarget!.id, signal),
+    enabled: deleteTarget !== null,
+    staleTime: 0,
+  });
+
   const deleteMutation = useMutation({
-    mutationFn: (sbom: SBOMSource) => deleteSbom(sbom.id, sbom.created_by ?? ''),
-    onSuccess: () => {
+    mutationFn: ({
+      sbom,
+      permanent,
+    }: {
+      sbom: SBOMSource;
+      permanent: boolean;
+    }) => deleteSbom(sbom.id, sbom.created_by ?? '', { permanent }),
+    onSuccess: (_data, { permanent }) => {
       queryClient.invalidateQueries({ queryKey: ['sboms'] });
-      showToast('SBOM deleted successfully', 'success');
+      showToast(
+        permanent ? 'SBOM permanently deleted' : 'SBOM moved to deleted',
+        'success',
+      );
       setDeleteTarget(null);
     },
     onError: (err: Error) => {
@@ -402,14 +418,24 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
         ) : null}
       </div>
 
-      <ConfirmDialog
+      <DeleteConfirmDialog
         open={deleteTarget !== null}
         onClose={() => setDeleteTarget(null)}
-        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget)}
-        title="Delete SBOM"
-        message={`Are you sure you want to delete "${deleteTarget?.sbom_name}"? This action cannot be undone.`}
-        confirmLabel="Delete SBOM"
+        onConfirm={({ permanent }) =>
+          deleteTarget && deleteMutation.mutate({ sbom: deleteTarget, permanent })
+        }
         loading={deleteMutation.isPending}
+        recordName={deleteTarget?.sbom_name ?? ''}
+        recordKind="SBOM"
+        cascadeImpact={
+          impactQuery.data
+            ? [
+                { label: 'component', count: impactQuery.data.components },
+                { label: 'run', count: impactQuery.data.runs },
+                { label: 'finding', count: impactQuery.data.findings },
+              ]
+            : []
+        }
       />
     </>
   );

@@ -286,8 +286,29 @@ export function updateProject(
   });
 }
 
-export function deleteProject(id: number, signal?: AbortSignal) {
-  return requestVoid(`/api/projects/${id}?confirm=yes`, {
+export interface ProjectDeleteImpact {
+  project_id: number;
+  project_name: string;
+  sboms: number;
+  components: number;
+  runs: number;
+  findings: number;
+  schedules: number;
+}
+
+export function getProjectDeleteImpact(id: number, signal?: AbortSignal) {
+  return request<ProjectDeleteImpact>(`/api/projects/${id}/delete-impact`, { signal });
+}
+
+export function deleteProject(
+  id: number,
+  options: { permanent?: boolean; userId?: string } = {},
+  signal?: AbortSignal,
+) {
+  const params = new URLSearchParams({ confirm: 'yes' });
+  if (options.permanent) params.set('permanent', 'true');
+  if (options.userId) params.set('user_id', options.userId);
+  return requestVoid(`/api/projects/${id}?${params.toString()}`, {
     method: 'DELETE',
     signal,
   });
@@ -323,8 +344,30 @@ export function updateSbom(
   });
 }
 
-export function deleteSbom(id: number, userId: number | string, signal?: AbortSignal) {
-  return requestVoid(`/api/sboms/${id}?user_id=${userId}&confirm=yes`, {
+export interface SbomDeleteImpact {
+  sbom_id: number;
+  sbom_name: string;
+  components: number;
+  runs: number;
+  findings: number;
+}
+
+export function getSbomDeleteImpact(id: number, signal?: AbortSignal) {
+  return request<SbomDeleteImpact>(`/api/sboms/${id}/delete-impact`, { signal });
+}
+
+export function deleteSbom(
+  id: number,
+  userId: number | string,
+  options: { permanent?: boolean } = {},
+  signal?: AbortSignal,
+) {
+  const params = new URLSearchParams({
+    user_id: String(userId),
+    confirm: 'yes',
+  });
+  if (options.permanent) params.set('permanent', 'true');
+  return requestVoid(`/api/sboms/${id}?${params.toString()}`, {
     method: 'DELETE',
     signal,
   });
@@ -779,8 +822,13 @@ export function patchProjectSchedule(
   });
 }
 
-export function deleteProjectSchedule(projectId: number, signal?: AbortSignal) {
-  return requestVoid(`/api/projects/${projectId}/schedule`, {
+export function deleteProjectSchedule(
+  projectId: number,
+  options: { permanent?: boolean } = {},
+  signal?: AbortSignal,
+) {
+  const qs = options.permanent ? '?permanent=true' : '';
+  return requestVoid(`/api/projects/${projectId}/schedule${qs}`, {
     method: 'DELETE',
     signal,
   });
@@ -814,8 +862,13 @@ export function patchSbomSchedule(
   });
 }
 
-export function deleteSbomSchedule(sbomId: number, signal?: AbortSignal) {
-  return requestVoid(`/api/sboms/${sbomId}/schedule`, {
+export function deleteSbomSchedule(
+  sbomId: number,
+  options: { permanent?: boolean } = {},
+  signal?: AbortSignal,
+) {
+  const qs = options.permanent ? '?permanent=true' : '';
+  return requestVoid(`/api/sboms/${sbomId}/schedule${qs}`, {
     method: 'DELETE',
     signal,
   });

@@ -17,7 +17,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
 import { Alert } from '@/components/ui/Alert';
-import { ConfirmDialog } from '@/components/ui/Dialog';
+import { DeleteConfirmDialog } from '@/components/ui/DeleteConfirmDialog';
 import {
   Table,
   TableBody,
@@ -170,14 +170,23 @@ export default function SchedulesPage() {
     onError: (err: Error) => showToast(`Run-now failed: ${err.message}`, 'error'),
   });
   const deleteM = useMutation({
-    mutationFn: (sched: AnalysisSchedule) =>
+    mutationFn: ({
+      sched,
+      permanent,
+    }: {
+      sched: AnalysisSchedule;
+      permanent: boolean;
+    }) =>
       sched.scope === 'PROJECT' && sched.project_id != null
-        ? deleteProjectSchedule(sched.project_id)
+        ? deleteProjectSchedule(sched.project_id, { permanent })
         : sched.scope === 'SBOM' && sched.sbom_id != null
-          ? deleteSbomSchedule(sched.sbom_id)
+          ? deleteSbomSchedule(sched.sbom_id, { permanent })
           : Promise.reject(new Error('Schedule has no resolvable target')),
-    onSuccess: () => {
-      showToast('Schedule removed', 'success');
+    onSuccess: (_data, { permanent }) => {
+      showToast(
+        permanent ? 'Schedule permanently removed' : 'Schedule removed',
+        'success',
+      );
       setConfirmDelete(null);
       invalidate();
     },
@@ -411,18 +420,23 @@ export default function SchedulesPage() {
         />
       )}
 
-      <ConfirmDialog
+      <DeleteConfirmDialog
         open={!!confirmDelete}
         onClose={() => setConfirmDelete(null)}
-        onConfirm={() => confirmDelete && deleteM.mutate(confirmDelete)}
-        title={confirmDelete?.scope === 'PROJECT' ? 'Remove project schedule' : 'Remove SBOM override'}
-        message={
-          confirmDelete?.scope === 'PROJECT'
-            ? 'SBOMs in this project will no longer be re-analyzed automatically.'
-            : 'This SBOM will fall back to the project-level cascade (or stop being scheduled if there is none).'
+        onConfirm={({ permanent }) =>
+          confirmDelete && deleteM.mutate({ sched: confirmDelete, permanent })
         }
-        confirmLabel="Remove"
         loading={deleteM.isPending}
+        recordName={confirmDelete ? cadenceSummary(confirmDelete) : ''}
+        recordKind={
+          confirmDelete?.scope === 'PROJECT' ? 'project schedule' : 'SBOM schedule override'
+        }
+        title={
+          confirmDelete?.scope === 'PROJECT'
+            ? 'Remove project schedule?'
+            : 'Remove SBOM override?'
+        }
+        cascadeImpact={[]}
       />
     </div>
   );

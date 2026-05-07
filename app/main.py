@@ -146,6 +146,24 @@ def _ensure_seed_data() -> None:
             )
             conn.commit()
 
+    # Migration 014 — soft-delete columns on the eight in-scope tables.
+    # ``Base.metadata.create_all`` already added the columns to fresh
+    # databases via the SoftDeleteMixin; these calls cover dev DBs that
+    # were created before this PR and therefore lack the columns.
+    for table in (
+        "projects",
+        "sbom_source",
+        "sbom_analysis_report",
+        "sbom_component",
+        "analysis_run",
+        "analysis_finding",
+        "analysis_schedule",
+        "ai_fix_batch",
+    ):
+        _ensure_column(table, "is_active", "BOOLEAN", "1")
+        _ensure_column(table, "deactivated_at", "TIMESTAMP")
+        _ensure_column(table, "deactivated_by", "VARCHAR(128)")
+
     db = SessionLocal()
     try:
         db.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_sbom_type_typename ON sbom_type(typename)"))

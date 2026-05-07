@@ -6,7 +6,7 @@ import { CalendarClock, Pause, Pencil, Play, Trash2, Zap } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import { ConfirmDialog } from '@/components/ui/Dialog';
+import { DeleteConfirmDialog } from '@/components/ui/DeleteConfirmDialog';
 import {
   deleteProjectSchedule,
   deleteSbomSchedule,
@@ -122,12 +122,16 @@ export function ScheduleCard({ scope, targetId }: ScheduleCardProps) {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: () =>
+    mutationFn: ({ permanent }: { permanent: boolean }) =>
       scope === 'PROJECT'
-        ? deleteProjectSchedule(targetId)
-        : deleteSbomSchedule(targetId),
-    onSuccess: () => {
-      showToast(scope === 'PROJECT' ? 'Schedule removed' : 'Override removed', 'success');
+        ? deleteProjectSchedule(targetId, { permanent })
+        : deleteSbomSchedule(targetId, { permanent }),
+    onSuccess: (_data, { permanent }) => {
+      const noun = scope === 'PROJECT' ? 'Schedule' : 'Override';
+      showToast(
+        permanent ? `${noun} permanently removed` : `${noun} removed`,
+        'success',
+      );
       setConfirmDelete(false);
       invalidate();
     },
@@ -309,18 +313,16 @@ export function ScheduleCard({ scope, targetId }: ScheduleCardProps) {
         existing={inherited ? null : sched}
       />
 
-      <ConfirmDialog
+      <DeleteConfirmDialog
         open={confirmDelete}
         onClose={() => setConfirmDelete(false)}
-        onConfirm={() => deleteMutation.mutate()}
-        title={scope === 'PROJECT' ? 'Remove schedule' : 'Remove SBOM override'}
-        message={
-          scope === 'PROJECT'
-            ? 'SBOMs in this project will no longer be re-analyzed automatically.'
-            : 'This SBOM will fall back to the project-level cascade (or stop being scheduled if there is none).'
-        }
-        confirmLabel="Remove"
+        onConfirm={({ permanent }) => deleteMutation.mutate({ permanent })}
         loading={deleteMutation.isPending}
+        recordName={cadenceLabel(sched as AnalysisSchedule)}
+        recordKind={scope === 'PROJECT' ? 'project schedule' : 'SBOM schedule override'}
+        title={scope === 'PROJECT' ? 'Remove schedule?' : 'Remove SBOM override?'}
+        // Schedules have no children — pre-flight impact is empty.
+        cascadeImpact={[]}
       />
     </>
   );
