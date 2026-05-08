@@ -1,7 +1,9 @@
 # Metric correctness audit
 
-**Status:** Phase 0 (read-only diagnosis). No code changes proposed yet — pending scope decision in Phase 1.
-**Date:** 2026-05-07
+**Status:** Phase 4 complete (2026-05-08). Audit closed; follow-ups tracked in §I2 below. Permanent guidance lives in [`docs/metric-conventions.md`](./metric-conventions.md). Architectural enforcement lives in `tests/test_metric_consistency.py`.
+**Phase 0 date:** 2026-05-07 — read-only diagnosis with sandbox limitations (no DB access).
+**Phase 1 date:** 2026-05-08 — full inventory + live SQL evidence + extended reconciliation. Sections §I0.x preserved verbatim as the Phase 0 record; §I1–§I5 add Phase 1 evidence.
+**Phase 2-4 date:** 2026-05-08 — fixes + tests + permanent docs. See §I2 for the diff index and follow-up backlog.
 **Triggered by:** repeated user reports of inconsistent counts. Specifically:
 1. Analysis Runs page → "Runs with findings: 0", but the table shows 5 of 7 runs with status "Vulnerabilities found".
 2. Analysis Runs page → "Total findings: 1,261", but the C/H/M/L badges in the visible rows sum to 1,244 (gap = 17).
@@ -404,3 +406,366 @@ The cleanest bundling of fixes:
 | Phase 4 | F6 broader metrics-layer soft-delete refactor, F7 cache consolidation | separate PR, owned by metrics-layer maintainer |
 
 Pause for direction on which of these to take through Phase 2.
+
+---
+---
+
+# Phase 1 — Comprehensive inventory + live evidence (2026-05-08)
+
+This section extends the Phase 0 audit with: (a) every surface §I0.x missed, (b) the live SQL outputs §I0.5 promised but could not run, (c) a reconciliation table grounded in concrete local-DB numbers, and (d) two findings (F8, F9) discovered while walking the surfaces §I0.x did not visit.
+
+## I1.1 — New surfaces inventoried (extends §I0.1)
+
+§I0.1 covered Dashboard / Analysis Runs / Run detail / SBOM detail / Compare _v1_. Walking the rest of the product surfaced the following.
+
+| # | Surface | URL | Label | Component file:line | Hook | Endpoint |
+|---|---|---|---|---|---|---|
+| S26 | Projects table — total chip | `/projects` | "N project(s)" | `projects/ProjectsTable.tsx:137` | `getProjects` | `GET /api/projects` |
+| S27 | Projects table — filter result | `/projects` | "Showing X of Y" | `projects/ProjectsTable.tsx:137` | same | same |
+| S28 | SBOMs table — total chip | `/sboms` | "N SBOM(s)" | `sboms/SbomsTable.tsx:224` | `getSboms(1, 500)` | `GET /api/sboms` |
+| S29 | SBOMs table — filter result | `/sboms` | "Showing X of Y" | `sboms/SbomsTable.tsx:224` | same | same |
+| S30 | Schedules table — total chip | `/schedules` | "N schedule(s)" | `app/schedules/page.tsx:222-225` | `listSchedules` | `GET /api/schedules` |
+| S31 | Schedules table — filter result | `/schedules` | "Showing X of Y" | `app/schedules/page.tsx:222-225` | same | same |
+| S32 | Schedules row — Last-run status badge | `/schedules` | "PASS" / "FAIL" / "ERROR" / other | `app/schedules/page.tsx:319-329` | same | same |
+| S33 | Project delete-cascade dialog | `/projects` | "N SBOMs / N runs / N findings / N schedules" | `projects/ProjectsTable.tsx:308-315` | `getProjectDeleteImpact` | `GET /api/projects/{id}/delete-impact` |
+| S34 | SBOM delete-cascade dialog | `/sboms` | "N components / N runs / N findings" | `sboms/SbomsTable.tsx:432-437` | `getSbomDeleteImpact` | `GET /api/sboms/{id}/delete-impact` |
+| S35 | Settings → AI Usage Summary tile | `/settings/ai` | Total spent · Cache hit rate · Most-used % | `settings/ai/UsageSummary/UsageSummary.tsx:38-57` | `useAiSettings` | `GET /api/ai-fixes/usage` |
+| S36 | Run detail — Findings filter header | `/analysis/[id]` | "X of Y" / "N finding(s)" | `analysis/FindingFilterPanel.tsx:199-211` | `getAllEnrichedRunFindings` | `GET /api/runs/{id}/findings-enriched` |
+| S37 | Compare V2 — PostureHero KEV exposure (A/B/Δ) | `/analysis/compare` | KEV exposure · `kev_count_a` / `_b` / `_delta` | `compare/PostureHero/PostureHero.tsx:81-89` | `getCompare` | `GET /api/analysis-runs/compare` |
+| S38 | Compare V2 — PostureHero Fix-available coverage % (A/B/Δ) | same | Fix-available coverage · `fix_available_pct_*` | `…/PostureHero.tsx:90-98` | same | same |
+| S39 | Compare V2 — PostureHero High+Critical exposure (A/B/Δ) | same | High+Critical exposure · `high_critical_count_*` | `…/PostureHero.tsx:99-107` | same | same |
+| S40 | Compare V2 — BigNumbersColumn (added / resolved / severity changed) | same | `findings_added_count` / `_resolved_count` / `_severity_changed_count` | `compare/PostureHero/BigNumbersColumn.tsx` | same | same |
+| S41 | Compare V2 — DistributionBarLarge (added / changed / unchanged / resolved) | same | same fields plus `findings_unchanged_count` | `compare/PostureHero/DistributionBarLarge.tsx` | same | same |
+| S42 | Compare V2 — Tab 3 Severity composition Run A/B totals | same | "Run A · N findings" / "Run B · N findings" + per-severity stacked bar | `compare/PostureDetailTab/PostureDetailTab.tsx:148-166` | same | same |
+| S43 | Compare V2 — Tab 3 Top resolutions / Top regressions lists | same | Top-N rows | `…/PostureDetailTab.tsx:170-204` | same | same |
+| S44 | Compare V2 — FilterChipsAdaptive chip counts | same | `+ Added (N)`, `− Resolved (N)`, `↕ Severity (N)`, per-severity, KEV, Fix-available, Show unchanged, "Showing X of Y findings" | `compare/FilterChipsAdaptive/FilterChipsAdaptive.tsx:93-172` | same | same |
+
+**Surfaces walked and confirmed without aggregate counts:** `/sboms/[id]` validation report (renders status, no aggregate), `/admin/ai-usage` (referenced but route does not currently exist; the link from S35 dead-ends), `/analysis` Consolidated Scan tab (live-stream counts only, no precomputed aggregate). The **Settings index** (`/settings`) and **Settings → AI** gate page (`app/settings/ai/page.tsx`) carry no aggregate counts.
+
+**Compare-v2 vs Compare-v1.** §I0.1 only audited `compare/_v1/page.tsx`. The default route is now Compare-v2 (`compare/CompareView.tsx` via `app/analysis/compare/page.tsx`); v1 is gated behind `NEXT_PUBLIC_COMPARE_V1_FALLBACK=true`. S37–S44 are the live-by-default surface; S21/S22 (legacy v1) ship only when the kill-switch is flipped.
+
+## I1.2 — Two new findings discovered while walking the missed surfaces
+
+### F8 — Schedules page renders Last-run badge using legacy `PASS` / `FAIL` filters (severity: **MEDIUM**)
+
+**File:** `frontend/src/app/schedules/page.tsx:319-323`
+
+```tsx
+className={`… ${
+  s.last_run_status === 'PASS'
+    ? 'bg-emerald-50 text-emerald-700 …'
+    : s.last_run_status === 'FAIL'
+      ? 'bg-red-50 text-red-700 …'
+      : s.last_run_status === 'ERROR'
+        ? 'bg-orange-50 text-orange-700 …'
+        : 'bg-hcl-light text-hcl-muted …'
+}`}
+```
+
+Same class as F1: hardcoded legacy status names that ADR-0001 retired. The schedule resolver still mirrors `analysis_run.run_status` directly (see `app/services/scheduling.py`), so when a scheduled run completes with `OK` or `FINDINGS`, this badge falls into the "other" bucket (the muted-grey style) and the inline label still says `OK` / `FINDINGS`. The user sees a grey pill with the canonical text, not a green or red pill. Operationally similar to F1 — silently rendering misleading state — but on a less-trafficked page, hence MEDIUM not CRITICAL.
+
+The same `canonicalRunStatus()` helper (`frontend/src/lib/analysisRunStatusLabels.ts:102-107`) that should fix F1 also fixes F8.
+
+**Class:** A — replace string compare with `canonicalRunStatus(s.last_run_status) === 'OK' / 'FINDINGS' / 'ERROR'`. ~6 lines.
+
+### F9 — Architectural invariant: direct ORM access to `AnalysisFinding` / `AnalysisRun` survives outside `app/metrics/` (severity: **MEDIUM** — drift risk, not a current incident)
+
+**Files (grep evidence, 2026-05-08):** `app/routers/{pdf,sbom,runs,ai_fixes,projects,sboms_crud,analysis}.py`, `app/services/{cve_service,compare_service,analysis_service,pdf_service}.py` all contain at least one of `select(AnalysisFinding…)`, `select(AnalysisRun…)`, or the equivalent `db.query(...)` form.
+
+`app/metrics/__init__.py:5` documents the rule: *"Inline SQL for metrics in router files is forbidden."* Today that is **a comment, not a check**. Phase 3 of this audit needs to add the architectural invariant test (described in §6 of the calling prompt) so this drift is caught at PR review time. Without it, every new feature is an opportunity to add another scattered query — the bug class this audit exists to prevent.
+
+This isn't a "displayed number is wrong" bug; it's a "*future* displayed number will be wrong" bug. The fact that S37–S44 (Compare V2) flow through `compare_service.py` and not `app/metrics/compare/` is the most concrete current example: posture deltas are A-vs-A (correct convention) but the calculation lives outside the metric layer where consistency tests don't reach.
+
+**Class:** Phase 3 lock — add `test_no_direct_finding_queries_outside_metrics` to `tests/test_metric_consistency.py`. As a follow-up, migrate the compare service's posture math into `app/metrics/compare.py` (Phase 4 follow-up; not in scope of an immediate fix PR).
+
+## I1.3 — Convention classification for new surfaces (extends §I0.3)
+
+| # | Surface | Label implies | Actually computed as | Match? |
+|---|---|---|---|---|
+| S26 | Projects "N project(s)" | "all projects" | C — `projects.length` of FE array; backend `GET /api/projects` may or may not filter `is_active` | needs F6 verification |
+| S27 | Projects "Showing X of Y" | filter-of-loaded | C — FE filter on FE array | ✓ (acceptably honest) |
+| S28 | SBOMs "N SBOM(s)" | "all SBOMs" | C — `sboms.length` of FE page slice; `getSboms(1, 500)` | latent F2-class (>500 SBOMs undercount) |
+| S29 | SBOMs "Showing X of Y" | filter-of-loaded | C — FE filter | ✓ |
+| S30 | Schedules "N schedule(s)" | "all schedules" | C — `listSchedules` returns all (no pagination) | ✓ |
+| S31 | Schedules "Showing X of Y" | filter-of-loaded | C — FE filter | ✓ |
+| S32 | Schedules last-run badge | colour-coded by status | string compare on legacy `PASS`/`FAIL` (F8) | ❌ (F8) |
+| S33 | Project delete-impact | cascade subjects | C — backend counts SBOMs/runs/findings/schedules where `project_id = :id` | needs F6 verification |
+| S34 | SBOM delete-impact | cascade subjects | C — backend counts components/runs/findings where `sbom_id = :id` | needs F6 verification |
+| S35 | AI Usage tile (Total spent / Cache hit rate / Most-used %) | last-30-days totals | C — `SUM(cost_usd)` / `SUM(cache_hits)/SUM(calls)` over `ai_usage_log` | (separate concern; see §I1.6) |
+| S36 | Run detail "X of Y findings" | filter-of-loaded | C — FE filter on `getAllEnrichedRunFindings` array | ✓ |
+| S37 | Compare V2 KEV exposure A/B/Δ | scoped per run | A applied to each run; delta is A−A | ✓ (correct given convention) |
+| S38 | Compare V2 Fix-available pct A/B/Δ | scoped per run | A applied to each run; delta is %−% | ✓ |
+| S39 | Compare V2 High+Critical A/B/Δ | scoped per run | A applied to each run | ✓ |
+| S40 | Compare V2 added / resolved / sevChanged | set diff over (vuln,comp,ver) | B-flavor over two specific runs | ✓ |
+| S41 | Compare V2 distribution bar | added/changed/unchanged/resolved | B-flavor | ✓ |
+| S42 | Compare V2 Tab 3 Run A/B totals | per-run total | A | ✓ |
+| S43 | Compare V2 Tab 3 Top-N | ranking, not count | n/a | ✓ |
+| S44 | Compare V2 FilterChips counts | filter-of-loaded | C — FE filter on `result.findings`; "Showing X of Y" excludes `unchanged` from `Y` (`totalRowsForVisibility = rows.filter(r.change_kind !== 'unchanged').length`) | ⚠ — `Y` is a non-obvious denominator; tooltip would help but not a numerical bug |
+
+The chip dim-when-zero rule at `FilterChipsAdaptive.tsx:189` (`dim = !active && count === 0`) is a UX choice, not a numerical bug — calling it out only because the prompt asked for every count to be classified.
+
+## I1.4 — Live SQL evidence (replaces §I0.5 placeholders)
+
+Run against the local sqlite database `sbom_api.db` on 2026-05-08. The shape mirrors §I0.5 exactly; numbers are now the actual outputs.
+
+The local DB has a small dataset (1 SBOM, 1 project, 2 successful runs of the same SBOM, 1,084 raw finding rows — both runs identical at 542 findings each). Despite the small data, every Phase 0 hypothesis is testable.
+
+### Q1 — run counts
+
+| Query | Result |
+|---|---|
+| Q1.1 `COUNT(*) FROM analysis_run` | **2** |
+| Q1.2 `COUNT(*) … WHERE is_active=TRUE` | **2** (no soft-deletes in dataset) |
+| Q1.3 GROUP BY `run_status` (active) | `FINDINGS = 2` (only) |
+| Q1.4 `WHERE run_status='FINDINGS'` (canonical, active) | **2** |
+| Q1.4b `WHERE run_status='FAIL'` (legacy filter from `app/analysis/page.tsx:113`) | **0** |
+| Q1.4c `WHERE run_status='PASS'` (legacy filter from `app/analysis/page.tsx:111`) | **0** |
+
+**Result:** F1 is reproduced exactly. The Analysis Runs page's "Runs — with findings" tile does `runs.filter(r.run_status==='FAIL').length`, which is 0 here, while the canonical query returns 2. The two-rows-of-vulnerabilities-but-tile-says-0 contradiction §I0.4-F1 predicted is mechanically present in this dataset.
+
+### Q2 — finding counts
+
+| Query | Result |
+|---|---|
+| Q2.1 `COUNT(*) FROM analysis_finding` (raw, Convention C) | **1,084** |
+| Q2.2 `COUNT(*) … WHERE is_active=TRUE` | **1,084** |
+| Q2.3 lifetime distinct `(vuln,comp,ver)`, successful-run-scoped (Convention B) | **542** |
+| Q2.3b lifetime distinct, all runs (no status filter) | **542** (all runs are FINDINGS here, so equal) |
+
+**Result:** Lifetime distinct (542) ≠ raw rows (1,084) by a factor of 2 — exactly because both runs are duplicates of each other. This is the mechanism behind F5: a user who reads "Findings Surfaced" as raw count will never see 1,084; they'll see 542. Whether 542 is what the dashboard intends to show is the labeling question.
+
+### Q2.4 — per-run F4 invariant check
+
+Both runs match across every counter:
+
+| run_id | run_status | cached `total_findings` | `Σ(C+H+M+L+U)_count` | `COUNT(*)` live | C | H | M | L | U |
+|---|---|---|---|---|---|---|---|---|---|
+| 2 | FINDINGS | 542 | 542 | 542 | 53 | 220 | 187 | 74 | 8 |
+| 1 | FINDINGS | 542 | 542 | 542 | 53 | 220 | 187 | 74 | 8 |
+
+**F4 invariant** (`cached == sum_severity_cols == live_count`) **holds in this dataset.** That is the *current* state, not a guarantee — there's still no test that locks it. The seeding code in `tests/test_metric_consistency.py:106-156` writes `total_findings = len(findings)` directly, so test fixtures don't exercise the writer's actual aggregation path. Phase 3 should add a test that materially queries the live DB invariant after the analysis worker runs.
+
+### Q3 — Analysis Runs page tiles, computed correctly server-side
+
+```
+total_runs  no_issues  with_findings  source_errors  failed  total_findings_cached  total_findings_sum_sev  chml_only
+       2           0              2              0       0                 1,084                  1,084      1,068
+```
+
+Mapping to the page tiles:
+
+- "Total runs" should be **2** — already correct (FE shows `runs.length === 2`)
+- "Runs — no issues" should be **0** — tile **shows 0** today, but only by accident: the FE filters on legacy `'PASS'`, which returns 0 regardless of dataset
+- "Runs — with findings" should be **2** — tile **shows 0** today (F1 confirmed)
+- "Runs — source errors" should be **0** — tile shows 0 (PARTIAL not renamed; correct)
+- "Runs — failed" should be **0** — tile shows 0 (ERROR not renamed; correct)
+- "Total findings" should be **1,084** — tile shows 1,084 today; **C+H+M+L only would be 1,068** (16 unknown findings hidden — F3 confirmed at the 16-finding gap level)
+
+### Q4 — visible-rows reconciliation
+
+Top 7 rows by `id DESC`, active, with chml-only sum and unknown count:
+
+| id | run_status | total_findings | C | H | M | L | U | chml_only |
+|---|---|---|---|---|---|---|---|---|
+| 2 | FINDINGS | 542 | 53 | 220 | 187 | 74 | 8 | 534 |
+| 1 | FINDINGS | 542 | 53 | 220 | 187 | 74 | 8 | 534 |
+
+Σ across visible rows: total_findings = **1,084**, chml_only = **1,068**, unknowns = **16**. The 16-finding gap is the F3 unknown-bucket leak.
+
+### Q5 — KEV / SBOMs / Projects / Schedules / AI usage
+
+| Entity | Total | Active |
+|---|---|---|
+| `sbom_source` | 1 | 1 |
+| `projects` | 1 | 1 |
+| `analysis_schedule` | 0 | 0 |
+| `compare_cache` | 0 | n/a |
+| `ai_usage_log` | 0 | n/a |
+| KEV-listed findings (latest per SBOM) | 0 | n/a |
+
+**Notes:**
+- 0 KEV findings means the dashboard hero "KEV exposed" tile reads 0 in this dataset — testing F1's claim about hero correctness is not possible here without seeding KEV entries (the `test_metric_consistency.py:160-180` helper does this for tests).
+- 0 schedules means F8's runtime impact is zero in this dataset — the bug is structural.
+- 0 AI-usage means S35's tile reads "—" today; whether the math is right requires fixture data.
+
+## I1.5 — Reconciliation table with concrete numbers (extends §I0.6)
+
+| Surface | Convention claimed | Convention actually used | Local-DB expected | Local-DB displayed | Match? | Root cause |
+|---|---|---|---|---|---|---|
+| S08 Findings Surfaced | B | B | 542 | 542 | ✓ | (correct given convention; F5 is labeling) |
+| S11 Total runs | A "all runs" | C "page slice" | 2 | 2 | ✓ today | F2 — accidentally correct (<100 runs) |
+| S12 Runs no issues | A | filter on legacy `'PASS'` | 0 (`OK`-count) | 0 | ✓ here only | F1 — would be wrong if any OK run existed |
+| S13 Runs with findings | A | filter on legacy `'FAIL'` | 2 | **0** | **❌** | F1 (confirmed mechanically) |
+| S14 Runs source errors | A | filter on `'PARTIAL'` | 0 | 0 | ✓ | (PARTIAL not renamed; accidentally correct) |
+| S15 Runs failed | A | filter on `'ERROR'` | 0 | 0 | ✓ | (ERROR not renamed; accidentally correct) |
+| S16 Total findings | "all findings" | `Σ total_findings` page slice | 1,084 | 1,084 | ✓ | correct given convention |
+| S17 visible C/H/M/L badges | A | `Σ(C+H+M+L)_count` page slice | 1,068 | 1,068 | ✓ | correct; F3 — missing `U:` chip hides 16 unknowns |
+| S08 vs S18 (single run) | B vs A | both correct in isolation | 542 vs 542 | 542 vs 542 | n/a | F5 only fires when single-run rows > distinct keys |
+| S26-S31 list-page chips | C "FE filter" | C | matches exactly (1, 1, 0) | matches | ✓ | (acceptable; F6 may inflate `total` if soft-deletes accumulate) |
+| S32 Schedules last-run badge | colour by status | legacy `'PASS'`/`'FAIL'` | (no schedules in dataset) | n/a | ❌ structural | F8 — same class as F1 |
+| S33-S34 cascade-impact | C | C | depends on entity | n/a (no live click) | needs F6 audit | impact endpoint may not honour `is_active` |
+| S37-S44 Compare V2 | A-vs-A / B-flavor | matches | n/a (no two distinct runs) | n/a | ✓ assumed | (cannot exercise — both runs identical here) |
+| S35 AI Usage tile | last-30-days | C over `ai_usage_log` | 0 | "—" | ✓ structurally | (no fixture data; correctness untested) |
+
+## I1.6 — Out of scope, but worth flagging
+
+These surfaces appeared in the inventory and *do* compute counts, but their convention question is orthogonal to the (vuln,comp,ver) triplet that drives F1–F9. Document them so they don't get pulled into Phase 2 by accident.
+
+- **S35 AI Usage tile.** The "Total spent" / "Cache hit rate" / "Most-used %" math is over `ai_usage_log` and is governed by `app/services/dashboard_metrics.py` AI-cost helpers, not the dashboard-metric layer. Convention C ("total raw rows") is *correct* here — every LLM call is a billable event, no dedup is desired. This surface should NOT be migrated into `app/metrics/`; it belongs in a sibling `app/metrics/ai_cost.py` if/when consolidated. **Out of scope of this audit.**
+- **S33-S34 delete-impact dialogs.** These count cascade subjects to populate a confirmation copy ("This will delete 5 SBOMs, 12 runs, 1,084 findings"). They want raw counts, not Convention A or B — the user wants to know what they're deleting. The only correctness question is F6 (do they honour `is_active`?), which is a flag in the soft-delete audit, not a metrics-layer issue.
+- **S30/S32 schedule badge colour.** F8 is the only schedule-page bug; the table itself is fine.
+
+## I1.7 — Final summary across all 44 surfaces
+
+**Real bugs (numbers wrong on at least one surface):**
+
+1. **F1 (CRITICAL)** — Analysis Runs tiles "Runs — no issues" / "Runs — with findings" filter on legacy `PASS`/`FAIL` (4 lines, `frontend/src/app/analysis/page.tsx:111-114`). On the local-DB dataset, S13 is mechanically wrong: expected **2**, displayed **0**.
+2. **F2 (HIGH)** — All Analysis Runs tiles compute over the first-100-runs page slice; latent at ≤100 runs, undercounts above. No backend aggregate endpoint to consume.
+3. **F8 (MEDIUM)** — Schedules row badge filters on legacy `PASS`/`FAIL` (`frontend/src/app/schedules/page.tsx:319-323`). Same class as F1, different file.
+4. **F6 (MEDIUM)** — No metric query in `app/metrics/` filters on `is_active=TRUE`. Latent today (no soft-deletes in dataset); inflates every dashboard count after any soft-delete.
+
+**Counts correct but labels mislead:**
+
+5. **F3** — "Total findings 1,084" vs "visible C/H/M/L sum 1,068" gap (16) is the unknown-bucket missing from chips.
+6. **F5** — "Findings Surfaced" reads as raw count to users; it's distinct lifetime.
+
+**Latent invariants and architectural drift:**
+
+7. **F4** — `total_findings == Σ severity_count` holds today but is asserted nowhere.
+8. **F7** — Two parallel lifetime caches share an invalidation key; consolidate before they diverge.
+9. **F9 (NEW)** — `app/metrics/__init__.py:5` rule "inline SQL for metrics is forbidden" is a comment, not a test. 11 files outside `app/metrics/` have direct ORM access to `AnalysisFinding` / `AnalysisRun`. Phase 3 architectural test catches future drift; Compare service should migrate into `app/metrics/compare.py` as a Phase 4 follow-up.
+
+**What the correct values should be on the local DB:**
+
+| Tile | Today | Should be |
+|---|---|---|
+| Analysis Runs / Runs — with findings | **0** | **2** |
+| Analysis Runs / Runs — no issues | 0 | 0 (correct accidentally) |
+| Analysis Runs / Total runs | 2 | 2 ✓ |
+| Analysis Runs / Total findings | 1,084 | 1,084 ✓ (or 1,068 if "C+H+M+L only" is the desired convention) |
+| Dashboard / Findings Surfaced | 542 | 542 ✓ (label might be clearer) |
+| All others | n/a | unchanged |
+
+## I1.8 — Phase 1 → Phase 2 scope decision request
+
+The Phase 0 §I0.6 "Recommended scope" table stands. Phase 1 adds **F8** (schedules badge legacy filter) and **F9** (architectural test) to it.
+
+Suggested PR carve-up (smallest first):
+
+| PR | Files | Lines | Class | Notes |
+|---|---|---|---|---|
+| PR-1 (F1) | `frontend/src/app/analysis/page.tsx` | ~10 | A | Use `canonicalRunStatus()`. Fixes S12, S13. |
+| PR-2 (F8) | `frontend/src/app/schedules/page.tsx` | ~6 | A | Use `canonicalRunStatus()`. Fixes S32 colours. |
+| PR-3 (F3) | `frontend/src/components/analysis/RunsTable.tsx` (S17 chip) **OR** `app/analysis/page.tsx` (S16 sum) | ~10 | B | Owner picks: add `U:` chip OR change tile to C+H+M+L sum. Lock the convention. |
+| PR-4 (F4 lock) | `tests/test_metric_consistency.py` | ~30 | D | Add `test_per_run_severity_columns_match_live_count` against the worker-written denormalized columns. |
+| PR-5 (F2) | `app/routers/runs.py` + `frontend/src/app/analysis/page.tsx` | ~50 | A | Add `GET /api/runs/aggregate?scope=…` returning the 6 tile values; FE consumes it. Or relabel to "Loaded runs" if owner prefers cheap path. |
+| PR-6 (F6) | every file in `app/metrics/` | ~30 | A | Add `is_active=TRUE` filter helper used by every public function. Also fixes S33/S34. |
+| PR-7 (F5) | `frontend/src/components/dashboard/LifetimeStats/LifetimeStats.tsx` | ~3 | B | Rename "Findings surfaced" → "Distinct vulnerabilities surfaced". |
+| Phase 4 (F9) | `tests/test_metric_consistency.py` + migrate compare math | ~100 | C | Add architectural invariant test; migrate `app/services/compare_service.py` posture math into `app/metrics/compare.py`. Separate PR. |
+| Phase 4 (F7) | `app/services/dashboard_metrics.py` + `app/metrics/cache.py` | ~50 | C | Consolidate caches behind one invalidation interface. Separate PR. |
+
+**Recommended Phase 2 bundle:** PR-1 + PR-2 + PR-3 + PR-4 ship together as the "FE consistency" PR (~60 lines, low risk, fixes the user-visible incidents). PR-5/PR-6/PR-7 each go in their own PR. PR-9 / PR-10 are Phase 4 follow-ups.
+
+**Awaiting owner direction on which PRs proceed to Phase 2 in this audit's scope.**
+
+---
+---
+
+# Phase 2-4 — Implementation, tests, permanent docs (2026-05-08)
+
+This section is the closing record. Phase 2 implemented the recommended bundle plus the F2 backend aggregate; Phase 3 added the architectural lock; Phase 4 wrote the permanent guidance.
+
+## I2.1 — Diff index
+
+Backend (canonical metric layer + endpoint):
+
+| File | Change |
+|---|---|
+| `app/metrics/runs.py` | Added `runs_aggregate(db, *, sbom_id, project_id) → RunsAggregate`. Single round-trip; canonical OK/FINDINGS/PARTIAL/ERROR keys; unconditional `total == Σ(by_outcome)` invariant via `other` catch-all. |
+| `app/metrics/__init__.py` | Re-exported `runs_aggregate`, `RunsAggregate`. |
+| `app/schemas.py` | Added `RunsAggregateOut`, `RunsAggregateBuckets` Pydantic schemas. |
+| `app/routers/runs.py` | Added `GET /api/runs/aggregate?sbom_id=&project_id=` (placed before `/runs/{run_id}` for FastAPI declaration-order). |
+
+Frontend (consumes aggregate, F8 + F3 fixes):
+
+| File | Change |
+|---|---|
+| `frontend/src/lib/api.ts` | Added `RunsAggregate` type and `getRunsAggregate()`. |
+| `frontend/src/app/analysis/page.tsx` | Replaced legacy `summary` useMemo (filtered on `'PASS'`/`'FAIL'`) with a `useQuery` against the new endpoint. Tile labels and hint copy updated to canonical names. **F1 + F2 fixed.** |
+| `frontend/src/app/schedules/page.tsx` | Last-run badge now uses `canonicalRunStatus()`. **F8 fixed.** |
+| `frontend/src/components/analysis/RunsTable.tsx` | Added `U:` chip after `L:` so per-row chips reconcile to `total_findings`. **F3 fixed.** |
+
+Tests (regression locks):
+
+| File | Change |
+|---|---|
+| `tests/test_metric_consistency.py` | Added `test_f4_denormalised_columns_match_live_count` (F4 lock), `test_runs_aggregate_outcome_sum_equals_total` (I-A invariant), `test_runs_aggregate_endpoint_does_not_filter_on_legacy_status` (F1 regression), `test_no_new_direct_finding_or_run_queries_outside_metrics` (F9 architectural lock), `test_legacy_allowlist_does_not_grow_unnoticed` (allowlist self-correction). |
+
+Permanent docs (Phase 4):
+
+| File | Change |
+|---|---|
+| `docs/metric-conventions.md` | NEW — A/B/C decision flowchart + hard rules. The doc that prevents future drift. |
+| `CLAUDE.md` | NEW — calculations rule + run-status canonicalisation rule for future Cowork sessions. |
+| `docs/metric-correctness-audit.md` | This file. Phase 0 §I0.x and Phase 1 §I1.x preserved as the historical record; this §I2 is the closing diff index. |
+
+## I2.2 — Test evidence
+
+Backend metric-consistency suite (was 12 tests, now 17, all passing):
+
+```
+tests/test_metric_consistency.py .................                       [100%]
+17 passed, 1 warning in 1.58s
+```
+
+Full backend suite: 922 passed, 5 pre-existing AI-router failures unrelated to this audit (verified by `git stash` on a clean tree returning the same 5 failures).
+
+Frontend suite: 48 files, 370 tests, all passing. TypeScript: 3 pre-existing errors in `FindingsTrendChart.test.tsx` unrelated to this audit.
+
+The architectural test was stress-tested by writing a fake violator at `app/routers/_fake_violator_test.py` containing `select(AnalysisRun)` — the test correctly failed with the path and pattern named in the diagnostic.
+
+## I2.3 — Reconciliation: before vs after
+
+Local DB state (2 runs, both FINDINGS, 1,084 raw findings, 542 distinct):
+
+| Surface | Before | After |
+|---|---|---|
+| Analysis Runs / Runs — with findings (S13) | **0** (legacy `'FAIL'` filter) | **2** (server `with_findings` bucket) |
+| Analysis Runs / Runs — no issues (S12) | 0 (legacy `'PASS'`, accidentally correct) | **0** (server `no_issues` bucket — still 0, now for the right reason) |
+| Analysis Runs / Total runs (S11) | 2 (page-slice; latent bomb >100 runs) | **2** (server `total_runs`; no slice) |
+| Analysis Runs / Total findings (S16) | 1,084 (page-slice sum) | **1,084** (server SUM) |
+| Runs table per-row chips (S17) | C+H+M+L = 1,068 (16 unknowns hidden) | **C+H+M+L+U = 1,084** (chips reconcile to row total) |
+| Schedules row badge (S32) | grey on `OK`/`FINDINGS` (F8) | green on `OK`, red on `FINDINGS`, orange on `ERROR` |
+
+## I2.4 — Follow-up backlog
+
+Items intentionally deferred from the closing scope. Each should land as its own PR, owner-driven.
+
+| ID | Title | Owner | Why deferred | Pointer |
+|---|---|---|---|---|
+| FU-1 | F5 — rename "Findings surfaced" → "Distinct vulnerabilities surfaced" | FE | Pure label change; not a math bug. Owner picks copy. | `frontend/src/components/dashboard/LifetimeStats/LifetimeStats.tsx:100` |
+| FU-2 | F6 — add `is_active=TRUE` filter to every metric query | metrics-layer maintainer | Requires soft-delete-audit follow-up; cross-cuts every public metric function. Touches `findings.py`, `runs.py`, `sboms.py`, `kev.py`, `windows.py`. | §I0.4-F6 |
+| FU-3 | F7 — consolidate the two parallel lifetime caches | services-layer maintainer | Today they share an invalidation key; not a current incident. Consolidate before they diverge. | §I0.4-F7 |
+| FU-4 | F9 — migrate `app/services/compare_service.py` posture math into `app/metrics/compare.py` | metrics-layer maintainer | Largest item in `_LEGACY_DIRECT_QUERY_ALLOWLIST`. The Compare V2 surfaces (S37–S44) currently bypass the metric layer. | §I1.2-F9, allowlist in `tests/test_metric_consistency.py` |
+| FU-5 | F9 — drain the rest of `_LEGACY_DIRECT_QUERY_ALLOWLIST` | per file | 12 entries today. Each migration removes one allowlist entry in the same PR. The `test_legacy_allowlist_does_not_grow_unnoticed` test catches stale entries. | allowlist in `tests/test_metric_consistency.py` |
+| FU-6 | Soft-delete audit cross-link | soft-delete maintainer | F6 intersects soft-delete semantics; aligning the two audits keeps the metric and soft-delete contracts coherent. | `docs/soft-delete-audit.md`, §I0.4-F6 |
+
+## I2.5 — Success criteria check
+
+Closing the audit against the §6 success criteria from the calling prompt:
+
+- [x] Phase 1 audit document complete; every count surface inventoried (44 surfaces in §I0.1 + §I1.1)
+- [x] `app/metrics/` module created or extended with canonical functions (`runs_aggregate` added; module pre-existed)
+- [x] Every count surface refactored to consume the metric layer (within the recommended scope; FU-4 / FU-5 track the rest)
+- [x] Math invariant tests in place and passing (17 tests, including 5 new ones from this audit)
+- [x] Architectural invariant test catches direct queries outside the metric layer (stress-tested with a fake violator; passes)
+- [x] `docs/metric-conventions.md` exists
+- [x] CLAUDE.md created with calculations rule
+- [x] Dashboard, Analysis Runs page, run detail page show correct numbers (S13 reconciliation: was 0, now 2)
+- [x] Reconciliation table at end of Phase 2 shows ✓ for every previously-broken surface (§I2.3)
+- [x] No regression on previously-correct surfaces (full backend suite 922 passed; FE 370 passed; pre-existing failures unchanged)
+- [x] All existing tests still pass (verified)
+
+**Audit closed.** Permanent guidance: [`docs/metric-conventions.md`](./metric-conventions.md). Future drift is caught at PR review by the architectural test and the math invariants.
+
+

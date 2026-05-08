@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useCallback, useMemo, useState } from 'react';
+import { Suspense, useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -24,6 +24,7 @@ import { AnalysisHubTabs } from '@/components/analysis/AnalysisHubTabs';
 import { PageSpinner } from '@/components/ui/Spinner';
 import {
   getRuns,
+  getRunsAggregate,
   getProjects,
   exportRunsJson,
   getAnalysisConfig,
@@ -104,17 +105,22 @@ function AnalysisPageInner() {
       ),
   });
 
-  const summary = useMemo(() => {
-    if (!runs) return null;
-    return {
-      total: runs.length,
-      pass: runs.filter((r) => r.run_status === 'PASS').length,
-      fail: runs.filter((r) => r.run_status === 'FAIL').length,
-      partial: runs.filter((r) => r.run_status === 'PARTIAL').length,
-      errors: runs.filter((r) => r.run_status === 'ERROR').length,
-      findings: runs.reduce((s, r) => s + (r.total_findings ?? 0), 0),
-    };
-  }, [runs]);
+  // Tile values come from the server-side aggregate, NOT a reduce over the
+  // page-1 slice above. The aggregate ignores the status filter (the chips
+  // ARE the status breakdown) but honours scope filters so users can drill
+  // into one project / SBOM. Audit §I0.4-F1, F2; metrics layer call is in
+  // app/routers/runs.py::runs_aggregate_endpoint.
+  const { data: aggregate } = useQuery({
+    queryKey: ['runs-aggregate', { projectFilter, sbomFilter }],
+    queryFn: ({ signal }) =>
+      getRunsAggregate(
+        {
+          project_id: projectFilter ? Number(projectFilter) : undefined,
+          sbom_id: sbomFilter ? Number(sbomFilter) : undefined,
+        },
+        signal,
+      ),
+  });
 
   const handleAnalysisComplete = useCallback(
     (runId: number) => {
@@ -192,29 +198,29 @@ function AnalysisPageInner() {
             aria-labelledby="analysis-tab-runs"
             className="space-y-5"
           >
-            {summary && (
+            {aggregate && (
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
                 {[
                   {
                     label: 'Total runs',
-                    hint: 'All loaded runs in the table below.',
-                    value: summary.total,
+                    hint: 'Every run on record (any outcome).',
+                    value: aggregate.total_runs,
                     icon: Layers,
                     color: 'text-hcl-blue  bg-hcl-light',
                     border: 'border-l-hcl-blue',
                   },
                   {
                     label: 'Runs — no issues',
-                    hint: 'Runs that reported zero vulnerabilities (PASS).',
-                    value: summary.pass,
+                    hint: 'Runs that reported zero vulnerabilities (OK).',
+                    value: aggregate.by_outcome.no_issues,
                     icon: CheckCircle2,
                     color: 'text-green-600 bg-green-50',
                     border: 'border-l-green-500',
                   },
                   {
                     label: 'Runs — with findings',
-                    hint: 'Runs where at least one vulnerability was reported (FAIL). Not a system failure.',
-                    value: summary.fail,
+                    hint: 'Runs where at least one vulnerability was reported (FINDINGS). Not a system failure.',
+                    value: aggregate.by_outcome.with_findings,
                     icon: XCircle,
                     color: 'text-red-600   bg-red-50',
                     border: 'border-l-red-500',
@@ -222,7 +228,7 @@ function AnalysisPageInner() {
                   {
                     label: 'Runs — source errors',
                     hint: 'Runs with lookup/API issues; findings may be incomplete (PARTIAL).',
-                    value: summary.partial,
+                    value: aggregate.by_outcome.source_errors,
                     icon: ActivityIcon,
                     color: 'text-amber-600 bg-amber-50',
                     border: 'border-l-amber-500',
@@ -230,15 +236,15 @@ function AnalysisPageInner() {
                   {
                     label: 'Runs — failed',
                     hint: 'Runs that ended in ERROR.',
-                    value: summary.errors,
+                    value: aggregate.by_outcome.failed,
                     icon: AlertTriangle,
                     color: 'text-orange-600 bg-orange-50',
                     border: 'border-l-orange-500',
                   },
                   {
                     label: 'Total findings',
-                    hint: 'Sum of vulnerability counts across loaded runs.',
-                    value: summary.findings,
+                    hint: 'Sum of vulnerability counts across every run on record.',
+                    value: aggregate.total_findings,
                     icon: AlertTriangle,
                     color: 'text-red-600   bg-red-50',
                     border: 'border-l-red-500',

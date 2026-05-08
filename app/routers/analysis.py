@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
+from ..metrics._helpers import cves_for_finding
 from ..models import AnalysisFinding, AnalysisRun, SBOMComponent
 from ..schemas_compare import COMPARABLE_RUN_STATUSES
 
@@ -215,6 +216,12 @@ def export_sarif(run_id: int, db: Session = Depends(get_db)):
             if comp:
                 purl = comp.purl
 
+        # Mirrors the web UI's alias chips: every CVE id from
+        # vuln_id ∪ aliases, minus the primary id (which is already in
+        # ``ruleId``). Identical logic to the PDF and CSV exports so the
+        # three formats agree per finding.
+        cve_aliases = [c for c in cves_for_finding(f.vuln_id, f.aliases) if c != (f.vuln_id or "").upper()]
+
         results.append(
             {
                 "ruleId": f.vuln_id or "UNKNOWN",
@@ -234,6 +241,7 @@ def export_sarif(run_id: int, db: Session = Depends(get_db)):
                     "score": f.score,
                     "cpe": f.cpe,
                     "published": f.published_on,
+                    "cve_aliases": cve_aliases,
                 },
             }
         )
@@ -284,6 +292,7 @@ def export_csv(run_id: int, db: Session = Depends(get_db)):
     writer.writerow(
         [
             "vuln_id",
+            "cve",
             "severity",
             "score",
             "component_name",
@@ -307,9 +316,15 @@ def export_csv(run_id: int, db: Session = Depends(get_db)):
             if comp:
                 purl = comp.purl
 
+        # Mirror the web UI's alias chips: every CVE id from
+        # vuln_id ∪ aliases, minus the primary id. Semicolon-joined
+        # so multi-CVE cells don't collide with the CSV column delimiter.
+        cve_aliases = [c for c in cves_for_finding(f.vuln_id, f.aliases) if c != (f.vuln_id or "").upper()]
+
         writer.writerow(
             [
                 f.vuln_id or "",
+                ";".join(cve_aliases),
                 f.severity or "",
                 f.score if f.score is not None else "",
                 f.component_name or "",

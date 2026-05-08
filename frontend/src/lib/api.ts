@@ -431,6 +431,43 @@ export function getRuns(filter: RunsFilter = {}, signal?: AbortSignal) {
   return request<AnalysisRun[]>(`/api/runs?${params.toString()}`, { signal });
 }
 
+// ─── Analysis Runs aggregate (server-side tile values) ───────────────────────
+// Mirrors RunsAggregateOut in app/schemas.py. Fixes audit §I0.4-F1
+// (legacy PASS/FAIL filters) and §I0.4-F2 (page-slice undercount).
+export interface RunsAggregate {
+  total_runs: number;
+  by_outcome: {
+    no_issues: number;
+    with_findings: number;
+    source_errors: number;
+    failed: number;
+    other: number;
+  };
+  total_findings: number;
+}
+
+export function getRunsAggregate(
+  filter: { sbom_id?: number; project_id?: number } = {},
+  signal?: AbortSignal,
+) {
+  const params = new URLSearchParams();
+  if (filter.sbom_id !== undefined && Number.isFinite(filter.sbom_id) && filter.sbom_id > 0) {
+    params.set('sbom_id', String(Math.trunc(filter.sbom_id)));
+  }
+  if (
+    filter.project_id !== undefined &&
+    Number.isFinite(filter.project_id) &&
+    filter.project_id > 0
+  ) {
+    params.set('project_id', String(Math.trunc(filter.project_id)));
+  }
+  const qs = params.toString();
+  return request<RunsAggregate>(
+    qs ? `/api/runs/aggregate?${qs}` : `/api/runs/aggregate`,
+    { signal },
+  );
+}
+
 export function getRun(id: number, signal?: AbortSignal) {
   return request<AnalysisRun>(`/api/runs/${id}`, { signal });
 }

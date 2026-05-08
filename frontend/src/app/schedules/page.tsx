@@ -42,6 +42,7 @@ import {
 import { useToast } from '@/hooks/useToast';
 import { formatRelative } from '@/lib/utils';
 import { matchesMultiField } from '@/lib/tableFilters';
+import { canonicalRunStatus } from '@/lib/analysisRunStatusLabels';
 import type { AnalysisSchedule, Project, SBOMSource } from '@/types';
 
 type ScopeFilter = 'all' | 'PROJECT' | 'SBOM';
@@ -313,21 +314,27 @@ export default function SchedulesPage() {
                       {s.last_run_at ? (
                         <span title={s.last_run_at}>
                           {formatRelative(s.last_run_at)}
-                          {s.last_run_status && (
-                            <span
-                              className={`ml-2 inline-flex items-center px-1.5 py-0 rounded text-[10px] font-bold border ${
-                                s.last_run_status === 'PASS'
-                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                  : s.last_run_status === 'FAIL'
-                                    ? 'bg-red-50 text-red-700 border-red-200'
-                                    : s.last_run_status === 'ERROR'
-                                      ? 'bg-orange-50 text-orange-700 border-orange-200'
-                                      : 'bg-hcl-light text-hcl-muted border-hcl-border'
-                              }`}
-                            >
-                              {s.last_run_status}
-                            </span>
-                          )}
+                          {s.last_run_status && (() => {
+                            // ADR-0001: backend emits OK/FINDINGS — never PASS/FAIL.
+                            // Audit §I1.2-F8: hard-coded legacy strings here painted
+                            // every successful run with the muted-grey "other" style.
+                            const canonical = canonicalRunStatus(s.last_run_status);
+                            const cls =
+                              canonical === 'OK'
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                : canonical === 'FINDINGS'
+                                  ? 'bg-red-50 text-red-700 border-red-200'
+                                  : canonical === 'ERROR'
+                                    ? 'bg-orange-50 text-orange-700 border-orange-200'
+                                    : 'bg-hcl-light text-hcl-muted border-hcl-border';
+                            return (
+                              <span
+                                className={`ml-2 inline-flex items-center px-1.5 py-0 rounded text-[10px] font-bold border ${cls}`}
+                              >
+                                {s.last_run_status}
+                              </span>
+                            );
+                          })()}
                         </span>
                       ) : (
                         <span className="text-hcl-muted">never</span>

@@ -15,9 +15,10 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
+from ..metrics import runs_aggregate
 from ..metrics._helpers import cves_for_finding
 from ..models import AnalysisFinding, AnalysisRun, EpssScore, SBOMSource
-from ..schemas import AnalysisFindingOut, AnalysisRunOut
+from ..schemas import AnalysisFindingOut, AnalysisRunOut, RunsAggregateOut
 from ..services.risk_score import (
     EPSS_AMPLIFIER,
     KEV_MULTIPLIER,
@@ -141,6 +142,36 @@ def list_analysis_runs(
                 response.headers["X-Next-Cursor"] = str(rid)
 
     return items
+
+
+# -----------------------------------------------------------------------------
+# Aggregate counts for the Analysis Runs page tiles
+# -----------------------------------------------------------------------------
+# Sits BEFORE ``/runs/{run_id}`` for the same FastAPI declaration-order
+# reason as ``/runs/recent`` below. The FE consumes this verbatim instead
+# of reducing over a paginated client-side slice (audit §I0.4-F1, F2).
+
+
+@router.get("/runs/aggregate", response_model=RunsAggregateOut)
+def runs_aggregate_endpoint(
+    sbom_id: str | None = Query(None),
+    project_id: str | None = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Return the six numbers behind the Analysis Runs page header tiles
+    (total runs, runs by outcome, total findings) in one round-trip.
+
+    Outcome buckets use canonical ADR-0001 status names — ``OK``,
+    ``FINDINGS``, ``PARTIAL``, ``ERROR`` — never legacy ``PASS``/``FAIL``.
+    """
+    sbom_id_int = _coerce_optional_int(sbom_id)
+    project_id_int = _coerce_optional_int(project_id)
+    agg = runs_aggregate(db, sbom_id=sbom_id_int, project_id=project_id_int)
+    return RunsAggregateOut(
+        total_runs=agg.total_runs,
+        by_outcome=agg.by_outcome,
+        total_findings=agg.total_findings,
+    )
 
 
 # -----------------------------------------------------------------------------

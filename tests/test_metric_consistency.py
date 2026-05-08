@@ -515,6 +515,259 @@ def test_i12_per_run_severity_sum_equals_total(client, db):
 
 
 # ---------------------------------------------------------------------------
+# F4 lock — denormalised columns must equal the live finding-row count
+# ---------------------------------------------------------------------------
+
+
+def test_f4_denormalised_columns_match_live_count(client, db):
+    """Audit §I0.4-F4: ``analysis_run.total_findings`` and the five
+    ``*_count`` columns are written by the analysis worker; nothing
+    today asserts the writer's invariant. If the worker ever updates one
+    column and forgets another, the run-detail page silently drifts.
+
+    Seed a run via the worker-shaped fixture, then assert the three
+    independent counters (cached column, severity-cols sum, live row count)
+    all agree.
+    """
+    from app.models import AnalysisFinding, AnalysisRun
+    from sqlalchemy import func, select as sa_select
+
+    s1, p1 = _seed_sbom_and_project(db, name="f4")
+    run = _seed_run(
+        db,
+        sbom=s1,
+        project=p1,
+        status="FINDINGS",
+        started_on=_now_iso(),
+        findings=[
+            {"vuln_id": "CVE-2026-F401", "severity": "CRITICAL"},
+            {"vuln_id": "CVE-2026-F402", "severity": "HIGH"},
+            {"vuln_id": "CVE-2026-F403", "severity": "MEDIUM"},
+            {"vuln_id": "CVE-2026-F404", "severity": "LOW"},
+            {"vuln_id": "CVE-2026-F405", "severity": "UNKNOWN"},
+        ],
+    )
+
+    fresh = db.get(AnalysisRun, run.id)
+    assert fresh is not None
+    sum_severity_cols = (
+        (fresh.critical_count or 0)
+        + (fresh.high_count or 0)
+        + (fresh.medium_count or 0)
+        + (fresh.low_count or 0)
+        + (fresh.unknown_count or 0)
+    )
+    live_count = db.execute(
+        sa_select(func.count(AnalysisFinding.id)).where(
+            AnalysisFinding.analysis_run_id == run.id
+        )
+    ).scalar() or 0
+
+    assert fresh.total_findings == sum_severity_cols, (
+        f"run {run.id}: cached total_findings={fresh.total_findings} "
+        f"!= Σ severity columns={sum_severity_cols}"
+    )
+    assert fresh.total_findings == live_count, (
+        f"run {run.id}: cached total_findings={fresh.total_findings} "
+        f"!= live COUNT(*)={live_count}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# I-A — runs_aggregate sum invariant (audit §I0.4-F1, F2 lock)
+# ---------------------------------------------------------------------------
+
+
+def test_runs_aggregate_outcome_sum_equals_total(client, db):
+    """The new ``app.metrics.runs_aggregate`` is the canonical source for
+    Analysis Runs page tiles. Every outcome bucket must add to the total —
+    if it doesn't, runs are being double-counted or silently dropped.
+
+    Seeds three runs with three different outcomes (OK, FINDINGS, ERROR)
+    then asserts the by_outcome sum equals total_runs and that no legacy
+    PASS/FAIL keys leak into the response shape.
+    """
+    from app import metrics
+
+    s1, p1 = _seed_sbom_and_project(db, name="ia")
+    _seed_run(db, sbom=s1, project=p1, status="OK", started_on=_now_iso(), findings=[])
+    _seed_run(
+        db, sbom=s1, project=p1, status="FINDINGS", started_on=_now_iso(),
+        findings=[{"vuln_id": "CVE-2026-IA1", "severity": "HIGH"}],
+    )
+    _seed_run(db, sbom=s1, project=p1, status="ERROR", started_on=_now_iso(), findings=[])
+
+    agg = metrics.runs_aggregate(db, sbom_id=s1.id)
+    assert agg.total_runs == sum(agg.by_outcome.values()), (
+        f"by_outcome Σ {sum(agg.by_outcome.values())} != total_runs {agg.total_runs}"
+    )
+    # Canonical names only — no legacy PASS/FAIL leaking through.
+    assert set(agg.by_outcome) == {
+        "no_issues",
+        "with_findings",
+        "source_errors",
+        "failed",
+        "other",
+    }
+    assert agg.by_outcome["no_issues"] >= 1
+    assert agg.by_outcome["with_findings"] >= 1
+    assert agg.by_outcome["failed"] >= 1
+
+
+def test_runs_aggregate_endpoint_does_not_filter_on_legacy_status(client, db):
+    """Audit §I0.4-F1 lock. The pre-fix FE filtered on ``run_status==='FAIL'``
+    which always returned 0 against a backend that emits ``FINDINGS``. The
+    aggregate endpoint must report FINDINGS-bucketed runs under
+    ``with_findings`` regardless of which alias the writer happens to have
+    persisted historically.
+    """
+    s1, p1 = _seed_sbom_and_project(db, name="legacy")
+    _seed_run(
+        db, sbom=s1, project=p1, status="FINDINGS", started_on=_now_iso(),
+        findings=[{"vuln_id": "CVE-2026-LEG1", "severity": "HIGH"}],
+    )
+
+    body = client.get(f"/api/runs/aggregate?sbom_id={s1.id}").json()
+    assert body["by_outcome"]["with_findings"] >= 1, (
+        "aggregate dropped FINDINGS-status runs — F1 has regressed"
+    )
+
+
+# ---------------------------------------------------------------------------
+# F9 architectural lock — no new direct ORM access to AnalysisFinding /
+# AnalysisRun outside ``app/metrics/``.
+#
+# Rationale (audit §I1.2-F9). The metric-layer-only rule is documented at
+# ``app/metrics/__init__.py:5`` but until this test landed, nothing
+# enforced it. Eleven files in routers/services already had the pattern
+# at the time of writing (the canonical migration backlog). The
+# allowlist below freezes that exact set: any *new* file that adds the
+# pattern fails this test at PR review, which is the lock.
+#
+# When a file in the allowlist is fully migrated to ``app.metrics.*``,
+# remove it from the allowlist in the same PR. When the allowlist is
+# empty, the comment block above can go too.
+# ---------------------------------------------------------------------------
+
+# Files known at audit time (2026-05-08) to contain direct ORM access to
+# AnalysisFinding / AnalysisRun. Each entry is the path RELATIVE to the
+# repo root. Order follows the count from the audit (highest first).
+#
+# Migration plan (Phase 4 follow-up):
+#   * compare_service.py    — aggregate severity / KEV math; OWES migration
+#                             into ``app/metrics/compare.py``.
+#   * dashboard_metrics.py  — already calls into ``app/metrics/``; the
+#                             remaining direct access is the lifetime cache
+#                             which §I0.4-F7 plans to consolidate.
+#   * Everything else       — single-row reads (``db.get(AnalysisRun, id)``
+#                             or list-page CRUD with WHERE id == :id) which
+#                             aren't metric-shaped queries. These don't
+#                             *need* migration but don't currently
+#                             distinguish themselves from metric callers
+#                             at the regex level. Leaving them in the
+#                             allowlist keeps the test honest.
+_LEGACY_DIRECT_QUERY_ALLOWLIST: frozenset[str] = frozenset(
+    {
+        "app/routers/runs.py",
+        "app/routers/analysis.py",
+        "app/routers/ai_fixes.py",
+        "app/routers/sboms_crud.py",
+        "app/routers/sbom.py",
+        "app/routers/projects.py",
+        "app/routers/pdf.py",
+        "app/services/pdf_service.py",
+        "app/services/cve_service.py",
+        "app/services/compare_service.py",
+        "app/services/analysis_service.py",
+        "app/services/dashboard_metrics.py",
+    }
+)
+
+
+def test_no_new_direct_finding_or_run_queries_outside_metrics():
+    """Every NEW router/service file must consume ``app.metrics.*`` —
+    direct ``select(AnalysisFinding)`` / ``db.query(AnalysisRun)`` and
+    similar are forbidden. This is the structural lock that prevents the
+    Phase 0 bug class from reappearing.
+
+    Today's known offenders are in ``_LEGACY_DIRECT_QUERY_ALLOWLIST`` and
+    don't trip the test. A new file matching the pattern, or any
+    additional file beyond the allowlist, fails the assertion.
+    """
+    import re
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parent.parent
+    forbidden_patterns = [
+        re.compile(r"select\(\s*AnalysisFinding"),
+        re.compile(r"select\(\s*AnalysisRun"),
+        re.compile(r"db\.query\(\s*AnalysisFinding"),
+        re.compile(r"db\.query\(\s*AnalysisRun"),
+        re.compile(r"\.query\(\s*AnalysisFinding"),  # session.query(...)
+        re.compile(r"\.query\(\s*AnalysisRun"),
+    ]
+    scan_dirs = ("app/routers", "app/services")
+    allowed_subtree = "app/metrics"
+
+    violations: list[str] = []
+    for scan_dir in scan_dirs:
+        for py_file in (repo_root / scan_dir).rglob("*.py"):
+            rel = py_file.relative_to(repo_root).as_posix()
+            if rel.startswith(allowed_subtree):
+                continue
+            try:
+                content = py_file.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            for pattern in forbidden_patterns:
+                if pattern.search(content) and rel not in _LEGACY_DIRECT_QUERY_ALLOWLIST:
+                    violations.append(f"{rel}: matched /{pattern.pattern}/")
+                    break  # one violation per file is enough
+
+    assert not violations, (
+        "Direct queries against AnalysisFinding / AnalysisRun found in NEW "
+        "files (or files beyond the legacy allowlist):\n  - "
+        + "\n  - ".join(violations)
+        + "\n\nMove the metric-shaped queries into app/metrics/ and call "
+        "them from your code. See docs/metric-conventions.md."
+    )
+
+
+def test_legacy_allowlist_does_not_grow_unnoticed():
+    """Catches the inverse mistake: adding a path to the allowlist that
+    doesn't actually have the pattern. Keeps the allowlist self-correcting
+    so it doesn't accumulate stale entries that mask future violations.
+    """
+    import re
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parent.parent
+    forbidden_patterns = [
+        re.compile(r"select\(\s*AnalysisFinding"),
+        re.compile(r"select\(\s*AnalysisRun"),
+        re.compile(r"db\.query\(\s*AnalysisFinding"),
+        re.compile(r"db\.query\(\s*AnalysisRun"),
+        re.compile(r"\.query\(\s*AnalysisFinding"),
+        re.compile(r"\.query\(\s*AnalysisRun"),
+    ]
+    stale: list[str] = []
+    for rel in _LEGACY_DIRECT_QUERY_ALLOWLIST:
+        path = repo_root / rel
+        if not path.exists():
+            stale.append(f"{rel}: file no longer exists")
+            continue
+        content = path.read_text(encoding="utf-8")
+        if not any(p.search(content) for p in forbidden_patterns):
+            stale.append(f"{rel}: allowlist entry no longer needed (file is clean)")
+
+    assert not stale, (
+        "_LEGACY_DIRECT_QUERY_ALLOWLIST contains entries that no longer "
+        "match the forbidden pattern:\n  - " + "\n  - ".join(stale)
+        + "\n\nRemove them from the allowlist."
+    )
+
+
+# ---------------------------------------------------------------------------
 # Helper used by I9 — looks up "any successful run completed before today−n"
 # ---------------------------------------------------------------------------
 

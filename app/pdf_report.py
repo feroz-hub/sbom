@@ -12,6 +12,7 @@
 # ================================================================
 
 import json
+import re
 from collections import Counter
 from datetime import datetime
 from html import escape
@@ -37,6 +38,32 @@ from reportlab.platypus import (
 # ---------------------------------------------------------
 
 _SEV_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"]
+
+# CVE id pattern — mirrors ``app.metrics._helpers._CVE_RE`` so the export
+# layer extracts the same set of CVE aliases the dashboard/run-detail UI
+# does. Keeping the regex local preserves this module's standalone status.
+_CVE_RE = re.compile(r"CVE-\d{4}-\d{4,7}", re.IGNORECASE)
+
+
+def _cve_aliases_for_row(primary_id: str | None, aliases: Any) -> list[str]:
+    """Return CVE ids from ``primary_id ∪ aliases`` minus the primary, sorted/unique.
+
+    Mirrors ``frontend/.../FindingsTable.tsx``'s
+    ``cve_aliases.filter(a => a !== vuln_id)`` so the PDF/CSV/JSON exports
+    show the same alias set the web UI renders below the primary identifier.
+    """
+    primary = (primary_id or "").upper()
+    found: set[str] = set()
+    if isinstance(aliases, list):
+        for a in aliases:
+            if isinstance(a, str):
+                found.update(m.upper() for m in _CVE_RE.findall(a))
+    elif isinstance(aliases, str) and aliases:
+        found.update(m.upper() for m in _CVE_RE.findall(aliases))
+    if primary_id:
+        found.update(m.upper() for m in _CVE_RE.findall(primary_id))
+    found.discard(primary)
+    return sorted(found)
 
 # Accent palette
 PRIMARY = colors.HexColor("#1f4e79")  # deep blue
@@ -93,7 +120,7 @@ def _flatten_consolidated(run: dict[str, Any]) -> list[dict[str, Any]]:
                     "published": v.get("published"),
                     "sources": ", ".join(v.get("sources") or []),
                     "url": v.get("url"),
-                    "aliases": ", ".join(v.get("aliases") or []),
+                    "aliases": list(v.get("aliases") or []),
                     # Pass through for Finding Details (were dropped → always "—")
                     "attack_vector": v.get("attack_vector"),
                     "cwe": v.get("cwe"),
@@ -125,7 +152,7 @@ def _flatten_nvd(run: dict[str, Any]) -> list[dict[str, Any]]:
                     "published": v.get("published"),
                     "sources": "NVD",
                     "url": v.get("url"),
-                    "aliases": "",
+                    "aliases": list(v.get("aliases") or []),
                     "attack_vector": v.get("attack_vector"),
                     "cwe": v.get("cwe"),
                     "fixed_versions": v.get("fixed_versions"),
@@ -157,7 +184,7 @@ def _flatten_ghsa(run: dict[str, Any]) -> list[dict[str, Any]]:
                     "published": v.get("published"),
                     "sources": "GHSA",
                     "url": v.get("url"),
-                    "aliases": "",
+                    "aliases": list(v.get("aliases") or []),
                     "attack_vector": v.get("attack_vector"),
                     "cwe": v.get("cwe"),
                     "fixed_versions": v.get("fixed_versions"),
@@ -189,7 +216,7 @@ def _flatten_osv(run: dict[str, Any]) -> list[dict[str, Any]]:
                     "published": v.get("published"),
                     "sources": "OSV",
                     "url": v.get("url"),
-                    "aliases": ", ".join(v.get("aliases") or []),
+                    "aliases": list(v.get("aliases") or []),
                     "attack_vector": v.get("attack_vector"),
                     "cwe": v.get("cwe"),
                     "fixed_versions": v.get("fixed_versions"),
@@ -473,7 +500,7 @@ def _build_pdf_from_run_impl(run: dict[str, Any], title: str = "SBOM Vulnerabili
 
     story.append(Paragraph("Findings", styles["Section"]))
 
-    find_header = ["Component", "ID", "Severity", "Score", "Published", "Sources", "Fix Version"]
+    find_header = ["Component", "ID", "CVE", "Severity", "Score", "Published", "Sources", "Fix Version"]
     find_table_data: list[list[Any]] = [[Paragraph(h, styles["TCellBold"]) for h in find_header]]
 
     # Track severity values per data row to paint color badges
@@ -492,11 +519,14 @@ def _build_pdf_from_run_impl(run: dict[str, Any], title: str = "SBOM Vulnerabili
                 fv_list = list(fv_raw) if fv_raw else []
             fix_ver = fv_list[0] if fv_list else "—"
             sev = _severity_bucket(r.get("severity"))
+            cve_list = _cve_aliases_for_row(r.get("id"), r.get("aliases"))
+            cve_cell = ", ".join(cve_list) if cve_list else "—"
             # Add row
             find_table_data.append(
                 [
                     Paragraph(escape(_short(comp_txt, 50)), styles["TCell"]),
                     Paragraph(escape(_short(r.get("id") or "", 28)), styles["TCell"]),
+                    Paragraph(escape(_short(cve_cell, 60)), styles["TCell"]),
                     Paragraph(escape(sev), styles["TCellCenter"]),
                     Paragraph("" if r.get("score") is None else f"{r.get('score')}", styles["TCellRight"]),
                     Paragraph(escape((r.get("published") or "")[:10]), styles["TCellCenter"]),
@@ -515,10 +545,11 @@ def _build_pdf_from_run_impl(run: dict[str, Any], title: str = "SBOM Vulnerabili
                 Paragraph("", styles["TCell"]),
                 Paragraph("", styles["TCell"]),
                 Paragraph("", styles["TCell"]),
+                Paragraph("", styles["TCell"]),
             ]
         )
 
-    find_cw = _widths(avail, [0.25, 0.17, 0.10, 0.08, 0.11, 0.12, 0.17])
+    find_cw = _widths(avail, [0.22, 0.14, 0.16, 0.09, 0.07, 0.10, 0.10, 0.12])
     find_table = Table(find_table_data, colWidths=find_cw, repeatRows=1, hAlign="LEFT")
 
     base_style = [
@@ -528,18 +559,18 @@ def _build_pdf_from_run_impl(run: dict[str, Any], title: str = "SBOM Vulnerabili
         ("FONTSIZE", (0, 0), (-1, 0), 9.5),
         ("FONTSIZE", (0, 1), (-1, -1), 8.5),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("ALIGN", (2, 1), (2, -1), "CENTER"),  # Severity
-        ("ALIGN", (3, 1), (3, -1), "RIGHT"),  # Score
-        ("ALIGN", (4, 1), (4, -1), "CENTER"),  # Published
+        ("ALIGN", (3, 1), (3, -1), "CENTER"),  # Severity
+        ("ALIGN", (4, 1), (4, -1), "RIGHT"),  # Score
+        ("ALIGN", (5, 1), (5, -1), "CENTER"),  # Published
         ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), ROW_STRIPES),
     ]
 
     for row_idx, sev in severity_by_row.items():
         col = _sev_color(sev)
-        base_style.append(("BACKGROUND", (2, row_idx), (2, row_idx), col))
+        base_style.append(("BACKGROUND", (3, row_idx), (3, row_idx), col))
         base_style.append(
-            ("TEXTCOLOR", (2, row_idx), (2, row_idx), colors.white if sev in ("CRITICAL", "HIGH") else colors.black)
+            ("TEXTCOLOR", (3, row_idx), (3, row_idx), colors.white if sev in ("CRITICAL", "HIGH") else colors.black)
         )
 
     find_table.setStyle(TableStyle(base_style))

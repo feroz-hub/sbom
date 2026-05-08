@@ -31,6 +31,8 @@ from .findings import (
 )
 from .kev import findings_kev_in_scope
 from .runs import (
+    RunsAggregate,
+    runs_aggregate,
     runs_completed_lifetime,
     runs_completed_this_week,
     runs_distinct_dates_with_data,
@@ -63,6 +65,8 @@ __all__ = [
     "runs_completed_this_week",
     "runs_distinct_dates_with_data",
     "runs_first_completed_at",
+    "runs_aggregate",
+    "RunsAggregate",
     # windows
     "findings_net_change",
     # sboms / projects

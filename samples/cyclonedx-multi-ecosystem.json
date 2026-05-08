@@ -2,9 +2,9 @@
   "bomFormat": "CycloneDX",
   "specVersion": "1.6",
   "serialNumber": "urn:uuid:a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "version": 1,
+  "version": 2,
   "metadata": {
-    "timestamp": "2026-04-06T10:00:00Z",
+    "timestamp": "2026-05-08T19:03:01Z",
     "tools": [
       {
         "vendor": "SBOM-Platform",
@@ -17,13 +17,30 @@
       "bom-ref": "pkg:generic/multi-ecosystem-app@1.0.0",
       "name": "multi-ecosystem-app",
       "version": "1.0.0",
-      "description": "Multi-ecosystem test SBOM with intentionally vulnerable components across Java, Python, Node.js, Go, .NET, and Rust."
+      "description": "Multi-ecosystem test SBOM with intentionally vulnerable components across Java, Python, Node.js, Go, .NET, and Rust.",
+      "supplier": {
+        "name": "Future Beyond Technology"
+      }
     },
     "authors": [
-      { "name": "SBOM Test Team" }
+      {
+        "name": "SBOM Test Team"
+      }
     ]
   },
   "components": [
+    {
+      "type": "application",
+      "bom-ref": "pkg:generic/multi-ecosystem-app@1.0.0",
+      "name": "multi-ecosystem-app",
+      "version": "1.0.0",
+      "description": "Multi-ecosystem test SBOM with intentionally vulnerable components across Java, Python, Node.js, Go, .NET, and Rust.",
+      "purl": "pkg:generic/multi-ecosystem-app@1.0.0",
+      "supplier": {
+        "name": "Future Beyond Technology"
+      },
+      "scope": "required"
+    },
     {
       "type": "library",
       "bom-ref": "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1",
@@ -32,7 +49,10 @@
       "version": "2.14.1",
       "description": "Apache Log4j Core - CVE-2021-44228 (Log4Shell)",
       "purl": "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "Apache Software Foundation"
+      }
     },
     {
       "type": "library",
@@ -42,7 +62,10 @@
       "version": "2.9.10.8",
       "description": "Jackson Databind - multiple deserialization CVEs",
       "purl": "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.9.10.8",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "FasterXML, LLC"
+      }
     },
     {
       "type": "library",
@@ -52,7 +75,10 @@
       "version": "5.2.0.RELEASE",
       "description": "Spring Framework Core - CVE-2022-22965 (Spring4Shell)",
       "purl": "pkg:maven/org.springframework/spring-core@5.2.0.RELEASE",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "VMware, Inc."
+      }
     },
     {
       "type": "library",
@@ -62,7 +88,10 @@
       "version": "5.2.0.RELEASE",
       "description": "Spring Web MVC",
       "purl": "pkg:maven/org.springframework/spring-webmvc@5.2.0.RELEASE",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "VMware, Inc."
+      }
     },
     {
       "type": "library",
@@ -72,7 +101,10 @@
       "version": "2.5.20",
       "description": "Apache Struts 2 Core - multiple RCE CVEs",
       "purl": "pkg:maven/org.apache.struts/struts2-core@2.5.20",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "Apache Software Foundation"
+      }
     },
     {
       "type": "library",
@@ -82,7 +114,10 @@
       "version": "3.2.1",
       "description": "Apache Commons Collections - deserialization gadget chains",
       "purl": "pkg:maven/commons-collections/commons-collections@3.2.1",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "Apache Software Foundation"
+      }
     },
     {
       "type": "library",
@@ -92,7 +127,10 @@
       "version": "1.9",
       "description": "Apache Commons Text - CVE-2022-42889 (Text4Shell)",
       "purl": "pkg:maven/org.apache.commons/commons-text@1.9",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "Apache Software Foundation"
+      }
     },
     {
       "type": "library",
@@ -102,7 +140,10 @@
       "version": "29.0-jre",
       "description": "Google Guava - CVE-2020-8908 (temp directory permissions)",
       "purl": "pkg:maven/com.google.guava/guava@29.0-jre",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "Google LLC"
+      }
     },
     {
       "type": "library",
@@ -112,7 +153,10 @@
       "version": "4.1.60.Final",
       "description": "Netty HTTP Codec - HTTP request smuggling CVEs",
       "purl": "pkg:maven/io.netty/netty-codec-http@4.1.60.Final",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "The Netty Project"
+      }
     },
     {
       "type": "library",
@@ -122,9 +166,11 @@
       "version": "4.5.6",
       "description": "Apache HttpClient",
       "purl": "pkg:maven/org.apache.httpcomponents/httpclient@4.5.6",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "Apache Software Foundation"
+      }
     },
-
     {
       "type": "library",
       "bom-ref": "pkg:pypi/django@3.1.0",
@@ -132,7 +178,10 @@
       "version": "3.1.0",
       "description": "Django Web Framework - multiple security fixes since 3.1",
       "purl": "pkg:pypi/django@3.1.0",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "Django Software Foundation"
+      }
     },
     {
       "type": "library",
@@ -141,7 +190,10 @@
       "version": "1.1.2",
       "description": "Flask Micro Framework",
       "purl": "pkg:pypi/flask@1.1.2",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "Pallets"
+      }
     },
     {
       "type": "library",
@@ -150,7 +202,10 @@
       "version": "2.25.0",
       "description": "Python HTTP library - CVE-2023-32681 (header leak on redirect)",
       "purl": "pkg:pypi/requests@2.25.0",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "Python Software Foundation"
+      }
     },
     {
       "type": "library",
@@ -159,7 +214,10 @@
       "version": "1.26.4",
       "description": "urllib3 - CVE-2023-43804 (Cookie header leak)",
       "purl": "pkg:pypi/urllib3@1.26.4",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "urllib3 maintainers"
+      }
     },
     {
       "type": "library",
@@ -168,7 +226,10 @@
       "version": "8.2.0",
       "description": "Pillow imaging library - multiple buffer overflow CVEs",
       "purl": "pkg:pypi/pillow@8.2.0",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "Pillow contributors"
+      }
     },
     {
       "type": "library",
@@ -177,7 +238,10 @@
       "version": "1.21.0",
       "description": "NumPy - CVE-2021-41496 (buffer overflow)",
       "purl": "pkg:pypi/numpy@1.21.0",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "NumPy Developers"
+      }
     },
     {
       "type": "library",
@@ -186,7 +250,10 @@
       "version": "3.4.6",
       "description": "Python Cryptography library - multiple CVEs in older OpenSSL binding",
       "purl": "pkg:pypi/cryptography@3.4.6",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "Python Cryptographic Authority"
+      }
     },
     {
       "type": "library",
@@ -195,7 +262,10 @@
       "version": "2.11.3",
       "description": "Jinja2 Template Engine - CVE-2024-22195 (XSS via xmlattr)",
       "purl": "pkg:pypi/jinja2@2.11.3",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "Pallets"
+      }
     },
     {
       "type": "library",
@@ -204,7 +274,10 @@
       "version": "5.4.1",
       "description": "PyYAML - CVE-2020-14343 (arbitrary code execution via load)",
       "purl": "pkg:pypi/pyyaml@5.4.1",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "PyYAML Project"
+      }
     },
     {
       "type": "library",
@@ -213,9 +286,11 @@
       "version": "56.0.0",
       "description": "Python setuptools - CVE-2024-6345 (remote code execution via download functions)",
       "purl": "pkg:pypi/setuptools@56.0.0",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "Python Packaging Authority"
+      }
     },
-
     {
       "type": "library",
       "bom-ref": "pkg:npm/lodash@4.17.20",
@@ -223,7 +298,10 @@
       "version": "4.17.20",
       "description": "Lodash - CVE-2021-23337 (command injection), CVE-2020-28500 (ReDoS)",
       "purl": "pkg:npm/lodash@4.17.20",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "OpenJS Foundation"
+      }
     },
     {
       "type": "library",
@@ -232,7 +310,10 @@
       "version": "4.17.1",
       "description": "Express.js - CVE-2024-29041 (open redirect)",
       "purl": "pkg:npm/express@4.17.1",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "OpenJS Foundation"
+      }
     },
     {
       "type": "library",
@@ -241,7 +322,10 @@
       "version": "0.21.1",
       "description": "Axios HTTP client - CVE-2021-3749 (ReDoS), SSRF in follow-redirects",
       "purl": "pkg:npm/axios@0.21.1",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "axios contributors"
+      }
     },
     {
       "type": "library",
@@ -250,7 +334,10 @@
       "version": "1.2.5",
       "description": "Minimist - CVE-2021-44906 (prototype pollution)",
       "purl": "pkg:npm/minimist@1.2.5",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "minimist maintainers"
+      }
     },
     {
       "type": "library",
@@ -259,7 +346,10 @@
       "version": "8.5.1",
       "description": "jsonwebtoken - CVE-2022-23529 (insecure key handling)",
       "purl": "pkg:npm/jsonwebtoken@8.5.1",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "Auth0, Inc."
+      }
     },
     {
       "type": "library",
@@ -268,7 +358,10 @@
       "version": "2.6.1",
       "description": "node-fetch - CVE-2022-0235 (header leak to third-party)",
       "purl": "pkg:npm/node-fetch@2.6.1",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "node-fetch contributors"
+      }
     },
     {
       "type": "library",
@@ -277,7 +370,10 @@
       "version": "6.9.4",
       "description": "qs querystring parser - CVE-2022-24999 (prototype pollution)",
       "purl": "pkg:npm/qs@6.9.4",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "qs maintainers"
+      }
     },
     {
       "type": "library",
@@ -286,7 +382,10 @@
       "version": "2.29.1",
       "description": "Moment.js - CVE-2022-24785 (path traversal), CVE-2022-31129 (ReDoS)",
       "purl": "pkg:npm/moment@2.29.1",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "Moment.js contributors"
+      }
     },
     {
       "type": "library",
@@ -295,7 +394,10 @@
       "version": "5.1.1",
       "description": "glob-parent - CVE-2020-28469 (ReDoS)",
       "purl": "pkg:npm/glob-parent@5.1.1",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "Gulp.js team"
+      }
     },
     {
       "type": "library",
@@ -304,9 +406,11 @@
       "version": "1.0.6",
       "description": "path-parse - CVE-2021-23343 (ReDoS)",
       "purl": "pkg:npm/path-parse@1.0.6",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "path-parse contributors"
+      }
     },
-
     {
       "type": "library",
       "bom-ref": "pkg:golang/golang.org/x/text@0.3.6",
@@ -314,7 +418,10 @@
       "version": "0.3.6",
       "description": "Go x/text - CVE-2021-38561 (panic on invalid UTF-8)",
       "purl": "pkg:golang/golang.org/x/text@0.3.6",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "The Go Authors"
+      }
     },
     {
       "type": "library",
@@ -323,7 +430,10 @@
       "version": "0.0.0-20210928044308",
       "description": "Go x/net - CVE-2022-41723 (HTTP/2 rapid reset DoS)",
       "purl": "pkg:golang/golang.org/x/net@0.0.0-20210928044308",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "The Go Authors"
+      }
     },
     {
       "type": "library",
@@ -332,7 +442,10 @@
       "version": "0.0.0-20210817164053",
       "description": "Go x/crypto - CVE-2022-27191 (ssh: crash on crafted keys)",
       "purl": "pkg:golang/golang.org/x/crypto@0.0.0-20210817164053",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "The Go Authors"
+      }
     },
     {
       "type": "library",
@@ -341,7 +454,10 @@
       "version": "1.7.4",
       "description": "Gin Web Framework - CVE-2023-26125 (path traversal)",
       "purl": "pkg:golang/github.com/gin-gonic/gin@1.7.4",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "Gin-Gonic Contributors"
+      }
     },
     {
       "type": "library",
@@ -350,9 +466,11 @@
       "version": "3.2.0",
       "description": "jwt-go - CVE-2020-26160 (none algorithm bypass)",
       "purl": "pkg:golang/github.com/dgrijalva/jwt-go@3.2.0",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "Dave Grijalva"
+      }
     },
-
     {
       "type": "library",
       "bom-ref": "pkg:nuget/Newtonsoft.Json@12.0.3",
@@ -360,7 +478,10 @@
       "version": "12.0.3",
       "description": "Json.NET - CVE-2024-21907 (StackOverflow on deeply nested input)",
       "purl": "pkg:nuget/Newtonsoft.Json@12.0.3",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "James Newton-King"
+      }
     },
     {
       "type": "library",
@@ -369,7 +490,10 @@
       "version": "4.3.0",
       "description": ".NET RegularExpressions - CVE-2019-0820 (ReDoS)",
       "purl": "pkg:nuget/System.Text.RegularExpressions@4.3.0",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "Microsoft Corporation"
+      }
     },
     {
       "type": "library",
@@ -378,9 +502,11 @@
       "version": "2.2.0",
       "description": "ASP.NET Core HTTP Abstractions",
       "purl": "pkg:nuget/Microsoft.AspNetCore.Http@2.2.0",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "Microsoft Corporation"
+      }
     },
-
     {
       "type": "library",
       "bom-ref": "pkg:cargo/hyper@0.14.18",
@@ -388,7 +514,10 @@
       "version": "0.14.18",
       "description": "Hyper HTTP library - CVE-2023-26964 (HTTP/2 DoS)",
       "purl": "pkg:cargo/hyper@0.14.18",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "Hyper Contributors"
+      }
     },
     {
       "type": "library",
@@ -397,7 +526,10 @@
       "version": "1.17.0",
       "description": "Tokio async runtime",
       "purl": "pkg:cargo/tokio@1.17.0",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "Tokio Contributors"
+      }
     },
     {
       "type": "library",
@@ -406,9 +538,11 @@
       "version": "1.5.4",
       "description": "Rust regex - CVE-2022-24713 (ReDoS via regex::Regex)",
       "purl": "pkg:cargo/regex@1.5.4",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "The Rust Project Developers"
+      }
     },
-
     {
       "type": "library",
       "bom-ref": "pkg:gem/nokogiri@1.11.7",
@@ -416,7 +550,10 @@
       "version": "1.11.7",
       "description": "Nokogiri - CVE-2022-23437 (XXE via libxml2), multiple CVEs",
       "purl": "pkg:gem/nokogiri@1.11.7",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "Nokogiri Contributors"
+      }
     },
     {
       "type": "library",
@@ -425,9 +562,11 @@
       "version": "6.1.4",
       "description": "Ruby on Rails - CVE-2022-23633 (information leak via Action Dispatch)",
       "purl": "pkg:gem/rails@6.1.4",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "Ruby on Rails Foundation"
+      }
     },
-
     {
       "type": "library",
       "bom-ref": "pkg:composer/laravel/framework@8.40.0",
@@ -435,7 +574,10 @@
       "version": "8.40.0",
       "description": "Laravel Framework",
       "purl": "pkg:composer/laravel/framework@8.40.0",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "Laravel LLC"
+      }
     },
     {
       "type": "library",
@@ -444,7 +586,10 @@
       "version": "7.3.0",
       "description": "Guzzle HTTP Client - CVE-2022-29248 (cookie forwarding to wrong domain)",
       "purl": "pkg:composer/guzzlehttp/guzzle@7.3.0",
-      "scope": "required"
+      "scope": "required",
+      "supplier": {
+        "name": "Guzzle Contributors"
+      }
     }
   ],
   "dependencies": [
@@ -454,16 +599,229 @@
         "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1",
         "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.9.10.8",
         "pkg:maven/org.springframework/spring-core@5.2.0.RELEASE",
+        "pkg:maven/org.springframework/spring-webmvc@5.2.0.RELEASE",
+        "pkg:maven/org.apache.struts/struts2-core@2.5.20",
+        "pkg:maven/commons-collections/commons-collections@3.2.1",
+        "pkg:maven/org.apache.commons/commons-text@1.9",
+        "pkg:maven/com.google.guava/guava@29.0-jre",
+        "pkg:maven/io.netty/netty-codec-http@4.1.60.Final",
+        "pkg:maven/org.apache.httpcomponents/httpclient@4.5.6",
         "pkg:pypi/django@3.1.0",
+        "pkg:pypi/flask@1.1.2",
         "pkg:pypi/requests@2.25.0",
+        "pkg:pypi/urllib3@1.26.4",
+        "pkg:pypi/pillow@8.2.0",
+        "pkg:pypi/numpy@1.21.0",
+        "pkg:pypi/cryptography@3.4.6",
+        "pkg:pypi/jinja2@2.11.3",
+        "pkg:pypi/pyyaml@5.4.1",
+        "pkg:pypi/setuptools@56.0.0",
         "pkg:npm/lodash@4.17.20",
         "pkg:npm/express@4.17.1",
+        "pkg:npm/axios@0.21.1",
+        "pkg:npm/minimist@1.2.5",
+        "pkg:npm/jsonwebtoken@8.5.1",
+        "pkg:npm/node-fetch@2.6.1",
+        "pkg:npm/qs@6.9.4",
+        "pkg:npm/moment@2.29.1",
+        "pkg:npm/glob-parent@5.1.1",
+        "pkg:npm/path-parse@1.0.6",
         "pkg:golang/golang.org/x/text@0.3.6",
+        "pkg:golang/golang.org/x/net@0.0.0-20210928044308",
+        "pkg:golang/golang.org/x/crypto@0.0.0-20210817164053",
+        "pkg:golang/github.com/gin-gonic/gin@1.7.4",
+        "pkg:golang/github.com/dgrijalva/jwt-go@3.2.0",
         "pkg:nuget/Newtonsoft.Json@12.0.3",
+        "pkg:nuget/System.Text.RegularExpressions@4.3.0",
+        "pkg:nuget/Microsoft.AspNetCore.Http@2.2.0",
         "pkg:cargo/hyper@0.14.18",
+        "pkg:cargo/tokio@1.17.0",
+        "pkg:cargo/regex@1.5.4",
         "pkg:gem/nokogiri@1.11.7",
+        "pkg:gem/rails@6.1.4",
+        "pkg:composer/laravel/framework@8.40.0",
         "pkg:composer/guzzlehttp/guzzle@7.3.0"
       ]
+    },
+    {
+      "ref": "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.9.10.8",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:maven/org.springframework/spring-core@5.2.0.RELEASE",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:maven/org.springframework/spring-webmvc@5.2.0.RELEASE",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:maven/org.apache.struts/struts2-core@2.5.20",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:maven/commons-collections/commons-collections@3.2.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:maven/org.apache.commons/commons-text@1.9",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:maven/com.google.guava/guava@29.0-jre",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:maven/io.netty/netty-codec-http@4.1.60.Final",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:maven/org.apache.httpcomponents/httpclient@4.5.6",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/django@3.1.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/flask@1.1.2",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/requests@2.25.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/urllib3@1.26.4",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/pillow@8.2.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/numpy@1.21.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/cryptography@3.4.6",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/jinja2@2.11.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/pyyaml@5.4.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/setuptools@56.0.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/lodash@4.17.20",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/express@4.17.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/axios@0.21.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/minimist@1.2.5",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/jsonwebtoken@8.5.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/node-fetch@2.6.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/qs@6.9.4",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/moment@2.29.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/glob-parent@5.1.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/path-parse@1.0.6",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:golang/golang.org/x/text@0.3.6",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:golang/golang.org/x/net@0.0.0-20210928044308",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:golang/golang.org/x/crypto@0.0.0-20210817164053",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:golang/github.com/gin-gonic/gin@1.7.4",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:golang/github.com/dgrijalva/jwt-go@3.2.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:nuget/Newtonsoft.Json@12.0.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:nuget/System.Text.RegularExpressions@4.3.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:nuget/Microsoft.AspNetCore.Http@2.2.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/hyper@0.14.18",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/tokio@1.17.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/regex@1.5.4",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:gem/nokogiri@1.11.7",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:gem/rails@6.1.4",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:composer/laravel/framework@8.40.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:composer/guzzlehttp/guzzle@7.3.0",
+      "dependsOn": []
     }
   ]
 }

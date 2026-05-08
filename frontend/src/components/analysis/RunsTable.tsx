@@ -364,6 +364,17 @@ export function RunsTable({ runs, isLoading, error, selectedIds, onToggleSelect 
                         L:{run.low_count}
                       </span>
                     )}
+                    {/* Audit §I0.4-F3: unknown findings used to be hidden — the
+                        sum of visible C/H/M/L chips silently dropped them, so
+                        the row total appeared inconsistent with the chip sum. */}
+                    {run.unknown_count != null && run.unknown_count > 0 && (
+                      <span
+                        className="inline-flex items-center rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-700 dark:bg-slate-800/60 dark:text-slate-200"
+                        title="Findings whose severity was not reported by the source feed"
+                      >
+                        U:{run.unknown_count}
+                      </span>
+                    )}
                     {run.total_findings === 0 && (
                       <span className="text-xs text-hcl-muted">None</span>
                     )}

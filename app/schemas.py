@@ -165,6 +165,28 @@ class AnalysisRunOut(ORMModel):
     raw_report: str | None = None
 
 
+class RunsAggregateBuckets(BaseModel):
+    """Run-status outcome counts. Sums to ``total_runs`` (I-A invariant)."""
+
+    no_issues: int  # OK
+    with_findings: int  # FINDINGS
+    source_errors: int  # PARTIAL
+    failed: int  # ERROR
+    other: int  # RUNNING / PENDING / NO_DATA / future codes
+
+
+class RunsAggregateOut(BaseModel):
+    """Server-side aggregate for the Analysis Runs page tiles.
+
+    Replaces the FE-side reduce that filtered on legacy ``PASS``/``FAIL``
+    strings (audit §I0.4-F1) and silently undercounted above 100 runs (F2).
+    """
+
+    total_runs: int
+    by_outcome: RunsAggregateBuckets
+    total_findings: int
+
+
 class AnalysisFindingOut(ORMModel):
     id: int
     analysis_run_id: int
