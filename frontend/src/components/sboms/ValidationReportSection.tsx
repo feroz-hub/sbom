@@ -3,11 +3,12 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useQueryClient } from '@tanstack/react-query';
-import { Copy, Check, Download, AlertOctagon, AlertTriangle, Info, Upload, ExternalLink, BookOpen, PlayCircle, Clock } from 'lucide-react';
+import { Copy, Check, ChevronDown, Download, AlertOctagon, AlertTriangle, Info, Upload, ExternalLink, BookOpen, PlayCircle, Clock } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { HttpError, revalidateSbom } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
+import { cn } from '@/lib/utils';
 import {
   groupEntriesByStage,
   severityChipClasses,
@@ -159,6 +160,17 @@ export function ValidationReportSection({ report, onReupload }: ValidationReport
   const isPending = report.status === 'pending';
   const isClean = report.status === 'validated' && report.warning_count === 0;
 
+  // Status drives the default. Failed/quarantined/pending demand attention →
+  // expanded by default. Validated (clean or warnings-only) is uneventful →
+  // collapsed by default. Resets per page load — no persistence; the headline
+  // status is always visible regardless of state.
+  const defaultExpanded = isFailed || isPending;
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  const detailsId = `validation-report-details-${report.sbom_id}`;
+  // Pending shows the "Run validation" CTA instead of a toggle — there's
+  // nothing meaningful to hide for legacy data; the user needs to act.
+  const showToggle = !isPending;
+
   const handleRevalidate = async () => {
     setRevalidating(true);
     try {
@@ -255,9 +267,35 @@ export function ValidationReportSection({ report, onReupload }: ValidationReport
               Re-upload
             </Button>
           )}
+          {showToggle && (
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              aria-expanded={expanded}
+              aria-controls={detailsId}
+              className="inline-flex items-center gap-1.5 rounded-md border border-hcl-border px-2.5 py-1 text-xs font-medium text-hcl-muted transition-colors hover:bg-hcl-light hover:text-hcl-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/30 motion-reduce:transition-none"
+            >
+              <ChevronDown
+                className={cn(
+                  'h-4 w-4 transition-transform duration-200 ease-out motion-reduce:transition-none',
+                  expanded && 'rotate-180',
+                )}
+                aria-hidden
+              />
+              {expanded ? 'Hide details' : 'Show details'}
+            </button>
+          )}
         </div>
       </CardHeader>
 
+      <div
+        id={detailsId}
+        className={cn(
+          'grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none',
+          expanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]',
+        )}
+      >
+        <div className="overflow-hidden">
       <CardContent>
         {isPending ? (
           <div className="flex items-start gap-3 rounded-md border border-hcl-border bg-hcl-light/40 px-4 py-3">
@@ -305,6 +343,8 @@ export function ValidationReportSection({ report, onReupload }: ValidationReport
           </div>
         )}
       </CardContent>
+        </div>
+      </div>
     </Card>
   );
 }

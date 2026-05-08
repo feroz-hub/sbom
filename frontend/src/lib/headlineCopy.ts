@@ -85,7 +85,7 @@ export function computeHeadlineCopy(
       return {
         headline: `${kev.toLocaleString()} actively exploited ${noun} attention.`,
         subline:
-          "These are listed in CISA's Known Exploited Vulnerabilities catalog. Prioritize remediation.",
+          "These are listed in CISA's Known Exploited Vulnerabilities catalog.",
         tone: 'danger',
       };
     }

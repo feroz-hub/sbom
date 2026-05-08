@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import {
   AlertTriangle,
-  Activity,
   FolderPlus,
   GitCompareArrows,
   ListChecks,
@@ -20,7 +19,7 @@ interface QuickActionsV2Props {
 }
 
 interface ActionConfig {
-  key: PrimaryAction | 'analysis_runs' | 'compare' | 'projects';
+  key: PrimaryAction | 'compare' | 'projects';
   label: string;
   href: string;
   Icon: LucideIcon;
@@ -50,12 +49,6 @@ const ACTIONS: Record<ActionConfig['key'], ActionConfig> = {
     label: 'View top vulnerable SBOMs',
     href: '/analysis?tab=runs&status=FINDINGS',
     Icon: ListChecks,
-  },
-  analysis_runs: {
-    key: 'analysis_runs',
-    label: 'Analysis runs',
-    href: '/analysis?tab=runs',
-    Icon: Activity,
   },
   compare: {
     key: 'compare',
@@ -94,7 +87,6 @@ export function QuickActionsV2({ primaryAction = 'upload' }: QuickActionsV2Props
   const secondaryKeys: ActionConfig['key'][] = (() => {
     const all: ActionConfig['key'][] = [
       'upload',
-      'analysis_runs',
       'compare',
       'projects',
     ];

@@ -110,7 +110,7 @@ Precedence is strict — the first matching rule wins. `no_data` and `clean` are
 |---|---|---|---|---|
 | `no_data` | **No SBOMs uploaded yet.** | Upload your first SBOM to see your security posture here. | `neutral` | hcl-muted text, slate ambient |
 | `clean` | **All clear across {N} {SBOMs/SBOM}.** | No critical or high-severity findings in your portfolio right now. | `success` | emerald-700 / emerald-300 |
-| `kev_present` | **{N} actively exploited {findings/finding} need{s} attention.** | These are listed in CISA's Known Exploited Vulnerabilities catalog. Prioritize remediation. | `danger` | red-700 / red-300, severity-critical-fade ambient |
+| `kev_present` | **{N} actively exploited {findings/finding} need{s} attention.** | These are listed in CISA's Known Exploited Vulnerabilities catalog. | `danger` | red-700 / red-300, severity-critical-fade ambient |
 | `criticals_no_kev` | **{N} critical {findings/finding} across {M} {SBOMs/SBOM}.** | None are in CISA KEV. Review and prioritize by exploitability. | `warning` | orange-700 / orange-300, severity-high-fade ambient |
 | `high_only` | **{N} high-severity {findings/finding} to review.** | No criticals; manageable backlog. | `info` | sky-700 / sky-300, severity-low-fade ambient |
 | `low_volume` | **{N} {findings/finding}, none critical or high.** | Stable posture — schedule routine remediation. | `neutral` | hcl-muted, slate ambient |

@@ -52,6 +52,8 @@ export function SelectionBar({
             selectedRunId={runAId}
             selectedRunSummary={runASummary}
             onSelect={onSelectRunA}
+            pairedRun={runBSummary}
+            pairedRunLabel="Run B"
           />
           <div
             aria-hidden
@@ -64,7 +66,8 @@ export function SelectionBar({
             selectedRunId={runBId}
             selectedRunSummary={runBSummary}
             onSelect={onSelectRunB}
-            pairedRunProjectId={runASummary?.project_id ?? null}
+            pairedRun={runASummary}
+            pairedRunLabel="Run A"
             align="right"
           />
           <div className="flex items-center gap-2 pb-1">
