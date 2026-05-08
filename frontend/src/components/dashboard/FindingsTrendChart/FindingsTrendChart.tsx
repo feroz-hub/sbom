@@ -147,22 +147,20 @@ export function FindingsTrendChart({ data, isLoading }: FindingsTrendChartProps)
   const runsTotal = data?.runs_total ?? populatedDays;
   const showEmptyState = distinctDates > 0 && distinctDates < 7;
 
+  // Legend pill numbers reflect the latest-day snapshot, not Σ over the window.
+  // Summing daily distinct counts double-counts persistent findings (a CVE
+  // active for 30 days would contribute 30×). Each daily point already obeys
+  // the spec's distinct-active convention, so the most recent point answers
+  // "what's active right now" alongside the trend chart. Spec §3.4 / I4.
   const totals: Record<SeriesKey, number> = useMemo(() => {
-    const acc: Record<SeriesKey, number> = {
-      critical: 0,
-      high: 0,
-      medium: 0,
-      low: 0,
-      unknown: 0,
+    const last = points[points.length - 1];
+    return {
+      critical: last?.critical ?? 0,
+      high: last?.high ?? 0,
+      medium: last?.medium ?? 0,
+      low: last?.low ?? 0,
+      unknown: last?.unknown ?? 0,
     };
-    for (const p of points) {
-      acc.critical += p.critical;
-      acc.high += p.high;
-      acc.medium += p.medium;
-      acc.low += p.low;
-      acc.unknown += p.unknown ?? 0;
-    }
-    return acc;
   }, [points]);
 
   const gridStroke = isDark ? '#243047' : '#dce8f2';
