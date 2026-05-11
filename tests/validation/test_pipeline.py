@@ -74,6 +74,18 @@ def test_uncaught_stage_exception_mapped_to_e025() -> None:
     assert E.E025_SCHEMA_VIOLATION in [e.code for e in report.errors]
 
 
+def test_cyclonedx_1_6_clean_file_validates(read_fixture) -> None:
+    # Regression: Stage 3 hardcoded Draft202012Validator, which crashed on
+    # CycloneDX's draft-07 tuple-form `items` ('list' object has no attribute
+    # 'get' inside referencing), and the orchestrator wrapped the crash as a
+    # generic E025 "Internal validator error". A clean 1.6 file must validate.
+    raw = read_fixture("valid/cyclonedx_1_6_clean.json")
+    report = run_validation(raw)
+    error_codes = [e.code for e in report.errors]
+    assert not report.has_errors(), error_codes
+    assert E.E025_SCHEMA_VIOLATION not in error_codes
+
+
 def test_dispatcher_routes_spdx_2_x_to_semantic_spdx() -> None:
     doc = {
         "spdxVersion": "SPDX-2.3",

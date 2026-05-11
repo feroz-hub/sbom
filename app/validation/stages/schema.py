@@ -177,7 +177,8 @@ def _validate_json(ctx: ValidationContext) -> ValidationContext:
         return ctx
 
     try:
-        from jsonschema import Draft202012Validator, FormatChecker  # type: ignore[import-untyped]
+        from jsonschema import FormatChecker  # type: ignore[import-untyped]
+        from jsonschema.validators import validator_for  # type: ignore[import-untyped]
     except ImportError:
         ctx.report.add(
             E.E025_SCHEMA_VIOLATION,
@@ -188,7 +189,12 @@ def _validate_json(ctx: ValidationContext) -> ValidationContext:
         )
         return ctx
 
-    validator = Draft202012Validator(schema, format_checker=FormatChecker())
+    # Pick the validator class declared by the schema's $schema keyword.
+    # CycloneDX 1.4/1.5/1.6 declare draft-07 (tuple-form `items` is legal),
+    # which Draft202012Validator misinterprets and crashes on. SPDX 2.x also
+    # declares draft-07. Auto-detecting keeps both families correct.
+    validator_cls = validator_for(schema)
+    validator = validator_cls(schema, format_checker=FormatChecker())
     for error in validator.iter_errors(ctx.parsed_dict):
         code = _VALIDATOR_CODE_MAP.get(error.validator or "", E.E025_SCHEMA_VIOLATION)
         path = ".".join(str(p) for p in error.absolute_path) or "(root)"
