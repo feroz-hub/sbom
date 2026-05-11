@@ -43,6 +43,10 @@ import { useToast } from '@/hooks/useToast';
 import { formatRelative } from '@/lib/utils';
 import { matchesMultiField } from '@/lib/tableFilters';
 import { canonicalRunStatus } from '@/lib/analysisRunStatusLabels';
+import {
+  invalidateRunLists,
+  invalidateSbomLists,
+} from '@/lib/queryInvalidation';
 import type { AnalysisSchedule, Project, SBOMSource } from '@/types';
 
 type ScopeFilter = 'all' | 'PROJECT' | 'SBOM';
@@ -167,6 +171,10 @@ export default function SchedulesPage() {
         `Enqueued ${res.sbom_ids.length} SBOM analysis${res.sbom_ids.length === 1 ? '' : 'es'}`,
         'success',
       );
+      // Enqueuing creates new runs and flips affected SBOMs into RUNNING —
+      // refresh runs list and SBOM analysis badges so the UI reflects it.
+      invalidateRunLists(queryClient);
+      invalidateSbomLists(queryClient);
     },
     onError: (err: Error) => showToast(`Run-now failed: ${err.message}`, 'error'),
   });

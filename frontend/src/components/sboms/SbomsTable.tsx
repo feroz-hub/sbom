@@ -19,6 +19,11 @@ import { formatDate } from '@/lib/utils';
 import { useToast } from '@/hooks/useToast';
 import { useTableSort } from '@/hooks/useTableSort';
 import { usePagination } from '@/hooks/usePagination';
+import {
+  invalidateProjectLists,
+  invalidateRunLists,
+  invalidateSbomLists,
+} from '@/lib/queryInvalidation';
 import { sbomAnalysisShortLabel } from '@/lib/analysisRunStatusLabels';
 import { stageLabel, validationStatusMeta } from '@/lib/sbomValidation';
 import type { AnalysisStatus } from '@/hooks/useBackgroundAnalysis';
@@ -108,7 +113,9 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
       permanent: boolean;
     }) => deleteSbom(sbom.id, sbom.created_by ?? '', { permanent }),
     onSuccess: (_data, { permanent }) => {
-      queryClient.invalidateQueries({ queryKey: ['sboms'] });
+      invalidateSbomLists(queryClient);
+      invalidateProjectLists(queryClient);
+      invalidateRunLists(queryClient);
       showToast(
         permanent ? 'SBOM permanently deleted' : 'SBOM moved to deleted',
         'success',

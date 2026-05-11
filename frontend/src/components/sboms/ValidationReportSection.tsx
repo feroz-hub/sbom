@@ -8,6 +8,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { HttpError, revalidateSbom } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
+import { invalidateSbomLists } from '@/lib/queryInvalidation';
 import { cn } from '@/lib/utils';
 import {
   groupEntriesByStage,
@@ -192,6 +193,9 @@ export function ValidationReportSection({ report, onReupload }: ValidationReport
     queryClient.invalidateQueries({ queryKey: ['sbom-validation-report', report.sbom_id] });
     queryClient.invalidateQueries({ queryKey: ['sbom', report.sbom_id] });
     queryClient.invalidateQueries({ queryKey: ['sbom-info', report.sbom_id] });
+    // The validation status/warning counts surface in the main list — refresh
+    // those caches too so the upload badge column matches the per-SBOM page.
+    invalidateSbomLists(queryClient);
     setRevalidating(false);
   };
 

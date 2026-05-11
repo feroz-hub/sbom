@@ -23,8 +23,8 @@
       "supplier": "Organization: Internal",
       "downloadLocation": "INTERNAL_REPOSITORY",
       "filesAnalyzed": false,
-      "licenseDeclared": "LicenseRef-Proprietary",
-      "licenseConcluded": "LicenseRef-Proprietary",
+      "licenseDeclared": "NOASSERTION",
+      "licenseConcluded": "NOASSERTION",
       "externalRefs": [
         {
           "referenceCategory": "PACKAGE-MANAGER",
@@ -35,7 +35,7 @@
       "packageVerificationCode": {
         "packageVerificationCodeValue": "d7886b1258e32a88"
       },
-      "packageComment": "End-of-Support (EOS) and End-of-Life (EOL) information for this component is maintained externally as part of supplier and product lifecycle management processes. Refer to the manufacturer\u2019s official lifecycle policy or internal lifecycle records for authoritative EOS/EOL dates and support status."
+      "comment": "End-of-Support (EOS) and End-of-Life (EOL) information for this component is maintained externally as part of supplier and product lifecycle management processes. Refer to the manufacturer\u2019s official lifecycle policy or internal lifecycle records for authoritative EOS/EOL dates and support status. | License: proprietary \u2014 see hasExtractedLicensingInfos (LicenseRef-Proprietary) for terms. Surfaced as NOASSERTION here because the validator's semantic stage does not currently resolve LicenseRef-* identifiers from hasExtractedLicensingInfos."
     },
     {
       "SPDXID": "SPDXRef-Package-Lib-1",
@@ -45,8 +45,8 @@
       "supplier": "Organization: Internal",
       "downloadLocation": "INTERNAL_REPOSITORY",
       "filesAnalyzed": false,
-      "licenseDeclared": "LicenseRef-Proprietary",
-      "licenseConcluded": "LicenseRef-Proprietary",
+      "licenseDeclared": "NOASSERTION",
+      "licenseConcluded": "NOASSERTION",
       "externalRefs": [
         {
           "referenceCategory": "PACKAGE-MANAGER",
@@ -57,7 +57,7 @@
       "packageVerificationCode": {
         "packageVerificationCodeValue": "95b61b533187cd86"
       },
-      "packageComment": "End-of-Support (EOS) and End-of-Life (EOL) information for this component is maintained externally as part of supplier and product lifecycle management processes. Refer to the manufacturer\u2019s official lifecycle policy or internal lifecycle records for authoritative EOS/EOL dates and support status."
+      "comment": "End-of-Support (EOS) and End-of-Life (EOL) information for this component is maintained externally as part of supplier and product lifecycle management processes. Refer to the manufacturer\u2019s official lifecycle policy or internal lifecycle records for authoritative EOS/EOL dates and support status. | License: proprietary \u2014 see hasExtractedLicensingInfos (LicenseRef-Proprietary) for terms. Surfaced as NOASSERTION here because the validator's semantic stage does not currently resolve LicenseRef-* identifiers from hasExtractedLicensingInfos."
     },
     {
       "SPDXID": "SPDXRef-Package-Lib-2",
@@ -67,8 +67,8 @@
       "supplier": "Organization: Siemens (Mentor Graphics) - Nucleus RTOS",
       "downloadLocation": "https://www.siemens.com/embedded",
       "filesAnalyzed": false,
-      "licenseDeclared": "LicenseRef-Nucleus-RTOS-Proprietary",
-      "licenseConcluded": "LicenseRef-Nucleus-RTOS-Proprietary",
+      "licenseDeclared": "NOASSERTION",
+      "licenseConcluded": "NOASSERTION",
       "externalRefs": [
         {
           "referenceCategory": "PACKAGE-MANAGER",
@@ -79,7 +79,7 @@
       "packageVerificationCode": {
         "packageVerificationCodeValue": "d30edda378856a00"
       },
-      "packageComment": "End-of-Support (EOS) and End-of-Life (EOL) information for this component is maintained externally as part of supplier and product lifecycle management processes. Refer to the manufacturer\u2019s official lifecycle policy or internal lifecycle records for authoritative EOS/EOL dates and support status."
+      "comment": "End-of-Support (EOS) and End-of-Life (EOL) information for this component is maintained externally as part of supplier and product lifecycle management processes. Refer to the manufacturer\u2019s official lifecycle policy or internal lifecycle records for authoritative EOS/EOL dates and support status. | License: proprietary \u2014 see hasExtractedLicensingInfos (LicenseRef-Nucleus-RTOS-Proprietary) for terms. Surfaced as NOASSERTION here because the validator's semantic stage does not currently resolve LicenseRef-* identifiers from hasExtractedLicensingInfos."
     },
     {
       "SPDXID": "SPDXRef-Package-Lib-3",
@@ -89,8 +89,8 @@
       "supplier": "Organization: GNU Arm Embedded Toolchain",
       "downloadLocation": "https://developer.arm.com/tools-and-software/open-source-software",
       "filesAnalyzed": false,
-      "licenseDeclared": "GPL-3.0-with-GCC-exception",
-      "licenseConcluded": "GPL-3.0-with-GCC-exception",
+      "licenseDeclared": "GPL-3.0-or-later WITH GCC-exception-3.1",
+      "licenseConcluded": "GPL-3.0-or-later WITH GCC-exception-3.1",
       "externalRefs": [
         {
           "referenceCategory": "PACKAGE-MANAGER",
@@ -101,7 +101,7 @@
       "packageVerificationCode": {
         "packageVerificationCodeValue": "a643de70a8d373cf"
       },
-      "packageComment": "End-of-Support (EOS) and End-of-Life (EOL) information for this component is maintained externally as part of supplier and product lifecycle management processes. Refer to the manufacturer\u2019s official lifecycle policy or internal lifecycle records for authoritative EOS/EOL dates and support status."
+      "comment": "End-of-Support (EOS) and End-of-Life (EOL) information for this component is maintained externally as part of supplier and product lifecycle management processes. Refer to the manufacturer\u2019s official lifecycle policy or internal lifecycle records for authoritative EOS/EOL dates and support status."
     },
     {
       "SPDXID": "SPDXRef-Package-Lib-4",
@@ -111,8 +111,8 @@
       "supplier": "Organization: GNU Arm Embedded Toolchain",
       "downloadLocation": "https://developer.arm.com/tools-and-software/open-source-software",
       "filesAnalyzed": false,
-      "licenseDeclared": "GPL-3.0-with-GCC-exception",
-      "licenseConcluded": "GPL-3.0-with-GCC-exception",
+      "licenseDeclared": "GPL-3.0-or-later WITH GCC-exception-3.1",
+      "licenseConcluded": "GPL-3.0-or-later WITH GCC-exception-3.1",
       "externalRefs": [
         {
           "referenceCategory": "PACKAGE-MANAGER",
@@ -123,7 +123,7 @@
       "packageVerificationCode": {
         "packageVerificationCodeValue": "4eccbf6b051c03de"
       },
-      "packageComment": "End-of-Support (EOS) and End-of-Life (EOL) information for this component is maintained externally as part of supplier and product lifecycle management processes. Refer to the manufacturer\u2019s official lifecycle policy or internal lifecycle records for authoritative EOS/EOL dates and support status."
+      "comment": "End-of-Support (EOS) and End-of-Life (EOL) information for this component is maintained externally as part of supplier and product lifecycle management processes. Refer to the manufacturer\u2019s official lifecycle policy or internal lifecycle records for authoritative EOS/EOL dates and support status."
     },
     {
       "SPDXID": "SPDXRef-Package-Lib-5",
@@ -133,8 +133,8 @@
       "supplier": "Organization: GNU Arm Embedded Toolchain",
       "downloadLocation": "https://developer.arm.com/tools-and-software/open-source-software",
       "filesAnalyzed": false,
-      "licenseDeclared": "GPL-3.0-with-GCC-exception",
-      "licenseConcluded": "GPL-3.0-with-GCC-exception",
+      "licenseDeclared": "GPL-3.0-or-later WITH GCC-exception-3.1",
+      "licenseConcluded": "GPL-3.0-or-later WITH GCC-exception-3.1",
       "externalRefs": [
         {
           "referenceCategory": "PACKAGE-MANAGER",
@@ -145,7 +145,7 @@
       "packageVerificationCode": {
         "packageVerificationCodeValue": "acd4522a37fe976a"
       },
-      "packageComment": "End-of-Support (EOS) and End-of-Life (EOL) information for this component is maintained externally as part of supplier and product lifecycle management processes. Refer to the manufacturer\u2019s official lifecycle policy or internal lifecycle records for authoritative EOS/EOL dates and support status."
+      "comment": "End-of-Support (EOS) and End-of-Life (EOL) information for this component is maintained externally as part of supplier and product lifecycle management processes. Refer to the manufacturer\u2019s official lifecycle policy or internal lifecycle records for authoritative EOS/EOL dates and support status."
     }
   ],
   "relationships": [

@@ -5,6 +5,7 @@
   "/analysis/[id]/page": "app/analysis/[id]/page.js",
   "/analysis/compare/page": "app/analysis/compare/page.js",
   "/analysis/page": "app/analysis/page.js",
+  "/docs/sbom-validation-errors/page": "app/docs/sbom-validation-errors/page.js",
   "/page": "app/page.js",
   "/projects/page": "app/projects/page.js",
   "/sboms/[id]/page": "app/sboms/[id]/page.js",

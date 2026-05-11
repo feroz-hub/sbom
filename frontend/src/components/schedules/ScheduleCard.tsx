@@ -19,6 +19,10 @@ import {
 import { useToast } from '@/hooks/useToast';
 import { formatRelative } from '@/lib/utils';
 import { HttpError } from '@/lib/api';
+import {
+  invalidateRunLists,
+  invalidateSbomLists,
+} from '@/lib/queryInvalidation';
 import { ScheduleEditor } from './ScheduleEditor';
 import type { AnalysisSchedule, ScheduleCadence } from '@/types';
 
@@ -117,6 +121,8 @@ export function ScheduleCard({ scope, targetId }: ScheduleCardProps) {
         `Enqueued ${res.sbom_ids.length} SBOM analysis${res.sbom_ids.length === 1 ? '' : 'es'}`,
         'success',
       );
+      invalidateRunLists(queryClient);
+      invalidateSbomLists(queryClient);
     },
     onError: (err: Error) => showToast(`Run-now failed: ${err.message}`, 'error'),
   });

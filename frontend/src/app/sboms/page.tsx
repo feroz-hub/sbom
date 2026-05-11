@@ -10,6 +10,10 @@ import { SbomUploadModal } from '@/components/sboms/SbomUploadModal';
 import { useSbomsList } from '@/hooks/useSbomsList';
 import { useBackgroundAnalysis } from '@/hooks/useBackgroundAnalysis';
 import { usePendingAnalysisRecovery } from '@/hooks/usePendingAnalysisRecovery';
+import {
+  invalidateProjectLists,
+  invalidateSbomLists,
+} from '@/lib/queryInvalidation';
 import type { SBOMSource } from '@/types';
 
 export default function SbomsPage() {
@@ -24,17 +28,22 @@ export default function SbomsPage() {
 
   /**
    * Called when the upload modal successfully creates an SBOM.
-   * 1. Inject the new SBOM into the React Query cache immediately (optimistic)
-   * 2. Fire background analysis — never blocks the user
+   * 1. Inject the new SBOM into the main list cache immediately (optimistic)
+   *    so the row appears with an ANALYSING badge with zero perceived latency.
+   * 2. Invalidate every sibling list view that includes SBOMs (sidebar, recent
+   *    feed, command palette, schedule dropdown, project counts). Without
+   *    this, those panels show stale data until their own staleTime expires.
+   * 3. Fire background analysis — never blocks the user.
    */
   const handleUploadSuccess = (newSbom: SBOMSource) => {
-    // Optimistic: add to list with ANALYSING status before any refetch
     queryClient.setQueryData<SBOMSource[]>(['sboms'], (old) => [
       { ...newSbom, _analysisStatus: 'ANALYSING' as const },
       ...(old ?? []),
     ]);
 
-    // Background analysis — toast + badge update happen automatically
+    invalidateSbomLists(queryClient);
+    invalidateProjectLists(queryClient);
+
     triggerBackgroundAnalysis(newSbom.id, newSbom.sbom_name);
   };
 

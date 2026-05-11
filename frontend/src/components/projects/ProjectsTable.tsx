@@ -19,6 +19,12 @@ import { formatDate } from '@/lib/utils';
 import { useToast } from '@/hooks/useToast';
 import { useTableSort } from '@/hooks/useTableSort';
 import { usePagination } from '@/hooks/usePagination';
+import {
+  invalidateProjectLists,
+  invalidateRunLists,
+  invalidateSbomLists,
+  invalidateScheduleLists,
+} from '@/lib/queryInvalidation';
 import type { Project } from '@/types';
 
 type ProjectSortKey = 'id' | 'project_name' | 'project_status' | 'created_by' | 'created_on';
@@ -50,7 +56,12 @@ export function ProjectsTable({ projects, isLoading, error }: ProjectsTableProps
     mutationFn: ({ id, permanent }: { id: number; permanent: boolean }) =>
       deleteProject(id, { permanent }),
     onSuccess: (_data, { permanent }) => {
-      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      // Project delete cascades to its SBOMs (and their runs/schedules);
+      // refresh every affected list view so the UI matches the cascade.
+      invalidateProjectLists(queryClient);
+      invalidateSbomLists(queryClient);
+      invalidateRunLists(queryClient);
+      invalidateScheduleLists(queryClient);
       showToast(
         permanent ? 'Project permanently deleted' : 'Project moved to deleted',
         'success',
