@@ -30,6 +30,10 @@ import {
   updateAiCredential,
   updateAiCredentialSettings,
 } from '@/lib/api';
+import {
+  invalidateAiCredentialSurfaces,
+  invalidateAiFixCaches,
+} from '@/lib/queryInvalidation';
 import type {
   AiBatchDurationEstimate,
   AiConnectionTestResult,
@@ -68,7 +72,7 @@ export function useCreateAiCredential() {
   return useMutation<AiCredential, Error, AiCredentialCreateRequest>({
     mutationFn: (body) => createAiCredential(body),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: aiCredentialsQueryKey });
+      invalidateAiCredentialSurfaces(qc);
     },
   });
 }
@@ -83,7 +87,7 @@ export function useUpdateAiCredential() {
   >({
     mutationFn: ({ id, body }) => updateAiCredential(id, body),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: aiCredentialsQueryKey });
+      invalidateAiCredentialSurfaces(qc);
     },
   });
 }
@@ -94,7 +98,9 @@ export function useDeleteAiCredential() {
   return useMutation<void, Error, number>({
     mutationFn: (id) => deleteAiCredential(id),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: aiCredentialsQueryKey });
+      invalidateAiCredentialSurfaces(qc);
+      // Cached per-finding fixes reference the deleted provider's name.
+      invalidateAiFixCaches(qc);
     },
   });
 }
@@ -105,7 +111,7 @@ export function useSetDefaultCredential() {
   return useMutation<AiCredential, Error, number>({
     mutationFn: (id) => setAiCredentialDefault(id),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: aiCredentialsQueryKey });
+      invalidateAiCredentialSurfaces(qc);
     },
   });
 }
@@ -116,7 +122,7 @@ export function useSetFallbackCredential() {
   return useMutation<AiCredential, Error, number>({
     mutationFn: (id) => setAiCredentialFallback(id),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: aiCredentialsQueryKey });
+      invalidateAiCredentialSurfaces(qc);
     },
   });
 }
@@ -136,20 +142,21 @@ export interface TestConnectionState {
 export function useTestConnection() {
   const qc = useQueryClient();
 
+  // @no-invalidation-needed — probes a candidate config; the saved-credentials
+  // list is unchanged by this call.
   const unsaved = useMutation<
     AiConnectionTestResult,
     Error,
     AiTestConnectionRequest
   >({
     mutationFn: (body) => testAiCredentialUnsaved(body),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: aiCredentialsQueryKey });
-    },
   });
 
   const saved = useMutation<AiConnectionTestResult, Error, number>({
     mutationFn: (id) => testAiCredentialSaved(id),
     onSuccess: () => {
+      // last_test_at / last_test_success on the row just changed — refresh
+      // the list so the status badge updates without F5.
       qc.invalidateQueries({ queryKey: aiCredentialsQueryKey });
     },
   });
@@ -171,6 +178,9 @@ export function useAiCredentialSettings(args: { enabled?: boolean } = {}) {
 }
 
 
+// @no-invalidation-needed — onSuccess primes the same cache key consumers
+// read (kill switch + budget caps), so a separate invalidateQueries pass
+// would just re-fetch what we already wrote.
 export function useUpdateAiCredentialSettings() {
   const qc = useQueryClient();
   return useMutation<

@@ -11,6 +11,10 @@ import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
 import { createProject, updateProject } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
+import {
+  invalidateProjectLists,
+  invalidateSbomLists,
+} from '@/lib/queryInvalidation';
 import type { Project } from '@/types';
 
 const schema = z.object({
@@ -81,7 +85,10 @@ export function ProjectModal({ open, onClose, project }: ProjectModalProps) {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      invalidateProjectLists(queryClient);
+      // SBOM rows render project_name; a rename leaves them stale until
+      // staleTime expires. Bust the SBOM list surfaces too.
+      invalidateSbomLists(queryClient);
       showToast(isEdit ? 'Project updated' : 'Project created', 'success');
       onClose();
     },

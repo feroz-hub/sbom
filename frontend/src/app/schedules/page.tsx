@@ -44,6 +44,7 @@ import { formatRelative } from '@/lib/utils';
 import { matchesMultiField } from '@/lib/tableFilters';
 import { canonicalRunStatus } from '@/lib/analysisRunStatusLabels';
 import {
+  invalidateDashboardTiles,
   invalidateRunLists,
   invalidateSbomLists,
 } from '@/lib/queryInvalidation';
@@ -172,9 +173,11 @@ export default function SchedulesPage() {
         'success',
       );
       // Enqueuing creates new runs and flips affected SBOMs into RUNNING —
-      // refresh runs list and SBOM analysis badges so the UI reflects it.
+      // refresh runs list, SBOM analysis badges, and dashboard counts so
+      // every surface reflects the in-flight work.
       invalidateRunLists(queryClient);
       invalidateSbomLists(queryClient);
+      invalidateDashboardTiles(queryClient);
     },
     onError: (err: Error) => showToast(`Run-now failed: ${err.message}`, 'error'),
   });

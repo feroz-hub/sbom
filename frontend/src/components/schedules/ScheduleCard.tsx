@@ -20,6 +20,7 @@ import { useToast } from '@/hooks/useToast';
 import { formatRelative } from '@/lib/utils';
 import { HttpError } from '@/lib/api';
 import {
+  invalidateDashboardTiles,
   invalidateRunLists,
   invalidateSbomLists,
 } from '@/lib/queryInvalidation';
@@ -123,6 +124,7 @@ export function ScheduleCard({ scope, targetId }: ScheduleCardProps) {
       );
       invalidateRunLists(queryClient);
       invalidateSbomLists(queryClient);
+      invalidateDashboardTiles(queryClient);
     },
     onError: (err: Error) => showToast(`Run-now failed: ${err.message}`, 'error'),
   });

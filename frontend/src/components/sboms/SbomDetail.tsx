@@ -16,6 +16,7 @@ import { ScheduleCard } from '@/components/schedules/ScheduleCard';
 import { ValidationReportSection } from '@/components/sboms/ValidationReportSection';
 import { getSbomComponents, getRuns, getSbomInfo, getSbomRiskSummary, getSbomValidationReport } from '@/lib/api';
 import { useAnalysisStream } from '@/hooks/useAnalysisStream';
+import { invalidateAnalysisCompletion } from '@/lib/queryInvalidation';
 import { useTableSort } from '@/hooks/useTableSort';
 import { usePagination } from '@/hooks/usePagination';
 import { formatDate, formatDuration } from '@/lib/utils';
@@ -136,10 +137,11 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
     startAnalysis({ sources: ['NVD', 'OSV', 'GITHUB', 'VULNDB'] });
   };
 
-  // Invalidate runs list when analysis completes
+  // Refresh runs, dashboards, recents, and per-SBOM detail when analysis
+  // completes — every surface whose numbers just changed.
   const handleReset = () => {
     if (state.phase === 'done') {
-      queryClient.invalidateQueries({ queryKey: ['runs'] });
+      invalidateAnalysisCompletion(queryClient, { sbomId: sbom.id });
     }
     reset();
   };

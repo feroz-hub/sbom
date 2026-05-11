@@ -118,6 +118,22 @@ responses are diffed against locked baseline files in
 file under `tests/snapshots/` and re-run pytest — the next run captures
 the new shape and the run after that asserts it stays stable.
 
+### Frontend
+
+```bash
+cd frontend && npm test
+```
+
+Vitest covers component, hook, and library behaviour, plus two
+architectural invariants:
+
+- `frontend/src/__tests__/mutation-invalidation.test.ts` — every
+  `useMutation` must invalidate the relevant query keys on success, or
+  carry a `// @no-invalidation-needed` marker. See
+  [docs/cache-invalidation-audit.md](./docs/cache-invalidation-audit.md)
+  and the "TanStack Query — mutation invalidation" section in
+  [CLAUDE.md](./CLAUDE.md) for the convention and helpers.
+
 ---
 
 ## Authentication

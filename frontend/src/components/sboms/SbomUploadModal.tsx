@@ -11,9 +11,10 @@ import { Dialog, DialogBody, DialogFooter } from '@/components/ui/Dialog';
 import { Input, Textarea } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
-import { createSbom, getProjects, getSbomTypes, HttpError } from '@/lib/api';
+import { getProjects, getSbomTypes, HttpError } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
 import { useSbomsList } from '@/hooks/useSbomsList';
+import { useUploadSbom } from '@/hooks/useSbomMutations';
 import { stageLabel, stageNumber } from '@/lib/sbomValidation';
 import type { SBOMSource, SbomValidationFailureDetail } from '@/types';
 
@@ -70,11 +71,12 @@ interface SbomUploadModalProps {
 
 export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalProps) {
   const fileRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [validationFailure, setValidationFailure] = useState<SbomValidationFailureDetail | null>(null);
   const [duplicateNameError, setDuplicateNameError] = useState<string | null>(null);
   const { showToast } = useToast();
+  const uploadMutation = useUploadSbom();
+  const uploading = uploadMutation.isPending;
 
   const { data: projects } = useQuery({
     queryKey: ['projects'],
@@ -135,14 +137,12 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
     }
   };
 
-  const onSubmit = async (values: FormValues) => {
-    setUploading(true);
+  const onSubmit = (values: FormValues) => {
     setUploadError(null);
     setValidationFailure(null);
 
-    let sbom: SBOMSource;
-    try {
-      sbom = await createSbom({
+    uploadMutation.mutate(
+      {
         sbom_name: values.sbom_name,
         sbom_data: values.sbom_data,
         sbom_type: values.sbom_type_id ? Number(values.sbom_type_id) : undefined,
@@ -150,36 +150,35 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
         sbom_version: values.sbom_version || undefined,
         created_by: values.created_by || undefined,
         productver: values.productver || undefined,
-      });
-    } catch (err) {
-      // Validation failure (4xx with structured detail) → render the
-      // structured rejection card with stage info + "View full report" link.
-      if (err instanceof HttpError && isValidationFailureDetail(err.detail)) {
-        setValidationFailure(err.detail);
-        setUploadError(null);
-      } else {
-        // Generic upload failure (network, 409 duplicate, 413 too-large) —
-        // fall back to the existing one-line error banner.
-        setUploadError(formatUploadError(err));
-      }
-      setUploading(false);
-      return; // modal stays open
-    }
-
-    // ── Upload succeeded ────────────────────────────────────────────────
-    // Close modal IMMEDIATELY — user should never wait for analysis.
-    setUploading(false);
-    reset();
-    setUploadError(null);
-    setValidationFailure(null);
-    setDuplicateNameError(null);
-    onClose(); // ← CLOSE HERE (line order matters — before onSuccess triggers analysis)
-
-    // Quick confirmation toast — background analysis toast follows immediately
-    showToast(`"${sbom.sbom_name}" uploaded successfully`, 'success', { duration: 3000 });
-
-    // Notify parent AFTER modal closes — adds to list + fires background analysis
-    onSuccess?.(sbom);
+      },
+      {
+        onSuccess: (sbom) => {
+          // Close modal IMMEDIATELY — user should never wait for analysis.
+          reset();
+          setUploadError(null);
+          setValidationFailure(null);
+          setDuplicateNameError(null);
+          onClose();
+          showToast(`"${sbom.sbom_name}" uploaded successfully`, 'success', {
+            duration: 3000,
+          });
+          // Parent triggers background analysis after the modal closes.
+          onSuccess?.(sbom);
+        },
+        onError: (err) => {
+          // Validation failure (4xx with structured detail) → render the
+          // structured rejection card with stage info + "View full report" link.
+          if (err instanceof HttpError && isValidationFailureDetail(err.detail)) {
+            setValidationFailure(err.detail);
+            setUploadError(null);
+          } else {
+            // Generic upload failure (network, 409 duplicate, 413 too-large) —
+            // fall back to the existing one-line error banner.
+            setUploadError(formatUploadError(err));
+          }
+        },
+      },
+    );
   };
 
   const handleClose = () => {

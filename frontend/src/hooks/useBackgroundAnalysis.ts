@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { analyzeConsolidated } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
 import { addPendingAnalysis, removePendingAnalysis } from '@/lib/pendingAnalysis';
+import { invalidateAnalysisCompletion } from '@/lib/queryInvalidation';
 import type { SBOMSource } from '@/types';
 
 // ADR-0001 — canonical names + legacy aliases (deprecation window).
@@ -67,7 +68,9 @@ export function useBackgroundAnalysis() {
             ) ?? [],
           );
 
-          queryClient.invalidateQueries({ queryKey: ['runs'] });
+          // Run lists, dashboard tiles, recents, per-SBOM detail — every
+          // surface whose numbers just changed.
+          invalidateAnalysisCompletion(queryClient, { sbomId });
 
           updateToast(
             toastId,

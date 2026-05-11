@@ -2,13 +2,11 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useQueryClient } from '@tanstack/react-query';
 import { Copy, Check, ChevronDown, Download, AlertOctagon, AlertTriangle, Info, Upload, ExternalLink, BookOpen, PlayCircle, Clock } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { HttpError, revalidateSbom } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
-import { invalidateSbomLists } from '@/lib/queryInvalidation';
+import { useRevalidateSbom } from '@/hooks/useSbomMutations';
 import { cn } from '@/lib/utils';
 import {
   groupEntriesByStage,
@@ -18,15 +16,7 @@ import {
   validationStatusMeta,
 } from '@/lib/sbomValidation';
 import { validationCodeAnchor } from '@/lib/validationCodeReference';
-import type { SbomValidationFailureDetail, ValidationErrorEntry, ValidationReport } from '@/types';
-
-function isValidationFailureDetail(detail: unknown): detail is SbomValidationFailureDetail {
-  return (
-    typeof detail === 'object' &&
-    detail !== null &&
-    (detail as { code?: unknown }).code === 'sbom_validation_failed'
-  );
-}
+import type { ValidationErrorEntry, ValidationReport } from '@/types';
 
 interface ValidationReportSectionProps {
   report: ValidationReport;
@@ -151,9 +141,9 @@ function EntryCard({ entry }: { entry: ValidationErrorEntry }) {
 }
 
 export function ValidationReportSection({ report, onReupload }: ValidationReportSectionProps) {
-  const queryClient = useQueryClient();
   const { showToast } = useToast();
-  const [revalidating, setRevalidating] = useState(false);
+  const revalidateMutation = useRevalidateSbom(report.sbom_id);
+  const revalidating = revalidateMutation.isPending;
 
   const meta = validationStatusMeta(report.status, report.warning_count);
   const grouped = useMemo(() => groupEntriesByStage(report.entries), [report.entries]);
@@ -172,31 +162,13 @@ export function ValidationReportSection({ report, onReupload }: ValidationReport
   // nothing meaningful to hide for legacy data; the user needs to act.
   const showToggle = !isPending;
 
-  const handleRevalidate = async () => {
-    setRevalidating(true);
-    try {
-      await revalidateSbom(report.sbom_id);
-    } catch (err) {
-      // A 4xx with ``code: sbom_validation_failed`` is the expected return
-      // when the report has errors — the operation succeeded; the SBOM
-      // simply didn't pass. Refresh the page state and let the report
-      // section re-render in its failed form.
-      if (err instanceof HttpError && isValidationFailureDetail(err.detail)) {
-        // expected outcome — fall through to invalidation below
-      } else {
+  const handleRevalidate = () => {
+    revalidateMutation.mutate(undefined, {
+      onError: (err) => {
         const message = err instanceof Error ? err.message : 'Validation failed to run.';
         showToast(`Could not re-run validation: ${message}`, 'error');
-        setRevalidating(false);
-        return;
-      }
-    }
-    queryClient.invalidateQueries({ queryKey: ['sbom-validation-report', report.sbom_id] });
-    queryClient.invalidateQueries({ queryKey: ['sbom', report.sbom_id] });
-    queryClient.invalidateQueries({ queryKey: ['sbom-info', report.sbom_id] });
-    // The validation status/warning counts surface in the main list — refresh
-    // those caches too so the upload badge column matches the per-SBOM page.
-    invalidateSbomLists(queryClient);
-    setRevalidating(false);
+      },
+    });
   };
 
   const headlineCounts: string[] = [];

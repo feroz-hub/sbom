@@ -88,6 +88,9 @@ export function useAiFix(
       generateFindingAiFix(findingId as number, { providerName }),
     onSuccess: (data) => {
       qc.setQueryData(aiFixQueryKey(findingId ?? -1, providerName), data);
+      // The run-detail "AI fix" column flips from Generate → View when a
+      // fix lands. We don't know the runId here, so invalidate the prefix.
+      qc.invalidateQueries({ queryKey: ['ai-fix-list'] });
     },
   });
 
@@ -96,6 +99,7 @@ export function useAiFix(
       regenerateFindingAiFix(findingId as number, { providerName }),
     onSuccess: (data) => {
       qc.setQueryData(aiFixQueryKey(findingId ?? -1, providerName), data);
+      qc.invalidateQueries({ queryKey: ['ai-fix-list'] });
     },
   });
 
@@ -203,6 +207,8 @@ export function useTriggerAiFixes(runId: number) {
       // invalidate so the run-detail table re-fetches when the user
       // opens it next.
       qc.invalidateQueries({ queryKey: ['ai-fix-list', runId] });
+      // Multi-batch history table picks up the new batch row.
+      qc.invalidateQueries({ queryKey: ['ai-batch-list', runId] });
     },
   });
 }
@@ -214,6 +220,10 @@ export function useCancelAiFixes(runId: number) {
     mutationFn: () => cancelRunAiFixes(runId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['ai-batch-progress', runId] });
+      // Partial fixes were cached as they came in; show them.
+      qc.invalidateQueries({ queryKey: ['ai-fix-list', runId] });
+      // Batch status flips to cancelled.
+      qc.invalidateQueries({ queryKey: ['ai-batch-list', runId] });
     },
   });
 }
@@ -320,6 +330,10 @@ export function useCancelAiBatch(runId: number) {
     onSuccess: (_resp, batchId) => {
       qc.invalidateQueries({ queryKey: ['ai-batch-progress', runId, batchId] });
       qc.invalidateQueries({ queryKey: ['ai-batch-list', runId] });
+      // Partial fixes were cached during the batch.
+      qc.invalidateQueries({ queryKey: ['ai-fix-list', runId] });
+      // Legacy banner consumers read the no-batchId key — refresh them too.
+      qc.invalidateQueries({ queryKey: ['ai-batch-progress', runId] });
     },
   });
 }

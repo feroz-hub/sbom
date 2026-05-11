@@ -24,11 +24,94 @@ export function invalidateProjectLists(qc: QueryClient): void {
   qc.invalidateQueries({ queryKey: ['projects'] });
 }
 
+/**
+ * Every cache that holds "a list of runs" or "a count derived from runs".
+ *
+ * Includes recent-run surfaces (sidebar, dashboard activity feed, ⌘K palette),
+ * the runs aggregate, top-vulnerable tile, and the compare-picker recents.
+ * Excludes per-run detail (`['run', id]`) and per-run findings — those are
+ * keyed by a specific run that doesn't change when the run set changes.
+ */
 export function invalidateRunLists(qc: QueryClient): void {
   qc.invalidateQueries({ queryKey: ['runs'] });
+  qc.invalidateQueries({ queryKey: ['runs-aggregate'] });
+  qc.invalidateQueries({ queryKey: ['recent-runs'] });
+  qc.invalidateQueries({ queryKey: ['sidebar-recent-runs'] });
+  qc.invalidateQueries({ queryKey: ['palette-recent-runs'] });
+  qc.invalidateQueries({ queryKey: ['top-vulnerable-runs'] });
+  qc.invalidateQueries({ queryKey: ['compare', 'picker', 'recent'] });
+  qc.invalidateQueries({ queryKey: ['compare', 'picker', 'search'] });
 }
 
 export function invalidateScheduleLists(qc: QueryClient): void {
   qc.invalidateQueries({ queryKey: ['schedules'] });
   qc.invalidateQueries({ queryKey: ['schedule'] });
+}
+
+/**
+ * Dashboard rollup tiles — posture, 30-day trend, lifetime totals.
+ *
+ * Any event that changes the universe of findings or runs (analysis
+ * completion, SBOM/project delete, schedule run-now enqueue) should
+ * call this so the dashboard reflects the change without F5.
+ */
+export function invalidateDashboardTiles(qc: QueryClient): void {
+  qc.invalidateQueries({ queryKey: ['dashboard-posture'] });
+  qc.invalidateQueries({ queryKey: ['dashboard-trend'] });
+  qc.invalidateQueries({ queryKey: ['dashboard-lifetime'] });
+}
+
+/**
+ * Convenience for the "analysis just completed" event: covers run lists,
+ * dashboard tiles, and the per-SBOM detail caches whose findings/risk
+ * numbers just changed.
+ *
+ * Pass `sbomId` whenever the caller knows which SBOM the run belongs to —
+ * it scopes the per-SBOM cache busts so we don't over-invalidate.
+ */
+export function invalidateAnalysisCompletion(
+  qc: QueryClient,
+  args: { sbomId?: number } = {},
+): void {
+  invalidateRunLists(qc);
+  invalidateDashboardTiles(qc);
+  // SBOM analysis status badge surfaces in the main table — refresh.
+  invalidateSbomLists(qc);
+  if (args.sbomId != null) {
+    qc.invalidateQueries({ queryKey: ['sbom-risk', args.sbomId] });
+    qc.invalidateQueries({ queryKey: ['sbom-info', args.sbomId] });
+    qc.invalidateQueries({ queryKey: ['compare', 'sparkline', args.sbomId] });
+  }
+}
+
+/**
+ * Every cache that derives state from the saved-credentials list.
+ *
+ * `['ai','credentials']` drives the providers list + status badges, but
+ * `['ai-settings','providers']` is a parallel joined query the Settings
+ * page composes — adding/removing/switching a credential must bust both,
+ * otherwise the Settings page shows a stale provider name until its
+ * 60-second staleTime expires.
+ *
+ * `['analysis-config']` is included because `AiConfigBanner`'s
+ * configured-vs-empty branch ultimately depends on whether any
+ * credential exists.
+ */
+export function invalidateAiCredentialSurfaces(qc: QueryClient): void {
+  qc.invalidateQueries({ queryKey: ['ai', 'credentials'] });
+  qc.invalidateQueries({ queryKey: ['ai-settings'] });
+  qc.invalidateQueries({ queryKey: ['analysis-config'] });
+}
+
+/**
+ * Drops every cached AI fix.
+ *
+ * Use after: deleting a provider (orphaned per-finding fixes still
+ * reference the deleted provider's name), regenerating in bulk, or
+ * cancelling a batch (partial fixes are now in a different state).
+ */
+export function invalidateAiFixCaches(qc: QueryClient): void {
+  qc.invalidateQueries({ queryKey: ['ai-fix'] });
+  qc.invalidateQueries({ queryKey: ['ai-fix-list'] });
+  qc.invalidateQueries({ queryKey: ['ai-batch-progress'] });
 }

@@ -20,6 +20,7 @@ import { useToast } from '@/hooks/useToast';
 import { useTableSort } from '@/hooks/useTableSort';
 import { usePagination } from '@/hooks/usePagination';
 import {
+  invalidateDashboardTiles,
   invalidateProjectLists,
   invalidateRunLists,
   invalidateSbomLists,
@@ -62,6 +63,7 @@ export function ProjectsTable({ projects, isLoading, error }: ProjectsTableProps
       invalidateSbomLists(queryClient);
       invalidateRunLists(queryClient);
       invalidateScheduleLists(queryClient);
+      invalidateDashboardTiles(queryClient);
       showToast(
         permanent ? 'Project permanently deleted' : 'Project moved to deleted',
         'success',

@@ -20,6 +20,7 @@ import { useToast } from '@/hooks/useToast';
 import { useTableSort } from '@/hooks/useTableSort';
 import { usePagination } from '@/hooks/usePagination';
 import {
+  invalidateDashboardTiles,
   invalidateProjectLists,
   invalidateRunLists,
   invalidateSbomLists,
@@ -116,6 +117,7 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
       invalidateSbomLists(queryClient);
       invalidateProjectLists(queryClient);
       invalidateRunLists(queryClient);
+      invalidateDashboardTiles(queryClient);
       showToast(
         permanent ? 'SBOM permanently deleted' : 'SBOM moved to deleted',
         'success',
