@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls c:/Users/ferozebasha.s/.claude/projects/c--sbom/ 2>/dev/null || echo \"Directory may not exist\")",
+      "Read(//c/Users/ferozebasha.s/.claude/projects/c--sbom/**)",
+      "Bash(python -m pytest tests/validation/test_stage_ingress.py -v)"
+    ]
+  }
+}

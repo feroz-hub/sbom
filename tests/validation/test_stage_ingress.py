@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import gzip
+import zlib
 
 import pytest
 from app.validation import errors as E
@@ -80,5 +81,41 @@ def test_decompressed_size_exceeded(monkeypatch: pytest.MonkeyPatch) -> None:
     huge = b"A" * (1024 * 1024)
     small = gzip.compress(huge)
     ctx = _run(small, content_encoding="gzip")
+    codes = [e.code for e in ctx.report.entries]
+    assert E.E002_DECOMPRESSED_SIZE_EXCEEDED in codes
+
+
+def test_deflate_decompression_succeeds() -> None:
+    raw = b"{\"bomFormat\": \"CycloneDX\"}"
+    ctx = _run(zlib.compress(raw), content_encoding="deflate")
+    assert not ctx.report.has_errors()
+    assert ctx.text == raw.decode()
+
+
+def test_deflate_decompression_ratio_exceeded(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        ingress,
+        "_load_limits",
+        lambda: {"max_upload": 100 * 1024, "max_decompressed": 200 * 1024 * 1024, "max_ratio": 5},
+    )
+    huge = b"A" * (1024 * 1024)
+    small = zlib.compress(huge)
+    ctx = _run(small, content_encoding="deflate")
+    codes = [e.code for e in ctx.report.entries]
+    assert E.E003_DECOMPRESSION_RATIO_EXCEEDED in codes
+
+
+def test_deflate_decompressed_size_exceeded_aborts_midstream(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Bomb defence: deflate must abort before fully materialising the payload."""
+    monkeypatch.setattr(
+        ingress,
+        "_load_limits",
+        lambda: {"max_upload": 100 * 1024 * 1024, "max_decompressed": 4 * 1024, "max_ratio": 100_000},
+    )
+    huge = b"A" * (1024 * 1024)
+    small = zlib.compress(huge)
+    ctx = _run(small, content_encoding="deflate")
     codes = [e.code for e in ctx.report.entries]
     assert E.E002_DECOMPRESSED_SIZE_EXCEEDED in codes

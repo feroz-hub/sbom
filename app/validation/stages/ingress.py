@@ -194,36 +194,75 @@ def _decompress(
                     return None
                 chunks.append(chunk)
             return b"".join(chunks)
-        # deflate
-        decompressed = zlib.decompress(body)
-        if len(decompressed) > max_total:
-            ctx.report.add(
-                E.E002_DECOMPRESSED_SIZE_EXCEEDED,
-                stage=_STAGE,
-                path="",
-                message=(
-                    f"Decompressed body of {len(decompressed)} bytes exceeds "
-                    f"MAX_DECOMPRESSED_BYTES ({max_total})."
-                ),
-                remediation="Verify that the SBOM is not a decompression bomb.",
-            )
-            return None
-        if len(body) > 0 and len(decompressed) / len(body) > max_ratio:
-            ctx.report.add(
-                E.E003_DECOMPRESSION_RATIO_EXCEEDED,
-                stage=_STAGE,
-                path="",
-                message=(
-                    f"Decompression ratio {len(decompressed) // max(1, len(body))}:1 "
-                    f"exceeds {max_ratio}:1 limit."
-                ),
-                remediation=(
-                    "The compressed payload expanded too aggressively to be a "
-                    "legitimate SBOM."
-                ),
-            )
-            return None
-        return decompressed
+        # deflate — bounded, chunked decompression so a zip-bomb aborts before
+        # zlib fully materializes the expanded payload in memory.
+        decoder = zlib.decompressobj()
+        chunks = []
+        total = 0
+        offset = 0
+        read_size = 64 * 1024
+        while offset < len(body) or decoder.unconsumed_tail:
+            if decoder.unconsumed_tail:
+                source = decoder.unconsumed_tail
+            else:
+                source = body[offset : offset + read_size]
+                offset += len(source)
+            chunk = decoder.decompress(source, read_size)
+            if chunk:
+                total += len(chunk)
+                if total > max_total + 1:
+                    ctx.report.add(
+                        E.E002_DECOMPRESSED_SIZE_EXCEEDED,
+                        stage=_STAGE,
+                        path="",
+                        message=(
+                            f"Decompressed body exceeded MAX_DECOMPRESSED_BYTES "
+                            f"({max_total}) mid-stream."
+                        ),
+                        remediation=(
+                            "Verify that the SBOM is not a decompression bomb."
+                        ),
+                    )
+                    return None
+                if len(body) > 0 and total / len(body) > max_ratio:
+                    ctx.report.add(
+                        E.E003_DECOMPRESSION_RATIO_EXCEEDED,
+                        stage=_STAGE,
+                        path="",
+                        message=(
+                            f"Decompression ratio {total // max(1, len(body))}:1 "
+                            f"exceeds {max_ratio}:1 limit."
+                        ),
+                        remediation=(
+                            "The compressed payload expanded too aggressively to "
+                            "be a legitimate SBOM."
+                        ),
+                    )
+                    return None
+                chunks.append(chunk)
+            if decoder.eof:
+                break
+            if not source and not decoder.unconsumed_tail:
+                break
+        tail = decoder.flush()
+        if tail:
+            total += len(tail)
+            if total > max_total + 1:
+                ctx.report.add(
+                    E.E002_DECOMPRESSED_SIZE_EXCEEDED,
+                    stage=_STAGE,
+                    path="",
+                    message=(
+                        f"Decompressed body exceeded MAX_DECOMPRESSED_BYTES "
+                        f"({max_total}) mid-stream."
+                    ),
+                    remediation=(
+                        "Verify that the SBOM is not a decompression bomb."
+                    ),
+                )
+                return None
+            chunks.append(tail)
+        return b"".join(chunks)
     except (OSError, zlib.error) as exc:
         ctx.report.add(
             E.E020_JSON_PARSE_FAILED,  # transport-level failure surfaces as parse fail
