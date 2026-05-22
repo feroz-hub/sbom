@@ -3,7 +3,9 @@
     "allow": [
       "Bash(ls c:/Users/ferozebasha.s/.claude/projects/c--sbom/ 2>/dev/null || echo \"Directory may not exist\")",
       "Read(//c/Users/ferozebasha.s/.claude/projects/c--sbom/**)",
-      "Bash(python -m pytest tests/validation/test_stage_ingress.py -v)"
+      "Bash(python -m pytest tests/validation/test_stage_ingress.py -v)",
+      "Bash(python -c \"from pptx import Presentation; p = Presentation\\('SBOM_Analyser_HCLTech.pptx'\\); print\\(f'Slides: {len\\(p.slides\\)}'\\); [print\\(f'\\\\n=== Slide {i+1} ==='\\) or [print\\(s.text_frame.text\\) for s in slide.shapes if s.has_text_frame] for i, slide in enumerate\\(p.slides\\)]\")",
+      "Bash(python -m pip install python-pptx --quiet)"
     ]
   }
 }
