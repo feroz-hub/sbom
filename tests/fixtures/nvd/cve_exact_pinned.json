@@ -1,0 +1,41 @@
+{
+  "resultsPerPage": 2000,
+  "startIndex": 0,
+  "totalResults": 1,
+  "format": "NVD_CVE",
+  "version": "2.0",
+  "timestamp": "2024-04-16T01:23:45.000",
+  "vulnerabilities": [
+    {
+      "cve": {
+        "id": "CVE-2024-EXACT-PIN",
+        "sourceIdentifier": "nvd@nist.gov",
+        "published": "2024-02-01T00:00:00.000",
+        "lastModified": "2024-04-16T01:23:45.000",
+        "vulnStatus": "Analyzed",
+        "descriptions": [
+          {"lang": "en", "value": "Synthetic CVE with an exact-pinned CPE — only one version is vulnerable, no range bounds."}
+        ],
+        "metrics": {},
+        "weaknesses": [],
+        "configurations": [
+          {
+            "nodes": [
+              {
+                "operator": "OR",
+                "negate": false,
+                "cpeMatch": [
+                  {
+                    "vulnerable": true,
+                    "criteria": "cpe:2.3:a:examplecorp:thing:1.2.3:*:*:*:*:*:*:*"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "references": []
+      }
+    }
+  ]
+}

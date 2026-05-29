@@ -64,6 +64,23 @@ class Settings(BaseSettings):
     # Analysis Settings
     analysis_legacy_level: int = Field(default=1, description="Legacy analysis level (0=new, 1+=compatibility)")
 
+    # NVD version-range filter (roadmap #1).
+    #
+    # When True, the NVD source consults the configurations.nodes.cpeMatch
+    # block on each CVE and drops findings whose component version falls
+    # outside the affected range. Kept findings get ``match_reason`` /
+    # ``matched_range`` populated for downstream UI surfacing (roadmap #6).
+    # When False (default), behaviour is byte-identical to pre-PR1: no
+    # filter, no tags, no metrics emitted from the new path.
+    nvd_version_range_filter_enabled: bool = Field(
+        default=False,
+        description=(
+            "Feature flag (default off) for the NVD version-range filter. "
+            "Set NVD_VERSION_RANGE_FILTER_ENABLED=true to dogfood; see "
+            "app/sources/version_range.py for the comparator semantics."
+        ),
+    )
+
     # Authentication Configuration (Finding A — opt-in bearer token auth)
     #
     # `api_auth_mode` is "none" by default so existing dev environments are

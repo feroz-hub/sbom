@@ -31,6 +31,32 @@ def slug(s: str | None) -> str | None:
     return token or None
 
 
+def ecosystem_from_component(comp: dict) -> str | None:
+    """Return the canonical lowercase PURL ecosystem for a component dict.
+
+    Checks ``comp["ecosystem"]`` first (set in OSV / heuristic-infer
+    branches), then falls back to parsing ``comp["purl"]``. Returns
+    ``None`` when neither is present or usable.
+
+    Used by the NVD version-range filter (roadmap #1) to dispatch a
+    per-ecosystem comparator. Roadmap #5's distro work also reads
+    this — keep the threading clean so the same call site serves
+    both.
+    """
+    eco = comp.get("ecosystem")
+    if isinstance(eco, str):
+        eco = eco.strip().lower()
+        if eco:
+            return eco
+    purl = comp.get("purl")
+    if isinstance(purl, str):
+        parsed = parse_purl(purl)
+        ptype = parsed.get("type") if parsed else None
+        if isinstance(ptype, str) and ptype:
+            return ptype.lower()
+    return None
+
+
 def cpe23_from_purl(purl: str, version_override: str | None = None) -> str | None:
     """
     Best-effort mapping of a PURL to a CPE 2.3 string.

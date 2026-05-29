@@ -210,6 +210,15 @@ class AnalysisFinding(Base, SoftDeleteMixin):
     cvss_version = Column(String, nullable=True)
     aliases = Column(Text, nullable=True)  # JSON array as string
 
+    # Version-range match verdict from app.sources.version_range. NULL
+    # for rows written before migration 016; PR3 populates these going
+    # forward. Width VARCHAR(32) accommodates the longest MatchReason
+    # literal (`exact_version_mismatch`, 22 chars) with headroom for
+    # roadmap #6 additions. No CHECK constraint — the Literal is
+    # enforced in Python, not at the DB layer.
+    match_reason = Column(String(32), nullable=True, index=True)
+    matched_range = Column(String(128), nullable=True)
+
     analysis_run = relationship("AnalysisRun", back_populates="findings")
     component = relationship("SBOMComponent", back_populates="findings")
 

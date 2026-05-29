@@ -260,6 +260,13 @@ def persist_analysis_run(
                 attack_vector=(finding.get("attack_vector") or "").strip() or None,
                 cvss_version=finding.get("cvss_version"),
                 aliases=aliases_json,
+                # Roadmap #1 — populated by the NVD version-range filter
+                # when ``nvd_version_range_filter_enabled`` is on. Absent
+                # (and therefore NULL in the row) when the flag is off or
+                # the source is not NVD. ``.get`` rather than ``[]`` so
+                # the flag-off path never KeyErrors.
+                match_reason=finding.get("match_reason"),
+                matched_range=finding.get("matched_range"),
             )
         )
 

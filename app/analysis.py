@@ -44,6 +44,23 @@ _nvd_session.headers.update({"User-Agent": "SBOM-Analyzer/enterprise-2.0"})
 
 LOGGER = logging.getLogger(__name__)
 
+# Structured-metric channel used by the NVD version-range filter (roadmap
+# #1). The repo carries no formal metrics client (see
+# app/nvd_mirror/observability.py:5); structured log events are the
+# stand-in. One log line per event, with ``metric`` / ``labels`` /
+# ``value`` attached via ``extra=`` so a JSON log handler renders the
+# Prometheus-style triple losslessly. Tests assert against this logger
+# via stdlib ``caplog``.
+_NVD_METRICS_LOG = logging.getLogger("sbom.nvd.metrics")
+
+
+def _emit_nvd_metric(name: str, value: int = 1, **labels: str) -> None:
+    """Emit one NVD metric event as a structured log line."""
+    _NVD_METRICS_LOG.info(
+        name,
+        extra={"metric": name, "labels": labels, "value": value},
+    )
+
 # ============================================================
 # CVE MODEL (kept inline for self-contained file)
 # ============================================================
@@ -254,6 +271,11 @@ class AnalysisSettings:
     cvss_medium_threshold: float = 4.0
     analysis_max_findings_per_cpe: int = 5000
     analysis_max_findings_total: int = 50000
+    # Roadmap #1 — gate for the NVD version-range filter wired into the
+    # emit step of nvd_query_by_components_async. Default False so existing
+    # behaviour is byte-identical until an operator opts in. Mirrors the
+    # Pydantic-side flag of the same name in app/settings.py.
+    nvd_version_range_filter_enabled: bool = False
 
 
 def _env_str(name: str, default: str) -> str:
@@ -320,6 +342,7 @@ def get_analysis_settings() -> AnalysisSettings:
         cvss_medium_threshold=_env_float("CVSS_MEDIUM_THRESHOLD", 4.0, minimum=0.0),
         analysis_max_findings_per_cpe=_env_int("ANALYSIS_MAX_FINDINGS_PER_CPE", 5000, minimum=0),
         analysis_max_findings_total=_env_int("ANALYSIS_MAX_FINDINGS_TOTAL", 50000, minimum=0),
+        nvd_version_range_filter_enabled=_env_bool_top("NVD_VERSION_RANGE_FILTER_ENABLED", False),
     )
 
 
@@ -345,6 +368,7 @@ def resolve_nvd_api_key(settings: AnalysisSettings | None = None) -> str | None:
 
 from .sources.cpe import cpe23_from_purl as _cpe23_from_purl
 from .sources.purl import parse_purl as _parse_purl
+from .sources.version_range import cve_affects_component as _cve_affects_component
 from .sources.severity import (
     cvss_version_from_metrics as _cvss_version_from_metrics,
 )
@@ -1280,9 +1304,17 @@ async def nvd_query_by_components_async(
 
     # CPE inventory + skipped count (preserve insertion order so progress
     # logs map 1:1 to the SBOM input ordering in logs/sbom.log).
+    #
+    # ``name_by_cpe`` carries the ecosystem alongside name/version because
+    # the version-range filter (roadmap #1, gated by
+    # ``nvd_version_range_filter_enabled``) dispatches its comparator on
+    # ecosystem. ``ecosystem_from_component`` reads ``comp['ecosystem']``
+    # when present and falls back to parsing the PURL.
+    from .sources.cpe import ecosystem_from_component as _ecosystem_from_component
+
     cpe_order: list[str] = []
     seen: set[str] = set()
-    name_by_cpe: dict[str, tuple[str, str | None]] = {}
+    name_by_cpe: dict[str, tuple[str, str | None, str | None]] = {}
     queried = 0
     skipped = 0
     for comp in normalized_components:
@@ -1292,7 +1324,11 @@ async def nvd_query_by_components_async(
             if cpe not in seen:
                 seen.add(cpe)
                 cpe_order.append(cpe)
-                name_by_cpe[cpe] = (comp.get("name") or "", comp.get("version"))
+                name_by_cpe[cpe] = (
+                    comp.get("name") or "",
+                    comp.get("version"),
+                    _ecosystem_from_component(comp),
+                )
         else:
             skipped += 1
             LOGGER.debug(
@@ -1362,12 +1398,40 @@ async def nvd_query_by_components_async(
             )
         else:
             succeeded += 1
-            comp_name, comp_ver = name_by_cpe.get(cpe, ("", None))
+            comp_name, comp_ver, ecosystem = name_by_cpe.get(cpe, ("", None, None))
+            range_filter_on = bool(
+                getattr(settings, "nvd_version_range_filter_enabled", False)
+            )
             for raw in raw_list:
-                if isinstance(raw, dict):
+                if not isinstance(raw, dict):
+                    continue
+                if not range_filter_on:
                     findings.append(
                         _finding_from_raw(raw, cpe, comp_name, comp_ver, settings)
                     )
+                    continue
+                verdict = _cve_affects_component(
+                    raw, comp_ver, ecosystem, target_cpe=cpe
+                )
+                if verdict.reason == "version_unparseable":
+                    # The PR1 contract is to keep the finding here, but we
+                    # surface the comparator gap so operators can spot
+                    # ecosystems whose version syntax we mis-handle.
+                    _emit_nvd_metric(
+                        "nvd.version_unparseable_total",
+                        ecosystem=ecosystem or "unknown",
+                    )
+                if not verdict.affected:
+                    _emit_nvd_metric(
+                        "nvd.findings_filtered_by_range_total",
+                        reason=verdict.reason,
+                    )
+                    continue
+                finding = _finding_from_raw(raw, cpe, comp_name, comp_ver, settings)
+                finding["match_reason"] = verdict.reason
+                finding["matched_range"] = verdict.matched_range
+                _emit_nvd_metric("nvd.findings_emitted_total")
+                findings.append(finding)
 
         if idx % 5 == 0 or idx == total:
             LOGGER.info("NVD progress: %d/%d", idx, total)
