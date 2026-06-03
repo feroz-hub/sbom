@@ -7,7 +7,7 @@ import os
 import time
 from dataclasses import asdict, dataclass, field, replace
 from functools import lru_cache
-from typing import Any
+from typing import Any, Literal
 
 import certifi
 import requests
@@ -276,6 +276,26 @@ class AnalysisSettings:
     # behaviour is byte-identical until an operator opts in. Mirrors the
     # Pydantic-side flag of the same name in app/settings.py.
     nvd_version_range_filter_enabled: bool = False
+    # Roadmap #2 — master switch for the source-response cache (PR-B
+    # wraps VulDB, PR-C wraps GHSA + OSV). Default False; opt in via
+    # SOURCE_CACHE_ENABLED. Mirrors the Pydantic-side field.
+    source_cache_enabled: bool = False
+    # Roadmap #2 — TTL for cached entries; PR-B's seam reads this at
+    # write time. Modest default for a security tool — staleness misses
+    # newly-published CVEs until expiry.
+    source_cache_ttl_seconds: int = 4 * 60 * 60
+    # Roadmap #2 PR-E — per-run "scan fresh" bypass. When True AND the
+    # cache is enabled, the seam IGNORES cached hits (fetches live) but
+    # STILL writes the fresh result (refreshing the cache for next
+    # time). Never set globally — wired per-run via dataclasses.replace
+    # at the scan entrypoint when ``force_refresh=True`` is passed.
+    # No-op when ``source_cache_enabled`` is False (everything's live
+    # regardless).
+    source_cache_force_refresh: bool = False
+    # Roadmap #5 — distro/Conan CPE resolver gate (PR-B routing +
+    # PR-C version_range distro-version handling). All-or-nothing
+    # under ONE flag. Mirrors the Pydantic-side field.
+    distro_cpe_enabled: bool = False
 
 
 def _env_str(name: str, default: str) -> str:
@@ -343,6 +363,11 @@ def get_analysis_settings() -> AnalysisSettings:
         analysis_max_findings_per_cpe=_env_int("ANALYSIS_MAX_FINDINGS_PER_CPE", 5000, minimum=0),
         analysis_max_findings_total=_env_int("ANALYSIS_MAX_FINDINGS_TOTAL", 50000, minimum=0),
         nvd_version_range_filter_enabled=_env_bool_top("NVD_VERSION_RANGE_FILTER_ENABLED", False),
+        source_cache_enabled=_env_bool_top("SOURCE_CACHE_ENABLED", False),
+        source_cache_ttl_seconds=_env_int(
+            "SOURCE_CACHE_TTL_SECONDS", 4 * 60 * 60, minimum=1
+        ),
+        distro_cpe_enabled=_env_bool_top("DISTRO_CPE_ENABLED", False),
     )
 
 
@@ -369,6 +394,126 @@ def resolve_nvd_api_key(settings: AnalysisSettings | None = None) -> str | None:
 from .sources.cpe import cpe23_from_purl as _cpe23_from_purl
 from .sources.purl import parse_purl as _parse_purl
 from .sources.version_range import cve_affects_component as _cve_affects_component
+from .sources.match_confidence import (
+    apply_strategy_floor as _apply_strategy_floor,
+    score_match as _score_match,
+)
+from .sources.cache_seam import (
+    cached_fetch as _cached_fetch,
+    component_cache_key as _component_cache_key,
+    component_cache_key_versionless as _component_cache_key_versionless,
+    partition_by_cache as _partition_by_cache,
+    write_cache_entries as _write_cache_entries,
+)
+
+
+class _GitHubGraphQLError(Exception):
+    """GHSA response carried a populated ``errors`` field.
+
+    Distinguished from generic transport-level exceptions so the
+    GHSA wrap can preserve the existing two log-message formats
+    when an error path fires. Internal to ``github_query_by_components``.
+    """
+
+
+def _nvd_cve_text(raw: dict[str, Any], description: str | None) -> str:
+    """Assemble the CVE evidence string for the confidence scorer (NVD).
+
+    Combines the English description with every ``cpeMatch.criteria``
+    string under ``configurations.nodes`` — vendor and product tokens
+    are anchored in those criteria strings, so feeding them to the
+    scorer reinforces structural match evidence on top of prose
+    overlap.
+    """
+    parts: list[str] = []
+    if description:
+        parts.append(description)
+    configurations = raw.get("configurations") or []
+    for cfg in configurations:
+        if not isinstance(cfg, dict):
+            continue
+        for node in cfg.get("nodes") or []:
+            if not isinstance(node, dict):
+                continue
+            for match in node.get("cpeMatch") or []:
+                if isinstance(match, dict):
+                    criteria = match.get("criteria")
+                    if isinstance(criteria, str) and criteria:
+                        parts.append(criteria)
+            # NVD occasionally nests AND-children; walk one level deep.
+            for child in node.get("children") or []:
+                if not isinstance(child, dict):
+                    continue
+                for match in child.get("cpeMatch") or []:
+                    if isinstance(match, dict):
+                        criteria = match.get("criteria")
+                        if isinstance(criteria, str) and criteria:
+                            parts.append(criteria)
+    return " ".join(parts)
+
+
+def _vendor_from_cpe(cpe: str | None) -> str | None:
+    """Extract the vendor slot from a CPE 2.3 string, or ``None``.
+
+    ``cpe:2.3:a:apache:log4j:2.14.0:*:...`` → ``"apache"``. Returns
+    ``None`` for malformed input, wildcard (``*``) or any (``-``) slots
+    — the scorer treats ``None`` as "no useful vendor signal" and
+    renormalizes accordingly.
+    """
+    if not cpe:
+        return None
+    parts = cpe.split(":")
+    if len(parts) < 6 or parts[0] != "cpe" or parts[1] != "2.3":
+        return None
+    vendor = parts[3]
+    if not vendor or vendor in {"*", "-", "ANY"}:
+        return None
+    return vendor
+
+
+def _tag_match_confidence(
+    finding: dict[str, Any],
+    *,
+    cve_text: str,
+    component_vendor: str | None,
+) -> None:
+    """Compute ``score_match`` + ``apply_strategy_floor`` and write the
+    final confidence onto ``finding["match_confidence"]``.
+
+    ``finding`` must already carry ``component_name``,
+    ``component_version``, and ``match_strategy`` — the latter is set
+    by every per-source emit step (roadmap #6, PR-C). Mutates the dict
+    in place; returns nothing.
+    """
+    result = _score_match(
+        component_name=finding.get("component_name") or "",
+        component_version=finding.get("component_version"),
+        component_vendor=component_vendor,
+        cve_text=cve_text,
+    )
+    finding["match_confidence"] = _apply_strategy_floor(
+        result.confidence, finding.get("match_strategy")
+    )
+
+# Roadmap #6 — search-strategy provenance tag attached to every finding
+# dict at the per-source emit step. Persisted on ``analysis_finding.
+# match_strategy`` (VARCHAR(32), migration 017). The Python Literal is
+# the source of truth — no DB CHECK, so PR-D or later can extend the
+# vocabulary without a migration.
+#
+# Of the five values below, three NVD strategies are spec'd; only
+# ``cpe_name`` is reachable from a live code path today
+# (``nvd_query_by_cpe`` is exact-CPE only; the ``virtualMatchString``
+# helpers and ``nvd_query_by_keyword`` exist but have zero call sites).
+# The non-live values are kept in the Literal so future emit paths can
+# tag-and-go without a type-check failure.
+MatchStrategy = Literal[
+    "cpe_name",
+    "virtual_match_string",
+    "keyword_search",
+    "purl_direct",
+    "ghsa_alias",
+]
 from .sources.severity import (
     cvss_version_from_metrics as _cvss_version_from_metrics,
 )
@@ -903,8 +1048,65 @@ async def osv_query_by_components(
     batch_url = f"{base}/v1/querybatch"
     get_url = f"{base}/v1/vulns"
 
-    queries: list[dict] = []
-    for comp in components:
+    findings: list[dict] = []
+    query_errors: list[dict] = []
+    query_warnings: list[dict] = []
+
+    # Build name-to-version lookup for comp_ver resolution (Bug A3)
+    name_to_ver: dict[str, str | None] = {(c.get("name") or "").lower(): c.get("version") for c in components}
+
+    # Parallel lookup of name → PURL namespace for the confidence
+    # scorer's vendor input (roadmap #3, PR-D). ``parse_purl`` returns
+    # an empty dict when the input isn't a recognisable PURL; we treat
+    # an absent namespace as ``None`` and let the scorer renormalize.
+    def _vendor_from_purl(p: str | None) -> str | None:
+        if not p:
+            return None
+        parsed = _parse_purl(p)
+        ns = parsed.get("namespace") if parsed else None
+        if isinstance(ns, str) and ns.strip():
+            return ns
+        return None
+
+    name_to_vendor: dict[str, str | None] = {
+        (c.get("name") or "").lower(): _vendor_from_purl(c.get("purl"))
+        for c in components
+    }
+
+    # ===================================================================
+    # Roadmap #2 PR-D — partition components by cache state.
+    #
+    # Hits skip ALL OSV network calls; misses go through the
+    # querybatch + (conditional) fallback live flow below. Cache value
+    # is provenance-tagged ``{"source_path": "querybatch"|"fallback",
+    # "vulns": [raw_vuln, ...]}`` so the replay path chooses the right
+    # normaliser. An empty ``vulns`` list IS a valid cache hit (the
+    # component was checked and OSV had nothing).
+    #
+    # Flag off → partition returns ({}, all-components) without
+    # opening a session or emitting metrics — byte-identical
+    # pass-through.
+    # ===================================================================
+    keyed_components: list[tuple[str | None, dict]] = [
+        (_component_cache_key(c), c) for c in components
+    ]
+    comp_by_key: dict[str, dict] = {}
+    for key, c in keyed_components:
+        if key is not None:
+            comp_by_key.setdefault(key, c)
+
+    cache_hits, miss_comps = await _partition_by_cache(
+        "OSV", keyed_components, settings=settings,
+    )
+
+    # ===================================================================
+    # Build /v1/querybatch queries for miss components only. Track
+    # parallel ``miss_query_purl_keys`` so result[i] traces back to the
+    # source component's cache key.
+    # ===================================================================
+    miss_queries: list[dict] = []
+    miss_query_purl_keys: list[str | None] = []
+    for comp in miss_comps:
         purl = comp.get("purl")
         name = comp.get("name") or ""
         version = comp.get("version")
@@ -913,7 +1115,6 @@ async def osv_query_by_components(
         if purl:
             parsed = _parse_purl(purl)
             if parsed:
-                # Prefer versioned purl; otherwise send purl + separate version if available
                 if parsed.get("version"):
                     q = {"package": {"purl": purl}}
                 elif version:
@@ -922,11 +1123,8 @@ async def osv_query_by_components(
                     q = {"package": {"purl": purl}}
 
         if not q and name:
-            # Last-resort: ecosystem+name(+version). OSV matching is much better
-            # with an ecosystem than with name-only.
             eco = (comp.get("ecosystem") or "").strip()
             if not eco:
-                # Infer from group heuristics when present (common for Maven-like SBOMs)
                 grp = (comp.get("group") or "").strip()
                 if grp and ("." in grp or grp.lower().startswith(("org.", "com.", "net.", "io."))):
                     eco = "Maven"
@@ -940,87 +1138,226 @@ async def osv_query_by_components(
                 q["version"] = version
 
         if q:
-            queries.append(q)
+            miss_queries.append(q)
+            miss_query_purl_keys.append(_component_cache_key(comp))
 
-    findings: list[dict] = []
-    query_errors: list[dict] = []
-    query_warnings: list[dict] = []
+    # ===================================================================
+    # Querybatch with per-query result tracking. Each batch's response
+    # ``results[i]`` corresponds to the i-th query in that batch — the
+    # legacy code flattened this; we preserve it so the per-component
+    # cache write later knows which vulns belong to which component.
+    # ===================================================================
+    miss_vulns_by_key_qb: dict[str, list[dict]] = {}
 
-    # Build name-to-version lookup for comp_ver resolution (Bug A3)
-    name_to_ver: dict[str, str | None] = {(c.get("name") or "").lower(): c.get("version") for c in components}
+    if miss_queries:
+        batches_with_starts: list[tuple[int, list[dict]]] = [
+            (i, miss_queries[i : i + settings.osv_results_per_batch])
+            for i in range(0, len(miss_queries), settings.osv_results_per_batch)
+        ]
 
-    if not queries:
-        return findings, query_errors, query_warnings
+        async def _fetch_batch_with_indices(
+            start: int, batch: list[dict],
+        ) -> list[tuple[int, list[str]]]:
+            try:
+                res = await _async_post(
+                    batch_url,
+                    json_body={"queries": batch},
+                    timeout=settings.nvd_request_timeout_seconds,
+                )
+                per_query: list[tuple[int, list[str]]] = []
+                for offset, item in enumerate(res.get("results", []) or []):
+                    ids = [
+                        v.get("id")
+                        for v in (item.get("vulns") or [])
+                        if v.get("id")
+                    ]
+                    per_query.append((start + offset, ids))
+                return per_query
+            except Exception as exc:
+                query_errors.append({"source": "OSV", "error": str(exc)})
+                return []
 
-    batches = [
-        queries[i : i + settings.osv_results_per_batch] for i in range(0, len(queries), settings.osv_results_per_batch)
-    ]
+        all_per_query = await asyncio.gather(
+            *[_fetch_batch_with_indices(s, b) for s, b in batches_with_starts]
+        )
 
-    async def _fetch_batch(batch: list[dict]) -> list[str]:
+        ids_by_query_index: dict[int, list[str]] = {}
+        for batch_results in all_per_query:
+            for q_idx, ids in batch_results:
+                ids_by_query_index[q_idx] = ids
+
+        # Union of all unique vuln IDs across miss queries — same dedup
+        # the legacy code did, just preserved here so the per-query
+        # mapping survives.
+        unique_miss_ids = sorted(
+            {vid for ids in ids_by_query_index.values() for vid in ids}
+        )
+
+        sem = asyncio.Semaphore(settings.max_concurrency)
+
+        async def _fetch_vuln(vid: str) -> dict | None:
+            url = f"{get_url}/{vid}"
+            try:
+                async with sem:
+                    data = await _async_get(
+                        url, timeout=settings.nvd_request_timeout_seconds,
+                    )
+                    return data
+            except Exception as exc:
+                query_errors.append({"source": "OSV", "id": vid, "error": str(exc)})
+                return None
+
+        hydrated_list = await asyncio.gather(
+            *[_fetch_vuln(vid) for vid in unique_miss_ids]
+        )
+        hydrated_by_id: dict[str, dict] = {
+            (h.get("id") or ""): h
+            for h in hydrated_list
+            if isinstance(h, dict) and h.get("id")
+        }
+
+        # Build per-component vuln lists from the per-query mapping.
+        for q_idx, ids in ids_by_query_index.items():
+            purl_key = miss_query_purl_keys[q_idx] if q_idx < len(miss_query_purl_keys) else None
+            if purl_key is None:
+                continue
+            vulns = [hydrated_by_id[vid] for vid in ids if vid in hydrated_by_id]
+            # Multiple queries may map to the same purl_key (shouldn't
+            # happen with version-included keys, but defensive). Append.
+            existing = miss_vulns_by_key_qb.setdefault(purl_key, [])
+            existing.extend(vulns)
+    else:
+        hydrated_by_id = {}
+
+    # ===================================================================
+    # Conditional fallback (over MISS comps only).
+    #
+    # Trigger semantics: matches the legacy "querybatch+hydrate yielded
+    # nothing AND any miss has a PURL" predicate, scoped to misses.
+    # Cache hits don't count toward the trigger because they didn't go
+    # through this run's querybatch.
+    # ===================================================================
+    miss_vulns_by_key_fb: dict[str, list[dict]] = {}
+    use_fallback_for_misses = False
+
+    # ``miss_vulns_by_key_qb`` may have keys mapping to empty lists (per-query
+    # empty results); the legacy trigger was "no hydrated vulns at all", so
+    # check VALUES are all empty, not just dict-emptiness.
+    have_any_qb_vulns = any(
+        bool(v) for v in miss_vulns_by_key_qb.values()
+    )
+    if (
+        not have_any_qb_vulns
+        and miss_comps
+        and any((c.get("purl") or "").strip() for c in miss_comps)
+    ):
         try:
-            res = await _async_post(
-                batch_url, json_body={"queries": batch}, timeout=settings.nvd_request_timeout_seconds
+            from .sources.osv_fallback import osv_fetch_via_query_endpoint_raw
+
+            fb_vulns_by_purl, fb_errors, fb_warnings = await osv_fetch_via_query_endpoint_raw(
+                miss_comps, settings, post_json_fn=_async_post,
             )
-            ids: list[str] = []
-            for item in res.get("results", []) or []:
-                for v in item.get("vulns", []) or []:
-                    vid = v.get("id")
-                    if vid:
-                        ids.append(vid)
-            return ids
+            if fb_errors:
+                query_errors.extend(fb_errors)
+            if fb_warnings:
+                query_warnings.extend(fb_warnings)
+            # Map purl-keyed fallback results to canonical cache keys.
+            for comp in miss_comps:
+                purl = (comp.get("purl") or "").strip()
+                key = _component_cache_key(comp)
+                if not purl or key is None:
+                    continue
+                if purl in fb_vulns_by_purl:
+                    miss_vulns_by_key_fb[key] = fb_vulns_by_purl[purl]
+            use_fallback_for_misses = True
         except Exception as exc:
-            query_errors.append({"source": "OSV", "error": str(exc)})
-            return []
-
-    all_ids_nested = await asyncio.gather(*[_fetch_batch(b) for b in batches])
-    unique_ids = sorted({vid for sub in all_ids_nested for vid in sub})
-
-    sem = asyncio.Semaphore(settings.max_concurrency)
-
-    async def _fetch_vuln(vid: str) -> dict | None:
-        url = f"{get_url}/{vid}"
-        try:
-            async with sem:
-                data = await _async_get(url, timeout=settings.nvd_request_timeout_seconds)
-                return data
-        except Exception as exc:
-            query_errors.append({"source": "OSV", "id": vid, "error": str(exc)})
-            return None
-
-    hydrated = await asyncio.gather(*[_fetch_vuln(vid) for vid in unique_ids])
-    hydrated = [h for h in hydrated if h]
-
-    # Fallback: some environments see empty `querybatch` results (or hydration
-    # yielding zero usable records) without explicit transport errors. When
-    # we had at least one purl-based query but ended up with no hydrated vulns,
-    # fall back to the per-component `/v1/query` endpoint (ported from the
-    # user's standalone osv_scan.py).
-    if not hydrated and any((c.get("purl") or "").strip() for c in components):
-        try:
-            from .sources.osv_fallback import osv_query_via_query_endpoint
-
-            f2, e2, w2 = await osv_query_via_query_endpoint(
-                components,
-                settings,
-                post_json_fn=_async_post,
-                best_score_and_vector_fn=_best_score_and_vector_from_osv,
-                severity_bucket_fn=_sev_bucket,
-                attack_vector_fn=_parse_cvss_attack_vector,
-                extract_cwe_fn=extract_cwe_from_osv,
-                extract_fixed_versions_fn=extract_fixed_versions_osv,
+            query_errors.append(
+                {"source": "OSV", "error": f"Fallback /v1/query failed: {exc}"}
             )
-            if f2:
-                findings.extend(f2)
-            if e2:
-                query_errors.extend(e2)
-            if w2:
-                query_warnings.extend(w2)
-            return findings, query_errors, query_warnings
-        except Exception as exc:
-            query_errors.append({"source": "OSV", "error": f"Fallback /v1/query failed: {exc}"})
+
+    # ===================================================================
+    # Cache writes for misses, including empty results.
+    #
+    # Each miss component with a usable cache key gets ONE write —
+    # provenance-tagged with the path that produced its vulns. Empty
+    # lists ARE cached: most components have no OSV vulns and we want
+    # to skip the network on re-scans.
+    # ===================================================================
+    write_entries: list[tuple[str, dict]] = []
+    for comp in miss_comps:
+        key = _component_cache_key(comp)
+        if key is None:
+            continue
+        if use_fallback_for_misses:
+            payload = {
+                "source_path": "fallback",
+                "vulns": miss_vulns_by_key_fb.get(key, []),
+            }
+        else:
+            payload = {
+                "source_path": "querybatch",
+                "vulns": miss_vulns_by_key_qb.get(key, []),
+            }
+        write_entries.append((key, payload))
+    _write_cache_entries("OSV", write_entries, settings=settings)
+
+    # ===================================================================
+    # Build the two processing streams:
+    #
+    #   * Querybatch-sourced vulns → main-path normalisation
+    #     (``affected[0].package.name`` heuristic + ``name_to_ver``).
+    #     Globally deduped by vuln ID, mirroring the legacy flat-list
+    #     processor's behaviour.
+    #
+    #   * Fallback-sourced vulns → per-component normalisation via
+    #     ``_normalize_osv_vuln_to_finding`` (uses source comp's
+    #     name+version directly). No global dedup — matches today's
+    #     fallback behaviour where multiple comps can each produce a
+    #     finding for the same vuln id (the path doesn't share with
+    #     the main path's dedup pool).
+    # ===================================================================
+    qb_vulns_flat: list[dict] = []
+    qb_seen_ids: set[str] = set()
+
+    def _add_qb_unique(vulns: list[dict]) -> None:
+        for vv in vulns:
+            if not isinstance(vv, dict):
+                continue
+            vid = vv.get("id")
+            if not vid or vid in qb_seen_ids:
+                continue
+            qb_seen_ids.add(vid)
+            qb_vulns_flat.append(vv)
+
+    # This run's miss-querybatch vulns.
+    for vulns in miss_vulns_by_key_qb.values():
+        _add_qb_unique(vulns)
+    # Cache hits that came from querybatch (or legacy untagged shape).
+    fb_pairs_from_hits: list[tuple[dict, list[dict]]] = []
+    for key, payload in cache_hits.items():
+        if isinstance(payload, dict) and "source_path" in payload and "vulns" in payload:
+            if payload.get("source_path") == "querybatch":
+                _add_qb_unique(payload.get("vulns") or [])
+            elif payload.get("source_path") == "fallback":
+                comp = comp_by_key.get(key)
+                if comp is not None:
+                    fb_pairs_from_hits.append((comp, payload.get("vulns") or []))
+        elif isinstance(payload, list):
+            # Forward-compat tolerance: a bare list is treated as
+            # querybatch-sourced raw vulns.
+            _add_qb_unique(payload)
+
+    # This run's miss-fallback vulns (per component).
+    fb_pairs_this_run: list[tuple[dict, list[dict]]] = []
+    if use_fallback_for_misses:
+        for key, vulns in miss_vulns_by_key_fb.items():
+            comp = comp_by_key.get(key)
+            if comp is not None:
+                fb_pairs_this_run.append((comp, vulns))
 
     cfg = settings
-    for v in hydrated:
+    # --- main-path processing (querybatch-sourced) ---
+    for v in qb_vulns_flat:
         affected = v.get("affected") or []
         published = v.get("published") or v.get("modified")
         summary = v.get("summary") or v.get("details")
@@ -1040,26 +1377,96 @@ async def osv_query_by_components(
             comp_name = pkg.get("name") or ""
             comp_ver = name_to_ver.get(comp_name.lower())  # Bug A3 fix
 
-        findings.append(
-            {
-                "vuln_id": v.get("id"),
-                "aliases": v.get("aliases", []),
-                "sources": ["OSV"],
-                "description": summary,
-                "severity": bucket,
-                "score": score,
-                "vector": vector,
-                "attack_vector": _parse_cvss_attack_vector(vector),
-                "cvss_version": None,
-                "published": published,
-                "references": [r.get("url") for r in references],
-                "cwe": extract_cwe_from_osv(v),
-                "fixed_versions": extract_fixed_versions_osv(v),
-                "component_name": comp_name,
-                "component_version": comp_ver,
-                "cpe": None,
-            }
+        finding_dict = {
+            "vuln_id": v.get("id"),
+            "aliases": v.get("aliases", []),
+            "sources": ["OSV"],
+            "description": summary,
+            "severity": bucket,
+            "score": score,
+            "vector": vector,
+            "attack_vector": _parse_cvss_attack_vector(vector),
+            "cvss_version": None,
+            "published": published,
+            "references": [r.get("url") for r in references],
+            "cwe": extract_cwe_from_osv(v),
+            "fixed_versions": extract_fixed_versions_osv(v),
+            "component_name": comp_name,
+            "component_version": comp_ver,
+            "cpe": None,
+            # Roadmap #6 — OSV joins on the component PURL via
+            # /v1/querybatch. Same tag on the /v1/query fallback
+            # path in app/sources/osv_fallback.py.
+            "match_strategy": "purl_direct",
+        }
+        # Roadmap #3 — assemble OSV-specific cve_text: summary +
+        # affected package names + range repr. The OSV ``affected``
+        # block is the source of structural identity tokens
+        # (package, ecosystem, range introduced/fixed events) that
+        # complement the prose summary.
+        osv_text_parts: list[str] = [summary or ""]
+        for aff in affected:
+            if not isinstance(aff, dict):
+                continue
+            pkg_block = aff.get("package") or {}
+            if isinstance(pkg_block, dict):
+                pkg_name = pkg_block.get("name")
+                pkg_eco = pkg_block.get("ecosystem")
+                if isinstance(pkg_name, str):
+                    osv_text_parts.append(pkg_name)
+                if isinstance(pkg_eco, str):
+                    osv_text_parts.append(pkg_eco)
+            for r in aff.get("ranges") or []:
+                if not isinstance(r, dict):
+                    continue
+                for e in r.get("events") or []:
+                    if not isinstance(e, dict):
+                        continue
+                    for v_field in ("introduced", "fixed", "last_affected"):
+                        v_val = e.get(v_field)
+                        if isinstance(v_val, str) and v_val:
+                            osv_text_parts.append(v_val)
+        _tag_match_confidence(
+            finding_dict,
+            cve_text=" ".join(osv_text_parts),
+            component_vendor=name_to_vendor.get(comp_name.lower()),
         )
+        findings.append(finding_dict)
+
+    # --- fallback-path processing (per component, raw → finding) ---
+    # Cached fallback hits + this-run's fallback misses both flow here.
+    # Uses the fallback's normaliser so component_name/version come
+    # from the SOURCE component directly — preserving today's
+    # fallback-path behaviour exactly (tests/test_sources_adapters.py
+    # asserts ``component_name == comp.get("name")`` for this path).
+    if fb_pairs_from_hits or fb_pairs_this_run:
+        from .sources.osv_fallback import _normalize_osv_vuln_to_finding
+        from .sources.osv_fallback import _osv_cve_text
+        from .sources.osv_fallback import _vendor_from_purl as _fb_vendor_from_purl
+
+        for fb_comp, fb_vulns in (*fb_pairs_from_hits, *fb_pairs_this_run):
+            fb_vendor = _fb_vendor_from_purl(fb_comp.get("purl"))
+            for v in fb_vulns:
+                if not isinstance(v, dict):
+                    continue
+                finding = _normalize_osv_vuln_to_finding(
+                    v,
+                    component_name=fb_comp.get("name") or "",
+                    component_version=fb_comp.get("version"),
+                    score_and_vector_fn=_best_score_and_vector_from_osv,
+                    severity_bucket_fn=_sev_bucket,
+                    attack_vector_fn=_parse_cvss_attack_vector,
+                    extract_cwe_fn=extract_cwe_from_osv,
+                    extract_fixed_versions_fn=extract_fixed_versions_osv,
+                    settings=settings,
+                )
+                # Roadmap #3 — same wiring as osv_fallback's live path.
+                _tag_match_confidence(
+                    finding,
+                    cve_text=_osv_cve_text(v),
+                    component_vendor=fb_vendor,
+                )
+                findings.append(finding)
 
     return findings, query_errors, query_warnings
 
@@ -1135,7 +1542,22 @@ async def github_query_by_components(
     url = settings.gh_graphql_url
 
     pkg_set: set[tuple[str, str]] = set()
-    name_for_component: dict[tuple[str, str], set[tuple[str, str | None]]] = {}
+    # value-tuple is (component_name, component_version, purl_namespace)
+    # — namespace carries the PURL's vendor token (org name for Maven,
+    # @scope for npm, github.com/user for golang) which the confidence
+    # scorer reads as ``component_vendor``. ``None`` namespace is
+    # passed through; the scorer's vendor-renormalization handles it.
+    name_for_component: dict[
+        tuple[str, str], set[tuple[str, str | None, str | None]]
+    ] = {}
+
+    # Roadmap #2 (PR-C) — versionless cache key per (eco, name).
+    # First contributing component sets the key; later components
+    # mapping to the same (eco, name) yield the same versionless key
+    # (the only varying part — version — is dropped), so first-wins is
+    # consistent. ``None`` values stay None and the cache seam falls
+    # through to a live fetch.
+    versionless_key_for_pkg: dict[tuple[str, str], str | None] = {}
 
     for comp in components:
         purl = comp.get("purl")
@@ -1148,7 +1570,13 @@ async def github_query_by_components(
             continue
         key = (eco, name)
         pkg_set.add(key)
-        name_for_component.setdefault(key, set()).add((comp.get("name") or name, comp.get("version")))
+        if key not in versionless_key_for_pkg:
+            versionless_key_for_pkg[key] = _component_cache_key_versionless(comp)
+        ns_value = parsed.get("namespace") if isinstance(parsed, dict) else None
+        ns: str | None = ns_value if isinstance(ns_value, str) and ns_value else None
+        name_for_component.setdefault(key, set()).add(
+            (comp.get("name") or name, comp.get("version"), ns)
+        )
 
     if not pkg_set:
         return [], [], []
@@ -1183,12 +1611,21 @@ async def github_query_by_components(
     query_errors: list[dict] = []
 
     async def _run_one(eco: str, pkg: str):
-        cursor = None
-        page_size = 100
-        while True:
-            try:
+        # Roadmap #2 (PR-C) — split fetch from processing so the
+        # cache seam wraps the network/pagination unit while the
+        # per-node finding-building runs identically on hit and miss.
+        # The cached payload is the flattened ``list[advisory_node]``
+        # across all pages; the processing loop below treats it the
+        # same way the live path does.
+        async def _live_fetch() -> list[dict]:
+            nodes_acc: list[dict] = []
+            cursor = None
+            page_size = 100
+            while True:
                 async with sem:
-                    variables: dict[str, Any] = {"ecosystem": eco, "name": pkg, "first": page_size}
+                    variables: dict[str, Any] = {
+                        "ecosystem": eco, "name": pkg, "first": page_size,
+                    }
                     if cursor:
                         variables["after"] = cursor
                     data = await _async_post(
@@ -1201,68 +1638,119 @@ async def github_query_by_components(
                         err_text = "; ".join(
                             (e.get("message") or str(e)) for e in (data["errors"] or [])
                         ) or str(data["errors"])
-                        LOGGER.warning(
-                            "GitHub GraphQL returned errors — package=%s/%s: %s",
-                            eco, pkg, err_text,
-                        )
-                        query_errors.append(
-                            {"source": "GITHUB", "package": f"{eco}/{pkg}", "error": err_text}
-                        )
-                        return
+                        raise _GitHubGraphQLError(err_text)
                     sv = (data.get("data") or {}).get("securityVulnerabilities") or {}
-                    nodes = sv.get("nodes") or []
+                    nodes_acc.extend(sv.get("nodes") or [])
                     page_info = sv.get("pageInfo") or {}
-                    for n in nodes:
-                        adv = n.get("advisory") or {}
-                        score = None
-                        vector = None
-                        cvss = adv.get("cvss") or {}
-                        if isinstance(cvss, dict):
-                            score = _safe_score(cvss.get("score"))
-                            vector = cvss.get("vectorString")
-                        bucket = _sev_bucket(score, settings=settings, severity_text=n.get("severity"))
-                        refs = adv.get("references") or []
-                        compname, compver = next(iter(name_for_component.get((eco, pkg), {(pkg, None)})))
-                        patched = (n.get("firstPatchedVersion") or {}).get("identifier")
-                        findings.append(
-                            {
-                                "vuln_id": adv.get("ghsaId"),
-                                "aliases": list({
-                                    v for v in [
-                                        adv.get("ghsaId"),
-                                        *[i["value"] for i in (adv.get("identifiers") or []) if i.get("type") in ("CVE", "GHSA")],
-                                    ] if v
-                                }),
-                                "sources": ["GITHUB"],
-                                "description": adv.get("summary") or adv.get("description"),
-                                "severity": bucket,
-                                "score": score,
-                                "vector": vector,
-                                "attack_vector": _parse_cvss_attack_vector(vector),
-                                "cvss_version": None,
-                                "published": adv.get("publishedAt"),
-                                "references": [r.get("url") for r in refs if r.get("url")],
-                                "cwe": extract_cwe_from_ghsa(n),
-                                "fixed_versions": [patched] if patched else [],
-                                "component_name": compname,
-                                "component_version": compver,
-                                "cpe": None,
-                            }
-                        )
                     if not page_info.get("hasNextPage"):
                         break
                     cursor = page_info.get("endCursor")
                     if not cursor:
                         break
-            except Exception as exc:
-                LOGGER.warning(
-                    "GitHub query failed — package=%s/%s error=%s: %s",
-                    eco, pkg, type(exc).__name__, exc,
+            return nodes_acc
+
+        try:
+            cache_key = versionless_key_for_pkg.get((eco, pkg))
+            nodes = await _cached_fetch(
+                "GITHUB",
+                cache_key,
+                live_fetch=_live_fetch,
+                settings=settings,
+            )
+        except _GitHubGraphQLError as exc:
+            # Preserve the existing log-message format for this branch.
+            LOGGER.warning(
+                "GitHub GraphQL returned errors — package=%s/%s: %s",
+                eco, pkg, str(exc),
+            )
+            query_errors.append(
+                {"source": "GITHUB", "package": f"{eco}/{pkg}", "error": str(exc)}
+            )
+            return
+        except Exception as exc:
+            LOGGER.warning(
+                "GitHub query failed — package=%s/%s error=%s: %s",
+                eco, pkg, type(exc).__name__, exc,
+            )
+            query_errors.append(
+                {"source": "GITHUB", "package": f"{eco}/{pkg}", "error": f"{type(exc).__name__}: {exc}"}
+            )
+            return
+
+        for n in nodes:
+            if not isinstance(n, dict):
+                continue
+            adv = n.get("advisory") or {}
+            score = None
+            vector = None
+            cvss = adv.get("cvss") or {}
+            if isinstance(cvss, dict):
+                score = _safe_score(cvss.get("score"))
+                vector = cvss.get("vectorString")
+            bucket = _sev_bucket(score, settings=settings, severity_text=n.get("severity"))
+            refs = adv.get("references") or []
+            comp_tuple = next(
+                iter(
+                    name_for_component.get(
+                        (eco, pkg), {(pkg, None, None)}
+                    )
                 )
-                query_errors.append(
-                    {"source": "GITHUB", "package": f"{eco}/{pkg}", "error": f"{type(exc).__name__}: {exc}"}
-                )
-                return
+            )
+            compname, compver, compvendor = comp_tuple
+            patched = (n.get("firstPatchedVersion") or {}).get("identifier")
+            ghsa_pkg = n.get("package") or {}
+            ghsa_finding = {
+                "vuln_id": adv.get("ghsaId"),
+                "aliases": list({
+                    v for v in [
+                        adv.get("ghsaId"),
+                        *[i["value"] for i in (adv.get("identifiers") or []) if i.get("type") in ("CVE", "GHSA")],
+                    ] if v
+                }),
+                "sources": ["GITHUB"],
+                "description": adv.get("summary") or adv.get("description"),
+                "severity": bucket,
+                "score": score,
+                "vector": vector,
+                "attack_vector": _parse_cvss_attack_vector(vector),
+                "cvss_version": None,
+                "published": adv.get("publishedAt"),
+                "references": [r.get("url") for r in refs if r.get("url")],
+                "cwe": extract_cwe_from_ghsa(n),
+                "fixed_versions": [patched] if patched else [],
+                "component_name": compname,
+                "component_version": compver,
+                "cpe": None,
+                # Roadmap #6 — GHSA advisories are
+                # correlated to CVEs via the
+                # ``adv.identifiers`` block; the
+                # GraphQL query joins on
+                # ``(ecosystem, package_name)`` but
+                # the strategy label captures the
+                # alias-driven correlation per the
+                # roadmap-#6 spec vocabulary.
+                "match_strategy": "ghsa_alias",
+            }
+            # Roadmap #3 — GHSA cve_text: advisory
+            # summary/description + the package block +
+            # the GraphQL-supplied vulnerable version
+            # range. Together this anchors the scorer on
+            # both prose and structural identity tokens.
+            ghsa_text = " ".join(
+                s for s in (
+                    adv.get("summary") or "",
+                    adv.get("description") or "",
+                    ghsa_pkg.get("name") or "",
+                    ghsa_pkg.get("ecosystem") or "",
+                    n.get("vulnerableVersionRange") or "",
+                ) if isinstance(s, str)
+            )
+            _tag_match_confidence(
+                ghsa_finding,
+                cve_text=ghsa_text,
+                component_vendor=compvendor,
+            )
+            findings.append(ghsa_finding)
 
     await asyncio.gather(*[_run_one(eco, pkg) for eco, pkg in pkg_set])
     return findings, query_errors, []
@@ -1402,16 +1890,34 @@ async def nvd_query_by_components_async(
             range_filter_on = bool(
                 getattr(settings, "nvd_version_range_filter_enabled", False)
             )
+            cpe_vendor = _vendor_from_cpe(cpe)
             for raw in raw_list:
                 if not isinstance(raw, dict):
                     continue
                 if not range_filter_on:
-                    findings.append(
-                        _finding_from_raw(raw, cpe, comp_name, comp_ver, settings)
+                    finding = _finding_from_raw(raw, cpe, comp_name, comp_ver, settings)
+                    # Roadmap #6 — every live NVD finding today is from
+                    # the exact-CPE path (``nvd_query_by_cpe``); the
+                    # virtualMatchString and keywordSearch paths are
+                    # spec'd but unreachable. Tag accordingly.
+                    finding["match_strategy"] = "cpe_name"
+                    _tag_match_confidence(
+                        finding,
+                        cve_text=_nvd_cve_text(raw, finding.get("description")),
+                        component_vendor=cpe_vendor,
                     )
+                    findings.append(finding)
                     continue
                 verdict = _cve_affects_component(
-                    raw, comp_ver, ecosystem, target_cpe=cpe
+                    raw, comp_ver, ecosystem, target_cpe=cpe,
+                    # Roadmap #5 PR-C — when the distro-CPE flag is
+                    # on, distro/Conan ecosystems skip the
+                    # ``ecosystem_unsupported`` short-circuit and
+                    # route through normalize-then-compare. Flag off
+                    # → byte-identical conservative-keep.
+                    distro_cpe_enabled=bool(
+                        getattr(settings, "distro_cpe_enabled", False)
+                    ),
                 )
                 if verdict.reason == "version_unparseable":
                     # The PR1 contract is to keep the finding here, but we
@@ -1430,6 +1936,12 @@ async def nvd_query_by_components_async(
                 finding = _finding_from_raw(raw, cpe, comp_name, comp_ver, settings)
                 finding["match_reason"] = verdict.reason
                 finding["matched_range"] = verdict.matched_range
+                finding["match_strategy"] = "cpe_name"
+                _tag_match_confidence(
+                    finding,
+                    cve_text=_nvd_cve_text(raw, finding.get("description")),
+                    component_vendor=cpe_vendor,
+                )
                 _emit_nvd_metric("nvd.findings_emitted_total")
                 findings.append(finding)
 

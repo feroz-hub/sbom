@@ -37,6 +37,7 @@ celery_app = Celery(
         "app.workers.scheduled_analysis",
         "app.workers.cve_refresh",
         "app.workers.ai_fix_tasks",
+        "app.workers.source_cache",
     ],
 )
 
@@ -73,5 +74,15 @@ celery_app.conf.beat_schedule = {
         # Daily — drop rows whose expires_at is more than 24 h in the past.
         "task": "cve_refresh.purge_expired",
         "schedule": crontab(minute=30, hour=3),
+    },
+    "source-cache-sweep": {
+        # Roadmap #2 PR-E — daily housekeeping of source_response_cache.
+        # TTL is 4 h by default so expired rows are typically a single
+        # day's worth at sweep time; one bounded batch (10k rows)
+        # comfortably handles steady state. 03:45 is offset from the
+        # cve-cache-purge slot at 03:30 so the two DELETE jobs don't
+        # co-fire and amplify lock contention.
+        "task": "source_cache.sweep_expired",
+        "schedule": crontab(minute=45, hour=3),
     },
 }

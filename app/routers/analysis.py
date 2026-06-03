@@ -242,6 +242,17 @@ def export_sarif(run_id: int, db: Session = Depends(get_db)):
                     "cpe": f.cpe,
                     "published": f.published_on,
                     "cve_aliases": cve_aliases,
+                    # Roadmap #6 / #1 — finding-provenance properties.
+                    # SARIF lets toolchain consumers (GitHub Code
+                    # Scanning, VS Code, Azure DevOps) filter and
+                    # display these alongside the native fields.
+                    "match_strategy": getattr(f, "match_strategy", None),
+                    "match_reason": getattr(f, "match_reason", None),
+                    "matched_range": getattr(f, "matched_range", None),
+                    # Roadmap #3 — confidence post strategy-floor.
+                    # JSON null for untagged rows; consumers can
+                    # distinguish "no signal" from a real low score.
+                    "match_confidence": getattr(f, "match_confidence", None),
                 },
             }
         )
@@ -306,6 +317,16 @@ def export_csv(run_id: int, db: Session = Depends(get_db)):
             "reference_url",
             "source",
             "description",
+            # Roadmap #1 + #6 — finding-provenance columns. Appended
+            # at the end of the row so existing consumers reading by
+            # index don't break; new consumers index by header name.
+            "match_strategy",
+            "match_reason",
+            "matched_range",
+            # Roadmap #3 — token-overlap confidence in [0.0, 1.0] post
+            # strategy-floor. Empty when the source did not emit a
+            # value (pre-PR-D scans, untagged paths).
+            "match_confidence",
         ]
     )
 
@@ -338,6 +359,18 @@ def export_csv(run_id: int, db: Session = Depends(get_db)):
                 f.reference_url or "",
                 f.source or "",
                 (f.description or "").replace("\n", " "),
+                # Roadmap #6 / #1 — provenance columns; empty when
+                # the source was not tagged (every pre-PR-C row, and
+                # any source not yet wired into the strategy capture).
+                getattr(f, "match_strategy", None) or "",
+                getattr(f, "match_reason", None) or "",
+                getattr(f, "matched_range", None) or "",
+                # Roadmap #3 — confidence is numeric (0.0..1.0). Use
+                # explicit ``""`` for None so consumers can tell
+                # "untagged" from a real 0.0 score.
+                ""
+                if getattr(f, "match_confidence", None) is None
+                else f"{f.match_confidence:.3f}",
             ]
         )
 

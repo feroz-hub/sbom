@@ -52,4 +52,32 @@ if (typeof window !== 'undefined') {
     }
     g.ResizeObserver = ResizeObserverStub;
   }
+
+  // jsdom 29 + vitest 4 leave window.localStorage defined but its
+  // methods throw on call, which trips ``loadDensity`` /
+  // findingFilters' preset storage inside any component test that
+  // mounts FindingsTable. Replace with a Map-backed in-memory store —
+  // PR4 lifted this inline; PR-E lifts it here so every component
+  // test (including the pre-existing red selection test) gets it.
+  const lsStore = new Map<string, string>();
+  Object.defineProperty(window, 'localStorage', {
+    configurable: true,
+    writable: true,
+    value: {
+      getItem: (k: string): string | null => lsStore.get(k) ?? null,
+      setItem: (k: string, v: string): void => {
+        lsStore.set(k, String(v));
+      },
+      removeItem: (k: string): void => {
+        lsStore.delete(k);
+      },
+      clear: (): void => {
+        lsStore.clear();
+      },
+      key: (i: number): string | null => Array.from(lsStore.keys())[i] ?? null,
+      get length(): number {
+        return lsStore.size;
+      },
+    },
+  });
 }

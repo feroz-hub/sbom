@@ -287,7 +287,16 @@ def _capture_ecosystem(monkeypatch: pytest.MonkeyPatch) -> list[str | None]:
     import app.analysis as analysis_mod
     from app.sources.version_range import MatchVerdict
 
-    def recorder(cve_json, component_version, ecosystem, *, target_cpe=None):
+    def recorder(
+        cve_json,
+        component_version,
+        ecosystem,
+        *,
+        target_cpe=None,
+        # PR-C added this kwarg to the production signature; the
+        # recorder accepts and ignores it.
+        distro_cpe_enabled: bool = False,
+    ):
         seen.append(ecosystem)
         return MatchVerdict(affected=True, reason="matched", matched_range="*")
 

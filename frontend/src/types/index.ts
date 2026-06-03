@@ -132,6 +132,42 @@ export interface AnalysisRun {
   error_message: string | null;
 }
 
+/**
+ * NVD version-range match verdict (roadmap #1). Populated when the
+ * backend flag NVD_VERSION_RANGE_FILTER_ENABLED is on; null on every
+ * pre-filter row and every row produced by a flag-off scan. Only the
+ * five values that survive the filter's drop step ever reach the UI —
+ * `out_of_range` / `exact_version_mismatch` drop the finding entirely.
+ *
+ * Closed literal after PR-C resolved the audit's column-name collision:
+ * roadmap #6's source-attribution values landed on the separate
+ * ``match_strategy`` column, not here. PR-E tightens the type
+ * accordingly — adding a sixth UI-visible reason now requires a
+ * deliberate type edit, which the filter UI and the badge mapping
+ * (see Badge.tsx::MATCH_REASON_DETAIL) need to follow.
+ */
+export type MatchReason =
+  | 'matched'
+  | 'version_unparseable'
+  | 'and_node_ambiguous'
+  | 'ecosystem_unsupported'
+  | 'no_configurations';
+
+/**
+ * Search strategy that produced a finding (roadmap #6). Five spec
+ * values; ``cpe_name`` / ``purl_direct`` / ``ghsa_alias`` are the only
+ * three reachable from a live emit path today, but the type carries
+ * all five so re-enabling the keyword/virtualMatch paths needs no
+ * type churn. The strategy filter in FindingFilterPanel renders only
+ * values actually present in the loaded findings (see PR-E note).
+ */
+export type MatchStrategy =
+  | 'cpe_name'
+  | 'virtual_match_string'
+  | 'keyword_search'
+  | 'purl_direct'
+  | 'ghsa_alias';
+
 export interface AnalysisFinding {
   id: number;
   analysis_run_id: number;          // backend field name
@@ -153,6 +189,14 @@ export interface AnalysisFinding {
   fixed_versions: string | null;    // JSON string e.g. '["1.2.3"]'
   cwe?: string | null;              // comma-separated, e.g. "CWE-79,CWE-89"
   cvss_version?: string | null;     // e.g. "3.1", "4.0"
+  /** Roadmap #1 — see MatchReason. Optional; null on pre-filter rows. */
+  match_reason?: MatchReason | null;
+  /** Roadmap #1 — human-readable affected range, e.g. ">= 2.0.0, < 2.17.0". */
+  matched_range?: string | null;
+  /** Roadmap #6 — which search strategy produced this finding. */
+  match_strategy?: MatchStrategy | null;
+  /** Roadmap #3 — token-overlap confidence post strategy-floor, [0.0, 1.0]. */
+  match_confidence?: number | null;
 }
 
 /**

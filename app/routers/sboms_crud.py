@@ -240,13 +240,25 @@ def safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
-async def create_auto_report(db: Session, sbom_obj: SBOMSource) -> AnalysisRun | None:
+async def create_auto_report(
+    db: Session,
+    sbom_obj: SBOMSource,
+    *,
+    force_refresh: bool = False,
+) -> AnalysisRun | None:
     """
     Trigger default multi-source analysis for an SBOM and persist the run.
 
     Uses the shared ``app.sources`` adapter runner so configured sources
     (NVD, OSV, GitHub, VulDB, etc.) are fanned out consistently with the
     streaming and ad-hoc analysis endpoints.
+
+    ``force_refresh`` (roadmap #2 PR-E): when True AND the source-response
+    cache is enabled, every external-source fetch IGNORES cached hits and
+    re-queries upstream — then writes the fresh result, overwriting the
+    stale entry. Scheduled scans pass ``False`` (default) so they reuse
+    cached responses; only an operator-triggered "scan fresh" should
+    pass ``True``. No-op when ``source_cache_enabled`` is False.
     """
     if not sbom_obj.sbom_data:
         return None
@@ -269,6 +281,12 @@ async def create_auto_report(db: Session, sbom_obj: SBOMSource) -> AnalysisRun |
     started_at = time.perf_counter()
 
     cfg = get_analysis_settings_multi()
+    if force_refresh:
+        # Per-run override via ``dataclasses.replace`` — never mutate
+        # the cached singleton, which is shared across requests.
+        from dataclasses import replace as _dc_replace
+
+        cfg = _dc_replace(cfg, source_cache_force_refresh=True)
     sources_used = configured_default_sources()
     try:
         raw_findings, all_errors, all_warnings = await run_sources_concurrently(
@@ -939,17 +957,31 @@ def revalidate_sbom(
 async def run_analysis_for_sbom(
     request: Request,
     sbom_id: int,
+    force_refresh: bool = Query(
+        False,
+        description=(
+            "Roadmap #2 PR-E — scan fresh. When True AND the source-response "
+            "cache is enabled, external-source fetches IGNORE cached hits "
+            "(query upstream live) but still write the fresh result, "
+            "refreshing the cache for next time. Scheduled scans default "
+            "False; only operator-driven 're-scan now' flows should pass "
+            "True. No-op when the cache flag is off."
+        ),
+    ),
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     db: Session = Depends(get_db),
 ):
     async def _execute() -> dict:
-        log.info("Manual analysis triggered for SBOM id=%d", sbom_id)
+        log.info(
+            "Manual analysis triggered for SBOM id=%d (force_refresh=%s)",
+            sbom_id, force_refresh,
+        )
         sbom = db.get(SBOMSource, sbom_id)
         if not sbom:
             log.warning("Analysis requested for unknown SBOM id=%d", sbom_id)
             raise HTTPException(status_code=404, detail="SBOM not found")
         try:
-            report = await create_auto_report(db, sbom)
+            report = await create_auto_report(db, sbom, force_refresh=force_refresh)
         except Exception as exc:
             db.rollback()
             log.error("Analysis run failed for SBOM id=%d: %s", sbom_id, exc, exc_info=True)

@@ -267,6 +267,18 @@ def persist_analysis_run(
                 # the flag-off path never KeyErrors.
                 match_reason=finding.get("match_reason"),
                 matched_range=finding.get("matched_range"),
+                # Roadmap #6 — search-strategy provenance tag attached
+                # at the per-source emit step. NVD=cpe_name (only live
+                # path), OSV=purl_direct (querybatch + /v1/query
+                # fallback), GHSA=ghsa_alias. NULL on any source not
+                # yet wired or any pre-PR-C row.
+                match_strategy=finding.get("match_strategy"),
+                # Roadmap #3 — token-overlap confidence in [0.0, 1.0],
+                # post strategy-floor. Computed by the per-source emit
+                # step via app.sources.match_confidence.score_match +
+                # apply_strategy_floor. NULL on pre-PR-D rows and any
+                # source not yet wired into the scorer.
+                match_confidence=finding.get("match_confidence"),
             )
         )
 

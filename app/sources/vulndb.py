@@ -16,6 +16,7 @@ from typing import Any
 import httpx
 
 from .base import SourceResult, empty_result
+from .cache_seam import cached_fetch, component_cache_key
 
 
 def _as_bool(value: Any, default: bool = False) -> bool:
@@ -212,13 +213,19 @@ class VulnDbSource:
 
         targets = self._query_targets(components)[:max_components]
         for idx, target in enumerate(targets):
-            try:
-                payload = await _post_vulndb_form(
+            # Roadmap #2 (PR-B) — cache wrap. The thunk captures every
+            # per-target form input so the seam's "live_fetch" decision
+            # stays deterministic given the same target. ``apikey`` is
+            # NOT part of the cache key — two scans with the same SBOM
+            # but different API keys share the cache row (the response
+            # depends on the search, not the key).
+            async def _live_fetch(t=target):
+                return await _post_vulndb_form(
                     base_url,
                     {
                         "apikey": api_key,
                         "version": api_version,
-                        "search": target["query"],
+                        "search": t["query"],
                         "limit": str(limit),
                         "details": "1" if details else "0",
                         "fields": (
@@ -229,6 +236,14 @@ class VulnDbSource:
                         ),
                     },
                     timeout,
+                )
+
+            try:
+                payload = await cached_fetch(
+                    self.name,
+                    target.get("cache_key"),
+                    live_fetch=_live_fetch,
+                    settings=settings,
                 )
             except Exception as exc:
                 errors.append(
@@ -306,6 +321,12 @@ class VulnDbSource:
                     "component_name": name,
                     "component_version": version,
                     "cpe": cpe,
+                    # Roadmap #2 — cache key built from the
+                    # contributing component's PURL. ``component_cache_key``
+                    # returns ``None`` for components without a usable
+                    # PURL; the seam falls through to a live (uncached)
+                    # fetch in that case.
+                    "cache_key": component_cache_key(comp),
                 }
             )
         return targets

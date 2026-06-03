@@ -1,4 +1,14 @@
-import type { EnrichedFinding } from '@/types';
+import type { EnrichedFinding, MatchStrategy } from '@/types';
+
+/**
+ * Two-state collapse of {@link MatchReason} mirroring PR4's
+ * MatchReasonBadge. ``all`` disables the filter; ``verified`` selects
+ * rows where ``match_reason === 'matched'``; ``not_verified`` selects
+ * rows with any conservative-keep reason. Null reasons match neither
+ * verified nor not_verified — pre-filter rows are filtered OUT when a
+ * non-``all`` value is set.
+ */
+export type MatchReasonFilter = 'all' | 'verified' | 'not_verified';
 
 export interface FindingsFilterState {
   /** Free-text search across vuln_id, CVE aliases, title, description, component, CPE. */
@@ -16,6 +26,12 @@ export interface FindingsFilterState {
   kevOnly: boolean;
   /** Show only findings with at least one fixed version. */
   hasFixOnly: boolean;
+  /** Roadmap #1 — two-state trust filter mirroring MatchReasonBadge. */
+  matchReasonFilter: MatchReasonFilter;
+  /** Roadmap #3 — minimum confidence threshold in [0.0, 1.0]. 0 disables. */
+  matchConfidenceMin: number;
+  /** Roadmap #6 — multi-select strategy filter. Empty = all. */
+  matchStrategies: MatchStrategy[];
 }
 
 export const DEFAULT_FILTERS: FindingsFilterState = {
@@ -27,6 +43,9 @@ export const DEFAULT_FILTERS: FindingsFilterState = {
   epssMinPct: 0,
   kevOnly: false,
   hasFixOnly: false,
+  matchReasonFilter: 'all',
+  matchConfidenceMin: 0,
+  matchStrategies: [],
 };
 
 const SEARCH_FIELDS: Array<keyof EnrichedFinding> = [
@@ -85,6 +104,31 @@ export function matchesFindingFilter(
     const term = filter.search.trim().toLowerCase();
     if (!searchableHay(f).includes(term)) return false;
   }
+  // Roadmap #1 — two-state trust filter. ``all`` is the no-op default.
+  // Null reasons (flag-off scans, non-NVD sources) match neither
+  // ``verified`` nor ``not_verified`` and are filtered out when a
+  // non-``all`` value is set. Matches the MatchReasonBadge collapse
+  // exactly so the chip and the badge stay coherent.
+  if (filter.matchReasonFilter === 'verified') {
+    if (f.match_reason !== 'matched') return false;
+  } else if (filter.matchReasonFilter === 'not_verified') {
+    if (!f.match_reason || f.match_reason === 'matched') return false;
+  }
+  // Roadmap #3 — minimum confidence threshold. A null confidence is
+  // filtered out when the threshold is set; the analyst chose to
+  // narrow to scored findings only.
+  if (filter.matchConfidenceMin > 0) {
+    if (f.match_confidence == null || f.match_confidence < filter.matchConfidenceMin) {
+      return false;
+    }
+  }
+  // Roadmap #6 — strategy multi-select. Null strategy never matches a
+  // chip (pre-tag rows are filtered out when any chip is active).
+  if (filter.matchStrategies.length > 0) {
+    if (!f.match_strategy || !filter.matchStrategies.includes(f.match_strategy)) {
+      return false;
+    }
+  }
   return true;
 }
 
@@ -97,7 +141,10 @@ export function hasActiveFilters(filter: FindingsFilterState): boolean {
     filter.cvssMax < 10 ||
     filter.epssMinPct > 0 ||
     filter.kevOnly ||
-    filter.hasFixOnly
+    filter.hasFixOnly ||
+    filter.matchReasonFilter !== 'all' ||
+    filter.matchConfidenceMin > 0 ||
+    filter.matchStrategies.length > 0
   );
 }
 
@@ -110,6 +157,9 @@ export function countActiveFilters(filter: FindingsFilterState): number {
   if (filter.epssMinPct > 0) n++;
   if (filter.kevOnly) n++;
   if (filter.hasFixOnly) n++;
+  if (filter.matchReasonFilter !== 'all') n++;
+  if (filter.matchConfidenceMin > 0) n++;
+  if (filter.matchStrategies.length > 0) n++;
   return n;
 }
 

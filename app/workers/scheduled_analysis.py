@@ -155,8 +155,19 @@ def tick_scheduled_analyses(self) -> dict:
     retry_backoff=True,
     retry_backoff_max=900,
 )
-def analyze_sbom_async(self, sbom_id: int, schedule_id: int) -> dict:
-    """Run create_auto_report for one SBOM and write back to the schedule row."""
+def analyze_sbom_async(
+    self,
+    sbom_id: int,
+    schedule_id: int,
+    force_refresh: bool = False,
+) -> dict:
+    """Run create_auto_report for one SBOM and write back to the schedule row.
+
+    ``force_refresh`` (roadmap #2 PR-E) flows into ``create_auto_report``
+    so an admin tool that enqueues this task directly can request a
+    scan-fresh run. The scheduled-tick path never sets this — periodic
+    scans defaults to using the cache.
+    """
     from app.db import SessionLocal
     from app.routers.sboms_crud import create_auto_report
 
@@ -186,7 +197,9 @@ def analyze_sbom_async(self, sbom_id: int, schedule_id: int) -> dict:
             return {"status": "SKIPPED", "reason": "recent_run_within_gap"}
 
         try:
-            run = asyncio.run(create_auto_report(db, sbom))
+            run = asyncio.run(
+                create_auto_report(db, sbom, force_refresh=force_refresh)
+            )
         except Exception as exc:
             log.exception(
                 "scheduled_analysis_run_failed",

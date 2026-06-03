@@ -219,6 +219,22 @@ class AnalysisFinding(Base, SoftDeleteMixin):
     match_reason = Column(String(32), nullable=True, index=True)
     matched_range = Column(String(128), nullable=True)
 
+    # Roadmap #3 — name/version/vendor token-overlap score in [0.0, 1.0].
+    # NULL on pre-migration-017 rows and on sources not yet wired into
+    # the scorer; the scorer in PR-B is the source of truth for the
+    # bound (no DB CHECK, matching migration 016's posture — see
+    # migration 017's docstring for the rationale).
+    match_confidence = Column(Float, nullable=True)
+
+    # Roadmap #6 — which search strategy produced this finding.
+    # Values (enforced in Python, not the DB): cpe_name,
+    # virtual_match_string, keyword_search (NVD); purl_direct (OSV);
+    # ghsa_alias (GHSA). Width VARCHAR(32) fits the longest token
+    # (``virtual_match_string`` = 21 chars) with headroom for future
+    # source-strategy additions. Indexed so triage queries
+    # ("show everything produced by keyword_search") don't table-scan.
+    match_strategy = Column(String(32), nullable=True, index=True)
+
     analysis_run = relationship("AnalysisRun", back_populates="findings")
     component = relationship("SBOMComponent", back_populates="findings")
 
@@ -374,6 +390,40 @@ class CveCache(Base):
     expires_at = Column(String, nullable=False, index=True)
     fetch_error = Column(Text, nullable=True)
     schema_version = Column(Integer, nullable=False, default=1)
+
+
+class SourceResponseCache(Base):
+    """
+    Per-(source, component) RAW response cache (roadmap #2, PR-A).
+
+    Composite primary key on (source, component_key); ``component_key`` is
+    the canonical PURL string so identical components across SBOMs share one
+    cached row. ``payload`` holds the source's raw response — opaque JSON
+    that PR-B's wiring step reprocesses on hit, so #1/#3/#6 logic stays
+    fresh on every read.
+
+    TTL is enforced at the repository layer at READ time: a row whose
+    ``expires_at`` is in the past is treated as a miss (and silently
+    overwritten on the next ``set``). ``ix_source_response_cache_expires_at``
+    supports a future periodic sweep job for housekeeping; today's readers
+    don't depend on it.
+
+    NOT to be confused with ``cve_cache`` (per-CVE-ID detail payloads) or
+    ``run_cache`` (per-SBOM whole-run JSON) — both are different concerns
+    with different key spaces.
+    """
+
+    __tablename__ = "source_response_cache"
+
+    source = Column(String(32), primary_key=True)
+    component_key = Column(String(512), primary_key=True)
+    payload = Column(JSON, nullable=False)
+    fetched_at = Column(String, nullable=False)
+    expires_at = Column(String, nullable=False)
+
+    __table_args__ = (
+        Index("ix_source_response_cache_expires_at", "expires_at"),
+    )
 
 
 class CompareCache(Base):

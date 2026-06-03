@@ -116,11 +116,35 @@ _SEMVER_ECOSYSTEMS: Final[frozenset[str]] = frozenset({"npm", "go", "golang", "g
 _PEP440_ECOSYSTEMS: Final[frozenset[str]] = frozenset({"pypi"})
 _MAVEN_ECOSYSTEMS: Final[frozenset[str]] = frozenset({"maven"})
 
-# Distro ecosystems — handled in roadmap #5. The comparator returns a
-# conservative-keep verdict so the caller never silently drops.
+# Distro/Conan ecosystems — roadmap #5. When ``distro_cpe_enabled`` is
+# OFF the comparator returns a conservative-keep
+# (``ecosystem_unsupported``) verdict so the caller never silently
+# drops. When ON, the component version is first normalised to its
+# UPSTREAM form via ``distro_cpe.normalize_upstream_version`` (strip
+# epoch + distro revision/release/-rN) and then compared through the
+# default semver-ish path — the NVD bounds are already upstream
+# versions because PR-B's resolver emits ``cpe:2.3:a:<upstream>:...``.
+#
+# **Backport unawareness (load-bearing limitation)** — the same caveat
+# from PR-A applies once this flag is flipped on: a distro that
+# patched a CVE WITHOUT bumping the upstream version
+# (``3.0.2-1+deb11u5`` → ``3.0.2``) will look affected here even
+# though the binary has the fix. Closing the gap needs distro
+# security feeds (DSA/RHSA/USN/ASA) that map ``(cve_id, distro,
+# package, fixed_revision)``; that's a separate feature. Downstream
+# UI / reports should mark distro findings as "may be backported —
+# verify against distro advisory" until those feeds land.
 _UNSUPPORTED_ECOSYSTEMS: Final[frozenset[str]] = frozenset(
     {"deb", "rpm", "apk", "conan", "alpine", "debian", "redhat"}
 )
+
+# Subset of ``_UNSUPPORTED_ECOSYSTEMS`` that PR-C's normalize-and-compare
+# branch can handle when the flag is on. Conan is included even though
+# its version normalisation is a passthrough — the routing still
+# bypasses the ``ecosystem_unsupported`` short-circuit and lets Conan
+# versions reach ``_cmp_semver`` cleanly (Conan versions are already
+# upstream-shaped per PR-A).
+_DISTRO_NORMALIZE_ECOSYSTEMS: Final[frozenset[str]] = _UNSUPPORTED_ECOSYSTEMS
 
 _INCOMPARABLE: Final[object] = object()
 
@@ -154,23 +178,57 @@ def version_in_range(
     version: str | None,
     ecosystem: str | None,
     bounds: VersionRange,
+    *,
+    distro_cpe_enabled: bool = False,
 ) -> MatchVerdict:
     """Decide whether ``version`` falls within ``bounds`` under ``ecosystem``'s ordering.
 
     Conservative on every failure mode: ``affected=True`` with a
     distinctive ``reason`` so the caller can keep the finding and
     record why.
+
+    Roadmap #5 PR-C: when ``distro_cpe_enabled`` is True AND the
+    ecosystem is one of ``deb``/``rpm``/``apk``/``conan`` (or aliases
+    ``debian``/``redhat``/``alpine``), the component version is first
+    normalised to its UPSTREAM form via
+    ``distro_cpe.normalize_upstream_version`` and then compared
+    through the default semver-ish path. The NVD bounds are already
+    upstream (PR-B's resolver emits upstream CPEs) so no normalisation
+    on the bound side. Flag OFF → distros short-circuit as
+    ``ecosystem_unsupported`` (byte-identical to today).
     """
     if not version:
         return MatchVerdict(affected=True, reason="version_unparseable", matched_range=_fmt_range(bounds))
 
     eco = _normalize_ecosystem(ecosystem)
     if eco in _UNSUPPORTED_ECOSYSTEMS:
-        return MatchVerdict(
-            affected=True,
-            reason="ecosystem_unsupported",
-            matched_range=_fmt_range(bounds),
-        )
+        # Roadmap #5 PR-C — distro/Conan get a normalize-and-compare
+        # path when the flag is on; otherwise short-circuit as
+        # ``ecosystem_unsupported`` (legacy behaviour).
+        if distro_cpe_enabled and eco in _DISTRO_NORMALIZE_ECOSYSTEMS:
+            from .distro_cpe import normalize_upstream_version
+
+            normalised = normalize_upstream_version(version, eco)
+            if not normalised:
+                # No usable upstream version after stripping → treat
+                # as unparseable rather than mis-comparing an empty
+                # string. The caller still keeps the finding.
+                return MatchVerdict(
+                    affected=True,
+                    reason="version_unparseable",
+                    matched_range=_fmt_range(bounds),
+                )
+            version = normalised
+            # Fall through to comparison below. ``_compare`` already
+            # routes unmapped ecosystems (deb/rpm/apk/conan) into
+            # ``_cmp_semver`` so the normalised upstream version
+            # compares cleanly against the NVD upstream bounds.
+        else:
+            return MatchVerdict(
+                affected=True,
+                reason="ecosystem_unsupported",
+                matched_range=_fmt_range(bounds),
+            )
 
     has_bounds = any(
         b is not None
@@ -240,6 +298,7 @@ def cve_affects_component(
     ecosystem: str | None,
     *,
     target_cpe: str | None = None,
+    distro_cpe_enabled: bool = False,
 ) -> MatchVerdict:
     """Walk a CVE's configurations and decide whether the component is affected.
 
@@ -286,6 +345,7 @@ def cve_affects_component(
                     component_version=component_version,
                     ecosystem=ecosystem,
                     target_stem=target_stem,
+                    distro_cpe_enabled=distro_cpe_enabled,
                 )
             )
 
@@ -312,6 +372,7 @@ def _walk_node(
     component_version: str | None,
     ecosystem: str | None,
     target_stem: str | None,
+    distro_cpe_enabled: bool = False,
 ) -> Iterator[MatchVerdict]:
     """Yield verdicts for every applicable cpeMatch under ``node``.
 
@@ -342,7 +403,12 @@ def _walk_node(
         criteria = str(match.get("criteria", ""))
         if target_stem is not None and _cpe_stem(criteria) != target_stem:
             continue
-        verdict = version_in_range(component_version, ecosystem, bounds)
+        verdict = version_in_range(
+            component_version,
+            ecosystem,
+            bounds,
+            distro_cpe_enabled=distro_cpe_enabled,
+        )
         if verdict.reason == "version_unparseable":
             log.warning(
                 "version_range: keeping finding — unparseable version "
@@ -361,6 +427,7 @@ def _walk_node(
                 component_version=component_version,
                 ecosystem=ecosystem,
                 target_stem=target_stem,
+                distro_cpe_enabled=distro_cpe_enabled,
             )
 
 

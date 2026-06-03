@@ -26,7 +26,11 @@ import {
   Td,
   Th,
 } from '@/components/ui/Table';
-import { SeverityBadge } from '@/components/ui/Badge';
+import {
+  MatchConfidenceChip,
+  MatchReasonBadge,
+  SeverityBadge,
+} from '@/components/ui/Badge';
 import { CvssMeter } from '@/components/ui/CvssMeter';
 import { KevBadge } from '@/components/ui/KevBadge';
 import { EpssChip } from '@/components/ui/EpssChip';
@@ -44,7 +48,15 @@ import { formatDateShort, truncate, cn } from '@/lib/utils';
 import { useTableSort } from '@/hooks/useTableSort';
 import { usePagination } from '@/hooks/usePagination';
 import { useRunAiFixList } from '@/hooks/useAiFix';
-import type { EnrichedFinding } from '@/types';
+import type { EnrichedFinding, MatchStrategy } from '@/types';
+
+const KNOWN_MATCH_STRATEGIES: ReadonlySet<MatchStrategy> = new Set([
+  'cpe_name',
+  'virtual_match_string',
+  'keyword_search',
+  'purl_direct',
+  'ghsa_alias',
+]);
 
 function aiFixLookupKey(
   vulnId: string | null | undefined,
@@ -70,7 +82,12 @@ type FindingSortKey =
   | 'epss'
   | 'component_name'
   | 'component_version'
-  | 'published_on';
+  | 'published_on'
+  // Accessor only — no column header surfaces this yet (the
+  // confidence chip lives inside the severity cell, not in its
+  // own column). Reserved so a future PR can add a sort trigger
+  // (column or sort menu) without refactoring useTableSort.
+  | 'match_confidence';
 
 type Density = 'compact' | 'comfortable' | 'spacious';
 
@@ -364,6 +381,21 @@ export function FindingsTable({
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [findings]);
 
+  // Roadmap #6 — distinct ``match_strategy`` values actually present
+  // in the loaded findings. Dead strategies (keyword_search,
+  // virtual_match_string) only surface as chips when re-enabled and
+  // a tagged finding lands. Pre-tag rows (null strategy) are excluded.
+  const strategyOptions = useMemo<MatchStrategy[]>(() => {
+    const set = new Set<MatchStrategy>();
+    findings?.forEach((f) => {
+      const s = f.match_strategy;
+      if (s && KNOWN_MATCH_STRATEGIES.has(s)) {
+        set.add(s);
+      }
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [findings]);
+
   const filteredFindings = useMemo(() => {
     if (!findings?.length) return [];
     return findings.filter((f) => matchesFindingFilter(f, filter));
@@ -380,6 +412,9 @@ export function FindingsTable({
       component_name: (f: EnrichedFinding) => (f.component_name ?? '').toLowerCase(),
       component_version: (f: EnrichedFinding) => f.component_version ?? '',
       published_on: (f: EnrichedFinding) => f.published_on ?? '',
+      // Null confidence sorts below any real number so unscored
+      // findings cluster at the bottom under ascending order.
+      match_confidence: (f: EnrichedFinding) => f.match_confidence ?? -1,
     }),
     [],
   );
@@ -493,6 +528,7 @@ export function FindingsTable({
         filter={filter}
         onChange={setFilter}
         sourceOptions={sourceOptions}
+        strategyOptions={strategyOptions}
         onSeverityServerChange={
           onSeverityChange
             ? (sev) => {
@@ -716,7 +752,22 @@ export function FindingsTable({
                       </div>
                     </td>
                     <td className={cn('px-4 align-top', cellPadding)}>
-                      <SeverityBadge severity={f.severity ?? 'UNKNOWN'} />
+                      <div className="flex flex-col items-start gap-1">
+                        <SeverityBadge severity={f.severity ?? 'UNKNOWN'} />
+                        {/* Trust badge + confidence sit on one row so the
+                            confidence number never becomes a third
+                            stacked badge. Both render null on absent
+                            data so flag-off rows stay byte-identical. */}
+                        {(f.match_reason || f.match_confidence != null) && (
+                          <div className="flex items-center gap-1.5">
+                            <MatchReasonBadge
+                              reason={f.match_reason}
+                              matchedRange={f.matched_range}
+                            />
+                            <MatchConfidenceChip confidence={f.match_confidence} />
+                          </div>
+                        )}
+                      </div>
                     </td>
                     <td className={cn('px-4 align-top', cellPadding)}>
                       <CvssMeter

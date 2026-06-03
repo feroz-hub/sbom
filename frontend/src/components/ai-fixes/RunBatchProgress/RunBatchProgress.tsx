@@ -11,7 +11,7 @@ import {
 } from '@/hooks/useAiFix';
 import { useGlobalAiBatchProgress } from '@/components/ai-fixes/GlobalAiBatchProgress';
 import { buildScope, describeScope } from '@/lib/aiFixScope';
-import type { FindingsFilterState } from '@/lib/findingFilters';
+import { DEFAULT_FILTERS, type FindingsFilterState } from '@/lib/findingFilters';
 import type {
   AiBatchProgress,
   AiFixGenerationScope,
@@ -448,16 +448,10 @@ function pluraliseDescription(description: string, count: number): string {
 }
 
 function defaultFilter(): FindingsFilterState {
-  return {
-    search: '',
-    severityFilter: '',
-    sources: [],
-    cvssMin: 0,
-    cvssMax: 10,
-    epssMinPct: 0,
-    kevOnly: false,
-    hasFixOnly: false,
-  };
+  // Use the canonical defaults so adding fields to FindingsFilterState
+  // (e.g. PR-E's matchReasonFilter / matchConfidenceMin /
+  // matchStrategies) doesn't ripple across local duplicates.
+  return { ...DEFAULT_FILTERS };
 }
 
 /**

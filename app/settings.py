@@ -175,6 +175,60 @@ class Settings(BaseSettings):
         description="Min spacing between NVD calls with an API key (50 req / 30s).",
     )
 
+    # Roadmap #2 — per-(source, component) raw-response cache TTL.
+    #
+    # Cached entries skip re-hitting OSV / GHSA / VulDB (and possibly
+    # NVD; PR-B decides) on repeat scans of the same component PURL.
+    # Default 4 hours — a deliberately modest window for a security
+    # tool: stale responses miss newly-published CVEs until expiry,
+    # so we trade some hit-rate for freshness. Per-source overrides
+    # are a follow-up; the repository signature already accepts a
+    # ``ttl_seconds`` argument at write time so callers can specialise
+    # later without touching the storage layer.
+    source_cache_ttl_seconds: int = Field(
+        default=4 * 60 * 60,
+        description=(
+            "TTL (seconds) for per-(source, component) raw-response cache "
+            "rows. PR-B reads this when populating source_response_cache."
+        ),
+    )
+
+    # Roadmap #2 (PR-B) — master switch for the source-response cache.
+    # When False (default), every per-source fetch is live and the
+    # cache is bypassed entirely — no reads, no writes, no metrics
+    # from the new path. When True, sources wrapped by PR-B (currently
+    # VulDB; GHSA + OSV land in PR-C) consult ``source_response_cache``
+    # before hitting upstream. NVD is intentionally NOT wrapped — its
+    # scan path goes through the local mirror, already fast and
+    # incrementally fresh.
+    source_cache_enabled: bool = Field(
+        default=False,
+        description=(
+            "Feature flag for the per-(source, component) response cache "
+            "(roadmap #2). Default off until dogfooded; set "
+            "SOURCE_CACHE_ENABLED=true to opt in."
+        ),
+    )
+
+    # Roadmap #5 — distro/Conan CPE resolver (PR-B routing + PR-C
+    # version_range distro-version handling). When True, deb/rpm/apk/
+    # conan PURLs route through ``app.sources.distro_cpe.resolve`` to
+    # produce an upstream CPE (e.g. ``openssl:openssl:3.0.2``) instead
+    # of the generic slugify fallback (which produced unmatched CPEs
+    # like ``debian:openssl:2_3.0.2-1``). The SAME flag gates the
+    # version_range distro support PR-C ships — all-or-nothing.
+    # Default off; set DISTRO_CPE_ENABLED=true to opt in.
+    distro_cpe_enabled: bool = Field(
+        default=False,
+        description=(
+            "Roadmap #5 — distro/Conan CPE resolver (PR-B + PR-C). When "
+            "True, deb/rpm/apk/conan PURLs map to upstream CPEs via the "
+            "curated table in app/sources/distro_cpe.py and the "
+            "version_range comparator gets distro-version normalisation. "
+            "Default off; set DISTRO_CPE_ENABLED=true to opt in."
+        ),
+    )
+
     # Compare Runs v2 (ADR-0008) — knobs and kill-switches
     #
     # ``compare_v1_fallback`` is the operational kill-switch. It is read by the

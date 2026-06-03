@@ -6,11 +6,52 @@ NVD's CPE dictionary uses radically different conventions across Maven
 (group's last segment), npm (scope), Composer (vendor/package), Go (last
 namespace segment), etc. ``cpe23_from_purl`` returns ``None`` if either
 side cannot be derived — callers must handle that.
+
+Roadmap #5 PR-B note
+--------------------
+When ``distro_cpe_enabled`` is True, deb/rpm/apk/conan PURLs route
+through ``app.sources.distro_cpe.resolve`` BEFORE the existing
+per-ecosystem branches — the curated table there produces upstream
+CPEs that match NVD (e.g. ``openssl:openssl:3.0.2`` for
+``pkg:deb/debian/openssl@2:3.0.2-1``). Flag off → existing
+generic-slugify path, byte-identical.
+
+The flag is read either from an explicit ``settings`` kwarg (preferred
+for tests) or, when that's ``None``, from the Pydantic singleton via
+``get_settings()``. Production callers don't need to thread settings
+through the four call sites of ``cpe23_from_purl`` — flipping the env
+var ``DISTRO_CPE_ENABLED`` reaches the singleton automatically.
 """
 
 from __future__ import annotations
 
+from typing import Any
+
 from .purl import parse_purl
+
+
+def _distro_cpe_enabled(settings: Any | None) -> bool:
+    """Check the distro-CPE flag from an explicit settings object,
+    falling back to the Pydantic singleton.
+
+    Tests pass an explicit ``settings`` for deterministic control;
+    production callers leave it ``None`` and the env-mapped singleton
+    decides. ``getattr`` with a default keeps the helper safe against
+    settings objects that don't carry the field (e.g. test stubs).
+    """
+    if settings is not None:
+        return bool(getattr(settings, "distro_cpe_enabled", False))
+    try:
+        from app.settings import get_settings
+
+        return bool(getattr(get_settings(), "distro_cpe_enabled", False))
+    except Exception:
+        return False
+
+
+_DISTRO_PTYPES = frozenset(
+    {"deb", "rpm", "apk", "conan", "alpine", "debian", "redhat"}
+)
 
 
 def slug(s: str | None) -> str | None:
@@ -57,7 +98,12 @@ def ecosystem_from_component(comp: dict) -> str | None:
     return None
 
 
-def cpe23_from_purl(purl: str, version_override: str | None = None) -> str | None:
+def cpe23_from_purl(
+    purl: str,
+    version_override: str | None = None,
+    *,
+    settings: Any | None = None,
+) -> str | None:
     """
     Best-effort mapping of a PURL to a CPE 2.3 string.
 
@@ -66,12 +112,32 @@ def cpe23_from_purl(purl: str, version_override: str | None = None) -> str | Non
     Maven (group's last segment), npm (scope), Composer (vendor/package),
     Go (last namespace segment), etc. Returns ``None`` if either side
     cannot be derived — callers must handle that.
+
+    Roadmap #5 PR-B: when ``distro_cpe_enabled`` is True, deb/rpm/apk/
+    conan PURLs route through ``distro_cpe.resolve`` for an upstream
+    CPE (e.g. ``openssl:openssl:3.0.2``). Flag off → existing
+    generic-slugify path, byte-identical. ``settings`` is an explicit
+    override for tests; production reads the Pydantic singleton.
     """
     parsed = parse_purl(purl)
     if not parsed:
         return None
 
     ptype = parsed.get("type")
+
+    # Roadmap #5 PR-B — distro/conan routing. Skipped entirely when
+    # the flag is off (byte-identical legacy path). When on, an
+    # in-set ptype hits ``distro_cpe.resolve``; a non-None result is
+    # returned directly. A None result (defensive — ``resolve``
+    # returns None only for non-distro ptypes, which the set check
+    # already excludes) falls through to the existing branches.
+    if ptype in _DISTRO_PTYPES and _distro_cpe_enabled(settings):
+        from .distro_cpe import resolve as _distro_resolve
+
+        resolution = _distro_resolve(purl)
+        if resolution is not None:
+            return resolution.cpe
+
     namespace = parsed.get("namespace") or ""
     name = parsed.get("name") or ""
     version = parsed.get("version") or version_override

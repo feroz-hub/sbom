@@ -96,6 +96,104 @@ const statusMap: Record<string, { cls: string; dot: string }> = {
   },
 };
 
+/**
+ * Roadmap #1 — version-match trust signal for findings produced by the
+ * NVD version-range filter. Collapses the seven-value backend literal
+ * into two visual states the analyst actually acts on:
+ *
+ *   * "Version confirmed"  → success variant; the component's pinned
+ *                            version was verified against the CVE's
+ *                            affected range. ``matched_range`` is shown
+ *                            as a tooltip so the analyst can see WHY.
+ *   * "Not verified"       → muted/gray variant; the filter could not
+ *                            confirm the version is in range and kept
+ *                            the finding conservatively. The specific
+ *                            reason is in the tooltip for the curious.
+ *
+ * Returns ``null`` when ``reason`` is null/undefined so rows from
+ * flag-off scans look byte-identical to before. ``cursor-help`` plus
+ * the ``title`` attribute give the tooltip without pulling in a
+ * tooltip primitive — fine for a single-line hover hint.
+ */
+interface MatchReasonBadgeProps {
+  reason: string | null | undefined;
+  matchedRange?: string | null;
+}
+
+const MATCH_REASON_DETAIL: Record<string, string> = {
+  version_unparseable:
+    "Couldn't parse the component version under this ecosystem's rules",
+  and_node_ambiguous:
+    'CVE applies only under a specific platform — auto-verification unavailable',
+  ecosystem_unsupported:
+    'No version comparator for this ecosystem yet',
+  no_configurations:
+    'CVE has no version-range data — kept conservatively',
+};
+
+export function MatchReasonBadge({ reason, matchedRange }: MatchReasonBadgeProps) {
+  if (!reason) return null;
+  if (reason === 'matched') {
+    const tooltip = matchedRange
+      ? `Affected: ${matchedRange}`
+      : 'Version confirmed in affected range';
+    return (
+      <span title={tooltip} className="cursor-help">
+        <Badge variant="success">Version confirmed</Badge>
+      </span>
+    );
+  }
+  const detail = MATCH_REASON_DETAIL[reason] ?? `Match status: ${reason}`;
+  return (
+    <span title={detail} className="cursor-help">
+      <Badge variant="gray">Not verified</Badge>
+    </span>
+  );
+}
+
+/**
+ * Roadmap #3 — compact confidence display for the finding row.
+ *
+ * Renders a small, border-less, percentage-only number that sits
+ * INLINE next to MatchReasonBadge in the severity cell — deliberately
+ * NOT a third stacked badge (would clutter the cell). The colour band
+ * is informational: green ≥ 70%, amber 40-70%, gray < 40%. Null
+ * input renders nothing, preserving PR4's flag-off parity.
+ *
+ * The underlying backend value carries 3-decimal precision; the UI
+ * rounds to whole percent — sub-score breakdown would warrant a
+ * tooltip but the three sub-scores aren't persisted (migration 017
+ * only added the final number). Tracked as a follow-up.
+ */
+interface MatchConfidenceChipProps {
+  confidence: number | null | undefined;
+}
+
+export function MatchConfidenceChip({ confidence }: MatchConfidenceChipProps) {
+  if (confidence == null) return null;
+  const clamped = Math.max(0, Math.min(1, confidence));
+  const pct = Math.round(clamped * 100);
+  const tone =
+    clamped >= 0.7
+      ? 'text-emerald-700 dark:text-emerald-300'
+      : clamped >= 0.4
+        ? 'text-amber-700 dark:text-amber-300'
+        : 'text-hcl-muted';
+  return (
+    <span
+      title={`Match confidence ${pct}% — token-overlap of component identity vs CVE evidence, post strategy-floor.`}
+      className={cn(
+        'font-metric inline-flex cursor-help items-baseline tabular-nums',
+        'text-[10px] font-semibold',
+        tone,
+      )}
+      aria-label={`Match confidence ${pct} percent`}
+    >
+      {pct}%
+    </span>
+  );
+}
+
 export function StatusBadge({ status }: { status: string }) {
   const key = status?.toUpperCase() ?? 'PENDING';
   const entry = statusMap[key] ?? statusMap.PENDING;

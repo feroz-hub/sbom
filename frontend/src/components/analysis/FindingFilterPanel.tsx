@@ -20,7 +20,9 @@ import {
   savePreset,
   type FindingsFilterPreset,
   type FindingsFilterState,
+  type MatchReasonFilter,
 } from '@/lib/findingFilters';
+import type { MatchStrategy } from '@/types';
 import { cn } from '@/lib/utils';
 
 interface FindingFilterPanelProps {
@@ -28,6 +30,14 @@ interface FindingFilterPanelProps {
   onChange: (next: FindingsFilterState) => void;
   /** Available source options derived from current findings (NVD, OSV, etc.). */
   sourceOptions: string[];
+  /**
+   * Roadmap #6 — distinct ``match_strategy`` values present in the
+   * currently-loaded findings. Empty array → strategy chips are
+   * hidden (no strategies on these findings yet); a re-enabled
+   * keyword path or a new strategy value surfaces automatically the
+   * moment a tagged finding lands.
+   */
+  strategyOptions: MatchStrategy[];
   /** Server-side severity filter — passes through to the API. */
   onSeverityServerChange?: (severity: string) => void;
   /** Raw count of all findings loaded in memory. */
@@ -36,10 +46,25 @@ interface FindingFilterPanelProps {
   filteredCount: number;
 }
 
+const MATCH_REASON_OPTIONS: ReadonlyArray<{ value: MatchReasonFilter; label: string }> = [
+  { value: 'all', label: 'All' },
+  { value: 'verified', label: 'Version confirmed' },
+  { value: 'not_verified', label: 'Not verified' },
+];
+
+const MATCH_STRATEGY_LABEL: Readonly<Record<MatchStrategy, string>> = {
+  cpe_name: 'CPE name',
+  virtual_match_string: 'Virtual match',
+  keyword_search: 'Keyword search',
+  purl_direct: 'PURL direct',
+  ghsa_alias: 'GHSA alias',
+};
+
 export function FindingFilterPanel({
   filter,
   onChange,
   sourceOptions,
+  strategyOptions,
   onSeverityServerChange,
   totalCount,
   filteredCount,
@@ -65,6 +90,13 @@ export function FindingFilterPanel({
       ? filter.sources.filter((s) => s !== src)
       : [...filter.sources, src];
     update('sources', next);
+  };
+
+  const toggleStrategy = (strategy: MatchStrategy) => {
+    const next = filter.matchStrategies.includes(strategy)
+      ? filter.matchStrategies.filter((s) => s !== strategy)
+      : [...filter.matchStrategies, strategy];
+    update('matchStrategies', next);
   };
 
   const reset = () => onChange({ ...DEFAULT_FILTERS, severityFilter: filter.severityFilter });
@@ -373,6 +405,110 @@ export function FindingFilterPanel({
                       )}
                     >
                       {src}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </fieldset>
+
+          {/* Roadmap #1 — match-reason two-state chip. Mirrors the
+              MatchReasonBadge collapse: "Version confirmed" vs
+              "Not verified". A non-``all`` selection filters out
+              rows with null match_reason (flag-off scans). */}
+          <fieldset className="space-y-2">
+            <legend className="text-[11px] font-semibold uppercase tracking-wider text-hcl-muted">
+              Match trust
+            </legend>
+            <div className="flex flex-wrap gap-1.5">
+              {MATCH_REASON_OPTIONS.map(({ value, label }) => {
+                const active = filter.matchReasonFilter === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => update('matchReasonFilter', value)}
+                    aria-pressed={active}
+                    className={cn(
+                      'inline-flex h-7 items-center rounded-full border px-2.5 text-[11px] font-semibold transition-all duration-base ease-spring',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/30',
+                      active
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border bg-surface text-hcl-muted hover:bg-surface-muted hover:text-hcl-navy',
+                    )}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[11px] text-hcl-muted">
+              Filter by NVD version-range verification status.
+            </p>
+          </fieldset>
+
+          {/* Roadmap #3 — minimum confidence threshold. Range 0..100
+              maps to [0.0, 1.0] on the underlying field (3-decimal
+              backend value). 0 disables the filter (no narrowing). */}
+          <fieldset className="space-y-2">
+            <legend className="text-[11px] font-semibold uppercase tracking-wider text-hcl-muted">
+              Min match confidence
+            </legend>
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={5}
+                value={Math.round(filter.matchConfidenceMin * 100)}
+                onChange={(e) =>
+                  update('matchConfidenceMin', Number(e.target.value) / 100)
+                }
+                aria-label="Minimum match confidence"
+                className="flex-1 accent-primary"
+              />
+              <span className="font-metric w-12 shrink-0 text-right text-sm font-semibold tabular-nums text-hcl-navy">
+                {Math.round(filter.matchConfidenceMin * 100)}%
+              </span>
+            </div>
+            <p className="text-[11px] text-hcl-muted">
+              Hide findings whose token-overlap confidence falls below this
+              threshold. Findings without a confidence score are also hidden
+              when the threshold is set.
+            </p>
+          </fieldset>
+
+          {/* Roadmap #6 — match-strategy multi-select. Options come
+              from distinct ``match_strategy`` values actually present
+              in the loaded findings — dead strategies (keyword_search,
+              virtual_match_string) only surface when re-enabled. */}
+          <fieldset className="space-y-2">
+            <legend className="text-[11px] font-semibold uppercase tracking-wider text-hcl-muted">
+              Match strategy
+            </legend>
+            {strategyOptions.length === 0 ? (
+              <p className="text-xs text-hcl-muted">
+                No strategy tags on these findings.
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {strategyOptions.map((strategy) => {
+                  const active = filter.matchStrategies.includes(strategy);
+                  return (
+                    <button
+                      key={strategy}
+                      type="button"
+                      onClick={() => toggleStrategy(strategy)}
+                      aria-pressed={active}
+                      className={cn(
+                        'inline-flex h-7 items-center rounded-full border px-2.5 text-[11px] font-semibold transition-all duration-base ease-spring',
+                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/30',
+                        active
+                          ? 'border-primary bg-primary/10 text-primary'
+                          : 'border-border bg-surface text-hcl-muted hover:bg-surface-muted hover:text-hcl-navy',
+                      )}
+                    >
+                      {MATCH_STRATEGY_LABEL[strategy] ?? strategy}
                     </button>
                   );
                 })}

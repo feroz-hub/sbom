@@ -62,9 +62,26 @@ export function invalidateDashboardTiles(qc: QueryClient): void {
 }
 
 /**
+ * Every cache that holds "the findings for a run".
+ *
+ * Findings are keyed `['findings-enriched', runId, severityFilter]`
+ * (see `app/analysis/[id]/page.tsx`). Prefix-invalidating `['findings-
+ * enriched']` catches every cached variant — cheap, and avoids stale
+ * tags when a run is mutated in place (the AI fix flow + any future
+ * re-run-on-same-id path). Roadmap #1 added `match_reason` /
+ * `matched_range` to each finding; without this bust, re-scanning a
+ * flag-on SBOM left the prior cache intact and the new trust badges
+ * stayed invisible until F5.
+ */
+export function invalidateFindings(qc: QueryClient): void {
+  qc.invalidateQueries({ queryKey: ['findings-enriched'] });
+}
+
+/**
  * Convenience for the "analysis just completed" event: covers run lists,
- * dashboard tiles, and the per-SBOM detail caches whose findings/risk
- * numbers just changed.
+ * dashboard tiles, the per-SBOM detail caches whose findings/risk
+ * numbers just changed, AND the per-run findings caches so newly-emitted
+ * tags (e.g. roadmap #1's `match_reason`) become visible without F5.
  *
  * Pass `sbomId` whenever the caller knows which SBOM the run belongs to —
  * it scopes the per-SBOM cache busts so we don't over-invalidate.
@@ -77,6 +94,9 @@ export function invalidateAnalysisCompletion(
   invalidateDashboardTiles(qc);
   // SBOM analysis status badge surfaces in the main table — refresh.
   invalidateSbomLists(qc);
+  // Findings caches keyed on runId — prefix-bust so re-runs surface new
+  // per-finding fields (e.g. match_reason / matched_range) immediately.
+  invalidateFindings(qc);
   if (args.sbomId != null) {
     qc.invalidateQueries({ queryKey: ['sbom-risk', args.sbomId] });
     qc.invalidateQueries({ queryKey: ['sbom-info', args.sbomId] });

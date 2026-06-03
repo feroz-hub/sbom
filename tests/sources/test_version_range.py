@@ -470,12 +470,155 @@ class TestNonVulnerableMatchIgnored:
 
 
 class TestUnsupportedEcosystem:
+    """Distro / Conan ecosystem behaviour — dual mode after roadmap #5 PR-C.
+
+    Flag OFF (default): conservative-keep with ``ecosystem_unsupported``.
+    Byte-identical to pre-#5 behaviour — any regression here would be
+    a silent change in flag-off semantics.
+
+    Flag ON: distro versions normalise to upstream and route through
+    the default semver-ish comparator. Verdict becomes
+    ``matched`` / ``out_of_range`` per the comparison result.
+    """
+
+    # ----- Flag OFF — legacy conservative-keep ------------------------------
+
     @pytest.mark.parametrize("eco", ["deb", "rpm", "apk", "conan", "alpine"])
-    def test_distro_ecosystems_are_conservative_keep(self, eco: str) -> None:
+    def test_flag_off_distro_ecosystems_are_conservative_keep(
+        self, eco: str
+    ) -> None:
         bounds = _bounds(start_inc="1.0", end_exc="2.0")
         v = version_in_range("1.5", eco, bounds)
         assert v.affected is True
         assert v.reason == "ecosystem_unsupported"
+
+    @pytest.mark.parametrize("eco", ["deb", "rpm", "apk", "conan", "alpine"])
+    def test_flag_off_explicit_false_matches_default(self, eco: str) -> None:
+        # Passing ``distro_cpe_enabled=False`` explicitly must give
+        # the same result as the default — guards against drift in
+        # the default value.
+        bounds = _bounds(start_inc="1.0", end_exc="2.0")
+        v = version_in_range("1.5", eco, bounds, distro_cpe_enabled=False)
+        assert v.reason == "ecosystem_unsupported"
+
+    # ----- Flag ON, in-range — matched -------------------------------------
+
+    def test_flag_on_deb_in_range_matches(self) -> None:
+        # Realistic Debian PURL: ``pkg:deb/debian/openssl@2:3.0.2-1``
+        # normalises to ``3.0.2`` and compares against an NVD range
+        # ``< 3.0.7`` — affected.
+        bounds = _bounds(end_exc="3.0.7")
+        v = version_in_range(
+            "2:3.0.2-1", "deb", bounds, distro_cpe_enabled=True,
+        )
+        assert v.affected is True
+        assert v.reason == "matched"
+
+    def test_flag_on_rpm_in_range_matches(self) -> None:
+        # ``3.0.2-1.el8`` strips to ``3.0.2`` and falls inside.
+        bounds = _bounds(start_inc="3.0.0", end_exc="3.0.7")
+        v = version_in_range(
+            "3.0.2-1.el8", "rpm", bounds, distro_cpe_enabled=True,
+        )
+        assert v.reason == "matched"
+
+    def test_flag_on_apk_in_range_matches(self) -> None:
+        # ``3.0.2-r0`` strips to ``3.0.2``.
+        bounds = _bounds(end_exc="3.0.7")
+        v = version_in_range(
+            "3.0.2-r0", "apk", bounds, distro_cpe_enabled=True,
+        )
+        assert v.reason == "matched"
+
+    def test_flag_on_conan_in_range_matches(self) -> None:
+        # Conan versions pass through; ``1.81.0`` compares directly.
+        bounds = _bounds(start_inc="1.80.0", end_exc="2.0.0")
+        v = version_in_range(
+            "1.81.0", "conan", bounds, distro_cpe_enabled=True,
+        )
+        assert v.reason == "matched"
+
+    # ----- Flag ON, out-of-range — dropped ---------------------------------
+
+    def test_flag_on_deb_above_range_drops(self) -> None:
+        # ``3.0.8-1`` normalises to ``3.0.8``; NVD range ``< 3.0.7``
+        # → above → out_of_range (the finding is dropped).
+        bounds = _bounds(end_exc="3.0.7")
+        v = version_in_range(
+            "3.0.8-1", "deb", bounds, distro_cpe_enabled=True,
+        )
+        assert v.affected is False
+        assert v.reason == "out_of_range"
+
+    def test_flag_on_apk_below_range_drops(self) -> None:
+        bounds = _bounds(start_inc="2.0.0", end_exc="3.0.0")
+        v = version_in_range(
+            "1.9.9-r5", "apk", bounds, distro_cpe_enabled=True,
+        )
+        assert v.affected is False
+        assert v.reason == "out_of_range"
+
+    # ----- Flag ON, normalisation stripping --------------------------------
+
+    def test_flag_on_deb_epoch_plus_revision_normalises_to_upstream(
+        self,
+    ) -> None:
+        # ``2:3.0.2-1+deb11u5`` — epoch ``2:`` AND revision ``-1+deb11u5``.
+        # After normalisation: ``3.0.2``. Range ``< 3.0.7`` → matched.
+        bounds = _bounds(end_exc="3.0.7")
+        v = version_in_range(
+            "2:3.0.2-1+deb11u5", "deb", bounds, distro_cpe_enabled=True,
+        )
+        assert v.reason == "matched"
+        # Confirm the matched_range label uses the bound (proves the
+        # comparison ran, not a degenerate path).
+        assert v.matched_range == "< 3.0.7"
+
+    def test_flag_on_rpm_release_strip_includes_dist_suffix(self) -> None:
+        # ``1:3.0.2-1.el8`` — epoch + release with .el8 dist suffix.
+        bounds = _bounds(end_exc="3.0.7")
+        v = version_in_range(
+            "1:3.0.2-1.el8", "rpm", bounds, distro_cpe_enabled=True,
+        )
+        assert v.reason == "matched"
+
+    # ----- Flag ON, non-distro ecosystem unchanged --------------------------
+
+    def test_flag_on_non_distro_ecosystem_unchanged(self) -> None:
+        # npm under flag-on must produce the same comparison result as
+        # under flag-off — the distro branch never fires for it.
+        bounds = _bounds(start_inc="1.0.0", end_exc="2.0.0")
+        v_off = version_in_range("1.5.0", "npm", bounds)
+        v_on = version_in_range(
+            "1.5.0", "npm", bounds, distro_cpe_enabled=True,
+        )
+        assert v_off == v_on
+        assert v_on.reason == "matched"
+
+    def test_flag_on_pypi_unchanged(self) -> None:
+        bounds = _bounds(end_exc="1.0.0")
+        v_off = version_in_range("1.0.0rc1", "pypi", bounds)
+        v_on = version_in_range(
+            "1.0.0rc1", "pypi", bounds, distro_cpe_enabled=True,
+        )
+        assert v_off == v_on
+        assert v_on.reason == "matched"
+
+    # ----- Flag ON edge cases -----------------------------------------------
+
+    def test_flag_on_empty_upstream_after_strip_is_unparseable(self) -> None:
+        # A pathological deb version that's ONLY an epoch + revision
+        # — after stripping, the upstream slot is empty. The
+        # normalize-and-compare path treats this as unparseable
+        # (conservative-keep), not a successful match.
+        bounds = _bounds(end_exc="3.0.7")
+        v = version_in_range(
+            "1:-1", "deb", bounds, distro_cpe_enabled=True,
+        )
+        # ``1:-1`` → strip epoch → ``-1`` → rsplit("-",1)[0] → ""
+        # → falls into the empty-after-normalise branch.
+        assert v.affected is True
+        assert v.reason == "version_unparseable"
 
 
 class TestParseRange:
