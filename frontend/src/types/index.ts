@@ -293,6 +293,18 @@ export interface DashboardPosture {
   // v2 additions — see `docs/dashboard-redesign.md` §9.3.
   total_findings?: number;
   distinct_vulnerabilities?: number;
+
+  // Phase-2 exploitability/quality aggregates (dashboard redesign). OPTIONAL
+  // and absent from the posture endpoint today — the FE feature-detects them:
+  // the "likely-exploited" tile and "needs-review" chip render only when the
+  // field is present, so they light up automatically when the backend
+  // aggregates land (no flag, no fake data). See the redesign plan.
+  /** Findings in scope whose CVE sits at/above the high-EPSS percentile
+   *  ({@link HIGH_EPSS_PERCENTILE}) — "likely to be exploited". */
+  high_epss_count?: number;
+  /** Findings in scope that are low-confidence / not-verified matches and
+   *  warrant manual review before action. */
+  needs_review_count?: number;
   /** Canonical 7-day delta envelope; carries `is_first_period`. */
   net_7day?: NetChange;
   /** @deprecated use `net_7day.added` — kept for one-release back-compat. */

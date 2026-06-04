@@ -34,6 +34,15 @@ export interface FindingsFilterState {
   matchStrategies: MatchStrategy[];
 }
 
+/**
+ * High-EPSS percentile threshold (0–100) — the boundary for "likely to be
+ * exploited" used by the dashboard's exploitability signal and its drill-down.
+ * Single source of truth so the dashboard tile, the `?epss=` deep-link, the
+ * destination `epssMinPct` filter, and the (Phase 2) backend aggregate all
+ * agree. 90 ≈ EpssChip's "High" band; tune here only.
+ */
+export const HIGH_EPSS_PERCENTILE = 90;
+
 export const DEFAULT_FILTERS: FindingsFilterState = {
   search: '',
   severityFilter: '',

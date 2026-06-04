@@ -8,51 +8,19 @@ import { Surface, SurfaceContent, SurfaceHeader } from '@/components/ui/Surface'
 import { Skeleton } from '@/components/ui/Spinner';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { getRuns } from '@/lib/api';
+import { aggregateRuns, type SeverityKey } from '@/lib/topVulnerableRuns';
+import { severityKeyToParam } from '@/lib/severityParam';
 import { cn } from '@/lib/utils';
-import type { AnalysisRun } from '@/types';
 
 const TOP_N = 5;
 
-interface SbomBucket {
-  sbomId: number;
-  sbomName: string;
-  critical: number;
-  high: number;
-  medium: number;
-  low: number;
-  totalFindings: number;
-  latestRunId: number;
-  weighted: number;
-}
-
-function aggregateRuns(runs: AnalysisRun[]): SbomBucket[] {
-  const buckets = new Map<number, SbomBucket>();
-  // Keep only the latest run per SBOM (runs come back desc by id).
-  for (const run of runs) {
-    if (run.sbom_id == null) continue;
-    if (buckets.has(run.sbom_id)) continue;
-    const critical = run.critical_count ?? 0;
-    const high = run.high_count ?? 0;
-    const medium = run.medium_count ?? 0;
-    const low = run.low_count ?? 0;
-    const totalFindings = run.total_findings ?? 0;
-    if (totalFindings === 0) continue;
-    buckets.set(run.sbom_id, {
-      sbomId: run.sbom_id,
-      sbomName: run.sbom_name ?? `SBOM #${run.sbom_id}`,
-      critical,
-      high,
-      medium,
-      low,
-      totalFindings,
-      latestRunId: run.id,
-      weighted: critical * 100 + high * 25 + medium * 8 + low * 2,
-    });
-  }
-  return Array.from(buckets.values())
-    .sort((a, b) => b.weighted - a.weighted)
-    .slice(0, TOP_N);
-}
+// Severity legend/badge config — colors mirror the stack-bar segments below.
+const SEVERITY_BADGES: Array<{ key: SeverityKey; label: string; dot: string }> = [
+  { key: 'critical', label: 'Critical', dot: 'bg-red-600' },
+  { key: 'high', label: 'High', dot: 'bg-orange-500' },
+  { key: 'medium', label: 'Medium', dot: 'bg-amber-500' },
+  { key: 'low', label: 'Low', dot: 'bg-sky-600' },
+];
 
 export function TopVulnerableSboms() {
   // Pull the most recent runs that produced findings.
@@ -63,7 +31,11 @@ export function TopVulnerableSboms() {
       getRuns({ run_status: 'FINDINGS', page: 1, page_size: 100 }, signal),
   });
 
-  const top = useMemo(() => aggregateRuns(runsQuery.data ?? []), [runsQuery.data]);
+  // aggregateRuns returns the full ranked set; this panel shows the top N.
+  const top = useMemo(
+    () => aggregateRuns(runsQuery.data ?? []).slice(0, TOP_N),
+    [runsQuery.data],
+  );
   const maxWeighted = top[0]?.weighted ?? 1;
 
   return (
@@ -115,90 +87,90 @@ export function TopVulnerableSboms() {
               const widthPct = (bucket.weighted / maxWeighted) * 100;
               return (
                 <li key={bucket.sbomId}>
-                  <Link
-                    href={`/analysis/${bucket.latestRunId}`}
+                  {/* The row container owns hover/focus affordance. The main
+                      link (→ unfiltered run) and the per-severity deep-link
+                      badges are SIBLINGS — nesting <a> in <a> is invalid. */}
+                  <div
                     className={cn(
-                      'group flex items-center gap-3 rounded-lg border border-transparent px-2 py-2 transition-all duration-base ease-spring',
+                      'group rounded-lg border border-transparent px-2 py-2 transition-all duration-base ease-spring',
                       'hover:-translate-y-px hover:border-border-subtle hover:bg-surface-muted',
-                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/40',
                     )}
                   >
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-hcl-light font-metric text-xs font-bold text-hcl-navy">
-                      {idx + 1}
-                    </span>
-                    <div className="min-w-0 flex-1 space-y-1.5">
-                      <div className="flex items-baseline justify-between gap-2">
-                        <span className="truncate text-sm font-medium text-hcl-navy group-hover:text-primary">
-                          {bucket.sbomName}
-                        </span>
-                        <span className="font-metric text-xs text-hcl-muted">
-                          {bucket.totalFindings.toLocaleString()} findings
-                        </span>
+                    <Link
+                      href={`/analysis/${bucket.latestRunId}`}
+                      className="flex items-center gap-3 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/40"
+                    >
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-hcl-light font-metric text-xs font-bold text-hcl-navy">
+                        {idx + 1}
+                      </span>
+                      <div className="min-w-0 flex-1 space-y-1.5">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <span className="truncate text-sm font-medium text-hcl-navy group-hover:text-primary">
+                            {bucket.sbomName}
+                          </span>
+                          <span className="font-metric text-xs text-hcl-muted">
+                            {bucket.totalFindings.toLocaleString()} findings
+                          </span>
+                        </div>
+                        {/* Severity stack bar */}
+                        <div
+                          className="flex h-1.5 w-full overflow-hidden rounded-full bg-border-subtle"
+                          style={{ width: `${Math.max(20, widthPct)}%` }}
+                          role="img"
+                          aria-label={`Critical ${bucket.critical}, High ${bucket.high}, Medium ${bucket.medium}, Low ${bucket.low}`}
+                        >
+                          {bucket.critical > 0 && (
+                            <div
+                              className="h-full bg-red-600"
+                              style={{ flex: bucket.critical, transition: 'flex 600ms var(--ease-spring)' }}
+                            />
+                          )}
+                          {bucket.high > 0 && (
+                            <div
+                              className="h-full bg-orange-500"
+                              style={{ flex: bucket.high }}
+                            />
+                          )}
+                          {bucket.medium > 0 && (
+                            <div
+                              className="h-full bg-amber-500"
+                              style={{ flex: bucket.medium }}
+                            />
+                          )}
+                          {bucket.low > 0 && (
+                            <div
+                              className="h-full bg-sky-600"
+                              style={{ flex: bucket.low }}
+                            />
+                          )}
+                        </div>
                       </div>
-                      {/* Severity stack bar */}
-                      <div
-                        className="flex h-1.5 w-full overflow-hidden rounded-full bg-border-subtle"
-                        style={{ width: `${Math.max(20, widthPct)}%` }}
-                        role="img"
-                        aria-label={`Critical ${bucket.critical}, High ${bucket.high}, Medium ${bucket.medium}, Low ${bucket.low}`}
-                      >
-                        {bucket.critical > 0 && (
-                          <div
-                            className="h-full bg-red-600"
-                            style={{ flex: bucket.critical, transition: 'flex 600ms var(--ease-spring)' }}
-                          />
-                        )}
-                        {bucket.high > 0 && (
-                          <div
-                            className="h-full bg-orange-500"
-                            style={{ flex: bucket.high }}
-                          />
-                        )}
-                        {bucket.medium > 0 && (
-                          <div
-                            className="h-full bg-amber-500"
-                            style={{ flex: bucket.medium }}
-                          />
-                        )}
-                        {bucket.low > 0 && (
-                          <div
-                            className="h-full bg-sky-600"
-                            style={{ flex: bucket.low }}
-                          />
-                        )}
-                      </div>
-                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-hcl-muted">
-                        {bucket.critical > 0 && (
-                          <span>
-                            <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-red-600" aria-hidden />
-                            <strong className="font-metric text-hcl-navy">{bucket.critical}</strong> Critical
-                          </span>
-                        )}
-                        {bucket.high > 0 && (
-                          <span>
-                            <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-orange-500" aria-hidden />
-                            <strong className="font-metric text-hcl-navy">{bucket.high}</strong> High
-                          </span>
-                        )}
-                        {bucket.medium > 0 && (
-                          <span>
-                            <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-amber-500" aria-hidden />
-                            <strong className="font-metric text-hcl-navy">{bucket.medium}</strong> Medium
-                          </span>
-                        )}
-                        {bucket.low > 0 && (
-                          <span>
-                            <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-sky-600" aria-hidden />
-                            <strong className="font-metric text-hcl-navy">{bucket.low}</strong> Low
-                          </span>
-                        )}
-                      </div>
+                      <ArrowUpRight
+                        className="h-3.5 w-3.5 shrink-0 text-hcl-border transition-colors group-hover:text-primary"
+                        aria-hidden
+                      />
+                    </Link>
+                    {/* Per-severity deep-links — drill into THIS app's run
+                        pre-filtered to one tier. Run-scoped, so no globalCount
+                        (and therefore no reconciliation banner). */}
+                    <div className="mt-1.5 flex flex-wrap gap-x-1 gap-y-0.5 pl-11 text-[10px] text-hcl-muted">
+                      {SEVERITY_BADGES.map((sev) => {
+                        const value = bucket[sev.key];
+                        if (value <= 0) return null;
+                        return (
+                          <Link
+                            key={sev.key}
+                            href={`/analysis/${bucket.latestRunId}?severity=${severityKeyToParam(sev.key)}`}
+                            aria-label={`View ${sev.label} findings for ${bucket.sbomName}`}
+                            className="inline-flex items-center gap-1 rounded px-1 py-0.5 transition-colors hover:bg-surface hover:text-hcl-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/40"
+                          >
+                            <span className={cn('inline-block h-1.5 w-1.5 rounded-full', sev.dot)} aria-hidden />
+                            <strong className="font-metric text-hcl-navy">{value}</strong> {sev.label}
+                          </Link>
+                        );
+                      })}
                     </div>
-                    <ArrowUpRight
-                      className="h-3.5 w-3.5 shrink-0 text-hcl-border transition-colors group-hover:text-primary"
-                      aria-hidden
-                    />
-                  </Link>
+                  </div>
                 </li>
               );
             })}
