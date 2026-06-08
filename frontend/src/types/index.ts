@@ -290,6 +290,11 @@ export interface DashboardPosture {
   total_sboms: number;
   total_active_projects: number;
 
+  // Counter tiles (manager dashboard): "SBOMs Analysed" = distinct SBOMs with
+  // a completed run; "Applications Scanned" = distinct projects with one.
+  total_sboms_analysed?: number;
+  total_applications_scanned?: number;
+
   // v2 additions — see `docs/dashboard-redesign.md` §9.3.
   total_findings?: number;
   distinct_vulnerabilities?: number;
@@ -487,6 +492,32 @@ export interface DashboardTrendPoint {
   unknown?: number;
   /** v2 — convenience aggregate; same as sum of severities. */
   total?: number;
+  /** Manager trend overlays — present when the trend is requested with a
+   *  granularity. Distinct active findings with a fix; findings resolved in
+   *  the period. 0/absent on the legacy daily path. */
+  fix_available?: number;
+  resolved?: number;
+}
+
+export type TrendGranularity = 'day' | 'week' | 'month' | 'year';
+
+export interface VulnerabilityAgeBuckets {
+  le_30d: number;
+  d31_90: number;
+  d91_365: number;
+  gt_365: number;
+  unknown: number;
+}
+
+export type AgePeriod = 'all' | 'day' | 'week' | 'month' | 'year' | 'custom';
+
+export interface VulnerabilityAgeResponse {
+  buckets: VulnerabilityAgeBuckets;
+  total: number;
+  period: AgePeriod;
+  date_from: string | null;
+  date_to: string | null;
+  schema_version?: number;
 }
 
 export type TrendAnnotationKind =
@@ -528,6 +559,9 @@ export interface DashboardTrend {
    * condition (`< 7` → show empty). Bug 6 lock.
    */
   runs_distinct_dates?: number;
+  /** Period bucketing of `points`: null on the legacy daily path, else
+   *  day/week/month/year (manager trend). */
+  granularity?: TrendGranularity | null;
   schema_version?: number;
 }
 

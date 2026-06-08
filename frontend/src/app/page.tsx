@@ -8,6 +8,10 @@ import { TopBar } from '@/components/layout/TopBar';
 import { Motion } from '@/components/ui/Motion';
 import { HeroPostureCard } from '@/components/dashboard/HeroPostureCard/HeroPostureCard';
 import { WhatsNewStrip } from '@/components/dashboard/WhatsNewStrip';
+import { CounterTiles } from '@/components/dashboard/CounterTiles';
+import { SeverityChart } from '@/components/dashboard/SeverityChart';
+import { VulnerabilityAgePie } from '@/components/dashboard/VulnerabilityAgePie';
+import { TrendExplorer } from '@/components/dashboard/TrendExplorer';
 import { QuickActionsV2 } from '@/components/dashboard/QuickActionsV2/QuickActionsV2';
 import { FindingsTrendChart } from '@/components/dashboard/FindingsTrendChart/FindingsTrendChart';
 import { LifetimeStats } from '@/components/dashboard/LifetimeStats/LifetimeStats';
@@ -154,8 +158,18 @@ export default function DashboardPage() {
       <div className="space-y-6 p-6">
         <AiConfigBanner />
 
-        {/* 1 — the decision */}
+        {/* Counter tiles — stored / scanned / analysed */}
         <Motion preset="rise">
+          <CounterTiles />
+        </Motion>
+
+        {/* "Your Analyzer, So Far" — lifetime growth, kept near the top */}
+        <Motion preset="rise" delay={20}>
+          <LifetimeStats data={lifetimeQuery.data} isLoading={lifetimeQuery.isLoading} />
+        </Motion>
+
+        {/* 1 — the decision */}
+        <Motion preset="rise" delay={40}>
           <HeroPostureCard
             posture={postureQuery.data}
             isLoading={postureQuery.isLoading}
@@ -182,8 +196,22 @@ export default function DashboardPage() {
           <QuickActionsV2 primaryAction={postureQuery.data?.primary_action} />
         </Motion>
 
-        {/* 4 — where to look first */}
-        <Motion preset="rise" delay={180}>
+        {/* Distribution pies — vulnerability by threat level + by age. Placed
+            ABOVE the vulnerable-SBOM list so the overview reads before the list. */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <Motion preset="rise" delay={180}>
+            <SeverityChart
+              data={postureQuery.data?.severity}
+              isLoading={postureQuery.isLoading}
+            />
+          </Motion>
+          <Motion preset="rise" delay={220}>
+            <VulnerabilityAgePie />
+          </Motion>
+        </div>
+
+        {/* Where to look first */}
+        <Motion preset="rise" delay={260}>
           <TopVulnerableSboms />
         </Motion>
 
@@ -208,14 +236,15 @@ export default function DashboardPage() {
           <FindingsTrendChart data={trendQuery.data} isLoading={trendQuery.isLoading} />
         </Motion>
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <Motion preset="rise" delay={300}>
-            <LifetimeStats data={lifetimeQuery.data} isLoading={lifetimeQuery.isLoading} />
-          </Motion>
-          <Motion preset="rise" delay={360}>
-            <ActivityFeed />
-          </Motion>
-        </div>
+        {/* Trend explorer — granularity + application filter + fix/resolved */}
+        <Motion preset="rise" delay={260}>
+          <TrendExplorer />
+        </Motion>
+
+        {/* Recent activity — supporting detail at the foot of the dashboard. */}
+        <Motion preset="rise" delay={300}>
+          <ActivityFeed />
+        </Motion>
       </div>
     </div>
   );

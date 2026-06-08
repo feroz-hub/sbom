@@ -20,10 +20,11 @@
   --color-hcl-blue: #0067b1;
   --color-hcl-cyan: #00b2e2;
   --color-hcl-accent: #0099cc;
+  --color-hcl-violet: #7c3aa8; /* HCLTech violet — lightened */
 
-  /* Sidebar: deep HCL navy gradient baseline */
-  --color-sidebar: #0f2744;
-  --color-sidebar-accent: #0067b1;
+  /* Sidebar: lighter HCLTech violet (still dark enough for white text) */
+  --color-sidebar: #5a2d8f;
+  --color-sidebar-accent: #7c3aa8;
 
   --focus-ring-color: #0067b1;
   --focus-ring-width: 2px;
@@ -97,9 +98,10 @@
   --color-hcl-blue: #3d9fda;
   --color-hcl-cyan: #38d4ff;
   --color-hcl-accent: #38d4ff;
+  --color-hcl-violet: #9457c4; /* HCLTech violet — lightened (dark theme) */
 
-  --color-sidebar: #050d18;
-  --color-sidebar-accent: #0067b1;
+  --color-sidebar: #3d1f63;
+  --color-sidebar-accent: #9457c4;
 
   --focus-ring-color: #38bdf8;
 
@@ -196,13 +198,13 @@
     background: linear-gradient(90deg, var(--color-sidebar) 0%, var(--color-hcl-blue) 100%);
   }
 
-  /** Sidebar masthead — HCLTech navy → blue depth */
+  /** Sidebar masthead — HCLTech violet depth */
   .sidebar-brand-bar {
     background: linear-gradient(
       125deg,
       var(--color-sidebar) 0%,
-      color-mix(in srgb, var(--color-hcl-blue) 38%, var(--color-sidebar)) 42%,
-      #001f3d 100%
+      color-mix(in srgb, var(--color-hcl-violet) 42%, var(--color-sidebar)) 42%,
+      #1a0930 100%
     );
   }
 
@@ -210,8 +212,8 @@
     background: linear-gradient(
       125deg,
       var(--color-sidebar) 0%,
-      color-mix(in srgb, var(--color-hcl-blue) 45%, var(--color-sidebar)) 40%,
-      #020810 100%
+      color-mix(in srgb, var(--color-hcl-violet) 48%, var(--color-sidebar)) 40%,
+      #120620 100%
     );
   }
 

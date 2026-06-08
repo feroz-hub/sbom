@@ -16,7 +16,7 @@ describe('KeySignalsRow — KEV count rendering (Bug 1 lock)', () => {
   it('renders kev_count verbatim', () => {
     render(<KeySignalsRow kevCount={10} criticalCount={0} fixCount={0} />);
     expect(screen.getByText('10')).toBeInTheDocument();
-    expect(screen.getByText('KEV exposed')).toBeInTheDocument();
+    expect(screen.getByText('Known Exploited Vulnerabilities')).toBeInTheDocument();
   });
 });
 
@@ -51,7 +51,7 @@ describe('KeySignalsRow — drill-down clickability (no dead buttons)', () => {
     );
 
     // KEV has a count → clickable.
-    const kevBtn = screen.getByRole('button', { name: /KEV exposed/i });
+    const kevBtn = screen.getByRole('button', { name: /Known Exploited Vulnerabilities/i });
     fireEvent.click(kevBtn);
     expect(onKevClick).toHaveBeenCalledTimes(1);
 

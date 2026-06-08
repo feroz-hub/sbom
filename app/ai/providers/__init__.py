@@ -24,6 +24,7 @@ from .gemini import GeminiProvider
 from .grok import GrokProvider
 from .ollama import OllamaProvider
 from .openai import OpenAiProvider
+from .sarvam import SarvamProvider
 from .vllm import VllmProvider
 
 __all__ = [
@@ -43,5 +44,6 @@ __all__ = [
     "OpenAiProvider",
     "ProviderInfo",
     "ProviderUnavailableError",
+    "SarvamProvider",
     "VllmProvider",
 ]

@@ -80,13 +80,17 @@ class TrendDataPoint(BaseModel):
     """One day's severity breakdown. ``unknown`` is first-class in v2 (it
     used to be silently dropped — see ``docs/dashboard-v2-audit.md`` §3.3)."""
 
-    date: str  # YYYY-MM-DD
+    date: str  # YYYY-MM-DD (period end for week/month/year granularity)
     critical: int = 0
     high: int = 0
     medium: int = 0
     low: int = 0
     unknown: int = 0
     total: int = 0
+    # Fix-series overlays (manager dashboard). Populated when the trend is
+    # requested with a ``granularity``; 0 on the legacy daily path.
+    fix_available: int = 0
+    resolved: int = 0
 
 
 class TrendAnnotation(BaseModel):
@@ -125,6 +129,9 @@ class FindingsTrendResponse(BaseModel):
     # Canonical run counts for the empty-state copy/condition.
     runs_total: int = 0
     runs_distinct_dates: int = 0
+    # Granularity of the points: null on the legacy daily path, else
+    # day/week/month/year (manager dashboard period trend).
+    granularity: str | None = None
     schema_version: int = 1
 
 
@@ -167,6 +174,35 @@ class NetChange(BaseModel):
     window_days: int = 7
 
 
+class AgeBuckets(BaseModel):
+    """CVE-age bucket counts for the "Vulnerability by Age" pie.
+
+    Age = ``now - published_on``. ``unknown`` holds findings with no usable
+    published date. Sums to the in-scope total.
+    """
+
+    le_30d: int = 0
+    d31_90: int = 0
+    d91_365: int = 0
+    gt_365: int = 0
+    unknown: int = 0
+
+
+class VulnerabilityAgeResponse(BaseModel):
+    """Response for ``GET /dashboard/vulnerability-age``.
+
+    ``period`` echoes the requested observation window (on scan date); the
+    buckets are the CVE-age distribution of findings detected in that window.
+    """
+
+    buckets: AgeBuckets
+    total: int = 0
+    period: Literal["all", "day", "week", "month", "year", "custom"] = "all"
+    date_from: str | None = None
+    date_to: str | None = None
+    schema_version: int = 1
+
+
 class DashboardPostureResponse(BaseModel):
     """v2 posture envelope.
 
@@ -185,6 +221,20 @@ class DashboardPostureResponse(BaseModel):
     last_successful_run_at: str | None = None
     total_sboms: int = 0
     total_active_projects: int = 0
+
+    # Counter tiles (manager dashboard). "Total SBOMs Stored" == total_sboms;
+    # these add "Total SBOMs Analysed" (distinct SBOMs with a completed run)
+    # and "Total Applications Scanned" (distinct projects with a completed run).
+    total_sboms_analysed: int = 0
+    total_applications_scanned: int = 0
+
+    # Exploitability / match-quality aggregates (dashboard redesign Phase 2).
+    # ``high_epss_count`` is findings likely-to-be-exploited (EPSS percentile
+    # >= the high boundary); ``needs_review_count`` is low-confidence /
+    # not-verified matches. The frontend feature-detects these to render the
+    # "likely-exploited" tile and the "needs-review" chip.
+    high_epss_count: int = 0
+    needs_review_count: int = 0
 
     # New in v2 — see ``docs/dashboard-redesign.md`` §9.3.
     total_findings: int = 0

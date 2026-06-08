@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 from statistics import fmean
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlalchemy.orm import Session
@@ -31,57 +32,83 @@ router = APIRouter()
 def dashboard_trend(
     request: Request,
     response: Response,
-    days: int = Query(30, ge=1, le=365, description="Number of days to look back"),
+    days: int = Query(30, ge=1, le=365, description="Number of days to look back (legacy daily path)"),
+    granularity: Literal["day", "week", "month", "year"] | None = Query(
+        None,
+        description="Period bucketing. Omit for the legacy daily series; set it for the "
+        "manager dashboard trend (adds fix_available + resolved overlays).",
+    ),
+    application_ids: list[int] | None = Query(
+        None, description="Restrict to runs of these projects (manager app filter)."
+    ),
     db: Session = Depends(get_db),
 ):
-    """Return zero-filled daily severity counts + annotations for the chart.
+    """Findings trend for the chart.
 
-    Each day's severity counts come from ``findings.daily_distinct_active``
-    (spec §3.4) — distinct ``(vuln_id, component_name, component_version)``
-    tuples in the latest successful run of each SBOM as-of-end-of-day. This
-    replaces the old "sum raw rows across runs" implementation that
-    over-counted by orders of magnitude (Bug 3).
+    **Legacy path (``granularity`` omitted):** zero-filled daily severity
+    counts from ``findings.daily_distinct_active`` (spec §3.4) +
+    annotations — unchanged, so the existing chart keeps working.
 
-    ``runs_total`` and ``runs_distinct_dates`` are exposed so the FE
-    empty-state copy/condition stops lying about run counts (Bug 2 / Bug 6).
+    **Manager path (``granularity`` set):** period-bucketed
+    (day/week/month/year) distinct-active snapshots from ``findings.trend``,
+    optionally filtered to ``application_ids``, with ``fix_available`` and
+    ``resolved`` overlays on each point. Annotations are omitted for periods >
+    a day (they're day-scoped event markers).
     """
-    points = metrics.findings_daily_distinct_active(db, days=days)
-    annotations = build_trend_annotations(db, days=days)
-
-    avg_total = fmean(p.total for p in points) if points else 0.0
-
     earliest_iso = metrics.runs_first_completed_at(db)
     earliest_run_date = earliest_iso[:10] if earliest_iso else None
-
     runs_total = metrics.runs_total_lifetime(db)
     runs_distinct_dates = metrics.runs_distinct_dates_with_data(db)
 
-    point_dicts = [
-        {
-            "date": p.date,
-            "critical": p.critical,
-            "high": p.high,
-            "medium": p.medium,
-            "low": p.low,
-            "unknown": p.unknown,
-            "total": p.total,
+    if granularity is None:
+        # ── Legacy daily path — behaviour preserved verbatim. ──
+        points = metrics.findings_daily_distinct_active(db, days=days)
+        annotations = build_trend_annotations(db, days=days)
+        point_dicts = [
+            {
+                "date": p.date,
+                "critical": p.critical,
+                "high": p.high,
+                "medium": p.medium,
+                "low": p.low,
+                "unknown": p.unknown,
+                "total": p.total,
+            }
+            for p in points
+        ]
+        avg_total = fmean(p.total for p in points) if points else 0.0
+        payload_dict = {
+            "days": days,
+            "points": point_dicts,
+            "series": point_dicts,
+            "annotations": [a.model_dump() for a in annotations],
+            "avg_total": round(avg_total, 2),
+            "earliest_run_date": earliest_run_date,
+            "runs_total": int(runs_total),
+            "runs_distinct_dates": int(runs_distinct_dates),
+            "granularity": None,
+            "schema_version": 1,
         }
-        for p in points
-    ]
-
-    payload_dict = {
-        "days": days,
-        "points": point_dicts,
-        # series alias — same data, same field shape. Removed in a follow-up
-        # release once the v2 frontend ships and the v1 bundle is retired.
-        "series": point_dicts,
-        "annotations": [a.model_dump() for a in annotations],
-        "avg_total": round(avg_total, 2),
-        "earliest_run_date": earliest_run_date,
-        "runs_total": int(runs_total),
-        "runs_distinct_dates": int(runs_distinct_dates),
-        "schema_version": 1,
-    }
+    else:
+        # ── Manager path — period buckets + app filter + fix overlays. ──
+        point_dicts = metrics.findings_trend(
+            db, granularity=granularity, application_ids=application_ids
+        )
+        avg_total = (
+            fmean(p["total"] for p in point_dicts) if point_dicts else 0.0
+        )
+        payload_dict = {
+            "days": days,
+            "points": point_dicts,
+            "series": point_dicts,
+            "annotations": [],  # day-scoped markers don't map to wider periods
+            "avg_total": round(avg_total, 2),
+            "earliest_run_date": earliest_run_date,
+            "runs_total": int(runs_total),
+            "runs_distinct_dates": int(runs_distinct_dates),
+            "granularity": granularity,
+            "schema_version": 1,
+        }
 
     nm = maybe_not_modified(request, response, payload_dict)
     if nm is not None:

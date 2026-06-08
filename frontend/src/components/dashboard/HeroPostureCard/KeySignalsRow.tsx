@@ -48,11 +48,11 @@ export function KeySignalsRow({
   return (
     <div className={cn('grid grid-cols-2 gap-3', colsClass)}>
       <HeroMetric
-        label="KEV exposed"
+        label="Known Exploited Vulnerabilities"
         icon={<ShieldAlert className="h-3.5 w-3.5" aria-hidden />}
         tone={(kevCount > 0 ? 'red' : 'neutral')}
-        tooltip="Findings whose CVE is on CISA's Known Exploited Vulnerabilities catalog — actively exploited in the wild."
-        caption="Actively exploited"
+        tooltip="Findings whose CVE is on CISA's Known Exploited Vulnerabilities (KEV) catalog — actively exploited in the wild."
+        caption="Actively exploited (CISA KEV)"
         onClick={kevCount > 0 ? onKevClick : undefined}
       >
         {kevCount.toLocaleString()}

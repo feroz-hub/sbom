@@ -162,3 +162,53 @@ describe('dashboard hero — Critical drill-down', () => {
     ).toHaveLength(0);
   });
 });
+
+describe('dashboard hero — Phase 2 gated signals (EPSS tile + needs-review chip)', () => {
+  const POSTURE_BASE = {
+    severity: { critical: 42, high: 0, medium: 0, low: 0, unknown: 0 },
+    kev_count: 0,
+    fix_available_count: 0,
+    last_successful_run_at: '2026-05-01T10:02:00Z',
+    total_sboms: 3,
+    total_active_projects: 1,
+    headline_state: 'criticals_no_kev',
+  };
+
+  it('shows the likely-exploited tile and drills to ?epss=90 when high_epss_count is present', async () => {
+    getDashboardPosture.mockResolvedValue({ ...POSTURE_BASE, high_epss_count: 5 });
+    render(wrap(<DashboardPage />));
+
+    const epssBtn = await screen.findByRole(
+      'button',
+      { name: /Likely exploited/i },
+      { timeout: 5000 },
+    );
+    fireEvent.click(epssBtn);
+    expect(push).toHaveBeenCalledWith('/analysis/7?epss=90&globalCount=5');
+  });
+
+  it('shows the needs-review chip and drills to ?review=1 when needs_review_count > 0', async () => {
+    getDashboardPosture.mockResolvedValue({ ...POSTURE_BASE, needs_review_count: 3 });
+    render(wrap(<DashboardPage />));
+
+    const chip = await screen.findByRole(
+      'button',
+      { name: /need review/i },
+      { timeout: 5000 },
+    );
+    fireEvent.click(chip);
+    expect(push).toHaveBeenCalledWith('/analysis/7?review=1&globalCount=3');
+  });
+
+  it('hides both gated signals when the posture fields are absent', async () => {
+    // beforeEach posture carries neither field.
+    render(wrap(<DashboardPage />));
+    await screen.findAllByRole(
+      'button',
+      { name: /View Critical findings/i },
+      { timeout: 5000 },
+    );
+    expect(screen.queryByRole('button', { name: /Likely exploited/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /need review/i })).toBeNull();
+  });
+});

@@ -34,6 +34,7 @@ from .providers.gemini import GeminiProvider
 from .providers.grok import GrokProvider
 from .providers.ollama import OllamaProvider
 from .providers.openai import OpenAiProvider
+from .providers.sarvam import SarvamProvider
 from .providers.vllm import VllmProvider
 
 log = logging.getLogger("sbom.ai.registry")
@@ -199,6 +200,14 @@ class ProviderRegistry:
                 max_concurrent=cfg.max_concurrent,
                 rate_per_minute=cfg.rate_per_minute,
             )
+        if cfg.name == "sarvam":
+            return SarvamProvider(
+                api_key=cfg.api_key,
+                default_model=cfg.default_model,
+                base_url=cfg.base_url or "https://api.sarvam.ai/v1",
+                max_concurrent=cfg.max_concurrent,
+                rate_per_minute=cfg.rate_per_minute,
+            )
         if cfg.name == "custom_openai":
             return CustomOpenAiCompatibleProvider(
                 base_url=cfg.base_url,
@@ -322,6 +331,18 @@ def build_configs_from_settings() -> list[ProviderConfig]:
                 max_concurrent=s.ai_grok_max_concurrent,
                 rate_per_minute=s.ai_grok_rpm,
                 tier="free" if (s.ai_grok_tier or "").strip().lower() == "free" else "paid",
+            )
+        )
+    if "sarvam" in declared:
+        out.append(
+            ProviderConfig(
+                name="sarvam",
+                enabled=bool(s.sarvam_api_key.strip()),
+                default_model=s.ai_sarvam_model,
+                api_key=s.sarvam_api_key.strip(),
+                base_url=(s.ai_sarvam_base_url or "https://api.sarvam.ai/v1").strip(),
+                max_concurrent=s.ai_sarvam_max_concurrent,
+                rate_per_minute=s.ai_sarvam_rpm,
             )
         )
     if "custom_openai" in declared:

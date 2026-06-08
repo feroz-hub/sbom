@@ -8,6 +8,8 @@ Module organisation matches the spec catalog:
 
 * ``findings``  — per-run, latest-state, lifetime, daily-distinct
 * ``kev``       — single canonical KEV-membership metric (parameterised scope)
+* ``epss``      — high-EPSS ("likely exploited") count (parameterised scope)
+* ``quality``   — needs-review / not-verified match count (parameterised scope)
 * ``runs``      — run counts, distinct-dates, first-completed
 * ``windows``   — added/resolved/net change over time windows
 * ``sboms``     — portfolio counts (sbom, project)
@@ -17,7 +19,9 @@ Helpers (``_helpers``, ``cache``, ``base``) are private to this package.
 
 from __future__ import annotations
 
+from .age import AGE_BUCKETS, findings_age_distribution
 from .base import COMPLETED_RUN_STATUSES, NetChangeResult, TrendPoint
+from .epss import findings_high_epss_in_scope
 from .findings import (
     findings_daily_distinct_active,
     findings_distinct_active_as_of,
@@ -30,6 +34,7 @@ from .findings import (
     findings_latest_per_sbom_total,
 )
 from .kev import findings_kev_in_scope
+from .quality import findings_needs_review_in_scope
 from .runs import (
     RunsAggregate,
     runs_aggregate,
@@ -39,7 +44,14 @@ from .runs import (
     runs_first_completed_at,
     runs_total_lifetime,
 )
-from .sboms import projects_active_total, projects_total, sboms_total
+from .sboms import (
+    applications_scanned_total,
+    projects_active_total,
+    projects_total,
+    sboms_analysed_total,
+    sboms_total,
+)
+from .trend import findings_trend
 from .windows import findings_net_change
 
 __all__ = [
@@ -59,6 +71,11 @@ __all__ = [
     "findings_daily_distinct_active",
     # kev
     "findings_kev_in_scope",
+    # epss / quality / age
+    "findings_high_epss_in_scope",
+    "findings_needs_review_in_scope",
+    "findings_age_distribution",
+    "AGE_BUCKETS",
     # runs
     "runs_total_lifetime",
     "runs_completed_lifetime",
@@ -67,10 +84,13 @@ __all__ = [
     "runs_first_completed_at",
     "runs_aggregate",
     "RunsAggregate",
-    # windows
+    # trend / windows
+    "findings_trend",
     "findings_net_change",
     # sboms / projects
     "sboms_total",
+    "sboms_analysed_total",
+    "applications_scanned_total",
     "projects_total",
     "projects_active_total",
 ]

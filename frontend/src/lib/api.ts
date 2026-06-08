@@ -23,6 +23,9 @@ import type {
   SBOMRiskSummary,
   ValidationReport,
   DashboardTrend,
+  TrendGranularity,
+  VulnerabilityAgeResponse,
+  AgePeriod,
   CompareRunsResult,
   AnalysisSchedule,
   SbomScheduleResolved,
@@ -702,6 +705,39 @@ export function revalidateSbom(sbomId: number, signal?: AbortSignal) {
 // ─── Dashboard trend ─────────────────────────────────────────────────────────
 export function getDashboardTrend(days = 30, signal?: AbortSignal) {
   return request<DashboardTrend>(`/dashboard/trend?days=${days}`, { signal });
+}
+
+/**
+ * Manager trend: period-bucketed (granularity) + optional application filter,
+ * with fix_available / resolved overlays on each point. Distinct from the
+ * legacy daily `getDashboardTrend` so the existing chart is untouched.
+ */
+export function getDashboardTrendFiltered(
+  opts: { granularity: TrendGranularity; applicationIds?: number[] },
+  signal?: AbortSignal,
+) {
+  const params = new URLSearchParams();
+  params.set('granularity', opts.granularity);
+  for (const id of opts.applicationIds ?? []) {
+    params.append('application_ids', String(id));
+  }
+  return request<DashboardTrend>(`/dashboard/trend?${params.toString()}`, { signal });
+}
+
+/** "Vulnerability by Age" pie — CVE-age buckets, observation window on scan date. */
+export function getVulnerabilityAge(
+  opts: { period?: AgePeriod; from?: string; to?: string } = {},
+  signal?: AbortSignal,
+) {
+  const params = new URLSearchParams();
+  if (opts.period) params.set('period', opts.period);
+  if (opts.from) params.set('date_from', opts.from);
+  if (opts.to) params.set('date_to', opts.to);
+  const qs = params.toString();
+  return request<VulnerabilityAgeResponse>(
+    `/dashboard/vulnerability-age${qs ? `?${qs}` : ''}`,
+    { signal },
+  );
 }
 
 // ─── Dashboard lifetime ──────────────────────────────────────────────────────
