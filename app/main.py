@@ -245,7 +245,7 @@ def _reconcile_zombie_ai_fix_batches() -> None:
                 UPDATE ai_fix_batch
                 SET status = 'failed',
                     completed_at = :now,
-                    last_error = 'reconciled at startup; previous process exited unexpectedly'
+                    last_error = 'interrupted — the server restarted before this batch finished; re-run to retry'
                 WHERE status IN ('queued', 'pending', 'in_progress', 'paused_budget')
                   AND created_at < :threshold
                   AND completed_at IS NULL

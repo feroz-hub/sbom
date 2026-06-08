@@ -318,3 +318,52 @@ def test_regenerate_finding_fix_force_refreshes(client, _seeded_run, _enable_ai,
 def test_get_finding_fix_404_for_unknown(client, _enable_ai):
     resp = client.get("/api/v1/findings/9999999/ai-fix")
     assert resp.status_code == 404
+
+
+# ============================================================ Pool-leak guard
+
+
+def test_sse_stream_does_not_pin_db_connection(client, _seeded_run, _memory_store, monkeypatch):
+    """Leak guard for the QueuePool-exhaustion bug.
+
+    An SSE progress stream stays open as long as generation (minutes). The
+    endpoint must NOT hold a DB connection for that whole time — the buggy
+    version kept its ``Depends(get_db)`` session checked out for the stream's
+    lifetime (FastAPI runs the dependency cleanup only after the response
+    finishes), so each subscriber pinned one of the 15 pool connections and
+    starved the frequently-polled ``/progress``.
+
+    We snapshot ``engine.pool.checkedout()`` at the moment the stream body
+    runs — i.e. AFTER the endpoint's upfront existence checks. The fixed
+    endpoint has already closed its short-lived session by then; the buggy one
+    still holds the request session open.
+    """
+    import app.routers.ai_fixes as ai_router
+    from app.ai.progress import initial_progress
+    from app.db import engine
+
+    run_id = _seeded_run["run_id"]
+    # Put a live progress entry in the store so the legacy stream takes the
+    # real (non-phantom) path through ``_sse_response``.
+    _memory_store.write(initial_progress(run_id, total=1, status="in_progress"))
+
+    captured: dict[str, int] = {}
+
+    def _spy_progress_events(store, rid, batch_id=None):
+        captured["during_stream"] = engine.pool.checkedout()
+        return iter(())  # no events → the stream ends immediately
+
+    monkeypatch.setattr(ai_router, "progress_events", _spy_progress_events)
+
+    baseline = engine.pool.checkedout()
+    resp = client.get(f"/api/v1/runs/{run_id}/ai-fixes/stream")
+    assert resp.status_code == 200
+
+    # The fix: no pool connection is held while the stream is producing.
+    assert captured["during_stream"] == baseline, (
+        f"SSE stream held {captured['during_stream'] - baseline} extra "
+        "connection(s) — the endpoint is pinning a pooled connection across "
+        "the stream's lifetime."
+    )
+    # And nothing leaked once the request completes.
+    assert engine.pool.checkedout() == baseline

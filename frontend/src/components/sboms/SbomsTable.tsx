@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Eye, Trash2 } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Alert } from '@/components/ui/Alert';
 import { Select } from '@/components/ui/Select';
@@ -351,9 +352,13 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
                   <Td className="font-mono text-xs text-hcl-muted">#{sbom.id}</Td>
                   <Td className="max-w-[220px] font-medium text-hcl-navy">
                     <div className="flex items-center gap-1.5">
-                      <span className="min-w-0 flex-1 truncate" title={sbom.sbom_name}>
+                      <Link
+                        href={`/sboms/${sbom.id}`}
+                        title={sbom.sbom_name}
+                        className="min-w-0 flex-1 truncate rounded font-medium text-hcl-navy transition-colors hover:text-hcl-blue hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/40"
+                      >
                         {sbom.sbom_name}
-                      </span>
+                      </Link>
                       <PinButton
                         kind="sbom"
                         id={sbom.id}
