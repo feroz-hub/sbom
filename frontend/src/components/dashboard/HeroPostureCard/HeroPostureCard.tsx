@@ -7,34 +7,46 @@ import {
   computeHeadlineCopy,
   toneToAmbientClass,
 } from '@/lib/headlineCopy';
-import type { DashboardPosture, DashboardTrend, HeadlineState } from '@/types';
+import type { SeverityKey } from '@/lib/severityParam';
+import type { DashboardPosture, HeadlineState } from '@/types';
 import { AdaptiveHeadline } from './AdaptiveHeadline';
 import { SeverityDistributionBar } from './SeverityDistributionBar';
-import { HeroMetricRow } from './HeroMetricRow';
+import { KeySignalsRow } from './KeySignalsRow';
 import { LatestRunIndicator } from './LatestRunIndicator';
 
 interface HeroPostureCardProps {
   posture: DashboardPosture | undefined;
-  trend: DashboardTrend | undefined;
   isLoading: boolean;
+  /** Drill-down wiring (optional — the hero renders read-only without it). */
+  onSegmentClick?: (key: SeverityKey) => void;
+  interactiveSeverities?: ReadonlySet<SeverityKey>;
+  onKevClick?: () => void;
+  onEpssClick?: () => void;
+  onCriticalClick?: () => void;
+  onFixClick?: () => void;
 }
 
 /**
- * The v2 hero — calm by default, loud only when it should be.
+ * The v3 hero — exploitability-led, decision-first.
  *
- * Composition (top to bottom): adaptive headline → sub-line → latest-run
- * inline indicator → severity distribution bar (h-7) → 4-tile metric row.
+ * Composition (top to bottom): adaptive headline (KEV-led posture statement)
+ * → latest-run freshness line → key-signals row (the four counts that change
+ * a triage decision: KEV · likely-exploited EPSS · Critical · Fix) → severity
+ * distribution bar, demoted to *supporting* context below the signals.
  *
- * The headline tone drives the ambient glow color (decorative only),
- * which is the only visual signal that escalates with severity. No
- * red-dot live pill; no "Urgent attention required"; no `degraded` band.
- * If you find yourself wanting to add one of those back, reread
- * `docs/dashboard-redesign.md` §2 and §13 before reaching for the keyboard.
+ * Net-7day moved to the What's-new strip and the mini-trend to the trend
+ * section — the hero now answers "what do I act on right now?" without a wall
+ * of tiles. The headline tone still drives the ambient glow (decorative).
  */
 export function HeroPostureCard({
   posture,
-  trend,
   isLoading,
+  onSegmentClick,
+  interactiveSeverities,
+  onKevClick,
+  onEpssClick,
+  onCriticalClick,
+  onFixClick,
 }: HeroPostureCardProps) {
   const state: HeadlineState = posture?.headline_state ?? 'no_data';
   const tone = computeHeadlineCopy(state, {}).tone;
@@ -46,13 +58,13 @@ export function HeroPostureCard({
         <div className="space-y-3">
           <Skeleton className="h-8 w-72" />
           <Skeleton className="h-3 w-96" />
-          <Skeleton className="h-7 w-full" />
           <div className="grid grid-cols-1 gap-3 pt-2 sm:grid-cols-4">
             <Skeleton className="h-16" />
             <Skeleton className="h-16" />
             <Skeleton className="h-16" />
             <Skeleton className="h-16" />
           </div>
+          <Skeleton className="h-7 w-full" />
         </div>
       </Surface>
     );
@@ -64,9 +76,7 @@ export function HeroPostureCard({
       elevation={3}
       className="motion-glide relative overflow-hidden p-6"
     >
-      {/* Ambient glow keyed to headline tone — purely decorative.
-          Same family as the headline color, low opacity, off-screen.
-          Critical state is never the loudest pixel; it's the only colored one. */}
+      {/* Ambient glow keyed to headline tone — purely decorative. */}
       <div
         aria-hidden="true"
         className={cn(
@@ -76,22 +86,43 @@ export function HeroPostureCard({
       />
 
       <div className="relative space-y-5">
-        <AdaptiveHeadline
-          state={state}
-          data={{
-            total_sboms: posture?.total_sboms,
-            total_findings: posture?.total_findings,
-            critical: posture?.severity?.critical,
-            high: posture?.severity?.high,
-            kev_count: posture?.kev_count,
-          }}
+        <div className="space-y-2">
+          <AdaptiveHeadline
+            state={state}
+            data={{
+              total_sboms: posture?.total_sboms,
+              total_findings: posture?.total_findings,
+              critical: posture?.severity?.critical,
+              high: posture?.severity?.high,
+              kev_count: posture?.kev_count,
+            }}
+          />
+          <LatestRunIndicator isoTimestamp={posture?.last_successful_run_at} />
+        </div>
+
+        {/* Key signals — the decision-relevant few, exploitability first. */}
+        <KeySignalsRow
+          kevCount={posture?.kev_count ?? 0}
+          highEpssCount={posture?.high_epss_count}
+          criticalCount={posture?.severity?.critical ?? 0}
+          fixCount={posture?.fix_available_count ?? 0}
+          onKevClick={onKevClick}
+          onEpssClick={onEpssClick}
+          onCriticalClick={onCriticalClick}
+          onFixClick={onFixClick}
         />
 
-        <LatestRunIndicator isoTimestamp={posture?.last_successful_run_at} />
-
-        <SeverityDistributionBar severity={posture?.severity} />
-
-        <HeroMetricRow posture={posture} trend={trend} />
+        {/* Supporting: severity proportions, demoted below the signals. */}
+        <div className="space-y-1.5">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-hcl-muted">
+            Severity distribution
+          </p>
+          <SeverityDistributionBar
+            severity={posture?.severity}
+            onSegmentClick={onSegmentClick}
+            interactiveSeverities={interactiveSeverities}
+          />
+        </div>
       </div>
     </Surface>
   );

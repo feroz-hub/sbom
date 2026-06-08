@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState } from 'react';
+import { Suspense, use, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import {
@@ -17,8 +17,10 @@ import { Motion } from '@/components/ui/Motion';
 import { RunBatchProgress } from '@/components/ai-fixes/RunBatchProgress';
 import { FindingsTable } from '@/components/analysis/FindingsTable';
 import { RunDetailHero } from '@/components/analysis/RunDetailHero';
+import { DrilldownReconciliationBanner } from '@/components/analysis/DrilldownReconciliationBanner';
 import { PageSpinner, SkeletonTable } from '@/components/ui/Spinner';
 import { DEFAULT_FILTERS, type FindingsFilterState } from '@/lib/findingFilters';
+import { useFindingsFilterFromUrl } from '@/hooks/useFindingsFilterFromUrl';
 import {
   getAnalysisConfig,
   getRun,
@@ -35,17 +37,41 @@ interface AnalysisDetailPageProps {
   params: Promise<{ id: string }>;
 }
 
-export default function AnalysisDetailPage({ params }: AnalysisDetailPageProps) {
+function AnalysisDetailContent({ params }: AnalysisDetailPageProps) {
   const { id: idParam } = use(params);
   const id = Number(idParam);
   const router = useRouter();
   const { showToast } = useToast();
-  const [severityFilter, setSeverityFilter] = useState('');
+
+  // Destination half of the dashboard drill-down chain. Read once at mount
+  // and used to SEED the same state the findings query is keyed by — so a
+  // deep-link lands pre-filtered on first render, no post-mount effect.
+  const {
+    severityFromUrl,
+    kevOnlyFromUrl,
+    hasFixOnlyFromUrl,
+    epssMinPctFromUrl,
+    needsReviewFromUrl,
+    globalCount,
+    drilldownDimension,
+    hasDrilldown,
+  } = useFindingsFilterFromUrl();
+
+  // ``severityFilter`` is the value that feeds BOTH the server query param
+  // and the ['findings-enriched', id, severityFilter] query key — seed it
+  // from the URL so the very first fetch is already narrowed.
+  const [severityFilter, setSeverityFilter] = useState(() => severityFromUrl);
   // Lifted filter state — drives both the findings table and the
   // scope-aware AI fix CTA. The findings table operates in controlled
   // mode; the CTA reads ``filter`` directly to compose its scope.
+  // KEV / fix drill-downs seed the client-side narrowing here.
   const [filter, setFilter] = useState<FindingsFilterState>(() => ({
     ...DEFAULT_FILTERS,
+    severityFilter: severityFromUrl,
+    kevOnly: kevOnlyFromUrl,
+    hasFixOnly: hasFixOnlyFromUrl,
+    epssMinPct: epssMinPctFromUrl,
+    matchReasonFilter: needsReviewFromUrl ? 'not_verified' : 'all',
   }));
   // Lifted row-selection state. Persists across filter changes (the
   // table doesn't deselect when filters narrow). Selection takes
@@ -59,6 +85,14 @@ export default function AnalysisDetailPage({ params }: AnalysisDetailPageProps) 
   const handleFilterChange = (next: FindingsFilterState) => {
     setFilter(next);
     setSeverityFilter(next.severityFilter);
+  };
+
+  // Clears the drill-down filter and drops the deep-link params from the URL
+  // so a refresh / shared link no longer re-applies it.
+  const handleClearDrilldown = () => {
+    setSeverityFilter('');
+    setFilter({ ...DEFAULT_FILTERS });
+    router.replace(`/analysis/${id}`, { scroll: false });
   };
   const [pdfDownloading, setPdfDownloading] = useState(false);
   const [csvDownloading, setCsvDownloading] = useState(false);
@@ -249,6 +283,26 @@ export default function AnalysisDetailPage({ params }: AnalysisDetailPageProps) 
           </Motion>
         ) : null}
 
+        {/* Drill-down reconciliation — only on hero drill-downs (those carry
+            globalCount). Per-app badges are run-scoped and omit it. */}
+        {hasDrilldown && globalCount != null && drilldownDimension != null && (
+          <Motion preset="rise" delay={60}>
+            <DrilldownReconciliationBanner
+              dimension={drilldownDimension}
+              severityLabel={
+                severityFilter
+                  ? severityFilter.charAt(0) + severityFilter.slice(1).toLowerCase()
+                  : undefined
+              }
+              globalCount={globalCount}
+              inRunCount={
+                drilldownDimension === 'severity' ? findingsTotalCount : undefined
+              }
+              onClear={handleClearDrilldown}
+            />
+          </Motion>
+        )}
+
         {/* Findings */}
         <Motion preset="rise" delay={80}>
           <Surface variant="elevated">
@@ -297,5 +351,31 @@ export default function AnalysisDetailPage({ params }: AnalysisDetailPageProps) 
         </Motion>
       </div>
     </div>
+  );
+}
+
+/**
+ * App Router requires any `useSearchParams()` consumer to sit under a
+ * `<Suspense>` boundary (otherwise the route deopts to fully client-side
+ * rendering / the build warns). `useFindingsFilterFromUrl` reads the
+ * drill-down params, so the content component must be wrapped here.
+ */
+export default function AnalysisDetailPage({ params }: AnalysisDetailPageProps) {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex flex-1 flex-col">
+          <TopBar
+            title="Analysis run"
+            breadcrumbs={[{ label: 'Analysis Runs', href: '/analysis' }]}
+          />
+          <div className="p-6">
+            <PageSpinner />
+          </div>
+        </div>
+      }
+    >
+      <AnalysisDetailContent params={params} />
+    </Suspense>
   );
 }

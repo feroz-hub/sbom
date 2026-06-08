@@ -82,6 +82,11 @@ PRICING: dict[str, ModelPricing] = {
         "grok-2": (0.002, 0.010),
         "grok-3": (0.005, 0.015),
     },
+    # Sarvam AI — fill in per-1k-token rates from your account's pricing.
+    # Unlisted models bill at $0.00 with a logged warning until set.
+    "sarvam": {
+        # "sarvam-m": (input_per_1k_usd, output_per_1k_usd),
+    },
     "ollama": {},  # priced at zero by ``estimate_cost`` when provider.is_local
     "vllm": {},
     # Custom OpenAI-compatible endpoints carry no built-in pricing —

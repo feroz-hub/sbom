@@ -12,13 +12,14 @@ from app.ai.estimator import estimate_batch_duration
 # ============================================================ Catalog
 
 
-def test_catalog_includes_seven_providers():
+def test_catalog_includes_all_providers():
     names = {entry.name for entry in PROVIDER_CATALOG}
     assert names == {
         "anthropic",
         "openai",
         "gemini",
         "grok",
+        "sarvam",
         "ollama",
         "vllm",
         "custom_openai",
@@ -63,7 +64,7 @@ def test_get_catalog_entry_unknown_returns_none():
 def test_list_catalog_returns_a_list():
     out = list_catalog()
     assert isinstance(out, list)
-    assert len(out) == 7
+    assert len(out) == len(PROVIDER_CATALOG)
 
 
 # ============================================================ Endpoint

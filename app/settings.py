@@ -295,7 +295,7 @@ class Settings(BaseSettings):
         description="Provider name used when LlmRequest.provider_name is None.",
     )
     ai_providers: str = Field(
-        default="anthropic,openai,gemini,grok,ollama,vllm,custom_openai",
+        default="anthropic,openai,gemini,grok,sarvam,ollama,vllm,custom_openai",
         description="Comma-separated list of providers to wire up. Disabled providers are reported but not callable.",
     )
 
@@ -357,6 +357,16 @@ class Settings(BaseSettings):
     )
     ai_grok_max_concurrent: int = Field(default=4, description="Max in-flight requests for Grok.")
     ai_grok_rpm: float = Field(default=60.0, description="RPM cap. Free tier clamps to 60.")
+
+    # Sarvam AI (OpenAI-compatible)
+    sarvam_api_key: str = Field(default="", description="Sarvam AI API key (https://dashboard.sarvam.ai).")
+    ai_sarvam_model: str = Field(default="sarvam-m", description="Default Sarvam model.")
+    ai_sarvam_base_url: str = Field(
+        default="https://api.sarvam.ai/v1",
+        description="Sarvam OpenAI-compatible base URL.",
+    )
+    ai_sarvam_max_concurrent: int = Field(default=10, description="Max in-flight requests for Sarvam.")
+    ai_sarvam_rpm: float = Field(default=60.0, description="Requests per minute soft limit for Sarvam.")
 
     # Custom OpenAI-compatible (LM Studio / LocalAI / LiteLLM proxy / etc.)
     ai_custom_openai_base_url: str = Field(

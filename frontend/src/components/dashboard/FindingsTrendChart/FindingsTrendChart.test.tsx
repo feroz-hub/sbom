@@ -17,7 +17,7 @@ import type { DashboardTrend } from '@/types';
 import { ThemeProvider } from '@/components/theme/ThemeProvider';
 
 function withTheme(node: React.ReactElement) {
-  return <ThemeProvider initialTheme="light">{node}</ThemeProvider>;
+  return <ThemeProvider>{node}</ThemeProvider>;
 }
 
 function trendWith(overrides: Partial<DashboardTrend>): DashboardTrend {
@@ -51,7 +51,7 @@ describe('FindingsTrendChart — empty-state copy reflects runs_total (Bug 2 loc
     const trend = trendWith({
       runs_total: 4,
       runs_distinct_dates: 1,
-      points: trendWith({}).points.map((p, i) =>
+      points: trendWith({}).points!.map((p, i) =>
         i === 29 ? { ...p, high: 5, total: 5 } : p,
       ),
     });
@@ -66,7 +66,7 @@ describe('FindingsTrendChart — empty-state copy reflects runs_total (Bug 2 loc
 
   it('does not show empty state when runs_distinct_dates >= 7', () => {
     // 7 distinct dates each with one finding → no empty state.
-    const points = trendWith({}).points.map((p, i) =>
+    const points = trendWith({}).points!.map((p, i) =>
       i % 4 === 0 ? { ...p, high: 1, total: 1 } : p,
     );
     const trend = trendWith({

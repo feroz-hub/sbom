@@ -189,6 +189,25 @@ GROK = ProviderCatalogEntry(
 
 
 # ---------------------------------------------------------------------------
+# Sarvam AI (OpenAI-compatible)
+# ---------------------------------------------------------------------------
+
+SARVAM = ProviderCatalogEntry(
+    name="sarvam",
+    display_name="Sarvam AI",
+    requires_api_key=True,
+    requires_base_url=False,
+    supports_free_tier=False,
+    available_models=[
+        ModelInfo(name="sarvam-m", display_name="Sarvam-M", default_tier="paid"),
+    ],
+    docs_url="https://docs.sarvam.ai/",
+    api_key_url="https://dashboard.sarvam.ai/",
+    notes="OpenAI-compatible chat completions (base https://api.sarvam.ai/v1). Confirm the model id and pricing for your account.",
+)
+
+
+# ---------------------------------------------------------------------------
 # Ollama
 # ---------------------------------------------------------------------------
 
@@ -263,6 +282,7 @@ PROVIDER_CATALOG: tuple[ProviderCatalogEntry, ...] = (
     OPENAI,
     GEMINI,
     GROK,
+    SARVAM,
     OLLAMA,
     VLLM,
     CUSTOM,

@@ -43,8 +43,10 @@ const config: Config = {
           dark: 'var(--color-hcl-dark)',
           blue: 'var(--color-hcl-blue)',
           cyan: 'var(--color-hcl-cyan)',
+          violet: 'var(--color-hcl-violet)',
         },
         sidebar: 'var(--color-sidebar)',
+        'sidebar-accent': 'var(--color-sidebar-accent)',
         severity: {
           critical: '#C0392B',
           high: '#D4680A',

@@ -2,15 +2,30 @@
 
 import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
+import type { SeverityKey } from '@/lib/severityParam';
 import type { SeverityData } from '@/types';
 
 interface SeverityDistributionBarProps {
   severity: SeverityData | undefined;
   className?: string;
+  /**
+   * When provided, segments and legend badges for severities in
+   * {@link interactiveSeverities} become buttons that call this on click —
+   * the dashboard drill-down. Without it the bar is purely presentational
+   * (the original behaviour, preserved verbatim).
+   */
+  onSegmentClick?: (key: SeverityKey) => void;
+  /**
+   * Severities that actually resolve to a run to drill into. A severity with
+   * findings in the portfolio but no resolvable run (rare) stays
+   * non-interactive so we never render a dead button. Required for any
+   * segment to be clickable.
+   */
+  interactiveSeverities?: ReadonlySet<SeverityKey>;
 }
 
 const SEGMENTS: Array<{
-  key: keyof Pick<SeverityData, 'critical' | 'high' | 'medium' | 'low'>;
+  key: SeverityKey;
   label: string;
   color: string;
 }> = [
@@ -31,7 +46,11 @@ const SEGMENTS: Array<{
 export function SeverityDistributionBar({
   severity,
   className,
+  onSegmentClick,
+  interactiveSeverities,
 }: SeverityDistributionBarProps) {
+  const isInteractive = (key: SeverityKey) =>
+    onSegmentClick != null && (interactiveSeverities?.has(key) ?? false);
   const segments = useMemo(() => {
     if (!severity) return [];
     const totalSev =
@@ -63,38 +82,76 @@ export function SeverityDistributionBar({
   return (
     <div className={cn('space-y-2', className)}>
       <div
-        role="img"
-        aria-label={`Severity distribution: ${segments
-          .map((s) => `${s.label} ${s.value}`)
-          .join(', ')}`}
         className="flex h-7 w-full overflow-hidden rounded-full bg-border-subtle gap-px"
+        {...(onSegmentClick == null
+          ? {
+              role: 'img' as const,
+              'aria-label': `Severity distribution: ${segments
+                .map((s) => `${s.label} ${s.value}`)
+                .join(', ')}`,
+            }
+          : {
+              role: 'group' as const,
+              'aria-label': 'Severity distribution — select a tier to view its findings',
+            })}
       >
-        {segments.map((seg) => (
-          <div
-            key={seg.key}
-            className="h-full transition-all duration-slower ease-spring"
-            style={{
-              width: `${seg.pct}%`,
-              backgroundColor: seg.color,
-            }}
-            title={`${seg.label}: ${seg.value.toLocaleString()} (${seg.pct.toFixed(0)}%)`}
-          />
-        ))}
+        {segments.map((seg) => {
+          const shared = {
+            className: cn(
+              'h-full transition-all duration-slower ease-spring',
+              isInteractive(seg.key) &&
+                'cursor-pointer hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/80',
+            ),
+            style: { width: `${seg.pct}%`, backgroundColor: seg.color },
+            title: `${seg.label}: ${seg.value.toLocaleString()} (${seg.pct.toFixed(0)}%)`,
+          };
+          return isInteractive(seg.key) ? (
+            <button
+              key={seg.key}
+              type="button"
+              aria-label={`View ${seg.label} findings (${seg.value.toLocaleString()})`}
+              onClick={() => onSegmentClick!(seg.key)}
+              {...shared}
+            />
+          ) : (
+            <div key={seg.key} {...shared} />
+          );
+        })}
       </div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-hcl-muted">
-        {segments.map((seg) => (
-          <span key={seg.key} className="inline-flex items-center gap-1.5">
+        {segments.map((seg) => {
+          const dot = (
             <span
               className="h-2 w-2 rounded-full"
               style={{ backgroundColor: seg.color }}
               aria-hidden
             />
-            {seg.label}:{' '}
-            <strong className="font-metric tabular-nums text-hcl-navy">
-              {seg.value.toLocaleString()}
-            </strong>
-          </span>
-        ))}
+          );
+          const body = (
+            <>
+              {dot}
+              {seg.label}:{' '}
+              <strong className="font-metric tabular-nums text-hcl-navy">
+                {seg.value.toLocaleString()}
+              </strong>
+            </>
+          );
+          return isInteractive(seg.key) ? (
+            <button
+              key={seg.key}
+              type="button"
+              onClick={() => onSegmentClick!(seg.key)}
+              aria-label={`View ${seg.label} findings (${seg.value.toLocaleString()})`}
+              className="inline-flex items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors hover:bg-surface-muted hover:text-hcl-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/40"
+            >
+              {body}
+            </button>
+          ) : (
+            <span key={seg.key} className="inline-flex items-center gap-1.5">
+              {body}
+            </span>
+          );
+        })}
         {unknownCount > 0 && <UnknownPill count={unknownCount} inline />}
       </div>
     </div>

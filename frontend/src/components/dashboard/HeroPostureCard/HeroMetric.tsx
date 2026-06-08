@@ -21,6 +21,13 @@ interface HeroMetricProps {
   tone?: HeroMetricTone;
   /** Hover tooltip — same string is exposed to screen readers via aria-label. */
   tooltip?: string;
+  /**
+   * When provided, the tile renders as a button (drill-down). Wire it only
+   * when there's somewhere to go — an undefined handler keeps the tile as a
+   * static div, so zero-value / non-drillable tiles never become dead
+   * buttons.
+   */
+  onClick?: () => void;
   className?: string;
 }
 
@@ -47,18 +54,11 @@ export function HeroMetric({
   caption,
   tone = 'neutral',
   tooltip,
+  onClick,
   className,
 }: HeroMetricProps) {
-  return (
-    <div
-      title={tooltip}
-      aria-label={tooltip ? `${label}: ${tooltip}` : label}
-      className={cn(
-        'rounded-lg border px-3 py-2 transition-colors duration-base',
-        TONE_CLASSES[tone],
-        className,
-      )}
-    >
+  const body = (
+    <>
       <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider">
         {icon}
         {label}
@@ -71,6 +71,39 @@ export function HeroMetric({
           {caption}
         </div>
       )}
+    </>
+  );
+
+  const baseClass = cn(
+    'rounded-lg border px-3 py-2 transition-colors duration-base',
+    TONE_CLASSES[tone],
+    className,
+  );
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        title={tooltip}
+        aria-label={tooltip ? `${label}: ${tooltip}` : label}
+        className={cn(
+          baseClass,
+          'cursor-pointer text-left hover:brightness-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/40',
+        )}
+      >
+        {body}
+      </button>
+    );
+  }
+
+  return (
+    <div
+      title={tooltip}
+      aria-label={tooltip ? `${label}: ${tooltip}` : label}
+      className={baseClass}
+    >
+      {body}
     </div>
   );
 }

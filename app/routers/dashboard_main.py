@@ -23,6 +23,7 @@ invariants. **Do not add inline metric SQL here.**
 
 import logging
 from datetime import UTC, datetime, timedelta
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlalchemy import func, select
@@ -36,7 +37,11 @@ from ..schemas_dashboard import (
     DashboardPostureResponse,
     LifetimeMetrics,
     NetChange,
+    VulnerabilityAgeResponse,
 )
+
+# Observation-window lengths (days) for the vulnerability-age period filter.
+_AGE_PERIOD_DAYS = {"day": 1, "week": 7, "month": 30, "year": 365}
 from ..services.dashboard_metrics import (
     compute_headline_state,
     compute_lifetime_metrics,
@@ -140,6 +145,10 @@ def dashboard_posture(request: Request, response: Response, db: Session = Depend
     """
     severity = metrics.findings_latest_per_sbom_severity_distribution(db)
     kev_count = metrics.findings_kev_in_scope(db, scope="latest_per_sbom")
+    high_epss_count = metrics.findings_high_epss_in_scope(db, scope="latest_per_sbom")
+    needs_review_count = metrics.findings_needs_review_in_scope(
+        db, scope="latest_per_sbom"
+    )
     fix_available_count = metrics.findings_latest_per_sbom_fix_available(db)
     total_findings = metrics.findings_latest_per_sbom_total(db)
     distinct_vulnerabilities = (
@@ -147,6 +156,8 @@ def dashboard_posture(request: Request, response: Response, db: Session = Depend
     )
     total_active_projects = metrics.projects_active_total(db)
     total_sboms = metrics.sboms_total(db)
+    total_sboms_analysed = metrics.sboms_analysed_total(db)
+    total_applications_scanned = metrics.applications_scanned_total(db)
     last_successful_run_at = _last_successful_completed_at(db)
 
     net = metrics.findings_net_change(db, days=7)
@@ -168,9 +179,13 @@ def dashboard_posture(request: Request, response: Response, db: Session = Depend
     payload = {
         "severity": severity,
         "kev_count": kev_count,
+        "high_epss_count": int(high_epss_count),
+        "needs_review_count": int(needs_review_count),
         "fix_available_count": fix_available_count,
         "last_successful_run_at": last_successful_run_at,
         "total_sboms": total_sboms,
+        "total_sboms_analysed": int(total_sboms_analysed),
+        "total_applications_scanned": int(total_applications_scanned),
         "total_active_projects": total_active_projects,
         "total_findings": int(total_findings),
         "distinct_vulnerabilities": int(distinct_vulnerabilities),
@@ -187,6 +202,55 @@ def dashboard_posture(request: Request, response: Response, db: Session = Depend
     if nm is not None:
         return nm
     return payload
+
+
+def _resolve_age_window(
+    period: str, date_from: str | None, date_to: str | None
+) -> tuple[str | None, str | None] | None:
+    """Translate the period selector into a ``(start_iso, end_iso)`` window on
+    the scan (run) date, or ``None`` for all-time.
+
+    day/week/month/year are rolling look-backs ending now (open upper bound);
+    ``custom`` uses the supplied ISO bounds (all-time if both are blank).
+    """
+    if period == "all":
+        return None
+    if period == "custom":
+        if not date_from and not date_to:
+            return None
+        return (date_from, date_to)
+    days = _AGE_PERIOD_DAYS.get(period)
+    if not days:
+        return None
+    start_iso = (datetime.now(UTC) - timedelta(days=days)).isoformat()
+    return (start_iso, None)
+
+
+@router.get("/vulnerability-age", response_model=VulnerabilityAgeResponse)
+def dashboard_vulnerability_age(
+    period: Literal["all", "day", "week", "month", "year", "custom"] = Query("all"),
+    date_from: str | None = Query(None, description="ISO start (custom period; filters scan date)"),
+    date_to: str | None = Query(None, description="ISO end (custom period; filters scan date)"),
+    db: Session = Depends(get_db),
+):
+    """"Vulnerability by Age" pie.
+
+    Buckets findings in the latest-successful-run-per-SBOM scope by CVE age
+    (``now - published_on``). ``period`` is an *observation window on the scan
+    date* — "of what we detected in this window, how old is it?". The age
+    buckets are fixed; the window narrows which findings are counted. All
+    numbers come from ``app.metrics`` (no inline metric SQL here).
+    """
+    window = _resolve_age_window(period, date_from, date_to)
+    buckets = metrics.findings_age_distribution(db, window=window)
+    return {
+        "buckets": buckets,
+        "total": sum(buckets.values()),
+        "period": period,
+        "date_from": date_from,
+        "date_to": date_to,
+        "schema_version": 1,
+    }
 
 
 @router.get("/lifetime", response_model=LifetimeMetrics)
