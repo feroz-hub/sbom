@@ -9,6 +9,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Dashboard v4 — advanced analytics layer (additive; v3 untouched).**
+  Four new capability clusters on the home dashboard, every number routed
+  through `app/metrics/` per the canonical-metrics rule:
+  - **Predictive risk engine** — `GET /dashboard/forecast`: OLS-projected
+    distinct-active trajectory over the locked daily series with ±1.96σ
+    band, honest `insufficient_history` gating (≥7 data days), optional
+    `days_to_zero`, and a day-over-day velocity anomaly (z ≥ 2 with a
+    flat-baseline fallback). New `app/metrics/forecast.py`; math helpers
+    are pure and unit-tested.
+  - **Exploitation outlook** — `GET /dashboard/exploitation`: portfolio
+    P(≥1 in-scope CVE exploited in 30d) composed from the local EPSS
+    mirror (1 − Π(1 − pᵢ), independence stated on the card), EPSS
+    coverage caveat, KEV count surfaced separately as observed
+    exploitation, top-driver CVEs KEV-first. New `app/metrics/exploitation.py`.
+  - **Remediation & SLA analytics** — `GET /dashboard/remediation`:
+    finding lifecycles derived from per-SBOM run timelines (ADR-0001
+    monotonic ids) → MTTR by severity vs CISA-BOD-19-02-flavoured budgets
+    (7/30/90/180d), overdue / due-soon / on-track countdown counts, worst
+    offenders with days-over-budget, reopened count, and 30-day
+    inflow-vs-resolved fix velocity. New `app/metrics/remediation.py`.
+  - **Interactive risk geometry** — `GET /dashboard/risk-map` (treemap:
+    cell size = latest-run finding count, colour = worst severity present;
+    no composite score, per the retired-Risk-Index decision) and
+    `GET /dashboard/risk-matrix` (impact × exploitability scatter: CVSS ×
+    EPSS with KEV diamonds and a patch-first quadrant; KEV/EPSS-first cap
+    at 300 points). New `app/metrics/riskmap.py`.
+  - **AI Security Copilot** — `GET /api/ai/copilot/briefing` (markdown
+    executive briefing, in-process cached per metrics invalidation tuple,
+    ≤6h TTL) and `POST /api/ai/copilot/ask` (one-shot grounded Q&A).
+    Grounded EXCLUSIVELY in the compact metrics snapshot (~2 KB — no SBOM
+    contents, no component dumps); same rollout gate, BudgetGuard, and
+    `ai_usage_log` ledger as AI fixes (purposes `copilot_briefing` /
+    `copilot_ask`). New `app/ai/copilot.py` + `app/routers/ai_copilot.py`.
+  - **Frontend** — six new dashboard sections appended to the v3 page
+    (`CopilotPanel`, `ForecastCard`, `ExploitationOutlookCard`,
+    `PortfolioRiskMap`, `RiskMatrixCard`, `RemediationPanel` under
+    `components/dashboard/advanced/`), typed API client methods, and the
+    new query keys folded into `invalidateDashboardTiles` so analysis
+    completion busts the whole v4 surface. The Copilot panel hides itself
+    when the AI rollout gate is closed.
+  - **Tests** — `tests/test_dashboard_v4_metrics.py` (pure-math + seeded
+    lifecycle/scope semantics + endpoint smoke, 13 tests) under the
+    `metric_consistency` marker; new routers pass the F9 direct-query
+    architectural lock; Copilot mutations satisfy the FE
+    mutation-invalidation lock.
+
 - **AI provider configuration via UI + free-tier provider additions (Phases 1-4 of the AI-config feature).**
   Three new providers (Google Gemini, xAI Grok, Custom OpenAI-compatible)
   joined the registry. AES-256-GCM at-rest credential encryption + a
