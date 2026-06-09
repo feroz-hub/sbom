@@ -201,8 +201,11 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <Motion preset="rise" delay={180}>
             <SeverityChart
+              title="Vulnerability by Threat Level"
               data={postureQuery.data?.severity}
               isLoading={postureQuery.isLoading}
+              onSliceClick={handleSegmentClick}
+              interactiveSeverities={interactiveSeverities}
             />
           </Motion>
           <Motion preset="rise" delay={220}>

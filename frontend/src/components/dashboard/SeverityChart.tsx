@@ -8,11 +8,22 @@ import { Spinner } from '@/components/ui/Spinner';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { cn } from '@/lib/utils';
+import type { SeverityKey } from '@/lib/severityParam';
 import type { SeverityData } from '@/types';
 
 interface SeverityChartProps {
   data: SeverityData | undefined;
   isLoading: boolean;
+  /** Card heading. Defaults to "Vulnerability severity". */
+  title?: string;
+  /** When provided, slices drill via this handler — reuses the hero severity
+   *  drill-down (→ useFindingsFilterFromUrl). Without it, the built-in
+   *  runs-list navigation is used. */
+  onSliceClick?: (key: SeverityKey) => void;
+  /** Scored severities that resolve to a run to drill into. A slice is
+   *  clickable only when in this set (with onSliceClick); others — including
+   *  the unscored bucket — render static (no dead buttons). */
+  interactiveSeverities?: ReadonlySet<SeverityKey>;
 }
 
 interface ChartDatum {
@@ -50,7 +61,13 @@ function CustomTooltip({ active, payload }: TooltipProps<number, string>) {
   );
 }
 
-export function SeverityChart({ data, isLoading }: SeverityChartProps) {
+export function SeverityChart({
+  data,
+  isLoading,
+  title = 'Vulnerability severity',
+  onSliceClick,
+  interactiveSeverities,
+}: SeverityChartProps) {
   const router = useRouter();
   const { resolvedTheme: _theme } = useTheme();
   const [hovered, setHovered] = useState<string | null>(null);
@@ -60,17 +77,31 @@ export function SeverityChart({ data, isLoading }: SeverityChartProps) {
     : [];
   const total = chartData.reduce((s, d) => s + d.value, 0);
 
-  const handleSliceClick = (datum: ChartDatum) => {
-    // Navigate to runs view, filtered to runs that produced findings.
+  // With onSliceClick (hero drill pattern) only scored severities that resolve
+  // to a run are clickable — the unscored bucket is shown for the total but has
+  // no severity run to land on. Without onSliceClick, the runs-list fallback
+  // handles every rendered slice.
+  const isDrillable = (d: ChartDatum): boolean =>
+    onSliceClick
+      ? d.key !== 'unknown' && (interactiveSeverities?.has(d.key) ?? false)
+      : true;
+
+  const handleSliceClick = (d: ChartDatum) => {
+    if (!isDrillable(d)) return;
+    if (onSliceClick) {
+      if (d.key !== 'unknown') onSliceClick(d.key);
+      return;
+    }
+    // Fallback: runs view filtered to runs that produced findings.
     // ADR-0001: status=FINDINGS replaces the old overloaded FAIL.
-    router.push(`/analysis?tab=runs&status=FINDINGS&severity=${datum.key.toUpperCase()}`);
+    router.push(`/analysis?tab=runs&status=FINDINGS&severity=${d.key.toUpperCase()}`);
   };
 
   return (
     <Surface variant="elevated">
       <SurfaceHeader>
         <div>
-          <h3 className="text-base font-semibold text-hcl-navy">Vulnerability severity</h3>
+          <h3 className="text-base font-semibold text-hcl-navy">{title}</h3>
           {total > 0 && (
             <p className="mt-0.5 text-xs text-hcl-muted">
               <span className="font-metric font-semibold text-hcl-navy">{total.toLocaleString()}</span> total findings · click to filter
@@ -110,7 +141,6 @@ export function SeverityChart({ data, isLoading }: SeverityChartProps) {
                     }}
                     onMouseEnter={(_, index) => setHovered(chartData[index]?.name ?? null)}
                     onMouseLeave={() => setHovered(null)}
-                    style={{ cursor: 'pointer' }}
                     isAnimationActive
                     animationDuration={600}
                     animationEasing="ease-out"
@@ -124,6 +154,7 @@ export function SeverityChart({ data, isLoading }: SeverityChartProps) {
                         style={{
                           transition: 'opacity 200ms',
                           opacity: hovered && hovered !== entry.name ? 0.55 : 1,
+                          cursor: isDrillable(entry) ? 'pointer' : 'default',
                         }}
                       />
                     ))}
@@ -144,34 +175,54 @@ export function SeverityChart({ data, isLoading }: SeverityChartProps) {
             <ul className="grid gap-1.5 self-center lg:min-w-[180px]">
               {chartData.map((d) => {
                 const pct = total > 0 ? (d.value / total) * 100 : 0;
+                const drillable = isDrillable(d);
+                const rowClass =
+                  'flex w-full items-center justify-between gap-3 rounded-lg px-2 py-1.5';
+                const body = (
+                  <>
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span
+                        className="h-2.5 w-2.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: d.color }}
+                        aria-hidden
+                      />
+                      <span className="text-xs font-medium text-hcl-navy">{d.name}</span>
+                    </span>
+                    <span className="flex items-center gap-2">
+                      <span className="text-[10px] tabular-nums text-hcl-muted">{pct.toFixed(0)}%</span>
+                      <span className="font-metric text-xs font-semibold text-hcl-navy">
+                        {d.value.toLocaleString()}
+                      </span>
+                    </span>
+                  </>
+                );
                 return (
                   <li key={d.name}>
-                    <button
-                      type="button"
-                      onClick={() => handleSliceClick(d)}
-                      onMouseEnter={() => setHovered(d.name)}
-                      onMouseLeave={() => setHovered(null)}
-                      className={cn(
-                        'flex w-full items-center justify-between gap-3 rounded-lg border border-transparent px-2 py-1.5 text-left transition-all duration-base ease-spring',
-                        'hover:border-border-subtle hover:bg-surface-muted hover:-translate-y-px',
-                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/40',
-                      )}
-                    >
-                      <span className="flex min-w-0 items-center gap-2">
-                        <span
-                          className="h-2.5 w-2.5 shrink-0 rounded-full"
-                          style={{ backgroundColor: d.color }}
-                          aria-hidden
-                        />
-                        <span className="text-xs font-medium text-hcl-navy">{d.name}</span>
-                      </span>
-                      <span className="flex items-center gap-2">
-                        <span className="text-[10px] tabular-nums text-hcl-muted">{pct.toFixed(0)}%</span>
-                        <span className="font-metric text-xs font-semibold text-hcl-navy">
-                          {d.value.toLocaleString()}
-                        </span>
-                      </span>
-                    </button>
+                    {drillable ? (
+                      <button
+                        type="button"
+                        onClick={() => handleSliceClick(d)}
+                        onMouseEnter={() => setHovered(d.name)}
+                        onMouseLeave={() => setHovered(null)}
+                        aria-label={`View ${d.name} findings (${d.value.toLocaleString()})`}
+                        className={cn(
+                          rowClass,
+                          'border border-transparent text-left transition-all duration-base ease-spring',
+                          'hover:border-border-subtle hover:bg-surface-muted hover:-translate-y-px',
+                          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/40',
+                        )}
+                      >
+                        {body}
+                      </button>
+                    ) : (
+                      <div
+                        className={rowClass}
+                        onMouseEnter={() => setHovered(d.name)}
+                        onMouseLeave={() => setHovered(null)}
+                      >
+                        {body}
+                      </div>
+                    )}
                   </li>
                 );
               })}

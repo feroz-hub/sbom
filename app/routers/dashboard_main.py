@@ -231,6 +231,8 @@ def dashboard_vulnerability_age(
     period: Literal["all", "day", "week", "month", "year", "custom"] = Query("all"),
     date_from: str | None = Query(None, description="ISO start (custom period; filters scan date)"),
     date_to: str | None = Query(None, description="ISO end (custom period; filters scan date)"),
+    project_id: int | None = Query(None, description="Restrict to one application (project)."),
+    sbom_id: int | None = Query(None, description="Restrict to one SBOM."),
     db: Session = Depends(get_db),
 ):
     """"Vulnerability by Age" pie.
@@ -242,7 +244,9 @@ def dashboard_vulnerability_age(
     numbers come from ``app.metrics`` (no inline metric SQL here).
     """
     window = _resolve_age_window(period, date_from, date_to)
-    buckets = metrics.findings_age_distribution(db, window=window)
+    buckets = metrics.findings_age_distribution(
+        db, window=window, project_id=project_id, sbom_id=sbom_id
+    )
     return {
         "buckets": buckets,
         "total": sum(buckets.values()),

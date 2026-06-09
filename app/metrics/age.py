@@ -47,31 +47,44 @@ def findings_age_distribution(
     db: Session,
     *,
     window: tuple[str | None, str | None] | None = None,
+    project_id: int | None = None,
+    sbom_id: int | None = None,
     today: date | None = None,
 ) -> dict[str, int]:
     """findings.age_distribution — counts per CVE-age bucket.
 
-    Scope is the latest successful run per SBOM. ``window`` (when given) is an
-    ``(start_iso, end_iso)`` filter on the run's ``started_on`` (scan date);
-    either side may be ``None`` for an open bound.
+    Scope is the latest successful run per SBOM. Optional narrowing filters:
+      * ``window`` — ``(start_iso, end_iso)`` on the run's ``started_on`` (scan
+        date); either side may be ``None`` for an open bound.
+      * ``project_id`` — only that application's (project's) runs.
+      * ``sbom_id`` — only that SBOM's (latest) run.
 
-    Returns a dict keyed by :data:`AGE_BUCKETS` (sums to the in-scope total).
+    ``project_id`` filters on ``AnalysisRun.project_id`` (reliably set from the
+    SBOM's project at run creation). Returns a dict keyed by :data:`AGE_BUCKETS`.
     """
     today = today or datetime.now(UTC).date()
 
     def _compute() -> dict[str, int]:
         latest = latest_run_per_sbom_subquery()
-        if window is not None:
-            start_iso, end_iso = window
+        # Join the run row only when we need to filter on it (scan-date window,
+        # project, or single SBOM). Scope stays latest-successful-run-per-SBOM;
+        # the filters narrow which of those runs contribute.
+        if window is not None or project_id is not None or sbom_id is not None:
             q = (
                 select(AnalysisFinding.published_on)
                 .join(AnalysisRun, AnalysisRun.id == AnalysisFinding.analysis_run_id)
                 .where(AnalysisFinding.analysis_run_id.in_(latest))
             )
-            if start_iso:
-                q = q.where(AnalysisRun.started_on >= start_iso)
-            if end_iso:
-                q = q.where(AnalysisRun.started_on <= end_iso)
+            if window is not None:
+                start_iso, end_iso = window
+                if start_iso:
+                    q = q.where(AnalysisRun.started_on >= start_iso)
+                if end_iso:
+                    q = q.where(AnalysisRun.started_on <= end_iso)
+            if project_id is not None:
+                q = q.where(AnalysisRun.project_id == project_id)
+            if sbom_id is not None:
+                q = q.where(AnalysisRun.sbom_id == sbom_id)
         else:
             q = select(AnalysisFinding.published_on).where(
                 AnalysisFinding.analysis_run_id.in_(latest)
@@ -87,7 +100,7 @@ def findings_age_distribution(
         name="findings.age_distribution",
         ttl_seconds=5 * 60,
         db=db,
-        key_extra=(today.isoformat(), start_key or "", end_key or ""),
+        key_extra=(today.isoformat(), start_key or "", end_key or "", project_id or 0, sbom_id or 0),
         compute=_compute,
     )
 

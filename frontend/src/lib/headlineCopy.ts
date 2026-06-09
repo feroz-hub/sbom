@@ -80,10 +80,21 @@ export function computeHeadlineCopy(
 
     case 'kev_present': {
       // KEV always wins over critical/high — actively-exploited vulns are a
-      // different mental category, not a higher severity tier.
-      const noun = kev === 1 ? 'finding needs' : 'findings need';
+      // different mental category, not a higher severity tier. The COUNT lives
+      // on the KEV tile; the headline carries only the urgency so the two don't
+      // duplicate the same number stacked together.
+      if (kev <= 0) {
+        // Defensive (this state normally only fires for kev >= 1): never claim
+        // attention is needed when there's nothing exploited.
+        return {
+          headline: 'No actively exploited findings right now.',
+          subline:
+            "Nothing in scope is on CISA's Known Exploited Vulnerabilities catalog.",
+          tone: 'success',
+        };
+      }
       return {
-        headline: `${kev.toLocaleString()} actively exploited ${noun} attention.`,
+        headline: 'Actively exploited findings need attention.',
         subline:
           "These are listed in CISA's Known Exploited Vulnerabilities catalog.",
         tone: 'danger',

@@ -1,4 +1,4 @@
-​{
+{
   "bomFormat": "CycloneDX",
   "specVersion": "1.6",
   "serialNumber": "urn:uuid:816bc393-478e-4608-af78-1de1070d01f2",
@@ -31,6 +31,18 @@
     }
   },
   "components": [
+    {
+      "type": "application",
+      "bom-ref": "pkg:generic/test-vuln-app@0.1.0?type=application",
+      "name": "test-vuln-app",
+      "version": "0.1.0",
+      "description": "Synthetic SBOM for vulnerability pipeline testing. Contains intentionally outdated dependencies.",
+      "purl": "pkg:generic/test-vuln-app@0.1.0?type=application",
+      "supplier": {
+        "name": "Future Beyond Technology"
+      },
+      "scope": "required"
+    },
     {
       "type": "library",
       "bom-ref": "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1",

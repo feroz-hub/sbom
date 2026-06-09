@@ -726,13 +726,15 @@ export function getDashboardTrendFiltered(
 
 /** "Vulnerability by Age" pie — CVE-age buckets, observation window on scan date. */
 export function getVulnerabilityAge(
-  opts: { period?: AgePeriod; from?: string; to?: string } = {},
+  opts: { period?: AgePeriod; from?: string; to?: string; projectId?: number; sbomId?: number } = {},
   signal?: AbortSignal,
 ) {
   const params = new URLSearchParams();
   if (opts.period) params.set('period', opts.period);
   if (opts.from) params.set('date_from', opts.from);
   if (opts.to) params.set('date_to', opts.to);
+  if (opts.projectId != null) params.set('project_id', String(opts.projectId));
+  if (opts.sbomId != null) params.set('sbom_id', String(opts.sbomId));
   const qs = params.toString();
   return request<VulnerabilityAgeResponse>(
     `/dashboard/vulnerability-age${qs ? `?${qs}` : ''}`,

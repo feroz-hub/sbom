@@ -107,6 +107,35 @@ def test_posture_exposes_counter_tiles(client, db):
     assert body["total_applications_scanned"] >= 1
 
 
+def test_applications_scanned_counts_only_projects_with_a_completed_run(client, db):
+    """"Total Applications Scanned" = distinct projects with >=1 SBOM that has
+    a COMPLETED run. Uploaded-only projects (and ERROR-only runs) don't count.
+
+    Delta-based (the metric is global + not memoized) so it's robust to the
+    shared session-scoped test DB.
+    """
+    from app import metrics
+
+    baseline = metrics.applications_scanned_total(db)
+
+    # (a) A project whose SBOM is only uploaded (no run) → does NOT count.
+    _seed(db, "uploaded-only")
+    db.commit()
+    assert metrics.applications_scanned_total(db) == baseline
+
+    # (b) A project with only a non-completed (ERROR) run → still does NOT count.
+    s_err, p_err = _seed(db, "errored")
+    _seed_run(db, sbom=s_err, project=p_err, started=_iso_days_ago(1),
+              findings=[], status="ERROR")
+    assert metrics.applications_scanned_total(db) == baseline
+
+    # (c) A project with a completed run → counts (+1).
+    s_ok, p_ok = _seed(db, "scanned")
+    _seed_run(db, sbom=s_ok, project=p_ok, started=_iso_days_ago(1),
+              findings=[{"vuln_id": "CVE-2021-9000", "severity": "HIGH"}])  # status defaults to FINDINGS
+    assert metrics.applications_scanned_total(db) == baseline + 1
+
+
 # ── Vulnerability by age ────────────────────────────────────────────────────
 
 
@@ -229,3 +258,41 @@ def test_trend_endpoint_legacy_and_manager_paths(client, db):
     assert len(mgr["points"]) == 12
     assert "fix_available" in mgr["points"][0]
     assert "resolved" in mgr["points"][0]
+
+
+def test_age_distribution_filters_by_project_and_sbom(client, db):
+    """Project / SBOM filters narrow the age pie to that scope.
+
+    Isolated by the unique project/sbom ids the helpers create, so the
+    filtered counts are exact (not just bounds).
+    """
+    from app import metrics
+    from app.metrics.cache import reset_cache
+
+    sa, pa = _seed(db, "age-proj-a")
+    _seed_run(db, sbom=sa, project=pa, started=_iso_days_ago(1),
+              findings=[{"vuln_id": "CVE-2021-7001", "published_on": _iso_days_ago(10)}])  # le_30d
+    sb, pb = _seed(db, "age-proj-b")
+    _seed_run(db, sbom=sb, project=pb, started=_iso_days_ago(1),
+              findings=[{"vuln_id": "CVE-2021-7002", "published_on": _iso_days_ago(800)}])  # gt_365
+
+    reset_cache()
+    # project A → only A's finding (le_30d); B's gt_365 is excluded.
+    a = metrics.findings_age_distribution(db, project_id=pa.id)
+    assert a["le_30d"] == 1
+    assert a["gt_365"] == 0
+    assert sum(a.values()) == 1
+
+    # project B → only B's finding (gt_365).
+    b = metrics.findings_age_distribution(db, project_id=pb.id)
+    assert b["gt_365"] == 1
+    assert sum(b.values()) == 1
+
+    # single SBOM (A1) → that SBOM's latest run only.
+    s = metrics.findings_age_distribution(db, sbom_id=sa.id)
+    assert s["le_30d"] == 1
+    assert sum(s.values()) == 1
+
+    # endpoint accepts the params.
+    assert client.get(f"/dashboard/vulnerability-age?project_id={pa.id}").status_code == 200
+    assert client.get(f"/dashboard/vulnerability-age?sbom_id={sa.id}").status_code == 200
