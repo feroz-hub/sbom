@@ -83,6 +83,7 @@ export const SAMPLE_FIX_RESULT: AiFixResult = {
       confidence: 'high',
       caveats: [],
     },
+    overall_confidence: 'high',
   },
   metadata: {
     cache_key: 'abc123',

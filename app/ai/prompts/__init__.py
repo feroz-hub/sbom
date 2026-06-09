@@ -23,7 +23,11 @@ from typing import Any
 # v1 → v2 (Phase 5): explicit format-only instructions (no fences, no
 # preamble, snake_case enums) added to address Gemini-side malformed
 # output that surfaced as ``schema_parse_failed``.
-PROMPT_VERSION: str = "v2"
+# v2 → v3: ask the model for a top-level ``overall_confidence`` rating the
+# whole response (new ``AiFixBundle`` field). The bump re-keys the cache so
+# post-deploy lookups miss the v2 rows and regenerate bundles that actually
+# carry the new field, rather than serving stale outputs that lack it.
+PROMPT_VERSION: str = "v3"
 
 _PROMPTS_DIR = Path(__file__).parent
 

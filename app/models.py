@@ -526,6 +526,11 @@ class AiFixCache(Base):
     remediation_prose = Column(JSON, nullable=False)
     upgrade_command = Column(JSON, nullable=False)
     decision_recommendation = Column(JSON, nullable=False)
+    # Model's self-assessed confidence in the whole bundle ("high"/"medium"/
+    # "low"). Nullable so historical rows (pre-019) and fresh-install paths
+    # that skip the migration read back as the neutral default in
+    # ``app.ai.cache.read_cache``. New rows are always written non-null.
+    overall_confidence = Column(String(16), nullable=True)
 
     provider_used = Column(String(32), nullable=False)
     model_used = Column(String(96), nullable=False)

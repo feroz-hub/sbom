@@ -76,6 +76,19 @@ describe('AiFixSection', () => {
     expect(screen.getByText(/anthropic/)).toBeInTheDocument();
   });
 
+  it('surfaces the overall AI confidence prominently at the top of the result', async () => {
+    getFindingAiFix.mockResolvedValue(SAMPLE_FIX_ENVELOPE_OK);
+    renderWithProviders(<AiFixSection findingId={1} providerLabel="anthropic" />);
+
+    const badge = await screen.findByTestId('ai-overall-confidence');
+    expect(badge).toHaveTextContent(/Overall AI confidence/i);
+    // The fixture bundle reports "high" confidence in the whole response.
+    expect(badge).toHaveTextContent(/High/);
+    expect(
+      screen.getByLabelText(/Overall AI confidence: High/i),
+    ).toBeInTheDocument();
+  });
+
   it('calls regenerate when the Regenerate button is clicked', async () => {
     getFindingAiFix.mockResolvedValue(SAMPLE_FIX_ENVELOPE_OK);
     regenerateFindingAiFix.mockResolvedValue(SAMPLE_FIX_ENVELOPE_OK);

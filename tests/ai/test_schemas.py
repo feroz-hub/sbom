@@ -31,6 +31,7 @@ def test_example_1_critical_kev_validates():
     assert bundle.upgrade_command.tested_against_data is True
     assert bundle.decision_recommendation.priority == "urgent"
     assert "kev" in bundle.decision_recommendation.citations
+    assert bundle.overall_confidence == "high"
 
 
 def test_example_2_medium_with_fix_validates():
@@ -115,14 +116,43 @@ def test_upgrade_command_target_version_required():
 # ============================================================ JSON Schema export
 
 
-def test_bundle_json_schema_exports_three_keys():
+def test_bundle_json_schema_exports_top_level_keys():
     schema = bundle_json_schema()
     props = schema.get("properties") or {}
     assert set(props.keys()) == {
         "remediation_prose",
         "upgrade_command",
         "decision_recommendation",
+        "overall_confidence",
     }
+
+
+# ============================================================ overall_confidence
+
+
+def test_overall_confidence_defaults_to_medium_when_omitted():
+    # The three sub-objects are required; the top-level confidence is not —
+    # an omitting model yields the neutral default, same as the per-section
+    # confidence fields.
+    payload = json.loads(json.dumps(EX1_CRITICAL_KEV_WITH_FIX_BUNDLE))
+    payload.pop("overall_confidence", None)
+    bundle = AiFixBundle.model_validate(payload)
+    assert bundle.overall_confidence == "medium"
+
+
+def test_overall_confidence_normalises_case():
+    # A model that ignores the lowercase instruction ("High") still matches.
+    payload = json.loads(json.dumps(EX1_CRITICAL_KEV_WITH_FIX_BUNDLE))
+    payload["overall_confidence"] = "High"
+    bundle = AiFixBundle.model_validate(payload)
+    assert bundle.overall_confidence == "high"
+
+
+def test_overall_confidence_rejects_invalid_value():
+    payload = json.loads(json.dumps(EX1_CRITICAL_KEV_WITH_FIX_BUNDLE))
+    payload["overall_confidence"] = "very-high"
+    with pytest.raises(ValidationError):
+        AiFixBundle.model_validate(payload)
 
 
 def test_schema_version_constant_stable():

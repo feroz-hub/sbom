@@ -57,6 +57,13 @@ export interface AiFixBundle {
   remediation_prose: AiRemediationProse;
   upgrade_command: AiUpgradeCommand;
   decision_recommendation: AiDecisionRecommendation;
+  /**
+   * Model's self-assessed confidence in the WHOLE response, surfaced
+   * prominently at the top of the AI-fix section. Distinct from the
+   * per-section ``confidence`` fields on ``remediation_prose`` and
+   * ``decision_recommendation``, which scope only their own section.
+   */
+  overall_confidence: AiConfidenceTier;
 }
 
 export interface AiFixMetadata {

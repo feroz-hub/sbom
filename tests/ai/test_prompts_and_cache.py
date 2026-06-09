@@ -32,6 +32,8 @@ def test_system_prompt_contains_hard_rules():
     assert "Never invent" in p or "NEVER invent" in p
     assert "actively_exploited" in p
     assert "JSON" in p
+    # v3: the prompt must ask for the whole-response confidence rating.
+    assert "overall_confidence" in p
 
 
 def test_user_prompt_substitutes_grounding():
@@ -50,9 +52,10 @@ def test_user_prompt_handles_braces_in_grounding_json():
     assert grounding in rendered
 
 
-def test_prompt_version_stable_for_phase_2():
-    # Bumping is a deliberate cache invalidation. Tests pin it to v1.
-    assert PROMPT_VERSION == "v1"
+def test_prompt_version_pinned():
+    # Bumping is a deliberate cache invalidation (it re-keys the cache).
+    # v3 added the top-level overall_confidence rating to the bundle.
+    assert PROMPT_VERSION == "v3"
 
 
 def test_reload_prompts_clears_cache():
@@ -127,6 +130,42 @@ def test_cache_round_trip_returns_bundle(client):
     assert hit.metadata.cache_hit is True
     assert hit.metadata.provider_used == "anthropic"
     assert hit.bundle.upgrade_command.target_version == "2.17.1"
+    # The top-level confidence must survive the column round-trip — it is
+    # persisted separately from the three JSON sub-blobs.
+    assert hit.bundle.overall_confidence == "high"
+
+
+def test_cache_null_overall_confidence_reads_as_medium(client):
+    # Historical (pre-019) rows have NULL in the new column. read_cache must
+    # coerce that to the neutral default rather than failing validation.
+    bundle = AiFixBundle.model_validate(EX1_CRITICAL_KEV_WITH_FIX_BUNDLE)
+    key = make_cache_key(vuln_id="CVE-2021-44832", component_name="legacy", component_version="1.0.0")
+
+    db = SessionLocal()
+    try:
+        write_cache(
+            db,
+            cache_key=key,
+            vuln_id="CVE-2021-44832",
+            component_name="legacy",
+            component_version="1.0.0",
+            bundle=bundle,
+            provider_used="anthropic",
+            model_used="claude-sonnet-4-5",
+            total_cost_usd=0.0,
+            kev_listed=True,
+        )
+        from app.models import AiFixCache
+
+        row = db.query(AiFixCache).filter_by(cache_key=key).one()
+        row.overall_confidence = None  # simulate a pre-migration row
+        db.commit()
+        hit = read_cache(db, cache_key=key)
+    finally:
+        db.close()
+
+    assert hit is not None
+    assert hit.bundle.overall_confidence == "medium"
 
 
 def test_cache_miss_when_expired(client, monkeypatch):
@@ -163,6 +202,10 @@ def test_cache_miss_when_expired(client, monkeypatch):
 
 def test_cache_upsert_overwrites_existing(client):
     bundle = AiFixBundle.model_validate(EX1_CRITICAL_KEV_WITH_FIX_BUNDLE)
+    # First write carries a DIFFERENT overall_confidence so the UPSERT
+    # branch's ``existing.overall_confidence = ...`` assignment is pinned —
+    # the round-trip test only covers the INSERT branch.
+    low_conf = bundle.model_copy(update={"overall_confidence": "low"})
     key = make_cache_key(vuln_id="CVE-9999-2", component_name="y", component_version="2")
 
     db = SessionLocal()
@@ -173,7 +216,7 @@ def test_cache_upsert_overwrites_existing(client):
             vuln_id="CVE-9999-2",
             component_name="y",
             component_version="2",
-            bundle=bundle,
+            bundle=low_conf,
             provider_used="openai",
             model_used="gpt-4o-mini",
             total_cost_usd=0.001,
@@ -186,7 +229,7 @@ def test_cache_upsert_overwrites_existing(client):
             vuln_id="CVE-9999-2",
             component_name="y",
             component_version="2",
-            bundle=bundle,
+            bundle=bundle,  # overall_confidence="high"
             provider_used="anthropic",
             model_used="claude-sonnet-4-5",
             total_cost_usd=0.005,
@@ -199,3 +242,5 @@ def test_cache_upsert_overwrites_existing(client):
     assert hit is not None
     assert hit.metadata.provider_used == "anthropic"
     assert hit.metadata.total_cost_usd == 0.005
+    # The UPSERT must have overwritten the stale "low" with the new "high".
+    assert hit.bundle.overall_confidence == "high"
