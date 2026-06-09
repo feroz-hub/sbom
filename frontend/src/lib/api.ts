@@ -171,6 +171,19 @@ async function request<T>(
   return (await res.json()) as T;
 }
 
+// Request for endpoints that return a body on 200 but 204 No Content when
+// there's nothing to report (e.g. an idle resource). Returns ``null`` on 204
+// instead of throwing, so callers can branch on "exists but empty."
+async function requestOrNull<T>(
+  path: string,
+  options: RequestInit & { signal?: AbortSignal } = {},
+  timeoutMs = 30_000,
+): Promise<T | null> {
+  const res = await performRequest(path, options, timeoutMs);
+  if (res.status === 204) return null;
+  return (await res.json()) as T;
+}
+
 // Void request — for endpoints that return no body (DELETE, etc.). No casts.
 async function requestVoid(
   path: string,
@@ -1097,11 +1110,18 @@ export function cancelRunAiFixes(
 }
 
 /** Snapshot for clients that prefer polling over SSE. */
+/**
+ * Most-recent batch progress for a run. Resolves to ``null`` when the run
+ * exists but has no AI fix batch (backend 204) — an idle run, not an error.
+ * Callers must treat ``null`` as "nothing to track" (don't subscribe/poll).
+ */
 export function getRunAiFixProgress(
   runId: number,
   signal?: AbortSignal,
-): Promise<AiBatchProgress> {
-  return request<AiBatchProgress>(`/api/v1/runs/${runId}/ai-fixes/progress`, { signal });
+): Promise<AiBatchProgress | null> {
+  return requestOrNull<AiBatchProgress>(`/api/v1/runs/${runId}/ai-fixes/progress`, {
+    signal,
+  });
 }
 
 /** List cached fix bundles for a run (table view). */

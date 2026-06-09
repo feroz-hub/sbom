@@ -140,7 +140,7 @@ export function useAiBatchProgress(
   // Initial fetch + polling fallback. ``refetchInterval`` is suspended
   // (false) while SSE is healthy — when the stream succeeds for the
   // first time we flip ``sseAvailable=true`` and stop polling.
-  const query = useQuery<AiBatchProgress>({
+  const query = useQuery<AiBatchProgress | null>({
     queryKey: ['ai-batch-progress', runId],
     queryFn: ({ signal }) => getRunAiFixProgress(runId as number, signal),
     enabled: active,
@@ -148,6 +148,9 @@ export function useAiBatchProgress(
       if (!active) return false;
       if (sseAvailable === true) return false;
       const data = qData.state.data;
+      // ``null`` = backend 204 (run exists, no batch — idle). Stop, same as
+      // a terminal status; don't poll a dead/idle endpoint forever.
+      if (data === null) return false;
       if (data && isTerminal(data.status)) return false;
       return POLL_INTERVAL_MS;
     },

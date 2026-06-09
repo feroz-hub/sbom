@@ -26,6 +26,7 @@ const cancelRunAiFixes = vi.fn();
 const cancelRunAiBatch = vi.fn();
 const estimateRunAiFixesScoped = vi.fn();
 const listRunAiBatches = vi.fn();
+const listRunAiFixes = vi.fn();
 
 vi.mock('@/lib/api', () => ({
   getRunAiFixProgress: (id: number, signal?: AbortSignal) => getRunAiFixProgress(id, signal),
@@ -42,6 +43,7 @@ vi.mock('@/lib/api', () => ({
   estimateRunAiFixesScoped: (id: number, scope: unknown, signal?: AbortSignal) =>
     estimateRunAiFixesScoped(id, scope, signal),
   listRunAiBatches: (id: number, signal?: AbortSignal) => listRunAiBatches(id, signal),
+  listRunAiFixes: (id: number, signal?: AbortSignal) => listRunAiFixes(id, signal),
 }));
 
 const DEFAULT_ESTIMATE = {
@@ -64,6 +66,7 @@ const DEFAULT_ESTIMATE = {
 };
 
 const NO_ACTIVE_BATCHES = { run_id: 42, items: [], total: 0 };
+const NO_RUN_FIXES = { run_id: 42, items: [], total: 0 };
 
 beforeEach(() => {
   getRunAiFixProgress.mockReset();
@@ -73,10 +76,12 @@ beforeEach(() => {
   cancelRunAiBatch.mockReset();
   estimateRunAiFixesScoped.mockReset();
   listRunAiBatches.mockReset();
+  listRunAiFixes.mockReset();
   // Defaults — paid tier, no contention, no warning. Tests override
   // when they need a different shape.
   estimateRunAiFixesScoped.mockResolvedValue(DEFAULT_ESTIMATE);
   listRunAiBatches.mockResolvedValue(NO_ACTIVE_BATCHES);
+  listRunAiFixes.mockResolvedValue(NO_RUN_FIXES);
   // EventSource isn't available in jsdom; the hook degrades to polling.
   Object.defineProperty(globalThis, 'EventSource', { value: undefined, configurable: true });
 });
@@ -112,6 +117,116 @@ describe('RunBatchProgress — in-flight banner', () => {
         'Critical findings',
       );
     });
+  });
+});
+
+describe('RunBatchProgress — terminal batch vs run-level fixes', () => {
+  // Reproduces the reported mismatch: the last batch was cancelled with
+  // nothing processed ("cancelled · 0/0 · Cached: 0 · Generated: 0 · $0"),
+  // yet the run still has cached AI fixes available (the table shows
+  // sparkle icons). The banner must scope its zeros to "Last batch" and
+  // surface the run-level total so the two views agree.
+  it('scopes the cancelled batch counters and shows run-level fixes available', async () => {
+    getRunAiFixProgress.mockResolvedValue(
+      makeBatchProgress({
+        status: 'cancelled',
+        total: 0,
+        from_cache: 0,
+        generated: 0,
+        failed: 0,
+        remaining: 0,
+        cost_so_far_usd: 0,
+        finished_at: '2026-05-03T12:05:00+00:00',
+        cancel_requested: true,
+      }),
+    );
+    // Two fixes exist in the tenant-shared cache for this run's findings
+    // (e.g. OpenSSL CVE-2014-0160 + zlib CVE-2022-37434) — the same data
+    // that lights up the findings-table AI column.
+    listRunAiFixes.mockResolvedValue({
+      run_id: 42,
+      total: 2,
+      items: [
+        {
+          cache_key: 'k1',
+          vuln_id: 'CVE-2014-0160',
+          component_name: 'openssl',
+          component_version: '1.0.1',
+          provider_used: 'anthropic',
+          model_used: 'claude',
+          total_cost_usd: 0,
+          generated_at: '2026-05-01T00:00:00Z',
+          expires_at: '2026-05-31T00:00:00Z',
+        },
+        {
+          cache_key: 'k2',
+          vuln_id: 'CVE-2022-37434',
+          component_name: 'zlib',
+          component_version: '1.2.11',
+          provider_used: 'anthropic',
+          model_used: 'claude',
+          total_cost_usd: 0,
+          generated_at: '2026-05-01T00:00:00Z',
+          expires_at: '2026-05-31T00:00:00Z',
+        },
+      ],
+    });
+
+    renderWithProviders(<RunBatchProgress runId={42} />);
+
+    await waitFor(() =>
+      expect(screen.getByText(/AI remediation cancelled/i)).toBeInTheDocument(),
+    );
+    // The zeros are explicitly attributed to the last batch …
+    expect(screen.getByText('Last batch')).toBeInTheDocument();
+    // … and the run-level availability reconciles with the table.
+    await waitFor(() =>
+      expect(screen.getByTestId('ai-batch-run-available')).toHaveTextContent(
+        /2 AI fixes available for this run/i,
+      ),
+    );
+  });
+
+  it('omits the run-level line while a batch is actively running', async () => {
+    getRunAiFixProgress.mockResolvedValue(makeBatchProgress({ status: 'in_progress' }));
+    listRunAiFixes.mockResolvedValue({
+      run_id: 42,
+      total: 5,
+      items: [],
+    });
+    renderWithProviders(<RunBatchProgress runId={42} />);
+    await waitFor(() =>
+      expect(screen.getByText(/Generating AI remediation/i)).toBeInTheDocument(),
+    );
+    // Live progress already shows its own Cached/Generated counts; the
+    // historical "Last batch" framing + run-level line are terminal-only.
+    expect(screen.queryByText('Last batch')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('ai-batch-run-available')).not.toBeInTheDocument();
+  });
+});
+
+describe('RunBatchProgress — idle run (backend 204)', () => {
+  // A run that exists but has no AI fix batch returns 204 from /progress,
+  // which the API layer maps to ``null``. The banner must render the
+  // Generate CTA (not a blank/looping banner), and must NOT present itself
+  // as an in-flight job.
+  it('renders the Generate CTA when /progress resolves null (204)', async () => {
+    getRunAiFixProgress.mockResolvedValue(null);
+    estimateRunAiFixesScoped.mockResolvedValue({
+      ...DEFAULT_ESTIMATE,
+      total_findings_in_scope: 50,
+      cached_count: 0,
+      llm_call_count: 50,
+    });
+    renderWithProviders(<RunBatchProgress runId={7} />);
+    await waitFor(() =>
+      expect(
+        screen.getByText(/Generate AI fixes for 50 findings in this run/i),
+      ).toBeInTheDocument(),
+    );
+    // Idle, not in-flight: no progress/terminal copy should appear.
+    expect(screen.queryByText(/Generating AI remediation/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('Last batch')).not.toBeInTheDocument();
   });
 });
 

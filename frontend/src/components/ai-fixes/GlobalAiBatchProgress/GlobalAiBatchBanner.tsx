@@ -58,12 +58,12 @@ function GlobalBatchRow({ entry, compact = false }: RowProps) {
   const ctx = useContext(AiBatchProgressContext);
   const { runId, batchId, scopeLabel } = entry;
   const queryKey = batchProgressQueryKey(runId, batchId);
-  const { data: progress } = useQuery<AiBatchProgress>({
+  const { data: progress } = useQuery<AiBatchProgress | null>({
     queryKey,
     queryFn: ({ signal }) => {
       if (batchId == null) return getRunAiFixProgress(runId, signal);
       return getRunAiBatch(runId, batchId, signal).then(
-        (detail) => detail.progress as AiBatchProgress,
+        (detail) => detail.progress ?? null,
       );
     },
   });

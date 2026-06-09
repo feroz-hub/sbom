@@ -61,7 +61,7 @@ from __future__ import annotations
 import json
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -755,19 +755,35 @@ def cancel_run_batch(
 @router.get(
     "/runs/{run_id}/ai-fixes/progress",
     response_model=BatchProgress,
+    responses={204: {"description": "Run exists but has no AI fix batch (idle)."}},
     deprecated=True,
 )
-def get_progress(run_id: int, db: Session = Depends(get_db)) -> BatchProgress:
+def get_progress(
+    run_id: int, db: Session = Depends(get_db)
+) -> BatchProgress | Response:
     """Return the most-recent batch's progress (legacy compat).
 
     Frontends migrating to the multi-batch surface should call
     ``/batches/{batch_id}`` instead.
 
-    Returns 404 when the run has no batch at all. Earlier the endpoint
-    fabricated a ``pending`` envelope for this case, which trapped any
-    subscriber forever — the frontend has no way to tell synthesised
-    "nothing here" apart from real "queued, waiting to start." A
-    structured 404 lets the client unregister the phantom.
+    Contract:
+      * ``404`` — the *run* does not exist (raised by ``_ensure_run_exists``).
+      * ``200`` — live progress, or the most-recent durable batch row
+        (so a terminal state survives a process restart).
+      * ``204`` — the run exists but has no AI fix batch at all (idle).
+
+    Idle is **204, not 404**: the run is real, there's simply nothing to
+    report. Earlier this case 404'd, which the client mistook for an
+    error and — paired with a re-registration loop — re-polled forever.
+    204 is also distinct from a fabricated ``pending`` envelope, so the
+    client can tell "nothing here, don't subscribe" apart from a real
+    "queued, waiting to start."
+
+    Non-streaming handler: the ``get_db`` dependency opens the session,
+    the two reads run, and the session is closed in ``get_db``'s
+    ``finally`` as soon as the request returns — the connection is never
+    held across anything slow (contrast the SSE stream handlers, which
+    use a short-lived ``SessionLocal()`` closed before streaming).
     """
     _ensure_run_exists(db, run_id)
     store = get_progress_store()
@@ -779,13 +795,7 @@ def get_progress(run_id: int, db: Session = Depends(get_db)) -> BatchProgress:
     last_row = _latest_batch_row(db, run_id)
     if last_row is not None:
         return _row_to_progress(last_row)
-    raise HTTPException(
-        status_code=404,
-        detail={
-            "error_code": "NO_BATCH",
-            "message": f"No AI fix batch exists for run {run_id}.",
-        },
-    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post(

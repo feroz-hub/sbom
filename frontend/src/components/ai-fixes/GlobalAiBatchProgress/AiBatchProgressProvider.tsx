@@ -71,7 +71,10 @@ function BatchStreamSubscription({
           const snap = await getRunAiFixProgress(runId);
           if (cancelled) return;
           qc.setQueryData(batchProgressQueryKey(runId, null), snap);
-          if (isTerminal(snap.status)) onTerminalRef.current();
+          // ``null`` = backend 204 (run exists, no batch — idle). Treat it
+          // like a terminal status so the provider unregisters this phantom
+          // subscriber instead of holding a stream open against nothing.
+          if (snap == null || isTerminal(snap.status)) onTerminalRef.current();
           return;
         }
         const detail = await getRunAiBatch(runId, batchId);
@@ -127,13 +130,22 @@ function BatchStreamSubscription({
         if (stopped) return;
         try {
           const snap = await fetchSnapshot();
-          if (snap) {
-            qc.setQueryData(queryKey, snap);
-            if (isTerminal(snap.status)) {
+          if (snap == null) {
+            // Legacy run-scoped null = 204 idle → stop polling a dead
+            // endpoint. (Batch-scoped null is a transient fetch error;
+            // keep polling so SSE/next tick can recover.)
+            if (batchId == null) {
               stopped = true;
               if (pollTimer) clearInterval(pollTimer);
               onTerminalRef.current();
             }
+            return;
+          }
+          qc.setQueryData(queryKey, snap);
+          if (isTerminal(snap.status)) {
+            stopped = true;
+            if (pollTimer) clearInterval(pollTimer);
+            onTerminalRef.current();
           }
         } catch {
           /* keep polling */

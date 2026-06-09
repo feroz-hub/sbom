@@ -215,14 +215,24 @@ def test_progress_endpoint_round_trips(client, _seeded_run, _enable_ai, _fake_re
     assert body["status"] in {"pending", "in_progress", "complete"}
 
 
-def test_progress_endpoint_returns_404_when_no_batch(client, _seeded_run, _memory_store):
-    """Phantom-banner regression: with no batch ever created, /progress
-    must surface that fact instead of fabricating a pending envelope —
-    otherwise a tab that registered on mount stays subscribed forever."""
+def test_progress_endpoint_returns_204_when_no_batch(client, _seeded_run, _memory_store):
+    """Idle contract: the run exists but has no batch, so /progress returns
+    204 (nothing to report) — NOT 404.
+
+    404 was wrong (the run is real) and the client mistook it for an error
+    and re-polled forever. 204 is also distinct from a fabricated ``pending``
+    envelope, so a tab that registered on mount can tell "nothing here, don't
+    subscribe" apart from a real "queued, waiting to start."
+    """
     resp = client.get(f"/api/v1/runs/{_seeded_run['run_id']}/ai-fixes/progress")
+    assert resp.status_code == 204
+    assert resp.content == b""  # No body on 204.
+
+
+def test_progress_endpoint_returns_404_when_run_missing(client, _memory_store):
+    """404 is reserved for a missing *run* — the genuine not-found case."""
+    resp = client.get("/api/v1/runs/999999/ai-fixes/progress")
     assert resp.status_code == 404
-    body = resp.json()
-    assert body["detail"]["error_code"] == "NO_BATCH"
 
 
 def test_cancel_endpoint_sets_flag(client, _seeded_run, _enable_ai, _memory_store):
