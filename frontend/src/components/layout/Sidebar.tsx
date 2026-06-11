@@ -453,6 +453,7 @@ function SidebarSection({
   iconClassName?: string;
   children: ReactNode;
 }) {
+  return (
     <section className="px-2 py-2 border-t border-white/10">
       <p className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-200">
         <Icon className={cn('h-3 w-3', iconClassName)} aria-hidden />
