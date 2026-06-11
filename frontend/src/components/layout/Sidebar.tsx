@@ -109,6 +109,8 @@ export function Sidebar() {
           mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
         )}
       >
+        {/* Brand bar — label slides + fades while the rail narrows; the logo
+            block stays put so nothing jumps (px-4 ≈ centered in the 64px rail). */}
         <div className="flex shrink-0 items-center gap-3 px-4 py-4 sidebar-brand-bar">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/20 bg-white/10 shadow-inner">
             <span className="text-xs font-bold leading-none tracking-tight text-white">HCL</span>
