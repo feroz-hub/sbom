@@ -202,6 +202,10 @@ export default function DashboardPage() {
           <QuickActionsV2 primaryAction={postureQuery.data?.primary_action} />
         </Motion>
 
+        <Motion preset="rise" delay={140}>
+          <CopilotPanel />
+        </Motion>
+
         {/* Distribution pies — vulnerability by threat level + by age. Placed
             ABOVE the vulnerable-SBOM list so the overview reads before the list. */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -247,8 +251,33 @@ export default function DashboardPage() {
           <TrendExplorer />
         </Motion>
 
+        {/* ── Dashboard v4 — Advanced Analytics ────────────────── */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <Motion preset="rise" delay={280}>
+            <ForecastCard />
+          </Motion>
+          <Motion preset="rise" delay={300}>
+            <ExploitationOutlookCard />
+          </Motion>
+        </div>
+
+
+
+        <Motion preset="rise" delay={320}>
+          <RemediationPanel />
+        </Motion>
+
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <Motion preset="rise" delay={340}>
+            <PortfolioRiskMap />
+          </Motion>
+          <Motion preset="rise" delay={360}>
+            <RiskMatrixCard />
+          </Motion>
+        </div>
+
         {/* Recent activity — supporting detail at the foot of the dashboard. */}
-        <Motion preset="rise" delay={300}>
+        <Motion preset="rise" delay={400}>
           <ActivityFeed />
         </Motion>
       </div>

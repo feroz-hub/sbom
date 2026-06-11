@@ -51,6 +51,10 @@ from .sboms import (
     sboms_analysed_total,
     sboms_total,
 )
+from .exploitation import compose_exploitation_probability, portfolio_exploitation_outlook
+from .forecast import findings_forecast, linear_fit, velocity_anomaly
+from .remediation import DEFAULT_SLA_DAYS, remediation_summary, sla_state
+from .riskmap import portfolio_risk_map, portfolio_risk_matrix
 from .trend import findings_trend
 from .windows import findings_net_change
 
