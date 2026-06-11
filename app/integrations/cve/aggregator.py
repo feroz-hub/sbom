@@ -32,8 +32,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from datetime import datetime, timezone
-from typing import Any, Iterable, Sequence
+from collections.abc import Sequence
+from datetime import UTC, datetime
+from typing import Any
 
 from ...schemas_cve import (
     CveDetail,
@@ -44,7 +45,7 @@ from ...schemas_cve import (
     CveSeverity,
 )
 from .base import CveSource, FetchOutcome, FetchResult
-from .identifiers import IdKind, VulnId, classify
+from .identifiers import IdKind, VulnId
 
 log = logging.getLogger("sbom.integrations.cve.aggregator")
 
@@ -265,7 +266,7 @@ def merge(cve_id: str, results: list[FetchResult]) -> CveDetail:
         references=references,
         sources_used=sources_used,  # type: ignore[arg-type]
         is_partial=is_partial,
-        fetched_at=datetime.now(timezone.utc),
+        fetched_at=datetime.now(UTC),
     )
 
 
@@ -376,7 +377,7 @@ async def _gather(sources: Sequence[CveSource], vuln_id: str) -> list[FetchResul
         *(s.fetch(vuln_id) for s in sources), return_exceptions=True
     )
     out: list[FetchResult] = []
-    for src, res in zip(sources, gathered):
+    for src, res in zip(sources, gathered, strict=True):
         if isinstance(res, FetchResult):
             out.append(res)
             continue

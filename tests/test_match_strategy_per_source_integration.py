@@ -51,10 +51,9 @@ async def _empty(*args, **kwargs):
 
 
 def _read_row(run_id: int, vuln_id: str):
-    from sqlalchemy import select
-
     from app.db import SessionLocal
     from app.models import AnalysisFinding
+    from sqlalchemy import select
 
     db = SessionLocal()
     try:

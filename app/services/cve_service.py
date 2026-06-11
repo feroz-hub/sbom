@@ -21,8 +21,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Iterable
+from collections.abc import Iterable
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -30,7 +30,7 @@ from sqlalchemy.orm import Session
 from ..integrations.cve.aggregator import aggregate
 from ..integrations.cve.epss import EpssSource
 from ..integrations.cve.ghsa import GhsaClient
-from ..integrations.cve.identifiers import IdKind, SUPPORTED_FORMATS, classify
+from ..integrations.cve.identifiers import IdKind, classify
 from ..integrations.cve.kev import KevSource
 from ..integrations.cve.nvd import NvdClient
 from ..integrations.cve.osv import OsvClient
@@ -166,7 +166,7 @@ class CveDetailService:
         if cold:
             tasks = [self._fetch_and_cache(classify(c)) for c in cold]
             results = await asyncio.gather(*tasks)
-            for c, r in zip(cold, results):
+            for c, r in zip(cold, results, strict=True):
                 out[c] = r
         return out
 
@@ -219,7 +219,7 @@ class CveDetailService:
             expires = datetime.fromisoformat(row.expires_at)
         except ValueError:
             return None
-        if datetime.now(timezone.utc) >= expires:
+        if datetime.now(UTC) >= expires:
             return None
         try:
             payload = row.payload if isinstance(row.payload, dict) else json.loads(row.payload)
@@ -230,7 +230,7 @@ class CveDetailService:
 
     def _write_cache(self, detail: CveDetail) -> None:
         ttl = self._ttl_for(detail)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         expires = now + timedelta(seconds=ttl)
         payload = detail.model_dump(mode="json")
         try:
@@ -257,7 +257,7 @@ class CveDetailService:
         if not detail.sources_used:
             return s.cve_cache_ttl_error_seconds
         if detail.published_at is not None:
-            age_days = (datetime.now(timezone.utc) - detail.published_at).days
+            age_days = (datetime.now(UTC) - detail.published_at).days
             if age_days <= s.cve_recent_window_days:
                 return s.cve_cache_ttl_recent_seconds
         return s.cve_cache_ttl_stable_seconds

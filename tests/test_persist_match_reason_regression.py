@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import pytest
 
-
 _NVD_FINDING_WITH_MATCH_TAGS = {
     "vuln_id": "CVE-MATCH-REASON-REGRESSION",
     "aliases": [],
@@ -79,10 +78,9 @@ def test_persist_analysis_run_forwards_match_reason_and_range(
     assert resp.status_code == 201, resp.text
     run_id = resp.json()["id"]
 
-    from sqlalchemy import select
-
     from app.db import SessionLocal
     from app.models import AnalysisFinding
+    from sqlalchemy import select
 
     db = SessionLocal()
     try:
@@ -145,10 +143,9 @@ def test_persist_analysis_run_tolerates_missing_match_keys(client, seeded_sbom, 
     assert resp.status_code == 201, resp.text
     run_id = resp.json()["id"]
 
-    from sqlalchemy import select
-
     from app.db import SessionLocal
     from app.models import AnalysisFinding
+    from sqlalchemy import select
 
     db = SessionLocal()
     try:

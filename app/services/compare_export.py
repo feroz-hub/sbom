@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import csv
 import io
-import json
 from typing import Literal
 
 from ..schemas_compare import (

@@ -15,18 +15,16 @@ rest of the schema and from the FastAPI startup path.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
-
 from app.db import Base
 from app.models import SourceResponseCache
 from app.services.source_response_cache import SourceResponseCacheRepository
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
 
-
-_T0 = datetime(2026, 6, 3, 12, 0, 0, tzinfo=timezone.utc)
+_T0 = datetime(2026, 6, 3, 12, 0, 0, tzinfo=UTC)
 
 
 @pytest.fixture()

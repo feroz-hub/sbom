@@ -10,9 +10,10 @@ rejected in __post_init__ so we never silently store ambiguous time.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
-from typing import Any, Literal, Mapping
+from datetime import UTC, datetime, timedelta
+from typing import Any, Literal
 
 # Sentinel — the maximum window NVD's API permits is 120 days; we use
 # 119 days as a hard ceiling everywhere to leave headroom for clock skew
@@ -199,4 +200,4 @@ class SyncReport:
 
 def utc_now() -> datetime:
     """Convenience helper — tz-aware UTC ``datetime.now()``."""
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)

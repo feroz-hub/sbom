@@ -15,7 +15,6 @@ import copy
 
 import pytest
 
-
 _LOG4SHELL_CVE = {
     "id": "CVE-2021-44228",
     "published": "2021-12-10T10:15:09.143",
@@ -82,7 +81,6 @@ def test_nvd_finding_carries_confidence_dict_to_row(client, seeded_sbom, monkeyp
     floor is moot here — the test confirms the wiring, not the floor.
     """
     import app.analysis as analysis_mod
-    from app.sources.nvd import NvdSource
 
     fake = _make_fake_lookup([_LOG4SHELL_CVE])
 
@@ -112,10 +110,9 @@ def test_nvd_finding_carries_confidence_dict_to_row(client, seeded_sbom, monkeyp
     assert resp.status_code == 201, resp.text
     run_id = resp.json()["id"]
 
-    from sqlalchemy import select
-
     from app.db import SessionLocal
     from app.models import AnalysisFinding
+    from sqlalchemy import select
 
     db = SessionLocal()
     try:

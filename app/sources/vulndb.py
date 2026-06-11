@@ -9,8 +9,7 @@ returns a warning-only empty result when no key is configured.
 from __future__ import annotations
 
 import asyncio
-import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -56,7 +55,7 @@ def _unix_to_iso(value: Any) -> str | None:
         return None
     if text.isdigit():
         try:
-            return datetime.fromtimestamp(int(text), tz=timezone.utc).replace(microsecond=0).isoformat()
+            return datetime.fromtimestamp(int(text), tz=UTC).replace(microsecond=0).isoformat()
         except (OverflowError, OSError, ValueError):
             return text
     return text

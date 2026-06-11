@@ -23,25 +23,21 @@ import asyncio
 import copy
 from collections.abc import Iterator
 from dataclasses import replace as dataclass_replace
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-
 from app.analysis import (
-    AnalysisSettings,
-    _MultiSettings,
-    github_query_by_components,
     get_analysis_settings_multi,
+    github_query_by_components,
 )
 from app.db import Base
 from app.models import SourceResponseCache
 from app.services.source_response_cache import SourceResponseCacheRepository
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
-
-_T0 = datetime(2026, 6, 3, 12, 0, 0, tzinfo=timezone.utc)
+_T0 = datetime(2026, 6, 3, 12, 0, 0, tzinfo=UTC)
 
 
 # ---------------------------------------------------------------------------

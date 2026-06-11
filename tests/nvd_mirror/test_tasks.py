@@ -9,22 +9,20 @@ from __future__ import annotations
 
 import os
 import tempfile
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
-
 from app.nvd_mirror.adapters.sync_run_repository import SqlAlchemySyncRunRepository
 from app.nvd_mirror.application._window_walker import HISTORICAL_FLOOR
-from app.nvd_mirror.db.models import NvdSyncRunRow
 from app.nvd_mirror.domain.models import MirrorWindow
 from app.nvd_mirror.tasks import (
     MirrorAlreadyRunningError,
     assert_no_run_in_flight,
     run_mirror_sync,
 )
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
 
 from ._fakes import (
     FakeCveRepository,
@@ -37,8 +35,7 @@ from ._fakes import (
     make_snapshot,
 )
 
-
-UTC = timezone.utc
+UTC = UTC
 
 
 def _no_commit() -> None:
@@ -125,8 +122,8 @@ def real_session() -> Session:
     os.close(fd)
     Path(path).unlink(missing_ok=True)
 
-    from app.db import Base
     import app.nvd_mirror.db.models  # noqa: F401
+    from app.db import Base
 
     engine = create_engine(f"sqlite:///{path}")
     Base.metadata.create_all(bind=engine)

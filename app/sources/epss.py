@@ -23,7 +23,7 @@ from __future__ import annotations
 import logging
 import os
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 from sqlalchemy import select
@@ -40,7 +40,7 @@ EPSS_BATCH_SIZE = int(os.getenv("EPSS_BATCH_SIZE", "100"))
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    return datetime.now(UTC).replace(microsecond=0).isoformat()
 
 
 def _is_fresh(refreshed_at: str | None) -> bool:
@@ -50,7 +50,7 @@ def _is_fresh(refreshed_at: str | None) -> bool:
         ts = datetime.fromisoformat(refreshed_at)
     except ValueError:
         return False
-    age = (datetime.now(timezone.utc) - ts).total_seconds()
+    age = (datetime.now(UTC) - ts).total_seconds()
     return age < EPSS_TTL_SECONDS
 
 

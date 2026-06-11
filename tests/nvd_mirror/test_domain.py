@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
-
 from app.nvd_mirror.domain.models import (
     CpeCriterion,
     CveBatch,
@@ -17,8 +16,7 @@ from app.nvd_mirror.domain.models import (
     utc_now,
 )
 
-
-UTC = timezone.utc
+UTC = UTC
 T0 = datetime(2024, 1, 1, tzinfo=UTC)
 T1 = datetime(2024, 4, 1, tzinfo=UTC)
 

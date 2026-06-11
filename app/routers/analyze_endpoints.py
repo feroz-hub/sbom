@@ -43,6 +43,7 @@ from ..analysis import (
 from ..db import get_db
 from ..idempotency import normalize_idempotency_key, run_idempotent
 from ..rate_limit import analyze_route_limit
+from ..services.analysis_service import compute_report_status, persist_analysis_run
 from ..services.sbom_service import load_sbom_from_ref as _load_sbom_from_ref
 from ..services.sbom_service import now_iso
 from ..settings import get_settings
@@ -50,7 +51,6 @@ from ..sources import (
     build_source_adapters,
     run_sources_concurrently,
 )
-from ..services.analysis_service import compute_report_status, persist_analysis_run
 
 DEFAULT_RESULTS_PER_PAGE = get_settings().DEFAULT_RESULTS_PER_PAGE
 

@@ -3,17 +3,15 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-
 from app.nvd_mirror.domain.mappers import (
     MalformedCveError,
     map_batch,
     map_cve,
 )
-
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "nvd"
 
@@ -34,8 +32,8 @@ def test_log4j_window_full_mapping() -> None:
 
     log4j = next(r for r in batch.records if r.cve_id == "CVE-2021-44228")
     assert log4j.vuln_status == "Modified"
-    assert log4j.last_modified == datetime(2024, 4, 16, 1, 23, 45, tzinfo=timezone.utc)
-    assert log4j.published == datetime(2021, 12, 10, 10, 15, 9, 143000, tzinfo=timezone.utc)
+    assert log4j.last_modified == datetime(2024, 4, 16, 1, 23, 45, tzinfo=UTC)
+    assert log4j.published == datetime(2021, 12, 10, 10, 15, 9, 143000, tzinfo=UTC)
     assert log4j.description_en is not None
     assert "Apache Log4j2" in log4j.description_en
 

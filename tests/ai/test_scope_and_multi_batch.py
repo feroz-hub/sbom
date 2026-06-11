@@ -53,7 +53,6 @@ from app.settings import reset_settings
 
 from tests.ai.fixtures import EX1_CRITICAL_KEV_WITH_FIX_BUNDLE
 
-
 # ---------------------------------------------------------------------------
 # Test fixtures
 # ---------------------------------------------------------------------------

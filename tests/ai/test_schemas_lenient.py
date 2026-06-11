@@ -12,7 +12,7 @@ from app.ai.schemas import (
     RemediationProse,
     UpgradeCommand,
 )
-
+from pydantic import ValidationError
 
 # ============================================================ RemediationProse
 
@@ -129,43 +129,40 @@ def test_decision_recommendation_allows_empty_reasoning_list() -> None:
 # ============================================================ AiFixBundle (whole)
 
 
-def test_full_bundle_with_extra_top_level_field_is_ignored() -> None:
-    """End-to-end: a bundle with one extra ignored field at the top
-    level still validates."""
-    bundle = AiFixBundle.model_validate(
-        {
-            "remediation_prose": {
-                "summary_in_context": "A long enough summary in context to pass min_length.",
-                "exploitation_likelihood": "High",  # capitalised
-                "recommended_path": "Upgrade to fixed version.",
-                "confidence": "Medium",
-            },
-            "upgrade_command": {
-                "ecosystem": "maven",
-                "command": "mvn versions:set -DnewVersion=2.17.1",
-                "target_version": "2.17.1",
-                "rationale": "Smallest semver-stable upgrade containing the fix.",
-                "breaking_change_risk": "Minor",
-                "tested_against_data": True,
-            },
-            "decision_recommendation": {
-                "priority": "Urgent",
-                "reasoning": ["Listed in CISA KEV as actively exploited."],
-                "citations": ["KEV", "NVD"],
-                "confidence": "High",
-            },
-            "model_self_critique": "ignored",  # extra field
-        }
-    )
-    assert bundle.remediation_prose.exploitation_likelihood == "high"
-    assert bundle.upgrade_command.breaking_change_risk == "minor"
-    assert bundle.decision_recommendation.citations == ["kev", "nvd"]
+def test_full_bundle_rejects_extra_top_level_field() -> None:
+    """End-to-end: generated bundles reject unmodeled top-level fields."""
+    with pytest.raises(ValidationError):
+        AiFixBundle.model_validate(
+            {
+                "remediation_prose": {
+                    "summary_in_context": "A long enough summary in context to pass min_length.",
+                    "exploitation_likelihood": "High",  # capitalised
+                    "recommended_path": "Upgrade to fixed version.",
+                    "confidence": "Medium",
+                },
+                "upgrade_command": {
+                    "ecosystem": "maven",
+                    "command": "mvn versions:set -DnewVersion=2.17.1",
+                    "target_version": "2.17.1",
+                    "rationale": "Smallest semver-stable upgrade containing the fix.",
+                    "breaking_change_risk": "Minor",
+                    "tested_against_data": True,
+                },
+                "decision_recommendation": {
+                    "priority": "Urgent",
+                    "reasoning": ["Listed in CISA KEV as actively exploited."],
+                    "citations": ["KEV", "NVD"],
+                    "confidence": "High",
+                },
+                "model_self_critique": "ignored",
+            }
+        )
 
 
 def test_full_bundle_rejects_invalid_enum_value() -> None:
     """Loosening must NOT accept arbitrary strings — the strict
     schema still rules. ``"super-critical"`` is not a valid priority."""
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         AiFixBundle.model_validate(
             {
                 "remediation_prose": {

@@ -16,6 +16,7 @@ except ImportError:
 
 # Initialise logging before importing the app so all modules inherit the config
 from app.logger import setup_logging
+
 setup_logging()
 
 import uvicorn

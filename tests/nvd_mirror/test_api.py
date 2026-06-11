@@ -9,15 +9,15 @@ with a fixed Fernet key so the tests don't depend on env vars.
 from __future__ import annotations
 
 import os
-from typing import Iterator
+from collections.abc import Iterator
+from datetime import UTC
 from unittest.mock import patch
 
 import pytest
-from cryptography.fernet import Fernet
-from fastapi.testclient import TestClient
-
 from app.nvd_mirror.adapters.secrets import FernetSecretsAdapter
 from app.nvd_mirror.api import get_secrets
+from cryptography.fernet import Fernet
+from fastapi.testclient import TestClient
 
 
 @pytest.fixture()
@@ -135,18 +135,19 @@ def test_put_settings_does_not_advance_watermark(api_client: TestClient) -> None
     # First, simulate a successful sync by directly setting the watermark
     # via a separate request flow — there's no admin API for this, so we
     # exercise the invariant via the settings repo on the same DB.
+    from datetime import datetime
+
     from app.db import SessionLocal
     from app.nvd_mirror.adapters.secrets import FernetSecretsAdapter
     from app.nvd_mirror.adapters.settings_repository import (
         SqlAlchemySettingsRepository,
     )
-    from datetime import datetime, timezone
 
     key = os.environ["NVD_MIRROR_FERNET_KEY"]
     s = SessionLocal()
     try:
         repo = SqlAlchemySettingsRepository(s, FernetSecretsAdapter(key))
-        target = datetime(2024, 6, 1, tzinfo=timezone.utc)
+        target = datetime(2024, 6, 1, tzinfo=UTC)
         repo.advance_watermark(
             last_modified_utc=target, last_successful_sync_at=target
         )
@@ -210,12 +211,13 @@ def test_get_sync_status_initially_empty(api_client: TestClient) -> None:
 
 def test_get_sync_status_returns_completed_runs(api_client: TestClient) -> None:
     # Seed a few runs directly via the repository.
+    from datetime import datetime
+
     from app.db import SessionLocal
     from app.nvd_mirror.adapters.sync_run_repository import (
         SqlAlchemySyncRunRepository,
     )
     from app.nvd_mirror.domain.models import MirrorWindow
-    from datetime import datetime, timezone
 
     s = SessionLocal()
     try:
@@ -223,8 +225,8 @@ def test_get_sync_status_returns_completed_runs(api_client: TestClient) -> None:
         rid = repo.begin(
             run_kind="bootstrap",
             window=MirrorWindow(
-                start=datetime(2024, 4, 1, tzinfo=timezone.utc),
-                end=datetime(2024, 4, 2, tzinfo=timezone.utc),
+                start=datetime(2024, 4, 1, tzinfo=UTC),
+                end=datetime(2024, 4, 2, tzinfo=UTC),
             ),
         )
         repo.finish(rid, status="success", upserts=42, error=None)
@@ -245,18 +247,19 @@ def test_get_sync_status_returns_completed_runs(api_client: TestClient) -> None:
 
 
 def test_watermark_reset_clears_last_modified_utc(api_client: TestClient) -> None:
+    from datetime import datetime
+
     from app.db import SessionLocal
     from app.nvd_mirror.adapters.secrets import FernetSecretsAdapter
     from app.nvd_mirror.adapters.settings_repository import (
         SqlAlchemySettingsRepository,
     )
-    from datetime import datetime, timezone
 
     key = os.environ["NVD_MIRROR_FERNET_KEY"]
     s = SessionLocal()
     try:
         repo = SqlAlchemySettingsRepository(s, FernetSecretsAdapter(key))
-        target = datetime(2024, 6, 1, tzinfo=timezone.utc)
+        target = datetime(2024, 6, 1, tzinfo=UTC)
         repo.advance_watermark(
             last_modified_utc=target, last_successful_sync_at=target
         )

@@ -9,11 +9,11 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Iterable
+from collections.abc import Iterable
 
 from sqlalchemy import ScalarSelect, func, select
 
-from ..models import AnalysisFinding, AnalysisRun
+from ..models import AnalysisRun
 from .base import COMPLETED_RUN_STATUSES
 
 _CVE_RE = re.compile(r"CVE-\d{4}-\d{4,7}", re.IGNORECASE)
@@ -22,9 +22,10 @@ _CVE_RE = re.compile(r"CVE-\d{4}-\d{4,7}", re.IGNORECASE)
 def active_head_sbom_ids_subquery() -> ScalarSelect:
     """Scalar subquery of active HEAD version sbom_source.ids."""
     from ..models import SBOMSource
+
     return (
         select(SBOMSource.id)
-        .where(SBOMSource.is_active == True)
+        .where(SBOMSource.is_active.is_(True))
         .where(~SBOMSource.id.in_(
             select(SBOMSource.parent_id)
             .where(SBOMSource.parent_id.is_not(None))

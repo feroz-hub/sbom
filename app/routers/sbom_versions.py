@@ -16,8 +16,8 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..models import SBOMSource
 from ..schemas import SbomEditPayload, SBOMSourceOut
-from ..validation import run as run_validation
 from ..services.version_control_service import compare_versions, edit_sbom, restore_version
+from ..validation import run as run_validation
 
 log = logging.getLogger(__name__)
 

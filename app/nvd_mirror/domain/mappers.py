@@ -8,8 +8,9 @@ one record without aborting a whole window.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any, Mapping
+from collections.abc import Mapping
+from datetime import UTC, datetime
+from typing import Any
 
 from .models import CpeCriterion, CveBatch, CveRecord
 
@@ -44,7 +45,7 @@ def _parse_nvd_datetime(raw: str | None, *, field: str) -> datetime:
     for fmt in _NVD_DATE_FORMATS:
         try:
             naive = datetime.strptime(cleaned, fmt)
-            return naive.replace(tzinfo=timezone.utc)
+            return naive.replace(tzinfo=UTC)
         except ValueError:
             continue
     raise MalformedCveError(f"could not parse datetime {field!r}={raw!r}")

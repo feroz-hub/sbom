@@ -4,21 +4,19 @@ from __future__ import annotations
 
 import os
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from cryptography.fernet import Fernet
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
-
 from app.nvd_mirror.adapters.secrets import FernetSecretsAdapter
 from app.nvd_mirror.adapters.settings_repository import SqlAlchemySettingsRepository
 from app.nvd_mirror.domain.models import NvdSettingsSnapshot
 from app.nvd_mirror.settings import NvdMirrorSettings
+from cryptography.fernet import Fernet
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
 
-
-UTC = timezone.utc
+UTC = UTC
 
 
 @pytest.fixture()
@@ -27,8 +25,8 @@ def session() -> Session:
     os.close(fd)
     Path(path).unlink(missing_ok=True)
 
-    from app.db import Base
     import app.nvd_mirror.db.models  # noqa: F401
+    from app.db import Base
 
     engine = create_engine(f"sqlite:///{path}")
     Base.metadata.create_all(bind=engine)

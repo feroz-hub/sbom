@@ -20,7 +20,6 @@ Six fixed cases per the brief:
 from __future__ import annotations
 
 import pytest
-
 from app.analysis import AnalysisSettings
 from app.sources.cpe import cpe23_from_purl
 

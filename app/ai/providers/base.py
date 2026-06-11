@@ -237,7 +237,7 @@ def classify_http_failure(
     status: int,
     body: str | None,
     retry_after_header: str | None = None,
-) -> "UpstreamFailure":
+) -> UpstreamFailure:
     """Map an HTTP error response to an :class:`UpstreamFailure`.
 
     The classification rules:
@@ -289,7 +289,7 @@ def classify_network_failure(
     *,
     provider_name: str,
     exc: Exception,
-) -> "UpstreamFailure":
+) -> UpstreamFailure:
     """Map an :class:`httpx.RequestError` to a network-unreachable failure."""
     return UpstreamFailure(
         kind="network_unreachable",
@@ -315,7 +315,7 @@ _QUOTA_BODY_SIGNALS: tuple[str, ...] = (
 )
 
 
-def detect_quota_in_2xx_body(body: str | None, *, provider_name: str, status: int) -> "UpstreamFailure | None":
+def detect_quota_in_2xx_body(body: str | None, *, provider_name: str, status: int) -> UpstreamFailure | None:
     """Return a :class:`UpstreamFailure` when ``body`` shows quota exhaustion.
 
     Some providers (Gemini's OpenAI-compat endpoint) embed quota errors
@@ -369,7 +369,7 @@ class AiProviderError(RuntimeError):
     instead of regex-ing error strings.
     """
 
-    def __init__(self, message: str, *, failure: "UpstreamFailure | None" = None) -> None:
+    def __init__(self, message: str, *, failure: UpstreamFailure | None = None) -> None:
         super().__init__(message)
         self.failure = failure
 

@@ -35,7 +35,6 @@ from typing import Any, Protocol
 
 from ..adapters.cve_repository import SqlAlchemyCveRepository
 from ..adapters.settings_repository import SqlAlchemySettingsRepository
-from ..domain.models import NvdSettingsSnapshot
 from ..observability import increment as _metric
 from ..ports import (
     ClockPort,

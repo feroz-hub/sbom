@@ -8,11 +8,10 @@ records its calls — that's enough to assert "live path was used".
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
-
 from app.nvd_mirror.application.facade import NvdLookupService
 from app.nvd_mirror.domain.models import CpeCriterion
 
@@ -24,8 +23,7 @@ from ._fakes import (
     make_snapshot,
 )
 
-
-UTC = timezone.utc
+UTC = UTC
 NOW = datetime(2024, 6, 1, 12, 0, 0, tzinfo=UTC)
 
 

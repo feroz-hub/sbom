@@ -17,7 +17,6 @@ from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
 from .domain.models import NvdSettingsSnapshot
 
-
 # ---------------------------------------------------------------------------
 # Settings GET / PUT
 # ---------------------------------------------------------------------------

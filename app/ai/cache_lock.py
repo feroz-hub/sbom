@@ -61,7 +61,7 @@ class CacheLock(Protocol):
         cache_key: str,
         *,
         ttl_seconds: int = _DEFAULT_TTL_SECONDS,
-    ) -> "AsyncContextManager[bool]":  # pragma: no cover — protocol
+    ) -> AsyncContextManager[bool]:  # pragma: no cover — protocol
         ...
 
 
@@ -106,7 +106,7 @@ class InMemoryCacheLock:
         try:
             await asyncio.wait_for(lock.acquire(), timeout=ttl_seconds)
             acquired = True
-        except asyncio.TimeoutError:
+        except TimeoutError:
             log.warning(
                 "ai.cache_lock.timeout: key=%s ttl=%ss — proceeding best-effort",
                 cache_key,

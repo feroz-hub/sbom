@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import pytest
-from cryptography.fernet import Fernet
-
 from app.nvd_mirror.adapters.secrets import (
     FernetSecretsAdapter,
     MissingFernetKeyError,
 )
+from cryptography.fernet import Fernet
 
 
 @pytest.fixture

@@ -18,13 +18,10 @@ import asyncio
 import copy
 from collections.abc import Iterator
 from dataclasses import replace as dataclass_replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-
 from app.analysis import (
     get_analysis_settings_multi,
     osv_query_by_components,
@@ -33,9 +30,10 @@ from app.db import Base
 from app.models import SourceResponseCache
 from app.services.source_response_cache import SourceResponseCacheRepository
 from app.sources.vulndb import VulnDbSource
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
-
-_T0 = datetime(2026, 6, 4, 12, 0, 0, tzinfo=timezone.utc)
+_T0 = datetime(2026, 6, 4, 12, 0, 0, tzinfo=UTC)
 
 
 # ---------------------------------------------------------------------------

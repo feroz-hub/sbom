@@ -31,6 +31,7 @@ def test_nvd_query_by_cpe_is_exact_only_no_virtual_match_fallback(monkeypatch):
     return ``[]`` and MUST NOT issue a ``virtualMatchString`` query.
     """
     import app.analysis as analysis_mod
+
     from tests.fixtures import canned_responses as canned
 
     calls: list[dict] = []

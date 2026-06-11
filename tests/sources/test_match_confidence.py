@@ -16,7 +16,6 @@ Six buckets per the PR-B brief:
 from __future__ import annotations
 
 import pytest
-
 from app.sources.match_confidence import (
     NAME_WEIGHT,
     VENDOR_WEIGHT,
@@ -24,7 +23,6 @@ from app.sources.match_confidence import (
     ConfidenceResult,
     score_match,
 )
-
 
 # When vendor renormalizes away, name/version pick up its weight
 # proportionally. Used in several test classes below for the expected

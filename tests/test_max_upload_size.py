@@ -52,9 +52,8 @@ async def test_post_with_chunked_oversize_returns_413(app):
     """Shape 2: client streams chunks past the limit with no
     Content-Length header. Middleware counts bytes incrementally and
     cuts the request off mid-stream."""
-    from httpx import ASGITransport, AsyncClient
-
     from app.settings import get_settings
+    from httpx import ASGITransport, AsyncClient
 
     max_bytes = get_settings().MAX_UPLOAD_BYTES
     chunk = b"x" * 65536

@@ -8,9 +8,9 @@ are stubbed at the module level so the tests don't hit external APIs.
 
 from __future__ import annotations
 
-import pytest
-from sqlalchemy.orm import Session
+from datetime import UTC
 
+import pytest
 from app.models import (
     AnalysisFinding,
     AnalysisRun,
@@ -21,7 +21,7 @@ from app.models import (
 )
 from app.services import risk_score
 from app.services.risk_score import score_findings
-
+from sqlalchemy.orm import Session
 
 # ---------------------------------------------------------------------
 # Helpers
@@ -30,11 +30,10 @@ from app.services.risk_score import score_findings
 
 def _new_db() -> Session:
     """Build an in-memory SQLite database with the project schema."""
+    import app.models  # noqa: F401  ensures models are registered
+    from app.db import Base
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
-
-    from app.db import Base
-    import app.models  # noqa: F401  ensures models are registered
 
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
@@ -289,7 +288,7 @@ def test_kev_lookup_with_seeded_table():
     independent of the network. Refresh-if-stale is short-circuited by
     inserting a row dated "now".
     """
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from app.sources.kev import lookup_kev_set
 
@@ -297,7 +296,7 @@ def test_kev_lookup_with_seeded_table():
     db.add(
         KevEntry(
             cve_id="CVE-2021-44228",
-            refreshed_at=datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+            refreshed_at=datetime.now(UTC).replace(microsecond=0).isoformat(),
         )
     )
     db.commit()

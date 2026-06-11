@@ -46,7 +46,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Callable
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import delete, select, tuple_
@@ -57,7 +57,8 @@ from ..models import SourceResponseCache
 log = logging.getLogger(__name__)
 
 
-_DEFAULT_CLOCK: Callable[[], datetime] = lambda: datetime.now(timezone.utc)
+def _DEFAULT_CLOCK() -> datetime:
+    return datetime.now(UTC)
 
 
 class SourceResponseCacheRepository:

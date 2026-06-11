@@ -16,14 +16,13 @@ that, if they had existed, would have prevented the screenshot bug
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
-
 from app.db import Base
 from app.integrations.cve.aggregator import aggregate
 from app.integrations.cve.base import FetchOutcome, FetchResult
 from app.integrations.cve.identifiers import IdKind, classify
 from app.services.cve_service import CveDetailService
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
 
 _KINDS_BY_SOURCE = {
     "osv": frozenset({IdKind.CVE, IdKind.GHSA, IdKind.PYSEC, IdKind.RUSTSEC, IdKind.GO, IdKind.OSV_GENERIC}),

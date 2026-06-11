@@ -19,14 +19,13 @@ literal PURL strings.
 
 from __future__ import annotations
 
-import pytest
+from dataclasses import FrozenInstanceError
 
+import pytest
 from app.sources.distro_cpe import (
-    DistroCpeResolution,
     normalize_upstream_version,
     resolve,
 )
-
 
 # =============================================================================
 # Bucket 1 — Roadmap example
@@ -291,7 +290,7 @@ class TestResolutionShape:
     def test_resolution_is_frozen_dataclass(self) -> None:
         result = resolve("pkg:deb/debian/openssl@2:3.0.2-1")
         assert result is not None
-        with pytest.raises(Exception):
+        with pytest.raises(FrozenInstanceError):
             # frozen=True → attribute assignment raises FrozenInstanceError.
             result.cpe_vendor = "tampered"  # type: ignore[misc]
 

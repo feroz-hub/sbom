@@ -247,6 +247,13 @@ def test_forecast_insufficient_history_with_sparse_data(client, db):
 def test_remediation_lifecycle_mttr_sla_and_velocity(client, db):
     """CVE-A detected 20d ago, resolved 10d ago (MTTR 10d). CVE-B still
     active for 20d against a 7d critical budget → overdue by 13d."""
+    from app.models import AnalysisFinding, AnalysisRun
+    from sqlalchemy import delete
+
+    db.execute(delete(AnalysisFinding))
+    db.execute(delete(AnalysisRun))
+    db.commit()
+
     s, p = _seed_sbom_and_project(db, name="remediation")
     _seed_run(
         db, sbom=s, project=p, status="FINDINGS", started_on=_days_ago_iso(20),

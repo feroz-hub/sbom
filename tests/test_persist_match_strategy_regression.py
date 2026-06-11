@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import pytest
 
-
 _NVD_FINDING_WITH_STRATEGY = {
     "vuln_id": "CVE-MATCH-STRATEGY-REGRESSION",
     "aliases": [],
@@ -76,10 +75,9 @@ def test_persist_analysis_run_forwards_match_strategy(
     assert resp.status_code == 201, resp.text
     run_id = resp.json()["id"]
 
-    from sqlalchemy import select
-
     from app.db import SessionLocal
     from app.models import AnalysisFinding
+    from sqlalchemy import select
 
     db = SessionLocal()
     try:
@@ -140,10 +138,9 @@ def test_persist_analysis_run_tolerates_missing_match_strategy(
     assert resp.status_code == 201, resp.text
     run_id = resp.json()["id"]
 
-    from sqlalchemy import select
-
     from app.db import SessionLocal
     from app.models import AnalysisFinding
+    from sqlalchemy import select
 
     db = SessionLocal()
     try:

@@ -12,7 +12,6 @@ from app.integrations.cve.aggregator import merge
 from app.integrations.cve.base import FetchOutcome, FetchResult
 from app.schemas_cve import CveSeverity
 
-
 # ---------------------------------------------------------------- helpers
 
 OSV_DATA = {

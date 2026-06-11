@@ -39,6 +39,8 @@ from .logger import get_logger, setup_logging
 setup_logging()
 log = get_logger("api")
 
+from datetime import UTC
+
 from . import error_handlers
 from .auth import require_auth, validate_auth_setup
 from .db import Base, SessionLocal, engine
@@ -59,15 +61,15 @@ from .routers import (
     dashboard_advanced,
     dashboard_main,
     health,
+    lifecycle,
     pdf,
     projects,
+    remediation,
     runs,
     sbom_upload,
+    sbom_versions,
     sboms_crud,
     schedules,
-    lifecycle,
-    remediation,
-    sbom_versions,
 )
 from .routers import analysis as analysis_export_router
 from .routers import dashboard as dashboard_trend_router
@@ -314,9 +316,9 @@ def _reconcile_zombie_ai_fix_batches() -> None:
     every realistic deadline (the inline-fallback path completes in
     seconds; even a slow paid batch finishes well inside 5 min).
     """
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     threshold = (now - timedelta(minutes=5)).isoformat()
     with engine.begin() as conn:
         result = conn.execute(

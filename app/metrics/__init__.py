@@ -22,6 +22,7 @@ from __future__ import annotations
 from .age import AGE_BUCKETS, findings_age_distribution
 from .base import COMPLETED_RUN_STATUSES, NetChangeResult, TrendPoint
 from .epss import findings_high_epss_in_scope
+from .exploitation import compose_exploitation_probability, portfolio_exploitation_outlook
 from .findings import (
     findings_daily_distinct_active,
     findings_distinct_active_as_of,
@@ -33,8 +34,14 @@ from .findings import (
     findings_latest_per_sbom_severity_distribution,
     findings_latest_per_sbom_total,
 )
+from .forecast import findings_forecast, linear_fit, velocity_anomaly
+from .health import health_completeness_average, health_missing_metadata_count, health_outdated_components_count
 from .kev import findings_kev_in_scope
+from .lifecycle import lifecycle_eol_total, lifecycle_eos_upcoming_total, lifecycle_unsupported_total
 from .quality import findings_needs_review_in_scope
+from .remediation import DEFAULT_SLA_DAYS, remediation_summary, sla_state
+from .remediation_extra import remediation_aging_count, remediation_status_counts
+from .riskmap import portfolio_risk_map, portfolio_risk_matrix
 from .runs import (
     RunsAggregate,
     runs_aggregate,
@@ -51,15 +58,8 @@ from .sboms import (
     sboms_analysed_total,
     sboms_total,
 )
-from .exploitation import compose_exploitation_probability, portfolio_exploitation_outlook
-from .forecast import findings_forecast, linear_fit, velocity_anomaly
-from .remediation import DEFAULT_SLA_DAYS, remediation_summary, sla_state
-from .riskmap import portfolio_risk_map, portfolio_risk_matrix
 from .trend import findings_trend
 from .windows import findings_net_change
-from .lifecycle import lifecycle_eol_total, lifecycle_eos_upcoming_total, lifecycle_unsupported_total
-from .health import health_completeness_average, health_missing_metadata_count, health_outdated_components_count
-from .remediation_extra import remediation_status_counts, remediation_aging_count
 
 __all__ = [
     # lifecycle metrics
@@ -108,9 +108,13 @@ __all__ = [
     "findings_net_change",
     # forecast / exploitation (dashboard v4)
     "findings_forecast",
+    "linear_fit",
+    "velocity_anomaly",
+    "compose_exploitation_probability",
     "portfolio_exploitation_outlook",
     # remediation / risk map (dashboard v4)
     "remediation_summary",
+    "sla_state",
     "DEFAULT_SLA_DAYS",
     "portfolio_risk_map",
     "portfolio_risk_matrix",

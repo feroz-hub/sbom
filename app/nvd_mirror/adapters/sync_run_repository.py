@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -49,7 +49,7 @@ class SqlAlchemySyncRunRepository:
         row.status = status
         row.upserted_count = upserts
         row.error_message = error
-        row.finished_at = datetime.now(tz=timezone.utc)
+        row.finished_at = datetime.now(tz=UTC)
         self._session.flush()
 
     def latest(self, limit: int = 10) -> Sequence[Mapping[str, object]]:
@@ -79,5 +79,5 @@ def _ensure_utc(dt: datetime | None) -> datetime | None:
     if dt is None:
         return None
     if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
+        return dt.replace(tzinfo=UTC)
     return dt

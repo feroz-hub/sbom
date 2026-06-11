@@ -25,7 +25,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Sequence
-from datetime import timezone
+from datetime import UTC
 from typing import Any, cast
 
 from packaging.version import InvalidVersion, Version
@@ -244,7 +244,7 @@ def _ensure_utc(dt):
     if dt is None:
         return None
     if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
+        return dt.replace(tzinfo=UTC)
     return dt
 
 

@@ -530,7 +530,8 @@ def test_f4_denormalised_columns_match_live_count(client, db):
     all agree.
     """
     from app.models import AnalysisFinding, AnalysisRun
-    from sqlalchemy import func, select as sa_select
+    from sqlalchemy import func
+    from sqlalchemy import select as sa_select
 
     s1, p1 = _seed_sbom_and_project(db, name="f4")
     run = _seed_run(
@@ -775,7 +776,8 @@ def test_legacy_allowlist_does_not_grow_unnoticed():
 def _has_run_completed_before(db, *, days: int) -> bool:
     from app.metrics.base import COMPLETED_RUN_STATUSES
     from app.models import AnalysisRun
-    from sqlalchemy import func, select as sa_select
+    from sqlalchemy import func
+    from sqlalchemy import select as sa_select
 
     cutoff = (datetime.now(UTC).date() - timedelta(days=days)).isoformat()
     n = (

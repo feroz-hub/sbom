@@ -26,10 +26,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from app.analysis import get_analysis_settings_multi
 from app.sources.nvd import NvdSource
-
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "nvd"
 

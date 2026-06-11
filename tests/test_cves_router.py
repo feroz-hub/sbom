@@ -14,11 +14,8 @@ Patches ``CveDetailService`` so we don't pull in the full source-fetch path
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-import pytest
-
-from app.integrations.cve.base import FetchOutcome, FetchResult
 from app.schemas_cve import CveDetail, CveExploitation
 
 
@@ -28,7 +25,7 @@ def _stub_detail(cve_id: str) -> CveDetail:
         summary="stub",
         sources_used=["osv"],
         is_partial=False,
-        fetched_at=datetime.now(timezone.utc),
+        fetched_at=datetime.now(UTC),
         exploitation=CveExploitation(),
     )
 

@@ -24,7 +24,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from app.sources.version_range import (
     MatchVerdict,
     VersionRange,

@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Type, TypeVar
+from typing import TypeVar
 
 from pydantic import BaseModel, ValidationError
 
@@ -74,7 +74,7 @@ class ParseError(Exception):
         self.last_validation_error = last_validation_error
 
 
-def parse_llm_json(raw: str, schema: Type[T]) -> T:
+def parse_llm_json(raw: str, schema: type[T]) -> T:
     """Parse LLM-generated JSON into a strict Pydantic ``schema``.
 
     Tries, in order:

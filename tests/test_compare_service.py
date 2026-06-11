@@ -19,7 +19,6 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-
 # =============================================================================
 # Helpers
 # =============================================================================
@@ -433,8 +432,8 @@ def test_invalidate_for_run_deletes_referenced_cache_rows(client, db):
 
 def test_kev_current_state_is_picked_up_from_kev_entry(client, db):
     from app.models import KevEntry
-    from app.services.compare_service import CompareService
     from app.schemas_compare import FindingChangeKind
+    from app.services.compare_service import CompareService
 
     proj, sbom_a = _seed_project_and_sbom(db, slug="kev-a")
     _, sbom_b = _seed_project_and_sbom(db, slug="kev-b")
@@ -454,8 +453,8 @@ def test_kev_current_state_is_picked_up_from_kev_entry(client, db):
 
 
 def test_top_resolutions_orders_kev_first_then_severity(client, db):
-    from app.services.compare_service import CompareService
     from app.models import KevEntry
+    from app.services.compare_service import CompareService
 
     proj, sbom_a = _seed_project_and_sbom(db, slug="top-a")
     _, sbom_b = _seed_project_and_sbom(db, slug="top-b")

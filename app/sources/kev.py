@@ -23,7 +23,7 @@ from __future__ import annotations
 import logging
 import os
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 from sqlalchemy import select
@@ -42,7 +42,7 @@ KEV_HTTP_TIMEOUT = float(os.getenv("KEV_HTTP_TIMEOUT", "30"))
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    return datetime.now(UTC).replace(microsecond=0).isoformat()
 
 
 def _cache_age_seconds(db: Session) -> float | None:
@@ -56,7 +56,7 @@ def _cache_age_seconds(db: Session) -> float | None:
         return None
     try:
         ts = datetime.fromisoformat(row)
-        return (datetime.now(timezone.utc) - ts).total_seconds()
+        return (datetime.now(UTC) - ts).total_seconds()
     except ValueError:
         return None
 

@@ -7,9 +7,8 @@ in ``test_secrets_fernet.py`` shows the structural-typing convention.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Mapping, Sequence
-from datetime import datetime, timedelta, timezone
-from typing import Iterable
+from collections.abc import AsyncIterator, Iterable, Mapping, Sequence
+from datetime import UTC, datetime, timedelta
 
 from app.nvd_mirror.domain.models import (
     CveBatch,
@@ -17,7 +16,6 @@ from app.nvd_mirror.domain.models import (
     MirrorWindow,
     NvdSettingsSnapshot,
 )
-
 
 # ---------------- Clock ----------------------------------------------------
 
@@ -202,7 +200,7 @@ class FakeSyncRunRepository:
                 "run_kind": run_kind,
                 "window_start": window.start,
                 "window_end": window.end,
-                "started_at": datetime.now(tz=timezone.utc),
+                "started_at": datetime.now(tz=UTC),
                 "finished_at": None,
                 "status": "running",
                 "upserted_count": 0,
@@ -224,7 +222,7 @@ class FakeSyncRunRepository:
                 run["status"] = status
                 run["upserted_count"] = upserts
                 run["error_message"] = error
-                run["finished_at"] = datetime.now(tz=timezone.utc)
+                run["finished_at"] = datetime.now(tz=UTC)
                 return
         raise LookupError(f"sync_run id={run_id} not found")
 
@@ -245,7 +243,7 @@ def make_snapshot(
     last_successful_sync_at: datetime | None = None,
     updated_at: datetime | None = None,
 ) -> NvdSettingsSnapshot:
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     return NvdSettingsSnapshot(
         enabled=enabled,
         api_endpoint="https://services.nvd.nist.gov/rest/json/cves/2.0",

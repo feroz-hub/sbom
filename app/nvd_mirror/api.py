@@ -22,7 +22,6 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from ..auth import require_auth
 from ..db import get_db
 from .adapters.secrets import FernetSecretsAdapter, MissingFernetKeyError
 from .adapters.settings_repository import SqlAlchemySettingsRepository

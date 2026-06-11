@@ -24,10 +24,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from unittest.mock import patch
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Change 1: sleep defaults
@@ -64,6 +62,7 @@ def test_nvd_fan_out_is_sequential_not_concurrent(monkeypatch):
     any given moment during a run.
     """
     import threading
+
     from app import analysis
 
     monkeypatch.delenv("NVD_API_KEY", raising=False)
@@ -172,7 +171,6 @@ def test_paginated_stops_when_total_results_exceeds_cap(monkeypatch):
     ``nvd_max_total_results_per_query`` must stop after the first page
     rather than walk thousands of pages at 0.6s each.
     """
-    import requests
     from app import analysis
 
     analysis.get_analysis_settings.cache_clear()

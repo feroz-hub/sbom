@@ -19,7 +19,7 @@ retrying. The service path doesn't depend on either task succeeding.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from celery import shared_task
 from sqlalchemy import delete
@@ -53,7 +53,7 @@ def purge_expired_cve_cache(self) -> dict:
     """Delete ``cve_cache`` rows expired more than 24 h ago."""
     from app.db import SessionLocal
 
-    cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    cutoff = (datetime.now(UTC) - timedelta(hours=24)).isoformat()
     db: Session = SessionLocal()
     try:
         result = db.execute(delete(CveCache).where(CveCache.expires_at < cutoff))

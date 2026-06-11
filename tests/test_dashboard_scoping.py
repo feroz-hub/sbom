@@ -177,9 +177,8 @@ def test_severity_excludes_error_runs(client, db):
     # this SBOM and therefore its findings are absent from severity totals.
     # Indirectly: severity is bounded above by the count of findings whose
     # parent run is in (OK,FINDINGS,PARTIAL) — verify with raw SQL.
-    from sqlalchemy import func, select
-
     from app.models import AnalysisFinding, AnalysisRun
+    from sqlalchemy import func, select
 
     in_scope_total = db.execute(
         select(func.count(AnalysisFinding.id))

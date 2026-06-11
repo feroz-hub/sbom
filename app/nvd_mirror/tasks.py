@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
 
 from celery import shared_task
@@ -29,7 +29,7 @@ from .adapters.settings_repository import SqlAlchemySettingsRepository
 from .adapters.sync_run_repository import SqlAlchemySyncRunRepository
 from .application import BootstrapMirror, IncrementalMirror
 from .db.models import NvdSyncRunRow
-from .domain.models import NvdSettingsSnapshot, SyncReport
+from .domain.models import SyncReport
 from .ports import (
     ClockPort,
     CveRepositoryPort,
@@ -58,7 +58,7 @@ async def run_mirror_sync(
     sync_run_repo: SyncRunRepositoryPort,
     remote: NvdRemotePort,
     clock: ClockPort,
-    commit: "Any",
+    commit: Any,
     now: datetime | None = None,
 ) -> SyncReport:
     """Decide bootstrap vs incremental, run the chosen use case.
@@ -217,7 +217,7 @@ def mirror_nvd(self) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def _build_secrets(fernet_env_var: str) -> "object":
+def _build_secrets(fernet_env_var: str) -> object:
     """Return a SecretsPort impl. If the Fernet key is missing, return a
     stub that fails closed: decrypt yields a plaintext-None outcome via
     the settings repo's defensive bypass; encrypt raises so we never

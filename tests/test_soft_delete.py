@@ -20,11 +20,9 @@ Plus restore + audit log + CompareCache hard-delete side effect.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
-from sqlalchemy import select
-
 from app.db import SessionLocal
 from app.models import (
     AiFixCache,
@@ -38,10 +36,11 @@ from app.models import (
     SBOMSource,
 )
 from app.services.soft_delete import CASCADE_EXCLUDED_TABLES, SoftDeleteService
+from sqlalchemy import select
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 @pytest.fixture()

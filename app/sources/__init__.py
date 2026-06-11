@@ -48,7 +48,6 @@ from .nvd import NvdSource
 from .osv import OsvSource
 from .purl import parse_purl
 from .registry import SOURCE_REGISTRY, get_source
-from .vulndb import VulnDbSource
 
 # Phase 3: shared concurrent fan-out runner
 from .runner import (
@@ -66,6 +65,7 @@ from .severity import (
     safe_score,
     sev_bucket,
 )
+from .vulndb import VulnDbSource
 
 __all__ = [
     # Phase 1 utilities

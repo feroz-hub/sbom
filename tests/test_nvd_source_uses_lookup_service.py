@@ -78,9 +78,8 @@ def test_nvd_source_routes_through_lookup_service_when_provided(monkeypatch):
 def test_nvd_source_falls_back_to_live_when_lookup_service_is_none(monkeypatch):
     """Without a lookup_service, NvdSource hits live NVD via
     nvd_query_by_components_async — preserves the pre-R6 default."""
-    from app.sources.nvd import NvdSource
-
     import app.analysis as analysis_mod
+    from app.sources.nvd import NvdSource
 
     live_calls: list[str] = []
 

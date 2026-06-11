@@ -37,14 +37,12 @@ bug cannot regress.
 
 from __future__ import annotations
 
-import inspect
 import pathlib
 import ssl
 
 import pytest
 import requests
 from requests.adapters import HTTPAdapter
-
 
 # ---------------------------------------------------------------------------
 # Deletion guard: NVD path must contain no SSL wiring at all.

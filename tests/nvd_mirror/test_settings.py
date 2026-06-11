@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from app.nvd_mirror.settings import (
     NvdMirrorSettings,
     load_mirror_settings_from_env,

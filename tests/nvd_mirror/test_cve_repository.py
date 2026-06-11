@@ -9,22 +9,20 @@ from __future__ import annotations
 
 import os
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
-
 from app.nvd_mirror.adapters.cve_repository import (
     SqlAlchemyCveRepository,
     _criterion_covers_version,
     _parse_cpe23,
 )
 from app.nvd_mirror.domain.models import CpeCriterion, CveRecord
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
 
-
-UTC = timezone.utc
+UTC = UTC
 
 
 @pytest.fixture()
@@ -38,8 +36,8 @@ def session() -> Session:
     # Build engine + create the mirror tables in isolation. We do NOT
     # call create_all on the full app Base here because that would force
     # the legacy app.models tables to be created and pollute the test.
-    from app.db import Base
     import app.nvd_mirror.db.models  # noqa: F401 — register tables
+    from app.db import Base
 
     engine = create_engine(url)
     Base.metadata.create_all(bind=engine)

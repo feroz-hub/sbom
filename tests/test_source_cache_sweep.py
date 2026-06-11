@@ -10,18 +10,16 @@ Covers the brief's three sweep scenarios:
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
-
 from app.db import Base
 from app.models import SourceResponseCache
 from app.services.source_response_cache import SourceResponseCacheRepository
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
 
-
-_T0 = datetime(2026, 6, 4, 12, 0, 0, tzinfo=timezone.utc)
+_T0 = datetime(2026, 6, 4, 12, 0, 0, tzinfo=UTC)
 
 
 @pytest.fixture()
@@ -149,10 +147,9 @@ def test_delete_expired_zero_or_negative_batch_size_is_noop(db: Session) -> None
 
 def test_source_cache_sweep_task_registered_on_celery_app() -> None:
     """Mirrors tests/nvd_mirror/test_tasks.py:test_mirror_nvd_task_registered."""
-    from app.workers.celery_app import celery_app
-
     # Importing the worker module triggers the @shared_task registration.
     import app.workers.source_cache  # noqa: F401
+    from app.workers.celery_app import celery_app
 
     assert "source_cache.sweep_expired" in celery_app.tasks
     # Beat schedule wired.

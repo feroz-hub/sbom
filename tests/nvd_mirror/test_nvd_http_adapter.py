@@ -9,21 +9,18 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
 import pytest
-
 from app.nvd_mirror.adapters.nvd_http import (
     NvdHttpAdapter,
-    NvdRemoteError,
     _RetryableHttpError,
 )
 from app.nvd_mirror.domain.models import MirrorWindow
 
-
-UTC = timezone.utc
+UTC = UTC
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "nvd"
 
 

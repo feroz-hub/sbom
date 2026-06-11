@@ -30,7 +30,6 @@ import logging
 import pytest
 import sqlalchemy.exc as sa_exc
 
-
 _LEAKABLE_TOKEN = "LEAKABLE_TOKEN_xyz123"
 
 

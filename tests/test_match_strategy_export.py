@@ -23,7 +23,6 @@ import json
 
 import pytest
 
-
 _NVD_TAGGED_FINDING = {
     "vuln_id": "CVE-EXPORT-TEST-0001",
     "aliases": [],

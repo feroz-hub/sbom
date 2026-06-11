@@ -42,7 +42,6 @@ from app.settings import reset_settings
 
 from tests.ai.fixtures import EX1_CRITICAL_KEV_WITH_FIX_BUNDLE
 
-
 # ---------------------------------------------------------------------------
 # Test scaffolding (mirrors test_scope_and_multi_batch.py — kept local so
 # the e2e file can be read end-to-end without jumping back).

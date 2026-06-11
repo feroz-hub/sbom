@@ -281,7 +281,7 @@ async def cached_fetch(
 
 async def partition_by_cache(
     source: str,
-    items_with_keys: "list[tuple[str | None, Any]]",
+    items_with_keys: list[tuple[str | None, Any]],
     *,
     settings: Any,
 ) -> tuple[dict[str, Any], list[Any]]:
@@ -368,7 +368,7 @@ async def partition_by_cache(
 
 def write_cache_entries(
     source: str,
-    entries: "list[tuple[str, Any]]",
+    entries: list[tuple[str, Any]],
     *,
     settings: Any,
 ) -> None:

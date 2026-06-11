@@ -16,26 +16,23 @@ import asyncio
 import json
 import os
 import tempfile
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
-from cryptography.fernet import Fernet
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-
+from app.nvd_mirror.adapters.cve_repository import SqlAlchemyCveRepository
 from app.nvd_mirror.adapters.secrets import FernetSecretsAdapter
 from app.nvd_mirror.adapters.settings_repository import SqlAlchemySettingsRepository
-from app.nvd_mirror.adapters.cve_repository import SqlAlchemyCveRepository
 from app.nvd_mirror.domain.models import (
     CpeCriterion,
     CveRecord,
     NvdSettingsSnapshot,
 )
+from cryptography.fernet import Fernet
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
-
-UTC = timezone.utc
+UTC = UTC
 
 
 def _minimal_sbom(name: str = "requests", version: str = "2.31.0") -> str:
@@ -79,8 +76,8 @@ def isolated_session(monkeypatch: pytest.MonkeyPatch):
     os.close(fd)
     Path(path).unlink(missing_ok=True)
 
-    from app.db import Base
     import app.nvd_mirror.db.models  # noqa: F401
+    from app.db import Base
 
     engine = create_engine(f"sqlite:///{path}")
     Base.metadata.create_all(bind=engine)

@@ -32,7 +32,7 @@ import hashlib
 import json
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -50,12 +50,12 @@ from ..models import (
 )
 from ..schemas_compare import (
     COMPARABLE_RUN_STATUSES,
-    CompareResult,
-    ComponentChangeKind,
-    ComponentDiffRow,
     ERR_COMPARE_RUN_NOT_FOUND,
     ERR_COMPARE_RUN_NOT_READY,
     ERR_COMPARE_SAME_RUN,
+    CompareResult,
+    ComponentChangeKind,
+    ComponentDiffRow,
     FindingChangeKind,
     FindingDiffRow,
     PostureDelta,
@@ -259,7 +259,7 @@ class CompareService:
 
     def _write_cache(self, result: CompareResult) -> None:
         ttl = self._settings.compare_cache_ttl_seconds
-        expires_at = datetime.now(timezone.utc) + timedelta(seconds=ttl)
+        expires_at = datetime.now(UTC) + timedelta(seconds=ttl)
         existing = self._db.get(CompareCache, result.cache_key)
         payload = json.loads(result.model_dump_json())  # ensure JSON-portable
         if existing is None:
@@ -327,7 +327,7 @@ class CompareService:
             posture=posture,
             findings=finding_diff,
             components=component_diff,
-            computed_at=datetime.now(timezone.utc),
+            computed_at=datetime.now(UTC),
             schema_version=1,
         )
 
@@ -763,28 +763,28 @@ def _expires_at_passed(expires_at_iso: str | None) -> bool:
     except ValueError:
         return True
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt <= datetime.now(timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
+    return dt <= datetime.now(UTC)
 
 
 def _parse_iso(value: str | None) -> datetime:
     """Best-effort ISO parse. Returns datetime.min when unparseable."""
     if not value:
-        return datetime.min.replace(tzinfo=timezone.utc)
+        return datetime.min.replace(tzinfo=UTC)
     try:
         dt = datetime.fromisoformat(value)
     except ValueError:
-        return datetime.min.replace(tzinfo=timezone.utc)
+        return datetime.min.replace(tzinfo=UTC)
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
     return dt
 
 
 def _days_between(a_iso: str | None, b_iso: str | None) -> float | None:
     a = _parse_iso(a_iso)
     b = _parse_iso(b_iso)
-    if a == datetime.min.replace(tzinfo=timezone.utc) or b == datetime.min.replace(
-        tzinfo=timezone.utc
+    if a == datetime.min.replace(tzinfo=UTC) or b == datetime.min.replace(
+        tzinfo=UTC
     ):
         return None
     delta = b - a

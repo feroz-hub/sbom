@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import threading
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
-
-from app.nvd_mirror.application._window_walker import HISTORICAL_FLOOR
 from app.nvd_mirror.application import BootstrapMirror
+from app.nvd_mirror.application._window_walker import HISTORICAL_FLOOR
 from app.nvd_mirror.application.facade import NvdLookupService
 from app.nvd_mirror.observability import Counters, mirror_counters
 
@@ -24,8 +23,7 @@ from ._fakes import (
     make_snapshot,
 )
 
-
-UTC = timezone.utc
+UTC = UTC
 
 
 @pytest.fixture(autouse=True)
@@ -198,7 +196,6 @@ async def test_429_counter_increments_per_429(monkeypatch: pytest.MonkeyPatch) -
     """Sanity check that the 429 counter increments — fully exercised by
     the HTTP adapter contract tests; here we just verify wiring."""
     import httpx
-
     from app.nvd_mirror.adapters.nvd_http import (
         NvdHttpAdapter,
         _RetryableHttpError,

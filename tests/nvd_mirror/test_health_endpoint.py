@@ -4,21 +4,20 @@ from __future__ import annotations
 
 import os
 import tempfile
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
-
-import pytest
-from cryptography.fernet import Fernet
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
 # Module-scope imports — done HERE rather than inside fixtures because
 # `import app.nvd_mirror.db.models` would rebind `app` in the fixture's
 # local namespace and shadow the FastAPI ``app`` fixture parameter.
 import app.db as _app_db
 import app.nvd_mirror.db.models  # noqa: F401 — register tables on Base
+import pytest
 from app.db import Base
+from cryptography.fernet import Fernet
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 
 @pytest.fixture()

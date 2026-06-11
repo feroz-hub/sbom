@@ -11,12 +11,10 @@ from __future__ import annotations
 
 import httpx
 import pytest
-
 from app.integrations.cve.base import FetchOutcome
 from app.integrations.cve.ghsa import GhsaClient
 from app.integrations.cve.nvd import NvdClient
 from app.integrations.cve.osv import OsvClient
-
 
 # ------------------------------------------------------------------ helpers
 
@@ -26,9 +24,9 @@ def _patch_async_client(monkeypatch, handler):
     transport = httpx.MockTransport(handler)
     fake = httpx.AsyncClient(transport=transport)
     import app.http_client as http_mod
-    import app.integrations.cve.osv as osv_mod
     import app.integrations.cve.ghsa as ghsa_mod
     import app.integrations.cve.nvd as nvd_mod
+    import app.integrations.cve.osv as osv_mod
 
     def _get():
         return fake

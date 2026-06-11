@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import httpx
 import pytest
-
 from app.integrations.cve.base import FetchOutcome
 from app.integrations.cve.ghsa import GhsaClient
 from app.integrations.cve.nvd import NvdClient

@@ -536,7 +536,7 @@ def _cmp_semver(a: str, b: str) -> int | object:
     n = max(len(a_main), len(b_main))
     a_padded = a_main + ((0,) * (n - len(a_main)))
     b_padded = b_main + ((0,) * (n - len(b_main)))
-    for x, y in zip(a_padded, b_padded):
+    for x, y in zip(a_padded, b_padded, strict=True):
         # ``int`` and ``str`` can't be compared directly in Py3 — coerce
         # to a sortable key. Numerics rank below strings of the same
         # main-segment slot, which matches semver §11 ordering.

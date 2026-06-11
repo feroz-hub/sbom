@@ -20,7 +20,6 @@ import threading
 import time
 from collections import defaultdict
 from datetime import UTC, date, datetime, timedelta
-from typing import Iterable
 
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session

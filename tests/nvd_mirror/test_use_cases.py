@@ -7,10 +7,9 @@ configuring the fake remote to raise on a chosen call.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
-
 from app.nvd_mirror.application import (
     BootstrapMirror,
     IncrementalMirror,
@@ -31,8 +30,7 @@ from ._fakes import (
     make_snapshot,
 )
 
-
-UTC = timezone.utc
+UTC = UTC
 
 
 # Minimal commit no-op since the fakes are in-memory.

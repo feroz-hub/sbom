@@ -391,20 +391,30 @@ def resolve_nvd_api_key(settings: AnalysisSettings | None = None) -> str | None:
 # adapters will import directly from `services.sources` instead.
 # ----------------------------------------------------------------------
 
-from .sources.cpe import cpe23_from_purl as _cpe23_from_purl
-from .sources.purl import parse_purl as _parse_purl
-from .sources.version_range import cve_affects_component as _cve_affects_component
-from .sources.match_confidence import (
-    apply_strategy_floor as _apply_strategy_floor,
-    score_match as _score_match,
-)
 from .sources.cache_seam import (
     cached_fetch as _cached_fetch,
+)
+from .sources.cache_seam import (
     component_cache_key as _component_cache_key,
+)
+from .sources.cache_seam import (
     component_cache_key_versionless as _component_cache_key_versionless,
+)
+from .sources.cache_seam import (
     partition_by_cache as _partition_by_cache,
+)
+from .sources.cache_seam import (
     write_cache_entries as _write_cache_entries,
 )
+from .sources.cpe import cpe23_from_purl as _cpe23_from_purl
+from .sources.match_confidence import (
+    apply_strategy_floor as _apply_strategy_floor,
+)
+from .sources.match_confidence import (
+    score_match as _score_match,
+)
+from .sources.purl import parse_purl as _parse_purl
+from .sources.version_range import cve_affects_component as _cve_affects_component
 
 
 class _GitHubGraphQLError(Exception):
@@ -1440,8 +1450,7 @@ async def osv_query_by_components(
     # fallback-path behaviour exactly (tests/test_sources_adapters.py
     # asserts ``component_name == comp.get("name")`` for this path).
     if fb_pairs_from_hits or fb_pairs_this_run:
-        from .sources.osv_fallback import _normalize_osv_vuln_to_finding
-        from .sources.osv_fallback import _osv_cve_text
+        from .sources.osv_fallback import _normalize_osv_vuln_to_finding, _osv_cve_text
         from .sources.osv_fallback import _vendor_from_purl as _fb_vendor_from_purl
 
         for fb_comp, fb_vulns in (*fb_pairs_from_hits, *fb_pairs_this_run):

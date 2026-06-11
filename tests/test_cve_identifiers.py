@@ -9,8 +9,7 @@ quirk, and every UNKNOWN edge case.
 from __future__ import annotations
 
 import pytest
-
-from app.integrations.cve.identifiers import IdKind, SUPPORTED_FORMATS, classify
+from app.integrations.cve.identifiers import SUPPORTED_FORMATS, IdKind, classify
 
 
 @pytest.mark.parametrize(

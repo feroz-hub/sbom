@@ -15,13 +15,9 @@ the same way for the existing snapshot tests.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-from typing import Any
+from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
-
 from app.db import Base
 from app.integrations.cve.base import FetchOutcome, FetchResult
 from app.integrations.cve.identifiers import IdKind
@@ -29,11 +25,12 @@ from app.models import (
     AnalysisFinding,
     AnalysisRun,
     CveCache,
-    KevEntry,
     Projects,
     SBOMComponent,
     SBOMSource,
 )
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
 
 # Per-source ``accepted_kinds`` mirrors the production declarations on the
 # real client classes — kept in one place so test fakes don't drift.
@@ -49,7 +46,6 @@ from app.services.cve_service import (
     InvalidCveIdError,
     normalise_cve_id,
 )
-
 
 # ----------------------------------------------------------------- fixtures
 
@@ -174,7 +170,7 @@ async def test_get_cache_expired_refetches(db):
     svc = _service(db, osv=osv)
 
     # Pre-seed an expired row.
-    expired = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+    expired = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
     db.add(
         CveCache(
             cve_id="CVE-2024-99999",

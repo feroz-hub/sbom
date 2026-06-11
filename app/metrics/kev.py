@@ -21,7 +21,6 @@ from ..models import AnalysisFinding
 from ..sources.kev import lookup_kev_set_memoized
 from ._helpers import (
     collect_kev_candidates,
-    is_kev_listed,
     latest_run_per_sbom_subquery,
 )
 from .base import KevScope
