@@ -765,6 +765,68 @@ export function getDashboardLifetime(signal?: AbortSignal) {
   return request<LifetimeMetrics>('/dashboard/lifetime', { signal });
 }
 
+// ─── Dashboard v4 — advanced analytics ───────────────────────────────────────
+import type {
+  FindingsForecast,
+  ExploitationOutlook,
+  RemediationSummary,
+  RiskMapResponse,
+  RiskMatrixResponse,
+  CopilotBriefing,
+  CopilotAnswer,
+} from '@/types';
+
+/** Projected findings trajectory + velocity anomaly (metrics findings.forecast). */
+export function getDashboardForecast(signal?: AbortSignal) {
+  return request<FindingsForecast>('/dashboard/forecast', { signal });
+}
+
+/** Portfolio P(≥1 CVE exploited in 30d) composed from EPSS (+ coverage caveat). */
+export function getDashboardExploitation(signal?: AbortSignal) {
+  return request<ExploitationOutlook>('/dashboard/exploitation', { signal });
+}
+
+/** MTTR by severity, SLA countdowns/breaches, 30-day fix velocity. */
+export function getDashboardRemediation(signal?: AbortSignal) {
+  return request<RemediationSummary>('/dashboard/remediation', { signal });
+}
+
+/** Treemap cells — one per analysed SBOM, latest successful run. */
+export function getDashboardRiskMap(signal?: AbortSignal) {
+  return request<RiskMapResponse>('/dashboard/risk-map', { signal });
+}
+
+/** Impact × exploitability scatter points (CVSS vs EPSS, KEV-flagged). */
+export function getDashboardRiskMatrix(limit = 300, signal?: AbortSignal) {
+  return request<RiskMatrixResponse>(`/dashboard/risk-matrix?limit=${limit}`, {
+    signal,
+  });
+}
+
+// ─── AI Security Copilot ─────────────────────────────────────────────────────
+/**
+ * Executive briefing over the portfolio snapshot. Server-cached per data
+ * state (≤6h); `force` regenerates. 403/404 → AI surface disabled (the
+ * panel hides itself); 429 → budget cap; 502 → provider failure.
+ * LLM latency can exceed the default 30s timeout — allow 90s.
+ */
+export function getCopilotBriefing(force = false, signal?: AbortSignal) {
+  return request<CopilotBriefing>(
+    `/api/ai/copilot/briefing${force ? '?force=true' : ''}`,
+    { signal },
+    90_000,
+  );
+}
+
+/** One-shot grounded Q&A over the portfolio snapshot. */
+export function askCopilot(question: string, signal?: AbortSignal) {
+  return request<CopilotAnswer>(
+    '/api/ai/copilot/ask',
+    { method: 'POST', body: JSON.stringify({ question }), signal },
+    90_000,
+  );
+}
+
 // ─── Analysis-runs export & compare ──────────────────────────────────────────
 export function compareRuns(runA: number, runB: number, signal?: AbortSignal) {
   return request<CompareRunsResult>(

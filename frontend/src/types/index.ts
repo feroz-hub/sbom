@@ -657,3 +657,21 @@ export type {
   CveCurrentVersionStatus,
   CveDetailWithContext,
 } from './cve';
+
+export type {
+  FindingsForecast,
+  ForecastHistoryPoint,
+  ForecastProjectionPoint,
+  VelocityAnomaly,
+  ExploitationOutlook,
+  ExploitationDriver,
+  RemediationSummary,
+  SlaOffender,
+  SlaSeverity,
+  RiskMapResponse,
+  RiskMapItem,
+  RiskMatrixResponse,
+  RiskMatrixPoint,
+  CopilotBriefing,
+  CopilotAnswer,
+} from './dashboardAdvanced';

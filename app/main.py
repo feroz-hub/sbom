@@ -49,12 +49,14 @@ from .middleware import MaxBodySizeMiddleware
 from .nvd_mirror.api import router as nvd_mirror_admin_router
 from .rate_limit import limiter, rate_limit_exceeded_handler
 from .routers import (
+    ai_copilot,
     ai_credentials,
     ai_fixes,
     ai_usage,
     analyze_endpoints,
     compare,
     cves,
+    dashboard_advanced,
     dashboard_main,
     health,
     pdf,
@@ -372,6 +374,8 @@ app.include_router(projects.router, dependencies=_protected)
 app.include_router(analyze_endpoints.router, dependencies=_protected)
 app.include_router(pdf.router, dependencies=_protected)
 app.include_router(dashboard_main.router, dependencies=_protected)
+app.include_router(dashboard_advanced.router, dependencies=_protected)
+app.include_router(ai_copilot.router, dependencies=_protected)
 app.include_router(schedules.router, dependencies=_protected)
 app.include_router(cves.router, dependencies=_protected)
 app.include_router(compare.router, dependencies=_protected)

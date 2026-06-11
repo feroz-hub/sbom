@@ -22,9 +22,10 @@
   --color-hcl-accent: #0099cc;
   --color-hcl-violet: #7c3aa8; /* HCLTech violet — lightened */
 
-  /* Sidebar: lighter HCLTech violet (still dark enough for white text) */
-  --color-sidebar: #5a2d8f;
-  --color-sidebar-accent: #7c3aa8;
+  /* Sidebar: deep HCLTech navy — premium enterprise rail, strong contrast
+     for white text (≥ 13:1) with cyan as the single accent. */
+  --color-sidebar: #0e2143;
+  --color-sidebar-accent: #00b2e2;
 
   --focus-ring-color: #0067b1;
   --focus-ring-width: 2px;
@@ -100,8 +101,8 @@
   --color-hcl-accent: #38d4ff;
   --color-hcl-violet: #9457c4; /* HCLTech violet — lightened (dark theme) */
 
-  --color-sidebar: #3d1f63;
-  --color-sidebar-accent: #9457c4;
+  --color-sidebar: #0a1830;
+  --color-sidebar-accent: #38d4ff;
 
   --focus-ring-color: #38bdf8;
 
@@ -198,23 +199,56 @@
     background: linear-gradient(90deg, var(--color-sidebar) 0%, var(--color-hcl-blue) 100%);
   }
 
-  /** Sidebar masthead — HCLTech violet depth */
+  /** Sidebar masthead — navy → brand-blue depth with a cyan whisper */
   .sidebar-brand-bar {
     background: linear-gradient(
       125deg,
-      var(--color-sidebar) 0%,
-      color-mix(in srgb, var(--color-hcl-violet) 42%, var(--color-sidebar)) 42%,
-      #1a0930 100%
+      #12305e 0%,
+      color-mix(in srgb, var(--color-hcl-dark, #003087) 60%, var(--color-sidebar)) 46%,
+      #081427 100%
     );
+    box-shadow: inset 0 -1px 0 rgba(0, 178, 226, 0.22);
   }
 
   .dark .sidebar-brand-bar {
     background: linear-gradient(
       125deg,
-      var(--color-sidebar) 0%,
-      color-mix(in srgb, var(--color-hcl-violet) 48%, var(--color-sidebar)) 40%,
-      #120620 100%
+      #0e2547 0%,
+      color-mix(in srgb, #0a4f9e 55%, var(--color-sidebar)) 44%,
+      #060f1f 100%
     );
+    box-shadow: inset 0 -1px 0 rgba(56, 212, 255, 0.18);
+  }
+
+  /** Sidebar rail — vertical navy depth so the rail reads as one solid,
+      premium surface instead of a flat fill. */
+  .sidebar-rail {
+    background: linear-gradient(
+      180deg,
+      #122a52 0%,
+      var(--color-sidebar) 46%,
+      #0a1730 100%
+    );
+  }
+
+  .dark .sidebar-rail {
+    background: linear-gradient(180deg, #0d203e 0%, var(--color-sidebar) 50%, #050d1b 100%);
+  }
+
+  /** Active nav pill — brand-blue gradient with an inner highlight; the
+      single saturated element on the rail, so the eye lands on "where am I". */
+  .sidebar-item-active {
+    background: linear-gradient(92deg, #0067b1 0%, #008ecf 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.16),
+      0 8px 18px -8px rgba(0, 142, 207, 0.65);
+  }
+
+  .dark .sidebar-item-active {
+    background: linear-gradient(92deg, #0a74c0 0%, #00a0dd 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.14),
+      0 8px 20px -8px rgba(0, 160, 221, 0.5);
   }
 
   /** Mono stack for run IDs, CVEs, hashes */
