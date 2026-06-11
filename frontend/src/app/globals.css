@@ -22,10 +22,9 @@
   --color-hcl-accent: #0099cc;
   --color-hcl-violet: #7c3aa8; /* HCLTech violet — lightened */
 
-  /* Sidebar: deep HCLTech navy — premium enterprise rail, strong contrast
-     for white text (≥ 13:1) with cyan as the single accent. */
-  --color-sidebar: #0e2143;
-  --color-sidebar-accent: #00b2e2;
+  /* Sidebar: lighter HCLTech violet (still dark enough for white text) */
+  --color-sidebar: #5a2d8f;
+  --color-sidebar-accent: #7c3aa8;
 
   --focus-ring-color: #0067b1;
   --focus-ring-width: 2px;
@@ -101,8 +100,8 @@
   --color-hcl-accent: #38d4ff;
   --color-hcl-violet: #9457c4; /* HCLTech violet — lightened (dark theme) */
 
-  --color-sidebar: #0a1830;
-  --color-sidebar-accent: #38d4ff;
+  --color-sidebar: #3d1f63;
+  --color-sidebar-accent: #9457c4;
 
   --focus-ring-color: #38bdf8;
 
@@ -199,13 +198,13 @@
     background: linear-gradient(90deg, var(--color-sidebar) 0%, var(--color-hcl-blue) 100%);
   }
 
-  /** Sidebar masthead — navy → brand-blue depth with a cyan whisper */
+  /** Sidebar masthead — HCLTech violet depth */
   .sidebar-brand-bar {
     background: linear-gradient(
       125deg,
-      #12305e 0%,
-      color-mix(in srgb, var(--color-hcl-dark, #003087) 60%, var(--color-sidebar)) 46%,
-      #081427 100%
+      var(--color-sidebar) 0%,
+      color-mix(in srgb, var(--color-hcl-violet) 42%, var(--color-sidebar)) 42%,
+      #1a0930 100%
     );
     box-shadow: inset 0 -1px 0 rgba(0, 178, 226, 0.22);
   }
@@ -213,9 +212,9 @@
   .dark .sidebar-brand-bar {
     background: linear-gradient(
       125deg,
-      #0e2547 0%,
-      color-mix(in srgb, #0a4f9e 55%, var(--color-sidebar)) 44%,
-      #060f1f 100%
+      var(--color-sidebar) 0%,
+      color-mix(in srgb, var(--color-hcl-violet) 48%, var(--color-sidebar)) 40%,
+      #120620 100%
     );
     box-shadow: inset 0 -1px 0 rgba(56, 212, 255, 0.18);
   }

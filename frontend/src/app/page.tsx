@@ -197,12 +197,6 @@ export default function DashboardPage() {
           <WhatsNewStrip posture={postureQuery.data} />
         </Motion>
 
-        {/* 2.5 — AI Security Copilot: grounded briefing + ask-anything.
-            Hides itself when the AI surface is disabled. */}
-        <Motion preset="rise" delay={90}>
-          <CopilotPanel />
-        </Motion>
-
         {/* 3 — the primary action */}
         <Motion preset="rise" delay={120}>
           <QuickActionsV2 primaryAction={postureQuery.data?.primary_action} />
@@ -213,11 +207,8 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <Motion preset="rise" delay={180}>
             <SeverityChart
-              title="Vulnerability by Threat Level"
               data={postureQuery.data?.severity}
               isLoading={postureQuery.isLoading}
-              onSliceClick={handleSegmentClick}
-              interactiveSeverities={interactiveSeverities}
             />
           </Motion>
           <Motion preset="rise" delay={220}>
@@ -225,34 +216,9 @@ export default function DashboardPage() {
           </Motion>
         </div>
 
-        {/* Advanced analytics — predictive trajectory + exploitation outlook */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <Motion preset="rise" delay={240}>
-            <ForecastCard />
-          </Motion>
-          <Motion preset="rise" delay={260}>
-            <ExploitationOutlookCard />
-          </Motion>
-        </div>
-
         {/* Where to look first */}
         <Motion preset="rise" delay={260}>
           <TopVulnerableSboms />
-        </Motion>
-
-        {/* Interactive risk geometry — portfolio treemap + impact × exploitability */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <Motion preset="rise" delay={280}>
-            <PortfolioRiskMap />
-          </Motion>
-          <Motion preset="rise" delay={300}>
-            <RiskMatrixCard />
-          </Motion>
-        </div>
-
-        {/* Remediation & SLA — MTTR, countdowns, fix velocity */}
-        <Motion preset="rise" delay={320}>
-          <RemediationPanel />
         </Motion>
 
         {/* Needs-review — quiet, feature-gated until the Phase 2 aggregate. */}

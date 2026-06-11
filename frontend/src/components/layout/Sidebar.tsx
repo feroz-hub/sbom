@@ -180,7 +180,7 @@ export function Sidebar() {
             aria-expanded={!collapsed}
             className={cn(
               'flex w-full items-center rounded-lg py-2 text-slate-200',
-              'transition-[padding,background-color,color] duration-300 ease-in-out hover:bg-white/10 hover:text-white motion-reduce:transition-none',
+              'transition-colors hover:bg-white/10 hover:text-white motion-reduce:transition-none',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-cyan',
               'px-3',
               collapsed && 'md:px-[15px]',
@@ -205,15 +205,9 @@ export function Sidebar() {
               Collapse
             </span>
           </button>
-          <p
-            className={cn(
-              'truncate px-3 text-[10px] text-slate-300 overflow-hidden',
-              'transition-[max-height,opacity] duration-300 ease-in-out motion-reduce:transition-none',
-              collapsed ? 'max-h-6 md:max-h-0 md:opacity-0' : 'max-h-6 opacity-100',
-            )}
-          >
-            © 2026 HCL Technologies
-          </p>
+          {!collapsed && (
+            <p className="truncate px-3 text-[10px] text-slate-300">© 2026 HCL Technologies</p>
+          )}
         </div>
       </aside>
     </>
@@ -257,7 +251,7 @@ function NavLink({
             'px-3 py-2.5',
             collapsed && 'md:px-[15px]',
             isActive
-              ? 'sidebar-item-active text-white ring-1 ring-white/15'
+              ? 'bg-hcl-violet text-white shadow-md shadow-black/15 ring-1 ring-white/10'
               : 'text-slate-100 hover:bg-white/10 hover:text-white',
           )}
         >
@@ -277,15 +271,15 @@ function NavLink({
           >
             {item.label}
           </span>
-          <ChevronDown
-            className={cn(
-              'h-3.5 w-3.5 shrink-0 text-slate-200',
-              'transition-[transform,width,opacity,margin-left] duration-300 ease-in-out motion-reduce:transition-none',
-              expanded && 'rotate-180',
-              collapsed ? 'ml-2 md:ml-0 md:w-0 md:opacity-0' : 'ml-2',
-            )}
-            aria-hidden
-          />
+          {!collapsed && (
+            <ChevronDown
+              className={cn(
+                'h-3.5 w-3.5 shrink-0 text-slate-200 transition-transform duration-base',
+                expanded && 'rotate-180',
+              )}
+              aria-hidden
+            />
+          )}
         </button>
 
         {/* Sub-nav height animates via grid-rows so it folds with the rail
@@ -353,7 +347,7 @@ function NavLink({
         'px-3 py-2.5',
         collapsed && 'md:px-[15px]',
         isActive
-          ? 'sidebar-item-active text-white ring-1 ring-white/15'
+          ? 'bg-hcl-blue text-white shadow-md shadow-black/15 ring-1 ring-white/10'
           : 'text-slate-100 hover:bg-white/10 hover:text-white',
       )}
     >
