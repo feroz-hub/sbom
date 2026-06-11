@@ -126,6 +126,9 @@ def read_cache(
                 "remediation_prose": _coerce(row.remediation_prose),
                 "upgrade_command": _coerce(row.upgrade_command),
                 "decision_recommendation": _coerce(row.decision_recommendation),
+                # NULL on pre-019 rows / fresh-install paths → neutral
+                # default, matching the Pydantic field default.
+                "overall_confidence": row.overall_confidence or "medium",
             }
         )
     except Exception as exc:  # noqa: BLE001 — corrupt cache row should not 500 the request
@@ -244,6 +247,7 @@ def write_cache(
                     remediation_prose=payload["remediation_prose"],
                     upgrade_command=payload["upgrade_command"],
                     decision_recommendation=payload["decision_recommendation"],
+                    overall_confidence=bundle.overall_confidence,
                     provider_used=provider_used,
                     model_used=model_used,
                     total_cost_usd=float(total_cost_usd),
@@ -261,6 +265,7 @@ def write_cache(
             existing.remediation_prose = payload["remediation_prose"]
             existing.upgrade_command = payload["upgrade_command"]
             existing.decision_recommendation = payload["decision_recommendation"]
+            existing.overall_confidence = bundle.overall_confidence
             existing.provider_used = provider_used
             existing.model_used = model_used
             existing.total_cost_usd = float(total_cost_usd)

@@ -8,13 +8,43 @@ Upload SBOMs, persist extracted components, scan them against NVD, GitHub Securi
 
 ## Local Development
 
+### One-command bootstrap (recommended)
+
+Installer scripts bring a fresh machine to a working dev state — they install
+Python 3.11 + Node 20, create the venv, run `npm ci`, and seed `.env` /
+`.env.local` from the example files. Both are idempotent.
+
 ```bash
-# Backend
+# macOS / Linux
+./scripts/bootstrap.sh            # add --skip-system if you already have Python/Node
+```
+
+```powershell
+# Windows (PowerShell)
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\scripts\bootstrap.ps1           # add -SkipSystem if you already have Python/Node
+```
+
+See [`scripts/BOOTSTRAP.md`](./scripts/BOOTSTRAP.md) for what gets installed per OS.
+
+### Manual backend setup
+
+```bash
+# macOS / Linux
 python3 -m venv .venv
 . .venv/bin/activate
 python3 -m pip install -r requirements.txt
 cp .env.example .env
 python3 run.py
+```
+
+```powershell
+# Windows (PowerShell)
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+Copy-Item .env.example .env
+python run.py
 ```
 
 The backend API starts on **http://localhost:8000**.
@@ -23,11 +53,21 @@ The backend API starts on **http://localhost:8000**.
 - `GET /docs` opens the FastAPI Swagger UI
 - `GET /health` returns the API health check
 
+### Manual frontend setup
+
 ```bash
-# Frontend
+# macOS / Linux
 cd frontend
 npm ci
 cp .env.local.example .env.local
+npm run dev
+```
+
+```powershell
+# Windows (PowerShell)
+cd frontend
+npm ci
+Copy-Item .env.local.example .env.local
 npm run dev
 ```
 
@@ -107,7 +147,13 @@ Adding a fourth source (e.g. Snyk, OSS Index) is a one-line change in
 ## Tests
 
 ```bash
+# macOS / Linux
 .venv/bin/python -m pytest tests/
+```
+
+```powershell
+# Windows (PowerShell) — after activating the venv
+python -m pytest tests/
 ```
 
 The suite is a deterministic snapshot regression net: every analyze endpoint
@@ -152,6 +198,124 @@ let every request through.
 Multiple tokens in `API_AUTH_TOKENS` (comma-separated) lets you rotate
 per-client without downtime: add a new one, redeploy clients, then
 remove the old one.
+
+---
+
+## AI Fix Configuration
+
+The platform can generate AI-assisted remediation guidance for findings.
+This is **opt-in** and supports seven providers — Anthropic, OpenAI, Google
+Gemini (free tier), xAI Grok (free tier), Sarvam AI, Ollama (self-hosted),
+vLLM (self-hosted) — plus any custom OpenAI-compatible endpoint.
+
+There are two ways to configure providers:
+
+- **Settings → AI page** (`/settings/ai`) — add/edit providers at runtime,
+  stored **encrypted in the DB**, no restart needed. Recommended for production.
+- **Environment variables** (`.env`) — seed a provider at boot. Good for local dev.
+
+### 1. Generate the credential encryption key (required for DB-stored providers)
+
+Any provider credential saved through the Settings UI is encrypted at rest with
+`AI_CONFIG_ENCRYPTION_KEY`. Generate one once and store it like any other
+production secret — **losing it makes every saved provider credential
+unrecoverable**.
+
+```bash
+# macOS / Linux
+python scripts/generate_encryption_key.py                 # prints the key
+python scripts/generate_encryption_key.py --append-to-env # writes it into .env
+```
+
+```powershell
+# Windows (PowerShell) — after activating the venv
+python scripts\generate_encryption_key.py
+python scripts\generate_encryption_key.py --append-to-env
+```
+
+### 2. Configure providers via `.env`
+
+The AI provider keys live at the bottom of `.env.example`. Set at least one and
+point `AI_DEFAULT_PROVIDER` at an enabled provider:
+
+```bash
+AI_FIXES_ENABLED=true
+AI_FIXES_UI_CONFIG_ENABLED=true       # exposes the Settings → AI page
+AI_DEFAULT_PROVIDER=anthropic
+AI_CONFIG_ENCRYPTION_KEY=<from step 1>
+
+ANTHROPIC_API_KEY=     # AI_ANTHROPIC_MODEL=claude-sonnet-4-5
+OPENAI_API_KEY=        # AI_OPENAI_MODEL=gpt-4o-mini
+GEMINI_API_KEY=        # AI_GEMINI_MODEL=gemini-2.5-flash   (free tier)
+GROK_API_KEY=          # AI_GROK_MODEL=grok-2-mini          (free tier)
+SARVAM_API_KEY=        # AI_SARVAM_MODEL=sarvam-m  AI_SARVAM_BASE_URL=https://api.sarvam.ai/v1
+# Ollama / vLLM / custom — add via the Settings → AI page (base URL + model)
+```
+
+Get API keys: Anthropic `console.anthropic.com/settings/keys` ·
+OpenAI `platform.openai.com/api-keys` · Gemini `aistudio.google.com/app/apikey` ·
+Grok `console.x.ai` · Sarvam `dashboard.sarvam.ai`. Full provider matrix and
+pricing: [`docs/ai-providers.md`](./docs/ai-providers.md). Admin walkthrough:
+[`docs/features/ai-configuration.md`](./docs/features/ai-configuration.md).
+
+### 3. Migrate `.env` providers into the encrypted DB store (optional)
+
+If you started with env-var keys and want them managed through the UI:
+
+```bash
+python scripts/migrate_env_to_db.py --dry-run   # preview, no writes
+python scripts/migrate_env_to_db.py             # actually migrate (idempotent)
+```
+
+### 4. Verify and smoke-test
+
+```bash
+# Confirm every AI rollout gate behaves as specified
+python scripts/verify_ai_rollout.py --pretty
+
+# Run the orchestrator against real provider output (needs a live key)
+python scripts/ai_fix_smoke.py                  # uses the default provider
+python scripts/ai_fix_smoke.py --provider openai
+```
+
+---
+
+## Background Analysis (Celery)
+
+Default dev runs scans **synchronously** inside the API process — no broker
+needed. To offload analysis to background workers, point the app at Redis and
+run the Celery worker (and beat scheduler for periodic jobs):
+
+```bash
+# .env
+REDIS_URL=redis://localhost:6379/0
+CELERY_BROKER_URL=redis://localhost:6379/0
+```
+
+```bash
+# macOS / Linux — one process per command, in separate terminals
+./scripts/celery_worker.sh
+./scripts/celery_beat.sh        # beat must run as a SINGLE instance
+```
+
+```powershell
+# Windows (PowerShell) — equivalent invocations
+celery -A app.workers.celery_app worker --loglevel=info
+celery -A app.workers.celery_app beat --loglevel=info
+```
+
+---
+
+## Database Migrations (Alembic)
+
+SQLite (repo-root `sbom_api.db`) is created automatically on first run. For
+PostgreSQL or schema changes, use Alembic (it reads `DATABASE_URL` from `.env`):
+
+```bash
+alembic upgrade head                       # apply all pending migrations
+alembic revision --autogenerate -m "msg"   # generate a new migration
+alembic downgrade -1                        # roll back the last migration
+```
 
 ---
 
@@ -203,9 +367,25 @@ Full interactive docs: **http://localhost:8000/docs**
 | `CORS_ORIGINS` | `*` runtime fallback | Comma-separated allowed origins |
 | `API_AUTH_MODE` | `none` | `none` or `bearer`; see **Authentication** above |
 | `API_AUTH_TOKENS` | *(none)* | Comma-separated bearer token allowlist (required when `API_AUTH_MODE=bearer`) |
-| `DATABASE_URL` | repo-root `sbom_api.db` | SQLAlchemy database URL override |
+| `DATABASE_URL` | repo-root `sbom_api.db` | SQLAlchemy database URL override (SQLite or PostgreSQL) |
 | `HOST` | `0.0.0.0` | Server host |
 | `PORT` | `8000` | Server port |
+| `REDIS_URL` / `CELERY_BROKER_URL` | *(none)* | Redis broker for Celery background analysis (optional) |
+| `LOG_LEVEL` / `LOG_FORMAT` | `INFO` / `text` | Log verbosity and format (`text` or `json`) |
+
+### AI fixes (`.env`)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AI_FIXES_ENABLED` | `true` | Master switch for AI fix generation |
+| `AI_FIXES_UI_CONFIG_ENABLED` | `true` | Exposes the Settings → AI provider config page |
+| `AI_CONFIG_ENCRYPTION_KEY` | *(none)* | AES-256 key encrypting DB-stored provider credentials — see **AI Fix Configuration** |
+| `AI_DEFAULT_PROVIDER` | `anthropic` | Provider used for every AI fix request; must name an enabled provider |
+| `ANTHROPIC_API_KEY` / `AI_ANTHROPIC_MODEL` | *(none)* / `claude-sonnet-4-5` | Anthropic credentials + model |
+| `OPENAI_API_KEY` / `AI_OPENAI_MODEL` | *(none)* / `gpt-4o-mini` | OpenAI credentials + model |
+| `GEMINI_API_KEY` / `AI_GEMINI_MODEL` | *(none)* / `gemini-2.5-flash` | Google Gemini credentials + model (free tier) |
+| `GROK_API_KEY` / `AI_GROK_MODEL` | *(none)* / `grok-2-mini` | xAI Grok credentials + model (free tier) |
+| `SARVAM_API_KEY` / `AI_SARVAM_MODEL` / `AI_SARVAM_BASE_URL` | *(none)* / `sarvam-m` / `https://api.sarvam.ai/v1` | Sarvam AI (OpenAI-compatible) |
 
 ### Frontend (`frontend/.env.local`)
 

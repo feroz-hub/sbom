@@ -224,6 +224,14 @@ class AiFixBundle(BaseModel):
 
     Cached as a single row in :class:`~app.models.AiFixCache` keyed on
     ``(vuln_id, component_name, component_version, prompt_version)``.
+
+    ``overall_confidence`` is the model's self-assessed confidence in the
+    *entire* response (distinct from the per-section ``confidence`` fields on
+    :class:`RemediationProse` and :class:`DecisionRecommendation`, which scope
+    only their own recommendation). It is surfaced prominently at the top of
+    the AI-fix UI so a reader can calibrate trust before reading the detail.
+    Model self-reported, not server-clamped — defaults to ``"medium"`` when
+    omitted, matching the neutral default used by the per-section fields.
     """
 
     model_config = ConfigDict(extra="ignore")
@@ -231,6 +239,14 @@ class AiFixBundle(BaseModel):
     remediation_prose: RemediationProse
     upgrade_command: UpgradeCommand
     decision_recommendation: DecisionRecommendation
+    overall_confidence: ConfidenceTier = "medium"
+
+    @field_validator("overall_confidence", mode="before")
+    @classmethod
+    def _normalize_overall_confidence(cls, v: object) -> object:
+        # Same lenience as the per-section confidence fields: a model that
+        # emits "High" / "Medium" still matches the lowercase Literal.
+        return _normalize_enum_value(v)
 
 
 # ---------------------------------------------------------------------------

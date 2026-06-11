@@ -87,6 +87,14 @@ __all__ = [
     # trend / windows
     "findings_trend",
     "findings_net_change",
+    # forecast / exploitation (dashboard v4)
+    "findings_forecast",
+    "portfolio_exploitation_outlook",
+    # remediation / risk map (dashboard v4)
+    "remediation_summary",
+    "DEFAULT_SLA_DAYS",
+    "portfolio_risk_map",
+    "portfolio_risk_matrix",
     # sboms / projects
     "sboms_total",
     "sboms_analysed_total",

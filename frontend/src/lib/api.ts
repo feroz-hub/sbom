@@ -171,6 +171,19 @@ async function request<T>(
   return (await res.json()) as T;
 }
 
+// Request for endpoints that return a body on 200 but 204 No Content when
+// there's nothing to report (e.g. an idle resource). Returns ``null`` on 204
+// instead of throwing, so callers can branch on "exists but empty."
+async function requestOrNull<T>(
+  path: string,
+  options: RequestInit & { signal?: AbortSignal } = {},
+  timeoutMs = 30_000,
+): Promise<T | null> {
+  const res = await performRequest(path, options, timeoutMs);
+  if (res.status === 204) return null;
+  return (await res.json()) as T;
+}
+
 // Void request — for endpoints that return no body (DELETE, etc.). No casts.
 async function requestVoid(
   path: string,
@@ -750,6 +763,68 @@ export function getDashboardLifetime(signal?: AbortSignal) {
   return request<LifetimeMetrics>('/dashboard/lifetime', { signal });
 }
 
+// ─── Dashboard v4 — advanced analytics ───────────────────────────────────────
+import type {
+  FindingsForecast,
+  ExploitationOutlook,
+  RemediationSummary,
+  RiskMapResponse,
+  RiskMatrixResponse,
+  CopilotBriefing,
+  CopilotAnswer,
+} from '@/types';
+
+/** Projected findings trajectory + velocity anomaly (metrics findings.forecast). */
+export function getDashboardForecast(signal?: AbortSignal) {
+  return request<FindingsForecast>('/dashboard/forecast', { signal });
+}
+
+/** Portfolio P(≥1 CVE exploited in 30d) composed from EPSS (+ coverage caveat). */
+export function getDashboardExploitation(signal?: AbortSignal) {
+  return request<ExploitationOutlook>('/dashboard/exploitation', { signal });
+}
+
+/** MTTR by severity, SLA countdowns/breaches, 30-day fix velocity. */
+export function getDashboardRemediation(signal?: AbortSignal) {
+  return request<RemediationSummary>('/dashboard/remediation', { signal });
+}
+
+/** Treemap cells — one per analysed SBOM, latest successful run. */
+export function getDashboardRiskMap(signal?: AbortSignal) {
+  return request<RiskMapResponse>('/dashboard/risk-map', { signal });
+}
+
+/** Impact × exploitability scatter points (CVSS vs EPSS, KEV-flagged). */
+export function getDashboardRiskMatrix(limit = 300, signal?: AbortSignal) {
+  return request<RiskMatrixResponse>(`/dashboard/risk-matrix?limit=${limit}`, {
+    signal,
+  });
+}
+
+// ─── AI Security Copilot ─────────────────────────────────────────────────────
+/**
+ * Executive briefing over the portfolio snapshot. Server-cached per data
+ * state (≤6h); `force` regenerates. 403/404 → AI surface disabled (the
+ * panel hides itself); 429 → budget cap; 502 → provider failure.
+ * LLM latency can exceed the default 30s timeout — allow 90s.
+ */
+export function getCopilotBriefing(force = false, signal?: AbortSignal) {
+  return request<CopilotBriefing>(
+    `/api/ai/copilot/briefing${force ? '?force=true' : ''}`,
+    { signal },
+    90_000,
+  );
+}
+
+/** One-shot grounded Q&A over the portfolio snapshot. */
+export function askCopilot(question: string, signal?: AbortSignal) {
+  return request<CopilotAnswer>(
+    '/api/ai/copilot/ask',
+    { method: 'POST', body: JSON.stringify({ question }), signal },
+    90_000,
+  );
+}
+
 // ─── Analysis-runs export & compare ──────────────────────────────────────────
 export function compareRuns(runA: number, runB: number, signal?: AbortSignal) {
   return request<CompareRunsResult>(
@@ -1095,11 +1170,18 @@ export function cancelRunAiFixes(
 }
 
 /** Snapshot for clients that prefer polling over SSE. */
+/**
+ * Most-recent batch progress for a run. Resolves to ``null`` when the run
+ * exists but has no AI fix batch (backend 204) — an idle run, not an error.
+ * Callers must treat ``null`` as "nothing to track" (don't subscribe/poll).
+ */
 export function getRunAiFixProgress(
   runId: number,
   signal?: AbortSignal,
-): Promise<AiBatchProgress> {
-  return request<AiBatchProgress>(`/api/v1/runs/${runId}/ai-fixes/progress`, { signal });
+): Promise<AiBatchProgress | null> {
+  return requestOrNull<AiBatchProgress>(`/api/v1/runs/${runId}/ai-fixes/progress`, {
+    signal,
+  });
 }
 
 /** List cached fix bundles for a run (table view). */

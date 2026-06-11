@@ -44,22 +44,24 @@ describe('computeHeadlineCopy — clean', () => {
 });
 
 describe('computeHeadlineCopy — kev_present', () => {
-  it('singular KEV finding uses "needs"', () => {
-    const copy = computeHeadlineCopy('kev_present', { kev_count: 1 });
-    expect(copy.headline).toBe('1 actively exploited finding needs attention.');
+  it('carries only the urgency message — no count (the KEV tile owns the number)', () => {
+    const copy = computeHeadlineCopy('kev_present', { kev_count: 12 });
+    expect(copy.headline).toBe('Actively exploited findings need attention.');
+    expect(copy.headline).not.toMatch(/\d/);
     expect(copy.tone).toBe('danger');
     expect(copy.subline).toContain('CISA');
   });
 
-  it('multiple KEV findings use "need"', () => {
-    const copy = computeHeadlineCopy('kev_present', { kev_count: 12 });
-    expect(copy.headline).toBe('12 actively exploited findings need attention.');
-    expect(copy.tone).toBe('danger');
+  it('stays number-free regardless of count magnitude', () => {
+    const copy = computeHeadlineCopy('kev_present', { kev_count: 1234 });
+    expect(copy.headline).toBe('Actively exploited findings need attention.');
   });
 
-  it('formats large counts with thousands separator', () => {
-    const copy = computeHeadlineCopy('kev_present', { kev_count: 1234 });
-    expect(copy.headline).toBe('1,234 actively exploited findings need attention.');
+  it('zero count reads as a distinct positive state (never "attention needed")', () => {
+    const copy = computeHeadlineCopy('kev_present', { kev_count: 0 });
+    expect(copy.headline).toBe('No actively exploited findings right now.');
+    expect(copy.headline).not.toMatch(/need/i);
+    expect(copy.tone).not.toBe('danger');
   });
 });
 

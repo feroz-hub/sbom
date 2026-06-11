@@ -6,6 +6,7 @@ import { useMemo, useState } from 'react';
 import {
   useCancelAiFixes,
   useRunAiBatches,
+  useRunAiFixList,
   useScopedRunBatchEstimate,
   useTriggerScopedAiFixes,
 } from '@/hooks/useAiFix';
@@ -168,9 +169,13 @@ export function RunBatchProgress({
   onClearSelection,
 }: RunBatchProgressProps) {
   const hasSelection = (selectedIds?.length ?? 0) > 0;
-  // Subscribe via the global provider so the SSE stream stays open
-  // when the user navigates away from this page and back.
-  const { data: progress } = useGlobalAiBatchProgress(runId, { enabled });
+  // Subscribe via the global provider so the SSE stream stays open when the
+  // user navigates away from this page and back. ``liveProgress`` is:
+  //   • undefined — still loading the first snapshot
+  //   • null      — backend 204: run exists but has no AI fix batch (idle)
+  //   • object    — live or most-recent batch progress
+  const { data: liveProgress, isLoading: progressLoading } =
+    useGlobalAiBatchProgress(runId, { enabled });
 
   const trigger = useTriggerScopedAiFixes(runId);
   const cancel = useCancelAiFixes(runId);
@@ -192,11 +197,11 @@ export function RunBatchProgress({
 
   // Scope-aware estimate (debounced).
   const isIdle =
-    !progress ||
-    progress.status === 'complete' ||
-    progress.status === 'failed' ||
-    progress.status === 'cancelled' ||
-    (progress.status === 'pending' && progress.total === 0);
+    !liveProgress ||
+    liveProgress.status === 'complete' ||
+    liveProgress.status === 'failed' ||
+    liveProgress.status === 'cancelled' ||
+    (liveProgress.status === 'pending' && liveProgress.total === 0);
   const { data: estimate } = useScopedRunBatchEstimate(runId, scope, {
     enabled: enabled && isIdle,
   });
@@ -206,6 +211,15 @@ export function RunBatchProgress({
   const { data: batches } = useRunAiBatches(runId, { enabled });
   const activeBatches = batches?.items.filter((b) => isActive(b.status)) ?? [];
   const atMaxConcurrent = activeBatches.length >= MAX_ACTIVE_BATCHES;
+
+  // Run-level count of fixes available in the tenant-shared cache — the
+  // SAME data (and query key) that drives the findings-table AI column.
+  // The per-batch counters below describe only the most-recent batch,
+  // so a cancelled/empty last batch reads "0" while the run can still
+  // have cached fixes available. Surfacing this run-level total keeps
+  // the banner and the table telling one consistent story.
+  const { data: runFixList } = useRunAiFixList(runId, { enabled });
+  const runFixesAvailable = runFixList?.total ?? 0;
 
   const [showWarning, setShowWarning] = useState(false);
 
@@ -223,8 +237,15 @@ export function RunBatchProgress({
     trigger.mutate({ scope });
   };
 
-  // Empty: never triggered, no active batches, no progress entry.
-  if (!progress) return null;
+  // Still fetching the first snapshot — don't flash the CTA before we know
+  // whether this run actually has a batch in flight.
+  if (liveProgress === undefined && progressLoading) return null;
+  // ``null`` = backend 204 (run exists, no batch yet) or a settled-empty
+  // fetch. Render the idle CTA from a local stub. The stub is display-only:
+  // it is NOT written to the query cache and the provider does NOT subscribe
+  // to it, so it can't trap a phantom subscriber the way a server-fabricated
+  // ``pending`` envelope did.
+  const progress: AiBatchProgress = liveProgress ?? makeIdleProgress(runId);
 
   const hasEverRun =
     progress.total > 0 || progress.from_cache > 0 || progress.generated > 0 || progress.failed > 0;
@@ -327,6 +348,10 @@ export function RunBatchProgress({
 
   const remaining = formatRemainingTime(progress.estimated_remaining_seconds);
   const cost = `$${progress.cost_so_far_usd.toFixed(4)}`;
+  // When the displayed batch has finished (complete/cancelled/failed/
+  // paused), its counters are historical — scope them to "Last batch"
+  // so they're not read as a run-wide tally.
+  const batchActive = isActive(progress.status);
 
   return (
     <>
@@ -361,6 +386,9 @@ export function RunBatchProgress({
         <BatchProgressBar progress={progress} />
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-hcl-muted">
+          {!batchActive ? (
+            <span className="font-medium text-hcl-navy">Last batch</span>
+          ) : null}
           <span>
             <span className="font-medium text-hcl-navy">
               {progress.from_cache + progress.generated + progress.failed}
@@ -389,6 +417,13 @@ export function RunBatchProgress({
             </span>
           ) : null}
         </div>
+
+        {!batchActive && runFixesAvailable > 0 ? (
+          <p className="text-xs text-emerald-700" data-testid="ai-batch-run-available">
+            {runFixesAvailable.toLocaleString()} AI fix{runFixesAvailable === 1 ? '' : 'es'}{' '}
+            available for this run
+          </p>
+        ) : null}
 
         {progress.last_error ? (
           <p className="text-xs text-red-700">{progress.last_error}</p>
@@ -445,6 +480,36 @@ function pluraliseDescription(description: string, count: number): string {
     return lowered.replace(/findings/i, 'finding');
   }
   return lowered;
+}
+
+/**
+ * Display-only idle envelope for a run whose ``/progress`` returned 204
+ * (run exists, no AI fix batch yet). Lets the banner render its "Generate"
+ * CTA without a server-fabricated ``pending`` payload — and without
+ * subscribing, since the real query data stays ``null`` (see
+ * ``useGlobalAiBatchProgress``, which only tracks live statuses).
+ */
+function makeIdleProgress(runId: number): AiBatchProgress {
+  return {
+    run_id: runId,
+    batch_id: null,
+    scope_label: null,
+    status: 'pending',
+    total: 0,
+    from_cache: 0,
+    generated: 0,
+    failed: 0,
+    remaining: 0,
+    cost_so_far_usd: 0,
+    estimated_remaining_seconds: null,
+    estimated_remaining_cost_usd: null,
+    started_at: null,
+    finished_at: null,
+    last_error: null,
+    cancel_requested: false,
+    provider_used: null,
+    model_used: null,
+  };
 }
 
 function defaultFilter(): FindingsFilterState {

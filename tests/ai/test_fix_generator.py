@@ -188,6 +188,9 @@ async def test_cache_miss_then_hit(_seeded):
     assert isinstance(first, AiFixResult)
     assert first.metadata.cache_hit is False
     assert first.bundle.upgrade_command.target_version == "2.17.1"
+    # overall_confidence threads from the provider response through
+    # _parse_response → _post_validate → write_cache on the MISS path.
+    assert first.bundle.overall_confidence == "high"
     assert len(fake.calls) == 1
 
     # Second call — same finding → cache hit, no extra LLM invocation.
@@ -200,6 +203,9 @@ async def test_cache_miss_then_hit(_seeded):
         db.close()
     assert isinstance(second, AiFixResult)
     assert second.metadata.cache_hit is True
+    # ...and survives the column round-trip on the read_cache HIT path
+    # (the field lives in its own column, not the JSON sub-blobs).
+    assert second.bundle.overall_confidence == "high"
     # Provider received zero additional calls.
     assert len(fake.calls) == 1
 
@@ -554,6 +560,7 @@ async def test_parse_succeeds_with_capitalised_enums(_seeded):
     bundle["upgrade_command"]["breaking_change_risk"] = "Major"
     bundle["decision_recommendation"]["priority"] = "Urgent"
     bundle["decision_recommendation"]["citations"] = ["KEV", "NVD", "EPSS", "fix_version_data"]
+    bundle["overall_confidence"] = "High"  # capitalised — must normalise too
     fake = FakeProvider([_json.dumps(bundle)])
     db = SessionLocal()
     try:
@@ -568,6 +575,8 @@ async def test_parse_succeeds_with_capitalised_enums(_seeded):
     assert result.bundle.remediation_prose.confidence == "high"
     assert result.bundle.upgrade_command.breaking_change_risk == "major"
     assert result.bundle.decision_recommendation.priority == "urgent"
+    # The top-level confidence normalises through the same pipeline.
+    assert result.bundle.overall_confidence == "high"
     # Schema lowercased + citation-pruning may drop ones not in
     # grounding.sources_used. The surviving citations must all be
     # lowercase enum values (no "KEV", "NVD", "EPSS" leakage).

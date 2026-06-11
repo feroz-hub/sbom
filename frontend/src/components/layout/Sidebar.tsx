@@ -9,7 +9,6 @@ import {
   CalendarClock,
   ChevronDown,
   ChevronLeft,
-  ChevronRight,
   FileText,
   FolderOpen,
   LayoutDashboard,
@@ -101,8 +100,8 @@ export function Sidebar() {
       <aside
         aria-label="Primary navigation"
         className={cn(
-          'fixed left-0 top-0 z-40 flex h-screen flex-col bg-sidebar',
-          'border-r border-white/5 shadow-[4px_0_24px_rgba(0,0,0,0.12)] dark:border-white/5 dark:shadow-[4px_0_32px_rgba(0,0,0,0.45)]',
+          'fixed left-0 top-0 z-40 flex h-screen flex-col bg-sidebar sidebar-rail',
+          'border-r border-white/10 shadow-[4px_0_24px_rgba(0,0,0,0.12)] dark:border-white/10 dark:shadow-[4px_0_32px_rgba(0,0,0,0.45)]',
           'transition-all duration-300 ease-in-out motion-reduce:transition-none',
           'md:translate-x-0',
           collapsed ? 'md:w-16' : 'md:w-60',
@@ -110,18 +109,19 @@ export function Sidebar() {
           mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
         )}
       >
-        {/* Brand bar */}
-        <div
-          className={cn(
-            'flex shrink-0 items-center border-b border-white/10 sidebar-brand-bar',
-            collapsed ? 'md:justify-center md:px-0 md:py-4' : '',
-            'gap-3 px-4 py-4',
-          )}
-        >
+        {/* Brand bar — label slides + fades while the rail narrows; the logo
+            block stays put so nothing jumps (px-4 ≈ centered in the 64px rail). */}
+        <div className="flex shrink-0 items-center gap-3 border-b border-white/10 px-4 py-4 sidebar-brand-bar">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/20 bg-white/10 shadow-inner">
             <span className="text-xs font-bold leading-none tracking-tight text-white">HCL</span>
           </div>
-          <div className={cn('min-w-0 flex-1', collapsed && 'md:hidden')}>
+          <div
+            className={cn(
+              'min-w-0 flex-1 overflow-hidden',
+              'transition-[max-width,opacity] duration-300 ease-in-out motion-reduce:transition-none',
+              collapsed ? 'max-w-full md:max-w-0 md:opacity-0' : 'max-w-full opacity-100',
+            )}
+          >
             <p className="truncate text-sm font-semibold leading-tight text-white">SBOM Analyzer</p>
             <p className="mt-0.5 truncate text-[11px] font-medium text-hcl-cyan">HCLTech Security</p>
           </div>
@@ -151,8 +151,21 @@ export function Sidebar() {
             ))}
           </nav>
 
-          {!collapsed && <PinnedSection />}
-          {!collapsed && <RecentSection />}
+          {/* Pinned + Recent collapse smoothly via the grid-rows height trick
+              (display:none can't animate; 0fr → 1fr can). */}
+          <div
+            className={cn(
+              'grid transition-[grid-template-rows,opacity] duration-300 ease-in-out motion-reduce:transition-none',
+              collapsed
+                ? 'grid-rows-[1fr] md:grid-rows-[0fr] md:opacity-0'
+                : 'grid-rows-[1fr] opacity-100',
+            )}
+          >
+            <div className="min-h-0 overflow-hidden">
+              <PinnedSection />
+              <RecentSection />
+            </div>
+          </div>
         </div>
 
         {/* Footer: status + collapse toggle */}
@@ -169,17 +182,28 @@ export function Sidebar() {
               'flex w-full items-center rounded-lg py-2 text-slate-200',
               'transition-colors hover:bg-white/10 hover:text-white motion-reduce:transition-none',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-cyan',
-              collapsed ? 'justify-center px-0' : 'gap-3 px-3',
+              'px-3',
+              collapsed && 'md:px-[15px]',
             )}
           >
-            {collapsed ? (
-              <ChevronRight className="h-[18px] w-[18px] shrink-0" aria-hidden />
-            ) : (
-              <>
-                <ChevronLeft className="h-[18px] w-[18px] shrink-0" aria-hidden />
-                <span className="truncate text-xs font-medium">Collapse</span>
-              </>
-            )}
+            {/* One chevron that rotates instead of two swapped icons — the
+                180° spin reads as the rail changing direction. */}
+            <ChevronLeft
+              className={cn(
+                'h-[18px] w-[18px] shrink-0 transition-transform duration-300 ease-in-out motion-reduce:transition-none',
+                collapsed && 'md:rotate-180',
+              )}
+              aria-hidden
+            />
+            <span
+              className={cn(
+                'truncate whitespace-nowrap text-xs font-medium overflow-hidden',
+                'transition-[max-width,opacity,margin-left] duration-300 ease-in-out motion-reduce:transition-none',
+                collapsed ? 'ml-3 max-w-[140px] md:ml-0 md:max-w-0 md:opacity-0' : 'ml-3 max-w-[140px] opacity-100',
+              )}
+            >
+              Collapse
+            </span>
           </button>
           {!collapsed && (
             <p className="truncate px-3 text-[10px] text-slate-300">© 2026 HCL Technologies</p>
@@ -222,10 +246,10 @@ function NavLink({
           aria-label={collapsed ? item.label : undefined}
           className={cn(
             'group relative flex w-full items-center rounded-lg text-sm font-medium',
-            'transition-colors duration-150 motion-reduce:transition-none',
+            'transition-[padding,background-color,color] duration-300 ease-in-out motion-reduce:transition-none',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-cyan',
-            collapsed ? 'md:justify-center md:px-0 md:py-3' : '',
-            'gap-3 px-3 py-2.5',
+            'px-3 py-2.5',
+            collapsed && 'md:px-[15px]',
             isActive
               ? 'bg-hcl-violet text-white shadow-md shadow-black/15 ring-1 ring-white/10'
               : 'text-slate-100 hover:bg-white/10 hover:text-white',
@@ -238,7 +262,13 @@ function NavLink({
             )}
             aria-hidden
           />
-          <span className={cn('truncate flex-1 text-left', collapsed && 'md:hidden')}>
+          <span
+            className={cn(
+              'flex-1 truncate whitespace-nowrap text-left overflow-hidden',
+              'transition-[max-width,opacity,margin-left] duration-300 ease-in-out motion-reduce:transition-none',
+              collapsed ? 'ml-3 max-w-full md:ml-0 md:max-w-0 md:opacity-0' : 'ml-3 max-w-full opacity-100',
+            )}
+          >
             {item.label}
           </span>
           {!collapsed && (
@@ -252,8 +282,22 @@ function NavLink({
           )}
         </button>
 
-        {expanded && !collapsed && (
-          <ul className="mt-0.5 ml-3 space-y-0.5 border-l border-white/10 pl-3 motion-fade-in">
+        {/* Sub-nav height animates via grid-rows so it folds with the rail
+            instead of popping in and out. */}
+        <div
+          className={cn(
+            'grid transition-[grid-template-rows,opacity,visibility] duration-300 ease-in-out motion-reduce:transition-none',
+            // `visibility` flips at the transition's end, so hidden links also
+            // drop out of the tab order once the fold-up finishes.
+            expanded && !collapsed
+              ? 'visible grid-rows-[1fr] opacity-100'
+              : 'invisible grid-rows-[0fr] opacity-0',
+            expanded &&
+              collapsed &&
+              'visible grid-rows-[1fr] opacity-100 md:invisible md:grid-rows-[0fr] md:opacity-0',
+          )}
+        >
+          <ul className="mt-0.5 ml-3 min-h-0 space-y-0.5 overflow-hidden border-l border-white/10 pl-3">
             {item.children.map((child) => {
               // Detect active child by pathname + query string approximation.
               const childActive =
@@ -286,7 +330,7 @@ function NavLink({
               );
             })}
           </ul>
-        )}
+        </div>
       </div>
     );
   }
@@ -298,10 +342,10 @@ function NavLink({
       aria-label={collapsed ? item.label : undefined}
       className={cn(
         'group relative flex items-center rounded-lg text-sm font-medium',
-        'transition-colors duration-150 motion-reduce:transition-none',
+        'transition-[padding,background-color,color] duration-300 ease-in-out motion-reduce:transition-none',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-cyan',
-        collapsed ? 'md:justify-center md:px-0 md:py-3' : '',
-        'gap-3 px-3 py-2.5',
+        'px-3 py-2.5',
+        collapsed && 'md:px-[15px]',
         isActive
           ? 'bg-hcl-blue text-white shadow-md shadow-black/15 ring-1 ring-white/10'
           : 'text-slate-100 hover:bg-white/10 hover:text-white',
@@ -314,12 +358,21 @@ function NavLink({
         )}
         aria-hidden
       />
-      <span className={cn('truncate', collapsed && 'md:hidden')}>{item.label}</span>
+      <span
+        className={cn(
+          'flex-1 truncate whitespace-nowrap overflow-hidden',
+          'transition-[max-width,opacity,margin-left] duration-300 ease-in-out motion-reduce:transition-none',
+          collapsed ? 'ml-3 max-w-full md:ml-0 md:max-w-0 md:opacity-0' : 'ml-3 max-w-full opacity-100',
+        )}
+      >
+        {item.label}
+      </span>
       {isActive && (
         <span
           className={cn(
             'ml-auto h-4 w-1 shrink-0 rounded-full bg-hcl-cyan shadow-[0_0_12px_rgba(0,178,226,0.6)]',
-            collapsed && 'md:hidden',
+            'transition-opacity duration-300 ease-in-out motion-reduce:transition-none',
+            collapsed && 'md:w-0 md:opacity-0',
           )}
           aria-hidden
         />

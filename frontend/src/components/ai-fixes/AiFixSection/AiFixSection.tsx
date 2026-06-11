@@ -7,6 +7,7 @@ import { GENERATE_DISABLED_CODES } from '@/types/ai';
 import { AiFixGenerateButton } from './AiFixGenerateButton';
 import { AiFixMetadata } from './AiFixMetadata';
 import { DecisionRecommendationCard } from './DecisionRecommendationCard';
+import { OverallConfidenceBadge } from './OverallConfidenceBadge';
 import { RemediationProse } from './RemediationProse';
 import { UpgradeCommandCard } from './UpgradeCommandCard';
 
@@ -203,6 +204,7 @@ export function AiFixSection({
       {/* Cached / freshly generated result. */}
       {result ? (
         <div className="space-y-4">
+          <OverallConfidenceBadge confidence={result.bundle.overall_confidence} />
           <RemediationProse prose={result.bundle.remediation_prose} />
           <UpgradeCommandCard command={result.bundle.upgrade_command} />
           <DecisionRecommendationCard decision={result.bundle.decision_recommendation} />

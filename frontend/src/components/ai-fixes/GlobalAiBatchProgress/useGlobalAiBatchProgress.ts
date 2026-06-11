@@ -30,6 +30,18 @@ import { batchProgressQueryKey } from './AiBatchProgressProvider';
  * provider, which matches the test expectation of a deterministic
  * state.
  */
+function isTrackableStatus(status: AiBatchProgress['status'] | undefined): boolean {
+  // A run/batch is worth subscribing to only while it's heading somewhere.
+  // Terminal states (and ``undefined``, i.e. an idle 204 → null) must NOT
+  // register — otherwise the provider's terminal teardown re-fires forever.
+  return (
+    status === 'pending' ||
+    status === 'queued' ||
+    status === 'in_progress' ||
+    status === 'paused_budget'
+  );
+}
+
 export function useGlobalAiBatchProgress(
   runId: number | null,
   args: {
@@ -40,33 +52,48 @@ export function useGlobalAiBatchProgress(
 ) {
   const { enabled = true, batchId = null, scopeLabel = null } = args;
   const ctx = useContext(AiBatchProgressContext);
+  // Pull the *stable* register callback rather than depending on ``ctx``.
+  // The provider's context value changes identity every time its tracked
+  // set mutates; depending on the whole ``ctx`` made this effect re-run on
+  // every (un)register, so a terminal/idle unregister immediately
+  // re-registered — an infinite ~9s poll loop. ``register`` is a
+  // ``useCallback([])``, so this effect now fires on real state changes only.
+  const register = ctx?.register;
   const active = enabled && runId != null;
 
-  useEffect(() => {
-    if (!active || !ctx) return;
-    ctx.register({
-      runId: runId as number,
-      batchId,
-      scopeLabel,
-    });
-    // Deliberately do NOT auto-unregister on unmount. The provider
-    // keeps the entry tracked until terminal status, so navigating
-    // away doesn't kill the subscription. Auto-cleanup happens
-    // server-side (terminal event) + provider linger timer.
-  }, [active, ctx, runId, batchId, scopeLabel]);
-
-  return useQuery<AiBatchProgress>({
+  const query = useQuery<AiBatchProgress | null>({
     queryKey: batchProgressQueryKey(runId ?? -1, batchId),
     queryFn: ({ signal }) => {
       if (batchId == null) {
         return getRunAiFixProgress(runId as number, signal);
       }
       return getRunAiBatch(runId as number, batchId, signal).then(
-        (detail) => detail.progress as AiBatchProgress,
+        (detail) => detail.progress ?? null,
       );
     },
     enabled: active,
   });
+
+  // Only subscribe (open the SSE stream / poll fallback) while a batch is
+  // actually running. An idle run (204 → null) or a finished batch never
+  // registers, so there's no background polling when nothing is happening.
+  // A freshly triggered batch seeds this cache key with a live status (see
+  // useTriggerScopedAiFixes), which flips ``shouldTrack`` and subscribes.
+  const shouldTrack = active && isTrackableStatus(query.data?.status);
+  useEffect(() => {
+    if (!shouldTrack || !register) return;
+    register({
+      runId: runId as number,
+      batchId,
+      scopeLabel,
+    });
+    // Deliberately do NOT auto-unregister on unmount. The provider keeps
+    // the entry tracked until terminal status, so navigating away doesn't
+    // kill the subscription. Auto-cleanup happens server-side (terminal
+    // event) + provider linger timer.
+  }, [shouldTrack, register, runId, batchId, scopeLabel]);
+
+  return query;
 }
 
 /**

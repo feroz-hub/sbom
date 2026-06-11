@@ -18,6 +18,12 @@ import { LifetimeStats } from '@/components/dashboard/LifetimeStats/LifetimeStat
 import { TopVulnerableSboms } from '@/components/dashboard/TopVulnerableSboms';
 import { ActivityFeed } from '@/components/dashboard/ActivityFeed';
 import { AiConfigBanner } from '@/components/dashboard/AiConfigBanner';
+import { CopilotPanel } from '@/components/dashboard/advanced/CopilotPanel';
+import { ForecastCard } from '@/components/dashboard/advanced/ForecastCard';
+import { ExploitationOutlookCard } from '@/components/dashboard/advanced/ExploitationOutlookCard';
+import { PortfolioRiskMap } from '@/components/dashboard/advanced/PortfolioRiskMap';
+import { RiskMatrixCard } from '@/components/dashboard/advanced/RiskMatrixCard';
+import { RemediationPanel } from '@/components/dashboard/advanced/RemediationPanel';
 import {
   getDashboardLifetime,
   getDashboardPosture,

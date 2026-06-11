@@ -47,6 +47,7 @@ EX1_CRITICAL_KEV_WITH_FIX_BUNDLE: dict = {
         "confidence": "high",
         "caveats": [],
     },
+    "overall_confidence": "high",
 }
 
 
@@ -82,6 +83,7 @@ EX2_MEDIUM_WITH_FIX_BUNDLE: dict = {
         "confidence": "high",
         "caveats": [],
     },
+    "overall_confidence": "high",
 }
 
 
@@ -119,6 +121,8 @@ EX3_HIGH_NO_FIX_BUNDLE: dict = {
             "Replacement-package guidance requires human review of usage patterns",
         ],
     },
+    # No upstream fix + unmaintained package → least trustworthy answer.
+    "overall_confidence": "low",
 }
 
 

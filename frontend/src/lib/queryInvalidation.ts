@@ -59,6 +59,16 @@ export function invalidateDashboardTiles(qc: QueryClient): void {
   qc.invalidateQueries({ queryKey: ['dashboard-posture'] });
   qc.invalidateQueries({ queryKey: ['dashboard-trend'] });
   qc.invalidateQueries({ queryKey: ['dashboard-lifetime'] });
+  // Dashboard v4 advanced tiles — all derived from the same run/finding
+  // universe, so they bust together with the classic tiles.
+  qc.invalidateQueries({ queryKey: ['dashboard-forecast'] });
+  qc.invalidateQueries({ queryKey: ['dashboard-exploitation'] });
+  qc.invalidateQueries({ queryKey: ['dashboard-remediation'] });
+  qc.invalidateQueries({ queryKey: ['dashboard-risk-map'] });
+  qc.invalidateQueries({ queryKey: ['dashboard-risk-matrix'] });
+  // The Copilot briefing is grounded in those same numbers; the server
+  // cache busts on new data, the client cache must follow.
+  qc.invalidateQueries({ queryKey: ['copilot-briefing'] });
 }
 
 /**

@@ -11,6 +11,85 @@ the **top**.
 
 ---
 
+## v3 — 2026-06-09 (overall-response confidence)
+
+**Files:**
+* [`v3.system.txt`](../../app/ai/prompts/v3.system.txt)
+* [`v3.user.txt`](../../app/ai/prompts/v3.user.txt)
+
+**Schema version:** 1 (unchanged — see below).
+
+**Change in plain language:**
+The bundle gained a fourth top-level key, `overall_confidence`
+(`high` / `medium` / `low`) — the model's self-assessed confidence in the
+*entire* response, distinct from the existing per-section `confidence`
+fields on `remediation_prose` and `decision_recommendation` (each of which
+scopes only its own section). A new hard rule (§9 in `v3.system.txt`)
+tells the model to reserve `"high"` for a grounded fix version plus an
+unambiguous exploitation picture and to drop to `"low"` when
+`fix_versions` is empty or the data is sparse/conflicting. The UI surfaces
+this prominently at the top of the AI-fix section so a reader can
+calibrate trust before reading the detail. The value is **model
+self-reported and NOT server-clamped** — `_post_validate` leaves it alone.
+
+**Cache impact:** Full invalidation on next read. `PROMPT_VERSION` is part
+of the cache key, so the v2→v3 bump re-keys every `ai_fix_cache` row; the
+next batch run is full cold-cache cost. This is deliberate — stale v2
+bundles predate the field and would otherwise serve a defaulted
+`"medium"`. Old v2 rows are orphaned and expire naturally (7d KEV / 30d).
+
+**Why `SCHEMA_VERSION` was NOT bumped:** The new field is backward
+compatible — it carries a default (`"medium"`), so any historical
+serialized bundle (three keys) still validates. Bumping `SCHEMA_VERSION`
+would mark *all* rows stale on read regardless of prompt version, which is
+redundant with the prompt re-key and contradicts the rule in
+[`schemas.py`](../../app/ai/schemas.py) ("only bump when the bundle shape
+changes in a backward-incompatible way"). Persistence is handled by a new
+nullable `overall_confidence` column on `AiFixCache`
+([migration 019](../../alembic/versions/019_ai_fix_cache_overall_confidence.py));
+`read_cache` coerces `NULL` (pre-019 rows) to `"medium"`.
+
+**Validation evidence:**
+* Prompt-level: hard rule §9 + the user-prompt constraint summary.
+* Schema-level: `_normalize_overall_confidence` (casing) + the `ConfidenceTier`
+  Literal (rejects junk).
+* Tests: `tests/ai/test_schemas.py` (default-when-omitted, case
+  normalisation, invalid-value rejection, 4-key JSON-schema export);
+  `tests/ai/test_prompts_and_cache.py` (`PROMPT_VERSION == "v3"`, prompt
+  contains `overall_confidence`, cache round-trip persists it, UPSERT
+  updates it, `NULL`→`"medium"` fallback); `tests/ai/test_fix_generator.py`
+  (E2E miss+hit threading and capitalised-enum normalisation);
+  `frontend/.../OverallConfidenceBadge.test.tsx` (all three tier branches).
+
+---
+
+## v2 — 2026-05-XX (Phase 5 format hardening) — backfilled 2026-06-09
+
+> Backfilled retroactively: the v2 bump shipped without a HISTORY entry.
+> Reconstructed here from the prompt files and `PROMPT_VERSION` comment so
+> the log is complete and the on-disk prompts are no longer undocumented.
+
+**Files:**
+* [`v2.system.txt`](../../app/ai/prompts/v2.system.txt)
+* [`v2.user.txt`](../../app/ai/prompts/v2.user.txt)
+
+**Schema version:** 1.
+
+**Change in plain language:**
+Format-only hardening (no semantic change to the advice). Added explicit
+instructions to address Gemini / OpenAI-compat malformed output that
+surfaced as `schema_parse_failed`: no markdown code fences, no
+preamble/trailing commentary, lowercase `snake_case` enums, exact
+`snake_case` field names, and "first char `{`, last char `}`". The schema
+loosening that accompanied this era (case-insensitive enums, ignored
+extra fields, sensible defaults for the secondary classification fields)
+lives in [`schemas.py`](../../app/ai/schemas.py) and is covered by
+`tests/ai/test_schemas_lenient.py`.
+
+**Cache impact:** Full invalidation on next read (the v1→v2 re-key).
+
+---
+
 ## v1 — 2026-05-03 (Phase 2 launch)
 
 **Files:**

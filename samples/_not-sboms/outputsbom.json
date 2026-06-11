@@ -1,0 +1,1246 @@
+​{
+  "resultsPerPage": 51,
+  "startIndex": 0,
+  "totalResults": 51,
+  "format": "NVD_CVE",
+  "version": "2.0",
+  "timestamp": "2026-03-05T05:30:00.000Z",
+  "vulnerabilities": [
+    {
+      "cve": {
+        "id": "CVE-2026-00001",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-01-01T10:00:00.000Z",
+        "lastModified": "2026-01-03T10:00:00.000Z",
+        "descriptions": [
+          { "lang": "en", "value": "Synthetic sample vulnerability #1 (remote code execution via improper input handling)." }
+        ],
+        "metrics": {
+          "cvssMetricV31": [
+            {
+              "source": "nvd@nist.gov",
+              "type": "Primary",
+              "cvssData": {
+                "version": "3.1",
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+                "baseScore": 9.8,
+                "baseSeverity": "CRITICAL"
+              },
+              "exploitabilityScore": 3.9,
+              "impactScore": 5.9
+            }
+          ]
+        },
+        "weaknesses": [
+          { "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-20" }] }
+        ],
+        "references": [
+          { "url": "https://example.org/advisory/CVE-2026-00001", "source": "example.org", "tags": ["Vendor Advisory"] }
+        ]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00002",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-01-02T10:00:00.000Z",
+        "lastModified": "2026-01-04T10:00:00.000Z",
+        "descriptions": [
+          { "lang": "en", "value": "Synthetic sample vulnerability #2 (authentication bypass under specific configuration)." }
+        ],
+        "metrics": {
+          "cvssMetricV31": [
+            {
+              "source": "nvd@nist.gov",
+              "type": "Primary",
+              "cvssData": {
+                "version": "3.1",
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N",
+                "baseScore": 9.1,
+                "baseSeverity": "CRITICAL"
+              },
+              "exploitabilityScore": 3.9,
+              "impactScore": 5.2
+            }
+          ]
+        },
+        "weaknesses": [
+          { "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-287" }] }
+        ],
+        "references": [
+          { "url": "https://example.org/advisory/CVE-2026-00002", "source": "example.org", "tags": ["Third Party Advisory"] }
+        ]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00003",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-01-03T10:00:00.000Z",
+        "lastModified": "2026-01-05T10:00:00.000Z",
+        "descriptions": [
+          { "lang": "en", "value": "Synthetic sample vulnerability #3 (stored XSS in administrative UI input fields)." }
+        ],
+        "metrics": {
+          "cvssMetricV31": [
+            {
+              "source": "nvd@nist.gov",
+              "type": "Primary",
+              "cvssData": {
+                "version": "3.1",
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:L/UI:R/S:C/C:L/I:L/A:N",
+                "baseScore": 6.4,
+                "baseSeverity": "MEDIUM"
+              },
+              "exploitabilityScore": 2.3,
+              "impactScore": 3.5
+            }
+          ]
+        },
+        "weaknesses": [
+          { "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-79" }] }
+        ],
+        "references": [
+          { "url": "https://example.org/advisory/CVE-2026-00003", "source": "example.org", "tags": ["Vendor Advisory"] }
+        ]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00004",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-01-04T10:00:00.000Z",
+        "lastModified": "2026-01-06T10:00:00.000Z",
+        "descriptions": [
+          { "lang": "en", "value": "Synthetic sample vulnerability #4 (SQL injection via unsanitized query parameter)." }
+        ],
+        "metrics": {
+          "cvssMetricV31": [
+            {
+              "source": "nvd@nist.gov",
+              "type": "Primary",
+              "cvssData": {
+                "version": "3.1",
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:N",
+                "baseScore": 8.8,
+                "baseSeverity": "HIGH"
+              },
+              "exploitabilityScore": 2.8,
+              "impactScore": 5.9
+            }
+          ]
+        },
+        "weaknesses": [
+          { "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-89" }] }
+        ],
+        "references": [
+          { "url": "https://example.org/advisory/CVE-2026-00004", "source": "example.org", "tags": ["Vendor Advisory"] }
+        ]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00005",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-01-05T10:00:00.000Z",
+        "lastModified": "2026-01-07T10:00:00.000Z",
+        "descriptions": [
+          { "lang": "en", "value": "Synthetic sample vulnerability #5 (path traversal leading to arbitrary file read)." }
+        ],
+        "metrics": {
+          "cvssMetricV31": [
+            {
+              "source": "nvd@nist.gov",
+              "type": "Primary",
+              "cvssData": {
+                "version": "3.1",
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
+                "baseScore": 7.5,
+                "baseSeverity": "HIGH"
+              },
+              "exploitabilityScore": 3.9,
+              "impactScore": 3.6
+            }
+          ]
+        },
+        "weaknesses": [
+          { "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-22" }] }
+        ],
+        "references": [
+          { "url": "https://example.org/advisory/CVE-2026-00005", "source": "example.org", "tags": ["Third Party Advisory"] }
+        ]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00006",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-01-06T10:00:00.000Z",
+        "lastModified": "2026-01-08T10:00:00.000Z",
+        "descriptions": [
+          { "lang": "en", "value": "Synthetic sample vulnerability #6 (information disclosure via verbose error messages)." }
+        ],
+        "metrics": {
+          "cvssMetricV31": [
+            {
+              "source": "nvd@nist.gov",
+              "type": "Primary",
+              "cvssData": {
+                "version": "3.1",
+                "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:N/A:N",
+                "baseScore": 5.3,
+                "baseSeverity": "MEDIUM"
+              },
+              "exploitabilityScore": 2.2,
+              "impactScore": 1.4
+            }
+          ]
+        },
+        "weaknesses": [
+          { "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-200" }] }
+        ],
+        "references": [
+          { "url": "https://example.org/advisory/CVE-2026-00006", "source": "example.org", "tags": ["Vendor Advisory"] }
+        ]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00007",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-01-07T10:00:00.000Z",
+        "lastModified": "2026-01-09T10:00:00.000Z",
+        "descriptions": [
+          { "lang": "en", "value": "Synthetic sample vulnerability #7 (missing authorization on a sensitive endpoint)." }
+        ],
+        "metrics": {
+          "cvssMetricV31": [
+            {
+              "source": "nvd@nist.gov",
+              "type": "Primary",
+              "cvssData": {
+                "version": "3.1",
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:L/A:N",
+                "baseScore": 7.3,
+                "baseSeverity": "HIGH"
+              },
+              "exploitabilityScore": 2.8,
+              "impactScore": 3.4
+            }
+          ]
+        },
+        "weaknesses": [
+          { "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-862" }] }
+        ],
+        "references": [
+          { "url": "https://example.org/advisory/CVE-2026-00007", "source": "example.org", "tags": ["Vendor Advisory"] }
+        ]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00008",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-01-08T10:00:00.000Z",
+        "lastModified": "2026-01-10T10:00:00.000Z",
+        "descriptions": [
+          { "lang": "en", "value": "Synthetic sample vulnerability #8 (weak cryptographic transport configuration)." }
+        ],
+        "metrics": {
+          "cvssMetricV31": [
+            {
+              "source": "nvd@nist.gov",
+              "type": "Primary",
+              "cvssData": {
+                "version": "3.1",
+                "vectorString": "CVSS:3.1/AV:A/AC:H/PR:N/UI:R/S:U/C:L/I:N/A:N",
+                "baseScore": 3.5,
+                "baseSeverity": "LOW"
+              },
+              "exploitabilityScore": 1.0,
+              "impactScore": 2.1
+            }
+          ]
+        },
+        "weaknesses": [
+          { "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-319" }] }
+        ],
+        "references": [
+          { "url": "https://example.org/advisory/CVE-2026-00008", "source": "example.org", "tags": ["Third Party Advisory"] }
+        ]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00009",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-01-09T10:00:00.000Z",
+        "lastModified": "2026-01-11T10:00:00.000Z",
+        "descriptions": [
+          { "lang": "en", "value": "Synthetic sample vulnerability #9 (improper input validation causes command injection)." }
+        ],
+        "metrics": {
+          "cvssMetricV31": [
+            {
+              "source": "nvd@nist.gov",
+              "type": "Primary",
+              "cvssData": {
+                "version": "3.1",
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N",
+                "baseScore": 9.1,
+                "baseSeverity": "CRITICAL"
+              },
+              "exploitabilityScore": 3.9,
+              "impactScore": 5.2
+            }
+          ]
+        },
+        "weaknesses": [
+          { "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-78" }] }
+        ],
+        "references": [
+          { "url": "https://example.org/advisory/CVE-2026-00009", "source": "example.org", "tags": ["Vendor Advisory"] }
+        ]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00010",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-01-10T10:00:00.000Z",
+        "lastModified": "2026-01-12T10:00:00.000Z",
+        "descriptions": [
+          { "lang": "en", "value": "Synthetic sample vulnerability #10 (race condition can cause denial of service)." }
+        ],
+        "metrics": {
+          "cvssMetricV31": [
+            {
+              "source": "nvd@nist.gov",
+              "type": "Primary",
+              "cvssData": {
+                "version": "3.1",
+                "vectorString": "CVSS:3.1/AV:L/AC:H/PR:L/UI:N/S:U/C:N/I:N/A:H",
+                "baseScore": 5.5,
+                "baseSeverity": "MEDIUM"
+              },
+              "exploitabilityScore": 1.0,
+              "impactScore": 4.2
+            }
+          ]
+        },
+        "weaknesses": [
+          { "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-362" }] }
+        ],
+        "references": [
+          { "url": "https://example.org/advisory/CVE-2026-00010", "source": "example.org", "tags": ["Third Party Advisory"] }
+        ]
+      }
+    },
+
+    {
+      "cve": {
+        "id": "CVE-2026-00011",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Modified",
+        "published": "2026-01-11T10:00:00.000Z",
+        "lastModified": "2026-01-13T10:00:00.000Z",
+        "descriptions": [
+          { "lang": "en", "value": "Synthetic sample vulnerability #11 (CSRF due to missing anti-CSRF tokens)." }
+        ],
+        "metrics": {
+          "cvssMetricV31": [
+            {
+              "source": "nvd@nist.gov",
+              "type": "Primary",
+              "cvssData": {
+                "version": "3.1",
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:L/A:N",
+                "baseScore": 6.1,
+                "baseSeverity": "MEDIUM"
+              },
+              "exploitabilityScore": 2.8,
+              "impactScore": 3.1
+            }
+          ]
+        },
+        "weaknesses": [
+          { "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-352" }] }
+        ],
+        "references": [
+          { "url": "https://example.org/advisory/CVE-2026-00011", "source": "example.org", "tags": ["Vendor Advisory"] }
+        ]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00012",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-01-12T10:00:00.000Z",
+        "lastModified": "2026-01-14T10:00:00.000Z",
+        "descriptions": [
+          { "lang": "en", "value": "Synthetic sample vulnerability #12 (deserialization of untrusted data leads to code execution)." }
+        ],
+        "metrics": {
+          "cvssMetricV31": [
+            {
+              "source": "nvd@nist.gov",
+              "type": "Primary",
+              "cvssData": {
+                "version": "3.1",
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+                "baseScore": 9.8,
+                "baseSeverity": "CRITICAL"
+              },
+              "exploitabilityScore": 3.9,
+              "impactScore": 5.9
+            }
+          ]
+        },
+        "weaknesses": [
+          { "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-502" }] }
+        ],
+        "references": [
+          { "url": "https://example.org/advisory/CVE-2026-00012", "source": "example.org", "tags": ["Third Party Advisory"] }
+        ]
+      }
+    },
+
+    {
+      "cve": {
+        "id": "CVE-2026-00013",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-01-13T10:00:00.000Z",
+        "lastModified": "2026-01-15T10:00:00.000Z",
+        "descriptions": [{ "lang": "en", "value": "Synthetic sample vulnerability #13 (buffer over-read in parsing routine)." }],
+        "metrics": {
+          "cvssMetricV31": [{
+            "source": "nvd@nist.gov",
+            "type": "Primary",
+            "cvssData": { "version": "3.1", "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N", "baseScore": 7.5, "baseSeverity": "HIGH" },
+            "exploitabilityScore": 3.9,
+            "impactScore": 3.6
+          }]
+        },
+        "weaknesses": [{ "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-125" }] }],
+        "references": [{ "url": "https://example.org/advisory/CVE-2026-00013", "source": "example.org", "tags": ["Vendor Advisory"] }]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00014",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-01-14T10:00:00.000Z",
+        "lastModified": "2026-01-16T10:00:00.000Z",
+        "descriptions": [{ "lang": "en", "value": "Synthetic sample vulnerability #14 (buffer overflow due to missing bounds checks)." }],
+        "metrics": {
+          "cvssMetricV31": [{
+            "source": "nvd@nist.gov",
+            "type": "Primary",
+            "cvssData": { "version": "3.1", "vectorString": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H", "baseScore": 7.8, "baseSeverity": "HIGH" },
+            "exploitabilityScore": 1.8,
+            "impactScore": 5.9
+          }]
+        },
+        "weaknesses": [{ "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-787" }] }],
+        "references": [{ "url": "https://example.org/advisory/CVE-2026-00014", "source": "example.org", "tags": ["Third Party Advisory"] }]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00015",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-01-15T10:00:00.000Z",
+        "lastModified": "2026-01-17T10:00:00.000Z",
+        "descriptions": [{ "lang": "en", "value": "Synthetic sample vulnerability #15 (open redirect may facilitate phishing)." }],
+        "metrics": {
+          "cvssMetricV31": [{
+            "source": "nvd@nist.gov",
+            "type": "Primary",
+            "cvssData": { "version": "3.1", "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:N/A:N", "baseScore": 4.3, "baseSeverity": "MEDIUM" },
+            "exploitabilityScore": 2.8,
+            "impactScore": 1.4
+          }]
+        },
+        "weaknesses": [{ "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-601" }] }],
+        "references": [{ "url": "https://example.org/advisory/CVE-2026-00015", "source": "example.org", "tags": ["Vendor Advisory"] }]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00016",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-01-16T10:00:00.000Z",
+        "lastModified": "2026-01-18T10:00:00.000Z",
+        "descriptions": [{ "lang": "en", "value": "Synthetic sample vulnerability #16 (weak password policy enables brute force attacks)." }],
+        "metrics": {
+          "cvssMetricV31": [{
+            "source": "nvd@nist.gov",
+            "type": "Primary",
+            "cvssData": { "version": "3.1", "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N", "baseScore": 7.3, "baseSeverity": "HIGH" },
+            "exploitabilityScore": 3.9,
+            "impactScore": 3.4
+          }]
+        },
+        "weaknesses": [{ "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-521" }] }],
+        "references": [{ "url": "https://example.org/advisory/CVE-2026-00016", "source": "example.org", "tags": ["Third Party Advisory"] }]
+      }
+    },
+
+    {
+      "cve": {
+        "id": "CVE-2026-00017",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-01-17T10:00:00.000Z",
+        "lastModified": "2026-01-19T10:00:00.000Z",
+        "descriptions": [{ "lang": "en", "value": "Synthetic sample vulnerability #17 (SSRF in URL fetch feature)." }],
+        "metrics": {
+          "cvssMetricV31": [{
+            "source": "nvd@nist.gov",
+            "type": "Primary",
+            "cvssData": { "version": "3.1", "vectorString": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:L/A:N", "baseScore": 8.3, "baseSeverity": "HIGH" },
+            "exploitabilityScore": 2.8,
+            "impactScore": 5.0
+          }]
+        },
+        "weaknesses": [{ "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-918" }] }],
+        "references": [{ "url": "https://example.org/advisory/CVE-2026-00017", "source": "example.org", "tags": ["Vendor Advisory"] }]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00018",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-01-18T10:00:00.000Z",
+        "lastModified": "2026-01-20T10:00:00.000Z",
+        "descriptions": [{ "lang": "en", "value": "Synthetic sample vulnerability #18 (XXE due to insecure XML parser settings)." }],
+        "metrics": {
+          "cvssMetricV31": [{
+            "source": "nvd@nist.gov",
+            "type": "Primary",
+            "cvssData": { "version": "3.1", "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N", "baseScore": 7.5, "baseSeverity": "HIGH" },
+            "exploitabilityScore": 3.9,
+            "impactScore": 3.6
+          }]
+        },
+        "weaknesses": [{ "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-611" }] }],
+        "references": [{ "url": "https://example.org/advisory/CVE-2026-00018", "source": "example.org", "tags": ["Third Party Advisory"] }]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00019",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-01-19T10:00:00.000Z",
+        "lastModified": "2026-01-21T10:00:00.000Z",
+        "descriptions": [{ "lang": "en", "value": "Synthetic sample vulnerability #19 (insecure direct object reference)." }],
+        "metrics": {
+          "cvssMetricV31": [{
+            "source": "nvd@nist.gov",
+            "type": "Primary",
+            "cvssData": { "version": "3.1", "vectorString": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:L/A:N", "baseScore": 7.3, "baseSeverity": "HIGH" },
+            "exploitabilityScore": 2.8,
+            "impactScore": 3.4
+          }]
+        },
+        "weaknesses": [{ "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-639" }] }],
+        "references": [{ "url": "https://example.org/advisory/CVE-2026-00019", "source": "example.org", "tags": ["Vendor Advisory"] }]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00020",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-01-20T10:00:00.000Z",
+        "lastModified": "2026-01-22T10:00:00.000Z",
+        "descriptions": [{ "lang": "en", "value": "Synthetic sample vulnerability #20 (directory listing enabled exposes sensitive content)." }],
+        "metrics": {
+          "cvssMetricV31": [{
+            "source": "nvd@nist.gov",
+            "type": "Primary",
+            "cvssData": { "version": "3.1", "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N", "baseScore": 5.3, "baseSeverity": "MEDIUM" },
+            "exploitabilityScore": 3.9,
+            "impactScore": 1.4
+          }]
+        },
+        "weaknesses": [{ "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-548" }] }],
+        "references": [{ "url": "https://example.org/advisory/CVE-2026-00020", "source": "example.org", "tags": ["Third Party Advisory"] }]
+      }
+    },
+
+    {
+      "cve": {
+        "id": "CVE-2026-00021",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-01-21T10:00:00.000Z",
+        "lastModified": "2026-01-23T10:00:00.000Z",
+        "descriptions": [{ "lang": "en", "value": "Synthetic sample vulnerability #21 (privilege escalation via insecure file permissions)." }],
+        "metrics": {
+          "cvssMetricV31": [{
+            "source": "nvd@nist.gov",
+            "type": "Primary",
+            "cvssData": { "version": "3.1", "vectorString": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H", "baseScore": 7.8, "baseSeverity": "HIGH" },
+            "exploitabilityScore": 1.8,
+            "impactScore": 5.9
+          }]
+        },
+        "weaknesses": [{ "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-276" }] }],
+        "references": [{ "url": "https://example.org/advisory/CVE-2026-00021", "source": "example.org", "tags": ["Vendor Advisory"] }]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00022",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-01-22T10:00:00.000Z",
+        "lastModified": "2026-01-24T10:00:00.000Z",
+        "descriptions": [{ "lang": "en", "value": "Synthetic sample vulnerability #22 (hard-coded credentials present in firmware image)." }],
+        "metrics": {
+          "cvssMetricV31": [{
+            "source": "nvd@nist.gov",
+            "type": "Primary",
+            "cvssData": { "version": "3.1", "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N", "baseScore": 9.1, "baseSeverity": "CRITICAL" },
+            "exploitabilityScore": 3.9,
+            "impactScore": 5.2
+          }]
+        },
+        "weaknesses": [{ "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-798" }] }],
+        "references": [{ "url": "https://example.org/advisory/CVE-2026-00022", "source": "example.org", "tags": ["Third Party Advisory"] }]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00023",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-01-23T10:00:00.000Z",
+        "lastModified": "2026-01-25T10:00:00.000Z",
+        "descriptions": [{ "lang": "en", "value": "Synthetic sample vulnerability #23 (improper access control allows data extraction)." }],
+        "metrics": {
+          "cvssMetricV31": [{
+            "source": "nvd@nist.gov",
+            "type": "Primary",
+            "cvssData": { "version": "3.1", "vectorString": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N", "baseScore": 7.7, "baseSeverity": "HIGH" },
+            "exploitabilityScore": 2.8,
+            "impactScore": 4.9
+          }]
+        },
+        "weaknesses": [{ "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-284" }] }],
+        "references": [{ "url": "https://example.org/advisory/CVE-2026-00023", "source": "example.org", "tags": ["Vendor Advisory"] }]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00024",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-01-24T10:00:00.000Z",
+        "lastModified": "2026-01-26T10:00:00.000Z",
+        "descriptions": [{ "lang": "en", "value": "Synthetic sample vulnerability #24 (improper validation of TLS certificate)." }],
+        "metrics": {
+          "cvssMetricV31": [{
+            "source": "nvd@nist.gov",
+            "type": "Primary",
+            "cvssData": { "version": "3.1", "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:L/A:N", "baseScore": 5.9, "baseSeverity": "MEDIUM" },
+            "exploitabilityScore": 2.2,
+            "impactScore": 3.1
+          }]
+        },
+        "weaknesses": [{ "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-295" }] }],
+        "references": [{ "url": "https://example.org/advisory/CVE-2026-00024", "source": "example.org", "tags": ["Third Party Advisory"] }]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00025",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-01-25T10:00:00.000Z",
+        "lastModified": "2026-01-27T10:00:00.000Z",
+        "descriptions": [{ "lang": "en", "value": "Synthetic sample vulnerability #25 (unsafe temporary file usage enables overwrite)." }],
+        "metrics": {
+          "cvssMetricV31": [{
+            "source": "nvd@nist.gov",
+            "type": "Primary",
+            "cvssData": { "version": "3.1", "vectorString": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:L/I:H/A:N", "baseScore": 6.7, "baseSeverity": "MEDIUM" },
+            "exploitabilityScore": 1.8,
+            "impactScore": 4.0
+          }]
+        },
+        "weaknesses": [{ "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-377" }] }],
+        "references": [{ "url": "https://example.org/advisory/CVE-2026-00025", "source": "example.org", "tags": ["Vendor Advisory"] }]
+      }
+    },
+
+    {
+      "cve": {
+        "id": "CVE-2026-00026",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-01-26T10:00:00.000Z",
+        "lastModified": "2026-01-28T10:00:00.000Z",
+        "descriptions": [{ "lang": "en", "value": "Synthetic sample vulnerability #26 (improper neutralization in log output causes log injection)." }],
+        "metrics": {
+          "cvssMetricV31": [{
+            "source": "nvd@nist.gov",
+            "type": "Primary",
+            "cvssData": { "version": "3.1", "vectorString": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:L/A:N", "baseScore": 7.3, "baseSeverity": "HIGH" },
+            "exploitabilityScore": 2.8,
+            "impactScore": 3.4
+          }]
+        },
+        "weaknesses": [{ "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-117" }] }],
+        "references": [{ "url": "https://example.org/advisory/CVE-2026-00026", "source": "example.org", "tags": ["Third Party Advisory"] }]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00027",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-01-27T10:00:00.000Z",
+        "lastModified": "2026-01-29T10:00:00.000Z",
+        "descriptions": [{ "lang": "en", "value": "Synthetic sample vulnerability #27 (missing rate limiting leads to account enumeration)." }],
+        "metrics": {
+          "cvssMetricV31": [{
+            "source": "nvd@nist.gov",
+            "type": "Primary",
+            "cvssData": { "version": "3.1", "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N", "baseScore": 5.3, "baseSeverity": "MEDIUM" },
+            "exploitabilityScore": 3.9,
+            "impactScore": 1.4
+          }]
+        },
+        "weaknesses": [{ "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-307" }] }],
+        "references": [{ "url": "https://example.org/advisory/CVE-2026-00027", "source": "example.org", "tags": ["Vendor Advisory"] }]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00028",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-01-28T10:00:00.000Z",
+        "lastModified": "2026-01-30T10:00:00.000Z",
+        "descriptions": [{ "lang": "en", "value": "Synthetic sample vulnerability #28 (use-after-free in memory management)." }],
+        "metrics": {
+          "cvssMetricV31": [{
+            "source": "nvd@nist.gov",
+            "type": "Primary",
+            "cvssData": { "version": "3.1", "vectorString": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H", "baseScore": 7.8, "baseSeverity": "HIGH" },
+            "exploitabilityScore": 1.8,
+            "impactScore": 5.9
+          }]
+        },
+        "weaknesses": [{ "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-416" }] }],
+        "references": [{ "url": "https://example.org/advisory/CVE-2026-00028", "source": "example.org", "tags": ["Third Party Advisory"] }]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00029",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-01-29T10:00:00.000Z",
+        "lastModified": "2026-01-31T10:00:00.000Z",
+        "descriptions": [{ "lang": "en", "value": "Synthetic sample vulnerability #29 (unsafe reflection leads to code execution in plugins)." }],
+        "metrics": {
+          "cvssMetricV31": [{
+            "source": "nvd@nist.gov",
+            "type": "Primary",
+            "cvssData": { "version": "3.1", "vectorString": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H", "baseScore": 8.8, "baseSeverity": "HIGH" },
+            "exploitabilityScore": 2.8,
+            "impactScore": 5.9
+          }]
+        },
+        "weaknesses": [{ "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-470" }] }],
+        "references": [{ "url": "https://example.org/advisory/CVE-2026-00029", "source": "example.org", "tags": ["Vendor Advisory"] }]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00030",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-01-30T10:00:00.000Z",
+        "lastModified": "2026-02-01T10:00:00.000Z",
+        "descriptions": [{ "lang": "en", "value": "Synthetic sample vulnerability #30 (insufficient session invalidation after logout)." }],
+        "metrics": {
+          "cvssMetricV31": [{
+            "source": "nvd@nist.gov",
+            "type": "Primary",
+            "cvssData": { "version": "3.1", "vectorString": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:L/A:N", "baseScore": 7.3, "baseSeverity": "HIGH" },
+            "exploitabilityScore": 2.8,
+            "impactScore": 3.4
+          }]
+        },
+        "weaknesses": [{ "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-613" }] }],
+        "references": [{ "url": "https://example.org/advisory/CVE-2026-00030", "source": "example.org", "tags": ["Third Party Advisory"] }]
+      }
+    },
+
+    {
+      "cve": {
+        "id": "CVE-2026-00031",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-01-31T10:00:00.000Z",
+        "lastModified": "2026-02-02T10:00:00.000Z",
+        "descriptions": [{ "lang": "en", "value": "Synthetic sample vulnerability #31 (improper restriction of excessive authentication attempts)." }],
+        "metrics": {
+          "cvssMetricV31": [{
+            "source": "nvd@nist.gov",
+            "type": "Primary",
+            "cvssData": { "version": "3.1", "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L", "baseScore": 5.3, "baseSeverity": "MEDIUM" },
+            "exploitabilityScore": 3.9,
+            "impactScore": 1.4
+          }]
+        },
+        "weaknesses": [{ "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-307" }] }],
+        "references": [{ "url": "https://example.org/advisory/CVE-2026-00031", "source": "example.org", "tags": ["Vendor Advisory"] }]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00032",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-02-01T10:00:00.000Z",
+        "lastModified": "2026-02-03T10:00:00.000Z",
+        "descriptions": [{ "lang": "en", "value": "Synthetic sample vulnerability #32 (incorrect permission assignment for critical resource)." }],
+        "metrics": {
+          "cvssMetricV31": [{
+            "source": "nvd@nist.gov",
+            "type": "Primary",
+            "cvssData": { "version": "3.1", "vectorString": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:L/I:L/A:N", "baseScore": 5.5, "baseSeverity": "MEDIUM" },
+            "exploitabilityScore": 1.8,
+            "impactScore": 3.1
+          }]
+        },
+        "weaknesses": [{ "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-732" }] }],
+        "references": [{ "url": "https://example.org/advisory/CVE-2026-00032", "source": "example.org", "tags": ["Third Party Advisory"] }]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00033",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-02-02T10:00:00.000Z",
+        "lastModified": "2026-02-04T10:00:00.000Z",
+        "descriptions": [{ "lang": "en", "value": "Synthetic sample vulnerability #33 (header injection allows response splitting)." }],
+        "metrics": {
+          "cvssMetricV31": [{
+            "source": "nvd@nist.gov",
+            "type": "Primary",
+            "cvssData": { "version": "3.1", "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:L/A:N", "baseScore": 6.1, "baseSeverity": "MEDIUM" },
+            "exploitabilityScore": 2.8,
+            "impactScore": 3.1
+          }]
+        },
+        "weaknesses": [{ "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-113" }] }],
+        "references": [{ "url": "https://example.org/advisory/CVE-2026-00033", "source": "example.org", "tags": ["Vendor Advisory"] }]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00034",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-02-03T10:00:00.000Z",
+        "lastModified": "2026-02-05T10:00:00.000Z",
+        "descriptions": [{ "lang": "en", "value": "Synthetic sample vulnerability #34 (improper output encoding causes reflected XSS)." }],
+        "metrics": {
+          "cvssMetricV31": [{
+            "source": "nvd@nist.gov",
+            "type": "Primary",
+            "cvssData": { "version": "3.1", "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N", "baseScore": 6.4, "baseSeverity": "MEDIUM" },
+            "exploitabilityScore": 2.8,
+            "impactScore": 3.5
+          }]
+        },
+        "weaknesses": [{ "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-79" }] }],
+        "references": [{ "url": "https://example.org/advisory/CVE-2026-00034", "source": "example.org", "tags": ["Third Party Advisory"] }]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00035",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-02-04T10:00:00.000Z",
+        "lastModified": "2026-02-06T10:00:00.000Z",
+        "descriptions": [{ "lang": "en", "value": "Synthetic sample vulnerability #35 (integer overflow leads to memory corruption)." }],
+        "metrics": {
+          "cvssMetricV31": [{
+            "source": "nvd@nist.gov",
+            "type": "Primary",
+            "cvssData": { "version": "3.1", "vectorString": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H", "baseScore": 7.8, "baseSeverity": "HIGH" },
+            "exploitabilityScore": 1.8,
+            "impactScore": 5.9
+          }]
+        },
+        "weaknesses": [{ "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-190" }] }],
+        "references": [{ "url": "https://example.org/advisory/CVE-2026-00035", "source": "example.org", "tags": ["Vendor Advisory"] }]
+      }
+    },
+
+    {
+      "cve": {
+        "id": "CVE-2026-00036",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-02-05T10:00:00.000Z",
+        "lastModified": "2026-02-07T10:00:00.000Z",
+        "descriptions": [{ "lang": "en", "value": "Synthetic sample vulnerability #36 (weak JWT validation enables token forgery)." }],
+        "metrics": {
+          "cvssMetricV31": [{
+            "source": "nvd@nist.gov",
+            "type": "Primary",
+            "cvssData": { "version": "3.1", "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N", "baseScore": 9.1, "baseSeverity": "CRITICAL" },
+            "exploitabilityScore": 3.9,
+            "impactScore": 5.2
+          }]
+        },
+        "weaknesses": [{ "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-347" }] }],
+        "references": [{ "url": "https://example.org/advisory/CVE-2026-00036", "source": "example.org", "tags": ["Third Party Advisory"] }]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00037",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-02-06T10:00:00.000Z",
+        "lastModified": "2026-02-08T10:00:00.000Z",
+        "descriptions": [{ "lang": "en", "value": "Synthetic sample vulnerability #37 (missing role check allows configuration change)." }],
+        "metrics": {
+          "cvssMetricV31": [{
+            "source": "nvd@nist.gov",
+            "type": "Primary",
+            "cvssData": { "version": "3.1", "vectorString": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:H/A:N", "baseScore": 7.7, "baseSeverity": "HIGH" },
+            "exploitabilityScore": 2.8,
+            "impactScore": 4.9
+          }]
+        },
+        "weaknesses": [{ "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-285" }] }],
+        "references": [{ "url": "https://example.org/advisory/CVE-2026-00037", "source": "example.org", "tags": ["Vendor Advisory"] }]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00038",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-02-07T10:00:00.000Z",
+        "lastModified": "2026-02-09T10:00:00.000Z",
+        "descriptions": [{ "lang": "en", "value": "Synthetic sample vulnerability #38 (improper logging can leak sensitive data)." }],
+        "metrics": {
+          "cvssMetricV31": [{
+            "source": "nvd@nist.gov",
+            "type": "Primary",
+            "cvssData": { "version": "3.1", "vectorString": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:N/A:N", "baseScore": 5.3, "baseSeverity": "MEDIUM" },
+            "exploitabilityScore": 2.8,
+            "impactScore": 1.4
+          }]
+        },
+        "weaknesses": [{ "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-532" }] }],
+        "references": [{ "url": "https://example.org/advisory/CVE-2026-00038", "source": "example.org", "tags": ["Third Party Advisory"] }]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00039",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-02-08T10:00:00.000Z",
+        "lastModified": "2026-02-10T10:00:00.000Z",
+        "descriptions": [{ "lang": "en", "value": "Synthetic sample vulnerability #39 (default credentials remain enabled after install)." }],
+        "metrics": {
+          "cvssMetricV31": [{
+            "source": "nvd@nist.gov",
+            "type": "Primary",
+            "cvssData": { "version": "3.1", "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N", "baseScore": 9.1, "baseSeverity": "CRITICAL" },
+            "exploitabilityScore": 3.9,
+            "impactScore": 5.2
+          }]
+        },
+        "weaknesses": [{ "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-1392" }] }],
+        "references": [{ "url": "https://example.org/advisory/CVE-2026-00039", "source": "example.org", "tags": ["Vendor Advisory"] }]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00040",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-02-09T10:00:00.000Z",
+        "lastModified": "2026-02-11T10:00:00.000Z",
+        "descriptions": [{ "lang": "en", "value": "Synthetic sample vulnerability #40 (denial of service via uncontrolled resource consumption)." }],
+        "metrics": {
+          "cvssMetricV31": [{
+            "source": "nvd@nist.gov",
+            "type": "Primary",
+            "cvssData": { "version": "3.1", "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H", "baseScore": 7.5, "baseSeverity": "HIGH" },
+            "exploitabilityScore": 3.9,
+            "impactScore": 3.6
+          }]
+        },
+        "weaknesses": [{ "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-400" }] }],
+        "references": [{ "url": "https://example.org/advisory/CVE-2026-00040", "source": "example.org", "tags": ["Third Party Advisory"] }]
+      }
+    },
+
+    {
+      "cve": {
+        "id": "CVE-2026-00041",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Modified",
+        "published": "2026-02-10T10:00:00.000Z",
+        "lastModified": "2026-02-12T10:00:00.000Z",
+        "descriptions": [{ "lang": "en", "value": "Synthetic sample vulnerability #41 (improper privilege management in background service)." }],
+        "metrics": {
+          "cvssMetricV31": [{
+            "source": "nvd@nist.gov",
+            "type": "Primary",
+            "cvssData": { "version": "3.1", "vectorString": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H", "baseScore": 7.8, "baseSeverity": "HIGH" },
+            "exploitabilityScore": 1.8,
+            "impactScore": 5.9
+          }]
+        },
+        "weaknesses": [{ "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-269" }] }],
+        "references": [{ "url": "https://example.org/advisory/CVE-2026-00041", "source": "example.org", "tags": ["Vendor Advisory"] }]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00042",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-02-11T10:00:00.000Z",
+        "lastModified": "2026-02-13T10:00:00.000Z",
+        "descriptions": [{ "lang": "en", "value": "Synthetic sample vulnerability #42 (improper state validation allows bypass of workflow checks)." }],
+        "metrics": {
+          "cvssMetricV31": [{
+            "source": "nvd@nist.gov",
+            "type": "Primary",
+            "cvssData": { "version": "3.1", "vectorString": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:L/A:N", "baseScore": 7.3, "baseSeverity": "HIGH" },
+            "exploitabilityScore": 2.8,
+            "impactScore": 3.4
+          }]
+        },
+        "weaknesses": [{ "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-841" }] }],
+        "references": [{ "url": "https://example.org/advisory/CVE-2026-00042", "source": "example.org", "tags": ["Third Party Advisory"] }]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00043",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-02-12T10:00:00.000Z",
+        "lastModified": "2026-02-14T10:00:00.000Z",
+        "descriptions": [{ "lang": "en", "value": "Synthetic sample vulnerability #43 (improper authentication on management interface)." }],
+        "metrics": {
+          "cvssMetricV31": [{
+            "source": "nvd@nist.gov",
+            "type": "Primary",
+            "cvssData": { "version": "3.1", "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N", "baseScore": 9.1, "baseSeverity": "CRITICAL" },
+            "exploitabilityScore": 3.9,
+            "impactScore": 5.2
+          }]
+        },
+        "weaknesses": [{ "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-306" }] }],
+        "references": [{ "url": "https://example.org/advisory/CVE-2026-00043", "source": "example.org", "tags": ["Vendor Advisory"] }]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00044",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-02-13T10:00:00.000Z",
+        "lastModified": "2026-02-15T10:00:00.000Z",
+        "descriptions": [{ "lang": "en", "value": "Synthetic sample vulnerability #44 (insecure randomness used for session tokens)." }],
+        "metrics": {
+          "cvssMetricV31": [{
+            "source": "nvd@nist.gov",
+            "type": "Primary",
+            "cvssData": { "version": "3.1", "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N", "baseScore": 7.4, "baseSeverity": "HIGH" },
+            "exploitabilityScore": 2.2,
+            "impactScore": 5.2
+          }]
+        },
+        "weaknesses": [{ "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-338" }] }],
+        "references": [{ "url": "https://example.org/advisory/CVE-2026-00044", "source": "example.org", "tags": ["Third Party Advisory"] }]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00045",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-02-14T10:00:00.000Z",
+        "lastModified": "2026-02-16T10:00:00.000Z",
+        "descriptions": [{ "lang": "en", "value": "Synthetic sample vulnerability #45 (insecure default configuration exposes admin console)." }],
+        "metrics": {
+          "cvssMetricV31": [{
+            "source": "nvd@nist.gov",
+            "type": "Primary",
+            "cvssData": { "version": "3.1", "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N", "baseScore": 7.3, "baseSeverity": "HIGH" },
+            "exploitabilityScore": 3.9,
+            "impactScore": 3.4
+          }]
+        },
+        "weaknesses": [{ "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-1188" }] }],
+        "references": [{ "url": "https://example.org/advisory/CVE-2026-00045", "source": "example.org", "tags": ["Vendor Advisory"] }]
+      }
+    },
+
+    {
+      "cve": {
+        "id": "CVE-2026-00046",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-02-15T10:00:00.000Z",
+        "lastModified": "2026-02-17T10:00:00.000Z",
+        "descriptions": [{ "lang": "en", "value": "Synthetic sample vulnerability #46 (improper boundary checks in image decoder)." }],
+        "metrics": {
+          "cvssMetricV31": [{
+            "source": "nvd@nist.gov",
+            "type": "Primary",
+            "cvssData": { "version": "3.1", "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:N/A:H", "baseScore": 7.5, "baseSeverity": "HIGH" },
+            "exploitabilityScore": 2.8,
+            "impactScore": 3.6
+          }]
+        },
+        "weaknesses": [{ "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-787" }] }],
+        "references": [{ "url": "https://example.org/advisory/CVE-2026-00046", "source": "example.org", "tags": ["Third Party Advisory"] }]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00047",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-02-16T10:00:00.000Z",
+        "lastModified": "2026-02-18T10:00:00.000Z",
+        "descriptions": [{ "lang": "en", "value": "Synthetic sample vulnerability #47 (insufficient input validation in API payload processing)." }],
+        "metrics": {
+          "cvssMetricV31": [{
+            "source": "nvd@nist.gov",
+            "type": "Primary",
+            "cvssData": { "version": "3.1", "vectorString": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:L/A:N", "baseScore": 7.3, "baseSeverity": "HIGH" },
+            "exploitabilityScore": 2.8,
+            "impactScore": 3.4
+          }]
+        },
+        "weaknesses": [{ "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-20" }] }],
+        "references": [{ "url": "https://example.org/advisory/CVE-2026-00047", "source": "example.org", "tags": ["Vendor Advisory"] }]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00048",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-02-17T10:00:00.000Z",
+        "lastModified": "2026-02-19T10:00:00.000Z",
+        "descriptions": [{ "lang": "en", "value": "Synthetic sample vulnerability #48 (improper handling of exceptional conditions causes crash)." }],
+        "metrics": {
+          "cvssMetricV31": [{
+            "source": "nvd@nist.gov",
+            "type": "Primary",
+            "cvssData": { "version": "3.1", "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H", "baseScore": 7.5, "baseSeverity": "HIGH" },
+            "exploitabilityScore": 3.9,
+            "impactScore": 3.6
+          }]
+        },
+        "weaknesses": [{ "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-703" }] }],
+        "references": [{ "url": "https://example.org/advisory/CVE-2026-00048", "source": "example.org", "tags": ["Third Party Advisory"] }]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00049",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-02-18T10:00:00.000Z",
+        "lastModified": "2026-02-20T10:00:00.000Z",
+        "descriptions": [{ "lang": "en", "value": "Synthetic sample vulnerability #49 (improper access control for API keys)." }],
+        "metrics": {
+          "cvssMetricV31": [{
+            "source": "nvd@nist.gov",
+            "type": "Primary",
+            "cvssData": { "version": "3.1", "vectorString": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N", "baseScore": 7.7, "baseSeverity": "HIGH" },
+            "exploitabilityScore": 2.8,
+            "impactScore": 4.9
+          }]
+        },
+        "weaknesses": [{ "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-522" }] }],
+        "references": [{ "url": "https://example.org/advisory/CVE-2026-00049", "source": "example.org", "tags": ["Vendor Advisory"] }]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00050",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Modified",
+        "published": "2026-02-19T10:00:00.000Z",
+        "lastModified": "2026-02-21T10:00:00.000Z",
+        "descriptions": [{ "lang": "en", "value": "Synthetic sample vulnerability #50 (misconfiguration exposes internal debug endpoints)." }],
+        "metrics": {
+          "cvssMetricV31": [{
+            "source": "nvd@nist.gov",
+            "type": "Primary",
+            "cvssData": { "version": "3.1", "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N", "baseScore": 5.3, "baseSeverity": "MEDIUM" },
+            "exploitabilityScore": 3.9,
+            "impactScore": 1.4
+          }]
+        },
+        "weaknesses": [{ "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-215" }] }],
+        "references": [{ "url": "https://example.org/advisory/CVE-2026-00050", "source": "example.org", "tags": ["Third Party Advisory"] }]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-00051",
+        "sourceIdentifier": "cna@example.org",
+        "vulnStatus": "Analyzed",
+        "published": "2026-02-20T10:00:00.000Z",
+        "lastModified": "2026-02-22T10:00:00.000Z",
+        "descriptions": [{ "lang": "en", "value": "Synthetic sample vulnerability #51 (heap buffer overflow via crafted input)." }],
+        "metrics": {
+          "cvssMetricV31": [{
+            "source": "nvd@nist.gov",
+            "type": "Primary",
+            "cvssData": { "version": "3.1", "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", "baseScore": 9.8, "baseSeverity": "CRITICAL" },
+            "exploitabilityScore": 3.9,
+            "impactScore": 5.9
+          }]
+        },
+        "weaknesses": [{ "source": "nvd@nist.gov", "type": "Primary", "description": [{ "lang": "en", "value": "CWE-787" }] }],
+        "references": [{ "url": "https://example.org/advisory/CVE-2026-00051", "source": "example.org", "tags": ["Vendor Advisory"] }]
+      }
+    }
+  ]
+}
