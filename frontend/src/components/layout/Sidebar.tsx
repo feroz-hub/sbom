@@ -109,9 +109,7 @@ export function Sidebar() {
           mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
         )}
       >
-        {/* Brand bar — label slides + fades while the rail narrows; the logo
-            block stays put so nothing jumps (px-4 ≈ centered in the 64px rail). */}
-        <div className="flex shrink-0 items-center gap-3 border-b border-white/10 px-4 py-4 sidebar-brand-bar">
+        <div className="flex shrink-0 items-center gap-3 px-4 py-4 sidebar-brand-bar">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/20 bg-white/10 shadow-inner">
             <span className="text-xs font-bold leading-none tracking-tight text-white">HCL</span>
           </div>
@@ -251,7 +249,7 @@ function NavLink({
             'px-3 py-2.5',
             collapsed && 'md:px-[15px]',
             isActive
-              ? 'bg-hcl-violet text-white shadow-md shadow-black/15 ring-1 ring-white/10'
+              ? 'sidebar-item-active text-white font-semibold'
               : 'text-slate-100 hover:bg-white/10 hover:text-white',
           )}
         >
@@ -347,7 +345,7 @@ function NavLink({
         'px-3 py-2.5',
         collapsed && 'md:px-[15px]',
         isActive
-          ? 'bg-hcl-blue text-white shadow-md shadow-black/15 ring-1 ring-white/10'
+          ? 'sidebar-item-active text-white font-semibold'
           : 'text-slate-100 hover:bg-white/10 hover:text-white',
       )}
     >
@@ -367,16 +365,6 @@ function NavLink({
       >
         {item.label}
       </span>
-      {isActive && (
-        <span
-          className={cn(
-            'ml-auto h-4 w-1 shrink-0 rounded-full bg-hcl-cyan shadow-[0_0_12px_rgba(0,178,226,0.6)]',
-            'transition-opacity duration-300 ease-in-out motion-reduce:transition-none',
-            collapsed && 'md:w-0 md:opacity-0',
-          )}
-          aria-hidden
-        />
-      )}
     </Link>
   );
 }
@@ -463,8 +451,7 @@ function SidebarSection({
   iconClassName?: string;
   children: ReactNode;
 }) {
-  return (
-    <section className="px-2 py-2 border-t border-white/5">
+    <section className="px-2 py-2 border-t border-white/10">
       <p className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-200">
         <Icon className={cn('h-3 w-3', iconClassName)} aria-hidden />
         {title}

@@ -22,9 +22,11 @@
   --color-hcl-accent: #0099cc;
   --color-hcl-violet: #7c3aa8; /* HCLTech violet — lightened */
 
-  /* Sidebar: lighter HCLTech violet (still dark enough for white text) */
-  --color-sidebar: #5a2d8f;
-  --color-sidebar-accent: #7c3aa8;
+  /* Sidebar: deep HCLTech-navy rail */
+  --color-sidebar: #0e2143;
+  --color-sidebar-rail-start: #122a52;
+  --color-sidebar-rail-end: #0a1730;
+  --color-sidebar-accent: #00b2e2;
 
   --focus-ring-color: #0067b1;
   --focus-ring-width: 2px;
@@ -100,8 +102,11 @@
   --color-hcl-accent: #38d4ff;
   --color-hcl-violet: #9457c4; /* HCLTech violet — lightened (dark theme) */
 
-  --color-sidebar: #3d1f63;
-  --color-sidebar-accent: #9457c4;
+  /* Sidebar: deep HCLTech-navy rail (dark theme) */
+  --color-sidebar: #070f1f;
+  --color-sidebar-rail-start: #0a1730;
+  --color-sidebar-rail-end: #040914;
+  --color-sidebar-accent: #38d4ff;
 
   --focus-ring-color: #38bdf8;
 
@@ -198,25 +203,23 @@
     background: linear-gradient(90deg, var(--color-sidebar) 0%, var(--color-hcl-blue) 100%);
   }
 
-  /** Sidebar masthead — HCLTech violet depth */
+  /** Sidebar masthead — navy to brand-blue gradient with a cyan hairline underline. */
   .sidebar-brand-bar {
     background: linear-gradient(
-      125deg,
-      var(--color-sidebar) 0%,
-      color-mix(in srgb, var(--color-hcl-violet) 42%, var(--color-sidebar)) 42%,
-      #1a0930 100%
+      135deg,
+      var(--color-sidebar-rail-start) 0%,
+      var(--color-hcl-blue) 100%
     );
-    box-shadow: inset 0 -1px 0 rgba(0, 178, 226, 0.22);
+    border-bottom: 1px solid color-mix(in srgb, var(--color-hcl-cyan) 30%, transparent);
   }
 
   .dark .sidebar-brand-bar {
     background: linear-gradient(
-      125deg,
-      var(--color-sidebar) 0%,
-      color-mix(in srgb, var(--color-hcl-violet) 48%, var(--color-sidebar)) 40%,
-      #120620 100%
+      135deg,
+      var(--color-sidebar-rail-start) 0%,
+      var(--color-hcl-blue) 100%
     );
-    box-shadow: inset 0 -1px 0 rgba(56, 212, 255, 0.18);
+    border-bottom: 1px solid color-mix(in srgb, var(--color-hcl-cyan) 40%, transparent);
   }
 
   /** Sidebar rail — vertical navy depth so the rail reads as one solid,
@@ -224,30 +227,49 @@
   .sidebar-rail {
     background: linear-gradient(
       180deg,
-      #122a52 0%,
+      var(--color-sidebar-rail-start) 0%,
       var(--color-sidebar) 46%,
-      #0a1730 100%
+      var(--color-sidebar-rail-end) 100%
     );
   }
 
   .dark .sidebar-rail {
-    background: linear-gradient(180deg, #0d203e 0%, var(--color-sidebar) 50%, #050d1b 100%);
+    background: linear-gradient(
+      180deg,
+      var(--color-sidebar-rail-start) 0%,
+      var(--color-sidebar) 50%,
+      var(--color-sidebar-rail-end) 100%
+    );
   }
 
   /** Active nav pill — brand-blue gradient with an inner highlight; the
       single saturated element on the rail, so the eye lands on "where am I". */
   .sidebar-item-active {
+    position: relative;
     background: linear-gradient(92deg, #0067b1 0%, #008ecf 100%);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.16),
-      0 8px 18px -8px rgba(0, 142, 207, 0.65);
+      inset 0 1px 0 rgba(255, 255, 255, 0.2),
+      0 4px 12px rgba(0, 103, 177, 0.35);
+  }
+
+  .sidebar-item-active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 16px;
+    border-radius: 0 4px 4px 0;
+    background-color: var(--color-sidebar-accent);
+    box-shadow: 0 0 8px var(--color-sidebar-accent);
   }
 
   .dark .sidebar-item-active {
     background: linear-gradient(92deg, #0a74c0 0%, #00a0dd 100%);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.14),
-      0 8px 20px -8px rgba(0, 160, 221, 0.5);
+      inset 0 1px 0 rgba(255, 255, 255, 0.16),
+      0 4px 14px rgba(0, 160, 221, 0.3);
   }
 
   /** Mono stack for run IDs, CVEs, hashes */
