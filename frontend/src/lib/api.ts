@@ -360,6 +360,35 @@ export function updateSbom(
   });
 }
 
+export function editSbom(id: number, payload: any, userId?: string, signal?: AbortSignal) {
+  const qs = userId ? `?user_id=${encodeURIComponent(userId)}` : '';
+  return request<SBOMSource>(`/api/sboms/${id}/edit${qs}`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    signal,
+  });
+}
+
+export function getSbomVersions(id: number, signal?: AbortSignal) {
+  return request<SBOMSource[]>(`/api/sboms/${id}/versions`, { signal });
+}
+
+export function compareSbomVersions(versionA: number, versionB: number, signal?: AbortSignal) {
+  return request<{
+    added: any[];
+    removed: any[];
+    changed: any[];
+  }>(`/api/sboms/compare-versions?version_a=${versionA}&version_b=${versionB}`, { signal });
+}
+
+export function restoreSbomVersion(id: number, versionId: number, userId?: string, signal?: AbortSignal) {
+  const qs = userId ? `?user_id=${encodeURIComponent(userId)}` : '';
+  return request<SBOMSource>(`/api/sboms/${id}/restore/${versionId}${qs}`, {
+    method: 'POST',
+    signal,
+  });
+}
+
 export interface SbomDeleteImpact {
   sbom_id: number;
   sbom_name: string;
@@ -787,6 +816,34 @@ export function getDashboardExploitation(signal?: AbortSignal) {
 /** MTTR by severity, SLA countdowns/breaches, 30-day fix velocity. */
 export function getDashboardRemediation(signal?: AbortSignal) {
   return request<RemediationSummary>('/dashboard/remediation', { signal });
+}
+
+export function getDashboardLifecycle(signal?: AbortSignal) {
+  return request<{
+    eol_components: number;
+    eos_upcoming: number;
+    unsupported: number;
+  }>('/dashboard/lifecycle', { signal });
+}
+
+export function getDashboardHealth(signal?: AbortSignal) {
+  return request<{
+    completeness_score: number;
+    missing_metadata: number;
+    outdated_components: number;
+  }>('/dashboard/health', { signal });
+}
+
+export function getDashboardRemediationStats(signal?: AbortSignal) {
+  return request<{
+    status_counts: Record<string, number>;
+    aging_count: number;
+    sla: {
+      overdue: number;
+      due_soon: number;
+      ok: number;
+    };
+  }>('/dashboard/remediation-stats', { signal });
 }
 
 /** Treemap cells — one per analysed SBOM, latest successful run. */
@@ -1430,4 +1487,12 @@ export function getCveDetail(
     return request<CveDetailWithContext>(`/api/v1/scans/${args.scanId}/cves/${id}`, { signal });
   }
   return request<CveDetail>(`/api/v1/cves/${id}`, { signal });
+}
+
+export function upsertRemediation(projectId: number, payload: any, signal?: AbortSignal) {
+  return request<any>(`/api/remediation?project_id=${projectId}`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    signal,
+  });
 }

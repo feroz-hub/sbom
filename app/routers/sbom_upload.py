@@ -25,7 +25,10 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..models import SBOMSource
+from ..models import Projects, SBOMSource, SBOMType
+from ..services.completeness_service import compute_and_save_completeness
+from ..services.lifecycle_service import sync_lifecycle_for_sbom
+from ..services.sbom_service import sync_sbom_components
 from ..settings import get_settings
 from ..validation import run as run_validation
 
@@ -73,6 +76,11 @@ async def upload_sbom(
     """
     settings = get_settings()
     max_bytes = int(getattr(settings, "MAX_UPLOAD_BYTES", 50 * 1024 * 1024))
+
+    if project_id is not None and db.get(Projects, project_id) is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if sbom_type is not None and db.get(SBOMType, sbom_type) is None:
+        raise HTTPException(status_code=404, detail="SBOM type not found")
 
     raw = await file.read()
     if len(raw) > max_bytes:
@@ -148,6 +156,13 @@ async def upload_sbom(
             status_code=500,
             detail={"code": "internal_error", "message": "Failed to persist SBOM."},
         )
+
+    try:
+        sync_sbom_components(db, obj)
+        sync_lifecycle_for_sbom(db, obj.id)
+        compute_and_save_completeness(db, obj)
+    except Exception as exc:  # pragma: no cover - defensive enrichment path
+        log.warning("Failed to enrich uploaded SBOM %s: %s", obj.id, exc)
 
     if report.has_errors():
         # Persist-then-reject: the row is committed, so the frontend can

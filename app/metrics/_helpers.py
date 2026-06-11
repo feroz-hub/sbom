@@ -19,6 +19,21 @@ from .base import COMPLETED_RUN_STATUSES
 _CVE_RE = re.compile(r"CVE-\d{4}-\d{4,7}", re.IGNORECASE)
 
 
+def active_head_sbom_ids_subquery() -> ScalarSelect:
+    """Scalar subquery of active HEAD version sbom_source.ids."""
+    from ..models import SBOMSource
+    return (
+        select(SBOMSource.id)
+        .where(SBOMSource.is_active == True)
+        .where(~SBOMSource.id.in_(
+            select(SBOMSource.parent_id)
+            .where(SBOMSource.parent_id.is_not(None))
+            .scalar_subquery()
+        ))
+        .scalar_subquery()
+    )
+
+
 def latest_run_per_sbom_subquery() -> ScalarSelect:
     """Scalar subquery: latest *successful* ``analysis_run.id`` per SBOM.
 
@@ -29,9 +44,11 @@ def latest_run_per_sbom_subquery() -> ScalarSelect:
     return (
         select(func.max(AnalysisRun.id))
         .where(AnalysisRun.run_status.in_(COMPLETED_RUN_STATUSES))
+        .where(AnalysisRun.sbom_id.in_(active_head_sbom_ids_subquery()))
         .group_by(AnalysisRun.sbom_id)
         .scalar_subquery()
     )
+
 
 
 def latest_run_per_sbom_as_of_subquery(as_of_iso: str) -> ScalarSelect:

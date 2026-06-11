@@ -1,11 +1,12 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { Timer } from 'lucide-react';
+import { RefreshCw, Timer } from 'lucide-react';
 import { Surface, SurfaceContent, SurfaceHeader } from '@/components/ui/Surface';
 import { Spinner } from '@/components/ui/Spinner';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { getDashboardRemediation } from '@/lib/api';
+import { Button } from '@/components/ui/Button';
+import { getDashboardRemediation, getDashboardRemediationStats } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import type { SlaSeverity } from '@/types';
 
@@ -36,12 +37,33 @@ export function RemediationPanel() {
     queryKey: ['dashboard-remediation'],
     queryFn: ({ signal }) => getDashboardRemediation(signal),
   });
+  const statsQuery = useQuery({
+    queryKey: ['dashboard-remediation-stats'],
+    queryFn: ({ signal }) => getDashboardRemediationStats(signal),
+  });
   const data = query.data;
+  const stats = statsQuery.data;
   const sla = data?.sla;
   const offenders = sla?.worst_offenders ?? [];
   const velocity = data?.velocity;
+  const counts = stats?.status_counts ?? {};
+  const openCount = counts.open ?? 0;
+  const inProgressCount = counts.in_progress ?? 0;
+  const fixedCount = counts.fixed ?? 0;
+  const acceptedRiskCount = counts.accepted_risk ?? 0;
+  const statusTotal = Object.values(counts).reduce((sum, value) => sum + value, 0);
   const hasAnyActivity =
-    (data?.resolved_total ?? 0) > 0 || (sla && sla.overdue + sla.due_soon + sla.ok > 0);
+    (data?.resolved_total ?? 0) > 0 ||
+    statusTotal > 0 ||
+    (stats?.aging_count ?? 0) > 0 ||
+    (sla && sla.overdue + sla.due_soon + sla.ok > 0);
+  const isLoading = query.isLoading || statsQuery.isLoading;
+  const isError = query.isError || statsQuery.isError;
+
+  const refetch = () => {
+    void query.refetch();
+    void statsQuery.refetch();
+  };
 
   return (
     <Surface variant="elevated">
@@ -60,10 +82,23 @@ export function RemediationPanel() {
         )}
       </SurfaceHeader>
       <SurfaceContent>
-        {query.isLoading ? (
+        {isLoading ? (
           <div className="flex h-48 items-center justify-center">
             <Spinner />
           </div>
+        ) : isError ? (
+          <EmptyState
+            illustration="generic"
+            title="Remediation metrics unavailable"
+            description="The dashboard could not load remediation status or SLA data."
+            action={
+              <Button variant="secondary" size="sm" onClick={refetch}>
+                <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+                Retry
+              </Button>
+            }
+            compact
+          />
         ) : !data || !hasAnyActivity ? (
           <EmptyState
             illustration="generic"
@@ -73,6 +108,26 @@ export function RemediationPanel() {
           />
         ) : (
           <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
+              {[
+                { label: 'Open', value: openCount, tone: 'text-red-700 dark:text-red-300' },
+                { label: 'In progress', value: inProgressCount, tone: 'text-amber-700 dark:text-amber-300' },
+                { label: 'Fixed', value: fixedCount, tone: 'text-emerald-700 dark:text-emerald-300' },
+                { label: 'Accepted risk', value: acceptedRiskCount, tone: 'text-violet-700 dark:text-violet-300' },
+                { label: 'Overdue', value: stats?.sla.overdue ?? sla?.overdue ?? 0, tone: 'text-red-700 dark:text-red-300' },
+                { label: 'Aging 30d', value: stats?.aging_count ?? 0, tone: 'text-hcl-navy dark:text-white' },
+              ].map((item) => (
+                <div key={item.label} className="rounded-lg bg-surface-muted px-3 py-2">
+                  <div className={cn('font-metric text-lg font-bold tabular-nums', item.tone)}>
+                    {item.value.toLocaleString()}
+                  </div>
+                  <div className="text-[10px] font-medium uppercase tracking-wider text-hcl-muted">
+                    {item.label}
+                  </div>
+                </div>
+              ))}
+            </div>
+
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
               {/* MTTR vs budget */}
               <div>

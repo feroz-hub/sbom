@@ -163,6 +163,7 @@ class AiFixGenerator:
         provider_name: str | None = None,
         force_refresh: bool = False,
         scan_id: int | None = None,
+        suppress_audit_log: bool = False,
     ) -> AiFixResult | AiFixError:
         """Generate (or fetch from cache) the AI fix bundle for one finding."""
         s = get_settings()
@@ -278,6 +279,7 @@ class AiFixGenerator:
                 cache_key=cache_key,
                 provider=provider,
                 scan_id=scan_id,
+                suppress_audit_log=suppress_audit_log,
             )
 
     async def generate_for_findings(
@@ -319,6 +321,7 @@ class AiFixGenerator:
         cache_key: str,
         provider: LlmProvider,
         scan_id: int | None,
+        suppress_audit_log: bool = False,
     ) -> AiFixResult | AiFixError:
         schema = bundle_json_schema()
         sys_p = system_prompt()
@@ -518,20 +521,21 @@ class AiFixGenerator:
             cost_usd=resp.usage.cost_usd,
             cache_hit=False,
         )
-        log_ai_call(
-            request_id=request_id,
-            provider=provider.name,
-            model=resp.model,
-            purpose="fix_bundle",
-            finding_cache_key=cache_key,
-            input_tokens=resp.usage.input_tokens,
-            output_tokens=resp.usage.output_tokens,
-            cost_usd=resp.usage.cost_usd,
-            latency_ms=latency_ms,
-            cache_hit=False,
-            outcome="ok",
-            response_text=resp.text,
-        )
+        if not suppress_audit_log:
+            log_ai_call(
+                request_id=request_id,
+                provider=provider.name,
+                model=resp.model,
+                purpose="fix_bundle",
+                finding_cache_key=cache_key,
+                input_tokens=resp.usage.input_tokens,
+                output_tokens=resp.usage.output_tokens,
+                cost_usd=resp.usage.cost_usd,
+                latency_ms=latency_ms,
+                cache_hit=False,
+                outcome="ok",
+                response_text=resp.text,
+            )
 
         result = cache_mod.write_cache(
             self._db,

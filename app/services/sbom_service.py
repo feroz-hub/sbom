@@ -198,6 +198,8 @@ def _upsert_components(db: Session, sbom_obj: SBOMSource, components: list[dict]
             cpe=cpe,
             supplier=(comp.get("supplier") or "").strip() or None,
             scope=(comp.get("scope") or "").strip() or None,
+            license=(comp.get("license") or "").strip() or None,
+            hashes=(comp.get("hashes") or "").strip() or None,
             created_on=now_iso(),
         )
         db.add(row)

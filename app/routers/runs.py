@@ -322,6 +322,32 @@ def list_run_findings(
     stmt = base.order_by(AnalysisFinding.score.desc()).limit(page_size).offset(offset)
     items = db.execute(stmt).scalars().all()
 
+    from ..models import VulnerabilityRemediation
+    remediations = db.execute(
+        select(VulnerabilityRemediation).where(VulnerabilityRemediation.project_id == run.project_id)
+    ).scalars().all()
+    rem_map = {
+        (r.vuln_id, r.component_name, r.component_version): r
+        for r in remediations
+    }
+
+    for item in items:
+        key = (item.vuln_id, item.component_name, item.component_version)
+        r = rem_map.get(key)
+        if r:
+            item.remediation = r
+        else:
+            item.remediation = {
+                "id": None,
+                "status": "Open",
+                "owner": None,
+                "due_date": None,
+                "resolution_date": None,
+                "fix_notes": None,
+                "fixed_version": None,
+                "updated_on": None
+            }
+
     if response is not None:
         response.headers["X-Total-Count"] = str(total)
 
@@ -398,6 +424,15 @@ def list_run_findings_enriched(
         for cve_id, epss_val, percentile in rows:
             epss_map[cve_id] = {"epss": epss_val, "percentile": percentile}
 
+    from ..models import VulnerabilityRemediation
+    remediations = db.execute(
+        select(VulnerabilityRemediation).where(VulnerabilityRemediation.project_id == run.project_id)
+    ).scalars().all()
+    rem_map = {
+        (r.vuln_id, r.component_name, r.component_version): r
+        for r in remediations
+    }
+
     items: list[dict] = []
     for f in findings:
         cves = finding_cves.get(f.id, [])
@@ -419,6 +454,31 @@ def list_run_findings_enriched(
         exploit_factor = 1.0 + EPSS_AMPLIFIER * epss
         kev_multiplier = KEV_MULTIPLIER if in_kev else 1.0
         risk_score = round(cvss * exploit_factor * kev_multiplier, 2)
+
+        key = (f.vuln_id, f.component_name, f.component_version)
+        r = rem_map.get(key)
+        if r:
+            rem_data = {
+                "id": r.id,
+                "status": r.status,
+                "owner": r.owner,
+                "due_date": r.due_date,
+                "resolution_date": r.resolution_date,
+                "fix_notes": r.fix_notes,
+                "fixed_version": r.fixed_version,
+                "updated_on": r.updated_on
+            }
+        else:
+            rem_data = {
+                "id": None,
+                "status": "Open",
+                "owner": None,
+                "due_date": None,
+                "resolution_date": None,
+                "fix_notes": None,
+                "fixed_version": None,
+                "updated_on": None
+            }
 
         items.append(
             {
@@ -450,6 +510,7 @@ def list_run_findings_enriched(
                 ),
                 "risk_score": risk_score,
                 "cve_aliases": cves,
+                "remediation": rem_data,
             }
         )
 

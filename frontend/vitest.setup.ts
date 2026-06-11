@@ -53,6 +53,38 @@ if (typeof window !== 'undefined') {
     g.ResizeObserver = ResizeObserverStub;
   }
 
+  if (typeof HTMLCanvasElement !== 'undefined') {
+    Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
+      configurable: true,
+      value: () => ({
+        clearRect: () => {},
+        fillRect: () => {},
+        getImageData: () => ({ data: new Uint8ClampedArray(4) }),
+        putImageData: () => {},
+        createImageData: () => [],
+        setTransform: () => {},
+        drawImage: () => {},
+        save: () => {},
+        fillText: () => {},
+        restore: () => {},
+        beginPath: () => {},
+        moveTo: () => {},
+        lineTo: () => {},
+        closePath: () => {},
+        stroke: () => {},
+        translate: () => {},
+        scale: () => {},
+        rotate: () => {},
+        arc: () => {},
+        fill: () => {},
+        measureText: () => ({ width: 0 }),
+        transform: () => {},
+        rect: () => {},
+        clip: () => {},
+      }),
+    });
+  }
+
   // jsdom 29 + vitest 4 leave window.localStorage defined but its
   // methods throw on call, which trips ``loadDensity`` /
   // findingFilters' preset storage inside any component test that

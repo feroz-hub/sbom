@@ -57,8 +57,23 @@ from .remediation import DEFAULT_SLA_DAYS, remediation_summary, sla_state
 from .riskmap import portfolio_risk_map, portfolio_risk_matrix
 from .trend import findings_trend
 from .windows import findings_net_change
+from .lifecycle import lifecycle_eol_total, lifecycle_eos_upcoming_total, lifecycle_unsupported_total
+from .health import health_completeness_average, health_missing_metadata_count, health_outdated_components_count
+from .remediation_extra import remediation_status_counts, remediation_aging_count
 
 __all__ = [
+    # lifecycle metrics
+    "lifecycle_eol_total",
+    "lifecycle_eos_upcoming_total",
+    "lifecycle_unsupported_total",
+    # health metrics
+    "health_completeness_average",
+    "health_missing_metadata_count",
+    "health_outdated_components_count",
+    # remediation extra metrics
+    "remediation_status_counts",
+    "remediation_aging_count",
+
     # base
     "COMPLETED_RUN_STATUSES",
     "NetChangeResult",

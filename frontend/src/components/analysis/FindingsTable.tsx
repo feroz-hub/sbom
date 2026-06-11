@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   ChevronDown,
   ChevronRight,
@@ -10,6 +11,7 @@ import {
   Rows4,
   Sparkles,
   Wrench,
+  X,
 } from 'lucide-react';
 import { Alert } from '@/components/ui/Alert';
 import {
@@ -49,6 +51,8 @@ import { useTableSort } from '@/hooks/useTableSort';
 import { usePagination } from '@/hooks/usePagination';
 import { useRunAiFixList } from '@/hooks/useAiFix';
 import type { EnrichedFinding, MatchStrategy } from '@/types';
+import { upsertRemediation } from '@/lib/api';
+import { invalidateDashboardTiles } from '@/lib/queryInvalidation';
 
 const KNOWN_MATCH_STRATEGIES: ReadonlySet<MatchStrategy> = new Set([
   'cpe_name',
@@ -132,6 +136,7 @@ interface FindingsTableProps {
   onSelectionChange?: (next: ReadonlySet<number>) => void;
   /** Analysis run id — when present, the modal uses the scan-aware variant (component context + recommended upgrade). */
   runId?: number;
+  projectId?: number;
   /** Human-friendly scan label (typically the SBOM name) shown in the modal's component-context line. */
   scanName?: string | null;
   /**
@@ -293,6 +298,7 @@ export function FindingsTable({
   selectedIds,
   onSelectionChange,
   runId,
+  projectId,
   scanName,
   cveModalEnabled = true,
   aiFixesEnabled = false,
@@ -330,6 +336,61 @@ export function FindingsTable({
   );
   const [density, setDensity] = useState<Density>('comfortable');
   const [expandedRows, setExpandedRows] = useState<Record<number, boolean>>({});
+
+  // Remediation drawer state
+  const [remediationFinding, setRemediationFinding] = useState<EnrichedFinding | null>(null);
+  const [remStatus, setRemStatus] = useState('Open');
+  const [remOwner, setRemOwner] = useState('');
+  const [remDueDate, setRemDueDate] = useState('');
+  const [remResolutionDate, setRemResolutionDate] = useState('');
+  const [remFixedVersion, setRemFixedVersion] = useState('');
+  const [remFixNotes, setRemFixNotes] = useState('');
+  const [isSavingRem, setIsSavingRem] = useState(false);
+  const [remError, setRemError] = useState('');
+
+  const queryClient = useQueryClient();
+
+  const openRemediationDrawer = (f: EnrichedFinding) => {
+    setRemediationFinding(f);
+    const rem = f.remediation;
+    setRemStatus(rem?.status || 'Open');
+    setRemOwner(rem?.owner || '');
+    setRemDueDate(rem?.due_date || '');
+    setRemResolutionDate(rem?.resolution_date || '');
+    setRemFixedVersion(rem?.fixed_version || '');
+    setRemFixNotes(rem?.fix_notes || '');
+    setRemError('');
+  };
+
+  const handleSaveRemediation = async () => {
+    if (!remediationFinding || projectId == null) return;
+    setIsSavingRem(true);
+    setRemError('');
+    try {
+      const payload = {
+        vuln_id: remediationFinding.vuln_id,
+        component_name: remediationFinding.component_name,
+        component_version: remediationFinding.component_version,
+        fixed_version: remFixedVersion || null,
+        status: remStatus,
+        owner: remOwner || null,
+        due_date: remDueDate || null,
+        resolution_date: remResolutionDate || null,
+        fix_notes: remFixNotes || null,
+      };
+      
+      remediationFinding.remediation = await upsertRemediation(projectId, payload);
+
+      setRemediationFinding(null);
+      queryClient.invalidateQueries({ queryKey: ['run', runId] });
+      queryClient.invalidateQueries({ queryKey: ['findings-enriched', runId] });
+      invalidateDashboardTiles(queryClient);
+    } catch (err: any) {
+      setRemError(err.message || 'Failed to save remediation details.');
+    } finally {
+      setIsSavingRem(false);
+    }
+  };
 
   // Active CVE for the in-app detail modal. We keep a single page-level
   // dialog instance and swap the active CVE — one query at a time, no
@@ -462,9 +523,9 @@ export function FindingsTable({
   const total = findings?.length ?? 0;
   const shown = filteredFindings.length;
   const cellPadding = DENSITY_CLASS[density];
-  // (select?) + chevron + vuln + severity + cvss + epss + risk + component + sources + (ai?) + fix
+  // (select?) + chevron + vuln + severity + cvss + epss + risk + component + remediation + sources + (ai?) + fix
   const COL_COUNT =
-    (selectionEnabled ? 1 : 0) + (showAiCol ? 10 : 9);
+    (selectionEnabled ? 1 : 0) + (showAiCol ? 11 : 10);
 
   const toggleExpand = (id: number) => {
     setExpandedRows((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -644,6 +705,7 @@ export function FindingsTable({
               >
                 Component
               </SortableTh>
+              <Th>Remediation</Th>
               <Th>Sources</Th>
               {showAiCol ? (
                 <Th className="w-10 text-center">
@@ -804,6 +866,19 @@ export function FindingsTable({
                       </div>
                     </td>
                     <td className={cn('px-4 align-top', cellPadding)}>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border capitalize ${
+                        f.remediation?.status === 'Fixed' || f.remediation?.status === 'Closed'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : f.remediation?.status === 'In Progress'
+                          ? 'bg-blue-50 text-blue-700 border-blue-200'
+                          : f.remediation?.status === 'Accepted Risk'
+                          ? 'bg-amber-50 text-amber-700 border-amber-200'
+                          : 'bg-gray-50 text-gray-700 border-gray-200'
+                      }`}>
+                        {f.remediation?.status || 'Open'}
+                      </span>
+                    </td>
+                    <td className={cn('px-4 align-top', cellPadding)}>
                       <SourceChips source={f.source} />
                     </td>
                     {showAiCol ? (
@@ -844,6 +919,7 @@ export function FindingsTable({
                               findingId: typeof f.id === 'number' ? f.id : null,
                             })
                           }
+                          onManageRemediation={() => openRemediationDrawer(f)}
                         />
                       </td>
                     </tr>
@@ -891,6 +967,143 @@ export function FindingsTable({
           aiProviderLabel={aiProviderLabel}
         />
       ) : null}
+
+      {/* Vulnerability Remediation Slide-Over Drawer */}
+      {remediationFinding && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/45 backdrop-blur-sm motion-fade-in">
+          {/* Backdrop click to close */}
+          <div className="absolute inset-0" onClick={() => setRemediationFinding(null)} />
+          
+          <div className="relative h-full w-full max-w-md bg-white shadow-2xl p-6 flex flex-col justify-between overflow-y-auto z-10 border-l border-border dark:bg-gray-900 dark:border-gray-800">
+            <div className="space-y-6">
+              <div className="flex justify-between items-center border-b pb-3 dark:border-gray-800">
+                <div>
+                  <h3 className="text-lg font-bold text-hcl-navy dark:text-white">Remediation Action</h3>
+                  <p className="text-xs text-hcl-muted mt-0.5">
+                    Vulnerability tracking for {remediationFinding.vuln_id}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setRemediationFinding(null)}
+                  className="p-1 rounded-md text-hcl-muted hover:text-hcl-navy dark:hover:text-white transition-colors"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {remError && (
+                <Alert variant="error" title="Error saving updates">
+                  {remError}
+                </Alert>
+              )}
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-hcl-muted">
+                    Remediation Status
+                  </label>
+                  <select
+                    value={remStatus}
+                    onChange={(e) => setRemStatus(e.target.value)}
+                    className="mt-1.5 w-full rounded-lg border border-border p-2.5 text-sm text-hcl-navy dark:text-white dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-hcl-blue"
+                  >
+                    <option value="Open">Open</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="Fixed">Fixed</option>
+                    <option value="Accepted Risk">Accepted Risk</option>
+                    <option value="Closed">Closed</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-hcl-muted">
+                    Assignee / Owner
+                  </label>
+                  <input
+                    type="text"
+                    value={remOwner}
+                    onChange={(e) => setRemOwner(e.target.value)}
+                    className="mt-1.5 w-full rounded-lg border border-border p-2.5 text-sm text-hcl-navy dark:text-white dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-hcl-blue"
+                    placeholder="e.g. security-team@org.com or name"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-hcl-muted">
+                      Due Date
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="YYYY-MM-DD"
+                      value={remDueDate}
+                      onChange={(e) => setRemDueDate(e.target.value)}
+                      className="mt-1.5 w-full rounded-lg border border-border p-2.5 text-sm text-hcl-navy dark:text-white dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-hcl-blue"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-hcl-muted">
+                      Resolution Date
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="YYYY-MM-DD"
+                      value={remResolutionDate}
+                      onChange={(e) => setRemResolutionDate(e.target.value)}
+                      className="mt-1.5 w-full rounded-lg border border-border p-2.5 text-sm text-hcl-navy dark:text-white dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-hcl-blue"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-hcl-muted">
+                    Fixed Version
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 2.4.1"
+                    value={remFixedVersion}
+                    onChange={(e) => setRemFixedVersion(e.target.value)}
+                    className="mt-1.5 w-full rounded-lg border border-border p-2.5 text-sm text-hcl-navy dark:text-white dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-hcl-blue"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-hcl-muted">
+                    Notes / Resolution Logs
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={remFixNotes}
+                    onChange={(e) => setRemFixNotes(e.target.value)}
+                    className="mt-1.5 w-full rounded-lg border border-border p-2.5 text-sm text-hcl-navy dark:text-white dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-hcl-blue"
+                    placeholder="Add details about the fix, risk acceptance justification, etc."
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 border-t pt-4 dark:border-gray-800 mt-6 justify-end">
+              <button
+                type="button"
+                onClick={() => setRemediationFinding(null)}
+                className="px-4 py-2 rounded-lg border border-border text-sm font-semibold hover:bg-surface-muted transition-colors text-hcl-navy dark:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveRemediation}
+                disabled={isSavingRem}
+                className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary/95 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5"
+              >
+                {isSavingRem ? 'Saving...' : 'Save Remediation'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -902,9 +1115,10 @@ interface ExpandedDetailProps {
   fixedVersions: string[];
   /** Open the CVE detail modal for an alternate ID. */
   onAliasOpen?: (alias: string) => void;
+  onManageRemediation?: () => void;
 }
 
-function ExpandedDetail({ finding: f, aliases, cwes, fixedVersions, onAliasOpen }: ExpandedDetailProps) {
+function ExpandedDetail({ finding: f, aliases, cwes, fixedVersions, onAliasOpen, onManageRemediation }: ExpandedDetailProps) {
   const description =
     f.description && f.description !== f.vuln_id
       ? f.description
@@ -976,6 +1190,53 @@ function ExpandedDetail({ finding: f, aliases, cwes, fixedVersions, onAliasOpen 
       </div>
 
       <div className="space-y-3">
+        {/* Remediation Status Section */}
+        <div className="rounded-lg border border-border-subtle bg-surface px-3 py-2.5 space-y-2 shadow-sm">
+          <div className="flex justify-between items-center">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-hcl-navy">
+              Remediation
+            </p>
+            {onManageRemediation && (
+              <button
+                type="button"
+                onClick={onManageRemediation}
+                className="text-[10px] text-hcl-blue hover:text-hcl-navy hover:underline font-bold"
+              >
+                Manage status
+              </button>
+            )}
+          </div>
+          <div className="flex items-center justify-between">
+            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold capitalize border ${
+              f.remediation?.status === 'Fixed' || f.remediation?.status === 'Closed'
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                : f.remediation?.status === 'In Progress'
+                ? 'bg-blue-50 text-blue-700 border-blue-200'
+                : f.remediation?.status === 'Accepted Risk'
+                ? 'bg-amber-50 text-amber-700 border-amber-200'
+                : 'bg-gray-50 text-gray-700 border-gray-200'
+            }`}>
+              {f.remediation?.status || 'Open'}
+            </span>
+            {f.remediation?.owner && (
+              <span className="text-[11px] text-hcl-muted truncate max-w-[150px]" title={f.remediation.owner}>
+                Owner: <span className="text-hcl-navy font-semibold">{f.remediation.owner}</span>
+              </span>
+            )}
+          </div>
+          {f.remediation?.due_date && (
+            <div className="text-[10px] text-hcl-muted flex justify-between border-t pt-1.5 mt-1">
+              <span>Due: {f.remediation.due_date}</span>
+              {f.remediation.fixed_version && <span>Fixed in: {f.remediation.fixed_version}</span>}
+            </div>
+          )}
+          {f.remediation?.fix_notes && (
+            <p className="text-[10px] text-hcl-muted italic border-t pt-1 truncate" title={f.remediation.fix_notes}>
+              "{f.remediation.fix_notes}"
+            </p>
+          )}
+        </div>
+
         {/* Risk score breakdown */}
         <div className="rounded-lg border border-border-subtle bg-surface px-3 py-2">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-hcl-muted">

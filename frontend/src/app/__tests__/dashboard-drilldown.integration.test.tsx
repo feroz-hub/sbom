@@ -62,6 +62,30 @@ vi.mock('@/components/dashboard/ActivityFeed', () => ({
 vi.mock('@/components/dashboard/AiConfigBanner', () => ({
   AiConfigBanner: () => null,
 }));
+vi.mock('@/components/dashboard/LifecycleHealthTiles', () => ({
+  LifecycleHealthTiles: () => null,
+}));
+vi.mock('@/components/dashboard/VulnerabilityAgePie', () => ({
+  VulnerabilityAgePie: () => null,
+}));
+vi.mock('@/components/dashboard/advanced/CopilotPanel', () => ({
+  CopilotPanel: () => null,
+}));
+vi.mock('@/components/dashboard/advanced/ForecastCard', () => ({
+  ForecastCard: () => null,
+}));
+vi.mock('@/components/dashboard/advanced/ExploitationOutlookCard', () => ({
+  ExploitationOutlookCard: () => null,
+}));
+vi.mock('@/components/dashboard/advanced/PortfolioRiskMap', () => ({
+  PortfolioRiskMap: () => null,
+}));
+vi.mock('@/components/dashboard/advanced/RiskMatrixCard', () => ({
+  RiskMatrixCard: () => null,
+}));
+vi.mock('@/components/dashboard/advanced/RemediationPanel', () => ({
+  RemediationPanel: () => null,
+}));
 
 import DashboardPage from '@/app/page';
 

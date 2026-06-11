@@ -16,7 +16,7 @@ from typing import Any, Callable, TypeVar
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..models import AnalysisRun, SBOMSource
+from ..models import AnalysisFinding, AnalysisRun, SBOMSource
 
 T = TypeVar("T")
 
@@ -25,17 +25,20 @@ _cache_lock = threading.Lock()
 _MAX_ENTRIES = 256  # bounded so a runaway test session doesn't grow forever
 
 
-def invalidation_key(db: Session) -> tuple[int, int, int]:
+def invalidation_key(db: Session) -> tuple[int, int, int, int, int]:
     """Cheap O(1) invalidation tuple — any new run / SBOM bumps it.
 
-    ``(max(analysis_run.id), count(analysis_run), count(sbom_source))``.
+    ``(max(analysis_run.id), count(analysis_run), count(sbom_source),
+    max(analysis_finding.id), count(analysis_finding))``.
     Kept identical to the existing lifetime cache key so the two pools
     converge if we ever consolidate.
     """
     max_run_id = db.execute(select(func.max(AnalysisRun.id))).scalar() or 0
     run_count = db.execute(select(func.count(AnalysisRun.id))).scalar() or 0
     sbom_count = db.execute(select(func.count(SBOMSource.id))).scalar() or 0
-    return (int(max_run_id), int(run_count), int(sbom_count))
+    max_finding_id = db.execute(select(func.max(AnalysisFinding.id))).scalar() or 0
+    finding_count = db.execute(select(func.count(AnalysisFinding.id))).scalar() or 0
+    return (int(max_run_id), int(run_count), int(sbom_count), int(max_finding_id), int(finding_count))
 
 
 def memoize_with_ttl(

@@ -9,6 +9,7 @@ import { Motion } from '@/components/ui/Motion';
 import { HeroPostureCard } from '@/components/dashboard/HeroPostureCard/HeroPostureCard';
 import { WhatsNewStrip } from '@/components/dashboard/WhatsNewStrip';
 import { CounterTiles } from '@/components/dashboard/CounterTiles';
+import { LifecycleHealthTiles } from '@/components/dashboard/LifecycleHealthTiles';
 import { SeverityChart } from '@/components/dashboard/SeverityChart';
 import { VulnerabilityAgePie } from '@/components/dashboard/VulnerabilityAgePie';
 import { TrendExplorer } from '@/components/dashboard/TrendExplorer';
@@ -169,6 +170,10 @@ export default function DashboardPage() {
           <CounterTiles />
         </Motion>
 
+        <Motion preset="rise" delay={10}>
+          <LifecycleHealthTiles />
+        </Motion>
+
         {/* "Your Analyzer, So Far" — lifetime growth, kept near the top */}
         <Motion preset="rise" delay={20}>
           <LifetimeStats data={lifetimeQuery.data} isLoading={lifetimeQuery.isLoading} />
@@ -213,6 +218,8 @@ export default function DashboardPage() {
             <SeverityChart
               data={postureQuery.data?.severity}
               isLoading={postureQuery.isLoading}
+              onSliceClick={handleSegmentClick}
+              interactiveSeverities={interactiveSeverities}
             />
           </Motion>
           <Motion preset="rise" delay={220}>

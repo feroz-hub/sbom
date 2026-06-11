@@ -27,6 +27,26 @@ def parse_spdx_dict(doc: dict[str, Any]) -> list[dict[str, Any]]:
         supplier_info = pkg.get("supplier")
         if isinstance(supplier_info, str):
             supplier = norm(supplier_info)
+
+        # Extract license
+        license_str = norm(pkg.get("licenseConcluded")) or norm(pkg.get("licenseDeclared")) or norm(pkg.get("license"))
+
+        # Extract hashes/checksums
+        checksums = pkg.get("checksums")
+        hashes_str = None
+        if isinstance(checksums, list):
+            hash_parts = []
+            for c in checksums:
+                if isinstance(c, dict):
+                    alg = c.get("algorithm")
+                    val = c.get("checksumValue")
+                    if alg and val:
+                        hash_parts.append(f"{alg}:{val}")
+                    elif val:
+                        hash_parts.append(str(val))
+            if hash_parts:
+                hashes_str = ", ".join(hash_parts)
+
         comps.append(
             {
                 "name": norm(pkg.get("name")),
@@ -38,6 +58,8 @@ def parse_spdx_dict(doc: dict[str, Any]) -> list[dict[str, Any]]:
                 "purl": purl,
                 "cpe": cpe,
                 "bom_ref": norm(pkg.get("SPDXID")),
+                "license": license_str,
+                "hashes": hashes_str,
             }
         )
     # SPDX-Lite or other representations
@@ -51,6 +73,26 @@ def parse_spdx_dict(doc: dict[str, Any]) -> list[dict[str, Any]]:
                     cpe = norm(ref.get("referenceLocator") or ref.get("locator"))
                 if rtype == "purl" and not purl:
                     purl = norm(ref.get("referenceLocator") or ref.get("locator"))
+
+            # Extract license
+            license_str = norm(obj.get("licenseConcluded")) or norm(obj.get("licenseDeclared")) or norm(obj.get("license"))
+
+            # Extract hashes
+            checksums = obj.get("checksums") or obj.get("hashes")
+            hashes_str = None
+            if isinstance(checksums, list):
+                hash_parts = []
+                for c in checksums:
+                    if isinstance(c, dict):
+                        alg = c.get("algorithm") or c.get("alg")
+                        val = c.get("checksumValue") or c.get("content")
+                        if alg and val:
+                            hash_parts.append(f"{alg}:{val}")
+                        elif val:
+                            hash_parts.append(str(val))
+                if hash_parts:
+                    hashes_str = ", ".join(hash_parts)
+
             comps.append(
                 {
                     "name": norm(obj.get("name")),
@@ -62,6 +104,8 @@ def parse_spdx_dict(doc: dict[str, Any]) -> list[dict[str, Any]]:
                     "purl": purl,
                     "cpe": cpe,
                     "bom_ref": norm(obj.get("id") or obj.get("spdx-id")),
+                    "license": license_str,
+                    "hashes": hashes_str,
                 }
             )
     return comps

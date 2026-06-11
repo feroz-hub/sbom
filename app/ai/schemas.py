@@ -201,10 +201,12 @@ class DecisionRecommendation(BaseModel):
     @classmethod
     def _enforce_reasoning_lengths(cls, v: list[str]) -> list[str]:
         # Each bullet has to be useful. 8 chars is the minimum that gets
-        # past "ok" / "n/a" type single-word junk responses. Empty list
-        # is now allowed (Phase 5) — the orchestrator's prompt asks for
-        # bullets, but a missing list shouldn't block the whole bundle.
+        # past "ok" / "n/a" type single-word junk responses. An omitted
+        # list may default empty, but an explicitly non-empty junk list is
+        # rejected so model output cannot silently lose all reasoning.
         out = [b.strip() for b in v if isinstance(b, str) and len(b.strip()) >= 8]
+        if v and not out:
+            raise ValueError("reasoning must include at least one substantive bullet")
         return out[:5]
 
     @field_validator("caveats")
@@ -234,7 +236,7 @@ class AiFixBundle(BaseModel):
     omitted, matching the neutral default used by the per-section fields.
     """
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="forbid")
 
     remediation_prose: RemediationProse
     upgrade_command: UpgradeCommand

@@ -1,6 +1,6 @@
 # schemas.py
 
-
+from typing import Any
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -67,6 +67,10 @@ class SBOMSourceOut(ORMModel):
     projectid: int | None = None
     created_on: str | None = None
     sbom_version: str | None = None
+    parent_id: int | None = None
+    change_summary: str | None = None
+    completeness_score: float | None = None
+    completeness_report: dict[str, Any] | None = None
     created_by: str | None = None
     productver: str | None = None
     modified_on: str | None = None
@@ -141,6 +145,14 @@ class SBOMComponentOut(ORMModel):
     supplier: str | None = None
     scope: str | None = None
     created_on: str | None = None
+    license: str | None = None
+    hashes: str | None = None
+    lifecycle_status: str | None = None
+    eos_date: str | None = None
+    eol_date: str | None = None
+    is_deprecated: bool | None = None
+    maintenance_status: str | None = None
+
 
 
 class AnalysisRunOut(ORMModel):
@@ -187,6 +199,17 @@ class RunsAggregateOut(BaseModel):
     total_findings: int
 
 
+class VulnerabilityRemediationOut(ORMModel):
+    id: int | None = None
+    status: str
+    owner: str | None = None
+    due_date: str | None = None
+    resolution_date: str | None = None
+    fix_notes: str | None = None
+    fixed_version: str | None = None
+    updated_on: str | None = None
+
+
 class AnalysisFindingOut(ORMModel):
     id: int
     analysis_run_id: int
@@ -208,6 +231,7 @@ class AnalysisFindingOut(ORMModel):
     attack_vector: str | None = None
     cvss_version: str | None = None
     aliases: str | None = None  # JSON string
+    remediation: VulnerabilityRemediationOut | None = None
 
 
 class ProjectUpdate(BaseModel):
@@ -312,3 +336,71 @@ class ScheduleResolved(BaseModel):
 
     inherited: bool
     schedule: ScheduleOut | None = None
+
+
+# --- SBOM Lifecycle Management Platform schemas ---
+
+class LifecycleInfoUpdate(BaseModel):
+    lifecycle_status: str
+    eos_date: str | None = None
+    eol_date: str | None = None
+    is_deprecated: bool = False
+    maintenance_status: str | None = None
+
+
+class VulnerabilityRemediationUpsert(BaseModel):
+    vuln_id: str
+    component_name: str
+    component_version: str
+    fixed_version: str | None = None
+    status: str  # Open, In Progress, Fixed, Accepted Risk, Closed
+    owner: str | None = None
+    due_date: str | None = None  # YYYY-MM-DD
+    resolution_date: str | None = None  # YYYY-MM-DD
+    fix_notes: str | None = None
+
+
+class VulnerabilityRemediationOut(ORMModel):
+    id: int
+    project_id: int
+    vuln_id: str
+    component_name: str
+    component_version: str
+    fixed_version: str | None = None
+    status: str
+    owner: str | None = None
+    due_date: str | None = None
+    resolution_date: str | None = None
+    fix_notes: str | None = None
+    created_on: str
+    updated_on: str
+
+
+class VulnerabilityRemediationAuditOut(ORMModel):
+    id: int
+    remediation_id: int
+    project_id: int
+    vuln_id: str
+    component_name: str
+    component_version: str
+    old_status: str | None = None
+    new_status: str
+    changed_by: str | None = None
+    changed_at: str
+    note: str | None = None
+
+
+class ComponentEditPayload(BaseModel):
+    bom_ref: str
+    name: str | None = None
+    version: str | None = None
+    supplier: str | None = None
+    license: str | None = None
+    hashes: str | None = None
+    lifecycle: dict[str, Any] | None = None
+
+
+class SbomEditPayload(BaseModel):
+    metadata: dict[str, Any] | None = None
+    components: list[ComponentEditPayload] = []
+    change_summary: str = "Manual edit via UI"

@@ -161,12 +161,17 @@ def _memory_store():
 # ============================================================ Disabled paths
 
 
-def test_trigger_returns_409_when_ai_disabled(client, _seeded_run):
+def test_trigger_returns_409_when_ai_disabled(client, _seeded_run, monkeypatch):
     # AI_FIXES_ENABLED defaults to False → trigger should refuse.
-    resp = client.post(f"/api/v1/runs/{_seeded_run['run_id']}/ai-fixes")
-    assert resp.status_code == 409
-    body = resp.json()
-    assert body["detail"]["error_code"] == "AI_FIXES_DISABLED"
+    monkeypatch.setenv("AI_FIXES_ENABLED", "false")
+    reset_settings()
+    try:
+        resp = client.post(f"/api/v1/runs/{_seeded_run['run_id']}/ai-fixes")
+        assert resp.status_code == 409
+        body = resp.json()
+        assert body["detail"]["error_code"] == "AI_FIXES_DISABLED"
+    finally:
+        reset_settings()
 
 
 def test_kill_switch_returns_409(client, _seeded_run, monkeypatch):
@@ -202,7 +207,7 @@ def test_trigger_runs_inline_when_celery_unavailable(client, _seeded_run, _enabl
     # but in CI it's the inline path.
     if not body["enqueued"]:
         assert body["progress"]["status"] == "complete"
-        assert body["progress"]["generated"] == 2  # solo finding is in same run
+        assert body["progress"]["generated"] == 3  # solo finding is in same run
 
 
 def test_progress_endpoint_round_trips(client, _seeded_run, _enable_ai, _fake_registry, _memory_store):

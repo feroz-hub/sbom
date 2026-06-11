@@ -68,6 +68,11 @@ class SBOMSource(Base, SoftDeleteMixin):
     productver = Column(String, nullable=True)
     modified_on = Column(String, nullable=True)
     modified_by = Column(String, nullable=True)
+    parent_id = Column(Integer, ForeignKey("sbom_source.id"), nullable=True)
+    change_summary = Column(String, nullable=True)
+    completeness_score = Column(Float, nullable=True, default=100.0)
+    completeness_report = Column(JSON, nullable=True)
+
 
     # 8-stage validation outcome — see migration 012.
     # ``server_default`` mirrors migration 012's literals so test-path
@@ -128,6 +133,15 @@ class SBOMComponent(Base, SoftDeleteMixin):
     supplier = Column(String, nullable=True)
     scope = Column(String, nullable=True)
     created_on = Column(String, nullable=True)
+
+    license = Column(String, nullable=True)
+    hashes = Column(Text, nullable=True)
+    lifecycle_status = Column(String, nullable=True)
+    eos_date = Column(String, nullable=True)
+    eol_date = Column(String, nullable=True)
+    is_deprecated = Column(Boolean, default=False)
+    maintenance_status = Column(String, nullable=True)
+
 
     sbom = relationship("SBOMSource", back_populates="components")
     findings = relationship("AnalysisFinding", back_populates="component")
@@ -715,3 +729,57 @@ class AuditLog(Base):
     detail = Column(String(240), nullable=True)
     metadata_json = Column(JSON, nullable=True)
     created_at = Column(String, nullable=False, index=True)
+
+
+class VulnerabilityRemediation(Base):
+    """
+    Tracks vulnerability fix / remediation status for findings.
+    """
+
+    __tablename__ = "vulnerability_remediation"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    vuln_id = Column(String, nullable=False, index=True)
+    component_name = Column(String, nullable=False, index=True)
+    component_version = Column(String, nullable=False)
+    fixed_version = Column(String, nullable=True)
+    status = Column(String, nullable=False, default="Open")  # Open, In Progress, Fixed, Accepted Risk, Closed
+    owner = Column(String, nullable=True)
+    due_date = Column(String, nullable=True)  # YYYY-MM-DD
+    resolution_date = Column(String, nullable=True)  # YYYY-MM-DD
+    fix_notes = Column(Text, nullable=True)
+    created_on = Column(String, nullable=False)
+    updated_on = Column(String, nullable=False)
+
+    history = relationship(
+        "VulnerabilityRemediationAudit",
+        back_populates="remediation",
+        cascade="all, delete-orphan",
+        order_by="VulnerabilityRemediationAudit.id",
+    )
+
+
+class VulnerabilityRemediationAudit(Base):
+    """Append-only status/change trail for vulnerability remediation records."""
+
+    __tablename__ = "vulnerability_remediation_audit"
+
+    id = Column(Integer, primary_key=True, index=True)
+    remediation_id = Column(
+        Integer,
+        ForeignKey("vulnerability_remediation.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    vuln_id = Column(String, nullable=False, index=True)
+    component_name = Column(String, nullable=False, index=True)
+    component_version = Column(String, nullable=False)
+    old_status = Column(String, nullable=True)
+    new_status = Column(String, nullable=False)
+    changed_by = Column(String(128), nullable=True)
+    changed_at = Column(String, nullable=False, index=True)
+    note = Column(Text, nullable=True)
+
+    remediation = relationship("VulnerabilityRemediation", back_populates="history")

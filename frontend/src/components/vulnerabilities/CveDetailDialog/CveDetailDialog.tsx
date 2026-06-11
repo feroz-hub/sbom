@@ -1,23 +1,15 @@
 'use client';
 
-import dynamic from 'next/dynamic';
 import { useId, useMemo } from 'react';
 import { Dialog } from '@/components/ui/Dialog';
 import { CveBanner } from './CveBanner';
+import CveDetailContent from './CveDetailContent';
 import { CveHeader } from './CveHeader';
 import { CveReferences } from './CveReferences';
 import { CveSkeleton } from './CveSkeleton';
 import { useCveDetail } from './hooks';
 import { selectDialogState } from './states';
 import type { CveDetail, CveDetailWithContext, CveRowSeed } from './types';
-
-// Lazy-load the heavy content body. The shell (header + skeleton + close)
-// stays in the main bundle so the dialog opens in <16ms with the row seed
-// already painted.
-const CveDetailContent = dynamic(() => import('./CveDetailContent'), {
-  ssr: false,
-  loading: () => <CveSkeleton />,
-});
 
 export interface CveDetailDialogProps {
   /**

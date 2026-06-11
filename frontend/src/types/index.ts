@@ -16,6 +16,10 @@ export interface SBOMSource {
   sbom_name: string;
   sbom_type: number | null;       // FK integer to SBOMType
   sbom_version: string | null;
+  parent_id?: number | null;
+  change_summary?: string | null;
+  completeness_score?: number | null;
+  completeness_report?: Record<string, unknown> | null;
   projectid: number | null;
   project_name?: string | null;
   created_by: string | null;
@@ -90,13 +94,41 @@ export interface SbomValidationFailureDetail {
 export interface SBOMComponent {
   id: number;
   sbom_id: number;
+  bom_ref?: string | null;
   name: string;
   version: string | null;
   cpe: string | null;
   purl: string | null;
   component_type: string | null;
+  component_group?: string | null;
+  supplier?: string | null;
   scope: string | null;
+  license?: string | null;
+  hashes?: string | null;
+  lifecycle_status?: string | null;
+  eos_date?: string | null;
+  eol_date?: string | null;
+  is_deprecated?: boolean | null;
+  maintenance_status?: string | null;
   created_on: string | null;
+}
+
+export type RemediationStatus = 'Open' | 'In Progress' | 'Fixed' | 'Accepted Risk' | 'Closed';
+
+export interface VulnerabilityRemediation {
+  id: number;
+  project_id: number;
+  vuln_id: string;
+  component_name: string | null;
+  component_version: string | null;
+  fixed_version: string | null;
+  status: RemediationStatus | string;
+  owner: string | null;
+  due_date: string | null;
+  resolution_date: string | null;
+  fix_notes: string | null;
+  created_on: string | null;
+  updated_on: string | null;
 }
 
 export interface AnalysisRun {
@@ -197,6 +229,8 @@ export interface AnalysisFinding {
   match_strategy?: MatchStrategy | null;
   /** Roadmap #3 — token-overlap confidence post strategy-floor, [0.0, 1.0]. */
   match_confidence?: number | null;
+  /** Lifecycle-management remediation record, when one has been saved. */
+  remediation?: VulnerabilityRemediation | null;
 }
 
 /**

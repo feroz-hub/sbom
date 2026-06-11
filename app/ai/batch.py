@@ -211,6 +211,7 @@ class AiFixBatchPipeline:
                     provider_name=provider.name,
                     force_refresh=force_refresh,
                     scan_id=run_id,
+                    suppress_audit_log=True,
                 )
 
         tasks = [asyncio.create_task(_one(f)) for f in miss_findings]

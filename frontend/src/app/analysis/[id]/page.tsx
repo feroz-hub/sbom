@@ -340,6 +340,7 @@ function AnalysisDetailContent({ params }: AnalysisDetailPageProps) {
                     analysisConfig?.ai_fixes_enabled ? setSelectedIds : undefined
                   }
                   runId={id}
+                  projectId={run?.project_id ?? undefined}
                   scanName={run?.sbom_name ?? null}
                   cveModalEnabled={cveModalEnabled}
                   aiFixesEnabled={Boolean(analysisConfig?.ai_fixes_enabled)}

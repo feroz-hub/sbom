@@ -65,6 +65,9 @@ from .routers import (
     sbom_upload,
     sboms_crud,
     schedules,
+    lifecycle,
+    remediation,
+    sbom_versions,
 )
 from .routers import analysis as analysis_export_router
 from .routers import dashboard as dashboard_trend_router
@@ -108,6 +111,65 @@ def _ensure_column(table_name: str, column_name: str, type_sql: str, default_sql
             ddl += f" DEFAULT {default_sql}"
         conn.execute(text(ddl))
         conn.commit()
+
+
+def _ensure_remediation_audit_table() -> None:
+    """Create the remediation audit table for legacy SQLite databases."""
+    if engine.dialect.name != "sqlite":
+        return
+    with engine.begin() as conn:
+        tables = {row[0] for row in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))}
+        if "vulnerability_remediation_audit" in tables:
+            return
+        conn.execute(
+            text(
+                """
+                CREATE TABLE vulnerability_remediation_audit (
+                    id INTEGER PRIMARY KEY,
+                    remediation_id INTEGER NOT NULL REFERENCES vulnerability_remediation(id) ON DELETE CASCADE,
+                    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                    vuln_id VARCHAR NOT NULL,
+                    component_name VARCHAR NOT NULL,
+                    component_version VARCHAR NOT NULL,
+                    old_status VARCHAR,
+                    new_status VARCHAR NOT NULL,
+                    changed_by VARCHAR(128),
+                    changed_at VARCHAR NOT NULL,
+                    note TEXT
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE INDEX ix_vulnerability_remediation_audit_remediation_id "
+                "ON vulnerability_remediation_audit (remediation_id)"
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE INDEX ix_vulnerability_remediation_audit_project_id "
+                "ON vulnerability_remediation_audit (project_id)"
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE INDEX ix_vulnerability_remediation_audit_vuln_id "
+                "ON vulnerability_remediation_audit (vuln_id)"
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE INDEX ix_vulnerability_remediation_audit_component_name "
+                "ON vulnerability_remediation_audit (component_name)"
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE INDEX ix_vulnerability_remediation_audit_changed_at "
+                "ON vulnerability_remediation_audit (changed_at)"
+            )
+        )
 
 
 def _ensure_seed_data() -> None:
@@ -165,6 +227,22 @@ def _ensure_seed_data() -> None:
         _ensure_column(table, "is_active", "BOOLEAN", "1")
         _ensure_column(table, "deactivated_at", "TIMESTAMP")
         _ensure_column(table, "deactivated_by", "VARCHAR(128)")
+
+    # New migrations for SBOM Lifecycle Management Platform features
+    _ensure_column("sbom_source", "parent_id", "INTEGER")
+    _ensure_column("sbom_source", "change_summary", "TEXT")
+    _ensure_column("sbom_source", "completeness_score", "FLOAT", "100.0")
+    _ensure_column("sbom_source", "completeness_report", "TEXT")
+
+    _ensure_column("sbom_component", "license", "TEXT")
+    _ensure_column("sbom_component", "hashes", "TEXT")
+    _ensure_column("sbom_component", "lifecycle_status", "TEXT")
+    _ensure_column("sbom_component", "eos_date", "TEXT")
+    _ensure_column("sbom_component", "eol_date", "TEXT")
+    _ensure_column("sbom_component", "is_deprecated", "BOOLEAN", "0")
+    _ensure_column("sbom_component", "maintenance_status", "TEXT")
+    _ensure_remediation_audit_table()
+
 
     db = SessionLocal()
     try:
@@ -365,6 +443,7 @@ error_handlers.install(app)
 _protected = [Depends(require_auth)]
 
 app.include_router(health.router)  # intentionally unprotected
+app.include_router(sbom_versions.router, dependencies=_protected)
 app.include_router(sboms_crud.router, dependencies=_protected)
 # New multipart upload route running the eight-stage validation pipeline.
 # Path /api/sboms/upload — see ADR-0007.
@@ -382,6 +461,9 @@ app.include_router(compare.router, dependencies=_protected)
 app.include_router(ai_usage.router, dependencies=_protected)
 app.include_router(ai_fixes.router, dependencies=_protected)
 app.include_router(ai_credentials.router, dependencies=_protected)
+app.include_router(lifecycle.router, dependencies=_protected)
+app.include_router(remediation.router, dependencies=_protected)
+
 
 # Feature routers (kept from earlier refactor) — additive paths.
 app.include_router(

@@ -64,6 +64,9 @@ export function invalidateDashboardTiles(qc: QueryClient): void {
   qc.invalidateQueries({ queryKey: ['dashboard-forecast'] });
   qc.invalidateQueries({ queryKey: ['dashboard-exploitation'] });
   qc.invalidateQueries({ queryKey: ['dashboard-remediation'] });
+  qc.invalidateQueries({ queryKey: ['dashboard-remediation-stats'] });
+  qc.invalidateQueries({ queryKey: ['dashboard-lifecycle'] });
+  qc.invalidateQueries({ queryKey: ['dashboard-health'] });
   qc.invalidateQueries({ queryKey: ['dashboard-risk-map'] });
   qc.invalidateQueries({ queryKey: ['dashboard-risk-matrix'] });
   // The Copilot briefing is grounded in those same numbers; the server

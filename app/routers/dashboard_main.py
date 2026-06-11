@@ -296,3 +296,41 @@ def _last_successful_completed_at(db: Session) -> str | None:
             AnalysisRun.run_status.in_(SUCCESSFUL_RUN_STATUSES)
         )
     ).scalar_one_or_none()
+
+
+@router.get("/lifecycle")
+def get_dashboard_lifecycle(db: Session = Depends(get_db)):
+    """Fetch EOL, EOS, and unsupported component counts for the dashboard."""
+    return {
+        "eol_components": metrics.lifecycle_eol_total(db),
+        "eos_upcoming": metrics.lifecycle_eos_upcoming_total(db),
+        "unsupported": metrics.lifecycle_unsupported_total(db),
+    }
+
+
+@router.get("/health")
+def get_dashboard_health(db: Session = Depends(get_db)):
+    """Fetch completeness and outdated component metrics for the dashboard."""
+    return {
+        "completeness_score": metrics.health_completeness_average(db),
+        "missing_metadata": metrics.health_missing_metadata_count(db),
+        "outdated_components": metrics.health_outdated_components_count(db),
+    }
+
+
+@router.get("/remediation-stats")
+def get_dashboard_remediation_stats(db: Session = Depends(get_db)):
+    """Fetch remediation progress, aging counts, and SLA metrics for the dashboard."""
+    rem_summary = metrics.remediation_summary(db)
+    sla_data = rem_summary.get("sla") or {}
+    
+    return {
+        "status_counts": metrics.remediation_status_counts(db),
+        "aging_count": metrics.remediation_aging_count(db),
+        "sla": {
+            "overdue": sla_data.get("overdue", 0),
+            "due_soon": sla_data.get("due_soon", 0),
+            "ok": sla_data.get("ok", 0),
+        }
+    }
+
