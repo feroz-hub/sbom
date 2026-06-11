@@ -1,0 +1,444 @@
+"""Provider-based component lifecycle enrichment orchestration."""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime, timedelta
+from typing import Any
+
+from fastapi import HTTPException
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from ...models import AuditLog, ComponentLifecycleCache, SBOMComponent, SBOMSource
+from .endoflife_date_provider import EndOfLifeDateProvider
+from .manual_override_provider import ManualOverrideProvider
+from .normalizer import normalize_component
+from .osv_provider import OSVProvider
+from .package_registry_provider import PackageRegistryProvider
+from .provider_base import LifecycleProvider
+from .types import (
+    ALLOWED_LIFECYCLE_STATUSES,
+    DEPRECATED,
+    EOF,
+    EOL,
+    EOL_SOON,
+    EOS,
+    HIGH,
+    STATUS_ALIASES,
+    UNKNOWN,
+    UNSUPPORTED,
+    LifecycleResult,
+    NormalizedComponent,
+    canonical_status,
+    now_iso,
+    unknown_result,
+)
+
+DEFAULT_CACHE_TTL_DAYS = 7
+
+
+class LifecycleEnrichmentService:
+    """Normalize components, query providers, cache, and persist results."""
+
+    def __init__(
+        self,
+        *,
+        providers: list[LifecycleProvider] | None = None,
+        cache_ttl_days: int = DEFAULT_CACHE_TTL_DAYS,
+    ) -> None:
+        self.providers = providers or [
+            EndOfLifeDateProvider(),
+            PackageRegistryProvider(),
+            OSVProvider(),
+        ]
+        self.cache_ttl_days = cache_ttl_days
+
+    def enrich_sbom(self, db: Session, sbom_id: int, *, force_refresh: bool = False) -> dict[str, Any]:
+        sbom = db.get(SBOMSource, sbom_id)
+        if sbom is None:
+            raise HTTPException(status_code=404, detail="SBOM not found")
+        components = db.execute(
+            select(SBOMComponent).where(
+                SBOMComponent.sbom_id == sbom_id,
+                (SBOMComponent.is_duplicate.is_(False)) | (SBOMComponent.is_duplicate.is_(None)),
+            )
+        ).scalars().all()
+        enriched = 0
+        stale = 0
+        for component in components:
+            result = self.enrich_component(db, component, force_refresh=force_refresh)
+            enriched += 1
+            stale += 1 if result.stale else 0
+        db.commit()
+        return {"sbom_id": sbom_id, "components_enriched": enriched, "stale_components": stale}
+
+    def enrich_component(
+        self,
+        db: Session,
+        component: SBOMComponent,
+        *,
+        force_refresh: bool = False,
+    ) -> LifecycleResult:
+        normalized = normalize_component(component)
+        component.ecosystem = normalized.ecosystem
+
+        manual = ManualOverrideProvider(component).lookup(normalized)
+        if manual.manual_override:
+            self._apply_result(component, manual, normalized)
+            return manual
+
+        cache_entry = self._read_cache(db, normalized)
+        if cache_entry is not None and not force_refresh and not self._cache_expired(cache_entry):
+            result = self._result_from_cache(cache_entry, normalized, stale=False)
+            self._apply_result(component, result, normalized)
+            return result
+
+        result = self._lookup_providers(normalized)
+        if result.is_actionable:
+            self._write_cache(db, normalized, result)
+            self._apply_result(component, result, normalized)
+            return result
+
+        if cache_entry is not None:
+            stale_result = self._result_from_cache(cache_entry, normalized, stale=True)
+            self._apply_result(component, stale_result, normalized)
+            return stale_result
+
+        result = unknown_result(normalized, "Lifecycle Providers").canonicalized()
+        self._apply_result(component, result, normalized)
+        return result
+
+    def apply_manual_override(
+        self,
+        db: Session,
+        component_id: int,
+        payload: dict[str, Any],
+        *,
+        updated_by: str | None = None,
+    ) -> SBOMComponent:
+        component = db.get(SBOMComponent, component_id)
+        if component is None:
+            raise HTTPException(status_code=404, detail="Component not found")
+
+        raw_status = payload.get("lifecycle_status")
+        status = canonical_status(raw_status)
+        raw_status_key = " ".join(str(raw_status or "").strip().replace("_", " ").replace("-", " ").split()).lower()
+        if status not in ALLOWED_LIFECYCLE_STATUSES or (
+            status == UNKNOWN and raw_status_key not in {"", "unknown"} and raw_status_key not in STATUS_ALIASES
+        ):
+            raise HTTPException(status_code=422, detail="Invalid lifecycle_status")
+
+        old_state = _component_lifecycle_state(component)
+        evidence_url = payload.get("evidence_url") or payload.get("lifecycle_source_url")
+        evidence = payload.get("evidence") if isinstance(payload.get("evidence"), dict) else {}
+        reason = payload.get("reason") or payload.get("note")
+        if reason:
+            evidence = {**evidence, "reason": reason}
+        if evidence_url:
+            evidence = {**evidence, "evidence_url": evidence_url}
+
+        component.lifecycle_status = status
+        component.eos_date = payload.get("eos_date")
+        component.eol_date = payload.get("eol_date")
+        component.eof_date = payload.get("eof_date")
+        component.maintenance_status = payload.get("maintenance_status")
+        component.latest_supported_version = payload.get("latest_supported_version")
+        component.recommended_version = payload.get("recommended_version")
+        component.lifecycle_recommendation = payload.get("recommendation") or payload.get("lifecycle_recommendation")
+        component.lifecycle_source = "Manual Override"
+        component.lifecycle_source_url = evidence_url
+        component.lifecycle_confidence = HIGH if evidence_url else "Medium"
+        component.lifecycle_checked_at = now_iso()
+        component.lifecycle_evidence_json = evidence
+        component.lifecycle_is_stale = False
+        component.lifecycle_manual_override = True
+        component.deprecated = status == DEPRECATED or bool(payload.get("deprecated"))
+        component.is_deprecated = bool(component.deprecated)
+
+        db.add(
+            AuditLog(
+                user_id=updated_by,
+                action="component.lifecycle_override",
+                target_kind="component",
+                target_id=component.id,
+                detail=f"Lifecycle override for {component.name}",
+                metadata_json={"old": old_state, "new": _component_lifecycle_state(component), "reason": reason},
+                created_at=now_iso(),
+            )
+        )
+        db.commit()
+        db.refresh(component)
+        return component
+
+    def lifecycle_report(self, db: Session, sbom_id: int) -> dict[str, Any]:
+        sbom = db.get(SBOMSource, sbom_id)
+        if sbom is None:
+            raise HTTPException(status_code=404, detail="SBOM not found")
+        components = db.execute(
+            select(SBOMComponent).where(
+                SBOMComponent.sbom_id == sbom_id,
+                (SBOMComponent.is_duplicate.is_(False)) | (SBOMComponent.is_duplicate.is_(None)),
+            )
+        ).scalars().all()
+        return {
+            "sbom_id": sbom_id,
+            "sbom_name": sbom.sbom_name,
+            "generated_at": now_iso(),
+            "summary": summarize_components(components),
+            "components": [component_lifecycle_dict(component) for component in components],
+        }
+
+    def _lookup_providers(self, component: NormalizedComponent) -> LifecycleResult:
+        winner: LifecycleResult | None = None
+        osv_result: LifecycleResult | None = None
+        for provider in self.providers:
+            try:
+                result = provider.lookup(component).canonicalized()
+            except Exception:
+                result = unknown_result(component, getattr(provider, "name", None)).canonicalized()
+            if provider.name == "OSV":
+                osv_result = result
+                continue
+            if result.lifecycle_status != UNKNOWN:
+                winner = result
+                break
+            if winner is None and result.is_actionable:
+                winner = result
+
+        if osv_result is None:
+            for provider in self.providers:
+                if provider.name == "OSV":
+                    try:
+                        osv_result = provider.lookup(component).canonicalized()
+                    except Exception:
+                        osv_result = unknown_result(component, provider.name).canonicalized()
+                    break
+
+        if winner is None:
+            winner = osv_result if osv_result and osv_result.is_actionable else unknown_result(component)
+        elif osv_result and osv_result.recommended_version:
+            winner.recommended_version = winner.recommended_version or osv_result.recommended_version
+            winner.recommendation = winner.recommendation or osv_result.recommendation
+            winner.evidence = {**winner.evidence, "osv": osv_result.evidence}
+            if winner.source_name and "OSV" not in winner.source_name:
+                winner.source_name = f"{winner.source_name} + OSV"
+
+        return winner.canonicalized()
+
+    def _read_cache(self, db: Session, component: NormalizedComponent) -> ComponentLifecycleCache | None:
+        name, version, ecosystem, purl = component.cache_identity
+        statement = select(ComponentLifecycleCache).where(
+            ComponentLifecycleCache.normalized_name == name,
+            ComponentLifecycleCache.normalized_version == version,
+            ComponentLifecycleCache.ecosystem == ecosystem,
+            ComponentLifecycleCache.purl == purl,
+        )
+        return db.execute(statement).scalars().first()
+
+    def _write_cache(self, db: Session, component: NormalizedComponent, result: LifecycleResult) -> None:
+        if result.manual_override:
+            return
+        name, version, ecosystem, purl = component.cache_identity
+        cache_entry = self._read_cache(db, component) or ComponentLifecycleCache(
+            normalized_name=name,
+            normalized_version=version,
+            ecosystem=ecosystem,
+            purl=purl,
+        )
+        cache_entry.lifecycle_status = result.lifecycle_status
+        cache_entry.eos_date = result.eos_date
+        cache_entry.eol_date = result.eol_date
+        cache_entry.eof_date = result.eof_date
+        cache_entry.deprecated = bool(result.deprecated)
+        cache_entry.maintenance_status = result.maintenance_status
+        cache_entry.latest_supported_version = result.latest_supported_version
+        cache_entry.recommended_version = result.recommended_version
+        cache_entry.recommendation = result.recommendation
+        cache_entry.source_name = result.source_name
+        cache_entry.source_url = result.source_url
+        cache_entry.evidence_json = result.evidence
+        cache_entry.confidence = result.confidence
+        cache_entry.checked_at = result.checked_at or now_iso()
+        cache_entry.expires_at = (
+            datetime.now(UTC).replace(microsecond=0) + timedelta(days=self.cache_ttl_days)
+        ).isoformat()
+        db.add(cache_entry)
+
+    def _cache_expired(self, cache_entry: ComponentLifecycleCache) -> bool:
+        try:
+            return datetime.fromisoformat(cache_entry.expires_at.replace("Z", "+00:00")) <= datetime.now(UTC)
+        except (AttributeError, ValueError):
+            return True
+
+    def _result_from_cache(
+        self,
+        cache_entry: ComponentLifecycleCache,
+        component: NormalizedComponent,
+        *,
+        stale: bool,
+    ) -> LifecycleResult:
+        evidence = cache_entry.evidence_json if isinstance(cache_entry.evidence_json, dict) else {}
+        if stale:
+            evidence = {**evidence, "stale_cache": True, "cache_expires_at": cache_entry.expires_at}
+        return LifecycleResult(
+            component_name=component.normalized_name,
+            component_version=component.normalized_version,
+            ecosystem=component.ecosystem,
+            purl=component.purl,
+            lifecycle_status=cache_entry.lifecycle_status or UNKNOWN,
+            eos_date=cache_entry.eos_date,
+            eol_date=cache_entry.eol_date,
+            eof_date=cache_entry.eof_date,
+            deprecated=bool(cache_entry.deprecated),
+            maintenance_status=cache_entry.maintenance_status,
+            latest_supported_version=cache_entry.latest_supported_version,
+            recommended_version=cache_entry.recommended_version,
+            recommendation=cache_entry.recommendation,
+            source_name=cache_entry.source_name,
+            source_url=cache_entry.source_url,
+            evidence=evidence,
+            confidence=cache_entry.confidence or "Unknown",
+            checked_at=cache_entry.checked_at,
+            stale=stale,
+        ).canonicalized()
+
+    def _apply_result(
+        self,
+        component: SBOMComponent,
+        result: LifecycleResult,
+        normalized: NormalizedComponent,
+    ) -> None:
+        component.ecosystem = normalized.ecosystem
+        component.lifecycle_status = result.lifecycle_status
+        component.eos_date = result.eos_date
+        component.eol_date = result.eol_date
+        component.eof_date = result.eof_date
+        component.deprecated = bool(result.deprecated)
+        component.is_deprecated = bool(result.deprecated)
+        component.maintenance_status = result.maintenance_status
+        component.latest_supported_version = result.latest_supported_version
+        component.recommended_version = result.recommended_version
+        component.lifecycle_recommendation = result.recommendation
+        component.lifecycle_source = result.source_name
+        component.lifecycle_source_url = result.source_url
+        component.lifecycle_confidence = result.confidence
+        component.lifecycle_checked_at = result.checked_at or now_iso()
+        component.lifecycle_evidence_json = result.evidence
+        component.lifecycle_is_stale = bool(result.stale)
+        if not result.manual_override:
+            component.lifecycle_manual_override = False
+
+
+def summarize_components(components: list[SBOMComponent]) -> dict[str, Any]:
+    summary = {
+        "total_components": len(components),
+        "supported_count": 0,
+        "eol_count": 0,
+        "eos_count": 0,
+        "eof_count": 0,
+        "deprecated_count": 0,
+        "unsupported_count": 0,
+        "unknown_count": 0,
+        "eol_soon_count": 0,
+        "stale_lifecycle_count": 0,
+    }
+    for component in components:
+        status = canonical_status(component.lifecycle_status)
+        if status == "Supported":
+            summary["supported_count"] += 1
+        elif status == EOL:
+            summary["eol_count"] += 1
+        elif status == EOS:
+            summary["eos_count"] += 1
+        elif status == EOF:
+            summary["eof_count"] += 1
+        elif status == DEPRECATED:
+            summary["deprecated_count"] += 1
+        elif status == UNSUPPORTED:
+            summary["unsupported_count"] += 1
+        elif status == EOL_SOON:
+            summary["eol_soon_count"] += 1
+        else:
+            summary["unknown_count"] += 1
+        if bool(component.lifecycle_is_stale):
+            summary["stale_lifecycle_count"] += 1
+    summary["top_risky_components"] = [
+        component_lifecycle_dict(component)
+        for component in sorted(components, key=_risk_sort_key, reverse=True)
+        if canonical_status(component.lifecycle_status) in {EOL, EOS, EOF, DEPRECATED, UNSUPPORTED, EOL_SOON}
+    ][:10]
+    summary["recommended_upgrades"] = [
+        component_lifecycle_dict(component)
+        for component in components
+        if component.recommended_version or component.lifecycle_recommendation
+    ][:10]
+    return summary
+
+
+def component_lifecycle_dict(component: SBOMComponent) -> dict[str, Any]:
+    return {
+        "id": component.id,
+        "name": component.name,
+        "version": component.version,
+        "ecosystem": component.ecosystem,
+        "purl": component.purl,
+        "supplier": component.supplier,
+        "license": component.license,
+        "lifecycle_status": canonical_status(component.lifecycle_status),
+        "eos_date": component.eos_date,
+        "eol_date": component.eol_date,
+        "eof_date": component.eof_date,
+        "deprecated": bool(component.deprecated or component.is_deprecated),
+        "maintenance_status": component.maintenance_status,
+        "latest_supported_version": component.latest_supported_version,
+        "recommended_version": component.recommended_version,
+        "recommendation": component.lifecycle_recommendation,
+        "source_name": component.lifecycle_source,
+        "source_url": component.lifecycle_source_url,
+        "confidence": component.lifecycle_confidence,
+        "checked_at": component.lifecycle_checked_at,
+        "evidence": component.lifecycle_evidence_json,
+        "is_stale": bool(component.lifecycle_is_stale),
+        "manual_override": bool(component.lifecycle_manual_override),
+    }
+
+
+def _risk_sort_key(component: SBOMComponent) -> int:
+    status = canonical_status(component.lifecycle_status)
+    weights = {EOL: 7, UNSUPPORTED: 6, EOS: 5, EOF: 4, DEPRECATED: 3, EOL_SOON: 2}
+    return weights.get(status, 0)
+
+
+def _component_lifecycle_state(component: SBOMComponent) -> dict[str, Any]:
+    return {
+        "lifecycle_status": component.lifecycle_status,
+        "eos_date": component.eos_date,
+        "eol_date": component.eol_date,
+        "eof_date": component.eof_date,
+        "maintenance_status": component.maintenance_status,
+        "recommended_version": component.recommended_version,
+        "source": component.lifecycle_source,
+    }
+
+
+def sync_lifecycle_for_sbom(db: Session, sbom_id: int, *, force_refresh: bool = False) -> dict[str, Any]:
+    return LifecycleEnrichmentService().enrich_sbom(db, sbom_id, force_refresh=force_refresh)
+
+
+def refresh_component_lifecycle(db: Session, component_id: int, *, force_refresh: bool = True) -> SBOMComponent:
+    component = db.get(SBOMComponent, component_id)
+    if component is None:
+        raise HTTPException(status_code=404, detail="Component not found")
+    LifecycleEnrichmentService().enrich_component(db, component, force_refresh=force_refresh)
+    db.commit()
+    db.refresh(component)
+    return component
+
+
+__all__ = [
+    "LifecycleEnrichmentService",
+    "component_lifecycle_dict",
+    "refresh_component_lifecycle",
+    "summarize_components",
+    "sync_lifecycle_for_sbom",
+]

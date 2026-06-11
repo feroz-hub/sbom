@@ -37,7 +37,7 @@ from .findings import (
 from .forecast import findings_forecast, linear_fit, velocity_anomaly
 from .health import health_completeness_average, health_missing_metadata_count, health_outdated_components_count
 from .kev import findings_kev_in_scope
-from .lifecycle import lifecycle_eol_total, lifecycle_eos_upcoming_total, lifecycle_unsupported_total
+from .lifecycle import lifecycle_eol_total, lifecycle_eos_upcoming_total, lifecycle_summary, lifecycle_unsupported_total
 from .quality import findings_needs_review_in_scope
 from .remediation import DEFAULT_SLA_DAYS, remediation_summary, sla_state
 from .remediation_extra import remediation_aging_count, remediation_status_counts
@@ -65,6 +65,7 @@ __all__ = [
     # lifecycle metrics
     "lifecycle_eol_total",
     "lifecycle_eos_upcoming_total",
+    "lifecycle_summary",
     "lifecycle_unsupported_total",
     # health metrics
     "health_completeness_average",

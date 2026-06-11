@@ -146,13 +146,29 @@ class SBOMComponentOut(ORMModel):
     supplier: str | None = None
     scope: str | None = None
     created_on: str | None = None
+    ecosystem: str | None = None
     license: str | None = None
     hashes: str | None = None
     lifecycle_status: str | None = None
     eos_date: str | None = None
     eol_date: str | None = None
+    eof_date: str | None = None
     is_deprecated: bool | None = None
+    deprecated: bool | None = None
     maintenance_status: str | None = None
+    latest_supported_version: str | None = None
+    recommended_version: str | None = None
+    lifecycle_recommendation: str | None = None
+    lifecycle_source: str | None = None
+    lifecycle_source_url: str | None = None
+    lifecycle_confidence: str | None = None
+    lifecycle_checked_at: str | None = None
+    lifecycle_evidence_json: dict[str, Any] | None = None
+    lifecycle_is_stale: bool | None = None
+    lifecycle_manual_override: bool | None = None
+    normalized_component_key: str | None = None
+    is_duplicate: bool | None = False
+    duplicate_of_component_id: int | None = None
 
 
 
@@ -345,8 +361,20 @@ class LifecycleInfoUpdate(BaseModel):
     lifecycle_status: str
     eos_date: str | None = None
     eol_date: str | None = None
+    eof_date: str | None = None
     is_deprecated: bool = False
+    deprecated: bool | None = None
     maintenance_status: str | None = None
+    latest_supported_version: str | None = None
+    recommended_version: str | None = None
+    recommendation: str | None = None
+    lifecycle_recommendation: str | None = None
+    evidence_url: str | None = None
+    lifecycle_source_url: str | None = None
+    reason: str | None = None
+    note: str | None = None
+    evidence: dict[str, Any] | None = None
+    updated_by: str | None = None
 
 
 class VulnerabilityRemediationUpsert(BaseModel):

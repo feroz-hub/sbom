@@ -119,6 +119,10 @@ E111_SIGNATURE_ALG_UNSUPPORTED = "SBOM_VAL_E111_SIGNATURE_ALG_UNSUPPORTED"
 E112_SIGNATURE_KEY_NOT_FOUND = "SBOM_VAL_E112_SIGNATURE_KEY_NOT_FOUND"
 W113_SIGNATURE_NOT_PRESENT = "SBOM_VAL_W113_SIGNATURE_NOT_PRESENT"
 
+# Stage 9 — Component Deduplication ------------------------------------------
+W120_DUPLICATE_COMPONENT_DETECTED = "SBOM_VAL_W120_DUPLICATE_COMPONENT_DETECTED"
+
+
 
 # ---------------------------------------------------------------------------
 # Code → (HTTP status, default severity) mapping
@@ -203,6 +207,8 @@ _CODE_TABLE: dict[str, tuple[int, Severity]] = {
     E111_SIGNATURE_ALG_UNSUPPORTED: (422, Severity.ERROR),
     E112_SIGNATURE_KEY_NOT_FOUND: (422, Severity.ERROR),
     W113_SIGNATURE_NOT_PRESENT: (200, Severity.WARNING),
+    # Stage 9
+    W120_DUPLICATE_COMPONENT_DETECTED: (422, Severity.WARNING),
 }
 
 

@@ -150,91 +150,13 @@ def normalized_key(value: str | None) -> str:
 
 
 def upsert_components(db: Session, sbom_obj: SBOMSource, components: list[dict]) -> dict:
-    existing_rows = db.execute(select(SBOMComponent).where(SBOMComponent.sbom_id == sbom_obj.id)).scalars().all()
-
-    by_comp_triplet = {}
-    by_name_version: dict = {}
-    by_cpe = {}
-
-    for row in existing_rows:
-        triplet = (
-            normalized_key(row.cpe),
-            normalized_key(row.name),
-            normalized_key(row.version),
-        )
-        by_comp_triplet.setdefault(triplet, row)
-        nv = (normalized_key(row.name), normalized_key(row.version))
-        by_name_version.setdefault(nv, []).append(row)
-        if row.cpe:
-            by_cpe.setdefault(normalized_key(row.cpe), []).append(row)
-
-    for comp in components:
-        name = (comp.get("name") or "").strip()
-        if not name:
-            fallback = (comp.get("bom_ref") or comp.get("purl") or comp.get("cpe") or "component").strip()
-            name = fallback[:255] if fallback else "component"
-
-        version = (comp.get("version") or "").strip() or None
-        cpe = (comp.get("cpe") or "").strip() or None
-        triplet = (normalized_key(cpe), normalized_key(name), normalized_key(version))
-
-        if triplet in by_comp_triplet:
-            continue
-
-        # Backfill: existing row with same (name, version) and no CPE is
-        # the same logical component now augmented with a derived CPE.
-        # Update in place instead of inserting a duplicate. (See
-        # services/sbom_service._upsert_components for the canonical
-        # version of this logic — both copies fix the same bug.)
-        if cpe:
-            nv_key = (normalized_key(name), normalized_key(version))
-            backfill_target = next(
-                (r for r in by_name_version.get(nv_key, []) if not (r.cpe or "").strip()),
-                None,
-            )
-            if backfill_target is not None:
-                backfill_target.cpe = cpe
-                db.add(backfill_target)
-                db.flush()
-                empty_triplet = (normalized_key(None), normalized_key(name), normalized_key(version))
-                by_comp_triplet.pop(empty_triplet, None)
-                by_comp_triplet[triplet] = backfill_target
-                by_cpe.setdefault(normalized_key(cpe), []).append(backfill_target)
-                continue
-
-        row = SBOMComponent(
-            sbom_id=sbom_obj.id,
-            bom_ref=(comp.get("bom_ref") or "").strip() or None,
-            component_type=(comp.get("type") or "").strip() or None,
-            component_group=(comp.get("group") or "").strip() or None,
-            name=name,
-            version=version,
-            purl=(comp.get("purl") or "").strip() or None,
-            cpe=cpe,
-            supplier=(comp.get("supplier") or "").strip() or None,
-            scope=(comp.get("scope") or "").strip() or None,
-            license=(comp.get("license") or "").strip() or None,
-            hashes=(comp.get("hashes") or "").strip() or None,
-            created_on=now_iso(),
-        )
-        db.add(row)
-        db.flush()
-
-        by_comp_triplet[triplet] = row
-        nv_key = (normalized_key(name), normalized_key(version))
-        by_name_version.setdefault(nv_key, []).append(row)
-        if cpe:
-            by_cpe.setdefault(normalized_key(cpe), []).append(row)
-
-    return {"triplet": by_comp_triplet, "cpe": by_cpe}
+    from ..services.sbom_service import _upsert_components
+    return _upsert_components(db, sbom_obj, components)
 
 
 def sync_sbom_components(db: Session, sbom_obj: SBOMSource) -> list[dict]:
-    if not sbom_obj.sbom_data:
-        return []
-    components = extract_components(sbom_obj.sbom_data)
-    upsert_components(db, sbom_obj, components)
-    return components
+    from ..services.sbom_service import sync_sbom_components as service_sync_sbom_components
+    return service_sync_sbom_components(db, sbom_obj)
 
 
 def safe_int(value: Any, default: int = 0) -> int:
@@ -272,7 +194,23 @@ async def create_auto_report(
     # into ``persist_analysis_run`` for component-row upserting.
     try:
         components_raw = extract_components(sbom_obj.sbom_data)
-        components_raw = [enrich_component_for_osv(c) for c in components_raw]
+
+        # Deduplicate components before scanning
+        try:
+            sbom_dict = json.loads(sbom_obj.sbom_data) if isinstance(sbom_obj.sbom_data, str) else sbom_obj.sbom_data
+        except Exception:
+            sbom_dict = {}
+        dependencies = []
+        if isinstance(sbom_dict, dict):
+            if sbom_dict.get("bomFormat") == "CycloneDX":
+                dependencies = sbom_dict.get("dependencies") or []
+            elif sbom_dict.get("spdxVersion") or sbom_dict.get("SPDXID"):
+                dependencies = sbom_dict.get("relationships") or []
+
+        from ..services.component_deduplication_service import ComponentDeduplicationService
+        canonical_raw, _, _, _, _ = ComponentDeduplicationService.deduplicate_components(components_raw, dependencies)
+
+        components_raw = [enrich_component_for_osv(c) for c in canonical_raw]
         components, _ = _augment_components_with_cpe(components_raw)
     except Exception as exc:
         log.warning("Component extraction failed for SBOM id=%d: %s", sbom_obj.id, exc)
@@ -595,6 +533,7 @@ def get_sbom_details(
 @router.get("/sboms/{sbom_id}/components", response_model=list[SBOMComponentOut])
 def get_sbom_components(
     sbom_id: int = Path(..., description="SBOM ID (positive integer)"),
+    include_duplicates: bool = Query(False, description="Whether to include duplicate components in the response"),
     page: int = Query(1, ge=1),
     page_size: int = Query(100, ge=1, le=1000),
     response: Response = None,
@@ -610,11 +549,15 @@ def get_sbom_components(
         if not sbom:
             raise HTTPException(status_code=404, detail="SBOM not found")
 
-        total = db.execute(select(func.count(SBOMComponent.id)).where(SBOMComponent.sbom_id == sbom_id)).scalar_one()
+        where_clause = [SBOMComponent.sbom_id == sbom_id]
+        if not include_duplicates:
+            where_clause.append((SBOMComponent.is_duplicate.is_(False)) | (SBOMComponent.is_duplicate.is_(None)))
+
+        total = db.execute(select(func.count(SBOMComponent.id)).where(*where_clause)).scalar_one()
 
         stmt = (
             select(SBOMComponent)
-            .where(SBOMComponent.sbom_id == sbom_id)
+            .where(*where_clause)
             .order_by(SBOMComponent.name.asc(), SBOMComponent.version.asc())
             .limit(page_size)
             .offset(offset)
@@ -629,6 +572,32 @@ def get_sbom_components(
         raise
     except SQLAlchemyError as exc:
         raise HTTPException(status_code=500, detail="Internal database error while fetching SBOM components.") from exc
+
+
+@router.get("/sboms/{sbom_id}/dedupe-report")
+def get_sbom_dedupe_report(
+    sbom_id: int = Path(..., description="SBOM ID (positive integer)"),
+    db: Session = Depends(get_db),
+):
+    sbom_id = _validate_positive_int(sbom_id, param_name="sbom_id")
+    try:
+        sbom = db.get(SBOMSource, sbom_id)
+        if not sbom:
+            raise HTTPException(status_code=404, detail="SBOM not found")
+        report = sbom.dedupe_report_json
+        if not report:
+            report = {
+                "duplicates_found": 0,
+                "duplicates_merged": 0,
+                "conflicts": [],
+                "ref_mapping": {},
+                "remapped_dependencies": {}
+            }
+        return report
+    except HTTPException:
+        raise
+    except SQLAlchemyError as exc:
+        raise HTTPException(status_code=500, detail="Internal database error while fetching dedupe report.") from exc
 
 
 @router.patch("/sboms/{sbom_id}", response_model=SBOMSourceOut)

@@ -16,6 +16,7 @@ import { ScheduleCard } from '@/components/schedules/ScheduleCard';
 import { ValidationReportSection } from '@/components/sboms/ValidationReportSection';
 import { 
   getSbomComponents, 
+  getSbomDedupeReport,
   getRuns, 
   getSbomInfo, 
   getSbomRiskSummary, 
@@ -24,6 +25,8 @@ import {
   getSbomVersions,
   compareSbomVersions,
   restoreSbomVersion,
+  refreshSbomLifecycle,
+  refreshComponentLifecycle,
   BASE_URL
 } from '@/lib/api';
 import { useAnalysisStream } from '@/hooks/useAnalysisStream';
@@ -40,6 +43,32 @@ interface SbomDetailProps {
   sbom: SBOMSource;
 }
 
+function canonicalLifecycleStatus(status?: string | null) {
+  const normalized = (status || 'Unknown').toLowerCase();
+  if (normalized === 'active' || normalized === 'supported') return 'Supported';
+  if (normalized === 'eol') return 'EOL';
+  if (normalized === 'eos') return 'EOS';
+  if (normalized === 'eof') return 'EOF';
+  if (normalized === 'deprecated') return 'Deprecated';
+  if (normalized === 'unsupported' || normalized === 'unmaintained') return 'Unsupported';
+  if (normalized === 'eol soon' || normalized === 'nearing eol') return 'EOL Soon';
+  return status || 'Unknown';
+}
+
+function lifecycleBadgeClass(status?: string | null) {
+  const canonical = canonicalLifecycleStatus(status);
+  if (canonical === 'EOL' || canonical === 'Unsupported') {
+    return 'bg-red-50 text-red-700 border-red-200';
+  }
+  if (canonical === 'EOS' || canonical === 'EOF' || canonical === 'Deprecated' || canonical === 'EOL Soon') {
+    return 'bg-amber-50 text-amber-700 border-amber-200';
+  }
+  if (canonical === 'Supported') {
+    return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+  }
+  return 'bg-gray-50 text-gray-700 border-gray-200';
+}
+
 export function SbomDetail({ sbom }: SbomDetailProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -53,13 +82,20 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
   const [editSupplier, setEditSupplier] = useState('');
   const [editLicense, setEditLicense] = useState('');
   const [editHashes, setEditHashes] = useState('');
-  const [editLifecycleStatus, setEditLifecycleStatus] = useState('active');
+  const [editLifecycleStatus, setEditLifecycleStatus] = useState('Supported');
   const [editEosDate, setEditEosDate] = useState('');
   const [editEolDate, setEditEolDate] = useState('');
+  const [editEofDate, setEditEofDate] = useState('');
   const [editIsDeprecated, setEditIsDeprecated] = useState(false);
-  const [editMaintStatus, setEditMaintStatus] = useState('active');
+  const [editMaintStatus, setEditMaintStatus] = useState('Supported');
+  const [editRecommendedVersion, setEditRecommendedVersion] = useState('');
+  const [editOverrideReason, setEditOverrideReason] = useState('');
+  const [editEvidenceUrl, setEditEvidenceUrl] = useState('');
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [editError, setEditError] = useState('');
+  const [isRefreshingLifecycle, setIsRefreshingLifecycle] = useState(false);
+  const [refreshingComponentId, setRefreshingComponentId] = useState<number | null>(null);
+  const [lifecycleMessage, setLifecycleMessage] = useState('');
 
   // Version Comparison State
   const [selectedVersions, setSelectedVersions] = useState<number[]>([]);
@@ -67,9 +103,19 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
   const [isComparing, setIsComparing] = useState(false);
   const [restoreMessage, setRestoreMessage] = useState('');
 
+  // Deduplication State
+  const [showDuplicates, setShowDuplicates] = useState(false);
+  const [isDedupeModalOpen, setIsDedupeModalOpen] = useState(false);
+
   const { data: components, isLoading: compLoading } = useQuery({
-    queryKey: ['sbom-components', sbom.id],
-    queryFn: ({ signal }) => getSbomComponents(sbom.id, signal),
+    queryKey: ['sbom-components', sbom.id, showDuplicates],
+    queryFn: ({ signal }) => getSbomComponents(sbom.id, showDuplicates, signal),
+  });
+
+  const { data: dedupeReport } = useQuery({
+    queryKey: ['sbom-dedupe-report', sbom.id],
+    queryFn: ({ signal }) => getSbomDedupeReport(sbom.id, signal),
+    retry: false,
   });
 
   const { data: runs, isLoading: runsLoading } = useQuery({
@@ -185,11 +231,15 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
     setEditSupplier(c.supplier || '');
     setEditLicense(c.license || '');
     setEditHashes(c.hashes || '');
-    setEditLifecycleStatus(c.lifecycle_status || 'active');
+    setEditLifecycleStatus(canonicalLifecycleStatus(c.lifecycle_status));
     setEditEosDate(c.eos_date || '');
     setEditEolDate(c.eol_date || '');
-    setEditIsDeprecated(c.is_deprecated || false);
-    setEditMaintStatus(c.maintenance_status || 'active');
+    setEditEofDate(c.eof_date || '');
+    setEditIsDeprecated(Boolean(c.deprecated || c.is_deprecated));
+    setEditMaintStatus(c.maintenance_status || 'Supported');
+    setEditRecommendedVersion(c.recommended_version || '');
+    setEditOverrideReason('');
+    setEditEvidenceUrl(c.lifecycle_source_url || '');
     setEditError('');
   };
 
@@ -213,8 +263,13 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
               lifecycle_status: editLifecycleStatus,
               eos_date: editEosDate || null,
               eol_date: editEolDate || null,
+              eof_date: editEofDate || null,
+              deprecated: editIsDeprecated,
               is_deprecated: editIsDeprecated,
               maintenance_status: editMaintStatus,
+              recommended_version: editRecommendedVersion || null,
+              reason: editOverrideReason || null,
+              evidence_url: editEvidenceUrl || null,
             }
           }
         ],
@@ -282,6 +337,40 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
       }, 2000);
     } catch (err: any) {
       setRestoreMessage(`Restoration failed: ${err.message}`);
+    }
+  };
+
+  const invalidateLifecycleQueries = () => {
+    queryClient.invalidateQueries({ queryKey: ['sbom-components', sbom.id] });
+    queryClient.invalidateQueries({ queryKey: ['dashboard-lifecycle'] });
+    queryClient.invalidateQueries({ queryKey: ['dashboard-health'] });
+  };
+
+  const handleRefreshLifecycle = async () => {
+    setIsRefreshingLifecycle(true);
+    setLifecycleMessage('');
+    try {
+      const result = await refreshSbomLifecycle(sbom.id, true);
+      invalidateLifecycleQueries();
+      setLifecycleMessage(`Lifecycle refreshed for ${result.components_enriched} components.`);
+    } catch (err: any) {
+      setLifecycleMessage(err.message || 'Lifecycle refresh failed.');
+    } finally {
+      setIsRefreshingLifecycle(false);
+    }
+  };
+
+  const handleRefreshComponentLifecycle = async (component: SBOMComponent) => {
+    setRefreshingComponentId(component.id);
+    setLifecycleMessage('');
+    try {
+      await refreshComponentLifecycle(component.id, true);
+      invalidateLifecycleQueries();
+      setLifecycleMessage(`Lifecycle refreshed for ${component.name}.`);
+    } catch (err: any) {
+      setLifecycleMessage(err.message || 'Component lifecycle refresh failed.');
+    } finally {
+      setRefreshingComponentId(null);
     }
   };
 
@@ -475,12 +564,59 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
 
       {/* TAB 2: COMPONENTS */}
       {activeTab === 'components' && (
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              Components{' '}
-              {components && <span className="ml-2 text-sm font-normal text-hcl-muted">({components.length})</span>}
-            </CardTitle>
+        <div className="space-y-4">
+          {/* Deduplication Summary Banner */}
+          {dedupeReport && dedupeReport.duplicates_found > 0 && (
+            <div className="p-4 bg-amber-50/70 border border-amber-200/60 rounded-xl flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2.5">
+                <Layers className="h-5 w-5 text-amber-600" />
+                <div>
+                  <h4 className="text-sm font-semibold text-amber-900">Deduplication Summary</h4>
+                  <p className="text-xs text-amber-700 font-medium mt-0.5">
+                    Found {dedupeReport.duplicates_found} duplicate component entries. Merged into {dedupeReport.duplicates_found - dedupeReport.duplicates_merged} unique canonical components.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsDedupeModalOpen(true)}
+                className="px-3 py-1.5 text-xs font-semibold text-amber-800 bg-amber-100 hover:bg-amber-200 rounded-lg transition-colors"
+              >
+                View Dedupe Report
+              </button>
+            </div>
+          )}
+
+          <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-3">
+            <div>
+              <CardTitle>
+                Components{' '}
+                {components && <span className="ml-2 text-sm font-normal text-hcl-muted">({components.length})</span>}
+              </CardTitle>
+              {lifecycleMessage ? (
+                <p className="mt-1 text-xs text-hcl-muted">{lifecycleMessage}</p>
+              ) : null}
+            </div>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <label className="flex items-center gap-1.5 mr-2 text-xs font-semibold text-hcl-navy cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showDuplicates}
+                  onChange={(e) => setShowDuplicates(e.target.checked)}
+                  className="rounded border-gray-300 text-hcl-blue focus:ring-hcl-blue h-3.5 w-3.5"
+                />
+                Show Duplicates
+              </label>
+              <a
+                href={`${BASE_URL}/api/sboms/${sbom.id}/lifecycle/report`}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-hcl-border px-3 py-1.5 text-xs font-semibold text-hcl-navy transition-colors hover:bg-hcl-light"
+              >
+                <Download className="h-3.5 w-3.5" /> Lifecycle Report
+              </a>
+              <Button size="sm" variant="outline" onClick={handleRefreshLifecycle} loading={isRefreshingLifecycle}>
+                <RefreshCw className="h-3.5 w-3.5" /> Refresh Lifecycle
+              </Button>
+            </div>
           </CardHeader>
           <div className="overflow-hidden">
             <Table striped ariaLabel="SBOM components">
@@ -502,9 +638,28 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                 ) : (
                   compPagination.pageItems.map((c) => (
                     <tr key={c.id} className="hover:bg-hcl-light/40">
-                      <Td className="font-medium text-hcl-navy">{c.name}</Td>
+                      <Td className="font-medium text-hcl-navy">
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-2">
+                            <span>{c.name}</span>
+                            {c.is_duplicate && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                                Duplicate
+                              </span>
+                            )}
+                          </div>
+                          {c.is_duplicate && c.duplicate_of_component_id && (
+                            <span className="text-[10px] text-hcl-muted">
+                              Duplicate of ID #{c.duplicate_of_component_id}
+                            </span>
+                          )}
+                        </div>
+                      </Td>
                       <Td className="font-mono text-xs">{c.version || '—'}</Td>
-                      <Td className="text-hcl-muted">{c.component_type || '—'}</Td>
+                      <Td className="text-hcl-muted">
+                        <div>{c.component_type || '—'}</div>
+                        {c.ecosystem ? <div className="text-[10px] uppercase tracking-wide">{c.ecosystem}</div> : null}
+                      </Td>
                       <Td className="max-w-[120px] truncate">
                         {c.license ? (
                           <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-50 text-emerald-800 border border-emerald-100 dark:bg-emerald-950/20 dark:text-emerald-300">
@@ -515,17 +670,39 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                         )}
                       </Td>
                       <Td>
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold capitalize border ${
-                          c.lifecycle_status === 'eol' || c.lifecycle_status === 'unsupported'
-                            ? 'bg-red-50 text-red-700 border-red-200'
-                            : c.lifecycle_status === 'eos' || c.lifecycle_status === 'deprecated'
-                            ? 'bg-amber-50 text-amber-700 border-amber-200'
-                            : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                        }`}>
-                          {c.lifecycle_status || 'active'}
+                        <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${lifecycleBadgeClass(c.lifecycle_status)}`}>
+                          {canonicalLifecycleStatus(c.lifecycle_status)}
                         </span>
+                        <div className="mt-1 max-w-[220px] space-y-0.5 text-[10px] leading-4 text-hcl-muted">
+                          {(c.eol_date || c.eos_date || c.eof_date) && (
+                            <div>
+                              {c.eol_date ? `EOL ${c.eol_date}` : ''}
+                              {c.eos_date ? `${c.eol_date ? ' · ' : ''}EOS ${c.eos_date}` : ''}
+                              {c.eof_date ? `${c.eol_date || c.eos_date ? ' · ' : ''}EOF ${c.eof_date}` : ''}
+                            </div>
+                          )}
+                          {(c.lifecycle_source || c.lifecycle_confidence) && (
+                            <div className="truncate">
+                              {c.lifecycle_source || 'Provider'} {c.lifecycle_confidence ? `· ${c.lifecycle_confidence}` : ''}
+                            </div>
+                          )}
+                          {c.recommended_version || c.lifecycle_recommendation ? (
+                            <div className="truncate text-hcl-navy">
+                              {c.recommended_version ? `Upgrade ${c.recommended_version}` : c.lifecycle_recommendation}
+                            </div>
+                          ) : null}
+                          {c.lifecycle_is_stale ? <div className="font-semibold text-amber-700">Stale data</div> : null}
+                          {c.lifecycle_manual_override ? <div className="font-semibold text-hcl-blue">Manual override</div> : null}
+                        </div>
                       </Td>
                       <Td className="text-right">
+                        <button
+                          onClick={() => handleRefreshComponentLifecycle(c)}
+                          disabled={refreshingComponentId === c.id}
+                          className="mr-3 inline-flex items-center gap-1 text-xs font-medium text-hcl-muted transition-colors hover:text-hcl-navy disabled:opacity-60"
+                        >
+                          <RefreshCw className={`h-3 w-3 ${refreshingComponentId === c.id ? 'animate-spin' : ''}`} /> Refresh
+                        </button>
                         <button
                           onClick={() => openEditModal(c)}
                           className="inline-flex items-center gap-1 text-xs text-hcl-blue hover:text-hcl-navy transition-colors font-medium"
@@ -555,6 +732,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
             ) : null}
           </div>
         </Card>
+      </div>
       )}
 
       {/* TAB 3: VERSION CONTROL */}
@@ -883,11 +1061,14 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                       onChange={(e) => setEditLifecycleStatus(e.target.value)}
                       className="mt-1 w-full rounded-lg border border-hcl-border p-2 text-sm text-hcl-navy focus:outline-none focus:ring-2 focus:ring-hcl-blue"
                     >
-                      <option value="active">Active</option>
-                      <option value="deprecated">Deprecated</option>
-                      <option value="eos">End of Support (EOS)</option>
-                      <option value="eol">End of Life (EOL)</option>
-                      <option value="unsupported">Unsupported</option>
+                      <option value="Supported">Supported</option>
+                      <option value="EOL">End of Life (EOL)</option>
+                      <option value="EOS">End of Support (EOS)</option>
+                      <option value="EOF">End of Fix (EOF)</option>
+                      <option value="Deprecated">Deprecated</option>
+                      <option value="Unsupported">Unsupported</option>
+                      <option value="EOL Soon">EOL Soon</option>
+                      <option value="Unknown">Unknown</option>
                     </select>
                   </div>
                   <div>
@@ -897,13 +1078,16 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                       onChange={(e) => setEditMaintStatus(e.target.value)}
                       className="mt-1 w-full rounded-lg border border-hcl-border p-2 text-sm text-hcl-navy focus:outline-none focus:ring-2 focus:ring-hcl-blue"
                     >
-                      <option value="active">Active / Maintained</option>
-                      <option value="unmaintained">Unmaintained</option>
+                      <option value="Supported">Supported</option>
+                      <option value="Active support">Active support</option>
+                      <option value="Maintenance only">Maintenance only</option>
+                      <option value="Unmaintained">Unmaintained</option>
+                      <option value="Unknown">Unknown</option>
                     </select>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-hcl-muted uppercase">EOS Date</label>
                     <input
@@ -924,6 +1108,46 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                       className="mt-1 w-full rounded-lg border border-hcl-border p-2 text-sm text-hcl-navy focus:outline-none focus:ring-2 focus:ring-hcl-blue"
                     />
                   </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-hcl-muted uppercase">EOF Date</label>
+                    <input
+                      type="text"
+                      placeholder="YYYY-MM-DD"
+                      value={editEofDate}
+                      onChange={(e) => setEditEofDate(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-hcl-border p-2 text-sm text-hcl-navy focus:outline-none focus:ring-2 focus:ring-hcl-blue"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-hcl-muted uppercase">Recommended Version</label>
+                    <input
+                      type="text"
+                      value={editRecommendedVersion}
+                      onChange={(e) => setEditRecommendedVersion(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-hcl-border p-2 text-sm text-hcl-navy focus:outline-none focus:ring-2 focus:ring-hcl-blue"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-hcl-muted uppercase">Evidence URL</label>
+                    <input
+                      type="url"
+                      value={editEvidenceUrl}
+                      onChange={(e) => setEditEvidenceUrl(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-hcl-border p-2 text-sm text-hcl-navy focus:outline-none focus:ring-2 focus:ring-hcl-blue"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-hcl-muted uppercase">Override Reason</label>
+                  <textarea
+                    value={editOverrideReason}
+                    onChange={(e) => setEditOverrideReason(e.target.value)}
+                    className="mt-1 min-h-20 w-full rounded-lg border border-hcl-border p-2 text-sm text-hcl-navy focus:outline-none focus:ring-2 focus:ring-hcl-blue"
+                  />
                 </div>
 
                 <div className="flex items-center gap-2 pt-2">
@@ -946,6 +1170,133 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                 </Button>
                 <Button onClick={saveComponentEdits} loading={isSavingEdit} size="sm">
                   Save Override
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* DEDUPLICATION REPORT MODAL OVERLAY */}
+      {isDedupeModalOpen && dedupeReport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
+          <Card className="w-full max-w-2xl bg-white shadow-2xl overflow-y-auto max-h-[90vh] border border-gray-150">
+            <CardHeader className="flex flex-row items-center justify-between border-b pb-4">
+              <div>
+                <CardTitle className="text-lg font-bold text-hcl-navy flex items-center gap-2">
+                  <Layers className="h-5 w-5 text-amber-500" />
+                  Deduplication Report
+                </CardTitle>
+                <p className="text-xs text-hcl-muted mt-1">
+                  Detailed logs of the Stage 9 component merging process for this SBOM version.
+                </p>
+              </div>
+              <button 
+                onClick={() => setIsDedupeModalOpen(false)} 
+                className="text-hcl-muted hover:text-hcl-navy p-1 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </CardHeader>
+            <CardContent className="p-6 space-y-6">
+              {/* Summary Stats Grid */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-4 bg-amber-50/50 border border-amber-100 rounded-xl">
+                  <span className="text-xs font-semibold text-amber-700 uppercase tracking-wider">Duplicates Found</span>
+                  <div className="text-3xl font-extrabold text-amber-900 mt-1">{dedupeReport.duplicates_found || 0}</div>
+                  <p className="text-2xs text-amber-600 mt-1">Identified duplicate component definitions.</p>
+                </div>
+                <div className="p-4 bg-emerald-50/50 border border-emerald-100 rounded-xl">
+                  <span className="text-xs font-semibold text-emerald-700 uppercase tracking-wider">Duplicates Merged</span>
+                  <div className="text-3xl font-extrabold text-emerald-900 mt-1">{dedupeReport.duplicates_merged || 0}</div>
+                  <p className="text-2xs text-emerald-600 mt-1">Merged duplicate fields into canonical records.</p>
+                </div>
+              </div>
+
+              {/* Conflict Resolutions Section */}
+              <div className="space-y-2">
+                <h4 className="text-sm font-bold text-hcl-navy">Conflict Resolutions</h4>
+                {dedupeReport.conflicts && dedupeReport.conflicts.length > 0 ? (
+                  <div className="border border-hcl-border rounded-xl overflow-hidden">
+                    <Table>
+                      <TableHead>
+                        <tr>
+                          <Th className="text-left text-2xs uppercase tracking-wider">Component</Th>
+                          <Th className="text-left text-2xs uppercase tracking-wider">Field</Th>
+                          <Th className="text-left text-2xs uppercase tracking-wider">Values Found</Th>
+                          <Th className="text-left text-2xs uppercase tracking-wider">Selected (Canonical)</Th>
+                        </tr>
+                      </TableHead>
+                      <TableBody>
+                        {dedupeReport.conflicts.map((conflict: any, idx: number) => (
+                          <tr key={idx} className="hover:bg-gray-50/50 transition-colors">
+                            <Td className="font-mono text-xs font-medium text-hcl-navy max-w-[180px] truncate">
+                              <span title={conflict.component}>{conflict.component}</span>
+                            </Td>
+                            <Td>
+                              <span className="px-2 py-0.5 text-2xs font-semibold bg-gray-100 text-gray-700 rounded-md">
+                                {conflict.field}
+                              </span>
+                            </Td>
+                            <Td className="text-xs text-hcl-muted">
+                              {Array.isArray(conflict.values) ? conflict.values.join(' / ') : String(conflict.values)}
+                            </Td>
+                            <Td className="text-xs font-semibold text-emerald-700 bg-emerald-50/20">
+                              {conflict.selected}
+                            </Td>
+                          </tr>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  <p className="text-xs text-hcl-muted bg-gray-50/50 p-4 border border-gray-100 rounded-xl">
+                    No attribute conflicts occurred. All identical component fields merged automatically and cleanly.
+                  </p>
+                )}
+              </div>
+
+              {/* Reference Mapping Table */}
+              <div className="space-y-2">
+                <h4 className="text-sm font-bold text-hcl-navy">Reference Mappings (bom-ref / SPDXID)</h4>
+                {dedupeReport.ref_mapping && Object.keys(dedupeReport.ref_mapping).length > 0 ? (
+                  <div className="border border-hcl-border rounded-xl overflow-hidden max-h-[180px] overflow-y-auto">
+                    <Table>
+                      <TableHead>
+                        <tr>
+                          <Th className="text-left text-2xs uppercase tracking-wider">Duplicate Reference</Th>
+                          <Th className="w-10">{" "}</Th>
+                          <Th className="text-left text-2xs uppercase tracking-wider">Canonical Reference</Th>
+                        </tr>
+                      </TableHead>
+                      <TableBody>
+                        {Object.entries(dedupeReport.ref_mapping).map(([dup, canonical]: [string, any], idx: number) => (
+                          <tr key={idx} className="hover:bg-gray-50/50 transition-colors">
+                            <Td className="font-mono text-xs text-red-600 bg-red-50/10 max-w-[200px] truncate">
+                              <span title={dup}>{dup}</span>
+                            </Td>
+                            <Td className="text-center text-hcl-muted">
+                              <ArrowRight className="h-3.5 w-3.5 inline mx-auto" />
+                            </Td>
+                            <Td className="font-mono text-xs text-emerald-600 bg-emerald-50/10 max-w-[200px] truncate">
+                              <span title={canonical}>{canonical}</span>
+                            </Td>
+                          </tr>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  <p className="text-xs text-hcl-muted bg-gray-50/50 p-4 border border-gray-100 rounded-xl">
+                    No reference mapping is required for this SBOM.
+                  </p>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <Button variant="outline" onClick={() => setIsDedupeModalOpen(false)} size="sm">
+                  Close Report
                 </Button>
               </div>
             </CardContent>

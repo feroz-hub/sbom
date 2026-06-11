@@ -10,20 +10,13 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..models import SBOMComponent
+from ..services.lifecycle import summarize_components
 from ._helpers import active_head_sbom_ids_subquery
 
 
 def lifecycle_eol_total(db: Session) -> int:
     """Total components in active HEAD SBOMs that are End of Life (EOL)."""
-    head_ids = active_head_sbom_ids_subquery()
-    return (
-        db.execute(
-            select(func.count(SBOMComponent.id))
-            .where(SBOMComponent.sbom_id.in_(head_ids))
-            .where(SBOMComponent.lifecycle_status == "eol")
-        ).scalar()
-        or 0
-    )
+    return lifecycle_summary(db)["eol_count"]
 
 
 def lifecycle_eos_upcoming_total(db: Session) -> int:
@@ -37,7 +30,7 @@ def lifecycle_eos_upcoming_total(db: Session) -> int:
             select(func.count(SBOMComponent.id))
             .where(SBOMComponent.sbom_id.in_(head_ids))
             .where(
-                (SBOMComponent.lifecycle_status == "eos") |
+                (func.lower(SBOMComponent.lifecycle_status) == "eos") |
                 (
                     (SBOMComponent.eos_date.is_not(None)) & 
                     (SBOMComponent.eos_date >= today_str) & 
@@ -51,15 +44,12 @@ def lifecycle_eos_upcoming_total(db: Session) -> int:
 
 def lifecycle_unsupported_total(db: Session) -> int:
     """Total unmaintained / unsupported components in active HEAD SBOMs."""
+    summary = lifecycle_summary(db)
+    return summary["unsupported_count"] + summary["eos_count"] + summary["eof_count"]
+
+
+def lifecycle_summary(db: Session) -> dict:
+    """Lifecycle summary over active HEAD SBOM components."""
     head_ids = active_head_sbom_ids_subquery()
-    return (
-        db.execute(
-            select(func.count(SBOMComponent.id))
-            .where(SBOMComponent.sbom_id.in_(head_ids))
-            .where(
-                (SBOMComponent.lifecycle_status == "unsupported") | 
-                (SBOMComponent.maintenance_status == "unmaintained")
-            )
-        ).scalar()
-        or 0
-    )
+    components = db.execute(select(SBOMComponent).where(SBOMComponent.sbom_id.in_(head_ids))).scalars().all()
+    return summarize_components(list(components))

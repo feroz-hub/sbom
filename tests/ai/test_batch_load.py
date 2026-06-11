@@ -55,21 +55,29 @@ class LoadProvider:
         self._payload = payload
         self._per_call_delay = per_call_delay
         self.call_count = 0
+        self.in_flight = 0
+        self.max_in_flight = 0
         self._lock = asyncio.Lock()
 
     async def generate(self, req: LlmRequest) -> LlmResponse:
         async with self._lock:
             self.call_count += 1
-        if self._per_call_delay > 0:
-            await asyncio.sleep(self._per_call_delay)
-        return LlmResponse(
-            text=json.dumps(self._payload),
-            parsed=self._payload,
-            usage=LlmUsage(input_tokens=100, output_tokens=200, cost_usd=0.0),
-            provider=self.name,
-            model=self.default_model,
-            latency_ms=1,
-        )
+            self.in_flight += 1
+            self.max_in_flight = max(self.max_in_flight, self.in_flight)
+        try:
+            if self._per_call_delay > 0:
+                await asyncio.sleep(self._per_call_delay)
+            return LlmResponse(
+                text=json.dumps(self._payload),
+                parsed=self._payload,
+                usage=LlmUsage(input_tokens=100, output_tokens=200, cost_usd=0.0),
+                provider=self.name,
+                model=self.default_model,
+                latency_ms=1,
+            )
+        finally:
+            async with self._lock:
+                self.in_flight -= 1
 
     async def health_check(self) -> bool:
         return True
@@ -155,11 +163,11 @@ async def test_batch_handles_1000_findings(client):
     assert summary.progress.generated == _LOAD_FINDINGS
     assert summary.progress.failed == 0
     assert summary.progress.from_cache == 0
-    # 1000 calls × 1 ms / 32 concurrent ≈ 30 ms minimum. Allow plenty of
-    # headroom for DB / Pydantic / asyncio overhead — this assertion is
-    # about catching a regression to non-concurrent execution, not about
-    # tight latency.
-    assert elapsed < 30.0, f"1000-finding batch took {elapsed:.2f}s — concurrency regressed?"
+    # Wall-clock time on shared CI/dev machines is dominated by SQLite,
+    # Pydantic, and prior-test process pressure, so use direct provider
+    # in-flight observation for the concurrency regression guard.
+    assert provider.max_in_flight > 1, "provider calls were serialized; batch concurrency regressed"
+    assert elapsed < 90.0, f"1000-finding batch took {elapsed:.2f}s — runaway batch execution?"
 
     # Cache check: every finding should now be cached.
     db = SessionLocal()

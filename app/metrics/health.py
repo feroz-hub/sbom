@@ -60,9 +60,10 @@ def health_outdated_components_count(db: Session) -> int:
             select(func.count(SBOMComponent.id))
             .where(SBOMComponent.sbom_id.in_(head_ids))
             .where(
-                (SBOMComponent.lifecycle_status == "eol") |
+                (func.lower(SBOMComponent.lifecycle_status).in_(("eol", "eos", "eof", "deprecated", "unsupported", "eol soon"))) |
                 (SBOMComponent.is_deprecated.is_(True)) |
-                (SBOMComponent.maintenance_status == "unmaintained")
+                (SBOMComponent.deprecated.is_(True)) |
+                (func.lower(SBOMComponent.maintenance_status) == "unmaintained")
             )
         ).scalar()
         or 0

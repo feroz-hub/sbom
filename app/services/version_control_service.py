@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from ..models import AuditLog, SBOMComponent, SBOMSource
 from ..validation import run as run_validation
 from .completeness_service import compute_and_save_completeness
+from .lifecycle.types import DEPRECATED, canonical_status, now_iso
 from .lifecycle_service import sync_lifecycle_for_sbom
 from .sbom_service import _upsert_components
 
@@ -30,15 +31,66 @@ def _now_iso() -> str:
 def _apply_lifecycle_update(comp: SBOMComponent, update: dict[str, Any]) -> None:
     """Apply only lifecycle fields that were explicitly provided by the edit payload."""
     if "lifecycle_status" in update:
-        comp.lifecycle_status = update.get("lifecycle_status")
+        comp.lifecycle_status = canonical_status(update.get("lifecycle_status"))
     if "eos_date" in update:
         comp.eos_date = update.get("eos_date")
     if "eol_date" in update:
         comp.eol_date = update.get("eol_date")
+    if "eof_date" in update:
+        comp.eof_date = update.get("eof_date")
     if "is_deprecated" in update:
         comp.is_deprecated = update.get("is_deprecated")
+    if "deprecated" in update:
+        comp.deprecated = update.get("deprecated")
+        comp.is_deprecated = bool(comp.deprecated)
     if "maintenance_status" in update:
         comp.maintenance_status = update.get("maintenance_status")
+    if "latest_supported_version" in update:
+        comp.latest_supported_version = update.get("latest_supported_version")
+    if "recommended_version" in update:
+        comp.recommended_version = update.get("recommended_version")
+    if "recommendation" in update or "lifecycle_recommendation" in update:
+        comp.lifecycle_recommendation = update.get("recommendation") or update.get("lifecycle_recommendation")
+
+    evidence_url = update.get("evidence_url") or update.get("lifecycle_source_url")
+    if evidence_url:
+        comp.lifecycle_source_url = evidence_url
+    if update.get("reason") or update.get("note") or evidence_url:
+        comp.lifecycle_evidence_json = {
+            "reason": update.get("reason") or update.get("note"),
+            "evidence_url": evidence_url,
+        }
+    if update:
+        comp.lifecycle_source = update.get("lifecycle_source") or "Manual Override"
+        comp.lifecycle_confidence = "High" if evidence_url else "Medium"
+        comp.lifecycle_checked_at = now_iso()
+        comp.lifecycle_manual_override = True
+        comp.lifecycle_is_stale = False
+        if canonical_status(comp.lifecycle_status) == DEPRECATED:
+            comp.deprecated = True
+            comp.is_deprecated = True
+
+
+def _copy_lifecycle_fields(target: SBOMComponent, source: SBOMComponent) -> None:
+    """Copy lifecycle enrichment fields across SBOM versions."""
+    target.ecosystem = source.ecosystem
+    target.lifecycle_status = source.lifecycle_status
+    target.eos_date = source.eos_date
+    target.eol_date = source.eol_date
+    target.eof_date = source.eof_date
+    target.is_deprecated = source.is_deprecated
+    target.deprecated = source.deprecated
+    target.maintenance_status = source.maintenance_status
+    target.latest_supported_version = source.latest_supported_version
+    target.recommended_version = source.recommended_version
+    target.lifecycle_recommendation = source.lifecycle_recommendation
+    target.lifecycle_source = source.lifecycle_source
+    target.lifecycle_source_url = source.lifecycle_source_url
+    target.lifecycle_confidence = source.lifecycle_confidence
+    target.lifecycle_checked_at = source.lifecycle_checked_at
+    target.lifecycle_evidence_json = source.lifecycle_evidence_json
+    target.lifecycle_is_stale = source.lifecycle_is_stale
+    target.lifecycle_manual_override = source.lifecycle_manual_override
 
 
 def apply_edits_to_json(sbom_json: dict[str, Any], updates: dict[str, Any]) -> dict[str, Any]:
@@ -205,16 +257,7 @@ def edit_sbom(
         select(SBOMComponent).where(SBOMComponent.sbom_id == parent.id)
     ).scalars().all()
     
-    parent_lifecycle = {
-        (c.name.lower(), c.version): {
-            "status": c.lifecycle_status,
-            "eos": c.eos_date,
-            "eol": c.eol_date,
-            "dep": c.is_deprecated,
-            "maint": c.maintenance_status
-        }
-        for c in parent_components if c.lifecycle_status
-    }
+    parent_lifecycle = {(c.name.lower(), c.version): c for c in parent_components if c.lifecycle_status}
     
     # Apply these to the new component rows
     new_components = db.execute(
@@ -237,12 +280,7 @@ def edit_sbom(
             # Carry forward parent's status
             key = (comp.name.lower(), comp.version)
             if key in parent_lifecycle:
-                p_life = parent_lifecycle[key]
-                comp.lifecycle_status = p_life["status"]
-                comp.eos_date = p_life["eos"]
-                comp.eol_date = p_life["eol"]
-                comp.is_deprecated = p_life["dep"]
-                comp.maintenance_status = p_life["maint"]
+                _copy_lifecycle_fields(comp, parent_lifecycle[key])
                 db.add(comp)
                 
     db.commit()
@@ -297,14 +335,26 @@ def compare_versions(db: Session, sbom_a_id: int, sbom_b_id: int) -> dict[str, A
             "bom_ref": component.bom_ref,
             "name": component.name,
             "version": component.version,
+            "purl": component.purl,
+            "ecosystem": component.ecosystem,
             "supplier": component.supplier,
             "license": component.license,
             "hashes": component.hashes,
             "lifecycle_status": component.lifecycle_status,
             "eos_date": component.eos_date,
             "eol_date": component.eol_date,
+            "eof_date": component.eof_date,
             "is_deprecated": bool(component.is_deprecated),
+            "deprecated": bool(component.deprecated or component.is_deprecated),
             "maintenance_status": component.maintenance_status,
+            "latest_supported_version": component.latest_supported_version,
+            "recommended_version": component.recommended_version,
+            "lifecycle_recommendation": component.lifecycle_recommendation,
+            "lifecycle_source": component.lifecycle_source,
+            "lifecycle_source_url": component.lifecycle_source_url,
+            "lifecycle_confidence": component.lifecycle_confidence,
+            "lifecycle_is_stale": bool(component.lifecycle_is_stale),
+            "lifecycle_manual_override": bool(component.lifecycle_manual_override),
         }
 
     def load_document(sbom_id: int) -> dict[str, Any]:
@@ -504,12 +554,7 @@ def restore_version(db: Session, sbom_id: int, restore_version_id: int, user_id:
     for comp in new_components:
         key = (comp.name.lower(), comp.version)
         if key in target_lifecycle:
-            t_comp = target_lifecycle[key]
-            comp.lifecycle_status = t_comp.lifecycle_status
-            comp.eos_date = t_comp.eos_date
-            comp.eol_date = t_comp.eol_date
-            comp.is_deprecated = t_comp.is_deprecated
-            comp.maintenance_status = t_comp.maintenance_status
+            _copy_lifecycle_fields(comp, target_lifecycle[key])
             db.add(comp)
             
     db.commit()

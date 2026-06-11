@@ -58,6 +58,9 @@ def run(ctx: ValidationContext) -> ValidationContext:
     _check_namespace(doc.get("documentNamespace"), ctx)
     _check_created(((doc.get("creationInfo") or {}).get("created")), ctx)
 
+    seen_identities: dict[str, int] = {}
+    from ...services.component_deduplication_service import get_component_identity_key
+
     for index, pkg in enumerate(doc.get("packages") or []):
         if not isinstance(pkg, dict):
             continue
@@ -69,6 +72,63 @@ def run(ctx: ValidationContext) -> ValidationContext:
             value = pkg.get(key)
             if isinstance(value, str) and value not in ("NOASSERTION", "NONE"):
                 _check_license_expression(value, f"packages[{index}].{key}", ctx)
+
+        # Check for duplicates using deduplication service identity logic
+        purl = None
+        cpe = None
+        for ref in pkg.get("externalRefs") or []:
+            rtype = (ref.get("referenceType") or "").lower()
+            if rtype == "purl":
+                purl = ref.get("referenceLocator")
+            if "cpe" in rtype:
+                cpe = ref.get("referenceLocator")
+        supplier = pkg.get("supplier")
+        if isinstance(supplier, str):
+            supplier = supplier.strip()
+
+        license_str = pkg.get("licenseConcluded") or pkg.get("licenseDeclared") or pkg.get("license")
+
+        checksums = pkg.get("checksums")
+        hashes_str = None
+        if isinstance(checksums, list):
+            hash_parts = []
+            for c in checksums:
+                if isinstance(c, dict):
+                    alg = c.get("algorithm")
+                    val = c.get("checksumValue")
+                    if alg and val:
+                        hash_parts.append(f"{alg}:{val}")
+            if hash_parts:
+                hashes_str = ", ".join(hash_parts)
+
+        flat_comp = {
+            "name": pkg.get("name"),
+            "version": pkg.get("versionInfo"),
+            "type": "library",
+            "group": None,
+            "supplier": supplier,
+            "scope": None,
+            "purl": purl,
+            "cpe": cpe,
+            "bom_ref": pkg.get("SPDXID"),
+            "license": license_str,
+            "hashes": hashes_str,
+        }
+
+        key = get_component_identity_key(flat_comp)
+        if key in seen_identities:
+            first_idx = seen_identities[key]
+            severity = E.Severity.ERROR if ctx.strict_ntia else E.Severity.WARNING
+            ctx.report.add(
+                E.W120_DUPLICATE_COMPONENT_DETECTED,
+                stage=_STAGE,
+                path=f"packages[{index}]",
+                message=f"Duplicate component detected with key '{key}'. First occurrence was at packages[{first_idx}].",
+                remediation="Merge duplicate component definitions into a single unique component definition.",
+                severity=severity,
+            )
+        else:
+            seen_identities[key] = index
 
     for index, file_block in enumerate(doc.get("files") or []):
         if isinstance(file_block, dict):

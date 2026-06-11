@@ -103,14 +103,100 @@ export interface SBOMComponent {
   component_group?: string | null;
   supplier?: string | null;
   scope: string | null;
+  ecosystem?: string | null;
   license?: string | null;
   hashes?: string | null;
   lifecycle_status?: string | null;
   eos_date?: string | null;
   eol_date?: string | null;
+  eof_date?: string | null;
+  is_deprecated?: boolean | null;
+  deprecated?: boolean | null;
+  maintenance_status?: string | null;
+  latest_supported_version?: string | null;
+  recommended_version?: string | null;
+  lifecycle_recommendation?: string | null;
+  lifecycle_source?: string | null;
+  lifecycle_source_url?: string | null;
+  lifecycle_confidence?: string | null;
+  lifecycle_checked_at?: string | null;
+  lifecycle_evidence_json?: Record<string, unknown> | null;
+  lifecycle_is_stale?: boolean | null;
+  lifecycle_manual_override?: boolean | null;
+  normalized_component_key?: string | null;
+  is_duplicate?: boolean | null;
+  duplicate_of_component_id?: number | null;
+  created_on: string | null;
+}
+
+export type LifecycleStatus =
+  | 'Supported'
+  | 'EOL'
+  | 'EOS'
+  | 'EOF'
+  | 'Deprecated'
+  | 'Unsupported'
+  | 'EOL Soon'
+  | 'Unknown';
+
+export interface LifecycleSummaryComponent {
+  id: number;
+  name: string;
+  version: string | null;
+  ecosystem?: string | null;
+  lifecycle_status: LifecycleStatus | string;
+  eos_date?: string | null;
+  eol_date?: string | null;
+  eof_date?: string | null;
+  source_name?: string | null;
+  source_url?: string | null;
+  confidence?: string | null;
+  recommended_version?: string | null;
+  recommendation?: string | null;
+  is_stale?: boolean;
+  manual_override?: boolean;
+}
+
+export interface DashboardLifecycle {
+  total_components: number;
+  supported_count: number;
+  eol_count: number;
+  eos_count: number;
+  eof_count: number;
+  deprecated_count: number;
+  unsupported_count: number;
+  unknown_count: number;
+  eol_soon_count: number;
+  stale_lifecycle_count: number;
+  top_risky_components: LifecycleSummaryComponent[];
+  recommended_upgrades: LifecycleSummaryComponent[];
+  eol_components: number;
+  eos_upcoming: number;
+  unsupported: number;
+}
+
+export interface LifecycleReport {
+  sbom_id: number;
+  sbom_name: string;
+  generated_at: string;
+  summary: DashboardLifecycle;
+  components: LifecycleSummaryComponent[];
+}
+
+export interface LifecycleOverridePayload {
+  lifecycle_status: LifecycleStatus | string;
+  eos_date?: string | null;
+  eol_date?: string | null;
+  eof_date?: string | null;
+  deprecated?: boolean | null;
   is_deprecated?: boolean | null;
   maintenance_status?: string | null;
-  created_on: string | null;
+  latest_supported_version?: string | null;
+  recommended_version?: string | null;
+  recommendation?: string | null;
+  evidence_url?: string | null;
+  reason?: string | null;
+  updated_by?: string | null;
 }
 
 export type RemediationStatus = 'Open' | 'In Progress' | 'Fixed' | 'Accepted Risk' | 'Closed';

@@ -76,6 +76,9 @@ def run(ctx: ValidationContext) -> ValidationContext:
     _check_metadata_timestamp(doc, ctx)
 
     seen_refs: dict[str, str] = {}
+    seen_identities: dict[str, int] = {}
+    from ...services.component_deduplication_service import get_component_identity_key
+
     for index, comp in enumerate(doc.get("components") or []):
         if not isinstance(comp, dict):
             continue
@@ -87,6 +90,82 @@ def run(ctx: ValidationContext) -> ValidationContext:
         for j, h in enumerate(comp.get("hashes") or []):
             if isinstance(h, dict):
                 _check_hash(h, f"{path}.hashes[{j}]", ctx)
+
+        # Extract normalized properties for duplicate key checking
+        licenses = comp.get("licenses")
+        license_str = None
+        if isinstance(licenses, list):
+            lic_names = []
+            for lic_item in licenses:
+                if isinstance(lic_item, dict):
+                    lic_obj = lic_item.get("license")
+                    if isinstance(lic_obj, dict):
+                        lic_name = lic_obj.get("id") or lic_obj.get("name")
+                        if lic_name:
+                            lic_names.append(str(lic_name))
+                    elif isinstance(lic_obj, str):
+                        lic_names.append(lic_obj)
+                    elif lic_item.get("expression"):
+                        lic_names.append(str(lic_item.get("expression")))
+                elif isinstance(lic_item, str):
+                    lic_names.append(lic_item)
+            if lic_names:
+                license_str = ", ".join(lic_names)
+        elif isinstance(licenses, dict):
+            lic_obj = licenses.get("license")
+            if isinstance(lic_obj, dict):
+                license_str = lic_obj.get("id") or lic_obj.get("name")
+            elif isinstance(lic_obj, str):
+                license_str = lic_obj
+            elif licenses.get("expression"):
+                license_str = licenses.get("expression")
+        elif isinstance(licenses, str):
+            license_str = licenses
+
+        if not license_str and comp.get("license"):
+            license_str = str(comp.get("license"))
+
+        hashes = comp.get("hashes")
+        hashes_str = None
+        if isinstance(hashes, list):
+            hash_parts = []
+            for h in hashes:
+                if isinstance(h, dict):
+                    alg = h.get("alg")
+                    content = h.get("content")
+                    if alg and content:
+                        hash_parts.append(f"{alg}:{content}")
+            if hash_parts:
+                hashes_str = ", ".join(hash_parts)
+
+        flat_comp = {
+            "name": comp.get("name"),
+            "version": comp.get("version"),
+            "type": comp.get("type"),
+            "group": comp.get("group"),
+            "supplier": (comp.get("supplier") or {}).get("name") if isinstance(comp.get("supplier"), dict) else comp.get("supplier"),
+            "scope": comp.get("scope"),
+            "purl": comp.get("purl"),
+            "cpe": comp.get("cpe"),
+            "bom_ref": comp.get("bom-ref") or comp.get("bomRef"),
+            "license": license_str,
+            "hashes": hashes_str,
+        }
+
+        key = get_component_identity_key(flat_comp)
+        if key in seen_identities:
+            first_idx = seen_identities[key]
+            severity = E.Severity.ERROR if ctx.strict_ntia else E.Severity.WARNING
+            ctx.report.add(
+                E.W120_DUPLICATE_COMPONENT_DETECTED,
+                stage=_STAGE,
+                path=path,
+                message=f"Duplicate component detected with key '{key}'. First occurrence was at components[{first_idx}].",
+                remediation="Merge duplicate component definitions into a single unique component definition.",
+                severity=severity,
+            )
+        else:
+            seen_identities[key] = index
 
     ctx.internal_model = normalize_cyclonedx(doc, ctx.spec_version)
     return ctx

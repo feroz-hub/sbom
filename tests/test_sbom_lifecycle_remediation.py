@@ -8,7 +8,9 @@ import pytest
 from app.db import SessionLocal
 from app.models import Projects, SBOMComponent, SBOMSource
 from app.services.completeness_service import compute_and_save_completeness
-from app.services.lifecycle_service import sync_lifecycle_for_sbom
+from app.services.lifecycle import LifecycleEnrichmentService
+from app.services.lifecycle.provider_base import LifecycleProvider
+from app.services.lifecycle.types import EOL, HIGH, UNKNOWN, LifecycleResult, NormalizedComponent, unknown_result
 from app.services.remediation_service import create_or_update_remediation, get_remediation_for_finding
 from app.services.version_control_service import compare_versions, edit_sbom, restore_version
 from sqlalchemy import select
@@ -23,7 +25,28 @@ def db(client):
         session.rollback()
         session.close()
 
-def test_lifecycle_catalog_resolution(db):
+class FakeLifecycleProvider(LifecycleProvider):
+    name = "Test Provider"
+
+    def lookup(self, component: NormalizedComponent) -> LifecycleResult:
+        if component.normalized_name == "log4j-core":
+            return LifecycleResult(
+                component_name=component.normalized_name,
+                component_version=component.normalized_version,
+                ecosystem=component.ecosystem,
+                purl=component.purl,
+                lifecycle_status=EOL,
+                eol_date="2021-12-30",
+                eos_date="2021-12-15",
+                maintenance_status="End of life",
+                source_name=self.name,
+                source_url="https://example.test/log4j",
+                confidence=HIGH,
+            )
+        return unknown_result(component, self.name)
+
+
+def test_lifecycle_provider_resolution(db):
     # Seed a minimal SBOM
     sbom = SBOMSource(
         sbom_name="lifecycle-test-sbom",
@@ -33,7 +56,6 @@ def test_lifecycle_catalog_resolution(db):
     db.add(sbom)
     db.flush()
 
-    # log4j-core 2.15.0 is in our lifecycle service catalog as EOL
     comp1 = SBOMComponent(
         sbom_id=sbom.id,
         name="log4j-core",
@@ -51,14 +73,15 @@ def test_lifecycle_catalog_resolution(db):
     db.add(comp2)
     db.commit()
 
-    sync_lifecycle_for_sbom(db, sbom.id)
+    LifecycleEnrichmentService(providers=[FakeLifecycleProvider()]).enrich_sbom(db, sbom.id)
 
     db.refresh(comp1)
     db.refresh(comp2)
 
-    assert comp1.lifecycle_status == "eol"
+    assert comp1.lifecycle_status == EOL
     assert comp1.eol_date is not None
-    assert comp2.lifecycle_status == "active"
+    assert comp1.lifecycle_source == "Test Provider"
+    assert comp2.lifecycle_status == UNKNOWN
 
 
 def test_completeness_score_calculation(db):
@@ -193,7 +216,7 @@ def test_sbom_editing_and_versioning(db):
     assert new_comp.name == "log4j-core-edited"
     assert new_comp.version == "2.16.0"
     assert new_comp.license == "Apache-2.0"
-    assert new_comp.lifecycle_status == "deprecated"
+    assert new_comp.lifecycle_status == "Deprecated"
     assert new_comp.is_deprecated is True
 
     # Compare versions
@@ -256,8 +279,9 @@ def test_partial_lifecycle_override_survives_catalog_sync(db):
         .where(SBOMComponent.bom_ref == "pkg:maven/org.apache.logging.log4j/log4j-core@2.15.0")
     ).scalar_one()
 
-    assert new_comp.lifecycle_status == "eol"
+    assert new_comp.lifecycle_status == UNKNOWN
     assert new_comp.maintenance_status == "maintained"
+    assert new_comp.lifecycle_manual_override is True
 
 
 def test_sbom_versions_use_strict_parent_lineage(client, db):

@@ -1,0 +1,185 @@
+"""Lifecycle enrichment value types and status helpers."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from typing import Any
+
+SUPPORTED = "Supported"
+EOL = "EOL"
+EOS = "EOS"
+EOF = "EOF"
+DEPRECATED = "Deprecated"
+UNSUPPORTED = "Unsupported"
+EOL_SOON = "EOL Soon"
+UNKNOWN = "Unknown"
+
+ALLOWED_LIFECYCLE_STATUSES = {
+    SUPPORTED,
+    EOL,
+    EOS,
+    EOF,
+    DEPRECATED,
+    UNSUPPORTED,
+    EOL_SOON,
+    UNKNOWN,
+}
+
+HIGH = "High"
+MEDIUM = "Medium"
+LOW = "Low"
+UNKNOWN_CONFIDENCE = "Unknown"
+
+ALLOWED_CONFIDENCE_VALUES = {HIGH, MEDIUM, LOW, UNKNOWN_CONFIDENCE}
+
+STATUS_ALIASES = {
+    "active": SUPPORTED,
+    "supported": SUPPORTED,
+    "ok": SUPPORTED,
+    "eol": EOL,
+    "end of life": EOL,
+    "end-of-life": EOL,
+    "eos": EOS,
+    "end of support": EOS,
+    "end-of-support": EOS,
+    "eof": EOF,
+    "end of fix": EOF,
+    "end-of-fix": EOF,
+    "deprecated": DEPRECATED,
+    "unsupported": UNSUPPORTED,
+    "unmaintained": UNSUPPORTED,
+    "eol soon": EOL_SOON,
+    "nearing eol": EOL_SOON,
+    "unknown": UNKNOWN,
+}
+
+ECOSYSTEM_ALIASES = {
+    "node": "npm",
+    "nodejs": "npm",
+    "javascript": "npm",
+    "js": "npm",
+    "python": "pypi",
+    "pip": "pypi",
+    "pypi": "pypi",
+    "maven": "maven",
+    "java": "maven",
+    "nuget": "nuget",
+    "dotnet": "nuget",
+    "gem": "gem",
+    "rubygems": "gem",
+    "go": "go",
+    "golang": "go",
+    "cargo": "cargo",
+    "rust": "cargo",
+    "deb": "debian",
+    "debian": "debian",
+    "ubuntu": "ubuntu",
+    "apk": "alpine",
+    "alpine": "alpine",
+    "oci": "docker",
+    "docker": "docker",
+    "github": "github",
+    "generic": "generic",
+}
+
+
+def now_iso() -> str:
+    return datetime.now(UTC).replace(microsecond=0).isoformat()
+
+
+def canonical_status(value: str | None) -> str:
+    if not value:
+        return UNKNOWN
+    cleaned = " ".join(str(value).strip().replace("_", " ").replace("-", " ").split())
+    if cleaned in ALLOWED_LIFECYCLE_STATUSES:
+        return cleaned
+    return STATUS_ALIASES.get(cleaned.lower(), UNKNOWN)
+
+
+def canonical_confidence(value: str | None) -> str:
+    if not value:
+        return UNKNOWN_CONFIDENCE
+    cleaned = str(value).strip().title()
+    return cleaned if cleaned in ALLOWED_CONFIDENCE_VALUES else UNKNOWN_CONFIDENCE
+
+
+def canonical_ecosystem(value: str | None) -> str:
+    if not value:
+        return "generic"
+    cleaned = str(value).strip().lower()
+    return ECOSYSTEM_ALIASES.get(cleaned, cleaned if cleaned in ECOSYSTEM_ALIASES.values() else "generic")
+
+
+@dataclass(slots=True)
+class NormalizedComponent:
+    component_id: int | None
+    name: str
+    version: str | None = None
+    normalized_name: str = ""
+    normalized_version: str | None = None
+    ecosystem: str = "generic"
+    purl: str | None = None
+    cpe: str | None = None
+    supplier: str | None = None
+    component_type: str | None = None
+    component_group: str | None = None
+    repository_url: str | None = None
+    external_references: list[dict[str, Any]] = field(default_factory=list)
+
+    @property
+    def cache_identity(self) -> tuple[str, str | None, str, str | None]:
+        return (
+            self.normalized_name or self.name.lower(),
+            self.normalized_version,
+            self.ecosystem or "generic",
+            self.purl,
+        )
+
+
+@dataclass(slots=True)
+class LifecycleResult:
+    component_name: str
+    component_version: str | None
+    ecosystem: str
+    purl: str | None
+    lifecycle_status: str = UNKNOWN
+    eos_date: str | None = None
+    eol_date: str | None = None
+    eof_date: str | None = None
+    deprecated: bool = False
+    maintenance_status: str | None = None
+    latest_supported_version: str | None = None
+    recommended_version: str | None = None
+    recommendation: str | None = None
+    source_name: str | None = None
+    source_url: str | None = None
+    evidence: dict[str, Any] = field(default_factory=dict)
+    confidence: str = UNKNOWN_CONFIDENCE
+    checked_at: str = field(default_factory=now_iso)
+    stale: bool = False
+    manual_override: bool = False
+    vulnerability_count: int | None = None
+
+    def canonicalized(self) -> LifecycleResult:
+        self.lifecycle_status = canonical_status(self.lifecycle_status)
+        self.confidence = canonical_confidence(self.confidence)
+        if self.lifecycle_status == DEPRECATED:
+            self.deprecated = True
+        return self
+
+    @property
+    def is_actionable(self) -> bool:
+        return self.lifecycle_status != UNKNOWN or bool(self.recommended_version or self.recommendation)
+
+
+def unknown_result(component: NormalizedComponent, source_name: str | None = None) -> LifecycleResult:
+    return LifecycleResult(
+        component_name=component.normalized_name or component.name,
+        component_version=component.normalized_version,
+        ecosystem=component.ecosystem,
+        purl=component.purl,
+        lifecycle_status=UNKNOWN,
+        source_name=source_name,
+        confidence=UNKNOWN_CONFIDENCE,
+    )

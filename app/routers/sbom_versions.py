@@ -14,8 +14,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..models import SBOMSource
+from ..models import SBOMComponent, SBOMSource
 from ..schemas import SbomEditPayload, SBOMSourceOut
+from ..services.lifecycle import LifecycleEnrichmentService, component_lifecycle_dict
 from ..services.version_control_service import compare_versions, edit_sbom, restore_version
 from ..validation import run as run_validation
 
@@ -108,6 +109,85 @@ def _media_type(standard: str, encoding: str) -> str:
     return "text/plain"
 
 
+def _components_for_sbom(db: Session, sbom_id: int) -> list[SBOMComponent]:
+    return db.execute(select(SBOMComponent).where(SBOMComponent.sbom_id == sbom_id)).scalars().all()
+
+
+def _lifecycle_properties(component: SBOMComponent) -> list[dict[str, str]]:
+    values = {
+        "lifecycle:status": component.lifecycle_status,
+        "lifecycle:eol": component.eol_date,
+        "lifecycle:eos": component.eos_date,
+        "lifecycle:eof": component.eof_date,
+        "lifecycle:deprecated": str(bool(component.deprecated or component.is_deprecated)).lower(),
+        "lifecycle:maintenance_status": component.maintenance_status,
+        "lifecycle:source": component.lifecycle_source,
+        "lifecycle:source_url": component.lifecycle_source_url,
+        "lifecycle:confidence": component.lifecycle_confidence,
+        "lifecycle:recommendation": component.lifecycle_recommendation,
+        "lifecycle:recommended_version": component.recommended_version,
+        "lifecycle:checked_at": component.lifecycle_checked_at,
+    }
+    return [{"name": key, "value": str(value)} for key, value in values.items() if value not in (None, "")]
+
+
+def _augment_lifecycle_metadata(db: Session, sbom: SBOMSource, parsed: dict[str, Any], standard: str) -> dict[str, Any]:
+    components = _components_for_sbom(db, sbom.id)
+    if not components:
+        return parsed
+    by_bom_ref = {component.bom_ref: component for component in components if component.bom_ref}
+    by_name_version = {(component.name.lower(), component.version): component for component in components}
+    by_purl = {component.purl: component for component in components if component.purl}
+
+    if standard == "cyclonedx":
+        for cdx_component in parsed.get("components") or []:
+            if not isinstance(cdx_component, dict):
+                continue
+            match = (
+                by_bom_ref.get(cdx_component.get("bom-ref"))
+                or by_purl.get(cdx_component.get("purl"))
+                or by_name_version.get((str(cdx_component.get("name") or "").lower(), cdx_component.get("version")))
+            )
+            if not match:
+                continue
+            existing = [
+                prop for prop in cdx_component.get("properties") or [] if not str(prop.get("name") or "").startswith("lifecycle:")
+            ]
+            cdx_component["properties"] = existing + _lifecycle_properties(match)
+        return parsed
+
+    if standard == "spdx":
+        annotations = list(parsed.get("annotations") or [])
+        for component in components:
+            lifecycle = component_lifecycle_dict(component)
+            if lifecycle["lifecycle_status"] == "Unknown" and not lifecycle["recommendation"]:
+                continue
+            annotations.append(
+                {
+                    "annotationType": "OTHER",
+                    "annotator": "Tool: SBOM Analyzer",
+                    "annotationDate": component.lifecycle_checked_at or "",
+                    "comment": json.dumps({"component": component.name, "version": component.version, "lifecycle": lifecycle}),
+                }
+            )
+        if annotations:
+            parsed["annotations"] = annotations
+        return parsed
+
+    return parsed
+
+
+def _maybe_augment_export_with_lifecycle(db: Session, sbom: SBOMSource, content: str, standard: str, encoding: str) -> str:
+    if encoding != "json" or standard not in {"cyclonedx", "spdx"}:
+        return content
+    parsed = json.loads(content)
+    if not isinstance(parsed, dict):
+        return content
+    candidate = json.dumps(_augment_lifecycle_metadata(db, sbom, parsed, standard), indent=2)
+    validation_report = run_validation(candidate.encode("utf-8"))
+    return content if validation_report.has_errors() else candidate
+
+
 @router.post("/{id}/edit", response_model=SBOMSourceOut)
 def edit_sbom_endpoint(
     id: int,
@@ -198,15 +278,116 @@ def restore_sbom_version(
         )
 
 
+@router.post("/{id}/lifecycle/refresh")
+def refresh_sbom_lifecycle(
+    id: int,
+    force: bool = Query(True),
+    db: Session = Depends(get_db),
+):
+    """Refresh provider-backed lifecycle data for all components in an SBOM."""
+
+    return LifecycleEnrichmentService().enrich_sbom(db, id, force_refresh=force)
+
+
+@router.get("/{id}/lifecycle/report")
+def get_sbom_lifecycle_report(id: int, db: Session = Depends(get_db)):
+    """Return a detailed lifecycle report suitable for export or UI evidence views."""
+
+    return LifecycleEnrichmentService().lifecycle_report(db, id)
+
+
+def _sync_flat_to_raw(flat: dict, raw: dict, standard: str) -> None:
+    # 1. Licenses
+    if flat.get("license"):
+        if standard == "cyclonedx":
+            licenses_list = []
+            for lic in flat["license"].split(", "):
+                lic = lic.strip()
+                if lic:
+                    if " " not in lic:
+                        licenses_list.append({"license": {"id": lic}})
+                    else:
+                        licenses_list.append({"license": {"name": lic}})
+            if licenses_list:
+                raw["licenses"] = licenses_list
+        else: # spdx
+            raw["licenseConcluded"] = flat["license"]
+            raw["licenseDeclared"] = flat["license"]
+
+    # 2. Hashes
+    if flat.get("hashes"):
+        if standard == "cyclonedx":
+            hashes_list = []
+            for h in flat["hashes"].split(", "):
+                h = h.strip()
+                if ":" in h:
+                    alg, content = h.split(":", 1)
+                    hashes_list.append({"alg": alg.strip(), "content": content.strip()})
+            if hashes_list:
+                raw["hashes"] = hashes_list
+        else: # spdx
+            checksums_list = []
+            for h in flat["hashes"].split(", "):
+                h = h.strip()
+                if ":" in h:
+                    alg, content = h.split(":", 1)
+                    spdx_alg = alg.strip().replace("-", "")
+                    checksums_list.append({"algorithm": spdx_alg, "checksumValue": content.strip()})
+            if checksums_list:
+                raw["checksums"] = checksums_list
+
+    # 3. Supplier
+    if flat.get("supplier"):
+        if standard == "cyclonedx":
+            if isinstance(raw.get("supplier"), dict):
+                raw["supplier"]["name"] = flat["supplier"]
+            else:
+                raw["supplier"] = {"name": flat["supplier"]}
+        else: # spdx
+            existing = raw.get("supplier") or ""
+            prefix = "Organization: "
+            if existing.startswith("Person: "):
+                prefix = "Person: "
+            elif existing.startswith("Organization: "):
+                prefix = "Organization: "
+            
+            clean_sup = flat["supplier"]
+            if clean_sup.startswith("Organization: "):
+                clean_sup = clean_sup[len("Organization: "):]
+            elif clean_sup.startswith("Person: "):
+                clean_sup = clean_sup[len("Person: "):]
+            raw["supplier"] = f"{prefix}{clean_sup}"
+
+    # 4. Scope
+    if flat.get("scope"):
+        if standard == "cyclonedx":
+            raw["scope"] = flat["scope"]
+
+    # 5. Type and Group
+    if flat.get("type"):
+        if standard == "cyclonedx":
+            raw["type"] = flat["type"]
+    if flat.get("group"):
+        if standard == "cyclonedx":
+            raw["group"] = flat["group"]
+
+
 @router.get("/{id}/export")
 def export_sbom(
     id: int,
     format: str = Query("native", description="native, json, xml, CycloneDX, or SPDX"),
+    export_mode: str = Query("original", description="Export mode: 'original' or 'normalized'"),
     db: Session = Depends(get_db)
 ):
     """
     Export the current SBOM data in its native format.
     """
+    if export_mode not in {"original", "normalized"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported export mode '{export_mode}'. Supported modes: original, normalized."
+        )
+
     sbom = db.get(SBOMSource, id)
     if not sbom or not sbom.sbom_data:
         raise HTTPException(
@@ -233,15 +414,144 @@ def export_sbom(
             ),
         )
 
-    content = sbom.sbom_data
-    if encoding == "json":
+    if export_mode == "normalized":
+        if encoding != "json":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Normalized export mode is only supported for JSON formatted SBOMs."
+            )
         try:
-            content = json.dumps(json.loads(content), indent=2)
-        except json.JSONDecodeError as exc:
+            doc = json.loads(sbom.sbom_data)
+        except Exception as exc:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"Stored SBOM JSON is invalid and cannot be exported: {exc}",
+                detail=f"Stored SBOM JSON is invalid: {exc}",
             ) from exc
+
+        from ..parsing import extract_components
+        from ..services.component_deduplication_service import ComponentDeduplicationService
+
+        if standard == "cyclonedx":
+            flat_comps = extract_components(doc)
+            original_components = doc.get("components") or []
+            
+            # Match 1-to-1 to attach original raw dicts
+            for flat, raw in zip(flat_comps, original_components, strict=False):
+                flat["raw"] = raw
+
+            dependencies = doc.get("dependencies") or []
+            canonical_flat, _, ref_mapping, _, _ = ComponentDeduplicationService.deduplicate_components(flat_comps, dependencies)
+
+            # Sync flat canonical attributes back to raw
+            for flat in canonical_flat:
+                if "raw" in flat:
+                    _sync_flat_to_raw(flat, flat["raw"], "cyclonedx")
+
+            # Update doc components
+            doc["components"] = [flat["raw"] for flat in canonical_flat if "raw" in flat]
+
+            # Remap and merge dependencies
+            cdx_deps_by_ref = {}
+            for dep in doc.get("dependencies") or []:
+                ref = dep.get("ref")
+                depends_on = dep.get("dependsOn") or []
+                
+                new_ref = ref_mapping.get(ref, ref)
+                new_depends_on = [ref_mapping.get(d, d) for d in depends_on]
+                new_depends_on = [d for d in new_depends_on if d != new_ref]
+                
+                if new_ref not in cdx_deps_by_ref:
+                    cdx_deps_by_ref[new_ref] = {"dep": dict(dep), "depends": []}
+                cdx_deps_by_ref[new_ref]["depends"].extend(new_depends_on)
+
+            new_deps = []
+            for new_ref, info in cdx_deps_by_ref.items():
+                unique_depends = list(dict.fromkeys(info["depends"]))
+                new_dep = info["dep"]
+                new_dep["ref"] = new_ref
+                new_dep["dependsOn"] = unique_depends
+                new_deps.append(new_dep)
+
+            if "dependencies" in doc:
+                doc["dependencies"] = new_deps
+
+        elif standard == "spdx":
+            flat_comps = extract_components(doc)
+            original_packages = doc.get("packages") or []
+            original_elements = [el for el in doc.get("elements") or [] if el.get("type") == "software:package"]
+            raw_list = original_packages + original_elements
+
+            # Match 1-to-1 to attach original raw dicts
+            for flat, raw in zip(flat_comps, raw_list, strict=False):
+                flat["raw"] = raw
+
+            relationships = doc.get("relationships") or []
+            canonical_flat, _, ref_mapping, _, _ = ComponentDeduplicationService.deduplicate_components(flat_comps, relationships)
+
+            # Sync flat canonical attributes back to raw
+            for flat in canonical_flat:
+                if "raw" in flat:
+                    _sync_flat_to_raw(flat, flat["raw"], "spdx")
+
+            # Rebuild packages and elements lists, keeping only canonical ones
+            canonical_raw_set = {id(flat["raw"]) for flat in canonical_flat if "raw" in flat}
+            
+            new_packages = [pkg for pkg in original_packages if id(pkg) in canonical_raw_set]
+            new_elements = [el for el in doc.get("elements") or [] if el.get("type") != "software:package" or id(el) in canonical_raw_set]
+
+            if "packages" in doc:
+                doc["packages"] = new_packages
+            if "elements" in doc:
+                doc["elements"] = new_elements
+
+            # Remap and deduplicate relationships
+            seen_rels = set()
+            new_relationships = []
+            for rel in doc.get("relationships") or []:
+                elem_id = rel.get("spdxElementId")
+                related_id = rel.get("relatedSpdxElement")
+                rel_type = rel.get("relationshipType")
+                
+                new_elem_id = ref_mapping.get(elem_id, elem_id)
+                new_related_id = ref_mapping.get(related_id, related_id)
+                
+                if new_elem_id == new_related_id and rel_type in {"DEPENDS_ON", "CONTAINS", "DESCRIBES"}:
+                    continue
+                    
+                rel_key = (new_elem_id, rel_type, new_related_id)
+                if rel_key not in seen_rels:
+                    seen_rels.add(rel_key)
+                    new_rel = dict(rel)
+                    new_rel["spdxElementId"] = new_elem_id
+                    new_rel["relatedSpdxElement"] = new_related_id
+                    new_relationships.append(new_rel)
+            if "relationships" in doc:
+                doc["relationships"] = new_relationships
+
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Normalized export mode not supported for standard {standard}."
+            )
+
+        content = json.dumps(doc, indent=2)
+
+    else:
+        content = sbom.sbom_data
+        if encoding == "json":
+            try:
+                content = json.dumps(json.loads(content), indent=2)
+            except json.JSONDecodeError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Stored SBOM JSON is invalid and cannot be exported: {exc}",
+                ) from exc
+
+    if encoding == "json":
+        try:
+            content = _maybe_augment_export_with_lifecycle(db, sbom, content, standard, encoding)
+        except Exception as exc:
+            log.warning("Lifecycle augmentation failed: %s", exc)
 
     report = run_validation(content.encode("utf-8"))
     if report.has_errors():

@@ -24,6 +24,7 @@ provenance of every code see [the error-code reference](validation-error-codes.m
 | 6 | Security checks | JSON depth ≤ 64, no `__proto__` keys, no XML DTDs / external entities |
 | 7 | NTIA minimum elements | Supplier / version / unique-id / dependency / author / timestamp — soft by default |
 | 8 | Signature (feature-flagged) | JSF (CycloneDX) or external sidecar (SPDX); off in v1 |
+| 9 | Component Deduplication | Uploaded SBOM may contain duplicate components; merges duplicates, flags them in the DB, and remaps dependencies |
 
 A successful upload returns **HTTP 202 Accepted**. Warnings and info-level
 entries flow through in the response body but never block acceptance.
@@ -272,6 +273,12 @@ $ curl -X POST 'http://localhost:8000/api/sboms/upload?strict_ntia=true' \
     -F "file=@partial.json" -F "sbom_name=partial"
 # now any W100-W106 returns HTTP 422
 ```
+
+### `SBOM_VAL_W120_DUPLICATE_COMPONENT_DETECTED` (HTTP 422)
+
+The SBOM contains duplicate component definitions (by matching PURL, CPE, or fallback identity characteristics).
+
+**Fix:** merge duplicate component definitions into a single unique component definition. By default, the system automatically resolves, merges, and flags duplicate components in the database, allowing the upload to succeed with warnings. If strict validation is enabled, this warning is promoted to an error, rejecting the upload.
 
 ---
 

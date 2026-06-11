@@ -46,7 +46,9 @@ def _stage_band(code: str) -> str:
         return "6 security"
     if n < 110:
         return "7 ntia"
-    return "8 signature"
+    if n < 120:
+        return "8 signature"
+    return "9 deduplication"
 
 
 def render_table() -> str:

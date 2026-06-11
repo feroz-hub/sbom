@@ -300,8 +300,11 @@ def _last_successful_completed_at(db: Session) -> str | None:
 
 @router.get("/lifecycle")
 def get_dashboard_lifecycle(db: Session = Depends(get_db)):
-    """Fetch EOL, EOS, and unsupported component counts for the dashboard."""
+    """Fetch component lifecycle metrics for the dashboard."""
+    summary = metrics.lifecycle_summary(db)
     return {
+        **summary,
+        # Backward-compatible aliases used by the existing dashboard bundle.
         "eol_components": metrics.lifecycle_eol_total(db),
         "eos_upcoming": metrics.lifecycle_eos_upcoming_total(db),
         "unsupported": metrics.lifecycle_unsupported_total(db),
@@ -333,4 +336,3 @@ def get_dashboard_remediation_stats(db: Session = Depends(get_db)):
             "ok": sla_data.get("ok", 0),
         }
     }
-

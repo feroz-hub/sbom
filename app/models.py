@@ -72,6 +72,7 @@ class SBOMSource(Base, SoftDeleteMixin):
     change_summary = Column(String, nullable=True)
     completeness_score = Column(Float, nullable=True, default=100.0)
     completeness_report = Column(JSON, nullable=True)
+    dedupe_report_json = Column(JSON, nullable=True)
 
 
     # 8-stage validation outcome — see migration 012.
@@ -133,15 +134,31 @@ class SBOMComponent(Base, SoftDeleteMixin):
     supplier = Column(String, nullable=True)
     scope = Column(String, nullable=True)
     created_on = Column(String, nullable=True)
+    ecosystem = Column(String, nullable=True, index=True)
 
     license = Column(String, nullable=True)
     hashes = Column(Text, nullable=True)
     lifecycle_status = Column(String, nullable=True)
     eos_date = Column(String, nullable=True)
     eol_date = Column(String, nullable=True)
+    eof_date = Column(String, nullable=True)
     is_deprecated = Column(Boolean, default=False)
+    deprecated = Column(Boolean, nullable=True, default=False)
     maintenance_status = Column(String, nullable=True)
+    latest_supported_version = Column(String, nullable=True)
+    recommended_version = Column(String, nullable=True)
+    lifecycle_recommendation = Column(Text, nullable=True)
+    lifecycle_source = Column(String, nullable=True)
+    lifecycle_source_url = Column(String, nullable=True)
+    lifecycle_confidence = Column(String, nullable=True)
+    lifecycle_checked_at = Column(String, nullable=True, index=True)
+    lifecycle_evidence_json = Column(JSON, nullable=True)
+    lifecycle_is_stale = Column(Boolean, nullable=False, default=False)
+    lifecycle_manual_override = Column(Boolean, nullable=False, default=False)
 
+    normalized_component_key = Column(String, nullable=True, index=True)
+    is_duplicate = Column(Boolean, nullable=False, default=False)
+    duplicate_of_component_id = Column(Integer, ForeignKey("sbom_component.id", ondelete="CASCADE"), nullable=True)
 
     sbom = relationship("SBOMSource", back_populates="components")
     findings = relationship("AnalysisFinding", back_populates="component")
@@ -156,6 +173,45 @@ class SBOMComponent(Base, SoftDeleteMixin):
             name="uq_sbom_component_fingerprint",
         ),
         Index("ix_sbom_component_sbom_name", "sbom_id", "name"),
+        Index("ix_sbom_component_lifecycle", "lifecycle_status", "ecosystem"),
+    )
+
+
+class ComponentLifecycleCache(Base):
+    """Normalized lifecycle enrichment cache shared across SBOMs."""
+
+    __tablename__ = "component_lifecycle_cache"
+
+    id = Column(Integer, primary_key=True, index=True)
+    normalized_name = Column(String, nullable=False, index=True)
+    normalized_version = Column(String, nullable=True, index=True)
+    ecosystem = Column(String, nullable=True, index=True)
+    purl = Column(String, nullable=True, index=True)
+    lifecycle_status = Column(String, nullable=True)
+    eos_date = Column(String, nullable=True)
+    eol_date = Column(String, nullable=True)
+    eof_date = Column(String, nullable=True)
+    deprecated = Column(Boolean, nullable=True, default=False)
+    maintenance_status = Column(String, nullable=True)
+    latest_supported_version = Column(String, nullable=True)
+    recommended_version = Column(String, nullable=True)
+    recommendation = Column(Text, nullable=True)
+    source_name = Column(String, nullable=True)
+    source_url = Column(String, nullable=True)
+    evidence_json = Column(JSON, nullable=True)
+    confidence = Column(String, nullable=True)
+    checked_at = Column(String, nullable=False, index=True)
+    expires_at = Column(String, nullable=False, index=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "normalized_name",
+            "normalized_version",
+            "ecosystem",
+            "purl",
+            name="uq_component_lifecycle_cache_identity",
+        ),
+        Index("ix_component_lifecycle_cache_lookup", "ecosystem", "normalized_name", "normalized_version"),
     )
 
 

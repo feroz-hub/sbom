@@ -30,6 +30,9 @@ import type {
   AnalysisSchedule,
   SbomScheduleResolved,
   ScheduleUpsertPayload,
+  DashboardLifecycle,
+  LifecycleOverridePayload,
+  LifecycleReport,
 } from '@/types';
 
 // Direct calls to FastAPI — no Next.js proxy (proxy caused ECONNRESET on
@@ -418,8 +421,53 @@ export function deleteSbom(
   });
 }
 
-export function getSbomComponents(sbomId: number, signal?: AbortSignal) {
-  return request<SBOMComponent[]>(`/api/sboms/${sbomId}/components`, { signal });
+export function getSbomComponents(sbomId: number, includeDuplicates = false, signal?: AbortSignal) {
+  return request<SBOMComponent[]>(
+    `/api/sboms/${sbomId}/components?include_duplicates=${includeDuplicates ? 'true' : 'false'}`,
+    { signal }
+  );
+}
+
+export function getSbomDedupeReport(sbomId: number, signal?: AbortSignal) {
+  return request<any>(`/api/sboms/${sbomId}/dedupe-report`, { signal });
+}
+
+export function refreshSbomLifecycle(sbomId: number, force = true, signal?: AbortSignal) {
+  return request<{ sbom_id: number; components_enriched: number; stale_components: number }>(
+    `/api/sboms/${sbomId}/lifecycle/refresh?force=${force ? 'true' : 'false'}`,
+    {
+      method: 'POST',
+      signal,
+    },
+    120_000,
+  );
+}
+
+export function getSbomLifecycleReport(sbomId: number, signal?: AbortSignal) {
+  return request<LifecycleReport>(`/api/sboms/${sbomId}/lifecycle/report`, { signal });
+}
+
+export function refreshComponentLifecycle(componentId: number, force = true, signal?: AbortSignal) {
+  return request<SBOMComponent>(
+    `/api/components/${componentId}/lifecycle/refresh?force=${force ? 'true' : 'false'}`,
+    {
+      method: 'POST',
+      signal,
+    },
+    120_000,
+  );
+}
+
+export function overrideComponentLifecycle(
+  componentId: number,
+  payload: LifecycleOverridePayload,
+  signal?: AbortSignal,
+) {
+  return request<SBOMComponent>(`/api/components/${componentId}/lifecycle-override`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+    signal,
+  });
 }
 
 export function analyzeSbom(sbomId: number, signal?: AbortSignal) {
@@ -819,11 +867,7 @@ export function getDashboardRemediation(signal?: AbortSignal) {
 }
 
 export function getDashboardLifecycle(signal?: AbortSignal) {
-  return request<{
-    eol_components: number;
-    eos_upcoming: number;
-    unsupported: number;
-  }>('/dashboard/lifecycle', { signal });
+  return request<DashboardLifecycle>('/dashboard/lifecycle', { signal });
 }
 
 export function getDashboardHealth(signal?: AbortSignal) {

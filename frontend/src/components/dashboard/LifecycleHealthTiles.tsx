@@ -20,6 +20,8 @@ export function LifecycleHealthTiles() {
   const lifecycle = lifecycleQuery.data;
   const health = healthQuery.data;
   const loading = lifecycleQuery.isLoading || healthQuery.isLoading;
+  const lifecycleError = lifecycleQuery.isError;
+  const lifecycleEmpty = !loading && !lifecycleError && (lifecycle?.total_components ?? 0) === 0;
 
   return (
     <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -31,6 +33,16 @@ export function LifecycleHealthTiles() {
             Tracking End-of-Life (EOL), End-of-Support (EOS), and deprecated components
           </p>
         </div>
+
+        {lifecycleError ? (
+          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800 dark:border-red-900 dark:bg-red-950/20 dark:text-red-200">
+            Lifecycle metrics could not be loaded. Retry from the dashboard or refresh this page.
+          </div>
+        ) : lifecycleEmpty ? (
+          <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-700 dark:border-gray-800 dark:bg-gray-900/50 dark:text-gray-300">
+            No component lifecycle data is available yet.
+          </div>
+        ) : null}
 
         <div className="mt-4 grid grid-cols-3 gap-3">
           <div className="rounded-xl bg-red-50/70 p-3 dark:bg-red-950/20">
@@ -78,6 +90,40 @@ export function LifecycleHealthTiles() {
             <div className="mt-0.5 text-[9px] text-blue-600/80 dark:text-blue-400/80">Deprecated/Unmaintained</div>
           </div>
         </div>
+
+        <div className="mt-3 grid grid-cols-3 gap-3">
+          {([
+            ['Supported', lifecycle?.supported_count ?? 0, 'text-emerald-700 dark:text-emerald-300'],
+            ['Deprecated', lifecycle?.deprecated_count ?? 0, 'text-orange-700 dark:text-orange-300'],
+            ['Unknown', lifecycle?.unknown_count ?? 0, 'text-gray-700 dark:text-gray-300'],
+            ['EOF', lifecycle?.eof_count ?? 0, 'text-rose-700 dark:text-rose-300'],
+            ['EOL Soon', lifecycle?.eol_soon_count ?? 0, 'text-amber-700 dark:text-amber-300'],
+            ['Stale Data', lifecycle?.stale_lifecycle_count ?? 0, 'text-slate-700 dark:text-slate-300'],
+          ] as const).map(([label, value, color]) => (
+            <div key={label} className="rounded-lg border border-gray-200/70 p-2 dark:border-gray-800">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-hcl-muted">{label}</div>
+              {loading ? (
+                <Skeleton className="mt-2 h-5 w-10" />
+              ) : (
+                <div className={`mt-1 font-metric text-xl font-semibold ${color}`}>{value}</div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {!loading && (lifecycle?.recommended_upgrades?.length ?? 0) > 0 ? (
+          <div className="mt-3 border-t border-gray-200 pt-3 dark:border-gray-800">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-hcl-muted">Recommended Upgrades</div>
+            <div className="mt-2 space-y-1.5">
+              {lifecycle?.recommended_upgrades.slice(0, 3).map((item) => (
+                <div key={`${item.id}-${item.name}`} className="flex items-center justify-between gap-3 text-xs">
+                  <span className="truncate font-medium text-hcl-navy">{item.name}</span>
+                  <span className="shrink-0 text-hcl-muted">{item.recommended_version ?? item.lifecycle_status}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </Surface>
 
       {/* SBOM Health Card */}

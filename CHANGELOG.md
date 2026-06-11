@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Provider-based Component Lifecycle Enrichment.**
+  Replaces static lifecycle catalog behavior with normalized provider
+  enrichment, cache, manual overrides, refreshed dashboard metrics, and SBOM
+  export/report support. Providers now include endoflife.date lifecycle date
+  matching, package-registry deprecation/latest-version signals, OSV
+  fixed-version recommendations, and audited manual overrides. New APIs:
+  `POST /api/sboms/{id}/lifecycle/refresh`,
+  `POST /api/components/{id}/lifecycle/refresh`,
+  `PATCH /api/components/{id}/lifecycle-override`,
+  `GET /api/sboms/{id}/lifecycle/report`, and expanded
+  `GET /dashboard/lifecycle`. See
+  [docs/lifecycle-enrichment.md](docs/lifecycle-enrichment.md).
+
+- **Component Deduplication (Stage 9 validation & persistence layer)**
+  - Resolves component duplication inside uploaded SBOMs. Groups components using PURL, CPE, or fallback identity characteristics, chooses canonical records, merges attributes (licenses, hashes, external refs, properties, and supplier info), and remaps the dependency graph (with self-dependency filtering and duplicate target removal).
+  - Flags duplicate database records using `is_duplicate` and `duplicate_of_component_id` columns, supporting `include_duplicates=true` queries in the API.
+  - Implements warning code `SBOM_VAL_W120_DUPLICATE_COMPONENT_DETECTED` that can be promoted to an error in strict NTIA mode.
+  - Adds two export modes on `GET /api/sboms/{id}/export`: `export_mode=original` (default) preserves the uploaded raw file, and `export_mode=normalized` exports the cleaned, merged, and remapped document.
+  - Enriches the frontend SBOM detail view with a deduplication summary banner, badge indicators, a toggle to show/hide duplicate component rows, and a detailed Deduplication Report modal.
+
 - **Dashboard v4 — advanced analytics layer (additive; v3 untouched).**
   Four new capability clusters on the home dashboard, every number routed
   through `app/metrics/` per the canonical-metrics rule:
