@@ -123,7 +123,7 @@ export function Sidebar() {
             )}
           >
             <p className="truncate text-sm font-semibold leading-tight text-white">SBOM Analyzer</p>
-            <p className="mt-0.5 truncate text-[11px] font-medium text-hcl-cyan">HCLTech Security</p>
+            <p className="mt-0.5 truncate text-[11px] font-medium text-white/70">HCLTech Security</p>
           </div>
           <button
             type="button"
@@ -169,7 +169,7 @@ export function Sidebar() {
         </div>
 
         {/* Footer: status + collapse toggle */}
-        <div className="hidden shrink-0 border-t border-white/10 px-2 py-3 md:block space-y-2">
+        <div className="hidden shrink-0 border-t border-white/15 px-2 py-3 md:block space-y-2">
           {!collapsed && <SidebarStatus />}
           {collapsed && <SidebarStatus compact />}
 
@@ -297,7 +297,7 @@ function NavLink({
               'visible grid-rows-[1fr] opacity-100 md:invisible md:grid-rows-[0fr] md:opacity-0',
           )}
         >
-          <ul className="mt-0.5 ml-3 min-h-0 space-y-0.5 overflow-hidden border-l border-sidebar-foreground/10 pl-3">
+          <ul className="mt-0.5 ml-3 min-h-0 space-y-0.5 overflow-hidden border-l border-white/15 pl-3">
             {item.children.map((child) => {
               // Detect active child by pathname + query string approximation.
               const childActive =
@@ -454,8 +454,8 @@ function SidebarSection({
   children: ReactNode;
 }) {
   return (
-    <section className="px-2 py-2 border-t border-sidebar-foreground/10">
-      <p className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/80">
+    <section className="px-2 py-2 border-t border-white/15">
+      <p className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-white/70">
         <Icon className={cn('h-3 w-3', iconClassName)} aria-hidden />
         {title}
       </p>

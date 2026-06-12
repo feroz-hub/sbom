@@ -2,59 +2,76 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── HCLTech semantic tokens (brand blues #003087 / #0067B1, accent cyan #00B2E2) ── */
+/* ── Enterprise blue dashboard theme ── */
 :root {
-  --color-background: #eef3f9;
-  --color-foreground: #0c1929;
-  --color-surface: #ffffff;
-  --color-surface-muted: #f4f8fc;
-  --color-border: #b8cce0;
-  --color-border-subtle: #dce8f2;
+  --color-background: #FFFFFF;
+  --color-foreground: #212529;
+  --color-surface: #FFFFFF;
+  --color-surface-muted: #F3F7FF;
+  --color-border: #DEE2E6;
+  --color-border-subtle: #E9ECEF;
 
   /* Brand core */
-  --color-hcl-navy: #1a2b4a;
-  --color-hcl-muted: #5c6d7e;
-  --color-hcl-border: #b8cce0;
-  --color-hcl-light: #e3eef8;
-  --color-hcl-dark: #003087;
-  --color-hcl-blue: #0067b1;
-  --color-hcl-cyan: #00b2e2;
-  --color-hcl-accent: #0099cc;
-  --color-hcl-violet: #7c3aa8; /* HCLTech violet — lightened */
+  --color-hcl-navy: #212529;
+  --color-hcl-muted: #868E96;
+  --color-hcl-border: #DEE2E6;
+  --color-hcl-light: #E8F1FF;
+  --color-hcl-dark: #0056D6;
+  --color-hcl-blue: #1068E6;
+  --color-hcl-cyan: #1B6FC9;
+  --color-hcl-accent: #1068E6;
+  --color-hcl-violet: #5124A3;
 
-  /* Sidebar: vibrant electric blue rail */
-  --color-sidebar: #3C91FF;
-  --color-sidebar-rail-start: #4D9CFF;
-  --color-sidebar-rail-end: #1F7EFF;
-  --color-sidebar-accent: #091a3c;
-  --color-sidebar-foreground: #091a3c;
-  --color-sidebar-muted: #2c4475;
-  --color-sidebar-hover-bg: rgba(9, 26, 60, 0.08);
+  /* Link color */
+  --color-link: #1B6FC9;
 
-  --focus-ring-color: #0067b1;
+  /* Sidebar: solid enterprise blue */
+  --color-sidebar: #065EE3;
+  --color-sidebar-rail-start: #065EE3;
+  --color-sidebar-rail-end: #065EE3;
+  --color-sidebar-accent: #FFFFFF;
+  --color-sidebar-foreground: #FFFFFF;
+  --color-sidebar-muted: rgba(255, 255, 255, 0.7);
+  --color-sidebar-hover-bg: rgba(255, 255, 255, 0.12);
+
+  /* Table header gradient */
+  --table-header-grad-start: #0046B8;
+  --table-header-grad-mid: #352FA9;
+  --table-header-grad-end: #5124A3;
+
+  /* Table row colors */
+  --row-bg: #FFFFFF;
+  --row-alt-bg: #F3F7FF;
+  --row-hover-bg: #E8F1FF;
+
+  /* Button */
+  --btn-primary: #1068E6;
+  --btn-primary-hover: #0056D6;
+
+  --focus-ring-color: #1068E6;
   --focus-ring-width: 2px;
   --focus-ring-offset: 2px;
 
-  --shadow-card: 0 1px 3px 0 rgba(0, 48, 135, 0.07), 0 4px 14px 0 rgba(0, 103, 177, 0.06);
-  --shadow-card-hover: 0 8px 24px 0 rgba(0, 48, 135, 0.12), 0 2px 8px 0 rgba(0, 103, 177, 0.08);
-  --shadow-topbar: 0 1px 0 0 rgba(0, 48, 135, 0.08), 0 4px 16px 0 rgba(15, 39, 68, 0.06);
+  --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.06), 0 1px 8px 0 rgba(0, 0, 0, 0.04);
+  --shadow-card-hover: 0 4px 16px 0 rgba(0, 0, 0, 0.10), 0 1px 4px 0 rgba(0, 0, 0, 0.06);
+  --shadow-topbar: 0 1px 0 0 rgba(0, 0, 0, 0.06), 0 2px 8px 0 rgba(0, 0, 0, 0.04);
 
   /* Elevation tiers — composable depth language */
   --elev-0: none;
-  --elev-1: 0 1px 2px 0 rgba(0, 48, 135, 0.06);
-  --elev-2: 0 2px 6px -1px rgba(0, 48, 135, 0.08), 0 4px 12px -2px rgba(0, 103, 177, 0.05);
-  --elev-3: 0 8px 24px -4px rgba(0, 48, 135, 0.14), 0 4px 12px -4px rgba(0, 103, 177, 0.08);
-  --elev-4: 0 24px 48px -8px rgba(0, 48, 135, 0.22), 0 8px 24px -8px rgba(0, 103, 177, 0.12);
+  --elev-1: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --elev-2: 0 2px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 8px -2px rgba(0, 0, 0, 0.04);
+  --elev-3: 0 6px 18px -4px rgba(0, 0, 0, 0.12), 0 2px 8px -4px rgba(0, 0, 0, 0.06);
+  --elev-4: 0 16px 40px -8px rgba(0, 0, 0, 0.18), 0 6px 18px -8px rgba(0, 0, 0, 0.08);
 
   /* Glass surfaces */
-  --glass-bg: rgba(255, 255, 255, 0.62);
-  --glass-bg-strong: rgba(255, 255, 255, 0.78);
-  --glass-border: rgba(184, 204, 224, 0.55);
+  --glass-bg: rgba(255, 255, 255, 0.75);
+  --glass-bg-strong: rgba(255, 255, 255, 0.88);
+  --glass-border: rgba(222, 226, 230, 0.55);
   --glass-blur: 14px;
 
   /* Glow accents (used sparingly on KEV badges, primary CTAs, live status) */
-  --glow-primary: 0 0 0 1px rgba(0, 103, 177, 0.35), 0 0 18px -2px rgba(0, 103, 177, 0.45);
-  --glow-cyan: 0 0 0 1px rgba(0, 178, 226, 0.4), 0 0 22px -4px rgba(0, 178, 226, 0.55);
+  --glow-primary: 0 0 0 1px rgba(16, 104, 230, 0.35), 0 0 18px -2px rgba(16, 104, 230, 0.30);
+  --glow-cyan: 0 0 0 1px rgba(27, 111, 201, 0.4), 0 0 22px -4px rgba(27, 111, 201, 0.35);
   --glow-critical: 0 0 0 1px rgba(192, 57, 43, 0.4), 0 0 18px -2px rgba(192, 57, 43, 0.4);
   --glow-success: 0 0 0 1px rgba(22, 163, 74, 0.35), 0 0 16px -2px rgba(22, 163, 74, 0.4);
 
@@ -69,17 +86,14 @@
   --duration-slower: 480ms;
 
   /* ── Compare-page UI uplift (ADR-0008 + compare-ui-redesign.md) ── */
-  /* Hero typography — clamp() so we don't bloat the Tailwind type ramp */
-  --hero-headline-size: clamp(1.5rem, 2.5vw, 2.25rem);    /* 24-36px */
-  --hero-bignumber-size: clamp(2.5rem, 5vw, 3.75rem);     /* 40-60px */
+  --hero-headline-size: clamp(1.5rem, 2.5vw, 2.25rem);
+  --hero-bignumber-size: clamp(2.5rem, 5vw, 3.75rem);
   --hero-headline-tracking: -0.025em;
 
-  /* Distribution bar — promoted from h-3 (12px) to a true visual element */
   --distribution-bar-height: 28px;
   --distribution-bar-radius: 999px;
 
-  /* Severity gradient stops — additive on the findings row left edge.
-   * Reuses the existing severity.* palette in fade form; no new severity colors. */
+  /* Severity gradient stops — preserved as-is for security context. */
   --severity-critical-fade: rgba(192, 57, 43, 0.10);
   --severity-high-fade: rgba(212, 104, 10, 0.10);
   --severity-medium-fade: rgba(184, 134, 11, 0.08);
@@ -156,11 +170,6 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
-    background-image: radial-gradient(
-      ellipse 120% 80% at 50% -30%,
-      color-mix(in srgb, var(--color-hcl-blue) 12%, transparent),
-      transparent 55%
-    );
   }
 
   .dark body {
@@ -206,17 +215,13 @@
   }
 
   .hcl-section-header {
-    background: linear-gradient(90deg, var(--color-sidebar) 0%, var(--color-hcl-blue) 100%);
+    background: linear-gradient(90deg, var(--table-header-grad-start) 0%, var(--table-header-grad-mid) 55%, var(--table-header-grad-end) 100%);
   }
 
-  /** Sidebar masthead — navy to brand-blue gradient with a cyan hairline underline. */
+  /** Sidebar masthead — solid enterprise blue. */
   .sidebar-brand-bar {
-    background: linear-gradient(
-      135deg,
-      var(--color-sidebar-rail-start) 0%,
-      var(--color-hcl-blue) 100%
-    );
-    border-bottom: 1px solid color-mix(in srgb, var(--color-hcl-cyan) 30%, transparent);
+    background: var(--color-sidebar);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
   }
 
   .dark .sidebar-brand-bar {
@@ -228,15 +233,9 @@
     border-bottom: 1px solid color-mix(in srgb, var(--color-hcl-cyan) 40%, transparent);
   }
 
-  /** Sidebar rail — vertical navy depth so the rail reads as one solid,
-      premium surface instead of a flat fill. */
+  /** Sidebar rail — solid enterprise blue. */
   .sidebar-rail {
-    background: linear-gradient(
-      180deg,
-      var(--color-sidebar-rail-start) 0%,
-      var(--color-sidebar) 46%,
-      var(--color-sidebar-rail-end) 100%
-    );
+    background: var(--color-sidebar);
   }
 
   .dark .sidebar-rail {
@@ -248,14 +247,11 @@
     );
   }
 
-  /** Active nav pill — brand-blue gradient with an inner highlight; the
-      single saturated element on the rail, so the eye lands on "where am I". */
+  /** Active nav pill — slightly lighter blue highlight on the solid sidebar. */
   .sidebar-item-active {
     position: relative;
-    background: linear-gradient(92deg, #0067b1 0%, #008ecf 100%);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.2),
-      0 4px 12px rgba(0, 103, 177, 0.35);
+    background: rgba(255, 255, 255, 0.18);
+    box-shadow: none;
   }
 
   .sidebar-item-active::before {
@@ -267,8 +263,8 @@
     width: 3px;
     height: 16px;
     border-radius: 0 4px 4px 0;
-    background-color: var(--color-sidebar-accent);
-    box-shadow: 0 0 8px var(--color-sidebar-accent);
+    background-color: #FFFFFF;
+    box-shadow: none;
   }
 
   .dark .sidebar-item-active {

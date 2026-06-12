@@ -13,7 +13,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantClasses: Record<string, string> = {
   primary:
-    'bg-primary text-white hover:bg-hcl-dark active:bg-hcl-dark border-transparent shadow-elev-1',
+    'bg-[var(--btn-primary)] text-white hover:bg-[var(--btn-primary-hover)] active:bg-[#004BBF] border-transparent shadow-elev-1',
   secondary:
     'bg-surface text-hcl-navy hover:bg-surface-muted active:bg-border-subtle/60 border-border',
   danger:
@@ -21,7 +21,7 @@ const variantClasses: Record<string, string> = {
   ghost:
     'bg-transparent text-hcl-navy hover:bg-surface-muted active:bg-border-subtle/60 border-transparent',
   outline:
-    'bg-transparent text-primary border-primary hover:bg-primary hover:text-white active:bg-hcl-dark active:text-white',
+    'bg-transparent text-[var(--btn-primary)] border-[var(--btn-primary)] hover:bg-[var(--btn-primary)] hover:text-white active:bg-[var(--btn-primary-hover)] active:text-white',
 };
 
 const glowVariantClasses: Record<string, string> = {

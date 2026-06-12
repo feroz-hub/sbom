@@ -20,19 +20,19 @@ const config: Config = {
           DEFAULT: 'var(--color-border)',
           subtle: 'var(--color-border-subtle)',
         },
-        // Brand scale (charts, emphasis) — numeric steps stay fixed
+        // Brand scale — anchored on enterprise blue #1068E6
         primary: {
-          DEFAULT: '#0067B1',
-          50: '#E6F2FA',
-          100: '#CCE4F4',
-          200: '#99C9E9',
-          300: '#66AEDE',
-          400: '#3393D3',
-          500: '#0067B1',
-          600: '#00528E',
-          700: '#003E6A',
-          800: '#002947',
-          900: '#001523',
+          DEFAULT: '#1068E6',
+          50: '#EBF3FE',
+          100: '#D2E4FC',
+          200: '#A5C9F9',
+          300: '#78AEF6',
+          400: '#4B93F3',
+          500: '#1068E6',
+          600: '#0056D6',
+          700: '#0044AA',
+          800: '#00337E',
+          900: '#002252',
         },
         // Theme-aware HCL tokens (text, borders, subtle fills)
         hcl: {
@@ -45,6 +45,7 @@ const config: Config = {
           cyan: 'var(--color-hcl-cyan)',
           violet: 'var(--color-hcl-violet)',
         },
+        link: 'var(--color-link)',
         sidebar: {
           DEFAULT: 'var(--color-sidebar)',
           foreground: 'var(--color-sidebar-foreground)',
@@ -52,6 +53,8 @@ const config: Config = {
           accent: 'var(--color-sidebar-accent)',
           hover: 'var(--color-sidebar-hover-bg)',
         },
+        'row-alt': 'var(--row-alt-bg)',
+        'row-hover': 'var(--row-hover-bg)',
         severity: {
           critical: '#C0392B',
           high: '#D4680A',

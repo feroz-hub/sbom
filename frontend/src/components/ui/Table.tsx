@@ -22,7 +22,8 @@ export function Table({ children, className, ariaLabel, striped }: TableProps) {
       <table
         className={cn(
           'w-full text-sm',
-          striped && '[&_tbody_tr:nth-child(even)]:bg-surface-muted/50',
+          striped && '[&_tbody_tr:nth-child(even)]:bg-row-alt',
+          '[&_tbody_tr]:transition-colors [&_tbody_tr]:hover:bg-row-hover',
           className,
         )}
       >
@@ -35,14 +36,19 @@ export function Table({ children, className, ariaLabel, striped }: TableProps) {
 
 export function TableHead({ children }: { children: ReactNode }) {
   return (
-    <thead className="sticky top-0 z-[1] border-b-2 border-border bg-surface-muted">
+    <thead
+      className="sticky top-0 z-[1]"
+      style={{
+        background: 'linear-gradient(90deg, var(--table-header-grad-start) 0%, var(--table-header-grad-mid) 55%, var(--table-header-grad-end) 100%)',
+      }}
+    >
       {children}
     </thead>
   );
 }
 
 export function TableBody({ children }: { children: ReactNode }) {
-  return <tbody className="divide-y divide-border/70">{children}</tbody>;
+  return <tbody className="divide-y divide-border/50">{children}</tbody>;
 }
 
 export function Th({
@@ -58,7 +64,7 @@ export function Th({
     <th
       scope={scope}
       className={cn(
-        'px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-hcl-navy',
+        'px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-white',
         className,
       )}
     >
@@ -88,11 +94,11 @@ export function Td({
 
 interface SortableThProps {
   children: ReactNode;
-  /** Column key — must match a key registered with `useTableSort`. */
+  /** Column key — must match a key registered with \`useTableSort\`. */
   sortKey: string;
   /** Currently active sort key on the table (null if none). */
   activeKey: string | null;
-  /** Direction of the active sort. Ignored when `activeKey !== sortKey`. */
+  /** Direction of the active sort. Ignored when \`activeKey !== sortKey\`. */
   direction: 'asc' | 'desc';
   onToggle: (key: string) => void;
   className?: string;
@@ -119,7 +125,7 @@ export function SortableTh({
       scope="col"
       aria-sort={ariaSort}
       className={cn(
-        'px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-hcl-navy',
+        'px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-white',
         className,
       )}
     >
@@ -128,15 +134,15 @@ export function SortableTh({
         onClick={() => onToggle(sortKey)}
         aria-label={ariaLabel ?? `Sort by ${typeof children === 'string' ? children : sortKey}`}
         className={cn(
-          'group inline-flex items-center gap-1 rounded-sm transition-colors hover:text-hcl-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/30',
-          isActive && 'text-hcl-blue',
+          'group inline-flex items-center gap-1 rounded-sm transition-colors text-white/90 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40',
+          isActive && 'text-white',
         )}
       >
         <span>{children}</span>
         <Icon
           className={cn(
             'h-3 w-3 transition-opacity',
-            isActive ? 'opacity-100' : 'opacity-30 group-hover:opacity-70',
+            isActive ? 'opacity-100' : 'opacity-40 group-hover:opacity-80',
           )}
           aria-hidden="true"
         />
