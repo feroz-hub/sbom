@@ -88,6 +88,14 @@ class SBOMSourceOut(ORMModel):
     productver: str | None = None
     modified_on: str | None = None
     modified_by: str | None = None
+    name: str | None = None
+    product_name: str | None = None
+    product_version: str | None = None
+    format: str | None = None
+    spec_version: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+    description: str | None = None
 
     # 8-stage validation outcome — populated by POST /api/sboms and
     # POST /api/sboms/upload. Older rows that predate migration 012 carry
@@ -308,6 +316,16 @@ class SBOMSourceUpdate(BaseModel):
             data = dict(data)
             data["projectid"] = data.get("project_id")
         return data
+
+
+class SbomPatchRequest(BaseModel):
+    project_id: int | None = None
+    name: str | None = None
+    product_name: str | None = None
+    product_version: str | None = None
+    sbom_version: str | None = None
+    description: str | None = None
+    change_reason: str | None = None
 
 
 # ---------------------------------------------------------------------------

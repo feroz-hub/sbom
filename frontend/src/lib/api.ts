@@ -389,11 +389,10 @@ export async function uploadSbom(payload: CreateSBOMPayload, signal?: AbortSigna
 
 export function updateSbom(
   id: number,
-  userId: number | string,
   payload: UpdateSBOMPayload,
   signal?: AbortSignal
 ) {
-  return request<SBOMSource>(`/api/sboms/${id}?user_id=${userId}`, {
+  return request<SBOMSource>(`/api/sboms/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
     signal,
@@ -849,12 +848,15 @@ export function getValidationSession(sessionId: string, signal?: AbortSignal) {
 
 export function updateValidationSession(
   sessionId: string,
-  currentContent: string,
+  content: string | null | { current_content?: string | null; project_id?: number | null },
   signal?: AbortSignal,
 ) {
+  const body = typeof content === 'string' || content === null
+    ? { current_content: content }
+    : content;
   return request<ValidationRepairSession>(`/api/sbom-validation-sessions/${sessionId}`, {
     method: 'PATCH',
-    body: JSON.stringify({ current_content: currentContent }),
+    body: JSON.stringify(body),
     signal,
   });
 }
@@ -866,8 +868,9 @@ export function validateValidationSession(sessionId: string, signal?: AbortSigna
   });
 }
 
-export function importValidationSession(sessionId: string, signal?: AbortSignal) {
-  return request<ValidationSessionImportResponse>(`/api/sbom-validation-sessions/${sessionId}/import`, {
+export function importValidationSession(sessionId: string, projectRequired = false, signal?: AbortSignal) {
+  const qs = projectRequired ? '?project_required=true' : '';
+  return request<ValidationSessionImportResponse>(`/api/sbom-validation-sessions/${sessionId}/import${qs}`, {
     method: 'POST',
     signal,
   });

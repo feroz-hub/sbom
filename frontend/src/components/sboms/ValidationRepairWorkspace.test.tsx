@@ -13,6 +13,7 @@ vi.mock('next/navigation', () => ({
 
 const getValidationRepairSession = vi.fn();
 const getProject = vi.fn();
+const getProjects = vi.fn();
 const updateValidationRepairSession = vi.fn();
 const validateRepairSession = vi.fn();
 const importRepairSession = vi.fn();
@@ -25,6 +26,7 @@ vi.mock('@/lib/api', async () => {
   return {
     ...actual,
     getProject: (...args: unknown[]) => getProject(...args),
+    getProjects: (...args: unknown[]) => getProjects(...args),
     getValidationSession: (...args: unknown[]) => getValidationRepairSession(...args),
     updateValidationSession: (...args: unknown[]) => updateValidationRepairSession(...args),
     validateValidationSession: (...args: unknown[]) => validateRepairSession(...args),
@@ -120,6 +122,19 @@ beforeEach(() => {
     modified_by: null,
     modified_on: null,
   });
+  getProjects.mockReset();
+  getProjects.mockResolvedValue([
+    {
+      id: 42,
+      project_name: 'Payments',
+      project_details: null,
+      project_status: 1,
+      created_by: null,
+      created_on: null,
+      modified_by: null,
+      modified_on: null,
+    }
+  ]);
   getValidationRepairSession.mockResolvedValue(FAILED_SESSION);
   getValidationRepairHistory.mockResolvedValue([
     {
@@ -224,7 +239,7 @@ describe('ValidationRepairWorkspace', () => {
     expect(importButton).toBeEnabled();
     fireEvent.click(importButton);
 
-    await waitFor(() => expect(importRepairSession).toHaveBeenCalledWith('session-1'));
+    await waitFor(() => expect(importRepairSession).toHaveBeenCalledWith('session-1', true));
     await waitFor(() => expect(push).toHaveBeenCalledWith('/sboms/101'));
   });
 

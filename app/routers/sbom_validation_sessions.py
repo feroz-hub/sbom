@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, Query
+from fastapi import APIRouter, Depends, Header, Query, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..schemas import SBOMSourceOut
+from ..models import SBOMValidationSession
 from ..services.validation_repair_service import (
     ValidationRepairService,
     session_to_dict,
@@ -19,7 +20,8 @@ router = APIRouter(prefix="/api/sbom-validation-sessions", tags=["sbom-validatio
 
 
 class SessionUpdateRequest(BaseModel):
-    current_content: str = Field(..., min_length=0)
+    current_content: str | None = None
+    project_id: int | None = None
 
 
 class AiSuggestRequest(BaseModel):
@@ -44,7 +46,14 @@ def update_validation_session(
     x_user_id: str | None = Header(None, alias="X-User-Id"),
 ):
     service = ValidationRepairService(db)
-    return session_to_dict(service.update_content(session_id, payload.current_content, actor_user_id=x_user_id))
+    return session_to_dict(
+        service.update_session(
+            session_id,
+            content=payload.current_content,
+            project_id=payload.project_id,
+            actor_user_id=x_user_id,
+        )
+    )
 
 
 @router.post("/{session_id}/validate")
@@ -71,9 +80,15 @@ def import_session(
     session_id: str,
     strict_ntia: bool = Query(False),
     verify_signature: bool = Query(False),
+    project_required: bool = Query(False),
     db: Session = Depends(get_db),
     x_user_id: str | None = Header(None, alias="X-User-Id"),
 ):
+    session = db.get(SBOMValidationSession, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Validation session not found")
+    if project_required and session.project_id is None:
+        raise HTTPException(status_code=400, detail="Project assignment is required to import this SBOM")
     service = ValidationRepairService(db)
     return service.import_session(
         session_id,

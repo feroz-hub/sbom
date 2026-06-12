@@ -59,6 +59,7 @@ from ..schemas import (
     SBOMSourceCreate,
     SBOMSourceOut,
     SBOMSourceUpdate,
+    SbomPatchRequest,
 )
 from ..services import audit_log
 from ..services.analysis_service import compute_report_status, persist_analysis_run
@@ -620,8 +621,8 @@ def get_sbom_dedupe_report(
 @router.patch("/sboms/{sbom_id}", response_model=SBOMSourceOut)
 def update_sbom(
     sbom_id: int,
-    payload: SBOMSourceUpdate,
-    user_id: str = Query(..., description="Must match SBOM.created_by"),
+    payload: SbomPatchRequest,
+    user_id: str | None = Query(None, description="Must match SBOM.created_by"),
     db: Session = Depends(get_db),
 ):
     sbom = db.get(SBOMSource, sbom_id)
@@ -629,33 +630,82 @@ def update_sbom(
         raise HTTPException(status_code=404, detail="SBOM not found")
 
     actual_owner = (sbom.created_by or "").strip().lower()
-    caller = (user_id or "").strip().lower()
-    if actual_owner and actual_owner != caller:
-        raise HTTPException(status_code=403, detail="Forbidden: user cannot update this SBOM")
-    if not sbom.created_by:
-        sbom.created_by = user_id
+    if user_id:
+        caller = user_id.strip().lower()
+        if actual_owner and actual_owner != caller:
+            raise HTTPException(status_code=403, detail="Forbidden: user cannot update this SBOM")
+        if not sbom.created_by:
+            sbom.created_by = user_id
 
-    data = payload.model_dump(exclude_unset=True, exclude_none=True)
+    old_project_id = sbom.projectid
+    old_name = sbom.sbom_name
 
-    if "projectid" in data and data["projectid"] is not None:
-        if db.get(Projects, data["projectid"]) is None:
-            raise HTTPException(status_code=404, detail="Project not found")
-    if "sbom_type" in data and data["sbom_type"] is not None:
-        if db.get(SBOMType, data["sbom_type"]) is None:
-            raise HTTPException(status_code=404, detail="SBOM type not found")
+    data = payload.model_dump(exclude_unset=True)
 
-    if "sbom_data" in data:
-        data["sbom_data"] = _coerce_sbom_data(data["sbom_data"])
+    if "project_id" in data:
+        new_proj_id = data["project_id"]
+        if new_proj_id is not None:
+            try:
+                p_id = int(new_proj_id)
+                if p_id <= 0:
+                    raise ValueError
+            except (ValueError, TypeError):
+                raise HTTPException(status_code=400, detail="Invalid project_id format")
+            
+            project = db.get(Projects, p_id)
+            if not project:
+                raise HTTPException(status_code=400, detail="Project not found")
+            new_proj_id = p_id
+
+        # Update project_id in SBOMSource
+        sbom.projectid = new_proj_id
+
+        # Update project_id in related AnalysisRuns
+        from sqlalchemy import update as sa_update
+        db.execute(
+            sa_update(AnalysisRun)
+            .where(AnalysisRun.sbom_id == sbom.id)
+            .values(project_id=new_proj_id)
+        )
+
+    if "name" in data:
+        sbom.sbom_name = data["name"]
+    if "product_name" in data:
+        sbom.product_name = data["product_name"]
+    if "product_version" in data:
+        sbom.productver = data["product_version"]
+    if "sbom_version" in data:
+        sbom.sbom_version = data["sbom_version"]
+    if "description" in data:
+        sbom.description = data["description"]
+
+    sbom.modified_on = now_iso()
+    if user_id:
+        sbom.modified_by = user_id
 
     try:
-        for k, v in data.items():
-            setattr(sbom, k, v)
-        sbom.modified_on = now_iso()
-        sbom.modified_by = data.get("modified_by") or user_id
-
         db.add(sbom)
         db.commit()
         db.refresh(sbom)
+
+        # Log to generic audit trail
+        audit_log.record(
+            db,
+            user_id=user_id,
+            action="sbom.update",
+            target_kind="sbom",
+            target_id=sbom.id,
+            detail=f"SBOM updated. Reason: {payload.change_reason or 'No reason specified'}",
+            metadata={
+                "old_project_id": old_project_id,
+                "new_project_id": sbom.projectid,
+                "old_name": old_name,
+                "new_name": sbom.sbom_name,
+                "changed_by": user_id,
+                "changed_at": now_iso(),
+                "change_reason": payload.change_reason
+            }
+        )
         return sbom
     except Exception:
         db.rollback()

@@ -77,7 +77,8 @@ class SBOMSource(Base, SoftDeleteMixin):
     completeness_score = Column(Float, nullable=True, default=100.0)
     completeness_report = Column(JSON, nullable=True)
     dedupe_report_json = Column(JSON, nullable=True)
-
+    product_name = Column(String, nullable=True)
+    description = Column(String, nullable=True)
 
     # 8-stage validation outcome — see migration 012.
     # ``server_default`` mirrors migration 012's literals so test-path
@@ -119,6 +120,54 @@ class SBOMSource(Base, SoftDeleteMixin):
     @property
     def component_count(self) -> int:
         return len([component for component in (self.components or []) if not getattr(component, "deleted_at", None)])
+
+    @property
+    def name(self) -> str:
+        return self.sbom_name
+
+    @property
+    def product_version(self) -> str | None:
+        return self.productver
+
+    @property
+    def created_at(self) -> str | None:
+        return self.created_on
+
+    @property
+    def updated_at(self) -> str | None:
+        return self.modified_on
+
+    @property
+    def format(self) -> str:
+        import json
+        if not self.sbom_data:
+            return "—"
+        try:
+            as_dict = json.loads(self.sbom_data) if isinstance(self.sbom_data, str) else self.sbom_data
+            if isinstance(as_dict, dict):
+                if as_dict.get("bomFormat") == "CycloneDX":
+                    return "cyclonedx"
+                if "spdxVersion" in as_dict:
+                    return "spdx"
+        except Exception:
+            pass
+        return "—"
+
+    @property
+    def spec_version(self) -> str:
+        import json
+        if not self.sbom_data:
+            return "—"
+        try:
+            as_dict = json.loads(self.sbom_data) if isinstance(self.sbom_data, str) else self.sbom_data
+            if isinstance(as_dict, dict):
+                if as_dict.get("bomFormat") == "CycloneDX":
+                    return str(as_dict.get("specVersion") or "—")
+                if "spdxVersion" in as_dict:
+                    return str(as_dict.get("spdxVersion") or "—")
+        except Exception:
+            pass
+        return "—"
 
 
 class SBOMValidationSession(Base):

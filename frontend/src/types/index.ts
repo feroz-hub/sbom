@@ -32,6 +32,14 @@ export interface SBOMSource {
   modified_on: string | null;
   productver: string | null;
   sbom_data?: string | null;
+  product_name?: string | null;
+  description?: string | null;
+  name?: string | null;
+  product_version?: string | null;
+  format?: string | null;
+  spec_version?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
   // 8-stage validation outcome — populated by POST /api/sboms.
   status?: SbomValidationStatus;
   failed_stage?: string | null;
@@ -723,8 +731,14 @@ export interface UploadSBOMAcceptedResponse {
 }
 
 export interface UpdateSBOMPayload {
+  project_id?: number | null;
+  name?: string | null;
+  product_name?: string | null;
+  product_version?: string | null;
+  sbom_version?: string | null;
+  description?: string | null;
+  change_reason?: string | null;
   sbom_name?: string;
-  sbom_version?: string;
   productver?: string;
   sbom_type?: number;
   modified_by?: string;

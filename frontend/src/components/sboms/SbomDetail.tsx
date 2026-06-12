@@ -9,6 +9,8 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Dialog, DialogBody } from '@/components/ui/Dialog';
 import { StatusBadge } from '@/components/ui/Badge';
+import { Input, Textarea } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
 import { Table, TableHead, TableBody, Th, SortableTh, Td, EmptyRow } from '@/components/ui/Table';
 import { SkeletonRow } from '@/components/ui/Spinner';
 import { Pagination } from '@/components/ui/Pagination';
@@ -38,10 +40,12 @@ import {
   getSbomVexStatements,
   overrideVexStatement,
   uploadSbomVexDocument,
+  getProjects,
+  updateSbom,
   BASE_URL
 } from '@/lib/api';
 import { useAnalysisStream } from '@/hooks/useAnalysisStream';
-import { invalidateAnalysisCompletion, invalidateDashboardTiles, invalidateSbomSurfaces } from '@/lib/queryInvalidation';
+import { invalidateAnalysisCompletion, invalidateDashboardTiles, invalidateSbomSurfaces, invalidateProjectSurfaces } from '@/lib/queryInvalidation';
 import { useTableSort } from '@/hooks/useTableSort';
 import { usePagination } from '@/hooks/usePagination';
 import { formatDate, formatDuration } from '@/lib/utils';
@@ -180,6 +184,105 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
   // Deduplication State
   const [showDuplicates, setShowDuplicates] = useState(false);
   const [isDedupeModalOpen, setIsDedupeModalOpen] = useState(false);
+
+  // Assign/Edit Project/Details State
+  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
+  const [isEditDetailsModalOpen, setIsEditDetailsModalOpen] = useState(false);
+  
+  // Assign Project Form State
+  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
+  const [assignChangeReason, setAssignChangeReason] = useState('');
+  const [isSavingAssign, setIsSavingAssign] = useState(false);
+  const [assignError, setAssignError] = useState('');
+
+  // Edit Details Form State
+  const [detailName, setDetailName] = useState('');
+  const [detailProductName, setDetailProductName] = useState('');
+  const [detailProductVersion, setDetailProductVersion] = useState('');
+  const [detailSbomVersion, setDetailSbomVersion] = useState('');
+  const [detailDescription, setDetailDescription] = useState('');
+  const [detailProjectId, setDetailProjectId] = useState<number | null>(null);
+  const [detailChangeReason, setDetailChangeReason] = useState('');
+  const [isSavingDetails, setIsSavingDetails] = useState(false);
+  const [detailsError, setDetailsError] = useState('');
+
+  const { data: projects } = useQuery({
+    queryKey: ['projects'],
+    queryFn: ({ signal }) => getProjects(signal),
+  });
+
+  const handleAssignProjectSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedProjectId) {
+      setAssignError('Please select a project.');
+      return;
+    }
+    setIsSavingAssign(true);
+    setAssignError('');
+    try {
+      await updateSbom(sbom.id, {
+        project_id: selectedProjectId,
+        change_reason: assignChangeReason || undefined,
+      });
+
+      queryClient.invalidateQueries({ queryKey: ['sbom', sbom.id] });
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      if (sbom.projectid) {
+        queryClient.invalidateQueries({ queryKey: ['project', sbom.projectid] });
+      }
+      queryClient.invalidateQueries({ queryKey: ['project', selectedProjectId] });
+      invalidateDashboardTiles(queryClient);
+      invalidateProjectSurfaces(queryClient);
+
+      setIsAssignModalOpen(false);
+      router.refresh?.();
+    } catch (err: any) {
+      setAssignError(err.message || 'Failed to update project assignment.');
+    } finally {
+      setIsSavingAssign(false);
+    }
+  };
+
+  const handleEditDetailsSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!detailName.trim()) {
+      setDetailsError('SBOM Name is required.');
+      return;
+    }
+    setIsSavingDetails(true);
+    setDetailsError('');
+    try {
+      const payload = {
+        name: detailName.trim(),
+        product_name: detailProductName.trim() || null,
+        product_version: detailProductVersion.trim() || null,
+        sbom_version: detailSbomVersion.trim() || null,
+        description: detailDescription.trim() || null,
+        project_id: detailProjectId || null,
+        change_reason: detailChangeReason.trim() || undefined,
+      };
+
+      await updateSbom(sbom.id, payload);
+
+      queryClient.invalidateQueries({ queryKey: ['sbom', sbom.id] });
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      if (sbom.projectid) {
+        queryClient.invalidateQueries({ queryKey: ['project', sbom.projectid] });
+      }
+      if (detailProjectId) {
+        queryClient.invalidateQueries({ queryKey: ['project', detailProjectId] });
+      }
+      invalidateDashboardTiles(queryClient);
+      invalidateProjectSurfaces(queryClient);
+
+      setIsEditDetailsModalOpen(false);
+      router.refresh?.();
+    } catch (err: any) {
+      setDetailsError(err.message || 'Failed to update details.');
+    } finally {
+      setIsSavingDetails(false);
+    }
+  };
 
   const { data: components, isLoading: compLoading } = useQuery({
     queryKey: ['sbom-components', sbom.id, showDuplicates],
@@ -662,6 +765,23 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>SBOM Details</CardTitle>
               <div className="flex gap-2">
+                <Button
+                  onClick={() => {
+                    setDetailName(sbom.sbom_name || '');
+                    setDetailProductName(sbom.product_name || '');
+                    setDetailProductVersion(sbom.productver || '');
+                    setDetailSbomVersion(sbom.sbom_version || '');
+                    setDetailDescription(sbom.description || '');
+                    setDetailProjectId(sbom.projectid || null);
+                    setDetailChangeReason('');
+                    setDetailsError('');
+                    setIsEditDetailsModalOpen(true);
+                  }}
+                  variant="outline"
+                  size="sm"
+                >
+                  <Edit2 className="h-3.5 w-3.5" /> Edit Details
+                </Button>
                 <a
                   href={`${BASE_URL}/api/sboms/${sbom.id}/export`}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-hcl-border text-xs font-semibold hover:bg-hcl-light transition-colors text-hcl-navy"
@@ -684,18 +804,36 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
               <dl className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {[
                   { label: 'Name', value: sbom.sbom_name },
-                  { label: 'Format / Type', value: sbom.sbom_type || '—' },
-                  { label: 'SBOM Version', value: sbom.sbom_version || '1.0.0' },
+                  { label: 'Product Name', value: sbom.product_name || '—' },
                   { label: 'Product Version', value: sbom.productver || '—' },
+                  { label: 'SBOM Version', value: sbom.sbom_version || '1.0.0' },
+                  { label: 'Format / Type', value: sbom.format || sbom.sbom_type || '—' },
                   {
                     label: 'Project',
-                    value: sbom.project_name || (sbom.projectid ? `Project #${sbom.projectid}` : '—'),
+                    value: (
+                      <div className="flex items-center gap-2">
+                        <span>{sbom.project_name || (sbom.projectid ? `Project #${sbom.projectid}` : '—')}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedProjectId(sbom.projectid || null);
+                            setAssignChangeReason('');
+                            setAssignError('');
+                            setIsAssignModalOpen(true);
+                          }}
+                          className="text-xs text-hcl-blue hover:underline font-semibold"
+                        >
+                          {sbom.projectid ? 'Change' : 'Assign'}
+                        </button>
+                      </div>
+                    ),
                   },
                   { label: 'Created By', value: sbom.created_by || '—' },
                   { label: 'Created On', value: formatDate(sbom.created_on) },
                   { label: 'Updated On', value: formatDate(sbom.modified_on) },
-                ].map(({ label, value }) => (
-                  <div key={label}>
+                  { label: 'Description', value: sbom.description || '—', fullWidth: true },
+                ].map(({ label, value, fullWidth }) => (
+                  <div key={label} className={fullWidth ? 'col-span-2 md:col-span-4' : ''}>
                     <dt className="text-xs font-medium text-hcl-muted uppercase tracking-wide">{label}</dt>
                     <dd className="mt-1 text-sm font-medium text-hcl-navy break-words">{value}</dd>
                   </div>
@@ -2019,6 +2157,132 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
           </Card>
         </div>
       )}
+
+      {/* ASSIGN PROJECT DIALOG */}
+      <Dialog
+        open={isAssignModalOpen}
+        onClose={() => setIsAssignModalOpen(false)}
+        title={sbom.projectid ? "Change Project" : "Assign Project"}
+        maxWidth="md"
+        footer={
+          <div className="flex items-center justify-end gap-2 px-6 py-4">
+            <Button size="sm" variant="ghost" onClick={() => setIsAssignModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button size="sm" onClick={handleAssignProjectSubmit} loading={isSavingAssign} disabled={!selectedProjectId}>
+              Save Assignment
+            </Button>
+          </div>
+        }
+      >
+        <DialogBody className="space-y-4">
+          {assignError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs font-medium text-red-800">
+              {assignError}
+            </div>
+          )}
+          
+          <Select
+            label="Project"
+            placeholder="Select a project..."
+            required
+            value={selectedProjectId || ''}
+            onChange={(e) => setSelectedProjectId(e.target.value ? Number(e.target.value) : null)}
+          >
+            {projects?.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.project_name}
+              </option>
+            ))}
+          </Select>
+
+          <Input
+            label="Change Reason"
+            placeholder="e.g. Initial project assignment / migration to new workspace"
+            value={assignChangeReason}
+            onChange={(e) => setAssignChangeReason(e.target.value)}
+          />
+        </DialogBody>
+      </Dialog>
+
+      {/* EDIT DETAILS DIALOG */}
+      <Dialog
+        open={isEditDetailsModalOpen}
+        onClose={() => setIsEditDetailsModalOpen(false)}
+        title="Edit SBOM Details"
+        maxWidth="lg"
+        footer={
+          <div className="flex items-center justify-end gap-2 px-6 py-4">
+            <Button size="sm" variant="ghost" onClick={() => setIsEditDetailsModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button size="sm" onClick={handleEditDetailsSubmit} loading={isSavingDetails}>
+              Save Details
+            </Button>
+          </div>
+        }
+      >
+        <DialogBody className="space-y-4">
+          {detailsError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs font-medium text-red-800">
+              {detailsError}
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="SBOM Name"
+              required
+              value={detailName}
+              onChange={(e) => setDetailName(e.target.value)}
+            />
+            <Select
+              label="Project"
+              placeholder="Select project..."
+              value={detailProjectId || ''}
+              onChange={(e) => setDetailProjectId(e.target.value ? Number(e.target.value) : null)}
+            >
+              {projects?.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.project_name}
+                </option>
+              ))}
+            </Select>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <Input
+              label="Product Name"
+              value={detailProductName}
+              onChange={(e) => setDetailProductName(e.target.value)}
+            />
+            <Input
+              label="Product Version"
+              value={detailProductVersion}
+              onChange={(e) => setDetailProductVersion(e.target.value)}
+            />
+            <Input
+              label="SBOM Version"
+              value={detailSbomVersion}
+              onChange={(e) => setDetailSbomVersion(e.target.value)}
+            />
+          </div>
+
+          <Textarea
+            label="Description"
+            placeholder="Add description..."
+            value={detailDescription}
+            onChange={(e) => setDetailDescription(e.target.value)}
+          />
+
+          <Input
+            label="Change Reason"
+            placeholder="e.g. Correcting metadata or project workspace"
+            value={detailChangeReason}
+            onChange={(e) => setDetailChangeReason(e.target.value)}
+          />
+        </DialogBody>
+      </Dialog>
     </div>
   );
 }

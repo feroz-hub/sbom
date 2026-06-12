@@ -14,6 +14,7 @@ import { PageSpinner } from '@/components/ui/Spinner';
 import {
   applyValidationSessionPatch,
   getProject,
+  getProjects,
   getValidationSession,
   getValidationSessionHistory,
   importValidationSession,
@@ -21,6 +22,7 @@ import {
   updateValidationSession,
   validateValidationSession,
 } from '@/lib/api';
+import { Select } from '@/components/ui/Select';
 import { invalidateDashboardTiles, invalidateProjectSurfaces, invalidateSbomSurfaces } from '@/lib/queryInvalidation';
 import { STAGE_NUMBERS, stageLabel, stageNumber } from '@/lib/sbomValidation';
 import type { AiRepairSuggestion, ValidationErrorEntry, ValidationRepairPatch } from '@/types';
@@ -93,6 +95,22 @@ export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspa
     enabled: sessionQuery.data?.project_id != null,
   });
 
+  const projectsQuery = useQuery({
+    queryKey: ['projects'],
+    queryFn: ({ signal }) => getProjects(signal),
+  });
+
+  const handleProjectChange = async (projectId: number | null) => {
+    try {
+      const updated = await updateValidationSession(sessionId, { project_id: projectId });
+      queryClient.setQueryData(['validation-repair-session', sessionId], updated);
+      queryClient.invalidateQueries({ queryKey: ['project', projectId] });
+      setLocalMessage('Project assignment updated.');
+    } catch (err: any) {
+      setLocalMessage(`Failed to update project: ${err.message}`);
+    }
+  };
+
   useEffect(() => {
     if (sessionQuery.data) setContent(sessionQuery.data.current_content);
   }, [sessionQuery.data?.id, sessionQuery.data?.current_content]);
@@ -122,7 +140,7 @@ export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspa
   });
 
   const importMutation = useMutation({
-    mutationFn: () => importValidationSession(sessionId),
+    mutationFn: () => importValidationSession(sessionId, true),
     onSuccess: (sbom) => {
       invalidateSbomSurfaces(queryClient, sbom.id);
       invalidateProjectSurfaces(queryClient, sbom.project_id ?? sbom.projectid ?? sessionQuery.data?.project_id);
@@ -168,7 +186,7 @@ export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspa
   const entries = report?.entries ?? [];
   const grouped = useMemo(() => groupErrors(entries), [entries]);
   const hardErrorCount = entries.filter((entry) => entry.severity === 'error').length;
-  const canImport = session?.validation_status === 'passed' && (report?.error_count ?? hardErrorCount) === 0 && hardErrorCount === 0;
+  const canImport = session?.validation_status === 'passed' && (report?.error_count ?? hardErrorCount) === 0 && hardErrorCount === 0 && session?.project_id != null;
   const hasSelectedPatch = suggestion?.patches.some((_, idx) => selected[idx]) ?? false;
   const hasUnsavedChanges = Boolean(session && content !== session.current_content);
 
@@ -222,8 +240,21 @@ export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspa
             </div>
             <div>
               <dt className="text-xs font-medium text-hcl-muted">Assigned project</dt>
-              <dd className="mt-1 text-hcl-navy">
-                {projectQuery.data?.project_name || (session.project_id != null ? `Project #${session.project_id}` : 'Unassigned')}
+              <dd className="mt-1">
+                <Select
+                  aria-label="Assign Project"
+                  value={session.project_id || ''}
+                  onChange={(e) => handleProjectChange(e.target.value ? Number(e.target.value) : null)}
+                  disabled={!session.can_edit}
+                  placeholder="Select a project..."
+                  className="h-8 py-0 text-xs font-medium"
+                >
+                  {projectsQuery.data?.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.project_name}
+                    </option>
+                  ))}
+                </Select>
               </dd>
             </div>
             <div>

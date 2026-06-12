@@ -32,6 +32,7 @@ AuditAction = Literal[
     "sbom.soft_delete",
     "sbom.permanent_delete",
     "sbom.restore",
+    "sbom.update",
     "schedule.soft_delete",
     "schedule.permanent_delete",
     "run.soft_delete",

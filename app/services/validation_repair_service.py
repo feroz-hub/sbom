@@ -267,27 +267,52 @@ class ValidationRepairService:
             raise HTTPException(status_code=404, detail="Validation session not found")
         return session
 
-    def update_content(self, session_id: str, content: str, *, actor_user_id: str | None = None) -> SBOMValidationSession:
+    def update_session(
+        self,
+        session_id: str,
+        content: str | None = None,
+        project_id: int | None = None,
+        *,
+        actor_user_id: str | None = None,
+    ) -> SBOMValidationSession:
         session = self.get_session(session_id)
         if not session.can_edit:
             raise HTTPException(status_code=403, detail="This validation session is not editable")
+        
+        summary_parts = []
         before = content_hash(session.current_content)
-        session.current_content = content
-        session.content_sha256 = content_hash(content)
-        session.validation_status = "edited"
+        
+        if content is not None:
+            session.current_content = content
+            session.content_sha256 = content_hash(content)
+            session.validation_status = "edited"
+            summary_parts.append("content edited")
+            
+        if project_id is not None:
+            project = self.db.get(Projects, project_id)
+            if not project:
+                raise HTTPException(status_code=404, detail="Project not found")
+            session.project_id = project_id
+            summary_parts.append(f"project assigned to '{project.project_name}'")
+            
         session.updated_at = now_iso()
         self.db.add(session)
+        
+        summary = "SBOM " + " and ".join(summary_parts) + " in validation repair workspace."
         self._record_event(
             session,
             "manual_edit",
             actor_user_id=actor_user_id,
-            summary="SBOM content edited in validation repair workspace.",
-            before_hash=before,
-            after_hash=session.content_sha256,
+            summary=summary,
+            before_hash=before if content is not None else None,
+            after_hash=session.content_sha256 if content is not None else None,
         )
         self.db.commit()
         self.db.refresh(session)
         return session
+
+    def update_content(self, session_id: str, content: str, *, actor_user_id: str | None = None) -> SBOMValidationSession:
+        return self.update_session(session_id, content=content, actor_user_id=actor_user_id)
 
     def validate_session(
         self,
