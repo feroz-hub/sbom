@@ -100,6 +100,53 @@ describe('SbomUploadModal validation repair handoff', () => {
     expect(link).toHaveAttribute('href', '/sbom-validation-sessions/repair-123');
   });
 
+  it('shows the repair link when the backend returns a session without can_edit', async () => {
+    useUploadSbomMutate.mockImplementation((_payload, handlers) => {
+      handlers.onError(
+        new HttpError('validation failed', 422, 'sbom_validation_failed', {
+          status: 'validation_failed',
+          message: 'Validation failed',
+          sbom_id: null,
+          session_id: 'repair-no-can-edit',
+          failed_stage: 'semantic',
+          error_count: 1,
+          warning_count: 0,
+          error_report: {
+            status: 'failed',
+            failed_stage: 'semantic',
+            error_count: 1,
+            warning_count: 0,
+            info_count: 0,
+            truncated: false,
+            entries: [
+              {
+                code: 'SBOM_VAL_E052_PURL_INVALID',
+                severity: 'error',
+                stage: 'semantic',
+                path: 'components[0].purl',
+                message: 'Bad purl',
+                remediation: 'Fix purl',
+                spec_reference: null,
+              },
+            ],
+          },
+          truncated: false,
+        }),
+      );
+    });
+
+    render(wrap(<SbomUploadModal open onClose={vi.fn()} />));
+
+    expect(await screen.findByRole('option', { name: 'Payments' })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/SBOM Name/i), { target: { value: 'bad-sbom' } });
+    fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: '42' } });
+    fireEvent.change(screen.getByPlaceholderText('{"bomFormat": "CycloneDX", ...}'), { target: { value: '{"bad":true}' } });
+    fireEvent.click(screen.getByRole('button', { name: /Upload SBOM/i }));
+
+    const link = await screen.findByRole('link', { name: /Open repair workspace/i });
+    expect(link).toHaveAttribute('href', '/sbom-validation-sessions/repair-no-can-edit');
+  });
+
   it('shows security-blocked text when no repair session is created', async () => {
     useUploadSbomMutate.mockImplementation((_payload, handlers) => {
       handlers.onError(

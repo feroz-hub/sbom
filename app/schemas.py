@@ -153,6 +153,9 @@ class ValidationReportResponse(BaseModel):
     severity_summary: dict[str, int] = Field(default_factory=dict)
     stage_summary: dict[str, int] = Field(default_factory=dict)
     truncated: bool = False
+    session_id: str | None = None
+    can_edit: bool = False
+
 
 
 class SBOMComponentOut(ORMModel):

@@ -237,6 +237,14 @@ export function ValidationReportSection({ report, onReupload }: ValidationReport
               {revalidating ? 'Validating…' : 'Run validation'}
             </Button>
           )}
+          {isFailed && report.session_id && report.can_edit !== false && (
+            <Link
+              href={`/sbom-validation-sessions/${report.session_id}`}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-hcl-border px-3 py-1.5 text-xs font-semibold text-hcl-navy hover:bg-hcl-light transition-colors"
+            >
+              Open repair workspace
+            </Link>
+          )}
           {isFailed && onReupload && (
             <Button type="button" size="sm" onClick={onReupload}>
               <Upload className="h-4 w-4" aria-hidden />

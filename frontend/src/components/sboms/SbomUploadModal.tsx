@@ -18,12 +18,32 @@ import { useUploadSbom } from '@/hooks/useSbomMutations';
 import { stageLabel, stageNumber } from '@/lib/sbomValidation';
 import type { SBOMSource, SbomValidationFailureDetail } from '@/types';
 
-function isValidationFailureDetail(detail: unknown): detail is SbomValidationFailureDetail {
-  return (
-    typeof detail === 'object' &&
-    detail !== null &&
-    (detail as { code?: unknown }).code === 'sbom_validation_failed'
-  );
+function normalizeValidationFailureDetail(detail: unknown): SbomValidationFailureDetail | null {
+  if (typeof detail !== 'object' || detail === null || Array.isArray(detail)) return null;
+  const raw = detail as Partial<SbomValidationFailureDetail>;
+  const looksLikeValidationFailure =
+    raw.code === 'sbom_validation_failed' ||
+    raw.status === 'validation_failed' ||
+    Array.isArray(raw.entries) ||
+    Boolean(raw.error_report);
+  if (!looksLikeValidationFailure) return null;
+
+  return {
+    code: 'sbom_validation_failed',
+    status: raw.status ?? 'validation_failed',
+    message: raw.message ?? 'SBOM validation failed.',
+    sbom_id: raw.sbom_id ?? null,
+    session_id: raw.session_id ?? null,
+    can_edit: raw.can_edit,
+    can_ai_fix: raw.can_ai_fix,
+    reason: raw.reason ?? null,
+    failed_stage: raw.failed_stage ?? raw.error_report?.failed_stage ?? null,
+    error_count: raw.error_count ?? raw.error_report?.error_count ?? 0,
+    warning_count: raw.warning_count ?? raw.error_report?.warning_count ?? 0,
+    entries: raw.entries ?? raw.error_report?.entries ?? [],
+    truncated: raw.truncated ?? raw.error_report?.truncated ?? false,
+    error_report: raw.error_report,
+  };
 }
 
 const schema = z.object({
@@ -177,8 +197,9 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
         onError: (err) => {
           // Validation failure (4xx with structured detail) → render the
           // structured rejection card with stage info + "View full report" link.
-          if (err instanceof HttpError && isValidationFailureDetail(err.detail)) {
-            setValidationFailure(err.detail);
+          const validationDetail = err instanceof HttpError ? normalizeValidationFailureDetail(err.detail) : null;
+          if (validationDetail) {
+            setValidationFailure(validationDetail);
             setUploadError(null);
           } else {
             // Generic upload failure (network, 409 duplicate, 413 too-large) —
@@ -248,7 +269,7 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
                     </div>
                   )}
                   <div className="mt-3 flex flex-wrap items-center gap-3">
-                    {validationFailure.session_id && validationFailure.can_edit ? (
+                    {validationFailure.session_id && validationFailure.can_edit !== false ? (
                       <Link
                         href={`/sbom-validation-sessions/${validationFailure.session_id}`}
                         className="inline-flex items-center gap-1 text-xs font-medium text-red-700 hover:underline dark:text-red-300"

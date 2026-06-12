@@ -350,6 +350,42 @@ class ValidationRepairService:
         if session.imported_sbom_id:
             existing = self.db.get(SBOMSource, session.imported_sbom_id)
             if existing:
+                if session.validation_status == "imported":
+                    return existing
+
+                # Update the existing SBOMSource with repaired content
+                existing.sbom_data = session.current_content or ""
+                existing.status = "validated"
+                existing.failed_stage = None
+                existing.validation_errors = (session.latest_error_report_json or {}).get("entries") or None
+                existing.error_count = 0
+                existing.warning_count = int((session.latest_error_report_json or {}).get("warning_count") or 0)
+                existing.validated_at = now_iso()
+                existing.modified_on = now_iso()
+                if actor_user_id:
+                    existing.modified_by = actor_user_id
+
+                self.db.add(existing)
+                self.db.flush()
+
+                sync_sbom_components(self.db, existing)
+                sync_lifecycle_for_sbom(self.db, int(existing.id))
+                compute_and_save_completeness(self.db, existing)
+
+                session.validation_status = "imported"
+                session.updated_at = now_iso()
+                self.db.add(session)
+
+                self._record_event(
+                    session,
+                    "imported",
+                    actor_user_id=actor_user_id,
+                    summary=f"Repaired SBOM imported back to SBOM {existing.id}.",
+                    after_hash=session.content_sha256,
+                    metadata={"imported_sbom_id": existing.id, "warning_count": report.get("warning_count", 0)},
+                )
+                self.db.commit()
+                self.db.refresh(existing)
                 return existing
         if session.project_id is not None and self.db.get(Projects, session.project_id) is None:
             raise HTTPException(status_code=404, detail="Project not found")

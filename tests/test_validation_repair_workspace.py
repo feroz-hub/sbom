@@ -247,3 +247,80 @@ def test_ai_suggestion_endpoint_returns_structured_suggestions_and_history(clien
 
     history = client.get(f"/api/sbom-validation-sessions/{session_id}/history").json()
     assert "ai_suggestion_generated" in [event["event_type"] for event in history]
+
+
+def test_lazy_session_creation_and_inplace_import(client):
+    project = _create_project(client)
+    CLEAN_CYCLONEDX = {
+        "bomFormat": "CycloneDX",
+        "specVersion": "1.6",
+        "serialNumber": "urn:uuid:99999999-aaaa-bbbb-cccc-dddddddddddd",
+        "version": 1,
+        "metadata": {"timestamp": "2026-04-30T12:00:00Z"},
+        "components": [
+            {
+                "type": "library",
+                "bom-ref": "x",
+                "name": "x",
+                "version": "1.0.0",
+                "purl": "pkg:generic/x@1.0.0",
+            }
+        ],
+        "dependencies": [],
+    }
+
+    resp = client.post(
+        "/api/sboms",
+        json={
+            "sbom_name": _unique("inplace-test"),
+            "sbom_data": json.dumps(CLEAN_CYCLONEDX),
+            "project_id": project["id"],
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    sbom_data = resp.json()
+    sbom_id = sbom_data["id"]
+
+    from app.db import SessionLocal
+    db = SessionLocal()
+    try:
+        sbom = db.get(SBOMSource, sbom_id)
+        assert sbom is not None
+        sbom.sbom_data = json.dumps(BAD_PURL_CYCLONEDX)
+        sbom.status = "failed"
+        sbom.error_count = 1
+        db.add(sbom)
+        db.commit()
+    finally:
+        db.close()
+
+    report_resp = client.get(f"/api/sboms/{sbom_id}/validation-report")
+    assert report_resp.status_code == 200
+    report_body = report_resp.json()
+    assert report_body["status"] == "failed"
+    session_id = report_body["session_id"]
+    assert session_id is not None
+    assert report_body["can_edit"] is True
+
+    patched_content = json.dumps(CLEAN_CYCLONEDX)
+    patch_resp = client.patch(
+        f"/api/sbom-validation-sessions/{session_id}",
+        json={"current_content": patched_content}
+    )
+    assert patch_resp.status_code == 200
+
+    import_resp = client.post(f"/api/sbom-validation-sessions/{session_id}/import")
+    assert import_resp.status_code == 200
+    imported_body = import_resp.json()
+    assert imported_body["id"] == sbom_id
+    assert imported_body["status"] == "validated"
+    assert imported_body["error_count"] == 0
+
+    db = SessionLocal()
+    try:
+        updated_sbom = db.get(SBOMSource, sbom_id)
+        assert updated_sbom.status == "validated"
+        assert "pkg:generic/x@1.0.0" in updated_sbom.sbom_data
+    finally:
+        db.close()
+

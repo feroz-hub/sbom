@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..models import AnalysisFinding, AnalysisRun, SBOMSource
+from ..models import AnalysisFinding, AnalysisRun, SBOMSource, SBOMValidationSession
 from ..schemas import ValidationErrorEntry, ValidationReportResponse
 from ..services.risk_score import score_findings
 from ..validation.stages import STAGE_NUMBERS
@@ -141,6 +141,39 @@ def get_sbom_validation_report(sbom_id: int, db: Session = Depends(get_db)):
 
     spec_detected, spec_version_detected = _detect_format_from_data(sbom.sbom_data)
 
+    session = (
+        db.execute(
+            select(SBOMValidationSession)
+            .where(SBOMValidationSession.imported_sbom_id == sbom.id)
+            .order_by(SBOMValidationSession.created_at.desc())
+        )
+        .scalars()
+        .first()
+    )
+
+    if not session and sbom.status in {"failed", "quarantined"}:
+        from ..services.validation_repair_service import ValidationRepairService
+        from ..validation import run as run_validation
+
+        raw = sbom.sbom_data.encode("utf-8") if sbom.sbom_data else b""
+        report = run_validation(raw)
+
+        service = ValidationRepairService(db)
+        session, blocked_reason = service.create_failed_upload_session(
+            raw_text=sbom.sbom_data or "",
+            report=report,
+            sbom_name=sbom.sbom_name,
+            original_filename=sbom.sbom_name,
+            project_id=sbom.projectid,
+            sbom_type=sbom.sbom_type,
+            user_id=sbom.created_by,
+        )
+        if session:
+            session.imported_sbom_id = sbom.id
+            db.add(session)
+            db.commit()
+            db.refresh(session)
+
     return ValidationReportResponse(
         sbom_id=int(sbom.id),
         filename=str(sbom.sbom_name),
@@ -156,6 +189,8 @@ def get_sbom_validation_report(sbom_id: int, db: Session = Depends(get_db)):
         severity_summary=dict(severity_summary),
         stage_summary=dict(stage_summary),
         truncated=False,
+        session_id=session.id if session else None,
+        can_edit=bool(session and session.can_edit),
     )
 
 

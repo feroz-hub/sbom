@@ -85,6 +85,8 @@ export interface ValidationReport {
   severity_summary: Record<string, number>;
   stage_summary: Record<string, number>;
   truncated: boolean;
+  session_id?: string | null;
+  can_edit?: boolean;
 }
 
 /** Body of a 4xx response from POST /api/sboms when validation fails. */
