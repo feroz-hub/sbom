@@ -11,6 +11,7 @@ import { Dialog, DialogBody } from '@/components/ui/Dialog';
 import { StatusBadge } from '@/components/ui/Badge';
 import { Input, Textarea } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
+import { useToast } from '@/hooks/useToast';
 import { Table, TableHead, TableBody, Th, SortableTh, Td, EmptyRow } from '@/components/ui/Table';
 import { SkeletonRow } from '@/components/ui/Spinner';
 import { Pagination } from '@/components/ui/Pagination';
@@ -30,6 +31,7 @@ import {
   restoreSbomVersion,
   refreshSbomLifecycle,
   refreshComponentLifecycle,
+  overrideComponentLifecycle,
   discoverSbomVexDocuments,
   exportSbomLifecycleReportCsv,
   exportSbomLifecycleReportPack,
@@ -128,6 +130,7 @@ function canManageEvidenceFromClient() {
 export function SbomDetail({ sbom }: SbomDetailProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
   const { state, startAnalysis, cancel, reset } = useAnalysisStream(sbom.id);
   const [activeTab, setActiveTab] = useState<'overview' | 'components' | 'versions' | 'runs'>('overview');
   
@@ -455,44 +458,54 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
     if (!editingComp) return;
     setIsSavingEdit(true);
     setEditError('');
+    const payload = {
+      lifecycle_status: editLifecycleStatus,
+      eos_date: editEosDate || null,
+      eol_date: editEolDate || null,
+      eof_date: editEofDate || null,
+      deprecated: editIsDeprecated,
+      is_deprecated: editIsDeprecated,
+      maintenance_status: editMaintStatus,
+      recommended_version: editRecommendedVersion || null,
+      evidence_url: editEvidenceUrl || null,
+      reason: editOverrideReason || null,
+      updated_by: sbom.created_by ?? null,
+    };
     try {
-      const payload = {
-        metadata: null,
-        components: [
-          {
-            bom_ref: editingComp.bom_ref || editingComp.name,
-            name: editName,
-            version: editVersion,
-            supplier: editSupplier,
-            license: editLicense,
-            hashes: editHashes,
-            lifecycle: {
-              lifecycle_status: editLifecycleStatus,
-              eos_date: editEosDate || null,
-              eol_date: editEolDate || null,
-              eof_date: editEofDate || null,
-              deprecated: editIsDeprecated,
-              is_deprecated: editIsDeprecated,
-              maintenance_status: editMaintStatus,
-              recommended_version: editRecommendedVersion || null,
-              reason: editOverrideReason || null,
-              evidence_url: editEvidenceUrl || null,
-            }
-          }
-        ],
-        change_summary: `Manual override for ${editingComp.name} (${editVersion})`
-      };
-
-      const newVersion = await editSbom(sbom.id, payload, sbom.created_by ?? undefined);
-      
-      // Invalidate queries to reload details, components, versions
-      queryClient.invalidateQueries({ queryKey: ['sbom', sbom.id] });
-      queryClient.invalidateQueries({ queryKey: ['sbom-components', sbom.id] });
-      queryClient.invalidateQueries({ queryKey: ['sbom-versions', sbom.id] });
+      await overrideComponentLifecycle(editingComp.id, payload);
+      showToast('Manual override saved successfully.', 'success');
       setEditingComp(null);
-      router.push(`/sboms/${newVersion.id}`);
+
+      // Invalidate queries asynchronously (do not block modal closure)
+      (async () => {
+        try {
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: ['sbom', sbom.id] }),
+            queryClient.invalidateQueries({ queryKey: ['sbom-components', sbom.id] }),
+            queryClient.invalidateQueries({ queryKey: ['dashboard-lifecycle'] }),
+            queryClient.invalidateQueries({ queryKey: ['dashboard-health'] }),
+          ]);
+        } catch (err) {
+          console.error('Failed to invalidate queries:', err);
+        }
+      })();
     } catch (err: any) {
-      setEditError(err.message || 'Failed to apply modifications.');
+      console.log('Error saving manual lifecycle override:', {
+        endpoint: `/api/components/${editingComp.id}/lifecycle-override`,
+        payload,
+        error: err
+      });
+      if (err.name === 'AbortError' || (err.message && err.message.toLowerCase().includes('timeout'))) {
+        setEditError('Save took too long. Please check backend logs.');
+      } else if (err.status === 400 || err.status === 422) {
+        setEditError(`Validation Error: ${err.message}`);
+      } else if (err.status === 404) {
+        setEditError('Component not found. It may have been removed or renamed.');
+      } else if (err.status === 500) {
+        setEditError(`Backend Error: ${err.message}`);
+      } else {
+        setEditError(err.message || 'Failed to save override.');
+      }
     } finally {
       setIsSavingEdit(false);
     }
@@ -1909,8 +1922,9 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-hcl-muted uppercase">Lifecycle Status</label>
+                    <label htmlFor="edit-lifecycle-status" className="block text-xs font-semibold text-hcl-muted uppercase">Lifecycle Status</label>
                     <select
+                      id="edit-lifecycle-status"
                       value={editLifecycleStatus}
                       onChange={(e) => setEditLifecycleStatus(e.target.value)}
                       className="mt-1 w-full rounded-lg border border-hcl-border p-2 text-sm text-hcl-navy focus:outline-none focus:ring-2 focus:ring-hcl-blue"
@@ -1926,8 +1940,9 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-hcl-muted uppercase">Maintenance Status</label>
+                    <label htmlFor="edit-maintenance-status" className="block text-xs font-semibold text-hcl-muted uppercase">Maintenance Status</label>
                     <select
+                      id="edit-maintenance-status"
                       value={editMaintStatus}
                       onChange={(e) => setEditMaintStatus(e.target.value)}
                       className="mt-1 w-full rounded-lg border border-hcl-border p-2 text-sm text-hcl-navy focus:outline-none focus:ring-2 focus:ring-hcl-blue"
@@ -1943,8 +1958,9 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
 
                 <div className="grid grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-hcl-muted uppercase">EOS Date</label>
+                    <label htmlFor="edit-eos-date" className="block text-xs font-semibold text-hcl-muted uppercase">EOS Date</label>
                     <input
+                      id="edit-eos-date"
                       type="text"
                       placeholder="YYYY-MM-DD"
                       value={editEosDate}
@@ -1953,8 +1969,9 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-hcl-muted uppercase">EOL Date</label>
+                    <label htmlFor="edit-eol-date" className="block text-xs font-semibold text-hcl-muted uppercase">EOL Date</label>
                     <input
+                      id="edit-eol-date"
                       type="text"
                       placeholder="YYYY-MM-DD"
                       value={editEolDate}
@@ -1963,8 +1980,9 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-hcl-muted uppercase">EOF Date</label>
+                    <label htmlFor="edit-eof-date" className="block text-xs font-semibold text-hcl-muted uppercase">EOF Date</label>
                     <input
+                      id="edit-eof-date"
                       type="text"
                       placeholder="YYYY-MM-DD"
                       value={editEofDate}
@@ -1976,8 +1994,9 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-hcl-muted uppercase">Recommended Version</label>
+                    <label htmlFor="edit-recommended-version" className="block text-xs font-semibold text-hcl-muted uppercase">Recommended Version</label>
                     <input
+                      id="edit-recommended-version"
                       type="text"
                       value={editRecommendedVersion}
                       onChange={(e) => setEditRecommendedVersion(e.target.value)}
@@ -1985,8 +2004,9 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-hcl-muted uppercase">Evidence URL</label>
+                    <label htmlFor="edit-evidence-url" className="block text-xs font-semibold text-hcl-muted uppercase">Evidence URL</label>
                     <input
+                      id="edit-evidence-url"
                       type="url"
                       value={editEvidenceUrl}
                       onChange={(e) => setEditEvidenceUrl(e.target.value)}
@@ -1996,8 +2016,9 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-hcl-muted uppercase">Override Reason</label>
+                  <label htmlFor="edit-override-reason" className="block text-xs font-semibold text-hcl-muted uppercase">Override Reason</label>
                   <textarea
+                    id="edit-override-reason"
                     value={editOverrideReason}
                     onChange={(e) => setEditOverrideReason(e.target.value)}
                     className="mt-1 min-h-20 w-full rounded-lg border border-hcl-border p-2 text-sm text-hcl-navy focus:outline-none focus:ring-2 focus:ring-hcl-blue"

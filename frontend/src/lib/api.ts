@@ -513,11 +513,15 @@ export function overrideComponentLifecycle(
   payload: LifecycleOverridePayload,
   signal?: AbortSignal,
 ) {
-  return request<SBOMComponent>(`/api/components/${componentId}/lifecycle-override`, {
-    method: 'PATCH',
-    body: JSON.stringify(payload),
-    signal,
-  });
+  return request<SBOMComponent>(
+    `/api/components/${componentId}/lifecycle-override`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+      signal,
+    },
+    2000,
+  );
 }
 
 export function analyzeSbom(sbomId: number, signal?: AbortSignal) {

@@ -56,10 +56,9 @@ from ..rate_limit import analyze_route_limit
 from ..schemas import (
     AnalysisRunOut,
     SBOMComponentOut,
+    SbomPatchRequest,
     SBOMSourceCreate,
     SBOMSourceOut,
-    SBOMSourceUpdate,
-    SbomPatchRequest,
 )
 from ..services import audit_log
 from ..services.analysis_service import compute_report_status, persist_analysis_run

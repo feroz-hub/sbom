@@ -136,6 +136,18 @@ class LifecycleEnrichmentService:
         ):
             raise HTTPException(status_code=422, detail="Invalid lifecycle_status")
 
+        # Validate dates if provided
+        for date_field in ("eos_date", "eol_date", "eof_date"):
+            val = payload.get(date_field)
+            if val:
+                try:
+                    datetime.strptime(val, "%Y-%m-%d")
+                except ValueError:
+                    raise HTTPException(
+                        status_code=422,
+                        detail=f"Invalid {date_field} format. Expected YYYY-MM-DD."
+                    )
+
         old_state = _component_lifecycle_state(component)
         evidence_url = payload.get("evidence_url") or payload.get("lifecycle_source_url")
         evidence = payload.get("evidence") if isinstance(payload.get("evidence"), dict) else {}

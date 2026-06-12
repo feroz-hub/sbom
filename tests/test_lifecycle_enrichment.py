@@ -529,3 +529,104 @@ def test_lifecycle_diagnostics_endpoint(client, db):
     assert diag["provider_hit_count"] == 0
     assert len(diag["sample_matched_components"]) == 1
     assert diag["sample_matched_components"][0]["name"] == "diag-package"
+
+
+def test_manual_lifecycle_override_validation_and_audit(client, db):
+    # Setup SBOM and component
+    sbom = SBOMSource(sbom_name="override-test", sbom_data="{}", status="validated")
+    db.add(sbom)
+    db.flush()
+    component = SBOMComponent(sbom_id=sbom.id, name="override-pkg", version="1.0.0", component_type="library")
+    db.add(component)
+    db.commit()
+
+    # 1. Success validation
+    # Check date validation and manual override flag setting
+    import time
+    start_time = time.time()
+
+    override_res = client.patch(
+        f"/api/components/{component.id}/lifecycle-override",
+        json={
+            "lifecycle_status": "EOL",
+            "maintenance_status": "Unsupported",
+            "eos_date": "2026-06-30",
+            "eol_date": "2026-12-31",
+            "eof_date": "2026-06-30",
+            "deprecated": False,
+            "unsupported": True,
+            "recommended_version": "2.0.0",
+            "reason": "Explicit test reason.",
+            "evidence_url": "https://example.com/eol-news",
+            "updated_by": "test-user"
+        }
+    )
+    end_time = time.time()
+    assert override_res.status_code == 200
+    duration = end_time - start_time
+    assert duration < 2.0  # completes quickly (DB only)
+
+    # 2. Verify override saves successfully
+    body = override_res.json()
+    assert body["lifecycle_status"] == "EOL"
+    assert body["eos_date"] == "2026-06-30"
+    assert body["eol_date"] == "2026-12-31"
+    assert body["eof_date"] == "2026-06-30"
+    assert body["recommended_version"] == "2.0.0"
+    assert body["lifecycle_manual_override"] is True
+    assert body["lifecycle_source"] == "Manual Override"
+    assert body["lifecycle_source_url"] == "https://example.com/eol-news"
+
+    # 3. Verify audit history is written
+    from app.models import AuditLog, ComponentLifecycleOverrideAudit
+    audit_logs = db.execute(
+        select(AuditLog).where(AuditLog.target_id == component.id, AuditLog.action == "component.lifecycle_override")
+    ).scalars().all()
+    assert len(audit_logs) == 1
+    assert audit_logs[0].user_id == "test-user"
+
+    override_audit = db.execute(
+        select(ComponentLifecycleOverrideAudit).where(ComponentLifecycleOverrideAudit.component_id == component.id)
+    ).scalars().all()
+    assert len(override_audit) == 1
+    assert override_audit[0].reason == "Explicit test reason."
+
+    # 4. Invalid status returns 422
+    invalid_status = client.patch(
+        f"/api/components/{component.id}/lifecycle-override",
+        json={
+            "lifecycle_status": "Not A Status",
+            "reason": "Test reason"
+        }
+    )
+    assert invalid_status.status_code == 422
+
+    # 5. Invalid date format returns 422
+    invalid_date = client.patch(
+        f"/api/components/{component.id}/lifecycle-override",
+        json={
+            "lifecycle_status": "EOL",
+            "eos_date": "2026/06/30",
+            "reason": "Test reason"
+        }
+    )
+    assert invalid_date.status_code == 422
+
+    # 6. Missing component returns 404
+    missing_comp = client.patch(
+        "/api/components/999999/lifecycle-override",
+        json={
+            "lifecycle_status": "EOL",
+            "reason": "Test reason"
+        }
+    )
+    assert missing_comp.status_code == 404
+
+    # 7. Manual override survives lifecycle refresh
+    # Create enrichment service that would normally fail if providers are called
+    # But because manual override is set, it won't hit providers
+    enrich_service = LifecycleEnrichmentService(providers=[FailIfCalledProvider()])
+    db.refresh(component)
+    result = enrich_service.enrich_component(db, component, force_refresh=True)
+    assert result.lifecycle_status == "EOL"
+    assert result.manual_override is True

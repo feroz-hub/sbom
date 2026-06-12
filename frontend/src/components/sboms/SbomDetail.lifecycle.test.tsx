@@ -28,6 +28,11 @@ vi.mock('@/components/sboms/ValidationReportSection', () => ({
   ValidationReportSection: () => null,
 }));
 
+const showToast = vi.fn();
+vi.mock('@/hooks/useToast', () => ({
+  useToast: () => ({ showToast, updateToast: vi.fn() }),
+}));
+
 const getSbomComponents = vi.fn();
 const getRuns = vi.fn();
 const getSbomInfo = vi.fn();
@@ -49,6 +54,7 @@ const getVexOverrideHistory = vi.fn();
 const getSbomVexStatements = vi.fn();
 const overrideVexStatement = vi.fn();
 const uploadSbomVexDocument = vi.fn();
+const overrideComponentLifecycle = vi.fn();
 
 vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api');
@@ -76,6 +82,7 @@ vi.mock('@/lib/api', async () => {
     getSbomVexStatements: (...args: unknown[]) => getSbomVexStatements(...args),
     overrideVexStatement: (...args: unknown[]) => overrideVexStatement(...args),
     uploadSbomVexDocument: (...args: unknown[]) => uploadSbomVexDocument(...args),
+    overrideComponentLifecycle: (...args: unknown[]) => overrideComponentLifecycle(...args),
   };
 });
 
@@ -227,6 +234,8 @@ beforeEach(() => {
     validation_status: 'accepted',
   });
   editSbom.mockResolvedValue({ ...SBOM, id: 43, parent_id: 42, sbom_version: '1.0.1' });
+  overrideComponentLifecycle.mockResolvedValue(COMPONENT);
+  showToast.mockReset();
 });
 
 describe('SbomDetail lifecycle management', () => {
@@ -359,4 +368,111 @@ describe('SbomDetail lifecycle management', () => {
     expect(screen.queryByRole('button', { name: /^Override$/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Discover/i })).not.toBeInTheDocument();
   }, 15000);
+
+  describe('manual lifecycle override saving', () => {
+    it('submits manual lifecycle override successfully with correct payload and closes modal', async () => {
+      const invalidateSpy = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
+      render(wrap(<SbomDetail sbom={SBOM} />));
+
+      fireEvent.click(screen.getByRole('button', { name: /Components List/i }));
+      expect(await screen.findByText('demo')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: /Edit/i }));
+      expect(await screen.findByText('Lifecycle Management Parameters')).toBeInTheDocument();
+
+      // Change input fields
+      fireEvent.change(screen.getByLabelText('Lifecycle Status'), { target: { value: 'EOL' } });
+      fireEvent.change(screen.getByLabelText('Maintenance Status'), { target: { value: 'Unmaintained' } });
+      fireEvent.change(screen.getByLabelText('EOS Date'), { target: { value: '2026-06-30' } });
+      fireEvent.change(screen.getByLabelText('EOL Date'), { target: { value: '2026-12-31' } });
+      fireEvent.change(screen.getByLabelText('EOF Date'), { target: { value: '2026-06-30' } });
+      fireEvent.change(screen.getByLabelText('Recommended Version'), { target: { value: '2.1.0' } });
+      fireEvent.change(screen.getByLabelText('Evidence URL'), { target: { value: 'https://example.com/evidence' } });
+      fireEvent.change(screen.getByLabelText('Override Reason'), { target: { value: 'Manual override reason' } });
+
+      const deprecateCheckbox = screen.getByLabelText('Mark component as Deprecated') as HTMLInputElement;
+      if (!deprecateCheckbox.checked) {
+        fireEvent.click(deprecateCheckbox);
+      }
+
+      fireEvent.click(screen.getByRole('button', { name: /Save Override/i }));
+
+      await waitFor(() => {
+        expect(overrideComponentLifecycle).toHaveBeenCalledWith(
+          99,
+          expect.objectContaining({
+            lifecycle_status: 'EOL',
+            eos_date: '2026-06-30',
+            eol_date: '2026-12-31',
+            eof_date: '2026-06-30',
+            deprecated: true,
+            is_deprecated: true,
+            maintenance_status: 'Unmaintained',
+            recommended_version: '2.1.0',
+            evidence_url: 'https://example.com/evidence',
+            reason: 'Manual override reason',
+            updated_by: 'alice',
+          })
+        );
+      });
+
+      // Assert modal closes
+      await waitFor(() => {
+        expect(screen.queryByText('Lifecycle Management Parameters')).not.toBeInTheDocument();
+      });
+
+      // Assert success toast is shown
+      expect(showToast).toHaveBeenCalledWith('Manual override saved successfully.', 'success');
+
+      // Assert query invalidate queries called
+      await waitFor(() => {
+        expect(invalidateSpy).toHaveBeenCalledWith(expect.objectContaining({ queryKey: ['sbom', 42] }));
+        expect(invalidateSpy).toHaveBeenCalledWith(expect.objectContaining({ queryKey: ['sbom-components', 42] }));
+      });
+
+      invalidateSpy.mockRestore();
+    }, 15000);
+
+    it('handles errors and timeouts correctly', async () => {
+      render(wrap(<SbomDetail sbom={SBOM} />));
+
+      fireEvent.click(screen.getByRole('button', { name: /Components List/i }));
+      expect(await screen.findByText('demo')).toBeInTheDocument();
+
+      // Case 1: Timeout error
+      fireEvent.click(screen.getByRole('button', { name: /Edit/i }));
+      const timeoutError = new Error('Request timed out after 2000ms');
+      timeoutError.name = 'AbortError';
+      overrideComponentLifecycle.mockRejectedValueOnce(timeoutError);
+
+      fireEvent.change(screen.getByLabelText('Override Reason'), { target: { value: 'Reason' } });
+      fireEvent.click(screen.getByRole('button', { name: /Save Override/i }));
+      expect(await screen.findByText('Save took too long. Please check backend logs.')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: /Cancel/i }));
+
+      // Case 2: Validation error (422)
+      fireEvent.click(screen.getByRole('button', { name: /Edit/i }));
+      const valError = { status: 422, message: 'Invalid eol_date format' };
+      overrideComponentLifecycle.mockRejectedValueOnce(valError);
+      fireEvent.click(screen.getByRole('button', { name: /Save Override/i }));
+      expect(await screen.findByText('Validation Error: Invalid eol_date format')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: /Cancel/i }));
+
+      // Case 3: Component Not Found error (404)
+      fireEvent.click(screen.getByRole('button', { name: /Edit/i }));
+      const notFoundError = { status: 404, message: 'Not Found' };
+      overrideComponentLifecycle.mockRejectedValueOnce(notFoundError);
+      fireEvent.click(screen.getByRole('button', { name: /Save Override/i }));
+      expect(await screen.findByText('Component not found. It may have been removed or renamed.')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: /Cancel/i }));
+
+      // Case 4: Backend error (500)
+      fireEvent.click(screen.getByRole('button', { name: /Edit/i }));
+      const serverError = { status: 500, message: 'Internal Server Error' };
+      overrideComponentLifecycle.mockRejectedValueOnce(serverError);
+      fireEvent.click(screen.getByRole('button', { name: /Save Override/i }));
+      expect(await screen.findByText('Backend Error: Internal Server Error')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: /Cancel/i }));
+    }, 15000);
+  });
 });
