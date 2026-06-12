@@ -1,0 +1,178 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.4",
+  "serialNumber": "urn:uuid:8a2d6c4e-144f-4ef7-822f-5bc41cfdd48f",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-06-12T00:00:00Z",
+    "tools": [
+      {
+        "vendor": "HCLTech",
+        "name": "SBOM Analyzer Test Generator",
+        "version": "2.0.0"
+      }
+    ],
+    "authors": [
+      {
+        "name": "SBOM Analyzer Test Team",
+        "email": "sbom-test@example.com"
+      }
+    ],
+    "supplier": {
+      "name": "HCLTech Security"
+    },
+    "component": {
+      "type": "application",
+      "bom-ref": "app-osv",
+      "supplier": {
+        "name": "HCLTech Security"
+      },
+      "name": "valid-vulnerable-components-osv",
+      "version": "1.0.0",
+      "purl": "pkg:generic/valid-vulnerable-components-osv@1.0.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "17462e721f15a9619176003e04b50c8b0a2fa812b1d633d8ee1ddb3b1e975c61"
+        }
+      ]
+    }
+  },
+  "components": [
+    {
+      "type": "application",
+      "bom-ref": "app-osv",
+      "supplier": {
+        "name": "HCLTech Security"
+      },
+      "name": "valid-vulnerable-components-osv",
+      "version": "1.0.0",
+      "purl": "pkg:generic/valid-vulnerable-components-osv@1.0.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "17462e721f15a9619176003e04b50c8b0a2fa812b1d633d8ee1ddb3b1e975c61"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "maven-log4j-core",
+      "supplier": {
+        "name": "Apache"
+      },
+      "name": "log4j-core",
+      "version": "2.14.1",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "43c902a3776c09e269a797f8d43bbde3a1d224f0a61972a568cb8d4713bfb380"
+        }
+      ],
+      "group": "org.apache.logging.log4j",
+      "purl": "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1"
+    },
+    {
+      "type": "library",
+      "bom-ref": "maven-spring-core",
+      "supplier": {
+        "name": "VMware"
+      },
+      "name": "spring-core",
+      "version": "5.3.17",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "3ac119131489cfc5cf0939c383e341e32919257ffa05dfb83fd504ae6a3a6c0d"
+        }
+      ],
+      "group": "org.springframework",
+      "purl": "pkg:maven/org.springframework/spring-core@5.3.17"
+    },
+    {
+      "type": "library",
+      "bom-ref": "npm-minimist",
+      "supplier": {
+        "name": "npm"
+      },
+      "name": "minimist",
+      "version": "0.0.8",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "85ea20239305e0f6071f13a1abc08494eddcfb6a279114501d6883b52a59af0c"
+        }
+      ],
+      "purl": "pkg:npm/minimist@0.0.8"
+    },
+    {
+      "type": "library",
+      "bom-ref": "npm-lodash-vuln",
+      "supplier": {
+        "name": "npm"
+      },
+      "name": "lodash",
+      "version": "4.17.15",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "df864aaf1d30062134f3e0cbc7dab897d5b62ed4c286d3f4d303eaff974247db"
+        }
+      ],
+      "purl": "pkg:npm/lodash@4.17.15"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "app-osv",
+      "dependsOn": [
+        "maven-log4j-core",
+        "maven-spring-core",
+        "npm-minimist",
+        "npm-lodash-vuln"
+      ]
+    }
+  ]
+}

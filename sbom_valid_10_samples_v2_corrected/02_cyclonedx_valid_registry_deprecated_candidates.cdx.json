@@ -1,0 +1,224 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.4",
+  "serialNumber": "urn:uuid:66ccb6c9-7aa8-4b35-a0d7-8c0b1b246861",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-06-12T00:00:00Z",
+    "tools": [
+      {
+        "vendor": "HCLTech",
+        "name": "SBOM Analyzer Test Generator",
+        "version": "2.0.0"
+      }
+    ],
+    "authors": [
+      {
+        "name": "SBOM Analyzer Test Team",
+        "email": "sbom-test@example.com"
+      }
+    ],
+    "supplier": {
+      "name": "HCLTech Security"
+    },
+    "component": {
+      "type": "application",
+      "bom-ref": "app-registry",
+      "supplier": {
+        "name": "HCLTech Security"
+      },
+      "name": "valid-registry-deprecated-candidates",
+      "version": "1.0.0",
+      "purl": "pkg:generic/valid-registry-deprecated-candidates@1.0.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "6fb85a79663c9af5f5c7968349c83f1c9faff8c43d26929e540522513e331982"
+        }
+      ]
+    }
+  },
+  "components": [
+    {
+      "type": "application",
+      "bom-ref": "app-registry",
+      "supplier": {
+        "name": "HCLTech Security"
+      },
+      "name": "valid-registry-deprecated-candidates",
+      "version": "1.0.0",
+      "purl": "pkg:generic/valid-registry-deprecated-candidates@1.0.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "6fb85a79663c9af5f5c7968349c83f1c9faff8c43d26929e540522513e331982"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "npm-request",
+      "supplier": {
+        "name": "npm"
+      },
+      "name": "request",
+      "version": "2.88.2",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "2dd99071eb186a0363b840ee0b104befa9e45304afe461bd3bb117f9ea3842d7"
+        }
+      ],
+      "purl": "pkg:npm/request@2.88.2"
+    },
+    {
+      "type": "library",
+      "bom-ref": "npm-left-pad",
+      "supplier": {
+        "name": "npm"
+      },
+      "name": "left-pad",
+      "version": "1.3.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "fe22fcff742cd58009ce517a74cf8a7cc3ad44f13d6262bbdb30cc4913e751ba"
+        }
+      ],
+      "purl": "pkg:npm/left-pad@1.3.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "npm-lodash-old",
+      "supplier": {
+        "name": "npm"
+      },
+      "name": "lodash",
+      "version": "4.17.15",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "a2be525447cb340c978c79b38827695c1ef0fba245adc7e5ad7044281e1b0099"
+        }
+      ],
+      "purl": "pkg:npm/lodash@4.17.15"
+    },
+    {
+      "type": "library",
+      "bom-ref": "npm-express",
+      "supplier": {
+        "name": "npm"
+      },
+      "name": "express",
+      "version": "4.17.1",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "9087190cba35d46ccaff5bb5a459b63a3ff478a42c5674f410140b181b4527b6"
+        }
+      ],
+      "purl": "pkg:npm/express@4.17.1"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pypi-urllib3-old",
+      "supplier": {
+        "name": "Python Package Index"
+      },
+      "name": "urllib3",
+      "version": "1.25.11",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "f95b969613c71a49e6bcfe5aba050b6b27d6ad36ec03e207b787751157a98721"
+        }
+      ],
+      "purl": "pkg:pypi/urllib3@1.25.11"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pypi-django-old",
+      "supplier": {
+        "name": "Django Software Foundation"
+      },
+      "name": "Django",
+      "version": "2.2.28",
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "9aee609c832208f7316b0602404925086fb960ae42b361d22de87b352935cba4"
+        }
+      ],
+      "purl": "pkg:pypi/django@2.2.28"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "app-registry",
+      "dependsOn": [
+        "npm-request",
+        "npm-left-pad",
+        "npm-lodash-old",
+        "npm-express",
+        "pypi-urllib3-old",
+        "pypi-django-old"
+      ]
+    }
+  ]
+}

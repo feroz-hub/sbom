@@ -1,0 +1,153 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.4",
+  "serialNumber": "urn:uuid:2684c38c-7208-4807-a972-40ca3bcf78d1",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-06-12T00:00:00Z",
+    "tools": [
+      {
+        "vendor": "HCLTech",
+        "name": "SBOM Analyzer Test Generator",
+        "version": "1.0.0"
+      }
+    ],
+    "authors": [
+      {
+        "name": "SBOM Analyzer Test Team",
+        "email": "sbom-test@example.com"
+      }
+    ],
+    "supplier": {
+      "name": "HCLTech Security"
+    },
+    "component": {
+      "type": "application",
+      "bom-ref": "app-edit",
+      "supplier": {
+        "name": "HCLTech Security"
+      },
+      "name": "valid-edit-version-management",
+      "version": "1.0.0",
+      "purl": "pkg:generic/valid-edit-version-management@1.0.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ]
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "edit-react",
+      "supplier": {
+        "name": "Meta"
+      },
+      "name": "react",
+      "version": "17.0.2",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "4e1447e07da3bc3b0914871e88bc09307dd8869da7d1b6fe085fcb650c3d5d3e"
+        }
+      ],
+      "purl": "pkg:npm/react@17.0.2"
+    },
+    {
+      "type": "library",
+      "bom-ref": "edit-react-dom",
+      "supplier": {
+        "name": "Meta"
+      },
+      "name": "react-dom",
+      "version": "17.0.2",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "dd916f42368dc74da37e6fc191b10594255792c12fc115c5d92c9797f663a9bc"
+        }
+      ],
+      "purl": "pkg:npm/react-dom@17.0.2"
+    },
+    {
+      "type": "library",
+      "bom-ref": "edit-typescript",
+      "supplier": {
+        "name": "Microsoft"
+      },
+      "name": "typescript",
+      "version": "4.9.5",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "fc2c4595b24440ace12c8413269927d904c004cf2f91ca27b1045c814102a843"
+        }
+      ],
+      "purl": "pkg:npm/typescript@4.9.5"
+    },
+    {
+      "type": "library",
+      "bom-ref": "edit-webpack",
+      "supplier": {
+        "name": "webpack"
+      },
+      "name": "webpack",
+      "version": "5.74.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "b77b49fa3e13f5ee6716a76208655d3087f3c484dd1a71a8a24a93c366c92073"
+        }
+      ],
+      "purl": "pkg:npm/webpack@5.74.0"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "app-edit",
+      "dependsOn": [
+        "edit-react",
+        "edit-react-dom",
+        "edit-typescript",
+        "edit-webpack"
+      ]
+    }
+  ],
+  "properties": [
+    {
+      "name": "test:feature",
+      "value": "edit-version-management"
+    }
+  ]
+}

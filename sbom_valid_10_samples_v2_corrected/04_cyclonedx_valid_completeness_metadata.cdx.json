@@ -1,0 +1,177 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.4",
+  "serialNumber": "urn:uuid:9aa828b3-7e83-4134-8a5a-f62cfc393c48",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-06-12T00:00:00Z",
+    "tools": [
+      {
+        "vendor": "HCLTech",
+        "name": "SBOM Analyzer Test Generator",
+        "version": "2.0.0"
+      }
+    ],
+    "authors": [
+      {
+        "name": "SBOM Analyzer Test Team",
+        "email": "sbom-test@example.com"
+      }
+    ],
+    "supplier": {
+      "name": "HCLTech Security"
+    },
+    "component": {
+      "type": "application",
+      "bom-ref": "app-completeness",
+      "supplier": {
+        "name": "HCLTech Security"
+      },
+      "name": "valid-completeness-metadata",
+      "version": "1.0.0",
+      "purl": "pkg:generic/valid-completeness-metadata@1.0.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "07b9a9c6e4d16bf3c62663dbfb2e9a71eae1a89bac63de20b56b0d0eb118dd83"
+        }
+      ]
+    }
+  },
+  "components": [
+    {
+      "type": "application",
+      "bom-ref": "app-completeness",
+      "supplier": {
+        "name": "HCLTech Security"
+      },
+      "name": "valid-completeness-metadata",
+      "version": "1.0.0",
+      "purl": "pkg:generic/valid-completeness-metadata@1.0.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "07b9a9c6e4d16bf3c62663dbfb2e9a71eae1a89bac63de20b56b0d0eb118dd83"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "complete-axios",
+      "supplier": {
+        "name": "npm"
+      },
+      "name": "axios",
+      "version": "0.21.1",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "39f2a54399733fa2925a33bea313d42f462d4a34e19287e526118ce594ff7896"
+        }
+      ],
+      "purl": "pkg:npm/axios@0.21.1"
+    },
+    {
+      "type": "library",
+      "bom-ref": "complete-flask",
+      "supplier": {
+        "name": "Pallets"
+      },
+      "name": "Flask",
+      "version": "1.1.4",
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "b565220da0b3c13f70ed8b3fe2c0abb2af0b130258c01edec4eb27d2d3d302ce"
+        }
+      ],
+      "purl": "pkg:pypi/flask@1.1.4"
+    },
+    {
+      "type": "library",
+      "bom-ref": "complete-guava",
+      "supplier": {
+        "name": "Google"
+      },
+      "name": "guava",
+      "version": "30.0-jre",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "fb3fc90da10e75d9b2070538228a19c808e4d78021d23ab8ff219ba198cae5a9"
+        }
+      ],
+      "group": "com.google.guava",
+      "purl": "pkg:maven/com.google.guava/guava@30.0-jre"
+    },
+    {
+      "type": "library",
+      "bom-ref": "complete-newtonsoft",
+      "supplier": {
+        "name": "Newtonsoft"
+      },
+      "name": "Newtonsoft.Json",
+      "version": "12.0.3",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "c92e0c6b5c77918a8e3467f659bd868830b55582c21a86aeb8d44bd89043a440"
+        }
+      ],
+      "purl": "pkg:nuget/Newtonsoft.Json@12.0.3"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "app-completeness",
+      "dependsOn": [
+        "complete-axios",
+        "complete-flask",
+        "complete-guava",
+        "complete-newtonsoft"
+      ]
+    }
+  ]
+}

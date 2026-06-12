@@ -1,0 +1,338 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.4",
+  "serialNumber": "urn:uuid:b3baa8b4-48cc-4709-b69a-7abae357559b",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-06-12T00:00:00Z",
+    "tools": [
+      {
+        "vendor": "HCLTech",
+        "name": "SBOM Analyzer Test Generator",
+        "version": "2.0.0"
+      }
+    ],
+    "authors": [
+      {
+        "name": "SBOM Analyzer Test Team",
+        "email": "sbom-test@example.com"
+      }
+    ],
+    "supplier": {
+      "name": "HCLTech Security"
+    },
+    "component": {
+      "type": "application",
+      "bom-ref": "app-dashboard",
+      "supplier": {
+        "name": "HCLTech Security"
+      },
+      "name": "valid-dashboard-full-feature",
+      "version": "1.0.0",
+      "purl": "pkg:generic/valid-dashboard-full-feature@1.0.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "48cd85bd47d3bfe23984393130cd8a5aa56b91f490e94b067972cc52ad60cf1a"
+        }
+      ]
+    }
+  },
+  "components": [
+    {
+      "type": "application",
+      "bom-ref": "app-dashboard",
+      "supplier": {
+        "name": "HCLTech Security"
+      },
+      "name": "valid-dashboard-full-feature",
+      "version": "1.0.0",
+      "purl": "pkg:generic/valid-dashboard-full-feature@1.0.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "48cd85bd47d3bfe23984393130cd8a5aa56b91f490e94b067972cc52ad60cf1a"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "dash-next",
+      "supplier": {
+        "name": "Vercel"
+      },
+      "name": "next",
+      "version": "14.2.3",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "a9caf235cc366865f0dcffdd586b342bb318a33ea96dfd956a9fd559f4bf2a1d"
+        }
+      ],
+      "purl": "pkg:npm/next@14.2.3"
+    },
+    {
+      "type": "library",
+      "bom-ref": "dash-react",
+      "supplier": {
+        "name": "Meta"
+      },
+      "name": "react",
+      "version": "18.2.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "91ccb91b33950ac7eec266542456e631b7724c1bb09b20734010d28dcdddba79"
+        }
+      ],
+      "purl": "pkg:npm/react@18.2.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "dash-fastapi",
+      "supplier": {
+        "name": "Python Package Index"
+      },
+      "name": "fastapi",
+      "version": "0.95.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "cda5e5b9e88ec7ca9019c44fd02b9ad317c2eac166a293f4ed698d1ffef07048"
+        }
+      ],
+      "purl": "pkg:pypi/fastapi@0.95.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "dash-starlette",
+      "supplier": {
+        "name": "Python Package Index"
+      },
+      "name": "starlette",
+      "version": "0.26.1",
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "a4150896f6bdede21c93d096458706e629a7b442e5a133aed1a6a15341b96e4e"
+        }
+      ],
+      "purl": "pkg:pypi/starlette@0.26.1"
+    },
+    {
+      "type": "library",
+      "bom-ref": "dash-sqlalchemy",
+      "supplier": {
+        "name": "Python Package Index"
+      },
+      "name": "SQLAlchemy",
+      "version": "1.4.46",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "3b656715e0d99271934a109cd5fcddf5b6705696fe23b81a21a93ac359801c4c"
+        }
+      ],
+      "purl": "pkg:pypi/sqlalchemy@1.4.46"
+    },
+    {
+      "type": "library",
+      "bom-ref": "dash-alembic",
+      "supplier": {
+        "name": "Python Package Index"
+      },
+      "name": "alembic",
+      "version": "1.10.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "a55612eaebd95ca8b1988b6f5c05c643c916463bbed05d7377bdac77eda6febd"
+        }
+      ],
+      "purl": "pkg:pypi/alembic@1.10.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "dash-uvicorn",
+      "supplier": {
+        "name": "Python Package Index"
+      },
+      "name": "uvicorn",
+      "version": "0.20.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "19fb4668d14540129cde274859d9e67450d8477568d0936e8c663d376af60d97"
+        }
+      ],
+      "purl": "pkg:pypi/uvicorn@0.20.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "dash-zod",
+      "supplier": {
+        "name": "npm"
+      },
+      "name": "zod",
+      "version": "3.22.4",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "06d319e2ed0bfc33d6ec88dcf859662d391cdd4725352b2ddd5170772732e30b"
+        }
+      ],
+      "purl": "pkg:npm/zod@3.22.4"
+    },
+    {
+      "type": "library",
+      "bom-ref": "dash-lucide",
+      "supplier": {
+        "name": "npm"
+      },
+      "name": "lucide-react",
+      "version": "0.468.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "ISC"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "7c858c7957ee41393df113ee468d5280f9aded2f601ac9450cec0d42dc9ca7d3"
+        }
+      ],
+      "purl": "pkg:npm/lucide-react@0.468.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "dash-tanstack",
+      "supplier": {
+        "name": "npm"
+      },
+      "name": "@tanstack/react-query",
+      "version": "5.35.1",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "b23240a36533cbf9516a987e6f7caae5b12655f2d72e9a4e32c8f96f54214732"
+        }
+      ],
+      "purl": "pkg:npm/%40tanstack/react-query@5.35.1"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "app-dashboard",
+      "dependsOn": [
+        "dash-next",
+        "dash-react",
+        "dash-fastapi",
+        "dash-starlette",
+        "dash-sqlalchemy",
+        "dash-alembic",
+        "dash-uvicorn",
+        "dash-zod",
+        "dash-lucide",
+        "dash-tanstack"
+      ]
+    },
+    {
+      "ref": "dash-next",
+      "dependsOn": [
+        "dash-react",
+        "dash-zod",
+        "dash-lucide",
+        "dash-tanstack"
+      ]
+    },
+    {
+      "ref": "dash-fastapi",
+      "dependsOn": [
+        "dash-starlette",
+        "dash-sqlalchemy",
+        "dash-alembic",
+        "dash-uvicorn"
+      ]
+    }
+  ]
+}
