@@ -1,0 +1,81 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "serialNumber": "urn:uuid:209dc8a5-d54e-4ba6-9605-f372e5c91285",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-06-12T00:00:00Z",
+    "tools": {
+      "components": [
+        {
+          "type": "application",
+          "name": "SBOM Analyzer Test Generator",
+          "version": "1.0.0"
+        }
+      ]
+    },
+    "component": {
+      "type": "application",
+      "name": "lifecycle-runtime-demo",
+      "version": "1.0.0"
+    }
+  },
+  "components": [
+    {
+      "type": "framework",
+      "bom-ref": "nodejs-16",
+      "name": "nodejs",
+      "version": "16.20.2"
+    },
+    {
+      "type": "framework",
+      "bom-ref": "python-38",
+      "name": "python",
+      "version": "3.8.10"
+    },
+    {
+      "type": "operating-system",
+      "bom-ref": "ubuntu-2004",
+      "name": "ubuntu",
+      "version": "20.04"
+    },
+    {
+      "type": "application",
+      "bom-ref": "postgresql-12",
+      "name": "postgresql",
+      "version": "12.15"
+    },
+    {
+      "type": "framework",
+      "bom-ref": "django-32",
+      "name": "django",
+      "version": "3.2.25"
+    },
+    {
+      "type": "framework",
+      "bom-ref": "angular-12",
+      "name": "angular",
+      "version": "12.2.17"
+    },
+    {
+      "type": "framework",
+      "bom-ref": "spring-boot-27",
+      "name": "spring-boot",
+      "version": "2.7.18"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "lifecycle-runtime-demo",
+      "dependsOn": [
+        "nodejs-16",
+        "python-38",
+        "ubuntu-2004",
+        "postgresql-12",
+        "django-32",
+        "angular-12",
+        "spring-boot-27"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "serialNumber": "urn:uuid:2bc74a58-3a70-4234-815d-f3c98ccfa117",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-06-12T00:00:00Z",
+    "tools": {
+      "components": [
+        {
+          "type": "application",
+          "name": "SBOM Analyzer Test Generator",
+          "version": "1.0.0"
+        }
+      ]
+    },
+    "component": {
+      "type": "application",
+      "bom-ref": "repair-demo-app",
+      "name": "repair-demo-app",
+      "version": "1.0.0"
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "dup-ref",
+      "name": "alpha-lib",
+      "version": "1.0.0",
+      "purl": "pkg:npm/alpha-lib@1.0.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "dup-ref",
+      "name": "beta-lib",
+      "version": "1.0.0",
+      "purl": "not-a-valid-purl"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "repair-demo-app",
+      "dependsOn": [
+        "dup-ref"
+      ]
+    }
+  ]
+}

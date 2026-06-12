@@ -1,0 +1,62 @@
+{
+  "spdxVersion": "SPDX-2.3",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "name": "spdx-valid-lifecycle-demo",
+  "documentNamespace": "https://example.com/spdxdocs/d9582aab-3b53-4958-a7ed-f9efa5040985",
+  "creationInfo": {
+    "created": "2026-06-12T00:00:00Z",
+    "creators": [
+      "Tool: SBOM Analyzer Test Generator-1.0.0"
+    ]
+  },
+  "packages": [
+    {
+      "name": "openssl",
+      "SPDXID": "SPDXRef-Package-openssl",
+      "versionInfo": "1.1.1k",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseConcluded": "OpenSSL",
+      "licenseDeclared": "OpenSSL",
+      "supplier": "Organization: OpenSSL"
+    },
+    {
+      "name": "nginx",
+      "SPDXID": "SPDXRef-Package-nginx",
+      "versionInfo": "1.18.0",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseConcluded": "BSD-2-Clause",
+      "licenseDeclared": "BSD-2-Clause",
+      "supplier": "Organization: NGINX"
+    },
+    {
+      "name": "redis",
+      "SPDXID": "SPDXRef-Package-redis",
+      "versionInfo": "6.0.16",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseConcluded": "BSD-3-Clause",
+      "licenseDeclared": "BSD-3-Clause",
+      "supplier": "Organization: Redis"
+    }
+  ],
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-Package-openssl"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-Package-nginx"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-Package-redis"
+    }
+  ]
+}
