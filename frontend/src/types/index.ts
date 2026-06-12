@@ -179,7 +179,9 @@ export interface SBOMComponent {
   eof_date?: string | null;
   is_deprecated?: boolean | null;
   deprecated?: boolean | null;
+  unsupported?: boolean | null;
   maintenance_status?: string | null;
+  latest_version?: string | null;
   latest_supported_version?: string | null;
   recommended_version?: string | null;
   lifecycle_recommendation?: string | null;
@@ -218,6 +220,7 @@ export interface LifecycleSummaryComponent {
   source_name?: string | null;
   source_url?: string | null;
   confidence?: string | null;
+  latest_version?: string | null;
   recommended_version?: string | null;
   recommendation?: string | null;
   is_stale?: boolean;
@@ -235,6 +238,7 @@ export interface DashboardLifecycle {
   unknown_count: number;
   eol_soon_count: number;
   stale_lifecycle_count: number;
+  stale_count?: number;
   top_risky_components: LifecycleSummaryComponent[];
   recommended_upgrades: LifecycleSummaryComponent[];
   eol_components: number;
@@ -257,7 +261,9 @@ export interface LifecycleOverridePayload {
   eof_date?: string | null;
   deprecated?: boolean | null;
   is_deprecated?: boolean | null;
+  unsupported?: boolean | null;
   maintenance_status?: string | null;
+  latest_version?: string | null;
   latest_supported_version?: string | null;
   recommended_version?: string | null;
   recommendation?: string | null;

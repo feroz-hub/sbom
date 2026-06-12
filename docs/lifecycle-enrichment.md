@@ -18,7 +18,8 @@ Provider priority:
 1. **Manual Override**: highest priority. Used when an admin/user has supplied a status, dates, reason, and optional evidence URL.
 2. **endoflife.date**: authoritative lifecycle dates for runtimes, platforms, frameworks, databases, and operating systems such as Node.js, Python, Java, .NET, Angular, Django, Spring Framework, Ubuntu, Debian, PostgreSQL, MySQL, and Kubernetes.
 3. **Package registries**: package ecosystem metadata. Current production support includes npm deprecation, PyPI latest/yanked release signals, NuGet deprecation metadata, and Maven latest-version metadata.
-4. **OSV**: vulnerability and fixed-version recommendations only. OSV does not mark lifecycle status as EOL/EOS.
+4. **Repository health**: conservative repository support signals when a registry or external reference exposes a repository URL. GitHub archived/disabled repositories can mark a component `Unsupported`; stale activity is stored as maintenance evidence only.
+5. **OSV**: vulnerability and fixed-version recommendations only. OSV does not mark lifecycle status as EOL/EOS.
 
 ## Decision Rules
 
@@ -26,7 +27,9 @@ Provider priority:
 - endoflife.date dates can mark `EOL`, `EOS`, `EOF`, `EOL Soon`, or `Supported`.
 - A component is `EOL Soon` when a matched EOL date is within 180 days.
 - Registry deprecation/yanked metadata marks `Deprecated`.
+- Archived or disabled source repositories mark `Unsupported` with medium confidence.
 - Old package age alone does not mark a component EOL or unsupported.
+- Stale repository activity alone sets `maintenance_status = Possibly Unmaintained`; it does not mark EOL.
 - OSV findings can set `recommended_version` and `recommendation`, but lifecycle status remains `Unknown` unless another provider supplies status evidence.
 - Every stored lifecycle result includes source, confidence, checked time, and evidence JSON when available.
 
@@ -42,7 +45,7 @@ Provider priority:
 Lifecycle lookups are cached in `component_lifecycle_cache`.
 
 - Default TTL: 7 days.
-- Cache key: normalized name, normalized version, ecosystem, and PURL when present.
+- Cache key: PURL when present, CPE when present, otherwise normalized ecosystem, name, version, and supplier. The version remains part of the identity, so the same package at two versions receives separate lifecycle decisions.
 - Non-expired cache entries prevent repeated external API calls.
 - If a cache entry is expired and providers return no data or fail, the old cache result is reused and the component is marked stale.
 - Manual overrides are component-local and are not written to the shared provider cache.
@@ -62,7 +65,9 @@ Override fields:
 - `eof_date`
 - `maintenance_status`
 - `latest_supported_version`
+- `latest_version`
 - `recommended_version`
+- `unsupported`
 - `recommendation`
 - `reason`
 - `evidence_url`
@@ -98,6 +103,8 @@ CycloneDX JSON native exports include lifecycle metadata as component properties
 - `lifecycle:eol`
 - `lifecycle:eos`
 - `lifecycle:eof`
+- `lifecycle:unsupported`
+- `lifecycle:latest_version`
 - `lifecycle:source`
 - `lifecycle:confidence`
 - `lifecycle:recommendation`
@@ -108,6 +115,7 @@ SPDX JSON exports attempt to include lifecycle annotations. If augmentation woul
 
 - endoflife.date product matching uses a conservative slug map; unknown products fall through to registries/OSV.
 - Package age is intentionally not treated as EOL evidence.
+- Repository health currently supports GitHub API signals. Other repository hosts are preserved in evidence and return `Unknown`.
 - npm, PyPI, NuGet, and Maven are implemented first; other ecosystems normalize to the provider interface but may return `Unknown`.
 - Provider calls are synchronous inside the current request flow. A future background enrichment job should move refreshes off the upload path for very large SBOMs.
 - Authorization remains at the existing API protection layer; role-based lifecycle override permissions should be added before multi-tenant production use.

@@ -11,6 +11,7 @@ from .lifecycle_enrichment_service import (
 from .normalizer import normalize_component
 from .osv_provider import OSVProvider
 from .package_registry_provider import PackageRegistryProvider
+from .repository_health_provider import RepositoryHealthProvider
 from .types import (
     ALLOWED_LIFECYCLE_STATUSES,
     LifecycleResult,
@@ -26,6 +27,7 @@ __all__ = [
     "NormalizedComponent",
     "OSVProvider",
     "PackageRegistryProvider",
+    "RepositoryHealthProvider",
     "canonical_status",
     "component_lifecycle_dict",
     "normalize_component",

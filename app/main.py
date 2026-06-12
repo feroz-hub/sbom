@@ -314,7 +314,9 @@ def _ensure_seed_data() -> None:
     _ensure_column("sbom_component", "eof_date", "TEXT")
     _ensure_column("sbom_component", "is_deprecated", "BOOLEAN", "0")
     _ensure_column("sbom_component", "deprecated", "BOOLEAN", "0")
+    _ensure_column("sbom_component", "unsupported", "BOOLEAN", "0")
     _ensure_column("sbom_component", "maintenance_status", "TEXT")
+    _ensure_column("sbom_component", "latest_version", "TEXT")
     _ensure_column("sbom_component", "ecosystem", "TEXT")
     _ensure_column("sbom_component", "latest_supported_version", "TEXT")
     _ensure_column("sbom_component", "recommended_version", "TEXT")
@@ -328,6 +330,14 @@ def _ensure_seed_data() -> None:
     _ensure_column("sbom_component", "lifecycle_manual_override", "BOOLEAN", "0")
     _ensure_remediation_audit_table()
     _ensure_validation_repair_tables()
+    for column, type_sql, default in (
+        ("lookup_key", "TEXT", None),
+        ("cpe", "TEXT", None),
+        ("unsupported", "BOOLEAN", "0"),
+        ("latest_version", "TEXT", None),
+        ("is_stale", "BOOLEAN", "0"),
+    ):
+        _ensure_column("component_lifecycle_cache", column, type_sql, default)
 
 
     db = SessionLocal()

@@ -25,7 +25,7 @@ def normalize_component(component: Any) -> NormalizedComponent:
     normalized_version = raw_version
 
     if raw_purl:
-        parsed = _parse_purl(raw_purl)
+        parsed = parse_purl(raw_purl)
         if parsed:
             ecosystem = canonical_ecosystem(parsed.type)
             purl_name = _name_from_purl(parsed)
@@ -33,10 +33,10 @@ def normalize_component(component: Any) -> NormalizedComponent:
             normalized_version = _clean_version(parsed.version) or raw_version
 
     if ecosystem == "generic":
-        ecosystem = _infer_ecosystem(raw_name, supplier, component_type, component_group, raw_cpe)
+        ecosystem = infer_ecosystem(raw_name, supplier, component_type, component_group, raw_cpe)
 
-    if not normalized_name and raw_name:
-        normalized_name = raw_name.lower()
+    if raw_name:
+        normalized_name = normalize_component_name(normalized_name or raw_name, ecosystem)
 
     return NormalizedComponent(
         component_id=getattr(component, "id", None),
@@ -55,11 +55,32 @@ def normalize_component(component: Any) -> NormalizedComponent:
     )
 
 
-def _parse_purl(value: str) -> PackageURL | None:
+def parse_purl(value: str | None) -> PackageURL | None:
+    """Parse a Package URL, returning ``None`` instead of raising."""
+    if not value:
+        return None
     try:
         return PackageURL.from_string(value)
     except Exception:
         return None
+
+
+def normalize_ecosystem(value: str | None) -> str:
+    """Return the canonical lifecycle ecosystem name."""
+    return canonical_ecosystem(value)
+
+
+def normalize_component_name(value: str | None, ecosystem: str | None = None) -> str:
+    """Normalize a component name for lifecycle lookups."""
+    cleaned = (value or "").strip().lower()
+    if not cleaned:
+        return ""
+    eco = canonical_ecosystem(ecosystem)
+    if eco == "npm" and cleaned.startswith("%40"):
+        cleaned = "@" + cleaned[3:]
+    if eco == "maven":
+        cleaned = cleaned.replace(":", "/")
+    return re.sub(r"\s+", "-", cleaned)
 
 
 def _name_from_purl(purl: PackageURL) -> str:
@@ -90,7 +111,7 @@ def _clean_version(value: Any) -> str | None:
     return cleaned or None
 
 
-def _infer_ecosystem(
+def infer_ecosystem(
     name: str,
     supplier: str | None,
     component_type: str | None,
@@ -128,6 +149,24 @@ def _infer_ecosystem(
     return "generic"
 
 
+def build_lifecycle_lookup_key(component: NormalizedComponent) -> str:
+    """Build a stable lookup key for cache/provider identity.
+
+    PURL is primary, CPE secondary, and ecosystem/name/version fallback. The
+    version and ecosystem are included so same-name components in different
+    ecosystems or versions never collapse into one cache entry.
+    """
+    if component.purl:
+        return f"purl:{component.purl.strip().lower()}"
+    if component.cpe:
+        return f"cpe:{component.cpe.strip().lower()}"
+    name = normalize_component_name(component.normalized_name or component.name, component.ecosystem)
+    version = (component.normalized_version or "").strip().lower()
+    ecosystem = canonical_ecosystem(component.ecosystem)
+    supplier = (component.supplier or "").strip().lower()
+    return f"fallback:{ecosystem}:{name}:{version}:{supplier}"
+
+
 def _repository_url_from_component(component: Any) -> str | None:
     evidence = getattr(component, "lifecycle_evidence_json", None) or {}
     if isinstance(evidence, dict):
@@ -137,4 +176,11 @@ def _repository_url_from_component(component: Any) -> str | None:
     return None
 
 
-__all__ = ["normalize_component"]
+__all__ = [
+    "build_lifecycle_lookup_key",
+    "infer_ecosystem",
+    "normalize_component",
+    "normalize_component_name",
+    "normalize_ecosystem",
+    "parse_purl",
+]

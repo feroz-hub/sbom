@@ -308,6 +308,7 @@ def get_dashboard_lifecycle(db: Session = Depends(get_db)):
         "eol_components": metrics.lifecycle_eol_total(db),
         "eos_upcoming": metrics.lifecycle_eos_upcoming_total(db),
         "unsupported": metrics.lifecycle_unsupported_total(db),
+        "stale_count": summary.get("stale_lifecycle_count", 0),
     }
 
 

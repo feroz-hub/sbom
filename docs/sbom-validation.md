@@ -28,6 +28,9 @@ provenance of every code see [the error-code reference](validation-error-codes.m
 
 A successful upload returns **HTTP 202 Accepted**. Warnings and info-level
 entries flow through in the response body but never block acceptance.
+After acceptance, extracted components are eligible for provider-based
+lifecycle enrichment; failed uploads remain in the repair workspace and are
+not lifecycle-enriched as trusted components until import succeeds.
 
 A rejected upload returns one of **400 / 413 / 415 / 422** with a
 machine-readable list of error entries. If the failed payload is safe to

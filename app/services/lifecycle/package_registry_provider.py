@@ -61,6 +61,7 @@ class PackageRegistryProvider(LifecycleProvider):
             return unknown_result(component, "npm registry")
 
         latest = (payload.get("dist-tags") or {}).get("latest")
+        repository_url = _repository_url(payload.get("repository"))
         versions = payload.get("versions") or {}
         version_payload = versions.get(component.normalized_version or "") if isinstance(versions, dict) else None
         deprecated_message = None
@@ -75,15 +76,21 @@ class PackageRegistryProvider(LifecycleProvider):
                 component_version=component.normalized_version,
                 ecosystem=component.ecosystem,
                 purl=component.purl,
+                cpe=component.cpe,
                 lifecycle_status=DEPRECATED,
                 deprecated=True,
                 maintenance_status="Deprecated by npm registry",
+                latest_version=latest,
                 latest_supported_version=latest,
                 recommended_version=latest if _is_newer(latest, component.normalized_version) else None,
                 recommendation=_registry_recommendation(latest, component.normalized_version, deprecated_message),
                 source_name="npm registry",
                 source_url=f"https://www.npmjs.com/package/{component.normalized_name}",
-                evidence={"deprecated": deprecated_message, "dist_tags": payload.get("dist-tags")},
+                evidence={
+                    "deprecated": deprecated_message,
+                    "dist_tags": payload.get("dist-tags"),
+                    "repository_url": repository_url,
+                },
                 confidence=MEDIUM,
             ).canonicalized()
 
@@ -92,7 +99,7 @@ class PackageRegistryProvider(LifecycleProvider):
             "npm registry",
             f"https://www.npmjs.com/package/{component.normalized_name}",
             latest,
-            {"dist_tags": payload.get("dist-tags")},
+            {"dist_tags": payload.get("dist-tags"), "repository_url": repository_url},
         )
 
     def _lookup_pypi(self, component: NormalizedComponent) -> LifecycleResult:
@@ -104,6 +111,7 @@ class PackageRegistryProvider(LifecycleProvider):
 
         info = payload.get("info") if isinstance(payload.get("info"), dict) else {}
         latest = info.get("version")
+        repository_url = _first_project_url(info, "Source", "Source Code", "Code", "Repository", "Homepage", "Home-page")
         releases = payload.get("releases") if isinstance(payload.get("releases"), dict) else {}
         current_files = releases.get(component.normalized_version or "") or []
         yanked = bool(current_files) and all(bool(file.get("yanked")) for file in current_files if isinstance(file, dict))
@@ -113,15 +121,17 @@ class PackageRegistryProvider(LifecycleProvider):
                 component_version=component.normalized_version,
                 ecosystem=component.ecosystem,
                 purl=component.purl,
+                cpe=component.cpe,
                 lifecycle_status=DEPRECATED,
                 deprecated=True,
                 maintenance_status="Release yanked on PyPI",
+                latest_version=latest,
                 latest_supported_version=latest,
                 recommended_version=latest if _is_newer(latest, component.normalized_version) else None,
                 recommendation=_registry_recommendation(latest, component.normalized_version, "Release is yanked on PyPI."),
                 source_name="PyPI",
                 source_url=f"https://pypi.org/project/{component.normalized_name}/",
-                evidence={"release_files": current_files[:5], "latest": latest},
+                evidence={"release_files": current_files[:5], "latest": latest, "repository_url": repository_url},
                 confidence=MEDIUM,
             ).canonicalized()
 
@@ -130,7 +140,7 @@ class PackageRegistryProvider(LifecycleProvider):
             "PyPI",
             f"https://pypi.org/project/{component.normalized_name}/",
             latest,
-            {"latest": latest},
+            {"latest": latest, "repository_url": repository_url},
         )
 
     def _lookup_nuget(self, component: NormalizedComponent) -> LifecycleResult:
@@ -143,6 +153,9 @@ class PackageRegistryProvider(LifecycleProvider):
         entries = _nuget_entries(payload)
         latest = _latest_from_versions([entry.get("version") for entry in entries])
         current = _match_version_entry(entries, component.normalized_version)
+        repository_url = None
+        if isinstance(current, dict):
+            repository_url = current.get("repositoryUrl") or current.get("projectUrl")
         deprecation = current.get("deprecation") if isinstance(current, dict) else None
         if deprecation:
             return LifecycleResult(
@@ -150,15 +163,17 @@ class PackageRegistryProvider(LifecycleProvider):
                 component_version=component.normalized_version,
                 ecosystem=component.ecosystem,
                 purl=component.purl,
+                cpe=component.cpe,
                 lifecycle_status=DEPRECATED,
                 deprecated=True,
                 maintenance_status="Deprecated by NuGet",
+                latest_version=latest,
                 latest_supported_version=latest,
                 recommended_version=latest if _is_newer(latest, component.normalized_version) else None,
                 recommendation=_registry_recommendation(latest, component.normalized_version, "Package version is deprecated."),
                 source_name="NuGet",
                 source_url=f"https://www.nuget.org/packages/{package_name}",
-                evidence={"deprecation": deprecation, "version": component.normalized_version},
+                evidence={"deprecation": deprecation, "version": component.normalized_version, "repository_url": repository_url},
                 confidence=MEDIUM,
             ).canonicalized()
 
@@ -167,7 +182,7 @@ class PackageRegistryProvider(LifecycleProvider):
             "NuGet",
             f"https://www.nuget.org/packages/{package_name}",
             latest,
-            {"latest": latest},
+            {"latest": latest, "repository_url": repository_url},
         )
 
     def _lookup_maven(self, component: NormalizedComponent) -> LifecycleResult:
@@ -215,7 +230,9 @@ def _unknown_with_latest(
         component_version=current,
         ecosystem=component.ecosystem,
         purl=component.purl,
+        cpe=component.cpe,
         lifecycle_status=UNKNOWN,
+        latest_version=latest,
         latest_supported_version=latest,
         recommended_version=recommended,
         recommendation=f"Review upgrade to latest registry version {latest}." if recommended else None,
@@ -274,6 +291,26 @@ def _match_version_entry(entries: list[dict[str, Any]], version: str | None) -> 
         if str(entry.get("version") or "").lower() == version.lower():
             return entry
     return {}
+
+
+def _repository_url(value: Any) -> str | None:
+    if isinstance(value, str):
+        return value.strip() or None
+    if isinstance(value, dict):
+        url = value.get("url") or value.get("web")
+        if isinstance(url, str):
+            return url.removeprefix("git+").removesuffix(".git").strip() or None
+    return None
+
+
+def _first_project_url(info: dict[str, Any], *names: str) -> str | None:
+    urls = info.get("project_urls") if isinstance(info.get("project_urls"), dict) else {}
+    for name in names:
+        value = urls.get(name)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    home = info.get("home_page")
+    return home.strip() if isinstance(home, str) and home.strip() else None
 
 
 __all__ = ["PackageRegistryProvider"]

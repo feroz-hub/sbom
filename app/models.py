@@ -207,7 +207,9 @@ class SBOMComponent(Base, SoftDeleteMixin):
     eof_date = Column(String, nullable=True)
     is_deprecated = Column(Boolean, default=False)
     deprecated = Column(Boolean, nullable=True, default=False)
+    unsupported = Column(Boolean, nullable=True, default=False)
     maintenance_status = Column(String, nullable=True)
+    latest_version = Column(String, nullable=True)
     latest_supported_version = Column(String, nullable=True)
     recommended_version = Column(String, nullable=True)
     lifecycle_recommendation = Column(Text, nullable=True)
@@ -246,16 +248,20 @@ class ComponentLifecycleCache(Base):
     __tablename__ = "component_lifecycle_cache"
 
     id = Column(Integer, primary_key=True, index=True)
+    lookup_key = Column(String, nullable=True, index=True)
     normalized_name = Column(String, nullable=False, index=True)
     normalized_version = Column(String, nullable=True, index=True)
     ecosystem = Column(String, nullable=True, index=True)
     purl = Column(String, nullable=True, index=True)
+    cpe = Column(String, nullable=True, index=True)
     lifecycle_status = Column(String, nullable=True)
     eos_date = Column(String, nullable=True)
     eol_date = Column(String, nullable=True)
     eof_date = Column(String, nullable=True)
     deprecated = Column(Boolean, nullable=True, default=False)
+    unsupported = Column(Boolean, nullable=True, default=False)
     maintenance_status = Column(String, nullable=True)
+    latest_version = Column(String, nullable=True)
     latest_supported_version = Column(String, nullable=True)
     recommended_version = Column(String, nullable=True)
     recommendation = Column(Text, nullable=True)
@@ -265,6 +271,7 @@ class ComponentLifecycleCache(Base):
     confidence = Column(String, nullable=True)
     checked_at = Column(String, nullable=False, index=True)
     expires_at = Column(String, nullable=False, index=True)
+    is_stale = Column(Boolean, nullable=False, default=False)
 
     __table_args__ = (
         UniqueConstraint(

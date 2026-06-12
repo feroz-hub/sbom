@@ -155,7 +155,9 @@ class SBOMComponentOut(ORMModel):
     eof_date: str | None = None
     is_deprecated: bool | None = None
     deprecated: bool | None = None
+    unsupported: bool | None = None
     maintenance_status: str | None = None
+    latest_version: str | None = None
     latest_supported_version: str | None = None
     recommended_version: str | None = None
     lifecycle_recommendation: str | None = None
@@ -364,7 +366,9 @@ class LifecycleInfoUpdate(BaseModel):
     eof_date: str | None = None
     is_deprecated: bool = False
     deprecated: bool | None = None
+    unsupported: bool | None = None
     maintenance_status: str | None = None
+    latest_version: str | None = None
     latest_supported_version: str | None = None
     recommended_version: str | None = None
     recommendation: str | None = None

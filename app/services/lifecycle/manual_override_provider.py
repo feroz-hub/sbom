@@ -30,6 +30,7 @@ class ManualOverrideProvider(LifecycleProvider):
             component_version=component.normalized_version,
             ecosystem=component.ecosystem,
             purl=component.purl,
+            cpe=component.cpe,
             lifecycle_status=getattr(orm_component, "lifecycle_status", None) or UNKNOWN,
             eos_date=getattr(orm_component, "eos_date", None),
             eol_date=getattr(orm_component, "eol_date", None),
@@ -37,7 +38,9 @@ class ManualOverrideProvider(LifecycleProvider):
             deprecated=bool(
                 getattr(orm_component, "deprecated", False) or getattr(orm_component, "is_deprecated", False)
             ),
+            unsupported=bool(getattr(orm_component, "unsupported", False)),
             maintenance_status=getattr(orm_component, "maintenance_status", None),
+            latest_version=getattr(orm_component, "latest_version", None),
             latest_supported_version=getattr(orm_component, "latest_supported_version", None),
             recommended_version=getattr(orm_component, "recommended_version", None),
             recommendation=getattr(orm_component, "lifecycle_recommendation", None),

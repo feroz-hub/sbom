@@ -128,12 +128,13 @@ class NormalizedComponent:
     external_references: list[dict[str, Any]] = field(default_factory=list)
 
     @property
-    def cache_identity(self) -> tuple[str, str | None, str, str | None]:
+    def cache_identity(self) -> tuple[str, str | None, str, str | None, str | None]:
         return (
             self.normalized_name or self.name.lower(),
             self.normalized_version,
             self.ecosystem or "generic",
             self.purl,
+            self.cpe,
         )
 
 
@@ -143,12 +144,15 @@ class LifecycleResult:
     component_version: str | None
     ecosystem: str
     purl: str | None
+    cpe: str | None = None
     lifecycle_status: str = UNKNOWN
     eos_date: str | None = None
     eol_date: str | None = None
     eof_date: str | None = None
     deprecated: bool = False
+    unsupported: bool = False
     maintenance_status: str | None = None
+    latest_version: str | None = None
     latest_supported_version: str | None = None
     recommended_version: str | None = None
     recommendation: str | None = None
@@ -157,6 +161,7 @@ class LifecycleResult:
     evidence: dict[str, Any] = field(default_factory=dict)
     confidence: str = UNKNOWN_CONFIDENCE
     checked_at: str = field(default_factory=now_iso)
+    expires_at: str | None = None
     stale: bool = False
     manual_override: bool = False
     vulnerability_count: int | None = None
@@ -166,6 +171,8 @@ class LifecycleResult:
         self.confidence = canonical_confidence(self.confidence)
         if self.lifecycle_status == DEPRECATED:
             self.deprecated = True
+        if self.lifecycle_status in {EOL, EOS, EOF, UNSUPPORTED}:
+            self.unsupported = True
         return self
 
     @property
@@ -179,6 +186,7 @@ def unknown_result(component: NormalizedComponent, source_name: str | None = Non
         component_version=component.normalized_version,
         ecosystem=component.ecosystem,
         purl=component.purl,
+        cpe=component.cpe,
         lifecycle_status=UNKNOWN,
         source_name=source_name,
         confidence=UNKNOWN_CONFIDENCE,

@@ -12,10 +12,11 @@ from sqlalchemy.orm import Session
 from ...models import AuditLog, ComponentLifecycleCache, SBOMComponent, SBOMSource
 from .endoflife_date_provider import EndOfLifeDateProvider
 from .manual_override_provider import ManualOverrideProvider
-from .normalizer import normalize_component
+from .normalizer import build_lifecycle_lookup_key, normalize_component
 from .osv_provider import OSVProvider
 from .package_registry_provider import PackageRegistryProvider
 from .provider_base import LifecycleProvider
+from .repository_health_provider import RepositoryHealthProvider
 from .types import (
     ALLOWED_LIFECYCLE_STATUSES,
     DEPRECATED,
@@ -49,6 +50,7 @@ class LifecycleEnrichmentService:
         self.providers = providers or [
             EndOfLifeDateProvider(),
             PackageRegistryProvider(),
+            RepositoryHealthProvider(),
             OSVProvider(),
         ]
         self.cache_ttl_days = cache_ttl_days
@@ -142,6 +144,7 @@ class LifecycleEnrichmentService:
         component.eol_date = payload.get("eol_date")
         component.eof_date = payload.get("eof_date")
         component.maintenance_status = payload.get("maintenance_status")
+        component.latest_version = payload.get("latest_version")
         component.latest_supported_version = payload.get("latest_supported_version")
         component.recommended_version = payload.get("recommended_version")
         component.lifecycle_recommendation = payload.get("recommendation") or payload.get("lifecycle_recommendation")
@@ -154,6 +157,7 @@ class LifecycleEnrichmentService:
         component.lifecycle_manual_override = True
         component.deprecated = status == DEPRECATED or bool(payload.get("deprecated"))
         component.is_deprecated = bool(component.deprecated)
+        component.unsupported = status in {EOL, EOS, EOF, UNSUPPORTED} or bool(payload.get("unsupported"))
 
         db.add(
             AuditLog(
@@ -196,6 +200,9 @@ class LifecycleEnrichmentService:
                 result = provider.lookup(component).canonicalized()
             except Exception:
                 result = unknown_result(component, getattr(provider, "name", None)).canonicalized()
+            repository_url = result.evidence.get("repository_url") if isinstance(result.evidence, dict) else None
+            if repository_url and not component.repository_url:
+                component.repository_url = str(repository_url)
             if provider.name == "OSV":
                 osv_result = result
                 continue
@@ -226,31 +233,43 @@ class LifecycleEnrichmentService:
         return winner.canonicalized()
 
     def _read_cache(self, db: Session, component: NormalizedComponent) -> ComponentLifecycleCache | None:
-        name, version, ecosystem, purl = component.cache_identity
+        lookup_key = build_lifecycle_lookup_key(component)
+        cached = db.execute(
+            select(ComponentLifecycleCache).where(ComponentLifecycleCache.lookup_key == lookup_key)
+        ).scalars().first()
+        if cached is not None:
+            return cached
+        name, version, ecosystem, purl, cpe = component.cache_identity
         statement = select(ComponentLifecycleCache).where(
             ComponentLifecycleCache.normalized_name == name,
             ComponentLifecycleCache.normalized_version == version,
             ComponentLifecycleCache.ecosystem == ecosystem,
             ComponentLifecycleCache.purl == purl,
+            ComponentLifecycleCache.cpe == cpe,
         )
         return db.execute(statement).scalars().first()
 
     def _write_cache(self, db: Session, component: NormalizedComponent, result: LifecycleResult) -> None:
         if result.manual_override:
             return
-        name, version, ecosystem, purl = component.cache_identity
+        name, version, ecosystem, purl, cpe = component.cache_identity
         cache_entry = self._read_cache(db, component) or ComponentLifecycleCache(
             normalized_name=name,
             normalized_version=version,
             ecosystem=ecosystem,
             purl=purl,
+            cpe=cpe,
         )
+        cache_entry.lookup_key = build_lifecycle_lookup_key(component)
+        cache_entry.cpe = cpe
         cache_entry.lifecycle_status = result.lifecycle_status
         cache_entry.eos_date = result.eos_date
         cache_entry.eol_date = result.eol_date
         cache_entry.eof_date = result.eof_date
         cache_entry.deprecated = bool(result.deprecated)
+        cache_entry.unsupported = bool(result.unsupported)
         cache_entry.maintenance_status = result.maintenance_status
+        cache_entry.latest_version = result.latest_version
         cache_entry.latest_supported_version = result.latest_supported_version
         cache_entry.recommended_version = result.recommended_version
         cache_entry.recommendation = result.recommendation
@@ -262,6 +281,7 @@ class LifecycleEnrichmentService:
         cache_entry.expires_at = (
             datetime.now(UTC).replace(microsecond=0) + timedelta(days=self.cache_ttl_days)
         ).isoformat()
+        cache_entry.is_stale = False
         db.add(cache_entry)
 
     def _cache_expired(self, cache_entry: ComponentLifecycleCache) -> bool:
@@ -285,12 +305,15 @@ class LifecycleEnrichmentService:
             component_version=component.normalized_version,
             ecosystem=component.ecosystem,
             purl=component.purl,
+            cpe=component.cpe,
             lifecycle_status=cache_entry.lifecycle_status or UNKNOWN,
             eos_date=cache_entry.eos_date,
             eol_date=cache_entry.eol_date,
             eof_date=cache_entry.eof_date,
             deprecated=bool(cache_entry.deprecated),
+            unsupported=bool(cache_entry.unsupported),
             maintenance_status=cache_entry.maintenance_status,
+            latest_version=cache_entry.latest_version,
             latest_supported_version=cache_entry.latest_supported_version,
             recommended_version=cache_entry.recommended_version,
             recommendation=cache_entry.recommendation,
@@ -299,6 +322,7 @@ class LifecycleEnrichmentService:
             evidence=evidence,
             confidence=cache_entry.confidence or "Unknown",
             checked_at=cache_entry.checked_at,
+            expires_at=cache_entry.expires_at,
             stale=stale,
         ).canonicalized()
 
@@ -315,7 +339,9 @@ class LifecycleEnrichmentService:
         component.eof_date = result.eof_date
         component.deprecated = bool(result.deprecated)
         component.is_deprecated = bool(result.deprecated)
+        component.unsupported = bool(result.unsupported)
         component.maintenance_status = result.maintenance_status
+        component.latest_version = result.latest_version
         component.latest_supported_version = result.latest_supported_version
         component.recommended_version = result.recommended_version
         component.lifecycle_recommendation = result.recommendation
@@ -354,7 +380,7 @@ def summarize_components(components: list[SBOMComponent]) -> dict[str, Any]:
             summary["eof_count"] += 1
         elif status == DEPRECATED:
             summary["deprecated_count"] += 1
-        elif status == UNSUPPORTED:
+        elif status == UNSUPPORTED or bool(component.unsupported):
             summary["unsupported_count"] += 1
         elif status == EOL_SOON:
             summary["eol_soon_count"] += 1
@@ -389,7 +415,9 @@ def component_lifecycle_dict(component: SBOMComponent) -> dict[str, Any]:
         "eol_date": component.eol_date,
         "eof_date": component.eof_date,
         "deprecated": bool(component.deprecated or component.is_deprecated),
+        "unsupported": bool(component.unsupported),
         "maintenance_status": component.maintenance_status,
+        "latest_version": component.latest_version,
         "latest_supported_version": component.latest_supported_version,
         "recommended_version": component.recommended_version,
         "recommendation": component.lifecycle_recommendation,
@@ -416,6 +444,7 @@ def _component_lifecycle_state(component: SBOMComponent) -> dict[str, Any]:
         "eol_date": component.eol_date,
         "eof_date": component.eof_date,
         "maintenance_status": component.maintenance_status,
+        "latest_version": component.latest_version,
         "recommended_version": component.recommended_version,
         "source": component.lifecycle_source,
     }

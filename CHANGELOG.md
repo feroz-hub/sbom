@@ -29,7 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   enrichment, cache, manual overrides, refreshed dashboard metrics, and SBOM
   export/report support. Providers now include endoflife.date lifecycle date
   matching, package-registry deprecation/latest-version signals, OSV
-  fixed-version recommendations, and audited manual overrides. New APIs:
+  fixed-version recommendations, conservative GitHub repository-health
+  signals, stronger PURL/CPE-aware cache identities, explicit unsupported and
+  latest-version fields, and audited manual overrides. New APIs:
   `POST /api/sboms/{id}/lifecycle/refresh`,
   `POST /api/components/{id}/lifecycle/refresh`,
   `PATCH /api/components/{id}/lifecycle-override`,
