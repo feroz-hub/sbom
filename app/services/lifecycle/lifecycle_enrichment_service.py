@@ -9,7 +9,9 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ...models import AuditLog, ComponentLifecycleCache, SBOMComponent, SBOMSource
+from ...models import AuditLog, ComponentLifecycleCache, ComponentLifecycleOverrideAudit, SBOMComponent, SBOMSource
+from .decision_engine import choose_lifecycle_result
+from .deps_dev_provider import DepsDevProvider
 from .endoflife_date_provider import EndOfLifeDateProvider
 from .manual_override_provider import ManualOverrideProvider
 from .normalizer import build_lifecycle_lookup_key, normalize_component
@@ -25,6 +27,7 @@ from .types import (
     EOL_SOON,
     EOS,
     HIGH,
+    POSSIBLY_UNMAINTAINED,
     STATUS_ALIASES,
     UNKNOWN,
     UNSUPPORTED,
@@ -49,6 +52,7 @@ class LifecycleEnrichmentService:
     ) -> None:
         self.providers = providers or [
             EndOfLifeDateProvider(),
+            DepsDevProvider(),
             PackageRegistryProvider(),
             RepositoryHealthProvider(),
             OSVProvider(),
@@ -136,6 +140,8 @@ class LifecycleEnrichmentService:
         reason = payload.get("reason") or payload.get("note")
         if reason:
             evidence = {**evidence, "reason": reason}
+        else:
+            raise HTTPException(status_code=422, detail="Manual lifecycle override requires reason")
         if evidence_url:
             evidence = {**evidence, "evidence_url": evidence_url}
 
@@ -170,6 +176,17 @@ class LifecycleEnrichmentService:
                 created_at=now_iso(),
             )
         )
+        db.add(
+            ComponentLifecycleOverrideAudit(
+                component_id=component.id,
+                old_value_json=old_state,
+                new_value_json=_component_lifecycle_state(component),
+                reason=str(reason),
+                evidence_url=evidence_url,
+                changed_by=updated_by,
+                changed_at=now_iso(),
+            )
+        )
         db.commit()
         db.refresh(component)
         return component
@@ -193,44 +210,17 @@ class LifecycleEnrichmentService:
         }
 
     def _lookup_providers(self, component: NormalizedComponent) -> LifecycleResult:
-        winner: LifecycleResult | None = None
-        osv_result: LifecycleResult | None = None
+        results: list[LifecycleResult] = []
         for provider in self.providers:
             try:
                 result = provider.lookup(component).canonicalized()
             except Exception:
                 result = unknown_result(component, getattr(provider, "name", None)).canonicalized()
+            results.append(result)
             repository_url = result.evidence.get("repository_url") if isinstance(result.evidence, dict) else None
             if repository_url and not component.repository_url:
                 component.repository_url = str(repository_url)
-            if provider.name == "OSV":
-                osv_result = result
-                continue
-            if result.lifecycle_status != UNKNOWN:
-                winner = result
-                break
-            if winner is None and result.is_actionable:
-                winner = result
-
-        if osv_result is None:
-            for provider in self.providers:
-                if provider.name == "OSV":
-                    try:
-                        osv_result = provider.lookup(component).canonicalized()
-                    except Exception:
-                        osv_result = unknown_result(component, provider.name).canonicalized()
-                    break
-
-        if winner is None:
-            winner = osv_result if osv_result and osv_result.is_actionable else unknown_result(component)
-        elif osv_result and osv_result.recommended_version:
-            winner.recommended_version = winner.recommended_version or osv_result.recommended_version
-            winner.recommendation = winner.recommendation or osv_result.recommendation
-            winner.evidence = {**winner.evidence, "osv": osv_result.evidence}
-            if winner.source_name and "OSV" not in winner.source_name:
-                winner.source_name = f"{winner.source_name} + OSV"
-
-        return winner.canonicalized()
+        return (choose_lifecycle_result(results) or unknown_result(component)).canonicalized()
 
     def _read_cache(self, db: Session, component: NormalizedComponent) -> ComponentLifecycleCache | None:
         lookup_key = build_lifecycle_lookup_key(component)
@@ -366,6 +356,7 @@ def summarize_components(components: list[SBOMComponent]) -> dict[str, Any]:
         "unsupported_count": 0,
         "unknown_count": 0,
         "eol_soon_count": 0,
+        "possibly_unmaintained_count": 0,
         "stale_lifecycle_count": 0,
     }
     for component in components:
@@ -384,6 +375,8 @@ def summarize_components(components: list[SBOMComponent]) -> dict[str, Any]:
             summary["unsupported_count"] += 1
         elif status == EOL_SOON:
             summary["eol_soon_count"] += 1
+        elif status == POSSIBLY_UNMAINTAINED or component.maintenance_status == POSSIBLY_UNMAINTAINED:
+            summary["possibly_unmaintained_count"] += 1
         else:
             summary["unknown_count"] += 1
         if bool(component.lifecycle_is_stale):
@@ -391,7 +384,8 @@ def summarize_components(components: list[SBOMComponent]) -> dict[str, Any]:
     summary["top_risky_components"] = [
         component_lifecycle_dict(component)
         for component in sorted(components, key=_risk_sort_key, reverse=True)
-        if canonical_status(component.lifecycle_status) in {EOL, EOS, EOF, DEPRECATED, UNSUPPORTED, EOL_SOON}
+        if canonical_status(component.lifecycle_status) in {EOL, EOS, EOF, DEPRECATED, UNSUPPORTED, EOL_SOON, POSSIBLY_UNMAINTAINED}
+        or component.maintenance_status == POSSIBLY_UNMAINTAINED
     ][:10]
     summary["recommended_upgrades"] = [
         component_lifecycle_dict(component)
@@ -433,7 +427,9 @@ def component_lifecycle_dict(component: SBOMComponent) -> dict[str, Any]:
 
 def _risk_sort_key(component: SBOMComponent) -> int:
     status = canonical_status(component.lifecycle_status)
-    weights = {EOL: 7, UNSUPPORTED: 6, EOS: 5, EOF: 4, DEPRECATED: 3, EOL_SOON: 2}
+    weights = {EOL: 7, UNSUPPORTED: 6, EOS: 5, EOF: 4, DEPRECATED: 3, EOL_SOON: 2, POSSIBLY_UNMAINTAINED: 1}
+    if status == UNKNOWN and component.maintenance_status == POSSIBLY_UNMAINTAINED:
+        return 1
     return weights.get(status, 0)
 
 

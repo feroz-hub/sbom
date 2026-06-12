@@ -13,6 +13,7 @@ EOF = "EOF"
 DEPRECATED = "Deprecated"
 UNSUPPORTED = "Unsupported"
 EOL_SOON = "EOL Soon"
+POSSIBLY_UNMAINTAINED = "Possibly Unmaintained"
 UNKNOWN = "Unknown"
 
 ALLOWED_LIFECYCLE_STATUSES = {
@@ -23,6 +24,7 @@ ALLOWED_LIFECYCLE_STATUSES = {
     DEPRECATED,
     UNSUPPORTED,
     EOL_SOON,
+    POSSIBLY_UNMAINTAINED,
     UNKNOWN,
 }
 
@@ -51,6 +53,8 @@ STATUS_ALIASES = {
     "unmaintained": UNSUPPORTED,
     "eol soon": EOL_SOON,
     "nearing eol": EOL_SOON,
+    "possibly unmaintained": POSSIBLY_UNMAINTAINED,
+    "possibly unsupported": POSSIBLY_UNMAINTAINED,
     "unknown": UNKNOWN,
 }
 
@@ -126,6 +130,7 @@ class NormalizedComponent:
     component_group: str | None = None
     repository_url: str | None = None
     external_references: list[dict[str, Any]] = field(default_factory=list)
+    identity_method: str = "name_version"
 
     @property
     def cache_identity(self) -> tuple[str, str | None, str, str | None, str | None]:
@@ -145,6 +150,8 @@ class LifecycleResult:
     ecosystem: str
     purl: str | None
     cpe: str | None = None
+    supplier: str | None = None
+    repository_url: str | None = None
     lifecycle_status: str = UNKNOWN
     eos_date: str | None = None
     eol_date: str | None = None
@@ -178,6 +185,26 @@ class LifecycleResult:
     @property
     def is_actionable(self) -> bool:
         return self.lifecycle_status != UNKNOWN or bool(self.recommended_version or self.recommendation)
+
+
+@dataclass(slots=True)
+class VexResult:
+    component_name: str
+    component_version: str | None
+    vulnerability_id: str
+    cve_id: str | None = None
+    product_context: str | None = None
+    vex_status: str = "unknown"
+    vex_justification: str | None = None
+    impact_statement: str | None = None
+    action_statement: str | None = None
+    fixed_version: str | None = None
+    mitigation: str | None = None
+    source_name: str | None = None
+    source_url: str | None = None
+    evidence: dict[str, Any] = field(default_factory=dict)
+    confidence: str = UNKNOWN_CONFIDENCE
+    checked_at: str = field(default_factory=now_iso)
 
 
 def unknown_result(component: NormalizedComponent, source_name: str | None = None) -> LifecycleResult:

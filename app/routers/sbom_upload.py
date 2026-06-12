@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..models import Projects, SBOMSource, SBOMType
 from ..services.completeness_service import compute_and_save_completeness
+from ..services.lifecycle.vex_provider import process_embedded_vex_for_sbom
 from ..services.lifecycle_service import sync_lifecycle_for_sbom
 from ..services.sbom_service import sync_sbom_components
 from ..services.validation_repair_service import (
@@ -178,6 +179,7 @@ async def upload_sbom(
     try:
         sync_sbom_components(db, obj)
         sync_lifecycle_for_sbom(db, obj.id)
+        process_embedded_vex_for_sbom(db, obj.id)
         compute_and_save_completeness(db, obj)
     except Exception as exc:  # pragma: no cover - defensive enrichment path
         log.warning("Failed to enrich uploaded SBOM %s: %s", obj.id, exc)

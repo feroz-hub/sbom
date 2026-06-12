@@ -62,6 +62,7 @@ from ..schemas import (
 from ..services import audit_log
 from ..services.analysis_service import compute_report_status, persist_analysis_run
 from ..services.completeness_service import compute_and_save_completeness
+from ..services.lifecycle.vex_provider import process_embedded_vex_for_sbom
 from ..services.lifecycle_service import sync_lifecycle_for_sbom
 from ..services.soft_delete import SoftDeleteService
 from ..services.validation_repair_service import (
@@ -414,6 +415,7 @@ def create_sbom(payload: SBOMSourceCreate, db: Session = Depends(get_db)):
         try:
             components = sync_sbom_components(db, obj)
             sync_lifecycle_for_sbom(db, obj.id)
+            process_embedded_vex_for_sbom(db, obj.id)
             compute_and_save_completeness(db, obj)
             db.commit()
             log.info("SBOM components synced: sbom id=%d components=%d", obj.id, len(components))

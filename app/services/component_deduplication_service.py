@@ -5,8 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from packageurl import PackageURL
-
+from ..services.lifecycle.normalizer import parse_purl
 from ..services.lifecycle.types import canonical_ecosystem
 
 log = logging.getLogger(__name__)
@@ -16,7 +15,9 @@ def get_purl_identity_key(purl_str: str | None) -> str | None:
     if not purl_str:
         return None
     try:
-        parsed = PackageURL.from_string(purl_str.strip())
+        parsed = parse_purl(purl_str.strip())
+        if parsed is None:
+            return None
         eco = canonical_ecosystem(parsed.type)
         ns = (parsed.namespace or "").strip().lower()
         name = (parsed.name or "").strip().lower()

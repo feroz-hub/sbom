@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const getDashboardLifecycle = vi.fn();
 const getDashboardHealth = vi.fn();
+const getDashboardVex = vi.fn();
 
 vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api');
@@ -14,6 +15,7 @@ vi.mock('@/lib/api', async () => {
     ...actual,
     getDashboardLifecycle: (...args: unknown[]) => getDashboardLifecycle(...args),
     getDashboardHealth: (...args: unknown[]) => getDashboardHealth(...args),
+    getDashboardVex: (...args: unknown[]) => getDashboardVex(...args),
   };
 });
 
@@ -29,10 +31,21 @@ function wrap(children: ReactNode) {
 beforeEach(() => {
   getDashboardLifecycle.mockReset();
   getDashboardHealth.mockReset();
+  getDashboardVex.mockReset();
   getDashboardHealth.mockResolvedValue({
     completeness_score: 88,
     missing_metadata: 3,
     outdated_components: 2,
+  });
+  getDashboardVex.mockResolvedValue({
+    affected_count: 1,
+    not_affected_count: 2,
+    fixed_count: 1,
+    under_investigation_count: 1,
+    unknown_count: 0,
+    vulnerabilities_reduced_by_vex: 3,
+    vulnerabilities_requiring_action: 2,
+    top_affected_components: [],
   });
 });
 
@@ -73,6 +86,7 @@ describe('LifecycleHealthTiles', () => {
     expect(screen.getByText('Recommended Upgrades')).toBeInTheDocument();
     expect(screen.getByText('22.0.0')).toBeInTheDocument();
     expect(screen.getByText('88%')).toBeInTheDocument();
+    expect(screen.getByText('VEX Exploitability')).toBeInTheDocument();
   });
 
   it('renders lifecycle error state', async () => {

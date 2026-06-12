@@ -43,6 +43,7 @@ export function invalidateSbomSurfaces(qc: QueryClient, sbomId?: number | null):
     qc.invalidateQueries({ queryKey: ['sbom-dedupe-report', sbomId] });
     qc.invalidateQueries({ queryKey: ['sbom-validation-report', sbomId] });
     qc.invalidateQueries({ queryKey: ['sbom-versions', sbomId] });
+    qc.invalidateQueries({ queryKey: ['sbom-vex', sbomId] });
   }
 }
 
@@ -88,6 +89,7 @@ export function invalidateDashboardTiles(qc: QueryClient): void {
   qc.invalidateQueries({ queryKey: ['dashboard-remediation'] });
   qc.invalidateQueries({ queryKey: ['dashboard-remediation-stats'] });
   qc.invalidateQueries({ queryKey: ['dashboard-lifecycle'] });
+  qc.invalidateQueries({ queryKey: ['dashboard-vex'] });
   qc.invalidateQueries({ queryKey: ['dashboard-health'] });
   qc.invalidateQueries({ queryKey: ['dashboard-risk-map'] });
   qc.invalidateQueries({ queryKey: ['dashboard-risk-matrix'] });

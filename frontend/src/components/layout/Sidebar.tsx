@@ -130,7 +130,7 @@ export function Sidebar() {
             onClick={closeMobile}
             aria-label="Close navigation"
             className={cn(
-              'rounded-lg p-2 text-slate-100 transition-colors hover:bg-white/10 hover:text-white md:hidden',
+              'rounded-lg p-2 text-sidebar-foreground transition-colors hover:bg-sidebar-hover md:hidden',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-cyan',
             )}
           >
@@ -179,8 +179,8 @@ export function Sidebar() {
             aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             aria-expanded={!collapsed}
             className={cn(
-              'flex w-full items-center rounded-lg py-2 text-slate-200',
-              'transition-colors hover:bg-white/10 hover:text-white motion-reduce:transition-none',
+              'flex w-full items-center rounded-lg py-2 text-sidebar-foreground',
+              'transition-colors hover:bg-sidebar-hover motion-reduce:transition-none',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-cyan',
               'px-3',
               collapsed && 'md:px-[15px]',
@@ -206,7 +206,7 @@ export function Sidebar() {
             </span>
           </button>
           {!collapsed && (
-            <p className="truncate px-3 text-[10px] text-slate-300">© 2026 HCL Technologies</p>
+            <p className="truncate px-3 text-[10px] text-sidebar-muted">© 2026 HCL Technologies</p>
           )}
         </div>
       </aside>
@@ -252,13 +252,13 @@ function NavLink({
             collapsed && 'md:px-[15px]',
             isActive
               ? 'sidebar-item-active text-white font-semibold'
-              : 'text-slate-100 hover:bg-white/10 hover:text-white',
+              : 'text-sidebar-foreground hover:bg-sidebar-hover',
           )}
         >
           <Icon
             className={cn(
               'h-[18px] w-[18px] shrink-0',
-              isActive ? 'text-white' : 'text-slate-200 group-hover:text-white',
+              isActive ? 'text-white' : 'text-sidebar-muted group-hover:text-sidebar-foreground',
             )}
             aria-hidden
           />
@@ -274,7 +274,7 @@ function NavLink({
           {!collapsed && (
             <ChevronDown
               className={cn(
-                'h-3.5 w-3.5 shrink-0 text-slate-200 transition-transform duration-base',
+                'h-3.5 w-3.5 shrink-0 text-sidebar-muted transition-transform duration-base',
                 expanded && 'rotate-180',
               )}
               aria-hidden
@@ -297,7 +297,7 @@ function NavLink({
               'visible grid-rows-[1fr] opacity-100 md:invisible md:grid-rows-[0fr] md:opacity-0',
           )}
         >
-          <ul className="mt-0.5 ml-3 min-h-0 space-y-0.5 overflow-hidden border-l border-white/10 pl-3">
+          <ul className="mt-0.5 ml-3 min-h-0 space-y-0.5 overflow-hidden border-l border-sidebar-foreground/10 pl-3">
             {item.children.map((child) => {
               // Detect active child by pathname + query string approximation.
               const childActive =
@@ -313,15 +313,15 @@ function NavLink({
                       'group flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors duration-150',
                       'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-cyan',
                       childActive
-                        ? 'bg-white/10 text-white'
-                        : 'text-slate-200 hover:bg-white/5 hover:text-white',
+                        ? 'bg-sidebar-hover text-sidebar-foreground font-semibold'
+                        : 'text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-foreground',
                     )}
                   >
                     <span
                       aria-hidden
                       className={cn(
                         'inline-block h-1 w-1 shrink-0 rounded-full',
-                        childActive ? 'bg-hcl-cyan' : 'bg-slate-500',
+                        childActive ? 'bg-sidebar-accent' : 'bg-sidebar-muted',
                       )}
                     />
                     {child.label}
@@ -348,13 +348,13 @@ function NavLink({
         collapsed && 'md:px-[15px]',
         isActive
           ? 'sidebar-item-active text-white font-semibold'
-          : 'text-slate-100 hover:bg-white/10 hover:text-white',
+          : 'text-sidebar-foreground hover:bg-sidebar-hover',
       )}
     >
       <Icon
         className={cn(
           'h-[18px] w-[18px] shrink-0',
-          isActive ? 'text-white' : 'text-slate-200 group-hover:text-white',
+          isActive ? 'text-white' : 'text-sidebar-muted group-hover:text-sidebar-foreground',
         )}
         aria-hidden
       />
@@ -454,8 +454,8 @@ function SidebarSection({
   children: ReactNode;
 }) {
   return (
-    <section className="px-2 py-2 border-t border-white/10">
-      <p className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-200">
+    <section className="px-2 py-2 border-t border-sidebar-foreground/10">
+      <p className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/80">
         <Icon className={cn('h-3 w-3', iconClassName)} aria-hidden />
         {title}
       </p>
@@ -482,13 +482,13 @@ function SidebarRow({
         title={label}
         className={cn(
           'flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs transition-colors duration-150',
-          'text-slate-100 hover:bg-white/10 hover:text-white',
+          'text-sidebar-foreground hover:bg-sidebar-hover',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-cyan',
         )}
       >
         <span className="min-w-0 flex-1">
           <span className="block truncate font-medium">{label}</span>
-          <span className="font-metric block truncate text-[10px] tabular-nums text-slate-300">
+          <span className="font-metric block truncate text-[10px] tabular-nums text-sidebar-muted">
             {subtitle}
           </span>
         </span>
@@ -503,9 +503,9 @@ function SidebarRow({
             aria-label={`Unpin ${label}`}
             title="Unpin"
             className={cn(
-              'shrink-0 rounded p-0.5 text-slate-200 transition-all duration-base',
+              'shrink-0 rounded p-0.5 text-sidebar-muted transition-all duration-base',
               'opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100',
-              'hover:bg-white/15 hover:text-amber-300',
+              'hover:bg-sidebar-hover hover:text-amber-500 dark:hover:text-amber-300',
               'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-hcl-cyan',
             )}
           >

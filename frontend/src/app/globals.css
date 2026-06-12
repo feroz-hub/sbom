@@ -22,11 +22,14 @@
   --color-hcl-accent: #0099cc;
   --color-hcl-violet: #7c3aa8; /* HCLTech violet — lightened */
 
-  /* Sidebar: deep HCLTech-navy rail */
-  --color-sidebar: #0e2143;
-  --color-sidebar-rail-start: #122a52;
-  --color-sidebar-rail-end: #0a1730;
-  --color-sidebar-accent: #00b2e2;
+  /* Sidebar: vibrant electric blue rail */
+  --color-sidebar: #3C91FF;
+  --color-sidebar-rail-start: #4D9CFF;
+  --color-sidebar-rail-end: #1F7EFF;
+  --color-sidebar-accent: #091a3c;
+  --color-sidebar-foreground: #091a3c;
+  --color-sidebar-muted: #2c4475;
+  --color-sidebar-hover-bg: rgba(9, 26, 60, 0.08);
 
   --focus-ring-color: #0067b1;
   --focus-ring-width: 2px;
@@ -107,6 +110,9 @@
   --color-sidebar-rail-start: #0a1730;
   --color-sidebar-rail-end: #040914;
   --color-sidebar-accent: #38d4ff;
+  --color-sidebar-foreground: #f1f5f9;
+  --color-sidebar-muted: #cbd5e1;
+  --color-sidebar-hover-bg: rgba(255, 255, 255, 0.1);
 
   --focus-ring-color: #38bdf8;
 

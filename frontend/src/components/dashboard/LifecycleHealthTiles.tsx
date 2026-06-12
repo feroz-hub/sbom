@@ -1,10 +1,10 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { ShieldAlert, AlertTriangle, AlertCircle, Award, FileWarning, HelpCircle } from 'lucide-react';
+import { ShieldAlert, AlertTriangle, AlertCircle, Award, FileWarning, HelpCircle, ShieldCheck } from 'lucide-react';
 import { Surface } from '@/components/ui/Surface';
 import { Skeleton } from '@/components/ui/Spinner';
-import { getDashboardLifecycle, getDashboardHealth } from '@/lib/api';
+import { getDashboardLifecycle, getDashboardHealth, getDashboardVex } from '@/lib/api';
 
 export function LifecycleHealthTiles() {
   const lifecycleQuery = useQuery({
@@ -17,14 +17,20 @@ export function LifecycleHealthTiles() {
     queryFn: ({ signal }) => getDashboardHealth(signal),
   });
 
+  const vexQuery = useQuery({
+    queryKey: ['dashboard-vex'],
+    queryFn: ({ signal }) => getDashboardVex(signal),
+  });
+
   const lifecycle = lifecycleQuery.data;
   const health = healthQuery.data;
-  const loading = lifecycleQuery.isLoading || healthQuery.isLoading;
+  const vex = vexQuery.data;
+  const loading = lifecycleQuery.isLoading || healthQuery.isLoading || vexQuery.isLoading;
   const lifecycleError = lifecycleQuery.isError;
   const lifecycleEmpty = !loading && !lifecycleError && (lifecycle?.total_components ?? 0) === 0;
 
   return (
-    <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+    <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
       {/* Component Lifecycle Card */}
       <Surface variant="elevated" className="p-5">
         <div>
@@ -98,6 +104,7 @@ export function LifecycleHealthTiles() {
             ['Unknown', lifecycle?.unknown_count ?? 0, 'text-gray-700 dark:text-gray-300'],
             ['EOF', lifecycle?.eof_count ?? 0, 'text-rose-700 dark:text-rose-300'],
             ['EOL Soon', lifecycle?.eol_soon_count ?? 0, 'text-amber-700 dark:text-amber-300'],
+            ['Possibly Unmaintained', lifecycle?.possibly_unmaintained_count ?? 0, 'text-yellow-700 dark:text-yellow-300'],
             ['Stale Data', lifecycle?.stale_lifecycle_count ?? 0, 'text-slate-700 dark:text-slate-300'],
           ] as const).map(([label, value, color]) => (
             <div key={label} className="rounded-lg border border-gray-200/70 p-2 dark:border-gray-800">
@@ -181,6 +188,63 @@ export function LifecycleHealthTiles() {
             <div className="mt-0.5 text-[9px] text-gray-500">Non-latest releases found</div>
           </div>
         </div>
+      </Surface>
+
+      {/* VEX Summary Card */}
+      <Surface variant="elevated" className="p-5">
+        <div>
+          <h3 className="text-base font-semibold text-hcl-navy">VEX Exploitability</h3>
+          <p className="mt-0.5 text-xs text-hcl-muted">
+            Product-context affected, fixed, and not-affected vulnerability statements
+          </p>
+        </div>
+
+        {vexQuery.isError ? (
+          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800 dark:border-red-900 dark:bg-red-950/20 dark:text-red-200">
+            VEX metrics could not be loaded.
+          </div>
+        ) : !loading && !vex && !vexQuery.isError ? (
+          <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-700 dark:border-gray-800 dark:bg-gray-900/50 dark:text-gray-300">
+            No VEX statements have been imported yet.
+          </div>
+        ) : null}
+
+        <div className="mt-4 grid grid-cols-3 gap-3">
+          {([
+            ['Affected', vex?.affected_count ?? 0, 'text-red-700 dark:text-red-300'],
+            ['Not Affected', vex?.not_affected_count ?? 0, 'text-emerald-700 dark:text-emerald-300'],
+            ['Fixed', vex?.fixed_count ?? 0, 'text-blue-700 dark:text-blue-300'],
+            ['Investigating', vex?.under_investigation_count ?? 0, 'text-amber-700 dark:text-amber-300'],
+            ['Unknown', vex?.unknown_count ?? 0, 'text-gray-700 dark:text-gray-300'],
+            ['Requires Action', vex?.vulnerabilities_requiring_action ?? 0, 'text-rose-700 dark:text-rose-300'],
+          ] as const).map(([label, value, color]) => (
+            <div key={label} className="rounded-lg border border-gray-200/70 p-2 dark:border-gray-800">
+              <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-hcl-muted">
+                <ShieldCheck className="h-3.5 w-3.5" />
+                {label}
+              </div>
+              {loading ? (
+                <Skeleton className="mt-2 h-5 w-10" />
+              ) : (
+                <div className={`mt-1 font-metric text-xl font-semibold ${color}`}>{value}</div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {!loading && (vex?.top_affected_components?.length ?? 0) > 0 ? (
+          <div className="mt-3 border-t border-gray-200 pt-3 dark:border-gray-800">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-hcl-muted">Top Affected</div>
+            <div className="mt-2 space-y-1.5">
+              {vex?.top_affected_components.slice(0, 3).map((item) => (
+                <div key={`${item.id}-${item.vulnerability_id}`} className="flex items-center justify-between gap-3 text-xs">
+                  <span className="truncate font-medium text-hcl-navy">{item.component_name ?? 'Component'}</span>
+                  <span className="shrink-0 text-hcl-muted">{item.vulnerability_id}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </Surface>
     </div>
   );

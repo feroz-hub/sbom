@@ -4,7 +4,7 @@ Router package for SBOM Analyzer API.
 Exposes all router modules for clean import and integration.
 """
 
-from . import analysis, analyze_endpoints, dashboard, dashboard_main, health, pdf, projects, runs, sbom, sboms_crud
+from . import analysis, analyze_endpoints, dashboard, dashboard_main, health, pdf, projects, runs, sbom, sboms_crud, vex
 
 __all__ = [
     "health",
@@ -17,4 +17,5 @@ __all__ = [
     "analysis",
     "sbom",
     "dashboard",
+    "vex",
 ]

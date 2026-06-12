@@ -18,6 +18,7 @@ from ..models import AuditLog, SBOMComponent, SBOMSource
 from ..validation import run as run_validation
 from .completeness_service import compute_and_save_completeness
 from .lifecycle.types import DEPRECATED, canonical_status, now_iso
+from .lifecycle.vex_provider import process_embedded_vex_for_sbom
 from .lifecycle_service import sync_lifecycle_for_sbom
 from .sbom_service import _upsert_components
 
@@ -287,6 +288,7 @@ def edit_sbom(
     
     # Run lifecycle backfill for new/modified components that have no lifecycle state
     sync_lifecycle_for_sbom(db, new_sbom.id)
+    process_embedded_vex_for_sbom(db, new_sbom.id)
 
     if override_map:
         new_components = db.execute(

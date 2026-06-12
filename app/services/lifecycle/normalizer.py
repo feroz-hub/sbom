@@ -4,8 +4,43 @@ from __future__ import annotations
 
 import re
 from typing import Any
+from urllib.parse import unquote
 
-from packageurl import PackageURL
+try:  # pragma: no cover - exercised when packageurl is installed.
+    from packageurl import PackageURL
+except ModuleNotFoundError:  # pragma: no cover - fallback covered via parse_purl tests.
+    class PackageURL:  # type: ignore[no-redef]
+        def __init__(
+            self,
+            *,
+            type: str,
+            name: str,
+            namespace: str | None = None,
+            version: str | None = None,
+        ) -> None:
+            self.type = type
+            self.name = name
+            self.namespace = namespace
+            self.version = version
+
+        @classmethod
+        def from_string(cls, value: str) -> PackageURL:
+            if not value.startswith("pkg:"):
+                raise ValueError("Invalid purl")
+            body = value[4:].split("?", 1)[0]
+            package_type, _, remainder = body.partition("/")
+            if not package_type or not remainder:
+                raise ValueError("Invalid purl")
+            path, _, version = remainder.rpartition("@")
+            if not path:
+                path = remainder
+                version = ""
+            segments = [unquote(segment) for segment in path.split("/") if segment]
+            if not segments:
+                raise ValueError("Invalid purl")
+            name = segments[-1]
+            namespace = "/".join(segments[:-1]) or None
+            return cls(type=package_type, namespace=namespace, name=name, version=unquote(version) or None)
 
 from .types import NormalizedComponent, canonical_ecosystem
 
@@ -31,6 +66,16 @@ def normalize_component(component: Any) -> NormalizedComponent:
             purl_name = _name_from_purl(parsed)
             normalized_name = purl_name.lower() if purl_name else normalized_name
             normalized_version = _clean_version(parsed.version) or raw_version
+            identity_method = "purl"
+        else:
+            identity_method = "name_version"
+    elif raw_cpe:
+        parsed_cpe = parse_cpe(raw_cpe)
+        normalized_name = parsed_cpe.get("product") or normalized_name
+        normalized_version = _clean_version(parsed_cpe.get("version")) or raw_version
+        identity_method = "cpe"
+    else:
+        identity_method = "ecosystem_name_version" if ecosystem != "generic" else "name_version"
 
     if ecosystem == "generic":
         ecosystem = infer_ecosystem(raw_name, supplier, component_type, component_group, raw_cpe)
@@ -52,6 +97,7 @@ def normalize_component(component: Any) -> NormalizedComponent:
         component_group=component_group,
         repository_url=_repository_url_from_component(component),
         external_references=[],
+        identity_method=identity_method,
     )
 
 
@@ -63,6 +109,29 @@ def parse_purl(value: str | None) -> PackageURL | None:
         return PackageURL.from_string(value)
     except Exception:
         return None
+
+
+def parse_cpe(value: str | None) -> dict[str, str]:
+    """Parse common CPE 2.2/2.3 fields into a small normalized dict."""
+    if not value:
+        return {}
+    text = value.strip()
+    parts = text.split(":")
+    if len(parts) >= 13 and parts[0] == "cpe" and parts[1] == "2.3":
+        return {
+            "part": parts[2],
+            "vendor": _cpe_unescape(parts[3]),
+            "product": normalize_component_name(_cpe_unescape(parts[4])),
+            "version": _cpe_unescape(parts[5]),
+        }
+    if len(parts) >= 6 and parts[0] == "cpe" and parts[1].startswith("/"):
+        return {
+            "part": parts[1].lstrip("/"),
+            "vendor": _cpe_unescape(parts[2]),
+            "product": normalize_component_name(_cpe_unescape(parts[3])),
+            "version": _cpe_unescape(parts[4]),
+        }
+    return {}
 
 
 def normalize_ecosystem(value: str | None) -> str:
@@ -167,6 +236,24 @@ def build_lifecycle_lookup_key(component: NormalizedComponent) -> str:
     return f"fallback:{ecosystem}:{name}:{version}:{supplier}"
 
 
+def normalize_version(value: Any) -> str | None:
+    """Public helper for version normalization used by VEX/vulnerability flows."""
+    return _clean_version(value)
+
+
+def build_vulnerability_lookup_key(component: NormalizedComponent, vulnerability_id: str | None = None) -> str:
+    """Build a stable key for component/vulnerability VEX matching."""
+    base = build_lifecycle_lookup_key(component)
+    vuln = (vulnerability_id or "").strip().upper()
+    return f"{base}:vuln:{vuln}"
+
+
+def _cpe_unescape(value: str) -> str:
+    if value in {"*", "-", ""}:
+        return ""
+    return value.replace("\\:", ":").replace("\\/", "/").strip().lower()
+
+
 def _repository_url_from_component(component: Any) -> str | None:
     evidence = getattr(component, "lifecycle_evidence_json", None) or {}
     if isinstance(evidence, dict):
@@ -178,9 +265,12 @@ def _repository_url_from_component(component: Any) -> str | None:
 
 __all__ = [
     "build_lifecycle_lookup_key",
+    "build_vulnerability_lookup_key",
     "infer_ecosystem",
     "normalize_component",
     "normalize_component_name",
     "normalize_ecosystem",
+    "normalize_version",
+    "parse_cpe",
     "parse_purl",
 ]

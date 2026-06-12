@@ -39,6 +39,7 @@ from ..schemas_dashboard import (
     NetChange,
     VulnerabilityAgeResponse,
 )
+from ..services.lifecycle.vex_provider import vex_dashboard_summary
 
 # Observation-window lengths (days) for the vulnerability-age period filter.
 _AGE_PERIOD_DAYS = {"day": 1, "week": 7, "month": 30, "year": 365}
@@ -310,6 +311,12 @@ def get_dashboard_lifecycle(db: Session = Depends(get_db)):
         "unsupported": metrics.lifecycle_unsupported_total(db),
         "stale_count": summary.get("stale_lifecycle_count", 0),
     }
+
+
+@router.get("/vex")
+def get_dashboard_vex(db: Session = Depends(get_db)):
+    """Fetch VEX exploitability metrics for the dashboard."""
+    return vex_dashboard_summary(db)
 
 
 @router.get("/health")

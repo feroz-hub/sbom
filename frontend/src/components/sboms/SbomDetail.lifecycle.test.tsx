@@ -39,6 +39,8 @@ const compareSbomVersions = vi.fn();
 const restoreSbomVersion = vi.fn();
 const refreshSbomLifecycle = vi.fn();
 const refreshComponentLifecycle = vi.fn();
+const getSbomVexStatements = vi.fn();
+const uploadSbomVexDocument = vi.fn();
 
 vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api');
@@ -56,6 +58,8 @@ vi.mock('@/lib/api', async () => {
     restoreSbomVersion: (...args: unknown[]) => restoreSbomVersion(...args),
     refreshSbomLifecycle: (...args: unknown[]) => refreshSbomLifecycle(...args),
     refreshComponentLifecycle: (...args: unknown[]) => refreshComponentLifecycle(...args),
+    getSbomVexStatements: (...args: unknown[]) => getSbomVexStatements(...args),
+    uploadSbomVexDocument: (...args: unknown[]) => uploadSbomVexDocument(...args),
   };
 });
 
@@ -130,12 +134,37 @@ beforeEach(() => {
   restoreSbomVersion.mockResolvedValue(SBOM);
   refreshSbomLifecycle.mockResolvedValue({ sbom_id: 42, components_enriched: 1, stale_components: 0 });
   refreshComponentLifecycle.mockResolvedValue(COMPONENT);
+  getSbomVexStatements.mockResolvedValue({
+    sbom_id: 42,
+    statements: [
+      {
+        id: 1,
+        sbom_id: 42,
+        component_id: 99,
+        component_name: 'demo',
+        component_version: '1.0.0',
+        vulnerability_id: 'CVE-2026-0001',
+        status: 'not_affected',
+        justification: 'vulnerable_code_not_present',
+        created_at: '2026-06-11T00:00:00Z',
+      },
+    ],
+  });
+  uploadSbomVexDocument.mockResolvedValue({
+    document_id: 1,
+    sbom_id: 42,
+    statements_imported: 1,
+    validation_status: 'accepted',
+  });
   editSbom.mockResolvedValue({ ...SBOM, id: 43, parent_id: 42, sbom_version: '1.0.1' });
 });
 
 describe('SbomDetail lifecycle management', () => {
   it('renders lifecycle details, refresh actions, and manual override form fields', async () => {
     render(wrap(<SbomDetail sbom={SBOM} />));
+
+    expect(await screen.findByText('VEX Statements')).toBeInTheDocument();
+    expect(await screen.findByText('CVE-2026-0001')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /Components List/i }));
 

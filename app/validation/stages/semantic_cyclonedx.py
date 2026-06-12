@@ -285,25 +285,15 @@ def _check_purl(value: object, path: str, ctx: ValidationContext) -> None:
             spec_reference="CycloneDX 1.6 §4.4.1",
         )
         return
-    try:
-        from packageurl import PackageURL  # type: ignore[import-untyped]
-    except ImportError:
+    from ...services.lifecycle.normalizer import parse_purl
+
+    parsed = parse_purl(value)
+    if parsed is None:
         ctx.report.add(
             E.E052_PURL_INVALID,
             stage=_STAGE,
             path=path,
-            message="packageurl-python is not installed; cannot validate PURL.",
-            remediation="Contact your operator; install packageurl-python>=0.15.",
-        )
-        return
-    try:
-        PackageURL.from_string(value)
-    except Exception as exc:
-        ctx.report.add(
-            E.E052_PURL_INVALID,
-            stage=_STAGE,
-            path=path,
-            message=f"PURL '{value}' is malformed: {exc}",
+            message=f"PURL '{value}' is malformed.",
             remediation=(
                 "Use the form `pkg:{type}/{namespace}/{name}@{version}`. "
                 "See https://github.com/package-url/purl-spec."

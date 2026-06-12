@@ -71,6 +71,7 @@ from .routers import (
     sbom_versions,
     sboms_crud,
     schedules,
+    vex,
 )
 from .routers import analysis as analysis_export_router
 from .routers import dashboard as dashboard_trend_router
@@ -559,6 +560,7 @@ app.include_router(ai_usage.router, dependencies=_protected)
 app.include_router(ai_fixes.router, dependencies=_protected)
 app.include_router(ai_credentials.router, dependencies=_protected)
 app.include_router(lifecycle.router, dependencies=_protected)
+app.include_router(vex.router, dependencies=_protected)
 app.include_router(remediation.router, dependencies=_protected)
 
 

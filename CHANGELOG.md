@@ -39,6 +39,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `GET /dashboard/lifecycle`. See
   [docs/lifecycle-enrichment.md](docs/lifecycle-enrichment.md).
 
+- **Evidence-based lifecycle decisioning and VEX enrichment.**
+  Adds explicit lifecycle decision priority, deps.dev package metadata,
+  optional-PURL fallback parsing, CPE/vulnerability lookup helpers, a
+  `Possibly Unmaintained` lifecycle governance category, dedicated lifecycle
+  override audit rows, VEX document/statement storage, embedded CycloneDX VEX
+  import after trusted SBOM creation, manual VEX overrides, `/dashboard/vex`,
+  VEX report/list APIs, and frontend dashboard/SBOM detail VEX surfaces. See
+  [docs/vex-integration.md](docs/vex-integration.md) and
+  [docs/component-lifecycle-sources.md](docs/component-lifecycle-sources.md).
+
 - **Component Deduplication (Stage 9 validation & persistence layer)**
   - Resolves component duplication inside uploaded SBOMs. Groups components using PURL, CPE, or fallback identity characteristics, chooses canonical records, merges attributes (licenses, hashes, external refs, properties, and supplier info), and remaps the dependency graph (with self-dependency filtering and duplicate target removal).
   - Flags duplicate database records using `is_duplicate` and `duplicate_of_component_id` columns, supporting `include_duplicates=true` queries in the API.

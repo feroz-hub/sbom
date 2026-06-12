@@ -31,8 +31,11 @@ import type {
   SbomScheduleResolved,
   ScheduleUpsertPayload,
   DashboardLifecycle,
+  DashboardVex,
   LifecycleOverridePayload,
   LifecycleReport,
+  VexImportResponse,
+  VexListResponse,
   AiRepairSuggestion,
   AiFixSuggestionRequest,
   ApplyPatchRequest,
@@ -983,6 +986,10 @@ export function getDashboardLifecycle(signal?: AbortSignal) {
   return request<DashboardLifecycle>('/dashboard/lifecycle', { signal });
 }
 
+export function getDashboardVex(signal?: AbortSignal) {
+  return request<DashboardVex>('/dashboard/vex', { signal });
+}
+
 export function getDashboardHealth(signal?: AbortSignal) {
   return request<{
     completeness_score: number;
@@ -1001,6 +1008,27 @@ export function getDashboardRemediationStats(signal?: AbortSignal) {
       ok: number;
     };
   }>('/dashboard/remediation-stats', { signal });
+}
+
+export function getSbomVexStatements(sbomId: number, signal?: AbortSignal) {
+  return request<VexListResponse>(`/api/sboms/${sbomId}/vex`, { signal });
+}
+
+export function uploadSbomVexDocument(
+  sbomId: number,
+  payload: {
+    document: Record<string, unknown>;
+    source_type?: string;
+    source_name?: string;
+    source_url?: string;
+    author?: string;
+    uploaded_by?: string;
+  },
+) {
+  return request<VexImportResponse>(`/api/sboms/${sbomId}/vex`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }
 
 /** Treemap cells — one per analysed SBOM, latest successful run. */

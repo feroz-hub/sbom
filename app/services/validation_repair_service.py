@@ -33,6 +33,7 @@ from ..models import (
     SBOMValidationSessionEvent,
 )
 from ..services.completeness_service import compute_and_save_completeness
+from ..services.lifecycle.vex_provider import process_embedded_vex_for_sbom
 from ..services.lifecycle_service import sync_lifecycle_for_sbom
 from ..services.sbom_service import sync_sbom_components
 from ..validation import ErrorReport
@@ -370,6 +371,7 @@ class ValidationRepairService:
 
                 sync_sbom_components(self.db, existing)
                 sync_lifecycle_for_sbom(self.db, int(existing.id))
+                process_embedded_vex_for_sbom(self.db, int(existing.id))
                 compute_and_save_completeness(self.db, existing)
 
                 session.validation_status = "imported"
@@ -418,6 +420,7 @@ class ValidationRepairService:
             self.db.flush()
             sync_sbom_components(self.db, obj)
             sync_lifecycle_for_sbom(self.db, int(obj.id))
+            process_embedded_vex_for_sbom(self.db, int(obj.id))
             compute_and_save_completeness(self.db, obj)
             session.imported_sbom_id = int(obj.id)
             session.validation_status = "imported"

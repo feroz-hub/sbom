@@ -45,8 +45,13 @@ const config: Config = {
           cyan: 'var(--color-hcl-cyan)',
           violet: 'var(--color-hcl-violet)',
         },
-        sidebar: 'var(--color-sidebar)',
-        'sidebar-accent': 'var(--color-sidebar-accent)',
+        sidebar: {
+          DEFAULT: 'var(--color-sidebar)',
+          foreground: 'var(--color-sidebar-foreground)',
+          muted: 'var(--color-sidebar-muted)',
+          accent: 'var(--color-sidebar-accent)',
+          hover: 'var(--color-sidebar-hover-bg)',
+        },
         severity: {
           critical: '#C0392B',
           high: '#D4680A',

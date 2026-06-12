@@ -27,14 +27,16 @@ import {
   restoreSbomVersion,
   refreshSbomLifecycle,
   refreshComponentLifecycle,
+  getSbomVexStatements,
+  uploadSbomVexDocument,
   BASE_URL
 } from '@/lib/api';
 import { useAnalysisStream } from '@/hooks/useAnalysisStream';
-import { invalidateAnalysisCompletion } from '@/lib/queryInvalidation';
+import { invalidateAnalysisCompletion, invalidateDashboardTiles, invalidateSbomSurfaces } from '@/lib/queryInvalidation';
 import { useTableSort } from '@/hooks/useTableSort';
 import { usePagination } from '@/hooks/usePagination';
 import { formatDate, formatDuration } from '@/lib/utils';
-import type { SBOMSource, SBOMComponent, AnalysisRun } from '@/types';
+import type { SBOMSource, SBOMComponent, AnalysisRun, VexStatement } from '@/types';
 
 type ComponentSortKey = 'name' | 'version' | 'component_type' | 'license' | 'lifecycle_status';
 type RunSortKey = 'id' | 'run_status' | 'total_findings' | 'duration_ms' | 'started_on';
@@ -96,6 +98,9 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
   const [isRefreshingLifecycle, setIsRefreshingLifecycle] = useState(false);
   const [refreshingComponentId, setRefreshingComponentId] = useState<number | null>(null);
   const [lifecycleMessage, setLifecycleMessage] = useState('');
+  const [vexDocumentText, setVexDocumentText] = useState('');
+  const [vexMessage, setVexMessage] = useState('');
+  const [isUploadingVex, setIsUploadingVex] = useState(false);
 
   // Version Comparison State
   const [selectedVersions, setSelectedVersions] = useState<number[]>([]);
@@ -138,6 +143,16 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
     retry: false,
   });
 
+  const {
+    data: vexData,
+    isLoading: vexLoading,
+    isError: vexIsError,
+  } = useQuery({
+    queryKey: ['sbom-vex', sbom.id],
+    queryFn: ({ signal }) => getSbomVexStatements(sbom.id, signal),
+    retry: false,
+  });
+
   // Risk summary
   const { data: risk } = useQuery({
     queryKey: ['sbom-risk', sbom.id, runs?.[0]?.id ?? null],
@@ -176,6 +191,14 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
     defaultPageSize: 25,
     storageKey: 'sbom-components',
   });
+  const vexStatements = useMemo<VexStatement[]>(() => vexData?.statements ?? [], [vexData]);
+  const vexCounts = useMemo(() => {
+    return vexStatements.reduce<Record<string, number>>((acc, statement) => {
+      const status = statement.status || 'unknown';
+      acc[status] = (acc[status] ?? 0) + 1;
+      return acc;
+    }, {});
+  }, [vexStatements]);
 
   // Analysis runs: same pattern.
   const runRows = useMemo<AnalysisRun[]>(() => runs ?? [], [runs]);
@@ -374,6 +397,33 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
     }
   };
 
+  const handleUploadVexDocument = async () => {
+    setVexMessage('');
+    let document: Record<string, unknown>;
+    try {
+      document = JSON.parse(vexDocumentText) as Record<string, unknown>;
+    } catch {
+      setVexMessage('VEX document must be valid JSON.');
+      return;
+    }
+
+    setIsUploadingVex(true);
+    try {
+      const result = await uploadSbomVexDocument(sbom.id, {
+        document,
+        source_name: 'Uploaded VEX',
+      });
+      setVexMessage(`Imported ${result.statements_imported} VEX statements.`);
+      setVexDocumentText('');
+      invalidateSbomSurfaces(queryClient, sbom.id);
+      invalidateDashboardTiles(queryClient);
+    } catch (err: any) {
+      setVexMessage(err.message || 'VEX import failed.');
+    } finally {
+      setIsUploadingVex(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Back button */}
@@ -562,6 +612,96 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
               </div>
             </Card>
           )}
+
+          <Card>
+            <CardHeader>
+              <CardTitle>VEX Statements</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {vexIsError ? (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800">
+                  VEX statements could not be loaded.
+                </div>
+              ) : null}
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+                {([
+                  ['Affected', vexCounts.affected ?? 0, 'text-red-700'],
+                  ['Not Affected', vexCounts.not_affected ?? 0, 'text-emerald-700'],
+                  ['Fixed', vexCounts.fixed ?? 0, 'text-blue-700'],
+                  ['Investigating', vexCounts.under_investigation ?? 0, 'text-amber-700'],
+                  ['Unknown', vexCounts.unknown ?? 0, 'text-gray-700'],
+                ] as const).map(([label, value, color]) => (
+                  <div key={label} className="rounded-lg border border-hcl-border p-3">
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-hcl-muted">{label}</div>
+                    <div className={`mt-1 font-metric text-xl font-semibold ${color}`}>{vexLoading ? '…' : value}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="rounded-lg border border-hcl-border p-3">
+                <label className="block text-xs font-semibold uppercase tracking-wide text-hcl-muted">
+                  Import VEX JSON
+                </label>
+                <textarea
+                  value={vexDocumentText}
+                  onChange={(event) => setVexDocumentText(event.target.value)}
+                  className="mt-2 min-h-28 w-full rounded-lg border border-hcl-border p-2 font-mono text-xs text-hcl-navy focus:outline-none focus:ring-2 focus:ring-hcl-blue"
+                  placeholder='{"bomFormat":"CycloneDX","vulnerabilities":[...]}'
+                />
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <p className="text-xs text-hcl-muted">{vexMessage}</p>
+                  <Button
+                    size="sm"
+                    onClick={handleUploadVexDocument}
+                    loading={isUploadingVex}
+                    disabled={!vexDocumentText.trim() || isUploadingVex}
+                  >
+                    Import VEX
+                  </Button>
+                </div>
+              </div>
+
+              <div className="overflow-hidden rounded-lg border border-hcl-border">
+                <Table striped ariaLabel="VEX statements">
+                  <TableHead>
+                    <tr>
+                      <Th>Vulnerability</Th>
+                      <Th>Component</Th>
+                      <Th>Status</Th>
+                      <Th>Source</Th>
+                      <Th>Evidence</Th>
+                    </tr>
+                  </TableHead>
+                  <TableBody>
+                    {vexLoading ? (
+                      <SkeletonRow cols={5} />
+                    ) : vexStatements.length === 0 ? (
+                      <EmptyRow cols={5} message="No VEX statements imported for this SBOM." />
+                    ) : (
+                      vexStatements.slice(0, 10).map((statement) => (
+                        <tr key={statement.id} className="hover:bg-hcl-light/40">
+                          <Td className="font-mono text-xs text-hcl-navy">{statement.vulnerability_id}</Td>
+                          <Td className="text-sm text-hcl-navy">
+                            {statement.component_name ?? '—'}
+                            {statement.component_version ? <span className="text-hcl-muted"> @ {statement.component_version}</span> : null}
+                          </Td>
+                          <Td>
+                            <span className="inline-flex rounded-full border border-hcl-border px-2 py-0.5 text-xs font-semibold text-hcl-navy">
+                              {String(statement.status).replace('_', ' ')}
+                            </span>
+                          </Td>
+                          <Td className="text-xs text-hcl-muted">{statement.source_name ?? 'VEX'}</Td>
+                          <Td className="max-w-xs truncate text-xs text-hcl-muted">
+                            {statement.justification || statement.impact_statement || statement.action_statement || '—'}
+                          </Td>
+                        </tr>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       )}
 

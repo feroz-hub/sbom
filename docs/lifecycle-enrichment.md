@@ -7,7 +7,13 @@
 - **EOF**: End of Fix or End of Full Support, when the source exposes that distinction.
 - **Deprecated**: A package registry marks the package or version as deprecated, yanked, or deprecated by policy.
 - **Unsupported**: A reliable source or manual override says the component is no longer supported.
+- **Possibly Unmaintained**: Repository or metadata signals suggest maintenance risk, but no reliable source proves EOL/EOS/EOF or unsupported status.
 - **Unknown**: No reliable lifecycle data was found.
+
+Lifecycle status is different from VEX status. Lifecycle answers whether a
+component version is still supported. VEX answers whether this product/context
+is actually affected by a vulnerability. See
+[vex-integration.md](vex-integration.md).
 
 ## Data Sources
 
@@ -17,9 +23,10 @@ Provider priority:
 
 1. **Manual Override**: highest priority. Used when an admin/user has supplied a status, dates, reason, and optional evidence URL.
 2. **endoflife.date**: authoritative lifecycle dates for runtimes, platforms, frameworks, databases, and operating systems such as Node.js, Python, Java, .NET, Angular, Django, Spring Framework, Ubuntu, Debian, PostgreSQL, MySQL, and Kubernetes.
-3. **Package registries**: package ecosystem metadata. Current production support includes npm deprecation, PyPI latest/yanked release signals, NuGet deprecation metadata, and Maven latest-version metadata.
-4. **Repository health**: conservative repository support signals when a registry or external reference exposes a repository URL. GitHub archived/disabled repositories can mark a component `Unsupported`; stale activity is stored as maintenance evidence only.
-5. **OSV**: vulnerability and fixed-version recommendations only. OSV does not mark lifecycle status as EOL/EOS.
+3. **deps.dev**: package/version metadata for supported open-source ecosystems. Explicit deprecation is lifecycle evidence; advisory/latest-version metadata is recommendation evidence only.
+4. **Package registries**: package ecosystem metadata. Current production support includes npm deprecation, PyPI latest/yanked release signals, NuGet deprecation metadata, and Maven latest-version metadata.
+5. **Repository health**: conservative repository support signals when a registry or external reference exposes a repository URL. GitHub archived/disabled repositories can mark a component `Unsupported`; stale activity is stored as maintenance evidence only.
+6. **OSV**: vulnerability and fixed-version recommendations only. OSV does not mark lifecycle status as EOL/EOS.
 
 ## Decision Rules
 
@@ -30,6 +37,7 @@ Provider priority:
 - Archived or disabled source repositories mark `Unsupported` with medium confidence.
 - Old package age alone does not mark a component EOL or unsupported.
 - Stale repository activity alone sets `maintenance_status = Possibly Unmaintained`; it does not mark EOL.
+- `Possibly Unmaintained` may be surfaced as a lifecycle governance status/count, but it is not equivalent to `Unsupported`.
 - OSV findings can set `recommended_version` and `recommendation`, but lifecycle status remains `Unknown` unless another provider supplies status evidence.
 - Every stored lifecycle result includes source, confidence, checked time, and evidence JSON when available.
 
@@ -83,8 +91,11 @@ Allowed statuses:
 - `Unsupported`
 - `EOL Soon`
 - `Unknown`
+- `Possibly Unmaintained`
 
-Every override writes an `audit_log` row with old/new lifecycle state and reason.
+Every override requires a `reason`, writes an `audit_log` row for backward
+compatibility, and writes a dedicated
+`component_lifecycle_override_audit` row with old/new lifecycle state.
 
 ## APIs
 
@@ -94,6 +105,7 @@ Every override writes an `audit_log` row with old/new lifecycle state and reason
 - `PATCH /api/components/{component_id}/lifecycle-override`: applies an audited manual override.
 - `GET /dashboard/lifecycle`: returns lifecycle dashboard counts, top risky components, stale counts, and recommended upgrades.
 - `GET /api/sboms/{sbom_id}/lifecycle/report`: returns a detailed JSON lifecycle report.
+- `GET /dashboard/vex`: returns VEX exploitability counts separately from lifecycle risk.
 
 ## Export
 

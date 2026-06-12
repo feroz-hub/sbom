@@ -1,5 +1,6 @@
 """Provider-based component lifecycle enrichment."""
 
+from .deps_dev_provider import DepsDevProvider
 from .endoflife_date_provider import EndOfLifeDateProvider
 from .lifecycle_enrichment_service import (
     LifecycleEnrichmentService,
@@ -16,12 +17,14 @@ from .types import (
     ALLOWED_LIFECYCLE_STATUSES,
     LifecycleResult,
     NormalizedComponent,
+    VexResult,
     canonical_status,
 )
 
 __all__ = [
     "ALLOWED_LIFECYCLE_STATUSES",
     "EndOfLifeDateProvider",
+    "DepsDevProvider",
     "LifecycleEnrichmentService",
     "LifecycleResult",
     "NormalizedComponent",
@@ -34,4 +37,5 @@ __all__ = [
     "refresh_component_lifecycle",
     "summarize_components",
     "sync_lifecycle_for_sbom",
+    "VexResult",
 ]

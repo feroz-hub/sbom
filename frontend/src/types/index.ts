@@ -232,6 +232,7 @@ export type LifecycleStatus =
   | 'Deprecated'
   | 'Unsupported'
   | 'EOL Soon'
+  | 'Possibly Unmaintained'
   | 'Unknown';
 
 export interface LifecycleSummaryComponent {
@@ -263,6 +264,7 @@ export interface DashboardLifecycle {
   unsupported_count: number;
   unknown_count: number;
   eol_soon_count: number;
+  possibly_unmaintained_count?: number;
   stale_lifecycle_count: number;
   stale_count?: number;
   top_risky_components: LifecycleSummaryComponent[];
@@ -270,6 +272,54 @@ export interface DashboardLifecycle {
   eol_components: number;
   eos_upcoming: number;
   unsupported: number;
+}
+
+export type VexStatus = 'affected' | 'not_affected' | 'fixed' | 'under_investigation' | 'unknown';
+
+export interface VexStatement {
+  id: number;
+  vex_document_id?: number | null;
+  sbom_id: number;
+  component_id?: number | null;
+  component_name?: string | null;
+  component_version?: string | null;
+  vulnerability_id: string;
+  cve_id?: string | null;
+  status: VexStatus | string;
+  justification?: string | null;
+  impact_statement?: string | null;
+  action_statement?: string | null;
+  fixed_version?: string | null;
+  mitigation?: string | null;
+  source_name?: string | null;
+  source_url?: string | null;
+  confidence?: string | null;
+  evidence_json?: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface VexListResponse {
+  sbom_id: number;
+  statements: VexStatement[];
+}
+
+export interface VexImportResponse {
+  document_id: number;
+  sbom_id: number;
+  statements_imported: number;
+  format?: string | null;
+  validation_status: string;
+}
+
+export interface DashboardVex {
+  affected_count: number;
+  not_affected_count: number;
+  fixed_count: number;
+  under_investigation_count: number;
+  unknown_count: number;
+  vulnerabilities_reduced_by_vex: number;
+  vulnerabilities_requiring_action: number;
+  top_affected_components: VexStatement[];
 }
 
 export interface LifecycleReport {

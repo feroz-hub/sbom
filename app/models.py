@@ -100,6 +100,7 @@ class SBOMSource(Base, SoftDeleteMixin):
     sbom_type_rel = relationship("SBOMType", back_populates="sboms")
     analysis_reports = relationship("SBOMAnalysisReport", back_populates="sbom")
     components = relationship("SBOMComponent", back_populates="sbom")
+    vex_documents = relationship("VexDocument", back_populates="sbom")
     analysis_runs = relationship("AnalysisRun", back_populates="sbom")
     schedules = relationship(
         "AnalysisSchedule",
@@ -243,6 +244,7 @@ class SBOMComponent(Base, SoftDeleteMixin):
 
     sbom = relationship("SBOMSource", back_populates="components")
     findings = relationship("AnalysisFinding", back_populates="component")
+    vex_statements = relationship("VexStatement", back_populates="component")
 
     __table_args__ = (
         UniqueConstraint(
@@ -299,6 +301,93 @@ class ComponentLifecycleCache(Base):
         ),
         Index("ix_component_lifecycle_cache_lookup", "ecosystem", "normalized_name", "normalized_version"),
     )
+
+
+class VexDocument(Base):
+    """Imported VEX document scoped to an SBOM/product context."""
+
+    __tablename__ = "vex_documents"
+
+    id = Column(Integer, primary_key=True, index=True)
+    sbom_id = Column(Integer, ForeignKey("sbom_source.id", ondelete="CASCADE"), nullable=False, index=True)
+    source_type = Column(String, nullable=False, default="uploaded", index=True)
+    format = Column(String, nullable=True, index=True)
+    author = Column(String, nullable=True)
+    uploaded_by = Column(String, nullable=True, index=True)
+    uploaded_at = Column(String, nullable=False, index=True)
+    raw_document_json = Column(JSON, nullable=True)
+    validation_status = Column(String, nullable=False, default="accepted", index=True)
+
+    sbom = relationship("SBOMSource", back_populates="vex_documents")
+    statements = relationship(
+        "VexStatement",
+        back_populates="vex_document",
+        cascade="all, delete-orphan",
+        order_by="VexStatement.id",
+    )
+
+
+class VexStatement(Base):
+    """Component/vulnerability exploitability statement."""
+
+    __tablename__ = "vex_statements"
+
+    id = Column(Integer, primary_key=True, index=True)
+    vex_document_id = Column(Integer, ForeignKey("vex_documents.id", ondelete="CASCADE"), nullable=True, index=True)
+    sbom_id = Column(Integer, ForeignKey("sbom_source.id", ondelete="CASCADE"), nullable=False, index=True)
+    component_id = Column(Integer, ForeignKey("sbom_component.id", ondelete="SET NULL"), nullable=True, index=True)
+    vulnerability_id = Column(String, nullable=False, index=True)
+    cve_id = Column(String, nullable=True, index=True)
+    status = Column(String, nullable=False, index=True)
+    justification = Column(Text, nullable=True)
+    impact_statement = Column(Text, nullable=True)
+    action_statement = Column(Text, nullable=True)
+    fixed_version = Column(String, nullable=True)
+    mitigation = Column(Text, nullable=True)
+    source_name = Column(String, nullable=True)
+    source_url = Column(String, nullable=True)
+    confidence = Column(String, nullable=True)
+    evidence_json = Column(JSON, nullable=True)
+    created_at = Column(String, nullable=False, index=True)
+
+    vex_document = relationship("VexDocument", back_populates="statements")
+    component = relationship("SBOMComponent", back_populates="vex_statements")
+
+    __table_args__ = (
+        Index("ix_vex_statement_sbom_status", "sbom_id", "status"),
+        Index("ix_vex_statement_component_vuln", "component_id", "vulnerability_id"),
+    )
+
+
+class ComponentLifecycleOverrideAudit(Base):
+    """Dedicated audit trail for lifecycle override changes."""
+
+    __tablename__ = "component_lifecycle_override_audit"
+
+    id = Column(Integer, primary_key=True, index=True)
+    component_id = Column(Integer, ForeignKey("sbom_component.id", ondelete="CASCADE"), nullable=False, index=True)
+    old_value_json = Column(JSON, nullable=True)
+    new_value_json = Column(JSON, nullable=True)
+    reason = Column(Text, nullable=False)
+    evidence_url = Column(String, nullable=True)
+    changed_by = Column(String, nullable=True, index=True)
+    changed_at = Column(String, nullable=False, index=True)
+
+
+class VexOverrideAudit(Base):
+    """Dedicated audit trail for manual VEX overrides."""
+
+    __tablename__ = "vex_override_audit"
+
+    id = Column(Integer, primary_key=True, index=True)
+    component_id = Column(Integer, ForeignKey("sbom_component.id", ondelete="CASCADE"), nullable=False, index=True)
+    vulnerability_id = Column(String, nullable=False, index=True)
+    old_value_json = Column(JSON, nullable=True)
+    new_value_json = Column(JSON, nullable=True)
+    reason = Column(Text, nullable=False)
+    evidence_url = Column(String, nullable=True)
+    changed_by = Column(String, nullable=True, index=True)
+    changed_at = Column(String, nullable=False, index=True)
 
 
 class AnalysisRun(Base, SoftDeleteMixin):
