@@ -1,15 +1,11 @@
-"""Phase 2 regression — failed uploads persist their validation report.
+"""Validation upload trust boundary and repair session regression tests.
 
-Until migration 012 the legacy ``POST /api/sboms`` route bypassed the
-validator entirely, and the multipart ``POST /api/sboms/upload`` route
-rejected before any DB write — refreshing the page lost everything. This
-suite locks in the new contract:
+The validation repair workspace changed the failed-upload contract:
 
 * A valid SBOM still creates a row with ``status='validated'`` and a 201.
 * An SBOM with NTIA warnings only is ``validated`` with ``warning_count > 0``.
-* An SBOM with semantic errors creates a row with ``status='failed'``
-  AND returns a 4xx whose ``detail.entries`` mirrors the validator output.
-* The persisted row's ``validation_errors`` JSON survives a fresh read.
+* An SBOM with hard validation errors does not create a trusted SBOM row.
+* Safe malformed SBOMs create a validation repair session with the full report.
 """
 
 from __future__ import annotations
@@ -87,7 +83,7 @@ def test_valid_sbom_persists_validated_status(client, unique_name):
     assert body["validated_at"] is not None
 
 
-def test_invalid_purl_persists_row_and_returns_422(client, unique_name):
+def test_invalid_purl_creates_repair_session_not_trusted_sbom(client, unique_name):
     resp = client.post(
         "/api/sboms",
         json={"sbom_name": unique_name, "sbom_data": json.dumps(_BAD_PURL_CYCLONEDX)},
@@ -98,12 +94,15 @@ def test_invalid_purl_persists_row_and_returns_422(client, unique_name):
 
     detail = resp.json()["detail"]
     assert detail["code"] == "sbom_validation_failed"
-    assert detail["status"] == "failed"
+    assert detail["status"] == "validation_failed"
     assert detail["failed_stage"] == "semantic"
     assert detail["error_count"] >= 1
+    assert detail["can_edit"] is True
+    assert detail["can_ai_fix"] is True
     assert isinstance(detail["entries"], list) and detail["entries"], detail
-    sbom_id = detail["sbom_id"]
-    assert isinstance(sbom_id, int) and sbom_id > 0
+    assert detail["sbom_id"] is None
+    session_id = detail["session_id"]
+    assert isinstance(session_id, str) and session_id
 
     # The first entry must mention the malformed PURL with its full
     # structured shape — no information loss between validator and API.
@@ -111,29 +110,35 @@ def test_invalid_purl_persists_row_and_returns_422(client, unique_name):
     assert {"code", "severity", "stage", "path", "message", "remediation"}.issubset(first.keys())
     assert first["severity"] == "error"
 
-    # The persisted row is reachable and carries the full report.
-    fetched = client.get(f"/api/sboms/{sbom_id}").json()
-    assert fetched["status"] == "failed"
-    assert fetched["failed_stage"] == "semantic"
-    assert fetched["error_count"] == detail["error_count"]
-    assert fetched["validation_errors"] is not None
-    assert len(fetched["validation_errors"]) == len(detail["entries"])
+    session = client.get(f"/api/sbom-validation-sessions/{session_id}").json()
+    assert session["validation_status"] == "failed"
+    assert session["current_content"] == json.dumps(_BAD_PURL_CYCLONEDX)
+    assert session["latest_error_report"]["error_count"] == detail["error_count"]
+
+    from app.db import SessionLocal
+    from app.models import SBOMSource
+
+    db = SessionLocal()
+    try:
+        assert db.query(SBOMSource).filter(SBOMSource.sbom_name == unique_name).first() is None
+    finally:
+        db.close()
 
 
-def test_failed_row_survives_get_after_failure(client, unique_name):
-    """Page-refresh equivalent: after the rejected upload, GET on the row
-    must still return the validation report."""
+def test_repair_session_survives_get_after_failure(client, unique_name):
+    """Page-refresh equivalent: after rejection, the repair session remains
+    reachable but no trusted SBOM row exists."""
     resp = client.post(
         "/api/sboms",
         json={"sbom_name": unique_name, "sbom_data": json.dumps(_BAD_PURL_CYCLONEDX)},
     )
     assert resp.status_code == 422, resp.text
-    sbom_id = resp.json()["detail"]["sbom_id"]
+    session_id = resp.json()["detail"]["session_id"]
 
     # Two reads — assert idempotent shape (no in-flight state)
-    a = client.get(f"/api/sboms/{sbom_id}").json()
-    b = client.get(f"/api/sboms/{sbom_id}").json()
+    a = client.get(f"/api/sbom-validation-sessions/{session_id}").json()
+    b = client.get(f"/api/sbom-validation-sessions/{session_id}").json()
     assert a == b
-    assert a["status"] == "failed"
-    assert a["validation_errors"]
-    assert a["validation_errors"][0]["severity"] == "error"
+    assert a["validation_status"] == "failed"
+    assert a["latest_error_report"]["entries"]
+    assert a["latest_error_report"]["entries"][0]["severity"] == "error"

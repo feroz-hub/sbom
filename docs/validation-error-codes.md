@@ -180,6 +180,21 @@ Any single response carries **at most 100 entries**. The 101st sets `"truncated"
 
 This keeps a pathological "every component is malformed" response from emitting a 50 MB error body.
 
+## Repair-workspace AI fixability
+
+The validation repair workspace adds editor metadata to each error entry. The
+original error codes are unchanged.
+
+AI suggestions are allowed only for repairable content problems such as format,
+schema, semantic, integrity, and NTIA field issues. They remain review-only and
+must pass revalidation after application.
+
+AI suggestions are disabled for ingress/security failures and signature trust
+failures. The server does not create editable sessions for payloads blocked by
+unsafe size, encoding, decompression, DTD/external entity, unsafe YAML,
+prototype-pollution, or embedded-blob checks. Signature errors can be explained
+but must not be fake-fixed by generating new trust/signature material.
+
 ## Auto-generated machine table
 
 <!-- AUTO-GENERATED:BEGIN code-table -->

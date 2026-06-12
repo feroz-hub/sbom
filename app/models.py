@@ -104,6 +104,69 @@ class SBOMSource(Base, SoftDeleteMixin):
     )
 
 
+class SBOMValidationSession(Base):
+    """Temporary repair workspace for SBOMs that failed validation.
+
+    Rows in this table are not trusted SBOM records. They hold staged content
+    only until the same validation pipeline passes and import creates an
+    ``SBOMSource`` row.
+    """
+
+    __tablename__ = "sbom_validation_sessions"
+
+    id = Column(String(36), primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=True, index=True)
+    user_id = Column(String(128), nullable=True, index=True)
+    original_filename = Column(String(255), nullable=True)
+    sbom_name = Column(String(255), nullable=True)
+    sbom_type = Column(Integer, ForeignKey("sbom_type.id"), nullable=True)
+    detected_format = Column(String(64), nullable=True)
+    detected_version = Column(String(64), nullable=True)
+    sanitized_content = Column(Text, nullable=True)
+    current_content = Column(Text, nullable=True)
+    validation_status = Column(String(32), nullable=False, default="failed", server_default="failed", index=True)
+    latest_error_report_json = Column(JSON, nullable=True)
+    can_edit = Column(Boolean, nullable=False, default=True, server_default="1")
+    can_ai_fix = Column(Boolean, nullable=False, default=True, server_default="1")
+    security_blocked_reason = Column(Text, nullable=True)
+    content_sha256 = Column(String(64), nullable=True, index=True)
+    created_at = Column(String, nullable=False, index=True)
+    updated_at = Column(String, nullable=False)
+    expires_at = Column(String, nullable=False, index=True)
+    imported_sbom_id = Column(Integer, ForeignKey("sbom_source.id"), nullable=True, index=True)
+
+    events = relationship(
+        "SBOMValidationSessionEvent",
+        back_populates="session",
+        cascade="all, delete-orphan",
+        order_by="SBOMValidationSessionEvent.id",
+    )
+    imported_sbom = relationship("SBOMSource", foreign_keys=[imported_sbom_id])
+
+
+class SBOMValidationSessionEvent(Base):
+    """Append-only audit history for validation repair sessions."""
+
+    __tablename__ = "sbom_validation_session_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(
+        String(36),
+        ForeignKey("sbom_validation_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    event_type = Column(String(64), nullable=False, index=True)
+    actor_user_id = Column(String(128), nullable=True, index=True)
+    timestamp = Column(String, nullable=False, index=True)
+    summary = Column(Text, nullable=True)
+    before_hash = Column(String(64), nullable=True)
+    after_hash = Column(String(64), nullable=True)
+    metadata_json = Column(JSON, nullable=True)
+
+    session = relationship("SBOMValidationSession", back_populates="events")
+
+
 class SBOMAnalysisReport(Base, SoftDeleteMixin):
     __tablename__ = "sbom_analysis_report"
 

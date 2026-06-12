@@ -64,6 +64,10 @@ from ..services.analysis_service import compute_report_status, persist_analysis_
 from ..services.completeness_service import compute_and_save_completeness
 from ..services.lifecycle_service import sync_lifecycle_for_sbom
 from ..services.soft_delete import SoftDeleteService
+from ..services.validation_repair_service import (
+    ValidationRepairService,
+    build_validation_failed_detail,
+)
 from ..sources import (
     EVENT_COMPLETE,
     EVENT_DONE,
@@ -354,16 +358,31 @@ def create_sbom(payload: SBOMSourceCreate, db: Session = Depends(get_db)):
                 },
             )
 
-    # --- Run the 8-stage validator BEFORE the insert. The row is written
-    # whether the report is clean or rejected — failed uploads must have a
-    # persistent home so the user can navigate back to the report. The
-    # validator is CPU-bound and fast (≤ a few hundred ms for SBOMs that
-    # fit MAX_UPLOAD_BYTES); running synchronously here keeps the create
-    # endpoint atomic. ---
+    # --- Run the 8-stage validator BEFORE the insert. Failed uploads are
+    # staged in sbom_validation_sessions when safe; they are never inserted
+    # into sbom_source as trusted records. ---
     raw_text = _coerce_sbom_data(payload.sbom_data) or ""
     report = run_validation(raw_text.encode("utf-8"))
-    sbom_status = _classify_status(report)
-    serialized_entries = [e.model_dump() for e in report.entries] if report.entries else None
+    if report.has_errors():
+        session, blocked_reason = ValidationRepairService(db).create_failed_upload_session(
+            raw_text=raw_text,
+            report=report,
+            sbom_name=payload.sbom_name,
+            original_filename=payload.sbom_name,
+            project_id=payload.projectid,
+            sbom_type=payload.sbom_type,
+            user_id=payload.created_by,
+        )
+        raise HTTPException(
+            status_code=report.http_status,
+            detail=build_validation_failed_detail(
+                report=report,
+                sbom_name=payload.sbom_name,
+                session=session,
+                blocked_reason=blocked_reason,
+            ),
+        )
+    serialized_entries = [e.model_dump(mode="json") for e in report.entries] if report.entries else None
 
     try:
         data = payload.model_dump()
@@ -371,8 +390,8 @@ def create_sbom(payload: SBOMSourceCreate, db: Session = Depends(get_db)):
         obj = SBOMSource(
             **data,
             created_on=now_iso(),
-            status=sbom_status,
-            failed_stage=report.first_error_stage,
+            status="validated",
+            failed_stage=None,
             validation_errors=serialized_entries,
             error_count=report.error_count,
             warning_count=report.warning_count,
@@ -386,16 +405,10 @@ def create_sbom(payload: SBOMSourceCreate, db: Session = Depends(get_db)):
             "SBOM created: id=%d name='%s' status=%s errors=%d warnings=%d",
             obj.id,
             obj.sbom_name,
-            sbom_status,
+            obj.status,
             report.error_count,
             report.warning_count,
         )
-
-        # On hard failure, surface the report alongside the persisted
-        # row id so the UI can navigate to it. We commit the row first
-        # so the id is stable even after the HTTPException unwinds.
-        if report.has_errors():
-            raise _validation_failure_response(int(obj.id), report, str(obj.sbom_name))
 
         # Clean SBOM (or warnings only) — sync components for the UI.
         try:

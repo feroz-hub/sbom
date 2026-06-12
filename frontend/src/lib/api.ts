@@ -33,6 +33,10 @@ import type {
   DashboardLifecycle,
   LifecycleOverridePayload,
   LifecycleReport,
+  AiRepairSuggestion,
+  ValidationRepairEvent,
+  ValidationRepairPatch,
+  ValidationRepairSession,
 } from '@/types';
 
 // Direct calls to FastAPI — no Next.js proxy (proxy caused ECONNRESET on
@@ -790,6 +794,68 @@ export function revalidateSbom(sbomId: number, signal?: AbortSignal) {
     method: 'POST',
     signal,
   });
+}
+
+export function getValidationRepairSession(sessionId: string, signal?: AbortSignal) {
+  return request<ValidationRepairSession>(`/api/sbom-validation-sessions/${sessionId}`, { signal });
+}
+
+export function updateValidationRepairSession(
+  sessionId: string,
+  currentContent: string,
+  signal?: AbortSignal,
+) {
+  return request<ValidationRepairSession>(`/api/sbom-validation-sessions/${sessionId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ current_content: currentContent }),
+    signal,
+  });
+}
+
+export function validateRepairSession(sessionId: string, signal?: AbortSignal) {
+  return request<ValidationRepairSession>(`/api/sbom-validation-sessions/${sessionId}/validate`, {
+    method: 'POST',
+    signal,
+  });
+}
+
+export function importRepairSession(sessionId: string, signal?: AbortSignal) {
+  return request<SBOMSource>(`/api/sbom-validation-sessions/${sessionId}/import`, {
+    method: 'POST',
+    signal,
+  });
+}
+
+export function suggestValidationRepairFixes(
+  sessionId: string,
+  userInstruction?: string,
+  signal?: AbortSignal,
+) {
+  return request<AiRepairSuggestion>(
+    `/api/sbom-validation-sessions/${sessionId}/ai/suggest-fixes`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ user_instruction: userInstruction ?? '' }),
+      signal,
+    },
+    120_000,
+  );
+}
+
+export function applyValidationRepairPatch(
+  sessionId: string,
+  patches: ValidationRepairPatch[],
+  signal?: AbortSignal,
+) {
+  return request<ValidationRepairSession>(`/api/sbom-validation-sessions/${sessionId}/apply-patch`, {
+    method: 'POST',
+    body: JSON.stringify({ patches }),
+    signal,
+  });
+}
+
+export function getValidationRepairHistory(sessionId: string, signal?: AbortSignal) {
+  return request<ValidationRepairEvent[]>(`/api/sbom-validation-sessions/${sessionId}/history`, { signal });
 }
 
 // ─── Dashboard trend ─────────────────────────────────────────────────────────

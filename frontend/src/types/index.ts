@@ -10,6 +10,7 @@ export interface Project {
 }
 
 export type SbomValidationStatus = 'validated' | 'failed' | 'quarantined' | 'pending';
+export type ValidationRepairStatus = 'failed' | 'edited' | 'passed' | 'security_blocked' | 'imported';
 
 export interface SBOMSource {
   id: number;
@@ -59,6 +60,7 @@ export interface ValidationErrorEntry {
   message: string;
   remediation: string;
   spec_reference: string | null;
+  can_ai_fix?: boolean;
 }
 
 export interface ValidationReport {
@@ -81,14 +83,79 @@ export interface ValidationReport {
 /** Body of a 4xx response from POST /api/sboms when validation fails. */
 export interface SbomValidationFailureDetail {
   code: 'sbom_validation_failed';
+  status?: 'validation_failed' | SbomValidationStatus;
   message: string;
-  sbom_id: number;
-  status: SbomValidationStatus;
+  sbom_id: number | null;
+  session_id?: string | null;
+  can_edit?: boolean;
+  can_ai_fix?: boolean;
+  reason?: string | null;
   failed_stage: string | null;
   error_count: number;
   warning_count: number;
   entries: ValidationErrorEntry[];
   truncated: boolean;
+  error_report?: ValidationRepairReport;
+}
+
+export interface ValidationRepairReport {
+  entries: ValidationErrorEntry[];
+  truncated: boolean;
+  failed_stage: string | null;
+  error_count: number;
+  warning_count: number;
+  info_count: number;
+  http_status?: number;
+  status: 'failed' | 'passed';
+}
+
+export interface ValidationRepairSession {
+  id: string;
+  project_id: number | null;
+  user_id: string | null;
+  original_filename: string | null;
+  sbom_name: string | null;
+  sbom_type: number | null;
+  detected_format: string | null;
+  detected_version: string | null;
+  current_content: string;
+  validation_status: ValidationRepairStatus;
+  latest_error_report: ValidationRepairReport;
+  can_edit: boolean;
+  can_ai_fix: boolean;
+  security_blocked_reason: string | null;
+  created_at: string;
+  updated_at: string;
+  expires_at: string;
+  imported_sbom_id: number | null;
+}
+
+export interface ValidationRepairPatch {
+  target: string;
+  operation: 'add' | 'replace' | 'remove';
+  before?: unknown;
+  after?: unknown;
+  reason: string;
+  validation_error_codes: string[];
+}
+
+export interface AiRepairSuggestion {
+  summary: string;
+  risk: 'low' | 'medium' | 'high';
+  patches: ValidationRepairPatch[];
+  requires_user_review: boolean;
+}
+
+export interface ValidationRepairEvent {
+  id: number;
+  session_id: string;
+  event_type: 'created' | 'manual_edit' | 'ai_suggestion_generated' | 'patch_applied' | 'validation_run' | 'imported' | string;
+  actor_user_id: string | null;
+  timestamp: string;
+  summary: string | null;
+  before_hash: string | null;
+  after_hash: string | null;
+  metadata: Record<string, unknown>;
 }
 
 export interface SBOMComponent {

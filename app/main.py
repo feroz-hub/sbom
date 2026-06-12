@@ -67,6 +67,7 @@ from .routers import (
     remediation,
     runs,
     sbom_upload,
+    sbom_validation_sessions,
     sbom_versions,
     sboms_crud,
     schedules,
@@ -174,6 +175,75 @@ def _ensure_remediation_audit_table() -> None:
         )
 
 
+def _ensure_validation_repair_tables() -> None:
+    """Create validation repair tables for legacy SQLite databases."""
+    if engine.dialect.name != "sqlite":
+        return
+    with engine.begin() as conn:
+        tables = {row[0] for row in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))}
+        if "sbom_validation_sessions" not in tables:
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE sbom_validation_sessions (
+                        id VARCHAR(36) PRIMARY KEY,
+                        project_id INTEGER REFERENCES projects(id),
+                        user_id VARCHAR(128),
+                        original_filename VARCHAR(255),
+                        sbom_name VARCHAR(255),
+                        sbom_type INTEGER REFERENCES sbom_type(id),
+                        detected_format VARCHAR(64),
+                        detected_version VARCHAR(64),
+                        sanitized_content TEXT,
+                        current_content TEXT,
+                        validation_status VARCHAR(32) NOT NULL DEFAULT 'failed',
+                        latest_error_report_json JSON,
+                        can_edit BOOLEAN NOT NULL DEFAULT 1,
+                        can_ai_fix BOOLEAN NOT NULL DEFAULT 1,
+                        security_blocked_reason TEXT,
+                        content_sha256 VARCHAR(64),
+                        created_at VARCHAR NOT NULL,
+                        updated_at VARCHAR NOT NULL,
+                        expires_at VARCHAR NOT NULL,
+                        imported_sbom_id INTEGER REFERENCES sbom_source(id)
+                    )
+                    """
+                )
+            )
+        if "sbom_validation_session_events" not in tables:
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE sbom_validation_session_events (
+                        id INTEGER PRIMARY KEY,
+                        session_id VARCHAR(36) NOT NULL REFERENCES sbom_validation_sessions(id) ON DELETE CASCADE,
+                        event_type VARCHAR(64) NOT NULL,
+                        actor_user_id VARCHAR(128),
+                        timestamp VARCHAR NOT NULL,
+                        summary TEXT,
+                        before_hash VARCHAR(64),
+                        after_hash VARCHAR(64),
+                        metadata_json JSON
+                    )
+                    """
+                )
+            )
+        for ddl in (
+            "CREATE INDEX IF NOT EXISTS ix_sbom_validation_sessions_project_id ON sbom_validation_sessions (project_id)",
+            "CREATE INDEX IF NOT EXISTS ix_sbom_validation_sessions_user_id ON sbom_validation_sessions (user_id)",
+            "CREATE INDEX IF NOT EXISTS ix_sbom_validation_sessions_validation_status ON sbom_validation_sessions (validation_status)",
+            "CREATE INDEX IF NOT EXISTS ix_sbom_validation_sessions_content_sha256 ON sbom_validation_sessions (content_sha256)",
+            "CREATE INDEX IF NOT EXISTS ix_sbom_validation_sessions_created_at ON sbom_validation_sessions (created_at)",
+            "CREATE INDEX IF NOT EXISTS ix_sbom_validation_sessions_expires_at ON sbom_validation_sessions (expires_at)",
+            "CREATE INDEX IF NOT EXISTS ix_sbom_validation_sessions_imported_sbom_id ON sbom_validation_sessions (imported_sbom_id)",
+            "CREATE INDEX IF NOT EXISTS ix_sbom_validation_session_events_session_id ON sbom_validation_session_events (session_id)",
+            "CREATE INDEX IF NOT EXISTS ix_sbom_validation_session_events_event_type ON sbom_validation_session_events (event_type)",
+            "CREATE INDEX IF NOT EXISTS ix_sbom_validation_session_events_actor_user_id ON sbom_validation_session_events (actor_user_id)",
+            "CREATE INDEX IF NOT EXISTS ix_sbom_validation_session_events_timestamp ON sbom_validation_session_events (timestamp)",
+        ):
+            conn.execute(text(ddl))
+
+
 def _ensure_seed_data() -> None:
     """Create tables, run lightweight migrations, seed reference data."""
     Base.metadata.create_all(bind=engine)
@@ -257,6 +327,7 @@ def _ensure_seed_data() -> None:
     _ensure_column("sbom_component", "lifecycle_is_stale", "BOOLEAN", "0")
     _ensure_column("sbom_component", "lifecycle_manual_override", "BOOLEAN", "0")
     _ensure_remediation_audit_table()
+    _ensure_validation_repair_tables()
 
 
     db = SessionLocal()
@@ -463,6 +534,7 @@ app.include_router(sboms_crud.router, dependencies=_protected)
 # New multipart upload route running the eight-stage validation pipeline.
 # Path /api/sboms/upload — see ADR-0007.
 app.include_router(sbom_upload.router, dependencies=_protected)
+app.include_router(sbom_validation_sessions.router, dependencies=_protected)
 app.include_router(runs.router, dependencies=_protected)
 app.include_router(projects.router, dependencies=_protected)
 app.include_router(analyze_endpoints.router, dependencies=_protected)

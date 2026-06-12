@@ -66,12 +66,32 @@ def _unique(prefix: str) -> str:
 
 @pytest.fixture
 def failed_sbom_id(client) -> int:
-    resp = client.post(
-        "/api/sboms",
-        json={"sbom_name": _unique("phase3-fail"), "sbom_data": json.dumps(_BAD_PURL_CYCLONEDX)},
-    )
+    """Seed a legacy trusted row and revalidate it into failed status.
+
+    First-time failed uploads now create repair sessions instead of SBOM rows,
+    but the validation-report endpoint still has to support already-existing
+    rows that fail revalidation.
+    """
+    from app.db import SessionLocal
+    from sqlalchemy import text
+
+    name = _unique("phase3-fail")
+    db = SessionLocal()
+    try:
+        db.execute(
+            text("INSERT INTO sbom_source (sbom_name, sbom_data, status) VALUES (:name, :data, 'pending')"),
+            {"name": name, "data": json.dumps(_BAD_PURL_CYCLONEDX)},
+        )
+        db.commit()
+        row = db.execute(text("SELECT id FROM sbom_source WHERE sbom_name = :name"), {"name": name}).first()
+        assert row is not None
+        sbom_id = int(row[0])
+    finally:
+        db.close()
+
+    resp = client.post(f"/api/sboms/{sbom_id}/revalidate")
     assert resp.status_code == 422, resp.text
-    return resp.json()["detail"]["sbom_id"]
+    return sbom_id
 
 
 @pytest.fixture

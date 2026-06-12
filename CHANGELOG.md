@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Validation Repair Workspace for failed SBOM uploads.**
+  Failed validation no longer creates trusted `sbom_source` rows. Safe
+  failures create quarantined `sbom_validation_sessions` with append-only
+  history, manual editing, revalidation, review-only AI patch suggestions,
+  safe patch application, and import gated on a clean run through the same
+  validation pipeline. Unsafe ingress/security payloads remain blocked with
+  no editable session. New APIs:
+  `GET/PATCH /api/sbom-validation-sessions/{id}`,
+  `POST /api/sbom-validation-sessions/{id}/validate`,
+  `POST /api/sbom-validation-sessions/{id}/import`,
+  `POST /api/sbom-validation-sessions/{id}/ai/suggest-fixes`,
+  `POST /api/sbom-validation-sessions/{id}/apply-patch`, and
+  `GET /api/sbom-validation-sessions/{id}/history`. See
+  [docs/sbom-validation-repair-workspace.md](docs/sbom-validation-repair-workspace.md).
+
 - **Provider-based Component Lifecycle Enrichment.**
   Replaces static lifecycle catalog behavior with normalized provider
   enrichment, cache, manual overrides, refreshed dashboard metrics, and SBOM

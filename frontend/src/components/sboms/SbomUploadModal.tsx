@@ -22,8 +22,7 @@ function isValidationFailureDetail(detail: unknown): detail is SbomValidationFai
   return (
     typeof detail === 'object' &&
     detail !== null &&
-    (detail as { code?: unknown }).code === 'sbom_validation_failed' &&
-    typeof (detail as { sbom_id?: unknown }).sbom_id === 'number'
+    (detail as { code?: unknown }).code === 'sbom_validation_failed'
   );
 }
 
@@ -239,14 +238,20 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
                     </div>
                   )}
                   <div className="mt-3 flex flex-wrap items-center gap-3">
-                    <Link
-                      href={`/sboms/${validationFailure.sbom_id}#validation-report`}
-                      className="inline-flex items-center gap-1 text-xs font-medium text-red-700 hover:underline dark:text-red-300"
-                      onClick={handleClose}
-                    >
-                      View full report
-                      <ArrowRight className="h-3 w-3" aria-hidden />
-                    </Link>
+                    {validationFailure.session_id && validationFailure.can_edit ? (
+                      <Link
+                        href={`/sbom-validation-sessions/${validationFailure.session_id}`}
+                        className="inline-flex items-center gap-1 text-xs font-medium text-red-700 hover:underline dark:text-red-300"
+                        onClick={handleClose}
+                      >
+                        Open repair workspace
+                        <ArrowRight className="h-3 w-3" aria-hidden />
+                      </Link>
+                    ) : (
+                      <span className="text-xs font-medium text-red-700 dark:text-red-300">
+                        {validationFailure.reason || 'This payload cannot be edited safely.'}
+                      </span>
+                    )}
                     <button
                       type="button"
                       onClick={() => fileRef.current?.click()}

@@ -36,6 +36,7 @@ from app.models import (
     SBOMComponent,
     SBOMSource,
 )
+from sqlalchemy import text
 
 from tests.ai.fixtures import EX1_CRITICAL_KEV_WITH_FIX_BUNDLE
 
@@ -109,6 +110,13 @@ def _seed(n: int) -> int:
         db.query(SBOMComponent).delete()
         db.query(SBOMSource).delete()
         db.commit()
+        # The session-scoped SQLite test DB can be heavily fragmented by the
+        # time this load test runs in the full suite. Compact after bulk
+        # cleanup so the wall-clock guard measures batch throughput, not
+        # leftover pages from unrelated tests.
+        if db.bind and db.bind.dialect.name == "sqlite":
+            db.execute(text("VACUUM"))
+            db.commit()
 
         sbom = SBOMSource(sbom_name="load")
         db.add(sbom)

@@ -6,12 +6,12 @@ multipart upload, runs :func:`app.validation.run`, and either:
 
 * responds 202 with the new ``SBOMSource`` row id and the report's warnings
   / info entries (so the frontend can surface NTIA hints), or
-* responds 400 / 413 / 415 / 422 with the structured ``ErrorReport``.
+* responds 400 / 413 / 415 / 422 with the structured ``ErrorReport`` and,
+  when safe, a validation repair session id.
 
-In both branches the ``SBOMSource`` row is persisted, so the frontend has
-a stable navigation target for the validation report. The legacy
-JSON-string endpoint (``POST /api/sboms``) follows the same persist-then-
-respond pattern; see :mod:`app.routers.sboms_crud`.
+Rejected SBOMs are never inserted into ``SBOMSource``. They may be staged
+only in ``sbom_validation_sessions`` for repair and later import after the
+same validation pipeline passes.
 """
 
 from __future__ import annotations
@@ -29,6 +29,10 @@ from ..models import Projects, SBOMSource, SBOMType
 from ..services.completeness_service import compute_and_save_completeness
 from ..services.lifecycle_service import sync_lifecycle_for_sbom
 from ..services.sbom_service import sync_sbom_components
+from ..services.validation_repair_service import (
+    ValidationRepairService,
+    build_validation_failed_detail,
+)
 from ..settings import get_settings
 from ..validation import run as run_validation
 
@@ -122,14 +126,26 @@ async def upload_sbom(
     if body_text.startswith("﻿"):
         body_text = body_text.lstrip("﻿")
 
-    sbom_status = "validated"
     if report.has_errors():
-        sbom_status = (
-            "quarantined"
-            if any(e.stage == "security" for e in report.errors)
-            else "failed"
+        service = ValidationRepairService(db)
+        session, blocked_reason = service.create_failed_upload_session(
+            raw_text=body_text,
+            report=report,
+            sbom_name=sbom_name,
+            original_filename=file.filename,
+            project_id=project_id,
+            sbom_type=sbom_type,
+            user_id=created_by,
         )
-    serialized_entries = [e.model_dump() for e in report.entries] if report.entries else None
+        raise HTTPException(
+            status_code=report.http_status,
+            detail=build_validation_failed_detail(
+                report=report,
+                sbom_name=sbom_name,
+                session=session,
+                blocked_reason=blocked_reason,
+            ),
+        )
 
     obj = SBOMSource(
         sbom_name=sbom_name.strip(),
@@ -138,9 +154,9 @@ async def upload_sbom(
         projectid=project_id,
         created_by=created_by,
         created_on=_now_iso(),
-        status=sbom_status,
-        failed_stage=report.first_error_stage,
-        validation_errors=serialized_entries,
+        status="validated",
+        failed_stage=None,
+        validation_errors=[e.model_dump(mode="json") for e in report.entries] if report.entries else None,
         error_count=report.error_count,
         warning_count=report.warning_count,
         validated_at=_now_iso(),
@@ -163,27 +179,6 @@ async def upload_sbom(
         compute_and_save_completeness(db, obj)
     except Exception as exc:  # pragma: no cover - defensive enrichment path
         log.warning("Failed to enrich uploaded SBOM %s: %s", obj.id, exc)
-
-    if report.has_errors():
-        # Persist-then-reject: the row is committed, so the frontend can
-        # navigate straight to the validation report on the detail page.
-        raise HTTPException(
-            status_code=report.http_status,
-            detail={
-                "code": "sbom_validation_failed",
-                "message": (
-                    f"SBOM '{sbom_name}' did not pass validation; "
-                    f"{report.error_count} error(s) at stage '{report.first_error_stage}'."
-                ),
-                "sbom_id": obj.id,
-                "status": sbom_status,
-                "failed_stage": report.first_error_stage,
-                "error_count": report.error_count,
-                "warning_count": report.warning_count,
-                "entries": [e.model_dump() for e in report.entries],
-                "truncated": report.truncated,
-            },
-        )
 
     spec = ""
     spec_version = ""

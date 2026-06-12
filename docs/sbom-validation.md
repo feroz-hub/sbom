@@ -30,7 +30,9 @@ A successful upload returns **HTTP 202 Accepted**. Warnings and info-level
 entries flow through in the response body but never block acceptance.
 
 A rejected upload returns one of **400 / 413 / 415 / 422** with a
-machine-readable list of error entries. Status precedence is
+machine-readable list of error entries. If the failed payload is safe to
+store, the response also contains a validation repair `session_id`. Unsafe
+ingress/security failures are not staged. Status precedence is
 `413 > 415 > 422 > 400` when multiple codes fire.
 
 ---
@@ -83,6 +85,15 @@ Rejected response shape (any 4xx):
 ```json
 {
   "detail": {
+    "code": "sbom_validation_failed",
+    "status": "validation_failed",
+    "session_id": "9e50e99f-78a3-4962-9b03-b97331cf0d57",
+    "sbom_id": null,
+    "can_edit": true,
+    "can_ai_fix": true,
+    "failed_stage": "semantic",
+    "error_count": 1,
+    "warning_count": 0,
     "entries": [
       {
         "code": "SBOM_VAL_E052_PURL_INVALID",
@@ -101,6 +112,12 @@ Rejected response shape (any 4xx):
 
 If a single document trips more than 100 entries, only the first 100 are
 returned and `truncated` is set to `true`. Fix what's listed and re-upload.
+
+See [SBOM validation repair workspace](sbom-validation-repair-workspace.md)
+for the edit, AI suggestion, revalidation, audit, and import workflow. Failed
+uploads are not trusted SBOM records until `POST
+/api/sbom-validation-sessions/{id}/import` succeeds after a clean validation
+run.
 
 ---
 
