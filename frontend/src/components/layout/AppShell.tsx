@@ -26,7 +26,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           // Mobile: sidebar is overlay, no margin offset
           'ml-0',
           // Desktop: reserve space for the fixed sidebar rail
-          collapsed ? 'md:ml-16' : 'md:ml-60',
+          collapsed ? 'md:ml-[68px]' : 'md:ml-60',
           'focus-visible:outline-none',
         )}
       >

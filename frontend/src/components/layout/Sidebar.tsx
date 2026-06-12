@@ -100,11 +100,11 @@ export function Sidebar() {
       <aside
         aria-label="Primary navigation"
         className={cn(
-          'fixed left-0 top-0 z-40 flex h-screen flex-col bg-sidebar sidebar-rail',
+          'app-sidebar fixed left-0 top-0 z-40 flex h-screen flex-col sidebar-rail',
           'border-r border-white/10 shadow-[4px_0_24px_rgba(0,0,0,0.12)] dark:border-white/10 dark:shadow-[4px_0_32px_rgba(0,0,0,0.45)]',
           'transition-all duration-300 ease-in-out motion-reduce:transition-none',
           'md:translate-x-0',
-          collapsed ? 'md:w-16' : 'md:w-60',
+          collapsed ? 'md:w-[68px] collapsed' : 'md:w-60',
           'w-60',
           mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
         )}
@@ -140,7 +140,7 @@ export function Sidebar() {
 
         {/* Scrollable middle: nav + pinned + recent */}
         <div className="flex-1 overflow-y-auto">
-          <nav className="space-y-0.5 px-2 py-3" aria-label="Main">
+          <nav className="space-y-2 px-2 py-3" aria-label="Main">
             {NAV_ITEMS.map((item) => (
               <NavLink
                 key={`${item.href}-${item.label}`}
@@ -178,28 +178,23 @@ export function Sidebar() {
             onClick={toggleCollapsed}
             aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             aria-expanded={!collapsed}
-            className={cn(
-              'flex w-full items-center rounded-lg py-2 text-sidebar-foreground',
-              'transition-colors hover:bg-sidebar-hover motion-reduce:transition-none',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-cyan',
-              'px-3',
-              collapsed && 'md:px-[15px]',
-            )}
+            className="sidebar-menu-item w-full"
           >
             {/* One chevron that rotates instead of two swapped icons — the
                 180° spin reads as the rail changing direction. */}
             <ChevronLeft
               className={cn(
-                'h-[18px] w-[18px] shrink-0 transition-transform duration-300 ease-in-out motion-reduce:transition-none',
+                'sidebar-menu-icon transition-transform duration-300 ease-in-out motion-reduce:transition-none',
                 collapsed && 'md:rotate-180',
               )}
               aria-hidden
             />
             <span
               className={cn(
-                'truncate whitespace-nowrap text-xs font-medium overflow-hidden',
-                'transition-[max-width,opacity,margin-left] duration-300 ease-in-out motion-reduce:transition-none',
-                collapsed ? 'ml-3 max-w-[140px] md:ml-0 md:max-w-0 md:opacity-0' : 'ml-3 max-w-[140px] opacity-100',
+                'sidebar-menu-label transition-[max-width,opacity,margin-left] duration-300 ease-in-out motion-reduce:transition-none',
+                collapsed
+                  ? 'ml-0 max-w-full opacity-100 md:max-w-0 md:opacity-0'
+                  : 'ml-0 max-w-full opacity-100',
               )}
             >
               Collapse
@@ -245,28 +240,18 @@ function NavLink({
           aria-current={isActive && !expanded ? 'page' : undefined}
           aria-label={collapsed ? item.label : undefined}
           className={cn(
-            'group relative flex w-full items-center rounded-lg text-sm font-medium',
-            'transition-[padding,background-color,color] duration-300 ease-in-out motion-reduce:transition-none',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-cyan',
-            'px-3 py-2.5',
-            collapsed && 'md:px-[15px]',
-            isActive
-              ? 'sidebar-item-active text-white font-semibold'
-              : 'text-sidebar-foreground hover:bg-sidebar-hover',
+            'sidebar-menu-item w-full',
+            isActive && 'active',
           )}
         >
-          <Icon
-            className={cn(
-              'h-[18px] w-[18px] shrink-0',
-              isActive ? 'text-white' : 'text-sidebar-muted group-hover:text-sidebar-foreground',
-            )}
-            aria-hidden
-          />
+          <Icon className="sidebar-menu-icon" aria-hidden />
           <span
             className={cn(
-              'flex-1 truncate whitespace-nowrap text-left overflow-hidden',
+              'sidebar-menu-label text-left',
               'transition-[max-width,opacity,margin-left] duration-300 ease-in-out motion-reduce:transition-none',
-              collapsed ? 'ml-3 max-w-full md:ml-0 md:max-w-0 md:opacity-0' : 'ml-3 max-w-full opacity-100',
+              collapsed
+                ? 'ml-0 max-w-full opacity-100 md:max-w-0 md:opacity-0'
+                : 'ml-0 max-w-full opacity-100',
             )}
           >
             {item.label}
@@ -274,7 +259,7 @@ function NavLink({
           {!collapsed && (
             <ChevronDown
               className={cn(
-                'h-3.5 w-3.5 shrink-0 text-sidebar-muted transition-transform duration-base',
+                'h-3.5 w-3.5 shrink-0 text-white/70 transition-transform duration-base',
                 expanded && 'rotate-180',
               )}
               aria-hidden
@@ -297,7 +282,7 @@ function NavLink({
               'visible grid-rows-[1fr] opacity-100 md:invisible md:grid-rows-[0fr] md:opacity-0',
           )}
         >
-          <ul className="mt-0.5 ml-3 min-h-0 space-y-0.5 overflow-hidden border-l border-white/15 pl-3">
+          <ul className="mt-0.5 ml-3 min-h-0 space-y-1.5 overflow-hidden border-l border-white/15 pl-3">
             {item.children.map((child) => {
               // Detect active child by pathname + query string approximation.
               const childActive =
@@ -310,7 +295,7 @@ function NavLink({
                     href={child.href}
                     aria-current={childActive ? 'page' : undefined}
                     className={cn(
-                      'group flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors duration-150',
+                      'group flex items-center gap-2 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors duration-150',
                       'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-cyan',
                       childActive
                         ? 'bg-sidebar-hover text-sidebar-foreground font-semibold'
@@ -341,28 +326,18 @@ function NavLink({
       aria-current={isActive ? 'page' : undefined}
       aria-label={collapsed ? item.label : undefined}
       className={cn(
-        'group relative flex items-center rounded-lg text-sm font-medium',
-        'transition-[padding,background-color,color] duration-300 ease-in-out motion-reduce:transition-none',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-cyan',
-        'px-3 py-2.5',
-        collapsed && 'md:px-[15px]',
-        isActive
-          ? 'sidebar-item-active text-white font-semibold'
-          : 'text-sidebar-foreground hover:bg-sidebar-hover',
+        'sidebar-menu-item',
+        isActive && 'active',
       )}
     >
-      <Icon
-        className={cn(
-          'h-[18px] w-[18px] shrink-0',
-          isActive ? 'text-white' : 'text-sidebar-muted group-hover:text-sidebar-foreground',
-        )}
-        aria-hidden
-      />
+      <Icon className="sidebar-menu-icon" aria-hidden />
       <span
         className={cn(
-          'flex-1 truncate whitespace-nowrap overflow-hidden',
+          'sidebar-menu-label',
           'transition-[max-width,opacity,margin-left] duration-300 ease-in-out motion-reduce:transition-none',
-          collapsed ? 'ml-3 max-w-full md:ml-0 md:max-w-0 md:opacity-0' : 'ml-3 max-w-full opacity-100',
+          collapsed
+            ? 'ml-0 max-w-full opacity-100 md:max-w-0 md:opacity-0'
+            : 'ml-0 max-w-full opacity-100',
         )}
       >
         {item.label}
@@ -370,8 +345,6 @@ function NavLink({
     </Link>
   );
 }
-
-// ─── Section: Pinned ─────────────────────────────────────────────────────────
 
 function PinnedSection() {
   const sboms = usePinned('sbom');
@@ -481,7 +454,7 @@ function SidebarRow({
         href={href}
         title={label}
         className={cn(
-          'flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs transition-colors duration-150',
+          'flex items-center gap-2 rounded-lg px-3 py-2 text-xs transition-colors duration-150',
           'text-sidebar-foreground hover:bg-sidebar-hover',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-cyan',
         )}
