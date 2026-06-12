@@ -7,6 +7,7 @@ export interface Project {
   created_on: string | null;
   modified_by: string | null;
   modified_on: string | null;
+  sbom_count?: number;
 }
 
 export type SbomValidationStatus = 'validated' | 'failed' | 'quarantined' | 'pending';
@@ -22,7 +23,9 @@ export interface SBOMSource {
   completeness_score?: number | null;
   completeness_report?: Record<string, unknown> | null;
   projectid: number | null;
+  project_id?: number | null;
   project_name?: string | null;
+  component_count?: number;
   created_by: string | null;
   created_on: string | null;
   modified_by: string | null;
@@ -56,9 +59,13 @@ export interface ValidationErrorEntry {
   severity: 'error' | 'warning' | 'info';
   stage: string;
   stage_number?: number;
-  path: string;
+  path?: string | null;
+  json_pointer?: string | null;
+  xpath?: string | null;
+  line?: number | null;
+  column?: number | null;
   message: string;
-  remediation: string;
+  remediation?: string | null;
   spec_reference: string | null;
   can_ai_fix?: boolean;
 }
@@ -157,6 +164,23 @@ export interface ValidationRepairEvent {
   after_hash: string | null;
   metadata: Record<string, unknown>;
 }
+
+export type ValidationSession = ValidationRepairSession;
+export type ValidationSessionEvent = ValidationRepairEvent;
+export type ValidationErrorReport = ValidationRepairReport;
+export type AiPatch = ValidationRepairPatch;
+export type AiFixSuggestion = AiRepairSuggestion;
+
+export interface AiFixSuggestionRequest {
+  user_instruction?: string | null;
+}
+
+export interface ApplyPatchRequest {
+  patches: AiPatch[];
+}
+
+export type ApplyPatchResponse = ValidationSession;
+export type ValidationSessionImportResponse = SBOMSource;
 
 export interface SBOMComponent {
   id: number;
@@ -589,9 +613,22 @@ export interface CreateSBOMPayload {
   sbom_data: string;
   sbom_type?: number;       // integer FK to SBOMType
   projectid?: number;
+  project_id?: number;
   sbom_version?: string;
   created_by?: string;
   productver?: string;
+}
+
+export interface UploadSBOMAcceptedResponse {
+  sbom_id: number;
+  sbom_name: string;
+  project_id: number | null;
+  project_name?: string | null;
+  spec: string;
+  spec_version: string;
+  components: number;
+  warnings: ValidationErrorEntry[];
+  info: ValidationErrorEntry[];
 }
 
 export interface UpdateSBOMPayload {

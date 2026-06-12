@@ -12,15 +12,17 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Textarea } from '@/components/ui/Input';
 import { PageSpinner } from '@/components/ui/Spinner';
 import {
-  applyValidationRepairPatch,
-  getValidationRepairHistory,
-  getValidationRepairSession,
-  importRepairSession,
-  suggestValidationRepairFixes,
-  updateValidationRepairSession,
-  validateRepairSession,
+  applyValidationSessionPatch,
+  getProject,
+  getValidationSession,
+  getValidationSessionHistory,
+  importValidationSession,
+  suggestValidationSessionFixes,
+  updateValidationSession,
+  validateValidationSession,
 } from '@/lib/api';
-import { stageLabel, stageNumber } from '@/lib/sbomValidation';
+import { invalidateDashboardTiles, invalidateProjectSurfaces, invalidateSbomSurfaces } from '@/lib/queryInvalidation';
+import { STAGE_NUMBERS, stageLabel, stageNumber } from '@/lib/sbomValidation';
 import type { AiRepairSuggestion, ValidationErrorEntry, ValidationRepairPatch } from '@/types';
 
 interface ValidationRepairWorkspaceProps {
@@ -28,12 +30,17 @@ interface ValidationRepairWorkspaceProps {
 }
 
 function groupErrors(entries: ValidationErrorEntry[]) {
-  return entries.reduce<Record<string, ValidationErrorEntry[]>>((acc, entry) => {
+  const grouped = entries.reduce<Record<string, ValidationErrorEntry[]>>((acc, entry) => {
     const key = entry.stage || 'unknown';
     acc[key] = acc[key] ?? [];
     acc[key].push(entry);
     return acc;
   }, {});
+  return Object.entries(grouped).sort(([a], [b]) => {
+    const rankA = STAGE_NUMBERS[a] ?? 99;
+    const rankB = STAGE_NUMBERS[b] ?? 99;
+    return rankA - rankB;
+  });
 }
 
 function severityVariant(severity: string): 'error' | 'warning' | 'info' | 'gray' {
@@ -49,6 +56,19 @@ function formatPatchValue(value: unknown) {
   return JSON.stringify(value, null, 2);
 }
 
+function formatLocation(entry: ValidationErrorEntry) {
+  if (entry.path) return entry.path;
+  if (entry.json_pointer) return entry.json_pointer;
+  if (entry.xpath) return entry.xpath;
+  if (entry.line != null && entry.column != null) return `Line ${entry.line}, column ${entry.column}`;
+  if (entry.line != null) return `Line ${entry.line}`;
+  return '';
+}
+
+function mutationErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
 export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspaceProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -59,12 +79,18 @@ export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspa
 
   const sessionQuery = useQuery({
     queryKey: ['validation-repair-session', sessionId],
-    queryFn: ({ signal }) => getValidationRepairSession(sessionId, signal),
+    queryFn: ({ signal }) => getValidationSession(sessionId, signal),
   });
 
   const historyQuery = useQuery({
     queryKey: ['validation-repair-history', sessionId],
-    queryFn: ({ signal }) => getValidationRepairHistory(sessionId, signal),
+    queryFn: ({ signal }) => getValidationSessionHistory(sessionId, signal),
+  });
+
+  const projectQuery = useQuery({
+    queryKey: ['project', sessionQuery.data?.project_id],
+    queryFn: ({ signal }) => getProject(sessionQuery.data!.project_id!, signal),
+    enabled: sessionQuery.data?.project_id != null,
   });
 
   useEffect(() => {
@@ -72,7 +98,7 @@ export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspa
   }, [sessionQuery.data?.id, sessionQuery.data?.current_content]);
 
   const updateMutation = useMutation({
-    mutationFn: () => updateValidationRepairSession(sessionId, content),
+    mutationFn: () => updateValidationSession(sessionId, content),
     onSuccess: (updated) => {
       queryClient.setQueryData(['validation-repair-session', sessionId], updated);
       queryClient.invalidateQueries({ queryKey: ['validation-repair-history', sessionId] });
@@ -82,9 +108,11 @@ export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspa
 
   const validateMutation = useMutation({
     mutationFn: async () => {
-      const saved = await updateValidationRepairSession(sessionId, content);
-      queryClient.setQueryData(['validation-repair-session', sessionId], saved);
-      return validateRepairSession(sessionId);
+      if (sessionQuery.data && content !== sessionQuery.data.current_content) {
+        const saved = await updateValidationSession(sessionId, content);
+        queryClient.setQueryData(['validation-repair-session', sessionId], saved);
+      }
+      return validateValidationSession(sessionId);
     },
     onSuccess: (updated) => {
       queryClient.setQueryData(['validation-repair-session', sessionId], updated);
@@ -94,16 +122,19 @@ export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspa
   });
 
   const importMutation = useMutation({
-    mutationFn: () => importRepairSession(sessionId),
+    mutationFn: () => importValidationSession(sessionId),
     onSuccess: (sbom) => {
-      queryClient.invalidateQueries({ queryKey: ['sboms'] });
+      invalidateSbomSurfaces(queryClient, sbom.id);
+      invalidateProjectSurfaces(queryClient, sbom.project_id ?? sbom.projectid ?? sessionQuery.data?.project_id);
+      invalidateDashboardTiles(queryClient);
       queryClient.invalidateQueries({ queryKey: ['validation-repair-session', sessionId] });
+      queryClient.invalidateQueries({ queryKey: ['validation-repair-history', sessionId] });
       router.push(`/sboms/${sbom.id}`);
     },
   });
 
   const suggestMutation = useMutation({
-    mutationFn: () => suggestValidationRepairFixes(sessionId),
+    mutationFn: () => suggestValidationSessionFixes(sessionId, { user_instruction: '' }),
     onSuccess: (result) => {
       setSuggestion(result);
       const initial: Record<number, boolean> = {};
@@ -119,7 +150,7 @@ export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspa
     mutationFn: async () => {
       if (!suggestion) return null;
       const patches = suggestion.patches.filter((_, idx) => selected[idx]);
-      return applyValidationRepairPatch(sessionId, patches);
+      return applyValidationSessionPatch(sessionId, { patches });
     },
     onSuccess: (updated) => {
       if (!updated) return;
@@ -136,8 +167,10 @@ export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspa
   const report = session?.latest_error_report;
   const entries = report?.entries ?? [];
   const grouped = useMemo(() => groupErrors(entries), [entries]);
-  const canImport = session?.validation_status === 'passed' && (report?.error_count ?? 0) === 0;
+  const hardErrorCount = entries.filter((entry) => entry.severity === 'error').length;
+  const canImport = session?.validation_status === 'passed' && (report?.error_count ?? hardErrorCount) === 0 && hardErrorCount === 0;
   const hasSelectedPatch = suggestion?.patches.some((_, idx) => selected[idx]) ?? false;
+  const hasUnsavedChanges = Boolean(session && content !== session.current_content);
 
   if (sessionQuery.isLoading) return <PageSpinner />;
 
@@ -164,6 +197,52 @@ export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspa
           {localMessage}
         </Alert>
       )}
+      {(updateMutation.error || validateMutation.error || suggestMutation.error || applyMutation.error || importMutation.error) && (
+        <Alert variant="error" title="Repair action failed">
+          {mutationErrorMessage(
+            updateMutation.error || validateMutation.error || suggestMutation.error || applyMutation.error || importMutation.error,
+            'The repair action could not be completed.',
+          )}
+        </Alert>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Validation Session</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <dt className="text-xs font-medium text-hcl-muted">Session ID</dt>
+              <dd className="mt-1 font-mono text-xs text-hcl-navy break-all">{session.id}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-medium text-hcl-muted">Original filename</dt>
+              <dd className="mt-1 text-hcl-navy">{session.original_filename || session.sbom_name || 'Unknown'}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-medium text-hcl-muted">Assigned project</dt>
+              <dd className="mt-1 text-hcl-navy">
+                {projectQuery.data?.project_name || (session.project_id != null ? `Project #${session.project_id}` : 'Unassigned')}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs font-medium text-hcl-muted">Detected format</dt>
+              <dd className="mt-1 text-hcl-navy">
+                {session.detected_format || 'Unknown'}{session.detected_version ? ` ${session.detected_version}` : ''}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs font-medium text-hcl-muted">Current status</dt>
+              <dd className="mt-1">
+                <Badge variant={session.validation_status === 'passed' || session.validation_status === 'imported' ? 'success' : 'warning'}>
+                  {session.validation_status.replace('_', ' ')}
+                </Badge>
+              </dd>
+            </div>
+          </dl>
+        </CardContent>
+      </Card>
 
       <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_24rem]">
         <Card className="min-w-0">
@@ -180,9 +259,10 @@ export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspa
                 variant="secondary"
                 onClick={() => updateMutation.mutate()}
                 loading={updateMutation.isPending}
+                disabled={!session.can_edit || !hasUnsavedChanges}
               >
                 <Save className="h-4 w-4" />
-                Save draft
+                {hasUnsavedChanges ? 'Save changes' : 'Saved'}
               </Button>
               <Button
                 size="sm"
@@ -212,6 +292,11 @@ export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspa
               className="min-h-[520px] font-mono text-xs leading-relaxed"
               disabled={!session.can_edit}
             />
+            {hasUnsavedChanges && (
+              <p className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-300">
+                Unsaved changes
+              </p>
+            )}
           </CardContent>
         </Card>
 
@@ -263,7 +348,7 @@ export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspa
                   No validation errors remain.
                 </div>
               ) : (
-                Object.entries(grouped).map(([stage, stageEntries]) => (
+                grouped.map(([stage, stageEntries]) => (
                   <div key={stage} className="space-y-2">
                     <h3 className="text-sm font-semibold text-hcl-navy">
                       Stage {stageNumber(stage)} · {stageLabel(stage)}
@@ -275,9 +360,10 @@ export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspa
                           <span className="font-mono font-semibold text-hcl-navy">{entry.code}</span>
                           {entry.can_ai_fix === false && <ShieldAlert className="h-3.5 w-3.5 text-amber-600" aria-label="Manual fix required" />}
                         </div>
-                        {entry.path && <p className="font-mono text-hcl-muted break-all">{entry.path}</p>}
+                        {formatLocation(entry) && <p className="font-mono text-hcl-muted break-all">{formatLocation(entry)}</p>}
                         <p className="mt-1 text-foreground">{entry.message}</p>
-                        <p className="mt-1 text-hcl-muted">{entry.remediation}</p>
+                        {entry.remediation && <p className="mt-1 text-hcl-muted">{entry.remediation}</p>}
+                        {entry.spec_reference && <p className="mt-1 text-hcl-muted">{entry.spec_reference}</p>}
                       </div>
                     ))}
                   </div>
@@ -350,6 +436,10 @@ export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspa
         <CardContent>
           {historyQuery.isLoading ? (
             <p className="text-sm text-hcl-muted">Loading history…</p>
+          ) : historyQuery.error ? (
+            <Alert variant="error" title="Could not load repair history">
+              {mutationErrorMessage(historyQuery.error, 'Repair history could not be loaded.')}
+            </Alert>
           ) : !historyQuery.data?.length ? (
             <p className="text-sm text-hcl-muted">No repair actions recorded yet.</p>
           ) : (

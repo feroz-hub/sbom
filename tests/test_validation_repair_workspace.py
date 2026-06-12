@@ -41,6 +41,15 @@ def _create_failed_session(client, name: str | None = None) -> tuple[str, dict]:
     return detail["session_id"], detail
 
 
+def _create_project(client, prefix: str = "repair-project") -> dict:
+    resp = client.post(
+        "/api/projects",
+        json={"project_name": _unique(prefix), "project_status": 1},
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
 def test_upload_invalid_sbom_creates_validation_session_not_normal_sbom(client):
     name = _unique("invalid")
     session_id, detail = _create_failed_session(client, name)
@@ -134,6 +143,52 @@ def test_import_blocked_until_validation_passes_then_succeeds_after_patch(client
     session = client.get(f"/api/sbom-validation-sessions/{session_id}").json()
     assert session["imported_sbom_id"] == body["id"]
     assert session["validation_status"] == "imported"
+
+
+def test_failed_upload_session_and_repair_import_preserve_project_id(client):
+    project = _create_project(client)
+    name = _unique("project-repair")
+    resp = client.post(
+        "/api/sboms",
+        json={
+            "sbom_name": name,
+            "sbom_data": json.dumps(BAD_PURL_CYCLONEDX),
+            "project_id": project["id"],
+        },
+    )
+    assert resp.status_code == 422, resp.text
+    session_id = resp.json()["detail"]["session_id"]
+
+    session = client.get(f"/api/sbom-validation-sessions/{session_id}").json()
+    assert session["project_id"] == project["id"]
+
+    patch_resp = client.post(
+        f"/api/sbom-validation-sessions/{session_id}/apply-patch",
+        json={
+            "patches": [
+                {
+                    "target": "/components/0/purl",
+                    "operation": "replace",
+                    "before": "not-a-purl",
+                    "after": "pkg:generic/x@1.0.0",
+                    "reason": "Replace malformed package URL with a valid purl.",
+                    "validation_error_codes": ["SBOM_VAL_E052_PURL_INVALID"],
+                }
+            ]
+        },
+    )
+    assert patch_resp.status_code == 200, patch_resp.text
+    assert patch_resp.json()["validation_status"] == "passed"
+
+    imported = client.post(f"/api/sbom-validation-sessions/{session_id}/import")
+    assert imported.status_code == 200, imported.text
+    body = imported.json()
+    assert body["projectid"] == project["id"]
+    assert body["project_id"] == project["id"]
+    assert body["project_name"] == project["project_name"]
+
+    refreshed_project = client.get(f"/api/projects/{project['id']}").json()
+    assert refreshed_project["sbom_count"] == 1
 
 
 def test_apply_patch_revalidates_and_rejects_signature_fake_fix(client):

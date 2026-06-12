@@ -30,7 +30,7 @@ const schema = z.object({
   sbom_name: z.string().min(1, 'Name is required'),
   sbom_data: z.string().min(2, 'SBOM content is required'),
   sbom_type_id: z.string().optional(),
-  projectid: z.string().optional(),
+  projectid: z.string().min(1, 'Project is required'),
   sbom_version: z.string().optional(),
   created_by: z.string().optional(),
   productver: z.string().optional(),
@@ -105,6 +105,15 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
       projectid: '', sbom_version: '', created_by: '', productver: '',
     },
   });
+  const selectedProjectId = watch('projectid');
+  const sbomNameValue = watch('sbom_name');
+  const sbomDataValue = watch('sbom_data');
+  const canSubmit = Boolean(
+    selectedProjectId &&
+    sbomNameValue?.trim() &&
+    sbomDataValue?.trim() &&
+    !duplicateNameError,
+  );
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -146,6 +155,7 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
         sbom_data: values.sbom_data,
         sbom_type: values.sbom_type_id ? Number(values.sbom_type_id) : undefined,
         projectid: values.projectid ? Number(values.projectid) : undefined,
+        project_id: values.projectid ? Number(values.projectid) : undefined,
         sbom_version: values.sbom_version || undefined,
         created_by: values.created_by || undefined,
         productver: values.productver || undefined,
@@ -318,7 +328,15 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <Select label="Project" placeholder="Select project..." disabled={uploading} {...register('projectid')}>
+            <Select
+              label="Project"
+              placeholder="Select project..."
+              disabled={uploading}
+              required
+              error={errors.projectid?.message}
+              hint={!projects?.length ? 'Create a project before uploading an SBOM.' : undefined}
+              {...register('projectid')}
+            >
               {projects?.map((p) => (
                 <option key={p.id} value={p.id}>{p.project_name}</option>
               ))}
@@ -342,7 +360,7 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
           <Button type="button" variant="secondary" onClick={handleClose} disabled={uploading}>
             Cancel
           </Button>
-          <Button type="submit" loading={uploading}>
+          <Button type="submit" loading={uploading} disabled={uploading || !canSubmit}>
             {uploading ? 'Uploading…' : 'Upload SBOM'}
           </Button>
         </DialogFooter>

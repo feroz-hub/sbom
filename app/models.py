@@ -39,6 +39,10 @@ class Projects(Base, SoftDeleteMixin):
         viewonly=True,
     )
 
+    @property
+    def sbom_count(self) -> int:
+        return len([sbom for sbom in (self.sboms or []) if not getattr(sbom, "deleted_at", None)])
+
 
 class SBOMType(Base):
     __tablename__ = "sbom_type"
@@ -102,6 +106,18 @@ class SBOMSource(Base, SoftDeleteMixin):
         primaryjoin="SBOMSource.id == foreign(AnalysisSchedule.sbom_id)",
         viewonly=True,
     )
+
+    @property
+    def project_id(self) -> int | None:
+        return self.projectid
+
+    @property
+    def project_name(self) -> str | None:
+        return self.project.project_name if self.project else None
+
+    @property
+    def component_count(self) -> int:
+        return len([component for component in (self.components or []) if not getattr(component, "deleted_at", None)])
 
 
 class SBOMValidationSession(Base):

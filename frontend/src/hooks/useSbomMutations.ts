@@ -10,10 +10,13 @@
  */
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { createSbom, HttpError, revalidateSbom } from '@/lib/api';
+import { HttpError, revalidateSbom, uploadSbom } from '@/lib/api';
 import {
+  invalidateDashboardTiles,
   invalidateProjectLists,
+  invalidateProjectSurfaces,
   invalidateSbomLists,
+  invalidateSbomSurfaces,
 } from '@/lib/queryInvalidation';
 import type {
   CreateSBOMPayload,
@@ -44,10 +47,13 @@ function isValidationFailureDetail(
 export function useUploadSbom() {
   const qc = useQueryClient();
   return useMutation<SBOMSource, Error, CreateSBOMPayload>({
-    mutationFn: (payload) => createSbom(payload),
-    onSuccess: () => {
-      invalidateSbomLists(qc);
+    mutationFn: (payload) => uploadSbom(payload),
+    onSuccess: (sbom) => {
+      invalidateSbomSurfaces(qc, sbom.id);
+      invalidateProjectSurfaces(qc, sbom.project_id ?? sbom.projectid);
+      invalidateDashboardTiles(qc);
       invalidateProjectLists(qc);
+      invalidateSbomLists(qc);
     },
   });
 }

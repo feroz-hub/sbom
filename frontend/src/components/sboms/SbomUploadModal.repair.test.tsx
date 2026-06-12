@@ -24,7 +24,18 @@ vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api');
   return {
     ...actual,
-    getProjects: vi.fn().mockResolvedValue([]),
+    getProjects: vi.fn().mockResolvedValue([
+      {
+        id: 42,
+        project_name: 'Payments',
+        project_details: null,
+        project_status: 1,
+        created_by: null,
+        created_on: null,
+        modified_by: null,
+        modified_on: null,
+      },
+    ]),
     getSbomTypes: vi.fn().mockResolvedValue([]),
   };
 });
@@ -75,11 +86,16 @@ describe('SbomUploadModal validation repair handoff', () => {
 
     render(wrap(<SbomUploadModal open onClose={vi.fn()} />));
 
+    expect(await screen.findByRole('option', { name: 'Payments' })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/SBOM Name/i), { target: { value: 'bad-sbom' } });
+    fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: '42' } });
     fireEvent.change(screen.getByPlaceholderText('{"bomFormat": "CycloneDX", ...}'), { target: { value: '{"bad":true}' } });
     fireEvent.click(screen.getByRole('button', { name: /Upload SBOM/i }));
 
-    await waitFor(() => expect(useUploadSbomMutate).toHaveBeenCalled());
+    await waitFor(() => expect(useUploadSbomMutate).toHaveBeenCalledWith(
+      expect.objectContaining({ projectid: 42, project_id: 42 }),
+      expect.any(Object),
+    ));
     const link = await screen.findByRole('link', { name: /Open repair workspace/i });
     expect(link).toHaveAttribute('href', '/sbom-validation-sessions/repair-123');
   });
@@ -117,11 +133,23 @@ describe('SbomUploadModal validation repair handoff', () => {
 
     render(wrap(<SbomUploadModal open onClose={vi.fn()} />));
 
+    expect(await screen.findByRole('option', { name: 'Payments' })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/SBOM Name/i), { target: { value: 'blocked-sbom' } });
+    fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: '42' } });
     fireEvent.change(screen.getByPlaceholderText('{"bomFormat": "CycloneDX", ...}'), { target: { value: '{"bad":true}' } });
     fireEvent.click(screen.getByRole('button', { name: /Upload SBOM/i }));
 
     expect(await screen.findByText('Payload blocked by security validation')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Open repair workspace/i })).not.toBeInTheDocument();
+  });
+
+  it('requires a project before allowing upload', async () => {
+    render(wrap(<SbomUploadModal open onClose={vi.fn()} />));
+
+    fireEvent.change(screen.getByLabelText(/SBOM Name/i), { target: { value: 'needs-project' } });
+    fireEvent.change(screen.getByPlaceholderText('{"bomFormat": "CycloneDX", ...}'), { target: { value: '{"bomFormat":"CycloneDX"}' } });
+
+    expect(await screen.findByRole('button', { name: /Upload SBOM/i })).toBeDisabled();
+    expect(useUploadSbomMutate).not.toHaveBeenCalled();
   });
 });

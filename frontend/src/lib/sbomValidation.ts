@@ -14,14 +14,14 @@ export const STAGE_NUMBERS: Record<string, number> = {
 
 /** Human-readable label per stage — matches the backend STAGE_LABELS table. */
 export const STAGE_LABELS: Record<string, string> = {
-  ingress: 'Ingress',
-  detect: 'Format detection',
-  schema: 'Schema',
-  semantic: 'Semantic',
-  integrity: 'Cross-reference integrity',
-  security: 'Security',
-  ntia: 'NTIA minimum elements',
-  signature: 'Signature',
+  ingress: 'Ingress Guard',
+  detect: 'Format Detection',
+  schema: 'Structural Schema',
+  semantic: 'Semantic Validation',
+  integrity: 'Cross-Reference Integrity',
+  security: 'Security Checks',
+  ntia: 'NTIA Minimum Elements',
+  signature: 'Signature Verification',
 };
 
 export function stageLabel(stage: string | null | undefined): string {

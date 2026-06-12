@@ -46,6 +46,8 @@ class SbomAcceptedResponse(BaseModel):
 
     sbom_id: int
     sbom_name: str
+    project_id: int | None = None
+    project_name: str | None = None
     spec: str
     spec_version: str
     components: int
@@ -206,6 +208,8 @@ async def upload_sbom(
     return SbomAcceptedResponse(
         sbom_id=obj.id,
         sbom_name=obj.sbom_name,
+        project_id=obj.projectid,
+        project_name=obj.project_name,
         spec=spec,
         spec_version=spec_version,
         components=components_count,

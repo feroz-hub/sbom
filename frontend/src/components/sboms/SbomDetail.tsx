@@ -449,7 +449,10 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                   { label: 'Format / Type', value: sbom.sbom_type || '—' },
                   { label: 'SBOM Version', value: sbom.sbom_version || '1.0.0' },
                   { label: 'Product Version', value: sbom.productver || '—' },
-                  { label: 'Project ID', value: sbom.projectid ? `#${sbom.projectid}` : '—' },
+                  {
+                    label: 'Project',
+                    value: sbom.project_name || (sbom.projectid ? `Project #${sbom.projectid}` : '—'),
+                  },
                   { label: 'Created By', value: sbom.created_by || '—' },
                   { label: 'Created On', value: formatDate(sbom.created_on) },
                   { label: 'Updated On', value: formatDate(sbom.modified_on) },

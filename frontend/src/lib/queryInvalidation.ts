@@ -24,6 +24,28 @@ export function invalidateProjectLists(qc: QueryClient): void {
   qc.invalidateQueries({ queryKey: ['projects'] });
 }
 
+export function invalidateProjectSurfaces(qc: QueryClient, projectId?: number | null): void {
+  invalidateProjectLists(qc);
+  if (projectId != null) {
+    qc.invalidateQueries({ queryKey: ['project', projectId] });
+    qc.invalidateQueries({ queryKey: ['project-detail', projectId] });
+    qc.invalidateQueries({ queryKey: ['project-schedule', projectId] });
+  }
+}
+
+export function invalidateSbomSurfaces(qc: QueryClient, sbomId?: number | null): void {
+  invalidateSbomLists(qc);
+  if (sbomId != null) {
+    qc.invalidateQueries({ queryKey: ['sbom', sbomId] });
+    qc.invalidateQueries({ queryKey: ['sbom-info', sbomId] });
+    qc.invalidateQueries({ queryKey: ['sbom-risk', sbomId] });
+    qc.invalidateQueries({ queryKey: ['sbom-components', sbomId] });
+    qc.invalidateQueries({ queryKey: ['sbom-dedupe-report', sbomId] });
+    qc.invalidateQueries({ queryKey: ['sbom-validation-report', sbomId] });
+    qc.invalidateQueries({ queryKey: ['sbom-versions', sbomId] });
+  }
+}
+
 /**
  * Every cache that holds "a list of runs" or "a count derived from runs".
  *

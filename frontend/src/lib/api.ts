@@ -34,9 +34,13 @@ import type {
   LifecycleOverridePayload,
   LifecycleReport,
   AiRepairSuggestion,
+  AiFixSuggestionRequest,
+  ApplyPatchRequest,
   ValidationRepairEvent,
   ValidationRepairPatch,
   ValidationRepairSession,
+  ValidationSessionImportResponse,
+  UploadSBOMAcceptedResponse,
 } from '@/types';
 
 // Direct calls to FastAPI — no Next.js proxy (proxy caused ECONNRESET on
@@ -116,11 +120,12 @@ async function performRequest(
   timeoutMs = 30_000,
 ): Promise<Response> {
   const url = `${BASE_URL}${path}`;
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
   const res = await fetchWithTimeout(
     url,
     {
       headers: {
-        'Content-Type': 'application/json',
+        ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
         ...options.headers,
       },
       ...options,
@@ -352,6 +357,28 @@ export function createSbom(payload: CreateSBOMPayload, signal?: AbortSignal) {
     body: JSON.stringify(payload),
     signal,
   });
+}
+
+export async function uploadSbom(payload: CreateSBOMPayload, signal?: AbortSignal) {
+  const form = new FormData();
+  const filename = `${payload.sbom_name || 'sbom'}.${payload.sbom_data.trimStart().startsWith('<') ? 'xml' : 'json'}`;
+  form.set('file', new Blob([payload.sbom_data], { type: 'application/octet-stream' }), filename);
+  form.set('sbom_name', payload.sbom_name);
+  const projectId = payload.project_id ?? payload.projectid;
+  if (projectId != null) form.set('project_id', String(projectId));
+  if (payload.sbom_type != null) form.set('sbom_type', String(payload.sbom_type));
+  if (payload.created_by) form.set('created_by', payload.created_by);
+
+  const accepted = await request<UploadSBOMAcceptedResponse>(
+    '/api/sboms/upload',
+    {
+      method: 'POST',
+      body: form,
+      signal,
+    },
+    120_000,
+  );
+  return getSbom(accepted.sbom_id, signal);
 }
 
 export function updateSbom(
@@ -796,11 +823,11 @@ export function revalidateSbom(sbomId: number, signal?: AbortSignal) {
   });
 }
 
-export function getValidationRepairSession(sessionId: string, signal?: AbortSignal) {
+export function getValidationSession(sessionId: string, signal?: AbortSignal) {
   return request<ValidationRepairSession>(`/api/sbom-validation-sessions/${sessionId}`, { signal });
 }
 
-export function updateValidationRepairSession(
+export function updateValidationSession(
   sessionId: string,
   currentContent: string,
   signal?: AbortSignal,
@@ -812,51 +839,71 @@ export function updateValidationRepairSession(
   });
 }
 
-export function validateRepairSession(sessionId: string, signal?: AbortSignal) {
+export function validateValidationSession(sessionId: string, signal?: AbortSignal) {
   return request<ValidationRepairSession>(`/api/sbom-validation-sessions/${sessionId}/validate`, {
     method: 'POST',
     signal,
   });
 }
 
-export function importRepairSession(sessionId: string, signal?: AbortSignal) {
-  return request<SBOMSource>(`/api/sbom-validation-sessions/${sessionId}/import`, {
+export function importValidationSession(sessionId: string, signal?: AbortSignal) {
+  return request<ValidationSessionImportResponse>(`/api/sbom-validation-sessions/${sessionId}/import`, {
     method: 'POST',
     signal,
   });
 }
 
-export function suggestValidationRepairFixes(
+export function suggestValidationSessionFixes(
   sessionId: string,
-  userInstruction?: string,
+  payload: AiFixSuggestionRequest = {},
   signal?: AbortSignal,
 ) {
   return request<AiRepairSuggestion>(
     `/api/sbom-validation-sessions/${sessionId}/ai/suggest-fixes`,
     {
       method: 'POST',
-      body: JSON.stringify({ user_instruction: userInstruction ?? '' }),
+      body: JSON.stringify({ user_instruction: payload.user_instruction ?? '' }),
       signal,
     },
     120_000,
   );
 }
 
+export function applyValidationSessionPatch(
+  sessionId: string,
+  patchPayload: ApplyPatchRequest,
+  signal?: AbortSignal,
+) {
+  return request<ValidationRepairSession>(`/api/sbom-validation-sessions/${sessionId}/apply-patch`, {
+    method: 'POST',
+    body: JSON.stringify(patchPayload),
+    signal,
+  });
+}
+
+export function getValidationSessionHistory(sessionId: string, signal?: AbortSignal) {
+  return request<ValidationRepairEvent[]>(`/api/sbom-validation-sessions/${sessionId}/history`, { signal });
+}
+
+export const getValidationRepairSession = getValidationSession;
+export const updateValidationRepairSession = updateValidationSession;
+export const validateRepairSession = validateValidationSession;
+export const importRepairSession = importValidationSession;
+export function suggestValidationRepairFixes(
+  sessionId: string,
+  userInstruction?: string,
+  signal?: AbortSignal,
+) {
+  return suggestValidationSessionFixes(sessionId, { user_instruction: userInstruction ?? '' }, signal);
+}
 export function applyValidationRepairPatch(
   sessionId: string,
   patches: ValidationRepairPatch[],
   signal?: AbortSignal,
 ) {
-  return request<ValidationRepairSession>(`/api/sbom-validation-sessions/${sessionId}/apply-patch`, {
-    method: 'POST',
-    body: JSON.stringify({ patches }),
-    signal,
-  });
+  return applyValidationSessionPatch(sessionId, { patches }, signal);
 }
-
-export function getValidationRepairHistory(sessionId: string, signal?: AbortSignal) {
-  return request<ValidationRepairEvent[]>(`/api/sbom-validation-sessions/${sessionId}/history`, { signal });
-}
+export const getValidationRepairHistory = getValidationSessionHistory;
 
 // ─── Dashboard trend ─────────────────────────────────────────────────────────
 export function getDashboardTrend(days = 30, signal?: AbortSignal) {

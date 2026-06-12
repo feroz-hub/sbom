@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 def _coerce_project_status(v) -> int:
@@ -38,6 +38,7 @@ class ProjectOut(ORMModel):
     created_by: str | None = None
     modified_on: str | None = None
     modified_by: str | None = None
+    sbom_count: int = 0
 
 
 class SBOMTypeOut(ORMModel):
@@ -59,6 +60,14 @@ class SBOMSourceCreate(BaseModel):
     created_by: str | None = None
     productver: str | None = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def accept_project_id_alias(cls, data):
+        if isinstance(data, dict) and "project_id" in data and "projectid" not in data:
+            data = dict(data)
+            data["projectid"] = data.get("project_id")
+        return data
+
 
 class SBOMSourceOut(ORMModel):
     id: int
@@ -66,6 +75,9 @@ class SBOMSourceOut(ORMModel):
     sbom_data: str | None = None
     sbom_type: int | None = None
     projectid: int | None = None
+    project_id: int | None = None
+    project_name: str | None = None
+    component_count: int = 0
     created_on: str | None = None
     sbom_version: str | None = None
     parent_id: int | None = None
@@ -87,6 +99,16 @@ class SBOMSourceOut(ORMModel):
     error_count: int = 0
     warning_count: int = 0
     validated_at: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def populate_project_id_alias(cls, data):
+        if hasattr(data, "projectid"):
+            return data
+        if isinstance(data, dict) and "project_id" not in data and "projectid" in data:
+            data = dict(data)
+            data["project_id"] = data.get("projectid")
+        return data
 
 
 class ValidationErrorEntry(BaseModel):
@@ -275,6 +297,14 @@ class SBOMSourceUpdate(BaseModel):
     sbom_version: str | None = None
     productver: str | None = None
     modified_by: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def accept_project_id_alias(cls, data):
+        if isinstance(data, dict) and "project_id" in data and "projectid" not in data:
+            data = dict(data)
+            data["projectid"] = data.get("project_id")
+        return data
 
 
 # ---------------------------------------------------------------------------

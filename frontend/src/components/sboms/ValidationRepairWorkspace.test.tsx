@@ -12,6 +12,7 @@ vi.mock('next/navigation', () => ({
 }));
 
 const getValidationRepairSession = vi.fn();
+const getProject = vi.fn();
 const updateValidationRepairSession = vi.fn();
 const validateRepairSession = vi.fn();
 const importRepairSession = vi.fn();
@@ -23,6 +24,14 @@ vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api');
   return {
     ...actual,
+    getProject: (...args: unknown[]) => getProject(...args),
+    getValidationSession: (...args: unknown[]) => getValidationRepairSession(...args),
+    updateValidationSession: (...args: unknown[]) => updateValidationRepairSession(...args),
+    validateValidationSession: (...args: unknown[]) => validateRepairSession(...args),
+    importValidationSession: (...args: unknown[]) => importRepairSession(...args),
+    suggestValidationSessionFixes: (...args: unknown[]) => suggestValidationRepairFixes(...args),
+    applyValidationSessionPatch: (...args: unknown[]) => applyValidationRepairPatch(...args),
+    getValidationSessionHistory: (...args: unknown[]) => getValidationRepairHistory(...args),
     getValidationRepairSession: (...args: unknown[]) => getValidationRepairSession(...args),
     updateValidationRepairSession: (...args: unknown[]) => updateValidationRepairSession(...args),
     validateRepairSession: (...args: unknown[]) => validateRepairSession(...args),
@@ -37,7 +46,7 @@ import { ValidationRepairWorkspace } from '@/components/sboms/ValidationRepairWo
 
 const FAILED_SESSION: ValidationRepairSession = {
   id: 'session-1',
-  project_id: null,
+  project_id: 42,
   user_id: null,
   original_filename: 'bad.json',
   sbom_name: 'bad',
@@ -100,6 +109,17 @@ function wrap(children: ReactNode) {
 
 beforeEach(() => {
   push.mockReset();
+  getProject.mockReset();
+  getProject.mockResolvedValue({
+    id: 42,
+    project_name: 'Payments',
+    project_details: null,
+    project_status: 1,
+    created_by: null,
+    created_on: null,
+    modified_by: null,
+    modified_on: null,
+  });
   getValidationRepairSession.mockResolvedValue(FAILED_SESSION);
   getValidationRepairHistory.mockResolvedValue([
     {
@@ -137,7 +157,9 @@ beforeEach(() => {
     sbom_name: 'bad',
     sbom_type: null,
     sbom_version: null,
-    projectid: null,
+    projectid: 42,
+    project_id: 42,
+    project_name: 'Payments',
     created_by: null,
     created_on: '2026-06-12T00:00:00Z',
     modified_by: null,
@@ -153,9 +175,13 @@ describe('ValidationRepairWorkspace', () => {
     render(wrap(<ValidationRepairWorkspace sessionId="session-1" />));
 
     expect(await screen.findByLabelText('SBOM repair editor')).toHaveValue(FAILED_SESSION.current_content);
-    expect(screen.getByText('Stage 4 · Semantic')).toBeInTheDocument();
+    expect(screen.getByText('session-1')).toBeInTheDocument();
+    expect(screen.getByText('bad.json')).toBeInTheDocument();
+    expect(await screen.findByText('Payments')).toBeInTheDocument();
+    expect(screen.getByText('Stage 4 · Semantic Validation')).toBeInTheDocument();
     expect(screen.getByText('SBOM_VAL_E052_PURL_INVALID')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Import SBOM/i })).toBeDisabled();
+    expect(screen.getAllByText('created').length).toBeGreaterThan(0);
   });
 
   it('saves before revalidating the current editor content', async () => {
@@ -177,12 +203,15 @@ describe('ValidationRepairWorkspace', () => {
     expect(await screen.findByText('Fix malformed purl')).toBeInTheDocument();
     expect(screen.getByText('not-a-purl')).toBeInTheDocument();
     expect(screen.getByText('pkg:generic/x@1.0.0')).toBeInTheDocument();
+    expect(screen.getByLabelText('SBOM repair editor')).toHaveValue(FAILED_SESSION.current_content);
 
     fireEvent.click(screen.getByRole('button', { name: /Apply selected/i }));
 
     await waitFor(() => expect(applyValidationRepairPatch).toHaveBeenCalledWith(
       'session-1',
-      expect.arrayContaining([expect.objectContaining({ target: '/components/0/purl' })]),
+      expect.objectContaining({
+        patches: expect.arrayContaining([expect.objectContaining({ target: '/components/0/purl' })]),
+      }),
     ));
     expect(await screen.findByText(/Patch applied and validation passed/i)).toBeInTheDocument();
   });
@@ -212,5 +241,19 @@ describe('ValidationRepairWorkspace', () => {
 
     expect(await screen.findByText('Security-blocked payload')).toBeInTheDocument();
     expect(screen.getByText('Payload blocked by security validation')).toBeInTheDocument();
+  });
+
+  it('renders a user-friendly API error state for failed actions and history loading', async () => {
+    getValidationRepairHistory.mockRejectedValue(new Error('history unavailable'));
+    updateValidationRepairSession.mockRejectedValue(new Error('save failed'));
+
+    render(wrap(<ValidationRepairWorkspace sessionId="session-1" />));
+    const editor = await screen.findByLabelText('SBOM repair editor');
+    fireEvent.change(editor, { target: { value: '{"changed":true}' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save changes/i }));
+
+    expect(await screen.findByText('Could not load repair history')).toBeInTheDocument();
+    expect(await screen.findByText('Repair action failed')).toBeInTheDocument();
+    expect(screen.getByText('save failed')).toBeInTheDocument();
   });
 });

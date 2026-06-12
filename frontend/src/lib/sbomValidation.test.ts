@@ -21,9 +21,9 @@ const e = (overrides: Partial<ValidationErrorEntry>): ValidationErrorEntry => ({
 
 describe('stageLabel / stageNumber', () => {
   it('maps known stages to canonical labels and numbers', () => {
-    expect(stageLabel('semantic')).toBe('Semantic');
+    expect(stageLabel('semantic')).toBe('Semantic Validation');
     expect(stageNumber('semantic')).toBe(4);
-    expect(stageLabel('ntia')).toBe('NTIA minimum elements');
+    expect(stageLabel('ntia')).toBe('NTIA Minimum Elements');
     expect(stageNumber('ntia')).toBe(7);
   });
 

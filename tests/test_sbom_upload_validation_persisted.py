@@ -13,6 +13,8 @@ from __future__ import annotations
 import json
 
 import pytest
+from app.db import SessionLocal
+from app.models import SBOMComponent
 
 _VALID_CYCLONEDX = {
     "bomFormat": "CycloneDX",
@@ -81,6 +83,74 @@ def test_valid_sbom_persists_validated_status(client, unique_name):
     assert body["warning_count"] >= 0
     # validated_at populated on the success path.
     assert body["validated_at"] is not None
+
+
+def test_upload_with_project_id_assigns_project_and_syncs_details(client, unique_name):
+    project = client.post(
+        "/api/projects",
+        json={"project_name": f"project-{unique_name}", "project_status": 1},
+    )
+    assert project.status_code == 201, project.text
+    project_id = project.json()["id"]
+
+    resp = client.post(
+        "/api/sboms/upload",
+        data={"sbom_name": unique_name, "project_id": str(project_id)},
+        files={"file": ("valid.json", json.dumps(_VALID_CYCLONEDX), "application/json")},
+    )
+    assert resp.status_code == 202, resp.text
+    accepted = resp.json()
+    assert accepted["project_id"] == project_id
+    assert accepted["project_name"] == project.json()["project_name"]
+
+    detail = client.get(f"/api/sboms/{accepted['sbom_id']}").json()
+    assert detail["projectid"] == project_id
+    assert detail["project_id"] == project_id
+    assert detail["project_name"] == project.json()["project_name"]
+    assert detail["component_count"] >= 1
+    assert detail["completeness_score"] is not None
+
+    refreshed_project = client.get(f"/api/projects/{project_id}").json()
+    assert refreshed_project["sbom_count"] == 1
+
+    db = SessionLocal()
+    try:
+        assert db.query(SBOMComponent).filter(SBOMComponent.sbom_id == accepted["sbom_id"]).count() >= 1
+    finally:
+        db.close()
+
+
+def test_upload_with_invalid_project_id_returns_clear_error(client, unique_name):
+    resp = client.post(
+        "/api/sboms/upload",
+        data={"sbom_name": unique_name, "project_id": "999999"},
+        files={"file": ("valid.json", json.dumps(_VALID_CYCLONEDX), "application/json")},
+    )
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "Project not found"
+
+
+def test_legacy_json_upload_accepts_project_id_alias(client, unique_name):
+    project = client.post(
+        "/api/projects",
+        json={"project_name": f"alias-project-{unique_name}", "project_status": 1},
+    )
+    assert project.status_code == 201, project.text
+    project_id = project.json()["id"]
+
+    resp = client.post(
+        "/api/sboms",
+        json={
+            "sbom_name": unique_name,
+            "sbom_data": json.dumps(_VALID_CYCLONEDX),
+            "project_id": project_id,
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["projectid"] == project_id
+    assert body["project_id"] == project_id
+    assert body["project_name"] == project.json()["project_name"]
 
 
 def test_invalid_purl_creates_repair_session_not_trusted_sbom(client, unique_name):
