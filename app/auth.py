@@ -11,10 +11,12 @@ from __future__ import annotations
 import hmac
 import logging
 import os
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 import jwt
-from fastapi import Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from jwt import InvalidTokenError
 
 log = logging.getLogger(__name__)
@@ -33,6 +35,23 @@ def _read_tokens() -> set[str]:
 
 class AuthConfigError(RuntimeError):
     """Raised at startup if auth env is inconsistent."""
+
+
+@dataclass(frozen=True)
+class Principal:
+    """Authenticated caller identity used for narrow role checks.
+
+    The project historically had binary auth only. This principal is a
+    lightweight bridge: JWT deployments can carry roles in claims, bearer
+    deployments can pass trusted gateway role headers, and local
+    ``API_AUTH_MODE=none`` remains permissive for developer/test parity.
+    """
+
+    user_id: str | None
+    roles: frozenset[str]
+
+    def has_any_role(self, allowed: set[str]) -> bool:
+        return bool({role.lower() for role in self.roles} & {role.lower() for role in allowed})
 
 
 def _jwt_settings() -> tuple[str, str, str | None, str | None]:
@@ -158,3 +177,73 @@ def require_auth(authorization: str | None = Header(default=None)) -> None:
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         detail="Server auth misconfigured",
     )
+
+
+def _roles_from_value(value: Any) -> frozenset[str]:
+    if value is None:
+        return frozenset()
+    if isinstance(value, str):
+        parts = value.replace(";", ",").replace(" ", ",").split(",")
+        return frozenset(part.strip().lower() for part in parts if part.strip())
+    if isinstance(value, (list, tuple, set)):
+        roles: set[str] = set()
+        for item in value:
+            roles.update(_roles_from_value(item))
+        return frozenset(roles)
+    return frozenset()
+
+
+def get_current_principal(
+    authorization: str | None = Header(default=None),
+    x_sbom_user: str | None = Header(default=None, alias="X-SBOM-User"),
+    x_sbom_roles: str | None = Header(default=None, alias="X-SBOM-Roles"),
+) -> Principal:
+    """Return the current caller with best-effort role information.
+
+    ``require_auth`` remains the global guard. This helper is intentionally
+    additive and is only wired to sensitive routes that need role semantics.
+    """
+
+    mode = _read_mode()
+    header_roles = _roles_from_value(x_sbom_roles)
+
+    if mode == "none":
+        return Principal(
+            user_id=x_sbom_user or "local-dev",
+            roles=header_roles or frozenset({"admin", "security"}),
+        )
+
+    if mode == "bearer":
+        if not authorization or not authorization.lower().startswith(_BEARER_PREFIX):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+        presented = authorization[len(_BEARER_PREFIX) :].strip()
+        if not presented or not _token_in_allowlist(presented, _read_tokens()):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+        return Principal(user_id=x_sbom_user or "bearer", roles=header_roles or frozenset({"viewer"}))
+
+    if mode == "jwt":
+        if not authorization or not authorization.lower().startswith(_BEARER_PREFIX):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+        claims = _decode_jwt(authorization[len(_BEARER_PREFIX) :].strip())
+        claim_roles = (
+            _roles_from_value(claims.get("roles"))
+            or _roles_from_value(claims.get("role"))
+            or _roles_from_value(claims.get("scope"))
+        )
+        return Principal(
+            user_id=str(claims.get("sub") or claims.get("email") or x_sbom_user or "jwt"),
+            roles=claim_roles or header_roles or frozenset({"viewer"}),
+        )
+
+    raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Server auth misconfigured")
+
+
+def require_roles(*allowed_roles: str) -> Callable[[Principal], Principal]:
+    allowed = {role.lower() for role in allowed_roles}
+
+    def _dependency(principal: Principal = Depends(get_current_principal)) -> Principal:
+        if principal.has_any_role(allowed):
+            return principal
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient role for this action")
+
+    return _dependency

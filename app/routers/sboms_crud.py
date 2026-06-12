@@ -34,6 +34,7 @@ from ..analysis import (
     extract_components,
     get_analysis_settings_multi,
 )
+from ..auth import require_roles
 from ..db import get_db
 from ..idempotency import (
     analysis_run_to_dict,
@@ -85,6 +86,7 @@ from ..validation import run as run_validation
 log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["sboms"])
+_security_role = Depends(require_roles("admin", "security"))
 
 
 # ---- Helper Functions ----
@@ -841,6 +843,7 @@ def delete_sbom(
 def restore_sbom(
     sbom_id: int = Path(..., ge=1),
     user_id: str | None = Query(None),
+    _principal=_security_role,
     db: Session = Depends(get_db),
 ):
     """Restore a soft-deleted SBOM. Does not cascade — children must be

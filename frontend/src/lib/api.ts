@@ -34,8 +34,11 @@ import type {
   DashboardVex,
   LifecycleOverridePayload,
   LifecycleReport,
+  VexDiscoveryResponse,
   VexImportResponse,
   VexListResponse,
+  VexOverrideHistoryResponse,
+  VexOverridePayload,
   AiRepairSuggestion,
   AiFixSuggestionRequest,
   ApplyPatchRequest,
@@ -479,6 +482,20 @@ export function refreshSbomLifecycle(sbomId: number, force = true, signal?: Abor
 
 export function getSbomLifecycleReport(sbomId: number, signal?: AbortSignal) {
   return request<LifecycleReport>(`/api/sboms/${sbomId}/lifecycle/report`, { signal });
+}
+
+export function exportSbomLifecycleReportCsv(sbomId: number, reportType = 'all', signal?: AbortSignal) {
+  const params = new URLSearchParams({ format: 'csv' });
+  if (reportType && reportType !== 'all') params.set('report_type', reportType);
+  return downloadBinary(
+    `/api/sboms/${sbomId}/lifecycle/report?${params.toString()}`,
+    `sbom_${sbomId}_lifecycle${reportType && reportType !== 'all' ? `_${reportType}` : ''}.csv`,
+    signal,
+  );
+}
+
+export function exportSbomLifecycleReportPack(sbomId: number, signal?: AbortSignal) {
+  return downloadBinary(`/api/sboms/${sbomId}/reports/lifecycle-pack`, `sbom_${sbomId}_lifecycle_reports.zip`, signal);
 }
 
 export function refreshComponentLifecycle(componentId: number, force = true, signal?: AbortSignal) {
@@ -1014,6 +1031,17 @@ export function getSbomVexStatements(sbomId: number, signal?: AbortSignal) {
   return request<VexListResponse>(`/api/sboms/${sbomId}/vex`, { signal });
 }
 
+export function discoverSbomVexDocuments(sbomId: number, force = false, signal?: AbortSignal) {
+  return request<VexDiscoveryResponse>(
+    `/api/sboms/${sbomId}/vex/discover?force=${force ? 'true' : 'false'}`,
+    {
+      method: 'POST',
+      signal,
+    },
+    120_000,
+  );
+}
+
 export function uploadSbomVexDocument(
   sbomId: number,
   payload: {
@@ -1029,6 +1057,49 @@ export function uploadSbomVexDocument(
     method: 'POST',
     body: JSON.stringify(payload),
   });
+}
+
+export function overrideVexStatement(
+  componentId: number,
+  vulnerabilityId: string,
+  payload: VexOverridePayload,
+  signal?: AbortSignal,
+) {
+  return request<VexListResponse['statements'][number]>(
+    `/api/components/${componentId}/vulnerabilities/${encodeURIComponent(vulnerabilityId)}/vex-override`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+      signal,
+    },
+  );
+}
+
+export function getVexOverrideHistory(componentId: number, vulnerabilityId: string, signal?: AbortSignal) {
+  return request<VexOverrideHistoryResponse>(
+    `/api/components/${componentId}/vulnerabilities/${encodeURIComponent(vulnerabilityId)}/vex-override/history`,
+    { signal },
+  );
+}
+
+export function exportSbomVexReportJson(sbomId: number, reportType = 'all', signal?: AbortSignal) {
+  const params = new URLSearchParams({ format: 'json' });
+  if (reportType && reportType !== 'all') params.set('report_type', reportType);
+  return downloadBinary(`/api/sboms/${sbomId}/vex/report?${params.toString()}`, `sbom_${sbomId}_vex.json`, signal);
+}
+
+export function exportSbomVexReportCsv(sbomId: number, reportType = 'all', signal?: AbortSignal) {
+  const params = new URLSearchParams({ format: 'csv' });
+  if (reportType && reportType !== 'all') params.set('report_type', reportType);
+  return downloadBinary(
+    `/api/sboms/${sbomId}/vex/report?${params.toString()}`,
+    `sbom_${sbomId}_vex${reportType && reportType !== 'all' ? `_${reportType}` : ''}.csv`,
+    signal,
+  );
+}
+
+export function exportSbomVexReportPack(sbomId: number, signal?: AbortSignal) {
+  return downloadBinary(`/api/sboms/${sbomId}/reports/vex-pack`, `sbom_${sbomId}_vex_reports.zip`, signal);
 }
 
 /** Treemap cells — one per analysed SBOM, latest successful run. */

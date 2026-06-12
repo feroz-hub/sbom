@@ -340,6 +340,14 @@ def _ensure_seed_data() -> None:
     ):
         _ensure_column("component_lifecycle_cache", column, type_sql, default)
 
+    for column, type_sql in (
+        ("source_url", "TEXT"),
+        ("discovery_evidence_json", "TEXT"),
+        ("last_refresh_status", "TEXT"),
+        ("provider_errors_json", "TEXT"),
+    ):
+        _ensure_column("vex_documents", column, type_sql)
+
 
     db = SessionLocal()
     try:

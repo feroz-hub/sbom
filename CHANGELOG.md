@@ -49,6 +49,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   [docs/vex-integration.md](docs/vex-integration.md) and
   [docs/component-lifecycle-sources.md](docs/component-lifecycle-sources.md).
 
+- **Production VEX/lifecycle hardening.**
+  Adds CSAF/VEX import with product-to-component matching and unmatched
+  low-confidence statement retention, vendor-hosted VEX discovery with cached
+  safe HTTP providers, CSV/ZIP lifecycle and VEX report exports, full SBOM
+  detail VEX override UI with validation and audit history, evidence modals for
+  lifecycle/VEX decisions, GitLab/Bitbucket/generic repository health signals,
+  and role checks for sensitive override/refresh/export actions.
+
 - **Component Deduplication (Stage 9 validation & persistence layer)**
   - Resolves component duplication inside uploaded SBOMs. Groups components using PURL, CPE, or fallback identity characteristics, chooses canonical records, merges attributes (licenses, hashes, external refs, properties, and supplier info), and remaps the dependency graph (with self-dependency filtering and duplicate target removal).
   - Flags duplicate database records using `is_duplicate` and `duplicate_of_component_id` columns, supporting `include_duplicates=true` queries in the API.

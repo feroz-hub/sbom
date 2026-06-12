@@ -5,6 +5,7 @@ from .endoflife_date_provider import EndOfLifeDateProvider
 from .lifecycle_enrichment_service import (
     LifecycleEnrichmentService,
     component_lifecycle_dict,
+    lifecycle_report_csv,
     refresh_component_lifecycle,
     summarize_components,
     sync_lifecycle_for_sbom,
@@ -33,6 +34,7 @@ __all__ = [
     "RepositoryHealthProvider",
     "canonical_status",
     "component_lifecycle_dict",
+    "lifecycle_report_csv",
     "normalize_component",
     "refresh_component_lifecycle",
     "summarize_components",

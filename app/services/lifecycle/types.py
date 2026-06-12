@@ -95,10 +95,35 @@ def now_iso() -> str:
 def canonical_status(value: str | None) -> str:
     if not value:
         return UNKNOWN
-    cleaned = " ".join(str(value).strip().replace("_", " ").replace("-", " ").split())
+    import re
+    # Split camelCase / PascalCase transitions preserving consecutive capitals (e.g. EndOfLife -> End Of Life)
+    s = re.sub(r'(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])', ' ', str(value))
+    cleaned = " ".join(s.strip().replace("_", " ").replace("-", " ").split())
     if cleaned in ALLOWED_LIFECYCLE_STATUSES:
         return cleaned
-    return STATUS_ALIASES.get(cleaned.lower(), UNKNOWN)
+
+    lower_cleaned = cleaned.lower()
+    if lower_cleaned in STATUS_ALIASES:
+        return STATUS_ALIASES[lower_cleaned]
+
+    # Fallback substring checks for robustness
+    if "eol" in lower_cleaned or "end of life" in lower_cleaned:
+        return EOL
+    if "eos" in lower_cleaned or "end of support" in lower_cleaned:
+        return EOS
+    if "eof" in lower_cleaned or "end of fix" in lower_cleaned:
+        return EOF
+    if "deprecated" in lower_cleaned:
+        return DEPRECATED
+    if "unsupported" in lower_cleaned:
+        return UNSUPPORTED
+    if "unmaintained" in lower_cleaned:
+        return UNSUPPORTED
+    if "eol soon" in lower_cleaned or "nearing eol" in lower_cleaned:
+        return EOL_SOON
+    if "possibly unmaintained" in lower_cleaned:
+        return POSSIBLY_UNMAINTAINED
+    return UNKNOWN
 
 
 def canonical_confidence(value: str | None) -> str:

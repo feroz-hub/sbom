@@ -27,6 +27,7 @@ from .types import (
     EOL_SOON,
     EOS,
     HIGH,
+    MEDIUM,
     POSSIBLY_UNMAINTAINED,
     STATUS_ALIASES,
     UNKNOWN,
@@ -100,17 +101,18 @@ class LifecycleEnrichmentService:
             return result
 
         result = self._lookup_providers(normalized)
-        if result.is_actionable:
-            self._write_cache(db, normalized, result)
-            self._apply_result(component, result, normalized)
-            return result
 
+        # Rule: Do not overwrite High/Medium confidence lifecycle evidence with Unknown
         if cache_entry is not None:
-            stale_result = self._result_from_cache(cache_entry, normalized, stale=True)
-            self._apply_result(component, stale_result, normalized)
-            return stale_result
+            cache_confidence = cache_entry.confidence or "Unknown"
+            cache_status = cache_entry.lifecycle_status or UNKNOWN
+            if cache_status != UNKNOWN and cache_confidence in {HIGH, MEDIUM} and result.lifecycle_status == UNKNOWN:
+                stale = self._cache_expired(cache_entry)
+                result = self._result_from_cache(cache_entry, normalized, stale=stale)
+                self._apply_result(component, result, normalized)
+                return result
 
-        result = unknown_result(normalized, "Lifecycle Providers").canonicalized()
+        self._write_cache(db, normalized, result)
         self._apply_result(component, result, normalized)
         return result
 
@@ -268,8 +270,11 @@ class LifecycleEnrichmentService:
         cache_entry.evidence_json = result.evidence
         cache_entry.confidence = result.confidence
         cache_entry.checked_at = result.checked_at or now_iso()
+
+        # Unknown cache should have a shorter TTL than confirmed lifecycle evidence (1 day vs cache_ttl_days)
+        ttl_days = 1 if result.lifecycle_status == UNKNOWN else self.cache_ttl_days
         cache_entry.expires_at = (
-            datetime.now(UTC).replace(microsecond=0) + timedelta(days=self.cache_ttl_days)
+            datetime.now(UTC).replace(microsecond=0) + timedelta(days=ttl_days)
         ).isoformat()
         cache_entry.is_stale = False
         db.add(cache_entry)
@@ -450,6 +455,84 @@ def sync_lifecycle_for_sbom(db: Session, sbom_id: int, *, force_refresh: bool = 
     return LifecycleEnrichmentService().enrich_sbom(db, sbom_id, force_refresh=force_refresh)
 
 
+def lifecycle_report_csv(db: Session, sbom_id: int, *, report_type: str | None = None) -> str:
+    import csv
+    import io
+
+    report = LifecycleEnrichmentService().lifecycle_report(db, sbom_id)
+    components = _filter_lifecycle_components(report["components"], report_type)
+    out = io.StringIO()
+    writer = csv.DictWriter(
+        out,
+        fieldnames=[
+            "component_id",
+            "name",
+            "version",
+            "ecosystem",
+            "purl",
+            "supplier",
+            "lifecycle_status",
+            "eos_date",
+            "eol_date",
+            "eof_date",
+            "deprecated",
+            "unsupported",
+            "maintenance_status",
+            "latest_version",
+            "recommended_version",
+            "recommendation",
+            "source_name",
+            "source_url",
+            "confidence",
+            "checked_at",
+            "is_stale",
+            "manual_override",
+        ],
+    )
+    writer.writeheader()
+    for component in components:
+        writer.writerow(
+            {
+                "component_id": component.get("id"),
+                "name": component.get("name"),
+                "version": component.get("version"),
+                "ecosystem": component.get("ecosystem"),
+                "purl": component.get("purl"),
+                "supplier": component.get("supplier"),
+                "lifecycle_status": component.get("lifecycle_status"),
+                "eos_date": component.get("eos_date"),
+                "eol_date": component.get("eol_date"),
+                "eof_date": component.get("eof_date"),
+                "deprecated": component.get("deprecated"),
+                "unsupported": component.get("unsupported"),
+                "maintenance_status": component.get("maintenance_status"),
+                "latest_version": component.get("latest_version"),
+                "recommended_version": component.get("recommended_version"),
+                "recommendation": component.get("recommendation"),
+                "source_name": component.get("source_name"),
+                "source_url": component.get("source_url"),
+                "confidence": component.get("confidence"),
+                "checked_at": component.get("checked_at"),
+                "is_stale": component.get("is_stale"),
+                "manual_override": component.get("manual_override"),
+            }
+        )
+    return out.getvalue()
+
+
+def _filter_lifecycle_components(components: list[dict[str, Any]], report_type: str | None) -> list[dict[str, Any]]:
+    key = (report_type or "all").strip().lower().replace("-", "_")
+    if key in {"all", "json", "csv", ""}:
+        return components
+    if key in {"unsupported", "unsupported_component", "unsupported_components"}:
+        return [c for c in components if c.get("unsupported") or canonical_status(c.get("lifecycle_status")) == UNSUPPORTED]
+    if key in {"eol", "eos", "eof", "eol_eos_eof"}:
+        return [c for c in components if canonical_status(c.get("lifecycle_status")) in {EOL, EOS, EOF} or c.get("eol_date") or c.get("eos_date") or c.get("eof_date")]
+    if key in {"deprecated", "deprecated_component", "deprecated_components"}:
+        return [c for c in components if c.get("deprecated") or canonical_status(c.get("lifecycle_status")) == DEPRECATED]
+    return components
+
+
 def refresh_component_lifecycle(db: Session, component_id: int, *, force_refresh: bool = True) -> SBOMComponent:
     component = db.get(SBOMComponent, component_id)
     if component is None:
@@ -463,6 +546,7 @@ def refresh_component_lifecycle(db: Session, component_id: int, *, force_refresh
 __all__ = [
     "LifecycleEnrichmentService",
     "component_lifecycle_dict",
+    "lifecycle_report_csv",
     "refresh_component_lifecycle",
     "summarize_components",
     "sync_lifecycle_for_sbom",

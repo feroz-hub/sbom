@@ -25,7 +25,7 @@ Provider priority:
 2. **endoflife.date**: authoritative lifecycle dates for runtimes, platforms, frameworks, databases, and operating systems such as Node.js, Python, Java, .NET, Angular, Django, Spring Framework, Ubuntu, Debian, PostgreSQL, MySQL, and Kubernetes.
 3. **deps.dev**: package/version metadata for supported open-source ecosystems. Explicit deprecation is lifecycle evidence; advisory/latest-version metadata is recommendation evidence only.
 4. **Package registries**: package ecosystem metadata. Current production support includes npm deprecation, PyPI latest/yanked release signals, NuGet deprecation metadata, and Maven latest-version metadata.
-5. **Repository health**: conservative repository support signals when a registry or external reference exposes a repository URL. GitHub archived/disabled repositories can mark a component `Unsupported`; stale activity is stored as maintenance evidence only.
+5. **Repository health**: conservative repository support signals when a registry or external reference exposes a repository URL. GitHub and GitLab archived/disabled repositories can mark a component `Unsupported`; Bitbucket availability and generic repository URLs are stored as evidence without guessing EOL. Stale activity is stored as maintenance evidence only.
 6. **OSV**: vulnerability and fixed-version recommendations only. OSV does not mark lifecycle status as EOL/EOS.
 
 ## Decision Rules
@@ -35,8 +35,12 @@ Provider priority:
 - A component is `EOL Soon` when a matched EOL date is within 180 days.
 - Registry deprecation/yanked metadata marks `Deprecated`.
 - Archived or disabled source repositories mark `Unsupported` with medium confidence.
+- GitLab archived repositories can contribute to `Unsupported`; unavailable
+  GitLab or Bitbucket repositories are low-confidence unsupported evidence.
 - Old package age alone does not mark a component EOL or unsupported.
 - Stale repository activity alone sets `maintenance_status = Possibly Unmaintained`; it does not mark EOL.
+- Generic repository URLs remain `Unknown` unless stronger provider evidence is
+  available.
 - `Possibly Unmaintained` may be surfaced as a lifecycle governance status/count, but it is not equivalent to `Unsupported`.
 - OSV findings can set `recommended_version` and `recommendation`, but lifecycle status remains `Unknown` unless another provider supplies status evidence.
 - Every stored lifecycle result includes source, confidence, checked time, and evidence JSON when available.
@@ -105,7 +109,16 @@ compatibility, and writes a dedicated
 - `PATCH /api/components/{component_id}/lifecycle-override`: applies an audited manual override.
 - `GET /dashboard/lifecycle`: returns lifecycle dashboard counts, top risky components, stale counts, and recommended upgrades.
 - `GET /api/sboms/{sbom_id}/lifecycle/report`: returns a detailed JSON lifecycle report.
+- `GET /api/sboms/{sbom_id}/lifecycle/report?format=csv`: returns CSV lifecycle
+  exports. `report_type` can filter `unsupported`, `eol_eos_eof`, or
+  `deprecated`.
+- `GET /api/sboms/{sbom_id}/reports/lifecycle-pack`: ZIP pack with JSON and
+  focused CSV reports.
 - `GET /dashboard/vex`: returns VEX exploitability counts separately from lifecycle risk.
+
+Lifecycle refresh, lifecycle override, lifecycle report export, and SBOM version
+restore require an `admin` or `security` role when auth is enabled. Local
+`API_AUTH_MODE=none` remains permissive for developer/test use.
 
 ## Export
 
@@ -128,6 +141,10 @@ SPDX JSON exports attempt to include lifecycle annotations. If augmentation woul
 - endoflife.date product matching uses a conservative slug map; unknown products fall through to registries/OSV.
 - Package age is intentionally not treated as EOL evidence.
 - Repository health currently supports GitHub API signals. Other repository hosts are preserved in evidence and return `Unknown`.
+- Repository health now supports GitHub, GitLab, Bitbucket, and conservative
+  generic repository evidence. Generic URLs intentionally remain low-confidence
+  `Unknown` unless another provider proves lifecycle status.
 - npm, PyPI, NuGet, and Maven are implemented first; other ecosystems normalize to the provider interface but may return `Unknown`.
-- Provider calls are synchronous inside the current request flow. A future background enrichment job should move refreshes off the upload path for very large SBOMs.
-- Authorization remains at the existing API protection layer; role-based lifecycle override permissions should be added before multi-tenant production use.
+- Provider calls are synchronous in explicit refresh request flows. A future
+  background enrichment worker can call the same service functions for scheduled
+  stale-cache refreshes.

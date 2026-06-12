@@ -9,6 +9,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
+from ..auth import require_roles
 from ..db import get_db
 from ..models import SBOMComponent
 from ..schemas import LifecycleInfoUpdate, SBOMComponentOut
@@ -17,6 +18,7 @@ from ..services.lifecycle import LifecycleEnrichmentService, refresh_component_l
 log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["lifecycle"])
+_security_role = Depends(require_roles("admin", "security"))
 
 
 @router.get("/api/lifecycle/component/{component_id}", response_model=SBOMComponentOut)
@@ -35,6 +37,7 @@ def get_component_lifecycle(component_id: int, db: Session = Depends(get_db)):
 def update_component_lifecycle(
     component_id: int,
     payload: LifecycleInfoUpdate,
+    _principal=_security_role,
     db: Session = Depends(get_db)
 ):
     """Backward-compatible manual lifecycle override endpoint."""
@@ -51,6 +54,7 @@ def update_component_lifecycle(
 def patch_component_lifecycle_override(
     component_id: int,
     payload: LifecycleInfoUpdate,
+    _principal=_security_role,
     db: Session = Depends(get_db),
 ):
     """Apply an audited manual lifecycle override to a component."""
@@ -67,6 +71,7 @@ def patch_component_lifecycle_override(
 def refresh_component_lifecycle_endpoint(
     component_id: int,
     force: bool = Query(True),
+    _principal=_security_role,
     db: Session = Depends(get_db),
 ):
     """Force refresh lifecycle enrichment for one component."""

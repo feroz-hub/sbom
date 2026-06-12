@@ -499,3 +499,33 @@ def test_lifecycle_refresh_override_report_and_dashboard_endpoints(client, db):
 
     audit = db.execute(select(ComponentLifecycleCache).where(ComponentLifecycleCache.normalized_name == "api-package"))
     assert audit.scalars().first() is not None
+
+
+def test_lifecycle_diagnostics_endpoint(client, db):
+    sbom = SBOMSource(sbom_name="diag-lifecycle", sbom_data="{}", status="validated")
+    db.add(sbom)
+    db.flush()
+    component = SBOMComponent(
+        sbom_id=sbom.id,
+        name="diag-package",
+        version="1.0.0",
+        component_type="library",
+        lifecycle_status=EOL,
+        lifecycle_source="endoflife.date",
+        lifecycle_confidence=HIGH,
+        lifecycle_evidence_json={"cached": True},
+        lifecycle_checked_at=_past_iso(),
+    )
+    db.add(component)
+    db.commit()
+
+    diag_response = client.get(f"/api/sboms/{sbom.id}/lifecycle/diagnostics")
+    assert diag_response.status_code == 200
+    diag = diag_response.json()
+    assert diag["component_count"] == 1
+    assert diag["components_enriched"] == 1
+    assert diag["unknown_count"] == 0
+    assert diag["cache_hit_count"] == 1
+    assert diag["provider_hit_count"] == 0
+    assert len(diag["sample_matched_components"]) == 1
+    assert diag["sample_matched_components"][0]["name"] == "diag-package"

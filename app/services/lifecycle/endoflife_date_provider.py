@@ -45,6 +45,7 @@ PRODUCT_SLUGS: dict[str, str] = {
     "spring": "spring-framework",
     "spring-framework": "spring-framework",
     "spring framework": "spring-framework",
+    "spring-boot": "spring-boot",
     "ubuntu": "ubuntu",
     "debian": "debian",
     "postgres": "postgresql",
@@ -99,9 +100,22 @@ class EndOfLifeDateProvider(LifecycleProvider):
             return unknown_result(component, self.name)
 
         eol_date = _extract_date(matched, "eol", "eolFrom", "endOfLife")
-        eos_date = _extract_date(matched, "support", "eos", "endOfSupport")
+        # Extract support/EOS and extendedSupport
+        eos_date = _extract_date(matched, "support", "eos", "endOfSupport", "eoasFrom")
+        extended_support = _extract_date(matched, "extendedSupport", "eoesFrom", "extendedSupportFrom", "extended_support")
+        if extended_support:
+            eos_date = extended_support
+
+        # EOF only if explicit source field exists
         eof_date = _extract_date(matched, "eof", "endOfFix", "endOfFullSupport")
-        latest = _string_value(matched, "latest", "latestVersion", "latestRelease")
+
+        # Handle dict-like latest values from v1 API
+        latest_val = matched.get("latest") or matched.get("latestVersion") or matched.get("latestRelease")
+        if isinstance(latest_val, dict):
+            latest = str(latest_val.get("name") or latest_val.get("version") or "") or None
+        else:
+            latest = _string_value(matched, "latest", "latestVersion", "latestRelease")
+
         status = self._status_from_dates(eol_date, eos_date, eof_date, matched)
         recommendation = _recommendation(status, latest, component.normalized_version, slug)
 
@@ -162,7 +176,9 @@ class EndOfLifeDateProvider(LifecycleProvider):
         eol = _parse_date(eol_date)
         eos = _parse_date(eos_date)
         eof = _parse_date(eof_date)
-        if eol and eol < today:
+        # Check if cycle has explicit boolean EOL/support properties
+        is_eol_bool = cycle.get("eol") is True or str(cycle.get("eol")).lower() == "true" or cycle.get("isEol") is True or str(cycle.get("isEol")).lower() == "true"
+        if (eol and eol < today) or is_eol_bool:
             return EOL
         if eos and eos < today:
             return EOS

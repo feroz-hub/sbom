@@ -307,8 +307,47 @@ export interface VexImportResponse {
   document_id: number;
   sbom_id: number;
   statements_imported: number;
+  matched_statements?: number;
+  unmatched_statements?: number;
   format?: string | null;
   validation_status: string;
+}
+
+export interface VexOverridePayload {
+  status: VexStatus | string;
+  justification?: string | null;
+  impact_statement?: string | null;
+  action_statement?: string | null;
+  fixed_version?: string | null;
+  mitigation?: string | null;
+  evidence_url?: string | null;
+  reason: string;
+  updated_by?: string | null;
+}
+
+export interface VexOverrideAuditEntry {
+  id: number;
+  old_value: Record<string, unknown> | null;
+  new_value: Record<string, unknown> | null;
+  reason: string;
+  evidence_url?: string | null;
+  changed_by?: string | null;
+  changed_at: string;
+}
+
+export interface VexOverrideHistoryResponse {
+  component_id: number;
+  vulnerability_id: string;
+  history: VexOverrideAuditEntry[];
+}
+
+export interface VexDiscoveryResponse {
+  sbom_id: number;
+  discovered_documents: number;
+  statements_imported: number;
+  matched_statements: number;
+  unmatched_statements: number;
+  errors: Array<{ provider?: string; url?: string; error: string }>;
 }
 
 export interface DashboardVex {

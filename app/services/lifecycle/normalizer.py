@@ -187,34 +187,91 @@ def infer_ecosystem(
     component_group: str | None,
     cpe: str | None,
 ) -> str:
+    name_low = name.lower()
+    supplier_low = (supplier or "").lower()
+    group_low = (component_group or "").lower()
+    cpe_low = (cpe or "").lower()
+
     haystack = " ".join(part for part in (name, supplier or "", component_type or "", component_group or "") if part)
     lowered = haystack.lower()
-    if re.search(r"(^|[-_/])npm($|[-_/])", lowered) or lowered.startswith("@"):
+
+    # 1. Direct matches on names of known platforms/runtimes
+    if name_low in {"node", "nodejs", "javascript", "js", "typescript", "ts"}:
         return "npm"
-    if "pypi" in lowered or lowered.startswith("python-"):
+    if name_low in {"python", "pip"}:
         return "pypi"
-    if "maven" in lowered or component_group:
+    if name_low in {"maven", "java", "openjdk", "jdk"}:
         return "maven"
-    if "nuget" in lowered or ".net" in lowered or "dotnet" in lowered:
+    if name_low in {"nuget", "dotnet", ".net", "c#"}:
         return "nuget"
-    if "rubygems" in lowered or lowered.startswith("ruby-"):
+
+    # 2. Check for npm
+    npm_libs = {"lodash", "express", "axios", "react", "angular", "vue", "uuid", "chalk", "commander", "tslib", "semver", "debug", "moment", "webpack"}
+    if (
+        re.search(r"(^|[-_/])npm($|[-_/])", lowered)
+        or name_low.startswith("@")
+        or name_low.startswith("%40")
+        or name_low in npm_libs
+        or "node" in supplier_low
+        or "npm" in supplier_low
+        or "javascript" in lowered
+    ):
+        return "npm"
+
+    # 3. Check for pypi
+    pypi_libs = {"requests", "urllib3", "django", "flask", "numpy", "pandas", "cryptography", "pillow", "jinja2", "click", "six", "certifi", "attrs", "idna", "pip", "setuptools"}
+    if (
+        "pypi" in lowered
+        or name_low.startswith("python-")
+        or name_low in pypi_libs
+        or "python" in supplier_low
+        or "pypi" in supplier_low
+    ):
+        return "pypi"
+
+    # 4. Check for nuget
+    nuget_libs = {"newtonsoft.json", "entityframework", "dapper", "nlog", "log4net", "serilog", "autofac", "moq", "xunit", "nunit"}
+    if (
+        "nuget" in lowered
+        or ".net" in lowered
+        or "dotnet" in lowered
+        or "microsoft" in lowered
+        or name_low in nuget_libs
+        or "nuget" in supplier_low
+        or "microsoft" in supplier_low
+    ):
+        return "nuget"
+
+    # 5. Check for maven
+    maven_libs = {"log4j-core", "jackson-databind", "spring-core", "spring-webmvc", "spring-boot", "junit", "slf4j"}
+    if (
+        "maven" in lowered
+        or "java" in lowered
+        or name_low in maven_libs
+        or "apache" in lowered
+        or "spring" in lowered
+        or "fasterxml" in lowered
+        or ":" in name_low
+        or (component_group and "." in component_group and " " not in component_group)
+    ):
+        return "maven"
+
+    # 6. Check for others
+    if "rubygems" in lowered or name_low.startswith("ruby-") or "gem" in lowered:
         return "gem"
-    if "golang" in lowered or lowered.startswith("golang.org/") or lowered.startswith("github.com/"):
+    if "golang" in lowered or name_low.startswith("golang.org/") or name_low.startswith("github.com/"):
         return "go"
-    if "cargo" in lowered or "crates.io" in lowered:
+    if "cargo" in lowered or "crates.io" in lowered or "rust" in lowered:
         return "cargo"
-    if "ubuntu" in lowered:
+    if "ubuntu" in lowered or (cpe and ":ubuntu:" in cpe_low):
         return "ubuntu"
-    if "debian" in lowered:
+    if "debian" in lowered or (cpe and ":debian:" in cpe_low):
         return "debian"
-    if "alpine" in lowered:
+    if "alpine" in lowered or (cpe and ":alpine:" in cpe_low):
         return "alpine"
     if "docker" in lowered or (component_type and component_type.lower() == "container"):
         return "docker"
-    if cpe and ":ubuntu:" in cpe.lower():
-        return "ubuntu"
-    if cpe and ":debian:" in cpe.lower():
-        return "debian"
+
     return "generic"
 
 

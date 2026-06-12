@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Play, ArrowLeft, ExternalLink, Edit2, GitBranch, History, Layers, Download, Check, RefreshCw, Eye, ArrowRight, X } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { Dialog, DialogBody } from '@/components/ui/Dialog';
 import { StatusBadge } from '@/components/ui/Badge';
 import { Table, TableHead, TableBody, Th, SortableTh, Td, EmptyRow } from '@/components/ui/Table';
 import { SkeletonRow } from '@/components/ui/Spinner';
@@ -27,7 +28,15 @@ import {
   restoreSbomVersion,
   refreshSbomLifecycle,
   refreshComponentLifecycle,
+  discoverSbomVexDocuments,
+  exportSbomLifecycleReportCsv,
+  exportSbomLifecycleReportPack,
+  exportSbomVexReportCsv,
+  exportSbomVexReportJson,
+  exportSbomVexReportPack,
+  getVexOverrideHistory,
   getSbomVexStatements,
+  overrideVexStatement,
   uploadSbomVexDocument,
   BASE_URL
 } from '@/lib/api';
@@ -36,10 +45,16 @@ import { invalidateAnalysisCompletion, invalidateDashboardTiles, invalidateSbomS
 import { useTableSort } from '@/hooks/useTableSort';
 import { usePagination } from '@/hooks/usePagination';
 import { formatDate, formatDuration } from '@/lib/utils';
-import type { SBOMSource, SBOMComponent, AnalysisRun, VexStatement } from '@/types';
+import type { SBOMSource, SBOMComponent, AnalysisRun, VexOverrideAuditEntry, VexStatement, VexStatus } from '@/types';
 
 type ComponentSortKey = 'name' | 'version' | 'component_type' | 'license' | 'lifecycle_status';
 type RunSortKey = 'id' | 'run_status' | 'total_findings' | 'duration_ms' | 'started_on';
+type EvidenceModalState =
+  | { kind: 'lifecycle'; component: SBOMComponent }
+  | { kind: 'vex'; statement: VexStatement }
+  | null;
+
+const VEX_STATUSES: VexStatus[] = ['affected', 'not_affected', 'fixed', 'under_investigation', 'unknown'];
 
 interface SbomDetailProps {
   sbom: SBOMSource;
@@ -69,6 +84,41 @@ function lifecycleBadgeClass(status?: string | null) {
     return 'bg-emerald-50 text-emerald-700 border-emerald-200';
   }
   return 'bg-gray-50 text-gray-700 border-gray-200';
+}
+
+function labelize(value?: string | null) {
+  return (value || 'Unknown').replace(/_/g, ' ');
+}
+
+function jsonSummary(value?: Record<string, unknown> | null) {
+  if (!value) return 'No raw evidence stored.';
+  try {
+    const text = JSON.stringify(value, null, 2);
+    return text.length > 900 ? `${text.slice(0, 900)}…` : text;
+  } catch {
+    return 'Evidence could not be rendered.';
+  }
+}
+
+function triggerDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+function canManageEvidenceFromClient() {
+  if (typeof window === 'undefined') return true;
+  const configured = window.localStorage.getItem('sbom-role') || window.localStorage.getItem('sbom:user-role');
+  if (!configured) return true;
+  return configured
+    .split(/[,\s]+/)
+    .map((role) => role.trim().toLowerCase())
+    .some((role) => role === 'admin' || role === 'security');
 }
 
 export function SbomDetail({ sbom }: SbomDetailProps) {
@@ -101,6 +151,25 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
   const [vexDocumentText, setVexDocumentText] = useState('');
   const [vexMessage, setVexMessage] = useState('');
   const [isUploadingVex, setIsUploadingVex] = useState(false);
+  const [isDiscoveringVex, setIsDiscoveringVex] = useState(false);
+  const [downloadMessage, setDownloadMessage] = useState('');
+  const [evidenceModal, setEvidenceModal] = useState<EvidenceModalState>(null);
+  const [isVexOverrideOpen, setIsVexOverrideOpen] = useState(false);
+  const [vexOverrideComponentId, setVexOverrideComponentId] = useState('');
+  const [vexOverrideVulnerability, setVexOverrideVulnerability] = useState('');
+  const [vexOverrideStatus, setVexOverrideStatus] = useState<VexStatus>('under_investigation');
+  const [vexOverrideJustification, setVexOverrideJustification] = useState('');
+  const [vexOverrideImpact, setVexOverrideImpact] = useState('');
+  const [vexOverrideAction, setVexOverrideAction] = useState('');
+  const [vexOverrideFixedVersion, setVexOverrideFixedVersion] = useState('');
+  const [vexOverrideMitigation, setVexOverrideMitigation] = useState('');
+  const [vexOverrideEvidenceUrl, setVexOverrideEvidenceUrl] = useState('');
+  const [vexOverrideReason, setVexOverrideReason] = useState('');
+  const [vexOverrideError, setVexOverrideError] = useState('');
+  const [isSavingVexOverride, setIsSavingVexOverride] = useState(false);
+  const [vexOverrideHistory, setVexOverrideHistory] = useState<VexOverrideAuditEntry[]>([]);
+  const [isLoadingVexHistory, setIsLoadingVexHistory] = useState(false);
+  const [canManageEvidence] = useState(canManageEvidenceFromClient);
 
   // Version Comparison State
   const [selectedVersions, setSelectedVersions] = useState<number[]>([]);
@@ -199,6 +268,18 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
       return acc;
     }, {});
   }, [vexStatements]);
+  const vulnerabilityOptions = useMemo(
+    () => Array.from(new Set(vexStatements.map((statement) => statement.vulnerability_id).filter(Boolean))),
+    [vexStatements],
+  );
+  const selectedOverrideComponent = useMemo(
+    () => componentRows.find((component) => String(component.id) === vexOverrideComponentId) ?? null,
+    [componentRows, vexOverrideComponentId],
+  );
+  const staleLifecycleCount = useMemo(
+    () => componentRows.filter((component) => component.lifecycle_is_stale).length,
+    [componentRows],
+  );
 
   // Analysis runs: same pattern.
   const runRows = useMemo<AnalysisRun[]>(() => runs ?? [], [runs]);
@@ -413,7 +494,9 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
         document,
         source_name: 'Uploaded VEX',
       });
-      setVexMessage(`Imported ${result.statements_imported} VEX statements.`);
+      setVexMessage(
+        `Imported ${result.statements_imported} VEX statements; ${result.unmatched_statements ?? 0} unmatched.`,
+      );
       setVexDocumentText('');
       invalidateSbomSurfaces(queryClient, sbom.id);
       invalidateDashboardTiles(queryClient);
@@ -421,6 +504,111 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
       setVexMessage(err.message || 'VEX import failed.');
     } finally {
       setIsUploadingVex(false);
+    }
+  };
+
+  const handleDiscoverVexDocuments = async () => {
+    setIsDiscoveringVex(true);
+    setVexMessage('');
+    try {
+      const result = await discoverSbomVexDocuments(sbom.id, true);
+      queryClient.invalidateQueries({ queryKey: ['sbom-vex', sbom.id] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-vex'] });
+      const errorSuffix = result.errors?.length ? ` ${result.errors.length} provider error(s) recorded.` : '';
+      setVexMessage(
+        `Discovery imported ${result.statements_imported} statements from ${result.discovered_documents} document(s); ${result.unmatched_statements} unmatched.${errorSuffix}`,
+      );
+    } catch (err: any) {
+      setVexMessage(err.message || 'VEX discovery failed.');
+    } finally {
+      setIsDiscoveringVex(false);
+    }
+  };
+
+  const openVexOverrideModal = async (statement?: VexStatement) => {
+    if (!canManageEvidence) return;
+    const componentId = statement?.component_id ? String(statement.component_id) : String(componentRows[0]?.id ?? '');
+    const vulnerabilityId = statement?.vulnerability_id ?? vulnerabilityOptions[0] ?? '';
+    setVexOverrideComponentId(componentId);
+    setVexOverrideVulnerability(vulnerabilityId);
+    setVexOverrideStatus((statement?.status as VexStatus) || 'under_investigation');
+    setVexOverrideJustification(statement?.justification || '');
+    setVexOverrideImpact(statement?.impact_statement || '');
+    setVexOverrideAction(statement?.action_statement || '');
+    setVexOverrideFixedVersion(statement?.fixed_version || '');
+    setVexOverrideMitigation(statement?.mitigation || '');
+    setVexOverrideEvidenceUrl(statement?.source_url || '');
+    setVexOverrideReason('');
+    setVexOverrideError('');
+    setVexOverrideHistory([]);
+    setIsVexOverrideOpen(true);
+
+    if (statement?.component_id && statement.vulnerability_id) {
+      setIsLoadingVexHistory(true);
+      try {
+        const history = await getVexOverrideHistory(statement.component_id, statement.vulnerability_id);
+        setVexOverrideHistory(history.history);
+      } catch {
+        setVexOverrideHistory([]);
+      } finally {
+        setIsLoadingVexHistory(false);
+      }
+    }
+  };
+
+  const validateVexOverride = () => {
+    if (!vexOverrideComponentId) return 'Component is required.';
+    if (!vexOverrideVulnerability.trim()) return 'Vulnerability or CVE is required.';
+    if (!vexOverrideReason.trim()) return 'Override reason is required.';
+    if (vexOverrideStatus === 'not_affected' && !vexOverrideJustification.trim() && !vexOverrideImpact.trim()) {
+      return 'not_affected requires justification or impact statement.';
+    }
+    if (vexOverrideStatus === 'fixed' && !vexOverrideFixedVersion.trim() && !vexOverrideEvidenceUrl.trim()) {
+      return 'fixed requires fixed version or evidence URL.';
+    }
+    return '';
+  };
+
+  const handleSubmitVexOverride = async () => {
+    const validation = validateVexOverride();
+    if (validation) {
+      setVexOverrideError(validation);
+      return;
+    }
+    setIsSavingVexOverride(true);
+    setVexOverrideError('');
+    try {
+      await overrideVexStatement(Number(vexOverrideComponentId), vexOverrideVulnerability.trim(), {
+        status: vexOverrideStatus,
+        justification: vexOverrideJustification.trim() || null,
+        impact_statement: vexOverrideImpact.trim() || null,
+        action_statement: vexOverrideAction.trim() || null,
+        fixed_version: vexOverrideFixedVersion.trim() || null,
+        mitigation: vexOverrideMitigation.trim() || null,
+        evidence_url: vexOverrideEvidenceUrl.trim() || null,
+        reason: vexOverrideReason.trim(),
+        updated_by: sbom.created_by || null,
+      });
+      setVexMessage(`Manual VEX override saved for ${vexOverrideVulnerability.trim()}.`);
+      setIsVexOverrideOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['sbom-vex', sbom.id] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-vex'] });
+      invalidateDashboardTiles(queryClient);
+    } catch (err: any) {
+      setVexOverrideError(err.message || 'Manual VEX override failed.');
+    } finally {
+      setIsSavingVexOverride(false);
+    }
+  };
+
+  const handleDownload = async (label: string, loader: () => Promise<{ blob: Blob; filename: string }>) => {
+    setDownloadMessage(`Preparing ${label}…`);
+    try {
+      const { blob, filename } = await loader();
+      triggerDownload(blob, filename);
+      setDownloadMessage(`Downloaded ${filename}.`);
+    } catch (err: any) {
+      setDownloadMessage(err.message || `${label} download failed.`);
     }
   };
 
@@ -614,8 +802,44 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
           )}
 
           <Card>
-            <CardHeader>
-              <CardTitle>VEX Statements</CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between gap-3">
+              <div>
+                <CardTitle>VEX Statements</CardTitle>
+                {downloadMessage ? <p className="mt-1 text-xs text-hcl-muted">{downloadMessage}</p> : null}
+              </div>
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleDownload('VEX JSON', () => exportSbomVexReportJson(sbom.id))}
+                >
+                  <Download className="h-3.5 w-3.5" /> JSON
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleDownload('VEX CSV', () => exportSbomVexReportCsv(sbom.id))}
+                >
+                  <Download className="h-3.5 w-3.5" /> CSV
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleDownload('VEX report pack', () => exportSbomVexReportPack(sbom.id))}
+                >
+                  <Download className="h-3.5 w-3.5" /> Pack
+                </Button>
+                {canManageEvidence ? (
+                  <>
+                    <Button size="sm" variant="outline" onClick={handleDiscoverVexDocuments} loading={isDiscoveringVex}>
+                      <RefreshCw className="h-3.5 w-3.5" /> Discover
+                    </Button>
+                    <Button size="sm" onClick={() => openVexOverrideModal()}>
+                      <Edit2 className="h-3.5 w-3.5" /> Override
+                    </Button>
+                  </>
+                ) : null}
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
               {vexIsError ? (
@@ -670,20 +894,24 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                       <Th>Status</Th>
                       <Th>Source</Th>
                       <Th>Evidence</Th>
+                      <Th className="text-right">Actions</Th>
                     </tr>
                   </TableHead>
                   <TableBody>
                     {vexLoading ? (
-                      <SkeletonRow cols={5} />
+                      <SkeletonRow cols={6} />
                     ) : vexStatements.length === 0 ? (
-                      <EmptyRow cols={5} message="No VEX statements imported for this SBOM." />
+                      <EmptyRow cols={6} message="No VEX statements imported for this SBOM." />
                     ) : (
                       vexStatements.slice(0, 10).map((statement) => (
                         <tr key={statement.id} className="hover:bg-hcl-light/40">
                           <Td className="font-mono text-xs text-hcl-navy">{statement.vulnerability_id}</Td>
                           <Td className="text-sm text-hcl-navy">
-                            {statement.component_name ?? '—'}
+                            {statement.component_name ?? 'Unmatched'}
                             {statement.component_version ? <span className="text-hcl-muted"> @ {statement.component_version}</span> : null}
+                            {!statement.component_id ? (
+                              <div className="text-[10px] font-semibold text-amber-700">Low-confidence mapping</div>
+                            ) : null}
                           </Td>
                           <Td>
                             <span className="inline-flex rounded-full border border-hcl-border px-2 py-0.5 text-xs font-semibold text-hcl-navy">
@@ -693,6 +921,24 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                           <Td className="text-xs text-hcl-muted">{statement.source_name ?? 'VEX'}</Td>
                           <Td className="max-w-xs truncate text-xs text-hcl-muted">
                             {statement.justification || statement.impact_statement || statement.action_statement || '—'}
+                          </Td>
+                          <Td className="text-right">
+                            <button
+                              type="button"
+                              onClick={() => setEvidenceModal({ kind: 'vex', statement })}
+                              className="mr-3 inline-flex items-center gap-1 text-xs font-medium text-hcl-muted transition-colors hover:text-hcl-navy"
+                            >
+                              <Eye className="h-3 w-3" /> Evidence
+                            </button>
+                            {canManageEvidence ? (
+                              <button
+                                type="button"
+                                onClick={() => openVexOverrideModal(statement)}
+                                className="inline-flex items-center gap-1 text-xs font-medium text-hcl-blue transition-colors hover:text-hcl-navy"
+                              >
+                                <Edit2 className="h-3 w-3" /> Override
+                              </button>
+                            ) : null}
                           </Td>
                         </tr>
                       ))
@@ -739,6 +985,9 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
               {lifecycleMessage ? (
                 <p className="mt-1 text-xs text-hcl-muted">{lifecycleMessage}</p>
               ) : null}
+              {downloadMessage ? (
+                <p className="mt-1 text-xs text-hcl-muted">{downloadMessage}</p>
+              ) : null}
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2">
               <label className="flex items-center gap-1.5 mr-2 text-xs font-semibold text-hcl-navy cursor-pointer">
@@ -750,17 +999,30 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                 />
                 Show Duplicates
               </label>
-              <a
-                href={`${BASE_URL}/api/sboms/${sbom.id}/lifecycle/report`}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-hcl-border px-3 py-1.5 text-xs font-semibold text-hcl-navy transition-colors hover:bg-hcl-light"
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleDownload('lifecycle CSV', () => exportSbomLifecycleReportCsv(sbom.id))}
               >
-                <Download className="h-3.5 w-3.5" /> Lifecycle Report
-              </a>
+                <Download className="h-3.5 w-3.5" /> Lifecycle CSV
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleDownload('lifecycle report pack', () => exportSbomLifecycleReportPack(sbom.id))}
+              >
+                <Download className="h-3.5 w-3.5" /> Lifecycle Pack
+              </Button>
               <Button size="sm" variant="outline" onClick={handleRefreshLifecycle} loading={isRefreshingLifecycle}>
                 <RefreshCw className="h-3.5 w-3.5" /> Refresh Lifecycle
               </Button>
             </div>
           </CardHeader>
+          {staleLifecycleCount ? (
+            <div className="border-y border-amber-200 bg-amber-50 px-4 py-2 text-xs font-medium text-amber-800">
+              {staleLifecycleCount} lifecycle evidence record{staleLifecycleCount === 1 ? ' is' : 's are'} stale. Refresh before relying on this report for release decisions.
+            </div>
+          ) : null}
           <div className="overflow-hidden">
             <Table striped ariaLabel="SBOM components">
               <TableHead>
@@ -839,6 +1101,12 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                         </div>
                       </Td>
                       <Td className="text-right">
+                        <button
+                          onClick={() => setEvidenceModal({ kind: 'lifecycle', component: c })}
+                          className="mr-3 inline-flex items-center gap-1 text-xs font-medium text-hcl-muted transition-colors hover:text-hcl-navy"
+                        >
+                          <Eye className="h-3 w-3" /> Evidence
+                        </button>
                         <button
                           onClick={() => handleRefreshComponentLifecycle(c)}
                           disabled={refreshingComponentId === c.id}
@@ -1123,6 +1391,311 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
           </div>
         </Card>
       )}
+
+      <Dialog
+        open={Boolean(evidenceModal)}
+        onClose={() => setEvidenceModal(null)}
+        title={evidenceModal?.kind === 'vex' ? 'VEX Evidence' : 'Lifecycle Evidence'}
+        maxWidth="xl"
+        footer={
+          evidenceModal?.kind === 'lifecycle' ? (
+            <div className="flex items-center justify-end gap-2 px-6 py-4">
+              {canManageEvidence ? (
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => evidenceModal && handleRefreshComponentLifecycle(evidenceModal.component)}
+                    loading={evidenceModal ? refreshingComponentId === evidenceModal.component.id : false}
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" /> Refresh
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      if (evidenceModal?.kind === 'lifecycle') {
+                        openEditModal(evidenceModal.component);
+                        setEvidenceModal(null);
+                      }
+                    }}
+                  >
+                    <Edit2 className="h-3.5 w-3.5" /> Override
+                  </Button>
+                </>
+              ) : null}
+            </div>
+          ) : evidenceModal?.kind === 'vex' ? (
+            <div className="flex items-center justify-end gap-2 px-6 py-4">
+              {canManageEvidence ? (
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    if (evidenceModal?.kind === 'vex') {
+                      openVexOverrideModal(evidenceModal.statement);
+                      setEvidenceModal(null);
+                    }
+                  }}
+                >
+                  <Edit2 className="h-3.5 w-3.5" /> Override
+                </Button>
+              ) : null}
+            </div>
+          ) : null
+        }
+      >
+        <DialogBody className="space-y-4">
+          {evidenceModal?.kind === 'lifecycle' ? (
+            <>
+              <div className="grid gap-3 md:grid-cols-2">
+                {[
+                  ['Component', `${evidenceModal.component.name}${evidenceModal.component.version ? ` @ ${evidenceModal.component.version}` : ''}`],
+                  ['Status', canonicalLifecycleStatus(evidenceModal.component.lifecycle_status)],
+                  ['Source', evidenceModal.component.lifecycle_source || 'Unknown'],
+                  ['Confidence', evidenceModal.component.lifecycle_confidence || 'Unknown'],
+                  ['Checked', formatDate(evidenceModal.component.lifecycle_checked_at)],
+                  ['Stale', evidenceModal.component.lifecycle_is_stale ? 'Yes' : 'No'],
+                  ['Provider', evidenceModal.component.lifecycle_source || 'Unknown'],
+                  ['Recommendation', evidenceModal.component.lifecycle_recommendation || evidenceModal.component.recommended_version || 'None recorded'],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-lg border border-hcl-border p-3">
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-hcl-muted">{label}</div>
+                    <div className="mt-1 break-words text-sm font-medium text-hcl-navy">{value}</div>
+                  </div>
+                ))}
+              </div>
+              {evidenceModal.component.lifecycle_source_url ? (
+                <a
+                  href={evidenceModal.component.lifecycle_source_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-hcl-blue hover:underline"
+                >
+                  Open source <ExternalLink className="h-3 w-3" />
+                </a>
+              ) : null}
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-hcl-muted">Raw Evidence Summary</div>
+                <pre className="mt-2 max-h-72 overflow-auto rounded-lg border border-hcl-border bg-hcl-light/40 p-3 text-xs text-hcl-navy">
+                  {jsonSummary(evidenceModal.component.lifecycle_evidence_json)}
+                </pre>
+              </div>
+            </>
+          ) : evidenceModal?.kind === 'vex' ? (
+            <>
+              <div className="grid gap-3 md:grid-cols-2">
+                {[
+                  ['Vulnerability', evidenceModal.statement.vulnerability_id],
+                  ['Component', evidenceModal.statement.component_name ? `${evidenceModal.statement.component_name}${evidenceModal.statement.component_version ? ` @ ${evidenceModal.statement.component_version}` : ''}` : 'Unmatched'],
+                  ['Status', labelize(evidenceModal.statement.status)],
+                  ['Source', evidenceModal.statement.source_name || 'VEX'],
+                  ['Confidence', evidenceModal.statement.confidence || 'Unknown'],
+                  ['Checked', formatDate(evidenceModal.statement.created_at)],
+                  ['Stale', evidenceModal.statement.evidence_json?.stale ? 'Yes' : 'No stale signal'],
+                  ['Reason', String(evidenceModal.statement.evidence_json?.reason || evidenceModal.statement.evidence_json?.mapping || 'Not recorded')],
+                  ['Recommendation', evidenceModal.statement.action_statement || evidenceModal.statement.mitigation || evidenceModal.statement.fixed_version || 'None recorded'],
+                  ['Provider', evidenceModal.statement.source_name || 'VEX'],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-lg border border-hcl-border p-3">
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-hcl-muted">{label}</div>
+                    <div className="mt-1 break-words text-sm font-medium text-hcl-navy">{value}</div>
+                  </div>
+                ))}
+              </div>
+              {evidenceModal.statement.source_url ? (
+                <a
+                  href={evidenceModal.statement.source_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-hcl-blue hover:underline"
+                >
+                  Open source <ExternalLink className="h-3 w-3" />
+                </a>
+              ) : null}
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-hcl-muted">Raw Evidence Summary</div>
+                <pre className="mt-2 max-h-72 overflow-auto rounded-lg border border-hcl-border bg-hcl-light/40 p-3 text-xs text-hcl-navy">
+                  {jsonSummary(evidenceModal.statement.evidence_json)}
+                </pre>
+              </div>
+            </>
+          ) : null}
+        </DialogBody>
+      </Dialog>
+
+      <Dialog
+        open={isVexOverrideOpen}
+        onClose={() => setIsVexOverrideOpen(false)}
+        title="Manual VEX Override"
+        maxWidth="xl"
+        footer={
+          <div className="flex items-center justify-end gap-2 px-6 py-4">
+            <Button size="sm" variant="ghost" onClick={() => setIsVexOverrideOpen(false)}>
+              Cancel
+            </Button>
+            <Button size="sm" onClick={handleSubmitVexOverride} loading={isSavingVexOverride}>
+              Save Override
+            </Button>
+          </div>
+        }
+      >
+        <DialogBody className="space-y-4">
+          {vexOverrideError ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs font-medium text-red-800">
+              {vexOverrideError}
+            </div>
+          ) : null}
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wide text-hcl-muted">Component</label>
+              <select
+                aria-label="Component"
+                value={vexOverrideComponentId}
+                onChange={(event) => setVexOverrideComponentId(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-hcl-border p-2 text-sm text-hcl-navy focus:outline-none focus:ring-2 focus:ring-hcl-blue"
+              >
+                <option value="">Select component</option>
+                {componentRows.map((component) => (
+                  <option key={component.id} value={component.id}>
+                    {component.name}{component.version ? ` @ ${component.version}` : ''}
+                  </option>
+                ))}
+              </select>
+              {selectedOverrideComponent ? (
+                <p className="mt-1 text-[11px] text-hcl-muted">
+                  {selectedOverrideComponent.purl || selectedOverrideComponent.cpe || selectedOverrideComponent.supplier || 'No package identifier recorded.'}
+                </p>
+              ) : null}
+            </div>
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wide text-hcl-muted">Vulnerability / CVE</label>
+              <input
+                aria-label="Vulnerability or CVE"
+                list="vex-vulnerability-options"
+                value={vexOverrideVulnerability}
+                onChange={(event) => setVexOverrideVulnerability(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-hcl-border p-2 font-mono text-sm text-hcl-navy focus:outline-none focus:ring-2 focus:ring-hcl-blue"
+                placeholder="CVE-2026-0001"
+              />
+              <datalist id="vex-vulnerability-options">
+                {vulnerabilityOptions.map((id) => (
+                  <option key={id} value={id} />
+                ))}
+              </datalist>
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wide text-hcl-muted">VEX Status</label>
+              <select
+                aria-label="VEX Status"
+                value={vexOverrideStatus}
+                onChange={(event) => setVexOverrideStatus(event.target.value as VexStatus)}
+                className="mt-1 w-full rounded-lg border border-hcl-border p-2 text-sm text-hcl-navy focus:outline-none focus:ring-2 focus:ring-hcl-blue"
+              >
+                {VEX_STATUSES.map((status) => (
+                  <option key={status} value={status}>
+                    {labelize(status)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wide text-hcl-muted">Evidence URL</label>
+              <input
+                aria-label="Evidence URL"
+                type="url"
+                value={vexOverrideEvidenceUrl}
+                onChange={(event) => setVexOverrideEvidenceUrl(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-hcl-border p-2 text-sm text-hcl-navy focus:outline-none focus:ring-2 focus:ring-hcl-blue"
+                placeholder="https://vendor.example/security/advisory"
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wide text-hcl-muted">Justification</label>
+              <input
+                aria-label="Justification"
+                value={vexOverrideJustification}
+                onChange={(event) => setVexOverrideJustification(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-hcl-border p-2 text-sm text-hcl-navy focus:outline-none focus:ring-2 focus:ring-hcl-blue"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wide text-hcl-muted">Fixed Version</label>
+              <input
+                aria-label="Fixed Version"
+                value={vexOverrideFixedVersion}
+                onChange={(event) => setVexOverrideFixedVersion(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-hcl-border p-2 text-sm text-hcl-navy focus:outline-none focus:ring-2 focus:ring-hcl-blue"
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wide text-hcl-muted">Impact Statement</label>
+              <textarea
+                aria-label="Impact Statement"
+                value={vexOverrideImpact}
+                onChange={(event) => setVexOverrideImpact(event.target.value)}
+                className="mt-1 min-h-24 w-full rounded-lg border border-hcl-border p-2 text-sm text-hcl-navy focus:outline-none focus:ring-2 focus:ring-hcl-blue"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wide text-hcl-muted">Action Statement</label>
+              <textarea
+                aria-label="Action Statement"
+                value={vexOverrideAction}
+                onChange={(event) => setVexOverrideAction(event.target.value)}
+                className="mt-1 min-h-24 w-full rounded-lg border border-hcl-border p-2 text-sm text-hcl-navy focus:outline-none focus:ring-2 focus:ring-hcl-blue"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wide text-hcl-muted">Mitigation</label>
+            <textarea
+              aria-label="Mitigation"
+              value={vexOverrideMitigation}
+              onChange={(event) => setVexOverrideMitigation(event.target.value)}
+              className="mt-1 min-h-20 w-full rounded-lg border border-hcl-border p-2 text-sm text-hcl-navy focus:outline-none focus:ring-2 focus:ring-hcl-blue"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wide text-hcl-muted">Reason for Override</label>
+            <textarea
+              aria-label="Reason for Override"
+              value={vexOverrideReason}
+              onChange={(event) => setVexOverrideReason(event.target.value)}
+              className="mt-1 min-h-20 w-full rounded-lg border border-hcl-border p-2 text-sm text-hcl-navy focus:outline-none focus:ring-2 focus:ring-hcl-blue"
+            />
+          </div>
+
+          <div className="rounded-lg border border-hcl-border p-3">
+            <div className="text-xs font-semibold uppercase tracking-wide text-hcl-muted">Audit History</div>
+            {isLoadingVexHistory ? (
+              <p className="mt-2 text-xs text-hcl-muted">Loading audit history…</p>
+            ) : vexOverrideHistory.length ? (
+              <ul className="mt-2 space-y-2">
+                {vexOverrideHistory.map((entry) => (
+                  <li key={entry.id} className="rounded-lg bg-hcl-light/50 p-2 text-xs text-hcl-navy">
+                    <div className="font-semibold">{entry.reason}</div>
+                    <div className="mt-0.5 text-hcl-muted">
+                      {entry.changed_by || 'Unknown user'} · {formatDate(entry.changed_at)}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-2 text-xs text-hcl-muted">No manual override history for this vulnerability/component pair.</p>
+            )}
+          </div>
+        </DialogBody>
+      </Dialog>
 
       {/* EDIT COMPONENT MODAL OVERLAY */}
       {editingComp && (

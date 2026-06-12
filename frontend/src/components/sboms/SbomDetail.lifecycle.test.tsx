@@ -39,7 +39,15 @@ const compareSbomVersions = vi.fn();
 const restoreSbomVersion = vi.fn();
 const refreshSbomLifecycle = vi.fn();
 const refreshComponentLifecycle = vi.fn();
+const discoverSbomVexDocuments = vi.fn();
+const exportSbomLifecycleReportCsv = vi.fn();
+const exportSbomLifecycleReportPack = vi.fn();
+const exportSbomVexReportCsv = vi.fn();
+const exportSbomVexReportJson = vi.fn();
+const exportSbomVexReportPack = vi.fn();
+const getVexOverrideHistory = vi.fn();
 const getSbomVexStatements = vi.fn();
+const overrideVexStatement = vi.fn();
 const uploadSbomVexDocument = vi.fn();
 
 vi.mock('@/lib/api', async () => {
@@ -58,7 +66,15 @@ vi.mock('@/lib/api', async () => {
     restoreSbomVersion: (...args: unknown[]) => restoreSbomVersion(...args),
     refreshSbomLifecycle: (...args: unknown[]) => refreshSbomLifecycle(...args),
     refreshComponentLifecycle: (...args: unknown[]) => refreshComponentLifecycle(...args),
+    discoverSbomVexDocuments: (...args: unknown[]) => discoverSbomVexDocuments(...args),
+    exportSbomLifecycleReportCsv: (...args: unknown[]) => exportSbomLifecycleReportCsv(...args),
+    exportSbomLifecycleReportPack: (...args: unknown[]) => exportSbomLifecycleReportPack(...args),
+    exportSbomVexReportCsv: (...args: unknown[]) => exportSbomVexReportCsv(...args),
+    exportSbomVexReportJson: (...args: unknown[]) => exportSbomVexReportJson(...args),
+    exportSbomVexReportPack: (...args: unknown[]) => exportSbomVexReportPack(...args),
+    getVexOverrideHistory: (...args: unknown[]) => getVexOverrideHistory(...args),
     getSbomVexStatements: (...args: unknown[]) => getSbomVexStatements(...args),
+    overrideVexStatement: (...args: unknown[]) => overrideVexStatement(...args),
     uploadSbomVexDocument: (...args: unknown[]) => uploadSbomVexDocument(...args),
   };
 });
@@ -122,8 +138,57 @@ function wrap(children: ReactNode) {
 }
 
 beforeEach(() => {
+  window.localStorage.clear();
+  Object.defineProperty(URL, 'createObjectURL', {
+    configurable: true,
+    value: vi.fn(() => 'blob:test-download'),
+  });
+  Object.defineProperty(URL, 'revokeObjectURL', {
+    configurable: true,
+    value: vi.fn(),
+  });
+  Object.defineProperty(HTMLAnchorElement.prototype, 'click', {
+    configurable: true,
+    value: vi.fn(),
+  });
   back.mockReset();
   push.mockReset();
+  discoverSbomVexDocuments.mockResolvedValue({
+    sbom_id: 42,
+    discovered_documents: 1,
+    statements_imported: 2,
+    matched_statements: 1,
+    unmatched_statements: 1,
+    errors: [],
+  });
+  exportSbomLifecycleReportCsv.mockResolvedValue({ blob: new Blob(['lifecycle']), filename: 'lifecycle.csv' });
+  exportSbomLifecycleReportPack.mockResolvedValue({ blob: new Blob(['zip']), filename: 'lifecycle.zip' });
+  exportSbomVexReportCsv.mockResolvedValue({ blob: new Blob(['vex']), filename: 'vex.csv' });
+  exportSbomVexReportJson.mockResolvedValue({ blob: new Blob(['{}']), filename: 'vex.json' });
+  exportSbomVexReportPack.mockResolvedValue({ blob: new Blob(['zip']), filename: 'vex.zip' });
+  getVexOverrideHistory.mockResolvedValue({
+    component_id: 99,
+    vulnerability_id: 'CVE-2026-0001',
+    history: [
+      {
+        id: 8,
+        old_value: null,
+        new_value: { status: 'affected' },
+        reason: 'Prior risk review',
+        evidence_url: 'https://vendor.example/evidence',
+        changed_by: 'security@example.test',
+        changed_at: '2026-06-10T00:00:00Z',
+      },
+    ],
+  });
+  overrideVexStatement.mockResolvedValue({
+    id: 2,
+    sbom_id: 42,
+    component_id: 99,
+    vulnerability_id: 'CVE-2026-0001',
+    status: 'affected',
+    created_at: '2026-06-12T00:00:00Z',
+  });
   getSbomComponents.mockResolvedValue([COMPONENT]);
   getRuns.mockResolvedValue([]);
   getSbomInfo.mockResolvedValue(null);
@@ -146,6 +211,11 @@ beforeEach(() => {
         vulnerability_id: 'CVE-2026-0001',
         status: 'not_affected',
         justification: 'vulnerable_code_not_present',
+        impact_statement: 'Demo build does not load the vulnerable code path.',
+        source_name: 'Uploaded VEX',
+        source_url: 'https://vendor.example/vex.json',
+        confidence: 'Medium',
+        evidence_json: { mapping: 'matched', provider: 'CSAF VEX Discovery' },
         created_at: '2026-06-11T00:00:00Z',
       },
     ],
@@ -190,5 +260,103 @@ describe('SbomDetail lifecycle management', () => {
     expect(screen.getByText('Recommended Version')).toBeInTheDocument();
     expect(screen.getByText('Evidence URL')).toBeInTheDocument();
     expect(screen.getByText('Override Reason')).toBeInTheDocument();
+  }, 15000);
+
+  it('opens the manual VEX override form and validates required evidence', async () => {
+    render(wrap(<SbomDetail sbom={SBOM} />));
+
+    expect(await screen.findByText('VEX Statements')).toBeInTheDocument();
+    expect(await screen.findByText('CVE-2026-0001')).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: /^Override$/i })[1]);
+
+    expect(await screen.findByRole('dialog', { name: /Manual VEX Override/i })).toBeInTheDocument();
+    expect(screen.getByLabelText('Component')).toHaveValue('99');
+    expect(screen.getByLabelText('Vulnerability or CVE')).toHaveValue('CVE-2026-0001');
+    fireEvent.click(screen.getByRole('button', { name: /Save Override/i }));
+    expect(await screen.findByText('Override reason is required.')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('VEX Status'), { target: { value: 'fixed' } });
+    fireEvent.change(screen.getByLabelText('Evidence URL'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('Reason for Override'), { target: { value: 'vendor advisory review' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save Override/i }));
+    expect(await screen.findByText('fixed requires fixed version or evidence URL.')).toBeInTheDocument();
+  }, 15000);
+
+  it('submits a manual VEX override and shows audit history', async () => {
+    render(wrap(<SbomDetail sbom={SBOM} />));
+
+    expect(await screen.findByText('CVE-2026-0001')).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: /^Override$/i })[1]);
+    expect(await screen.findByText('Prior risk review')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('VEX Status'), { target: { value: 'affected' } });
+    fireEvent.change(screen.getByLabelText('Action Statement'), { target: { value: 'Upgrade immediately' } });
+    fireEvent.change(screen.getByLabelText('Reason for Override'), { target: { value: 'confirmed reachable in deployment' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save Override/i }));
+
+    await waitFor(() => {
+      expect(overrideVexStatement).toHaveBeenCalledWith(
+        99,
+        'CVE-2026-0001',
+        expect.objectContaining({
+          status: 'affected',
+          action_statement: 'Upgrade immediately',
+          reason: 'confirmed reachable in deployment',
+        }),
+      );
+    });
+    expect(await screen.findByText(/Manual VEX override saved/i)).toBeInTheDocument();
+  }, 15000);
+
+  it('shows VEX and lifecycle evidence modals', async () => {
+    render(wrap(<SbomDetail sbom={SBOM} />));
+
+    expect(await screen.findByText('CVE-2026-0001')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Evidence/i }));
+    expect(await screen.findByRole('dialog', { name: /VEX Evidence/i })).toBeInTheDocument();
+    expect(screen.getAllByText((_, node) => Boolean(node?.textContent?.includes('CSAF VEX Discovery'))).length).toBeGreaterThan(0);
+    expect(screen.getByText('Raw Evidence Summary')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Close dialog/i }));
+
+    fireEvent.click(screen.getByRole('button', { name: /Components List/i }));
+    expect(await screen.findByText('demo')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^Evidence$/i }));
+    expect(await screen.findByRole('dialog', { name: /Lifecycle Evidence/i })).toBeInTheDocument();
+    expect(screen.getAllByText('endoflife.date').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/No raw evidence stored|cycle/i).length).toBeGreaterThan(0);
+  }, 15000);
+
+  it('downloads VEX and lifecycle CSV reports', async () => {
+    render(wrap(<SbomDetail sbom={SBOM} />));
+
+    expect(await screen.findByText('VEX Statements')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^CSV$/i }));
+    await waitFor(() => expect(exportSbomVexReportCsv).toHaveBeenCalledWith(42));
+    expect(await screen.findByText('Downloaded vex.csv.')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Components List/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Lifecycle CSV/i }));
+    await waitFor(() => expect(exportSbomLifecycleReportCsv).toHaveBeenCalledWith(42));
+    expect(await screen.findByText('Downloaded lifecycle.csv.')).toBeInTheDocument();
+  }, 15000);
+
+  it('runs VEX discovery refresh and renders stale lifecycle warning', async () => {
+    render(wrap(<SbomDetail sbom={SBOM} />));
+
+    expect(await screen.findByText('VEX Statements')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Discover/i }));
+    await waitFor(() => expect(discoverSbomVexDocuments).toHaveBeenCalledWith(42, true));
+    expect(await screen.findByText(/Discovery imported 2 statements/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Components List/i }));
+    expect(await screen.findByText(/1 lifecycle evidence record is stale/i)).toBeInTheDocument();
+  }, 15000);
+
+  it('hides sensitive VEX controls for viewer role', async () => {
+    window.localStorage.setItem('sbom-role', 'viewer');
+    render(wrap(<SbomDetail sbom={SBOM} />));
+
+    expect(await screen.findByText('VEX Statements')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Override$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Discover/i })).not.toBeInTheDocument();
   }, 15000);
 });

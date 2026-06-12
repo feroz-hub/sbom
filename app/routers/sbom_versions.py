@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import json
 import logging
+import zipfile
+from io import BytesIO
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -13,16 +15,18 @@ from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..auth import require_roles
 from ..db import get_db
 from ..models import SBOMComponent, SBOMSource
 from ..schemas import SbomEditPayload, SBOMSourceOut
-from ..services.lifecycle import LifecycleEnrichmentService, component_lifecycle_dict
+from ..services.lifecycle import LifecycleEnrichmentService, component_lifecycle_dict, lifecycle_report_csv
 from ..services.version_control_service import compare_versions, edit_sbom, restore_version
 from ..validation import run as run_validation
 
 log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/sboms", tags=["sbom-versions"])
+_security_role = Depends(require_roles("admin", "security"))
 
 
 def _root_for_lineage(db: Session, sbom: SBOMSource) -> SBOMSource:
@@ -195,6 +199,7 @@ def edit_sbom_endpoint(
     id: int,
     payload: SbomEditPayload,
     user_id: str | None = Query(None),
+    _principal=_security_role,
     db: Session = Depends(get_db)
 ):
     """
@@ -228,7 +233,7 @@ def get_sbom_versions(id: int, db: Session = Depends(get_db)):
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"SBOM with ID {id} not found."
         )
-        
+
     root = _root_for_lineage(db, sbom)
     ids = _lineage_ids(db, root.id)
     versions = db.execute(
@@ -236,7 +241,7 @@ def get_sbom_versions(id: int, db: Session = Depends(get_db)):
         .where(SBOMSource.id.in_(ids))
         .order_by(SBOMSource.id.asc())
     ).scalars().all()
-    
+
     return list(versions)
 
 
@@ -264,6 +269,7 @@ def restore_sbom_version(
     id: int,
     version_id: int,
     user_id: str | None = Query(None),
+    _principal=_security_role,
     db: Session = Depends(get_db)
 ):
     """
@@ -284,6 +290,7 @@ def restore_sbom_version(
 def refresh_sbom_lifecycle(
     id: int,
     force: bool = Query(True),
+    _principal=_security_role,
     db: Session = Depends(get_db),
 ):
     """Refresh provider-backed lifecycle data for all components in an SBOM."""
@@ -292,10 +299,47 @@ def refresh_sbom_lifecycle(
 
 
 @router.get("/{id}/lifecycle/report")
-def get_sbom_lifecycle_report(id: int, db: Session = Depends(get_db)):
+def get_sbom_lifecycle_report(
+    id: int,
+    format: str = Query("json", pattern="^(json|csv)$"),
+    report_type: str | None = Query(None, description="all, unsupported, eol_eos_eof, or deprecated"),
+    _principal=_security_role,
+    db: Session = Depends(get_db),
+):
     """Return a detailed lifecycle report suitable for export or UI evidence views."""
 
+    if format == "csv":
+        content = lifecycle_report_csv(db, id, report_type=report_type)
+        suffix = f"_{report_type}" if report_type else ""
+        return Response(
+            content=content,
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="sbom_{id}_lifecycle{suffix}.csv"'},
+        )
     return LifecycleEnrichmentService().lifecycle_report(db, id)
+
+
+@router.get("/{id}/reports/lifecycle-pack")
+def get_lifecycle_report_pack(
+    id: int,
+    _principal=_security_role,
+    db: Session = Depends(get_db),
+):
+    """Download a ZIP pack of lifecycle JSON and focused CSV reports."""
+
+    report = LifecycleEnrichmentService().lifecycle_report(db, id)
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("lifecycle.json", json.dumps(report, indent=2))
+        zf.writestr("lifecycle_all.csv", lifecycle_report_csv(db, id))
+        zf.writestr("lifecycle_unsupported.csv", lifecycle_report_csv(db, id, report_type="unsupported"))
+        zf.writestr("lifecycle_eol_eos_eof.csv", lifecycle_report_csv(db, id, report_type="eol_eos_eof"))
+        zf.writestr("lifecycle_deprecated.csv", lifecycle_report_csv(db, id, report_type="deprecated"))
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="sbom_{id}_lifecycle_reports.zip"'},
+    )
 
 
 def _sync_flat_to_raw(flat: dict, raw: dict, standard: str) -> None:
@@ -352,7 +396,7 @@ def _sync_flat_to_raw(flat: dict, raw: dict, standard: str) -> None:
                 prefix = "Person: "
             elif existing.startswith("Organization: "):
                 prefix = "Organization: "
-            
+
             clean_sup = flat["supplier"]
             if clean_sup.startswith("Organization: "):
                 clean_sup = clean_sup[len("Organization: "):]
@@ -436,7 +480,7 @@ def export_sbom(
         if standard == "cyclonedx":
             flat_comps = extract_components(doc)
             original_components = doc.get("components") or []
-            
+
             # Match 1-to-1 to attach original raw dicts
             for flat, raw in zip(flat_comps, original_components, strict=False):
                 flat["raw"] = raw
@@ -457,11 +501,11 @@ def export_sbom(
             for dep in doc.get("dependencies") or []:
                 ref = dep.get("ref")
                 depends_on = dep.get("dependsOn") or []
-                
+
                 new_ref = ref_mapping.get(ref, ref)
                 new_depends_on = [ref_mapping.get(d, d) for d in depends_on]
                 new_depends_on = [d for d in new_depends_on if d != new_ref]
-                
+
                 if new_ref not in cdx_deps_by_ref:
                     cdx_deps_by_ref[new_ref] = {"dep": dict(dep), "depends": []}
                 cdx_deps_by_ref[new_ref]["depends"].extend(new_depends_on)
@@ -497,7 +541,7 @@ def export_sbom(
 
             # Rebuild packages and elements lists, keeping only canonical ones
             canonical_raw_set = {id(flat["raw"]) for flat in canonical_flat if "raw" in flat}
-            
+
             new_packages = [pkg for pkg in original_packages if id(pkg) in canonical_raw_set]
             new_elements = [el for el in doc.get("elements") or [] if el.get("type") != "software:package" or id(el) in canonical_raw_set]
 
@@ -513,13 +557,13 @@ def export_sbom(
                 elem_id = rel.get("spdxElementId")
                 related_id = rel.get("relatedSpdxElement")
                 rel_type = rel.get("relationshipType")
-                
+
                 new_elem_id = ref_mapping.get(elem_id, elem_id)
                 new_related_id = ref_mapping.get(related_id, related_id)
-                
+
                 if new_elem_id == new_related_id and rel_type in {"DEPENDS_ON", "CONTAINS", "DESCRIBES"}:
                     continue
-                    
+
                 rel_key = (new_elem_id, rel_type, new_related_id)
                 if rel_key not in seen_rels:
                     seen_rels.add(rel_key)
@@ -570,5 +614,78 @@ def export_sbom(
     headers = {
         "Content-Disposition": f"attachment; filename=\"{filename}\""
     }
-    
+
     return Response(content=content, media_type=_media_type(standard, encoding), headers=headers)
+
+
+@router.get("/{id}/lifecycle/diagnostics")
+def get_sbom_lifecycle_diagnostics(id: int, db: Session = Depends(get_db)):
+    """Return component count, provider hit count, cache hit count, and sample components."""
+    sbom = db.get(SBOMSource, id)
+    if not sbom:
+        raise HTTPException(status_code=404, detail="SBOM not found")
+
+    components = db.execute(
+        select(SBOMComponent).where(SBOMComponent.sbom_id == id)
+    ).scalars().all()
+
+    total = len(components)
+    enriched = sum(1 for c in components if c.lifecycle_checked_at is not None)
+    unknown = sum(1 for c in components if (c.lifecycle_status or "Unknown") == "Unknown")
+
+    cache_hits = 0
+    provider_hits = 0
+    provider_failures = 0
+
+    for c in components:
+        evidence = c.lifecycle_evidence_json or {}
+        if c.lifecycle_source == "Manual Override":
+            continue
+        if c.lifecycle_source == "Lifecycle Providers":
+            # Failed to match any provider
+            provider_failures += 1
+        elif evidence.get("cached") or evidence.get("stale_cache") or c.lifecycle_source == "Cached Provider":
+            cache_hits += 1
+        elif c.lifecycle_source in {"endoflife.date", "npm registry", "PyPI", "NuGet", "Maven Central", "OSV", "Repository Health"}:
+            provider_hits += 1
+
+    sample_unknown = []
+    sample_matched = []
+
+    for c in components:
+        status_canonical = c.lifecycle_status or "Unknown"
+        if status_canonical == "Unknown":
+            if len(sample_unknown) < 10:
+                reason = "No matching lifecycle evidence found across providers."
+                if c.lifecycle_source == "Lifecycle Providers":
+                    reason = "All providers returned Unknown."
+                sample_unknown.append({
+                    "id": c.id,
+                    "name": c.name,
+                    "version": c.version,
+                    "purl": c.purl,
+                    "cpe": c.cpe,
+                    "ecosystem": c.ecosystem,
+                    "reason": reason
+                })
+        else:
+            if len(sample_matched) < 10:
+                sample_matched.append({
+                    "id": c.id,
+                    "name": c.name,
+                    "version": c.version,
+                    "status": status_canonical,
+                    "source": c.lifecycle_source,
+                    "evidence": c.lifecycle_evidence_json
+                })
+
+    return {
+        "component_count": total,
+        "components_enriched": enriched,
+        "unknown_count": unknown,
+        "provider_hit_count": provider_hits,
+        "cache_hit_count": cache_hits,
+        "provider_failure_count": provider_failures,
+        "sample_unknown_components": sample_unknown,
+        "sample_matched_components": sample_matched
+    }
