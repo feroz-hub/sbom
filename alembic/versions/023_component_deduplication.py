@@ -42,14 +42,20 @@ def _create_index_if_missing(index_name: str, table: str, columns: list[str]) ->
 
 def upgrade() -> None:
     bind = op.get_bind()
+    naming_convention = {
+        "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
+        "uq": "uq_%(table_name)s_%(column_0_name)s",
+        "ck": "ck_%(table_name)s_%(constraint_name)s",
+        "pk": "pk_%(table_name)s"
+    }
 
     # Add column to sbom_source
     if not _column_exists(bind, "sbom_source", "dedupe_report_json"):
-        with op.batch_alter_table("sbom_source") as batch_op:
+        with op.batch_alter_table("sbom_source", naming_convention=naming_convention) as batch_op:
             batch_op.add_column(sa.Column("dedupe_report_json", sa.JSON(), nullable=True))
 
     # Add columns to sbom_component
-    with op.batch_alter_table("sbom_component") as batch_op:
+    with op.batch_alter_table("sbom_component", naming_convention=naming_convention) as batch_op:
         if not _column_exists(bind, "sbom_component", "normalized_component_key"):
             batch_op.add_column(sa.Column("normalized_component_key", sa.String(), nullable=True))
         if not _column_exists(bind, "sbom_component", "is_duplicate"):
@@ -61,7 +67,11 @@ def upgrade() -> None:
                 sa.Column(
                     "duplicate_of_component_id",
                     sa.Integer(),
-                    sa.ForeignKey("sbom_component.id", ondelete="CASCADE"),
+                    sa.ForeignKey(
+                        "sbom_component.id",
+                        ondelete="CASCADE",
+                        name="fk_sbom_component_duplicate_of_component_id",
+                    ),
                     nullable=True,
                 )
             )
@@ -73,6 +83,12 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     bind = op.get_bind()
+    naming_convention = {
+        "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
+        "uq": "uq_%(table_name)s_%(column_0_name)s",
+        "ck": "ck_%(table_name)s_%(constraint_name)s",
+        "pk": "pk_%(table_name)s"
+    }
 
     # Drop indexes
     for index_name in (
@@ -83,7 +99,7 @@ def downgrade() -> None:
             op.drop_index(index_name, table_name="sbom_component")
 
     # Drop columns from sbom_component
-    with op.batch_alter_table("sbom_component") as batch_op:
+    with op.batch_alter_table("sbom_component", naming_convention=naming_convention) as batch_op:
         if _column_exists(bind, "sbom_component", "duplicate_of_component_id"):
             batch_op.drop_column("duplicate_of_component_id")
         if _column_exists(bind, "sbom_component", "is_duplicate"):
@@ -93,5 +109,5 @@ def downgrade() -> None:
 
     # Drop column from sbom_source
     if _column_exists(bind, "sbom_source", "dedupe_report_json"):
-        with op.batch_alter_table("sbom_source") as batch_op:
+        with op.batch_alter_table("sbom_source", naming_convention=naming_convention) as batch_op:
             batch_op.drop_column("dedupe_report_json")
