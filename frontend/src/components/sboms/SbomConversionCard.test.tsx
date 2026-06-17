@@ -11,6 +11,12 @@ import type { SBOMSource } from '@/types';
 const convertSbomToCycloneDX = vi.fn();
 const exportSbomDocument = vi.fn();
 const getSbomConversionReport = vi.fn();
+const getSbom = vi.fn();
+const invalidateSbomConversionSurfaces = vi.fn();
+
+vi.mock('@/lib/queryInvalidation', () => ({
+  invalidateSbomConversionSurfaces: (...args: unknown[]) => invalidateSbomConversionSurfaces(...args),
+}));
 
 vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api');
@@ -19,6 +25,7 @@ vi.mock('@/lib/api', async () => {
     convertSbomToCycloneDX: (...args: unknown[]) => convertSbomToCycloneDX(...args),
     exportSbomDocument: (...args: unknown[]) => exportSbomDocument(...args),
     getSbomConversionReport: (...args: unknown[]) => getSbomConversionReport(...args),
+    getSbom: (...args: unknown[]) => getSbom(...args),
   };
 });
 
@@ -52,6 +59,7 @@ describe('SbomConversionCard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getSbomConversionReport.mockRejectedValue(new Error('not found'));
+    getSbom.mockResolvedValue({ ...spdxSbom, enrichment_status: 'pending' });
   });
 
   it('shows Convert to CycloneDX button for SPDX SBOMs', () => {
@@ -71,6 +79,9 @@ describe('SbomConversionCard', () => {
       source_format: 'SPDX',
       target_format: 'CycloneDX',
       status: 'completed',
+      conversion_status: 'completed',
+      enrichment_status: 'pending',
+      message: 'Converted to CycloneDX. Lifecycle enrichment is running in background.',
       warnings: [],
       errors: [],
       conversion_report: {},
@@ -84,20 +95,52 @@ describe('SbomConversionCard', () => {
     });
   });
 
-  it('shows converted SBOM link after conversion', () => {
-    render(
-      wrapper(
-        <SbomConversionCard
-          sbom={{
-            ...spdxSbom,
-            converted_sbom_id: 100,
-            conversion_status: 'completed',
-          }}
-          formatLabel="SPDX"
-        />,
-      ),
-    );
-    expect(screen.getByRole('link', { name: '#100' })).toHaveAttribute('href', '/sboms/100');
+  it('shows converted SBOM link and background enrichment message on success', async () => {
+    convertSbomToCycloneDX.mockResolvedValue({
+      source_sbom_id: 42,
+      converted_sbom_id: 100,
+      source_format: 'SPDX',
+      target_format: 'CycloneDX',
+      status: 'completed',
+      conversion_status: 'completed',
+      enrichment_status: 'pending',
+      message: 'Converted to CycloneDX. Lifecycle enrichment is running in background.',
+      warnings: [],
+      errors: [],
+      conversion_report: {},
+    });
+
+    render(wrapper(<SbomConversionCard sbom={spdxSbom} formatLabel="SPDX" />));
+    fireEvent.click(screen.getByRole('button', { name: /Convert to CycloneDX/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: '#100' })).toBeInTheDocument();
+      expect(screen.getByText(/running in background/i)).toBeInTheDocument();
+      expect(screen.getByText(/Enrichment pending/i)).toBeInTheDocument();
+    });
+  });
+
+  it('uses narrow query invalidation after conversion', async () => {
+    convertSbomToCycloneDX.mockResolvedValue({
+      source_sbom_id: 42,
+      converted_sbom_id: 100,
+      source_format: 'SPDX',
+      target_format: 'CycloneDX',
+      status: 'completed',
+      conversion_status: 'completed',
+      enrichment_status: 'pending',
+      message: 'Converted to CycloneDX. Lifecycle enrichment is running in background.',
+      warnings: [],
+      errors: [],
+      conversion_report: {},
+    });
+
+    render(wrapper(<SbomConversionCard sbom={spdxSbom} formatLabel="SPDX" />));
+    fireEvent.click(screen.getByRole('button', { name: /Convert to CycloneDX/i }));
+
+    await waitFor(() => {
+      expect(invalidateSbomConversionSurfaces).toHaveBeenCalled();
+    });
   });
 
   it('shows export buttons when conversion exists', () => {
@@ -108,6 +151,7 @@ describe('SbomConversionCard', () => {
             ...spdxSbom,
             converted_sbom_id: 100,
             conversion_status: 'completed_with_warnings',
+            enrichment_status: 'pending',
           }}
           formatLabel="SPDX"
         />,
@@ -126,6 +170,17 @@ describe('SbomConversionCard', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/Conversion failed: invalid SPDX/i)).toBeInTheDocument();
+    });
+  });
+
+  it('shows clear timeout error message', async () => {
+    convertSbomToCycloneDX.mockRejectedValue(new Error('Request timed out after 30000ms'));
+
+    render(wrapper(<SbomConversionCard sbom={spdxSbom} formatLabel="SPDX" />));
+    fireEvent.click(screen.getByRole('button', { name: /Convert to CycloneDX/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Conversion timed out/i)).toBeInTheDocument();
     });
   });
 

@@ -108,6 +108,13 @@ class SBOMSource(Base, SoftDeleteMixin):
     conversion_report_json = Column(JSON, nullable=True)
     converted_at = Column(String, nullable=True)
     converted_by = Column(String, nullable=True)
+    enrichment_status = Column(String(32), nullable=True, index=True)
+    conversion_started_at = Column(String, nullable=True)
+    conversion_completed_at = Column(String, nullable=True)
+    enrichment_started_at = Column(String, nullable=True)
+    enrichment_completed_at = Column(String, nullable=True)
+    conversion_error = Column(Text, nullable=True)
+    enrichment_error = Column(Text, nullable=True)
 
     project = relationship("Projects", back_populates="sboms")
     sbom_type_rel = relationship("SBOMType", back_populates="sboms")

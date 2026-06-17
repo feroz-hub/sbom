@@ -33,6 +33,24 @@ export function invalidateProjectSurfaces(qc: QueryClient, projectId?: number | 
   }
 }
 
+/**
+ * Narrow invalidation for SPDX→CycloneDX conversion — avoids dashboard/VEX/risk storms.
+ */
+export function invalidateSbomConversionSurfaces(
+  qc: QueryClient,
+  sourceSbomId: number,
+  convertedSbomId?: number | null,
+): void {
+  qc.invalidateQueries({ queryKey: ['sbom', sourceSbomId] });
+  qc.invalidateQueries({ queryKey: ['sbom-info', sourceSbomId] });
+  qc.invalidateQueries({ queryKey: ['sbom-conversion-report', sourceSbomId] });
+  qc.invalidateQueries({ queryKey: ['sboms'] });
+  if (convertedSbomId != null) {
+    qc.invalidateQueries({ queryKey: ['sbom', convertedSbomId] });
+    qc.invalidateQueries({ queryKey: ['sbom-info', convertedSbomId] });
+  }
+}
+
 export function invalidateSbomSurfaces(qc: QueryClient, sbomId?: number | null): void {
   invalidateSbomLists(qc);
   if (sbomId != null) {

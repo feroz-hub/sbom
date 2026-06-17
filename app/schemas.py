@@ -119,6 +119,13 @@ class SBOMSourceOut(ORMModel):
     conversion_report_json: dict[str, Any] | None = None
     converted_at: str | None = None
     converted_by: str | None = None
+    enrichment_status: str | None = None
+    conversion_started_at: str | None = None
+    conversion_completed_at: str | None = None
+    enrichment_started_at: str | None = None
+    enrichment_completed_at: str | None = None
+    conversion_error: str | None = None
+    enrichment_error: str | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -508,6 +515,9 @@ class SbomConversionResponse(BaseModel):
     source_format: str
     target_format: str
     status: str
+    conversion_status: str
+    enrichment_status: str
+    message: str
     warnings: list[str] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
     conversion_report: dict[str, Any] = Field(default_factory=dict)
@@ -521,6 +531,7 @@ class SbomConversionReportResponse(BaseModel):
     source_sbom_id: int | None = None
     converted_sbom_id: int | None = None
     conversion_status: str | None = None
+    enrichment_status: str | None = None
     package_count: int = 0
     component_count: int = 0
     mapped_relationships: int = 0

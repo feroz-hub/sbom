@@ -3,16 +3,17 @@
 import Link from 'next/link';
 import { AlertTriangle, ArrowRightLeft, CheckCircle2, Download, FileJson, Loader2, XCircle } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import {
   convertSbomToCycloneDX,
   exportSbomDocument,
+  getSbom,
   getSbomConversionReport,
 } from '@/lib/api';
-import { invalidateSbomLists, invalidateSbomSurfaces } from '@/lib/queryInvalidation';
+import { invalidateSbomConversionSurfaces } from '@/lib/queryInvalidation';
 import type { SBOMSource, SbomConversionReport } from '@/types';
 
 function triggerDownload(blob: Blob, filename: string) {
@@ -24,6 +25,10 @@ function triggerDownload(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
+function isTimeoutError(err: unknown): boolean {
+  return err instanceof Error && /timed out/i.test(err.message);
+}
+
 interface SbomConversionCardProps {
   sbom: SBOMSource;
   formatLabel?: string;
@@ -33,6 +38,10 @@ export function SbomConversionCard({ sbom, formatLabel }: SbomConversionCardProp
   const qc = useQueryClient();
   const [message, setMessage] = useState<string | null>(null);
   const [showReport, setShowReport] = useState(false);
+  const [convertedId, setConvertedId] = useState<number | null>(sbom.converted_sbom_id ?? null);
+  const [enrichmentStatus, setEnrichmentStatus] = useState<string | null>(
+    sbom.enrichment_status ?? null,
+  );
 
   const isSpdx =
     formatLabel?.toUpperCase() === 'SPDX' ||
@@ -40,30 +49,65 @@ export function SbomConversionCard({ sbom, formatLabel }: SbomConversionCardProp
     sbom.original_format?.toLowerCase() === 'spdx';
 
   const conversionStatus = sbom.conversion_status;
-  const convertedId = sbom.converted_sbom_id;
+
+  useEffect(() => {
+    setConvertedId(sbom.converted_sbom_id ?? null);
+    setEnrichmentStatus(sbom.enrichment_status ?? null);
+  }, [sbom.converted_sbom_id, sbom.enrichment_status]);
 
   const reportQuery = useQuery({
     queryKey: ['sbom-conversion-report', sbom.id],
     queryFn: () => getSbomConversionReport(sbom.id),
-    enabled: isSpdx && Boolean(conversionStatus),
+    enabled: isSpdx && Boolean(conversionStatus || convertedId),
   });
+
+  const enrichmentPollQuery = useQuery({
+    queryKey: ['sbom-enrichment-status', sbom.id],
+    queryFn: () => getSbom(sbom.id),
+    enabled: isSpdx && (enrichmentStatus === 'pending' || enrichmentStatus === 'running'),
+    refetchInterval: (query) => {
+      const status = query.state.data?.enrichment_status;
+      if (status === 'pending' || status === 'running') {
+        return 3000;
+      }
+      return false;
+    },
+  });
+
+  useEffect(() => {
+    const polled = enrichmentPollQuery.data?.enrichment_status;
+    if (polled && polled !== enrichmentStatus) {
+      setEnrichmentStatus(polled);
+      if (polled === 'completed') {
+        setMessage('Lifecycle enrichment completed.');
+      } else if (polled === 'failed') {
+        setMessage(
+          enrichmentPollQuery.data?.enrichment_error ||
+            'Lifecycle enrichment failed. Use manual refresh on the converted SBOM.',
+        );
+      }
+    }
+  }, [enrichmentPollQuery.data, enrichmentStatus]);
 
   const convertMutation = useMutation({
     mutationFn: () => convertSbomToCycloneDX(sbom.id),
     onSuccess: (result) => {
-      invalidateSbomSurfaces(qc, sbom.id);
-      invalidateSbomLists(qc);
-      if (result.converted_sbom_id) {
-        invalidateSbomSurfaces(qc, result.converted_sbom_id);
-      }
+      setConvertedId(result.converted_sbom_id);
+      setEnrichmentStatus(result.enrichment_status || 'pending');
+      invalidateSbomConversionSurfaces(qc, sbom.id, result.converted_sbom_id);
       qc.invalidateQueries({ queryKey: ['sbom-conversion-report', sbom.id] });
       setMessage(
-        result.warnings.length > 0
-          ? `Conversion completed with ${result.warnings.length} warning(s).`
-          : 'Conversion completed successfully.',
+        result.message ||
+          'Converted to CycloneDX. Lifecycle enrichment is running in background.',
       );
     },
     onError: (err: Error) => {
+      if (isTimeoutError(err)) {
+        setMessage(
+          'Conversion timed out. The server may still be processing — refresh this page in a moment.',
+        );
+        return;
+      }
       setMessage(err.message || 'Conversion failed.');
     },
   });
@@ -87,7 +131,7 @@ export function SbomConversionCard({ sbom, formatLabel }: SbomConversionCardProp
     if (convertMutation.isPending) {
       return (
         <span className="inline-flex items-center gap-1 text-xs font-semibold text-hcl-blue">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Conversion running
+          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Converting…
         </span>
       );
     }
@@ -105,7 +149,7 @@ export function SbomConversionCard({ sbom, formatLabel }: SbomConversionCardProp
         </span>
       );
     }
-    if (conversionStatus === 'completed') {
+    if (conversionStatus === 'completed' || convertedId) {
       return (
         <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-600">
           <CheckCircle2 className="h-3.5 w-3.5" /> Conversion completed
@@ -113,6 +157,26 @@ export function SbomConversionCard({ sbom, formatLabel }: SbomConversionCardProp
       );
     }
     return <span className="text-xs text-hcl-muted">Not converted</span>;
+  };
+
+  const enrichmentBadge = () => {
+    const status = enrichmentStatus || reportQuery.data?.enrichment_status;
+    if (!status) return null;
+    if (status === 'pending' || status === 'running') {
+      return (
+        <span className="inline-flex items-center gap-1 text-xs font-medium text-hcl-blue">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Enrichment {status === 'running' ? 'running' : 'pending'}
+        </span>
+      );
+    }
+    if (status === 'completed') {
+      return <span className="text-xs font-medium text-green-600">Enrichment completed</span>;
+    }
+    if (status === 'failed') {
+      return <span className="text-xs font-medium text-red-600">Enrichment failed</span>;
+    }
+    return null;
   };
 
   const report: SbomConversionReport | undefined = reportQuery.data;
@@ -129,7 +193,10 @@ export function SbomConversionCard({ sbom, formatLabel }: SbomConversionCardProp
             Convert SPDX packages to CycloneDX for lifecycle enrichment and export.
           </p>
         </div>
-        {statusBadge()}
+        <div className="flex flex-col items-end gap-1">
+          {statusBadge()}
+          {enrichmentBadge()}
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex flex-wrap gap-2">
@@ -234,7 +301,11 @@ export function SbomConversionCard({ sbom, formatLabel }: SbomConversionCardProp
           </button>
         )}
 
-        {message && <p className="text-xs text-hcl-muted">{message}</p>}
+        {message && (
+          <p className={`text-xs ${isTimeoutError({ message } as Error) ? 'text-amber-700' : 'text-hcl-muted'}`}>
+            {message}
+          </p>
+        )}
       </CardContent>
     </Card>
   );

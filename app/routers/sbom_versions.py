@@ -10,7 +10,7 @@ import zipfile
 from io import BytesIO
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -20,7 +20,10 @@ from ..db import get_db
 from ..models import SBOMComponent, SBOMSource
 from ..schemas import SbomConversionReportResponse, SbomConversionResponse, SbomEditPayload, SBOMSourceOut
 from ..services.lifecycle import LifecycleEnrichmentService, component_lifecycle_dict, lifecycle_report_csv
-from ..services.sbom_conversion_service import convert_and_persist_spdx_to_cyclonedx
+from ..services.sbom_conversion_service import (
+    convert_and_persist_spdx_to_cyclonedx,
+    run_post_conversion_enrichment,
+)
 from ..services.version_control_service import compare_versions, edit_sbom, restore_version
 from ..validation import run as run_validation
 
@@ -421,6 +424,7 @@ def _sync_flat_to_raw(flat: dict, raw: dict, standard: str) -> None:
 @router.post("/{id}/convert/cyclonedx", response_model=SbomConversionResponse)
 def convert_spdx_to_cyclonedx_endpoint(
     id: int,
+    background_tasks: BackgroundTasks,
     user_id: str | None = Query(None),
     _principal=_security_role,
     db: Session = Depends(get_db),
@@ -445,6 +449,8 @@ def convert_spdx_to_cyclonedx_endpoint(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
+    background_tasks.add_task(run_post_conversion_enrichment, converted.id, id)
+
     conv_status = "completed_with_warnings" if result.conversion_warnings else "completed"
     return SbomConversionResponse(
         source_sbom_id=id,
@@ -452,6 +458,9 @@ def convert_spdx_to_cyclonedx_endpoint(
         source_format="SPDX",
         target_format="CycloneDX",
         status=conv_status,
+        conversion_status=conv_status,
+        enrichment_status="pending",
+        message="Converted to CycloneDX. Lifecycle enrichment is running in background.",
         warnings=result.conversion_warnings,
         errors=result.conversion_errors,
         conversion_report=report,
@@ -490,6 +499,7 @@ def get_conversion_report(id: int, db: Session = Depends(get_db)):
         source_sbom_id=sbom.source_sbom_id or (id if sbom.converted_sbom_id else None),
         converted_sbom_id=sbom.converted_sbom_id or (id if sbom.source_sbom_id else None),
         conversion_status=sbom.conversion_status,
+        enrichment_status=report.get("enrichment_status") or sbom.enrichment_status,
         package_count=report.get("package_count", 0),
         component_count=report.get("component_count", 0),
         mapped_relationships=report.get("mapped_relationships", 0),

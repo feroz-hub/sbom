@@ -58,6 +58,13 @@ export interface SBOMSource {
   conversion_report_json?: Record<string, unknown> | null;
   converted_at?: string | null;
   converted_by?: string | null;
+  enrichment_status?: string | null;
+  conversion_started_at?: string | null;
+  conversion_completed_at?: string | null;
+  enrichment_started_at?: string | null;
+  enrichment_completed_at?: string | null;
+  conversion_error?: string | null;
+  enrichment_error?: string | null;
   // Client-side only — not from API. Set during optimistic updates.
   // ADR-0001: OK / FINDINGS are the canonical names. PASS / FAIL accepted as
   // legacy aliases during the deprecation window.
@@ -787,6 +794,9 @@ export interface SbomConversionResponse {
   source_format: string;
   target_format: string;
   status: string;
+  conversion_status: string;
+  enrichment_status: string;
+  message: string;
   warnings: string[];
   errors: string[];
   conversion_report: Record<string, unknown>;
@@ -800,6 +810,7 @@ export interface SbomConversionReport {
   source_sbom_id?: number | null;
   converted_sbom_id?: number | null;
   conversion_status?: string | null;
+  enrichment_status?: string | null;
   package_count: number;
   component_count: number;
   mapped_relationships: number;

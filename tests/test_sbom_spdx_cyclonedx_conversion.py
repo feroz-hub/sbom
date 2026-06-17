@@ -189,6 +189,8 @@ class TestSpdxToCyclonedxConversionApi:
         assert body["converted_sbom_id"]
         assert body["source_format"] == "SPDX"
         assert body["target_format"] == "CycloneDX"
+        assert body["enrichment_status"] == "pending"
+        assert "background" in body["message"].lower()
 
         refreshed = client.get(f"/api/sboms/{sbom_id}").json()
         assert refreshed["sbom_data"] == original_data
@@ -260,3 +262,109 @@ class TestSpdxToCyclonedxConversionApi:
         assert export.status_code == 200
         report = json.loads(export.text)
         assert report.get("source_format") == "SPDX"
+
+
+class TestSpdxConversionPerformance:
+    def test_convert_does_not_call_lifecycle_in_persist_path(self, monkeypatch):
+        from app.db import SessionLocal
+        from app.models import SBOMSource
+        from app.services.sbom_conversion_service import convert_and_persist_spdx_to_cyclonedx
+
+        lifecycle_calls: list[int] = []
+
+        def _track_lifecycle(db, sbom_id, **kwargs):
+            lifecycle_calls.append(sbom_id)
+            return {"sbom_id": sbom_id}
+
+        monkeypatch.setattr(
+            "app.services.lifecycle_service.sync_lifecycle_for_sbom",
+            _track_lifecycle,
+        )
+
+        spdx_data = json.dumps(_load_spdx())
+        db = SessionLocal()
+        try:
+            source = SBOMSource(
+                sbom_name="perf-test-spdx",
+                sbom_data=spdx_data,
+                status="validated",
+                original_format="spdx",
+                current_format="spdx",
+            )
+            db.add(source)
+            db.commit()
+            db.refresh(source)
+
+            convert_and_persist_spdx_to_cyclonedx(db, source)
+
+            assert lifecycle_calls == []
+            db.refresh(source)
+            assert source.enrichment_status == "pending"
+        finally:
+            db.rollback()
+            db.close()
+
+    def test_run_post_conversion_enrichment_marks_completed(self, monkeypatch):
+        from app.db import SessionLocal
+        from app.models import SBOMSource
+        from app.services.sbom_conversion_service import (
+            convert_and_persist_spdx_to_cyclonedx,
+            run_post_conversion_enrichment,
+        )
+
+        monkeypatch.setattr(
+            "app.services.lifecycle_service.sync_lifecycle_for_sbom",
+            lambda db, sbom_id, **kwargs: {"sbom_id": sbom_id, "components_enriched": 1},
+        )
+        monkeypatch.setattr(
+            "app.services.lifecycle.vex_provider.process_embedded_vex_for_sbom",
+            lambda db, sbom_id: None,
+        )
+        monkeypatch.setattr(
+            "app.services.completeness_service.compute_and_save_completeness",
+            lambda db, sbom: None,
+        )
+
+        db = SessionLocal()
+        try:
+            source = SBOMSource(
+                sbom_name="bg-enrich-spdx",
+                sbom_data=json.dumps(_load_spdx()),
+                status="validated",
+                original_format="spdx",
+                current_format="spdx",
+            )
+            db.add(source)
+            db.commit()
+            db.refresh(source)
+
+            converted, _, _ = convert_and_persist_spdx_to_cyclonedx(db, source)
+            run_post_conversion_enrichment(converted.id, source.id)
+
+            db.refresh(converted)
+            db.refresh(source)
+            assert converted.enrichment_status == "completed"
+            assert source.enrichment_status == "completed"
+        finally:
+            db.rollback()
+            db.close()
+
+    def test_convert_api_returns_before_enrichment_finishes(self, client, monkeypatch):
+        import time
+
+        def slow_background(converted_sbom_id: int, source_sbom_id: int | None = None) -> None:
+            time.sleep(2)
+
+        monkeypatch.setattr(
+            "app.routers.sbom_versions.run_post_conversion_enrichment",
+            slow_background,
+        )
+
+        sbom_id = _upload_spdx(client)
+        started = time.perf_counter()
+        convert = client.post(f"/api/sboms/{sbom_id}/convert/cyclonedx")
+        elapsed = time.perf_counter() - started
+
+        assert convert.status_code == 200
+        assert elapsed < 5.0
+        assert convert.json()["enrichment_status"] == "pending"

@@ -397,7 +397,7 @@ def _map_relationships(
     return dependencies
 
 
-def convert_spdx_to_cyclonedx(spdx_data: dict[str, Any]) -> ConversionResult:
+def convert_spdx_to_cyclonedx(spdx_data: dict[str, Any], *, validate: bool = True) -> ConversionResult:
     """Convert an SPDX JSON document to CycloneDX 1.6 JSON."""
     state = _ConversionState()
 
@@ -527,21 +527,22 @@ def convert_spdx_to_cyclonedx(spdx_data: dict[str, Any]) -> ConversionResult:
         "dependencies": dependencies,
     }
 
-    # Validate output
-    validation_report = run_validation(
-        __import__("json").dumps(cyclonedx_bom).encode("utf-8"),
-    )
-    if validation_report.has_errors():
-        for entry in validation_report.errors:
-            state.errors.append(f"{entry.code}: {entry.message}")
-        return ConversionResult(
-            cyclonedx_bom=cyclonedx_bom,
-            conversion_warnings=state.warnings,
-            conversion_errors=state.errors,
-            component_mapping=state.component_mapping,
-            relationship_mapping=state.relationship_mapping,
-            unmapped_fields=state.unmapped_fields,
+    # Validate output when requested — persist path validates once after save.
+    if validate:
+        validation_report = run_validation(
+            __import__("json").dumps(cyclonedx_bom).encode("utf-8"),
         )
+        if validation_report.has_errors():
+            for entry in validation_report.errors:
+                state.errors.append(f"{entry.code}: {entry.message}")
+            return ConversionResult(
+                cyclonedx_bom=cyclonedx_bom,
+                conversion_warnings=state.warnings,
+                conversion_errors=state.errors,
+                component_mapping=state.component_mapping,
+                relationship_mapping=state.relationship_mapping,
+                unmapped_fields=state.unmapped_fields,
+            )
 
     return ConversionResult(
         cyclonedx_bom=cyclonedx_bom,
@@ -592,14 +593,15 @@ def convert_and_persist_spdx_to_cyclonedx(
 ) -> tuple[Any, ConversionResult, dict[str, Any]]:
     """Convert an SPDX SBOM to CycloneDX and persist as a related SBOM record.
 
+    Performs only the fast synchronous path: convert, validate, save, sync
+    component rows. Lifecycle/VEX/completeness enrichment must be triggered
+    separately via :func:`run_post_conversion_enrichment`.
+
     Returns (converted_sbom, conversion_result, conversion_report).
     """
     import json
 
     from ..models import SBOMSource
-    from ..services.completeness_service import compute_and_save_completeness
-    from ..services.lifecycle.vex_provider import process_embedded_vex_for_sbom
-    from ..services.lifecycle_service import sync_lifecycle_for_sbom
     from ..services.sbom_service import sync_sbom_components
 
     if source_sbom.format != "spdx":
@@ -612,14 +614,23 @@ def convert_and_persist_spdx_to_cyclonedx(
                 f"SPDX SBOM already converted to CycloneDX (converted_sbom_id={existing.id})."
             )
 
+    started_at = _now_iso()
+    source_sbom.conversion_started_at = started_at
+    source_sbom.conversion_status = "running"
+
     spdx_data = _parse_spdx_dict(source_sbom.sbom_data)
-    result = convert_spdx_to_cyclonedx(spdx_data)
+    result = convert_spdx_to_cyclonedx(spdx_data, validate=False)
     if result.conversion_errors:
+        source_sbom.conversion_status = "failed"
+        source_sbom.conversion_error = "; ".join(result.conversion_errors)
+        source_sbom.conversion_completed_at = _now_iso()
+        db.commit()
         raise ValueError("; ".join(result.conversion_errors))
 
     report = build_conversion_report(result, source_sbom_id=source_sbom.id)
     converted_json = json.dumps(result.cyclonedx_bom, indent=2)
     now = _now_iso()
+    conv_status = "completed_with_warnings" if result.conversion_warnings else "completed"
 
     converted = SBOMSource(
         sbom_name=f"{source_sbom.sbom_name} (CycloneDX)",
@@ -640,7 +651,10 @@ def convert_and_persist_spdx_to_cyclonedx(
         current_format="cyclonedx",
         converted_from_format="spdx",
         source_sbom_id=source_sbom.id,
-        conversion_status="completed" if not result.conversion_warnings else "completed_with_warnings",
+        conversion_status=conv_status,
+        conversion_started_at=started_at,
+        conversion_completed_at=now,
+        enrichment_status="pending",
         conversion_warnings_json=[{"message": w} for w in result.conversion_warnings],
         conversion_report_json=report,
         converted_at=now,
@@ -649,7 +663,6 @@ def convert_and_persist_spdx_to_cyclonedx(
     db.add(converted)
     db.flush()
 
-    # Validate converted output once more before commit
     validation_report = run_validation(converted_json.encode("utf-8"))
     converted.validation_errors = (
         [e.model_dump(mode="json") for e in validation_report.entries] if validation_report.entries else None
@@ -659,29 +672,100 @@ def convert_and_persist_spdx_to_cyclonedx(
 
     if validation_report.has_errors():
         db.rollback()
+        source_sbom.conversion_status = "failed"
+        source_sbom.conversion_error = "Converted CycloneDX failed validation."
+        source_sbom.conversion_completed_at = _now_iso()
+        db.commit()
         raise ValueError("Converted CycloneDX failed validation.")
 
-    # Update source SBOM conversion tracking (original data unchanged)
     if not source_sbom.original_format:
         source_sbom.original_format = "spdx"
     source_sbom.current_format = "spdx"
     source_sbom.converted_sbom_id = converted.id
-    source_sbom.conversion_status = converted.conversion_status
+    source_sbom.conversion_status = conv_status
+    source_sbom.conversion_completed_at = now
+    source_sbom.conversion_error = None
     source_sbom.conversion_warnings_json = converted.conversion_warnings_json
     source_sbom.conversion_report_json = report
     source_sbom.converted_at = now
     source_sbom.converted_by = user_id or source_sbom.created_by
+    source_sbom.enrichment_status = "pending"
+    source_sbom.enrichment_error = None
 
     db.commit()
     db.refresh(converted)
     db.refresh(source_sbom)
 
-    try:
-        sync_sbom_components(db, converted)
-        sync_lifecycle_for_sbom(db, converted.id)
-        process_embedded_vex_for_sbom(db, converted.id)
-        compute_and_save_completeness(db, converted)
-    except Exception:
-        pass
+    # Local DB sync only — no external provider calls.
+    sync_sbom_components(db, converted)
+    db.commit()
 
     return converted, result, report
+
+
+def run_post_conversion_enrichment(converted_sbom_id: int, source_sbom_id: int | None = None) -> None:
+    """Background enrichment: lifecycle providers, VEX, completeness.
+
+    Uses its own DB session. Failures are recorded on the converted SBOM row
+    and do not affect the already-completed conversion.
+    """
+    import logging
+
+    from ..db import SessionLocal
+    from ..models import SBOMSource
+    from ..services.completeness_service import compute_and_save_completeness
+    from ..services.lifecycle.vex_provider import process_embedded_vex_for_sbom
+    from ..services.lifecycle_service import sync_lifecycle_for_sbom
+
+    log = logging.getLogger(__name__)
+    db = SessionLocal()
+    try:
+        converted = db.get(SBOMSource, converted_sbom_id)
+        if converted is None:
+            return
+
+        started = _now_iso()
+        converted.enrichment_status = "running"
+        converted.enrichment_started_at = started
+        converted.enrichment_error = None
+        if source_sbom_id is not None:
+            source = db.get(SBOMSource, source_sbom_id)
+            if source is not None:
+                source.enrichment_status = "running"
+                source.enrichment_started_at = started
+                source.enrichment_error = None
+        db.commit()
+
+        sync_lifecycle_for_sbom(db, converted_sbom_id)
+        process_embedded_vex_for_sbom(db, converted_sbom_id)
+        compute_and_save_completeness(db, converted)
+
+        completed = _now_iso()
+        converted.enrichment_status = "completed"
+        converted.enrichment_completed_at = completed
+        if source_sbom_id is not None:
+            source = db.get(SBOMSource, source_sbom_id)
+            if source is not None:
+                source.enrichment_status = "completed"
+                source.enrichment_completed_at = completed
+        db.commit()
+    except Exception as exc:
+        log.exception(
+            "Post-conversion enrichment failed for converted_sbom_id=%s",
+            converted_sbom_id,
+        )
+        db.rollback()
+        converted = db.get(SBOMSource, converted_sbom_id)
+        if converted is not None:
+            converted.enrichment_status = "failed"
+            converted.enrichment_error = str(exc)[:2000]
+            converted.enrichment_completed_at = _now_iso()
+            if source_sbom_id is not None:
+                source = db.get(SBOMSource, source_sbom_id)
+                if source is not None:
+                    source.enrichment_status = "failed"
+                    source.enrichment_error = str(exc)[:2000]
+                    source.enrichment_completed_at = converted.enrichment_completed_at
+            db.commit()
+    finally:
+        db.close()
