@@ -108,6 +108,18 @@ class SBOMSourceOut(ORMModel):
     warning_count: int = 0
     validated_at: str | None = None
 
+    # SPDX → CycloneDX conversion tracking
+    original_format: str | None = None
+    current_format: str | None = None
+    converted_from_format: str | None = None
+    source_sbom_id: int | None = None
+    converted_sbom_id: int | None = None
+    conversion_status: str | None = None
+    conversion_warnings_json: list[dict[str, Any]] | None = None
+    conversion_report_json: dict[str, Any] | None = None
+    converted_at: str | None = None
+    converted_by: str | None = None
+
     @model_validator(mode="before")
     @classmethod
     def populate_project_id_alias(cls, data):
@@ -488,3 +500,34 @@ class SbomEditPayload(BaseModel):
     metadata: dict[str, Any] | None = None
     components: list[ComponentEditPayload] = []
     change_summary: str = "Manual edit via UI"
+
+
+class SbomConversionResponse(BaseModel):
+    source_sbom_id: int
+    converted_sbom_id: int
+    source_format: str
+    target_format: str
+    status: str
+    warnings: list[str] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
+    conversion_report: dict[str, Any] = Field(default_factory=dict)
+
+
+class SbomConversionReportResponse(BaseModel):
+    source_format: str | None = None
+    target_format: str | None = None
+    converted_at: str | None = None
+    converted_by: str | None = None
+    source_sbom_id: int | None = None
+    converted_sbom_id: int | None = None
+    conversion_status: str | None = None
+    package_count: int = 0
+    component_count: int = 0
+    mapped_relationships: int = 0
+    unmapped_relationships: int = 0
+    warnings: list[str] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
+    unmapped_fields: list[str] = Field(default_factory=list)
+    component_mapping: dict[str, str] = Field(default_factory=dict)
+    relationship_mapping: list[dict[str, Any]] = Field(default_factory=list)
+    conversion_report: dict[str, Any] = Field(default_factory=dict)

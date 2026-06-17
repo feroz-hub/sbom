@@ -21,6 +21,8 @@ import type {
   ConsolidatedAnalysisResult,
   SBOMInfo,
   SBOMRiskSummary,
+  SbomConversionReport,
+  SbomConversionResponse,
   ValidationReport,
   DashboardTrend,
   TrendGranularity,
@@ -829,6 +831,31 @@ export function getSbomRiskSummary(sbomId: number, signal?: AbortSignal) {
 
 export function getSbomValidationReport(sbomId: number, signal?: AbortSignal) {
   return request<ValidationReport>(`/api/sboms/${sbomId}/validation-report`, { signal });
+}
+
+export function convertSbomToCycloneDX(sbomId: number, userId?: string, signal?: AbortSignal) {
+  const params = userId ? `?user_id=${encodeURIComponent(userId)}` : '';
+  return request<SbomConversionResponse>(`/api/sboms/${sbomId}/convert/cyclonedx${params}`, {
+    method: 'POST',
+    signal,
+  });
+}
+
+export function getSbomConversionReport(sbomId: number, signal?: AbortSignal) {
+  return request<SbomConversionReport>(`/api/sboms/${sbomId}/conversion-report`, { signal });
+}
+
+export function exportSbomDocument(
+  sbomId: number,
+  opts?: { format?: string; exportMode?: string },
+  signal?: AbortSignal,
+) {
+  const params = new URLSearchParams();
+  if (opts?.format) params.set('format', opts.format);
+  if (opts?.exportMode) params.set('export_mode', opts.exportMode);
+  const qs = params.toString();
+  const suffix = qs ? `?${qs}` : '';
+  return downloadBinary(`/api/sboms/${sbomId}/export${suffix}`, `sbom_${sbomId}.json`, signal);
 }
 
 /**

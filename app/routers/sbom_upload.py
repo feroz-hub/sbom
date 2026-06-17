@@ -150,6 +150,23 @@ async def upload_sbom(
             ),
         )
 
+    spec = ""
+    spec_version = ""
+    components_count = 0
+    try:
+        as_dict = json.loads(body_text)
+        if isinstance(as_dict, dict):
+            if as_dict.get("bomFormat") == "CycloneDX":
+                spec = "cyclonedx"
+                spec_version = str(as_dict.get("specVersion") or "")
+                components_count = len(as_dict.get("components") or [])
+            elif "spdxVersion" in as_dict:
+                spec = "spdx"
+                spec_version = str(as_dict.get("spdxVersion") or "")
+                components_count = len(as_dict.get("packages") or [])
+    except Exception:
+        pass
+
     obj = SBOMSource(
         sbom_name=sbom_name.strip(),
         sbom_data=body_text,
@@ -163,6 +180,8 @@ async def upload_sbom(
         error_count=report.error_count,
         warning_count=report.warning_count,
         validated_at=_now_iso(),
+        original_format=spec or None,
+        current_format=spec or None,
     )
     try:
         db.add(obj)
@@ -183,29 +202,6 @@ async def upload_sbom(
         compute_and_save_completeness(db, obj)
     except Exception as exc:  # pragma: no cover - defensive enrichment path
         log.warning("Failed to enrich uploaded SBOM %s: %s", obj.id, exc)
-
-    spec = ""
-    spec_version = ""
-    components_count = 0
-    # The pipeline does not expose the internal model on ErrorReport; for the
-    # response shape we re-derive minimal stats from the parsed dict by
-    # re-parsing the body. This is cheap on the success path because the
-    # document already passed every cap.
-    try:
-        as_dict = json.loads(body_text)
-        if isinstance(as_dict, dict):
-            if as_dict.get("bomFormat") == "CycloneDX":
-                spec = "cyclonedx"
-                spec_version = str(as_dict.get("specVersion") or "")
-                components_count = len(as_dict.get("components") or [])
-            elif "spdxVersion" in as_dict:
-                spec = "spdx"
-                spec_version = str(as_dict.get("spdxVersion") or "")
-                components_count = len(as_dict.get("packages") or [])
-    except Exception:
-        # XML / tag-value path; surface 0 components in the response — the
-        # legacy parser will populate the components table on first analyse.
-        pass
 
     return SbomAcceptedResponse(
         sbom_id=obj.id,

@@ -47,6 +47,17 @@ export interface SBOMSource {
   error_count?: number;
   warning_count?: number;
   validated_at?: string | null;
+  // SPDX → CycloneDX conversion tracking
+  original_format?: string | null;
+  current_format?: string | null;
+  converted_from_format?: string | null;
+  source_sbom_id?: number | null;
+  converted_sbom_id?: number | null;
+  conversion_status?: string | null;
+  conversion_warnings_json?: Array<{ message?: string }> | null;
+  conversion_report_json?: Record<string, unknown> | null;
+  converted_at?: string | null;
+  converted_by?: string | null;
   // Client-side only — not from API. Set during optimistic updates.
   // ADR-0001: OK / FINDINGS are the canonical names. PASS / FAIL accepted as
   // legacy aliases during the deprecation window.
@@ -768,6 +779,37 @@ export interface SBOMInfo {
   has_purls: boolean;
   has_cpes: boolean;
   components_preview: string[];
+}
+
+export interface SbomConversionResponse {
+  source_sbom_id: number;
+  converted_sbom_id: number;
+  source_format: string;
+  target_format: string;
+  status: string;
+  warnings: string[];
+  errors: string[];
+  conversion_report: Record<string, unknown>;
+}
+
+export interface SbomConversionReport {
+  source_format?: string | null;
+  target_format?: string | null;
+  converted_at?: string | null;
+  converted_by?: string | null;
+  source_sbom_id?: number | null;
+  converted_sbom_id?: number | null;
+  conversion_status?: string | null;
+  package_count: number;
+  component_count: number;
+  mapped_relationships: number;
+  unmapped_relationships: number;
+  warnings: string[];
+  errors: string[];
+  unmapped_fields: string[];
+  component_mapping: Record<string, string>;
+  relationship_mapping: Array<Record<string, unknown>>;
+  conversion_report: Record<string, unknown>;
 }
 
 export interface RiskComponent {

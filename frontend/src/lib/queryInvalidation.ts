@@ -44,6 +44,7 @@ export function invalidateSbomSurfaces(qc: QueryClient, sbomId?: number | null):
     qc.invalidateQueries({ queryKey: ['sbom-validation-report', sbomId] });
     qc.invalidateQueries({ queryKey: ['sbom-versions', sbomId] });
     qc.invalidateQueries({ queryKey: ['sbom-vex', sbomId] });
+    qc.invalidateQueries({ queryKey: ['sbom-conversion-report', sbomId] });
   }
 }
 

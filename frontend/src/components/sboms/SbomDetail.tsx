@@ -17,6 +17,7 @@ import { SkeletonRow } from '@/components/ui/Spinner';
 import { Pagination } from '@/components/ui/Pagination';
 import { AnalysisProgress } from '@/components/analysis/AnalysisProgress';
 import { ScheduleCard } from '@/components/schedules/ScheduleCard';
+import { SbomConversionCard } from '@/components/sboms/SbomConversionCard';
 import { ValidationReportSection } from '@/components/sboms/ValidationReportSection';
 import { 
   getSbomComponents, 
@@ -796,11 +797,14 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                   <Edit2 className="h-3.5 w-3.5" /> Edit Details
                 </Button>
                 <a
-                  href={`${BASE_URL}/api/sboms/${sbom.id}/export`}
+                  href={`${BASE_URL}/api/sboms/${sbom.id}/export?export_mode=original`}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-hcl-border text-xs font-semibold hover:bg-hcl-light transition-colors text-hcl-navy"
                   download
                 >
-                  <Download className="h-3.5 w-3.5" /> Export CycloneDX
+                  <Download className="h-3.5 w-3.5" />{' '}
+                  {info?.format === 'SPDX' || sbom.format === 'spdx'
+                    ? 'Export Original SPDX'
+                    : 'Export CycloneDX'}
                 </a>
                 <Button
                   onClick={handleRunAnalysis}
@@ -856,6 +860,8 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
           </Card>
 
           <ScheduleCard scope="SBOM" targetId={sbom.id} />
+
+          <SbomConversionCard sbom={sbom} formatLabel={info?.format} />
 
           {info && (
             <Card>

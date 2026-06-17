@@ -18,8 +18,9 @@ from sqlalchemy.orm import Session
 from ..auth import require_roles
 from ..db import get_db
 from ..models import SBOMComponent, SBOMSource
-from ..schemas import SbomEditPayload, SBOMSourceOut
+from ..schemas import SbomConversionReportResponse, SbomConversionResponse, SbomEditPayload, SBOMSourceOut
 from ..services.lifecycle import LifecycleEnrichmentService, component_lifecycle_dict, lifecycle_report_csv
+from ..services.sbom_conversion_service import convert_and_persist_spdx_to_cyclonedx
 from ..services.version_control_service import compare_versions, edit_sbom, restore_version
 from ..validation import run as run_validation
 
@@ -90,11 +91,11 @@ def _normalized_export_format(value: str) -> str:
         "tag-value": "spdx",
     }
     requested = aliases.get(requested, requested)
-    allowed = {"native", "json", "xml", "cyclonedx", "spdx"}
+    allowed = {"native", "json", "xml", "cyclonedx", "spdx", "conversion-report"}
     if requested not in allowed:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unsupported export format '{value}'. Supported formats: native, json, xml, CycloneDX, SPDX.",
+            detail=f"Unsupported export format '{value}'. Supported formats: native, json, xml, CycloneDX, SPDX, conversion-report.",
         )
     return requested
 
@@ -120,19 +121,18 @@ def _components_for_sbom(db: Session, sbom_id: int) -> list[SBOMComponent]:
 def _lifecycle_properties(component: SBOMComponent) -> list[dict[str, str]]:
     values = {
         "lifecycle:status": component.lifecycle_status,
-        "lifecycle:eol": component.eol_date,
-        "lifecycle:eos": component.eos_date,
-        "lifecycle:eof": component.eof_date,
-        "lifecycle:deprecated": str(bool(component.deprecated or component.is_deprecated)).lower(),
-        "lifecycle:unsupported": str(bool(component.unsupported)).lower(),
-        "lifecycle:maintenance_status": component.maintenance_status,
-        "lifecycle:latest_version": component.latest_version,
+        "lifecycle:maintenanceStatus": component.maintenance_status,
+        "lifecycle:eolDate": component.eol_date,
+        "lifecycle:eosDate": component.eos_date,
+        "lifecycle:eofDate": component.eof_date,
+        "lifecycle:deprecated": str(bool(component.deprecated or component.is_deprecated)).lower() if (component.deprecated or component.is_deprecated) else None,
+        "lifecycle:unsupported": str(bool(component.unsupported)).lower() if component.unsupported else None,
+        "lifecycle:recommendedVersion": component.recommended_version,
         "lifecycle:source": component.lifecycle_source,
-        "lifecycle:source_url": component.lifecycle_source_url,
+        "lifecycle:evidenceUrl": component.lifecycle_source_url,
         "lifecycle:confidence": component.lifecycle_confidence,
-        "lifecycle:recommendation": component.lifecycle_recommendation,
-        "lifecycle:recommended_version": component.recommended_version,
-        "lifecycle:checked_at": component.lifecycle_checked_at,
+        "lifecycle:checkedAt": component.lifecycle_checked_at,
+        "lifecycle:manualOverride": str(bool(component.lifecycle_manual_override)).lower() if getattr(component, "lifecycle_manual_override", None) else None,
     }
     return [{"name": key, "value": str(value)} for key, value in values.items() if value not in (None, "")]
 
@@ -418,20 +418,106 @@ def _sync_flat_to_raw(flat: dict, raw: dict, standard: str) -> None:
             raw["group"] = flat["group"]
 
 
+@router.post("/{id}/convert/cyclonedx", response_model=SbomConversionResponse)
+def convert_spdx_to_cyclonedx_endpoint(
+    id: int,
+    user_id: str | None = Query(None),
+    _principal=_security_role,
+    db: Session = Depends(get_db),
+):
+    """Convert a validated SPDX SBOM to CycloneDX and persist as a related record."""
+
+    sbom = db.get(SBOMSource, id)
+    if not sbom:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"SBOM with ID {id} not found.")
+    if sbom.format != "spdx":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"SBOM format is '{sbom.format}'; only SPDX SBOMs can be converted to CycloneDX.",
+        )
+    if sbom.status != "validated":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="SBOM must pass validation before conversion.",
+        )
+    try:
+        converted, result, report = convert_and_persist_spdx_to_cyclonedx(db, sbom, user_id=user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    conv_status = "completed_with_warnings" if result.conversion_warnings else "completed"
+    return SbomConversionResponse(
+        source_sbom_id=id,
+        converted_sbom_id=converted.id,
+        source_format="SPDX",
+        target_format="CycloneDX",
+        status=conv_status,
+        warnings=result.conversion_warnings,
+        errors=result.conversion_errors,
+        conversion_report=report,
+    )
+
+
+@router.get("/{id}/conversion-report", response_model=SbomConversionReportResponse)
+def get_conversion_report(id: int, db: Session = Depends(get_db)):
+    """Return the SPDX to CycloneDX conversion report for an SBOM."""
+
+    sbom = db.get(SBOMSource, id)
+    if not sbom:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"SBOM with ID {id} not found.")
+
+    report = sbom.conversion_report_json or {}
+    if not report and sbom.source_sbom_id:
+        source = db.get(SBOMSource, sbom.source_sbom_id)
+        if source and source.conversion_report_json:
+            report = source.conversion_report_json
+
+    if not report and not sbom.conversion_status:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No conversion report found for this SBOM.",
+        )
+
+    warnings = report.get("warnings") or sbom.conversion_warnings_json or []
+    if warnings and isinstance(warnings[0], dict):
+        warnings = [w.get("message", str(w)) for w in warnings]
+
+    return SbomConversionReportResponse(
+        source_format=report.get("source_format") or sbom.converted_from_format or sbom.original_format,
+        target_format=report.get("target_format") or "CycloneDX",
+        converted_at=report.get("converted_at") or sbom.converted_at,
+        converted_by=sbom.converted_by,
+        source_sbom_id=sbom.source_sbom_id or (id if sbom.converted_sbom_id else None),
+        converted_sbom_id=sbom.converted_sbom_id or (id if sbom.source_sbom_id else None),
+        conversion_status=sbom.conversion_status,
+        package_count=report.get("package_count", 0),
+        component_count=report.get("component_count", 0),
+        mapped_relationships=report.get("mapped_relationships", 0),
+        unmapped_relationships=report.get("unmapped_relationships", 0),
+        warnings=warnings,
+        errors=report.get("errors") or [],
+        unmapped_fields=report.get("unmapped_fields") or [],
+        component_mapping=report.get("component_mapping") or {},
+        relationship_mapping=report.get("relationship_mapping") or [],
+        conversion_report=report,
+    )
+
+
 @router.get("/{id}/export")
 def export_sbom(
     id: int,
-    format: str = Query("native", description="native, json, xml, CycloneDX, or SPDX"),
-    export_mode: str = Query("original", description="Export mode: 'original' or 'normalized'"),
+    format: str = Query("native", description="native, json, xml, CycloneDX, SPDX, or conversion-report"),
+    export_mode: str = Query("original", description="Export mode: 'original', 'converted', 'enriched', or 'normalized'"),
     db: Session = Depends(get_db)
 ):
     """
-    Export the current SBOM data in its native format.
+    Export the current SBOM data in its native format, or a converted/enriched variant.
     """
-    if export_mode not in {"original", "normalized"}:
+    allowed_modes = {"original", "converted", "enriched", "normalized"}
+    if export_mode not in allowed_modes:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unsupported export mode '{export_mode}'. Supported modes: original, normalized."
+            detail=f"Unsupported export mode '{export_mode}'. Supported modes: {', '.join(sorted(allowed_modes))}.",
         )
 
     sbom = db.get(SBOMSource, id)
@@ -441,9 +527,57 @@ def export_sbom(
             detail=f"SBOM with ID {id} has no data."
         )
     requested = _normalized_export_format(format)
+
+    # Conversion report download
+    if requested == "conversion-report" or format.strip().lower() == "conversion-report":
+        report = sbom.conversion_report_json
+        if not report and sbom.source_sbom_id:
+            source = db.get(SBOMSource, sbom.source_sbom_id)
+            report = source.conversion_report_json if source else None
+        if not report:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No conversion report available for this SBOM.",
+            )
+        content = json.dumps(report, indent=2)
+        return Response(
+            content=content,
+            media_type="application/json",
+            headers={"Content-Disposition": f'attachment; filename="sbom_{id}_conversion-report.json"'},
+        )
+
     standard, encoding = _detect_native_format(sbom.sbom_data)
 
-    if requested in {"cyclonedx", "spdx"} and standard != requested:
+    # SPDX-origin exports: resolve target SBOM and content based on export_mode
+    export_sbom_obj = sbom
+    skip_lifecycle_augment = False
+    if standard == "spdx":
+        if export_mode == "original" or requested in {"native", "spdx", "json"}:
+            pass  # export original SPDX from sbom.sbom_data
+        elif export_mode in {"converted", "enriched"} or requested == "cyclonedx":
+            if not sbom.converted_sbom_id:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="No CycloneDX conversion exists for this SPDX SBOM. Run conversion first.",
+                )
+            converted = db.get(SBOMSource, sbom.converted_sbom_id)
+            if not converted or not converted.sbom_data:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Converted CycloneDX SBOM not found.",
+                )
+            export_sbom_obj = converted
+            standard, encoding = _detect_native_format(converted.sbom_data)
+            skip_lifecycle_augment = export_mode == "converted"
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"Unsupported SBOM conversion from {standard} to {requested}. "
+                    "Use export_mode=converted or enriched with format=cyclonedx."
+                ),
+            )
+    elif requested in {"cyclonedx", "spdx"} and standard != requested:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
@@ -451,7 +585,7 @@ def export_sbom(
                 "Only native-format export is currently supported."
             ),
         )
-    if requested in {"json", "xml"} and encoding != requested:
+    elif requested in {"json", "xml"} and encoding != requested:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
@@ -583,7 +717,7 @@ def export_sbom(
         content = json.dumps(doc, indent=2)
 
     else:
-        content = sbom.sbom_data
+        content = export_sbom_obj.sbom_data
         if encoding == "json":
             try:
                 content = json.dumps(json.loads(content), indent=2)
@@ -593,9 +727,9 @@ def export_sbom(
                     detail=f"Stored SBOM JSON is invalid and cannot be exported: {exc}",
                 ) from exc
 
-    if encoding == "json":
+    if encoding == "json" and not skip_lifecycle_augment and export_mode != "normalized":
         try:
-            content = _maybe_augment_export_with_lifecycle(db, sbom, content, standard, encoding)
+            content = _maybe_augment_export_with_lifecycle(db, export_sbom_obj, content, standard, encoding)
         except Exception as exc:
             log.warning("Lifecycle augmentation failed: %s", exc)
 
@@ -609,8 +743,22 @@ def export_sbom(
             },
         )
 
-    extension = "json" if encoding == "json" else "xml" if encoding == "xml" else "spdx"
-    filename = f"{sbom.sbom_name}_v{sbom.sbom_version or '1'}.{extension}"
+    if standard == "cyclonedx" and encoding == "json":
+        extension = "cdx.json"
+    elif standard == "spdx" and encoding == "json":
+        extension = "spdx.json"
+    else:
+        extension = "json" if encoding == "json" else "xml" if encoding == "xml" else "spdx"
+
+    mode_suffix = ""
+    if export_mode == "converted":
+        mode_suffix = "_converted"
+    elif export_mode == "enriched":
+        mode_suffix = "_enriched"
+    elif export_mode == "original" and standard == "spdx":
+        mode_suffix = "_original"
+
+    filename = f"{sbom.sbom_name}{mode_suffix}.{extension}"
     headers = {
         "Content-Disposition": f"attachment; filename=\"{filename}\""
     }

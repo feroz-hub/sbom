@@ -97,6 +97,18 @@ class SBOMSource(Base, SoftDeleteMixin):
     warning_count = Column(Integer, nullable=False, default=0, server_default="0")
     validated_at = Column(String, nullable=True)
 
+    # SPDX → CycloneDX conversion tracking — see migration 029.
+    original_format = Column(String(32), nullable=True)
+    current_format = Column(String(32), nullable=True)
+    converted_from_format = Column(String(32), nullable=True)
+    source_sbom_id = Column(Integer, ForeignKey("sbom_source.id"), nullable=True, index=True)
+    converted_sbom_id = Column(Integer, ForeignKey("sbom_source.id"), nullable=True, index=True)
+    conversion_status = Column(String(32), nullable=True, index=True)
+    conversion_warnings_json = Column(JSON, nullable=True)
+    conversion_report_json = Column(JSON, nullable=True)
+    converted_at = Column(String, nullable=True)
+    converted_by = Column(String, nullable=True)
+
     project = relationship("Projects", back_populates="sboms")
     sbom_type_rel = relationship("SBOMType", back_populates="sboms")
     analysis_reports = relationship("SBOMAnalysisReport", back_populates="sbom")
