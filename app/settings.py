@@ -64,6 +64,17 @@ class Settings(BaseSettings):
     # Analysis Settings
     analysis_legacy_level: int = Field(default=1, description="Legacy analysis level (0=new, 1+=compatibility)")
 
+    # Lifecycle enrichment provider controls. These keep best-effort
+    # external lookups bounded so SBOM enrichment cannot monopolize workers.
+    lifecycle_provider_timeout_seconds: float = Field(
+        default=5.0,
+        description="Per-provider timeout for lifecycle/EOL/deps.dev/OSV lookups.",
+    )
+    lifecycle_provider_max_concurrent: int = Field(
+        default=3,
+        description="Maximum lifecycle providers queried concurrently per component.",
+    )
+
     # NVD version-range filter (roadmap #1).
     #
     # When True, the NVD source consults the configurations.nodes.cpeMatch

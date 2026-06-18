@@ -426,8 +426,9 @@ describe('SbomDetail lifecycle management', () => {
 
       // Assert query invalidate queries called
       await waitFor(() => {
-        expect(invalidateSpy).toHaveBeenCalledWith(expect.objectContaining({ queryKey: ['sbom', 42] }));
         expect(invalidateSpy).toHaveBeenCalledWith(expect.objectContaining({ queryKey: ['sbom-components', 42] }));
+        expect(invalidateSpy).toHaveBeenCalledWith(expect.objectContaining({ queryKey: ['dashboard-lifecycle'] }));
+        expect(invalidateSpy).toHaveBeenCalledWith(expect.objectContaining({ queryKey: ['dashboard-health'] }));
       });
 
       invalidateSpy.mockRestore();

@@ -188,9 +188,11 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
           setValidationFailure(null);
           setDuplicateNameError(null);
           onClose();
-          showToast(`"${sbom.sbom_name}" uploaded successfully`, 'success', {
-            duration: 3000,
-          });
+          showToast(
+            `"${sbom.sbom_name}" uploaded successfully. Enrichment is running in background.`,
+            'success',
+            { duration: 5000 },
+          );
           // Parent triggers background analysis after the modal closes.
           onSuccess?.(sbom);
         },

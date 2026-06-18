@@ -20,7 +20,7 @@ import time
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Path, Query, Request, Response, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import delete, func, select
@@ -62,9 +62,7 @@ from ..schemas import (
 )
 from ..services import audit_log
 from ..services.analysis_service import compute_report_status, persist_analysis_run
-from ..services.completeness_service import compute_and_save_completeness
-from ..services.lifecycle.vex_provider import process_embedded_vex_for_sbom
-from ..services.lifecycle_service import sync_lifecycle_for_sbom
+from ..services.sbom_enrichment_service import mark_enrichment_pending, run_post_upload_enrichment
 from ..services.soft_delete import SoftDeleteService
 from ..services.validation_repair_service import (
     ValidationRepairService,
@@ -338,7 +336,11 @@ def get_sbom(sbom_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/sboms", response_model=SBOMSourceOut, status_code=status.HTTP_201_CREATED)
-def create_sbom(payload: SBOMSourceCreate, db: Session = Depends(get_db)):
+def create_sbom(
+    payload: SBOMSourceCreate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
     log.info("Creating SBOM: name='%s' project_id=%s", payload.sbom_name, payload.projectid)
     # --- Foreign key checks ---
     if payload.projectid is not None and db.get(Projects, payload.projectid) is None:
@@ -400,6 +402,7 @@ def create_sbom(payload: SBOMSourceCreate, db: Session = Depends(get_db)):
             warning_count=report.warning_count,
             validated_at=now_iso(),
         )
+        mark_enrichment_pending(obj)
         db.add(obj)
         db.flush()
         db.commit()
@@ -416,15 +419,13 @@ def create_sbom(payload: SBOMSourceCreate, db: Session = Depends(get_db)):
         # Clean SBOM (or warnings only) — sync components for the UI.
         try:
             components = sync_sbom_components(db, obj)
-            sync_lifecycle_for_sbom(db, obj.id)
-            process_embedded_vex_for_sbom(db, obj.id)
-            compute_and_save_completeness(db, obj)
             db.commit()
             log.info("SBOM components synced: sbom id=%d components=%d", obj.id, len(components))
         except Exception as exc:
             db.rollback()
             log.warning("Component sync failed for SBOM id=%d: %s", obj.id, exc)
 
+        background_tasks.add_task(run_post_upload_enrichment, obj.id)
         return obj
 
     except IntegrityError as exc:

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
-from app.models import SBOMSource, Projects, AnalysisRun, SBOMComponent, AuditLog, SBOMValidationSession
+
 from app.db import SessionLocal
+from app.models import AnalysisRun, AuditLog, SBOMComponent
 
 CLEAN_CYCLONEDX = {
     "bomFormat": "CycloneDX",

@@ -48,7 +48,13 @@ import {
   BASE_URL
 } from '@/lib/api';
 import { useAnalysisStream } from '@/hooks/useAnalysisStream';
-import { invalidateAnalysisCompletion, invalidateDashboardTiles, invalidateSbomSurfaces, invalidateProjectSurfaces } from '@/lib/queryInvalidation';
+import {
+  invalidateAnalysisCompletion,
+  invalidateLifecycleOverrideSurfaces,
+  invalidateProjectAssignmentSurfaces,
+  invalidateSbomVersionSurfaces,
+  invalidateVexSurfaces,
+} from '@/lib/queryInvalidation';
 import { useTableSort } from '@/hooks/useTableSort';
 import { usePagination } from '@/hooks/usePagination';
 import { formatDate, formatDuration } from '@/lib/utils';
@@ -229,17 +235,13 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
         change_reason: assignChangeReason || undefined,
       });
 
-      queryClient.invalidateQueries({ queryKey: ['sbom', sbom.id] });
-      queryClient.invalidateQueries({ queryKey: ['projects'] });
-      if (sbom.projectid) {
-        queryClient.invalidateQueries({ queryKey: ['project', sbom.projectid] });
-      }
-      queryClient.invalidateQueries({ queryKey: ['project', selectedProjectId] });
-      invalidateDashboardTiles(queryClient);
-      invalidateProjectSurfaces(queryClient);
+      invalidateProjectAssignmentSurfaces(queryClient, {
+        sbomId: sbom.id,
+        previousProjectId: sbom.projectid,
+        nextProjectId: selectedProjectId,
+      });
 
       setIsAssignModalOpen(false);
-      router.refresh?.();
     } catch (err: any) {
       setAssignError(err.message || 'Failed to update project assignment.');
     } finally {
@@ -268,19 +270,13 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
 
       await updateSbom(sbom.id, payload);
 
-      queryClient.invalidateQueries({ queryKey: ['sbom', sbom.id] });
-      queryClient.invalidateQueries({ queryKey: ['projects'] });
-      if (sbom.projectid) {
-        queryClient.invalidateQueries({ queryKey: ['project', sbom.projectid] });
-      }
-      if (detailProjectId) {
-        queryClient.invalidateQueries({ queryKey: ['project', detailProjectId] });
-      }
-      invalidateDashboardTiles(queryClient);
-      invalidateProjectSurfaces(queryClient);
+      invalidateProjectAssignmentSurfaces(queryClient, {
+        sbomId: sbom.id,
+        previousProjectId: sbom.projectid,
+        nextProjectId: detailProjectId,
+      });
 
       setIsEditDetailsModalOpen(false);
-      router.refresh?.();
     } catch (err: any) {
       setDetailsError(err.message || 'Failed to update details.');
     } finally {
@@ -480,12 +476,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
       // Invalidate queries asynchronously (do not block modal closure)
       (async () => {
         try {
-          await Promise.all([
-            queryClient.invalidateQueries({ queryKey: ['sbom', sbom.id] }),
-            queryClient.invalidateQueries({ queryKey: ['sbom-components', sbom.id] }),
-            queryClient.invalidateQueries({ queryKey: ['dashboard-lifecycle'] }),
-            queryClient.invalidateQueries({ queryKey: ['dashboard-health'] }),
-          ]);
+          await invalidateLifecycleOverrideSurfaces(queryClient, sbom.id);
         } catch (err) {
           console.error('Failed to invalidate queries:', err);
         }
@@ -549,9 +540,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
     try {
       const restoredVersion = await restoreSbomVersion(sbom.id, versionId, sbom.created_by ?? undefined);
       setRestoreMessage('Version restored successfully as new HEAD! Refreshing...');
-      queryClient.invalidateQueries({ queryKey: ['sbom', sbom.id] });
-      queryClient.invalidateQueries({ queryKey: ['sbom-components', sbom.id] });
-      queryClient.invalidateQueries({ queryKey: ['sbom-versions', sbom.id] });
+      invalidateSbomVersionSurfaces(queryClient, sbom.id);
       setTimeout(() => {
         setRestoreMessage('');
         router.push(`/sboms/${restoredVersion.id}`);
@@ -562,9 +551,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
   };
 
   const invalidateLifecycleQueries = () => {
-    queryClient.invalidateQueries({ queryKey: ['sbom-components', sbom.id] });
-    queryClient.invalidateQueries({ queryKey: ['dashboard-lifecycle'] });
-    queryClient.invalidateQueries({ queryKey: ['dashboard-health'] });
+    invalidateLifecycleOverrideSurfaces(queryClient, sbom.id);
   };
 
   const handleRefreshLifecycle = async () => {
@@ -615,8 +602,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
         `Imported ${result.statements_imported} VEX statements; ${result.unmatched_statements ?? 0} unmatched.`,
       );
       setVexDocumentText('');
-      invalidateSbomSurfaces(queryClient, sbom.id);
-      invalidateDashboardTiles(queryClient);
+      invalidateVexSurfaces(queryClient, sbom.id);
     } catch (err: any) {
       setVexMessage(err.message || 'VEX import failed.');
     } finally {
@@ -629,8 +615,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
     setVexMessage('');
     try {
       const result = await discoverSbomVexDocuments(sbom.id, true);
-      queryClient.invalidateQueries({ queryKey: ['sbom-vex', sbom.id] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard-vex'] });
+      invalidateVexSurfaces(queryClient, sbom.id);
       const errorSuffix = result.errors?.length ? ` ${result.errors.length} provider error(s) recorded.` : '';
       setVexMessage(
         `Discovery imported ${result.statements_imported} statements from ${result.discovered_documents} document(s); ${result.unmatched_statements} unmatched.${errorSuffix}`,
@@ -708,9 +693,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
       });
       setVexMessage(`Manual VEX override saved for ${vexOverrideVulnerability.trim()}.`);
       setIsVexOverrideOpen(false);
-      queryClient.invalidateQueries({ queryKey: ['sbom-vex', sbom.id] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard-vex'] });
-      invalidateDashboardTiles(queryClient);
+      invalidateVexSurfaces(queryClient, sbom.id);
     } catch (err: any) {
       setVexOverrideError(err.message || 'Manual VEX override failed.');
     } finally {

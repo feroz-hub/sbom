@@ -6,12 +6,10 @@ import json
 import uuid
 from pathlib import Path
 
-import pytest
-from sqlalchemy import select
-
 from app.models import SBOMComponent
 from app.services.sbom_conversion_service import convert_spdx_to_cyclonedx
 from app.validation import run as run_validation
+from sqlalchemy import select
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "sboms" / "valid"
 

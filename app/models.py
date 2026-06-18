@@ -157,6 +157,10 @@ class SBOMSource(Base, SoftDeleteMixin):
         return self.modified_on
 
     @property
+    def last_enriched_at(self) -> str | None:
+        return self.enrichment_completed_at
+
+    @property
     def format(self) -> str:
         import json
         if not self.sbom_data:

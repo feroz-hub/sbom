@@ -124,6 +124,7 @@ class SBOMSourceOut(ORMModel):
     conversion_completed_at: str | None = None
     enrichment_started_at: str | None = None
     enrichment_completed_at: str | None = None
+    last_enriched_at: str | None = None
     conversion_error: str | None = None
     enrichment_error: str | None = None
 

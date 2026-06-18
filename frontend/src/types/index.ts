@@ -63,6 +63,7 @@ export interface SBOMSource {
   conversion_completed_at?: string | null;
   enrichment_started_at?: string | null;
   enrichment_completed_at?: string | null;
+  last_enriched_at?: string | null;
   conversion_error?: string | null;
   enrichment_error?: string | null;
   // Client-side only — not from API. Set during optimistic updates.
@@ -746,6 +747,8 @@ export interface UploadSBOMAcceptedResponse {
   components: number;
   warnings: ValidationErrorEntry[];
   info: ValidationErrorEntry[];
+  enrichment_status?: string | null;
+  message?: string;
 }
 
 export interface UpdateSBOMPayload {

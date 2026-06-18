@@ -15,7 +15,6 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from ..validation import run as run_validation
-from ..validation.normalize import normalize_spdx
 
 _CONVERSION_TOOL = "SBOM Analyzer"
 _TARGET_SPEC_VERSION = "1.6"

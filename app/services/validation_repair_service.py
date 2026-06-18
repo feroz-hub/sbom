@@ -32,9 +32,7 @@ from ..models import (
     SBOMValidationSession,
     SBOMValidationSessionEvent,
 )
-from ..services.completeness_service import compute_and_save_completeness
-from ..services.lifecycle.vex_provider import process_embedded_vex_for_sbom
-from ..services.lifecycle_service import sync_lifecycle_for_sbom
+from ..services.sbom_enrichment_service import mark_enrichment_pending
 from ..services.sbom_service import sync_sbom_components
 from ..validation import ErrorReport
 from ..validation import run as run_validation
@@ -395,9 +393,7 @@ class ValidationRepairService:
                 self.db.flush()
 
                 sync_sbom_components(self.db, existing)
-                sync_lifecycle_for_sbom(self.db, int(existing.id))
-                process_embedded_vex_for_sbom(self.db, int(existing.id))
-                compute_and_save_completeness(self.db, existing)
+                mark_enrichment_pending(existing)
 
                 session.validation_status = "imported"
                 session.updated_at = now_iso()
@@ -440,13 +436,11 @@ class ValidationRepairService:
             warning_count=int((session.latest_error_report_json or {}).get("warning_count") or 0),
             validated_at=now_iso(),
         )
+        mark_enrichment_pending(obj)
         try:
             self.db.add(obj)
             self.db.flush()
             sync_sbom_components(self.db, obj)
-            sync_lifecycle_for_sbom(self.db, int(obj.id))
-            process_embedded_vex_for_sbom(self.db, int(obj.id))
-            compute_and_save_completeness(self.db, obj)
             session.imported_sbom_id = int(obj.id)
             session.validation_status = "imported"
             session.updated_at = now_iso()

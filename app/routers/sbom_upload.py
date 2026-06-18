@@ -20,15 +20,13 @@ import json
 import logging
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..models import Projects, SBOMSource, SBOMType
-from ..services.completeness_service import compute_and_save_completeness
-from ..services.lifecycle.vex_provider import process_embedded_vex_for_sbom
-from ..services.lifecycle_service import sync_lifecycle_for_sbom
+from ..services.sbom_enrichment_service import mark_enrichment_pending, run_post_upload_enrichment
 from ..services.sbom_service import sync_sbom_components
 from ..services.validation_repair_service import (
     ValidationRepairService,
@@ -54,6 +52,8 @@ class SbomAcceptedResponse(BaseModel):
     components: int
     warnings: list[dict]
     info: list[dict]
+    enrichment_status: str = "pending"
+    message: str = "SBOM uploaded successfully. Enrichment is running in background."
 
 
 def _now_iso() -> str:
@@ -66,6 +66,7 @@ def _now_iso() -> str:
     response_model=SbomAcceptedResponse,
 )
 async def upload_sbom(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(..., description="SBOM document (SPDX or CycloneDX)"),
     sbom_name: str = Form(..., min_length=1, max_length=255),
     project_id: int | None = Form(None),
@@ -183,6 +184,7 @@ async def upload_sbom(
         original_format=spec or None,
         current_format=spec or None,
     )
+    mark_enrichment_pending(obj)
     try:
         db.add(obj)
         db.commit()
@@ -197,11 +199,12 @@ async def upload_sbom(
 
     try:
         sync_sbom_components(db, obj)
-        sync_lifecycle_for_sbom(db, obj.id)
-        process_embedded_vex_for_sbom(db, obj.id)
-        compute_and_save_completeness(db, obj)
+        db.commit()
     except Exception as exc:  # pragma: no cover - defensive enrichment path
-        log.warning("Failed to enrich uploaded SBOM %s: %s", obj.id, exc)
+        db.rollback()
+        log.warning("Failed to sync uploaded SBOM components %s: %s", obj.id, exc)
+
+    background_tasks.add_task(run_post_upload_enrichment, obj.id)
 
     return SbomAcceptedResponse(
         sbom_id=obj.id,
@@ -213,4 +216,6 @@ async def upload_sbom(
         components=components_count,
         warnings=[w.model_dump() for w in report.warnings],
         info=[i.model_dump() for i in report.info],
+        enrichment_status=obj.enrichment_status or "pending",
+        message="SBOM uploaded successfully. Enrichment is running in background.",
     )

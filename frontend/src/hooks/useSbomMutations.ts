@@ -12,11 +12,8 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { HttpError, revalidateSbom, uploadSbom } from '@/lib/api';
 import {
-  invalidateDashboardTiles,
-  invalidateProjectLists,
-  invalidateProjectSurfaces,
   invalidateSbomLists,
-  invalidateSbomSurfaces,
+  invalidateUploadSurfaces,
 } from '@/lib/queryInvalidation';
 import type {
   CreateSBOMPayload,
@@ -35,10 +32,8 @@ function isValidationFailureDetail(
 }
 
 /**
- * Upload an SBOM. On success the hook invalidates every list surface
- * that displays SBOMs (main table, sidebar, dashboard activity feed,
- * ⌘K palette) plus the project list (project SBOM-counts could
- * change).
+ * Upload an SBOM. On success the hook refreshes only the SBOM list,
+ * affected project detail, and dashboard summary surfaces.
  *
  * Callers can still attach their own `onSuccess` at mutate-time for
  * optimistic UX (e.g. inserting the new row immediately) or to fire
@@ -49,11 +44,7 @@ export function useUploadSbom() {
   return useMutation<SBOMSource, Error, CreateSBOMPayload>({
     mutationFn: (payload) => uploadSbom(payload),
     onSuccess: (sbom) => {
-      invalidateSbomSurfaces(qc, sbom.id);
-      invalidateProjectSurfaces(qc, sbom.project_id ?? sbom.projectid);
-      invalidateDashboardTiles(qc);
-      invalidateProjectLists(qc);
-      invalidateSbomLists(qc);
+      invalidateUploadSurfaces(qc, sbom.project_id ?? sbom.projectid);
     },
   });
 }

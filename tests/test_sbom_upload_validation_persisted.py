@@ -11,10 +11,11 @@ The validation repair workspace changed the failed-upload contract:
 from __future__ import annotations
 
 import json
+import uuid
 
 import pytest
 from app.db import SessionLocal
-from app.models import SBOMComponent
+from app.models import SBOMComponent, SBOMSource
 
 _VALID_CYCLONEDX = {
     "bomFormat": "CycloneDX",
@@ -117,6 +118,76 @@ def test_upload_with_project_id_assigns_project_and_syncs_details(client, unique
     try:
         assert db.query(SBOMComponent).filter(SBOMComponent.sbom_id == accepted["sbom_id"]).count() >= 1
     finally:
+        db.close()
+
+
+def test_upload_schedules_background_enrichment_without_inline_provider_calls(client, unique_name, monkeypatch):
+    scheduled: list[int] = []
+
+    def fake_background_enrichment(sbom_id: int) -> None:
+        scheduled.append(sbom_id)
+
+    monkeypatch.setattr(
+        "app.routers.sbom_upload.run_post_upload_enrichment",
+        fake_background_enrichment,
+    )
+
+    resp = client.post(
+        "/api/sboms/upload",
+        data={"sbom_name": unique_name},
+        files={"file": ("valid.json", json.dumps(_VALID_CYCLONEDX), "application/json")},
+    )
+    assert resp.status_code == 202, resp.text
+    accepted = resp.json()
+    assert accepted["enrichment_status"] == "pending"
+    assert "background" in accepted["message"].lower()
+    assert scheduled == [accepted["sbom_id"]]
+
+    detail = client.get(f"/api/sboms/{accepted['sbom_id']}").json()
+    assert detail["status"] == "validated"
+    assert detail["component_count"] >= 1
+    assert detail["enrichment_status"] == "pending"
+
+
+def test_post_upload_background_enrichment_updates_status(client, monkeypatch):
+    from app.services.sbom_enrichment_service import mark_enrichment_pending, run_post_upload_enrichment
+
+    monkeypatch.setattr(
+        "app.services.sbom_enrichment_service.sync_lifecycle_for_sbom",
+        lambda db, sbom_id, **kwargs: {"sbom_id": sbom_id, "components_enriched": 1},
+    )
+    monkeypatch.setattr(
+        "app.services.sbom_enrichment_service.process_embedded_vex_for_sbom",
+        lambda db, sbom_id: {"documents_processed": 0},
+    )
+    monkeypatch.setattr(
+        "app.services.sbom_enrichment_service.compute_and_save_completeness",
+        lambda db, sbom: {"score": 100},
+    )
+
+    db = SessionLocal()
+    try:
+        unique_bg_name = f"background-status-{uuid.uuid4().hex[:8]}"
+        sbom = SBOMSource(
+            sbom_name=unique_bg_name,
+            sbom_data=json.dumps(_VALID_CYCLONEDX),
+            status="validated",
+        )
+        mark_enrichment_pending(sbom)
+        db.add(sbom)
+        db.commit()
+        db.refresh(sbom)
+
+        run_post_upload_enrichment(sbom.id)
+
+        db.refresh(sbom)
+        assert sbom.sbom_name == unique_bg_name
+        assert sbom.enrichment_status == "completed"
+        assert sbom.enrichment_started_at is not None
+        assert sbom.enrichment_completed_at is not None
+        assert sbom.enrichment_error is None
+    finally:
+        db.rollback()
         db.close()
 
 

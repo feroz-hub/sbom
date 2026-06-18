@@ -30,6 +30,7 @@ ENV/
 .virtualenv/
 
 # ── Nested app artifacts ──────────────────────────────────
+node_modules/
 **/.next/
 **/*.tsbuildinfo
 frontend/node_modules/
@@ -39,6 +40,7 @@ frontend/next-env.d.ts
 
 # ── Database ──────────────────────────────────────────────
 *.db
+*.db.bak
 *.sqlite
 *.sqlite3
 
@@ -67,6 +69,7 @@ htmlcov/
 .tox/
 .mypy_cache/
 .ruff_cache/
+.hypothesis/
 
 # ── OS ────────────────────────────────────────────────────
 .DS_Store

@@ -95,7 +95,6 @@ export function SbomConversionCard({ sbom, formatLabel }: SbomConversionCardProp
       setConvertedId(result.converted_sbom_id);
       setEnrichmentStatus(result.enrichment_status || 'pending');
       invalidateSbomConversionSurfaces(qc, sbom.id, result.converted_sbom_id);
-      qc.invalidateQueries({ queryKey: ['sbom-conversion-report', sbom.id] });
       setMessage(
         result.message ||
           'Converted to CycloneDX. Lifecycle enrichment is running in background.',

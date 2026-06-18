@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from concurrent.futures import TimeoutError as FuturesTimeoutError
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime, timedelta
+from math import ceil
 from typing import Any
 
 from fastapi import HTTPException
@@ -10,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ...models import AuditLog, ComponentLifecycleCache, ComponentLifecycleOverrideAudit, SBOMComponent, SBOMSource
+from ...settings import get_settings
 from .decision_engine import choose_lifecycle_result
 from .deps_dev_provider import DepsDevProvider
 from .endoflife_date_provider import EndOfLifeDateProvider
@@ -50,13 +54,24 @@ class LifecycleEnrichmentService:
         *,
         providers: list[LifecycleProvider] | None = None,
         cache_ttl_days: int = DEFAULT_CACHE_TTL_DAYS,
+        provider_timeout_seconds: float | None = None,
+        provider_max_concurrent: int | None = None,
     ) -> None:
+        settings = get_settings()
+        self.provider_timeout_seconds = max(
+            0.1,
+            float(provider_timeout_seconds or getattr(settings, "lifecycle_provider_timeout_seconds", 5.0)),
+        )
+        self.provider_max_concurrent = max(
+            1,
+            int(provider_max_concurrent or getattr(settings, "lifecycle_provider_max_concurrent", 3)),
+        )
         self.providers = providers or [
-            EndOfLifeDateProvider(),
-            DepsDevProvider(),
-            PackageRegistryProvider(),
-            RepositoryHealthProvider(),
-            OSVProvider(),
+            EndOfLifeDateProvider(timeout_seconds=self.provider_timeout_seconds),
+            DepsDevProvider(timeout_seconds=self.provider_timeout_seconds),
+            PackageRegistryProvider(timeout_seconds=self.provider_timeout_seconds),
+            RepositoryHealthProvider(timeout_seconds=self.provider_timeout_seconds),
+            OSVProvider(timeout_seconds=self.provider_timeout_seconds),
         ]
         self.cache_ttl_days = cache_ttl_days
 
@@ -225,16 +240,60 @@ class LifecycleEnrichmentService:
 
     def _lookup_providers(self, component: NormalizedComponent) -> LifecycleResult:
         results: list[LifecycleResult] = []
-        for provider in self.providers:
-            try:
-                result = provider.lookup(component).canonicalized()
-            except Exception:
-                result = unknown_result(component, getattr(provider, "name", None)).canonicalized()
-            results.append(result)
-            repository_url = result.evidence.get("repository_url") if isinstance(result.evidence, dict) else None
-            if repository_url and not component.repository_url:
-                component.repository_url = str(repository_url)
+        if not self.providers:
+            return unknown_result(component).canonicalized()
+
+        max_workers = min(self.provider_max_concurrent, len(self.providers))
+        timeout_budget = max(
+            self.provider_timeout_seconds,
+            self.provider_timeout_seconds * ceil(len(self.providers) / max_workers),
+        )
+        executor = ThreadPoolExecutor(max_workers=max_workers)
+        future_to_provider = {
+            executor.submit(self._lookup_provider_safely, provider, component): provider
+            for provider in self.providers
+        }
+        completed = set()
+        try:
+            for future in as_completed(future_to_provider, timeout=timeout_budget):
+                completed.add(future)
+                result = future.result()
+                results.append(result)
+                repository_url = result.evidence.get("repository_url") if isinstance(result.evidence, dict) else None
+                if repository_url and not component.repository_url:
+                    component.repository_url = str(repository_url)
+
+            for future, provider in future_to_provider.items():
+                if future not in completed:
+                    future.cancel()
+                    results.append(unknown_result(component, getattr(provider, "name", None)).canonicalized())
+        except FuturesTimeoutError:
+            for future, provider in future_to_provider.items():
+                if future in completed:
+                    continue
+                if future.done():
+                    try:
+                        result = future.result()
+                    except Exception:
+                        result = unknown_result(component, getattr(provider, "name", None)).canonicalized()
+                else:
+                    future.cancel()
+                    result = unknown_result(component, getattr(provider, "name", None)).canonicalized()
+                results.append(result)
+        finally:
+            executor.shutdown(wait=False, cancel_futures=True)
         return (choose_lifecycle_result(results) or unknown_result(component)).canonicalized()
+
+    def _lookup_provider_safely(
+        self,
+        provider: LifecycleProvider,
+        component: NormalizedComponent,
+    ) -> LifecycleResult:
+        try:
+            result = provider.lookup(component).canonicalized()
+        except Exception:
+            result = unknown_result(component, getattr(provider, "name", None)).canonicalized()
+        return result
 
     def _read_cache(self, db: Session, component: NormalizedComponent) -> ComponentLifecycleCache | None:
         lookup_key = build_lifecycle_lookup_key(component)

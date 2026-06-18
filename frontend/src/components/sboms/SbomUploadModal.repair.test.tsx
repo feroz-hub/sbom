@@ -7,13 +7,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HttpError } from '@/lib/api';
 
 const useUploadSbomMutate = vi.fn();
+const showToast = vi.fn();
 
 vi.mock('@/hooks/useSbomMutations', () => ({
   useUploadSbom: () => ({ mutate: useUploadSbomMutate, isPending: false }),
 }));
 
 vi.mock('@/hooks/useToast', () => ({
-  useToast: () => ({ showToast: vi.fn() }),
+  useToast: () => ({ showToast }),
 }));
 
 vi.mock('@/hooks/useSbomsList', () => ({
@@ -51,9 +52,66 @@ function wrap(children: ReactNode) {
 
 beforeEach(() => {
   useUploadSbomMutate.mockReset();
+  showToast.mockReset();
 });
 
 describe('SbomUploadModal validation repair handoff', () => {
+  it('shows upload success copy that enrichment continues in background', async () => {
+    const onClose = vi.fn();
+    const onSuccess = vi.fn();
+    useUploadSbomMutate.mockImplementation((_payload, handlers) => {
+      handlers.onSuccess({
+        id: 7,
+        sbom_name: 'good-sbom',
+        projectid: 42,
+        project_id: 42,
+        project_name: 'Payments',
+        component_count: 1,
+        status: 'validated',
+        enrichment_status: 'pending',
+      });
+    });
+
+    render(wrap(<SbomUploadModal open onClose={onClose} onSuccess={onSuccess} />));
+
+    expect(await screen.findByRole('option', { name: 'Payments' })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/SBOM Name/i), { target: { value: 'good-sbom' } });
+    fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: '42' } });
+    fireEvent.change(screen.getByPlaceholderText('{"bomFormat": "CycloneDX", ...}'), {
+      target: { value: '{"bomFormat":"CycloneDX","specVersion":"1.5","components":[]}' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Upload SBOM/i }));
+
+    await waitFor(() => {
+      expect(showToast).toHaveBeenCalledWith(
+        '"good-sbom" uploaded successfully. Enrichment is running in background.',
+        'success',
+        { duration: 5000 },
+      );
+    });
+    expect(onClose).toHaveBeenCalled();
+    expect(onSuccess).toHaveBeenCalledWith(expect.objectContaining({ id: 7, enrichment_status: 'pending' }));
+  });
+
+  it('shows upload timeout or network errors without opening repair workspace', async () => {
+    useUploadSbomMutate.mockImplementation((_payload, handlers) => {
+      handlers.onError(new Error('Request timed out after 120000ms'));
+    });
+
+    render(wrap(<SbomUploadModal open onClose={vi.fn()} />));
+
+    expect(await screen.findByRole('option', { name: 'Payments' })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/SBOM Name/i), { target: { value: 'slow-sbom' } });
+    fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: '42' } });
+    fireEvent.change(screen.getByPlaceholderText('{"bomFormat": "CycloneDX", ...}'), {
+      target: { value: '{"bomFormat":"CycloneDX","specVersion":"1.5","components":[]}' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Upload SBOM/i }));
+
+    expect(await screen.findByText('Request timed out after 120000ms')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Open repair workspace/i })).not.toBeInTheDocument();
+  });
+
   it('shows an Open repair workspace link when upload validation creates a session', async () => {
     useUploadSbomMutate.mockImplementation((_payload, handlers) => {
       handlers.onError(

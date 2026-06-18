@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 import os
 
 from app.db import SessionLocal
@@ -167,6 +168,46 @@ def test_vendor_vex_discovery_failure_returns_error_without_upload_failure():
         result = discover_and_import_vex_documents(db, sbom.id, providers=[BrokenProvider()])
         assert result["statements_imported"] == 0
         assert result["errors"][0]["provider"] == "Broken Provider"
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_vendor_vex_discovery_blocks_private_internal_ip_urls():
+    db = _session()
+    try:
+        sbom = SBOMSource(
+            sbom_name="discover-private-urls",
+            sbom_data=json.dumps(
+                {
+                    "bomFormat": "CycloneDX",
+                    "externalReferences": [
+                        {"type": "vex", "url": "http://127.0.0.1/vex.json"},
+                        {"type": "vex", "url": "http://169.254.169.254/latest/meta-data"},
+                        {"type": "vex", "url": "http://10.0.0.8/vex.json"},
+                        {"type": "vex", "url": "http://localhost/vex.json"},
+                        {"type": "vex", "url": "http://service.internal/vex.json"},
+                    ],
+                }
+            ),
+            status="validated",
+        )
+        db.add(sbom)
+        db.commit()
+
+        calls: list[str] = []
+
+        def fake_get(url: str):
+            calls.append(url)
+            return _csaf_document()
+
+        provider = VendorVexDiscoveryProvider(http_get=fake_get)
+        assert provider.candidates(sbom, []) == []
+
+        result = discover_and_import_vex_documents(db, sbom.id, providers=[provider])
+        assert result["discovered_documents"] == 0
+        assert result["statements_imported"] == 0
+        assert calls == []
     finally:
         db.rollback()
         db.close()

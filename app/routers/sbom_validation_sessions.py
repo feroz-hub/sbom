@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -15,6 +15,7 @@ from ..services.validation_repair_service import (
     ValidationRepairService,
     session_to_dict,
 )
+from ..services.sbom_enrichment_service import run_post_upload_enrichment
 
 router = APIRouter(prefix="/api/sbom-validation-sessions", tags=["sbom-validation-sessions"])
 
@@ -78,6 +79,7 @@ def validate_session(
 @router.post("/{session_id}/import", response_model=SBOMSourceOut)
 def import_session(
     session_id: str,
+    background_tasks: BackgroundTasks,
     strict_ntia: bool = Query(False),
     verify_signature: bool = Query(False),
     project_required: bool = Query(False),
@@ -90,12 +92,14 @@ def import_session(
     if project_required and session.project_id is None:
         raise HTTPException(status_code=400, detail="Project assignment is required to import this SBOM")
     service = ValidationRepairService(db)
-    return service.import_session(
+    sbom = service.import_session(
         session_id,
         strict_ntia=strict_ntia,
         verify_signature=verify_signature,
         actor_user_id=x_user_id,
     )
+    background_tasks.add_task(run_post_upload_enrichment, sbom.id)
+    return sbom
 
 
 @router.post("/{session_id}/ai/suggest-fixes")

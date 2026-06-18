@@ -33,6 +33,44 @@ export function invalidateProjectSurfaces(qc: QueryClient, projectId?: number | 
   }
 }
 
+export function invalidateDashboardSummary(qc: QueryClient): void {
+  qc.invalidateQueries({ queryKey: ['dashboard-posture'] });
+  qc.invalidateQueries({ queryKey: ['dashboard-trend'] });
+  qc.invalidateQueries({ queryKey: ['dashboard-lifetime'] });
+}
+
+export function invalidateLifecycleSummary(qc: QueryClient): void {
+  qc.invalidateQueries({ queryKey: ['dashboard-lifecycle'] });
+  qc.invalidateQueries({ queryKey: ['dashboard-health'] });
+}
+
+export function invalidateUploadSurfaces(qc: QueryClient, projectId?: number | null): void {
+  invalidateSbomLists(qc);
+  if (projectId != null) {
+    qc.invalidateQueries({ queryKey: ['project', projectId] });
+    qc.invalidateQueries({ queryKey: ['project-detail', projectId] });
+  }
+  invalidateDashboardSummary(qc);
+}
+
+export function invalidateProjectAssignmentSurfaces(
+  qc: QueryClient,
+  args: { sbomId: number; previousProjectId?: number | null; nextProjectId?: number | null },
+): void {
+  qc.invalidateQueries({ queryKey: ['sbom', args.sbomId] });
+  qc.invalidateQueries({ queryKey: ['sbom-info', args.sbomId] });
+  invalidateProjectLists(qc);
+  if (args.previousProjectId != null) {
+    qc.invalidateQueries({ queryKey: ['project', args.previousProjectId] });
+    qc.invalidateQueries({ queryKey: ['project-detail', args.previousProjectId] });
+  }
+  if (args.nextProjectId != null) {
+    qc.invalidateQueries({ queryKey: ['project', args.nextProjectId] });
+    qc.invalidateQueries({ queryKey: ['project-detail', args.nextProjectId] });
+  }
+  invalidateDashboardSummary(qc);
+}
+
 /**
  * Narrow invalidation for SPDX→CycloneDX conversion — avoids dashboard/VEX/risk storms.
  */
@@ -44,11 +82,31 @@ export function invalidateSbomConversionSurfaces(
   qc.invalidateQueries({ queryKey: ['sbom', sourceSbomId] });
   qc.invalidateQueries({ queryKey: ['sbom-info', sourceSbomId] });
   qc.invalidateQueries({ queryKey: ['sbom-conversion-report', sourceSbomId] });
-  qc.invalidateQueries({ queryKey: ['sboms'] });
   if (convertedSbomId != null) {
     qc.invalidateQueries({ queryKey: ['sbom', convertedSbomId] });
     qc.invalidateQueries({ queryKey: ['sbom-info', convertedSbomId] });
   }
+}
+
+export function invalidateLifecycleOverrideSurfaces(qc: QueryClient, sbomId: number): void {
+  qc.invalidateQueries({ queryKey: ['sbom-components', sbomId] });
+  invalidateLifecycleSummary(qc);
+}
+
+export function invalidateVexSurfaces(qc: QueryClient, sbomId: number): void {
+  qc.invalidateQueries({ queryKey: ['sbom-vex', sbomId] });
+  qc.invalidateQueries({ queryKey: ['dashboard-vex'] });
+}
+
+export function invalidateRemediationSurfaces(qc: QueryClient): void {
+  qc.invalidateQueries({ queryKey: ['dashboard-remediation'] });
+  qc.invalidateQueries({ queryKey: ['dashboard-remediation-stats'] });
+}
+
+export function invalidateSbomVersionSurfaces(qc: QueryClient, sbomId: number): void {
+  qc.invalidateQueries({ queryKey: ['sbom', sbomId] });
+  qc.invalidateQueries({ queryKey: ['sbom-components', sbomId] });
+  qc.invalidateQueries({ queryKey: ['sbom-versions', sbomId] });
 }
 
 export function invalidateSbomSurfaces(qc: QueryClient, sbomId?: number | null): void {

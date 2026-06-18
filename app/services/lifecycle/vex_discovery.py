@@ -8,6 +8,7 @@ ingest or lifecycle enrichment.
 from __future__ import annotations
 
 import json
+import ipaddress
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -221,14 +222,36 @@ def _dedupe_safe_urls(urls: list[str]) -> list[str]:
     seen: set[str] = set()
     safe: list[str] = []
     for url in urls:
-        parsed = urlparse(url)
-        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        if not _is_safe_public_http_url(url):
             continue
         cleaned = url.strip()
         if cleaned not in seen:
             seen.add(cleaned)
             safe.append(cleaned)
     return safe[:25]
+
+
+def _is_safe_public_http_url(url: str) -> bool:
+    parsed = urlparse(url.strip())
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc or not parsed.hostname:
+        return False
+    hostname = parsed.hostname.strip().lower().rstrip(".")
+    if hostname in {"localhost", "metadata.google.internal"}:
+        return False
+    if hostname.endswith((".localhost", ".local", ".internal")):
+        return False
+    try:
+        ip = ipaddress.ip_address(hostname.strip("[]"))
+    except ValueError:
+        return True
+    return not (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_multicast
+        or ip.is_reserved
+        or ip.is_unspecified
+    )
 
 
 def _looks_like_vex(payload: Any) -> bool:

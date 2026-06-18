@@ -430,6 +430,41 @@ def test_manual_override_has_priority_over_external_provider(db):
     assert result.confidence == HIGH
 
 
+def test_apply_manual_lifecycle_override_does_not_call_external_providers(db, monkeypatch):
+    sbom = SBOMSource(sbom_name="manual-save-no-provider", sbom_data="{}", status="validated")
+    db.add(sbom)
+    db.flush()
+    component = SBOMComponent(
+        sbom_id=sbom.id,
+        name="manual-save-package",
+        version="1.0.0",
+        component_type="library",
+    )
+    db.add(component)
+    db.commit()
+
+    def fail_lookup(*args, **kwargs):  # noqa: ANN002, ANN003
+        raise AssertionError("provider lookup should not run during save override")
+
+    monkeypatch.setattr(LifecycleEnrichmentService, "_lookup_providers", fail_lookup)
+
+    updated = LifecycleEnrichmentService().apply_manual_override(
+        db,
+        component.id,
+        {
+            "lifecycle_status": EOL,
+            "eol_date": "2026-12-31",
+            "reason": "Vendor advisory confirmed end of life.",
+            "evidence_url": "https://vendor.example/advisory",
+        },
+        updated_by="qa",
+    )
+
+    assert updated.lifecycle_status == EOL
+    assert updated.lifecycle_manual_override is True
+    assert updated.lifecycle_source == "Manual Override"
+
+
 def test_lifecycle_refresh_override_report_and_dashboard_endpoints(client, db):
     sbom = SBOMSource(sbom_name="api-lifecycle", sbom_data="{}", status="validated")
     db.add(sbom)
