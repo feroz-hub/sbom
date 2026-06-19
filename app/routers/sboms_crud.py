@@ -55,7 +55,7 @@ from ..models import (
 from ..rate_limit import analyze_route_limit
 from ..schemas import (
     AnalysisRunOut,
-    SBOMComponentOut,
+    SBOMComponentListResponse,
     SbomPatchRequest,
     SBOMSourceCreate,
     SBOMSourceOut,
@@ -63,6 +63,7 @@ from ..schemas import (
 from ..services import audit_log
 from ..services.analysis_service import compute_report_status, persist_analysis_run
 from ..services.sbom_enrichment_service import mark_enrichment_pending, run_post_upload_enrichment
+from ..services.sbom_service import coerce_sbom_data
 from ..services.soft_delete import SoftDeleteService
 from ..services.validation_repair_service import (
     ValidationRepairService,
@@ -95,15 +96,7 @@ def now_iso() -> str:
 
 
 def _coerce_sbom_data(value: Any) -> str | None:
-    """
-    Ensure sbom_data is always stored as a JSON string in the DB Text column,
-    even if the client sends a dict/list. Leave strings as-is.
-    """
-    if value is None:
-        return None
-    if isinstance(value, (dict, list)):
-        return json.dumps(value, ensure_ascii=False)
-    return value if isinstance(value, str) else str(value)
+    return coerce_sbom_data(value)
 
 
 def _classify_status(report: ErrorReport) -> str:
@@ -160,7 +153,7 @@ def upsert_components(db: Session, sbom_obj: SBOMSource, components: list[dict])
 
 
 def sync_sbom_components(db: Session, sbom_obj: SBOMSource) -> list[dict]:
-    from ..services.sbom_service import sync_sbom_components as service_sync_sbom_components
+    from ..services.sbom_service import coerce_sbom_data, sync_sbom_components as service_sync_sbom_components
     return service_sync_sbom_components(db, sbom_obj)
 
 
@@ -548,44 +541,40 @@ def get_sbom_details(
         raise HTTPException(status_code=500, detail="Internal database error while fetching SBOMs.") from exc
 
 
-@router.get("/sboms/{sbom_id}/components", response_model=list[SBOMComponentOut])
+@router.get("/sboms/{sbom_id}/components", response_model=SBOMComponentListResponse)
 def get_sbom_components(
     sbom_id: int = Path(..., description="SBOM ID (positive integer)"),
     include_duplicates: bool = Query(False, description="Whether to include duplicate components in the response"),
     page: int = Query(1, ge=1),
     page_size: int = Query(100, ge=1, le=1000),
-    response: Response = None,
+    search: str | None = Query(None, description="Case-insensitive search across component fields"),
+    sort_by: str = Query("name", description="Sort field: name, version, component_type, license, lifecycle_status"),
+    sort_order: str = Query("asc", description="Sort direction: asc or desc"),
     db: Session = Depends(get_db),
 ):
     sbom_id = _validate_positive_int(sbom_id, param_name="sbom_id")
-    page = 1 if page < 1 else page
-    page_size = max(1, min(page_size, 1000))
-    offset = (page - 1) * page_size
+    if sort_by not in {"name", "version", "component_type", "license", "lifecycle_status"}:
+        raise HTTPException(status_code=400, detail=f"Unsupported sort_by value: {sort_by}")
+    if sort_order.lower() not in {"asc", "desc"}:
+        raise HTTPException(status_code=400, detail=f"Unsupported sort_order value: {sort_order}")
 
     try:
         sbom = db.get(SBOMSource, sbom_id)
         if not sbom:
             raise HTTPException(status_code=404, detail="SBOM not found")
 
-        where_clause = [SBOMComponent.sbom_id == sbom_id]
-        if not include_duplicates:
-            where_clause.append((SBOMComponent.is_duplicate.is_(False)) | (SBOMComponent.is_duplicate.is_(None)))
+        from ..services.sbom_service import list_sbom_components
 
-        total = db.execute(select(func.count(SBOMComponent.id)).where(*where_clause)).scalar_one()
-
-        stmt = (
-            select(SBOMComponent)
-            .where(*where_clause)
-            .order_by(SBOMComponent.name.asc(), SBOMComponent.version.asc())
-            .limit(page_size)
-            .offset(offset)
+        return list_sbom_components(
+            db,
+            sbom_id,
+            include_duplicates=include_duplicates,
+            page=page,
+            page_size=page_size,
+            search=search,
+            sort_by=sort_by,
+            sort_order=sort_order,
         )
-        items = db.execute(stmt).scalars().all()
-
-        if response is not None:
-            response.headers["X-Total-Count"] = str(total)
-
-        return items
     except HTTPException:
         raise
     except SQLAlchemyError as exc:

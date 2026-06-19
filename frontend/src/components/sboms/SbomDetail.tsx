@@ -13,6 +13,7 @@ import { Input, Textarea } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { useToast } from '@/hooks/useToast';
 import { Table, TableHead, TableBody, Th, SortableTh, Td, EmptyRow } from '@/components/ui/Table';
+import { TableFilterBar, TableSearchInput } from '@/components/ui/TableFilterBar';
 import { SkeletonRow } from '@/components/ui/Spinner';
 import { Pagination } from '@/components/ui/Pagination';
 import { AnalysisProgress } from '@/components/analysis/AnalysisProgress';
@@ -193,6 +194,10 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
 
   // Deduplication State
   const [showDuplicates, setShowDuplicates] = useState(false);
+  const [componentSearch, setComponentSearch] = useState('');
+  const [debouncedComponentSearch, setDebouncedComponentSearch] = useState('');
+  const [componentPage, setComponentPage] = useState(1);
+  const [componentPageSize, setComponentPageSize] = useState(25);
   const [isDedupeModalOpen, setIsDedupeModalOpen] = useState(false);
 
   // Assign/Edit Project/Details State
@@ -284,10 +289,61 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
     }
   };
 
-  const { data: components, isLoading: compLoading } = useQuery({
-    queryKey: ['sbom-components', sbom.id, showDuplicates],
-    queryFn: ({ signal }) => getSbomComponents(sbom.id, showDuplicates, signal),
+  const [compSortKey, setCompSortKey] = useState<ComponentSortKey>('name');
+  const [compSortDirection, setCompSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  const toggleCompSort = (key: ComponentSortKey) => {
+    if (key === compSortKey) {
+      setCompSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setCompSortKey(key);
+      setCompSortDirection('asc');
+    }
+    setComponentPage(1);
+  };
+
+  const { data: componentList, isLoading: compLoading } = useQuery({
+    queryKey: [
+      'sbom-components',
+      sbom.id,
+      showDuplicates,
+      componentPage,
+      componentPageSize,
+      debouncedComponentSearch,
+      compSortKey,
+      compSortDirection,
+    ],
+    queryFn: ({ signal }) =>
+      getSbomComponents(sbom.id, {
+        includeDuplicates: showDuplicates,
+        page: componentPage,
+        pageSize: componentPageSize,
+        search: debouncedComponentSearch || undefined,
+        sortBy: compSortKey,
+        sortOrder: compSortDirection,
+        signal,
+      }),
   });
+
+  const { data: canonicalComponentList } = useQuery({
+    queryKey: ['sbom-components-canonical', sbom.id],
+    queryFn: ({ signal }) =>
+      getSbomComponents(sbom.id, {
+        includeDuplicates: false,
+        page: 1,
+        pageSize: 1000,
+        signal,
+      }),
+    staleTime: 60_000,
+  });
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedComponentSearch(componentSearch.trim());
+      setComponentPage(1);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [componentSearch]);
 
   const { data: dedupeReport } = useQuery({
     queryKey: ['sbom-dedupe-report', sbom.id],
@@ -339,30 +395,26 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
     queryFn: ({ signal }) => getSbomVersions(sbom.id, signal),
   });
 
-  // Components table: in-memory sort + paginate
-  const componentRows = useMemo<SBOMComponent[]>(() => components ?? [], [components]);
-  const componentSortAccessors = useMemo(
-    () => ({
-      name: (c: SBOMComponent) => (c.name ?? '').toLowerCase(),
-      version: (c: SBOMComponent) => c.version ?? '',
-      component_type: (c: SBOMComponent) => (c.component_type ?? '').toLowerCase(),
-      license: (c: SBOMComponent) => (c.license ?? '').toLowerCase(),
-      lifecycle_status: (c: SBOMComponent) => (c.lifecycle_status ?? '').toLowerCase(),
-    }),
-    [],
+  // Components table: server-side sort, search, and pagination
+  const componentRows = useMemo<SBOMComponent[]>(
+    () => canonicalComponentList?.items ?? [],
+    [canonicalComponentList],
   );
-  const {
-    sort: compSort,
-    sortedRows: sortedComponents,
-    toggle: toggleCompSort,
-  } = useTableSort<SBOMComponent, ComponentSortKey>(componentRows, componentSortAccessors, {
-    initialKey: 'name',
-    initialDirection: 'asc',
-  });
-  const compPagination = usePagination<SBOMComponent>(sortedComponents, {
-    defaultPageSize: 25,
-    storageKey: 'sbom-components',
-  });
+  const displayedComponents = useMemo<SBOMComponent[]>(
+    () => componentList?.items ?? [],
+    [componentList],
+  );
+  const componentTotalPages = Math.max(
+    1,
+    Math.ceil((componentList?.total_count ?? 0) / componentPageSize),
+  );
+  const componentRangeStart =
+    (componentList?.total_count ?? 0) === 0 ? 0 : (componentPage - 1) * componentPageSize + 1;
+  const componentRangeEnd =
+    (componentList?.total_count ?? 0) === 0
+      ? 0
+      : Math.min(componentPage * componentPageSize, componentList?.total_count ?? 0);
+  const compSort = { key: compSortKey, direction: compSortDirection };
   const vexStatements = useMemo<VexStatement[]>(() => vexData?.statements ?? [], [vexData]);
   const vexCounts = useMemo(() => {
     return vexStatements.reduce<Record<string, number>>((acc, statement) => {
@@ -410,8 +462,8 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
   });
 
   useEffect(() => {
-    compPagination.resetPage();
-  }, [components?.length]);
+    setComponentPage(1);
+  }, [showDuplicates]);
 
   useEffect(() => {
     runPagination.resetPage();
@@ -1118,10 +1170,22 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
           <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-3">
             <div>
-              <CardTitle>
-                Components{' '}
-                {components && <span className="ml-2 text-sm font-normal text-hcl-muted">({components.length})</span>}
-              </CardTitle>
+              <CardTitle>Components</CardTitle>
+              <p className="mt-1 text-xs text-hcl-muted">
+                {showDuplicates ? (
+                  <>
+                    {componentList?.total_count ?? 0} total · {componentList?.unique_count ?? 0} unique ·{' '}
+                    {componentList?.duplicate_count ?? 0} duplicates
+                  </>
+                ) : (
+                  <>
+                    {componentList?.unique_count ?? 0} unique
+                    {(componentList?.duplicate_count ?? 0) > 0
+                      ? ` · Duplicates hidden: ${componentList?.duplicate_count ?? 0}`
+                      : ''}
+                  </>
+                )}
+              </p>
               {lifecycleMessage ? (
                 <p className="mt-1 text-xs text-hcl-muted">{lifecycleMessage}</p>
               ) : null}
@@ -1130,15 +1194,15 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
               ) : null}
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2">
-              <label className="flex items-center gap-1.5 mr-2 text-xs font-semibold text-hcl-navy cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={showDuplicates}
-                  onChange={(e) => setShowDuplicates(e.target.checked)}
-                  className="rounded border-gray-300 text-hcl-blue focus:ring-hcl-blue h-3.5 w-3.5"
-                />
-                Show Duplicates
-              </label>
+              {(componentList?.duplicate_count ?? dedupeReport?.duplicates_found ?? 0) > 0 ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowDuplicates((prev) => !prev)}
+                >
+                  {showDuplicates ? 'Hide Duplicates' : 'Show Duplicates'}
+                </Button>
+              ) : null}
               <Button
                 size="sm"
                 variant="outline"
@@ -1163,6 +1227,22 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
               {staleLifecycleCount} lifecycle evidence record{staleLifecycleCount === 1 ? ' is' : 's are'} stale. Refresh before relying on this report for release decisions.
             </div>
           ) : null}
+          <TableFilterBar
+            onClear={componentSearch ? () => setComponentSearch('') : undefined}
+            clearDisabled={!componentSearch}
+            resultHint={
+              componentList
+                ? `Showing ${componentRangeStart}-${componentRangeEnd} of ${componentList.total_count}`
+                : undefined
+            }
+          >
+            <TableSearchInput
+              value={componentSearch}
+              onChange={setComponentSearch}
+              placeholder="Search components by name, version, PURL, CPE…"
+              label="Search SBOM components"
+            />
+          </TableFilterBar>
           <div className="overflow-hidden">
             <Table striped ariaLabel="SBOM components">
               <TableHead>
@@ -1178,11 +1258,14 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
               <TableBody>
                 {compLoading ? (
                   Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} cols={6} />)
-                ) : !components?.length ? (
+                ) : !displayedComponents.length ? (
                   <EmptyRow cols={6} message="No components found for this SBOM" />
                 ) : (
-                  compPagination.pageItems.map((c) => (
-                    <tr key={c.id} className="hover:bg-hcl-light/40">
+                  displayedComponents.map((c) => (
+                    <tr
+                      key={c.id}
+                      className={c.is_duplicate ? 'bg-amber-50/40 hover:bg-amber-50/70' : 'hover:bg-hcl-light/40'}
+                    >
                       <Td className="font-medium text-hcl-navy">
                         <div className="flex flex-col">
                           <div className="flex items-center gap-2">
@@ -1193,9 +1276,10 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                               </span>
                             )}
                           </div>
-                          {c.is_duplicate && c.duplicate_of_component_id && (
+                          {c.is_duplicate && (c.canonical_component_name || c.duplicate_of_component_id) && (
                             <span className="text-[10px] text-hcl-muted">
-                              Duplicate of ID #{c.duplicate_of_component_id}
+                              Duplicate of {c.canonical_component_name || 'component'}
+                              {c.canonical_component_version ? ` ${c.canonical_component_version}` : ''}
                             </span>
                           )}
                         </div>
@@ -1266,18 +1350,21 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                 )}
               </TableBody>
             </Table>
-            {!compLoading && componentRows.length > 0 ? (
+            {!compLoading && (componentList?.total_count ?? 0) > 0 ? (
               <Pagination
-                page={compPagination.page}
-                pageSize={compPagination.pageSize}
-                total={compPagination.total}
-                totalPages={compPagination.totalPages}
-                rangeStart={compPagination.rangeStart}
-                rangeEnd={compPagination.rangeEnd}
-                hasPrev={compPagination.hasPrev}
-                hasNext={compPagination.hasNext}
-                onPageChange={compPagination.setPage}
-                onPageSizeChange={compPagination.setPageSize}
+                page={componentPage}
+                pageSize={componentPageSize}
+                total={componentList?.total_count ?? 0}
+                totalPages={componentTotalPages}
+                rangeStart={componentRangeStart}
+                rangeEnd={componentRangeEnd}
+                hasPrev={componentPage > 1}
+                hasNext={componentPage < componentTotalPages}
+                onPageChange={setComponentPage}
+                onPageSizeChange={(size) => {
+                  setComponentPageSize(size);
+                  setComponentPage(1);
+                }}
                 itemNoun="component"
               />
             ) : null}

@@ -567,6 +567,46 @@ def _augment_components_with_cpe(components: list[dict]) -> tuple[list[dict], in
 # ============================================================
 
 
+def _classify_nvd_lookup_identifier(value: str | None) -> Literal["cpe", "cve", "invalid"]:
+    """Classify a component ``cpe`` field for NVD REST 2.0 lookup routing."""
+    if not value:
+        return "invalid"
+    s = str(value).strip()
+    if not s:
+        return "invalid"
+    if s.upper().startswith("CVE-"):
+        return "cve"
+    if s.lower().startswith("cpe:2.3:"):
+        return "cpe"
+    return "invalid"
+
+
+def _is_retryable_nvd_request_error(exc: requests.RequestException) -> bool:
+    """Retry only transient 429/5xx and network timeouts — never SSL failures."""
+    if isinstance(exc, requests.exceptions.SSLError):
+        return False
+    resp = getattr(exc, "response", None)
+    if resp is not None:
+        return resp.status_code == 429 or resp.status_code >= 500
+    return isinstance(
+        exc,
+        (
+            requests.exceptions.Timeout,
+            requests.exceptions.ConnectionError,
+        ),
+    )
+
+
+def _is_nvd_ssl_error(exc: BaseException) -> bool:
+    if isinstance(exc, requests.exceptions.SSLError):
+        return True
+    cause = getattr(exc, "__cause__", None)
+    if cause is not None and cause is not exc and _is_nvd_ssl_error(cause):
+        return True
+    msg = str(exc).lower()
+    return "ssl" in msg or "certificate" in msg
+
+
 def _cpe23_virtual_match_wildcard_vendor(cpe: str) -> str | None:
     """cpe:2.3:a:vendor:product:version:... -> wildcard vendor only (NVD virtualMatchString)."""
     parts = cpe.split(":")
@@ -621,7 +661,7 @@ def _nvd_fetch_cves_paginated(
                 response.raise_for_status()
                 break
             except requests.RequestException as exc:
-                if attempt >= cfg.nvd_max_retries:
+                if not _is_retryable_nvd_request_error(exc) or attempt >= cfg.nvd_max_retries:
                     raise RuntimeError(f"NVD query failed for {log_label}: {exc}") from exc
                 # On 429 prefer the server's Retry-After — our own linear
                 # backoff can undercut it and immediately hit another 429.
@@ -697,6 +737,11 @@ def nvd_query_by_cpe(cpe: str, api_key: str | None, settings: AnalysisSettings |
     cfg = settings or get_analysis_settings()
     if not cpe:
         return []
+    if _classify_nvd_lookup_identifier(cpe) != "cpe":
+        LOGGER.warning(
+            "Skipping NVD cpeName lookup for non-CPE identifier %r", cpe,
+        )
+        return []
     headers = {"User-Agent": cfg.http_user_agent}
     if api_key:
         headers["apiKey"] = api_key
@@ -705,6 +750,50 @@ def nvd_query_by_cpe(cpe: str, api_key: str | None, settings: AnalysisSettings |
     return _nvd_fetch_cves_paginated(
         cfg, headers, {"cpeName": cpe}, delay=delay, log_label=f"cpeName={cpe!r}"
     )
+
+
+def nvd_query_by_cve_id(
+    cve_id: str,
+    api_key: str | None,
+    settings: AnalysisSettings | None = None,
+) -> list[dict]:
+    """Lookup a single CVE record via NVD ``cveId`` (never ``cpeName``)."""
+    cfg = settings or get_analysis_settings()
+    if not cve_id:
+        return []
+    normalized = cve_id.strip().upper()
+    if _classify_nvd_lookup_identifier(normalized) != "cve":
+        LOGGER.warning(
+            "Skipping NVD cveId lookup for non-CVE identifier %r", cve_id,
+        )
+        return []
+    headers = {"User-Agent": cfg.http_user_agent}
+    if api_key:
+        headers["apiKey"] = api_key
+    delay = cfg.nvd_request_delay_with_key_seconds if api_key else cfg.nvd_request_delay_without_key_seconds
+
+    return _nvd_fetch_cves_paginated(
+        cfg,
+        headers,
+        {"cveId": normalized},
+        delay=delay,
+        log_label=f"cveId={normalized!r}",
+    )
+
+
+def nvd_query_by_identifier(
+    identifier: str,
+    api_key: str | None,
+    settings: AnalysisSettings | None = None,
+) -> list[dict]:
+    """Route NVD lookup by identifier kind: ``cveId`` for CVE-*, ``cpeName`` for CPE 2.3."""
+    kind = _classify_nvd_lookup_identifier(identifier)
+    if kind == "cpe":
+        return nvd_query_by_cpe(identifier, api_key, settings)
+    if kind == "cve":
+        return nvd_query_by_cve_id(identifier, api_key, settings)
+    LOGGER.warning("Skipping invalid NVD lookup identifier: %r", identifier)
+    return []
 
 
 def nvd_query_by_keyword(
@@ -759,7 +848,7 @@ def nvd_query_by_keyword(
             response.raise_for_status()
             break
         except requests.RequestException as exc:
-            if attempt >= cfg.nvd_max_retries:
+            if not _is_retryable_nvd_request_error(exc) or attempt >= cfg.nvd_max_retries:
                 raise RuntimeError(f"NVD keyword query failed for {keyword!r}: {exc}") from exc
             backoff = cfg.nvd_retry_backoff_seconds * (attempt + 1)
             resp = getattr(exc, "response", None)
@@ -1817,6 +1906,16 @@ async def nvd_query_by_components_async(
     for comp in normalized_components:
         cpe = comp.get("cpe")
         if cpe:
+            kind = _classify_nvd_lookup_identifier(cpe)
+            if kind == "invalid":
+                skipped += 1
+                LOGGER.warning(
+                    "Skipping NVD for %s@%s: invalid identifier %r",
+                    comp.get("name") or "?",
+                    comp.get("version") or "?",
+                    cpe,
+                )
+                continue
             queried += 1
             if cpe not in seen:
                 seen.add(cpe)
@@ -1871,45 +1970,63 @@ async def nvd_query_by_components_async(
     findings: list[dict] = []
     errors: list[dict] = []
     succeeded = 0
+    nvd_provider_failed = False
 
     loop = asyncio.get_running_loop()
-    # Per-CPE callable: when a lookup_service is wired (R6: NvdSource +
+    # Per-identifier callable: when a lookup_service is wired (R6: NvdSource +
     # mirror facade), route through it; otherwise hit live NVD directly.
-    # Both have the same `(cpe, api_key, settings) -> list[dict]` shape,
+    # Both have the same `(identifier, api_key, settings) -> list[dict]` shape,
     # so the executor call is a single drop-in substitution.
-    query_callable = lookup_service if lookup_service is not None else nvd_query_by_cpe
-    for idx, cpe in enumerate(cpe_order, 1):
+    query_callable = (
+        lookup_service if lookup_service is not None else nvd_query_by_identifier
+    )
+    for idx, identifier in enumerate(cpe_order, 1):
+        if nvd_provider_failed:
+            break
+        id_kind = _classify_nvd_lookup_identifier(identifier)
         try:
             # Run sync requests.Session call in the shared executor so we
             # do not block the event loop, but serialize the submissions.
             raw_list = await loop.run_in_executor(
-                _executor, query_callable, cpe, api_key, cfg
+                _executor, query_callable, identifier, api_key, cfg
             )
         except Exception as exc:
             LOGGER.warning(
-                "NVD CPE query failed — cpe=%r error=%s: %s",
-                cpe, type(exc).__name__, exc,
+                "NVD query failed — identifier=%r error=%s: %s",
+                identifier, type(exc).__name__, exc,
             )
-            errors.append(
-                {"source": "NVD", "cpe": cpe, "error": f"{type(exc).__name__}: {exc}"}
-            )
+            err_entry: dict[str, Any] = {
+                "source": "NVD",
+                "identifier": identifier,
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+            if _is_nvd_ssl_error(exc):
+                err_entry["provider_failed"] = True
+                nvd_provider_failed = True
+                LOGGER.error(
+                    "NVD provider failed due to SSL error; skipping remaining lookups",
+                )
+            errors.append(err_entry)
+            if nvd_provider_failed:
+                break
         else:
             succeeded += 1
-            comp_name, comp_ver, ecosystem = name_by_cpe.get(cpe, ("", None, None))
+            comp_name, comp_ver, ecosystem = name_by_cpe.get(identifier, ("", None, None))
             range_filter_on = bool(
                 getattr(settings, "nvd_version_range_filter_enabled", False)
             )
-            cpe_vendor = _vendor_from_cpe(cpe)
+            cpe_vendor = (
+                _vendor_from_cpe(identifier)
+                if id_kind == "cpe"
+                else None
+            )
+            match_strategy = "cve_id" if id_kind == "cve" else "cpe_name"
             for raw in raw_list:
                 if not isinstance(raw, dict):
                     continue
                 if not range_filter_on:
-                    finding = _finding_from_raw(raw, cpe, comp_name, comp_ver, settings)
-                    # Roadmap #6 — every live NVD finding today is from
-                    # the exact-CPE path (``nvd_query_by_cpe``); the
-                    # virtualMatchString and keywordSearch paths are
-                    # spec'd but unreachable. Tag accordingly.
-                    finding["match_strategy"] = "cpe_name"
+                    finding = _finding_from_raw(raw, identifier, comp_name, comp_ver, settings)
+                    finding["match_strategy"] = match_strategy
                     _tag_match_confidence(
                         finding,
                         cve_text=_nvd_cve_text(raw, finding.get("description")),
@@ -1918,7 +2035,7 @@ async def nvd_query_by_components_async(
                     findings.append(finding)
                     continue
                 verdict = _cve_affects_component(
-                    raw, comp_ver, ecosystem, target_cpe=cpe,
+                    raw, comp_ver, ecosystem, target_cpe=identifier if id_kind == "cpe" else None,
                     # Roadmap #5 PR-C — when the distro-CPE flag is
                     # on, distro/Conan ecosystems skip the
                     # ``ecosystem_unsupported`` short-circuit and
@@ -1942,10 +2059,10 @@ async def nvd_query_by_components_async(
                         reason=verdict.reason,
                     )
                     continue
-                finding = _finding_from_raw(raw, cpe, comp_name, comp_ver, settings)
+                finding = _finding_from_raw(raw, identifier, comp_name, comp_ver, settings)
                 finding["match_reason"] = verdict.reason
                 finding["matched_range"] = verdict.matched_range
-                finding["match_strategy"] = "cpe_name"
+                finding["match_strategy"] = match_strategy
                 _tag_match_confidence(
                     finding,
                     cve_text=_nvd_cve_text(raw, finding.get("description")),

@@ -9,11 +9,12 @@ import logging
 from datetime import UTC
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import asc, desc, func, or_, select
 from sqlalchemy.orm import Session
 
 from ..analysis import extract_components
 from ..models import SBOMComponent, SBOMSource
+from ..schemas import SBOMComponentListItem, SBOMComponentListResponse
 from ..parsing import detect_sbom_format
 
 log = logging.getLogger(__name__)
@@ -390,3 +391,120 @@ def load_sbom_from_ref(
         raise ValueError(f"SBOM parsing error: {e}")
 
     return sbom_row, sbom_dict, sbom_format, spec_version, components
+
+
+_COMPONENT_SORT_COLUMNS = {
+    "name": SBOMComponent.name,
+    "version": SBOMComponent.version,
+    "component_type": SBOMComponent.component_type,
+    "license": SBOMComponent.license,
+    "lifecycle_status": SBOMComponent.lifecycle_status,
+}
+
+
+def _canonical_only_clause():
+    return (SBOMComponent.is_duplicate.is_(False)) | (SBOMComponent.is_duplicate.is_(None))
+
+
+def list_sbom_components(
+    db: Session,
+    sbom_id: int,
+    *,
+    include_duplicates: bool = False,
+    page: int = 1,
+    page_size: int = 100,
+    search: str | None = None,
+    sort_by: str = "name",
+    sort_order: str = "asc",
+) -> SBOMComponentListResponse:
+    """List SBOM components with duplicate-aware filtering and summary counts."""
+
+    page = max(1, page)
+    page_size = max(1, min(page_size, 1000))
+    offset = (page - 1) * page_size
+
+    sbom_clause = SBOMComponent.sbom_id == sbom_id
+    duplicate_count = int(
+        db.scalar(
+            select(func.count(SBOMComponent.id)).where(
+                sbom_clause,
+                SBOMComponent.is_duplicate.is_(True),
+            )
+        )
+        or 0
+    )
+    unique_count = int(
+        db.scalar(
+            select(func.count(SBOMComponent.id)).where(sbom_clause, _canonical_only_clause())
+        )
+        or 0
+    )
+    total_count = unique_count + duplicate_count
+
+    where_clause = [sbom_clause]
+    if not include_duplicates:
+        where_clause.append(_canonical_only_clause())
+
+    if search and search.strip():
+        term = f"%{search.strip()}%"
+        where_clause.append(
+            or_(
+                SBOMComponent.name.ilike(term),
+                SBOMComponent.version.ilike(term),
+                SBOMComponent.bom_ref.ilike(term),
+                SBOMComponent.purl.ilike(term),
+                SBOMComponent.cpe.ilike(term),
+                SBOMComponent.supplier.ilike(term),
+                SBOMComponent.license.ilike(term),
+                SBOMComponent.normalized_component_key.ilike(term),
+            )
+        )
+
+    filtered_total = int(db.scalar(select(func.count(SBOMComponent.id)).where(*where_clause)) or 0)
+
+    sort_column = _COMPONENT_SORT_COLUMNS.get(sort_by, SBOMComponent.name)
+    order_fn = asc if sort_order.lower() != "desc" else desc
+    stmt = (
+        select(SBOMComponent)
+        .where(*where_clause)
+        .order_by(order_fn(sort_column), asc(SBOMComponent.id))
+        .limit(page_size)
+        .offset(offset)
+    )
+    rows = db.execute(stmt).scalars().all()
+
+    canonical_rows = db.execute(
+        select(SBOMComponent).where(sbom_clause, _canonical_only_clause())
+    ).scalars().all()
+    canonical_by_id = {row.id: row for row in canonical_rows}
+
+    items: list[SBOMComponentListItem] = []
+    for row in rows:
+        canonical_name: str | None = None
+        canonical_version: str | None = None
+        duplicate_reason: str | None = None
+        if row.is_duplicate:
+            parent = canonical_by_id.get(row.duplicate_of_component_id or -1)
+            if parent is not None:
+                canonical_name = parent.name
+                canonical_version = parent.version
+            duplicate_reason = (
+                "Duplicate SBOM component entry merged into the canonical component"
+                + (f" ({row.normalized_component_key})" if row.normalized_component_key else "")
+            )
+
+        payload = SBOMComponentListItem.model_validate(row, from_attributes=True)
+        payload.canonical_component_name = canonical_name
+        payload.canonical_component_version = canonical_version
+        payload.duplicate_reason = duplicate_reason
+        items.append(payload)
+
+    return SBOMComponentListResponse(
+        items=items,
+        total_count=filtered_total,
+        unique_count=unique_count,
+        duplicate_count=duplicate_count,
+        include_duplicates=include_duplicates,
+        page=page,
+        page_size=page_size,
+    )

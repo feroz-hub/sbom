@@ -86,6 +86,37 @@ def test_cyclonedx_1_6_clean_file_validates(read_fixture) -> None:
     assert E.E025_SCHEMA_VIOLATION not in error_codes
 
 
+def test_cyclonedx_license_id_ref_resolves_offline() -> None:
+    """Regression: CycloneDX BOM schemas $ref spdx.schema.json for license ids.
+
+    Without the vendored SPDX enum registered in the validator registry,
+    documents that use ``license.id`` (e.g. normalized export) crash schema
+    validation with an internal E025 instead of a real violation report.
+    """
+    doc = {
+        "bomFormat": "CycloneDX",
+        "specVersion": "1.5",
+        "serialNumber": "urn:uuid:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+        "version": 1,
+        "metadata": {"timestamp": "2026-04-30T12:00:00Z"},
+        "components": [
+            {
+                "type": "library",
+                "bom-ref": "pkg:npm/lodash@4.17.21",
+                "name": "lodash",
+                "version": "4.17.21",
+                "licenses": [{"license": {"id": "MIT"}}],
+            }
+        ],
+    }
+    report = run_validation(json.dumps(doc).encode())
+    error_codes = [e.code for e in report.errors]
+    assert E.E025_SCHEMA_VIOLATION not in error_codes or "Internal validator error" not in (
+        e.message for e in report.errors
+    )
+    assert not any("Internal validator error" in e.message for e in report.errors)
+
+
 def test_dispatcher_routes_spdx_2_x_to_semantic_spdx() -> None:
     doc = {
         "spdxVersion": "SPDX-2.3",

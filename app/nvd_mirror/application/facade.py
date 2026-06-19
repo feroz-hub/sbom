@@ -47,8 +47,8 @@ from .freshness import compute_freshness
 
 log = logging.getLogger(__name__)
 
-# A live-query callable matches ``app.analysis.nvd_query_by_cpe``'s shape:
-#   (cpe23, api_key, settings) -> list[dict]
+# A live-query callable matches ``app.analysis.nvd_query_by_identifier``'s shape:
+#   (identifier, api_key, settings) -> list[dict]
 LiveQuery = Callable[[str, "str | None", Any], list[dict[str, Any]]]
 
 
@@ -92,7 +92,14 @@ class NvdLookupService:
         settings: Any,
     ) -> list[dict[str, Any]]:
         """Return raw-NVD-shape dicts for ``cpe23``. Identical contract to
-        ``app.analysis.nvd_query_by_cpe``."""
+        ``app.analysis.nvd_query_by_identifier``."""
+        from app.analysis import _classify_nvd_lookup_identifier
+
+        # CVE IDs and other non-CPE identifiers are live-only — the mirror
+        # indexes by CPE configuration, not by CVE id.
+        if _classify_nvd_lookup_identifier(cpe23) != "cpe":
+            return self._live_query(cpe23, api_key, settings)
+
         snapshot = self._settings_repo.load()
 
         # 1. Mirror disabled → live, no warnings, no counter (this is the
@@ -222,7 +229,7 @@ class SessionScopedNvdLookupService:
 def build_nvd_lookup_for_pipeline() -> SessionScopedNvdLookupService:
     """Build the facade with real adapters for the multi-source pipeline.
 
-    The live callable is the late-bound ``app.analysis.nvd_query_by_cpe``
+    The live callable is the late-bound ``app.analysis.nvd_query_by_identifier``
     so test monkeypatching via ``conftest.py`` continues to work — the
     function is re-resolved per call.
     """
@@ -245,11 +252,11 @@ def build_nvd_lookup_for_pipeline() -> SessionScopedNvdLookupService:
         secrets = _StubSecrets(env_defaults.fernet_key_env_var)
 
     def _late_bound_live(cpe: str, api_key: str | None, settings: Any) -> list[dict]:
-        # Re-import on each call so monkeypatching ``app.analysis.nvd_query_by_cpe``
+        # Re-import on each call so monkeypatching ``app.analysis.nvd_query_by_identifier``
         # at test time is honoured.
-        from app.analysis import nvd_query_by_cpe
+        from app.analysis import nvd_query_by_identifier
 
-        return nvd_query_by_cpe(cpe, api_key, settings=settings)
+        return nvd_query_by_identifier(cpe, api_key, settings=settings)
 
     return SessionScopedNvdLookupService(
         session_factory=SessionLocal,

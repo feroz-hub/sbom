@@ -187,12 +187,12 @@ async def _fake_github_query_by_components(components, settings):
     return findings, [], []
 
 
-def _fake_nvd_query_by_cpe(cpe, api_key, settings=None):
-    """``nvd_query_by_components_async`` calls this per CPE (or the
+def _fake_nvd_query_by_identifier(identifier, api_key, settings=None):
+    """``nvd_query_by_components_async`` calls this per identifier (or the
     mirror facade does, then falls back here on cache miss). Return a
     minimal raw NVD record so ``_finding_from_raw`` produces a
     deterministic finding."""
-    if cpe and "log4j" in cpe.lower():
+    if identifier and "log4j" in identifier.lower():
         return [canned.NVD_LOG4J_RESPONSE["vulnerabilities"][0]["cve"]]
     return []
 
@@ -218,7 +218,8 @@ def mock_external_sources(monkeypatch):
 
     monkeypatch.setattr(analysis_mod, "osv_query_by_components", _fake_osv_query_by_components)
     monkeypatch.setattr(analysis_mod, "github_query_by_components", _fake_github_query_by_components)
-    monkeypatch.setattr(analysis_mod, "nvd_query_by_cpe", _fake_nvd_query_by_cpe)
+    monkeypatch.setattr(analysis_mod, "nvd_query_by_cpe", _fake_nvd_query_by_identifier)
+    monkeypatch.setattr(analysis_mod, "nvd_query_by_identifier", _fake_nvd_query_by_identifier)
 
     # Phase 3 (Finding B): the SSE stream + manual analyze paths now consume
     # the source registry. Patch the underlying analysis.* coroutines that

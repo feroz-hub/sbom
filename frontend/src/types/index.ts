@@ -248,7 +248,30 @@ export interface SBOMComponent {
   normalized_component_key?: string | null;
   is_duplicate?: boolean | null;
   duplicate_of_component_id?: number | null;
+  canonical_component_name?: string | null;
+  canonical_component_version?: string | null;
+  duplicate_reason?: string | null;
   created_on: string | null;
+}
+
+export interface SbomComponentListResponse {
+  items: SBOMComponent[];
+  total_count: number;
+  unique_count: number;
+  duplicate_count: number;
+  include_duplicates: boolean;
+  page: number;
+  page_size: number;
+}
+
+export interface GetSbomComponentsOptions {
+  includeDuplicates?: boolean;
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  sortBy?: 'name' | 'version' | 'component_type' | 'license' | 'lifecycle_status';
+  sortOrder?: 'asc' | 'desc';
+  signal?: AbortSignal;
 }
 
 export type LifecycleStatus =

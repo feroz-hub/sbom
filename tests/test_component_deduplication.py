@@ -144,7 +144,12 @@ def test_api_dedupe_on_upload(client, unique_name):
     # 1. include_duplicates = False (default)
     components_resp = client.get(f"/api/sboms/{sbom_id}/components")
     assert components_resp.status_code == 200
-    components = components_resp.json()
+    payload = components_resp.json()
+    components = payload["items"]
+    assert payload["include_duplicates"] is False
+    assert payload["unique_count"] == 2
+    assert payload["duplicate_count"] == 1
+    assert payload["total_count"] == 2
     # Should contain 2 components: app and canonical lodash
     assert len(components) == 2
     names = [c["name"] for c in components]
@@ -156,11 +161,83 @@ def test_api_dedupe_on_upload(client, unique_name):
     # 2. include_duplicates = True
     components_dup_resp = client.get(f"/api/sboms/{sbom_id}/components?include_duplicates=true")
     assert components_dup_resp.status_code == 200
-    components_all = components_dup_resp.json()
+    payload_all = components_dup_resp.json()
+    components_all = payload_all["items"]
+    assert payload_all["include_duplicates"] is True
+    assert payload_all["unique_count"] == 2
+    assert payload_all["duplicate_count"] == 1
+    assert payload_all["total_count"] == 3
     # Should contain 3 components: app, canonical lodash, and duplicate lodash
     assert len(components_all) == 3
     duplicates_flag = [c.get("is_duplicate") for c in components_all]
     assert True in duplicates_flag
+    duplicate_row = next(c for c in components_all if c.get("is_duplicate"))
+    assert duplicate_row.get("canonical_component_name") == "lodash"
+    assert duplicate_row.get("canonical_component_version") == "4.17.21"
+    assert duplicate_row.get("duplicate_reason")
+
+
+def test_component_list_search_hides_and_includes_duplicates(client, unique_name):
+    resp = client.post(
+        "/api/sboms",
+        json={"sbom_name": unique_name, "sbom_data": json.dumps(_DUPLICATE_CYCLONEDX)},
+    )
+    assert resp.status_code == 201
+    sbom_id = resp.json()["id"]
+
+    hidden = client.get(f"/api/sboms/{sbom_id}/components?search=lodash")
+    assert hidden.status_code == 200
+    hidden_payload = hidden.json()
+    assert hidden_payload["total_count"] == 1
+    assert len(hidden_payload["items"]) == 1
+    assert hidden_payload["items"][0]["is_duplicate"] is False
+
+    visible = client.get(f"/api/sboms/{sbom_id}/components?include_duplicates=true&search=lodash")
+    assert visible.status_code == 200
+    visible_payload = visible.json()
+    assert visible_payload["total_count"] == 2
+    assert len(visible_payload["items"]) == 2
+    assert sum(1 for item in visible_payload["items"] if item.get("is_duplicate")) == 1
+
+
+def test_component_list_pagination_respects_duplicate_filter(client, unique_name):
+    resp = client.post(
+        "/api/sboms",
+        json={"sbom_name": unique_name, "sbom_data": json.dumps(_DUPLICATE_CYCLONEDX)},
+    )
+    assert resp.status_code == 201
+    sbom_id = resp.json()["id"]
+
+    page_default = client.get(f"/api/sboms/{sbom_id}/components?page_size=1")
+    assert page_default.status_code == 200
+    page_default_payload = page_default.json()
+    assert page_default_payload["total_count"] == 2
+    assert len(page_default_payload["items"]) == 1
+
+    page_with_dupes = client.get(
+        f"/api/sboms/{sbom_id}/components?include_duplicates=true&page_size=1"
+    )
+    assert page_with_dupes.status_code == 200
+    page_with_dupes_payload = page_with_dupes.json()
+    assert page_with_dupes_payload["total_count"] == 3
+    assert len(page_with_dupes_payload["items"]) == 1
+
+
+def test_component_list_does_not_modify_stored_sbom(client, unique_name):
+    resp = client.post(
+        "/api/sboms",
+        json={"sbom_name": unique_name, "sbom_data": json.dumps(_DUPLICATE_CYCLONEDX)},
+    )
+    assert resp.status_code == 201
+    sbom_id = resp.json()["id"]
+
+    before = client.get(f"/api/sboms/{sbom_id}").json()["sbom_data"]
+    list_resp = client.get(f"/api/sboms/{sbom_id}/components?include_duplicates=false")
+    assert list_resp.status_code == 200
+    after = client.get(f"/api/sboms/{sbom_id}").json()["sbom_data"]
+    assert before == after
+    stored = json.loads(after)
+    assert len(stored["components"]) == 3
 
 
 def test_validation_warnings_for_duplicates(client, unique_name):

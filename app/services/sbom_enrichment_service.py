@@ -67,3 +67,53 @@ def run_post_upload_enrichment(sbom_id: int) -> None:
             db.commit()
     finally:
         db.close()
+
+
+def run_post_edit_enrichment(
+    sbom_id: int,
+    lifecycle_overrides: dict[str, dict] | None = None,
+) -> None:
+    """Run slow enrichment after an SBOM edit response has returned.
+
+    Re-applies explicit lifecycle overrides after provider sync so manual
+    edit payloads are not overwritten by enrichment results.
+    """
+
+    from .lifecycle.types import now_iso
+    from .version_control_service import reapply_edit_lifecycle_overrides
+
+    db: Session = SessionLocal()
+    try:
+        sbom = db.get(SBOMSource, sbom_id)
+        if sbom is None:
+            return
+
+        started = now_iso()
+        sbom.enrichment_status = "running"
+        sbom.enrichment_started_at = started
+        sbom.enrichment_error = None
+        db.commit()
+
+        sync_lifecycle_for_sbom(db, sbom_id)
+        process_embedded_vex_for_sbom(db, sbom_id)
+        if lifecycle_overrides:
+            reapply_edit_lifecycle_overrides(db, sbom_id, lifecycle_overrides)
+
+        sbom = db.get(SBOMSource, sbom_id)
+        if sbom is not None:
+            compute_and_save_completeness(db, sbom)
+            sbom.enrichment_status = "completed"
+            sbom.enrichment_completed_at = now_iso()
+            sbom.enrichment_error = None
+            db.commit()
+    except Exception as exc:  # pragma: no cover - defensive background path
+        log.exception("Post-edit enrichment failed for sbom_id=%s", sbom_id)
+        db.rollback()
+        sbom = db.get(SBOMSource, sbom_id)
+        if sbom is not None:
+            sbom.enrichment_status = "failed"
+            sbom.enrichment_error = str(exc)[:2000]
+            sbom.enrichment_completed_at = now_iso()
+            db.commit()
+    finally:
+        db.close()

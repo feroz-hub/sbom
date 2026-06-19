@@ -89,6 +89,51 @@ def _ensure_json_schema(spec: str, version: str) -> dict[str, Any] | None:
     return schema
 
 
+_SPDX_LICENSE_SCHEMAS: dict[str, dict[str, Any]] = {}
+
+
+def _load_cyclonedx_spdx_license_schema(version: str) -> dict[str, Any] | None:
+    """Load the SPDX license-id enum schema vendored beside CycloneDX BOM schemas."""
+    sub_dir = _vendored_dir("cyclonedx", version)
+    try:
+        path = resources.files("app.validation.schemas.cyclonedx").joinpath(sub_dir, "spdx.schema.json")
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:  # pragma: no cover — startup failure
+        log.error("failed to load vendored CycloneDX SPDX license schema %s: %s", version, exc)
+        return None
+
+
+def _ensure_cyclonedx_spdx_license_schema(version: str) -> dict[str, Any] | None:
+    sub_dir = _vendored_dir("cyclonedx", version)
+    if sub_dir in _SPDX_LICENSE_SCHEMAS:
+        return _SPDX_LICENSE_SCHEMAS[sub_dir]
+    schema = _load_cyclonedx_spdx_license_schema(version)
+    if schema is not None:
+        _SPDX_LICENSE_SCHEMAS[sub_dir] = schema
+    return schema
+
+
+def _build_json_validator(schema: dict[str, Any], spec: str, version: str):
+    """Construct a jsonschema validator with vendored $ref targets pre-registered."""
+    from jsonschema import FormatChecker  # type: ignore[import-untyped]
+    from jsonschema.validators import validator_for  # type: ignore[import-untyped]
+    from referencing import Registry, Resource  # type: ignore[import-untyped]
+
+    validator_cls = validator_for(schema)
+    registry = Registry()
+    schema_id = schema.get("$id")
+    if isinstance(schema_id, str):
+        registry = registry.with_resource(schema_id, Resource.from_contents(schema))
+
+    if spec == "cyclonedx":
+        spdx_schema = _ensure_cyclonedx_spdx_license_schema(version)
+        if spdx_schema is not None:
+            spdx_id = spdx_schema.get("$id") or "http://cyclonedx.org/schema/spdx.schema.json"
+            registry = registry.with_resource(spdx_id, Resource.from_contents(spdx_schema))
+
+    return validator_cls(schema, format_checker=FormatChecker(), registry=registry)
+
+
 def _ensure_xsd(version: str):  # noqa: ANN202 — lxml type imported lazily
     sub_dir = _vendored_dir("cyclonedx", version)
     if sub_dir in _XSD_SCHEMAS:
@@ -177,8 +222,7 @@ def _validate_json(ctx: ValidationContext) -> ValidationContext:
         return ctx
 
     try:
-        from jsonschema import FormatChecker  # type: ignore[import-untyped]
-        from jsonschema.validators import validator_for  # type: ignore[import-untyped]
+        validator = _build_json_validator(schema, ctx.spec or "", ctx.spec_version or "")
     except ImportError:
         ctx.report.add(
             E.E025_SCHEMA_VIOLATION,
@@ -193,8 +237,6 @@ def _validate_json(ctx: ValidationContext) -> ValidationContext:
     # CycloneDX 1.4/1.5/1.6 declare draft-07 (tuple-form `items` is legal),
     # which Draft202012Validator misinterprets and crashes on. SPDX 2.x also
     # declares draft-07. Auto-detecting keeps both families correct.
-    validator_cls = validator_for(schema)
-    validator = validator_cls(schema, format_checker=FormatChecker())
     for error in validator.iter_errors(ctx.parsed_dict):
         code = _VALIDATOR_CODE_MAP.get(error.validator or "", E.E025_SCHEMA_VIOLATION)
         path = ".".join(str(p) for p in error.absolute_path) or "(root)"

@@ -196,7 +196,15 @@ beforeEach(() => {
     status: 'affected',
     created_at: '2026-06-12T00:00:00Z',
   });
-  getSbomComponents.mockResolvedValue([COMPONENT]);
+  getSbomComponents.mockResolvedValue({
+    items: [COMPONENT],
+    total_count: 1,
+    unique_count: 1,
+    duplicate_count: 0,
+    include_duplicates: false,
+    page: 1,
+    page_size: 100,
+  });
   getRuns.mockResolvedValue([]);
   getSbomInfo.mockResolvedValue(null);
   getSbomRiskSummary.mockResolvedValue(null);

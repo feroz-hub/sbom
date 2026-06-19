@@ -176,12 +176,34 @@ def apply_edits_to_json(sbom_json: dict[str, Any], updates: dict[str, Any]) -> d
     return doc
 
 
+def reapply_edit_lifecycle_overrides(
+    db: Session,
+    sbom_id: int,
+    override_map: dict[str, dict[str, Any]],
+) -> None:
+    """Re-apply explicit lifecycle overrides after provider enrichment."""
+
+    if not override_map:
+        return
+
+    components = db.execute(
+        select(SBOMComponent).where(SBOMComponent.sbom_id == sbom_id)
+    ).scalars().all()
+    for comp in components:
+        if comp.bom_ref in override_map:
+            _apply_lifecycle_update(comp, override_map[comp.bom_ref])
+            db.add(comp)
+    db.commit()
+
+
 def edit_sbom(
     db: Session,
     sbom_id: int,
     user_id: str | None,
     updates: dict[str, Any],
-    change_summary: str
+    change_summary: str,
+    *,
+    defer_enrichment: bool = False,
 ) -> SBOMSource:
     """
     Perform an edit on an SBOM.
@@ -286,22 +308,21 @@ def edit_sbom(
                 
     db.commit()
     
-    # Run lifecycle backfill for new/modified components that have no lifecycle state
-    sync_lifecycle_for_sbom(db, new_sbom.id)
-    process_embedded_vex_for_sbom(db, new_sbom.id)
+    if defer_enrichment:
+        from .sbom_enrichment_service import mark_enrichment_pending
 
-    if override_map:
-        new_components = db.execute(
-            select(SBOMComponent).where(SBOMComponent.sbom_id == new_sbom.id)
-        ).scalars().all()
-        for comp in new_components:
-            if comp.bom_ref in override_map:
-                _apply_lifecycle_update(comp, override_map[comp.bom_ref])
-                db.add(comp)
+        mark_enrichment_pending(new_sbom)
         db.commit()
-    
-    # Re-run completeness validation
-    compute_and_save_completeness(db, new_sbom)
+    else:
+        # Run lifecycle backfill for new/modified components that have no lifecycle state
+        sync_lifecycle_for_sbom(db, new_sbom.id)
+        process_embedded_vex_for_sbom(db, new_sbom.id)
+
+        if override_map:
+            reapply_edit_lifecycle_overrides(db, new_sbom.id, override_map)
+
+        # Re-run completeness validation
+        compute_and_save_completeness(db, new_sbom)
     
     # Log audit entry
     db.add(

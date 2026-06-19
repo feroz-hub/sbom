@@ -226,6 +226,23 @@ class SBOMComponentOut(ORMModel):
     duplicate_of_component_id: int | None = None
 
 
+class SBOMComponentListItem(SBOMComponentOut):
+    """Component row enriched for list views (canonical duplicate references)."""
+
+    canonical_component_name: str | None = None
+    canonical_component_version: str | None = None
+    duplicate_reason: str | None = None
+
+
+class SBOMComponentListResponse(BaseModel):
+    items: list[SBOMComponentListItem]
+    total_count: int
+    unique_count: int
+    duplicate_count: int
+    include_duplicates: bool
+    page: int
+    page_size: int
+
 
 class AnalysisRunOut(ORMModel):
     id: int

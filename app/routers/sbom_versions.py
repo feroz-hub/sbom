@@ -24,6 +24,7 @@ from ..services.sbom_conversion_service import (
     convert_and_persist_spdx_to_cyclonedx,
     run_post_conversion_enrichment,
 )
+from ..services.sbom_enrichment_service import run_post_edit_enrichment
 from ..services.version_control_service import compare_versions, edit_sbom, restore_version
 from ..validation import run as run_validation
 
@@ -201,6 +202,7 @@ def _maybe_augment_export_with_lifecycle(db: Session, sbom: SBOMSource, content:
 def edit_sbom_endpoint(
     id: int,
     payload: SbomEditPayload,
+    background_tasks: BackgroundTasks,
     user_id: str | None = Query(None),
     _principal=_security_role,
     db: Session = Depends(get_db)
@@ -209,14 +211,24 @@ def edit_sbom_endpoint(
     Manually edit SBOM components, metadata, or dependencies.
     Creates a new version of the SBOM in the DB.
     """
+    override_map = {
+        comp_up["bom_ref"]: comp_up["lifecycle"]
+        for comp_up in (payload.model_dump(exclude_none=True).get("components") or [])
+        if "bom_ref" in comp_up and "lifecycle" in comp_up
+    }
     try:
         new_version = edit_sbom(
             db=db,
             sbom_id=id,
             user_id=user_id,
             updates=payload.model_dump(exclude_none=True),
-            change_summary=payload.change_summary
+            change_summary=payload.change_summary,
+            defer_enrichment=True,
         )
+        if override_map:
+            background_tasks.add_task(run_post_edit_enrichment, new_version.id, override_map)
+        else:
+            background_tasks.add_task(run_post_edit_enrichment, new_version.id)
         return new_version
     except ValueError as e:
         raise HTTPException(

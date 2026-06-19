@@ -49,6 +49,8 @@ import type {
   ValidationRepairSession,
   ValidationSessionImportResponse,
   UploadSBOMAcceptedResponse,
+  SbomComponentListResponse,
+  GetSbomComponentsOptions,
 } from '@/types';
 
 // Direct calls to FastAPI — no Next.js proxy (proxy caused ECONNRESET on
@@ -459,11 +461,32 @@ export function deleteSbom(
   });
 }
 
-export function getSbomComponents(sbomId: number, includeDuplicates = false, signal?: AbortSignal) {
-  return request<SBOMComponent[]>(
-    `/api/sboms/${sbomId}/components?include_duplicates=${includeDuplicates ? 'true' : 'false'}`,
-    { signal }
-  );
+export function getSbomComponents(
+  sbomId: number,
+  options: GetSbomComponentsOptions = {},
+): Promise<SbomComponentListResponse> {
+  const {
+    includeDuplicates = false,
+    page = 1,
+    pageSize = 100,
+    search,
+    sortBy = 'name',
+    sortOrder = 'asc',
+    signal,
+  } = options;
+  const params = new URLSearchParams({
+    include_duplicates: includeDuplicates ? 'true' : 'false',
+    page: String(page),
+    page_size: String(pageSize),
+    sort_by: sortBy,
+    sort_order: sortOrder,
+  });
+  if (search?.trim()) {
+    params.set('search', search.trim());
+  }
+  return request<SbomComponentListResponse>(`/api/sboms/${sbomId}/components?${params.toString()}`, {
+    signal,
+  });
 }
 
 export function getSbomDedupeReport(sbomId: number, signal?: AbortSignal) {
