@@ -96,8 +96,12 @@ describe('DeleteConfirmDialog', () => {
   });
 
   it('hides the permanent option when allowPermanent=false', () => {
-    renderDialog({ allowPermanent: false });
+    renderDialog({
+      allowPermanent: false,
+      permanentBlockedReason: 'A future-feature record still references this SBOM.',
+    });
     expect(screen.queryByLabelText(/delete permanently/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/future-feature record still references/i)).toBeInTheDocument();
   });
 
   it('has zero axe violations in the soft-default state', async () => {

@@ -82,7 +82,7 @@ class NvdClient:
         for attempt in range(self._retries + 1):
             try:
                 resp = await client.get(
-                    _NVD_URL, params={"cveId": cve_id}, headers=headers, timeout=timeout
+                    _NVD_URL, params={"cveIds": cve_id.upper()}, headers=headers, timeout=timeout
                 )
             except (httpx.TimeoutException, httpx.TransportError) as exc:
                 last_exc = exc

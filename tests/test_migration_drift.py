@@ -7,10 +7,9 @@ corresponding migration/startup schema path.
 
 from __future__ import annotations
 
-from sqlalchemy import inspect
-
 from app.db import engine
 from app.models import Base
+from sqlalchemy import inspect
 
 
 def test_model_columns_exist_in_database_schema(client):

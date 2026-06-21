@@ -163,6 +163,7 @@ class SBOMSource(Base, SoftDeleteMixin):
     @property
     def format(self) -> str:
         import json
+
         if not self.sbom_data:
             return "—"
         try:
@@ -179,6 +180,7 @@ class SBOMSource(Base, SoftDeleteMixin):
     @property
     def spec_version(self) -> str:
         import json
+
         if not self.sbom_data:
             return "—"
         try:
@@ -283,6 +285,7 @@ class SBOMComponent(Base, SoftDeleteMixin):
     version = Column(String, nullable=True, index=True)
     purl = Column(String, nullable=True)
     cpe = Column(String, nullable=True, index=True)
+    cpe_source = Column(String(32), nullable=True, index=True)
     supplier = Column(String, nullable=True)
     scope = Column(String, nullable=True)
     created_on = Column(String, nullable=True)
@@ -742,8 +745,32 @@ class SourceResponseCache(Base):
     fetched_at = Column(String, nullable=False)
     expires_at = Column(String, nullable=False)
 
+    __table_args__ = (Index("ix_source_response_cache_expires_at", "expires_at"),)
+
+
+class NvdLookupCache(Base):
+    """Cache of NVD lookup results and short-lived provider failures."""
+
+    __tablename__ = "nvd_lookup_cache"
+
+    id = Column(Integer, primary_key=True)
+    lookup_type = Column(String(16), nullable=False)
+    identifier = Column(String(2048), nullable=False)
+    identifier_hash = Column(String(64), nullable=False)
+    status = Column(String(16), nullable=False)
+    response_json = Column(JSON, nullable=True)
+    http_status = Column(Integer, nullable=True)
+    error_message = Column(Text, nullable=True)
+    checked_at = Column(String, nullable=False)
+    expires_at = Column(String, nullable=False)
+    created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=False)
+
     __table_args__ = (
-        Index("ix_source_response_cache_expires_at", "expires_at"),
+        UniqueConstraint("lookup_type", "identifier_hash", name="uq_nvd_lookup_cache_type_hash"),
+        Index("ix_nvd_lookup_cache_expires_at", "expires_at"),
+        Index("ix_nvd_lookup_cache_status", "status"),
+        Index("ix_nvd_lookup_cache_identifier", "identifier"),
     )
 
 
@@ -953,9 +980,7 @@ class AiProviderCredential(Base):
     last_test_success = Column(Boolean, nullable=True)
     last_test_error = Column(Text, nullable=True)
 
-    __table_args__ = (
-        UniqueConstraint("provider_name", "label", name="uq_ai_provider_credential_provider_label"),
-    )
+    __table_args__ = (UniqueConstraint("provider_name", "label", name="uq_ai_provider_credential_provider_label"),)
 
 
 class AiSettings(Base):
@@ -978,9 +1003,7 @@ class AiSettings(Base):
     updated_at = Column(String, nullable=False)
     updated_by_user_id = Column(String, nullable=True)
 
-    __table_args__ = (
-        CheckConstraint("id = 1", name="ck_ai_settings_singleton"),
-    )
+    __table_args__ = (CheckConstraint("id = 1", name="ck_ai_settings_singleton"),)
 
 
 class AiCredentialAuditLog(Base):

@@ -86,6 +86,9 @@ def app(_tmp_database_path: str):
     # Don't let a real GitHub token in the dev shell leak into tests.
     os.environ.pop("GITHUB_TOKEN", None)
     os.environ.pop("NVD_API_KEY", None)
+    # TestClient executes BackgroundTasks before returning; provider-specific
+    # tests opt in explicitly so general upload tests never call public NVD.
+    os.environ["NVD_ENABLED"] = "false"
     os.environ.pop("VULNDB_API_KEY", None)
 
     # Reset cached settings singleton if it exists.
@@ -232,6 +235,16 @@ def mock_external_sources(monkeypatch):
         "nvd_query_by_components_async",
         _fake_nvd_query_by_components_async,
     )
+    from app.sources.base import SourceResult
+    from app.sources.nvd import NvdSource
+
+    async def _fake_batched_nvd(self, components, vulnerabilities, settings):
+        findings, errors, warnings = await _fake_nvd_query_by_components_async(
+            components, settings, nvd_api_key=self.api_key
+        )
+        return SourceResult(findings=findings, errors=errors, warnings=warnings)
+
+    monkeypatch.setattr(NvdSource, "query_with_vulnerabilities", _fake_batched_nvd)
     # osv_query_by_components / github_query_by_components are already
     # patched on `app.analysis` above; the adapters import them lazily from
     # the same module attribute, so the patch propagates.

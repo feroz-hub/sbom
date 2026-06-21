@@ -4,7 +4,6 @@ import asyncio
 import concurrent.futures
 import logging
 import os
-import time
 from dataclasses import asdict, dataclass, field, replace
 from functools import lru_cache
 from typing import Any, Literal
@@ -60,6 +59,7 @@ def _emit_nvd_metric(name: str, value: int = 1, **labels: str) -> None:
         name,
         extra={"metric": name, "labels": labels, "value": value},
     )
+
 
 # ============================================================
 # CVE MODEL (kept inline for self-contained file)
@@ -364,9 +364,7 @@ def get_analysis_settings() -> AnalysisSettings:
         analysis_max_findings_total=_env_int("ANALYSIS_MAX_FINDINGS_TOTAL", 50000, minimum=0),
         nvd_version_range_filter_enabled=_env_bool_top("NVD_VERSION_RANGE_FILTER_ENABLED", False),
         source_cache_enabled=_env_bool_top("SOURCE_CACHE_ENABLED", False),
-        source_cache_ttl_seconds=_env_int(
-            "SOURCE_CACHE_TTL_SECONDS", 4 * 60 * 60, minimum=1
-        ),
+        source_cache_ttl_seconds=_env_int("SOURCE_CACHE_TTL_SECONDS", 4 * 60 * 60, minimum=1),
         distro_cpe_enabled=_env_bool_top("DISTRO_CPE_ENABLED", False),
     )
 
@@ -501,9 +499,8 @@ def _tag_match_confidence(
         component_vendor=component_vendor,
         cve_text=cve_text,
     )
-    finding["match_confidence"] = _apply_strategy_floor(
-        result.confidence, finding.get("match_strategy")
-    )
+    finding["match_confidence"] = _apply_strategy_floor(result.confidence, finding.get("match_strategy"))
+
 
 # Roadmap #6 — search-strategy provenance tag attached to every finding
 # dict at the per-source emit step. Persisted on ``analysis_finding.
@@ -550,6 +547,10 @@ def _augment_components_with_cpe(components: list[dict]) -> tuple[list[dict], in
     generated = 0
     for c in components:
         d = dict(c or {})
+        if d.get("cpe") and not d.get("cpe_source"):
+            # Components emitted by the SBOM parsers carry this explicitly;
+            # keep direct callers safe without treating inferred values as trusted.
+            d["cpe_source"] = "unknown"
         if not d.get("cpe"):
             p = d.get("purl")
             if p:
@@ -557,6 +558,7 @@ def _augment_components_with_cpe(components: list[dict]) -> tuple[list[dict], in
                 cpe = _cpe23_from_purl(p, version_override=comp_version)
                 if cpe:
                     d["cpe"] = cpe
+                    d["cpe_source"] = "generated_fallback"
                     generated += 1
         out.append(d)
     return out, generated
@@ -634,90 +636,26 @@ def _nvd_fetch_cves_paginated(
     delay: float,
     log_label: str,
 ) -> list[dict]:
-    """
-    Query NVD CVE 2.0 API with either cpeName=... or virtualMatchString=... (not both).
-    Paginates through all results.
-    """
-    params: dict[str, Any] = {
-        **search_params,
-        "resultsPerPage": cfg.nvd_results_per_page,
-        "startIndex": 0,
-    }
-    out: list[dict] = []
-    pages_fetched = 0
-
-    while True:
-        response = None
-        for attempt in range(cfg.nvd_max_retries + 1):
-            try:
-                response = _nvd_session.get(
-                    cfg.nvd_api_base_url,
-                    params=params,
-                    headers=headers,
-                    timeout=cfg.nvd_request_timeout_seconds,
-                )
-                if response.status_code == 429 or response.status_code >= 500:
-                    raise requests.HTTPError(f"NVD HTTP {response.status_code}", response=response)
-                response.raise_for_status()
-                break
-            except requests.RequestException as exc:
-                if not _is_retryable_nvd_request_error(exc) or attempt >= cfg.nvd_max_retries:
-                    raise RuntimeError(f"NVD query failed for {log_label}: {exc}") from exc
-                # On 429 prefer the server's Retry-After — our own linear
-                # backoff can undercut it and immediately hit another 429.
-                backoff = cfg.nvd_retry_backoff_seconds * (attempt + 1)
-                resp = getattr(exc, "response", None)
-                if resp is not None and resp.status_code == 429:
-                    ra = resp.headers.get("Retry-After")
-                    try:
-                        if ra is not None:
-                            backoff = max(backoff, float(ra))
-                    except (TypeError, ValueError):
-                        pass
-                LOGGER.warning(
-                    "NVD request retry %s for %s (sleep %.2fs) due to: %s",
-                    attempt + 1, log_label, backoff, exc,
-                )
-                if backoff > 0:
-                    time.sleep(backoff)
-
-        if response is None:
-            raise RuntimeError(f"NVD query returned no response for {log_label}")
-
-        data = response.json()
-        vulnerabilities = data.get("vulnerabilities", []) or []
-        out.extend([item.get("cve") for item in vulnerabilities if item.get("cve")])
-        pages_fetched += 1
-
-        total = int(data.get("totalResults", len(out)))
-        start = int(params["startIndex"])
-        size = int(data.get("resultsPerPage") or params["resultsPerPage"] or 0)
-        if size <= 0 or start + size >= total:
-            break
-
-        # --- Safety caps -------------------------------------------------
-        # Either bound hit = the CPE/match pattern is too broad to be
-        # useful. Stop paginating and keep what we already have; this
-        # prevents one runaway query from freezing the whole phase.
-        if pages_fetched >= cfg.nvd_max_pages_per_query:
-            LOGGER.warning(
-                "NVD pagination cap hit for %s — fetched %d pages, totalResults=%d, "
-                "stopping (cap=%d). Result may be partial.",
-                log_label, pages_fetched, total, cfg.nvd_max_pages_per_query,
-            )
-            break
-        if total > cfg.nvd_max_total_results_per_query:
-            LOGGER.warning(
-                "NVD totalResults=%d exceeds cap=%d for %s — CPE/match pattern is too "
-                "broad; stopping after %d results.",
-                total, cfg.nvd_max_total_results_per_query, log_label, len(out),
-            )
-            break
-
-        params["startIndex"] = start + size
-        if delay > 0:
-            time.sleep(delay)
-    return out
+    """Compatibility shim: one bounded call, with no pagination or retries."""
+    del delay
+    try:
+        response = _nvd_session.get(
+            cfg.nvd_api_base_url,
+            params=search_params,
+            headers=headers,
+            timeout=(min(5, cfg.nvd_request_timeout_seconds), min(20, cfg.nvd_request_timeout_seconds)),
+        )
+        if response.status_code in {429, 502, 503, 504}:
+            raise RuntimeError(f"NVD query failed for {log_label}: HTTP {response.status_code}")
+        response.raise_for_status()
+        payload = response.json()
+    except requests.RequestException as exc:
+        raise RuntimeError(f"NVD query failed for {log_label}: {exc}") from exc
+    return [
+        item["cve"]
+        for item in payload.get("vulnerabilities", []) or []
+        if isinstance(item, dict) and isinstance(item.get("cve"), dict)
+    ]
 
 
 def nvd_query_by_cpe(cpe: str, api_key: str | None, settings: AnalysisSettings | None = None) -> list[dict]:
@@ -739,7 +677,8 @@ def nvd_query_by_cpe(cpe: str, api_key: str | None, settings: AnalysisSettings |
         return []
     if _classify_nvd_lookup_identifier(cpe) != "cpe":
         LOGGER.warning(
-            "Skipping NVD cpeName lookup for non-CPE identifier %r", cpe,
+            "Skipping NVD cpeName lookup for non-CPE identifier %r",
+            cpe,
         )
         return []
     headers = {"User-Agent": cfg.http_user_agent}
@@ -747,9 +686,7 @@ def nvd_query_by_cpe(cpe: str, api_key: str | None, settings: AnalysisSettings |
         headers["apiKey"] = api_key
     delay = cfg.nvd_request_delay_with_key_seconds if api_key else cfg.nvd_request_delay_without_key_seconds
 
-    return _nvd_fetch_cves_paginated(
-        cfg, headers, {"cpeName": cpe}, delay=delay, log_label=f"cpeName={cpe!r}"
-    )
+    return _nvd_fetch_cves_paginated(cfg, headers, {"cpeName": cpe}, delay=delay, log_label=f"cpeName={cpe!r}")
 
 
 def nvd_query_by_cve_id(
@@ -757,14 +694,15 @@ def nvd_query_by_cve_id(
     api_key: str | None,
     settings: AnalysisSettings | None = None,
 ) -> list[dict]:
-    """Lookup a single CVE record via NVD ``cveId`` (never ``cpeName``)."""
+    """Compatibility lookup using the required ``cveIds`` parameter."""
     cfg = settings or get_analysis_settings()
     if not cve_id:
         return []
     normalized = cve_id.strip().upper()
     if _classify_nvd_lookup_identifier(normalized) != "cve":
         LOGGER.warning(
-            "Skipping NVD cveId lookup for non-CVE identifier %r", cve_id,
+            "Skipping NVD cveId lookup for non-CVE identifier %r",
+            cve_id,
         )
         return []
     headers = {"User-Agent": cfg.http_user_agent}
@@ -775,9 +713,9 @@ def nvd_query_by_cve_id(
     return _nvd_fetch_cves_paginated(
         cfg,
         headers,
-        {"cveId": normalized},
+        {"cveIds": normalized},
         delay=delay,
-        log_label=f"cveId={normalized!r}",
+        log_label=f"cveIds={normalized!r}",
     )
 
 
@@ -813,68 +751,10 @@ def nvd_query_by_keyword(
     configuration), results are capped at
     ``settings.nvd_keyword_results_limit`` per component to bound noise.
     """
-    cfg = settings or get_analysis_settings()
-    if not name:
-        return []
-    stripped_name = name.strip()
-    if not stripped_name:
-        return []
-    stripped_version = (version or "").strip()
-    keyword = f"{stripped_name} {stripped_version}".strip() if stripped_version else stripped_name
-
-    headers = {"User-Agent": cfg.http_user_agent}
-    if api_key:
-        headers["apiKey"] = api_key
-    delay = cfg.nvd_request_delay_with_key_seconds if api_key else cfg.nvd_request_delay_without_key_seconds
-    limit = max(1, int(cfg.nvd_keyword_results_limit))
-
-    params: dict[str, Any] = {
-        "keywordSearch": keyword,
-        "resultsPerPage": limit,
-        "startIndex": 0,
-    }
-
-    response = None
-    for attempt in range(cfg.nvd_max_retries + 1):
-        try:
-            response = _nvd_session.get(
-                cfg.nvd_api_base_url,
-                params=params,
-                headers=headers,
-                timeout=cfg.nvd_request_timeout_seconds,
-            )
-            if response.status_code == 429 or response.status_code >= 500:
-                raise requests.HTTPError(f"NVD HTTP {response.status_code}", response=response)
-            response.raise_for_status()
-            break
-        except requests.RequestException as exc:
-            if not _is_retryable_nvd_request_error(exc) or attempt >= cfg.nvd_max_retries:
-                raise RuntimeError(f"NVD keyword query failed for {keyword!r}: {exc}") from exc
-            backoff = cfg.nvd_retry_backoff_seconds * (attempt + 1)
-            resp = getattr(exc, "response", None)
-            if resp is not None and resp.status_code == 429:
-                ra = resp.headers.get("Retry-After")
-                try:
-                    if ra is not None:
-                        backoff = max(backoff, float(ra))
-                except (TypeError, ValueError):
-                    pass
-            LOGGER.warning(
-                "NVD keyword retry %s for %r (sleep %.2fs) due to: %s",
-                attempt + 1, keyword, backoff, exc,
-            )
-            if backoff > 0:
-                time.sleep(backoff)
-
-    if response is None:
-        return []
-
-    data = response.json()
-    vulnerabilities = data.get("vulnerabilities", []) or []
-    out = [item.get("cve") for item in vulnerabilities if item.get("cve")]
-    if delay > 0:
-        time.sleep(delay)
-    return out[:limit]
+    del name, version, api_key, settings
+    # Free-text matching is intentionally disabled: it is noisy and turns NVD
+    # back into a per-component search service.
+    return []
 
 
 def _finding_from_raw(
@@ -1168,8 +1048,7 @@ async def osv_query_by_components(
         return None
 
     name_to_vendor: dict[str, str | None] = {
-        (c.get("name") or "").lower(): _vendor_from_purl(c.get("purl"))
-        for c in components
+        (c.get("name") or "").lower(): _vendor_from_purl(c.get("purl")) for c in components
     }
 
     # ===================================================================
@@ -1186,16 +1065,16 @@ async def osv_query_by_components(
     # opening a session or emitting metrics — byte-identical
     # pass-through.
     # ===================================================================
-    keyed_components: list[tuple[str | None, dict]] = [
-        (_component_cache_key(c), c) for c in components
-    ]
+    keyed_components: list[tuple[str | None, dict]] = [(_component_cache_key(c), c) for c in components]
     comp_by_key: dict[str, dict] = {}
     for key, c in keyed_components:
         if key is not None:
             comp_by_key.setdefault(key, c)
 
     cache_hits, miss_comps = await _partition_by_cache(
-        "OSV", keyed_components, settings=settings,
+        "OSV",
+        keyed_components,
+        settings=settings,
     )
 
     # ===================================================================
@@ -1255,7 +1134,8 @@ async def osv_query_by_components(
         ]
 
         async def _fetch_batch_with_indices(
-            start: int, batch: list[dict],
+            start: int,
+            batch: list[dict],
         ) -> list[tuple[int, list[str]]]:
             try:
                 res = await _async_post(
@@ -1265,20 +1145,14 @@ async def osv_query_by_components(
                 )
                 per_query: list[tuple[int, list[str]]] = []
                 for offset, item in enumerate(res.get("results", []) or []):
-                    ids = [
-                        v.get("id")
-                        for v in (item.get("vulns") or [])
-                        if v.get("id")
-                    ]
+                    ids = [v.get("id") for v in (item.get("vulns") or []) if v.get("id")]
                     per_query.append((start + offset, ids))
                 return per_query
             except Exception as exc:
                 query_errors.append({"source": "OSV", "error": str(exc)})
                 return []
 
-        all_per_query = await asyncio.gather(
-            *[_fetch_batch_with_indices(s, b) for s, b in batches_with_starts]
-        )
+        all_per_query = await asyncio.gather(*[_fetch_batch_with_indices(s, b) for s, b in batches_with_starts])
 
         ids_by_query_index: dict[int, list[str]] = {}
         for batch_results in all_per_query:
@@ -1288,9 +1162,7 @@ async def osv_query_by_components(
         # Union of all unique vuln IDs across miss queries — same dedup
         # the legacy code did, just preserved here so the per-query
         # mapping survives.
-        unique_miss_ids = sorted(
-            {vid for ids in ids_by_query_index.values() for vid in ids}
-        )
+        unique_miss_ids = sorted({vid for ids in ids_by_query_index.values() for vid in ids})
 
         sem = asyncio.Semaphore(settings.max_concurrency)
 
@@ -1299,20 +1171,17 @@ async def osv_query_by_components(
             try:
                 async with sem:
                     data = await _async_get(
-                        url, timeout=settings.nvd_request_timeout_seconds,
+                        url,
+                        timeout=settings.nvd_request_timeout_seconds,
                     )
                     return data
             except Exception as exc:
                 query_errors.append({"source": "OSV", "id": vid, "error": str(exc)})
                 return None
 
-        hydrated_list = await asyncio.gather(
-            *[_fetch_vuln(vid) for vid in unique_miss_ids]
-        )
+        hydrated_list = await asyncio.gather(*[_fetch_vuln(vid) for vid in unique_miss_ids])
         hydrated_by_id: dict[str, dict] = {
-            (h.get("id") or ""): h
-            for h in hydrated_list
-            if isinstance(h, dict) and h.get("id")
+            (h.get("id") or ""): h for h in hydrated_list if isinstance(h, dict) and h.get("id")
         }
 
         # Build per-component vuln lists from the per-query mapping.
@@ -1342,19 +1211,15 @@ async def osv_query_by_components(
     # ``miss_vulns_by_key_qb`` may have keys mapping to empty lists (per-query
     # empty results); the legacy trigger was "no hydrated vulns at all", so
     # check VALUES are all empty, not just dict-emptiness.
-    have_any_qb_vulns = any(
-        bool(v) for v in miss_vulns_by_key_qb.values()
-    )
-    if (
-        not have_any_qb_vulns
-        and miss_comps
-        and any((c.get("purl") or "").strip() for c in miss_comps)
-    ):
+    have_any_qb_vulns = any(bool(v) for v in miss_vulns_by_key_qb.values())
+    if not have_any_qb_vulns and miss_comps and any((c.get("purl") or "").strip() for c in miss_comps):
         try:
             from .sources.osv_fallback import osv_fetch_via_query_endpoint_raw
 
             fb_vulns_by_purl, fb_errors, fb_warnings = await osv_fetch_via_query_endpoint_raw(
-                miss_comps, settings, post_json_fn=_async_post,
+                miss_comps,
+                settings,
+                post_json_fn=_async_post,
             )
             if fb_errors:
                 query_errors.extend(fb_errors)
@@ -1370,9 +1235,7 @@ async def osv_query_by_components(
                     miss_vulns_by_key_fb[key] = fb_vulns_by_purl[purl]
             use_fallback_for_misses = True
         except Exception as exc:
-            query_errors.append(
-                {"source": "OSV", "error": f"Fallback /v1/query failed: {exc}"}
-            )
+            query_errors.append({"source": "OSV", "error": f"Fallback /v1/query failed: {exc}"})
 
     # ===================================================================
     # Cache writes for misses, including empty results.
@@ -1645,9 +1508,7 @@ async def github_query_by_components(
     # @scope for npm, github.com/user for golang) which the confidence
     # scorer reads as ``component_vendor``. ``None`` namespace is
     # passed through; the scorer's vendor-renormalization handles it.
-    name_for_component: dict[
-        tuple[str, str], set[tuple[str, str | None, str | None]]
-    ] = {}
+    name_for_component: dict[tuple[str, str], set[tuple[str, str | None, str | None]]] = {}
 
     # Roadmap #2 (PR-C) — versionless cache key per (eco, name).
     # First contributing component sets the key; later components
@@ -1672,9 +1533,7 @@ async def github_query_by_components(
             versionless_key_for_pkg[key] = _component_cache_key_versionless(comp)
         ns_value = parsed.get("namespace") if isinstance(parsed, dict) else None
         ns: str | None = ns_value if isinstance(ns_value, str) and ns_value else None
-        name_for_component.setdefault(key, set()).add(
-            (comp.get("name") or name, comp.get("version"), ns)
-        )
+        name_for_component.setdefault(key, set()).add((comp.get("name") or name, comp.get("version"), ns))
 
     if not pkg_set:
         return [], [], []
@@ -1722,7 +1581,9 @@ async def github_query_by_components(
             while True:
                 async with sem:
                     variables: dict[str, Any] = {
-                        "ecosystem": eco, "name": pkg, "first": page_size,
+                        "ecosystem": eco,
+                        "name": pkg,
+                        "first": page_size,
                     }
                     if cursor:
                         variables["after"] = cursor
@@ -1733,9 +1594,9 @@ async def github_query_by_components(
                         timeout=settings.nvd_request_timeout_seconds,
                     )
                     if "errors" in data:
-                        err_text = "; ".join(
-                            (e.get("message") or str(e)) for e in (data["errors"] or [])
-                        ) or str(data["errors"])
+                        err_text = "; ".join((e.get("message") or str(e)) for e in (data["errors"] or [])) or str(
+                            data["errors"]
+                        )
                         raise _GitHubGraphQLError(err_text)
                     sv = (data.get("data") or {}).get("securityVulnerabilities") or {}
                     nodes_acc.extend(sv.get("nodes") or [])
@@ -1759,16 +1620,19 @@ async def github_query_by_components(
             # Preserve the existing log-message format for this branch.
             LOGGER.warning(
                 "GitHub GraphQL returned errors — package=%s/%s: %s",
-                eco, pkg, str(exc),
+                eco,
+                pkg,
+                str(exc),
             )
-            query_errors.append(
-                {"source": "GITHUB", "package": f"{eco}/{pkg}", "error": str(exc)}
-            )
+            query_errors.append({"source": "GITHUB", "package": f"{eco}/{pkg}", "error": str(exc)})
             return
         except Exception as exc:
             LOGGER.warning(
                 "GitHub query failed — package=%s/%s error=%s: %s",
-                eco, pkg, type(exc).__name__, exc,
+                eco,
+                pkg,
+                type(exc).__name__,
+                exc,
             )
             query_errors.append(
                 {"source": "GITHUB", "package": f"{eco}/{pkg}", "error": f"{type(exc).__name__}: {exc}"}
@@ -1787,24 +1651,22 @@ async def github_query_by_components(
                 vector = cvss.get("vectorString")
             bucket = _sev_bucket(score, settings=settings, severity_text=n.get("severity"))
             refs = adv.get("references") or []
-            comp_tuple = next(
-                iter(
-                    name_for_component.get(
-                        (eco, pkg), {(pkg, None, None)}
-                    )
-                )
-            )
+            comp_tuple = next(iter(name_for_component.get((eco, pkg), {(pkg, None, None)})))
             compname, compver, compvendor = comp_tuple
             patched = (n.get("firstPatchedVersion") or {}).get("identifier")
             ghsa_pkg = n.get("package") or {}
             ghsa_finding = {
                 "vuln_id": adv.get("ghsaId"),
-                "aliases": list({
-                    v for v in [
-                        adv.get("ghsaId"),
-                        *[i["value"] for i in (adv.get("identifiers") or []) if i.get("type") in ("CVE", "GHSA")],
-                    ] if v
-                }),
+                "aliases": list(
+                    {
+                        v
+                        for v in [
+                            adv.get("ghsaId"),
+                            *[i["value"] for i in (adv.get("identifiers") or []) if i.get("type") in ("CVE", "GHSA")],
+                        ]
+                        if v
+                    }
+                ),
                 "sources": ["GITHUB"],
                 "description": adv.get("summary") or adv.get("description"),
                 "severity": bucket,
@@ -1835,13 +1697,15 @@ async def github_query_by_components(
             # range. Together this anchors the scorer on
             # both prose and structural identity tokens.
             ghsa_text = " ".join(
-                s for s in (
+                s
+                for s in (
                     adv.get("summary") or "",
                     adv.get("description") or "",
                     ghsa_pkg.get("name") or "",
                     ghsa_pkg.get("ecosystem") or "",
                     n.get("vulnerableVersionRange") or "",
-                ) if isinstance(s, str)
+                )
+                if isinstance(s, str)
             )
             _tag_match_confidence(
                 ghsa_finding,
@@ -1871,22 +1735,51 @@ async def nvd_query_by_components_async(
         One request at a time with a fixed inter-request sleep stays under
         the ceiling by construction: 45 comps × 0.6 s ≈ 27 s with a key.
 
-    Components **without** a CPE are skipped on purpose — OSV and GHSA
-    already cover them via PURL, and NVD's keyword-search path is noisy
-    and burns rate-limit for low-value results. Before we decide what is
-    "without a CPE" we try to **derive one from the PURL**: for example,
-    ``pkg:pypi/requests@2.31.0`` becomes
-    ``cpe:2.3:a:requests:requests:2.31.0:*:*:*:*:*:*:*``.
-
-    The multi-source orchestrator already augments upstream, but doing it
-    here too keeps this function correct when called directly.
+    Components without a trusted SBOM-provided/verified CPE are skipped.
 
     Returns ``(findings, errors, warnings)`` — same shape as osv/github.
     """
-    # Best-effort PURL → CPE derivation before the inventory pass. When
-    # multi_source already augmented, this is a no-op (components that
-    # already have ``cpe`` are passed through unchanged).
-    normalized_components, generated_cpe_count = _augment_components_with_cpe(components)
+    if lookup_service is None:
+        # Canonical production-safe path. The legacy body below is retained
+        # only for an explicitly injected local-mirror/test lookup seam.
+        from .db import SessionLocal
+        from .services.nvd_enrichment_service import NvdEnrichmentService
+        from .settings import get_settings
+
+        def _run_enrichment():
+            db = SessionLocal()
+            app_settings = get_settings()
+            if nvd_api_key and nvd_api_key != app_settings.nvd_api_key:
+                app_settings = app_settings.model_copy(update={"nvd_api_key": nvd_api_key})
+            try:
+                return NvdEnrichmentService(db, app_settings).enrich(components, [])
+            finally:
+                db.close()
+
+        result = await asyncio.to_thread(_run_enrichment)
+        provider_status = result["provider_status"]
+        findings = []
+        for record in result["records"]:
+            component = record.get("component") or {}
+            identifier = record["identifier"]
+            finding = _finding_from_raw(
+                record["raw"],
+                identifier,
+                component.get("name") or "",
+                component.get("version"),
+                settings,
+            )
+            finding["match_strategy"] = "cve_ids" if identifier.upper().startswith("CVE-") else "cpe_name"
+            findings.append(finding)
+        errors = []
+        if provider_status["status"] == "degraded":
+            errors.append({"source": "NVD", "provider_status": provider_status})
+        return findings, errors, [{"source": "NVD", "provider_status": provider_status}]
+
+    # Explicit local-mirror compatibility seam. Never derive CPEs here.
+    normalized_components = [dict(component or {}) for component in components]
+    generated_cpe_count = 0
+    from .services.nvd_enrichment_service import is_trusted_cpe
 
     # CPE inventory + skipped count (preserve insertion order so progress
     # logs map 1:1 to the SBOM input ordering in logs/sbom.log).
@@ -1906,6 +1799,9 @@ async def nvd_query_by_components_async(
     for comp in normalized_components:
         cpe = comp.get("cpe")
         if cpe:
+            if not is_trusted_cpe(cpe, comp.get("cpe_source") or "manual_verified"):
+                skipped += 1
+                continue
             kind = _classify_nvd_lookup_identifier(cpe)
             if kind == "invalid":
                 skipped += 1
@@ -1935,7 +1831,9 @@ async def nvd_query_by_components_async(
 
     LOGGER.info(
         "NVD: %d queried, %d skipped (no CPE), %d CPEs derived from PURL",
-        queried, skipped, generated_cpe_count,
+        queried,
+        skipped,
+        generated_cpe_count,
     )
 
     if not cpe_order:
@@ -1944,11 +1842,7 @@ async def nvd_query_by_components_async(
     api_key = nvd_api_key or resolve_nvd_api_key(settings)
 
     cfg_base = get_analysis_settings()
-    sleep_s = (
-        cfg_base.nvd_request_delay_with_key_seconds
-        if api_key
-        else cfg_base.nvd_request_delay_without_key_seconds
-    )
+    sleep_s = cfg_base.nvd_request_delay_with_key_seconds if api_key else cfg_base.nvd_request_delay_without_key_seconds
 
     # Tighter per-request budget for the sequential path: long timeouts and
     # multi-attempt backoffs just pile on top of NVD's 429 Retry-After and
@@ -1959,6 +1853,7 @@ async def nvd_query_by_components_async(
         nvd_max_retries=min(cfg_base.nvd_max_retries, 1),
     )
 
+    cpe_order = cpe_order[:10]
     total = len(cpe_order)
     LOGGER.info(
         "NVD client: api_key=%s, sleep=%.2fs, sequential, cpe_targets=%d",
@@ -1977,9 +1872,7 @@ async def nvd_query_by_components_async(
     # mirror facade), route through it; otherwise hit live NVD directly.
     # Both have the same `(identifier, api_key, settings) -> list[dict]` shape,
     # so the executor call is a single drop-in substitution.
-    query_callable = (
-        lookup_service if lookup_service is not None else nvd_query_by_identifier
-    )
+    query_callable = lookup_service if lookup_service is not None else nvd_query_by_identifier
     for idx, identifier in enumerate(cpe_order, 1):
         if nvd_provider_failed:
             break
@@ -1987,13 +1880,13 @@ async def nvd_query_by_components_async(
         try:
             # Run sync requests.Session call in the shared executor so we
             # do not block the event loop, but serialize the submissions.
-            raw_list = await loop.run_in_executor(
-                _executor, query_callable, identifier, api_key, cfg
-            )
+            raw_list = await loop.run_in_executor(_executor, query_callable, identifier, api_key, cfg)
         except Exception as exc:
             LOGGER.warning(
                 "NVD query failed — identifier=%r error=%s: %s",
-                identifier, type(exc).__name__, exc,
+                identifier,
+                type(exc).__name__,
+                exc,
             )
             err_entry: dict[str, Any] = {
                 "source": "NVD",
@@ -2012,14 +1905,8 @@ async def nvd_query_by_components_async(
         else:
             succeeded += 1
             comp_name, comp_ver, ecosystem = name_by_cpe.get(identifier, ("", None, None))
-            range_filter_on = bool(
-                getattr(settings, "nvd_version_range_filter_enabled", False)
-            )
-            cpe_vendor = (
-                _vendor_from_cpe(identifier)
-                if id_kind == "cpe"
-                else None
-            )
+            range_filter_on = bool(getattr(settings, "nvd_version_range_filter_enabled", False))
+            cpe_vendor = _vendor_from_cpe(identifier) if id_kind == "cpe" else None
             match_strategy = "cve_id" if id_kind == "cve" else "cpe_name"
             for raw in raw_list:
                 if not isinstance(raw, dict):
@@ -2035,15 +1922,16 @@ async def nvd_query_by_components_async(
                     findings.append(finding)
                     continue
                 verdict = _cve_affects_component(
-                    raw, comp_ver, ecosystem, target_cpe=identifier if id_kind == "cpe" else None,
+                    raw,
+                    comp_ver,
+                    ecosystem,
+                    target_cpe=identifier if id_kind == "cpe" else None,
                     # Roadmap #5 PR-C — when the distro-CPE flag is
                     # on, distro/Conan ecosystems skip the
                     # ``ecosystem_unsupported`` short-circuit and
                     # route through normalize-then-compare. Flag off
                     # → byte-identical conservative-keep.
-                    distro_cpe_enabled=bool(
-                        getattr(settings, "distro_cpe_enabled", False)
-                    ),
+                    distro_cpe_enabled=bool(getattr(settings, "distro_cpe_enabled", False)),
                 )
                 if verdict.reason == "version_unparseable":
                     # The PR1 contract is to keep the finding here, but we
@@ -2071,18 +1959,22 @@ async def nvd_query_by_components_async(
                 _emit_nvd_metric("nvd.findings_emitted_total")
                 findings.append(finding)
 
-        if idx % 5 == 0 or idx == total:
-            LOGGER.info("NVD progress: %d/%d", idx, total)
-
         # Inter-request sleep (only between components, not after the last).
         if idx < total and sleep_s > 0:
             await asyncio.sleep(sleep_s)
 
     LOGGER.info(
         "NVD phase complete: %d/%d succeeded (findings=%d errors=%d skipped_no_cpe=%d)",
-        succeeded, total, len(findings), len(errors), skipped,
+        succeeded,
+        total,
+        len(findings),
+        len(errors),
+        skipped,
     )
     return findings, errors, []
+
+
+nvd_query_by_components_async._production_safe = True  # type: ignore[attr-defined]
 
 
 # Phase 1 (Finding B): canonical implementation now lives in

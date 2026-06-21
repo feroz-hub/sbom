@@ -48,6 +48,7 @@ def run_post_upload_enrichment(sbom_id: int) -> None:
 
         sync_lifecycle_for_sbom(db, sbom_id)
         process_embedded_vex_for_sbom(db, sbom_id)
+        _run_background_nvd_enrichment(db, sbom_id)
 
         sbom = db.get(SBOMSource, sbom_id)
         if sbom is not None:
@@ -67,6 +68,43 @@ def run_post_upload_enrichment(sbom_id: int) -> None:
             db.commit()
     finally:
         db.close()
+
+
+def _run_background_nvd_enrichment(db: Session, sbom_id: int) -> dict | None:
+    """Populate NVD cache after upload; provider failure is always non-fatal."""
+
+    from sqlalchemy import select
+
+    from ..models import SBOMComponent
+    from ..settings import get_settings
+    from .nvd_enrichment_service import NvdEnrichmentService
+
+    settings = get_settings()
+    if not settings.nvd_enabled or not settings.nvd_background_enrichment:
+        return None
+    rows = db.execute(select(SBOMComponent).where(SBOMComponent.sbom_id == sbom_id)).scalars().all()
+    components = [
+        {
+            "name": row.name,
+            "version": row.version,
+            "purl": row.purl,
+            "cpe": row.cpe,
+            "cpe_source": row.cpe_source,
+        }
+        for row in rows
+    ]
+    try:
+        return NvdEnrichmentService(db, settings).enrich(components, [])
+    except Exception as exc:  # defensive: never poison lifecycle/upload enrichment
+        db.rollback()
+        log.warning("Background NVD enrichment degraded for sbom_id=%s: %s", sbom_id, exc)
+        return {
+            "provider_status": {
+                "provider": "NVD",
+                "status": "degraded",
+                "error_message": str(exc),
+            }
+        }
 
 
 def run_post_edit_enrichment(

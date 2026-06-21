@@ -23,7 +23,7 @@ from typing import Any
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Path, Query, Request, Response, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import delete, func, select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -44,11 +44,8 @@ from ..idempotency import (
     run_idempotent,
 )
 from ..models import (
-    AnalysisFinding,
     AnalysisRun,
     Projects,
-    SBOMAnalysisReport,
-    SBOMComponent,
     SBOMSource,
     SBOMType,
 )
@@ -62,6 +59,7 @@ from ..schemas import (
 )
 from ..services import audit_log
 from ..services.analysis_service import compute_report_status, persist_analysis_run
+from ..services.sbom_delete_service import SBOMDeleteConflict, SBOMDeleteService
 from ..services.sbom_enrichment_service import mark_enrichment_pending, run_post_upload_enrichment
 from ..services.sbom_service import coerce_sbom_data
 from ..services.soft_delete import SoftDeleteService
@@ -115,9 +113,7 @@ def _classify_status(report: ErrorReport) -> str:
     return "failed"
 
 
-def _validation_failure_response(
-    sbom_id: int, report: ErrorReport, sbom_name: str
-) -> HTTPException:
+def _validation_failure_response(sbom_id: int, report: ErrorReport, sbom_name: str) -> HTTPException:
     """Build the structured 4xx response for a rejected upload.
 
     The ``detail`` shape mirrors ``ErrorReport.to_dict()`` plus the bits
@@ -149,11 +145,13 @@ def normalized_key(value: str | None) -> str:
 
 def upsert_components(db: Session, sbom_obj: SBOMSource, components: list[dict]) -> dict:
     from ..services.sbom_service import _upsert_components
+
     return _upsert_components(db, sbom_obj, components)
 
 
 def sync_sbom_components(db: Session, sbom_obj: SBOMSource) -> list[dict]:
-    from ..services.sbom_service import coerce_sbom_data, sync_sbom_components as service_sync_sbom_components
+    from ..services.sbom_service import sync_sbom_components as service_sync_sbom_components
+
     return service_sync_sbom_components(db, sbom_obj)
 
 
@@ -206,6 +204,7 @@ async def create_auto_report(
                 dependencies = sbom_dict.get("relationships") or []
 
         from ..services.component_deduplication_service import ComponentDeduplicationService
+
         canonical_raw, _, _, _, _ = ComponentDeduplicationService.deduplicate_components(components_raw, dependencies)
 
         components_raw = [enrich_component_for_osv(c) for c in canonical_raw]
@@ -257,7 +256,14 @@ async def create_auto_report(
         "query_errors": all_errors,
         "query_warnings": all_warnings,
         "findings": final_findings,
-        "analysis_metadata": {"sources": sources_used},
+        "analysis_metadata": {
+            "sources": sources_used,
+            "provider_status": [
+                warning["provider_status"]
+                for warning in all_warnings
+                if isinstance(warning, dict) and isinstance(warning.get("provider_status"), dict)
+            ],
+        },
     }
 
     run_status = compute_report_status(len(final_findings), all_errors)
@@ -598,7 +604,7 @@ def get_sbom_dedupe_report(
                 "duplicates_merged": 0,
                 "conflicts": [],
                 "ref_mapping": {},
-                "remapped_dependencies": {}
+                "remapped_dependencies": {},
             }
         return report
     except HTTPException:
@@ -640,7 +646,7 @@ def update_sbom(
                     raise ValueError
             except (ValueError, TypeError):
                 raise HTTPException(status_code=400, detail="Invalid project_id format")
-            
+
             project = db.get(Projects, p_id)
             if not project:
                 raise HTTPException(status_code=400, detail="Project not found")
@@ -651,11 +657,8 @@ def update_sbom(
 
         # Update project_id in related AnalysisRuns
         from sqlalchemy import update as sa_update
-        db.execute(
-            sa_update(AnalysisRun)
-            .where(AnalysisRun.sbom_id == sbom.id)
-            .values(project_id=new_proj_id)
-        )
+
+        db.execute(sa_update(AnalysisRun).where(AnalysisRun.sbom_id == sbom.id).values(project_id=new_proj_id))
 
     if "name" in data:
         sbom.sbom_name = data["name"]
@@ -692,8 +695,8 @@ def update_sbom(
                 "new_name": sbom.sbom_name,
                 "changed_by": user_id,
                 "changed_at": now_iso(),
-                "change_reason": payload.change_reason
-            }
+                "change_reason": payload.change_reason,
+            },
         )
         return sbom
     except Exception:
@@ -710,41 +713,11 @@ def sbom_delete_impact(
     sbom_id: int = Path(..., ge=1),
     db: Session = Depends(get_db),
 ):
-    """Pre-flight cascade preview for the SBOM delete confirmation modal.
-
-    Phase 4 §4.2: returns the count of dependent rows that a soft-delete
-    on this SBOM would tombstone. Counts respect Option C — only
-    currently-active rows are counted.
-    """
-    sbom = db.get(SBOMSource, sbom_id)
-    if sbom is None:
+    """Return the complete permanent-delete impact, including descendants."""
+    try:
+        return SBOMDeleteService(db).get_delete_impact(sbom_id)
+    except LookupError:
         raise HTTPException(status_code=404, detail="SBOM not found")
-
-    run_ids = (
-        db.execute(select(AnalysisRun.id).where(AnalysisRun.sbom_id == sbom_id))
-        .scalars()
-        .all()
-    )
-    components = db.execute(
-        select(func.count(SBOMComponent.id)).where(SBOMComponent.sbom_id == sbom_id)
-    ).scalar()
-    findings = (
-        db.execute(
-            select(func.count(AnalysisFinding.id)).where(
-                AnalysisFinding.analysis_run_id.in_(run_ids)
-            )
-        ).scalar()
-        if run_ids
-        else 0
-    )
-
-    return {
-        "sbom_id": sbom_id,
-        "sbom_name": sbom.sbom_name,
-        "components": int(components or 0),
-        "runs": len(run_ids),
-        "findings": int(findings or 0),
-    }
 
 
 @router.delete("/sboms/{sbom_id}", status_code=status.HTTP_200_OK)
@@ -766,7 +739,8 @@ def delete_sbom(
     if sbom_id is None or not isinstance(sbom_id, int) or sbom_id <= 0:
         raise HTTPException(status_code=400, detail="Invalid sbom_id. It must be a positive integer.")
 
-    sbom = db.get(SBOMSource, sbom_id)
+    service = SBOMDeleteService(db)
+    sbom = service.get_sbom(sbom_id)
     if not sbom:
         raise HTTPException(status_code=404, detail="SBOM not found")
 
@@ -776,7 +750,8 @@ def delete_sbom(
     if sbom.created_by and _norm(sbom.created_by) != _norm(user_id):
         raise HTTPException(status_code=403, detail="Forbidden: user cannot delete this SBOM")
 
-    if _norm(confirm) not in {"yes", "y"}:
+    confirmed = _norm(confirm) in {"yes", "y"}
+    if not confirmed and not permanent:
         return {
             "status": "pending_confirmation",
             "message": (
@@ -787,95 +762,33 @@ def delete_sbom(
             "example": f"/api/sboms/{sbom_id}?user_id={user_id}&confirm=yes",
         }
 
-    service = SoftDeleteService(db)
-
     if permanent:
         try:
-            run_ids = (
-                db.execute(
-                    select(AnalysisRun.id)
-                    .where(AnalysisRun.sbom_id == sbom_id)
-                    .execution_options(include_deleted=True)
-                )
-                .scalars()
-                .all()
-            )
-
-            if run_ids:
-                db.execute(
-                    delete(AnalysisFinding)
-                    .where(AnalysisFinding.analysis_run_id.in_(run_ids))
-                    .execution_options(synchronize_session=False)
-                )
-
-            db.execute(
-                delete(AnalysisRun).where(AnalysisRun.sbom_id == sbom_id).execution_options(synchronize_session=False)
-            )
-            db.execute(
-                delete(SBOMComponent).where(SBOMComponent.sbom_id == sbom_id).execution_options(synchronize_session=False)
-            )
-            db.execute(
-                delete(SBOMAnalysisReport)
-                .where(SBOMAnalysisReport.sbom_ref_id == sbom_id)
-                .execution_options(synchronize_session=False)
-            )
-            db.flush()
-
-            service.hard_delete(sbom)
-            db.commit()
+            return service.permanently_delete_sbom(sbom_id, user_id, confirmed)
+        except SBOMDeleteConflict as exc:
+            detail: dict[str, Any] = {
+                "code": "sbom_delete_conflict",
+                "message": exc.message,
+                "blocking_dependencies": exc.blocking_dependencies,
+            }
+            if exc.impact is not None:
+                detail["delete_impact"] = exc.impact
+            raise HTTPException(status_code=409, detail=detail)
         except Exception:
-            db.rollback()
             log.exception("permanent delete_sbom failed: sbom_id=%s user=%s", sbom_id, user_id)
             raise HTTPException(
                 status_code=500,
                 detail={"code": "internal_error", "message": "Internal server error."},
             )
 
-        audit_log.record(
-            db,
-            user_id=user_id,
-            action="sbom.permanent_delete",
-            target_kind="sbom",
-            target_id=sbom_id,
-            detail=f"runs={len(run_ids)}",
-            metadata={"run_ids": list(run_ids)},
-        )
-        return {
-            "status": "deleted",
-            "permanent": True,
-            "message": f"SBOM {sbom_id} and related data have been permanently deleted.",
-            "sbom_id": sbom_id,
-            "requested_by": user_id,
-        }
-
     try:
-        cascaded_count = service.soft_delete(sbom, user_id=user_id, cascade=True)
-        db.commit()
+        return service.soft_delete_sbom(sbom_id, user_id)
     except Exception:
-        db.rollback()
         log.exception("soft delete_sbom failed: sbom_id=%s user=%s", sbom_id, user_id)
         raise HTTPException(
             status_code=500,
             detail={"code": "internal_error", "message": "Internal server error."},
         )
-
-    audit_log.record(
-        db,
-        user_id=user_id,
-        action="sbom.soft_delete",
-        target_kind="sbom",
-        target_id=sbom_id,
-        detail=f"cascaded={cascaded_count}",
-        metadata={"cascaded_count": cascaded_count},
-    )
-    return {
-        "status": "deleted",
-        "permanent": False,
-        "cascaded_count": cascaded_count,
-        "sbom_id": sbom_id,
-        "requested_by": user_id,
-        "message": f"SBOM {sbom_id} moved to deleted (recoverable).",
-    }
 
 
 @router.post("/sboms/{sbom_id}/restore", status_code=status.HTTP_200_OK)
@@ -888,9 +801,7 @@ def restore_sbom(
     """Restore a soft-deleted SBOM. Does not cascade — children must be
     restored individually. Phase 3.4 admin recovery surface."""
     sbom = db.execute(
-        select(SBOMSource)
-        .where(SBOMSource.id == sbom_id)
-        .execution_options(include_deleted=True)
+        select(SBOMSource).where(SBOMSource.id == sbom_id).execution_options(include_deleted=True)
     ).scalar_one_or_none()
     if sbom is None:
         raise HTTPException(status_code=404, detail="SBOM not found")
@@ -1006,7 +917,8 @@ async def run_analysis_for_sbom(
     async def _execute() -> dict:
         log.info(
             "Manual analysis triggered for SBOM id=%d (force_refresh=%s)",
-            sbom_id, force_refresh,
+            sbom_id,
+            force_refresh,
         )
         sbom = db.get(SBOMSource, sbom_id)
         if not sbom:
@@ -1128,6 +1040,7 @@ async def analyze_sbom_stream(
             # streaming contract while killing the inline source-dispatch loop.
             all_findings: list[dict] = []
             all_errors: list[dict] = []
+            all_warnings: list[dict] = []
             event_queue: asyncio.Queue = asyncio.Queue()
 
             async def _drive_runner() -> None:
@@ -1141,6 +1054,7 @@ async def analyze_sbom_stream(
                 # loop below can pick them up after EVENT_DONE.
                 all_findings.extend(f)
                 all_errors.extend(e)
+                all_warnings.extend(_w)
 
             orchestrator = asyncio.create_task(_drive_runner())
 
@@ -1215,7 +1129,14 @@ async def analyze_sbom_stream(
                 "unknown": buckets["UNKNOWN"],
                 "query_errors": all_errors,
                 "findings": final_findings,
-                "analysis_metadata": {"sources": sources},
+                "analysis_metadata": {
+                    "sources": sources,
+                    "provider_status": [
+                        warning["provider_status"]
+                        for warning in all_warnings
+                        if isinstance(warning, dict) and isinstance(warning.get("provider_status"), dict)
+                    ],
+                },
             }
 
             run_status = compute_report_status(len(final_findings), all_errors)
@@ -1248,6 +1169,7 @@ async def analyze_sbom_stream(
                 "unknown": buckets["UNKNOWN"],
                 "errors": len(all_errors),
                 "duration_ms": duration_ms,
+                "provider_status": details["analysis_metadata"]["provider_status"],
             }
             if idem:
                 put_cached(f"analyze_stream:{sbom_id}", idem, complete_payload)

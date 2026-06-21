@@ -57,6 +57,7 @@ def parse_spdx_dict(doc: dict[str, Any]) -> list[dict[str, Any]]:
                 "scope": None,
                 "purl": purl,
                 "cpe": cpe,
+                "cpe_source": "sbom_provided" if cpe else None,
                 "bom_ref": norm(pkg.get("SPDXID")),
                 "license": license_str,
                 "hashes": hashes_str,
@@ -75,7 +76,9 @@ def parse_spdx_dict(doc: dict[str, Any]) -> list[dict[str, Any]]:
                     purl = norm(ref.get("referenceLocator") or ref.get("locator"))
 
             # Extract license
-            license_str = norm(obj.get("licenseConcluded")) or norm(obj.get("licenseDeclared")) or norm(obj.get("license"))
+            license_str = (
+                norm(obj.get("licenseConcluded")) or norm(obj.get("licenseDeclared")) or norm(obj.get("license"))
+            )
 
             # Extract hashes
             checksums = obj.get("checksums") or obj.get("hashes")
@@ -103,6 +106,7 @@ def parse_spdx_dict(doc: dict[str, Any]) -> list[dict[str, Any]]:
                     "scope": None,
                     "purl": purl,
                     "cpe": cpe,
+                    "cpe_source": "sbom_provided" if cpe else None,
                     "bom_ref": norm(obj.get("id") or obj.get("spdx-id")),
                     "license": license_str,
                     "hashes": hashes_str,

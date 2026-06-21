@@ -35,7 +35,7 @@ from sqlalchemy.orm import sessionmaker
 UTC = UTC
 
 
-def _minimal_sbom(name: str = "requests", version: str = "2.31.0") -> str:
+def _minimal_sbom(name: str = "requests", version: str = "2.31.0", *, trusted_cpe: bool = False) -> str:
     """A CycloneDX SBOM with one PyPI component.
 
     PyPI mapping in cpe23_from_purl is deterministic: vendor=name=name,
@@ -43,19 +43,20 @@ def _minimal_sbom(name: str = "requests", version: str = "2.31.0") -> str:
     'requests:requests'. We use that to make the seeded CPE match
     multi_source's generated CPE exactly.
     """
+    component = {
+        "type": "library",
+        "name": name,
+        "version": version,
+        "purl": f"pkg:pypi/{name}@{version}",
+    }
+    if trusted_cpe:
+        component["cpe"] = f"cpe:2.3:a:{name}:{name}:{version}:*:*:*:*:*:*:*"
     return json.dumps(
         {
             "bomFormat": "CycloneDX",
             "specVersion": "1.4",
             "version": 1,
-            "components": [
-                {
-                    "type": "library",
-                    "name": name,
-                    "version": version,
-                    "purl": f"pkg:pypi/{name}@{version}",
-                }
-            ],
+            "components": [component],
         }
     )
 
@@ -130,7 +131,7 @@ def _run_nvd_via_runner(sbom_json: str) -> tuple[list[dict], list[dict], list[di
 # --- Mirror disabled (default) → live path used ---------------------------
 
 
-def test_orchestrator_uses_live_when_mirror_disabled(
+def test_orchestrator_does_not_bypass_cache_boundary_when_mirror_disabled(
     isolated_session,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -170,10 +171,8 @@ def test_orchestrator_uses_live_when_mirror_disabled(
 
     findings, _errors, _warnings = _run_nvd_via_runner(_minimal_sbom())
 
-    # The patched live function was called with the requests CPE.
-    assert any("requests:requests" in c for c in captured), captured
-    # The fake live result flowed through the runner+adapter chain.
-    assert any(f.get("vuln_id") == "CVE-LIVE-1" for f in findings)
+    assert captured == []
+    assert not any(f.get("vuln_id") == "CVE-LIVE-1" for f in findings)
 
 
 # --- Mirror enabled, fresh, has data → mirror path used -------------------
@@ -269,7 +268,7 @@ def test_orchestrator_uses_mirror_when_enabled_and_fresh(
     monkeypatch.setattr(analysis_mod, "osv_query_by_components", _empty_pair)
     monkeypatch.setattr(analysis_mod, "github_query_by_components", _empty_pair)
 
-    findings, _errors, _warnings = _run_nvd_via_runner(_minimal_sbom())
+    findings, _errors, _warnings = _run_nvd_via_runner(_minimal_sbom(trusted_cpe=True))
 
     vuln_ids = {f.get("vuln_id") for f in findings}
     assert "CVE-MIRROR-1" in vuln_ids
@@ -280,7 +279,7 @@ def test_orchestrator_uses_mirror_when_enabled_and_fresh(
 # --- Mirror enabled, stale → live + warning -------------------------------
 
 
-def test_orchestrator_falls_back_to_live_when_mirror_stale(
+def test_orchestrator_does_not_fall_back_per_cpe_when_mirror_stale(
     isolated_session,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -334,9 +333,7 @@ def test_orchestrator_falls_back_to_live_when_mirror_stale(
 
     _run_nvd_via_runner(_minimal_sbom())
 
-    # Stale path: live was called (the warning log was checked in the
-    # port-based facade tests).
-    assert len(captured) >= 1
+    assert captured == []
 
 
 # --- session-scoped wrapper -----------------------------------------------

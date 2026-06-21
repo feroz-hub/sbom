@@ -44,7 +44,7 @@ def parse_cyclonedx_dict(doc: dict[str, Any]) -> list[dict[str, Any]]:
                 license_str = licenses.get("expression")
         elif isinstance(licenses, str):
             license_str = licenses
-            
+
         if not license_str and c.get("license"):
             license_str = str(c.get("license"))
 
@@ -80,6 +80,7 @@ def parse_cyclonedx_dict(doc: dict[str, Any]) -> list[dict[str, Any]]:
                 "scope": norm(c.get("scope")),
                 "purl": norm(c.get("purl")),
                 "cpe": norm(c.get("cpe")),
+                "cpe_source": "sbom_provided" if norm(c.get("cpe")) else None,
                 "bom_ref": norm(c.get("bom-ref") or c.get("bomRef")),
                 "license": norm(license_str),
                 "hashes": norm(hashes_str),
@@ -118,7 +119,7 @@ def parse_cyclonedx_xml(xml_string: str) -> list[dict[str, Any]]:
                 cpe = norm(c.get("cpe"))
             supplier_raw = c.get("supplier") or {}
             supplier = norm(supplier_raw.get("name") if isinstance(supplier_raw, dict) else supplier_raw)
-            
+
             # Licenses in xmltodict
             licenses_raw = c.get("licenses") or {}
             license_list = licenses_raw.get("license", []) if isinstance(licenses_raw, dict) else []
@@ -168,6 +169,7 @@ def parse_cyclonedx_xml(xml_string: str) -> list[dict[str, Any]]:
                     "scope": norm(c.get("@scope")),
                     "purl": purl,
                     "cpe": cpe,
+                    "cpe_source": "sbom_provided" if cpe else None,
                     "bom_ref": norm(c.get("@bom-ref")),
                     "license": norm(license_str),
                     "hashes": norm(hashes_str),
@@ -194,7 +196,7 @@ def parse_cyclonedx_xml(xml_string: str) -> list[dict[str, Any]]:
         name_el = comp.find("cdx:name", ns)
         ver_el = comp.find("cdx:version", ns)
         grp_el = comp.find("cdx:group", ns)
-        
+
         # Extract licenses using ElementTree
         lic_names = []
         licenses_el = comp.find("cdx:licenses", ns)
@@ -234,6 +236,7 @@ def parse_cyclonedx_xml(xml_string: str) -> list[dict[str, Any]]:
                 "scope": norm(comp.get("scope")),
                 "purl": norm(purl_el.text if purl_el is not None else None),
                 "cpe": norm(cpe_el.text if cpe_el is not None else None),
+                "cpe_source": "sbom_provided" if cpe_el is not None and norm(cpe_el.text) else None,
                 "bom_ref": norm(comp.get("bom-ref")),
                 "license": norm(license_str),
                 "hashes": norm(hashes_str),

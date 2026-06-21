@@ -14,8 +14,8 @@ from sqlalchemy.orm import Session
 
 from ..analysis import extract_components
 from ..models import SBOMComponent, SBOMSource
-from ..schemas import SBOMComponentListItem, SBOMComponentListResponse
 from ..parsing import detect_sbom_format
+from ..schemas import SBOMComponentListItem, SBOMComponentListResponse
 
 log = logging.getLogger(__name__)
 
@@ -135,8 +135,9 @@ def sync_sbom_components(db: Session, sbom_obj: SBOMSource) -> list[dict]:
 
     from .component_deduplication_service import ComponentDeduplicationService
 
-    canonical_components, duplicate_components, _, dedupe_report, _ = \
+    canonical_components, duplicate_components, _, dedupe_report, _ = (
         ComponentDeduplicationService.deduplicate_components(components, dependencies)
+    )
 
     # Save dedupe report to SBOMSource
     sbom_obj.dedupe_report_json = dedupe_report
@@ -148,10 +149,7 @@ def sync_sbom_components(db: Session, sbom_obj: SBOMSource) -> list[dict]:
 
 
 def _upsert_components(
-    db: Session,
-    sbom_obj: SBOMSource,
-    canonical_components: list[dict],
-    duplicate_components: list[dict] | None = None
+    db: Session, sbom_obj: SBOMSource, canonical_components: list[dict], duplicate_components: list[dict] | None = None
 ) -> dict:
     """
     Internal: Upsert components into the database, avoiding duplicates.
@@ -169,8 +167,9 @@ def _upsert_components(
 
     if duplicate_components is None:
         # Backward compatibility path: deduplicate components internally
-        canonical_components, duplicate_components, _, _, _ = \
-            ComponentDeduplicationService.deduplicate_components(canonical_components, [])
+        canonical_components, duplicate_components, _, _, _ = ComponentDeduplicationService.deduplicate_components(
+            canonical_components, []
+        )
 
     existing_rows = db.execute(select(SBOMComponent).where(SBOMComponent.sbom_id == sbom_obj.id)).scalars().all()
 
@@ -202,6 +201,7 @@ def _upsert_components(
 
         version = (comp.get("version") or "").strip() or None
         cpe = (comp.get("cpe") or "").strip() or None
+        cpe_source = (comp.get("cpe_source") or "").strip() or None
         triplet = (normalized_key(cpe), normalized_key(name), normalized_key(version))
         ref = (comp.get("bom_ref") or "").strip() or None
 
@@ -209,6 +209,7 @@ def _upsert_components(
         if ref and ref in by_bom_ref:
             row = by_bom_ref[ref]
             row.is_duplicate = is_dup
+            row.cpe_source = cpe_source
             row.duplicate_of_component_id = dup_of_id
             row.normalized_component_key = get_component_identity_key(comp)
             db.add(row)
@@ -224,6 +225,7 @@ def _upsert_components(
             )
             if backfill_target is not None:
                 backfill_target.cpe = cpe
+                backfill_target.cpe_source = cpe_source
                 backfill_target.is_duplicate = False
                 backfill_target.normalized_component_key = get_component_identity_key(comp)
                 db.add(backfill_target)
@@ -246,6 +248,7 @@ def _upsert_components(
             version=version,
             purl=(comp.get("purl") or "").strip() or None,
             cpe=cpe,
+            cpe_source=cpe_source,
             supplier=(comp.get("supplier") or "").strip() or None,
             scope=(comp.get("scope") or "").strip() or None,
             license=(comp.get("license") or "").strip() or None,
@@ -434,10 +437,7 @@ def list_sbom_components(
         or 0
     )
     unique_count = int(
-        db.scalar(
-            select(func.count(SBOMComponent.id)).where(sbom_clause, _canonical_only_clause())
-        )
-        or 0
+        db.scalar(select(func.count(SBOMComponent.id)).where(sbom_clause, _canonical_only_clause())) or 0
     )
     total_count = unique_count + duplicate_count
 
@@ -473,9 +473,7 @@ def list_sbom_components(
     )
     rows = db.execute(stmt).scalars().all()
 
-    canonical_rows = db.execute(
-        select(SBOMComponent).where(sbom_clause, _canonical_only_clause())
-    ).scalars().all()
+    canonical_rows = db.execute(select(SBOMComponent).where(sbom_clause, _canonical_only_clause())).scalars().all()
     canonical_by_id = {row.id: row for row in canonical_rows}
 
     items: list[SBOMComponentListItem] = []
@@ -488,9 +486,8 @@ def list_sbom_components(
             if parent is not None:
                 canonical_name = parent.name
                 canonical_version = parent.version
-            duplicate_reason = (
-                "Duplicate SBOM component entry merged into the canonical component"
-                + (f" ({row.normalized_component_key})" if row.normalized_component_key else "")
+            duplicate_reason = "Duplicate SBOM component entry merged into the canonical component" + (
+                f" ({row.normalized_component_key})" if row.normalized_component_key else ""
             )
 
         payload = SBOMComponentListItem.model_validate(row, from_attributes=True)

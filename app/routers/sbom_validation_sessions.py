@@ -11,11 +11,11 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..models import SBOMValidationSession
 from ..schemas import SBOMSourceOut
+from ..services.sbom_enrichment_service import run_post_upload_enrichment
 from ..services.validation_repair_service import (
     ValidationRepairService,
     session_to_dict,
 )
-from ..services.sbom_enrichment_service import run_post_upload_enrichment
 
 router = APIRouter(prefix="/api/sbom-validation-sessions", tags=["sbom-validation-sessions"])
 

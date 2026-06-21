@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import Any
 
 from .base import VulnSource
 from .ghsa import GhsaSource
@@ -58,11 +57,13 @@ def build_source_adapters(sources: Iterable[str]) -> list[VulnSource]:
 
     facade = build_nvd_lookup_for_pipeline()
 
-    def _nvd_lookup(cpe: str, api_key: str | None, settings: Any) -> list[dict]:
-        return facade.query_legacy(cpe, api_key=api_key, settings=settings)
+    def _mirror_cache_only(cpe: str):
+        return facade.query_cached_only(cpe)
+
+    _mirror_cache_only.cache_only = True  # type: ignore[attr-defined]
 
     factories = {
-        "NVD": lambda: NvdSource(api_key=nvd_api_key_for_adapters(), lookup_service=_nvd_lookup),
+        "NVD": lambda: NvdSource(api_key=nvd_api_key_for_adapters(), lookup_service=_mirror_cache_only),
         "OSV": OsvSource,
         "GITHUB": lambda: GhsaSource(token=github_token_for_adapters()),
         "VULNDB": lambda: VulnDbSource(api_key=vulndb_api_key_for_adapters()),

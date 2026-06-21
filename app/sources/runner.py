@@ -77,7 +77,11 @@ async def run_sources_concurrently(
         if progress_queue is not None:
             await progress_queue.put({"kind": EVENT_RUNNING, "source": source.name})
         try:
-            result = await source.query(components, settings)
+            query_with_vulnerabilities = getattr(source, "query_with_vulnerabilities", None)
+            if query_with_vulnerabilities is not None:
+                result = await query_with_vulnerabilities(components, list(all_findings), settings)
+            else:
+                result = await source.query(components, settings)
             elapsed_ms = int((time.perf_counter() - src_start) * 1000)
             findings = list(result.get("findings", []))
             errors = list(result.get("errors", []))
@@ -110,10 +114,16 @@ async def run_sources_concurrently(
                 )
 
     try:
+        # Fast providers run first. NVD then enriches their known CVE IDs in
+        # bounded cveIds batches instead of racing them with per-CPE calls.
+        nvd_sources = [src for src in sources if src.name.upper() == "NVD"]
+        fast_sources = [src for src in sources if src.name.upper() != "NVD"]
         await asyncio.gather(
-            *(_run_one(src) for src in sources),
+            *(_run_one(src) for src in fast_sources),
             return_exceptions=False,
         )
+        for source in nvd_sources:
+            await _run_one(source)
     finally:
         if progress_queue is not None:
             await progress_queue.put({"kind": EVENT_DONE})

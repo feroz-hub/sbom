@@ -21,7 +21,7 @@ class _Resp:
         return self._data
 
 
-def test_nvd_cve_id_uses_cve_id_param(monkeypatch):
+def test_nvd_cve_id_uses_cve_ids_param(monkeypatch):
     import app.analysis as analysis_mod
 
     calls: list[dict] = []
@@ -40,7 +40,7 @@ def test_nvd_cve_id_uses_cve_id_param(monkeypatch):
 
     assert out == []
     assert len(calls) == 1
-    assert calls[0].get("cveId") == "CVE-2025-7546"
+    assert calls[0].get("cveIds") == "CVE-2025-7546"
     assert "cpeName" not in calls[0]
 
 
@@ -144,13 +144,13 @@ async def test_analysis_continues_when_nvd_fails(monkeypatch):
     )
 
     assert any(f.get("vuln_id") == "OSV-CONTINUES" for f in findings)
-    assert any(e.get("source") == "NVD" for e in errors)
-    assert calls == 1, "SSL failure should short-circuit further NVD lookups"
+    assert not any(e.get("source") == "NVD" for e in errors)
+    assert calls == 0, "untrusted CPEs must never reach any NVD transport"
 
 
 @pytest.mark.asyncio
-async def test_nvd_components_async_routes_cve_in_cpe_field(monkeypatch):
-    """Malformed SBOMs may put a CVE id in the cpe field — route to cveId."""
+async def test_nvd_components_async_skips_cve_in_cpe_field(monkeypatch):
+    """A malformed CPE field is not a trusted CVE enrichment source."""
     import app.analysis as analysis_mod
 
     captured: list[dict] = []
@@ -177,4 +177,4 @@ async def test_nvd_components_async_routes_cve_in_cpe_field(monkeypatch):
 
     assert findings == []
     assert errors == []
-    assert captured == [{"identifier": "CVE-2025-7546"}]
+    assert captured == []

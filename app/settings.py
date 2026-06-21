@@ -38,6 +38,23 @@ class Settings(BaseSettings):
 
     # API Keys and Credentials
     nvd_api_key: str = Field(default="", description="NVD API key for enhanced rate limits")
+    nvd_enabled: bool = Field(default=True, description="Enable optional NVD enrichment")
+    nvd_base_url: str = Field(
+        default="https://services.nvd.nist.gov/rest/json/cves/2.0",
+        description="NVD CVE API 2.0 endpoint",
+    )
+    nvd_connect_timeout_seconds: float = Field(default=5.0, ge=0.1)
+    nvd_read_timeout_seconds: float = Field(default=20.0, ge=0.1)
+    nvd_failure_threshold: int = Field(default=3, ge=1)
+    nvd_max_cpe_lookups_per_scan: int = Field(default=10, ge=0)
+    nvd_max_cve_batches_per_scan: int = Field(default=3, ge=0)
+    nvd_cve_batch_size: int = Field(default=100, ge=1, le=100)
+    nvd_failure_cache_ttl_minutes: int = Field(default=60, ge=1)
+    nvd_success_cache_ttl_hours: int = Field(default=24, ge=1)
+    nvd_no_result_cache_ttl_hours: int = Field(default=24, ge=1)
+    nvd_min_delay_without_api_key_seconds: float = Field(default=6.0, ge=0.0)
+    nvd_min_delay_with_api_key_seconds: float = Field(default=1.0, ge=0.0)
+    nvd_background_enrichment: bool = Field(default=True)
     github_token: str = Field(default="", description="GitHub token for GraphQL API access")
     vulndb_api_key: str = Field(default="", description="VulDB API key for VulnDB/VulDB vulnerability lookups")
 

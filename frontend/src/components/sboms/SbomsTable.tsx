@@ -14,7 +14,7 @@ import { SkeletonRow } from '@/components/ui/Spinner';
 import { Pagination } from '@/components/ui/Pagination';
 import { SbomStatusBadge } from '@/components/sboms/SbomStatusBadge';
 import { PinButton } from '@/components/ui/PinButton';
-import { deleteSbom, getSbomDeleteImpact } from '@/lib/api';
+import { deleteSbom, getSbomDeleteImpact, HttpError } from '@/lib/api';
 import { matchesMultiField } from '@/lib/tableFilters';
 import { formatDate } from '@/lib/utils';
 import { useToast } from '@/hooks/useToast';
@@ -22,9 +22,10 @@ import { useTableSort } from '@/hooks/useTableSort';
 import { usePagination } from '@/hooks/usePagination';
 import {
   invalidateDashboardTiles,
-  invalidateProjectLists,
+  invalidateProjectSurfaces,
   invalidateRunLists,
-  invalidateSbomLists,
+  invalidateScheduleLists,
+  invalidateSbomSurfaces,
 } from '@/lib/queryInvalidation';
 import { sbomAnalysisShortLabel } from '@/lib/analysisRunStatusLabels';
 import { stageLabel, validationStatusMeta } from '@/lib/sbomValidation';
@@ -114,10 +115,12 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
       sbom: SBOMSource;
       permanent: boolean;
     }) => deleteSbom(sbom.id, sbom.created_by ?? '', { permanent }),
-    onSuccess: (_data, { permanent }) => {
-      invalidateSbomLists(queryClient);
-      invalidateProjectLists(queryClient);
+    retry: false,
+    onSuccess: (_data, { permanent, sbom }) => {
+      invalidateSbomSurfaces(queryClient, sbom.id);
+      invalidateProjectSurfaces(queryClient, sbom.projectid);
       invalidateRunLists(queryClient);
+      invalidateScheduleLists(queryClient);
       invalidateDashboardTiles(queryClient);
       showToast(
         permanent ? 'SBOM permanently deleted' : 'SBOM moved to deleted',
@@ -126,7 +129,10 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
       setDeleteTarget(null);
     },
     onError: (err: Error) => {
-      showToast(`Delete failed: ${err.message}`, 'error');
+      const prefix = err instanceof HttpError && err.status === 409
+        ? 'Cannot delete SBOM'
+        : 'Delete failed';
+      showToast(`${prefix}: ${err.message}`, 'error');
     },
   });
 
@@ -441,12 +447,29 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
         loading={deleteMutation.isPending}
         recordName={deleteTarget?.sbom_name ?? ''}
         recordKind="SBOM"
+        allowPermanent={impactQuery.data?.can_delete ?? false}
+        permanentBlockedReason={
+          impactQuery.isError
+            ? 'Permanent deletion is unavailable because delete impact could not be loaded.'
+            : impactQuery.data && !impactQuery.data.can_delete
+              ? impactQuery.data.warnings.join(' ')
+              : impactQuery.isLoading
+                ? 'Checking permanent-delete dependencies…'
+                : undefined
+        }
         cascadeImpact={
           impactQuery.data
             ? [
-                { label: 'component', count: impactQuery.data.components },
-                { label: 'run', count: impactQuery.data.runs },
-                { label: 'finding', count: impactQuery.data.findings },
+                { label: 'component', count: impactQuery.data.dependent_counts.components },
+                { label: 'analysis run', count: impactQuery.data.dependent_counts.analysis_runs },
+                { label: 'vulnerability finding', count: impactQuery.data.dependent_counts.vulnerabilities },
+                { label: 'validation report', count: impactQuery.data.dependent_counts.validation_reports },
+                { label: 'validation session', count: impactQuery.data.dependent_counts.validation_sessions },
+                { label: 'VEX document', count: impactQuery.data.dependent_counts.vex_documents },
+                { label: 'VEX statement', count: impactQuery.data.dependent_counts.vex_statements },
+                { label: 'schedule', count: impactQuery.data.dependent_counts.schedules },
+                { label: 'version', count: impactQuery.data.dependent_counts.versions },
+                { label: 'derived SBOM', count: impactQuery.data.dependent_counts.derived_sboms },
               ]
             : []
         }

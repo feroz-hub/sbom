@@ -672,7 +672,6 @@ _LEGACY_DIRECT_QUERY_ALLOWLIST: frozenset[str] = frozenset(
         "app/routers/runs.py",
         "app/routers/analysis.py",
         "app/routers/ai_fixes.py",
-        "app/routers/sboms_crud.py",
         "app/routers/sbom.py",
         "app/routers/projects.py",
         "app/routers/pdf.py",

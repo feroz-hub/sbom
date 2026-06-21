@@ -54,6 +54,7 @@ def test_nvd_source_routes_through_lookup_service_when_provided(monkeypatch):
             "name": "x",
             "version": "1.0",
             "cpe": "cpe:2.3:a:x:x:1.0:*:*:*:*:*:*:*",
+            "cpe_source": "sbom_provided",
         }
     ]
 
@@ -75,9 +76,8 @@ def test_nvd_source_routes_through_lookup_service_when_provided(monkeypatch):
     ), f"lookup result did not flow through to findings: {result['findings']!r}"
 
 
-def test_nvd_source_falls_back_to_live_when_lookup_service_is_none(monkeypatch):
-    """Without a lookup_service, NvdSource hits live NVD via
-    nvd_query_by_components_async — preserves the pre-R6 default."""
+def test_nvd_source_does_not_send_unknown_cpe_live(monkeypatch):
+    """Without trusted provenance, a direct source call remains cache-safe."""
     import app.analysis as analysis_mod
     from app.sources.nvd import NvdSource
 
@@ -101,6 +101,4 @@ def test_nvd_source_falls_back_to_live_when_lookup_service_is_none(monkeypatch):
     src = NvdSource(api_key="fake")  # no lookup_service
     asyncio.run(src.query(components, cfg))
 
-    assert live_calls == [components[0]["cpe"]], (
-        f"live path was not consulted: {live_calls!r}"
-    )
+    assert live_calls == []

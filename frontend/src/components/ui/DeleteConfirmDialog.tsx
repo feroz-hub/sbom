@@ -50,6 +50,8 @@ export interface DeleteConfirmDialogProps {
    * surfaces (none today) where permanent delete is disallowed.
    */
   allowPermanent?: boolean;
+  /** Explanation shown when permanent deletion is unavailable. */
+  permanentBlockedReason?: string;
   /** Override the title; defaults to ``Delete <recordKind>?``. */
   title?: string;
 }
@@ -79,6 +81,7 @@ export function DeleteConfirmDialog({
   recordKind,
   cascadeImpact = [],
   allowPermanent = true,
+  permanentBlockedReason,
   title,
 }: DeleteConfirmDialogProps) {
   const [mode, setMode] = useState<'soft' | 'permanent'>('soft');
@@ -281,6 +284,12 @@ export function DeleteConfirmDialog({
             </div>
           ) : null}
         </fieldset>
+
+        {!allowPermanent && permanentBlockedReason ? (
+          <p className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
+            {permanentBlockedReason}
+          </p>
+        ) : null}
 
         {/* sr-only summary for the dialog's aria-describedby */}
         {hasImpact ? (

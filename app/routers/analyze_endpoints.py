@@ -143,7 +143,7 @@ async def _run_legacy_analysis(
     started_at = time.perf_counter()
 
     cfg = get_analysis_settings_multi()
-    raw_findings, query_errors, _query_warnings = await run_sources_concurrently(
+    raw_findings, query_errors, query_warnings = await run_sources_concurrently(
         sources=adapters,
         components=components,
         settings=cfg,
@@ -168,7 +168,14 @@ async def _run_legacy_analysis(
         "unknown": buckets["UNKNOWN"],
         "query_errors": query_errors,
         "findings": final_findings,
-        "analysis_metadata": {"sources": sources_list},
+        "analysis_metadata": {
+            "sources": sources_list,
+            "provider_status": [
+                warning["provider_status"]
+                for warning in query_warnings
+                if isinstance(warning, dict) and isinstance(warning.get("provider_status"), dict)
+            ],
+        },
     }
 
     run_status = compute_report_status(len(final_findings), query_errors)
@@ -234,6 +241,11 @@ async def _run_legacy_analysis(
         "low_count": buckets["LOW"],
         "unknown_count": buckets["UNKNOWN"],
         "query_error_count": len(query_errors),
+        **(
+            {"provider_status": details["analysis_metadata"]["provider_status"]}
+            if details["analysis_metadata"]["provider_status"]
+            else {}
+        ),
         # Legacy compatibility blocks (read by useBackgroundAnalysis.ts:65)
         "sbom": {
             "id": sbom_row.id,

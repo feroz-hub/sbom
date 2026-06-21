@@ -7,8 +7,8 @@ ingest or lifecycle enrichment.
 
 from __future__ import annotations
 
-import json
 import ipaddress
+import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime

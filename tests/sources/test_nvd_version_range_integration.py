@@ -171,10 +171,9 @@ def test_flag_on_keeps_and_node_with_ambiguous_tag() -> None:
     ]
     result = _run_query(components, raw_cves=[raw], range_filter_on=True)
 
-    assert len(result["findings"]) == 1
-    f = result["findings"][0]
-    assert f["match_reason"] == "and_node_ambiguous"
-    assert f["matched_range"] is None
+    # Placeholder/example CPE tokens are never submitted, even to an
+    # injected lookup service.
+    assert result["findings"] == []
 
 
 # ---------------------------------------------------------------------------

@@ -438,6 +438,39 @@ export interface SbomDeleteImpact {
   components: number;
   runs: number;
   findings: number;
+  can_delete: boolean;
+  requires_confirmation: boolean;
+  dependent_counts: {
+    components: number;
+    analysis_runs: number;
+    vulnerabilities: number;
+    remediations: number;
+    validation_reports: number;
+    validation_sessions: number;
+    validation_events: number;
+    vex_documents: number;
+    vex_statements: number;
+    schedules: number;
+    versions: number;
+    derived_sboms: number;
+    lifecycle_override_audits: number;
+    vex_override_audits: number;
+    ai_fix_batches: number;
+    run_cache_rows: number;
+    compare_cache_rows: number;
+  };
+  table_counts: Record<string, number>;
+  blocking_dependencies: Record<string, number>;
+  child_sbom_ids: number[];
+  child_sboms: Array<{
+    sbom_id: number;
+    sbom_name: string;
+    parent_id: number | null;
+    source_sbom_id: number | null;
+    converted_sbom_id: number | null;
+  }>;
+  warnings: string[];
+  delete_order: string[];
 }
 
 export function getSbomDeleteImpact(id: number, signal?: AbortSignal) {

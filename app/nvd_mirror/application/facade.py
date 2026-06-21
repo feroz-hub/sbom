@@ -220,6 +220,25 @@ class SessionScopedNvdLookupService:
         finally:
             session.close()
 
+    def query_cached_only(self, cpe23: str) -> list[dict[str, Any]] | None:
+        """Read a fresh mirror hit without ever falling back to live NVD."""
+
+        session = self._session_factory()
+        try:
+            settings_repo = SqlAlchemySettingsRepository(
+                session, self._secrets, env_defaults=self._env_defaults
+            )
+            snapshot = settings_repo.load()
+            if not snapshot.enabled:
+                session.commit()
+                return None
+            if not compute_freshness(snapshot, self._clock.now()).is_fresh:
+                return None
+            records = list(SqlAlchemyCveRepository(session).find_by_cpe(cpe23))
+            return [dict(record.raw) for record in records] or None
+        finally:
+            session.close()
+
 
 # ---------------------------------------------------------------------------
 # Production builder
