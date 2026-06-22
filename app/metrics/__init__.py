@@ -33,6 +33,8 @@ from .findings import (
     findings_latest_per_sbom_fix_available,
     findings_latest_per_sbom_severity_distribution,
     findings_latest_per_sbom_total,
+    findings_with_components_for_run,
+    latest_successful_run_for_sbom,
 )
 from .forecast import findings_forecast, linear_fit, velocity_anomaly
 from .health import health_completeness_average, health_missing_metadata_count, health_outdated_components_count
@@ -89,6 +91,8 @@ __all__ = [
     "findings_distinct_lifetime",
     "findings_distinct_active_as_of",
     "findings_daily_distinct_active",
+    "findings_with_components_for_run",
+    "latest_successful_run_for_sbom",
     # kev
     "findings_kev_in_scope",
     # epss / quality / age

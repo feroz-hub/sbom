@@ -914,6 +914,14 @@ export function exportSbomDocument(
   return downloadBinary(`/api/sboms/${sbomId}/export${suffix}`, `sbom_${sbomId}.json`, signal);
 }
 
+export function exportSbomVulnerabilityExcel(sbomId: number, signal?: AbortSignal) {
+  return downloadBinary(
+    `/api/sboms/${sbomId}/reports/vulnerabilities.xlsx`,
+    `sbom-${sbomId}-vulnerability-report.xlsx`,
+    signal,
+  );
+}
+
 /**
  * Re-run the 8-stage validator against the stored SBOM body and persist
  * the outcome on the row. Used by the "Run validation" affordance on

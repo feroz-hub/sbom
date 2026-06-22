@@ -11,7 +11,7 @@ from io import BytesIO
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -25,6 +25,10 @@ from ..services.sbom_conversion_service import (
     run_post_conversion_enrichment,
 )
 from ..services.sbom_enrichment_service import run_post_edit_enrichment
+from ..services.sbom_vulnerability_excel_report_service import (
+    SbomNotFoundError,
+    SbomVulnerabilityExcelReportService,
+)
 from ..services.version_control_service import compare_versions, edit_sbom, restore_version
 from ..validation import run as run_validation
 
@@ -32,6 +36,8 @@ log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/sboms", tags=["sbom-versions"])
 _security_role = Depends(require_roles("admin", "security"))
+
+EXCEL_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
 def _root_for_lineage(db: Session, sbom: SBOMSource) -> SBOMSource:
@@ -522,6 +528,35 @@ def get_conversion_report(id: int, db: Session = Depends(get_db)):
         component_mapping=report.get("component_mapping") or {},
         relationship_mapping=report.get("relationship_mapping") or [],
         conversion_report=report,
+    )
+
+
+@router.get("/{sbom_id}/reports/vulnerabilities.xlsx")
+def export_sbom_vulnerabilities_excel(
+    sbom_id: int,
+    include_duplicates: bool = Query(False),
+    severity: str | None = Query(None),
+    package_name: str | None = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Export the SBOM's latest stored vulnerability findings as Excel."""
+    service = SbomVulnerabilityExcelReportService(db)
+    try:
+        sbom = service.get_sbom(sbom_id)
+        content = service.generate(
+            sbom,
+            include_duplicates=include_duplicates,
+            severity=severity,
+            package_name=package_name,
+        )
+    except SbomNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+    filename = f"sbom-{sbom_id}-vulnerability-report.xlsx"
+    return StreamingResponse(
+        BytesIO(content),
+        media_type=EXCEL_MEDIA_TYPE,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

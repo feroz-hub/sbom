@@ -40,6 +40,7 @@ import {
   exportSbomVexReportCsv,
   exportSbomVexReportJson,
   exportSbomVexReportPack,
+  exportSbomVulnerabilityExcel,
   getVexOverrideHistory,
   getSbomVexStatements,
   overrideVexStatement,
@@ -841,6 +842,15 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                     ? 'Export Original SPDX'
                     : 'Export CycloneDX'}
                 </a>
+                <Button
+                  onClick={() =>
+                    handleDownload('vulnerability Excel', () => exportSbomVulnerabilityExcel(sbom.id))
+                  }
+                  variant="outline"
+                  size="sm"
+                >
+                  <Download className="h-3.5 w-3.5" /> Export Vulnerability Excel
+                </Button>
                 <Button
                   onClick={handleRunAnalysis}
                   loading={isAnalyzing}

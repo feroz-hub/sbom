@@ -8,10 +8,10 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import UTC, date, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from ..models import AnalysisFinding, AnalysisRun
+from ..models import AnalysisFinding, AnalysisRun, SBOMComponent
 from ._helpers import (
     finding_key,
     latest_run_per_sbom_as_of_subquery,
@@ -19,6 +19,44 @@ from ._helpers import (
 )
 from .base import COMPLETED_RUN_STATUSES, SEVERITY_KEYS, TrendPoint
 from .cache import memoize_with_ttl
+
+
+def latest_successful_run_for_sbom(db: Session, *, sbom_id: int) -> AnalysisRun | None:
+    """Return the latest completed stored analysis run for one SBOM."""
+    return db.execute(
+        select(AnalysisRun)
+        .where(AnalysisRun.sbom_id == sbom_id)
+        .where(AnalysisRun.is_active.is_(True))
+        .where(AnalysisRun.run_status.in_((*COMPLETED_RUN_STATUSES, "PASS", "FAIL")))
+        .order_by(AnalysisRun.id.desc())
+    ).scalars().first()
+
+
+def findings_with_components_for_run(
+    db: Session,
+    *,
+    run_id: int,
+    include_duplicates: bool = False,
+) -> list[tuple[AnalysisFinding, SBOMComponent | None]]:
+    """Load active finding/component pairs for an export without provider I/O."""
+    statement = (
+        select(AnalysisFinding, SBOMComponent)
+        .outerjoin(SBOMComponent, AnalysisFinding.component_id == SBOMComponent.id)
+        .where(AnalysisFinding.analysis_run_id == run_id)
+        .where(AnalysisFinding.is_active.is_(True))
+        .where(
+            or_(
+                AnalysisFinding.component_id.is_(None),
+                SBOMComponent.is_active.is_(True),
+            )
+        )
+        .order_by(AnalysisFinding.id)
+    )
+    if not include_duplicates:
+        statement = statement.where(
+            or_(SBOMComponent.id.is_(None), SBOMComponent.is_duplicate.is_(False))
+        )
+    return list(db.execute(statement).all())
 
 # ---------------------------------------------------------------------------
 # Single run — Convention A, scope=run
