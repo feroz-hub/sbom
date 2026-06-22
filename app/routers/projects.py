@@ -260,6 +260,7 @@ def delete_project(
         # fix batches do), so we walk the tree manually. Mirrors the
         # SBOM hard-delete pattern in sboms_crud.py.
         try:
+            tenant_id = project.tenant_id
             sbom_ids = (
                 db.execute(
                     select(SBOMSource.id)
@@ -281,28 +282,34 @@ def delete_project(
             if run_ids:
                 db.execute(
                     delete(AnalysisFinding)
-                    .where(AnalysisFinding.analysis_run_id.in_(run_ids))
+                    .where(
+                        AnalysisFinding.analysis_run_id.in_(run_ids),
+                        AnalysisFinding.tenant_id == tenant_id,
+                    )
                     .execution_options(synchronize_session=False)
                 )
                 db.execute(
                     delete(AnalysisRun)
-                    .where(AnalysisRun.id.in_(run_ids))
+                    .where(AnalysisRun.id.in_(run_ids), AnalysisRun.tenant_id == tenant_id)
                     .execution_options(synchronize_session=False)
                 )
             if sbom_ids:
                 db.execute(
                     delete(SBOMComponent)
-                    .where(SBOMComponent.sbom_id.in_(sbom_ids))
+                    .where(SBOMComponent.sbom_id.in_(sbom_ids), SBOMComponent.tenant_id == tenant_id)
                     .execution_options(synchronize_session=False)
                 )
                 db.execute(
                     delete(SBOMAnalysisReport)
-                    .where(SBOMAnalysisReport.sbom_ref_id.in_(sbom_ids))
+                    .where(
+                        SBOMAnalysisReport.sbom_ref_id.in_(sbom_ids),
+                        SBOMAnalysisReport.tenant_id == tenant_id,
+                    )
                     .execution_options(synchronize_session=False)
                 )
                 db.execute(
                     delete(SBOMSource)
-                    .where(SBOMSource.id.in_(sbom_ids))
+                    .where(SBOMSource.id.in_(sbom_ids), SBOMSource.tenant_id == tenant_id)
                     .execution_options(synchronize_session=False)
                 )
             db.flush()

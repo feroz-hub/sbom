@@ -103,11 +103,15 @@ class SBOMDeleteService:
 
     def __init__(self, db: Session):
         self.db = db
+        self._tenant_id: int | None = None
 
     def get_sbom(self, sbom_id: int) -> SBOMSource | None:
-        return self.db.execute(
+        row = self.db.execute(
             select(SBOMSource).where(SBOMSource.id == sbom_id).execution_options(include_deleted=True)
         ).scalar_one_or_none()
+        if row is not None:
+            self._tenant_id = row.tenant_id
+        return row
 
     def get_delete_impact(self, sbom_id: int) -> dict[str, Any]:
         sbom = self.get_sbom(sbom_id)
@@ -335,13 +339,19 @@ class SBOMDeleteService:
             if run_ids:
                 self.db.execute(
                     update(AnalysisSchedule)
-                    .where(AnalysisSchedule.last_run_id.in_(run_ids))
+                    .where(
+                        AnalysisSchedule.last_run_id.in_(run_ids),
+                        AnalysisSchedule.tenant_id == self._tenant_id,
+                    )
                     .values(last_run_id=None)
                     .execution_options(synchronize_session=False)
                 )
                 self.db.execute(
                     delete(CompareCache)
-                    .where(or_(CompareCache.run_a_id.in_(run_ids), CompareCache.run_b_id.in_(run_ids)))
+                    .where(
+                        CompareCache.tenant_id == self._tenant_id,
+                        or_(CompareCache.run_a_id.in_(run_ids), CompareCache.run_b_id.in_(run_ids)),
+                    )
                     .execution_options(synchronize_session=False)
                 )
             self._delete(RunCache, RunCache.sbom_id.in_(tree_ids))
@@ -360,6 +370,7 @@ class SBOMDeleteService:
                     .where(
                         SBOMComponent.duplicate_of_component_id.in_(component_ids),
                         SBOMComponent.sbom_id.not_in(tree_ids),
+                        SBOMComponent.tenant_id == self._tenant_id,
                     )
                     .values(duplicate_of_component_id=None)
                     .execution_options(synchronize_session=False)
@@ -370,19 +381,31 @@ class SBOMDeleteService:
             # tree before deleting the tree itself.
             self.db.execute(
                 update(SBOMSource)
-                .where(SBOMSource.id.not_in(tree_ids), SBOMSource.parent_id.in_(tree_ids))
+                .where(
+                    SBOMSource.id.not_in(tree_ids),
+                    SBOMSource.parent_id.in_(tree_ids),
+                    SBOMSource.tenant_id == self._tenant_id,
+                )
                 .values(parent_id=None)
                 .execution_options(synchronize_session=False)
             )
             self.db.execute(
                 update(SBOMSource)
-                .where(SBOMSource.id.not_in(tree_ids), SBOMSource.source_sbom_id.in_(tree_ids))
+                .where(
+                    SBOMSource.id.not_in(tree_ids),
+                    SBOMSource.source_sbom_id.in_(tree_ids),
+                    SBOMSource.tenant_id == self._tenant_id,
+                )
                 .values(source_sbom_id=None)
                 .execution_options(synchronize_session=False)
             )
             self.db.execute(
                 update(SBOMSource)
-                .where(SBOMSource.id.not_in(tree_ids), SBOMSource.converted_sbom_id.in_(tree_ids))
+                .where(
+                    SBOMSource.id.not_in(tree_ids),
+                    SBOMSource.converted_sbom_id.in_(tree_ids),
+                    SBOMSource.tenant_id == self._tenant_id,
+                )
                 .values(converted_sbom_id=None)
                 .execution_options(synchronize_session=False)
             )
@@ -485,7 +508,10 @@ class SBOMDeleteService:
     def _delete(self, model, criterion, required_ids: set[Any] | None = None) -> None:
         if required_ids is not None and not required_ids:
             return
-        self.db.execute(delete(model).where(criterion).execution_options(synchronize_session=False))
+        statement = delete(model).where(criterion)
+        if self._tenant_id is not None and hasattr(model, "tenant_id"):
+            statement = statement.where(model.tenant_id == self._tenant_id)
+        self.db.execute(statement.execution_options(synchronize_session=False))
 
     def _unknown_fk_dependencies(self, target_ids: dict[str, set[Any]]) -> dict[str, int]:
         bind = self.db.get_bind()

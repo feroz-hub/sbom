@@ -31,7 +31,7 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-from sqlalchemy import text
+from sqlalchemy import select, text
 from starlette.middleware.gzip import GZipMiddleware
 
 from .logger import get_logger, setup_logging
@@ -40,10 +40,11 @@ from .logger import get_logger, setup_logging
 setup_logging()
 log = get_logger("api")
 
-from datetime import UTC
+from datetime import UTC, datetime
 
 from . import error_handlers
 from .auth import require_auth, validate_auth_setup
+from .core.security import enforce_request_access
 from .db import Base, SessionLocal, engine
 from .http_client import close_async_http_client, init_async_http_client
 from .middleware import MaxBodySizeMiddleware
@@ -73,6 +74,7 @@ from .routers import (
     sboms_crud,
     schedules,
     vex,
+    tenants,
 )
 from .routers import analysis as analysis_export_router
 from .routers import dashboard as dashboard_trend_router
@@ -362,9 +364,54 @@ def _ensure_seed_data() -> None:
         if engine.dialect.name == "sqlite":
             db.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_sbom_type_typename ON sbom_type(typename)"))
 
-        # Seed default SBOM types
-        from sqlalchemy import select
+        # Seed the local development identity. Production HCL IAM users are
+        # mapped from validated claims and explicit tenant memberships.
+        from .models import IAMUser, Tenant, TenantUser
 
+        now = datetime.now(UTC)
+        tenant = db.get(Tenant, 1)
+        if tenant is None:
+            tenant = Tenant(
+                id=1,
+                name="Default Tenant",
+                slug="default",
+                external_iam_tenant_id="local-default",
+                status="ACTIVE",
+                created_at=now,
+                updated_at=now,
+            )
+            db.add(tenant)
+        user = db.get(IAMUser, 1)
+        if user is None:
+            user = IAMUser(
+                id=1,
+                external_iam_user_id="local-dev-admin",
+                email="local-admin@localhost",
+                display_name="Local Development Admin",
+                status="ACTIVE",
+                created_at=now,
+                updated_at=now,
+                last_login_at=now,
+            )
+            db.add(user)
+        db.flush()
+        membership = db.execute(
+            select(TenantUser).where(TenantUser.tenant_id == 1, TenantUser.user_id == 1)
+        ).scalar_one_or_none()
+        if membership is None:
+            db.add(
+                TenantUser(
+                    tenant_id=1,
+                    user_id=1,
+                    role="PLATFORM_ADMIN",
+                    status="ACTIVE",
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+        db.commit()
+
+        # Seed default SBOM types
         from .models import SBOMType
 
         existing = {(row.typename or "").strip().lower() for row in db.execute(select(SBOMType)).scalars().all()}
@@ -549,6 +596,45 @@ async def log_requests(request: Request, call_next):
         response.status_code,
         duration_ms,
     )
+    context = getattr(request.state, "current_context", None)
+    audit_action = None
+    if request.url.path == "/api/auth/me":
+        audit_action = "auth.login_mapping"
+    elif request.headers.get("X-Tenant-ID"):
+        audit_action = "tenant.switch"
+    elif request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+        audit_action = f"api.{request.method.lower()}"
+    elif request.method == "GET" and any(
+        value in request.url.path for value in ("/export", "/reports/")
+    ):
+        audit_action = "export.download"
+    if context is not None and audit_action and response.status_code < 400:
+        try:
+            from .core.context import tenant_scope
+            from .models import AuditLog
+
+            with tenant_scope(context), SessionLocal() as audit_db:
+                audit_db.add(
+                    AuditLog(
+                        tenant_id=context.tenant_id,
+                        user_id=context.external_user_id,
+                        user_ref_id=context.user_id,
+                        action=audit_action,
+                        target_kind=request.url.path.split("/")[2] if request.url.path.count("/") >= 2 else "api",
+                        detail=f"{request.method} {request.url.path}"[:240],
+                        entity_type=request.url.path.split("/")[2] if request.url.path.count("/") >= 2 else "api",
+                        entity_id=next(
+                            (part for part in reversed(request.url.path.split("/")) if part.isdigit()),
+                            None,
+                        ),
+                        ip_address=request.client.host if request.client else None,
+                        user_agent=(request.headers.get("user-agent") or "")[:512] or None,
+                        created_at=datetime.now(UTC).isoformat(),
+                    )
+                )
+                audit_db.commit()
+        except Exception:
+            log.exception("security_audit_write_failed")
     return response
 
 
@@ -578,7 +664,7 @@ error_handlers.install(app)
 # (the default) the dependency is a cheap no-op, so applying it everywhere
 # costs essentially nothing in dev but makes production a one-env-var flip.
 
-_protected = [Depends(require_auth)]
+_protected = [Depends(require_auth), Depends(enforce_request_access)]
 
 app.include_router(health.router)  # intentionally unprotected
 app.include_router(sbom_versions.router, dependencies=_protected)
@@ -603,6 +689,7 @@ app.include_router(ai_credentials.router, dependencies=_protected)
 app.include_router(lifecycle.router, dependencies=_protected)
 app.include_router(vex.router, dependencies=_protected)
 app.include_router(remediation.router, dependencies=_protected)
+app.include_router(tenants.router, dependencies=_protected)
 
 
 # Feature routers (kept from earlier refactor) — additive paths.

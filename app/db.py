@@ -128,7 +128,8 @@ def _filter_soft_deleted(execute_state) -> None:
 
     # Local import so app.db can be imported without a circular hit on
     # app.models_mixins during initial bootstrap.
-    from .models_mixins import SoftDeleteMixin
+    from .core.context import get_bound_context
+    from .models_mixins import SoftDeleteMixin, TenantOwnedMixin
 
     execute_state.statement = execute_state.statement.options(
         with_loader_criteria(
@@ -137,3 +138,48 @@ def _filter_soft_deleted(execute_state) -> None:
             include_aliases=True,
         )
     )
+    context = get_bound_context()
+    if context is not None:
+        tenant_id = context.tenant_id
+        execute_state.statement = execute_state.statement.options(
+            with_loader_criteria(
+                TenantOwnedMixin,
+                lambda cls: cls.tenant_id == tenant_id,
+                include_aliases=True,
+            )
+        )
+
+
+@event.listens_for(_OrmSession, "before_flush")
+def _enforce_tenant_on_writes(session, _flush_context, _instances) -> None:
+    """Stamp new tenant rows and reject cross-tenant ORM mutations."""
+    from .core.context import get_bound_context
+    from .models_mixins import TenantOwnedMixin
+
+    context = get_bound_context()
+    if context is not None:
+        tenant_id = context.tenant_id
+    else:
+        from .settings import get_settings
+
+        if get_settings().auth_enabled:
+            tenant_id = None
+        else:
+            tenant_id = 1
+
+    for instance in session.new:
+        if not isinstance(instance, TenantOwnedMixin):
+            continue
+        current = getattr(instance, "tenant_id", None)
+        if current is None:
+            if tenant_id is None:
+                raise RuntimeError("Tenant context is required for tenant-owned writes")
+            instance.tenant_id = tenant_id
+        elif tenant_id is not None and current != tenant_id:
+            raise RuntimeError("Cross-tenant insert blocked")
+
+    if context is None:
+        return
+    for instance in session.dirty | session.deleted:
+        if isinstance(instance, TenantOwnedMixin) and instance.tenant_id != context.tenant_id:
+            raise RuntimeError("Cross-tenant mutation blocked")

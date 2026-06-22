@@ -66,6 +66,14 @@ def _jwt_settings() -> tuple[str, str, str | None, str | None]:
 
 
 def validate_auth_setup() -> None:
+    from .settings import get_settings
+
+    if get_settings().auth_enabled:
+        from .core.security import validate_hcl_auth_setup
+
+        validate_hcl_auth_setup()
+        log.info("HCL IAM JWT/JWKS authentication enabled.")
+        return
     mode = _read_mode()
     if mode == "none":
         log.warning(

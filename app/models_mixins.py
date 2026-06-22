@@ -24,7 +24,7 @@ can be migrated to FK without breaking the mixin contract.
 
 from __future__ import annotations
 
-from sqlalchemy import Boolean, Column, DateTime, String
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
 from sqlalchemy.sql import expression
 
 
@@ -56,4 +56,15 @@ class SoftDeleteMixin:
     deactivated_by = Column(String(128), nullable=True)
 
 
-__all__ = ["SoftDeleteMixin"]
+class TenantOwnedMixin:
+    """Marks data that must be isolated by the active tenant context."""
+
+    tenant_id = Column(
+        Integer,
+        ForeignKey("tenants.id"),
+        nullable=False,
+        index=True,
+    )
+
+
+__all__ = ["SoftDeleteMixin", "TenantOwnedMixin"]

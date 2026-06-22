@@ -152,6 +152,19 @@ class Settings(BaseSettings):
     jwt_audience: str = Field(default="", description="Optional expected aud claim")
     jwt_issuer: str = Field(default="", description="Optional expected iss claim")
 
+    # HCL IAM / OIDC. AUTH_ENABLED=false is restricted to local development
+    # and tests; production validation uses asymmetric JWTs from JWKS.
+    auth_enabled: bool = Field(default=False, description="Require HCL IAM authentication")
+    hcl_iam_issuer: str = Field(default="", description="Expected HCL IAM token issuer")
+    hcl_iam_audience: str = Field(default="", description="Expected API audience")
+    hcl_iam_jwks_url: str = Field(default="", description="HCL IAM JWKS endpoint")
+    hcl_iam_client_id: str = Field(default="", description="OIDC public client identifier")
+    hcl_iam_allowed_algorithms: str = Field(default="RS256", description="Comma-separated JWT algorithms")
+    hcl_iam_role_claim: str = Field(default="roles", description="JWT claim containing IAM roles")
+    hcl_iam_tenant_claim: str = Field(default="tenant_id", description="JWT claim containing tenant identity")
+    hcl_iam_jwks_cache_seconds: int = Field(default=300, ge=30, le=86400)
+    default_tenant_slug: str = Field(default="default", description="Dev-mode/default tenant slug")
+
     # Celery / Redis
     redis_url: str = Field(default="redis://localhost:6379/0", description="Redis URL for Celery broker/backend")
     celery_broker_url: str = Field(

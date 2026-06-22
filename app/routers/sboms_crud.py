@@ -658,7 +658,11 @@ def update_sbom(
         # Update project_id in related AnalysisRuns
         from sqlalchemy import update as sa_update
 
-        db.execute(sa_update(AnalysisRun).where(AnalysisRun.sbom_id == sbom.id).values(project_id=new_proj_id))
+        db.execute(
+            sa_update(AnalysisRun)
+            .where(AnalysisRun.sbom_id == sbom.id, AnalysisRun.tenant_id == sbom.tenant_id)
+            .values(project_id=new_proj_id)
+        )
 
     if "name" in data:
         sbom.sbom_name = data["name"]

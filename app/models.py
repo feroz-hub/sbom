@@ -5,6 +5,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Column,
+    DateTime,
     Float,
     ForeignKey,
     Index,
@@ -20,10 +21,68 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import expression
 
 from .db import Base
-from .models_mixins import SoftDeleteMixin
+from .models_mixins import SoftDeleteMixin, TenantOwnedMixin
 
 
-class Projects(Base, SoftDeleteMixin):
+class Tenant(Base):
+    __tablename__ = "tenants"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(255), nullable=False)
+    slug = Column(String(128), nullable=False, index=True)
+    external_iam_tenant_id = Column(String(255), nullable=False, index=True)
+    status = Column(String(32), nullable=False, default="ACTIVE")
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    updated_at = Column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("slug", name="uq_tenants_slug"),
+        UniqueConstraint(
+            "external_iam_tenant_id", name="uq_tenants_external_iam_tenant_id"
+        ),
+    )
+
+
+class IAMUser(Base):
+    __tablename__ = "iam_users"
+
+    id = Column(Integer, primary_key=True)
+    external_iam_user_id = Column(String(255), nullable=False, index=True)
+    email = Column(String(320), nullable=True, index=True)
+    display_name = Column(String(255), nullable=True)
+    status = Column(String(32), nullable=False, default="ACTIVE")
+    last_login_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    updated_at = Column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "external_iam_user_id", name="uq_iam_users_external_iam_user_id"
+        ),
+    )
+
+
+class TenantUser(Base):
+    __tablename__ = "tenant_users"
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="CASCADE"), nullable=False, index=True)
+    role = Column(String(64), nullable=False)
+    status = Column(String(32), nullable=False, default="ACTIVE")
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    updated_at = Column(DateTime(timezone=True), nullable=False)
+
+    tenant = relationship("Tenant")
+    user = relationship("IAMUser")
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "user_id", name="uq_tenant_users_tenant_user"),
+        Index("ix_tenant_users_tenant_status", "tenant_id", "status"),
+    )
+
+
+class Projects(Base, SoftDeleteMixin, TenantOwnedMixin):
     __tablename__ = "projects"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -41,6 +100,11 @@ class Projects(Base, SoftDeleteMixin):
         "AnalysisSchedule",
         primaryjoin="Projects.id == foreign(AnalysisSchedule.project_id)",
         viewonly=True,
+    )
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "project_name", name="uq_projects_tenant_name"),
+        Index("ix_projects_tenant_created", "tenant_id", "created_on"),
     )
 
     @property
@@ -62,7 +126,7 @@ class SBOMType(Base):
     sboms = relationship("SBOMSource", back_populates="sbom_type_rel")
 
 
-class SBOMSource(Base, SoftDeleteMixin):
+class SBOMSource(Base, SoftDeleteMixin, TenantOwnedMixin):
     __tablename__ = "sbom_source"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -132,6 +196,15 @@ class SBOMSource(Base, SoftDeleteMixin):
         viewonly=True,
     )
 
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "sbom_name", "sbom_version",
+            name="uq_sbom_source_tenant_name_version",
+        ),
+        Index("ix_sbom_source_tenant_project", "tenant_id", "projectid"),
+        Index("ix_sbom_source_tenant_created", "tenant_id", "created_on"),
+    )
+
     @property
     def project_id(self) -> int | None:
         return self.projectid
@@ -199,7 +272,7 @@ class SBOMSource(Base, SoftDeleteMixin):
         return "—"
 
 
-class SBOMValidationSession(Base):
+class SBOMValidationSession(Base, TenantOwnedMixin):
     """Temporary repair workspace for SBOMs that failed validation.
 
     Rows in this table are not trusted SBOM records. They hold staged content
@@ -239,7 +312,7 @@ class SBOMValidationSession(Base):
     imported_sbom = relationship("SBOMSource", foreign_keys=[imported_sbom_id])
 
 
-class SBOMValidationSessionEvent(Base):
+class SBOMValidationSessionEvent(Base, TenantOwnedMixin):
     """Append-only audit history for validation repair sessions."""
 
     __tablename__ = "sbom_validation_session_events"
@@ -262,7 +335,7 @@ class SBOMValidationSessionEvent(Base):
     session = relationship("SBOMValidationSession", back_populates="events")
 
 
-class SBOMAnalysisReport(Base, SoftDeleteMixin):
+class SBOMAnalysisReport(Base, SoftDeleteMixin, TenantOwnedMixin):
     __tablename__ = "sbom_analysis_report"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -277,7 +350,7 @@ class SBOMAnalysisReport(Base, SoftDeleteMixin):
     sbom = relationship("SBOMSource", back_populates="analysis_reports")
 
 
-class SBOMComponent(Base, SoftDeleteMixin):
+class SBOMComponent(Base, SoftDeleteMixin, TenantOwnedMixin):
     __tablename__ = "sbom_component"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -327,6 +400,7 @@ class SBOMComponent(Base, SoftDeleteMixin):
 
     __table_args__ = (
         UniqueConstraint(
+            "tenant_id",
             "sbom_id",
             "bom_ref",
             "name",
@@ -382,7 +456,7 @@ class ComponentLifecycleCache(Base):
     )
 
 
-class VexDocument(Base):
+class VexDocument(Base, TenantOwnedMixin):
     """Imported VEX document scoped to an SBOM/product context."""
 
     __tablename__ = "vex_documents"
@@ -410,7 +484,7 @@ class VexDocument(Base):
     )
 
 
-class VexStatement(Base):
+class VexStatement(Base, TenantOwnedMixin):
     """Component/vulnerability exploitability statement."""
 
     __tablename__ = "vex_statements"
@@ -442,7 +516,7 @@ class VexStatement(Base):
     )
 
 
-class ComponentLifecycleOverrideAudit(Base):
+class ComponentLifecycleOverrideAudit(Base, TenantOwnedMixin):
     """Dedicated audit trail for lifecycle override changes."""
 
     __tablename__ = "component_lifecycle_override_audit"
@@ -457,7 +531,7 @@ class ComponentLifecycleOverrideAudit(Base):
     changed_at = Column(String, nullable=False, index=True)
 
 
-class VexOverrideAudit(Base):
+class VexOverrideAudit(Base, TenantOwnedMixin):
     """Dedicated audit trail for manual VEX overrides."""
 
     __tablename__ = "vex_override_audit"
@@ -473,7 +547,7 @@ class VexOverrideAudit(Base):
     changed_at = Column(String, nullable=False, index=True)
 
 
-class AnalysisRun(Base, SoftDeleteMixin):
+class AnalysisRun(Base, SoftDeleteMixin, TenantOwnedMixin):
     __tablename__ = "analysis_run"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -511,7 +585,7 @@ class AnalysisRun(Base, SoftDeleteMixin):
     )
 
 
-class AnalysisFinding(Base, SoftDeleteMixin):
+class AnalysisFinding(Base, SoftDeleteMixin, TenantOwnedMixin):
     __tablename__ = "analysis_finding"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -572,7 +646,7 @@ class AnalysisFinding(Base, SoftDeleteMixin):
     )
 
 
-class RunCache(Base):
+class RunCache(Base, TenantOwnedMixin):
     """
     Persists the raw JSON payload returned by the ad-hoc analysis endpoints
     (NVD / GitHub / OSV / Consolidated).  The id returned here IS the runId
@@ -612,7 +686,7 @@ class KevEntry(Base):
     refreshed_at = Column(String, nullable=False)  # ISO timestamp
 
 
-class AnalysisSchedule(Base, SoftDeleteMixin):
+class AnalysisSchedule(Base, SoftDeleteMixin, TenantOwnedMixin):
     """
     Periodic analysis schedule. One row per scope target (PROJECT or SBOM).
 
@@ -778,7 +852,7 @@ class NvdLookupCache(Base):
     )
 
 
-class CompareCache(Base):
+class CompareCache(Base, TenantOwnedMixin):
     """
     Cached ``CompareResult`` payload (ADR-0008).
 
@@ -799,7 +873,7 @@ class CompareCache(Base):
     schema_version = Column(Integer, nullable=False, default=1)
 
 
-class AiUsageLog(Base):
+class AiUsageLog(Base, TenantOwnedMixin):
     """
     Append-only ledger of every LLM call (success and failure).
 
@@ -902,7 +976,7 @@ class AiFixCache(Base):
     )
 
 
-class AiFixBatch(Base, SoftDeleteMixin):
+class AiFixBatch(Base, SoftDeleteMixin, TenantOwnedMixin):
     """
     Durable record of a scope-aware AI fix batch (Phase 2 multi-batch).
 
@@ -1031,7 +1105,7 @@ class AiCredentialAuditLog(Base):
     created_at = Column(String, nullable=False, index=True)
 
 
-class AuditLog(Base):
+class AuditLog(Base, TenantOwnedMixin):
     """
     Append-only general-purpose audit trail.
 
@@ -1062,10 +1136,17 @@ class AuditLog(Base):
     target_id = Column(Integer, nullable=True, index=True)
     detail = Column(String(240), nullable=True)
     metadata_json = Column(JSON, nullable=True)
+    user_ref_id = Column(Integer, ForeignKey("iam_users.id", ondelete="SET NULL"), nullable=True, index=True)
+    entity_type = Column(String(64), nullable=True, index=True)
+    entity_id = Column(String(128), nullable=True, index=True)
+    old_value = Column(JSON, nullable=True)
+    new_value = Column(JSON, nullable=True)
+    ip_address = Column(String(64), nullable=True)
+    user_agent = Column(String(512), nullable=True)
     created_at = Column(String, nullable=False, index=True)
 
 
-class VulnerabilityRemediation(Base):
+class VulnerabilityRemediation(Base, TenantOwnedMixin):
     """
     Tracks vulnerability fix / remediation status for findings.
     """
@@ -1094,7 +1175,7 @@ class VulnerabilityRemediation(Base):
     )
 
 
-class VulnerabilityRemediationAudit(Base):
+class VulnerabilityRemediationAudit(Base, TenantOwnedMixin):
     """Append-only status/change trail for vulnerability remediation records."""
 
     __tablename__ = "vulnerability_remediation_audit"
@@ -1137,6 +1218,20 @@ for _model in (
         _model.is_active,
         postgresql_where=sql_text("is_active = false"),
         sqlite_where=sql_text("is_active = 0"),
+    )
+
+for _tenant_model in (
+    Projects, SBOMSource, SBOMValidationSession, SBOMValidationSessionEvent,
+    SBOMAnalysisReport, SBOMComponent, VexDocument, VexStatement,
+    ComponentLifecycleOverrideAudit, VexOverrideAudit, AnalysisRun,
+    AnalysisFinding, RunCache, AnalysisSchedule, CompareCache, AiUsageLog,
+    AiFixBatch, AuditLog, VulnerabilityRemediation, VulnerabilityRemediationAudit,
+):
+    _pk_column = next(iter(_tenant_model.__table__.primary_key.columns))
+    Index(
+        f"ix_{_tenant_model.__tablename__}_tenant_identity",
+        _tenant_model.tenant_id,
+        _pk_column,
     )
 
 Index("ix_ai_usage_log_provider_created", AiUsageLog.provider, AiUsageLog.created_at)
