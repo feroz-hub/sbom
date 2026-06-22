@@ -118,7 +118,7 @@ sbom/
     ├── analysis.py         # SBOM parsers + multi-source orchestrator
     ├── models.py           # SQLAlchemy ORM models
     ├── schemas.py          # Pydantic request/response schemas
-    ├── db.py               # Database setup (repo-root SQLite by default)
+    ├── db.py               # PostgreSQL/SQLite engine and session setup
     ├── pdf_report.py       # PDF report generation (ReportLab)
     ├── logger.py           # Structured/text logging setup
     ├── routers/            # HTTP handlers (sboms_crud, analyze_endpoints,
@@ -308,14 +308,103 @@ celery -A app.workers.celery_app beat --loglevel=info
 
 ## Database Migrations (Alembic)
 
-SQLite (repo-root `sbom_api.db`) is created automatically on first run. For
-PostgreSQL or schema changes, use Alembic (it reads `DATABASE_URL` from `.env`):
+PostgreSQL 16 is the development and production database. SQLite remains
+supported for isolated tests and emergency rollback. PostgreSQL schema changes
+must be applied by Alembic before the API starts; the API deliberately does not
+create or alter PostgreSQL tables during startup.
+
+### Start PostgreSQL locally
 
 ```bash
-alembic upgrade head                       # apply all pending migrations
-alembic revision --autogenerate -m "msg"   # generate a new migration
-alembic downgrade -1                        # roll back the last migration
+docker compose up -d postgres
+docker compose ps
 ```
+
+Configure `.env`:
+
+```env
+DATABASE_URL=postgresql+psycopg://sbom:sbom@localhost:5432/sbom_analyser
+```
+
+Create or upgrade the schema, then run the API:
+
+```bash
+alembic heads
+alembic upgrade head
+alembic current
+alembic check
+uvicorn app.main:app --reload
+```
+
+### Migrate an existing SQLite database
+
+Use a maintenance window: stop the API, Celery workers, and scheduler before
+the backup and keep them stopped until verification is complete.
+
+```bash
+mkdir -p backups
+sqlite3 ./sbom_api.db ".backup './backups/sbom_api-pre-postgres.db'"
+shasum -a 256 ./sbom_api.db ./backups/sbom_api-pre-postgres.db
+```
+
+The PostgreSQL schema must already be at Alembic head. First perform a read-only
+preflight:
+
+```bash
+python scripts/migrate_sqlite_to_postgres.py \
+  --sqlite-url sqlite:///./sbom_api.db \
+  --postgres-url postgresql+psycopg://sbom:sbom@localhost:5432/sbom_analyser \
+  --dry-run
+```
+
+Copy all application tables in one PostgreSQL transaction:
+
+```bash
+python scripts/migrate_sqlite_to_postgres.py \
+  --sqlite-url sqlite:///./sbom_api.db \
+  --postgres-url postgresql+psycopg://sbom:sbom@localhost:5432/sbom_analyser
+```
+
+Verify row counts, complete primary-key digests, raw SBOM hashes, foreign keys,
+constraints, and relationships:
+
+```bash
+python scripts/migrate_sqlite_to_postgres.py \
+  --sqlite-url sqlite:///./sbom_api.db \
+  --postgres-url postgresql+psycopg://sbom:sbom@localhost:5432/sbom_analyser \
+  --verify-only
+```
+
+The target must be empty by default. Clearing a disposable or pre-backed-up
+target requires both explicit flags:
+
+```bash
+python scripts/migrate_sqlite_to_postgres.py \
+  --sqlite-url sqlite:///./sbom_api.db \
+  --postgres-url postgresql+psycopg://sbom:sbom@localhost:5432/sbom_analyser \
+  --truncate-target --confirm-truncate
+```
+
+After verification and API smoke tests, create a PostgreSQL backup before
+opening traffic:
+
+```bash
+pg_dump --format=custom \
+  --file=./backups/sbom_analyser-post-migration.dump \
+  postgresql://sbom:sbom@localhost:5432/sbom_analyser
+```
+
+### Rollback
+
+- Never remove or overwrite the original SQLite database during migration.
+- If copy or verification fails, keep `DATABASE_URL` pointed at SQLite.
+- If pre-traffic API smoke tests fail, stop the API and restore the SQLite URL.
+- Do not permit application writes on PostgreSQL until all smoke tests pass;
+  this avoids split-brain reconciliation during rollback.
+- If a populated PostgreSQL target was cleared, restore its pre-migration
+  `pg_dump` before investigating.
+- Retain both the SQLite backup and the post-migration PostgreSQL dump for the
+  agreed operational retention period.
 
 ---
 
@@ -367,7 +456,11 @@ Full interactive docs: **http://localhost:8000/docs**
 | `CORS_ORIGINS` | `*` runtime fallback | Comma-separated allowed origins |
 | `API_AUTH_MODE` | `none` | `none` or `bearer`; see **Authentication** above |
 | `API_AUTH_TOKENS` | *(none)* | Comma-separated bearer token allowlist (required when `API_AUTH_MODE=bearer`) |
-| `DATABASE_URL` | repo-root `sbom_api.db` | SQLAlchemy database URL override (SQLite or PostgreSQL) |
+| `DATABASE_URL` | *(required for PostgreSQL)* | SQLAlchemy URL; use `postgresql+psycopg://…` outside isolated SQLite tests |
+| `DATABASE_POOL_SIZE` | `5` | PostgreSQL persistent connection-pool size |
+| `DATABASE_MAX_OVERFLOW` | `10` | PostgreSQL overflow connections |
+| `DATABASE_POOL_TIMEOUT` | `30` | Seconds to wait for a PostgreSQL pool connection |
+| `DATABASE_POOL_RECYCLE` | `1800` | Seconds before a PostgreSQL pooled connection is recycled |
 | `HOST` | `0.0.0.0` | Server host |
 | `PORT` | `8000` | Server port |
 | `REDIS_URL` / `CELERY_BROKER_URL` | *(none)* | Redis broker for Celery background analysis (optional) |

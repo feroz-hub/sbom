@@ -24,6 +24,8 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
 import tempfile
 from collections.abc import Iterator
 from pathlib import Path
@@ -50,9 +52,13 @@ _SESSION_DB_FD, _SESSION_DB_PATH = tempfile.mkstemp(
 )
 os.close(_SESSION_DB_FD)
 Path(_SESSION_DB_PATH).unlink(missing_ok=True)
-# Use ``setdefault`` so an explicit DATABASE_URL set by the user (or by an
-# outer test runner) wins.
-os.environ.setdefault("DATABASE_URL", f"sqlite:///{_SESSION_DB_PATH}")
+# PostgreSQL integration tests opt in through a dedicated, disposable test
+# database. The ordinary suite remains isolated on temporary SQLite.
+_TEST_POSTGRES_DATABASE_URL = (os.getenv("TEST_POSTGRES_DATABASE_URL") or "").strip()
+os.environ.setdefault(
+    "DATABASE_URL",
+    _TEST_POSTGRES_DATABASE_URL or f"sqlite:///{_SESSION_DB_PATH}",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -73,7 +79,22 @@ def _tmp_database_path() -> Iterator[str]:
 @pytest.fixture(scope="session")
 def app(_tmp_database_path: str):
     """Import the FastAPI app *after* DATABASE_URL is pointed at the temp DB."""
-    os.environ["DATABASE_URL"] = f"sqlite:///{_tmp_database_path}"
+    postgres_url = (os.getenv("TEST_POSTGRES_DATABASE_URL") or "").strip()
+    if postgres_url:
+        from sqlalchemy.engine import make_url
+
+        database_name = make_url(postgres_url).database or ""
+        if "test" not in database_name.lower():
+            pytest.fail("TEST_POSTGRES_DATABASE_URL must name a disposable database containing 'test'")
+        os.environ["DATABASE_URL"] = postgres_url
+        subprocess.run(
+            [sys.executable, "-m", "alembic", "upgrade", "head"],
+            cwd=Path(__file__).resolve().parent.parent,
+            env=os.environ.copy(),
+            check=True,
+        )
+    else:
+        os.environ["DATABASE_URL"] = f"sqlite:///{_tmp_database_path}"
     # Avoid CORS noise + force deterministic settings.
     os.environ.setdefault("CORS_ORIGINS", "http://testserver")
     os.environ.setdefault("ANALYSIS_SOURCES", "NVD,OSV,GITHUB")

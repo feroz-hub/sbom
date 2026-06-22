@@ -25,6 +25,7 @@ from __future__ import annotations
 import logging
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -246,8 +247,13 @@ def _ensure_validation_repair_tables() -> None:
 
 
 def _ensure_seed_data() -> None:
-    """Create tables, run lightweight migrations, seed reference data."""
-    Base.metadata.create_all(bind=engine)
+    """Prepare legacy SQLite or validate PostgreSQL, then seed reference data."""
+    if engine.dialect.name == "sqlite":
+        Base.metadata.create_all(bind=engine)
+    elif engine.dialect.name == "postgresql":
+        _verify_postgresql_schema_at_head()
+    else:
+        raise RuntimeError(f"Unsupported database dialect: {engine.dialect.name}")
 
     # Lightweight migrations: add columns added in later versions of the schema
     _ensure_text_column("analysis_run", "sbom_name")
@@ -351,7 +357,10 @@ def _ensure_seed_data() -> None:
 
     db = SessionLocal()
     try:
-        db.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_sbom_type_typename ON sbom_type(typename)"))
+        # PostgreSQL schema DDL belongs exclusively to Alembic. This
+        # compatibility index is retained only for legacy SQLite files.
+        if engine.dialect.name == "sqlite":
+            db.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_sbom_type_typename ON sbom_type(typename)"))
 
         # Seed default SBOM types
         from sqlalchemy import select
@@ -385,6 +394,30 @@ def _ensure_seed_data() -> None:
         backfill_analytics_tables(db)
     finally:
         db.close()
+
+
+def _verify_postgresql_schema_at_head() -> None:
+    """Fail fast when PostgreSQL has not been provisioned by Alembic."""
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    config = Config(str(Path(__file__).resolve().parent.parent / "alembic.ini"))
+    expected_heads = set(ScriptDirectory.from_config(config).get_heads())
+    try:
+        with engine.connect() as conn:
+            actual_heads = {
+                str(row[0])
+                for row in conn.execute(text("SELECT version_num FROM alembic_version"))
+            }
+    except Exception as exc:
+        raise RuntimeError(
+            "PostgreSQL schema is missing or unreadable; run 'alembic upgrade head' before starting the API."
+        ) from exc
+    if actual_heads != expected_heads:
+        raise RuntimeError(
+            "PostgreSQL schema is not at Alembic head; run 'alembic upgrade head' before starting the API. "
+            f"Expected {sorted(expected_heads)}, found {sorted(actual_heads)}."
+        )
 
 
 def _update_sbom_names() -> None:

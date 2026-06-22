@@ -12,7 +12,7 @@ import logging
 from datetime import UTC
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from sqlalchemy import literal, select
 from sqlalchemy.orm import Session
 
 from ..analysis import get_analysis_settings_multi
@@ -116,8 +116,20 @@ def health(db: Session = Depends(get_db)) -> dict:
     log.debug("Health check requested")
     return {
         "status": "ok",
+        "database": _database_health(db),
         "nvd_mirror": _nvd_mirror_health(db),
     }
+
+
+def _database_health(db: Session) -> dict:
+    """Additive connectivity signal without exposing credentials or errors."""
+    try:
+        db.execute(select(literal(1))).scalar_one()
+        bind = db.get_bind()
+        return {"available": True, "dialect": bind.dialect.name}
+    except Exception:
+        log.warning("database_health_unavailable", exc_info=True)
+        return {"available": False}
 
 
 def _nvd_mirror_health(db: Session) -> dict:

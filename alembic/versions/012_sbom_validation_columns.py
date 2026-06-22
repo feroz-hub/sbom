@@ -134,6 +134,19 @@ def upgrade() -> None:
             ["failed_stage"],
         )
 
+    # Alembic's built-in version table uses VARCHAR(32). Several existing
+    # revision identifiers after this migration are longer than 32 bytes;
+    # SQLite silently accepts them while PostgreSQL correctly rejects them.
+    # Widen before Alembic attempts to record revision 013.
+    if bind.dialect.name == "postgresql":
+        op.alter_column(
+            "alembic_version",
+            "version_num",
+            existing_type=sa.String(length=32),
+            type_=sa.String(length=128),
+            existing_nullable=False,
+        )
+
 
 def downgrade() -> None:
     bind = op.get_bind()

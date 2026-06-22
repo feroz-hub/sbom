@@ -103,10 +103,12 @@ class CveRow(Base):
     __table_args__ = (
         Index("ix_cves_last_modified", "last_modified"),
         Index("ix_cves_vuln_status", "vuln_status"),
-        # Note: GIN indexes for cpe_match (and aliases on PG) are added by
-        # the Alembic migration in a dialect-conditional block. They are
-        # not declared here because SQLAlchemy cannot express GIN
-        # generically and the repo runs against SQLite in the dev/test path.
+        Index(
+            "ix_cves_cpe_match_gin",
+            "cpe_match",
+            postgresql_using="gin",
+            postgresql_ops={"cpe_match": "jsonb_path_ops"},
+        ).ddl_if(dialect="postgresql"),
     )
 
     cve_id: Mapped[str] = mapped_column(Text, primary_key=True)

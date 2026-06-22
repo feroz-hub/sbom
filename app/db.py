@@ -6,8 +6,17 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import MetaData, create_engine, event
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import declarative_base, sessionmaker
+
+NAMING_CONVENTION = {
+    "ix": "ix_%(column_0_label)s",
+    "uq": "uq_%(table_name)s_%(column_0_name)s",
+    "ck": "ck_%(table_name)s_%(constraint_name)s",
+    "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
+    "pk": "pk_%(table_name)s",
+}
 
 
 def _default_sqlite_url() -> str:
@@ -34,11 +43,33 @@ def _resolve_database_url() -> str:
 
 DATABASE_URL = _resolve_database_url()
 
-_connect_args: dict = {}
-if DATABASE_URL.startswith("sqlite"):
-    _connect_args = {"check_same_thread": False}
 
-engine = create_engine(DATABASE_URL, connect_args=_connect_args)
+def database_backend(database_url: str) -> str:
+    """Return the SQLAlchemy backend name without exposing URL credentials."""
+    return make_url(database_url).get_backend_name()
+
+
+def engine_options(database_url: str, settings=None) -> dict:
+    """Build dialect-specific engine options without opening a connection."""
+    backend = database_backend(database_url)
+    if backend == "sqlite":
+        return {"connect_args": {"check_same_thread": False}}
+    if backend == "postgresql":
+        if settings is None:
+            from .settings import get_settings
+
+            settings = get_settings()
+        return {
+            "pool_pre_ping": True,
+            "pool_size": settings.database_pool_size,
+            "max_overflow": settings.database_max_overflow,
+            "pool_timeout": settings.database_pool_timeout,
+            "pool_recycle": settings.database_pool_recycle,
+        }
+    return {}
+
+
+engine = create_engine(DATABASE_URL, **engine_options(DATABASE_URL))
 
 
 @event.listens_for(engine, "connect")
@@ -51,7 +82,7 @@ def _set_sqlite_pragma(dbapi_connection, connection_record):
 
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-Base = declarative_base()
+Base = declarative_base(metadata=MetaData(naming_convention=NAMING_CONVENTION))
 
 
 def get_db():

@@ -13,7 +13,11 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy import (
+    text as sql_text,
+)
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import expression
 
 from .db import Base
 from .models_mixins import SoftDeleteMixin
@@ -217,8 +221,8 @@ class SBOMValidationSession(Base):
     current_content = Column(Text, nullable=True)
     validation_status = Column(String(32), nullable=False, default="failed", server_default="failed", index=True)
     latest_error_report_json = Column(JSON, nullable=True)
-    can_edit = Column(Boolean, nullable=False, default=True, server_default="1")
-    can_ai_fix = Column(Boolean, nullable=False, default=True, server_default="1")
+    can_edit = Column(Boolean, nullable=False, default=True, server_default=expression.true())
+    can_ai_fix = Column(Boolean, nullable=False, default=True, server_default=expression.true())
     security_blocked_reason = Column(Text, nullable=True)
     content_sha256 = Column(String(64), nullable=True, index=True)
     created_at = Column(String, nullable=False, index=True)
@@ -1111,5 +1115,48 @@ class VulnerabilityRemediationAudit(Base):
     changed_by = Column(String(128), nullable=True)
     changed_at = Column(String, nullable=False, index=True)
     note = Column(Text, nullable=True)
-
     remediation = relationship("VulnerabilityRemediation", back_populates="history")
+
+
+# Indexes created by historical Alembic revisions are declared here as
+# well so fresh metadata-created test schemas and Alembic autogeneration
+# agree with production. Partial predicates are dialect-specific but the
+# index names and covered columns remain identical across engines.
+for _model in (
+    Projects,
+    SBOMSource,
+    SBOMAnalysisReport,
+    SBOMComponent,
+    AnalysisRun,
+    AnalysisFinding,
+    AnalysisSchedule,
+    AiFixBatch,
+):
+    Index(
+        f"ix_{_model.__tablename__}_deactivated",
+        _model.is_active,
+        postgresql_where=sql_text("is_active = false"),
+        sqlite_where=sql_text("is_active = 0"),
+    )
+
+Index("ix_ai_usage_log_provider_created", AiUsageLog.provider, AiUsageLog.created_at)
+Index("ix_ai_usage_log_purpose_created", AiUsageLog.purpose, AiUsageLog.created_at)
+Index("ix_sbom_component_bom_ref", SBOMComponent.bom_ref)
+Index("ix_sbom_component_duplicate_of_component_id", SBOMComponent.duplicate_of_component_id)
+Index("ix_sbom_source_converted_from_format", SBOMSource.converted_from_format)
+Index("ix_sbom_source_parent_id", SBOMSource.parent_id)
+Index("ix_sbom_source_sbom_type", SBOMSource.sbom_type)
+Index(
+    "ix_ai_only_one_default",
+    AiProviderCredential.is_default,
+    unique=True,
+    postgresql_where=sql_text("is_default = true"),
+    sqlite_where=sql_text("is_default = 1"),
+)
+Index(
+    "ix_ai_only_one_fallback",
+    AiProviderCredential.is_fallback,
+    unique=True,
+    postgresql_where=sql_text("is_fallback = true"),
+    sqlite_where=sql_text("is_fallback = 1"),
+)
