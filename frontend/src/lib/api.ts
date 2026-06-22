@@ -65,8 +65,68 @@ import type {
 // Example: NEXT_PUBLIC_API_URL = "http://api.example.com"
 //          request("/api/sboms")  →  http://api.example.com/api/sboms
 import { resolveBaseUrl } from './env';
+import { getAccessToken, getActiveTenantId, clearTokens } from './auth';
 
 export const BASE_URL = resolveBaseUrl();
+
+// ─── Auth header injection ────────────────────────────────────────────────────
+// Reads token + active tenant from sessionStorage and returns the headers
+// to inject into every outbound API request. This runs on every call so
+// the latest token and tenant are always sent (including after refresh or
+// tenant switch).
+function getAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {};
+  try {
+    const token = getAccessToken();
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    const tenantId = getActiveTenantId();
+    if (tenantId) {
+      headers['X-Tenant-ID'] = tenantId;
+    }
+  } catch {
+    // sessionStorage may not be available in SSR; silently skip
+  }
+  return headers;
+}
+
+// ─── 401/403 response handling ────────────────────────────────────────────────
+// On 401: token has expired or been revoked. Clear local tokens and
+// redirect to login if auth is enabled. On 403: user lacks permission.
+// Redirect to the access-denied page instead of showing a raw error.
+let _auth401InFlight = false;
+
+function handleAuthError(status: number): void {
+  if (typeof window === 'undefined') return;
+
+  if (status === 401 && !_auth401InFlight) {
+    _auth401InFlight = true;
+    const authEnabled = process.env.NEXT_PUBLIC_AUTH_ENABLED === 'true';
+    if (authEnabled) {
+      clearTokens();
+      // Avoid redirect loops: don't redirect if already on auth pages
+      const path = window.location.pathname;
+      if (!path.startsWith('/auth/')) {
+        // Small delay to batch multiple concurrent 401s into one redirect
+        setTimeout(() => {
+          window.location.href = '/';
+          _auth401InFlight = false;
+        }, 100);
+      } else {
+        _auth401InFlight = false;
+      }
+    } else {
+      _auth401InFlight = false;
+    }
+  }
+
+  if (status === 403) {
+    // Don't auto-redirect for 403 on specific endpoints that callers handle
+    // (e.g. tenant-switch probing, permission checks). Only redirect for
+    // top-level page-load 403s. Callers can catch HttpError(403) themselves.
+  }
+}
 
 // ─── Typed HTTP error ─────────────────────────────────────────────────────────
 export class HttpError extends Error {
@@ -131,11 +191,13 @@ async function performRequest(
 ): Promise<Response> {
   const url = `${BASE_URL}${path}`;
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+  const authHeaders = getAuthHeaders();
   const res = await fetchWithTimeout(
     url,
     {
       headers: {
         ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
+        ...authHeaders,
         ...options.headers,
       },
       ...options,
@@ -144,6 +206,9 @@ async function performRequest(
   );
 
   if (!res.ok) {
+    // Handle auth errors before parsing the body
+    handleAuthError(res.status);
+
     let message = `HTTP ${res.status}: ${res.statusText}`;
     let code: string | undefined;
     let rawDetail: unknown;

@@ -6,6 +6,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { useSidebar } from './SidebarContext';
 import { openCommandPalette } from './CommandPalette';
 import { ThemeToggle } from '@/components/theme/ThemeToggle';
+import { UserMenu } from '@/components/layout/UserMenu';
 import { cn } from '@/lib/utils';
 
 export interface BreadcrumbItem {
@@ -138,6 +139,7 @@ export function TopBar({ title, action, subtitle, breadcrumbs }: TopBarProps) {
           <Search className="h-4 w-4" aria-hidden />
         </button>
         {action}
+        <UserMenu />
         <ThemeToggle />
       </div>
     </header>

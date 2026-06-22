@@ -3,6 +3,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import { ToastProvider } from '@/hooks/useToast';
+import { AuthProvider } from '@/hooks/useAuth';
+import { AuthGuard } from '@/components/auth/AuthGuard';
 import { ThemeProvider } from '@/components/theme/ThemeProvider';
 import { CommandPalette } from '@/components/layout/CommandPalette';
 import { KeyboardCheatsheet } from '@/components/layout/KeyboardCheatsheet';
@@ -33,15 +35,20 @@ export function Providers({ children }: { children: ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <ToastProvider>
-          <AiBatchProgressProvider>
-            {children}
-            <CommandPalette />
-            <KeyboardCheatsheet />
-          </AiBatchProgressProvider>
-        </ToastProvider>
-      </ThemeProvider>
+      <AuthProvider>
+        <ThemeProvider>
+          <ToastProvider>
+            <AiBatchProgressProvider>
+              <AuthGuard>
+                {children}
+              </AuthGuard>
+              <CommandPalette />
+              <KeyboardCheatsheet />
+            </AiBatchProgressProvider>
+          </ToastProvider>
+        </ThemeProvider>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }
+

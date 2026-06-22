@@ -21,6 +21,7 @@ import {
 import { cn, formatDate } from '@/lib/utils';
 import { useSidebar } from './SidebarContext';
 import { SidebarStatus } from './SidebarStatus';
+import { TenantSwitcher } from './TenantSwitcher';
 import { usePinned, unpin } from '@/lib/pinned';
 import { getRecentSboms, getRuns } from '@/lib/api';
 
@@ -136,6 +137,17 @@ export function Sidebar() {
           >
             <X className="h-5 w-5" aria-hidden />
           </button>
+        </div>
+
+        {/* Tenant switcher — collapses with the sidebar */}
+        <div
+          className={cn(
+            'shrink-0 px-2 pb-2',
+            'transition-[max-height,opacity] duration-300 ease-in-out motion-reduce:transition-none',
+            collapsed ? 'max-h-0 opacity-0 md:max-h-0 md:opacity-0 overflow-hidden' : 'max-h-20 opacity-100',
+          )}
+        >
+          <TenantSwitcher />
         </div>
 
         {/* Scrollable middle: nav + pinned + recent */}
