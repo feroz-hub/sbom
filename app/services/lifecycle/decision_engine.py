@@ -9,6 +9,7 @@ from .types import (
     EOL_SOON,
     EOS,
     POSSIBLY_UNMAINTAINED,
+    SUPPORTED,
     UNKNOWN,
     UNSUPPORTED,
     LifecycleResult,
@@ -23,8 +24,11 @@ LIFECYCLE_PRIORITY = {
     UNSUPPORTED: 65,
     EOL_SOON: 60,
     POSSIBLY_UNMAINTAINED: 30,
+    SUPPORTED: 10,
     UNKNOWN: 0,
 }
+
+CONFIDENCE_PRIORITY = {"High": 3, "Medium": 2, "Low": 1, "Unknown": 0}
 
 VEX_PRIORITY = {
     "affected": 90,
@@ -47,33 +51,24 @@ def choose_lifecycle_result(results: list[LifecycleResult]) -> LifecycleResult |
     if not actionable:
         return None
 
-    official = next(
+    vendor = next(
         (
             result
             for result in actionable
-            if result.source_name
-            and result.source_name.lower() == "endoflife.date"
-            and result.lifecycle_status != UNKNOWN
+            if isinstance(result.evidence, dict) and result.evidence.get("authority") == "vendor"
         ),
         None,
     )
-    if official:
-        return _merge_recommendations(official, actionable)
+    if vendor:
+        return _merge_recommendations(vendor, actionable)
 
-    registry = next(
-        (
-            result
-            for result in actionable
-            if result.lifecycle_status == DEPRECATED
-            and result.source_name
-            and ("registry" in result.source_name.lower() or result.source_name in {"PyPI", "NuGet", "Maven Central"})
+    chosen = max(
+        actionable,
+        key=lambda result: (
+            LIFECYCLE_PRIORITY.get(result.lifecycle_status, 0),
+            CONFIDENCE_PRIORITY.get(result.confidence, 0),
         ),
-        None,
     )
-    if registry:
-        return _merge_recommendations(registry, actionable)
-
-    chosen = max(actionable, key=lambda result: LIFECYCLE_PRIORITY.get(result.lifecycle_status, 0))
     return _merge_recommendations(chosen, actionable)
 
 

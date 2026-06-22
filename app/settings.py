@@ -91,6 +91,22 @@ class Settings(BaseSettings):
         default=3,
         description="Maximum lifecycle providers queried concurrently per component.",
     )
+    lifecycle_xeol_enabled: bool = Field(
+        default=False,
+        description="Enable Xeol EOL API lookups. Also enabled when an API key is configured.",
+    )
+    lifecycle_xeol_api_url: str = Field(
+        default="https://edb-prod.xeol.io/eol/check",
+        description="Xeol component EOL check endpoint.",
+    )
+    lifecycle_xeol_api_key: str | None = Field(
+        default=None,
+        description="Optional Xeol API bearer token; keep this in environment or secret storage.",
+    )
+    lifecycle_vendor_records_json: str = Field(
+        default="[]",
+        description="JSON array of lifecycle records transcribed from official vendor pages.",
+    )
 
     # NVD version-range filter (roadmap #1).
     #

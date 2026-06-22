@@ -42,6 +42,8 @@ from .types import (
     now_iso,
     unknown_result,
 )
+from .vendor_lifecycle_provider import VendorLifecycleProvider
+from .xeol_provider import XeolProvider
 
 DEFAULT_CACHE_TTL_DAYS = 7
 
@@ -66,14 +68,33 @@ class LifecycleEnrichmentService:
             1,
             int(provider_max_concurrent or getattr(settings, "lifecycle_provider_max_concurrent", 3)),
         )
-        self.providers = providers or [
-            EndOfLifeDateProvider(timeout_seconds=self.provider_timeout_seconds),
-            DepsDevProvider(timeout_seconds=self.provider_timeout_seconds),
-            PackageRegistryProvider(timeout_seconds=self.provider_timeout_seconds),
-            RepositoryHealthProvider(timeout_seconds=self.provider_timeout_seconds),
-            OSVProvider(timeout_seconds=self.provider_timeout_seconds),
-        ]
+        self.providers = providers if providers is not None else self._default_providers(settings)
         self.cache_ttl_days = cache_ttl_days
+
+    def _default_providers(self, settings: Any) -> list[LifecycleProvider]:
+        providers: list[LifecycleProvider] = []
+        vendor = VendorLifecycleProvider.from_json(getattr(settings, "lifecycle_vendor_records_json", "[]"))
+        if vendor.records:
+            providers.append(vendor)
+        xeol_key = getattr(settings, "lifecycle_xeol_api_key", None)
+        if bool(getattr(settings, "lifecycle_xeol_enabled", False) or xeol_key):
+            providers.append(
+                XeolProvider(
+                    api_url=getattr(settings, "lifecycle_xeol_api_url", "https://edb-prod.xeol.io/eol/check"),
+                    api_key=xeol_key,
+                    timeout_seconds=self.provider_timeout_seconds,
+                )
+            )
+        providers.extend(
+            [
+                EndOfLifeDateProvider(timeout_seconds=self.provider_timeout_seconds),
+                DepsDevProvider(timeout_seconds=self.provider_timeout_seconds),
+                PackageRegistryProvider(timeout_seconds=self.provider_timeout_seconds),
+                RepositoryHealthProvider(timeout_seconds=self.provider_timeout_seconds),
+                OSVProvider(timeout_seconds=self.provider_timeout_seconds),
+            ]
+        )
+        return providers
 
     def enrich_sbom(self, db: Session, sbom_id: int, *, force_refresh: bool = False) -> dict[str, Any]:
         sbom = db.get(SBOMSource, sbom_id)
@@ -478,6 +499,7 @@ def component_lifecycle_dict(component: SBOMComponent) -> dict[str, Any]:
         "version": component.version,
         "ecosystem": component.ecosystem,
         "purl": component.purl,
+        "cpe": component.cpe,
         "supplier": component.supplier,
         "license": component.license,
         "lifecycle_status": canonical_status(component.lifecycle_status),
@@ -529,6 +551,7 @@ def sync_lifecycle_for_sbom(db: Session, sbom_id: int, *, force_refresh: bool = 
 def lifecycle_report_csv(db: Session, sbom_id: int, *, report_type: str | None = None) -> str:
     import csv
     import io
+    import json
 
     report = LifecycleEnrichmentService().lifecycle_report(db, sbom_id)
     components = _filter_lifecycle_components(report["components"], report_type)
@@ -558,6 +581,8 @@ def lifecycle_report_csv(db: Session, sbom_id: int, *, report_type: str | None =
             "checked_at",
             "is_stale",
             "manual_override",
+            "source_authority",
+            "evidence_json",
         ],
     )
     writer.writeheader()
@@ -586,6 +611,12 @@ def lifecycle_report_csv(db: Session, sbom_id: int, *, report_type: str | None =
                 "checked_at": component.get("checked_at"),
                 "is_stale": component.get("is_stale"),
                 "manual_override": component.get("manual_override"),
+                "source_authority": (
+                    component.get("evidence", {}).get("authority")
+                    if isinstance(component.get("evidence"), dict)
+                    else None
+                ),
+                "evidence_json": json.dumps(component.get("evidence") or {}, sort_keys=True),
             }
         )
     return out.getvalue()

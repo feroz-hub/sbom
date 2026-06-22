@@ -19,7 +19,12 @@ from ..auth import require_roles
 from ..db import get_db
 from ..models import SBOMComponent, SBOMSource
 from ..schemas import SbomConversionReportResponse, SbomConversionResponse, SbomEditPayload, SBOMSourceOut
-from ..services.lifecycle import LifecycleEnrichmentService, component_lifecycle_dict, lifecycle_report_csv
+from ..services.lifecycle import (
+    LifecycleEnrichmentService,
+    component_lifecycle_dict,
+    lifecycle_report_csv,
+    lifecycle_report_openeox,
+)
 from ..services.sbom_conversion_service import (
     convert_and_persist_spdx_to_cyclonedx,
     run_post_conversion_enrichment,
@@ -322,7 +327,7 @@ def refresh_sbom_lifecycle(
 @router.get("/{id}/lifecycle/report")
 def get_sbom_lifecycle_report(
     id: int,
-    format: str = Query("json", pattern="^(json|csv)$"),
+    format: str = Query("json", pattern="^(json|csv|openeox)$"),
     report_type: str | None = Query(None, description="all, unsupported, eol_eos_eof, or deprecated"),
     _principal=_security_role,
     db: Session = Depends(get_db),
@@ -337,7 +342,14 @@ def get_sbom_lifecycle_report(
             media_type="text/csv",
             headers={"Content-Disposition": f'attachment; filename="sbom_{id}_lifecycle{suffix}.csv"'},
         )
-    return LifecycleEnrichmentService().lifecycle_report(db, id)
+    report = LifecycleEnrichmentService().lifecycle_report(db, id)
+    if format == "openeox":
+        return Response(
+            content=json.dumps(lifecycle_report_openeox(report), indent=2),
+            media_type="application/json",
+            headers={"Content-Disposition": f'attachment; filename="sbom_{id}_lifecycle.openeox.json"'},
+        )
+    return report
 
 
 @router.get("/{id}/reports/lifecycle-pack")
@@ -352,6 +364,7 @@ def get_lifecycle_report_pack(
     buffer = BytesIO()
     with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("lifecycle.json", json.dumps(report, indent=2))
+        zf.writestr("lifecycle.openeox.json", json.dumps(lifecycle_report_openeox(report), indent=2))
         zf.writestr("lifecycle_all.csv", lifecycle_report_csv(db, id))
         zf.writestr("lifecycle_unsupported.csv", lifecycle_report_csv(db, id, report_type="unsupported"))
         zf.writestr("lifecycle_eol_eos_eof.csv", lifecycle_report_csv(db, id, report_type="eol_eos_eof"))
