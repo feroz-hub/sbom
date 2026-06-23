@@ -59,6 +59,7 @@ const NAV_ITEMS: NavItem[] = [
     icon: SettingsIcon,
     children: [
       { href: '/settings/ai', label: 'AI configuration' },
+      { href: '/settings/tenant', label: 'Tenant users' },
       { href: '/admin/ai-usage', label: 'AI usage' },
     ],
   },

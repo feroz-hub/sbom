@@ -8,6 +8,8 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, 
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from ..core.context import CurrentContext
+from ..core.security import get_current_tenant_context
 from ..db import get_db
 from ..models import SBOMValidationSession
 from ..schemas import SBOMSourceOut
@@ -83,6 +85,7 @@ def import_session(
     strict_ntia: bool = Query(False),
     verify_signature: bool = Query(False),
     project_required: bool = Query(False),
+    context: CurrentContext = Depends(get_current_tenant_context),
     db: Session = Depends(get_db),
     x_user_id: str | None = Header(None, alias="X-User-Id"),
 ):
@@ -96,9 +99,9 @@ def import_session(
         session_id,
         strict_ntia=strict_ntia,
         verify_signature=verify_signature,
-        actor_user_id=x_user_id,
+        actor_user_id=x_user_id or context.actor_label(),
     )
-    background_tasks.add_task(run_post_upload_enrichment, sbom.id)
+    background_tasks.add_task(run_post_upload_enrichment, sbom.id, context.tenant_id)
     return sbom
 
 

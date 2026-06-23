@@ -1,17 +1,16 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
-
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..core.context import CurrentContext
 from ..core.permissions import ROLE_PERMISSIONS, normalize_role
 from ..core.security import get_current_tenant_context, require_permission
 from ..db import get_db
-from ..models import AuditLog, IAMUser, Tenant, TenantUser
+from ..models import Tenant
+from ..services import audit_service
+from ..services import tenant_service as ts
 
 router = APIRouter(prefix="/api", tags=["identity"])
 
@@ -66,19 +65,7 @@ def list_my_tenants(
     context: CurrentContext = Depends(get_current_tenant_context),
     db: Session = Depends(get_db),
 ) -> list[dict]:
-    if context.is_platform_admin:
-        tenants = db.execute(select(Tenant).where(Tenant.status == "ACTIVE").order_by(Tenant.name)).scalars()
-        return [_tenant_dict(tenant, "PLATFORM_ADMIN") for tenant in tenants]
-    rows = db.execute(
-        select(Tenant, TenantUser.role)
-        .join(TenantUser, TenantUser.tenant_id == Tenant.id)
-        .where(
-            TenantUser.user_id == context.user_id,
-            TenantUser.status == "ACTIVE",
-            Tenant.status == "ACTIVE",
-        )
-        .order_by(Tenant.name)
-    ).all()
+    rows = ts.get_available_tenants_for_user(db, context.user_id, context.is_platform_admin)
     return [_tenant_dict(tenant, role) for tenant, role in rows]
 
 
@@ -88,16 +75,12 @@ def create_tenant(
     context: CurrentContext = Depends(require_permission("platform:admin")),
     db: Session = Depends(get_db),
 ) -> dict:
-    now = datetime.now(UTC)
-    tenant = Tenant(
-        name=payload.name.strip(),
+    tenant = ts.create_tenant(
+        db,
+        name=payload.name,
         slug=payload.slug,
         external_iam_tenant_id=payload.external_iam_tenant_id,
-        status="ACTIVE",
-        created_at=now,
-        updated_at=now,
     )
-    db.add(tenant)
     db.commit()
     db.refresh(tenant)
     return _tenant_dict(tenant)
@@ -111,12 +94,7 @@ def list_tenant_users(
 ) -> list[dict]:
     if tenant_id != context.tenant_id:
         raise HTTPException(status_code=403, detail="Tenant access denied")
-    rows = db.execute(
-        select(TenantUser, IAMUser)
-        .join(IAMUser, IAMUser.id == TenantUser.user_id)
-        .where(TenantUser.tenant_id == tenant_id)
-        .order_by(IAMUser.email, IAMUser.external_iam_user_id)
-    ).all()
+    rows = ts.list_tenant_users(db, tenant_id)
     return [
         {
             "membership_id": membership.id,
@@ -143,51 +121,22 @@ def add_tenant_user(
     role = normalize_role(payload.role)
     if role not in ROLE_PERMISSIONS or role == "PLATFORM_ADMIN":
         raise HTTPException(status_code=422, detail="Invalid tenant role")
-    now = datetime.now(UTC)
-    user = db.execute(
-        select(IAMUser).where(IAMUser.external_iam_user_id == payload.external_iam_user_id)
-    ).scalar_one_or_none()
-    if user is None:
-        user = IAMUser(
-            external_iam_user_id=payload.external_iam_user_id,
-            email=str(payload.email) if payload.email else None,
-            display_name=payload.display_name,
-            status="ACTIVE",
-            created_at=now,
-            updated_at=now,
-        )
-        db.add(user)
-        db.flush()
-    membership = db.execute(
-        select(TenantUser).where(TenantUser.tenant_id == tenant_id, TenantUser.user_id == user.id)
-    ).scalar_one_or_none()
-    if membership is None:
-        membership = TenantUser(
-            tenant_id=tenant_id,
-            user_id=user.id,
-            role=role,
-            status=payload.status.upper(),
-            created_at=now,
-            updated_at=now,
-        )
-        db.add(membership)
-    else:
-        membership.role = role
-        membership.status = payload.status.upper()
-        membership.updated_at = now
-    db.add(
-        AuditLog(
-            tenant_id=tenant_id,
-            user_id=context.external_user_id,
-            user_ref_id=context.user_id,
-            action="tenant.user.upsert",
-            target_kind="tenant_user",
-            target_id=user.id,
-            entity_type="tenant_user",
-            entity_id=str(user.id),
-            new_value={"role": role, "status": membership.status},
-            created_at=now.isoformat(),
-        )
+    membership, user = ts.add_user_to_tenant(
+        db,
+        tenant_id,
+        external_iam_user_id=payload.external_iam_user_id,
+        email=str(payload.email) if payload.email else None,
+        display_name=payload.display_name,
+        role=role,
+        status=payload.status,
+    )
+    audit_service.write_audit_log(
+        db,
+        context,
+        "tenant.user.upsert",
+        entity_type="tenant_user",
+        entity_id=user.id,
+        new_value={"role": role, "status": membership.status},
     )
     db.commit()
     return {"membership_id": membership.id, "user_id": user.id, "role": role, "status": membership.status}
@@ -203,34 +152,25 @@ def update_tenant_user(
 ) -> dict:
     if tenant_id != context.tenant_id:
         raise HTTPException(status_code=403, detail="Tenant access denied")
-    membership = db.execute(
-        select(TenantUser).where(TenantUser.id == membership_id, TenantUser.tenant_id == tenant_id)
-    ).scalar_one_or_none()
-    if membership is None:
-        raise HTTPException(status_code=404, detail="Membership not found")
-    old = {"role": membership.role, "status": membership.status}
     if payload.role is not None:
         role = normalize_role(payload.role)
         if role not in ROLE_PERMISSIONS or role == "PLATFORM_ADMIN":
             raise HTTPException(status_code=422, detail="Invalid tenant role")
-        membership.role = role
-    if payload.status is not None:
-        membership.status = payload.status.upper()
-    membership.updated_at = datetime.now(UTC)
-    db.add(
-        AuditLog(
-            tenant_id=tenant_id,
-            user_id=context.external_user_id,
-            user_ref_id=context.user_id,
-            action="tenant.user.update",
-            target_kind="tenant_user",
-            target_id=membership.user_id,
-            entity_type="tenant_user",
-            entity_id=str(membership.user_id),
-            old_value=old,
-            new_value={"role": membership.role, "status": membership.status},
-            created_at=membership.updated_at.isoformat(),
-        )
+    membership, old, new = ts.update_user_role(
+        db,
+        tenant_id,
+        membership_id,
+        role=normalize_role(payload.role) if payload.role is not None else None,
+        status=payload.status,
+    )
+    audit_service.write_audit_log(
+        db,
+        context,
+        "tenant.user.update",
+        entity_type="tenant_user",
+        entity_id=membership.user_id,
+        old_value=old,
+        new_value=new,
     )
     db.commit()
     return {"membership_id": membership.id, "role": membership.role, "status": membership.status}

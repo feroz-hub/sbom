@@ -46,6 +46,23 @@ def delete_db() -> Iterator[Session]:
 
     Base.metadata.create_all(engine)
     session = Session(engine)
+    from datetime import UTC, datetime
+
+    from app.models import Tenant
+
+    now = datetime.now(UTC)
+    session.add(
+        Tenant(
+            id=1,
+            name="Default Tenant",
+            slug="default",
+            external_iam_tenant_id="default",
+            status="ACTIVE",
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    session.commit()
     try:
         yield session
     finally:

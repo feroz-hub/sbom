@@ -34,7 +34,8 @@ from ..analysis import (
     extract_components,
     get_analysis_settings_multi,
 )
-from ..auth import require_roles
+from ..core.context import CurrentContext
+from ..core.security import get_current_tenant_context
 from ..db import get_db
 from ..idempotency import (
     analysis_run_to_dict,
@@ -61,6 +62,7 @@ from ..services import audit_log
 from ..services.analysis_service import compute_report_status, persist_analysis_run
 from ..services.sbom_delete_service import SBOMDeleteConflict, SBOMDeleteService
 from ..services.sbom_enrichment_service import mark_enrichment_pending, run_post_upload_enrichment
+from ..services.tenant_access import get_project_for_tenant, get_sbom_for_tenant
 from ..services.sbom_service import coerce_sbom_data
 from ..services.soft_delete import SoftDeleteService
 from ..services.validation_repair_service import (
@@ -83,8 +85,6 @@ from ..validation import run as run_validation
 log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["sboms"])
-_security_role = Depends(require_roles("admin", "security"))
-
 
 # ---- Helper Functions ----
 
@@ -327,8 +327,12 @@ def _validate_positive_int(value: int, param_name: str = "id") -> int:
 
 
 @router.get("/sboms/{sbom_id}", response_model=SBOMSourceOut)
-def get_sbom(sbom_id: int, db: Session = Depends(get_db)):
-    sbom = db.get(SBOMSource, sbom_id)
+def get_sbom(
+    sbom_id: int,
+    context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
+):
+    sbom = get_sbom_for_tenant(db, sbom_id, context.tenant_id)
     if not sbom:
         raise HTTPException(status_code=404, detail="SBOM not found")
     return sbom
@@ -338,11 +342,12 @@ def get_sbom(sbom_id: int, db: Session = Depends(get_db)):
 def create_sbom(
     payload: SBOMSourceCreate,
     background_tasks: BackgroundTasks,
+    context: CurrentContext = Depends(get_current_tenant_context),
     db: Session = Depends(get_db),
 ):
     log.info("Creating SBOM: name='%s' project_id=%s", payload.sbom_name, payload.projectid)
     # --- Foreign key checks ---
-    if payload.projectid is not None and db.get(Projects, payload.projectid) is None:
+    if payload.projectid is not None and get_project_for_tenant(db, payload.projectid, context.tenant_id) is None:
         log.warning("create_sbom: project_id=%s not found", payload.projectid)
         raise HTTPException(status_code=404, detail="Project not found")
     if payload.sbom_type is not None and db.get(SBOMType, payload.sbom_type) is None:
@@ -391,6 +396,7 @@ def create_sbom(
     try:
         data = payload.model_dump()
         data["sbom_data"] = raw_text or None
+        data["created_by"] = data.get("created_by") or context.actor_label()
         obj = SBOMSource(
             **data,
             created_on=now_iso(),
@@ -424,7 +430,7 @@ def create_sbom(
             db.rollback()
             log.warning("Component sync failed for SBOM id=%d: %s", obj.id, exc)
 
-        background_tasks.add_task(run_post_upload_enrichment, obj.id)
+        background_tasks.add_task(run_post_upload_enrichment, obj.id, context.tenant_id)
         return obj
 
     except IntegrityError as exc:
@@ -617,20 +623,16 @@ def get_sbom_dedupe_report(
 def update_sbom(
     sbom_id: int,
     payload: SbomPatchRequest,
-    user_id: str | None = Query(None, description="Must match SBOM.created_by"),
+    context: CurrentContext = Depends(get_current_tenant_context),
     db: Session = Depends(get_db),
 ):
-    sbom = db.get(SBOMSource, sbom_id)
+    sbom = get_sbom_for_tenant(db, sbom_id, context.tenant_id)
     if not sbom:
         raise HTTPException(status_code=404, detail="SBOM not found")
 
-    actual_owner = (sbom.created_by or "").strip().lower()
-    if user_id:
-        caller = user_id.strip().lower()
-        if actual_owner and actual_owner != caller:
-            raise HTTPException(status_code=403, detail="Forbidden: user cannot update this SBOM")
-        if not sbom.created_by:
-            sbom.created_by = user_id
+    actor = context.actor_label()
+    if not sbom.created_by:
+        sbom.created_by = actor
 
     old_project_id = sbom.projectid
     old_name = sbom.sbom_name
@@ -647,9 +649,9 @@ def update_sbom(
             except (ValueError, TypeError):
                 raise HTTPException(status_code=400, detail="Invalid project_id format")
 
-            project = db.get(Projects, p_id)
+            project = get_project_for_tenant(db, p_id, context.tenant_id)
             if not project:
-                raise HTTPException(status_code=400, detail="Project not found")
+                raise HTTPException(status_code=404, detail="Project not found")
             new_proj_id = p_id
 
         # Update project_id in SBOMSource
@@ -676,8 +678,7 @@ def update_sbom(
         sbom.description = data["description"]
 
     sbom.modified_on = now_iso()
-    if user_id:
-        sbom.modified_by = user_id
+    sbom.modified_by = actor
 
     try:
         db.add(sbom)
@@ -687,7 +688,7 @@ def update_sbom(
         # Log to generic audit trail
         audit_log.record(
             db,
-            user_id=user_id,
+            user_id=actor,
             action="sbom.update",
             target_kind="sbom",
             target_id=sbom.id,
@@ -697,7 +698,7 @@ def update_sbom(
                 "new_project_id": sbom.projectid,
                 "old_name": old_name,
                 "new_name": sbom.sbom_name,
-                "changed_by": user_id,
+                "changed_by": actor,
                 "changed_at": now_iso(),
                 "change_reason": payload.change_reason,
             },
@@ -705,7 +706,7 @@ def update_sbom(
         return sbom
     except Exception:
         db.rollback()
-        log.exception("update_sbom failed: sbom_id=%s user=%s", sbom_id, user_id)
+        log.exception("update_sbom failed: sbom_id=%s user=%s", sbom_id, actor)
         raise HTTPException(
             status_code=500,
             detail={"code": "internal_error", "message": "Internal server error."},
@@ -727,7 +728,6 @@ def sbom_delete_impact(
 @router.delete("/sboms/{sbom_id}", status_code=status.HTTP_200_OK)
 def delete_sbom(
     sbom_id: int,
-    user_id: str = Query(..., description="CreatedBy user id; must match SBOM.created_by"),
     confirm: str = Query("no", description="Set to 'yes' to confirm deletion"),
     permanent: bool = Query(
         False,
@@ -738,11 +738,13 @@ def delete_sbom(
             "recovery."
         ),
     ),
+    context: CurrentContext = Depends(get_current_tenant_context),
     db: Session = Depends(get_db),
 ):
     if sbom_id is None or not isinstance(sbom_id, int) or sbom_id <= 0:
         raise HTTPException(status_code=400, detail="Invalid sbom_id. It must be a positive integer.")
 
+    user_id = context.actor_label()
     service = SBOMDeleteService(db)
     sbom = service.get_sbom(sbom_id)
     if not sbom:
@@ -750,9 +752,6 @@ def delete_sbom(
 
     def _norm(s: str | None) -> str:
         return (s or "").strip().lower()
-
-    if sbom.created_by and _norm(sbom.created_by) != _norm(user_id):
-        raise HTTPException(status_code=403, detail="Forbidden: user cannot delete this SBOM")
 
     confirmed = _norm(confirm) in {"yes", "y"}
     if not confirmed and not permanent:
@@ -763,7 +762,7 @@ def delete_sbom(
                 "To proceed, resend the request with confirm=yes "
                 "(and add permanent=true to bypass soft delete)."
             ),
-            "example": f"/api/sboms/{sbom_id}?user_id={user_id}&confirm=yes",
+            "example": f"/api/sboms/{sbom_id}?confirm=yes",
         }
 
     if permanent:
@@ -798,8 +797,7 @@ def delete_sbom(
 @router.post("/sboms/{sbom_id}/restore", status_code=status.HTTP_200_OK)
 def restore_sbom(
     sbom_id: int = Path(..., ge=1),
-    user_id: str | None = Query(None),
-    _principal=_security_role,
+    context: CurrentContext = Depends(get_current_tenant_context),
     db: Session = Depends(get_db),
 ):
     """Restore a soft-deleted SBOM. Does not cascade — children must be
@@ -816,7 +814,7 @@ def restore_sbom(
     db.commit()
     audit_log.record(
         db,
-        user_id=user_id,
+        user_id=context.actor_label(),
         action="sbom.restore",
         target_kind="sbom",
         target_id=sbom_id,

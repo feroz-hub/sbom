@@ -221,6 +221,7 @@ def build_trend_annotations(db: Session, *, days: int) -> list[TrendAnnotation]:
 
 def _consecutive_successful_run_pairs(
     db: Session,
+    tenant_id: int | None = None,
 ) -> list[tuple[int, int, str | None]]:
     """Yield ``(run_a_id, run_b_id, run_b_started_on)`` pairs for the same SBOM
     where ``b`` is the immediate successor of ``a`` in chronological order
@@ -231,8 +232,15 @@ def _consecutive_successful_run_pairs(
     SQLite supports window functions since 3.25 and the ORM string this
     builds is fine on Postgres too.
     """
+    if tenant_id is None:
+        from ..core.context import get_bound_context
+
+        ctx = get_bound_context()
+        tenant_id = ctx.tenant_id if ctx else None
+
+    tenant_filter = "AND tenant_id = :tenant_id" if tenant_id is not None else ""
     sql = text(
-        """
+        f"""
         WITH ordered AS (
             SELECT
                 id,
@@ -241,6 +249,7 @@ def _consecutive_successful_run_pairs(
                 ROW_NUMBER() OVER (PARTITION BY sbom_id ORDER BY id) AS rn
             FROM analysis_run
             WHERE run_status IN ('OK','FINDINGS','PARTIAL')
+            {tenant_filter}
         )
         SELECT a.id AS run_a, b.id AS run_b, b.started_on AS run_b_started
         FROM ordered a
@@ -249,7 +258,8 @@ def _consecutive_successful_run_pairs(
         ORDER BY b.id
         """
     )
-    return [(row[0], row[1], row[2]) for row in db.execute(sql).all()]
+    params = {"tenant_id": tenant_id} if tenant_id is not None else {}
+    return [(row[0], row[1], row[2]) for row in db.execute(sql, params).all()]
 
 
 def _finding_keys_for_run(db: Session, run_id: int) -> set[tuple[str, str, str]]:

@@ -9,7 +9,10 @@
  */
 
 import { useEffect, type ReactNode } from 'react';
+import { usePathname } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+
+const PUBLIC_PATHS = ['/auth/callback', '/access-denied'];
 
 interface AuthGuardProps {
   children: ReactNode;
@@ -20,13 +23,21 @@ interface AuthGuardProps {
 }
 
 export function AuthGuard({ children, requiredPermission, requiredRoles }: AuthGuardProps) {
+  const pathname = usePathname();
   const { isAuthenticated, isLoading, config, login, hasPermission, hasAnyRole } = useAuth();
 
+  const isPublicPath = PUBLIC_PATHS.some((p) => pathname?.startsWith(p));
+
   useEffect(() => {
+    if (isPublicPath) return;
     if (!isLoading && config.enabled && !isAuthenticated) {
       login();
     }
-  }, [isLoading, config.enabled, isAuthenticated, login]);
+  }, [isLoading, config.enabled, isAuthenticated, login, isPublicPath]);
+
+  if (isPublicPath) {
+    return <>{children}</>;
+  }
 
   // Loading state
   if (isLoading) {

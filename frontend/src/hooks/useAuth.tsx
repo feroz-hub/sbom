@@ -90,12 +90,12 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 const DEV_USER: AuthUser = {
   userId: 1,
-  externalUserId: 'local-dev-admin',
-  email: 'local-admin@localhost',
-  displayName: 'Local Development Admin',
+  externalUserId: 'dev-user',
+  email: 'dev@local',
+  displayName: 'Dev User',
   tenantId: 1,
-  externalTenantId: 'local-default',
-  roles: ['PLATFORM_ADMIN'],
+  externalTenantId: 'default',
+  roles: ['TENANT_ADMIN'],
   permissions: [
     'sbom:read', 'sbom:upload', 'sbom:update', 'sbom:delete', 'sbom:export',
     'project:read', 'project:create', 'project:update', 'project:delete',
@@ -118,9 +118,9 @@ const DEV_TENANTS: TenantInfo[] = [
     id: 1,
     name: 'Default Tenant',
     slug: 'default',
-    externalIamTenantId: 'local-default',
+    externalIamTenantId: 'default',
     status: 'ACTIVE',
-    role: 'PLATFORM_ADMIN',
+    role: 'TENANT_ADMIN',
   },
 ];
 

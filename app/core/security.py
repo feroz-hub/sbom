@@ -4,24 +4,21 @@ import os
 import threading
 import time
 from collections.abc import Callable, Iterator
-from datetime import UTC, datetime
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ..models import IAMUser
 
-
 import jwt
 from fastapi import Depends, Header, HTTPException, Request, status
 from jwt import InvalidTokenError, PyJWKClient
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..settings import get_settings
 from .context import CurrentContext, bind_context, reset_context
-from .permissions import normalize_role, permissions_for_roles
+from .permissions import normalize_role
 
 AUTH_CHALLENGE = {"WWW-Authenticate": 'Bearer realm="sbom-analyzer"'}
 
@@ -109,11 +106,11 @@ def get_current_claims(
     settings = get_settings()
     if not settings.auth_enabled:
         return {
-            "sub": "local-dev-admin",
-            "email": "local-admin@localhost",
-            "name": "Local Development Admin",
-            settings.hcl_iam_role_claim: ["PLATFORM_ADMIN"],
-            settings.hcl_iam_tenant_claim: "local-default",
+            "sub": "dev-user",
+            "email": "dev@local",
+            "name": "Dev User",
+            settings.hcl_iam_role_claim: ["TENANT_ADMIN"],
+            settings.hcl_iam_tenant_claim: "default",
         }
     if not authorization or not authorization.lower().startswith("bearer "):
         raise _unauthorized()
@@ -155,7 +152,8 @@ def _set_cached_context(claims: dict[str, Any], x_tenant_id: str | None, context
     iat = claims.get("iat")
     key = (sub, x_tenant_id, iat)
     now = time.time()
-    expires_at = now + 60.0  # 60s TTL
+    settings = get_settings()
+    expires_at = now + float(settings.auth_context_cache_seconds)
     exp = claims.get("exp")
     if exp:
         try:
@@ -167,60 +165,9 @@ def _set_cached_context(claims: dict[str, Any], x_tenant_id: str | None, context
 
 
 def _upsert_user(db: Session, claims: dict[str, Any]) -> tuple[IAMUser, bool]:
-    from ..models import IAMUser
+    from ..services import tenant_service
 
-    external_id = str(claims["sub"])
-    now = datetime.now(UTC)
-    user = db.execute(select(IAMUser).where(IAMUser.external_iam_user_id == external_id)).scalar_one_or_none()
-
-    needs_commit = False
-    if user is None:
-        user = IAMUser(
-            external_iam_user_id=external_id,
-            email=claims.get("email"),
-            display_name=claims.get("name") or claims.get("preferred_username"),
-            status="ACTIVE",
-            created_at=now,
-            updated_at=now,
-            last_login_at=now,
-        )
-        db.add(user)
-        db.flush()
-        needs_commit = True
-    else:
-        changed = False
-        new_email = claims.get("email")
-        new_name = claims.get("name") or claims.get("preferred_username")
-
-        if new_email and user.email != new_email:
-            user.email = new_email
-            changed = True
-        if new_name and user.display_name != new_name:
-            user.display_name = new_name
-            changed = True
-
-        last_login = user.last_login_at
-        if last_login is not None:
-            if last_login.tzinfo is None:
-                time_diff = (datetime.now(UTC).replace(tzinfo=None) - last_login).total_seconds()
-            else:
-                time_diff = (now - last_login).total_seconds()
-        else:
-            time_diff = 999999
-
-        if time_diff > 300:
-            user.last_login_at = now
-            user.updated_at = now
-            changed = True
-
-        if changed:
-            db.add(user)
-            db.flush()
-            needs_commit = True
-
-    if user.status != "ACTIVE":
-        raise HTTPException(status_code=403, detail="Access denied")
-    return user, needs_commit
+    return tenant_service.get_or_create_user_from_claims(db, claims)
 
 
 def _resolve_context(
@@ -228,70 +175,24 @@ def _resolve_context(
     claims: dict[str, Any],
     selected_tenant: str | None,
 ) -> CurrentContext:
-    from ..models import Tenant, TenantUser
+    from ..services import tenant_service
 
     settings = get_settings()
     user, needs_commit = _upsert_user(db, claims)
     token_roles = _roles(_claim(claims, settings.hcl_iam_role_claim))
-    is_platform_admin = "PLATFORM_ADMIN" in token_roles
-    memberships = db.execute(
-        select(TenantUser, Tenant)
-        .join(Tenant, Tenant.id == TenantUser.tenant_id)
-        .where(
-            TenantUser.user_id == user.id,
-            TenantUser.status == "ACTIVE",
-            Tenant.status == "ACTIVE",
-        )
-    ).all()
-
+    memberships = tenant_service.get_user_memberships(db, user.id)
     tenant_claim = _claim(claims, settings.hcl_iam_tenant_claim)
-    requested = (selected_tenant or "").strip()
-    selected: Tenant | None = None
-    membership: TenantUser | None = None
-    if requested:
-        for member, tenant in memberships:
-            if requested in {str(tenant.id), tenant.slug, tenant.external_iam_tenant_id}:
-                membership, selected = member, tenant
-                break
-        if selected is None and is_platform_admin:
-            selected = db.execute(
-                select(Tenant).where(
-                    Tenant.status == "ACTIVE",
-                    sa_or_tenant_identity(Tenant, requested),
-                )
-            ).scalar_one_or_none()
-    elif tenant_claim is not None:
-        claim_value = str(tenant_claim)
-        for member, tenant in memberships:
-            if claim_value in {str(tenant.id), tenant.slug, tenant.external_iam_tenant_id}:
-                membership, selected = member, tenant
-                break
-        if selected is None and is_platform_admin:
-            selected = db.execute(
-                select(Tenant).where(Tenant.external_iam_tenant_id == claim_value)
-            ).scalar_one_or_none()
-    elif len(memberships) == 1:
-        membership, selected = memberships[0]
-    elif not settings.auth_enabled:
-        selected = db.execute(select(Tenant).where(Tenant.slug == settings.default_tenant_slug)).scalar_one_or_none()
-        membership = (
-            db.execute(
-                select(TenantUser).where(
-                    TenantUser.tenant_id == selected.id,
-                    TenantUser.user_id == user.id,
-                )
-            ).scalar_one_or_none()
-            if selected
-            else None
-        )
 
-    if selected is None or (membership is None and not is_platform_admin):
-        db.rollback()
-        raise HTTPException(status_code=403, detail="Tenant access denied")
-    roles = {normalize_role(membership.role)} if membership else set()
-    if is_platform_admin:
-        roles.add("PLATFORM_ADMIN")
-    permissions = permissions_for_roles(frozenset(roles))
+    selected, membership, roles, permissions, is_platform_admin = tenant_service.resolve_active_tenant(
+        db,
+        user,
+        memberships,
+        selected_tenant=selected_tenant,
+        tenant_claim=tenant_claim,
+        token_roles=token_roles,
+        auth_enabled=settings.auth_enabled,
+    )
+
     if needs_commit:
         db.commit()
     return CurrentContext(
@@ -301,19 +202,10 @@ def _resolve_context(
         display_name=user.display_name,
         tenant_id=selected.id,
         external_tenant_id=selected.external_iam_tenant_id,
-        roles=frozenset(roles),
+        roles=roles,
         permissions=permissions,
         is_platform_admin=is_platform_admin,
     )
-
-
-def sa_or_tenant_identity(tenant_model, value: str):
-    from sqlalchemy import or_
-
-    clauses = [tenant_model.slug == value, tenant_model.external_iam_tenant_id == value]
-    if value.isdigit():
-        clauses.append(tenant_model.id == int(value))
-    return or_(*clauses)
 
 
 def get_current_tenant_context(

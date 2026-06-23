@@ -122,9 +122,10 @@ function handleAuthError(status: number): void {
   }
 
   if (status === 403) {
-    // Don't auto-redirect for 403 on specific endpoints that callers handle
-    // (e.g. tenant-switch probing, permission checks). Only redirect for
-    // top-level page-load 403s. Callers can catch HttpError(403) themselves.
+    const path = window.location.pathname;
+    if (!path.startsWith('/access-denied') && !path.startsWith('/auth/')) {
+      window.location.href = '/access-denied';
+    }
   }
 }
 

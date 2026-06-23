@@ -385,41 +385,76 @@ def test_generic_repository_health_remains_unknown_low_confidence():
 
 
 def test_rbac_blocks_viewer_and_allows_security_override(client, monkeypatch):
+    """VEX write requires vex:write — enforced via HCL IAM permissions."""
+    from app.core.permissions import permissions_for_roles
+    from app.core.context import CurrentContext
+    from app.core.security import get_current_tenant_context
+
     db = _session()
     try:
-        sbom = SBOMSource(sbom_name="rbac-vex-sbom", sbom_data="{}", status="validated")
+        sbom = SBOMSource(sbom_name="rbac-vex-sbom", sbom_data="{}", status="validated", tenant_id=1)
         db.add(sbom)
         db.flush()
-        component = SBOMComponent(sbom_id=sbom.id, name="openssl", version="1.1.1")
+        component = SBOMComponent(sbom_id=sbom.id, name="openssl", version="1.1.1", tenant_id=1)
         db.add(component)
         db.commit()
 
-        monkeypatch.setenv("API_AUTH_MODE", "bearer")
-        monkeypatch.setenv("API_AUTH_TOKENS", "secret")
-        headers = {"Authorization": "Bearer secret"}
         payload = {
             "status": "affected",
             "reason": "security review",
             "impact_statement": "reachable",
         }
+
+        viewer_ctx = CurrentContext(
+            user_id=1,
+            external_user_id="viewer",
+            email="viewer@test",
+            display_name="Viewer",
+            tenant_id=1,
+            external_tenant_id="default",
+            roles=frozenset({"VIEWER"}),
+            permissions=permissions_for_roles(frozenset({"VIEWER"})),
+            is_platform_admin=False,
+        )
+        analyst_ctx = CurrentContext(
+            user_id=1,
+            external_user_id="analyst",
+            email="analyst@test",
+            display_name="Analyst",
+            tenant_id=1,
+            external_tenant_id="default",
+            roles=frozenset({"SECURITY_ANALYST"}),
+            permissions=permissions_for_roles(frozenset({"SECURITY_ANALYST"})),
+            is_platform_admin=False,
+        )
+
+        def _viewer_dep():
+            yield viewer_ctx
+
+        def _analyst_dep():
+            yield analyst_ctx
+
+        from app.main import app
+
+        app.dependency_overrides[get_current_tenant_context] = _viewer_dep
         blocked = client.patch(
             f"/api/components/{component.id}/vulnerabilities/CVE-2026-9999/vex-override",
             json=payload,
-            headers=headers,
         )
         assert blocked.status_code == 403
 
+        app.dependency_overrides[get_current_tenant_context] = _analyst_dep
         allowed = client.patch(
             f"/api/components/{component.id}/vulnerabilities/CVE-2026-9999/vex-override",
             json=payload,
-            headers={**headers, "X-SBOM-Roles": "security", "X-SBOM-User": "sec@example.test"},
         )
         assert allowed.status_code == 200
+        app.dependency_overrides.pop(get_current_tenant_context, None)
         audit = (
             db.execute(select(VexOverrideAudit).where(VexOverrideAudit.component_id == component.id)).scalars().first()
         )
         assert audit is not None
-        assert audit.changed_by == "sec@example.test"
+        assert audit.changed_by == "analyst@test"
     finally:
         monkeypatch.setenv("API_AUTH_MODE", "none")
         os.environ.pop("API_AUTH_TOKENS", None)

@@ -24,10 +24,14 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPExcepti
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from ..core.context import CurrentContext
+from ..core.security import get_current_tenant_context
 from ..db import get_db
-from ..models import Projects, SBOMSource, SBOMType
+from ..models import SBOMSource, SBOMType
+from ..services import audit_service
 from ..services.sbom_enrichment_service import mark_enrichment_pending, run_post_upload_enrichment
 from ..services.sbom_service import sync_sbom_components
+from ..services.tenant_access import get_project_for_tenant
 from ..services.validation_repair_service import (
     ValidationRepairService,
     build_validation_failed_detail,
@@ -71,7 +75,7 @@ async def upload_sbom(
     sbom_name: str = Form(..., min_length=1, max_length=255),
     project_id: int | None = Form(None),
     sbom_type: int | None = Form(None),
-    created_by: str | None = Form(None),
+    context: CurrentContext = Depends(get_current_tenant_context),
     strict_ntia: bool = Query(False, description="Promote NTIA warnings to hard errors."),
     db: Session = Depends(get_db),
 ) -> SbomAcceptedResponse:
@@ -85,7 +89,9 @@ async def upload_sbom(
     settings = get_settings()
     max_bytes = int(getattr(settings, "MAX_UPLOAD_BYTES", 50 * 1024 * 1024))
 
-    if project_id is not None and db.get(Projects, project_id) is None:
+    created_by = context.actor_label()
+
+    if project_id is not None and get_project_for_tenant(db, project_id, context.tenant_id) is None:
         raise HTTPException(status_code=404, detail="Project not found")
     if sbom_type is not None and db.get(SBOMType, sbom_type) is None:
         raise HTTPException(status_code=404, detail="SBOM type not found")
@@ -185,6 +191,15 @@ async def upload_sbom(
         db.add(obj)
         db.commit()
         db.refresh(obj)
+        audit_service.write_audit_log(
+            db,
+            context,
+            "sbom.upload",
+            entity_type="sbom",
+            entity_id=obj.id,
+            new_value={"sbom_name": obj.sbom_name, "project_id": obj.projectid},
+        )
+        db.commit()
     except Exception:
         db.rollback()
         log.exception("upload_sbom: persist failed for name=%s", sbom_name)
@@ -200,7 +215,7 @@ async def upload_sbom(
         db.rollback()
         log.warning("Failed to sync uploaded SBOM components %s: %s", obj.id, exc)
 
-    background_tasks.add_task(run_post_upload_enrichment, obj.id)
+    background_tasks.add_task(run_post_upload_enrichment, obj.id, context.tenant_id)
 
     return SbomAcceptedResponse(
         sbom_id=obj.id,

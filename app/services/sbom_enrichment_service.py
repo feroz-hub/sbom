@@ -24,7 +24,7 @@ def mark_enrichment_pending(sbom: SBOMSource) -> None:
     sbom.enrichment_error = None
 
 
-def run_post_upload_enrichment(sbom_id: int) -> None:
+def run_post_upload_enrichment(sbom_id: int, tenant_id: int | None = None) -> None:
     """Run slow enrichment work after upload/import response completion.
 
     This function owns its DB session so it is safe to schedule from
@@ -32,31 +32,38 @@ def run_post_upload_enrichment(sbom_id: int) -> None:
     never affect the already-validated trusted SBOM.
     """
 
+    from ..core.context import minimal_background_context, tenant_scope
     from .lifecycle.types import now_iso
 
     db: Session = SessionLocal()
     try:
-        sbom = db.get(SBOMSource, sbom_id)
+        from sqlalchemy import select
+
+        stmt = select(SBOMSource).where(SBOMSource.id == sbom_id)
+        if tenant_id is not None:
+            stmt = stmt.where(SBOMSource.tenant_id == tenant_id)
+        sbom = db.execute(stmt).scalar_one_or_none()
         if sbom is None:
             return
-
-        started = now_iso()
-        sbom.enrichment_status = "running"
-        sbom.enrichment_started_at = started
-        sbom.enrichment_error = None
-        db.commit()
-
-        sync_lifecycle_for_sbom(db, sbom_id)
-        process_embedded_vex_for_sbom(db, sbom_id)
-        _run_background_nvd_enrichment(db, sbom_id)
-
-        sbom = db.get(SBOMSource, sbom_id)
-        if sbom is not None:
-            compute_and_save_completeness(db, sbom)
-            sbom.enrichment_status = "completed"
-            sbom.enrichment_completed_at = now_iso()
+        effective_tenant = tenant_id or sbom.tenant_id
+        with tenant_scope(minimal_background_context(effective_tenant)):
+            started = now_iso()
+            sbom.enrichment_status = "running"
+            sbom.enrichment_started_at = started
             sbom.enrichment_error = None
             db.commit()
+
+            sync_lifecycle_for_sbom(db, sbom_id)
+            process_embedded_vex_for_sbom(db, sbom_id)
+            _run_background_nvd_enrichment(db, sbom_id)
+
+            sbom = db.get(SBOMSource, sbom_id)
+            if sbom is not None:
+                compute_and_save_completeness(db, sbom)
+                sbom.enrichment_status = "completed"
+                sbom.enrichment_completed_at = now_iso()
+                sbom.enrichment_error = None
+                db.commit()
     except Exception as exc:  # pragma: no cover - defensive background path
         log.exception("Post-upload enrichment failed for sbom_id=%s", sbom_id)
         db.rollback()

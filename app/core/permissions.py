@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from enum import Enum
+
 ALL_PERMISSIONS = frozenset(
     {
         "sbom:read",
@@ -91,8 +93,24 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
 }
 
 
+class Role(str, Enum):
+    PLATFORM_ADMIN = "PLATFORM_ADMIN"
+    TENANT_ADMIN = "TENANT_ADMIN"
+    SECURITY_ANALYST = "SECURITY_ANALYST"
+    DEVELOPER = "DEVELOPER"
+    VIEWER = "VIEWER"
+
+
 def normalize_role(role: str) -> str:
     return role.strip().upper().replace("-", "_").replace(" ", "_")
+
+
+def get_permissions_for_role(role: str) -> frozenset[str]:
+    return ROLE_PERMISSIONS.get(normalize_role(role), frozenset())
+
+
+def has_permission(role: str, permission: str) -> bool:
+    return permission in get_permissions_for_role(role)
 
 
 def permissions_for_roles(roles: set[str] | frozenset[str]) -> frozenset[str]:

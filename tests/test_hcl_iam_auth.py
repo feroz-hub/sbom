@@ -216,8 +216,8 @@ class TestGetCurrentUser:
         reset_settings()
 
         claims = get_current_user(authorization=None)
-        assert claims["sub"] == "local-dev-admin"
-        assert claims["email"] == "local-admin@localhost"
+        assert claims["sub"] == "dev-user"
+        assert claims["email"] == "dev@local"
 
     def test_missing_auth_header_raises_401(self, monkeypatch):
         monkeypatch.setenv("AUTH_ENABLED", "true")

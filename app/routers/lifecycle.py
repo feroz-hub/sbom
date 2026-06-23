@@ -9,7 +9,8 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from ..auth import require_roles
+from ..core.context import CurrentContext
+from ..core.security import get_current_tenant_context
 from ..db import get_db
 from ..models import SBOMComponent
 from ..schemas import LifecycleInfoUpdate, SBOMComponentOut
@@ -18,7 +19,6 @@ from ..services.lifecycle import LifecycleEnrichmentService, refresh_component_l
 log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["lifecycle"])
-_security_role = Depends(require_roles("admin", "security"))
 
 
 @router.get("/api/lifecycle/component/{component_id}", response_model=SBOMComponentOut)
@@ -34,7 +34,10 @@ def get_component_lifecycle(component_id: int, db: Session = Depends(get_db)):
 
 @router.put("/api/lifecycle/component/{component_id}", response_model=SBOMComponentOut)
 def update_component_lifecycle(
-    component_id: int, payload: LifecycleInfoUpdate, _principal=_security_role, db: Session = Depends(get_db)
+    component_id: int,
+    payload: LifecycleInfoUpdate,
+    context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
 ):
     """Backward-compatible manual lifecycle override endpoint."""
 
@@ -42,7 +45,7 @@ def update_component_lifecycle(
         db,
         component_id,
         payload.model_dump(exclude_none=True),
-        updated_by=payload.updated_by,
+        updated_by=payload.updated_by or context.actor_label(),
     )
 
 
@@ -50,7 +53,7 @@ def update_component_lifecycle(
 def patch_component_lifecycle_override(
     component_id: int,
     payload: LifecycleInfoUpdate,
-    _principal=_security_role,
+    context: CurrentContext = Depends(get_current_tenant_context),
     db: Session = Depends(get_db),
 ):
     """Apply an audited manual lifecycle override to a component."""
@@ -59,7 +62,7 @@ def patch_component_lifecycle_override(
         db,
         component_id,
         payload.model_dump(exclude_none=True),
-        updated_by=payload.updated_by,
+        updated_by=payload.updated_by or context.actor_label(),
     )
 
 
@@ -67,7 +70,6 @@ def patch_component_lifecycle_override(
 def refresh_component_lifecycle_endpoint(
     component_id: int,
     force: bool = Query(True),
-    _principal=_security_role,
     db: Session = Depends(get_db),
 ):
     """Force refresh lifecycle enrichment for one component."""

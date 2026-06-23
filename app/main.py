@@ -382,15 +382,19 @@ def _ensure_seed_data() -> None:
         if user is None:
             user = IAMUser(
                 id=1,
-                external_iam_user_id="local-dev-admin",
-                email="local-admin@localhost",
-                display_name="Local Development Admin",
+                external_iam_user_id="dev-user",
+                email="dev@local",
+                display_name="Dev User",
                 status="ACTIVE",
                 created_at=now,
                 updated_at=now,
                 last_login_at=now,
             )
             db.add(user)
+        elif user.external_iam_user_id == "local-dev-admin":
+            user.external_iam_user_id = "dev-user"
+            user.email = user.email or "dev@local"
+            user.display_name = user.display_name or "Dev User"
         db.flush()
         membership = db.execute(
             select(TenantUser).where(TenantUser.tenant_id == 1, TenantUser.user_id == 1)
@@ -400,12 +404,14 @@ def _ensure_seed_data() -> None:
                 TenantUser(
                     tenant_id=1,
                     user_id=1,
-                    role="PLATFORM_ADMIN",
+                    role="TENANT_ADMIN",
                     status="ACTIVE",
                     created_at=now,
                     updated_at=now,
                 )
             )
+        elif membership.role == "PLATFORM_ADMIN" and not get_settings().auth_enabled:
+            membership.role = "TENANT_ADMIN"
         db.commit()
 
         # Seed default SBOM types
@@ -737,7 +743,7 @@ error_handlers.install(app)
 # (the default) the dependency is a cheap no-op, so applying it everywhere
 # costs essentially nothing in dev but makes production a one-env-var flip.
 
-_protected = [Depends(require_auth), Depends(enforce_request_access)]
+_protected = [Depends(enforce_request_access)]
 
 app.include_router(health.router)  # intentionally unprotected
 app.include_router(sbom_versions.router, dependencies=_protected)

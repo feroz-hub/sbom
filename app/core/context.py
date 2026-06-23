@@ -21,6 +21,10 @@ class CurrentContext:
     def has_permission(self, permission: str) -> bool:
         return permission in self.permissions
 
+    def actor_label(self) -> str:
+        """Stable string for created_by / modified_by attribution."""
+        return self.email or self.external_user_id or str(self.user_id)
+
 
 _current_context: ContextVar[CurrentContext | None] = ContextVar("sbom_current_context", default=None)
 
@@ -47,3 +51,18 @@ def tenant_scope(context: CurrentContext) -> Iterator[None]:
         yield
     finally:
         reset_context(token)
+
+
+def minimal_background_context(tenant_id: int, external_tenant_id: str | None = None) -> CurrentContext:
+    """Lightweight tenant context for background jobs (no permission checks)."""
+    return CurrentContext(
+        user_id=0,
+        external_user_id="system",
+        email=None,
+        display_name="System",
+        tenant_id=tenant_id,
+        external_tenant_id=external_tenant_id or str(tenant_id),
+        roles=frozenset(),
+        permissions=frozenset(),
+        is_platform_admin=False,
+    )

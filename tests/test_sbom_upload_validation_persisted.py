@@ -124,7 +124,7 @@ def test_upload_with_project_id_assigns_project_and_syncs_details(client, unique
 def test_upload_schedules_background_enrichment_without_inline_provider_calls(client, unique_name, monkeypatch):
     scheduled: list[int] = []
 
-    def fake_background_enrichment(sbom_id: int) -> None:
+    def fake_background_enrichment(sbom_id: int, tenant_id: int | None = None) -> None:
         scheduled.append(sbom_id)
 
     monkeypatch.setattr(
@@ -178,7 +178,7 @@ def test_post_upload_background_enrichment_updates_status(client, monkeypatch):
         db.commit()
         db.refresh(sbom)
 
-        run_post_upload_enrichment(sbom.id)
+        run_post_upload_enrichment(sbom.id, sbom.tenant_id)
 
         db.refresh(sbom)
         assert sbom.sbom_name == unique_bg_name

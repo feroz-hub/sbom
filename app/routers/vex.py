@@ -11,7 +11,8 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from ..auth import require_roles
+from ..core.context import CurrentContext
+from ..core.security import get_current_tenant_context
 from ..db import get_db
 from ..models import VexOverrideAudit
 from ..services.lifecycle.vex_discovery import discover_and_import_vex_documents
@@ -24,14 +25,13 @@ from ..services.lifecycle.vex_provider import (
 )
 
 router = APIRouter(tags=["vex"])
-_security_role = Depends(require_roles("admin", "security"))
 
 
 @router.post("/api/sboms/{sbom_id}/vex")
 def upload_vex_document(
     sbom_id: int,
     payload: dict[str, Any],
-    principal=_security_role,
+    context: CurrentContext = Depends(get_current_tenant_context),
     db: Session = Depends(get_db),
 ):
     """Upload/import CycloneDX/OpenVEX-style exploitability statements."""
@@ -44,7 +44,7 @@ def upload_vex_document(
         source_name=str(payload.get("source_name") or "Uploaded VEX"),
         source_url=payload.get("source_url"),
         author=payload.get("author"),
-        uploaded_by=payload.get("uploaded_by") or principal.user_id,
+        uploaded_by=payload.get("uploaded_by") or context.actor_label(),
     )
 
 
@@ -61,7 +61,6 @@ def get_vex_report(
     report_type: str | None = Query(
         None, description="affected, not_affected, fixed, under_investigation, unknown, remediation_action"
     ),
-    _principal=_security_role,
     db: Session = Depends(get_db),
 ):
     """Return detailed VEX statement evidence for export/UI reports."""
@@ -81,7 +80,6 @@ def get_vex_report(
 @router.get("/api/sboms/{sbom_id}/reports/vex-pack")
 def get_vex_report_pack(
     sbom_id: int,
-    _principal=_security_role,
     db: Session = Depends(get_db),
 ):
     """Download a ZIP pack of VEX JSON and focused CSV reports."""
@@ -103,7 +101,6 @@ def get_vex_report_pack(
 def discover_vex_documents(
     sbom_id: int,
     force: bool = Query(False),
-    _principal=_security_role,
     db: Session = Depends(get_db),
 ):
     """Discover and import vendor-hosted VEX documents without blocking upload."""
@@ -116,7 +113,7 @@ def patch_vex_override(
     component_id: int,
     vulnerability_id: str,
     payload: dict[str, Any],
-    principal=_security_role,
+    context: CurrentContext = Depends(get_current_tenant_context),
     db: Session = Depends(get_db),
 ):
     """Apply an audited manual VEX override."""
@@ -125,7 +122,7 @@ def patch_vex_override(
         component_id,
         vulnerability_id,
         payload,
-        changed_by=payload.get("updated_by") or payload.get("changed_by") or principal.user_id,
+        changed_by=payload.get("updated_by") or payload.get("changed_by") or context.actor_label(),
     )
     return {
         "id": statement.id,

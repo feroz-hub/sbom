@@ -83,7 +83,7 @@ export function generateState(): string {
 
 // ─── OIDC endpoint derivation ────────────────────────────────────────────────
 
-/** Derive standard OIDC endpoints from the issuer URL. */
+/** Derive standard OIDC endpoints from the issuer URL (Keycloak-compatible). */
 export function oidcEndpoints(issuer: string) {
   const base = issuer.replace(/\/$/, '');
   return {
@@ -92,6 +92,27 @@ export function oidcEndpoints(issuer: string) {
     logout: `${base}/protocol/openid-connect/logout`,
     userinfo: `${base}/protocol/openid-connect/userinfo`,
     wellKnown: `${base}/.well-known/openid-configuration`,
+  };
+}
+
+/** Resolve OIDC endpoints: explicit env URLs take precedence over issuer-derived defaults. */
+export function resolveOidcEndpoints(config: AuthConfig) {
+  const derived = config.issuer ? oidcEndpoints(config.issuer) : null;
+  return {
+    authorization:
+      process.env.NEXT_PUBLIC_HCL_IAM_AUTHORIZATION_URL ||
+      derived?.authorization ||
+      '',
+    token:
+      process.env.NEXT_PUBLIC_HCL_IAM_TOKEN_URL ||
+      derived?.token ||
+      '',
+    logout:
+      process.env.NEXT_PUBLIC_HCL_IAM_LOGOUT_URL ||
+      derived?.logout ||
+      '',
+    userinfo: derived?.userinfo || '',
+    wellKnown: derived?.wellKnown || '',
   };
 }
 
@@ -215,7 +236,7 @@ export async function buildAuthorizationUrl(config: AuthConfig): Promise<string>
   storeCodeVerifier(verifier);
   storeAuthState(state);
 
-  const endpoints = oidcEndpoints(config.issuer);
+  const endpoints = resolveOidcEndpoints(config);
   const params = new URLSearchParams({
     response_type: 'code',
     client_id: config.clientId,
@@ -248,7 +269,7 @@ export async function exchangeCodeForTokens(
     throw new Error('Missing PKCE code verifier — login flow may have been interrupted.');
   }
 
-  const endpoints = oidcEndpoints(config.issuer);
+  const endpoints = resolveOidcEndpoints(config);
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
     client_id: config.clientId,
@@ -284,7 +305,7 @@ export async function refreshAccessToken(
   const refreshToken = getRefreshToken();
   if (!refreshToken) return false;
 
-  const endpoints = oidcEndpoints(config.issuer);
+  const endpoints = resolveOidcEndpoints(config);
   const body = new URLSearchParams({
     grant_type: 'refresh_token',
     client_id: config.clientId,
@@ -317,7 +338,7 @@ export async function refreshAccessToken(
  */
 export function buildLogoutUrl(config: AuthConfig): string {
   const idToken = getIdToken();
-  const endpoints = oidcEndpoints(config.issuer);
+  const endpoints = resolveOidcEndpoints(config);
   const params = new URLSearchParams({
     post_logout_redirect_uri: config.postLogoutRedirectUri,
   });

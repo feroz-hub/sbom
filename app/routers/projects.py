@@ -18,6 +18,8 @@ from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from ..core.context import CurrentContext
+from ..core.security import get_current_tenant_context
 from ..db import get_db
 from ..models import (
     AnalysisFinding,
@@ -31,6 +33,7 @@ from ..models import (
 from ..schemas import ProjectCreate, ProjectOut, ProjectUpdate
 from ..services import audit_log
 from ..services.soft_delete import SoftDeleteService
+from ..services.tenant_access import get_project_for_tenant
 
 log = logging.getLogger(__name__)
 
@@ -67,14 +70,20 @@ def _validate_positive_int(value: int, param_name: str = "id") -> int:
 
 
 @router.post("/projects", response_model=ProjectOut, status_code=status.HTTP_201_CREATED)
-def create_project(payload: ProjectCreate, db: Session = Depends(get_db)):
+def create_project(
+    payload: ProjectCreate,
+    context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
+):
     try:
         existing_project = db.query(Projects).filter(Projects.project_name == payload.project_name).first()
 
         if existing_project:
             raise HTTPException(status_code=400, detail="Project with this name already exists")
 
-        obj = Projects(**payload.model_dump(), created_on=now_iso())
+        data = payload.model_dump()
+        data["created_by"] = data.get("created_by") or context.actor_label()
+        obj = Projects(**data, created_on=now_iso())
         db.add(obj)
         db.commit()
         db.refresh(obj)
@@ -96,11 +105,13 @@ def create_project(payload: ProjectCreate, db: Session = Depends(get_db)):
 
 @router.get("/projects/{project_id}", response_model=ProjectOut)
 def get_project_details(
-    project_id: int = Path(..., description="Project ID (positive integer)"), db: Session = Depends(get_db)
+    project_id: int = Path(..., description="Project ID (positive integer)"),
+    context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
 ):
     project_id = _validate_positive_int(project_id)
     try:
-        project = db.get(Projects, project_id)
+        project = get_project_for_tenant(db, project_id, context.tenant_id)
         if not project:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
         return project
@@ -119,13 +130,10 @@ def list_projects(db: Session = Depends(get_db)):
 def update_project(
     project_id: int = Path(..., description="Project ID (positive integer)"),
     payload: ProjectUpdate = ...,
-    user_id: str | None = Query(
-        None, description="Optional: if provided, must match Projects.created_by (letters/digits/_/./-, 1–64)"
-    ),
+    context: CurrentContext = Depends(get_current_tenant_context),
     db: Session = Depends(get_db),
 ):
     project_id = _validate_positive_int(project_id, "project_id")
-    user_id = _validate_user_id(user_id)
     data = payload.model_dump(exclude_unset=True, exclude_none=True)
     if not data:
         raise HTTPException(status_code=422, detail="No updatable fields provided in payload.")
@@ -135,15 +143,11 @@ def update_project(
         if not project:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
 
-        if user_id is not None:
-            if (project.created_by or "").strip().lower() != user_id.lower():
-                raise HTTPException(status_code=403, detail="Forbidden: user cannot update this Project")
-
         for k, v in data.items():
             setattr(project, k, v)
 
         project.modified_on = now_iso()
-        project.modified_by = data.get("modified_by") or user_id or project.modified_by
+        project.modified_by = data.get("modified_by") or context.actor_label()
 
         db.add(project)
         db.commit()
@@ -209,7 +213,6 @@ def project_delete_impact(
 @router.delete("/projects/{project_id}", status_code=status.HTTP_200_OK)
 def delete_project(
     project_id: int,
-    user_id: str | None = Query(None, description="Optional: if provided, must match Projects.created_by"),
     confirm: str = Query("no", description="Set to 'yes' to confirm deletion"),
     permanent: bool = Query(
         False,
@@ -220,15 +223,14 @@ def delete_project(
             "ownership tree as inactive, leaving rows in place for recovery."
         ),
     ),
+    context: CurrentContext = Depends(get_current_tenant_context),
     db: Session = Depends(get_db),
 ):
     project = db.get(Projects, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    if user_id is not None:
-        if (project.created_by or "").strip().lower() != (user_id or "").strip().lower():
-            raise HTTPException(status_code=403, detail="Forbidden: user cannot delete this Project")
+    user_id = context.actor_label()
 
     if (confirm or "").strip().lower() not in {"yes", "y"}:
         return {

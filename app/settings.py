@@ -175,6 +175,16 @@ class Settings(BaseSettings):
     hcl_iam_role_claim: str = Field(default="roles", description="JWT claim containing IAM roles")
     hcl_iam_tenant_claim: str = Field(default="tenant_id", description="JWT claim containing tenant identity")
     hcl_iam_jwks_cache_seconds: int = Field(default=300, ge=30, le=86400)
+    auth_context_cache_seconds: int = Field(
+        default=120,
+        ge=30,
+        le=300,
+        description="In-memory auth context cache TTL (capped by token exp)",
+    )
+    dev_default_tenant: bool = Field(
+        default=True,
+        description="When AUTH_ENABLED=false, auto-select the default tenant for dev context",
+    )
     default_tenant_slug: str = Field(default="default", description="Dev-mode/default tenant slug")
 
     # Celery / Redis
@@ -695,3 +705,21 @@ def reset_settings() -> None:
     """
     global _settings_instance
     _settings_instance = None
+
+
+def mask_database_url(url: str) -> str:
+    """Return a database URL with password redacted for logs and diagnostics."""
+    if not url:
+        return ""
+    try:
+        from sqlalchemy.engine import make_url
+
+        parsed = make_url(url)
+        if parsed.password:
+            return str(parsed.set(password="****"))
+        return str(parsed)
+    except Exception:
+        # Fallback: mask anything between ://user: and @
+        import re
+
+        return re.sub(r"(://[^:]+:)[^@]+(@)", r"\1****\2", url)

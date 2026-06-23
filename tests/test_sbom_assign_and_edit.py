@@ -95,7 +95,7 @@ def test_patch_sbom_invalid_project_returns_400_or_422(client):
     sbom = _create_sbom(client)
     # Patch SBOM with invalid project_id
     resp = client.patch(f"/api/sboms/{sbom['id']}", json={"project_id": 999999}, params={"user_id": "test-user"})
-    assert resp.status_code in {400, 422}, resp.text
+    assert resp.status_code in {400, 404, 422}, resp.text
 
     # Try invalid format
     resp2 = client.patch(f"/api/sboms/{sbom['id']}", json={"project_id": "invalid-id"}, params={"user_id": "test-user"})

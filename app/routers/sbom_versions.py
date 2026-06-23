@@ -15,7 +15,8 @@ from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..auth import require_roles
+from ..core.context import CurrentContext
+from ..core.security import get_current_tenant_context
 from ..db import get_db
 from ..models import SBOMComponent, SBOMSource
 from ..schemas import SbomConversionReportResponse, SbomConversionResponse, SbomEditPayload, SBOMSourceOut
@@ -40,8 +41,6 @@ from ..validation import run as run_validation
 log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/sboms", tags=["sbom-versions"])
-_security_role = Depends(require_roles("admin", "security"))
-
 EXCEL_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
@@ -223,7 +222,6 @@ def edit_sbom_endpoint(
     payload: SbomEditPayload,
     background_tasks: BackgroundTasks,
     user_id: str | None = Query(None),
-    _principal=_security_role,
     db: Session = Depends(get_db),
 ):
     """
@@ -290,7 +288,6 @@ def restore_sbom_version(
     id: int,
     version_id: int,
     user_id: str | None = Query(None),
-    _principal=_security_role,
     db: Session = Depends(get_db),
 ):
     """
@@ -308,7 +305,6 @@ def restore_sbom_version(
 def refresh_sbom_lifecycle(
     id: int,
     force: bool = Query(True),
-    _principal=_security_role,
     db: Session = Depends(get_db),
 ):
     """Refresh provider-backed lifecycle data for all components in an SBOM."""
@@ -321,7 +317,6 @@ def get_sbom_lifecycle_report(
     id: int,
     format: str = Query("json", pattern="^(json|csv|openeox)$"),
     report_type: str | None = Query(None, description="all, unsupported, eol_eos_eof, or deprecated"),
-    _principal=_security_role,
     db: Session = Depends(get_db),
 ):
     """Return a detailed lifecycle report suitable for export or UI evidence views."""
@@ -347,7 +342,6 @@ def get_sbom_lifecycle_report(
 @router.get("/{id}/reports/lifecycle-pack")
 def get_lifecycle_report_pack(
     id: int,
-    _principal=_security_role,
     db: Session = Depends(get_db),
 ):
     """Download a ZIP pack of lifecycle JSON and focused CSV reports."""
@@ -449,7 +443,6 @@ def convert_spdx_to_cyclonedx_endpoint(
     id: int,
     background_tasks: BackgroundTasks,
     user_id: str | None = Query(None),
-    _principal=_security_role,
     db: Session = Depends(get_db),
 ):
     """Convert a validated SPDX SBOM to CycloneDX and persist as a related record."""
