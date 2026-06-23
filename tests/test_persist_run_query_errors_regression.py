@@ -73,9 +73,8 @@ def test_persist_analysis_run_records_query_error_count_and_raw_report(
         parsed = json.loads(run.raw_report)
         assert isinstance(parsed, dict), "raw_report must parse as a JSON object"
         errors = parsed.get("query_errors") or []
-        assert any(
-            (e or {}).get("message") == "synthetic error for r2 regression"
-            for e in errors
-        ), f"raw_report.query_errors did not include synthetic error; got {errors!r}"
+        assert any((e or {}).get("message") == "synthetic error for r2 regression" for e in errors), (
+            f"raw_report.query_errors did not include synthetic error; got {errors!r}"
+        )
     finally:
         db.close()

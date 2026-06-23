@@ -55,8 +55,8 @@ class TestVersionNormalisation:
             # Debian: epoch + revision, including the +debNuN suffix.
             ("deb", "2:3.0.2-1", "3.0.2"),
             ("deb", "2:3.0.2-1+deb11u5", "3.0.2"),
-            ("deb", "1.21.0", "1.21.0"),         # no epoch, no revision
-            ("deb", "1:2.3.4", "2.3.4"),         # epoch only
+            ("deb", "1.21.0", "1.21.0"),  # no epoch, no revision
+            ("deb", "1:2.3.4", "2.3.4"),  # epoch only
             # RPM: epoch + .elN/.fcN/.amzn release suffix.
             ("rpm", "3.0.2-1.el8", "3.0.2"),
             ("rpm", "1:3.0.2-1.el8", "3.0.2"),
@@ -98,9 +98,7 @@ class TestVersionStrippingViaResolve:
             ("pkg:apk/alpine/openssl@3.0.2-r0", "3.0.2"),
         ],
     )
-    def test_end_to_end_version_in_cpe_is_upstream(
-        self, purl: str, expected_version: str
-    ) -> None:
+    def test_end_to_end_version_in_cpe_is_upstream(self, purl: str, expected_version: str) -> None:
         result = resolve(purl)
         assert result is not None
         assert result.upstream_version == expected_version
@@ -135,17 +133,11 @@ class TestCuratedTableHits:
             ("pkg:deb/debian/sqlite3@3.34.1-3", "sqlite", "sqlite"),
         ],
     )
-    def test_curated_packages_map_to_expected_vendor_product(
-        self, purl: str, vendor: str, product: str
-    ) -> None:
+    def test_curated_packages_map_to_expected_vendor_product(self, purl: str, vendor: str, product: str) -> None:
         result = resolve(purl)
         assert result is not None, f"resolve returned None for {purl!r}"
-        assert result.cpe_vendor == vendor, (
-            f"{purl!r}: expected vendor {vendor!r}, got {result.cpe_vendor!r}"
-        )
-        assert result.cpe_product == product, (
-            f"{purl!r}: expected product {product!r}, got {result.cpe_product!r}"
-        )
+        assert result.cpe_vendor == vendor, f"{purl!r}: expected vendor {vendor!r}, got {result.cpe_vendor!r}"
+        assert result.cpe_product == product, f"{purl!r}: expected product {product!r}, got {result.cpe_product!r}"
         assert result.source == "curated"
 
 
@@ -161,9 +153,7 @@ class TestHeuristicFallback:
         assert result.cpe_vendor == result.cpe_product
         assert result.source == "heuristic"
         # Sanitised version slot.
-        assert result.cpe == (
-            f"cpe:2.3:a:{result.cpe_vendor}:{result.cpe_product}:1.0.0:*:*:*:*:*:*:*"
-        )
+        assert result.cpe == (f"cpe:2.3:a:{result.cpe_vendor}:{result.cpe_product}:1.0.0:*:*:*:*:*:*:*")
 
     def test_heuristic_strips_common_distro_suffixes(self) -> None:
         # ``-dev`` is a Debian convention; the heuristic strips it so
@@ -265,9 +255,7 @@ class TestNonDistroReturnsNone:
             "pkg:deb/",
         ],
     )
-    def test_empty_or_unparseable_purl_returns_none(
-        self, purl: str | None
-    ) -> None:
+    def test_empty_or_unparseable_purl_returns_none(self, purl: str | None) -> None:
         assert resolve(purl) is None  # type: ignore[arg-type]
 
     def test_distro_purl_without_version_still_resolves(self) -> None:
@@ -308,7 +296,4 @@ class TestResolutionShape:
         self,
     ) -> None:
         assert resolve("pkg:deb/debian/openssl@3.0.2-1").source == "curated"  # type: ignore[union-attr]
-        assert (
-            resolve("pkg:deb/debian/some-uncovered-thing@1.0.0-1").source
-            == "heuristic"
-        )  # type: ignore[union-attr]
+        assert resolve("pkg:deb/debian/some-uncovered-thing@1.0.0-1").source == "heuristic"  # type: ignore[union-attr]

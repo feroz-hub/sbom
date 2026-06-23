@@ -38,9 +38,7 @@ def _ensure_utc(dt: datetime, field_name: str) -> None:
     if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
         raise ValueError(f"{field_name} must be tz-aware UTC; got naive datetime {dt!r}")
     if dt.utcoffset() != timedelta(0):
-        raise ValueError(
-            f"{field_name} must be UTC (offset=0); got {dt.utcoffset()!r}"
-        )
+        raise ValueError(f"{field_name} must be UTC (offset=0); got {dt.utcoffset()!r}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,9 +122,7 @@ class MirrorWindow:
             raise ValueError(f"MirrorWindow.end ({self.end!r}) must be > start ({self.start!r})")
         delta = self.end - self.start
         if delta > _MAX_WINDOW_DELTA:
-            raise ValueError(
-                f"MirrorWindow span {delta!r} exceeds NVD ceiling of {_MAX_WINDOW_DELTA!r}"
-            )
+            raise ValueError(f"MirrorWindow span {delta!r} exceeds NVD ceiling of {_MAX_WINDOW_DELTA!r}")
 
 
 @dataclass(frozen=True, slots=True)

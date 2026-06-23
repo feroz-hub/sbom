@@ -14,26 +14,22 @@ Uses in-process RSA key pairs and PyJWKClient mocking — no network calls.
 from __future__ import annotations
 
 import json
-import os
 import time
-from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 import jwt as pyjwt
 import pytest
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
-
-from app.core.context import CurrentContext
 from app.core.security import (
     _claim,
     _roles,
     get_current_user,
     validate_hcl_token,
 )
-
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 
 # ─── RSA key fixture (session-scoped) ─────────────────────────────────────────
+
 
 @pytest.fixture(scope="session")
 def rsa_keypair():
@@ -100,6 +96,7 @@ def _make_token(
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
+
 class TestClaimExtraction:
     """Test the _claim() dot-path resolver."""
 
@@ -140,6 +137,7 @@ class TestRoleNormalization:
 
 # ─── Token validation ────────────────────────────────────────────────────────
 
+
 class TestValidateHclToken:
     """Test validate_hcl_token() with RSA-signed JWTs."""
 
@@ -156,11 +154,13 @@ class TestValidateHclToken:
         monkeypatch.setenv("HCL_IAM_TENANT_CLAIM", "tenant_id")
 
         from app.settings import reset_settings
+
         reset_settings()
 
         # Mock JWKS client to return our test key
         mock_signing_key = MagicMock()
         from jwt.algorithms import RSAAlgorithm
+
         mock_signing_key.key = RSAAlgorithm.from_jwk(json.dumps(rsa_public_jwk))
 
         mock_jwks = MagicMock()
@@ -182,6 +182,7 @@ class TestValidateHclToken:
         priv, _ = rsa_keypair
         token = _make_token(priv, exp_offset=-100)  # already expired
         from fastapi import HTTPException
+
         with pytest.raises(HTTPException) as exc_info:
             validate_hcl_token(token)
         assert exc_info.value.status_code == 401
@@ -190,6 +191,7 @@ class TestValidateHclToken:
         priv, _ = rsa_keypair
         token = _make_token(priv, sub="   ")
         from fastapi import HTTPException
+
         with pytest.raises(HTTPException) as exc_info:
             validate_hcl_token(token)
         assert exc_info.value.status_code == 401
@@ -198,6 +200,7 @@ class TestValidateHclToken:
         priv, _ = rsa_keypair
         token = _make_token(priv, extra={"email": 123})
         from fastapi import HTTPException
+
         with pytest.raises(HTTPException) as exc_info:
             validate_hcl_token(token)
         assert exc_info.value.status_code == 401
@@ -209,6 +212,7 @@ class TestGetCurrentUser:
     def test_auth_disabled_returns_dev_claims(self, monkeypatch):
         monkeypatch.setenv("AUTH_ENABLED", "false")
         from app.settings import reset_settings
+
         reset_settings()
 
         claims = get_current_user(authorization=None)
@@ -222,9 +226,11 @@ class TestGetCurrentUser:
         monkeypatch.setenv("HCL_IAM_JWKS_URL", "https://iam.hcl.example.com/realms/sbom/certs")
         monkeypatch.setenv("HCL_IAM_CLIENT_ID", "sbom-frontend")
         from app.settings import reset_settings
+
         reset_settings()
 
         from fastapi import HTTPException
+
         with pytest.raises(HTTPException) as exc_info:
             get_current_user(authorization=None)
         assert exc_info.value.status_code == 401
@@ -236,9 +242,11 @@ class TestGetCurrentUser:
         monkeypatch.setenv("HCL_IAM_JWKS_URL", "https://iam.hcl.example.com/realms/sbom/certs")
         monkeypatch.setenv("HCL_IAM_CLIENT_ID", "sbom-frontend")
         from app.settings import reset_settings
+
         reset_settings()
 
         from fastapi import HTTPException
+
         with pytest.raises(HTTPException) as exc_info:
             get_current_user(authorization="Basic dXNlcjpwYXNz")
         assert exc_info.value.status_code == 401
@@ -250,9 +258,11 @@ class TestGetCurrentUser:
         monkeypatch.setenv("HCL_IAM_JWKS_URL", "https://iam.hcl.example.com/realms/sbom/certs")
         monkeypatch.setenv("HCL_IAM_CLIENT_ID", "sbom-frontend")
         from app.settings import reset_settings
+
         reset_settings()
 
         from fastapi import HTTPException
+
         with pytest.raises(HTTPException) as exc_info:
             get_current_user(authorization="Bearer ")
         assert exc_info.value.status_code == 401
@@ -264,8 +274,10 @@ class TestValidateHclAuthSetup:
     def test_disabled_auth_is_noop(self, monkeypatch):
         monkeypatch.setenv("AUTH_ENABLED", "false")
         from app.settings import reset_settings
+
         reset_settings()
         from app.core.security import validate_hcl_auth_setup
+
         validate_hcl_auth_setup()  # must not raise
 
     def test_missing_issuer_raises(self, monkeypatch):
@@ -275,8 +287,10 @@ class TestValidateHclAuthSetup:
         monkeypatch.setenv("HCL_IAM_JWKS_URL", "https://iam.hcl.example.com/certs")
         monkeypatch.setenv("HCL_IAM_CLIENT_ID", "sbom-frontend")
         from app.settings import reset_settings
+
         reset_settings()
         from app.core.security import validate_hcl_auth_setup
+
         with pytest.raises(RuntimeError, match="HCL_IAM_ISSUER"):
             validate_hcl_auth_setup()
 
@@ -288,7 +302,9 @@ class TestValidateHclAuthSetup:
         monkeypatch.setenv("HCL_IAM_CLIENT_ID", "sbom-frontend")
         monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
         from app.settings import reset_settings
+
         reset_settings()
         from app.core.security import validate_hcl_auth_setup
+
         with pytest.raises(RuntimeError, match="HTTPS"):
             validate_hcl_auth_setup()

@@ -157,9 +157,7 @@ class AiFixBatchPipeline:
             return BatchSummary(results=[], errors=[], progress=progress)
 
         try:
-            provider = (
-                self._registry.get(provider_name) if provider_name else self._registry.get_default()
-            )
+            provider = self._registry.get(provider_name) if provider_name else self._registry.get_default()
         except ProviderUnavailableError as exc:
             progress.status = "failed"
             progress.last_error = str(exc)
@@ -195,7 +193,11 @@ class AiFixBatchPipeline:
             return BatchSummary(results=results, errors=errors, progress=progress)
 
         # Phase 2: bounded-concurrency miss path.
-        gen = AiFixGenerator(self._db, registry=self._registry, budget=self._budget) if self._budget else AiFixGenerator(self._db, registry=self._registry)
+        gen = (
+            AiFixGenerator(self._db, registry=self._registry, budget=self._budget)
+            if self._budget
+            else AiFixGenerator(self._db, registry=self._registry)
+        )
         max_concurrent = max(1, int(getattr(provider, "max_concurrent", 1)))
         semaphore = asyncio.Semaphore(max_concurrent)
         start_perf = time.perf_counter()

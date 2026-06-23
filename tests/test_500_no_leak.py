@@ -61,9 +61,7 @@ def override_db_with_failing_commit(app):
     app.dependency_overrides.pop(get_db, None)
 
 
-def test_500_from_db_error_returns_generic_envelope(
-    client, seeded_sbom, override_db_with_failing_commit, caplog
-):
+def test_500_from_db_error_returns_generic_envelope(client, seeded_sbom, override_db_with_failing_commit, caplog):
     sbom_id = seeded_sbom["id"]
     override_db_with_failing_commit["raise"] = sa_exc.IntegrityError(
         "synthetic-stmt UNIQUE constraint violated", "synthetic_params", Exception("synthetic_orig")
@@ -79,9 +77,7 @@ def test_500_from_db_error_returns_generic_envelope(
 
     body_text = resp.text
     for forbidden in ("IntegrityError", "synthetic-stmt", "synthetic_orig", "synthetic_params", "UNIQUE"):
-        assert forbidden not in body_text, (
-            f"500 response leaked SQLAlchemy text {forbidden!r}: {body_text[:300]!r}"
-        )
+        assert forbidden not in body_text, f"500 response leaked SQLAlchemy text {forbidden!r}: {body_text[:300]!r}"
 
     payload = resp.json()
     detail = payload.get("detail")
@@ -94,9 +90,7 @@ def test_500_from_db_error_returns_generic_envelope(
     )
 
 
-def test_500_from_generic_exception_returns_generic_envelope(
-    client, seeded_sbom, override_db_with_failing_commit
-):
+def test_500_from_generic_exception_returns_generic_envelope(client, seeded_sbom, override_db_with_failing_commit):
     sbom_id = seeded_sbom["id"]
     override_db_with_failing_commit["raise"] = RuntimeError(_LEAKABLE_TOKEN)
 
@@ -106,12 +100,8 @@ def test_500_from_generic_exception_returns_generic_envelope(
     )
 
     assert resp.status_code == 500, f"got {resp.status_code}: {resp.text[:200]!r}"
-    assert _LEAKABLE_TOKEN not in resp.text, (
-        f"500 response leaked exception message: {resp.text[:300]!r}"
-    )
-    assert "RuntimeError" not in resp.text, (
-        f"500 response leaked exception class name: {resp.text[:300]!r}"
-    )
+    assert _LEAKABLE_TOKEN not in resp.text, f"500 response leaked exception message: {resp.text[:300]!r}"
+    assert "RuntimeError" not in resp.text, f"500 response leaked exception class name: {resp.text[:300]!r}"
 
     payload = resp.json()
     detail = payload.get("detail")
@@ -132,9 +122,7 @@ def test_4xx_validation_errors_unchanged(client):
     assert resp.status_code == 422, f"expected 422, got {resp.status_code}: {resp.text[:200]!r}"
     payload = resp.json()
     detail = payload.get("detail")
-    assert isinstance(detail, list), (
-        f"FastAPI 422 detail shape changed; got {type(detail).__name__}: {detail!r}"
-    )
+    assert isinstance(detail, list), f"FastAPI 422 detail shape changed; got {type(detail).__name__}: {detail!r}"
     # The validation list should reference the missing field — proves the
     # handler hasn't redacted legitimate client-facing detail.
     flat = json.dumps(detail)
@@ -154,15 +142,10 @@ def synthetic_boom_route(app):
     yield
     # Best-effort teardown — Starlette doesn't expose a public removal
     # API, so just filter the route out by path.
-    app.router.routes = [
-        r for r in app.router.routes
-        if getattr(r, "path", None) != "/__test_internal_error__"
-    ]
+    app.router.routes = [r for r in app.router.routes if getattr(r, "path", None) != "/__test_internal_error__"]
 
 
-def test_global_handler_500_includes_correlation_id(
-    app, synthetic_boom_route, caplog
-):
+def test_global_handler_500_includes_correlation_id(app, synthetic_boom_route, caplog):
     # ServerErrorMiddleware catches the exception, calls our handler, and
     # returns the 500 response — but it ALSO re-raises so test runners can
     # see the original. raise_server_exceptions=False suppresses the re-raise
@@ -176,12 +159,8 @@ def test_global_handler_500_includes_correlation_id(
         resp = tc.get("/__test_internal_error__")
 
     assert resp.status_code == 500, f"got {resp.status_code}: {resp.text[:200]!r}"
-    assert _LEAKABLE_TOKEN not in resp.text, (
-        f"global handler leaked exception message: {resp.text[:300]!r}"
-    )
-    assert "RuntimeError" not in resp.text, (
-        f"global handler leaked class name: {resp.text[:300]!r}"
-    )
+    assert _LEAKABLE_TOKEN not in resp.text, f"global handler leaked exception message: {resp.text[:300]!r}"
+    assert "RuntimeError" not in resp.text, f"global handler leaked class name: {resp.text[:300]!r}"
 
     payload = resp.json()
     detail = payload.get("detail")
@@ -195,6 +174,5 @@ def test_global_handler_500_includes_correlation_id(
     # who receives a user-reported ID can grep the logs to the cause.
     server_log = "\n".join(rec.getMessage() for rec in caplog.records)
     assert cid in server_log, (
-        f"correlation_id={cid} not found in server log; records: "
-        f"{[r.getMessage() for r in caplog.records]!r}"
+        f"correlation_id={cid} not found in server log; records: {[r.getMessage() for r in caplog.records]!r}"
     )

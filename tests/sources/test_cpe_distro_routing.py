@@ -161,9 +161,7 @@ class TestFlagOnNonDistroPassthrough:
             ),
         ],
     )
-    def test_non_distro_ptype_skips_resolver(
-        self, purl: str, expected: str
-    ) -> None:
+    def test_non_distro_ptype_skips_resolver(self, purl: str, expected: str) -> None:
         """npm/pypi/maven/rubygems aren't in the distro-ptype set, so
         ``resolve()`` is NEVER called; the existing per-ecosystem
         branch fires unchanged. Result equals the legacy CPE.
@@ -184,9 +182,7 @@ class TestFlagOnNonDistroPassthrough:
 
 
 class TestSingletonFallback:
-    def test_no_explicit_settings_reads_pydantic_singleton(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_no_explicit_settings_reads_pydantic_singleton(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Production callers don't thread settings — they flip the env
         var and the singleton picks it up. Verify the helper reads
         ``get_settings().distro_cpe_enabled`` when no kwarg is passed.
@@ -206,9 +202,7 @@ class TestSingletonFallback:
             monkeypatch.delenv("DISTRO_CPE_ENABLED", raising=False)
             settings_mod.reset_settings()
 
-    def test_singleton_default_false_yields_legacy_path(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_singleton_default_false_yields_legacy_path(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from app import settings as settings_mod
 
         monkeypatch.delenv("DISTRO_CPE_ENABLED", raising=False)

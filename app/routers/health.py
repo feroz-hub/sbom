@@ -156,9 +156,7 @@ def _nvd_mirror_health(db: Session) -> dict:
 
         env_defaults = load_mirror_settings_from_env()
         try:
-            secrets = FernetSecretsAdapter.from_env(
-                env_var=env_defaults.fernet_key_env_var
-            )
+            secrets = FernetSecretsAdapter.from_env(env_var=env_defaults.fernet_key_env_var)
         except MissingFernetKeyError:
             secrets = _StubSecrets(env_defaults.fernet_key_env_var)
 
@@ -172,14 +170,8 @@ def _nvd_mirror_health(db: Session) -> dict:
         verdict = compute_freshness(snap, datetime.now(tz=UTC))
         return {
             "enabled": snap.enabled,
-            "last_success_at": (
-                snap.last_successful_sync_at.isoformat()
-                if snap.last_successful_sync_at
-                else None
-            ),
-            "watermark": (
-                snap.last_modified_utc.isoformat() if snap.last_modified_utc else None
-            ),
+            "last_success_at": (snap.last_successful_sync_at.isoformat() if snap.last_successful_sync_at else None),
+            "watermark": (snap.last_modified_utc.isoformat() if snap.last_modified_utc else None),
             "stale": not verdict.is_fresh,
             "counters": mirror_counters.snapshot(),
         }

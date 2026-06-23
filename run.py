@@ -3,6 +3,7 @@ SBOM Analyzer — Application Entry Point
 Run with:  python run.py
            uvicorn app.main:app --reload
 """
+
 from __future__ import annotations
 
 import os
@@ -10,6 +11,7 @@ import os
 # Load .env file if present
 try:
     from dotenv import load_dotenv
+
     load_dotenv()
 except ImportError:
     pass  # python-dotenv not installed; rely on shell env

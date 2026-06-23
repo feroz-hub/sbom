@@ -65,6 +65,7 @@ def _cve_aliases_for_row(primary_id: str | None, aliases: Any) -> list[str]:
     found.discard(primary)
     return sorted(found)
 
+
 # Accent palette
 PRIMARY = colors.HexColor("#1f4e79")  # deep blue
 MUTED = colors.HexColor("#4e5b6e")  # gray-blue

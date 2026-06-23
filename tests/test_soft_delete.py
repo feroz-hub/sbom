@@ -165,9 +165,7 @@ def test_cascade_walks_full_ownership_tree(db):
         tree["schedule"],
     ):
         db.refresh(record)
-        assert record.is_active is False, (
-            f"{type(record).__name__}({record.id}) was not soft-deleted"
-        )
+        assert record.is_active is False, f"{type(record).__name__}({record.id}) was not soft-deleted"
         assert record.deactivated_at is not None
         assert record.deactivated_by == "alice"
 
@@ -189,9 +187,7 @@ def test_cascade_does_not_touch_ai_fix_cache(db):
 
     # AiFixCache lacks SoftDeleteMixin, so Option C does NOT filter it.
     # A bare select must still find the row, untouched.
-    surviving = db.execute(
-        select(AiFixCache).where(AiFixCache.cache_key == cache_key)
-    ).scalar_one_or_none()
+    surviving = db.execute(select(AiFixCache).where(AiFixCache.cache_key == cache_key)).scalar_one_or_none()
     assert surviving is not None, "ai_fix_cache row was deleted by cascade"
 
     # Defensive: confirm the table name is in the explicit exclusion list.
@@ -203,9 +199,7 @@ def test_cascade_excluded_tables_include_audit_logs():
     must remain in the exclusion list — they are append-only retention
     surfaces and should outlive every soft-delete."""
     for name in ("audit_log", "ai_credential_audit_log", "ai_usage_log"):
-        assert name in CASCADE_EXCLUDED_TABLES, (
-            f"{name} missing from cascade exclusion list"
-        )
+        assert name in CASCADE_EXCLUDED_TABLES, f"{name} missing from cascade exclusion list"
 
 
 # ---------------------------------------------------------------------------
@@ -226,19 +220,12 @@ def test_can_recreate_project_with_same_name_after_soft_delete(db):
 
     # The default-filtered SELECT (mirroring routers/projects.py:62) must
     # NOT find the tombstone.
-    found = db.execute(
-        select(Projects).where(Projects.project_name == "duplicate-target")
-    ).first()
-    assert found is None, (
-        "tombstoned project leaked through the uniqueness check; "
-        "Option C filter is broken"
-    )
+    found = db.execute(select(Projects).where(Projects.project_name == "duplicate-target")).first()
+    assert found is None, "tombstoned project leaked through the uniqueness check; Option C filter is broken"
 
     # And include_deleted=True still finds it.
     tombstone = db.execute(
-        select(Projects)
-        .where(Projects.project_name == "duplicate-target")
-        .execution_options(include_deleted=True)
+        select(Projects).where(Projects.project_name == "duplicate-target").execution_options(include_deleted=True)
     ).scalar_one_or_none()
     assert tombstone is not None
     assert tombstone.is_active is False
@@ -276,9 +263,7 @@ def test_list_filtering_applies_to_select_and_legacy_query(db):
 
     # Bypass works for select()
     bypass_select = db.execute(
-        select(Projects)
-        .where(Projects.id == pid)
-        .execution_options(include_deleted=True)
+        select(Projects).where(Projects.id == pid).execution_options(include_deleted=True)
     ).scalar_one_or_none()
     assert bypass_select is not None and bypass_select.is_active is False
 
@@ -304,9 +289,7 @@ def test_restore_makes_record_visible_again(db):
 
     # Reload via include_deleted, restore, commit, re-check
     tombstone = db.execute(
-        select(Projects)
-        .where(Projects.id == pid)
-        .execution_options(include_deleted=True)
+        select(Projects).where(Projects.id == pid).execution_options(include_deleted=True)
     ).scalar_one()
     service.restore(tombstone)
     db.commit()
@@ -331,9 +314,7 @@ def test_restore_does_not_cascade(db):
     db.commit()
 
     tombstone = db.execute(
-        select(Projects)
-        .where(Projects.id == proj_id)
-        .execution_options(include_deleted=True)
+        select(Projects).where(Projects.id == proj_id).execution_options(include_deleted=True)
     ).scalar_one()
     service.restore(tombstone)
     db.commit()
@@ -371,13 +352,8 @@ def test_run_soft_delete_hard_evicts_compare_cache(db):
     SoftDeleteService(db).soft_delete(tree["run"], user_id="alice", cascade=True)
     db.commit()
 
-    surviving = db.execute(
-        select(CompareCache).where(CompareCache.cache_key == "a" * 64)
-    ).scalar_one_or_none()
-    assert surviving is None, (
-        "compare_cache row should have been hard-deleted alongside "
-        "the run soft-delete"
-    )
+    surviving = db.execute(select(CompareCache).where(CompareCache.cache_key == "a" * 64)).scalar_one_or_none()
+    assert surviving is None, "compare_cache row should have been hard-deleted alongside the run soft-delete"
 
 
 # ---------------------------------------------------------------------------
@@ -431,21 +407,14 @@ def test_endpoint_writes_audit_row_for_permanent_delete(client, db):
     # No row left at all
     assert (
         db.execute(
-            select(Projects)
-            .where(Projects.id == pid)
-            .execution_options(include_deleted=True)
+            select(Projects).where(Projects.id == pid).execution_options(include_deleted=True)
         ).scalar_one_or_none()
         is None
     )
 
     # Audit row recorded
     rows = (
-        db.execute(
-            select(AuditLog)
-            .where(AuditLog.target_kind == "project", AuditLog.target_id == pid)
-        )
-        .scalars()
-        .all()
+        db.execute(select(AuditLog).where(AuditLog.target_kind == "project", AuditLog.target_id == pid)).scalars().all()
     )
     assert any(r.action == "project.permanent_delete" for r in rows)
 
@@ -466,9 +435,7 @@ def test_soft_delete_is_idempotent(db):
 
     # Reload tombstone via include_deleted and re-attempt
     proj_again = db.execute(
-        select(Projects)
-        .where(Projects.id == proj.id)
-        .execution_options(include_deleted=True)
+        select(Projects).where(Projects.id == proj.id).execution_options(include_deleted=True)
     ).scalar_one()
     service2 = SoftDeleteService(db)  # fresh visited set
     second = service2.soft_delete(proj_again, user_id="bob", cascade=False)

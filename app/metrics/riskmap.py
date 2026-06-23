@@ -66,9 +66,7 @@ def _risk_map_uncached(db: Session) -> dict:
     project_names: dict[int, str] = {}
     if project_ids:
         for pid, pname in db.execute(
-            select(Projects.id, Projects.project_name).where(
-                Projects.id.in_(project_ids)
-            )
+            select(Projects.id, Projects.project_name).where(Projects.id.in_(project_ids))
         ).all():
             project_names[pid] = pname
 

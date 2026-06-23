@@ -72,16 +72,25 @@ function MatrixTooltip({ active, payload }: TooltipProps<number, string>) {
   );
 }
 
-export function RiskMatrixCard() {
-  const query = useQuery({
+export interface RiskMatrixCardProps {
+  riskMatrix?: any;
+  isLoading?: boolean;
+}
+
+export function RiskMatrixCard({ riskMatrix, isLoading: propsIsLoading }: RiskMatrixCardProps = {}) {
+  const hasProps = riskMatrix !== undefined;
+
+  const queryResult = useQuery({
     queryKey: ['dashboard-risk-matrix'],
     queryFn: ({ signal }) => getDashboardRiskMatrix(300, signal),
+    enabled: !hasProps,
   });
-  const data = query.data;
+  const data = hasProps ? riskMatrix : queryResult.data;
+  const isLoading = hasProps ? !!propsIsLoading : queryResult.isLoading;
   const points = data?.points ?? [];
-  const kevPoints = points.filter((p) => p.kev);
-  const otherPoints = points.filter((p) => !p.kev);
-  const patchFirst = points.filter((p) => p.cvss >= QUADRANT_Y && p.epss >= QUADRANT_X).length;
+  const kevPoints = points.filter((p: any) => p.kev);
+  const otherPoints = points.filter((p: any) => !p.kev);
+  const patchFirst = points.filter((p: any) => p.cvss >= QUADRANT_Y && p.epss >= QUADRANT_X).length;
 
   return (
     <Surface variant="elevated">
@@ -99,7 +108,7 @@ export function RiskMatrixCard() {
         )}
       </SurfaceHeader>
       <SurfaceContent>
-        {query.isLoading ? (
+        {isLoading ? (
           <div className="flex h-64 items-center justify-center">
             <Spinner />
           </div>
@@ -150,7 +159,7 @@ export function RiskMatrixCard() {
                 />
                 <Tooltip content={<MatrixTooltip />} cursor={{ strokeDasharray: '3 3' }} />
                 <Scatter data={otherPoints} isAnimationActive={false} fillOpacity={0.75}>
-                  {otherPoints.map((p, i) => (
+                  {otherPoints.map((p: any, i: number) => (
                     <Cell
                       key={`${p.vuln_id}-${i}`}
                       fill={SEVERITY_COLOR[p.severity] ?? SEVERITY_COLOR.unknown}

@@ -27,18 +27,14 @@ def get_component_lifecycle(component_id: int, db: Session = Depends(get_db)):
     comp = db.get(SBOMComponent, component_id)
     if not comp:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Component with ID {component_id} not found."
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"Component with ID {component_id} not found."
         )
     return comp
 
 
 @router.put("/api/lifecycle/component/{component_id}", response_model=SBOMComponentOut)
 def update_component_lifecycle(
-    component_id: int,
-    payload: LifecycleInfoUpdate,
-    _principal=_security_role,
-    db: Session = Depends(get_db)
+    component_id: int, payload: LifecycleInfoUpdate, _principal=_security_role, db: Session = Depends(get_db)
 ):
     """Backward-compatible manual lifecycle override endpoint."""
 

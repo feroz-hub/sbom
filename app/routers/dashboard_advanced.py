@@ -44,9 +44,7 @@ def dashboard_forecast(
     two-point regression. The velocity ``anomaly`` envelope is the
     "something unusual landed yesterday" signal.
     """
-    payload = metrics.findings_forecast(
-        db, history_days=history_days, horizon_days=horizon_days
-    )
+    payload = metrics.findings_forecast(db, history_days=history_days, horizon_days=horizon_days)
     nm = maybe_not_modified(request, response, payload)
     if nm is not None:
         return nm
@@ -54,9 +52,7 @@ def dashboard_forecast(
 
 
 @router.get("/exploitation")
-def dashboard_exploitation(
-    request: Request, response: Response, db: Session = Depends(get_db)
-):
+def dashboard_exploitation(request: Request, response: Response, db: Session = Depends(get_db)):
     """Portfolio exploitation outlook (metrics ``portfolio.exploitation_outlook``).
 
     EPSS-composed probability that at least one in-scope CVE is exploited
@@ -70,9 +66,7 @@ def dashboard_exploitation(
 
 
 @router.get("/remediation")
-def dashboard_remediation(
-    request: Request, response: Response, db: Session = Depends(get_db)
-):
+def dashboard_remediation(request: Request, response: Response, db: Session = Depends(get_db)):
     """MTTR / SLA / velocity envelope (metrics ``remediation.summary``)."""
     payload = metrics.remediation_summary(db)
     nm = maybe_not_modified(request, response, payload)
@@ -82,9 +76,7 @@ def dashboard_remediation(
 
 
 @router.get("/risk-map")
-def dashboard_risk_map(
-    request: Request, response: Response, db: Session = Depends(get_db)
-):
+def dashboard_risk_map(request: Request, response: Response, db: Session = Depends(get_db)):
     """Treemap cells, one per analysed SBOM (metrics ``portfolio.risk_map``)."""
     payload = metrics.portfolio_risk_map(db)
     nm = maybe_not_modified(request, response, payload)

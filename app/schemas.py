@@ -185,7 +185,6 @@ class ValidationReportResponse(BaseModel):
     can_edit: bool = False
 
 
-
 class SBOMComponentOut(ORMModel):
     id: int
     sbom_id: int
@@ -446,6 +445,7 @@ class ScheduleResolved(BaseModel):
 
 
 # --- SBOM Lifecycle Management Platform schemas ---
+
 
 class LifecycleInfoUpdate(BaseModel):
     lifecycle_status: str

@@ -111,9 +111,7 @@ async def walk_windows(
             )
             errors.append(f"{type(exc).__name__}: {exc}")
             _metric("nvd.windows.failure")
-            sync_run_repo.finish(
-                run_id, status="failed", upserts=window_upserts, error=str(exc)
-            )
+            sync_run_repo.finish(run_id, status="failed", upserts=window_upserts, error=str(exc))
             commit()
             break
 
@@ -123,9 +121,7 @@ async def walk_windows(
             last_modified_utc=end,
             last_successful_sync_at=success_at,
         )
-        sync_run_repo.finish(
-            run_id, status="success", upserts=window_upserts, error=None
-        )
+        sync_run_repo.finish(run_id, status="success", upserts=window_upserts, error=None)
         commit()
         _metric("nvd.windows.success")
 

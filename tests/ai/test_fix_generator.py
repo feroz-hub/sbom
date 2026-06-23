@@ -463,12 +463,7 @@ async def test_parse_failure_writes_raw_response_preview_to_ledger(_seeded):
 
     db = SessionLocal()
     try:
-        rows = (
-            db.query(AiUsageLog)
-            .order_by(AiUsageLog.id.desc())
-            .limit(1)
-            .all()
-        )
+        rows = db.query(AiUsageLog).order_by(AiUsageLog.id.desc()).limit(1).all()
     finally:
         db.close()
     assert rows
@@ -601,8 +596,7 @@ async def test_parse_failure_quota_cost_is_exactly_two_calls(_seeded):
     assert isinstance(result, AiFixError)
     assert result.error_code == "schema_parse_failed"
     assert len(fake.calls) == 2, (
-        f"Hard cap broken: {len(fake.calls)} calls (expected exactly 2). "
-        "Each extra call burns a quota slot for free."
+        f"Hard cap broken: {len(fake.calls)} calls (expected exactly 2). Each extra call burns a quota slot for free."
     )
 
 

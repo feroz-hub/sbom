@@ -41,9 +41,7 @@ _NVD_FINDING_WITH_STRATEGY = {
 }
 
 
-async def _fake_nvd_with_strategy(
-    components, settings, nvd_api_key=None, lookup_service=None
-):
+async def _fake_nvd_with_strategy(components, settings, nvd_api_key=None, lookup_service=None):
     return ([_NVD_FINDING_WITH_STRATEGY], [], [])
 
 
@@ -55,16 +53,12 @@ async def _fake_empty_async(*args, **kwargs):
 def mock_nvd_with_strategy_tagged_finding(monkeypatch):
     import app.analysis as analysis_mod
 
-    monkeypatch.setattr(
-        analysis_mod, "nvd_query_by_components_async", _fake_nvd_with_strategy
-    )
+    monkeypatch.setattr(analysis_mod, "nvd_query_by_components_async", _fake_nvd_with_strategy)
     monkeypatch.setattr(analysis_mod, "osv_query_by_components", _fake_empty_async)
     monkeypatch.setattr(analysis_mod, "github_query_by_components", _fake_empty_async)
 
 
-def test_persist_analysis_run_forwards_match_strategy(
-    client, seeded_sbom, mock_nvd_with_strategy_tagged_finding
-):
+def test_persist_analysis_run_forwards_match_strategy(client, seeded_sbom, mock_nvd_with_strategy_tagged_finding):
     """A finding dict carrying ``match_strategy`` must produce an
     ``analysis_finding`` row with the column populated. Guards against
     the explicit-kwarg-list pattern silently dropping the new key.
@@ -91,10 +85,7 @@ def test_persist_analysis_run_forwards_match_strategy(
             .scalars()
             .all()
         )
-        assert len(rows) == 1, (
-            f"expected exactly one row for the synthetic finding, "
-            f"got {len(rows)}"
-        )
+        assert len(rows) == 1, f"expected exactly one row for the synthetic finding, got {len(rows)}"
         row = rows[0]
         assert row.match_strategy == "cpe_name", (
             f"match_strategy was {row.match_strategy!r}; "
@@ -105,31 +96,21 @@ def test_persist_analysis_run_forwards_match_strategy(
         db.close()
 
 
-def test_persist_analysis_run_tolerates_missing_match_strategy(
-    client, seeded_sbom, monkeypatch
-):
+def test_persist_analysis_run_tolerates_missing_match_strategy(client, seeded_sbom, monkeypatch):
     """Parity case: a finding dict without ``match_strategy`` must
     persist with NULL and no KeyError. ``.get`` semantics in the
     persistence layer guarantee this — guard it so a future refactor
     to ``finding["match_strategy"]`` is caught immediately.
     """
-    pre_pr_c_finding = {
-        k: v
-        for k, v in _NVD_FINDING_WITH_STRATEGY.items()
-        if k != "match_strategy"
-    }
+    pre_pr_c_finding = {k: v for k, v in _NVD_FINDING_WITH_STRATEGY.items() if k != "match_strategy"}
     pre_pr_c_finding["vuln_id"] = "CVE-PRE-PR-C-SHAPE"
 
-    async def _fake_nvd_without_strategy(
-        components, settings, nvd_api_key=None, lookup_service=None
-    ):
+    async def _fake_nvd_without_strategy(components, settings, nvd_api_key=None, lookup_service=None):
         return ([pre_pr_c_finding], [], [])
 
     import app.analysis as analysis_mod
 
-    monkeypatch.setattr(
-        analysis_mod, "nvd_query_by_components_async", _fake_nvd_without_strategy
-    )
+    monkeypatch.setattr(analysis_mod, "nvd_query_by_components_async", _fake_nvd_without_strategy)
     monkeypatch.setattr(analysis_mod, "osv_query_by_components", _fake_empty_async)
     monkeypatch.setattr(analysis_mod, "github_query_by_components", _fake_empty_async)
 

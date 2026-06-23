@@ -84,9 +84,7 @@ def test_xeol_provider_maps_documented_nested_response():
     assert result.confidence == HIGH
     assert result.evidence["reason"] == "vendor_announced"
     assert result.evidence["authority"] == "vendor-derived"
-    assert calls[0][1] == {
-        "component": {"name": "go", "version": "1.15.2", "ecosystem": "generic"}
-    }
+    assert calls[0][1] == {"component": {"name": "go", "version": "1.15.2", "ecosystem": "generic"}}
     assert calls[0][2]["Authorization"] == "Bearer secret"
 
 

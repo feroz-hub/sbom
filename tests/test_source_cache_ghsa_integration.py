@@ -208,9 +208,7 @@ def test_flag_on_second_scan_hits_cache(
     second_calls = network_mock["calls"]
 
     assert first_calls == 1, "scan 1 should have fetched exactly once"
-    assert second_calls == 1, (
-        f"scan 2 should have been a cache hit; total fetches now {second_calls}"
-    )
+    assert second_calls == 1, f"scan 2 should have been a cache hit; total fetches now {second_calls}"
 
     with isolated_session_factory() as s:
         rows = s.query(SourceResponseCache).all()
@@ -236,12 +234,8 @@ def test_cached_findings_identical_to_live_findings(
     settings = _settings_with(cache_on=True)
     comps = _components_single()
 
-    first_findings, first_errors, _ = asyncio.run(
-        github_query_by_components(comps, settings)
-    )
-    second_findings, second_errors, _ = asyncio.run(
-        github_query_by_components(comps, settings)
-    )
+    first_findings, first_errors, _ = asyncio.run(github_query_by_components(comps, settings))
+    second_findings, second_errors, _ = asyncio.run(github_query_by_components(comps, settings))
 
     assert first_errors == [] == second_errors
     assert first_findings == second_findings
@@ -284,10 +278,7 @@ def test_versionless_key_reuse_across_versions(
             settings,
         )
     )
-    assert network_mock["calls"] == 1, (
-        "scan 2 with a different version must have HIT the cache "
-        "(versionless key)"
-    )
+    assert network_mock["calls"] == 1, "scan 2 with a different version must have HIT the cache (versionless key)"
 
     # Sanity — exactly one cache row.
     with isolated_session_factory() as s:
@@ -306,9 +297,7 @@ def test_existing_dedup_within_single_scan_still_holds(
     that.
     """
     settings = _settings_with(cache_on=True)
-    asyncio.run(
-        github_query_by_components(_components_two_versions_same_pkg(), settings)
-    )
+    asyncio.run(github_query_by_components(_components_two_versions_same_pkg(), settings))
     # Both components dedupe to one (eco, name) — one fetch, regardless
     # of the cache.
     assert network_mock["calls"] == 1

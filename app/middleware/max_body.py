@@ -40,8 +40,7 @@ Scope = dict[str, Any]
 
 
 _BODY_TOO_LARGE_PAYLOAD = (
-    b'{"detail":{"code":"payload_too_large",'
-    b'"message":"Request body exceeds maximum allowed size."}}'
+    b'{"detail":{"code":"payload_too_large","message":"Request body exceeds maximum allowed size."}}'
 )
 
 _METHODS_WITHOUT_BODY = frozenset({"GET", "HEAD", "OPTIONS", "DELETE"})

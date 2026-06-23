@@ -53,11 +53,7 @@ class SqlAlchemySyncRunRepository:
         self._session.flush()
 
     def latest(self, limit: int = 10) -> Sequence[Mapping[str, object]]:
-        stmt = (
-            select(NvdSyncRunRow)
-            .order_by(NvdSyncRunRow.started_at.desc())
-            .limit(max(1, int(limit)))
-        )
+        stmt = select(NvdSyncRunRow).order_by(NvdSyncRunRow.started_at.desc()).limit(max(1, int(limit)))
         rows = self._session.execute(stmt).scalars().all()
         return [
             {

@@ -369,7 +369,13 @@ async def test_get_with_scan_context_status_fixed_when_already_above(db):
             data={
                 "summary": "x",
                 "fix_versions": [
-                    {"ecosystem": "npm", "package": "left-pad", "fixed_in": "1.3.1", "introduced_in": None, "range": None}
+                    {
+                        "ecosystem": "npm",
+                        "package": "left-pad",
+                        "fixed_in": "1.3.1",
+                        "introduced_in": None,
+                        "range": None,
+                    }
                 ],
                 "references": [],
             },

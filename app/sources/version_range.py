@@ -134,9 +134,7 @@ _MAVEN_ECOSYSTEMS: Final[frozenset[str]] = frozenset({"maven"})
 # package, fixed_revision)``; that's a separate feature. Downstream
 # UI / reports should mark distro findings as "may be backported —
 # verify against distro advisory" until those feeds land.
-_UNSUPPORTED_ECOSYSTEMS: Final[frozenset[str]] = frozenset(
-    {"deb", "rpm", "apk", "conan", "alpine", "debian", "redhat"}
-)
+_UNSUPPORTED_ECOSYSTEMS: Final[frozenset[str]] = frozenset({"deb", "rpm", "apk", "conan", "alpine", "debian", "redhat"})
 
 # Subset of ``_UNSUPPORTED_ECOSYSTEMS`` that PR-C's normalize-and-compare
 # branch can handle when the flag is on. Conan is included even though
@@ -411,8 +409,7 @@ def _walk_node(
         )
         if verdict.reason == "version_unparseable":
             log.warning(
-                "version_range: keeping finding — unparseable version "
-                "component=%r range=%s cpe=%r ecosystem=%r",
+                "version_range: keeping finding — unparseable version component=%r range=%s cpe=%r ecosystem=%r",
                 component_version,
                 verdict.matched_range,
                 criteria,

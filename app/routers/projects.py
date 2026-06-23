@@ -173,21 +173,11 @@ def project_delete_impact(
 
     from sqlalchemy import func
 
-    sbom_ids = (
-        db.execute(select(SBOMSource.id).where(SBOMSource.projectid == project_id))
-        .scalars()
-        .all()
-    )
-    run_ids = (
-        db.execute(select(AnalysisRun.id).where(AnalysisRun.project_id == project_id))
-        .scalars()
-        .all()
-    )
+    sbom_ids = db.execute(select(SBOMSource.id).where(SBOMSource.projectid == project_id)).scalars().all()
+    run_ids = db.execute(select(AnalysisRun.id).where(AnalysisRun.project_id == project_id)).scalars().all()
     components = (
         db.execute(
-            select(func.count(SBOMComponent.id)).where(
-                SBOMComponent.sbom_id.in_(sbom_ids) if sbom_ids else False
-            )
+            select(func.count(SBOMComponent.id)).where(SBOMComponent.sbom_id.in_(sbom_ids) if sbom_ids else False)
         ).scalar()
         if sbom_ids
         else 0
@@ -202,9 +192,7 @@ def project_delete_impact(
         else 0
     )
     schedules = db.execute(
-        select(func.count(AnalysisSchedule.id)).where(
-            AnalysisSchedule.project_id == project_id
-        )
+        select(func.count(AnalysisSchedule.id)).where(AnalysisSchedule.project_id == project_id)
     ).scalar()
 
     return {
@@ -371,9 +359,7 @@ def restore_project(
     be restored individually if also tombstoned. (Phase 3.4: admin
     recovery surface; UI affordance ships in a follow-up PR.)"""
     project = db.execute(
-        select(Projects)
-        .where(Projects.id == project_id)
-        .execution_options(include_deleted=True)
+        select(Projects).where(Projects.id == project_id).execution_options(include_deleted=True)
     ).scalar_one_or_none()
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")

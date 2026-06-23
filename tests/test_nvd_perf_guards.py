@@ -17,10 +17,7 @@ def test_cve_batch_has_hard_100_identifier_ceiling():
 
 
 def test_purl_fanout_does_not_become_nvd_cpe_fanout():
-    components = [
-        {"name": f"pkg-{i}", "version": "1", "purl": f"pkg:pypi/pkg-{i}@1"}
-        for i in range(500)
-    ]
+    components = [{"name": f"pkg-{i}", "version": "1", "purl": f"pkg:pypi/pkg-{i}@1"} for i in range(500)]
     identifiers = collect_nvd_identifiers(components, [])
     assert identifiers.trusted_cpes == []
 

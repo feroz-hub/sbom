@@ -353,7 +353,7 @@ _HEURISTIC_SUFFIX_STRIP: Final[tuple[str, ...]] = (
     "-utils",
     "-bin",
     "-tools",
-    "-devel",   # RPM convention for ``-dev``
+    "-devel",  # RPM convention for ``-dev``
 )
 
 
@@ -407,9 +407,7 @@ def _sanitise_cpe_version_slot(version: str) -> str:
     plugs into the same NVD-lookup machinery."""
     if not version:
         return "*"
-    cleaned = "".join(
-        ch if ch.isalnum() or ch in "._-" else "_" for ch in version
-    ).strip("._-")
+    cleaned = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in version).strip("._-")
     return cleaned or "*"
 
 

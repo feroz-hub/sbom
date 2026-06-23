@@ -136,7 +136,9 @@ class NvdSource:
             findings.append(finding)
         if mirror_findings:
             provider_status["cache_hits"] += len(mirror_findings)
-            provider_status["status"] = "success" if provider_status["status"] == "skipped" else provider_status["status"]
+            provider_status["status"] = (
+                "success" if provider_status["status"] == "skipped" else provider_status["status"]
+            )
         errors = []
         if provider_status["status"] == "degraded":
             errors.append(

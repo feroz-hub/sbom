@@ -132,9 +132,7 @@ def _check_canary_distribution() -> Check:
         AI_FIXES_ENABLED="true",
         AI_CANARY_PERCENTAGE="50",
     )
-    allowed = sum(
-        1 for i in range(1000) if evaluate_access(rollout_key=f"run:{i}").allowed
-    )
+    allowed = sum(1 for i in range(1000) if evaluate_access(rollout_key=f"run:{i}").allowed)
     ok = 450 <= allowed <= 550
     return Check(
         name="canary 50% routes ~50% of 1000 keys (±5%)",

@@ -103,13 +103,9 @@ async def upload_sbom(
                         "severity": "error",
                         "stage": "ingress",
                         "path": "",
-                        "message": (
-                            f"Uploaded body of {len(raw)} bytes exceeds "
-                            f"MAX_UPLOAD_BYTES ({max_bytes})."
-                        ),
+                        "message": (f"Uploaded body of {len(raw)} bytes exceeds MAX_UPLOAD_BYTES ({max_bytes})."),
                         "remediation": (
-                            "Compress the SBOM, split into multi-part, or "
-                            "contact your operator to raise the limit."
+                            "Compress the SBOM, split into multi-part, or contact your operator to raise the limit."
                         ),
                         "spec_reference": None,
                     }

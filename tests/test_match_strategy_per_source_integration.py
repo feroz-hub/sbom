@@ -67,9 +67,7 @@ def _read_row(run_id: int, vuln_id: str):
             .scalars()
             .all()
         )
-        assert len(rows) == 1, (
-            f"expected one row for vuln_id={vuln_id!r}, got {len(rows)}"
-        )
+        assert len(rows) == 1, f"expected one row for vuln_id={vuln_id!r}, got {len(rows)}"
         return rows[0]
     finally:
         db.close()
@@ -131,6 +129,5 @@ def test_each_strategy_tag_flows_dict_to_row(
 
     row = _read_row(run_id, vuln_id)
     assert row.match_strategy == strategy, (
-        f"expected match_strategy={strategy!r} for {source_label} finding, "
-        f"got {row.match_strategy!r}"
+        f"expected match_strategy={strategy!r} for {source_label} finding, got {row.match_strategy!r}"
     )

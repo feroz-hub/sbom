@@ -225,9 +225,7 @@ def test_rescan_reuse_zero_osv_calls(
     assert len(osv_network.querybatch_calls) == qb_before, (
         "querybatch should NOT have been called on the all-cached re-scan"
     )
-    assert len(osv_network.vuln_calls) == vuln_before, (
-        "hydration should NOT have been called on the all-cached re-scan"
-    )
+    assert len(osv_network.vuln_calls) == vuln_before, "hydration should NOT have been called on the all-cached re-scan"
     assert len(osv_network.query_calls) == query_before, (
         "fallback should NOT have been called on the all-cached re-scan"
     )
@@ -278,9 +276,7 @@ def test_partial_batch_only_misses_hit_querybatch(
     # Querybatch was called ONCE more, with ONLY the express query.
     assert len(osv_network.querybatch_calls) == qb_before + 1
     new_qb = osv_network.querybatch_calls[-1]
-    purls_in_batch = [
-        ((q or {}).get("package") or {}).get("purl") for q in new_qb["queries"]
-    ]
+    purls_in_batch = [((q or {}).get("package") or {}).get("purl") for q in new_qb["queries"]]
     assert purls_in_batch == ["pkg:npm/express@4.18.0"], (
         f"querybatch should have ONLY the miss component, got {purls_in_batch!r}"
     )
@@ -311,15 +307,11 @@ def test_empty_results_are_cached(
     with isolated_session_factory() as s:
         rows = s.query(SourceResponseCache).all()
     keys = {r.component_key for r in rows}
-    assert "pkg:pypi/requests@2.20.0" in keys, (
-        "empty-result component must still be cached (empty hit > re-fetch)"
-    )
+    assert "pkg:pypi/requests@2.20.0" in keys, "empty-result component must still be cached (empty hit > re-fetch)"
 
     qb_before = len(osv_network.querybatch_calls)
     asyncio.run(osv_query_by_components(components, settings))
-    assert len(osv_network.querybatch_calls) == qb_before, (
-        "re-scan must NOT re-query the empty-result component"
-    )
+    assert len(osv_network.querybatch_calls) == qb_before, "re-scan must NOT re-query the empty-result component"
 
 
 # ---------------------------------------------------------------------------
@@ -339,15 +331,10 @@ def test_reprocess_equals_live_for_querybatch_path(
     osv_network.vuln_payloads = {"OSV-FAKE-LODASH": _LODASH_VULN}
 
     components = _components_two_npm()
-    live_findings, _, _ = asyncio.run(
-        osv_query_by_components(components, settings)
-    )
-    cached_findings, _, _ = asyncio.run(
-        osv_query_by_components(components, settings)
-    )
+    live_findings, _, _ = asyncio.run(osv_query_by_components(components, settings))
+    cached_findings, _, _ = asyncio.run(osv_query_by_components(components, settings))
     assert live_findings == cached_findings, (
-        "cached re-scan findings must be IDENTICAL to the live scan — "
-        "processing runs fresh on every hit"
+        "cached re-scan findings must be IDENTICAL to the live scan — processing runs fresh on every hit"
     )
 
 
@@ -368,22 +355,16 @@ def test_reprocess_equals_live_for_fallback_path(
     }
     components = [{"name": "lodash", "version": "4.17.15", "purl": "pkg:npm/lodash@4.17.15"}]
 
-    live_findings, _, _ = asyncio.run(
-        osv_query_by_components(components, settings)
-    )
-    cached_findings, _, _ = asyncio.run(
-        osv_query_by_components(components, settings)
-    )
+    live_findings, _, _ = asyncio.run(osv_query_by_components(components, settings))
+    cached_findings, _, _ = asyncio.run(osv_query_by_components(components, settings))
 
     assert len(live_findings) == 1, (
-        f"first scan should have fired fallback and produced one finding, "
-        f"got {len(live_findings)}"
+        f"first scan should have fired fallback and produced one finding, got {len(live_findings)}"
     )
     # Fallback's normaliser uses comp.get("name") = "lodash" directly.
     assert live_findings[0]["component_name"] == "lodash"
     assert live_findings == cached_findings, (
-        "cached fallback scan must produce identical findings — replay "
-        "must dispatch on source_path=fallback"
+        "cached fallback scan must produce identical findings — replay must dispatch on source_path=fallback"
     )
 
     # Cache row exists with the fallback provenance tag.
@@ -395,6 +376,7 @@ def test_reprocess_equals_live_for_fallback_path(
         # SQLite TEXT JSON — should still round-trip via repo.get; we
         # only inspect for shape here, so parse.
         import json as _json
+
         payload = _json.loads(payload)
     assert payload.get("source_path") == "fallback"
 

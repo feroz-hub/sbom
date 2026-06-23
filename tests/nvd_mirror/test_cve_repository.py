@@ -225,9 +225,7 @@ def test_soft_mark_rejected_empty_list(session: Session) -> None:
 
 def test_find_by_cpe_exact_version_match(session: Session) -> None:
     repo = SqlAlchemyCveRepository(session)
-    repo.upsert_batch(
-        [_make_record(cve_id="CVE-2021-44228", cpe_criteria=(_crit(version="2.14.0"),))]
-    )
+    repo.upsert_batch([_make_record(cve_id="CVE-2021-44228", cpe_criteria=(_crit(version="2.14.0"),))])
     session.commit()
     hits = repo.find_by_cpe("cpe:2.3:a:apache:log4j:2.14.0:*:*:*:*:*:*:*")
     assert [h.cve_id for h in hits] == ["CVE-2021-44228"]
@@ -245,9 +243,7 @@ def test_find_by_cpe_excludes_rejected(session: Session) -> None:
 def test_find_by_cpe_version_range_inside(session: Session) -> None:
     repo = SqlAlchemyCveRepository(session)
     crit = _crit(version="*", start_inc="2.0.0", end_exc="2.17.0")
-    repo.upsert_batch(
-        [_make_record(cve_id="CVE-2021-44228", cpe_criteria=(crit,))]
-    )
+    repo.upsert_batch([_make_record(cve_id="CVE-2021-44228", cpe_criteria=(crit,))])
     session.commit()
     hits = repo.find_by_cpe("cpe:2.3:a:apache:log4j:2.14.0:*:*:*:*:*:*:*")
     assert [h.cve_id for h in hits] == ["CVE-2021-44228"]
@@ -256,9 +252,7 @@ def test_find_by_cpe_version_range_inside(session: Session) -> None:
 def test_find_by_cpe_version_range_excludes_outside(session: Session) -> None:
     repo = SqlAlchemyCveRepository(session)
     crit = _crit(version="*", start_inc="2.0.0", end_exc="2.17.0")
-    repo.upsert_batch(
-        [_make_record(cve_id="CVE-2021-44228", cpe_criteria=(crit,))]
-    )
+    repo.upsert_batch([_make_record(cve_id="CVE-2021-44228", cpe_criteria=(crit,))])
     session.commit()
     # 2.17.0 is excluded by end_exc
     assert repo.find_by_cpe("cpe:2.3:a:apache:log4j:2.17.0:*:*:*:*:*:*:*") == []
@@ -267,12 +261,7 @@ def test_find_by_cpe_version_range_excludes_outside(session: Session) -> None:
 
 
 def test_find_by_cpe_unknown_product(session: Session) -> None:
-    assert (
-        SqlAlchemyCveRepository(session).find_by_cpe(
-            "cpe:2.3:a:nobody:nothing:1.0.0:*:*:*:*:*:*:*"
-        )
-        == []
-    )
+    assert SqlAlchemyCveRepository(session).find_by_cpe("cpe:2.3:a:nobody:nothing:1.0.0:*:*:*:*:*:*:*") == []
 
 
 def test_find_by_cpe_malformed_input(session: Session) -> None:

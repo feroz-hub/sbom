@@ -55,8 +55,7 @@ def _example_1_critical_kev_with_fix() -> GroundingContext:
             cpe="cpe:2.3:a:apache:log4j:2.16.0:*:*:*:*:*:*:*",
         ),
         cve_summary_from_db=(
-            "Apache Log4j2 vulnerable to RCE via JDBC Appender when "
-            "attacker controls Thread Context."
+            "Apache Log4j2 vulnerable to RCE via JDBC Appender when attacker controls Thread Context."
         ),
         severity="critical",
         cvss_v3_score=9.0,
@@ -157,9 +156,7 @@ def _example_5_low_defer() -> GroundingContext:
             ecosystem="PyPI",
             purl="pkg:pypi/some-pkg@1.0.0",
         ),
-        cve_summary_from_db=(
-            "Information disclosure in error-handling path under specific configurations."
-        ),
+        cve_summary_from_db=("Information disclosure in error-handling path under specific configurations."),
         severity="low",
         cvss_v3_score=3.7,
         epss_score=0.0001,

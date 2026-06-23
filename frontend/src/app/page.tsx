@@ -26,11 +26,10 @@ import { PortfolioRiskMap } from '@/components/dashboard/advanced/PortfolioRiskM
 import { RiskMatrixCard } from '@/components/dashboard/advanced/RiskMatrixCard';
 import { RemediationPanel } from '@/components/dashboard/advanced/RemediationPanel';
 import {
-  getDashboardLifetime,
-  getDashboardPosture,
-  getDashboardTrend,
+  getDashboardSummary,
   getRuns,
 } from '@/lib/api';
+import { getActiveTenantId } from '@/lib/auth';
 import {
   aggregateRuns,
   topRunForSeverity,
@@ -70,20 +69,14 @@ const DRILLABLE_SEVERITIES: readonly SeverityKey[] = [
  */
 export default function DashboardPage() {
   const router = useRouter();
+  const tenantId = typeof window !== 'undefined' ? getActiveTenantId() : null;
 
-  const postureQuery = useQuery({
-    queryKey: ['dashboard-posture'],
-    queryFn: ({ signal }) => getDashboardPosture(signal),
-  });
-
-  const trendQuery = useQuery({
-    queryKey: ['dashboard-trend', 30],
-    queryFn: ({ signal }) => getDashboardTrend(30, signal),
-  });
-
-  const lifetimeQuery = useQuery({
-    queryKey: ['dashboard-lifetime'],
-    queryFn: ({ signal }) => getDashboardLifetime(signal),
+  const summaryQuery = useQuery({
+    queryKey: ['dashboard-summary', tenantId],
+    queryFn: ({ signal }) => getDashboardSummary(signal),
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
   });
 
   // Same key + fetch as TopVulnerableSboms → shared cache, one network call.
@@ -94,7 +87,8 @@ export default function DashboardPage() {
       getRuns({ run_status: 'FINDINGS', page: 1, page_size: 100 }, signal),
   });
 
-  const posture = postureQuery.data;
+  const summary = summaryQuery.data;
+  const posture = summary?.posture;
   const buckets = useMemo(
     () => aggregateRuns(topRunsQuery.data ?? []),
     [topRunsQuery.data],
@@ -167,23 +161,28 @@ export default function DashboardPage() {
 
         {/* Counter tiles — stored / scanned / analysed */}
         <Motion preset="rise">
-          <CounterTiles />
+          <CounterTiles posture={summary?.posture} isLoading={summaryQuery.isLoading} />
         </Motion>
 
         <Motion preset="rise" delay={10}>
-          <LifecycleHealthTiles />
+          <LifecycleHealthTiles
+            lifecycle={summary?.lifecycle}
+            health={summary?.health}
+            vex={summary?.vex}
+            isLoading={summaryQuery.isLoading}
+          />
         </Motion>
 
         {/* "Your Analyzer, So Far" — lifetime growth, kept near the top */}
         <Motion preset="rise" delay={20}>
-          <LifetimeStats data={lifetimeQuery.data} isLoading={lifetimeQuery.isLoading} />
+          <LifetimeStats data={summary?.lifetime} isLoading={summaryQuery.isLoading} />
         </Motion>
 
         {/* 1 — the decision */}
         <Motion preset="rise" delay={40}>
           <HeroPostureCard
-            posture={postureQuery.data}
-            isLoading={postureQuery.isLoading}
+            posture={summary?.posture}
+            isLoading={summaryQuery.isLoading}
             onSegmentClick={handleSegmentClick}
             interactiveSeverities={interactiveSeverities}
             onKevClick={topBucket ? handleKevClick : undefined}
@@ -199,12 +198,12 @@ export default function DashboardPage() {
 
         {/* 2 — what's changed (delta drives action more than totals) */}
         <Motion preset="rise" delay={60}>
-          <WhatsNewStrip posture={postureQuery.data} />
+          <WhatsNewStrip posture={summary?.posture} />
         </Motion>
 
         {/* 3 — the primary action */}
         <Motion preset="rise" delay={120}>
-          <QuickActionsV2 primaryAction={postureQuery.data?.primary_action} />
+          <QuickActionsV2 primaryAction={summary?.posture?.primary_action} />
         </Motion>
 
         <Motion preset="rise" delay={140}>
@@ -216,14 +215,17 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <Motion preset="rise" delay={180}>
             <SeverityChart
-              data={postureQuery.data?.severity}
-              isLoading={postureQuery.isLoading}
+              data={summary?.posture?.severity}
+              isLoading={summaryQuery.isLoading}
               onSliceClick={handleSegmentClick}
               interactiveSeverities={interactiveSeverities}
             />
           </Motion>
           <Motion preset="rise" delay={220}>
-            <VulnerabilityAgePie />
+            <VulnerabilityAgePie
+              vulnerabilityAge={summary?.vulnerability_age}
+              isLoading={summaryQuery.isLoading}
+            />
           </Motion>
         </div>
 
@@ -250,7 +252,7 @@ export default function DashboardPage() {
 
         {/* 5 — supporting detail */}
         <Motion preset="rise" delay={240}>
-          <FindingsTrendChart data={trendQuery.data} isLoading={trendQuery.isLoading} />
+          <FindingsTrendChart data={summary?.trend} isLoading={summaryQuery.isLoading} />
         </Motion>
 
         {/* Trend explorer — granularity + application filter + fix/resolved */}
@@ -261,25 +263,27 @@ export default function DashboardPage() {
         {/* ── Dashboard v4 — Advanced Analytics ────────────────── */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <Motion preset="rise" delay={280}>
-            <ForecastCard />
+            <ForecastCard forecast={summary?.forecast} isLoading={summaryQuery.isLoading} />
           </Motion>
           <Motion preset="rise" delay={300}>
-            <ExploitationOutlookCard />
+            <ExploitationOutlookCard exploitation={summary?.exploitation} isLoading={summaryQuery.isLoading} />
           </Motion>
         </div>
 
-
-
         <Motion preset="rise" delay={320}>
-          <RemediationPanel />
+          <RemediationPanel
+            remediation={summary?.remediation}
+            remediationStats={summary?.remediation_stats}
+            isLoading={summaryQuery.isLoading}
+          />
         </Motion>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <Motion preset="rise" delay={340}>
-            <PortfolioRiskMap />
+            <PortfolioRiskMap riskMap={summary?.risk_map} isLoading={summaryQuery.isLoading} />
           </Motion>
           <Motion preset="rise" delay={360}>
-            <RiskMatrixCard />
+            <RiskMatrixCard riskMatrix={summary?.risk_matrix} isLoading={summaryQuery.isLoading} />
           </Motion>
         </div>
 

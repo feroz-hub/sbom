@@ -86,9 +86,7 @@ def _stub_external(monkeypatch):
     these via monkeypatch to assert the boost paths.
     """
     monkeypatch.setattr(risk_score, "lookup_kev_set_memoized", lambda db, ids: set())
-    monkeypatch.setattr(
-        risk_score, "get_epss_scores_memoized", lambda db, ids: {c: 0.0 for c in ids}
-    )
+    monkeypatch.setattr(risk_score, "get_epss_scores_memoized", lambda db, ids: {c: 0.0 for c in ids})
 
 
 # ---------------------------------------------------------------------
@@ -144,9 +142,7 @@ def test_epss_amplifies(monkeypatch):
     db.add(f)
     db.commit()
 
-    monkeypatch.setattr(
-        risk_score, "get_epss_scores_memoized", lambda db, ids: {"CVE-2024-0003": 0.5}
-    )
+    monkeypatch.setattr(risk_score, "get_epss_scores_memoized", lambda db, ids: {"CVE-2024-0003": 0.5})
     summary = score_findings(db, [f])
     assert summary["total_risk_score"] == pytest.approx(28.0, rel=1e-3)
     # 28 >= 20 → MEDIUM
@@ -161,9 +157,7 @@ def test_kev_doubles_and_critical_band(monkeypatch):
     db.add(f)
     db.commit()
 
-    monkeypatch.setattr(
-        risk_score, "lookup_kev_set_memoized", lambda db, ids: {"CVE-2024-0004"}
-    )
+    monkeypatch.setattr(risk_score, "lookup_kev_set_memoized", lambda db, ids: {"CVE-2024-0004"})
     summary = score_findings(db, [f])
     assert summary["total_risk_score"] == pytest.approx(18.0, rel=1e-3)
     # Worst-score 18 < 80, but the KEV+CVSS>=9 branch promotes to CRITICAL.
@@ -176,18 +170,12 @@ def test_kev_and_epss_compound(monkeypatch):
     """CVSS=10, EPSS=0.9, KEV → 10 * (1+5*0.9) * 2 = 10 * 5.5 * 2 = 110."""
     db = _new_db()
     run = _seed_run(db)
-    f = _make_finding(
-        run_id=run.id, vuln_id="CVE-2021-44228", cvss=10.0, severity="CRITICAL"
-    )
+    f = _make_finding(run_id=run.id, vuln_id="CVE-2021-44228", cvss=10.0, severity="CRITICAL")
     db.add(f)
     db.commit()
 
-    monkeypatch.setattr(
-        risk_score, "lookup_kev_set_memoized", lambda db, ids: {"CVE-2021-44228"}
-    )
-    monkeypatch.setattr(
-        risk_score, "get_epss_scores_memoized", lambda db, ids: {"CVE-2021-44228": 0.9}
-    )
+    monkeypatch.setattr(risk_score, "lookup_kev_set_memoized", lambda db, ids: {"CVE-2021-44228"})
+    monkeypatch.setattr(risk_score, "get_epss_scores_memoized", lambda db, ids: {"CVE-2021-44228": 0.9})
     summary = score_findings(db, [f])
     assert summary["total_risk_score"] == pytest.approx(110.0, rel=1e-3)
     assert summary["risk_band"] == "CRITICAL"
@@ -208,9 +196,7 @@ def test_aliases_are_searched_for_cves(monkeypatch):
     db.add(f)
     db.commit()
 
-    monkeypatch.setattr(
-        risk_score, "lookup_kev_set_memoized", lambda db, ids: {"CVE-2021-44228"}
-    )
+    monkeypatch.setattr(risk_score, "lookup_kev_set_memoized", lambda db, ids: {"CVE-2021-44228"})
     summary = score_findings(db, [f])
     # Without alias-search this would be 10; with it, KEV doubles to 20.
     assert summary["total_risk_score"] == pytest.approx(20.0, rel=1e-3)
@@ -261,17 +247,13 @@ def test_band_thresholds_at_boundaries(monkeypatch):
     db.commit()
 
     # CVSS=10, EPSS=0.8 → 10 * (1 + 5*0.8) = 50.0 → HIGH
-    monkeypatch.setattr(
-        risk_score, "get_epss_scores_memoized", lambda db, ids: {"CVE-2024-0099": 0.8}
-    )
+    monkeypatch.setattr(risk_score, "get_epss_scores_memoized", lambda db, ids: {"CVE-2024-0099": 0.8})
     summary = score_findings(db, [f])
     assert summary["worst_finding"]["score"] == pytest.approx(50.0, rel=1e-3)
     assert summary["risk_band"] == "HIGH"
 
     # CVSS=10, EPSS=1.0 → 10 * 6 = 60 — still HIGH, NOT CRITICAL without KEV.
-    monkeypatch.setattr(
-        risk_score, "get_epss_scores_memoized", lambda db, ids: {"CVE-2024-0099": 1.0}
-    )
+    monkeypatch.setattr(risk_score, "get_epss_scores_memoized", lambda db, ids: {"CVE-2024-0099": 1.0})
     summary = score_findings(db, [f])
     assert summary["worst_finding"]["score"] == pytest.approx(60.0, rel=1e-3)
     assert summary["risk_band"] == "HIGH"

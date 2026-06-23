@@ -70,8 +70,7 @@ def run(ctx: ValidationContext) -> ValidationContext:
         path="",
         message="Unable to detect SBOM format. No SPDX or CycloneDX fingerprint matched.",
         remediation=(
-            "The document must be SPDX (2.2 / 2.3 JSON or 2.3 Tag-Value) or "
-            "CycloneDX (1.4 / 1.5 / 1.6 JSON or XML)."
+            "The document must be SPDX (2.2 / 2.3 JSON or 2.3 Tag-Value) or CycloneDX (1.4 / 1.5 / 1.6 JSON or XML)."
         ),
     )
     return ctx
@@ -115,9 +114,7 @@ def _detect_json(ctx: ValidationContext, text: str) -> ValidationContext:
         return ctx
 
     has_spdx = (
-        "spdxVersion" in doc
-        or "SPDXID" in doc
-        or "@graph" in doc  # SPDX 3.0
+        "spdxVersion" in doc or "SPDXID" in doc or "@graph" in doc  # SPDX 3.0
     )
     bom_format = doc.get("bomFormat")
     has_cdx = (isinstance(bom_format, str) and bom_format.lower() == "cyclonedx") or "specVersion" in doc
@@ -250,8 +247,7 @@ def _detect_xml(ctx: ValidationContext, text: str) -> ValidationContext:
         path="",
         message="XML document has no recognised CycloneDX or SPDX namespace.",
         remediation=(
-            "CycloneDX XML root carries xmlns='http://cyclonedx.org/schema/bom/<v>'; "
-            "SPDX RDF/XML is deferred in v1."
+            "CycloneDX XML root carries xmlns='http://cyclonedx.org/schema/bom/<v>'; SPDX RDF/XML is deferred in v1."
         ),
     )
     return ctx

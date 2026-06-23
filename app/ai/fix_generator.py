@@ -243,9 +243,7 @@ class AiFixGenerator:
 
         # Cache miss — pick provider, build request, enforce budget, call.
         try:
-            provider = (
-                self._registry.get(provider_name) if provider_name else self._registry.get_default()
-            )
+            provider = self._registry.get(provider_name) if provider_name else self._registry.get_default()
         except ProviderUnavailableError as exc:
             return self._error(
                 finding,
@@ -440,8 +438,7 @@ class AiFixGenerator:
                 bad_preview,
             )
             retry_user = (
-                usr_p
-                + "\n\nYour previous response could not be parsed as JSON.\n"
+                usr_p + "\n\nYour previous response could not be parsed as JSON.\n"
                 f"You returned (first 240 chars):\n{bad_preview}\n\n"
                 "Return ONLY a JSON object matching the schema. No markdown "
                 "fences, no commentary, no preamble. Start your response "
@@ -556,9 +553,7 @@ class AiFixGenerator:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _parse_response(
-        text: str, parsed: dict[str, Any] | None
-    ) -> tuple[AiFixBundle | None, str | None]:
+    def _parse_response(text: str, parsed: dict[str, Any] | None) -> tuple[AiFixBundle | None, str | None]:
         """Parse the LLM output into a strict :class:`AiFixBundle`.
 
         Two paths:
@@ -622,9 +617,7 @@ class AiFixGenerator:
         if bundle.remediation_prose.exploitation_likelihood == "actively_exploited" and not ctx.kev_listed:
             bundle = bundle.model_copy(
                 update={
-                    "remediation_prose": bundle.remediation_prose.model_copy(
-                        update={"exploitation_likelihood": "high"}
-                    )
+                    "remediation_prose": bundle.remediation_prose.model_copy(update={"exploitation_likelihood": "high"})
                 }
             )
         # citations subset of sources_used
@@ -633,9 +626,7 @@ class AiFixGenerator:
         if cleaned != bundle.decision_recommendation.citations:
             bundle = bundle.model_copy(
                 update={
-                    "decision_recommendation": bundle.decision_recommendation.model_copy(
-                        update={"citations": cleaned}
-                    )
+                    "decision_recommendation": bundle.decision_recommendation.model_copy(update={"citations": cleaned})
                 }
             )
         return bundle

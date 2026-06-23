@@ -9,6 +9,7 @@ from urllib.parse import unquote
 try:  # pragma: no cover - exercised when packageurl is installed.
     from packageurl import PackageURL
 except ModuleNotFoundError:  # pragma: no cover - fallback covered via parse_purl tests.
+
     class PackageURL:  # type: ignore[no-redef]
         def __init__(
             self,
@@ -41,6 +42,7 @@ except ModuleNotFoundError:  # pragma: no cover - fallback covered via parse_pur
             name = segments[-1]
             namespace = "/".join(segments[:-1]) or None
             return cls(type=package_type, namespace=namespace, name=name, version=unquote(version) or None)
+
 
 from .types import NormalizedComponent, canonical_ecosystem
 
@@ -206,7 +208,22 @@ def infer_ecosystem(
         return "nuget"
 
     # 2. Check for npm
-    npm_libs = {"lodash", "express", "axios", "react", "angular", "vue", "uuid", "chalk", "commander", "tslib", "semver", "debug", "moment", "webpack"}
+    npm_libs = {
+        "lodash",
+        "express",
+        "axios",
+        "react",
+        "angular",
+        "vue",
+        "uuid",
+        "chalk",
+        "commander",
+        "tslib",
+        "semver",
+        "debug",
+        "moment",
+        "webpack",
+    }
     if (
         re.search(r"(^|[-_/])npm($|[-_/])", lowered)
         or name_low.startswith("@")
@@ -219,7 +236,24 @@ def infer_ecosystem(
         return "npm"
 
     # 3. Check for pypi
-    pypi_libs = {"requests", "urllib3", "django", "flask", "numpy", "pandas", "cryptography", "pillow", "jinja2", "click", "six", "certifi", "attrs", "idna", "pip", "setuptools"}
+    pypi_libs = {
+        "requests",
+        "urllib3",
+        "django",
+        "flask",
+        "numpy",
+        "pandas",
+        "cryptography",
+        "pillow",
+        "jinja2",
+        "click",
+        "six",
+        "certifi",
+        "attrs",
+        "idna",
+        "pip",
+        "setuptools",
+    }
     if (
         "pypi" in lowered
         or name_low.startswith("python-")
@@ -230,7 +264,18 @@ def infer_ecosystem(
         return "pypi"
 
     # 4. Check for nuget
-    nuget_libs = {"newtonsoft.json", "entityframework", "dapper", "nlog", "log4net", "serilog", "autofac", "moq", "xunit", "nunit"}
+    nuget_libs = {
+        "newtonsoft.json",
+        "entityframework",
+        "dapper",
+        "nlog",
+        "log4net",
+        "serilog",
+        "autofac",
+        "moq",
+        "xunit",
+        "nunit",
+    }
     if (
         "nuget" in lowered
         or ".net" in lowered

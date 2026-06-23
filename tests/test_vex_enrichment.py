@@ -75,9 +75,7 @@ def test_vex_not_affected_requires_justification(client):
             json={
                 "document": {
                     "bomFormat": "CycloneDX",
-                    "vulnerabilities": [
-                        {"id": "CVE-2024-0001", "analysis": {"state": "not_affected"}}
-                    ],
+                    "vulnerabilities": [{"id": "CVE-2024-0001", "analysis": {"state": "not_affected"}}],
                 }
             },
         )
@@ -110,7 +108,9 @@ def test_manual_vex_override_is_audited(client):
         assert response.json()["status"] == "affected"
 
         statement = db.execute(select(VexStatement).where(VexStatement.component_id == component.id)).scalars().first()
-        audit = db.execute(select(VexOverrideAudit).where(VexOverrideAudit.component_id == component.id)).scalars().first()
+        audit = (
+            db.execute(select(VexOverrideAudit).where(VexOverrideAudit.component_id == component.id)).scalars().first()
+        )
         assert statement is not None
         assert audit is not None
         assert audit.reason == "Confirmed by product security review."

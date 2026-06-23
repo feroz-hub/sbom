@@ -23,13 +23,17 @@ from .cache import memoize_with_ttl
 
 def latest_successful_run_for_sbom(db: Session, *, sbom_id: int) -> AnalysisRun | None:
     """Return the latest completed stored analysis run for one SBOM."""
-    return db.execute(
-        select(AnalysisRun)
-        .where(AnalysisRun.sbom_id == sbom_id)
-        .where(AnalysisRun.is_active.is_(True))
-        .where(AnalysisRun.run_status.in_((*COMPLETED_RUN_STATUSES, "PASS", "FAIL")))
-        .order_by(AnalysisRun.id.desc())
-    ).scalars().first()
+    return (
+        db.execute(
+            select(AnalysisRun)
+            .where(AnalysisRun.sbom_id == sbom_id)
+            .where(AnalysisRun.is_active.is_(True))
+            .where(AnalysisRun.run_status.in_((*COMPLETED_RUN_STATUSES, "PASS", "FAIL")))
+            .order_by(AnalysisRun.id.desc())
+        )
+        .scalars()
+        .first()
+    )
 
 
 def findings_with_components_for_run(
@@ -53,10 +57,9 @@ def findings_with_components_for_run(
         .order_by(AnalysisFinding.id)
     )
     if not include_duplicates:
-        statement = statement.where(
-            or_(SBOMComponent.id.is_(None), SBOMComponent.is_duplicate.is_(False))
-        )
+        statement = statement.where(or_(SBOMComponent.id.is_(None), SBOMComponent.is_duplicate.is_(False)))
     return list(db.execute(statement).all())
+
 
 # ---------------------------------------------------------------------------
 # Single run — Convention A, scope=run
@@ -70,18 +73,12 @@ def findings_in_run_total(db: Session, *, run_id: int) -> int:
     on the run row (writer-side invariant).
     """
     return (
-        db.execute(
-            select(func.count(AnalysisFinding.id)).where(
-                AnalysisFinding.analysis_run_id == run_id
-            )
-        ).scalar()
+        db.execute(select(func.count(AnalysisFinding.id)).where(AnalysisFinding.analysis_run_id == run_id)).scalar()
         or 0
     )
 
 
-def findings_in_run_severity_distribution(
-    db: Session, *, run_id: int
-) -> dict[str, int]:
+def findings_in_run_severity_distribution(db: Session, *, run_id: int) -> dict[str, int]:
     """findings.in_run.severity_distribution — see metrics-spec.md §3.1.
 
     ``sum(values()) == findings_in_run_total(run_id)``. Severities are
@@ -107,11 +104,7 @@ def findings_latest_per_sbom_total(db: Session) -> int:
     """
     latest = latest_run_per_sbom_subquery()
     return (
-        db.execute(
-            select(func.count(AnalysisFinding.id)).where(
-                AnalysisFinding.analysis_run_id.in_(latest)
-            )
-        ).scalar()
+        db.execute(select(func.count(AnalysisFinding.id)).where(AnalysisFinding.analysis_run_id.in_(latest))).scalar()
         or 0
     )
 
@@ -197,9 +190,7 @@ def findings_distinct_lifetime(db: Session) -> int:
     )
 
 
-def findings_distinct_active_as_of(
-    db: Session, *, as_of: date
-) -> set[tuple[str, str, str]]:
+def findings_distinct_active_as_of(db: Session, *, as_of: date) -> set[tuple[str, str, str]]:
     """findings.distinct_active_as_of — see metrics-spec.md §3.4.
 
     Distinct ``(vuln_id, component_name, component_version)`` tuples in the
@@ -227,9 +218,7 @@ def findings_distinct_active_as_of(
 # ---------------------------------------------------------------------------
 
 
-def findings_daily_distinct_active(
-    db: Session, *, days: int = 30, today: date | None = None
-) -> list[TrendPoint]:
+def findings_daily_distinct_active(db: Session, *, days: int = 30, today: date | None = None) -> list[TrendPoint]:
     """findings.daily_distinct_active — see metrics-spec.md §3.4.
 
     For each of the last ``days`` calendar days, compute the distinct
@@ -258,9 +247,7 @@ def findings_daily_distinct_active(
     )
 
 
-def _daily_distinct_active_uncached(
-    db: Session, days_list: list[date]
-) -> list[TrendPoint]:
+def _daily_distinct_active_uncached(db: Session, days_list: list[date]) -> list[TrendPoint]:
     """The actual computation, factored out so the cache wrapper stays tidy."""
     # Load every successful run with its sbom_id and completed_on, sorted
     # for monotonic walk per SBOM.
@@ -311,9 +298,7 @@ def _daily_distinct_active_uncached(
             ).where(AnalysisFinding.analysis_run_id.in_(runs_needed))
         ).all()
         for run_id, vuln, comp, ver, sev in rows:
-            findings_by_run[run_id].append(
-                ((vuln or ""), (comp or ""), (ver or ""), (sev or "unknown"))
-            )
+            findings_by_run[run_id].append(((vuln or ""), (comp or ""), (ver or ""), (sev or "unknown")))
 
     # Per-day distinct snapshot. First-occurrence severity wins on ties (a
     # finding appearing in two SBOMs' latest runs on the same day takes the

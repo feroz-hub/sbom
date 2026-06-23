@@ -70,13 +70,22 @@ function ForecastTooltip({ active, payload, label }: TooltipProps<number, string
   );
 }
 
-export function ForecastCard() {
-  const query = useQuery({
+export interface ForecastCardProps {
+  forecast?: any;
+  isLoading?: boolean;
+}
+
+export function ForecastCard({ forecast, isLoading: propsIsLoading }: ForecastCardProps = {}) {
+  const hasProps = forecast !== undefined;
+
+  const queryResult = useQuery({
     queryKey: ['dashboard-forecast'],
     queryFn: ({ signal }) => getDashboardForecast(signal),
+    enabled: !hasProps,
   });
 
-  const data = query.data;
+  const data = hasProps ? forecast : queryResult.data;
+  const isLoading = hasProps ? !!propsIsLoading : queryResult.isLoading;
 
   const rows: ChartRow[] = [];
   if (data && !data.insufficient_history) {
@@ -135,7 +144,7 @@ export function ForecastCard() {
         )}
       </SurfaceHeader>
       <SurfaceContent>
-        {query.isLoading ? (
+        {isLoading ? (
           <div className="flex h-56 items-center justify-center">
             <Spinner />
           </div>

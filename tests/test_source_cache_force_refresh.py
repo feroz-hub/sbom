@@ -166,9 +166,7 @@ def test_force_refresh_ignores_fresh_hit_and_overwrites(
     # the cached row.
     vulndb_network["next_payload"] = _VULDB_REFRESHED
     asyncio.run(src.query(components, _settings(cache_on=True, force_refresh=True)))
-    assert vulndb_network["calls"] == 2, (
-        "force_refresh must IGNORE the fresh hit and fetch live"
-    )
+    assert vulndb_network["calls"] == 2, "force_refresh must IGNORE the fresh hit and fetch live"
 
     # The cached entry now reflects the refreshed payload.
     with isolated_session_factory() as s:
@@ -182,10 +180,7 @@ def test_force_refresh_ignores_fresh_hit_and_overwrites(
     first_result = (cached.get("result") or [None])[0] or {}
     source_block = first_result.get("source") or {}
     cve = (source_block.get("cve") or {}).get("id")
-    assert cve == "CVE-FR-2", (
-        "force_refresh must WRITE the fresh result so the stale entry "
-        "is refreshed for next time"
-    )
+    assert cve == "CVE-FR-2", "force_refresh must WRITE the fresh result so the stale entry is refreshed for next time"
 
 
 def test_no_force_refresh_uses_cached_hit(
@@ -288,19 +283,14 @@ def test_force_refresh_bypasses_partition_hits_on_osv(
     components = [{"name": "lodash", "version": "4.17.15", "purl": "pkg:npm/lodash@4.17.15"}]
 
     # Scan 1 — caches the result.
-    asyncio.run(
-        osv_query_by_components(components, _settings(cache_on=True, force_refresh=False))
-    )
+    asyncio.run(osv_query_by_components(components, _settings(cache_on=True, force_refresh=False)))
     assert len(osv_net.querybatch_calls) == 1
 
     # Scan 2 — force_refresh=True. The cache row exists and is fresh,
     # but the bypass forces a re-query.
-    asyncio.run(
-        osv_query_by_components(components, _settings(cache_on=True, force_refresh=True))
-    )
+    asyncio.run(osv_query_by_components(components, _settings(cache_on=True, force_refresh=True)))
     assert len(osv_net.querybatch_calls) == 2, (
-        "force_refresh must bypass partition_by_cache hits and re-query "
-        "OSV's querybatch endpoint"
+        "force_refresh must bypass partition_by_cache hits and re-query OSV's querybatch endpoint"
     )
 
     # And it overwrites the cache row (still one row, refreshed timestamp).

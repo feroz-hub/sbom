@@ -67,9 +67,7 @@ def _snap(
 # --- load -----------------------------------------------------------------
 
 
-def test_load_seeds_defaults_on_first_call(
-    session: Session, secrets: FernetSecretsAdapter
-) -> None:
+def test_load_seeds_defaults_on_first_call(session: Session, secrets: FernetSecretsAdapter) -> None:
     repo = SqlAlchemySettingsRepository(session, secrets)
     snap = repo.load()
     session.commit()
@@ -79,9 +77,7 @@ def test_load_seeds_defaults_on_first_call(
     assert snap.window_days == 119
 
 
-def test_load_uses_env_defaults_when_provided(
-    session: Session, secrets: FernetSecretsAdapter
-) -> None:
+def test_load_uses_env_defaults_when_provided(session: Session, secrets: FernetSecretsAdapter) -> None:
     defaults = NvdMirrorSettings(enabled=True, page_size=500, window_days=30)
     repo = SqlAlchemySettingsRepository(session, secrets, env_defaults=defaults)
     snap = repo.load()
@@ -91,9 +87,7 @@ def test_load_uses_env_defaults_when_provided(
     assert snap.window_days == 30
 
 
-def test_load_returns_existing_row_unchanged(
-    session: Session, secrets: FernetSecretsAdapter
-) -> None:
+def test_load_returns_existing_row_unchanged(session: Session, secrets: FernetSecretsAdapter) -> None:
     repo = SqlAlchemySettingsRepository(session, secrets)
     repo.save(_snap())
     session.commit()
@@ -105,9 +99,7 @@ def test_load_returns_existing_row_unchanged(
 # --- save -----------------------------------------------------------------
 
 
-def test_save_round_trip_preserves_api_key(
-    session: Session, secrets: FernetSecretsAdapter
-) -> None:
+def test_save_round_trip_preserves_api_key(session: Session, secrets: FernetSecretsAdapter) -> None:
     repo = SqlAlchemySettingsRepository(session, secrets)
     repo.save(_snap(api_key="my-nvd-secret"))
     session.commit()
@@ -124,9 +116,7 @@ def test_save_round_trip_preserves_api_key(
     assert snap.api_key_plaintext == "my-nvd-secret"
 
 
-def test_save_with_empty_api_key_clears_ciphertext(
-    session: Session, secrets: FernetSecretsAdapter
-) -> None:
+def test_save_with_empty_api_key_clears_ciphertext(session: Session, secrets: FernetSecretsAdapter) -> None:
     repo = SqlAlchemySettingsRepository(session, secrets)
     repo.save(_snap(api_key="x"))
     repo.save(_snap(api_key=""))
@@ -135,9 +125,7 @@ def test_save_with_empty_api_key_clears_ciphertext(
     assert snap.api_key_plaintext is None
 
 
-def test_save_does_not_advance_watermark(
-    session: Session, secrets: FernetSecretsAdapter
-) -> None:
+def test_save_does_not_advance_watermark(session: Session, secrets: FernetSecretsAdapter) -> None:
     """save() may move enabled/api_endpoint but never the watermark."""
     repo = SqlAlchemySettingsRepository(session, secrets)
     repo.advance_watermark(
@@ -155,9 +143,7 @@ def test_save_does_not_advance_watermark(
 # --- watermark ------------------------------------------------------------
 
 
-def test_advance_watermark_seeds_row_if_missing(
-    session: Session, secrets: FernetSecretsAdapter
-) -> None:
+def test_advance_watermark_seeds_row_if_missing(session: Session, secrets: FernetSecretsAdapter) -> None:
     repo = SqlAlchemySettingsRepository(session, secrets)
     target = datetime(2024, 6, 1, tzinfo=UTC)
     repo.advance_watermark(last_modified_utc=target, last_successful_sync_at=target)
@@ -167,9 +153,7 @@ def test_advance_watermark_seeds_row_if_missing(
     assert snap.last_successful_sync_at == target
 
 
-def test_reset_watermark_clears_last_modified(
-    session: Session, secrets: FernetSecretsAdapter
-) -> None:
+def test_reset_watermark_clears_last_modified(session: Session, secrets: FernetSecretsAdapter) -> None:
     repo = SqlAlchemySettingsRepository(session, secrets)
     target = datetime(2024, 6, 1, tzinfo=UTC)
     repo.advance_watermark(last_modified_utc=target, last_successful_sync_at=target)
@@ -186,9 +170,7 @@ def test_reset_watermark_clears_last_modified(
 # --- decrypt failures (rotated Fernet key) --------------------------------
 
 
-def test_load_with_undecryptable_ciphertext_returns_none_key(
-    session: Session, secrets: FernetSecretsAdapter
-) -> None:
+def test_load_with_undecryptable_ciphertext_returns_none_key(session: Session, secrets: FernetSecretsAdapter) -> None:
     repo = SqlAlchemySettingsRepository(session, secrets)
     repo.save(_snap(api_key="x"))
     session.commit()
@@ -204,15 +186,14 @@ def test_load_with_undecryptable_ciphertext_returns_none_key(
 # --- singleton constraint -------------------------------------------------
 
 
-def test_load_always_returns_id_1_singleton(
-    session: Session, secrets: FernetSecretsAdapter
-) -> None:
+def test_load_always_returns_id_1_singleton(session: Session, secrets: FernetSecretsAdapter) -> None:
     repo = SqlAlchemySettingsRepository(session, secrets)
     repo.load()
     repo.load()
     repo.load()
     session.commit()
     from app.nvd_mirror.db.models import NvdSettingsRow
+
     rows = session.query(NvdSettingsRow).all()
     assert len(rows) == 1
     assert rows[0].id == 1

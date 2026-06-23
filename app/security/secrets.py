@@ -52,7 +52,7 @@ from typing import ClassVar
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 _NONCE_BYTES = 12  # AES-GCM standard nonce length
-_KEY_BYTES = 32    # AES-256
+_KEY_BYTES = 32  # AES-256
 
 
 class SecretCipher:

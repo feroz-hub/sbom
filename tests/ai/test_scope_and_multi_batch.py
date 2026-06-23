@@ -266,9 +266,7 @@ def test_resolve_scope_finding_ids_overrides_filters(client, _seeded_two_runs):
         db.close()
 
 
-def test_resolve_scope_finding_ids_intersected_with_run_id_for_security(
-    client, _seeded_two_runs
-):
+def test_resolve_scope_finding_ids_intersected_with_run_id_for_security(client, _seeded_two_runs):
     """A caller passing finding_ids from a different run gets the intersection.
 
     This is the hard security invariant: even with explicit IDs, we
@@ -279,8 +277,8 @@ def test_resolve_scope_finding_ids_intersected_with_run_id_for_security(
         # Caller forges run_a but slips in run_b's finding id.
         scope = AiFixGenerationScope(
             finding_ids=[
-                _seeded_two_runs["a1"],     # legit (run_a)
-                _seeded_two_runs["b1"],     # forged (run_b — must be filtered)
+                _seeded_two_runs["a1"],  # legit (run_a)
+                _seeded_two_runs["b1"],  # forged (run_b — must be filtered)
             ]
         )
         rows = resolve_scope_findings(db, run_id=_seeded_two_runs["run_a"], scope=scope)
@@ -289,9 +287,7 @@ def test_resolve_scope_finding_ids_intersected_with_run_id_for_security(
         db.close()
 
 
-def test_resolve_scope_combines_multiple_filters_conjunctively(
-    client, _seeded_two_runs
-):
+def test_resolve_scope_combines_multiple_filters_conjunctively(client, _seeded_two_runs):
     db = SessionLocal()
     try:
         # Critical AND fix-available — should hit a1 only (a2 is HIGH).
@@ -318,9 +314,7 @@ def test_count_cached_for_finding_ids_empty_returns_zero(client, _seeded_two_run
         db.close()
 
 
-def test_count_cached_for_finding_ids_joins_against_cache_table(
-    client, _seeded_two_runs
-):
+def test_count_cached_for_finding_ids_joins_against_cache_table(client, _seeded_two_runs):
     db = SessionLocal()
     try:
         # Seed a cache row matching finding a1's natural key.
@@ -419,9 +413,7 @@ def _fake_registry(monkeypatch):
     registry_mod.reset_registry()
 
 
-def test_count_active_batches_excludes_terminal_states(
-    client, _seeded_two_runs, _enable_ai, _fake_registry
-):
+def test_count_active_batches_excludes_terminal_states(client, _seeded_two_runs, _enable_ai, _fake_registry):
     db = SessionLocal()
     try:
         run_id = _seeded_two_runs["run_a"]
@@ -455,9 +447,7 @@ def test_count_active_batches_excludes_terminal_states(
         db.close()
 
 
-def test_fourth_batch_on_run_returns_409(
-    client, _seeded_two_runs, _enable_ai, _fake_registry, _memory_store
-):
+def test_fourth_batch_on_run_returns_409(client, _seeded_two_runs, _enable_ai, _fake_registry, _memory_store):
     """The router enforces ``MAX_ACTIVE_BATCHES_PER_RUN`` and returns
     a typed 409 with retryable=True so the frontend can prompt the user
     to wait or cancel an active batch."""
@@ -494,9 +484,7 @@ def test_fourth_batch_on_run_returns_409(
 # ============================================================================
 
 
-def test_empty_scope_returns_400(
-    client, _seeded_two_runs, _enable_ai, _fake_registry, _memory_store
-):
+def test_empty_scope_returns_400(client, _seeded_two_runs, _enable_ai, _fake_registry, _memory_store):
     """A scope that resolves to zero findings should refuse with a
     typed error so the frontend can surface 'No findings match' copy
     instead of starting an empty batch."""
@@ -536,9 +524,7 @@ def test_per_batch_cancel_does_not_affect_other_batches(
     assert store.is_cancel_requested(run_id, "batch-b") is False
 
 
-def test_legacy_cancel_propagates_to_all_batches(
-    client, _seeded_two_runs, _enable_ai, _memory_store
-):
+def test_legacy_cancel_propagates_to_all_batches(client, _seeded_two_runs, _enable_ai, _memory_store):
     """Legacy run-level cancel halts every batch on the run.
 
     Documented behaviour for the deprecated POST /cancel endpoint —
@@ -609,9 +595,7 @@ class _CountingProvider:
         )
 
 
-def test_cache_lock_dedupes_concurrent_generations_for_same_key(
-    client, _seeded_two_runs, _enable_ai
-):
+def test_cache_lock_dedupes_concurrent_generations_for_same_key(client, _seeded_two_runs, _enable_ai):
     """Two parallel generators racing on the same cache key must
     produce exactly ONE provider call, with the second coroutine
     receiving the cached result the first wrote.
@@ -626,11 +610,7 @@ def test_cache_lock_dedupes_concurrent_generations_for_same_key(
 
     db = SessionLocal()
     try:
-        finding = (
-            db.query(AnalysisFinding)
-            .filter(AnalysisFinding.id == _seeded_two_runs["a1"])
-            .one()
-        )
+        finding = db.query(AnalysisFinding).filter(AnalysisFinding.id == _seeded_two_runs["a1"]).one()
     finally:
         db.close()
 
@@ -661,9 +641,7 @@ def test_cache_lock_dedupes_concurrent_generations_for_same_key(
 
     asyncio.run(_race())
     # Hard invariant: the provider was called at most once for this key.
-    assert counting.calls == 1, (
-        f"expected exactly 1 LLM call under cache-lock dedup, got {counting.calls}"
-    )
+    assert counting.calls == 1, f"expected exactly 1 LLM call under cache-lock dedup, got {counting.calls}"
 
 
 # ============================================================================
@@ -688,7 +666,7 @@ def test_trigger_with_scope_creates_batch_row_and_runs_inline(
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["batch_id"]
-    assert body["total"] == 1   # only a1 is CRITICAL
+    assert body["total"] == 1  # only a1 is CRITICAL
     assert body["scope_label"] == "Critical findings"
 
     # The durable row exists. Status depends on whether Celery
@@ -710,9 +688,7 @@ def test_trigger_with_scope_creates_batch_row_and_runs_inline(
         db.close()
 
 
-def test_estimate_post_with_severity_scope_returns_scoped_count(
-    client, _seeded_two_runs, _fake_registry
-):
+def test_estimate_post_with_severity_scope_returns_scoped_count(client, _seeded_two_runs, _fake_registry):
     """POST /estimate with a severity scope reports the resolved count."""
     run_id = _seeded_two_runs["run_a"]
     body = {"scope": {"severities": ["HIGH", "MEDIUM"]}}
@@ -724,9 +700,7 @@ def test_estimate_post_with_severity_scope_returns_scoped_count(
     assert payload["blocked"] is False
 
 
-def test_estimate_post_no_scope_returns_full_run(
-    client, _seeded_two_runs, _fake_registry
-):
+def test_estimate_post_no_scope_returns_full_run(client, _seeded_two_runs, _fake_registry):
     run_id = _seeded_two_runs["run_a"]
     resp = client.post(f"/api/v1/runs/{run_id}/ai-fixes/estimate", json={})
     assert resp.status_code == 200
@@ -749,9 +723,7 @@ def test_legacy_get_estimate_still_works(client, _seeded_two_runs, _fake_registr
 # ============================================================================
 
 
-def test_list_batches_endpoint(
-    client, _seeded_two_runs, _enable_ai, _fake_registry, _memory_store
-):
+def test_list_batches_endpoint(client, _seeded_two_runs, _enable_ai, _fake_registry, _memory_store):
     run_id = _seeded_two_runs["run_a"]
     client.post(
         f"/api/v1/runs/{run_id}/ai-fixes",
@@ -764,17 +736,13 @@ def test_list_batches_endpoint(
     assert body["items"][0]["scope_label"] == "Critical"
 
 
-def test_batch_detail_404_for_unknown_batch(
-    client, _seeded_two_runs, _enable_ai
-):
+def test_batch_detail_404_for_unknown_batch(client, _seeded_two_runs, _enable_ai):
     run_id = _seeded_two_runs["run_a"]
     resp = client.get(f"/api/v1/runs/{run_id}/ai-fixes/batches/00000000-0000-0000-0000-000000000000")
     assert resp.status_code == 404
 
 
-def test_per_batch_cancel_endpoint_sets_flag(
-    client, _seeded_two_runs, _enable_ai, _fake_registry, _memory_store
-):
+def test_per_batch_cancel_endpoint_sets_flag(client, _seeded_two_runs, _enable_ai, _fake_registry, _memory_store):
     """Cancel one batch — only that batch gets the flag; others on the
     run keep running."""
     run_id = _seeded_two_runs["run_a"]

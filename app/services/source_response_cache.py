@@ -114,9 +114,10 @@ class SourceResponseCacheRepository:
                 return json.loads(payload)
             except (TypeError, ValueError) as exc:
                 log.warning(
-                    "source_response_cache: payload deserialise failed "
-                    "(source=%r component_key=%r): %s",
-                    source, component_key, exc,
+                    "source_response_cache: payload deserialise failed (source=%r component_key=%r): %s",
+                    source,
+                    component_key,
+                    exc,
                 )
                 return None
         # Any other shape (None, primitive) is preserved as-is — JSON
@@ -166,10 +167,11 @@ class SourceResponseCacheRepository:
         except Exception as exc:  # pragma: no cover — defensive
             log.warning(
                 "source_response_cache: write failed (source=%r component_key=%r): %s",
-                source, component_key, exc,
+                source,
+                component_key,
+                exc,
             )
             self._db.rollback()
-
 
     # ---------------------------------------------------------- delete_expired
 
@@ -205,17 +207,14 @@ class SourceResponseCacheRepository:
         # ``.all()`` so the subsequent DELETE doesn't reference a
         # subquery on the same table (which would be a footgun on
         # some Postgres + MVCC setups).
-        expired_pairs = (
-            self._db.execute(
-                select(
-                    SourceResponseCache.source,
-                    SourceResponseCache.component_key,
-                )
-                .where(SourceResponseCache.expires_at < now_iso)
-                .limit(batch_size)
+        expired_pairs = self._db.execute(
+            select(
+                SourceResponseCache.source,
+                SourceResponseCache.component_key,
             )
-            .all()
-        )
+            .where(SourceResponseCache.expires_at < now_iso)
+            .limit(batch_size)
+        ).all()
         if not expired_pairs:
             return 0
 

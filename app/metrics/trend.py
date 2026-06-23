@@ -75,9 +75,7 @@ def _period_end_dates(granularity: Granularity, today: date) -> list[date]:
     if granularity == "month":
         return _last_n_month_ends(today, n)
     if granularity == "year":
-        return list(
-            reversed([min(date(today.year - i, 12, 31), today) for i in range(n)])
-        )
+        return list(reversed([min(date(today.year - i, 12, 31), today) for i in range(n)]))
     # day (default)
     return [today - timedelta(days=i) for i in range(n - 1, -1, -1)]
 
@@ -132,9 +130,9 @@ def _trend_uncached(
     window_start = period_ends[0] if period_ends else today
 
     # 1. Completed runs (optionally app-filtered), grouped per SBOM in id order.
-    run_q = select(
-        AnalysisRun.id, AnalysisRun.sbom_id, AnalysisRun.completed_on
-    ).where(AnalysisRun.run_status.in_(COMPLETED_RUN_STATUSES))
+    run_q = select(AnalysisRun.id, AnalysisRun.sbom_id, AnalysisRun.completed_on).where(
+        AnalysisRun.run_status.in_(COMPLETED_RUN_STATUSES)
+    )
     if application_ids:
         run_q = run_q.where(AnalysisRun.project_id.in_(application_ids))
 
@@ -198,7 +196,7 @@ def _trend_uncached(
             key = finding_key(vuln, comp, ver)
             keys_by_run[run_id].add(key)
             if key not in sev_by_run[run_id]:
-                sev_by_run[run_id][key] = (sev or "unknown")
+                sev_by_run[run_id][key] = sev or "unknown"
             if _has_fix(fixed):
                 fix_keys_by_run[run_id].add(key)
 

@@ -206,9 +206,7 @@ async def test_nvd_parses_v3_metrics(monkeypatch):
                             }
                         ]
                     },
-                    "weaknesses": [
-                        {"description": [{"value": "CWE-79"}, {"value": "CWE-89"}]}
-                    ],
+                    "weaknesses": [{"description": [{"value": "CWE-79"}, {"value": "CWE-89"}]}],
                     "references": [
                         {"url": "https://nvd.nist.gov/x", "tags": ["Vendor Advisory"]},
                         {"url": "https://example.com/patch", "tags": ["Patch"]},

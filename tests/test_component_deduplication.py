@@ -29,7 +29,7 @@ _DUPLICATE_CYCLONEDX = {
             "bom-ref": "pkg:generic/phase2-valid@1.0.0",
             "name": "phase2-valid",
             "version": "1.0.0",
-            "purl": "pkg:generic/phase2-valid@1.0.0"
+            "purl": "pkg:generic/phase2-valid@1.0.0",
         },
         {
             "type": "library",
@@ -38,8 +38,10 @@ _DUPLICATE_CYCLONEDX = {
             "version": "4.17.21",
             "purl": "pkg:npm/lodash@4.17.21",
             "licenses": [{"license": {"name": "MIT"}}],
-            "hashes": [{"alg": "SHA-256", "content": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"}],
-            "supplier": {"name": "JS Supplier"}
+            "hashes": [
+                {"alg": "SHA-256", "content": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"}
+            ],
+            "supplier": {"name": "JS Supplier"},
         },
         {
             "type": "library",
@@ -49,25 +51,22 @@ _DUPLICATE_CYCLONEDX = {
             "purl": "pkg:npm/lodash@4.17.21",
             "licenses": [{"license": {"name": "Apache-2.0"}}],
             "hashes": [{"alg": "SHA-1", "content": "1234567890abcdef1234567890abcdef12345678"}],
-            "supplier": {"name": "Alternate Supplier"}
-        }
+            "supplier": {"name": "Alternate Supplier"},
+        },
     ],
     "dependencies": [
-        {
-            "ref": "pkg:generic/phase2-valid@1.0.0",
-            "dependsOn": ["ref-lodash-1", "ref-lodash-2"]
-        },
-        {
-            "ref": "ref-lodash-2",
-            "dependsOn": []
-        }
-    ]
+        {"ref": "pkg:generic/phase2-valid@1.0.0", "dependsOn": ["ref-lodash-1", "ref-lodash-2"]},
+        {"ref": "ref-lodash-2", "dependsOn": []},
+    ],
 }
+
 
 @pytest.fixture
 def unique_name(request) -> str:
     import uuid
+
     return f"dedupe-{request.node.name}-{uuid.uuid4().hex[:8]}"
+
 
 def test_deduplication_service_logic():
     """Test pure python deduplication and merging logic."""
@@ -79,7 +78,7 @@ def test_deduplication_service_logic():
             "bom_ref": "ref-lodash-1",
             "license": "MIT",
             "hashes": "SHA-256:12345",
-            "supplier": "JS Supplier"
+            "supplier": "JS Supplier",
         },
         {
             "name": "lodash",
@@ -88,12 +87,12 @@ def test_deduplication_service_logic():
             "bom_ref": "ref-lodash-2",
             "license": "Apache-2.0",
             "hashes": "SHA-1:67890",
-            "supplier": "Alternate Supplier"
-        }
+            "supplier": "Alternate Supplier",
+        },
     ]
     dependencies = [
         {"ref": "app-ref", "dependsOn": ["ref-lodash-1", "ref-lodash-2"]},
-        {"ref": "ref-lodash-2", "dependsOn": []}
+        {"ref": "ref-lodash-2", "dependsOn": []},
     ]
 
     canonical, duplicates, ref_mapping, report, warnings = ComponentDeduplicationService.deduplicate_components(
@@ -214,9 +213,7 @@ def test_component_list_pagination_respects_duplicate_filter(client, unique_name
     assert page_default_payload["total_count"] == 2
     assert len(page_default_payload["items"]) == 1
 
-    page_with_dupes = client.get(
-        f"/api/sboms/{sbom_id}/components?include_duplicates=true&page_size=1"
-    )
+    page_with_dupes = client.get(f"/api/sboms/{sbom_id}/components?include_duplicates=true&page_size=1")
     assert page_with_dupes.status_code == 200
     page_with_dupes_payload = page_with_dupes.json()
     assert page_with_dupes_payload["total_count"] == 3
@@ -246,11 +243,11 @@ def test_validation_warnings_for_duplicates(client, unique_name):
         "/api/sboms/upload",
         params={"strict_ntia": "false"},
         data={"sbom_name": unique_name},
-        files={"file": ("sbom.json", json.dumps(_DUPLICATE_CYCLONEDX), "application/json")}
+        files={"file": ("sbom.json", json.dumps(_DUPLICATE_CYCLONEDX), "application/json")},
     )
     assert resp.status_code == 202, resp.text
     body = resp.json()
-    
+
     warnings = [w["code"] for w in body["warnings"]]
     assert W120_DUPLICATE_COMPONENT_DETECTED in warnings
 
@@ -278,7 +275,7 @@ def test_export_mode_original_vs_normalized(client, unique_name):
     norm_data = export_norm_resp.json()
     # Should contain 2 component definitions (app + canonical lodash)
     assert len(norm_data["components"]) == 2
-    
+
     # Check that licenses are merged in the raw exported JSON for lodash
     lodash_comp = next(c for c in norm_data["components"] if c["name"] == "lodash")
     license_names = []

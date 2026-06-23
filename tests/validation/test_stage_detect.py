@@ -61,10 +61,7 @@ def test_spdx_3_0_rejected() -> None:
 
 
 def test_cyclonedx_xml_namespace_detected() -> None:
-    xml = (
-        '<?xml version="1.0"?>\n'
-        '<bom xmlns="http://cyclonedx.org/schema/bom/1.5" version="1"></bom>'
-    )
+    xml = '<?xml version="1.0"?>\n<bom xmlns="http://cyclonedx.org/schema/bom/1.5" version="1"></bom>'
     ctx = _run(xml)
     assert ctx.spec == "cyclonedx"
     assert ctx.spec_version == "1.5"

@@ -52,15 +52,9 @@ class NvdSettingsRow(Base):
     __tablename__ = "nvd_settings"
     __table_args__ = (
         CheckConstraint("id = 1", name="ck_nvd_settings_singleton"),
-        CheckConstraint(
-            "page_size BETWEEN 1 AND 2000", name="ck_nvd_settings_page_size_range"
-        ),
-        CheckConstraint(
-            "window_days BETWEEN 1 AND 119", name="ck_nvd_settings_window_days_range"
-        ),
-        CheckConstraint(
-            "min_freshness_hours >= 0", name="ck_nvd_settings_min_freshness_nonneg"
-        ),
+        CheckConstraint("page_size BETWEEN 1 AND 2000", name="ck_nvd_settings_page_size_range"),
+        CheckConstraint("window_days BETWEEN 1 AND 119", name="ck_nvd_settings_window_days_range"),
+        CheckConstraint("min_freshness_hours >= 0", name="ck_nvd_settings_min_freshness_nonneg"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -75,15 +69,9 @@ class NvdSettingsRow(Base):
     page_size: Mapped[int] = mapped_column(Integer, nullable=False, default=2000)
     window_days: Mapped[int] = mapped_column(Integer, nullable=False, default=119)
     min_freshness_hours: Mapped[int] = mapped_column(Integer, nullable=False, default=24)
-    last_modified_utc: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    last_successful_sync_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
-    )
+    last_modified_utc: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_successful_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -112,9 +100,7 @@ class CveRow(Base):
     )
 
     cve_id: Mapped[str] = mapped_column(Text, primary_key=True)
-    last_modified: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
+    last_modified: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     published: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     vuln_status: Mapped[str] = mapped_column(Text, nullable=False)
     description_en: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -124,9 +110,7 @@ class CveRow(Base):
     severity_text: Mapped[str | None] = mapped_column(String(32), nullable=True)
     vector_string: Mapped[str | None] = mapped_column(Text, nullable=True)
     aliases: Mapped[list[str]] = mapped_column(_JsonType, nullable=False, default=list)
-    cpe_match: Mapped[list[dict[str, Any]]] = mapped_column(
-        _JsonType, nullable=False, default=list
-    )
+    cpe_match: Mapped[list[dict[str, Any]]] = mapped_column(_JsonType, nullable=False, default=list)
     references: Mapped[list[str]] = mapped_column(_JsonType, nullable=False, default=list)
     data: Mapped[dict[str, Any]] = mapped_column(_JsonType, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
@@ -160,18 +144,14 @@ class NvdSyncRunRow(Base):
         autoincrement=True,
     )
     run_kind: Mapped[str] = mapped_column(String(16), nullable=False)
-    window_start: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
+    window_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     window_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         server_default=func.now(),
     )
-    finished_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="running")
     upserted_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)

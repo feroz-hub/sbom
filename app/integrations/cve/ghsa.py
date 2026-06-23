@@ -105,9 +105,7 @@ class GhsaClient:
                 break
             latency_ms = int((time.perf_counter() - t0) * 1000)
             if resp.status_code >= 500:
-                last_exc = httpx.HTTPStatusError(
-                    f"ghsa {resp.status_code}", request=resp.request, response=resp
-                )
+                last_exc = httpx.HTTPStatusError(f"ghsa {resp.status_code}", request=resp.request, response=resp)
                 if attempt < self._retries:
                     continue
                 break
@@ -135,9 +133,7 @@ class GhsaClient:
                     latency_ms=latency_ms,
                 )
 
-            nodes = (
-                ((payload.get("data") or {}).get("securityAdvisories") or {}).get("nodes") or []
-            )
+            nodes = ((payload.get("data") or {}).get("securityAdvisories") or {}).get("nodes") or []
             self._breaker.record_success()
             if not nodes:
                 log.info("ghsa not_found", extra={"cve_id": cve_id, "latency_ms": latency_ms})
@@ -212,9 +208,7 @@ def _parse(node: dict[str, Any]) -> dict[str, Any]:
         if not (eco and name):
             continue
         first_patched = v.get("firstPatchedVersion") or {}
-        fixed_in = (
-            first_patched.get("identifier") if isinstance(first_patched, dict) else None
-        )
+        fixed_in = first_patched.get("identifier") if isinstance(first_patched, dict) else None
         fix_versions.append(
             {
                 "ecosystem": str(eco),

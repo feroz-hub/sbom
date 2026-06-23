@@ -38,13 +38,13 @@ class BatchDurationEstimate:
     """
 
     findings_total: int
-    findings_to_generate: int          # total - cached
+    findings_to_generate: int  # total - cached
     cached_count: int
     concurrency: int
     requests_per_minute: float
     estimated_seconds: int
     estimated_cost_usd: float
-    bottleneck: str                    # "rate_limit", "concurrency", or "cache"
+    bottleneck: str  # "rate_limit", "concurrency", or "cache"
     warning_recommended: bool
 
 
@@ -122,11 +122,7 @@ def estimate_batch_duration(
         throughput = 1.0  # avoid division by zero on misconfiguration
 
     estimated_seconds = int(to_generate / throughput)
-    cost = (
-        0.0
-        if (is_local or tier == "free")
-        else round(to_generate * float(avg_cost_per_finding_usd), 4)
-    )
+    cost = 0.0 if (is_local or tier == "free") else round(to_generate * float(avg_cost_per_finding_usd), 4)
 
     return BatchDurationEstimate(
         findings_total=findings_total,

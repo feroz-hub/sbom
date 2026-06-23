@@ -97,7 +97,7 @@ def _copy_lifecycle_fields(target: SBOMComponent, source: SBOMComponent) -> None
 def apply_edits_to_json(sbom_json: dict[str, Any], updates: dict[str, Any]) -> dict[str, Any]:
     """
     Mutate the parsed SBOM dict according to the specified updates.
-    
+
     updates format:
     {
         "metadata": { "sbom_name": "New Name", "sbom_version": "1.0.2" },
@@ -116,7 +116,7 @@ def apply_edits_to_json(sbom_json: dict[str, Any], updates: dict[str, Any]) -> d
     doc = dict(sbom_json)
     is_cyclonedx = doc.get("bomFormat") == "CycloneDX"
     is_spdx = "spdxVersion" in doc or "SPDXID" in doc
-    
+
     # 1. Update metadata
     meta_updates = updates.get("metadata") or {}
     if meta_updates:
@@ -132,12 +132,12 @@ def apply_edits_to_json(sbom_json: dict[str, Any], updates: dict[str, Any]) -> d
                 doc["name"] = meta_updates["sbom_name"]
             if "sbom_version" in meta_updates:
                 doc["versionInfo"] = meta_updates["sbom_version"]
-                
+
     # 2. Update components
     comp_updates = updates.get("components") or []
     if comp_updates:
         comp_map = {c["bom_ref"]: c for c in comp_updates if "bom_ref" in c}
-        
+
         if is_cyclonedx:
             components = doc.setdefault("components", [])
             for c in components:
@@ -172,7 +172,7 @@ def apply_edits_to_json(sbom_json: dict[str, Any], updates: dict[str, Any]) -> d
                         pkg["licenseDeclared"] = u["license"]
                     if "hashes" in u:
                         pkg["checksums"] = [{"algorithm": "SHA256", "checksumValue": u["hashes"]}]
-                        
+
     return doc
 
 
@@ -186,9 +186,7 @@ def reapply_edit_lifecycle_overrides(
     if not override_map:
         return
 
-    components = db.execute(
-        select(SBOMComponent).where(SBOMComponent.sbom_id == sbom_id)
-    ).scalars().all()
+    components = db.execute(select(SBOMComponent).where(SBOMComponent.sbom_id == sbom_id)).scalars().all()
     for comp in components:
         if comp.bom_ref in override_map:
             _apply_lifecycle_update(comp, override_map[comp.bom_ref])
@@ -213,23 +211,23 @@ def edit_sbom(
     parent = db.get(SBOMSource, sbom_id)
     if not parent:
         raise ValueError(f"Parent SBOM with ID {sbom_id} not found")
-        
+
     try:
         sbom_dict = json.loads(parent.sbom_data) if isinstance(parent.sbom_data, str) else parent.sbom_data
     except Exception as e:
         raise ValueError(f"Failed to parse original SBOM JSON: {e}")
-        
+
     # Apply edits
     new_dict = apply_edits_to_json(sbom_dict, updates)
     new_data_str = json.dumps(new_dict)
-    
+
     # Run validation pipeline on the new JSON string
     report = run_validation(new_data_str.encode("utf-8"))
-    
+
     sbom_status = "validated"
     if report.has_errors():
         sbom_status = "quarantined" if any(e.stage == "security" for e in report.errors) else "failed"
-        
+
     # Increment version number
     current_ver_str = parent.sbom_version or "1.0.0"
     try:
@@ -241,7 +239,7 @@ def edit_sbom(
             new_version_str = f"{current_ver_str}.1"
     except Exception:
         new_version_str = f"{current_ver_str}-revised"
-        
+
     # Create the new SBOMSource row
     new_sbom = SBOMSource(
         sbom_name=parent.sbom_name,
@@ -258,42 +256,38 @@ def edit_sbom(
         warning_count=report.warning_count,
         validated_at=_now_iso(),
         parent_id=parent.id,
-        change_summary=change_summary
+        change_summary=change_summary,
     )
-    
+
     db.add(new_sbom)
     db.commit()
     db.refresh(new_sbom)
-    
+
     # 3. Synchronize components for the new version
     from ..analysis import extract_components
-    
+
     try:
         components_list = extract_components(new_dict)
         _upsert_components(db, new_sbom, components_list)
     except Exception as e:
         log.warning("Component extraction failed for edited SBOM id=%d: %s", new_sbom.id, e)
-        
+
     # 4. Map and carry forward manual lifecycle status of unmodified components
     # If a component was not modified, copy its lifecycle status from the parent's component!
-    parent_components = db.execute(
-        select(SBOMComponent).where(SBOMComponent.sbom_id == parent.id)
-    ).scalars().all()
-    
+    parent_components = db.execute(select(SBOMComponent).where(SBOMComponent.sbom_id == parent.id)).scalars().all()
+
     parent_lifecycle = {(c.name.lower(), c.version): c for c in parent_components if c.lifecycle_status}
-    
+
     # Apply these to the new component rows
-    new_components = db.execute(
-        select(SBOMComponent).where(SBOMComponent.sbom_id == new_sbom.id)
-    ).scalars().all()
-    
+    new_components = db.execute(select(SBOMComponent).where(SBOMComponent.sbom_id == new_sbom.id)).scalars().all()
+
     # If the component was edited, check if updates carried any lifecycle overrides.
     # Otherwise, carry forward the parent's lifecycle parameters if they exist.
     override_map = {}
     for comp_up in updates.get("components") or []:
         if "bom_ref" in comp_up and "lifecycle" in comp_up:
             override_map[comp_up["bom_ref"]] = comp_up["lifecycle"]
-            
+
     for comp in new_components:
         # Check explicit lifecycle override in the edit payload
         if comp.bom_ref in override_map:
@@ -305,9 +299,9 @@ def edit_sbom(
             if key in parent_lifecycle:
                 _copy_lifecycle_fields(comp, parent_lifecycle[key])
                 db.add(comp)
-                
+
     db.commit()
-    
+
     if defer_enrichment:
         from .sbom_enrichment_service import mark_enrichment_pending
 
@@ -323,7 +317,7 @@ def edit_sbom(
 
         # Re-run completeness validation
         compute_and_save_completeness(db, new_sbom)
-    
+
     # Log audit entry
     db.add(
         AuditLog(
@@ -333,11 +327,11 @@ def edit_sbom(
             target_id=new_sbom.id,
             detail=f"Edited SBOM version {new_version_str} ({change_summary})",
             metadata_json={"parent_id": parent.id, "version": new_version_str},
-            created_at=_now_iso()
+            created_at=_now_iso(),
         )
     )
     db.commit()
-    
+
     return new_sbom
 
 
@@ -461,7 +455,7 @@ def compare_versions(db: Session, sbom_a_id: int, sbom_b_id: int) -> dict[str, A
     # Map components by bom_ref, falling back to name + version when no ref exists.
     map_a = {component_key(c): c for c in comps_a}
     map_b = {component_key(c): c for c in comps_b}
-    
+
     added = []
     removed = []
     changed = []
@@ -476,10 +470,12 @@ def compare_versions(db: Session, sbom_a_id: int, sbom_b_id: int) -> dict[str, A
         new_summary = component_summary(cb)
         diffs = top_level_diff(old_summary, new_summary)
         if diffs:
-            changed.append({
-                **new_summary,
-                "changes": diffs,
-            })
+            changed.append(
+                {
+                    **new_summary,
+                    "changes": diffs,
+                }
+            )
 
     for key, ca in map_a.items():
         if key not in map_b:
@@ -498,7 +494,7 @@ def compare_versions(db: Session, sbom_a_id: int, sbom_b_id: int) -> dict[str, A
         "dependency_changes": dependency_changes,
         "total_added": len(added),
         "total_removed": len(removed),
-        "total_changed": len(changed)
+        "total_changed": len(changed),
     }
 
 
@@ -509,13 +505,13 @@ def restore_version(db: Session, sbom_id: int, restore_version_id: int, user_id:
     target = db.get(SBOMSource, restore_version_id)
     if not target:
         raise ValueError(f"Restoration target version ID {restore_version_id} not found")
-        
+
     parent = db.get(SBOMSource, sbom_id)
     if not parent:
         raise ValueError(f"Current version SBOM ID {sbom_id} not found")
-        
+
     change_summary = f"Restored previous version {target.sbom_version} (created on {target.created_on})"
-    
+
     # Increment version number from current parent version
     current_ver_str = parent.sbom_version or "1.0.0"
     try:
@@ -544,47 +540,41 @@ def restore_version(db: Session, sbom_id: int, restore_version_id: int, user_id:
         warning_count=target.warning_count,
         validated_at=_now_iso(),
         parent_id=parent.id,
-        change_summary=change_summary
+        change_summary=change_summary,
     )
-    
+
     db.add(new_sbom)
     db.commit()
     db.refresh(new_sbom)
-    
+
     # Extract and insert components for the restored version
     try:
         target_dict = json.loads(target.sbom_data) if isinstance(target.sbom_data, str) else target.sbom_data
         from ..analysis import extract_components
+
         components_list = extract_components(target_dict)
         _upsert_components(db, new_sbom, components_list)
     except Exception as e:
         log.warning("Component extraction failed for restored SBOM id=%d: %s", new_sbom.id, e)
 
     # Copy lifecycle status from target's components
-    target_components = db.execute(
-        select(SBOMComponent).where(SBOMComponent.sbom_id == target.id)
-    ).scalars().all()
-    
-    new_components = db.execute(
-        select(SBOMComponent).where(SBOMComponent.sbom_id == new_sbom.id)
-    ).scalars().all()
-    
-    target_lifecycle = {
-        (c.name.lower(), c.version): c
-        for c in target_components
-    }
-    
+    target_components = db.execute(select(SBOMComponent).where(SBOMComponent.sbom_id == target.id)).scalars().all()
+
+    new_components = db.execute(select(SBOMComponent).where(SBOMComponent.sbom_id == new_sbom.id)).scalars().all()
+
+    target_lifecycle = {(c.name.lower(), c.version): c for c in target_components}
+
     for comp in new_components:
         key = (comp.name.lower(), comp.version)
         if key in target_lifecycle:
             _copy_lifecycle_fields(comp, target_lifecycle[key])
             db.add(comp)
-            
+
     db.commit()
-    
+
     # Re-run completeness validation
     compute_and_save_completeness(db, new_sbom)
-    
+
     # Log audit entry
     db.add(
         AuditLog(
@@ -594,9 +584,9 @@ def restore_version(db: Session, sbom_id: int, restore_version_id: int, user_id:
             target_id=new_sbom.id,
             detail=f"Restored SBOM to version {new_version_str} (from version {target.sbom_version})",
             metadata_json={"parent_id": parent.id, "target_version_id": target.id, "version": new_version_str},
-            created_at=_now_iso()
+            created_at=_now_iso(),
         )
     )
     db.commit()
-    
+
     return new_sbom

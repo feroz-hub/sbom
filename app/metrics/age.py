@@ -73,9 +73,7 @@ def findings_age_distribution(
             if end_iso:
                 q = q.where(AnalysisRun.started_on <= end_iso)
         else:
-            q = select(AnalysisFinding.published_on).where(
-                AnalysisFinding.analysis_run_id.in_(latest)
-            )
+            q = select(AnalysisFinding.published_on).where(AnalysisFinding.analysis_run_id.in_(latest))
 
         buckets = {k: 0 for k in AGE_BUCKETS}
         for (published_on,) in db.execute(q).all():

@@ -64,4 +64,9 @@ def sync_lifecycle_for_sbom(db: Session, sbom_id: int, *, force_refresh: bool = 
     return _sync_lifecycle_for_sbom(db, sbom_id, force_refresh=force_refresh)
 
 
-__all__ = ["LifecycleEnrichmentService", "analyze_component_lifecycle", "parse_clean_version", "sync_lifecycle_for_sbom"]
+__all__ = [
+    "LifecycleEnrichmentService",
+    "analyze_component_lifecycle",
+    "parse_clean_version",
+    "sync_lifecycle_for_sbom",
+]

@@ -59,14 +59,14 @@ class FakeNvdRemote:
         self.calls: list[MirrorWindow] = []
 
     async def fetch_window(
-        self, window: MirrorWindow, *, page_size: int  # noqa: ARG002
+        self,
+        window: MirrorWindow,
+        *,
+        page_size: int,  # noqa: ARG002
     ) -> AsyncIterator[CveBatch]:
         self.call_count += 1
         self.calls.append(window)
-        if (
-            self._raise_on_nth_call is not None
-            and self.call_count == self._raise_on_nth_call
-        ):
+        if self._raise_on_nth_call is not None and self.call_count == self._raise_on_nth_call:
             raise self._raise_exc
         batches = self._windows.get((window.start, window.end), [])
         for b in batches:
@@ -178,8 +178,7 @@ class FakeSettingsRepository:
     def reset_watermark(self) -> None:
         self.advance_watermark(
             last_modified_utc=None,  # type: ignore[arg-type]
-            last_successful_sync_at=self._snapshot.last_successful_sync_at
-            or self._snapshot.updated_at,
+            last_successful_sync_at=self._snapshot.last_successful_sync_at or self._snapshot.updated_at,
         )
 
 

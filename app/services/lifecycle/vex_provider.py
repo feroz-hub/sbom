@@ -47,11 +47,17 @@ class VexProvider:
         if not isinstance(document, dict):
             raise HTTPException(status_code=422, detail="VEX document must be a JSON object")
         if _is_csaf_document(document):
-            return self._parse_csaf(document, sbom=sbom, components=components, source_name=source_name, source_url=source_url)
+            return self._parse_csaf(
+                document, sbom=sbom, components=components, source_name=source_name, source_url=source_url
+            )
         if "vulnerabilities" in document:
-            return self._parse_cyclonedx(document, sbom=sbom, components=components, source_name=source_name, source_url=source_url)
+            return self._parse_cyclonedx(
+                document, sbom=sbom, components=components, source_name=source_name, source_url=source_url
+            )
         if "statements" in document:
-            return self._parse_openvex(document, sbom=sbom, components=components, source_name=source_name, source_url=source_url)
+            return self._parse_openvex(
+                document, sbom=sbom, components=components, source_name=source_name, source_url=source_url
+            )
         raise HTTPException(status_code=422, detail="Unsupported VEX document format")
 
     def _parse_cyclonedx(
@@ -139,10 +145,10 @@ class VexProvider:
                 continue
             vulnerability = statement.get("vulnerability") or {}
             vuln_id = (
-                vulnerability.get("name")
-                if isinstance(vulnerability, dict)
-                else None
-            ) or statement.get("vulnerability_id") or statement.get("vuln_id")
+                (vulnerability.get("name") if isinstance(vulnerability, dict) else None)
+                or statement.get("vulnerability_id")
+                or statement.get("vuln_id")
+            )
             if not vuln_id:
                 continue
             products = statement.get("products") or []
@@ -323,7 +329,9 @@ def import_vex_document(
     db.add(vex_document)
     db.flush()
     statements = [
-        _statement_from_result(result, sbom_id=sbom_id, vex_document_id=vex_document.id, components=list(components), created_at=now)
+        _statement_from_result(
+            result, sbom_id=sbom_id, vex_document_id=vex_document.id, components=list(components), created_at=now
+        )
         for result in results
     ]
     for statement in statements:
@@ -482,12 +490,16 @@ def apply_vex_override(
     )
     if not payload.get("reason"):
         raise HTTPException(status_code=422, detail="Manual VEX override requires reason")
-    existing = db.execute(
-        select(VexStatement)
-        .where(VexStatement.component_id == component_id)
-        .where(func.lower(VexStatement.vulnerability_id) == vulnerability_id.lower())
-        .order_by(VexStatement.id.desc())
-    ).scalars().first()
+    existing = (
+        db.execute(
+            select(VexStatement)
+            .where(VexStatement.component_id == component_id)
+            .where(func.lower(VexStatement.vulnerability_id) == vulnerability_id.lower())
+            .order_by(VexStatement.id.desc())
+        )
+        .scalars()
+        .first()
+    )
     old = _statement_dict(existing) if existing else None
     statement = _statement_from_result(
         result,
@@ -663,12 +675,18 @@ def _component_candidates(component: SBOMComponent) -> set[str]:
     if name and version:
         candidates.update({f"{name}@{version}", f"{name}:{version}", f"{name} {version}"})
     if supplier and name and version:
-        candidates.update({f"{supplier}/{name}@{version}", f"{supplier}:{name}:{version}", f"{supplier} {name} {version}"})
+        candidates.update(
+            {f"{supplier}/{name}@{version}", f"{supplier}:{name}:{version}", f"{supplier} {name} {version}"}
+        )
     return {candidate for candidate in candidates if candidate}
 
 
 def _component_matches_product(component: SBOMComponent, product: dict[str, Any]) -> bool:
-    helper = product.get("product_identification_helper") if isinstance(product.get("product_identification_helper"), dict) else {}
+    helper = (
+        product.get("product_identification_helper")
+        if isinstance(product.get("product_identification_helper"), dict)
+        else {}
+    )
     purls = _as_list(product.get("purl")) + _as_list(helper.get("purl"))
     cpes = _as_list(product.get("cpe")) + _as_list(helper.get("cpe")) + _as_list(helper.get("cpe23Uri"))
     product_name = _norm(product.get("name") or product.get("product_name"))

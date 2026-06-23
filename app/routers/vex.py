@@ -58,7 +58,9 @@ def get_vex_statements(sbom_id: int, db: Session = Depends(get_db)):
 def get_vex_report(
     sbom_id: int,
     format: str = Query("json", pattern="^(json|csv)$"),
-    report_type: str | None = Query(None, description="affected, not_affected, fixed, under_investigation, unknown, remediation_action"),
+    report_type: str | None = Query(
+        None, description="affected, not_affected, fixed, under_investigation, unknown, remediation_action"
+    ),
     _principal=_security_role,
     db: Session = Depends(get_db),
 ):

@@ -60,10 +60,7 @@ def run(ctx: ValidationContext) -> ValidationContext:
             stage=_STAGE,
             path="dependencies",
             message=f"Dependency cycle detected: {' -> '.join(cycle)} -> {cycle[0]}.",
-            remediation=(
-                "Cycles are common in real BOMs and are reported for visibility, "
-                "not rejected."
-            ),
+            remediation=("Cycles are common in real BOMs and are reported for visibility, not rejected."),
         )
 
     inbound: dict[str, int] = defaultdict(int)
@@ -79,10 +76,7 @@ def run(ctx: ValidationContext) -> ValidationContext:
                 stage=_STAGE,
                 path=comp.raw_path,
                 message=f"Component '{comp.ref}' has no inbound or outbound dependency edges.",
-                remediation=(
-                    "Informational. Consider declaring the relationship that "
-                    "brought this component in."
-                ),
+                remediation=("Informational. Consider declaring the relationship that brought this component in."),
             )
     return ctx
 

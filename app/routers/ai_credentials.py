@@ -308,17 +308,13 @@ def _stamp_test_result(row: AiProviderCredential, result: ConnectionTestResult) 
 
 @router.get("/credentials", response_model=list[CredentialResponse])
 def list_credentials(db: Session = Depends(get_db)) -> list[CredentialResponse]:
-    rows = db.execute(
-        select(AiProviderCredential).order_by(AiProviderCredential.id)
-    ).scalars().all()
+    rows = db.execute(select(AiProviderCredential).order_by(AiProviderCredential.id)).scalars().all()
     return [_row_to_response(r) for r in rows]
 
 
 @router.get("/credentials/{cred_id}", response_model=CredentialResponse)
 def get_credential(cred_id: int, db: Session = Depends(get_db)) -> CredentialResponse:
-    row = db.execute(
-        select(AiProviderCredential).where(AiProviderCredential.id == cred_id)
-    ).scalar_one_or_none()
+    row = db.execute(select(AiProviderCredential).where(AiProviderCredential.id == cred_id)).scalar_one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail=f"Credential {cred_id} not found.")
     return _row_to_response(row)
@@ -393,9 +389,7 @@ def update_credential(
     request: Request,
     db: Session = Depends(get_db),
 ) -> CredentialResponse:
-    row = db.execute(
-        select(AiProviderCredential).where(AiProviderCredential.id == cred_id)
-    ).scalar_one_or_none()
+    row = db.execute(select(AiProviderCredential).where(AiProviderCredential.id == cred_id)).scalar_one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail=f"Credential {cred_id} not found.")
 
@@ -459,9 +453,7 @@ def delete_credential(
     request: Request,
     db: Session = Depends(get_db),
 ) -> None:
-    row = db.execute(
-        select(AiProviderCredential).where(AiProviderCredential.id == cred_id)
-    ).scalar_one_or_none()
+    row = db.execute(select(AiProviderCredential).where(AiProviderCredential.id == cred_id)).scalar_one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail=f"Credential {cred_id} not found.")
     provider_name = row.provider_name
@@ -490,9 +482,7 @@ def set_default_credential(
     request: Request,
     db: Session = Depends(get_db),
 ) -> CredentialResponse:
-    row = db.execute(
-        select(AiProviderCredential).where(AiProviderCredential.id == cred_id)
-    ).scalar_one_or_none()
+    row = db.execute(select(AiProviderCredential).where(AiProviderCredential.id == cred_id)).scalar_one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail=f"Credential {cred_id} not found.")
     # Atomic swap: clear all, set the chosen, single flush. The partial
@@ -522,9 +512,7 @@ def set_fallback_credential(
     request: Request,
     db: Session = Depends(get_db),
 ) -> CredentialResponse:
-    row = db.execute(
-        select(AiProviderCredential).where(AiProviderCredential.id == cred_id)
-    ).scalar_one_or_none()
+    row = db.execute(select(AiProviderCredential).where(AiProviderCredential.id == cred_id)).scalar_one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail=f"Credential {cred_id} not found.")
     for other in db.execute(select(AiProviderCredential).where(AiProviderCredential.id != cred_id)).scalars():
@@ -590,9 +578,7 @@ async def test_saved_credential(
     db: Session = Depends(get_db),
 ) -> ConnectionTestResult:
     """Re-test a saved row. Decrypts the stored key in-memory only."""
-    row = db.execute(
-        select(AiProviderCredential).where(AiProviderCredential.id == cred_id)
-    ).scalar_one_or_none()
+    row = db.execute(select(AiProviderCredential).where(AiProviderCredential.id == cred_id)).scalar_one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail=f"Credential {cred_id} not found.")
 
@@ -709,11 +695,7 @@ def update_singleton_settings(
         changes.append("daily")
 
     # Validation: per-request ≤ per-scan ≤ per-day.
-    if not (
-        float(row.budget_per_request_usd)
-        <= float(row.budget_per_scan_usd)
-        <= float(row.budget_daily_usd)
-    ):
+    if not (float(row.budget_per_request_usd) <= float(row.budget_per_scan_usd) <= float(row.budget_daily_usd)):
         db.rollback()
         raise HTTPException(
             status_code=400,

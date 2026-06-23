@@ -32,12 +32,12 @@ def test_size_exceeded_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_utf16_bom_rejected() -> None:
-    ctx = _run(b"\xff\xfe<bom xmlns=\"...\"/>")
+    ctx = _run(b'\xff\xfe<bom xmlns="..."/>')
     assert ctx.report.entries[0].code == E.E004_ENCODING_NOT_UTF8
 
 
 def test_utf8_bom_stripped() -> None:
-    ctx = _run(b"\xef\xbb\xbf{\"a\": 1}")
+    ctx = _run(b'\xef\xbb\xbf{"a": 1}')
     assert not ctx.report.has_errors()
     assert ctx.text == '{"a": 1}'
 
@@ -53,7 +53,7 @@ def test_unsupported_encoding_rejected() -> None:
 
 
 def test_gzip_decompression_succeeds() -> None:
-    raw = b"{\"bomFormat\": \"CycloneDX\"}"
+    raw = b'{"bomFormat": "CycloneDX"}'
     ctx = _run(gzip.compress(raw), content_encoding="gzip")
     assert not ctx.report.has_errors()
     assert ctx.text == raw.decode()
@@ -86,7 +86,7 @@ def test_decompressed_size_exceeded(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_deflate_decompression_succeeds() -> None:
-    raw = b"{\"bomFormat\": \"CycloneDX\"}"
+    raw = b'{"bomFormat": "CycloneDX"}'
     ctx = _run(zlib.compress(raw), content_encoding="deflate")
     assert not ctx.report.has_errors()
     assert ctx.text == raw.decode()

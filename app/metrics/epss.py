@@ -29,9 +29,7 @@ from .cache import memoize_with_ttl
 HIGH_EPSS_PERCENTILE = 0.90
 
 
-def findings_high_epss_in_scope(
-    db: Session, *, scope: KevScope, run_id: int | None = None
-) -> int:
+def findings_high_epss_in_scope(db: Session, *, scope: KevScope, run_id: int | None = None) -> int:
     """findings.high_epss_in_scope — count of findings *likely to be exploited*.
 
     A finding-row counts when any CVE from its ``vuln_id`` or parsed
@@ -84,9 +82,7 @@ def _count_high_epss(db: Session, rows) -> int:
         return 0
     # ``collect_kev_candidates`` is a generic CVE collector despite the name —
     # walks rows once into (per_row_cves, all_cves) so EPSS is one lookup.
-    per_row, all_cves = collect_kev_candidates(
-        _RowShim(r.id, r.vuln_id, r.aliases) for r in rows
-    )
+    per_row, all_cves = collect_kev_candidates(_RowShim(r.id, r.vuln_id, r.aliases) for r in rows)
     if not all_cves:
         return 0
     high = _high_epss_cve_set(db, sorted(all_cves))

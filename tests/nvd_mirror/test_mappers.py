@@ -188,8 +188,14 @@ def test_map_batch_skips_individually_malformed_entries() -> None:
     batch = map_batch(
         {
             "vulnerabilities": [
-                {"cve": {"id": "CVE-good", "lastModified": "2024-04-16T00:00:00.000",
-                         "published": "2024-01-01T00:00:00.000", "vulnStatus": "Analyzed"}},
+                {
+                    "cve": {
+                        "id": "CVE-good",
+                        "lastModified": "2024-04-16T00:00:00.000",
+                        "published": "2024-01-01T00:00:00.000",
+                        "vulnStatus": "Analyzed",
+                    }
+                },
                 {"cve": {"id": "CVE-bad-no-dates"}},
                 {"not_a_cve": {}},
                 {"cve": "not-a-dict"},

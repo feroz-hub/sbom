@@ -180,9 +180,7 @@ class OpenAiProvider(LlmProvider):
             latency_ms=latency,
         )
 
-    async def _probe_via_completion(
-        self, model: str, client: httpx.AsyncClient
-    ) -> ConnectionTestResult:
+    async def _probe_via_completion(self, model: str, client: httpx.AsyncClient) -> ConnectionTestResult:
         from . import _probe
 
         body = {
@@ -353,14 +351,11 @@ class OpenAiProvider(LlmProvider):
             # HTTP 200 with the quota text embedded in the assistant
             # message. Without this scan the prose flows through to
             # ``parse_llm_json`` and surfaces as ``schema_parse_failed``.
-            quota_failure = detect_quota_in_2xx_body(
-                resp.text, provider_name=self.name, status=resp.status_code
-            )
+            quota_failure = detect_quota_in_2xx_body(resp.text, provider_name=self.name, status=resp.status_code)
             if quota_failure is not None:
                 self._breaker.record_failure()
                 raise AiProviderError(
-                    f"{self.name}: HTTP {resp.status_code} quota — "
-                    f"{(quota_failure.upstream_message or '')[:200]}",
+                    f"{self.name}: HTTP {resp.status_code} quota — {(quota_failure.upstream_message or '')[:200]}",
                     failure=quota_failure,
                 )
 

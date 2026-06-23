@@ -64,8 +64,13 @@ async def test_service_accepts_ghsa_id(db):
                     "aliases": ["CVE-2021-44832"],
                     "published": "2021-12-28T00:00:00Z",
                     "fix_versions": [
-                        {"ecosystem": "Maven", "package": "org.apache.logging.log4j:log4j-core",
-                         "fixed_in": "2.17.1", "introduced_in": None, "range": None}
+                        {
+                            "ecosystem": "Maven",
+                            "package": "org.apache.logging.log4j:log4j-core",
+                            "fixed_in": "2.17.1",
+                            "introduced_in": None,
+                            "range": None,
+                        }
                     ],
                     "references": [],
                 },
@@ -133,7 +138,9 @@ async def test_aggregator_alias_resolution():
 
         async def fetch(self, cve_id: str) -> FetchResult:
             calls.append(cve_id)
-            return FetchResult(source=name, outcome=FetchOutcome.OK, data={"score": 0.5} if name == "epss" else {"listed": True})
+            return FetchResult(
+                source=name, outcome=FetchOutcome.OK, data={"score": 0.5} if name == "epss" else {"listed": True}
+            )
 
         _Src.fetch = fetch
         return _Src()

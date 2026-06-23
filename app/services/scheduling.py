@@ -62,9 +62,7 @@ class ScheduleValidationError(ValueError):
 def validate_spec(spec: ScheduleSpec) -> None:
     """Raise ScheduleValidationError if the spec is internally inconsistent."""
     if spec.cadence not in VALID_CADENCES:
-        raise ScheduleValidationError(
-            f"cadence must be one of {sorted(VALID_CADENCES)}, got {spec.cadence!r}"
-        )
+        raise ScheduleValidationError(f"cadence must be one of {sorted(VALID_CADENCES)}, got {spec.cadence!r}")
     if not (0 <= spec.hour_utc <= 23):
         raise ScheduleValidationError("hour_utc must be in [0, 23]")
 
@@ -84,9 +82,7 @@ def validate_spec(spec: ScheduleSpec) -> None:
         if not (spec.cron_expression and spec.cron_expression.strip()):
             raise ScheduleValidationError("CUSTOM cadence requires cron_expression")
         if _croniter is None:
-            raise ScheduleValidationError(
-                "CUSTOM cadence needs the 'croniter' package; pip install croniter"
-            )
+            raise ScheduleValidationError("CUSTOM cadence needs the 'croniter' package; pip install croniter")
         if not _croniter.is_valid(spec.cron_expression):
             raise ScheduleValidationError(f"invalid cron expression: {spec.cron_expression!r}")
 

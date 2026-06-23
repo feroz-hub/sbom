@@ -3,6 +3,13 @@
 from __future__ import annotations
 
 import os
+# Load .env file if present before importing db or resolving URLs
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from logging.config import fileConfig
 
 from alembic import context

@@ -205,7 +205,7 @@ async def osv_query_via_query_endpoint(
         payload = {"package": {"purl": purl}}
         # If PURL lacks version but component has it, send as separate field.
         version = comp.get("version")
-        if version and "@"+str(version) not in purl and payload.get("package"):
+        if version and "@" + str(version) not in purl and payload.get("package"):
             payload["version"] = version
 
         try:
@@ -240,10 +240,7 @@ async def osv_query_via_query_endpoint(
                 component_vendor=vendor,
                 cve_text=_osv_cve_text(v),
             )
-            finding["match_confidence"] = apply_strategy_floor(
-                result.confidence, finding.get("match_strategy")
-            )
+            finding["match_confidence"] = apply_strategy_floor(result.confidence, finding.get("match_strategy"))
             findings.append(finding)
 
     return findings, errors, warnings
-

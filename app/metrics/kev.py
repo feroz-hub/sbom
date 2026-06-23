@@ -27,9 +27,7 @@ from .base import KevScope
 from .cache import memoize_with_ttl
 
 
-def findings_kev_in_scope(
-    db: Session, *, scope: KevScope, run_id: int | None = None
-) -> int:
+def findings_kev_in_scope(db: Session, *, scope: KevScope, run_id: int | None = None) -> int:
     """findings.kev_in_scope — see metrics-spec.md §3.3.
 
     Counts finding-rows in ``scope`` whose ``vuln_id`` or any parsed CVE
@@ -92,9 +90,7 @@ def _count_kev_listed(db: Session, rows) -> int:
         return 0
     # SQLAlchemy returns Row objects; aliases helper takes a row-like with
     # .vuln_id and .aliases — use a tiny shim to avoid attribute confusion.
-    per_row, all_cves = collect_kev_candidates(
-        _RowShim(r.id, r.vuln_id, r.aliases) for r in rows
-    )
+    per_row, all_cves = collect_kev_candidates(_RowShim(r.id, r.vuln_id, r.aliases) for r in rows)
     if not all_cves:
         return 0
     kev_set = lookup_kev_set_memoized(db, sorted(all_cves))

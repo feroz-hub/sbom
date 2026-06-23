@@ -57,9 +57,7 @@ async def test_fetch_window_yields_one_batch_for_single_page() -> None:
 
     transport = httpx.MockTransport(handler)
     client = httpx.AsyncClient(transport=transport)
-    adapter = NvdHttpAdapter(
-        api_endpoint="https://nvd.test/cves/2.0", api_key="key", client=client
-    )
+    adapter = NvdHttpAdapter(api_endpoint="https://nvd.test/cves/2.0", api_key="key", client=client)
     batches = []
     async for b in adapter.fetch_window(_make_window(), page_size=2000):
         batches.append(b)
@@ -111,9 +109,7 @@ async def test_fetch_window_paginates_until_exhausted() -> None:
         return httpx.Response(200, json=page1 if idx == 0 else page2)
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    adapter = NvdHttpAdapter(
-        api_endpoint="https://nvd.test/cves/2.0", api_key="key", client=client
-    )
+    adapter = NvdHttpAdapter(api_endpoint="https://nvd.test/cves/2.0", api_key="key", client=client)
     cve_ids: list[str] = []
     async for b in adapter.fetch_window(_make_window(), page_size=1):
         cve_ids.extend(r.cve_id for r in b.records)
@@ -134,15 +130,11 @@ async def test_fetch_window_retries_on_429_then_succeeds() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         counts["calls"] += 1
         if counts["calls"] == 1:
-            return httpx.Response(
-                429, json={}, headers={"Retry-After": "0"}
-            )
+            return httpx.Response(429, json={}, headers={"Retry-After": "0"})
         return httpx.Response(200, json=payload)
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    adapter = NvdHttpAdapter(
-        api_endpoint="https://nvd.test/cves/2.0", api_key="key", client=client
-    )
+    adapter = NvdHttpAdapter(api_endpoint="https://nvd.test/cves/2.0", api_key="key", client=client)
     batches = [b async for b in adapter.fetch_window(_make_window(), page_size=2000)]
     assert len(batches) == 1
     assert counts["calls"] == 2  # 1 retry + success
@@ -161,9 +153,7 @@ async def test_fetch_window_retries_on_503_then_succeeds() -> None:
         return httpx.Response(200, json=payload)
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    adapter = NvdHttpAdapter(
-        api_endpoint="https://nvd.test/cves/2.0", api_key="key", client=client
-    )
+    adapter = NvdHttpAdapter(api_endpoint="https://nvd.test/cves/2.0", api_key="key", client=client)
     batches = [b async for b in adapter.fetch_window(_make_window(), page_size=2000)]
     assert len(batches) == 1
     assert counts["calls"] == 2
@@ -181,9 +171,7 @@ async def test_fetch_window_gives_up_after_max_attempts(
         return httpx.Response(429, json={}, headers={"Retry-After": "0"})
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    adapter = NvdHttpAdapter(
-        api_endpoint="https://nvd.test/cves/2.0", api_key="key", client=client
-    )
+    adapter = NvdHttpAdapter(api_endpoint="https://nvd.test/cves/2.0", api_key="key", client=client)
     with pytest.raises(_RetryableHttpError):
         async for _ in adapter.fetch_window(_make_window(), page_size=2000):
             pass
@@ -201,9 +189,7 @@ async def test_fetch_window_does_not_retry_400() -> None:
         return httpx.Response(400, json={"detail": "bad request"})
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    adapter = NvdHttpAdapter(
-        api_endpoint="https://nvd.test/cves/2.0", api_key="key", client=client
-    )
+    adapter = NvdHttpAdapter(api_endpoint="https://nvd.test/cves/2.0", api_key="key", client=client)
     with pytest.raises(httpx.HTTPStatusError):
         async for _ in adapter.fetch_window(_make_window(), page_size=2000):
             pass
@@ -232,9 +218,7 @@ async def test_fetch_window_honours_retry_after_header() -> None:
         return httpx.Response(200, json=_load("cve_empty_window.json"))
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    adapter = NvdHttpAdapter(
-        api_endpoint="https://nvd.test/cves/2.0", api_key="key", client=client
-    )
+    adapter = NvdHttpAdapter(api_endpoint="https://nvd.test/cves/2.0", api_key="key", client=client)
 
     import app.nvd_mirror.adapters.nvd_http as adapter_mod
 
@@ -284,9 +268,7 @@ async def test_fetch_window_omits_api_key_header_when_unset() -> None:
         return httpx.Response(200, json=_load("cve_empty_window.json"))
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    adapter = NvdHttpAdapter(
-        api_endpoint="https://nvd.test/cves/2.0", api_key=None, client=client
-    )
+    adapter = NvdHttpAdapter(api_endpoint="https://nvd.test/cves/2.0", api_key=None, client=client)
     async for _ in adapter.fetch_window(_make_window(), page_size=2000):
         pass
     assert "apikey" not in seen_headers
@@ -302,9 +284,7 @@ async def test_fetch_window_sends_lastmod_dates_in_iso_format() -> None:
         return httpx.Response(200, json=_load("cve_empty_window.json"))
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    adapter = NvdHttpAdapter(
-        api_endpoint="https://nvd.test/cves/2.0", api_key="k", client=client
-    )
+    adapter = NvdHttpAdapter(api_endpoint="https://nvd.test/cves/2.0", api_key="k", client=client)
     async for _ in adapter.fetch_window(_make_window(), page_size=2000):
         pass
     assert "lastModStartDate" in seen_params
@@ -345,9 +325,7 @@ async def test_fetch_window_short_circuits_on_unexpected_empty_page() -> None:
         return httpx.Response(200, json=payload)
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    adapter = NvdHttpAdapter(
-        api_endpoint="https://nvd.test/cves/2.0", api_key="k", client=client
-    )
+    adapter = NvdHttpAdapter(api_endpoint="https://nvd.test/cves/2.0", api_key="k", client=client)
     pages = 0
     async for _ in adapter.fetch_window(_make_window(), page_size=100):
         pages += 1

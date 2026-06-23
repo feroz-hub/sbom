@@ -34,12 +34,15 @@ def test_billion_laughs_xml_rejected() -> None:
     report = run_validation(body)
     assert report.has_errors()
     codes = [e.code for e in report.errors]
-    assert any(c in codes for c in (
-        E.E083_XML_DTD_FORBIDDEN,
-        E.E084_XML_EXTERNAL_ENTITY_FORBIDDEN,
-        E.E085_XML_ENTITY_EXPANSION,
-        E.E021_XML_PARSE_FAILED,
-    )), codes
+    assert any(
+        c in codes
+        for c in (
+            E.E083_XML_DTD_FORBIDDEN,
+            E.E084_XML_EXTERNAL_ENTITY_FORBIDDEN,
+            E.E085_XML_ENTITY_EXPANSION,
+            E.E021_XML_PARSE_FAILED,
+        )
+    ), codes
 
 
 def test_yaml_encoding_rejected() -> None:
@@ -97,13 +100,7 @@ def test_detect_tag_value_false_positive_rejected() -> None:
 
 def test_pipeline_full_run_for_spdx_realistic_under_budget() -> None:
     """Bonus: the realistic SPDX path produces no errors and runs fast."""
-    body = (
-        Path(__file__).parent.parent
-        / "fixtures"
-        / "sboms"
-        / "valid"
-        / "spdx_2_3_realistic.json"
-    ).read_bytes()
+    body = (Path(__file__).parent.parent / "fixtures" / "sboms" / "valid" / "spdx_2_3_realistic.json").read_bytes()
     report = run_validation(body)
     assert not report.has_errors()
 
@@ -125,10 +122,13 @@ def test_pipeline_run_with_explicit_overrides() -> None:
     assert E.W104_NTIA_DEPENDENCY_RELATIONSHIP_MISSING in err_codes
 
 
-@pytest.mark.parametrize("body", [
-    b"<not xml",
-    b"<root xmlns='http://example.com'/>",
-])
+@pytest.mark.parametrize(
+    "body",
+    [
+        b"<not xml",
+        b"<root xmlns='http://example.com'/>",
+    ],
+)
 def test_xml_branches_in_detect(body: bytes) -> None:
     text = body.decode()
     ctx = ValidationContext(raw_bytes=body, text=text)

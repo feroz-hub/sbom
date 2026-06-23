@@ -121,18 +121,33 @@ _MIN_TOKEN_LEN: Final[int] = 2
 _STOPLIST: Final[frozenset[str]] = frozenset(
     {
         # Articles, prepositions, conjunctions
-        "the", "an", "of", "for", "in", "on", "to", "and", "or", "is", "by",
-        "as", "at", "be", "it", "if",
+        "the",
+        "an",
+        "of",
+        "for",
+        "in",
+        "on",
+        "to",
+        "and",
+        "or",
+        "is",
+        "by",
+        "as",
+        "at",
+        "be",
+        "it",
+        "if",
         # Generic CVE-text noise — appears so often it carries no signal
-        "library", "package", "module",
+        "library",
+        "package",
+        "module",
     }
 )
 
 # Sanity: a typo in the weight constants is a load-time error rather
 # than a silently-skewed score.
 assert abs((NAME_WEIGHT + VERSION_WEIGHT + VENDOR_WEIGHT) - 1.0) < 1e-9, (
-    f"weights must sum to 1.0; got "
-    f"{NAME_WEIGHT} + {VERSION_WEIGHT} + {VENDOR_WEIGHT}"
+    f"weights must sum to 1.0; got {NAME_WEIGHT} + {VERSION_WEIGHT} + {VENDOR_WEIGHT}"
 )
 
 
@@ -180,9 +195,7 @@ def score_match(
     module level.
     """
     if not component_name or not component_name.strip():
-        return ConfidenceResult(
-            confidence=0.0, name_score=0.0, version_score=0.0, vendor_score=0.0
-        )
+        return ConfidenceResult(confidence=0.0, name_score=0.0, version_score=0.0, vendor_score=0.0)
 
     text_tokens = _tokenize(cve_text)
     text_lc = cve_text.lower()
@@ -237,10 +250,7 @@ def _tokenize(s: str | None) -> frozenset[str]:
     if not s:
         return frozenset()
     parts = _NON_ALNUM_SPLIT_RE.split(s.lower())
-    return frozenset(
-        p for p in parts
-        if len(p) >= _MIN_TOKEN_LEN and p not in _STOPLIST
-    )
+    return frozenset(p for p in parts if len(p) >= _MIN_TOKEN_LEN and p not in _STOPLIST)
 
 
 def _presence_ratio(needle_tokens: frozenset[str], hay_tokens: frozenset[str]) -> float:

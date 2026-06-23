@@ -87,9 +87,7 @@ async def test_anthropic_tool_use_for_structured_output():
         return httpx.Response(
             200,
             json={
-                "content": [
-                    {"type": "tool_use", "name": "emit_structured_output", "input": {"summary": "hi"}}
-                ],
+                "content": [{"type": "tool_use", "name": "emit_structured_output", "input": {"summary": "hi"}}],
                 "usage": {"input_tokens": 5, "output_tokens": 3},
             },
         )
@@ -306,7 +304,8 @@ async def test_openai_unknown_model_warns_and_costs_zero(caplog):
         )
 
     provider = OpenAiProvider(
-        api_key="sk-test", default_model="future-model-not-in-table",
+        api_key="sk-test",
+        default_model="future-model-not-in-table",
         client_factory=lambda: _make_client(handler),
     )
     with caplog.at_level("WARNING"):
@@ -367,6 +366,7 @@ async def test_openai_inner_name_override_propagates_into_error_strings():
     """Wrappers (Gemini, Grok, custom) override ``inner.name`` after construction.
     Error strings emitted by the inner OpenAi must carry the new name.
     """
+
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(429, text=_GEMINI_QUOTA_BODY)
 
@@ -611,9 +611,7 @@ def test_classify_http_failure_unit_retry_after_parsing():
     from app.ai.providers.base import classify_http_failure
 
     # Header form (RFC 7231 — integer seconds).
-    f1 = classify_http_failure(
-        provider_name="openai", status=429, body="too many", retry_after_header="42"
-    )
+    f1 = classify_http_failure(provider_name="openai", status=429, body="too many", retry_after_header="42")
     assert f1.retry_after_seconds == 42
     # Body form (Gemini structured retryDelay).
     f2 = classify_http_failure(

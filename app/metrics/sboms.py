@@ -57,12 +57,7 @@ def projects_total(db: Session) -> int:
 
 def projects_active_total(db: Session) -> int:
     """projects.active_total — see metrics-spec.md §3.8."""
-    return (
-        db.execute(
-            select(func.count(Projects.id)).where(Projects.project_status == 1)
-        ).scalar()
-        or 0
-    )
+    return db.execute(select(func.count(Projects.id)).where(Projects.project_status == 1)).scalar() or 0
 
 
 __all__ = [

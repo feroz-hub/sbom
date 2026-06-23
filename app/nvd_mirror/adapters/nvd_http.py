@@ -98,9 +98,7 @@ class NvdHttpAdapter:
 
     # ---- public API (NvdRemotePort) -------------------------------------
 
-    async def fetch_window(
-        self, window: MirrorWindow, *, page_size: int
-    ) -> AsyncIterator[CveBatch]:
+    async def fetch_window(self, window: MirrorWindow, *, page_size: int) -> AsyncIterator[CveBatch]:
         """Yields one ``CveBatch`` per paginated NVD response page.
 
         NOTE on type: ``async def`` with ``yield`` returns
@@ -162,9 +160,7 @@ class NvdHttpAdapter:
 
     # ---- internals ------------------------------------------------------
 
-    def _build_params(
-        self, window: MirrorWindow, *, page_size: int, start_index: int
-    ) -> dict[str, Any]:
+    def _build_params(self, window: MirrorWindow, *, page_size: int, start_index: int) -> dict[str, Any]:
         return {
             "lastModStartDate": _format_iso(window.start),
             "lastModEndDate": _format_iso(window.end),
@@ -185,19 +181,13 @@ class NvdHttpAdapter:
         """One GET, retried under tenacity on transient errors."""
         try:
             async for attempt in AsyncRetrying(
-                retry=retry_if_exception_type(
-                    (_RetryableHttpError, *_RETRYABLE_HTTPX_EXCS)
-                ),
-                wait=wait_exponential_jitter(
-                    initial=RETRY_INITIAL_WAIT, max=RETRY_MAX_WAIT
-                ),
+                retry=retry_if_exception_type((_RetryableHttpError, *_RETRYABLE_HTTPX_EXCS)),
+                wait=wait_exponential_jitter(initial=RETRY_INITIAL_WAIT, max=RETRY_MAX_WAIT),
                 stop=stop_after_attempt(RETRY_MAX_ATTEMPTS),
                 reraise=True,
             ):
                 with attempt:
-                    response = await self._client.get(
-                        self._endpoint, params=params, headers=self._headers()
-                    )
+                    response = await self._client.get(self._endpoint, params=params, headers=self._headers())
                     if response.status_code == 429:
                         _metric("nvd.api.429_count")
                         retry_after = _retry_after_seconds(response)
@@ -213,9 +203,7 @@ class NvdHttpAdapter:
                     response.raise_for_status()
                     return response.json()
         except RetryError as exc:  # pragma: no cover — reraise=True covers normal path
-            raise NvdRemoteError(
-                f"NVD remote exhausted retries ({RETRY_MAX_ATTEMPTS}): {exc}"
-            ) from exc
+            raise NvdRemoteError(f"NVD remote exhausted retries ({RETRY_MAX_ATTEMPTS}): {exc}") from exc
         # Unreachable: tenacity will either return inside attempt or raise.
         raise NvdRemoteError("NVD remote returned no response")  # pragma: no cover
 

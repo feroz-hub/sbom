@@ -139,9 +139,7 @@ def test_watermark_accepts_none() -> None:
 
 def test_watermark_rejects_naive_value() -> None:
     with pytest.raises(ValueError):
-        MirrorWatermark(
-            last_modified_utc=datetime(2024, 1, 1), last_sync_run_id=42
-        )
+        MirrorWatermark(last_modified_utc=datetime(2024, 1, 1), last_sync_run_id=42)
 
 
 def test_settings_snapshot_round_trip_fields() -> None:

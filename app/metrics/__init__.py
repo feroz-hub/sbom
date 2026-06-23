@@ -76,7 +76,6 @@ __all__ = [
     # remediation extra metrics
     "remediation_status_counts",
     "remediation_aging_count",
-
     # base
     "COMPLETED_RUN_STATUSES",
     "NetChangeResult",

@@ -56,10 +56,7 @@ def test_cdx_string_supplier_supported() -> None:
     doc = {
         "specVersion": "1.6",
         "metadata": {},
-        "components": [
-            {"type": "library", "bom-ref": "x", "name": "x", "version": "1",
-             "supplier": "ACME"}
-        ],
+        "components": [{"type": "library", "bom-ref": "x", "name": "x", "version": "1", "supplier": "ACME"}],
     }
     sbom = normalize_cyclonedx(doc, "1.6")
     assert sbom.components[0].supplier == "ACME"
@@ -87,12 +84,17 @@ def test_cdx_license_objects_with_expression_collected() -> None:
         "specVersion": "1.6",
         "metadata": {},
         "components": [
-            {"type": "library", "bom-ref": "x", "name": "x", "version": "1",
-             "licenses": [
-                 {"expression": "Apache-2.0 OR MIT"},
-                 {"license": {"id": "BSD-3-Clause"}},
-                 {"license": {"name": "Custom Name"}},
-             ]}
+            {
+                "type": "library",
+                "bom-ref": "x",
+                "name": "x",
+                "version": "1",
+                "licenses": [
+                    {"expression": "Apache-2.0 OR MIT"},
+                    {"license": {"id": "BSD-3-Clause"}},
+                    {"license": {"name": "Custom Name"}},
+                ],
+            }
         ],
     }
     sbom = normalize_cyclonedx(doc, "1.6")
@@ -160,8 +162,7 @@ def test_spdx_relationship_with_kind() -> None:
         "creationInfo": {"creators": []},
         "packages": [],
         "relationships": [
-            {"spdxElementId": "SPDXRef-A", "relatedSpdxElement": "SPDXRef-B",
-             "relationshipType": "CONTAINS"},
+            {"spdxElementId": "SPDXRef-A", "relatedSpdxElement": "SPDXRef-B", "relationshipType": "CONTAINS"},
             "garbage",
             {"spdxElementId": 123, "relatedSpdxElement": "SPDXRef-B"},
         ],

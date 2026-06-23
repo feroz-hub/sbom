@@ -28,9 +28,7 @@ def runs_completed_lifetime(db: Session) -> int:
     """
     return (
         db.execute(
-            select(func.count(AnalysisRun.id)).where(
-                AnalysisRun.run_status.in_(COMPLETED_RUN_STATUSES)
-            )
+            select(func.count(AnalysisRun.id)).where(AnalysisRun.run_status.in_(COMPLETED_RUN_STATUSES))
         ).scalar()
         or 0
     )
@@ -43,14 +41,7 @@ def runs_completed_this_week(db: Session) -> int:
     started 8 days ago and finished yesterday is "this week's work".
     """
     one_week_ago = (datetime.now(UTC) - timedelta(days=7)).isoformat()
-    return (
-        db.execute(
-            select(func.count(AnalysisRun.id)).where(
-                AnalysisRun.completed_on >= one_week_ago
-            )
-        ).scalar()
-        or 0
-    )
+    return db.execute(select(func.count(AnalysisRun.id)).where(AnalysisRun.completed_on >= one_week_ago)).scalar() or 0
 
 
 def runs_distinct_dates_with_data(db: Session) -> int:
@@ -62,9 +53,9 @@ def runs_distinct_dates_with_data(db: Session) -> int:
     """
     return (
         db.execute(
-            select(
-                func.count(func.distinct(func.substr(AnalysisRun.started_on, 1, 10)))
-            ).where(AnalysisRun.run_status.in_(COMPLETED_RUN_STATUSES))
+            select(func.count(func.distinct(func.substr(AnalysisRun.started_on, 1, 10)))).where(
+                AnalysisRun.run_status.in_(COMPLETED_RUN_STATUSES)
+            )
         ).scalar()
         or 0
     )
@@ -77,9 +68,7 @@ def runs_first_completed_at(db: Session) -> str | None:
     ``None`` until the first successful run.
     """
     return db.execute(
-        select(func.min(AnalysisRun.completed_on)).where(
-            AnalysisRun.run_status.in_(COMPLETED_RUN_STATUSES)
-        )
+        select(func.min(AnalysisRun.completed_on)).where(AnalysisRun.run_status.in_(COMPLETED_RUN_STATUSES))
     ).scalar()
 
 
@@ -131,12 +120,7 @@ def runs_aggregate(
     if project_id is not None:
         scope_clauses.append(AnalysisRun.project_id == project_id)
 
-    total = (
-        db.execute(
-            select(func.count(AnalysisRun.id)).where(*scope_clauses)
-        ).scalar()
-        or 0
-    )
+    total = db.execute(select(func.count(AnalysisRun.id)).where(*scope_clauses)).scalar() or 0
 
     rows = db.execute(
         select(AnalysisRun.run_status, func.count(AnalysisRun.id))
@@ -154,11 +138,7 @@ def runs_aggregate(
     }
 
     findings_sum = (
-        db.execute(
-            select(func.coalesce(func.sum(AnalysisRun.total_findings), 0))
-            .where(*scope_clauses)
-        ).scalar()
-        or 0
+        db.execute(select(func.coalesce(func.sum(AnalysisRun.total_findings), 0)).where(*scope_clauses)).scalar() or 0
     )
 
     return RunsAggregate(

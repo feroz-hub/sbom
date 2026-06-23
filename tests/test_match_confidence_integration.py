@@ -84,9 +84,7 @@ def test_nvd_finding_carries_confidence_dict_to_row(client, seeded_sbom, monkeyp
 
     fake = _make_fake_lookup([_LOG4SHELL_CVE])
 
-    async def _fake_nvd_runner(
-        components, settings, nvd_api_key=None, lookup_service=None
-    ):
+    async def _fake_nvd_runner(components, settings, nvd_api_key=None, lookup_service=None):
         # Route through the real ``nvd_query_by_components_async`` so
         # the emit step runs — the only thing we mock is the per-CPE
         # query callable (the lookup_service hook).
@@ -94,9 +92,7 @@ def test_nvd_finding_carries_confidence_dict_to_row(client, seeded_sbom, monkeyp
             components, settings, nvd_api_key=nvd_api_key, lookup_service=fake
         )
 
-    monkeypatch.setattr(
-        analysis_mod, "nvd_query_by_components_async", _fake_nvd_runner
-    )
+    monkeypatch.setattr(analysis_mod, "nvd_query_by_components_async", _fake_nvd_runner)
 
     async def _empty(*args, **kwargs):
         return [], [], []

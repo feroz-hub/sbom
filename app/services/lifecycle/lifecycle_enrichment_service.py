@@ -100,12 +100,16 @@ class LifecycleEnrichmentService:
         sbom = db.get(SBOMSource, sbom_id)
         if sbom is None:
             raise HTTPException(status_code=404, detail="SBOM not found")
-        components = db.execute(
-            select(SBOMComponent).where(
-                SBOMComponent.sbom_id == sbom_id,
-                (SBOMComponent.is_duplicate.is_(False)) | (SBOMComponent.is_duplicate.is_(None)),
+        components = (
+            db.execute(
+                select(SBOMComponent).where(
+                    SBOMComponent.sbom_id == sbom_id,
+                    (SBOMComponent.is_duplicate.is_(False)) | (SBOMComponent.is_duplicate.is_(None)),
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         enriched = 0
         stale = 0
         for component in components:
@@ -179,10 +183,7 @@ class LifecycleEnrichmentService:
                 try:
                     datetime.strptime(val, "%Y-%m-%d")
                 except ValueError:
-                    raise HTTPException(
-                        status_code=422,
-                        detail=f"Invalid {date_field} format. Expected YYYY-MM-DD."
-                    )
+                    raise HTTPException(status_code=422, detail=f"Invalid {date_field} format. Expected YYYY-MM-DD.")
 
         old_state = _component_lifecycle_state(component)
         evidence_url = payload.get("evidence_url") or payload.get("lifecycle_source_url")
@@ -245,12 +246,16 @@ class LifecycleEnrichmentService:
         sbom = db.get(SBOMSource, sbom_id)
         if sbom is None:
             raise HTTPException(status_code=404, detail="SBOM not found")
-        components = db.execute(
-            select(SBOMComponent).where(
-                SBOMComponent.sbom_id == sbom_id,
-                (SBOMComponent.is_duplicate.is_(False)) | (SBOMComponent.is_duplicate.is_(None)),
+        components = (
+            db.execute(
+                select(SBOMComponent).where(
+                    SBOMComponent.sbom_id == sbom_id,
+                    (SBOMComponent.is_duplicate.is_(False)) | (SBOMComponent.is_duplicate.is_(None)),
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         return {
             "sbom_id": sbom_id,
             "sbom_name": sbom.sbom_name,
@@ -271,8 +276,7 @@ class LifecycleEnrichmentService:
         )
         executor = ThreadPoolExecutor(max_workers=max_workers)
         future_to_provider = {
-            executor.submit(self._lookup_provider_safely, provider, component): provider
-            for provider in self.providers
+            executor.submit(self._lookup_provider_safely, provider, component): provider for provider in self.providers
         }
         completed = set()
         try:
@@ -318,9 +322,11 @@ class LifecycleEnrichmentService:
 
     def _read_cache(self, db: Session, component: NormalizedComponent) -> ComponentLifecycleCache | None:
         lookup_key = build_lifecycle_lookup_key(component)
-        cached = db.execute(
-            select(ComponentLifecycleCache).where(ComponentLifecycleCache.lookup_key == lookup_key)
-        ).scalars().first()
+        cached = (
+            db.execute(select(ComponentLifecycleCache).where(ComponentLifecycleCache.lookup_key == lookup_key))
+            .scalars()
+            .first()
+        )
         if cached is not None:
             return cached
         name, version, ecosystem, purl, cpe = component.cache_identity
@@ -365,9 +371,7 @@ class LifecycleEnrichmentService:
 
         # Unknown cache should have a shorter TTL than confirmed lifecycle evidence (1 day vs cache_ttl_days)
         ttl_days = 1 if result.lifecycle_status == UNKNOWN else self.cache_ttl_days
-        cache_entry.expires_at = (
-            datetime.now(UTC).replace(microsecond=0) + timedelta(days=ttl_days)
-        ).isoformat()
+        cache_entry.expires_at = (datetime.now(UTC).replace(microsecond=0) + timedelta(days=ttl_days)).isoformat()
         cache_entry.is_stale = False
         db.add(cache_entry)
 
@@ -481,7 +485,8 @@ def summarize_components(components: list[SBOMComponent]) -> dict[str, Any]:
     summary["top_risky_components"] = [
         component_lifecycle_dict(component)
         for component in sorted(components, key=_risk_sort_key, reverse=True)
-        if canonical_status(component.lifecycle_status) in {EOL, EOS, EOF, DEPRECATED, UNSUPPORTED, EOL_SOON, POSSIBLY_UNMAINTAINED}
+        if canonical_status(component.lifecycle_status)
+        in {EOL, EOS, EOF, DEPRECATED, UNSUPPORTED, EOL_SOON, POSSIBLY_UNMAINTAINED}
         or component.maintenance_status == POSSIBLY_UNMAINTAINED
     ][:10]
     summary["recommended_upgrades"] = [
@@ -627,11 +632,22 @@ def _filter_lifecycle_components(components: list[dict[str, Any]], report_type: 
     if key in {"all", "json", "csv", ""}:
         return components
     if key in {"unsupported", "unsupported_component", "unsupported_components"}:
-        return [c for c in components if c.get("unsupported") or canonical_status(c.get("lifecycle_status")) == UNSUPPORTED]
+        return [
+            c for c in components if c.get("unsupported") or canonical_status(c.get("lifecycle_status")) == UNSUPPORTED
+        ]
     if key in {"eol", "eos", "eof", "eol_eos_eof"}:
-        return [c for c in components if canonical_status(c.get("lifecycle_status")) in {EOL, EOS, EOF} or c.get("eol_date") or c.get("eos_date") or c.get("eof_date")]
+        return [
+            c
+            for c in components
+            if canonical_status(c.get("lifecycle_status")) in {EOL, EOS, EOF}
+            or c.get("eol_date")
+            or c.get("eos_date")
+            or c.get("eof_date")
+        ]
     if key in {"deprecated", "deprecated_component", "deprecated_components"}:
-        return [c for c in components if c.get("deprecated") or canonical_status(c.get("lifecycle_status")) == DEPRECATED]
+        return [
+            c for c in components if c.get("deprecated") or canonical_status(c.get("lifecycle_status")) == DEPRECATED
+        ]
     return components
 
 

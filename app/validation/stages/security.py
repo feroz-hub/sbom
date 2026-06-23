@@ -214,13 +214,9 @@ def _walk(node: Any, path: str, ctx: ValidationContext) -> None:
                     stage=_STAGE,
                     path=sub_path,
                     message=(
-                        f"Embedded blob at {sub_path} is {len(value)} bytes (> 1 MB) "
-                        "and is not a known content field."
+                        f"Embedded blob at {sub_path} is {len(value)} bytes (> 1 MB) and is not a known content field."
                     ),
-                    remediation=(
-                        "Move the blob to a referenced URL, or use one of the standard "
-                        "hash content fields."
-                    ),
+                    remediation=("Move the blob to a referenced URL, or use one of the standard hash content fields."),
                 )
                 continue
             _walk(value, sub_path, ctx)

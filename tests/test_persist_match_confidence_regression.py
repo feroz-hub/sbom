@@ -38,9 +38,7 @@ _NVD_FINDING_WITH_CONFIDENCE = {
 }
 
 
-async def _fake_nvd_with_confidence(
-    components, settings, nvd_api_key=None, lookup_service=None
-):
+async def _fake_nvd_with_confidence(components, settings, nvd_api_key=None, lookup_service=None):
     return ([_NVD_FINDING_WITH_CONFIDENCE], [], [])
 
 
@@ -52,16 +50,12 @@ async def _fake_empty_async(*args, **kwargs):
 def mock_nvd_with_confidence_finding(monkeypatch):
     import app.analysis as analysis_mod
 
-    monkeypatch.setattr(
-        analysis_mod, "nvd_query_by_components_async", _fake_nvd_with_confidence
-    )
+    monkeypatch.setattr(analysis_mod, "nvd_query_by_components_async", _fake_nvd_with_confidence)
     monkeypatch.setattr(analysis_mod, "osv_query_by_components", _fake_empty_async)
     monkeypatch.setattr(analysis_mod, "github_query_by_components", _fake_empty_async)
 
 
-def test_persist_analysis_run_forwards_match_confidence(
-    client, seeded_sbom, mock_nvd_with_confidence_finding
-):
+def test_persist_analysis_run_forwards_match_confidence(client, seeded_sbom, mock_nvd_with_confidence_finding):
     sbom_id = seeded_sbom["id"]
     resp = client.post(f"/api/sboms/{sbom_id}/analyze")
     assert resp.status_code == 201, resp.text
@@ -94,29 +88,19 @@ def test_persist_analysis_run_forwards_match_confidence(
         db.close()
 
 
-def test_persist_analysis_run_tolerates_missing_match_confidence(
-    client, seeded_sbom, monkeypatch
-):
+def test_persist_analysis_run_tolerates_missing_match_confidence(client, seeded_sbom, monkeypatch):
     """Parity case: finding without ``match_confidence`` persists with
     NULL and no KeyError.
     """
-    pre_pr_d_finding = {
-        k: v
-        for k, v in _NVD_FINDING_WITH_CONFIDENCE.items()
-        if k != "match_confidence"
-    }
+    pre_pr_d_finding = {k: v for k, v in _NVD_FINDING_WITH_CONFIDENCE.items() if k != "match_confidence"}
     pre_pr_d_finding["vuln_id"] = "CVE-PRE-PR-D-SHAPE"
 
-    async def _fake_nvd_without_confidence(
-        components, settings, nvd_api_key=None, lookup_service=None
-    ):
+    async def _fake_nvd_without_confidence(components, settings, nvd_api_key=None, lookup_service=None):
         return ([pre_pr_d_finding], [], [])
 
     import app.analysis as analysis_mod
 
-    monkeypatch.setattr(
-        analysis_mod, "nvd_query_by_components_async", _fake_nvd_without_confidence
-    )
+    monkeypatch.setattr(analysis_mod, "nvd_query_by_components_async", _fake_nvd_without_confidence)
     monkeypatch.setattr(analysis_mod, "osv_query_by_components", _fake_empty_async)
     monkeypatch.setattr(analysis_mod, "github_query_by_components", _fake_empty_async)
 

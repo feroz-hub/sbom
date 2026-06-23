@@ -143,7 +143,9 @@ def run(ctx: ValidationContext) -> ValidationContext:
             "version": comp.get("version"),
             "type": comp.get("type"),
             "group": comp.get("group"),
-            "supplier": (comp.get("supplier") or {}).get("name") if isinstance(comp.get("supplier"), dict) else comp.get("supplier"),
+            "supplier": (comp.get("supplier") or {}).get("name")
+            if isinstance(comp.get("supplier"), dict)
+            else comp.get("supplier"),
             "scope": comp.get("scope"),
             "purl": comp.get("purl"),
             "cpe": comp.get("cpe"),
@@ -295,8 +297,7 @@ def _check_purl(value: object, path: str, ctx: ValidationContext) -> None:
             path=path,
             message=f"PURL '{value}' is malformed.",
             remediation=(
-                "Use the form `pkg:{type}/{namespace}/{name}@{version}`. "
-                "See https://github.com/package-url/purl-spec."
+                "Use the form `pkg:{type}/{namespace}/{name}@{version}`. See https://github.com/package-url/purl-spec."
             ),
             spec_reference="CycloneDX 1.6 §4.4.1",
         )
@@ -329,10 +330,7 @@ def _check_hash(h: dict, path: str, ctx: ValidationContext) -> None:
             E.E054_HASH_LENGTH_MISMATCH,
             stage=_STAGE,
             path=path,
-            message=(
-                f"Hash has alg '{alg}' but content length {len(content)} hex "
-                f"chars (expected {expected})."
-            ),
+            message=(f"Hash has alg '{alg}' but content length {len(content)} hex chars (expected {expected})."),
             remediation="Recompute the digest with the algorithm declared.",
             spec_reference="CycloneDX 1.6 §4.4.5",
         )

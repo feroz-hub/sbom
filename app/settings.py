@@ -80,7 +80,19 @@ class Settings(BaseSettings):
     database_pool_size: int = Field(default=5, ge=1, description="PostgreSQL connection-pool size")
     database_max_overflow: int = Field(default=10, ge=0, description="PostgreSQL pool overflow")
     database_pool_timeout: int = Field(default=30, ge=1, description="PostgreSQL pool checkout timeout in seconds")
-    database_pool_recycle: int = Field(default=1800, ge=0, description="PostgreSQL connection recycle interval in seconds")
+    database_pool_recycle: int = Field(
+        default=1800, ge=0, description="PostgreSQL connection recycle interval in seconds"
+    )
+
+    db_pool_size: int = Field(default=20, ge=1, description="Environment-based PostgreSQL connection-pool size")
+    db_max_overflow: int = Field(default=20, ge=0, description="Environment-based PostgreSQL pool overflow")
+    db_pool_timeout: int = Field(
+        default=30, ge=1, description="Environment-based PostgreSQL pool checkout timeout in seconds"
+    )
+    db_pool_recycle: int = Field(
+        default=1800, ge=0, description="Environment-based PostgreSQL connection recycle interval in seconds"
+    )
+    db_pool_pre_ping: bool = Field(default=True, description="Environment-based connection pre-ping")
 
     # Analysis Settings
     analysis_legacy_level: int = Field(default=1, description="Legacy analysis level (0=new, 1+=compatibility)")

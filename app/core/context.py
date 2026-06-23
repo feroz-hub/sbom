@@ -22,9 +22,7 @@ class CurrentContext:
         return permission in self.permissions
 
 
-_current_context: ContextVar[CurrentContext | None] = ContextVar(
-    "sbom_current_context", default=None
-)
+_current_context: ContextVar[CurrentContext | None] = ContextVar("sbom_current_context", default=None)
 
 
 def get_bound_context() -> CurrentContext | None:
@@ -36,7 +34,10 @@ def bind_context(context: CurrentContext) -> Token:
 
 
 def reset_context(token: Token) -> None:
-    _current_context.reset(token)
+    try:
+        _current_context.reset(token)
+    except ValueError:
+        _current_context.set(None)
 
 
 @contextmanager

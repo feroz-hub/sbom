@@ -33,7 +33,7 @@ log = logging.getLogger("sbom.ai.providers.grok")
 
 _BASE_URL = "https://api.x.ai/v1"
 
-_FREE_TIER_RPM = 60       # ~1 req/sec
+_FREE_TIER_RPM = 60  # ~1 req/sec
 _FREE_TIER_DAILY_TOKENS = 25_000
 
 

@@ -158,9 +158,7 @@ def get_ai_usage(db: Session = Depends(get_db)) -> AiUsageSummary:
         "per_day_org_usd": float(s.ai_budget_per_day_org_usd),
     }
     spent_today = today.total_cost_usd
-    daily_remaining = (
-        max(caps["per_day_org_usd"] - spent_today, 0.0) if caps["per_day_org_usd"] is not None else None
-    )
+    daily_remaining = max(caps["per_day_org_usd"] - spent_today, 0.0) if caps["per_day_org_usd"] is not None else None
 
     return AiUsageSummary(
         today=today,
@@ -298,15 +296,7 @@ def get_top_cached_fixes(
     the dashboard. Cache entries are tenant-shared (Phase 2 §2.4), so this
     is org-wide.
     """
-    rows = (
-        db.execute(
-            select(AiFixCache)
-            .order_by(AiFixCache.total_cost_usd.desc())
-            .limit(limit)
-        )
-        .scalars()
-        .all()
-    )
+    rows = db.execute(select(AiFixCache).order_by(AiFixCache.total_cost_usd.desc()).limit(limit)).scalars().all()
     return [
         TopCachedItem(
             cache_key=r.cache_key,

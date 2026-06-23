@@ -105,7 +105,9 @@ def read_cache(
         return None
 
     if int(row.schema_version or 0) != SCHEMA_VERSION:
-        log.debug("ai.cache.miss.stale_schema: key=%s row_schema=%s want=%s", cache_key, row.schema_version, SCHEMA_VERSION)
+        log.debug(
+            "ai.cache.miss.stale_schema: key=%s row_schema=%s want=%s", cache_key, row.schema_version, SCHEMA_VERSION
+        )
         return None
 
     try:
@@ -232,9 +234,7 @@ def write_cache(
     }
 
     try:
-        existing = db.execute(
-            select(AiFixCache).where(AiFixCache.cache_key == cache_key)
-        ).scalar_one_or_none()
+        existing = db.execute(select(AiFixCache).where(AiFixCache.cache_key == cache_key)).scalar_one_or_none()
         if existing is None:
             db.add(
                 AiFixCache(

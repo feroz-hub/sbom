@@ -182,19 +182,15 @@ def test_flag_on_keeps_and_node_with_ambiguous_tag() -> None:
 
 
 def _events(caplog: pytest.LogCaptureFixture, name: str) -> list[logging.LogRecord]:
-    return [
-        r
-        for r in caplog.records
-        if r.name == "sbom.nvd.metrics" and getattr(r, "metric", None) == name
-    ]
+    return [r for r in caplog.records if r.name == "sbom.nvd.metrics" and getattr(r, "metric", None) == name]
 
 
 def test_emit_metrics_for_each_observation_point(caplog: pytest.LogCaptureFixture) -> None:
     """Three observation points fire on the right paths:
 
-      * ``nvd.findings_emitted_total``           — kept-finding test
-      * ``nvd.findings_filtered_by_range_total`` — dropped-finding test
-      * ``nvd.version_unparseable_total``        — unparseable-version test
+    * ``nvd.findings_emitted_total``           — kept-finding test
+    * ``nvd.findings_filtered_by_range_total`` — dropped-finding test
+    * ``nvd.version_unparseable_total``        — unparseable-version test
     """
     raw = _load_cve("cve_log4j_window.json", cve_id="CVE-2021-44228")
     # Component A (maven): in range, kept.
@@ -240,9 +236,7 @@ def test_emit_metrics_for_each_observation_point(caplog: pytest.LogCaptureFixtur
     assert len(emitted) == 2, f"expected two kept-finding events, got {len(emitted)}"
     assert len(filtered) == 1, f"expected one dropped-finding event, got {len(filtered)}"
     assert filtered[0].labels == {"reason": "out_of_range"}
-    assert len(unparseable) == 1, (
-        f"expected one unparseable event, got {len(unparseable)}"
-    )
+    assert len(unparseable) == 1, f"expected one unparseable event, got {len(unparseable)}"
     # Ecosystem label is the normalized canonical name (lowercased by
     # ``ecosystem_from_component``); "PyPI" → "pypi".
     assert unparseable[0].labels == {"ecosystem": "pypi"}
@@ -263,9 +257,7 @@ def test_no_metrics_when_flag_off(caplog: pytest.LogCaptureFixture) -> None:
 
     # No structured metric events fire when the flag is off — the
     # baseline path is byte-identical to pre-PR1.
-    nvd_metric_records = [
-        r for r in caplog.records if r.name == "sbom.nvd.metrics"
-    ]
+    nvd_metric_records = [r for r in caplog.records if r.name == "sbom.nvd.metrics"]
     assert nvd_metric_records == []
 
 

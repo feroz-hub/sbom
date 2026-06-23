@@ -368,9 +368,7 @@ def export_csv(run_id: int, db: Session = Depends(get_db)):
                 # Roadmap #3 — confidence is numeric (0.0..1.0). Use
                 # explicit ``""`` for None so consumers can tell
                 # "untagged" from a real 0.0 score.
-                ""
-                if getattr(f, "match_confidence", None) is None
-                else f"{f.match_confidence:.3f}",
+                "" if getattr(f, "match_confidence", None) is None else f"{f.match_confidence:.3f}",
             ]
         )
 

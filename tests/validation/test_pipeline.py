@@ -126,15 +126,24 @@ def test_dispatcher_routes_spdx_2_x_to_semantic_spdx() -> None:
         "documentNamespace": "https://example.com/sboms/x",
         "creationInfo": {"created": "2026-04-30T12:00:00Z", "creators": ["Tool: t"]},
         "packages": [
-            {"SPDXID": "SPDXRef-Package", "name": "p", "versionInfo": "1.0.0",
-             "downloadLocation": "NOASSERTION", "filesAnalyzed": False,
-             "supplier": "Organization: ACME",
-             "licenseConcluded": "Apache-2.0", "licenseDeclared": "Apache-2.0",
-             "copyrightText": "NOASSERTION"}
+            {
+                "SPDXID": "SPDXRef-Package",
+                "name": "p",
+                "versionInfo": "1.0.0",
+                "downloadLocation": "NOASSERTION",
+                "filesAnalyzed": False,
+                "supplier": "Organization: ACME",
+                "licenseConcluded": "Apache-2.0",
+                "licenseDeclared": "Apache-2.0",
+                "copyrightText": "NOASSERTION",
+            }
         ],
         "relationships": [
-            {"spdxElementId": "SPDXRef-DOCUMENT", "relationshipType": "DESCRIBES",
-             "relatedSpdxElement": "SPDXRef-Package"}
+            {
+                "spdxElementId": "SPDXRef-DOCUMENT",
+                "relationshipType": "DESCRIBES",
+                "relatedSpdxElement": "SPDXRef-Package",
+            }
         ],
     }
     report = run_validation(json.dumps(doc).encode())

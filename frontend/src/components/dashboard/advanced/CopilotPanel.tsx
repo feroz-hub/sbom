@@ -81,12 +81,14 @@ function isAiDisabled(err: unknown): boolean {
 export function CopilotPanel() {
   const queryClient = useQueryClient();
   const [question, setQuestion] = useState('');
+  const [enabled, setEnabled] = useState(false);
 
   const briefingQuery = useQuery({
     queryKey: ['copilot-briefing'],
     queryFn: ({ signal }) => getCopilotBriefing(false, signal),
     staleTime: 5 * 60_000,
     retry: false,
+    enabled: enabled,
   });
 
   // Regenerate replaces the cached briefing in place — setQueryData keeps
@@ -95,6 +97,7 @@ export function CopilotPanel() {
     mutationFn: () => getCopilotBriefing(true),
     onSuccess: (data) => {
       queryClient.setQueryData(['copilot-briefing'], data);
+      setEnabled(true);
     },
   });
 
@@ -108,7 +111,7 @@ export function CopilotPanel() {
   if (isAiDisabled(briefingQuery.error)) return null;
 
   const briefing = briefingQuery.data;
-  const busy = briefingQuery.isLoading || regenerate.isPending;
+  const busy = (enabled && briefingQuery.isLoading) || regenerate.isPending;
 
   const submitQuestion = (e: FormEvent) => {
     e.preventDefault();
@@ -150,7 +153,21 @@ export function CopilotPanel() {
       </SurfaceHeader>
       <SurfaceContent>
         {/* Briefing */}
-        {busy ? (
+        {!enabled && !regenerate.isPending ? (
+          <div className="flex flex-col items-center justify-center p-6 border border-dashed border-border-subtle rounded-xl bg-surface-muted/30">
+            <p className="text-xs text-hcl-muted mb-3 text-center">
+              Generate or load the AI executive briefing on-demand.
+            </p>
+            <button
+              type="button"
+              onClick={() => setEnabled(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-hcl-blue px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-hcl-blue/90"
+            >
+              <Sparkles className="h-3.5 w-3.5" aria-hidden />
+              Load executive briefing
+            </button>
+          </div>
+        ) : busy ? (
           <div className="flex h-28 items-center justify-center gap-3 text-xs text-hcl-muted">
             <Spinner />
             {regenerate.isPending ? 'Regenerating briefing…' : 'Reading your portfolio…'}

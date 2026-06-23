@@ -25,6 +25,7 @@ def db(client):
         session.rollback()
         session.close()
 
+
 class FakeLifecycleProvider(LifecycleProvider):
     name = "Test Provider"
 
@@ -48,27 +49,13 @@ class FakeLifecycleProvider(LifecycleProvider):
 
 def test_lifecycle_provider_resolution(db):
     # Seed a minimal SBOM
-    sbom = SBOMSource(
-        sbom_name="lifecycle-test-sbom",
-        sbom_data="{}",
-        status="validated"
-    )
+    sbom = SBOMSource(sbom_name="lifecycle-test-sbom", sbom_data="{}", status="validated")
     db.add(sbom)
     db.flush()
 
-    comp1 = SBOMComponent(
-        sbom_id=sbom.id,
-        name="log4j-core",
-        version="2.15.0",
-        component_type="library"
-    )
+    comp1 = SBOMComponent(sbom_id=sbom.id, name="log4j-core", version="2.15.0", component_type="library")
     # active component
-    comp2 = SBOMComponent(
-        sbom_id=sbom.id,
-        name="some-active-component",
-        version="1.0.0",
-        component_type="library"
-    )
+    comp2 = SBOMComponent(sbom_id=sbom.id, name="some-active-component", version="1.0.0", component_type="library")
     db.add(comp1)
     db.add(comp2)
     db.commit()
@@ -94,39 +81,21 @@ def test_completeness_score_calculation(db):
                 "version": "1.0.0",
                 "supplier": {"name": "Supplier A"},
                 "licenses": [{"license": {"id": "MIT"}}],
-                "hashes": [{"alg": "SHA-256", "content": "somehash"}]
+                "hashes": [{"alg": "SHA-256", "content": "somehash"}],
             },
-            {
-                "name": "pkg2",
-                "version": "1.0.0",
-                "type": "library"
-            }
-        ]
+            {"name": "pkg2", "version": "1.0.0", "type": "library"},
+        ],
     }
-    sbom = SBOMSource(
-        sbom_name="completeness-test-sbom",
-        sbom_data=json.dumps(sbom_data),
-        status="validated"
-    )
+    sbom = SBOMSource(sbom_name="completeness-test-sbom", sbom_data=json.dumps(sbom_data), status="validated")
     db.add(sbom)
     db.flush()
 
     # Perfect component (has name, version, supplier, license, hashes)
     comp1 = SBOMComponent(
-        sbom_id=sbom.id,
-        name="pkg1",
-        version="1.0.0",
-        supplier="Supplier A",
-        license="MIT",
-        hashes="somehash"
+        sbom_id=sbom.id, name="pkg1", version="1.0.0", supplier="Supplier A", license="MIT", hashes="somehash"
     )
     # Component missing license and supplier and hashes
-    comp2 = SBOMComponent(
-        sbom_id=sbom.id,
-        name="pkg2",
-        version="1.0.0",
-        component_type="library"
-    )
+    comp2 = SBOMComponent(sbom_id=sbom.id, name="pkg2", version="1.0.0", component_type="library")
     db.add(comp1)
     db.add(comp2)
     db.commit()
@@ -137,7 +106,9 @@ def test_completeness_score_calculation(db):
     # Score should be calculated (between 0 and 100) and stored
     assert sbom.completeness_score is not None
     assert 0 < sbom.completeness_score < 100
-    report = json.loads(sbom.completeness_report) if isinstance(sbom.completeness_report, str) else sbom.completeness_report
+    report = (
+        json.loads(sbom.completeness_report) if isinstance(sbom.completeness_report, str) else sbom.completeness_report
+    )
     assert len(report["missing_fields"]) > 0
 
 
@@ -156,17 +127,17 @@ def test_sbom_editing_and_versioning(db):
             {
                 "bom-ref": "pkg:maven/org.apache.logging.log4j/log4j-core@2.15.0",
                 "name": "log4j-core",
-                "version": "2.15.0"
+                "version": "2.15.0",
             }
-        ]
+        ],
     }
-    
+
     parent_sbom = SBOMSource(
         sbom_name="edit-target-sbom",
         sbom_data=json.dumps(sbom_data),
         projectid=proj.id,
         sbom_version="1.0.0",
-        status="validated"
+        status="validated",
     )
     db.add(parent_sbom)
     db.flush()
@@ -175,7 +146,7 @@ def test_sbom_editing_and_versioning(db):
         sbom_id=parent_sbom.id,
         bom_ref="pkg:maven/org.apache.logging.log4j/log4j-core@2.15.0",
         name="log4j-core",
-        version="2.15.0"
+        version="2.15.0",
     )
     db.add(comp)
     db.commit()
@@ -196,10 +167,10 @@ def test_sbom_editing_and_versioning(db):
                     "eos_date": "2026-12-31",
                     "eol_date": "2027-12-31",
                     "is_deprecated": True,
-                    "maintenance_status": "unmaintained"
-                }
+                    "maintenance_status": "unmaintained",
+                },
             }
-        ]
+        ],
     }
 
     new_version = edit_sbom(db, parent_sbom.id, user_id="bob", updates=updates, change_summary="Updated log4j version")
@@ -453,7 +424,7 @@ def test_remediation_tracking(db):
         "status": "In Progress",
         "owner": "security-lead@org.com",
         "due_date": "2026-06-30",
-        "fix_notes": "Mitigating via JVM parameter until patch is verified"
+        "fix_notes": "Mitigating via JVM parameter until patch is verified",
     }
 
     record = create_or_update_remediation(db, proj.id, remediation_data)

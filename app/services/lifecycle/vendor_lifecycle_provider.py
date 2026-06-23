@@ -52,11 +52,15 @@ class VendorLifecycleProvider(LifecycleProvider):
         eos_date = _date(record.get("eos_date") or record.get("end_of_support"))
         eof_date = _date(record.get("eof_date") or record.get("end_of_security_support"))
         declared_status = record.get("lifecycle_status") or record.get("status")
-        status = canonical_status(str(declared_status)) if declared_status else _status(
-            eol_date,
-            eos_date,
-            eof_date,
-            today=self.today,
+        status = (
+            canonical_status(str(declared_status))
+            if declared_status
+            else _status(
+                eol_date,
+                eos_date,
+                eof_date,
+                today=self.today,
+            )
         )
         latest = _text(record.get("latest_supported_version") or record.get("latest_version"))
         recommendation = _text(record.get("recommendation"))
@@ -104,9 +108,12 @@ def _match_record(records: list[dict[str, Any]], component: NormalizedComponent)
         record_ecosystem = str(record.get("ecosystem") or "generic").strip().casefold()
         if record_ecosystem not in {"", "generic", ecosystem}:
             continue
-        record_version = str(
-            record.get("version") or record.get("version_prefix") or record.get("cycle") or ""
-        ).strip().casefold().lstrip("v")
+        record_version = (
+            str(record.get("version") or record.get("version_prefix") or record.get("cycle") or "")
+            .strip()
+            .casefold()
+            .lstrip("v")
+        )
         if record_version and version != record_version and not version.startswith(f"{record_version}."):
             continue
         matches.append((len(record_version), record))

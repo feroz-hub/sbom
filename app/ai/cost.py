@@ -116,8 +116,7 @@ def estimate_cost_usd(
     pair = table.get(model)
     if pair is None:
         log.warning(
-            "ai.cost.unknown_model: provider=%s model=%s — billed at $0; "
-            "update PRICING in app/ai/cost.py",
+            "ai.cost.unknown_model: provider=%s model=%s — billed at $0; update PRICING in app/ai/cost.py",
             provider,
             model,
         )
@@ -307,9 +306,7 @@ class BudgetGuard:
             try:
                 from .observability import update_budget_remaining
 
-                update_budget_remaining(
-                    remaining_usd=max(self._caps.per_day_org_usd - self._counter.get(), 0.0)
-                )
+                update_budget_remaining(remaining_usd=max(self._caps.per_day_org_usd - self._counter.get(), 0.0))
             except Exception:  # noqa: BLE001 — telemetry failure must not break a successful call
                 pass
 
@@ -344,9 +341,7 @@ class BudgetGuard:
             return 0.0
         today_iso = datetime.now(UTC).date().isoformat()
         with self._db_session_factory() as session:  # type: Session
-            stmt = select(func.coalesce(func.sum(AiUsageLog.cost_usd), 0.0)).where(
-                AiUsageLog.created_at >= today_iso
-            )
+            stmt = select(func.coalesce(func.sum(AiUsageLog.cost_usd), 0.0)).where(AiUsageLog.created_at >= today_iso)
             return float(session.execute(stmt).scalar() or 0.0)
 
 

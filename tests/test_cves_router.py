@@ -87,9 +87,7 @@ def test_get_scan_variant_200(client, monkeypatch):
             recommended_upgrade="1.3.1",
         )
 
-    monkeypatch.setattr(
-        "app.services.cve_service.CveDetailService.get_with_scan_context", _fake
-    )
+    monkeypatch.setattr("app.services.cve_service.CveDetailService.get_with_scan_context", _fake)
     resp = client.get("/api/v1/scans/123/cves/CVE-2024-12345")
     assert resp.status_code == 200, resp.text
     body = resp.json()

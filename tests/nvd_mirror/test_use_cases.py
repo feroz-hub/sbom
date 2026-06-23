@@ -50,9 +50,7 @@ def test_freshness_is_false_when_never_synced() -> None:
 
 def test_freshness_is_true_when_inside_window() -> None:
     last = datetime(2024, 6, 1, 0, 0, 0, tzinfo=UTC)
-    snap = make_snapshot(
-        min_freshness_hours=24, last_successful_sync_at=last
-    )
+    snap = make_snapshot(min_freshness_hours=24, last_successful_sync_at=last)
     v = compute_freshness(snap, last + timedelta(hours=23))
     assert v.is_fresh is True
     assert v.age_hours is not None and v.age_hours == pytest.approx(23.0)
@@ -60,9 +58,7 @@ def test_freshness_is_true_when_inside_window() -> None:
 
 def test_freshness_is_false_when_outside_window() -> None:
     last = datetime(2024, 6, 1, 0, 0, 0, tzinfo=UTC)
-    snap = make_snapshot(
-        min_freshness_hours=24, last_successful_sync_at=last
-    )
+    snap = make_snapshot(min_freshness_hours=24, last_successful_sync_at=last)
     v = compute_freshness(snap, last + timedelta(hours=25))
     assert v.is_fresh is False
     assert v.age_hours == pytest.approx(25.0)
@@ -101,9 +97,7 @@ async def test_bootstrap_walks_windows_from_floor_when_no_watermark() -> None:
     snap = make_snapshot(window_days=30, last_modified_utc=None)
 
     rec = make_record("CVE-1", last_modified=target - timedelta(days=1))
-    remote = FakeNvdRemote(
-        {(HISTORICAL_FLOOR, target): [batch([rec])]}
-    )
+    remote = FakeNvdRemote({(HISTORICAL_FLOOR, target): [batch([rec])]})
     cve_repo = FakeCveRepository()
     settings_repo = FakeSettingsRepository(snap)
     sync_run_repo = FakeSyncRunRepository()
@@ -137,9 +131,7 @@ async def test_bootstrap_walks_multiple_windows() -> None:
     rec2 = make_record("CVE-2", last_modified=w2[1] - timedelta(seconds=1))
     rec3 = make_record("CVE-3", last_modified=w3[1] - timedelta(seconds=1))
 
-    remote = FakeNvdRemote(
-        {w1: [batch([rec1])], w2: [batch([rec2])], w3: [batch([rec3])]}
-    )
+    remote = FakeNvdRemote({w1: [batch([rec1])], w2: [batch([rec2])], w3: [batch([rec3])]})
     cve_repo = FakeCveRepository()
     settings_repo = FakeSettingsRepository(snap)
     sync_run_repo = FakeSyncRunRepository()
@@ -268,9 +260,7 @@ async def test_bootstrap_resumes_idempotently_after_failure() -> None:
     assert cve_repo.find_by_cve_id("CVE-3") is None
 
     # Second attempt: clean remote, resume from watermark.
-    healthy_remote = FakeNvdRemote(
-        {w2: [batch([rec2])], w3: [batch([rec3])]}
-    )
+    healthy_remote = FakeNvdRemote({w2: [batch([rec2])], w3: [batch([rec3])]})
     report = await BootstrapMirror(
         remote=healthy_remote,
         cve_repo=cve_repo,
@@ -290,15 +280,9 @@ async def test_bootstrap_soft_marks_rejected_cves() -> None:
     target = HISTORICAL_FLOOR + timedelta(days=15)
     snap = make_snapshot(window_days=30, last_modified_utc=None)
 
-    rejected = make_record(
-        "CVE-REJ", last_modified=target - timedelta(seconds=1), vuln_status="Rejected"
-    )
-    good = make_record(
-        "CVE-GOOD", last_modified=target - timedelta(seconds=2), vuln_status="Analyzed"
-    )
-    remote = FakeNvdRemote(
-        {(HISTORICAL_FLOOR, target): [batch([good, rejected])]}
-    )
+    rejected = make_record("CVE-REJ", last_modified=target - timedelta(seconds=1), vuln_status="Rejected")
+    good = make_record("CVE-GOOD", last_modified=target - timedelta(seconds=2), vuln_status="Analyzed")
+    remote = FakeNvdRemote({(HISTORICAL_FLOOR, target): [batch([good, rejected])]})
     cve_repo = FakeCveRepository()
     settings_repo = FakeSettingsRepository(snap)
     sync_run_repo = FakeSyncRunRepository()
@@ -327,12 +311,8 @@ async def test_replay_with_newer_rejected_status_overwrites_via_upsert() -> None
     target = HISTORICAL_FLOOR + timedelta(days=15)
     snap = make_snapshot(window_days=30, last_modified_utc=None)
 
-    pass1 = make_record(
-        "CVE-X", last_modified=target - timedelta(days=2), vuln_status="Analyzed"
-    )
-    pass2 = make_record(
-        "CVE-X", last_modified=target - timedelta(days=1), vuln_status="Rejected"
-    )
+    pass1 = make_record("CVE-X", last_modified=target - timedelta(days=2), vuln_status="Analyzed")
+    pass2 = make_record("CVE-X", last_modified=target - timedelta(days=1), vuln_status="Rejected")
     cve_repo = FakeCveRepository()
     settings_repo = FakeSettingsRepository(snap)
     sync_run_repo = FakeSyncRunRepository()
@@ -373,12 +353,8 @@ async def test_out_of_order_modifications_do_not_overwrite_fresher_row() -> None
     target = HISTORICAL_FLOOR + timedelta(days=15)
     snap = make_snapshot(window_days=30, last_modified_utc=None)
 
-    fresh = make_record(
-        "CVE-A", last_modified=target - timedelta(days=1), vuln_status="Analyzed"
-    )
-    stale = make_record(
-        "CVE-A", last_modified=target - timedelta(days=10), vuln_status="Modified"
-    )
+    fresh = make_record("CVE-A", last_modified=target - timedelta(days=1), vuln_status="Analyzed")
+    stale = make_record("CVE-A", last_modified=target - timedelta(days=10), vuln_status="Modified")
 
     cve_repo = FakeCveRepository()
     cve_repo.upsert_batch([fresh])  # write fresh first
@@ -474,13 +450,9 @@ def test_query_returns_records_for_known_cpe() -> None:
         criteria_stem="apache:log4j",
         vulnerable=True,
     )
-    rec = make_record(
-        "CVE-2021-44228", last_modified=datetime(2024, 6, 1, tzinfo=UTC), cpe_criteria=(crit,)
-    )
+    rec = make_record("CVE-2021-44228", last_modified=datetime(2024, 6, 1, tzinfo=UTC), cpe_criteria=(crit,))
     repo.upsert_batch([rec])
-    out = QueryMirror(cve_repo=repo).execute(
-        "cpe:2.3:a:apache:log4j:2.14.0:*:*:*:*:*:*:*"
-    )
+    out = QueryMirror(cve_repo=repo).execute("cpe:2.3:a:apache:log4j:2.14.0:*:*:*:*:*:*:*")
     assert [r.cve_id for r in out] == ["CVE-2021-44228"]
 
 

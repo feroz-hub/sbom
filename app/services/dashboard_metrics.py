@@ -129,9 +129,7 @@ def build_trend_points(db: Session, *, days: int) -> list[TrendDataPoint]:
     ).all()
 
     bucket_keys = ("critical", "high", "medium", "low", "unknown")
-    daily: dict[str, dict[str, int]] = defaultdict(
-        lambda: {k: 0 for k in bucket_keys}
-    )
+    daily: dict[str, dict[str, int]] = defaultdict(lambda: {k: 0 for k in bucket_keys})
     for day, severity, count in rows:
         if not day:
             continue
@@ -188,14 +186,8 @@ def build_trend_annotations(db: Session, *, days: int) -> list[TrendAnnotation]:
     for day, n, sample_name in upload_rows:
         if day not in in_window:
             continue
-        label = (
-            f"{sample_name} uploaded"
-            if n == 1
-            else f"+{n} SBOMs uploaded"
-        )
-        annotations.append(
-            TrendAnnotation(date=day, kind="sbom_uploaded", label=label, count=n or 1)
-        )
+        label = f"{sample_name} uploaded" if n == 1 else f"+{n} SBOMs uploaded"
+        annotations.append(TrendAnnotation(date=day, kind="sbom_uploaded", label=label, count=n or 1))
 
     # Remediation events — drop of ≥ 5 distinct findings between consecutive
     # successful runs of the same SBOM. Done in two passes: first the

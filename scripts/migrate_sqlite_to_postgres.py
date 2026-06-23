@@ -85,9 +85,7 @@ def require_target_at_head(connection: sa.Connection) -> None:
     expected = _alembic_heads()
     actual = _database_revisions(connection)
     if actual != expected:
-        raise MigrationError(
-            f"PostgreSQL is not at Alembic head; expected {sorted(expected)}, found {sorted(actual)}"
-        )
+        raise MigrationError(f"PostgreSQL is not at Alembic head; expected {sorted(expected)}, found {sorted(actual)}")
 
 
 def reflect_database(engine: sa.Engine) -> sa.MetaData:
@@ -196,10 +194,7 @@ def prepare_rows(
     prepared: list[dict[str, Any]] = []
     deferred: list[tuple[dict[str, Any], dict[str, Any]]] = []
     for source_row in source_connection.execute(sa.select(source_table)).mappings():
-        row = {
-            column.name: convert_value(source_row[column.name], column)
-            for column in target_table.columns
-        }
+        row = {column.name: convert_value(source_row[column.name], column) for column in target_table.columns}
         self_values = {name: row[name] for name in self_columns if row[name] is not None}
         if self_values:
             identity = {name: row[name] for name in pk_names}
@@ -213,10 +208,7 @@ def prepare_rows(
 
 
 def target_row_counts(connection: sa.Connection, tables: Iterable[sa.Table]) -> dict[str, int]:
-    return {
-        table.name: int(connection.scalar(sa.select(sa.func.count()).select_from(table)) or 0)
-        for table in tables
-    }
+    return {table.name: int(connection.scalar(sa.select(sa.func.count()).select_from(table)) or 0) for table in tables}
 
 
 def ensure_empty_or_clear(
@@ -355,13 +347,17 @@ def verify_databases(
             rows.append(("sbom_source.sbom_data SHA-256", 0, 0, "MISMATCH"))
 
     orphan_failures = _foreign_key_orphans(target_connection, target)
-    invalid_constraints = target_connection.execute(
-        sa.text(
-            "SELECT conname FROM pg_constraint c "
-            "JOIN pg_namespace n ON n.oid = c.connamespace "
-            "WHERE n.nspname = current_schema() AND NOT c.convalidated"
+    invalid_constraints = (
+        target_connection.execute(
+            sa.text(
+                "SELECT conname FROM pg_constraint c "
+                "JOIN pg_namespace n ON n.oid = c.connamespace "
+                "WHERE n.nspname = current_schema() AND NOT c.convalidated"
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     if orphan_failures or invalid_constraints:
         ok = False
 
@@ -372,8 +368,7 @@ def verify_databases(
         print(f"| {name} | {source_count} | {target_count} | {status} |")
     print(f"\nForeign-key integrity: {'PASS' if not orphan_failures else 'FAIL: ' + ', '.join(orphan_failures)}")
     print(
-        "Constraint validation: "
-        + ("PASS" if not invalid_constraints else "FAIL: " + ", ".join(invalid_constraints))
+        "Constraint validation: " + ("PASS" if not invalid_constraints else "FAIL: " + ", ".join(invalid_constraints))
     )
     return ok
 

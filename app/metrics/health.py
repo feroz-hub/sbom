@@ -16,14 +16,10 @@ from ._helpers import active_head_sbom_ids_subquery
 def health_completeness_average(db: Session) -> float:
     """Average completeness score across active HEAD SBOMs."""
     head_ids = active_head_sbom_ids_subquery()
-    score_sum = db.execute(
-        select(func.sum(SBOMSource.completeness_score)).where(SBOMSource.id.in_(head_ids))
-    ).scalar()
-    
-    count = db.execute(
-        select(func.count(SBOMSource.id)).where(SBOMSource.id.in_(head_ids))
-    ).scalar() or 0
-    
+    score_sum = db.execute(select(func.sum(SBOMSource.completeness_score)).where(SBOMSource.id.in_(head_ids))).scalar()
+
+    count = db.execute(select(func.count(SBOMSource.id)).where(SBOMSource.id.in_(head_ids))).scalar() or 0
+
     if count == 0 or score_sum is None:
         return 100.0
     return round(float(score_sum) / count, 1)
@@ -32,10 +28,8 @@ def health_completeness_average(db: Session) -> float:
 def health_missing_metadata_count(db: Session) -> int:
     """Total missing metadata items across active HEAD SBOMs."""
     head_ids = active_head_sbom_ids_subquery()
-    reports = db.execute(
-        select(SBOMSource.completeness_report).where(SBOMSource.id.in_(head_ids))
-    ).scalars().all()
-    
+    reports = db.execute(select(SBOMSource.completeness_report).where(SBOMSource.id.in_(head_ids))).scalars().all()
+
     total = 0
     for report_raw in reports:
         if not report_raw:
@@ -60,10 +54,14 @@ def health_outdated_components_count(db: Session) -> int:
             select(func.count(SBOMComponent.id))
             .where(SBOMComponent.sbom_id.in_(head_ids))
             .where(
-                (func.lower(SBOMComponent.lifecycle_status).in_(("eol", "eos", "eof", "deprecated", "unsupported", "eol soon"))) |
-                (SBOMComponent.is_deprecated.is_(True)) |
-                (SBOMComponent.deprecated.is_(True)) |
-                (func.lower(SBOMComponent.maintenance_status) == "unmaintained")
+                (
+                    func.lower(SBOMComponent.lifecycle_status).in_(
+                        ("eol", "eos", "eof", "deprecated", "unsupported", "eol soon")
+                    )
+                )
+                | (SBOMComponent.is_deprecated.is_(True))
+                | (SBOMComponent.deprecated.is_(True))
+                | (func.lower(SBOMComponent.maintenance_status) == "unmaintained")
             )
         ).scalar()
         or 0

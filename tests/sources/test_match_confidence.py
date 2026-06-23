@@ -50,9 +50,7 @@ class TestStrongMatch:
                 "vulnerable to remote code execution."
             ),
         )
-        assert result.confidence >= 0.9, (
-            f"strong-signal match should score >=0.9, got {result.confidence}"
-        )
+        assert result.confidence >= 0.9, f"strong-signal match should score >=0.9, got {result.confidence}"
         assert result.name_score == 1.0
         assert result.version_score == 1.0
         assert result.vendor_score == 1.0
@@ -202,10 +200,7 @@ class TestTokenizationEdgeCases:
             component_name="core",
             component_version="14.0.0",
             component_vendor="angular",
-            cve_text=(
-                "An issue in @angular/core 14.0.0 allows prototype "
-                "pollution under specific conditions."
-            ),
+            cve_text=("An issue in @angular/core 14.0.0 allows prototype pollution under specific conditions."),
         )
         # angular + core both appear in the text; version 14.0.0 too.
         assert result.name_score == 1.0
@@ -310,9 +305,7 @@ class TestEmptyComponentName:
             component_vendor="apache",
             cve_text="Apache log4j 2.14.0 is affected",
         )
-        assert result == ConfidenceResult(
-            confidence=0.0, name_score=0.0, version_score=0.0, vendor_score=0.0
-        )
+        assert result == ConfidenceResult(confidence=0.0, name_score=0.0, version_score=0.0, vendor_score=0.0)
 
 
 # =============================================================================

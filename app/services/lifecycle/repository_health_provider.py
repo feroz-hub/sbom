@@ -315,10 +315,14 @@ def _repository_url_from_evidence(references: list[dict[str, Any]]) -> str | Non
             continue
         value = ref.get("url") or ref.get("reference")
         kind = str(ref.get("type") or ref.get("comment") or "").lower()
-        if isinstance(value, str) and value.strip() and (
-            "repo" in kind
-            or "vcs" in kind
-            or any(host in value.lower() for host in ("github.com", "gitlab.com", "bitbucket.org"))
+        if (
+            isinstance(value, str)
+            and value.strip()
+            and (
+                "repo" in kind
+                or "vcs" in kind
+                or any(host in value.lower() for host in ("github.com", "gitlab.com", "bitbucket.org"))
+            )
         ):
             return value.strip()
     return None

@@ -50,9 +50,7 @@ _SNYK_REPORT = {
     "ok": False,
     "dependencyCount": 10052,
     "summary": "Found 3 issues",
-    "vulnerabilities": [
-        {"id": "SNYK-JS-BRACEEXPANSION-9789073", "packageName": "brace-expansion"}
-    ],
+    "vulnerabilities": [{"id": "SNYK-JS-BRACEEXPANSION-9789073", "packageName": "brace-expansion"}],
 }
 
 
@@ -69,8 +67,8 @@ def _seed_legacy_row(client, name: str, body: str) -> int:
     try:
         db.execute(
             text(
-                "INSERT INTO sbom_source (sbom_name, sbom_data, status) "
-                "VALUES (:name, :data, 'validated')"
+                "INSERT INTO sbom_source (sbom_name, sbom_data, status, tenant_id) "
+                "VALUES (:name, :data, 'validated', 1)"
             ),
             {"name": name, "data": body},
         )
@@ -169,8 +167,7 @@ def test_revalidate_400_when_sbom_data_missing(client):
     try:
         db.execute(
             text(
-                "INSERT INTO sbom_source (sbom_name, sbom_data, status) "
-                "VALUES (:name, NULL, 'pending')"
+                "INSERT INTO sbom_source (sbom_name, sbom_data, status, tenant_id) VALUES (:name, NULL, 'pending', 1)"
             ),
             {"name": name},
         )
@@ -218,15 +215,11 @@ def test_legacy_rows_get_reclassified_to_pending_at_startup(client):
 @pytest.mark.parametrize("scenario", ["snyk", "clean"])
 def test_revalidate_does_not_disturb_other_rows(client, scenario):
     """A revalidate call writes only to the targeted row."""
-    other = _seed_legacy_row(
-        client, _unique("other"), json.dumps(_VALID_CYCLONEDX)
-    )
+    other = _seed_legacy_row(client, _unique("other"), json.dumps(_VALID_CYCLONEDX))
     _set_pending(client, other)
 
     target_body = _SNYK_REPORT if scenario == "snyk" else _VALID_CYCLONEDX
-    target = _seed_legacy_row(
-        client, _unique(f"target-{scenario}"), json.dumps(target_body)
-    )
+    target = _seed_legacy_row(client, _unique(f"target-{scenario}"), json.dumps(target_body))
     _set_pending(client, target)
 
     client.post(f"/api/sboms/{target}/revalidate")

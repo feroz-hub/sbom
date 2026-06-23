@@ -61,10 +61,7 @@ def _recent_run_exists(db: Session, sbom_id: int, gap_minutes: int) -> bool:
     """
     cutoff = (_now() - timedelta(minutes=gap_minutes)).isoformat()
     found = db.execute(
-        select(AnalysisRun.id)
-        .where(AnalysisRun.sbom_id == sbom_id)
-        .where(AnalysisRun.completed_on >= cutoff)
-        .limit(1)
+        select(AnalysisRun.id).where(AnalysisRun.sbom_id == sbom_id).where(AnalysisRun.completed_on >= cutoff).limit(1)
     ).scalar_one_or_none()
     return found is not None
 
@@ -93,11 +90,7 @@ def tick_scheduled_analyses(self) -> dict:
         # per-SBOM task ultimately succeeds, otherwise a failing schedule
         # would re-fire on the next 15-min tick.
         schedule_ids = {t.schedule_id for t in targets}
-        schedules = (
-            db.execute(select(AnalysisSchedule).where(AnalysisSchedule.id.in_(schedule_ids)))
-            .scalars()
-            .all()
-        )
+        schedules = db.execute(select(AnalysisSchedule).where(AnalysisSchedule.id.in_(schedule_ids))).scalars().all()
         schedule_by_id = {s.id: s for s in schedules}
 
         enqueued = 0
@@ -197,9 +190,7 @@ def analyze_sbom_async(
             return {"status": "SKIPPED", "reason": "recent_run_within_gap"}
 
         try:
-            run = asyncio.run(
-                create_auto_report(db, sbom, force_refresh=force_refresh)
-            )
+            run = asyncio.run(create_auto_report(db, sbom, force_refresh=force_refresh))
         except Exception as exc:
             log.exception(
                 "scheduled_analysis_run_failed",
@@ -212,9 +203,7 @@ def analyze_sbom_async(
                 # Override forward-cursor with the backoff value; the tick
                 # already advanced it once based on cadence, but a flapping
                 # source warrants slowing down further.
-                sched.next_run_at = to_iso(
-                    compute_failure_backoff(sched.consecutive_failures, _now())
-                )
+                sched.next_run_at = to_iso(compute_failure_backoff(sched.consecutive_failures, _now()))
                 db.commit()
             raise self.retry(exc=exc)
 

@@ -299,15 +299,9 @@ def _row_to_progress(row: AiFixBatch) -> BatchProgress:
 
 
 def _latest_batch_row(db: Session, run_id: int) -> AiFixBatch | None:
-    return (
-        db.execute(
-            select(AiFixBatch)
-            .where(AiFixBatch.run_id == run_id)
-            .order_by(AiFixBatch.created_at.desc())
-            .limit(1)
-        )
-        .scalar_one_or_none()
-    )
+    return db.execute(
+        select(AiFixBatch).where(AiFixBatch.run_id == run_id).order_by(AiFixBatch.created_at.desc()).limit(1)
+    ).scalar_one_or_none()
 
 
 # ---------------------------------------------------------------------------
@@ -343,10 +337,7 @@ async def trigger_run_fixes(
             status_code=409,
             detail={
                 "error_code": "TOO_MANY_ACTIVE_BATCHES",
-                "message": (
-                    f"This run has {active} active batches. Wait for one to "
-                    "complete before starting another."
-                ),
+                "message": (f"This run has {active} active batches. Wait for one to complete before starting another."),
                 "active_count": active,
                 "max_concurrent": MAX_ACTIVE_BATCHES_PER_RUN,
                 "retryable": True,
@@ -607,9 +598,7 @@ def _legacy_estimate(db: Session, *, run_id: int) -> BatchDurationEstimateRespon
     POST variant but preserves the exact pre-Phase-4 numbers for any
     consumer still on the GET endpoint."""
     _ensure_run_exists(db, run_id)
-    findings = list(
-        db.execute(select(AnalysisFinding).where(AnalysisFinding.analysis_run_id == run_id)).scalars()
-    )
+    findings = list(db.execute(select(AnalysisFinding).where(AnalysisFinding.analysis_run_id == run_id)).scalars())
     total = len(findings)
 
     cached = 0
@@ -758,9 +747,7 @@ def cancel_run_batch(
     responses={204: {"description": "Run exists but has no AI fix batch (idle)."}},
     deprecated=True,
 )
-def get_progress(
-    run_id: int, db: Session = Depends(get_db)
-) -> BatchProgress | Response:
+def get_progress(run_id: int, db: Session = Depends(get_db)) -> BatchProgress | Response:
     """Return the most-recent batch's progress (legacy compat).
 
     Frontends migrating to the multi-batch surface should call
@@ -896,9 +883,7 @@ def _sse_response(run_id: int, *, batch_id: str | None) -> StreamingResponse:
 def list_run_fixes(run_id: int, db: Session = Depends(get_db)) -> FindingFixListResponse:
     """List cached AI fix bundles produced for a run."""
     _ensure_run_exists(db, run_id)
-    findings = list(
-        db.execute(select(AnalysisFinding).where(AnalysisFinding.analysis_run_id == run_id)).scalars()
-    )
+    findings = list(db.execute(select(AnalysisFinding).where(AnalysisFinding.analysis_run_id == run_id)).scalars())
     keys: list[str] = []
     key_to_finding: dict[str, AnalysisFinding] = {}
     for f in findings:
@@ -915,9 +900,7 @@ def list_run_fixes(run_id: int, db: Session = Depends(get_db)) -> FindingFixList
         key_to_finding[key] = f
     if not keys:
         return FindingFixListResponse(run_id=run_id, items=[], total=0)
-    rows = list(
-        db.execute(select(AiFixCache).where(AiFixCache.cache_key.in_(keys))).scalars()
-    )
+    rows = list(db.execute(select(AiFixCache).where(AiFixCache.cache_key.in_(keys))).scalars())
     items = [
         FindingFixListItem(
             cache_key=r.cache_key,
@@ -1006,9 +989,7 @@ async def regenerate_finding_fix(
     _require_ai_enabled(rollout_key=f"finding:{finding_id}")
     finding = _load_finding(db, finding_id)
     gen = AiFixGenerator(db)
-    outcome = await gen.generate_for_finding(
-        finding, provider_name=provider_name, force_refresh=True
-    )
+    outcome = await gen.generate_for_finding(finding, provider_name=provider_name, force_refresh=True)
     return _envelope(outcome)
 
 
@@ -1031,5 +1012,3 @@ __all__ = [
     "TriggerBatchResponse",
     "router",
 ]
-
-

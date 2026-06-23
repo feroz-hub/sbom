@@ -102,7 +102,9 @@ class EndOfLifeDateProvider(LifecycleProvider):
         eol_date = _extract_date(matched, "eol", "eolFrom", "endOfLife")
         # Extract support/EOS and extendedSupport
         eos_date = _extract_date(matched, "support", "eos", "endOfSupport", "eoasFrom")
-        extended_support = _extract_date(matched, "extendedSupport", "eoesFrom", "extendedSupportFrom", "extended_support")
+        extended_support = _extract_date(
+            matched, "extendedSupport", "eoesFrom", "extendedSupportFrom", "extended_support"
+        )
         if extended_support:
             eos_date = extended_support
 
@@ -177,7 +179,12 @@ class EndOfLifeDateProvider(LifecycleProvider):
         eos = _parse_date(eos_date)
         eof = _parse_date(eof_date)
         # Check if cycle has explicit boolean EOL/support properties
-        is_eol_bool = cycle.get("eol") is True or str(cycle.get("eol")).lower() == "true" or cycle.get("isEol") is True or str(cycle.get("isEol")).lower() == "true"
+        is_eol_bool = (
+            cycle.get("eol") is True
+            or str(cycle.get("eol")).lower() == "true"
+            or cycle.get("isEol") is True
+            or str(cycle.get("isEol")).lower() == "true"
+        )
         if (eol and eol < today) or is_eol_bool:
             return EOL
         if eos and eos < today:

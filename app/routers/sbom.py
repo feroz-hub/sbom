@@ -44,24 +44,14 @@ def get_sbom_risk_summary(sbom_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="SBOM not found")
 
     run = (
-        db.execute(
-            select(AnalysisRun)
-            .where(AnalysisRun.sbom_id == sbom_id)
-            .order_by(AnalysisRun.id.desc())
-        )
+        db.execute(select(AnalysisRun).where(AnalysisRun.sbom_id == sbom_id).order_by(AnalysisRun.id.desc()))
         .scalars()
         .first()
     )
     if not run:
         raise HTTPException(status_code=404, detail="No analysis run found for this SBOM")
 
-    findings = (
-        db.execute(
-            select(AnalysisFinding).where(AnalysisFinding.analysis_run_id == run.id)
-        )
-        .scalars()
-        .all()
-    )
+    findings = db.execute(select(AnalysisFinding).where(AnalysisFinding.analysis_run_id == run.id)).scalars().all()
 
     summary = score_findings(db, findings)
     return {

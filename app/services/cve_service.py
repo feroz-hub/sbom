@@ -143,7 +143,16 @@ class CveDetailService:
         cached = self._read_cache(vid.normalized)
         if cached is not None:
             return cached
-        return await self._fetch_and_cache(vid)
+
+        # Cache miss: close active session before external API calls
+        self._db.close()
+
+        detail = await aggregate(vid, self._sources)
+        from ..db import SessionLocal
+
+        with SessionLocal() as db_write:
+            self._write_cache_with_db(db_write, detail)
+        return detail
 
     async def get_many(self, cve_ids: Iterable[str]) -> dict[str, CveDetail]:
         """Fetch many advisories concurrently. Unrecognised IDs raise."""
@@ -164,10 +173,17 @@ class CveDetailService:
             else:
                 cold.append(n)
         if cold:
-            tasks = [self._fetch_and_cache(classify(c)) for c in cold]
+            # Cache miss: close active session before external API calls
+            self._db.close()
+
+            tasks = [aggregate(classify(c), self._sources) for c in cold]
             results = await asyncio.gather(*tasks)
-            for c, r in zip(cold, results, strict=True):
-                out[c] = r
+            from ..db import SessionLocal
+
+            with SessionLocal() as db_write:
+                for c, r in zip(cold, results, strict=True):
+                    self._write_cache_with_db(db_write, r)
+                    out[c] = r
         return out
 
     async def get_with_scan_context(self, cve_id: str, scan_id: int) -> CveDetailWithContext:
@@ -229,12 +245,15 @@ class CveDetailService:
             return None
 
     def _write_cache(self, detail: CveDetail) -> None:
+        self._write_cache_with_db(self._db, detail)
+
+    def _write_cache_with_db(self, db: Session, detail: CveDetail) -> None:
         ttl = self._ttl_for(detail)
         now = datetime.now(UTC)
         expires = now + timedelta(seconds=ttl)
         payload = detail.model_dump(mode="json")
         try:
-            self._db.merge(
+            db.merge(
                 CveCache(
                     cve_id=detail.cve_id,
                     payload=payload,
@@ -245,10 +264,10 @@ class CveDetailService:
                     schema_version=CACHE_SCHEMA_VERSION,
                 )
             )
-            self._db.commit()
+            db.commit()
         except Exception as exc:  # pragma: no cover - defensive
             log.warning("cve_cache write failed for %s: %s", detail.cve_id, exc)
-            self._db.rollback()
+            db.rollback()
 
     def _ttl_for(self, detail: CveDetail) -> int:
         s = get_settings()
@@ -297,9 +316,7 @@ class CveDetailService:
             purl=None,
         )
 
-    def _upgrade_recommendation(
-        self, detail: CveDetail, component: CveScanContext
-    ) -> tuple[str, str | None]:
+    def _upgrade_recommendation(self, detail: CveDetail, component: CveScanContext) -> tuple[str, str | None]:
         """
         Pick the best upgrade target from ``fix_versions`` for the detected
         component. Returns (status, recommended_upgrade).
@@ -326,9 +343,7 @@ class CveDetailService:
         if not applicable:
             # Try without ecosystem strict-match — name match alone.
             applicable = [
-                fv
-                for fv in detail.fix_versions
-                if fv.fixed_in and fv.package.lower() == component.name.lower()
+                fv for fv in detail.fix_versions if fv.fixed_in and fv.package.lower() == component.name.lower()
             ]
         if not applicable:
             return "unknown", None

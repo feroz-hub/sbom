@@ -119,16 +119,10 @@ def assert_no_run_in_flight(session: Session) -> None:
     6× window-time so a worker that died with `kill -9` doesn't block
     future scheduled runs forever.
     """
-    stmt = (
-        select(NvdSyncRunRow.id)
-        .where(NvdSyncRunRow.status == "running")
-        .limit(1)
-    )
+    stmt = select(NvdSyncRunRow.id).where(NvdSyncRunRow.status == "running").limit(1)
     existing = session.execute(stmt).scalar_one_or_none()
     if existing is not None:
-        raise MirrorAlreadyRunningError(
-            f"sync_run id={existing} is still 'running'; skip this firing"
-        )
+        raise MirrorAlreadyRunningError(f"sync_run id={existing} is still 'running'; skip this firing")
 
 
 # ---------------------------------------------------------------------------
@@ -163,9 +157,7 @@ def mirror_nvd(self) -> dict[str, Any]:
                 "reason": "concurrent_run_in_progress",
             }
 
-        settings_repo = SqlAlchemySettingsRepository(
-            session, secrets, env_defaults=env_defaults
-        )
+        settings_repo = SqlAlchemySettingsRepository(session, secrets, env_defaults=env_defaults)
         cve_repo = SqlAlchemyCveRepository(session)
         sync_run_repo = SqlAlchemySyncRunRepository(session)
         clock = SystemClockAdapter()
@@ -178,13 +170,12 @@ def mirror_nvd(self) -> dict[str, Any]:
         # without touching the DB.
         if not api_key:
             import os
+
             env_key = os.getenv(env_defaults.api_key_env_var, "").strip()
             api_key = env_key or None
 
         async def _run() -> SyncReport:
-            adapter = NvdHttpAdapter(
-                api_endpoint=snapshot.api_endpoint, api_key=api_key
-            )
+            adapter = NvdHttpAdapter(api_endpoint=snapshot.api_endpoint, api_key=api_key)
             try:
                 return await run_mirror_sync(
                     settings_repo=settings_repo,
@@ -245,9 +236,7 @@ class _StubSecrets:
         self._env_var = env_var
 
     def encrypt(self, plaintext: str) -> bytes:  # noqa: ARG002
-        raise MissingFernetKeyError(
-            f"Cannot persist API key: env var {self._env_var!r} is not set"
-        )
+        raise MissingFernetKeyError(f"Cannot persist API key: env var {self._env_var!r} is not set")
 
     def decrypt(self, ciphertext: bytes) -> str:  # noqa: ARG002
         raise ValueError("Fernet key not configured — cannot decrypt")
@@ -276,9 +265,7 @@ def _report_to_dict(report: SyncReport) -> dict[str, Any]:
         "upserts": report.upserts,
         "rejected_marked": report.rejected_marked,
         "errors": list(report.errors),
-        "final_watermark": (
-            report.final_watermark.isoformat() if report.final_watermark else None
-        ),
+        "final_watermark": (report.final_watermark.isoformat() if report.final_watermark else None),
     }
 
 

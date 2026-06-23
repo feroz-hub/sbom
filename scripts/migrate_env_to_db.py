@@ -42,9 +42,7 @@ sys.path.insert(0, str(ROOT))
 
 # Make sure DATABASE_URL points at the deployment DB before importing
 # app modules (the engine is built at module-import time).
-os.environ.setdefault(
-    "DATABASE_URL", f"sqlite:///{ROOT / 'sbom_api.db'}"
-)
+os.environ.setdefault("DATABASE_URL", f"sqlite:///{ROOT / 'sbom_api.db'}")
 
 
 def _now_iso() -> str:
@@ -118,10 +116,7 @@ def main() -> int:
 
     with SessionLocal() as db:
         # Existing rows, by (provider, label).
-        existing = {
-            (r.provider_name, r.label): r
-            for r in db.query(AiProviderCredential).all()
-        }
+        existing = {(r.provider_name, r.label): r for r in db.query(AiProviderCredential).all()}
         any_default = any(r.is_default for r in existing.values())
 
         for cfg in enabled_env:
@@ -181,8 +176,7 @@ def main() -> int:
     get_loader().invalidate()
 
     print(
-        f"\nDone. created={created} updated={updated} skipped={skipped} "
-        f"of {len(enabled_env)} env-configured providers."
+        f"\nDone. created={created} updated={updated} skipped={skipped} of {len(enabled_env)} env-configured providers."
     )
     if created or updated:
         print(

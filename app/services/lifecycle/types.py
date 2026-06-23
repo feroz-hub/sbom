@@ -96,8 +96,9 @@ def canonical_status(value: str | None) -> str:
     if not value:
         return UNKNOWN
     import re
+
     # Split camelCase / PascalCase transitions preserving consecutive capitals (e.g. EndOfLife -> End Of Life)
-    s = re.sub(r'(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])', ' ', str(value))
+    s = re.sub(r"(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])", " ", str(value))
     cleaned = " ".join(s.strip().replace("_", " ").replace("-", " ").split())
     if cleaned in ALLOWED_LIFECYCLE_STATUSES:
         return cleaned

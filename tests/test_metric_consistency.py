@@ -190,9 +190,7 @@ def test_i1_dashboard_total_equals_severity_distribution_sum(client, db):
     """Spec §4 invariant I1."""
     body = client.get("/dashboard/posture").json()
     severity_sum = sum(body["severity"].values())
-    assert body["total_findings"] == severity_sum, (
-        f"hero total {body['total_findings']} != severity Σ {severity_sum}"
-    )
+    assert body["total_findings"] == severity_sum, f"hero total {body['total_findings']} != severity Σ {severity_sum}"
 
 
 # ---------------------------------------------------------------------------
@@ -205,13 +203,25 @@ def test_i2_dashboard_total_equals_sum_of_latest_runs(client, db):
     # Seed two SBOMs, each with a run, distinct findings.
     s1, p1 = _seed_sbom_and_project(db, name="i2-a")
     s2, p2 = _seed_sbom_and_project(db, name="i2-b")
-    _seed_run(db, sbom=s1, project=p1, status="FINDINGS", started_on=_now_iso(),
-              findings=[{"vuln_id": "CVE-2026-1001", "severity": "HIGH"}])
-    _seed_run(db, sbom=s2, project=p2, status="FINDINGS", started_on=_now_iso(),
-              findings=[
-                  {"vuln_id": "CVE-2026-2006", "severity": "MEDIUM"},
-                  {"vuln_id": "CVE-2026-2007", "severity": "LOW"},
-              ])
+    _seed_run(
+        db,
+        sbom=s1,
+        project=p1,
+        status="FINDINGS",
+        started_on=_now_iso(),
+        findings=[{"vuln_id": "CVE-2026-1001", "severity": "HIGH"}],
+    )
+    _seed_run(
+        db,
+        sbom=s2,
+        project=p2,
+        status="FINDINGS",
+        started_on=_now_iso(),
+        findings=[
+            {"vuln_id": "CVE-2026-2006", "severity": "MEDIUM"},
+            {"vuln_id": "CVE-2026-2007", "severity": "LOW"},
+        ],
+    )
 
     posture = client.get("/dashboard/posture").json()
 
@@ -222,9 +232,7 @@ def test_i2_dashboard_total_equals_sum_of_latest_runs(client, db):
     from sqlalchemy import select as sa_select
 
     latest_subq = latest_run_per_sbom_subquery()
-    latest_runs = db.execute(
-        sa_select(AnalysisRun.id).where(AnalysisRun.id.in_(latest_subq))
-    ).scalars().all()
+    latest_runs = db.execute(sa_select(AnalysisRun.id).where(AnalysisRun.id.in_(latest_subq))).scalars().all()
 
     sum_of_latest = sum(metrics.findings_in_run_total(db, run_id=r) for r in latest_runs)
     assert posture["total_findings"] == sum_of_latest, (
@@ -249,7 +257,11 @@ def test_i3_dashboard_kev_equals_sum_of_run_kev(client, db):
     s1, p1 = _seed_sbom_and_project(db, name="i3-a")
     s2, p2 = _seed_sbom_and_project(db, name="i3-b")
     _seed_run(
-        db, sbom=s1, project=p1, status="FINDINGS", started_on=_now_iso(),
+        db,
+        sbom=s1,
+        project=p1,
+        status="FINDINGS",
+        started_on=_now_iso(),
         findings=[
             # vuln_id direct match
             {"vuln_id": "CVE-2026-2008", "severity": "HIGH"},
@@ -258,7 +270,11 @@ def test_i3_dashboard_kev_equals_sum_of_run_kev(client, db):
         ],
     )
     _seed_run(
-        db, sbom=s2, project=p2, status="FINDINGS", started_on=_now_iso(),
+        db,
+        sbom=s2,
+        project=p2,
+        status="FINDINGS",
+        started_on=_now_iso(),
         findings=[
             # GHSA vuln_id but CVE alias is in KEV — the case the broken
             # dashboard query missed entirely (Bug 1).
@@ -280,16 +296,10 @@ def test_i3_dashboard_kev_equals_sum_of_run_kev(client, db):
     from sqlalchemy import select as sa_select
 
     latest_subq = latest_run_per_sbom_subquery()
-    latest_runs = db.execute(
-        sa_select(AnalysisRun.id).where(AnalysisRun.id.in_(latest_subq))
-    ).scalars().all()
-    sum_of_run_kev = sum(
-        metrics.findings_kev_in_scope(db, scope="run", run_id=r) for r in latest_runs
-    )
+    latest_runs = db.execute(sa_select(AnalysisRun.id).where(AnalysisRun.id.in_(latest_subq))).scalars().all()
+    sum_of_run_kev = sum(metrics.findings_kev_in_scope(db, scope="run", run_id=r) for r in latest_runs)
 
-    assert posture["kev_count"] == sum_of_run_kev, (
-        f"hero KEV {posture['kev_count']} != Σ run KEVs {sum_of_run_kev}"
-    )
+    assert posture["kev_count"] == sum_of_run_kev, f"hero KEV {posture['kev_count']} != Σ run KEVs {sum_of_run_kev}"
     # And both must be ≥ 2 in this fixture (one vuln_id match + one alias match).
     assert posture["kev_count"] >= 2
 
@@ -305,17 +315,29 @@ def test_i4_trend_distinct_total_does_not_exceed_lifetime(client, db):
     # Two consecutive runs of the same SBOM with overlapping findings.
     # Old code summed both → over-count. The fix snapshots distinct
     # findings as-of-day, so the per-day Σ stays bounded.
-    _seed_run(db, sbom=s1, project=p1, status="FINDINGS", started_on=_days_ago_iso(2),
-              findings=[
-                  {"vuln_id": "CVE-2026-2011", "severity": "HIGH"},
-                  {"vuln_id": "CVE-2026-2012", "severity": "MEDIUM"},
-              ])
-    _seed_run(db, sbom=s1, project=p1, status="FINDINGS", started_on=_now_iso(),
-              findings=[
-                  {"vuln_id": "CVE-2026-2011", "severity": "HIGH"},   # carries over
-                  {"vuln_id": "CVE-2026-2012", "severity": "MEDIUM"}, # carries over
-                  {"vuln_id": "CVE-2026-2013", "severity": "LOW"},    # newly added
-              ])
+    _seed_run(
+        db,
+        sbom=s1,
+        project=p1,
+        status="FINDINGS",
+        started_on=_days_ago_iso(2),
+        findings=[
+            {"vuln_id": "CVE-2026-2011", "severity": "HIGH"},
+            {"vuln_id": "CVE-2026-2012", "severity": "MEDIUM"},
+        ],
+    )
+    _seed_run(
+        db,
+        sbom=s1,
+        project=p1,
+        status="FINDINGS",
+        started_on=_now_iso(),
+        findings=[
+            {"vuln_id": "CVE-2026-2011", "severity": "HIGH"},  # carries over
+            {"vuln_id": "CVE-2026-2012", "severity": "MEDIUM"},  # carries over
+            {"vuln_id": "CVE-2026-2013", "severity": "LOW"},  # newly added
+        ],
+    )
 
     trend = client.get("/dashboard/trend?days=30").json()
     lifetime = client.get("/dashboard/lifetime").json()
@@ -336,11 +358,17 @@ def test_i4_trend_distinct_total_does_not_exceed_lifetime(client, db):
 def test_i5_trend_today_equals_latest_state_distinct_keys(client, db):
     """Spec §4 invariant I5."""
     s1, p1 = _seed_sbom_and_project(db, name="i5")
-    _seed_run(db, sbom=s1, project=p1, status="FINDINGS", started_on=_now_iso(),
-              findings=[
-                  {"vuln_id": "CVE-2026-2014", "severity": "HIGH"},
-                  {"vuln_id": "CVE-2026-2015", "severity": "MEDIUM"},
-              ])
+    _seed_run(
+        db,
+        sbom=s1,
+        project=p1,
+        status="FINDINGS",
+        started_on=_now_iso(),
+        findings=[
+            {"vuln_id": "CVE-2026-2014", "severity": "HIGH"},
+            {"vuln_id": "CVE-2026-2015", "severity": "MEDIUM"},
+        ],
+    )
 
     trend = client.get("/dashboard/trend?days=30").json()
     today_iso = datetime.now(UTC).date().isoformat()
@@ -361,21 +389,33 @@ def test_i6_lifetime_findings_ge_max_run_distinct(client, db):
     """Spec §4 invariant I6. Multiple runs with growth → lifetime > single-run."""
     s1, p1 = _seed_sbom_and_project(db, name="i6")
     # Run 1: 3 findings.
-    _seed_run(db, sbom=s1, project=p1, status="FINDINGS", started_on=_days_ago_iso(2),
-              findings=[
-                  {"vuln_id": "CVE-2026-2016", "severity": "HIGH",   "component_name": "lib", "component_version": "1.0"},
-                  {"vuln_id": "CVE-2026-2017", "severity": "MEDIUM", "component_name": "lib", "component_version": "1.0"},
-                  {"vuln_id": "CVE-2026-2018", "severity": "LOW",    "component_name": "lib", "component_version": "1.0"},
-              ])
+    _seed_run(
+        db,
+        sbom=s1,
+        project=p1,
+        status="FINDINGS",
+        started_on=_days_ago_iso(2),
+        findings=[
+            {"vuln_id": "CVE-2026-2016", "severity": "HIGH", "component_name": "lib", "component_version": "1.0"},
+            {"vuln_id": "CVE-2026-2017", "severity": "MEDIUM", "component_name": "lib", "component_version": "1.0"},
+            {"vuln_id": "CVE-2026-2018", "severity": "LOW", "component_name": "lib", "component_version": "1.0"},
+        ],
+    )
     # Run 2 (later): drops one, adds two new — net 4 in scope, but lifetime
     # union is 5 distinct (vuln,comp,ver) tuples.
-    _seed_run(db, sbom=s1, project=p1, status="FINDINGS", started_on=_now_iso(),
-              findings=[
-                  {"vuln_id": "CVE-2026-2016", "severity": "HIGH",   "component_name": "lib", "component_version": "1.0"},
-                  {"vuln_id": "CVE-2026-2017", "severity": "MEDIUM", "component_name": "lib", "component_version": "1.0"},
-                  {"vuln_id": "CVE-2026-2019", "severity": "LOW",    "component_name": "lib", "component_version": "1.0"},
-                  {"vuln_id": "CVE-2026-2020", "severity": "CRITICAL", "component_name": "lib", "component_version": "1.0"},
-              ])
+    _seed_run(
+        db,
+        sbom=s1,
+        project=p1,
+        status="FINDINGS",
+        started_on=_now_iso(),
+        findings=[
+            {"vuln_id": "CVE-2026-2016", "severity": "HIGH", "component_name": "lib", "component_version": "1.0"},
+            {"vuln_id": "CVE-2026-2017", "severity": "MEDIUM", "component_name": "lib", "component_version": "1.0"},
+            {"vuln_id": "CVE-2026-2019", "severity": "LOW", "component_name": "lib", "component_version": "1.0"},
+            {"vuln_id": "CVE-2026-2020", "severity": "CRITICAL", "component_name": "lib", "component_version": "1.0"},
+        ],
+    )
 
     lifetime = client.get("/dashboard/lifetime").json()
     posture = client.get("/dashboard/posture").json()
@@ -385,8 +425,7 @@ def test_i6_lifetime_findings_ge_max_run_distinct(client, db):
     # distinct must be ≥ the per-run distinct-key count of any single run.
     # In this fixture, run 2's distinct keys = 4; lifetime should be ≥ 5.
     assert lifetime["findings_surfaced_total"] >= 5, (
-        f"lifetime {lifetime['findings_surfaced_total']} < expected ≥ 5 "
-        "(union of run1 + run2 distinct tuples)"
+        f"lifetime {lifetime['findings_surfaced_total']} < expected ≥ 5 (union of run1 + run2 distinct tuples)"
     )
     # And it must be strictly greater than the latest run's row count
     # whenever new tuples appeared in earlier runs but were resolved.
@@ -404,9 +443,14 @@ def test_i7_runs_total_matches_recent_count(client, db):
     """Spec §4 invariant I7."""
     s1, p1 = _seed_sbom_and_project(db, name="i7")
     for i in range(3):
-        _seed_run(db, sbom=s1, project=p1, status="FINDINGS",
-                  started_on=_days_ago_iso(i),
-                  findings=[{"vuln_id": f"CVE-I7-{i}", "severity": "LOW"}])
+        _seed_run(
+            db,
+            sbom=s1,
+            project=p1,
+            status="FINDINGS",
+            started_on=_days_ago_iso(i),
+            findings=[{"vuln_id": f"CVE-I7-{i}", "severity": "LOW"}],
+        )
 
     lifetime = client.get("/dashboard/lifetime").json()
     recent = client.get("/api/runs/recent?limit=50").json()
@@ -415,8 +459,7 @@ def test_i7_runs_total_matches_recent_count(client, db):
     # The invariant is "lifetime equals recent when limit ≥ lifetime".
     if lifetime["runs_executed_total"] <= 50:
         assert lifetime["runs_executed_total"] == len(recent), (
-            f"lifetime runs {lifetime['runs_executed_total']} "
-            f"!= recent count {len(recent)}"
+            f"lifetime runs {lifetime['runs_executed_total']} != recent count {len(recent)}"
         )
     else:
         assert len(recent) == 50  # capped by the limit param
@@ -447,8 +490,14 @@ def test_i9_net7day_first_period_when_no_prior_runs(client, db):
     "first scan this week" instead of the misleading ``+N / −0``.
     """
     s1, p1 = _seed_sbom_and_project(db, name="i9")
-    _seed_run(db, sbom=s1, project=p1, status="FINDINGS", started_on=_now_iso(),
-              findings=[{"vuln_id": "CVE-2026-2021", "severity": "HIGH"}])
+    _seed_run(
+        db,
+        sbom=s1,
+        project=p1,
+        status="FINDINGS",
+        started_on=_now_iso(),
+        findings=[{"vuln_id": "CVE-2026-2021", "severity": "HIGH"}],
+    )
 
     posture = client.get("/dashboard/posture").json()
     # The envelope is the canonical field; flat aliases are back-compat.
@@ -466,8 +515,14 @@ def test_i9_net7day_first_period_when_no_prior_runs(client, db):
 def test_i10_first_period_resolved_is_zero(client, db):
     """Spec §4 invariant I10."""
     s1, p1 = _seed_sbom_and_project(db, name="i10")
-    _seed_run(db, sbom=s1, project=p1, status="FINDINGS", started_on=_now_iso(),
-              findings=[{"vuln_id": "CVE-2026-2000", "severity": "HIGH"}])
+    _seed_run(
+        db,
+        sbom=s1,
+        project=p1,
+        status="FINDINGS",
+        started_on=_now_iso(),
+        findings=[{"vuln_id": "CVE-2026-2000", "severity": "HIGH"}],
+    )
 
     posture = client.get("/dashboard/posture").json()
     net = posture.get("net_7day", {})
@@ -495,7 +550,11 @@ def test_i12_per_run_severity_sum_equals_total(client, db):
     """Spec §4 invariant I12 — every run row's severity counts add up."""
     s1, p1 = _seed_sbom_and_project(db, name="i12")
     run = _seed_run(
-        db, sbom=s1, project=p1, status="FINDINGS", started_on=_now_iso(),
+        db,
+        sbom=s1,
+        project=p1,
+        status="FINDINGS",
+        started_on=_now_iso(),
         findings=[
             {"vuln_id": "CVE-2026-2001", "severity": "CRITICAL"},
             {"vuln_id": "CVE-2026-2002", "severity": "HIGH"},
@@ -509,9 +568,7 @@ def test_i12_per_run_severity_sum_equals_total(client, db):
 
     total = metrics.findings_in_run_total(db, run_id=run.id)
     sev = metrics.findings_in_run_severity_distribution(db, run_id=run.id)
-    assert sum(sev.values()) == total, (
-        f"per-run severity Σ {sum(sev.values())} != per-run total {total}"
-    )
+    assert sum(sev.values()) == total, f"per-run severity Σ {sum(sev.values())} != per-run total {total}"
 
 
 # ---------------------------------------------------------------------------
@@ -558,19 +615,16 @@ def test_f4_denormalised_columns_match_live_count(client, db):
         + (fresh.low_count or 0)
         + (fresh.unknown_count or 0)
     )
-    live_count = db.execute(
-        sa_select(func.count(AnalysisFinding.id)).where(
-            AnalysisFinding.analysis_run_id == run.id
-        )
-    ).scalar() or 0
+    live_count = (
+        db.execute(sa_select(func.count(AnalysisFinding.id)).where(AnalysisFinding.analysis_run_id == run.id)).scalar()
+        or 0
+    )
 
     assert fresh.total_findings == sum_severity_cols, (
-        f"run {run.id}: cached total_findings={fresh.total_findings} "
-        f"!= Σ severity columns={sum_severity_cols}"
+        f"run {run.id}: cached total_findings={fresh.total_findings} != Σ severity columns={sum_severity_cols}"
     )
     assert fresh.total_findings == live_count, (
-        f"run {run.id}: cached total_findings={fresh.total_findings} "
-        f"!= live COUNT(*)={live_count}"
+        f"run {run.id}: cached total_findings={fresh.total_findings} != live COUNT(*)={live_count}"
     )
 
 
@@ -593,7 +647,11 @@ def test_runs_aggregate_outcome_sum_equals_total(client, db):
     s1, p1 = _seed_sbom_and_project(db, name="ia")
     _seed_run(db, sbom=s1, project=p1, status="OK", started_on=_now_iso(), findings=[])
     _seed_run(
-        db, sbom=s1, project=p1, status="FINDINGS", started_on=_now_iso(),
+        db,
+        sbom=s1,
+        project=p1,
+        status="FINDINGS",
+        started_on=_now_iso(),
         findings=[{"vuln_id": "CVE-2026-IA1", "severity": "HIGH"}],
     )
     _seed_run(db, sbom=s1, project=p1, status="ERROR", started_on=_now_iso(), findings=[])
@@ -624,14 +682,16 @@ def test_runs_aggregate_endpoint_does_not_filter_on_legacy_status(client, db):
     """
     s1, p1 = _seed_sbom_and_project(db, name="legacy")
     _seed_run(
-        db, sbom=s1, project=p1, status="FINDINGS", started_on=_now_iso(),
+        db,
+        sbom=s1,
+        project=p1,
+        status="FINDINGS",
+        started_on=_now_iso(),
         findings=[{"vuln_id": "CVE-2026-LEG1", "severity": "HIGH"}],
     )
 
     body = client.get(f"/api/runs/aggregate?sbom_id={s1.id}").json()
-    assert body["by_outcome"]["with_findings"] >= 1, (
-        "aggregate dropped FINDINGS-status runs — F1 has regressed"
-    )
+    assert body["by_outcome"]["with_findings"] >= 1, "aggregate dropped FINDINGS-status runs — F1 has regressed"
 
 
 # ---------------------------------------------------------------------------
@@ -762,8 +822,7 @@ def test_legacy_allowlist_does_not_grow_unnoticed():
 
     assert not stale, (
         "_LEGACY_DIRECT_QUERY_ALLOWLIST contains entries that no longer "
-        "match the forbidden pattern:\n  - " + "\n  - ".join(stale)
-        + "\n\nRemove them from the allowlist."
+        "match the forbidden pattern:\n  - " + "\n  - ".join(stale) + "\n\nRemove them from the allowlist."
     )
 
 

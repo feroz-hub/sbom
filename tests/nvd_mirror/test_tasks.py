@@ -71,9 +71,7 @@ async def test_run_mirror_sync_no_op_when_disabled() -> None:
 @pytest.mark.asyncio
 async def test_run_mirror_sync_dispatches_to_bootstrap_on_no_watermark() -> None:
     target = HISTORICAL_FLOOR + timedelta(days=15)
-    snap = make_snapshot(
-        enabled=True, window_days=30, last_modified_utc=None
-    )
+    snap = make_snapshot(enabled=True, window_days=30, last_modified_utc=None)
     rec = make_record("CVE-1", last_modified=target - timedelta(seconds=1))
     remote = FakeNvdRemote({(HISTORICAL_FLOOR, target): [batch([rec])]})
 
@@ -94,9 +92,7 @@ async def test_run_mirror_sync_dispatches_to_bootstrap_on_no_watermark() -> None
 async def test_run_mirror_sync_dispatches_to_incremental_when_watermark_present() -> None:
     target = datetime(2024, 6, 1, tzinfo=UTC)
     waterline = target - timedelta(days=10)
-    snap = make_snapshot(
-        enabled=True, window_days=30, last_modified_utc=waterline
-    )
+    snap = make_snapshot(enabled=True, window_days=30, last_modified_utc=waterline)
     rec = make_record("CVE-NEW", last_modified=target - timedelta(seconds=1))
     remote = FakeNvdRemote({(waterline, target): [batch([rec])]})
 

@@ -372,10 +372,7 @@ def patch_sbom_schedule(
     if row is None:
         raise HTTPException(
             status_code=404,
-            detail=(
-                "No SBOM-level schedule. POST a new override or rely on the "
-                "project-level cascade."
-            ),
+            detail=("No SBOM-level schedule. POST a new override or rely on the project-level cascade."),
         )
 
     _apply_payload(row, payload, partial=True)
@@ -505,11 +502,7 @@ def run_schedule_now(schedule_id: int = Path(..., ge=1), db: Session = Depends(g
     elif row.scope == "PROJECT" and row.project_id is not None:
         target_sbom_ids = [
             sid
-            for sid in db.execute(
-                select(SBOMSource.id).where(SBOMSource.projectid == row.project_id)
-            )
-            .scalars()
-            .all()
+            for sid in db.execute(select(SBOMSource.id).where(SBOMSource.projectid == row.project_id)).scalars().all()
         ]
         # Honour SBOM-level overrides during manual fan-out too — same
         # rule as the tick: an explicit SBOM row (even paused) opts out.

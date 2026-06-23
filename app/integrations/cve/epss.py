@@ -46,9 +46,7 @@ class EpssSource:
         scores = get_epss_scores(self._db, [cve_id])
         score = scores.get(cve_id, 0.0)
         # Pull the percentile out of the (possibly just-refreshed) row.
-        row = self._db.execute(
-            select(EpssScore.percentile).where(EpssScore.cve_id == cve_id)
-        ).scalars().first()
+        row = self._db.execute(select(EpssScore.percentile).where(EpssScore.cve_id == cve_id)).scalars().first()
         latency_ms = int((time.perf_counter() - t0) * 1000)
         if score == 0.0 and row is None:
             return FetchResult(source=self.name, outcome=FetchOutcome.NOT_FOUND, latency_ms=latency_ms)

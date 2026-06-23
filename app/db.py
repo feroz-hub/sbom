@@ -6,6 +6,14 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+# Load .env file if present before any config resolution
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ImportError:
+    pass
+
 from sqlalchemy import MetaData, create_engine, event
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import declarative_base, sessionmaker
@@ -28,6 +36,13 @@ def _resolve_database_url() -> str:
     # Prefer explicit env (tests set this before import) then Settings.
     raw = (os.getenv("DATABASE_URL") or "").strip()
     if raw:
+        try:
+            url_parsed = make_url(raw)
+            if url_parsed.get_backend_name() == "postgresql" and not url_parsed.password:
+                raise RuntimeError("PostgreSQL DATABASE_URL without password is invalid for local development.")
+        except Exception as e:
+            if isinstance(e, RuntimeError):
+                raise e
         return raw
     try:
         from .settings import get_settings
@@ -35,9 +50,24 @@ def _resolve_database_url() -> str:
         s = get_settings()
         u = (s.database_url or "").strip()
         if u:
+            try:
+                url_parsed = make_url(u)
+                if url_parsed.get_backend_name() == "postgresql" and not url_parsed.password:
+                    raise RuntimeError("PostgreSQL DATABASE_URL without password is invalid for local development.")
+            except Exception as e:
+                if isinstance(e, RuntimeError):
+                    raise e
             return u
     except Exception:
         pass
+
+    # If DATABASE_URL is missing, we only allow SQLite fallback if ALLOW_SQLITE is explicitly true.
+    allow_sqlite = os.getenv("ALLOW_SQLITE", "false").lower() == "true"
+    if not allow_sqlite:
+        raise RuntimeError(
+            "DATABASE_URL is not configured and fallback to SQLite is not explicitly allowed. "
+            "Please set DATABASE_URL or set ALLOW_SQLITE=true to use local SQLite development."
+        )
     return _default_sqlite_url()
 
 
@@ -59,12 +89,34 @@ def engine_options(database_url: str, settings=None) -> dict:
             from .settings import get_settings
 
             settings = get_settings()
+
+        # Support both new db_pool_* and legacy database_pool_* settings names for compatibility
+        pool_pre_ping = getattr(settings, "db_pool_pre_ping", None)
+        if pool_pre_ping is None:
+            pool_pre_ping = getattr(settings, "database_pool_pre_ping", True)
+
+        pool_size = getattr(settings, "db_pool_size", None)
+        if pool_size is None:
+            pool_size = getattr(settings, "database_pool_size", 20)
+
+        max_overflow = getattr(settings, "db_max_overflow", None)
+        if max_overflow is None:
+            max_overflow = getattr(settings, "database_max_overflow", 20)
+
+        pool_timeout = getattr(settings, "db_pool_timeout", None)
+        if pool_timeout is None:
+            pool_timeout = getattr(settings, "database_pool_timeout", 30)
+
+        pool_recycle = getattr(settings, "db_pool_recycle", None)
+        if pool_recycle is None:
+            pool_recycle = getattr(settings, "database_pool_recycle", 1800)
+
         return {
-            "pool_pre_ping": True,
-            "pool_size": settings.database_pool_size,
-            "max_overflow": settings.database_max_overflow,
-            "pool_timeout": settings.database_pool_timeout,
-            "pool_recycle": settings.database_pool_recycle,
+            "pool_pre_ping": pool_pre_ping,
+            "pool_size": pool_size,
+            "max_overflow": max_overflow,
+            "pool_timeout": pool_timeout,
+            "pool_recycle": pool_recycle,
         }
     return {}
 
@@ -89,6 +141,9 @@ def get_db():
     db = SessionLocal()
     try:
         yield db
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
 

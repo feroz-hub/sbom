@@ -91,14 +91,10 @@ def test_csv_export_includes_provenance_columns(client, run_with_tagged_finding)
         "matched_range",
         "match_confidence",
     ):
-        assert col in fieldnames, (
-            f"missing {col!r} column in CSV export; header was {fieldnames!r}"
-        )
+        assert col in fieldnames, f"missing {col!r} column in CSV export; header was {fieldnames!r}"
 
     rows = [r for r in reader if r["vuln_id"] == "CVE-EXPORT-TEST-0001"]
-    assert len(rows) == 1, (
-        f"expected one row for the tagged finding, got {len(rows)}"
-    )
+    assert len(rows) == 1, f"expected one row for the tagged finding, got {len(rows)}"
     row = rows[0]
     assert row["match_strategy"] == "cpe_name"
     assert row["match_reason"] == "matched"
@@ -107,9 +103,7 @@ def test_csv_export_includes_provenance_columns(client, run_with_tagged_finding)
     assert row["match_confidence"] == "0.873"
 
 
-def test_sarif_export_includes_provenance_properties(
-    client, run_with_tagged_finding
-):
+def test_sarif_export_includes_provenance_properties(client, run_with_tagged_finding):
     """The per-finding SARIF (routers/analysis.py:export_sarif) puts
     the three provenance values inside the result's ``properties`` so
     GitHub Code Scanning / VS Code / Azure DevOps consumers can read
@@ -124,10 +118,7 @@ def test_sarif_export_includes_provenance_properties(
     assert len(runs) == 1
     results = runs[0]["results"]
     matching = [r for r in results if r["ruleId"] == "CVE-EXPORT-TEST-0001"]
-    assert len(matching) == 1, (
-        f"expected one SARIF result for the tagged finding, "
-        f"got {len(matching)}"
-    )
+    assert len(matching) == 1, f"expected one SARIF result for the tagged finding, got {len(matching)}"
     props = matching[0]["properties"]
     assert props.get("match_strategy") == "cpe_name"
     assert props.get("match_reason") == "matched"

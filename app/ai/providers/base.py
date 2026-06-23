@@ -256,11 +256,7 @@ def classify_http_failure(
 
     kind: UpstreamFailureKind
     if status == 429:
-        if (
-            "resource_exhausted" in body_lc
-            or "quota" in body_lc
-            or "exceeded your" in body_lc
-        ):
+        if "resource_exhausted" in body_lc or "quota" in body_lc or "exceeded your" in body_lc:
             kind = "quota_exceeded"
         else:
             kind = "rate_limited"
@@ -399,10 +395,7 @@ class BudgetExceededError(AiProviderError):
     """
 
     def __init__(self, scope: str, cap_usd: float, would_be_usd: float) -> None:
-        super().__init__(
-            f"AI budget exceeded at scope={scope}: cap=${cap_usd:.4f}, "
-            f"would-be=${would_be_usd:.4f}"
-        )
+        super().__init__(f"AI budget exceeded at scope={scope}: cap=${cap_usd:.4f}, would-be=${would_be_usd:.4f}")
         self.scope = scope
         self.cap_usd = cap_usd
         self.would_be_usd = would_be_usd

@@ -48,8 +48,8 @@ log = logging.getLogger("sbom.ai.progress")
 
 
 ProgressStatus = Literal[
-    "pending",        # accepted, not started
-    "queued",         # accepted, waiting for worker pickup
+    "pending",  # accepted, not started
+    "queued",  # accepted, waiting for worker pickup
     "in_progress",
     "paused_budget",  # halted at the per-scan or per-day cap
     "complete",
@@ -126,9 +126,7 @@ class InMemoryProgressStore:
                 return
             key = (progress.run_id, progress.batch_id)
             if key not in self._batch_progress:
-                self._run_batches.setdefault(progress.run_id, []).append(
-                    (time.monotonic(), progress.batch_id)
-                )
+                self._run_batches.setdefault(progress.run_id, []).append((time.monotonic(), progress.batch_id))
             self._batch_progress[key] = progress.model_dump_json()
 
     def read(self, run_id: int) -> BatchProgress | None:
@@ -157,10 +155,7 @@ class InMemoryProgressStore:
     def list_for_run(self, run_id: int) -> list[BatchProgress]:
         with self._lock:
             entries = list(self._run_batches.get(run_id, []))
-            raws = [
-                self._batch_progress.get((run_id, bid))
-                for _, bid in entries
-            ]
+            raws = [self._batch_progress.get((run_id, bid)) for _, bid in entries]
         out: list[BatchProgress] = []
         for raw in raws:
             decoded = _decode(raw) if raw else None
@@ -195,9 +190,7 @@ class InMemoryProgressStore:
                 for rid, bid in list(self._batch_progress.keys()):
                     if rid == run_id:
                         self._batch_progress.pop((rid, bid), None)
-                self._batch_cancel = {
-                    (rid, bid) for rid, bid in self._batch_cancel if rid != run_id
-                }
+                self._batch_cancel = {(rid, bid) for rid, bid in self._batch_cancel if rid != run_id}
                 self._run_batches.pop(run_id, None)
                 return
             self._batch_progress.pop((run_id, batch_id), None)
@@ -341,11 +334,7 @@ class RedisProgressStore:
     # Cancel -----------------------------------------------------------
 
     def request_cancel(self, run_id: int, batch_id: str | None = None) -> None:
-        key = (
-            self._legacy_cancel_key(run_id)
-            if batch_id is None
-            else self._batch_cancel_key(run_id, batch_id)
-        )
+        key = self._legacy_cancel_key(run_id) if batch_id is None else self._batch_cancel_key(run_id, batch_id)
         try:
             self._client.set(key, "1", ex=self._PROGRESS_TTL_SECONDS)
         except Exception as exc:  # noqa: BLE001
@@ -362,9 +351,7 @@ class RedisProgressStore:
         try:
             if self._client.get(self._legacy_cancel_key(run_id)):
                 return True
-            if batch_id is not None and self._client.get(
-                self._batch_cancel_key(run_id, batch_id)
-            ):
+            if batch_id is not None and self._client.get(self._batch_cancel_key(run_id, batch_id)):
                 return True
             return False
         except Exception:  # noqa: BLE001

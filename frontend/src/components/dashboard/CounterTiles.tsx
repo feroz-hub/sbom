@@ -22,12 +22,23 @@ interface TileSpec {
  * uploaded; "Analysed" = SBOMs with a completed run; "Scanned" = applications
  * (projects) with a completed run.
  */
-export function CounterTiles() {
+export interface CounterTilesProps {
+  posture?: any;
+  isLoading?: boolean;
+}
+
+export function CounterTiles({ posture, isLoading: propsIsLoading }: CounterTilesProps = {}) {
   const router = useRouter();
-  const { data, isLoading } = useQuery({
+  const hasProps = posture !== undefined;
+
+  const queryResult = useQuery({
     queryKey: ['dashboard-posture'],
     queryFn: ({ signal }) => getDashboardPosture(signal),
+    enabled: !hasProps,
   });
+
+  const data = hasProps ? posture : queryResult.data;
+  const isLoading = hasProps ? !!propsIsLoading : queryResult.isLoading;
 
   const tiles: TileSpec[] = [
     {

@@ -192,9 +192,7 @@ def _summary_uncached(db: Session, budgets: dict[str, int], today: date) -> dict
         ds = durations_by_sev.get(sev, [])
         mttr[sev] = round(sum(ds) / len(ds), 1) if ds else None
         all_durations.extend(ds)
-    mttr["overall"] = (
-        round(sum(all_durations) / len(all_durations), 1) if all_durations else None
-    )
+    mttr["overall"] = round(sum(all_durations) / len(all_durations), 1) if all_durations else None
 
     # 5. SLA classification of the active (deduped) set.
     counts = {"overdue": 0, "due_soon": 0, "ok": 0}

@@ -49,9 +49,7 @@ def _distro_cpe_enabled(settings: Any | None) -> bool:
         return False
 
 
-_DISTRO_PTYPES = frozenset(
-    {"deb", "rpm", "apk", "conan", "alpine", "debian", "redhat"}
-)
+_DISTRO_PTYPES = frozenset({"deb", "rpm", "apk", "conan", "alpine", "debian", "redhat"})
 
 
 def slug(s: str | None) -> str | None:

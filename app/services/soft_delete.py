@@ -94,9 +94,7 @@ class SoftDeleteService:
         the parent). Already-deleted records contribute 0.
         """
         if not isinstance(record, SoftDeleteMixin):
-            raise ValueError(
-                f"{type(record).__name__} does not inherit SoftDeleteMixin"
-            )
+            raise ValueError(f"{type(record).__name__} does not inherit SoftDeleteMixin")
 
         mapper = inspect(record).mapper
         table_name = mapper.local_table.name
@@ -163,13 +161,9 @@ class SoftDeleteService:
                 # session state changes during the walk don't trip
                 # us up.
                 for child in list(children):
-                    count += self.soft_delete(
-                        child, user_id=user_id, cascade=True
-                    )
+                    count += self.soft_delete(child, user_id=user_id, cascade=True)
             else:
-                count += self.soft_delete(
-                    children, user_id=user_id, cascade=True
-                )
+                count += self.soft_delete(children, user_id=user_id, cascade=True)
 
         return count
 
@@ -210,9 +204,7 @@ class SoftDeleteService:
         the parent was deleted).
         """
         if not isinstance(record, SoftDeleteMixin):
-            raise ValueError(
-                f"{type(record).__name__} does not inherit SoftDeleteMixin"
-            )
+            raise ValueError(f"{type(record).__name__} does not inherit SoftDeleteMixin")
         if record.is_active:
             return 0
         record.is_active = True

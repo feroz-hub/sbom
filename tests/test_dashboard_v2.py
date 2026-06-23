@@ -230,11 +230,7 @@ def test_trend_emits_remediation_annotation_on_5plus_drop(client, db):
 
     body = client.get("/dashboard/trend?days=30").json()
     newer_key = newer[:10]
-    remed = [
-        a
-        for a in body["annotations"]
-        if a["kind"] == "remediation" and a["date"] == newer_key
-    ]
+    remed = [a for a in body["annotations"] if a["kind"] == "remediation" and a["date"] == newer_key]
     assert remed, "expected a remediation annotation when ≥5 findings were resolved"
     assert remed[0]["count"] >= 5
 
@@ -415,9 +411,7 @@ def test_lifetime_findings_resolved_after_remediation(client, db):
         {"vuln_id": f"CVE-RESV-{i}", "severity": "HIGH", "component_name": "z", "component_version": "1.0"}
         for i in range(4)
     ]
-    after_fix = [
-        {"vuln_id": "CVE-RESV-0", "severity": "HIGH", "component_name": "z", "component_version": "1.0"}
-    ]
+    after_fix = [{"vuln_id": "CVE-RESV-0", "severity": "HIGH", "component_name": "z", "component_version": "1.0"}]
     _seed_run(db, sbom=sbom, project=proj, status="FINDINGS", started_on=older, findings=base)
     _seed_run(db, sbom=sbom, project=proj, status="FINDINGS", started_on=newer, findings=after_fix)
 

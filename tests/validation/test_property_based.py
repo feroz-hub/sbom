@@ -26,9 +26,7 @@ _HYPOTHESIS = settings(
 )
 
 _VALID_SPDXID_BODY = st.from_regex(r"^[a-zA-Z0-9.\-]{1,32}$", fullmatch=True)
-_INVALID_SPDXID_BODY = st.text(min_size=1, max_size=32).filter(
-    lambda s: not re.fullmatch(r"[a-zA-Z0-9.\-]+", s)
-)
+_INVALID_SPDXID_BODY = st.text(min_size=1, max_size=32).filter(lambda s: not re.fullmatch(r"[a-zA-Z0-9.\-]+", s))
 
 
 _BASE_SPDX = {
@@ -39,15 +37,20 @@ _BASE_SPDX = {
     "documentNamespace": "https://example.com/sboms/abc",
     "creationInfo": {"created": "2026-04-30T12:00:00Z", "creators": ["Tool: t"]},
     "packages": [
-        {"SPDXID": "SPDXRef-Package", "name": "p", "versionInfo": "1.0.0",
-         "downloadLocation": "NOASSERTION", "filesAnalyzed": False,
-         "supplier": "Organization: ACME",
-         "licenseConcluded": "Apache-2.0", "licenseDeclared": "Apache-2.0",
-         "copyrightText": "NOASSERTION"}
+        {
+            "SPDXID": "SPDXRef-Package",
+            "name": "p",
+            "versionInfo": "1.0.0",
+            "downloadLocation": "NOASSERTION",
+            "filesAnalyzed": False,
+            "supplier": "Organization: ACME",
+            "licenseConcluded": "Apache-2.0",
+            "licenseDeclared": "Apache-2.0",
+            "copyrightText": "NOASSERTION",
+        }
     ],
     "relationships": [
-        {"spdxElementId": "SPDXRef-DOCUMENT", "relationshipType": "DESCRIBES",
-         "relatedSpdxElement": "SPDXRef-Package"}
+        {"spdxElementId": "SPDXRef-DOCUMENT", "relationshipType": "DESCRIBES", "relatedSpdxElement": "SPDXRef-Package"}
     ],
 }
 
@@ -86,8 +89,14 @@ _BASE_CDX = {
     "version": 1,
     "metadata": {"timestamp": "2026-04-30T12:00:00Z", "tools": [{"name": "t"}]},
     "components": [
-        {"type": "library", "bom-ref": "ref-a", "name": "a", "version": "1.0.0",
-         "purl": "pkg:npm/a@1.0.0", "supplier": {"name": "ACME"}}
+        {
+            "type": "library",
+            "bom-ref": "ref-a",
+            "name": "a",
+            "version": "1.0.0",
+            "purl": "pkg:npm/a@1.0.0",
+            "supplier": {"name": "ACME"},
+        }
     ],
     "dependencies": [{"ref": "ref-a", "dependsOn": []}],
 }

@@ -64,9 +64,7 @@ def _seed_sbom_and_project(db, *, name: str):
     proj = Projects(project_name=f"v4-{name}", project_status=1, created_on=_now_iso())
     db.add(proj)
     db.flush()
-    sbom = SBOMSource(
-        sbom_name=f"v4-sbom-{name}", projectid=proj.id, created_on=_now_iso()
-    )
+    sbom = SBOMSource(sbom_name=f"v4-sbom-{name}", projectid=proj.id, created_on=_now_iso())
     db.add(sbom)
     db.flush()
     return sbom, proj
@@ -233,7 +231,11 @@ def test_forecast_insufficient_history_with_sparse_data(client, db):
     """One day of data must NOT produce a projection (no 2-point regression)."""
     s, p = _seed_sbom_and_project(db, name="forecast-sparse")
     _seed_run(
-        db, sbom=s, project=p, status="FINDINGS", started_on=_now_iso(),
+        db,
+        sbom=s,
+        project=p,
+        status="FINDINGS",
+        started_on=_now_iso(),
         findings=[{"vuln_id": "CVE-2026-0001", "severity": "HIGH"}],
     )
     body = client.get("/dashboard/forecast").json()
@@ -256,19 +258,24 @@ def test_remediation_lifecycle_mttr_sla_and_velocity(client, db):
 
     s, p = _seed_sbom_and_project(db, name="remediation")
     _seed_run(
-        db, sbom=s, project=p, status="FINDINGS", started_on=_days_ago_iso(20),
+        db,
+        sbom=s,
+        project=p,
+        status="FINDINGS",
+        started_on=_days_ago_iso(20),
         findings=[
-            {"vuln_id": "CVE-2026-AAAA", "severity": "CRITICAL",
-             "component_name": "liba", "component_version": "1.0"},
-            {"vuln_id": "CVE-2026-BBBB", "severity": "CRITICAL",
-             "component_name": "libb", "component_version": "2.0"},
+            {"vuln_id": "CVE-2026-AAAA", "severity": "CRITICAL", "component_name": "liba", "component_version": "1.0"},
+            {"vuln_id": "CVE-2026-BBBB", "severity": "CRITICAL", "component_name": "libb", "component_version": "2.0"},
         ],
     )
     _seed_run(
-        db, sbom=s, project=p, status="FINDINGS", started_on=_days_ago_iso(10),
+        db,
+        sbom=s,
+        project=p,
+        status="FINDINGS",
+        started_on=_days_ago_iso(10),
         findings=[
-            {"vuln_id": "CVE-2026-BBBB", "severity": "CRITICAL",
-             "component_name": "libb", "component_version": "2.0"},
+            {"vuln_id": "CVE-2026-BBBB", "severity": "CRITICAL", "component_name": "libb", "component_version": "2.0"},
         ],
     )
 
@@ -302,12 +309,14 @@ def test_remediation_endpoint_smoke(client, db):
 def test_exploitation_outlook_composes_seeded_epss(client, db):
     s, p = _seed_sbom_and_project(db, name="exploit")
     _seed_run(
-        db, sbom=s, project=p, status="FINDINGS", started_on=_now_iso(),
+        db,
+        sbom=s,
+        project=p,
+        status="FINDINGS",
+        started_on=_now_iso(),
         findings=[
-            {"vuln_id": "CVE-2026-1111", "severity": "HIGH",
-             "component_name": "libx", "component_version": "1.0"},
-            {"vuln_id": "CVE-2026-2222", "severity": "HIGH",
-             "component_name": "liby", "component_version": "1.0"},
+            {"vuln_id": "CVE-2026-1111", "severity": "HIGH", "component_name": "libx", "component_version": "1.0"},
+            {"vuln_id": "CVE-2026-2222", "severity": "HIGH", "component_name": "liby", "component_version": "1.0"},
         ],
     )
     _seed_epss(db, {"CVE-2026-1111": 0.5, "CVE-2026-2222": 0.5})
@@ -329,13 +338,27 @@ def test_exploitation_outlook_composes_seeded_epss(client, db):
 def test_risk_map_and_matrix_reflect_latest_run(client, db):
     s, p = _seed_sbom_and_project(db, name="riskmap")
     _seed_run(
-        db, sbom=s, project=p, status="FINDINGS", started_on=_now_iso(),
+        db,
+        sbom=s,
+        project=p,
+        status="FINDINGS",
+        started_on=_now_iso(),
         findings=[
-            {"vuln_id": "CVE-2026-3333", "severity": "CRITICAL", "score": 9.8,
-             "component_name": "libz", "component_version": "3.0",
-             "fixed_versions": '["3.1"]'},
-            {"vuln_id": "CVE-2026-4444", "severity": "LOW", "score": 3.1,
-             "component_name": "libw", "component_version": "0.1"},
+            {
+                "vuln_id": "CVE-2026-3333",
+                "severity": "CRITICAL",
+                "score": 9.8,
+                "component_name": "libz",
+                "component_version": "3.0",
+                "fixed_versions": '["3.1"]',
+            },
+            {
+                "vuln_id": "CVE-2026-4444",
+                "severity": "LOW",
+                "score": 3.1,
+                "component_name": "libw",
+                "component_version": "0.1",
+            },
         ],
     )
     _seed_epss(db, {"CVE-2026-3333": 0.9})

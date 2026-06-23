@@ -65,9 +65,7 @@ def _lineage_ids(db: Session, root_id: int) -> set[int]:
     ids = {root_id}
     frontier = [root_id]
     while frontier:
-        children = db.execute(
-            select(SBOMSource.id).where(SBOMSource.parent_id.in_(frontier))
-        ).scalars().all()
+        children = db.execute(select(SBOMSource.id).where(SBOMSource.parent_id.in_(frontier))).scalars().all()
         frontier = [child_id for child_id in children if child_id not in ids]
         ids.update(frontier)
     return ids
@@ -140,14 +138,18 @@ def _lifecycle_properties(component: SBOMComponent) -> list[dict[str, str]]:
         "lifecycle:eolDate": component.eol_date,
         "lifecycle:eosDate": component.eos_date,
         "lifecycle:eofDate": component.eof_date,
-        "lifecycle:deprecated": str(bool(component.deprecated or component.is_deprecated)).lower() if (component.deprecated or component.is_deprecated) else None,
+        "lifecycle:deprecated": str(bool(component.deprecated or component.is_deprecated)).lower()
+        if (component.deprecated or component.is_deprecated)
+        else None,
         "lifecycle:unsupported": str(bool(component.unsupported)).lower() if component.unsupported else None,
         "lifecycle:recommendedVersion": component.recommended_version,
         "lifecycle:source": component.lifecycle_source,
         "lifecycle:evidenceUrl": component.lifecycle_source_url,
         "lifecycle:confidence": component.lifecycle_confidence,
         "lifecycle:checkedAt": component.lifecycle_checked_at,
-        "lifecycle:manualOverride": str(bool(component.lifecycle_manual_override)).lower() if getattr(component, "lifecycle_manual_override", None) else None,
+        "lifecycle:manualOverride": str(bool(component.lifecycle_manual_override)).lower()
+        if getattr(component, "lifecycle_manual_override", None)
+        else None,
     }
     return [{"name": key, "value": str(value)} for key, value in values.items() if value not in (None, "")]
 
@@ -172,7 +174,9 @@ def _augment_lifecycle_metadata(db: Session, sbom: SBOMSource, parsed: dict[str,
             if not match:
                 continue
             existing = [
-                prop for prop in cdx_component.get("properties") or [] if not str(prop.get("name") or "").startswith("lifecycle:")
+                prop
+                for prop in cdx_component.get("properties") or []
+                if not str(prop.get("name") or "").startswith("lifecycle:")
             ]
             cdx_component["properties"] = existing + _lifecycle_properties(match)
         return parsed
@@ -188,7 +192,9 @@ def _augment_lifecycle_metadata(db: Session, sbom: SBOMSource, parsed: dict[str,
                     "annotationType": "OTHER",
                     "annotator": "Tool: SBOM Analyzer",
                     "annotationDate": component.lifecycle_checked_at or "",
-                    "comment": json.dumps({"component": component.name, "version": component.version, "lifecycle": lifecycle}),
+                    "comment": json.dumps(
+                        {"component": component.name, "version": component.version, "lifecycle": lifecycle}
+                    ),
                 }
             )
         if annotations:
@@ -198,7 +204,9 @@ def _augment_lifecycle_metadata(db: Session, sbom: SBOMSource, parsed: dict[str,
     return parsed
 
 
-def _maybe_augment_export_with_lifecycle(db: Session, sbom: SBOMSource, content: str, standard: str, encoding: str) -> str:
+def _maybe_augment_export_with_lifecycle(
+    db: Session, sbom: SBOMSource, content: str, standard: str, encoding: str
+) -> str:
     if encoding != "json" or standard not in {"cyclonedx", "spdx"}:
         return content
     parsed = json.loads(content)
@@ -216,7 +224,7 @@ def edit_sbom_endpoint(
     background_tasks: BackgroundTasks,
     user_id: str | None = Query(None),
     _principal=_security_role,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     Manually edit SBOM components, metadata, or dependencies.
@@ -242,10 +250,7 @@ def edit_sbom_endpoint(
             background_tasks.add_task(run_post_edit_enrichment, new_version.id)
         return new_version
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.get("/{id}/versions", response_model=list[SBOMSourceOut])
@@ -255,28 +260,19 @@ def get_sbom_versions(id: int, db: Session = Depends(get_db)):
     """
     sbom = db.get(SBOMSource, id)
     if not sbom:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"SBOM with ID {id} not found."
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"SBOM with ID {id} not found.")
 
     root = _root_for_lineage(db, sbom)
     ids = _lineage_ids(db, root.id)
-    versions = db.execute(
-        select(SBOMSource)
-        .where(SBOMSource.id.in_(ids))
-        .order_by(SBOMSource.id.asc())
-    ).scalars().all()
+    versions = (
+        db.execute(select(SBOMSource).where(SBOMSource.id.in_(ids)).order_by(SBOMSource.id.asc())).scalars().all()
+    )
 
     return list(versions)
 
 
 @router.get("/compare-versions", response_model=dict[str, Any])
-def compare_sbom_versions(
-    version_a: int = Query(...),
-    version_b: int = Query(...),
-    db: Session = Depends(get_db)
-):
+def compare_sbom_versions(version_a: int = Query(...), version_b: int = Query(...), db: Session = Depends(get_db)):
     """
     Compare two SBOM versions and return added, removed, and changed components.
     """
@@ -284,8 +280,7 @@ def compare_sbom_versions(
     sbom_b = db.get(SBOMSource, version_b)
     if not sbom_a or not sbom_b:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="One or both of the specified SBOM versions were not found."
+            status_code=status.HTTP_404_NOT_FOUND, detail="One or both of the specified SBOM versions were not found."
         )
     return compare_versions(db, version_a, version_b)
 
@@ -296,7 +291,7 @@ def restore_sbom_version(
     version_id: int,
     user_id: str | None = Query(None),
     _principal=_security_role,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     Restore a previous version of the SBOM.
@@ -306,10 +301,7 @@ def restore_sbom_version(
         restored = restore_version(db, id, version_id, user_id)
         return restored
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.post("/{id}/lifecycle/refresh")
@@ -390,7 +382,7 @@ def _sync_flat_to_raw(flat: dict, raw: dict, standard: str) -> None:
                         licenses_list.append({"license": {"name": lic}})
             if licenses_list:
                 raw["licenses"] = licenses_list
-        else: # spdx
+        else:  # spdx
             raw["licenseConcluded"] = flat["license"]
             raw["licenseDeclared"] = flat["license"]
 
@@ -405,7 +397,7 @@ def _sync_flat_to_raw(flat: dict, raw: dict, standard: str) -> None:
                     hashes_list.append({"alg": alg.strip(), "content": content.strip()})
             if hashes_list:
                 raw["hashes"] = hashes_list
-        else: # spdx
+        else:  # spdx
             checksums_list = []
             for h in flat["hashes"].split(", "):
                 h = h.strip()
@@ -423,7 +415,7 @@ def _sync_flat_to_raw(flat: dict, raw: dict, standard: str) -> None:
                 raw["supplier"]["name"] = flat["supplier"]
             else:
                 raw["supplier"] = {"name": flat["supplier"]}
-        else: # spdx
+        else:  # spdx
             existing = raw.get("supplier") or ""
             prefix = "Organization: "
             if existing.startswith("Person: "):
@@ -433,9 +425,9 @@ def _sync_flat_to_raw(flat: dict, raw: dict, standard: str) -> None:
 
             clean_sup = flat["supplier"]
             if clean_sup.startswith("Organization: "):
-                clean_sup = clean_sup[len("Organization: "):]
+                clean_sup = clean_sup[len("Organization: ") :]
             elif clean_sup.startswith("Person: "):
-                clean_sup = clean_sup[len("Person: "):]
+                clean_sup = clean_sup[len("Person: ") :]
             raw["supplier"] = f"{prefix}{clean_sup}"
 
     # 4. Scope
@@ -577,8 +569,10 @@ def export_sbom_vulnerabilities_excel(
 def export_sbom(
     id: int,
     format: str = Query("native", description="native, json, xml, CycloneDX, SPDX, or conversion-report"),
-    export_mode: str = Query("original", description="Export mode: 'original', 'converted', 'enriched', or 'normalized'"),
-    db: Session = Depends(get_db)
+    export_mode: str = Query(
+        "original", description="Export mode: 'original', 'converted', 'enriched', or 'normalized'"
+    ),
+    db: Session = Depends(get_db),
 ):
     """
     Export the current SBOM data in its native format, or a converted/enriched variant.
@@ -592,10 +586,7 @@ def export_sbom(
 
     sbom = db.get(SBOMSource, id)
     if not sbom or not sbom.sbom_data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"SBOM with ID {id} has no data."
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"SBOM with ID {id} has no data.")
     requested = _normalized_export_format(format)
 
     # Conversion report download
@@ -668,7 +659,7 @@ def export_sbom(
         if encoding != "json":
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Normalized export mode is only supported for JSON formatted SBOMs."
+                detail="Normalized export mode is only supported for JSON formatted SBOMs.",
             )
         try:
             doc = json.loads(sbom.sbom_data)
@@ -690,7 +681,9 @@ def export_sbom(
                 flat["raw"] = raw
 
             dependencies = doc.get("dependencies") or []
-            canonical_flat, _, ref_mapping, _, _ = ComponentDeduplicationService.deduplicate_components(flat_comps, dependencies)
+            canonical_flat, _, ref_mapping, _, _ = ComponentDeduplicationService.deduplicate_components(
+                flat_comps, dependencies
+            )
 
             # Sync flat canonical attributes back to raw
             for flat in canonical_flat:
@@ -736,7 +729,9 @@ def export_sbom(
                 flat["raw"] = raw
 
             relationships = doc.get("relationships") or []
-            canonical_flat, _, ref_mapping, _, _ = ComponentDeduplicationService.deduplicate_components(flat_comps, relationships)
+            canonical_flat, _, ref_mapping, _, _ = ComponentDeduplicationService.deduplicate_components(
+                flat_comps, relationships
+            )
 
             # Sync flat canonical attributes back to raw
             for flat in canonical_flat:
@@ -747,7 +742,11 @@ def export_sbom(
             canonical_raw_set = {id(flat["raw"]) for flat in canonical_flat if "raw" in flat}
 
             new_packages = [pkg for pkg in original_packages if id(pkg) in canonical_raw_set]
-            new_elements = [el for el in doc.get("elements") or [] if el.get("type") != "software:package" or id(el) in canonical_raw_set]
+            new_elements = [
+                el
+                for el in doc.get("elements") or []
+                if el.get("type") != "software:package" or id(el) in canonical_raw_set
+            ]
 
             if "packages" in doc:
                 doc["packages"] = new_packages
@@ -781,7 +780,7 @@ def export_sbom(
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Normalized export mode not supported for standard {standard}."
+                detail=f"Normalized export mode not supported for standard {standard}.",
             )
 
         content = json.dumps(doc, indent=2)
@@ -829,9 +828,7 @@ def export_sbom(
         mode_suffix = "_original"
 
     filename = f"{sbom.sbom_name}{mode_suffix}.{extension}"
-    headers = {
-        "Content-Disposition": f"attachment; filename=\"{filename}\""
-    }
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
 
     return Response(content=content, media_type=_media_type(standard, encoding), headers=headers)
 
@@ -843,9 +840,7 @@ def get_sbom_lifecycle_diagnostics(id: int, db: Session = Depends(get_db)):
     if not sbom:
         raise HTTPException(status_code=404, detail="SBOM not found")
 
-    components = db.execute(
-        select(SBOMComponent).where(SBOMComponent.sbom_id == id)
-    ).scalars().all()
+    components = db.execute(select(SBOMComponent).where(SBOMComponent.sbom_id == id)).scalars().all()
 
     total = len(components)
     enriched = sum(1 for c in components if c.lifecycle_checked_at is not None)
@@ -864,7 +859,15 @@ def get_sbom_lifecycle_diagnostics(id: int, db: Session = Depends(get_db)):
             provider_failures += 1
         elif evidence.get("cached") or evidence.get("stale_cache") or c.lifecycle_source == "Cached Provider":
             cache_hits += 1
-        elif c.lifecycle_source in {"endoflife.date", "npm registry", "PyPI", "NuGet", "Maven Central", "OSV", "Repository Health"}:
+        elif c.lifecycle_source in {
+            "endoflife.date",
+            "npm registry",
+            "PyPI",
+            "NuGet",
+            "Maven Central",
+            "OSV",
+            "Repository Health",
+        }:
             provider_hits += 1
 
     sample_unknown = []
@@ -877,25 +880,29 @@ def get_sbom_lifecycle_diagnostics(id: int, db: Session = Depends(get_db)):
                 reason = "No matching lifecycle evidence found across providers."
                 if c.lifecycle_source == "Lifecycle Providers":
                     reason = "All providers returned Unknown."
-                sample_unknown.append({
-                    "id": c.id,
-                    "name": c.name,
-                    "version": c.version,
-                    "purl": c.purl,
-                    "cpe": c.cpe,
-                    "ecosystem": c.ecosystem,
-                    "reason": reason
-                })
+                sample_unknown.append(
+                    {
+                        "id": c.id,
+                        "name": c.name,
+                        "version": c.version,
+                        "purl": c.purl,
+                        "cpe": c.cpe,
+                        "ecosystem": c.ecosystem,
+                        "reason": reason,
+                    }
+                )
         else:
             if len(sample_matched) < 10:
-                sample_matched.append({
-                    "id": c.id,
-                    "name": c.name,
-                    "version": c.version,
-                    "status": status_canonical,
-                    "source": c.lifecycle_source,
-                    "evidence": c.lifecycle_evidence_json
-                })
+                sample_matched.append(
+                    {
+                        "id": c.id,
+                        "name": c.name,
+                        "version": c.version,
+                        "status": status_canonical,
+                        "source": c.lifecycle_source,
+                        "evidence": c.lifecycle_evidence_json,
+                    }
+                )
 
     return {
         "component_count": total,
@@ -905,5 +912,5 @@ def get_sbom_lifecycle_diagnostics(id: int, db: Session = Depends(get_db)):
         "cache_hit_count": cache_hits,
         "provider_failure_count": provider_failures,
         "sample_unknown_components": sample_unknown,
-        "sample_matched_components": sample_matched
+        "sample_matched_components": sample_matched,
     }

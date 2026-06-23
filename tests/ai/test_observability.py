@@ -83,16 +83,16 @@ def test_render_prometheus_includes_types_and_buckets():
     # Counter line.
     assert 'ai_request_total{outcome="ok",provider="anthropic",purpose="fix_bundle"} 1.0' in out
     # Histogram bucket + sum + count lines.
-    assert "ai_request_latency_seconds_bucket{provider=\"anthropic\",le=\"0.5\"} 1" in out
-    assert "ai_request_latency_seconds_sum{provider=\"anthropic\"} 0.5" in out
-    assert "ai_request_latency_seconds_count{provider=\"anthropic\"} 1" in out
+    assert 'ai_request_latency_seconds_bucket{provider="anthropic",le="0.5"} 1' in out
+    assert 'ai_request_latency_seconds_sum{provider="anthropic"} 0.5' in out
+    assert 'ai_request_latency_seconds_count{provider="anthropic"} 1' in out
 
 
 def test_render_prometheus_escapes_label_values():
     t = AiTelemetry()
     t.inc("metric", {"provider": 'evil"break\nlf'})
     out = t.render_prometheus()
-    assert r'evil\"break\nlf' in out
+    assert r"evil\"break\nlf" in out
 
 
 # ============================================================ High-level recorders
@@ -172,9 +172,7 @@ def test_log_ai_call_never_logs_response_body(caplog):
         )
     # The raw text must not appear anywhere in the captured log records
     # (message, args, or extra dict serialisations).
-    serialized = "\n".join(
-        [r.getMessage() + " " + str(r.__dict__) for r in caplog.records]
-    )
+    serialized = "\n".join([r.getMessage() + " " + str(r.__dict__) for r in caplog.records])
     assert secret_body not in serialized
     # The hash of the response must be present.
     assert hash_response(secret_body) in serialized

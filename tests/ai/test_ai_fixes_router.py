@@ -265,9 +265,7 @@ def test_legacy_stream_phantom_fast_path(client, _seeded_run, _memory_store):
     """No batch + no envelope ⇒ stream emits one terminal event and ends.
     Without this, the SSE generator would poll silently for 600s while
     the client banner stays parked."""
-    with client.stream(
-        "GET", f"/api/v1/runs/{_seeded_run['run_id']}/ai-fixes/stream"
-    ) as resp:
+    with client.stream("GET", f"/api/v1/runs/{_seeded_run['run_id']}/ai-fixes/stream") as resp:
         assert resp.status_code == 200
         body = resp.read().decode()
     assert "event: progress" in body
@@ -287,9 +285,7 @@ def test_list_run_fixes_after_generation(client, _seeded_run, _enable_ai, _fake_
     assert "total" in body
 
 
-def test_get_finding_fix_404_when_no_cached_bundle(
-    client, _seeded_run, _enable_ai, _fake_registry, _memory_store
-):
+def test_get_finding_fix_404_when_no_cached_bundle(client, _seeded_run, _enable_ai, _fake_registry, _memory_store):
     """Read-only contract: GET must NOT spend LLM budget on cache miss."""
     finding_id = _seeded_run["solo_id"]
     pre_calls = _fake_registry.calls
@@ -299,9 +295,7 @@ def test_get_finding_fix_404_when_no_cached_bundle(
     assert _fake_registry.calls == pre_calls
 
 
-def test_post_generate_then_get_returns_cached(
-    client, _seeded_run, _enable_ai, _fake_registry, _memory_store
-):
+def test_post_generate_then_get_returns_cached(client, _seeded_run, _enable_ai, _fake_registry, _memory_store):
     finding_id = _seeded_run["solo_id"]
     # POST = explicit Generate click → spends budget, populates cache.
     resp = client.post(f"/api/v1/findings/{finding_id}/ai-fix")

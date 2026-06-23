@@ -188,7 +188,12 @@ def test_set_default_swaps_atomically(client):
 def test_set_fallback_swaps_atomically(client):
     a = client.post(
         "/api/v1/ai/credentials",
-        json={"provider_name": "gemini", "api_key": "AIzaSy-1-XXXXXXXX", "default_model": "gemini-2.5-flash", "tier": "free"},
+        json={
+            "provider_name": "gemini",
+            "api_key": "AIzaSy-1-XXXXXXXX",
+            "default_model": "gemini-2.5-flash",
+            "tier": "free",
+        },
     ).json()
     b = client.post(
         "/api/v1/ai/credentials",
@@ -325,9 +330,7 @@ def test_no_raw_key_leaks_into_log_records(client, caplog):
             },
         )
         # Update the same key + delete it.
-        cred_id = (
-            client.get("/api/v1/ai/credentials").json()[0]["id"]
-        )
+        cred_id = client.get("/api/v1/ai/credentials").json()[0]["id"]
         client.put(
             f"/api/v1/ai/credentials/{cred_id}",
             json={"api_key": sentinel + "-V2"},
@@ -335,16 +338,12 @@ def test_no_raw_key_leaks_into_log_records(client, caplog):
         client.delete(f"/api/v1/ai/credentials/{cred_id}")
 
     # Concatenate every captured record (message + extras + exception).
-    blob = "\n".join(
-        r.getMessage() + " " + str(r.__dict__) for r in caplog.records
-    )
+    blob = "\n".join(r.getMessage() + " " + str(r.__dict__) for r in caplog.records)
     assert sentinel not in blob
     # Audit detail in the DB, too — must not contain the sentinel.
     db = SessionLocal()
     try:
-        all_audit_text = " ".join(
-            (r.detail or "") for r in db.query(AiCredentialAuditLog).all()
-        )
+        all_audit_text = " ".join((r.detail or "") for r in db.query(AiCredentialAuditLog).all())
         assert sentinel not in all_audit_text
     finally:
         db.close()

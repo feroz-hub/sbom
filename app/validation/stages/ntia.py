@@ -33,10 +33,7 @@ def run(ctx: ValidationContext) -> ValidationContext:
             stage=_STAGE,
             path="creationInfo.creators" if sbom.spec == "spdx" else "metadata.tools",
             message="Document has no author / SBOM-data creator.",
-            remediation=(
-                "Add `creationInfo.creators` (SPDX) or `metadata.tools[]` "
-                "(CycloneDX)."
-            ),
+            remediation=("Add `creationInfo.creators` (SPDX) or `metadata.tools[]` (CycloneDX)."),
             spec_reference="NTIA 2021 §6",
             severity=severity,
         )
@@ -58,10 +55,7 @@ def run(ctx: ValidationContext) -> ValidationContext:
             stage=_STAGE,
             path="dependencies" if sbom.spec == "cyclonedx" else "relationships",
             message="No dependency relationship is declared between any components.",
-            remediation=(
-                "Add at least one dependency edge (CycloneDX `dependencies[]` "
-                "or SPDX `relationships[]`)."
-            ),
+            remediation=("Add at least one dependency edge (CycloneDX `dependencies[]` or SPDX `relationships[]`)."),
             spec_reference="NTIA 2021 §5",
             severity=severity,
         )
@@ -104,8 +98,7 @@ def run(ctx: ValidationContext) -> ValidationContext:
                 path=comp.raw_path,
                 message=f"Component '{comp.ref}' has no PURL, CPE, or SPDXID.",
                 remediation=(
-                    "Add at least one unique identifier so the scanner can match "
-                    "against vulnerability databases."
+                    "Add at least one unique identifier so the scanner can match against vulnerability databases."
                 ),
                 spec_reference="NTIA 2021 §4",
                 severity=severity,

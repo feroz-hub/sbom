@@ -135,12 +135,9 @@ def merge_components(canonical: dict, duplicate: dict, key: str, conflicts: list
         raw_c = canonical.get("license")
         raw_d = duplicate.get("license")
         if raw_c and raw_d and raw_c.strip() != raw_d.strip():
-            conflicts.append({
-                "component": key,
-                "field": "license",
-                "values": sorted(list({raw_c, raw_d})),
-                "selected": raw_c
-            })
+            conflicts.append(
+                {"component": key, "field": "license", "values": sorted(list({raw_c, raw_d})), "selected": raw_c}
+            )
 
     # 2. Merge hashes
     hashes_canonical = parse_hashes_to_list(canonical.get("hashes"))
@@ -162,12 +159,9 @@ def merge_components(canonical: dict, duplicate: dict, key: str, conflicts: list
     sup_d = duplicate.get("supplier")
     if sup_d and sup_c != sup_d:
         if sup_c:
-            conflicts.append({
-                "component": key,
-                "field": "supplier",
-                "values": sorted(list({sup_c, sup_d})),
-                "selected": sup_c
-            })
+            conflicts.append(
+                {"component": key, "field": "supplier", "values": sorted(list({sup_c, sup_d})), "selected": sup_c}
+            )
         else:
             merged["supplier"] = sup_d
 
@@ -232,8 +226,7 @@ def merge_components(canonical: dict, duplicate: dict, key: str, conflicts: list
 class ComponentDeduplicationService:
     @staticmethod
     def deduplicate_components(
-        components: list[dict],
-        dependencies: list[dict]
+        components: list[dict], dependencies: list[dict]
     ) -> tuple[list[dict], list[dict], dict, dict, list[str]]:
         """
         Deduplicates components based on PURL, CPE, or fallback identity keys.
@@ -296,7 +289,9 @@ class ComponentDeduplicationService:
                 duplicate_components.append(dup_comp)
 
             canonical_components.append(merged)
-            warnings.append(f"SBOM_VAL_W120_DUPLICATE_COMPONENT_DETECTED: Component with key '{key}' has duplicate definitions merged.")
+            warnings.append(
+                f"SBOM_VAL_W120_DUPLICATE_COMPONENT_DETECTED: Component with key '{key}' has duplicate definitions merged."
+            )
 
         # Remap dependency references
         remapped_dependencies = []
@@ -352,7 +347,7 @@ class ComponentDeduplicationService:
             "duplicates_merged": duplicates_merged,
             "conflicts": conflicts,
             "ref_mapping": ref_mapping,
-            "remapped_dependencies": remapped_refs
+            "remapped_dependencies": remapped_refs,
         }
 
         return canonical_components, duplicate_components, ref_mapping, dedupe_report, warnings

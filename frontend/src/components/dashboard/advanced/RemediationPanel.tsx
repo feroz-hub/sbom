@@ -32,21 +32,35 @@ const SEVERITY_COLOR: Record<string, string> = {
 
 const MTTR_ORDER: SlaSeverity[] = ['critical', 'high', 'medium', 'low'];
 
-export function RemediationPanel() {
+export interface RemediationPanelProps {
+  remediation?: any;
+  remediationStats?: any;
+  isLoading?: boolean;
+}
+
+export function RemediationPanel({
+  remediation: propsRemediation,
+  remediationStats: propsRemediationStats,
+  isLoading: propsIsLoading,
+}: RemediationPanelProps = {}) {
+  const hasProps = propsRemediation !== undefined && propsRemediationStats !== undefined;
+
   const query = useQuery({
     queryKey: ['dashboard-remediation'],
     queryFn: ({ signal }) => getDashboardRemediation(signal),
+    enabled: !hasProps,
   });
   const statsQuery = useQuery({
     queryKey: ['dashboard-remediation-stats'],
     queryFn: ({ signal }) => getDashboardRemediationStats(signal),
+    enabled: !hasProps,
   });
-  const data = query.data;
-  const stats = statsQuery.data;
+  const data = hasProps ? propsRemediation : query.data;
+  const stats = hasProps ? propsRemediationStats : statsQuery.data;
   const sla = data?.sla;
   const offenders = sla?.worst_offenders ?? [];
   const velocity = data?.velocity;
-  const counts = stats?.status_counts ?? {};
+  const counts = (stats?.status_counts ?? {}) as Record<string, number>;
   const openCount = counts.open ?? 0;
   const inProgressCount = counts.in_progress ?? 0;
   const fixedCount = counts.fixed ?? 0;
@@ -57,8 +71,8 @@ export function RemediationPanel() {
     statusTotal > 0 ||
     (stats?.aging_count ?? 0) > 0 ||
     (sla && sla.overdue + sla.due_soon + sla.ok > 0);
-  const isLoading = query.isLoading || statsQuery.isLoading;
-  const isError = query.isError || statsQuery.isError;
+  const isLoading = hasProps ? !!propsIsLoading : (query.isLoading || statsQuery.isLoading);
+  const isError = hasProps ? false : (query.isError || statsQuery.isError);
 
   const refetch = () => {
     void query.refetch();
@@ -247,7 +261,7 @@ export function RemediationPanel() {
                   Longest past budget
                 </h4>
                 <ul className="mt-1.5 space-y-1.5">
-                  {offenders.map((o) => {
+                  {offenders.map((o: any) => {
                     const pct = Math.min(100, (o.age_days / Math.max(1, o.sla_days)) * 100);
                     return (
                       <li

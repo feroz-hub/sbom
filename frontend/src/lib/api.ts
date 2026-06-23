@@ -360,6 +360,10 @@ export function getDashboardPosture(signal?: AbortSignal) {
   return request<DashboardPosture>('/dashboard/posture', { signal });
 }
 
+export function getDashboardSummary(signal?: AbortSignal) {
+  return request<any>('/dashboard/summary', { signal });
+}
+
 // ─── Projects ────────────────────────────────────────────────────────────────
 export function getProjects(signal?: AbortSignal) {
   return request<Project[]>('/api/projects', { signal });

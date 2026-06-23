@@ -49,7 +49,9 @@ def normalize_cyclonedx(doc: dict[str, Any], spec_version: str) -> InternalSbom:
         bom_version=bom_version_int,
         spec_version=spec_version,
         data_license=None,
-        name=(metadata_block.get("component") or {}).get("name") if isinstance(metadata_block.get("component"), dict) else None,
+        name=(metadata_block.get("component") or {}).get("name")
+        if isinstance(metadata_block.get("component"), dict)
+        else None,
         creators=creators,
         created=metadata_block.get("timestamp"),
     )

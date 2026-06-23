@@ -47,11 +47,7 @@ def _now_iso() -> str:
 
 def _cache_age_seconds(db: Session) -> float | None:
     """Return age (seconds) of the freshest row, or None if cache is empty."""
-    row = (
-        db.execute(select(KevEntry.refreshed_at).order_by(KevEntry.refreshed_at.desc()).limit(1))
-        .scalars()
-        .first()
-    )
+    row = db.execute(select(KevEntry.refreshed_at).order_by(KevEntry.refreshed_at.desc()).limit(1)).scalars().first()
     if not row:
         return None
     try:
@@ -125,15 +121,11 @@ def refresh_if_stale(db: Session, *, force: bool = False) -> bool:
     # so the cost of a clean replace is trivial and the code is much
     # simpler than dialect-specific UPSERT.
     try:
-        existing = {
-            r for r in db.execute(select(KevEntry.cve_id)).scalars().all() if r
-        }
+        existing = {r for r in db.execute(select(KevEntry.cve_id)).scalars().all() if r}
         # Drop entries that fell off the catalog
         stale = existing - incoming_ids
         if stale:
-            db.query(KevEntry).filter(KevEntry.cve_id.in_(stale)).delete(
-                synchronize_session=False
-            )
+            db.query(KevEntry).filter(KevEntry.cve_id.in_(stale)).delete(synchronize_session=False)
         for row in rows:
             db.merge(row)
         db.commit()

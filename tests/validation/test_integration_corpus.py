@@ -12,9 +12,7 @@ from pathlib import Path
 import pytest
 from app.validation import run as run_validation
 
-EXPECTED = json.loads(
-    (Path(__file__).parent / "expected_outcomes.json").read_text(encoding="utf-8")
-)
+EXPECTED = json.loads((Path(__file__).parent / "expected_outcomes.json").read_text(encoding="utf-8"))
 CORPUS_ROOT = Path(__file__).parent.parent / "fixtures" / "sboms"
 
 
@@ -33,9 +31,7 @@ def test_corpus_fixture_matches_expected(rel_path: str) -> None:
     for must in expected["must_contain"]:
         assert must in codes, f"{rel_path}: missing required code {must}; got {codes}"
     for forbidden in expected["must_not_contain"]:
-        assert forbidden not in codes, (
-            f"{rel_path}: forbidden code {forbidden} present; got {codes}"
-        )
+        assert forbidden not in codes, f"{rel_path}: forbidden code {forbidden} present; got {codes}"
 
 
 @pytest.mark.integration

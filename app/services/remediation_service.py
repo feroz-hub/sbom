@@ -96,17 +96,17 @@ def create_or_update_remediation(
     vuln_id = (data.get("vuln_id") or "").strip()
     component_name = (data.get("component_name") or "").strip()
     component_version = (data.get("component_version") or "").strip()
-    
+
     if not vuln_id or not component_name or not component_version:
         raise ValueError("vuln_id, component_name, and component_version are required fields.")
-        
+
     # Check if record already exists
     record = db.execute(
         select(VulnerabilityRemediation).where(
             VulnerabilityRemediation.project_id == project_id,
             VulnerabilityRemediation.vuln_id == vuln_id,
             VulnerabilityRemediation.component_name == component_name,
-            VulnerabilityRemediation.component_version == component_version
+            VulnerabilityRemediation.component_version == component_version,
         )
     ).scalar_one_or_none()
 
@@ -186,11 +186,7 @@ def create_or_update_remediation(
 
 
 def get_remediation_for_finding(
-    db: Session,
-    project_id: int,
-    vuln_id: str,
-    component_name: str,
-    component_version: str
+    db: Session, project_id: int, vuln_id: str, component_name: str, component_version: str
 ) -> VulnerabilityRemediation | None:
     """
     Get the remediation record for a specific vulnerability finding.
@@ -200,7 +196,7 @@ def get_remediation_for_finding(
             VulnerabilityRemediation.project_id == project_id,
             VulnerabilityRemediation.vuln_id == vuln_id,
             VulnerabilityRemediation.component_name == component_name,
-            VulnerabilityRemediation.component_version == component_version
+            VulnerabilityRemediation.component_version == component_version,
         )
     ).scalar_one_or_none()
 
@@ -209,9 +205,11 @@ def list_remediations_for_project(db: Session, project_id: int) -> list[Vulnerab
     """
     List all remediation records associated with a project.
     """
-    return list(db.execute(
-        select(VulnerabilityRemediation).where(VulnerabilityRemediation.project_id == project_id)
-    ).scalars().all())
+    return list(
+        db.execute(select(VulnerabilityRemediation).where(VulnerabilityRemediation.project_id == project_id))
+        .scalars()
+        .all()
+    )
 
 
 def list_remediation_history(db: Session, remediation_id: int) -> list[VulnerabilityRemediationAudit]:
@@ -229,11 +227,7 @@ def list_remediation_history(db: Session, remediation_id: int) -> list[Vulnerabi
     )
 
 
-def enrich_finding_with_remediation(
-    db: Session,
-    finding: dict[str, Any],
-    project_id: int
-) -> dict[str, Any]:
+def enrich_finding_with_remediation(db: Session, finding: dict[str, Any], project_id: int) -> dict[str, Any]:
     """
     Enrich a finding dictionary with remediation details.
     """
@@ -241,7 +235,7 @@ def enrich_finding_with_remediation(
     vuln_id = res.get("vuln_id")
     comp_name = res.get("component_name")
     comp_ver = res.get("component_version")
-    
+
     if vuln_id and comp_name and comp_ver:
         rem = get_remediation_for_finding(db, project_id, vuln_id, comp_name, comp_ver)
         if rem:
@@ -253,7 +247,7 @@ def enrich_finding_with_remediation(
                 "resolution_date": rem.resolution_date,
                 "fix_notes": rem.fix_notes,
                 "fixed_version": rem.fixed_version,
-                "updated_on": rem.updated_on
+                "updated_on": rem.updated_on,
             }
         else:
             res["remediation"] = {
@@ -264,6 +258,6 @@ def enrich_finding_with_remediation(
                 "resolution_date": None,
                 "fix_notes": None,
                 "fixed_version": None,
-                "updated_on": None
+                "updated_on": None,
             }
     return res

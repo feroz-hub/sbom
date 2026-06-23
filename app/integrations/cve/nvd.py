@@ -47,9 +47,7 @@ class NvdClient:
             threshold=s.cve_circuit_breaker_threshold,
             reset_seconds=s.cve_circuit_breaker_reset_seconds,
         )
-        self._throttle_seconds = (
-            s.cve_nvd_auth_throttle_seconds if self._api_key else s.cve_nvd_unauth_throttle_seconds
-        )
+        self._throttle_seconds = s.cve_nvd_auth_throttle_seconds if self._api_key else s.cve_nvd_unauth_throttle_seconds
         self._lock = asyncio.Lock()
         self._last_call_at: float = 0.0
 
@@ -81,9 +79,7 @@ class NvdClient:
         last_exc: BaseException | None = None
         for attempt in range(self._retries + 1):
             try:
-                resp = await client.get(
-                    _NVD_URL, params={"cveIds": cve_id.upper()}, headers=headers, timeout=timeout
-                )
+                resp = await client.get(_NVD_URL, params={"cveIds": cve_id.upper()}, headers=headers, timeout=timeout)
             except (httpx.TimeoutException, httpx.TransportError) as exc:
                 last_exc = exc
                 if attempt < self._retries:
@@ -91,9 +87,7 @@ class NvdClient:
                 break
             latency_ms = int((time.perf_counter() - t0) * 1000)
             if resp.status_code >= 500:
-                last_exc = httpx.HTTPStatusError(
-                    f"nvd {resp.status_code}", request=resp.request, response=resp
-                )
+                last_exc = httpx.HTTPStatusError(f"nvd {resp.status_code}", request=resp.request, response=resp)
                 if attempt < self._retries:
                     continue
                 break

@@ -158,9 +158,7 @@ def test_active_projects_excludes_inactive(client, db):
     # We verify by re-counting status=1 directly.
     from sqlalchemy import func, select
 
-    expected = db.execute(
-        select(func.count(Projects.id)).where(Projects.project_status == 1)
-    ).scalar_one()
+    expected = db.execute(select(func.count(Projects.id)).where(Projects.project_status == 1)).scalar_one()
     assert body["total_active_projects"] == expected
 
 

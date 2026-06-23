@@ -53,14 +53,8 @@ def run(ctx: ValidationContext) -> ValidationContext:
             E.E001_SIZE_EXCEEDED,
             stage=_STAGE,
             path="",
-            message=(
-                f"Uploaded body of {len(body)} bytes exceeds MAX_UPLOAD_BYTES "
-                f"({settings['max_upload']})."
-            ),
-            remediation=(
-                "Compress the SBOM, split into multi-part, or contact your "
-                "operator to raise the limit."
-            ),
+            message=(f"Uploaded body of {len(body)} bytes exceeds MAX_UPLOAD_BYTES ({settings['max_upload']})."),
+            remediation=("Compress the SBOM, split into multi-part, or contact your operator to raise the limit."),
         )
         return ctx
 
@@ -77,10 +71,7 @@ def run(ctx: ValidationContext) -> ValidationContext:
                 f"Decompressed body of {len(decompressed)} bytes exceeds "
                 f"MAX_DECOMPRESSED_BYTES ({settings['max_decompressed']})."
             ),
-            remediation=(
-                "Verify that the SBOM is not a decompression bomb. Real SBOMs "
-                "decompress to < 200 MB."
-            ),
+            remediation=("Verify that the SBOM is not a decompression bomb. Real SBOMs decompress to < 200 MB."),
         )
         return ctx
 
@@ -91,10 +82,7 @@ def run(ctx: ValidationContext) -> ValidationContext:
             stage=_STAGE,
             path="",
             message=encoding_error,
-            remediation=(
-                "Re-encode the SBOM as UTF-8. UTF-16 / UTF-32 BOMs are not "
-                "accepted."
-            ),
+            remediation=("Re-encode the SBOM as UTF-8. UTF-16 / UTF-32 BOMs are not accepted."),
         )
         return ctx
 
@@ -144,10 +132,7 @@ def _decompress(
             stage=_STAGE,
             path="",
             message=f"Content-Encoding '{content_encoding}' is not supported.",
-            remediation=(
-                "Use identity, gzip, or deflate. Brotli / zstd are not yet "
-                "supported by the validator."
-            ),
+            remediation=("Use identity, gzip, or deflate. Brotli / zstd are not yet supported by the validator."),
         )
         return None
 
@@ -168,13 +153,8 @@ def _decompress(
                         E.E002_DECOMPRESSED_SIZE_EXCEEDED,
                         stage=_STAGE,
                         path="",
-                        message=(
-                            f"Decompressed body exceeded MAX_DECOMPRESSED_BYTES "
-                            f"({max_total}) mid-stream."
-                        ),
-                        remediation=(
-                            "Verify that the SBOM is not a decompression bomb."
-                        ),
+                        message=(f"Decompressed body exceeded MAX_DECOMPRESSED_BYTES ({max_total}) mid-stream."),
+                        remediation=("Verify that the SBOM is not a decompression bomb."),
                     )
                     return None
                 if len(body) > 0 and total / len(body) > max_ratio:
@@ -182,14 +162,8 @@ def _decompress(
                         E.E003_DECOMPRESSION_RATIO_EXCEEDED,
                         stage=_STAGE,
                         path="",
-                        message=(
-                            f"Decompression ratio {total // max(1, len(body))}:1 "
-                            f"exceeds {max_ratio}:1 limit."
-                        ),
-                        remediation=(
-                            "The compressed payload expanded too aggressively to "
-                            "be a legitimate SBOM."
-                        ),
+                        message=(f"Decompression ratio {total // max(1, len(body))}:1 exceeds {max_ratio}:1 limit."),
+                        remediation=("The compressed payload expanded too aggressively to be a legitimate SBOM."),
                     )
                     return None
                 chunks.append(chunk)
@@ -215,13 +189,8 @@ def _decompress(
                         E.E002_DECOMPRESSED_SIZE_EXCEEDED,
                         stage=_STAGE,
                         path="",
-                        message=(
-                            f"Decompressed body exceeded MAX_DECOMPRESSED_BYTES "
-                            f"({max_total}) mid-stream."
-                        ),
-                        remediation=(
-                            "Verify that the SBOM is not a decompression bomb."
-                        ),
+                        message=(f"Decompressed body exceeded MAX_DECOMPRESSED_BYTES ({max_total}) mid-stream."),
+                        remediation=("Verify that the SBOM is not a decompression bomb."),
                     )
                     return None
                 if len(body) > 0 and total / len(body) > max_ratio:
@@ -229,14 +198,8 @@ def _decompress(
                         E.E003_DECOMPRESSION_RATIO_EXCEEDED,
                         stage=_STAGE,
                         path="",
-                        message=(
-                            f"Decompression ratio {total // max(1, len(body))}:1 "
-                            f"exceeds {max_ratio}:1 limit."
-                        ),
-                        remediation=(
-                            "The compressed payload expanded too aggressively to "
-                            "be a legitimate SBOM."
-                        ),
+                        message=(f"Decompression ratio {total // max(1, len(body))}:1 exceeds {max_ratio}:1 limit."),
+                        remediation=("The compressed payload expanded too aggressively to be a legitimate SBOM."),
                     )
                     return None
                 chunks.append(chunk)
@@ -252,13 +215,8 @@ def _decompress(
                     E.E002_DECOMPRESSED_SIZE_EXCEEDED,
                     stage=_STAGE,
                     path="",
-                    message=(
-                        f"Decompressed body exceeded MAX_DECOMPRESSED_BYTES "
-                        f"({max_total}) mid-stream."
-                    ),
-                    remediation=(
-                        "Verify that the SBOM is not a decompression bomb."
-                    ),
+                    message=(f"Decompressed body exceeded MAX_DECOMPRESSED_BYTES ({max_total}) mid-stream."),
+                    remediation=("Verify that the SBOM is not a decompression bomb."),
                 )
                 return None
             chunks.append(tail)
@@ -286,5 +244,3 @@ def _strip_bom_and_decode(body: bytes) -> tuple[str, str | None]:
         return codecs.decode(body, "utf-8", errors="strict"), None
     except UnicodeDecodeError as exc:
         return "", f"Body is not valid UTF-8 (offset {exc.start}): {exc.reason}"
-
-

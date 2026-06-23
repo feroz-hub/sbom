@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 import os
+import threading
+import time
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from functools import lru_cache
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from ..models import IAMUser
+
 
 import jwt
 from fastapi import Depends, Header, HTTPException, Request, status
@@ -67,11 +73,7 @@ def get_jwks_client() -> PyJWKClient:
 
 def validate_hcl_token(token: str) -> dict[str, Any]:
     settings = get_settings()
-    algorithms = [
-        value.strip()
-        for value in settings.hcl_iam_allowed_algorithms.split(",")
-        if value.strip()
-    ]
+    algorithms = [value.strip() for value in settings.hcl_iam_allowed_algorithms.split(",") if value.strip()]
     if not algorithms or any(value.upper().startswith("HS") for value in algorithms):
         raise RuntimeError("HCL IAM must use configured asymmetric JWT algorithms")
     try:
@@ -101,7 +103,7 @@ def validate_hcl_token(token: str) -> dict[str, Any]:
     return claims
 
 
-def get_current_user(
+def get_current_claims(
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any]:
     settings = get_settings()
@@ -121,14 +123,57 @@ def get_current_user(
     return validate_hcl_token(token)
 
 
-def _upsert_user(db: Session, claims: dict[str, Any]):
+get_current_user = get_current_claims
+
+
+_CONTEXT_CACHE = {}
+_CACHE_LOCK = threading.Lock()
+
+
+def _get_cached_context(claims: dict[str, Any], x_tenant_id: str | None) -> CurrentContext | None:
+    sub = claims.get("sub")
+    if not sub:
+        return None
+    iat = claims.get("iat")
+    key = (sub, x_tenant_id, iat)
+    now = time.time()
+    with _CACHE_LOCK:
+        cached = _CONTEXT_CACHE.get(key)
+        if cached:
+            expires_at, context = cached
+            if now < expires_at:
+                return context
+            else:
+                _CONTEXT_CACHE.pop(key, None)
+    return None
+
+
+def _set_cached_context(claims: dict[str, Any], x_tenant_id: str | None, context: CurrentContext) -> None:
+    sub = claims.get("sub")
+    if not sub:
+        return
+    iat = claims.get("iat")
+    key = (sub, x_tenant_id, iat)
+    now = time.time()
+    expires_at = now + 60.0  # 60s TTL
+    exp = claims.get("exp")
+    if exp:
+        try:
+            expires_at = min(expires_at, float(exp))
+        except (ValueError, TypeError):
+            pass
+    with _CACHE_LOCK:
+        _CONTEXT_CACHE[key] = (expires_at, context)
+
+
+def _upsert_user(db: Session, claims: dict[str, Any]) -> tuple[IAMUser, bool]:
     from ..models import IAMUser
 
     external_id = str(claims["sub"])
     now = datetime.now(UTC)
-    user = db.execute(
-        select(IAMUser).where(IAMUser.external_iam_user_id == external_id)
-    ).scalar_one_or_none()
+    user = db.execute(select(IAMUser).where(IAMUser.external_iam_user_id == external_id)).scalar_one_or_none()
+
+    needs_commit = False
     if user is None:
         user = IAMUser(
             external_iam_user_id=external_id,
@@ -141,14 +186,41 @@ def _upsert_user(db: Session, claims: dict[str, Any]):
         )
         db.add(user)
         db.flush()
+        needs_commit = True
     else:
-        user.email = claims.get("email") or user.email
-        user.display_name = claims.get("name") or claims.get("preferred_username") or user.display_name
-        user.last_login_at = now
-        user.updated_at = now
+        changed = False
+        new_email = claims.get("email")
+        new_name = claims.get("name") or claims.get("preferred_username")
+
+        if new_email and user.email != new_email:
+            user.email = new_email
+            changed = True
+        if new_name and user.display_name != new_name:
+            user.display_name = new_name
+            changed = True
+
+        last_login = user.last_login_at
+        if last_login is not None:
+            if last_login.tzinfo is None:
+                time_diff = (datetime.now(UTC).replace(tzinfo=None) - last_login).total_seconds()
+            else:
+                time_diff = (now - last_login).total_seconds()
+        else:
+            time_diff = 999999
+
+        if time_diff > 300:
+            user.last_login_at = now
+            user.updated_at = now
+            changed = True
+
+        if changed:
+            db.add(user)
+            db.flush()
+            needs_commit = True
+
     if user.status != "ACTIVE":
         raise HTTPException(status_code=403, detail="Access denied")
-    return user
+    return user, needs_commit
 
 
 def _resolve_context(
@@ -156,10 +228,10 @@ def _resolve_context(
     claims: dict[str, Any],
     selected_tenant: str | None,
 ) -> CurrentContext:
-    from ..models import IAMUser, Tenant, TenantUser
+    from ..models import Tenant, TenantUser
 
     settings = get_settings()
-    user: IAMUser = _upsert_user(db, claims)
+    user, needs_commit = _upsert_user(db, claims)
     token_roles = _roles(_claim(claims, settings.hcl_iam_role_claim))
     is_platform_admin = "PLATFORM_ADMIN" in token_roles
     memberships = db.execute(
@@ -201,15 +273,17 @@ def _resolve_context(
     elif len(memberships) == 1:
         membership, selected = memberships[0]
     elif not settings.auth_enabled:
-        selected = db.execute(
-            select(Tenant).where(Tenant.slug == settings.default_tenant_slug)
-        ).scalar_one_or_none()
-        membership = db.execute(
-            select(TenantUser).where(
-                TenantUser.tenant_id == selected.id,
-                TenantUser.user_id == user.id,
-            )
-        ).scalar_one_or_none() if selected else None
+        selected = db.execute(select(Tenant).where(Tenant.slug == settings.default_tenant_slug)).scalar_one_or_none()
+        membership = (
+            db.execute(
+                select(TenantUser).where(
+                    TenantUser.tenant_id == selected.id,
+                    TenantUser.user_id == user.id,
+                )
+            ).scalar_one_or_none()
+            if selected
+            else None
+        )
 
     if selected is None or (membership is None and not is_platform_admin):
         db.rollback()
@@ -218,7 +292,8 @@ def _resolve_context(
     if is_platform_admin:
         roles.add("PLATFORM_ADMIN")
     permissions = permissions_for_roles(frozenset(roles))
-    db.commit()
+    if needs_commit:
+        db.commit()
     return CurrentContext(
         user_id=user.id,
         external_user_id=user.external_iam_user_id,
@@ -242,11 +317,26 @@ def sa_or_tenant_identity(tenant_model, value: str):
 
 
 def get_current_tenant_context(
+    request: Request = None,
     claims: dict[str, Any] = Depends(get_current_user),
     x_tenant_id: str | None = Header(default=None, alias="X-Tenant-ID"),
     db: Session = Depends(get_db),
 ) -> Iterator[CurrentContext]:
+    cached = _get_cached_context(claims, x_tenant_id)
+    if cached is not None:
+        db.close()
+        token = bind_context(cached)
+        try:
+            yield cached
+        finally:
+            reset_context(token)
+        return
+
     context = _resolve_context(db, claims, x_tenant_id)
+    _set_cached_context(claims, x_tenant_id, context)
+
+    if request is not None and "/stream" in request.url.path:
+        db.close()
     token = bind_context(context)
     try:
         yield context
@@ -295,8 +385,11 @@ def permission_for_request(request: Request) -> str:
         return "schedule:read" if method == "GET" else "schedule:write"
     if path.startswith("/api/projects"):
         return {
-            "GET": "project:read", "POST": "project:create",
-            "PATCH": "project:update", "PUT": "project:update", "DELETE": "project:delete",
+            "GET": "project:read",
+            "POST": "project:create",
+            "PATCH": "project:update",
+            "PUT": "project:update",
+            "DELETE": "project:delete",
         }.get(method, "project:read")
     if path.startswith("/api/sboms"):
         if method == "GET":

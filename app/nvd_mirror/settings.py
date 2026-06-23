@@ -111,13 +111,9 @@ def load_mirror_settings_from_env() -> NvdMirrorSettings:
             "https://services.nvd.nist.gov/rest/json/cves/2.0",
         ),
         api_key_env_var=_env_str("NVD_MIRROR_API_KEY_ENV_VAR", "NVD_API_KEY"),
-        fernet_key_env_var=_env_str(
-            "NVD_MIRROR_FERNET_KEY_ENV_VAR", "NVD_MIRROR_FERNET_KEY"
-        ),
+        fernet_key_env_var=_env_str("NVD_MIRROR_FERNET_KEY_ENV_VAR", "NVD_MIRROR_FERNET_KEY"),
         download_feeds_enabled=_env_bool("NVD_MIRROR_DOWNLOAD_FEEDS_ENABLED", False),
         page_size=_env_int("NVD_MIRROR_PAGE_SIZE", 2000, minimum=1, maximum=2000),
         window_days=_env_int("NVD_MIRROR_WINDOW_DAYS", 119, minimum=1, maximum=119),
-        min_freshness_hours=_env_int(
-            "NVD_MIRROR_MIN_FRESHNESS_HOURS", 24, minimum=0, maximum=24 * 365
-        ),
+        min_freshness_hours=_env_int("NVD_MIRROR_MIN_FRESHNESS_HOURS", 24, minimum=0, maximum=24 * 365),
     )

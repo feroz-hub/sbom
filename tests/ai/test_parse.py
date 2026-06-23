@@ -57,7 +57,7 @@ def test_parse_strips_javascript_fence() -> None:
 
 
 def test_parse_extracts_object_with_leading_preamble() -> None:
-    raw = "Sure, here's your result:\n\n{\"name\": \"preamble\", \"count\": 5}"
+    raw = 'Sure, here\'s your result:\n\n{"name": "preamble", "count": 5}'
     out = parse_llm_json(raw, _Payload)
     assert out == _Payload(name="preamble", count=5)
 
@@ -69,10 +69,7 @@ def test_parse_extracts_object_with_trailing_text() -> None:
 
 
 def test_parse_extracts_object_with_both_preamble_and_trailing() -> None:
-    raw = (
-        'Sure, here you go:\n{"name": "both", "count": 7}\n\n'
-        "Hope that helps."
-    )
+    raw = 'Sure, here you go:\n{"name": "both", "count": 7}\n\nHope that helps.'
     out = parse_llm_json(raw, _Payload)
     assert out == _Payload(name="both", count=7)
 
@@ -96,10 +93,7 @@ def test_brace_counter_handles_escaped_quote_in_string() -> None:
 
 def test_nested_object_value() -> None:
     """Brace counting must close at the OUTER object, not the first inner }."""
-    raw = (
-        'Here you go: {"name": "nested", "count": 10, '
-        '"extra": {"a": 1, "b": 2}} thanks!'
-    )
+    raw = 'Here you go: {"name": "nested", "count": 10, "extra": {"a": 1, "b": 2}} thanks!'
     out = parse_llm_json(raw, _Payload)
     assert out.count == 10
 

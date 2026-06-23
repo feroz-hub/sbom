@@ -167,8 +167,7 @@ def _check_data_license(value: object, ctx: ValidationContext) -> None:
             path="dataLicense",
             message=f"dataLicense must be exactly 'CC0-1.0', got '{value}'.",
             remediation=(
-                "Set dataLicense to 'CC0-1.0' — this is the licence of the SBOM "
-                "document itself, not of the components."
+                "Set dataLicense to 'CC0-1.0' — this is the licence of the SBOM document itself, not of the components."
             ),
             spec_reference="SPDX 2.3 §6.2",
         )
@@ -229,10 +228,7 @@ def _check_checksum(chk: dict, path: str, ctx: ValidationContext) -> None:
             E.E044_CHECKSUM_LENGTH_MISMATCH,
             stage=_STAGE,
             path=path,
-            message=(
-                f"Checksum has algorithm '{alg}' but value length {len(value)} hex "
-                f"chars (expected {expected})."
-            ),
+            message=(f"Checksum has algorithm '{alg}' but value length {len(value)} hex chars (expected {expected})."),
             remediation="Recompute the digest with the algorithm declared.",
             spec_reference="SPDX 2.3 §7.10",
         )
@@ -267,10 +263,7 @@ def _check_license_expression(expr: str, path: str, ctx: ValidationContext) -> N
             E.E043_LICENSE_EXPRESSION_INVALID,
             stage=_STAGE,
             path=path,
-            message=(
-                "license-expression library is not installed; cannot validate "
-                f"expression '{expr}'."
-            ),
+            message=(f"license-expression library is not installed; cannot validate expression '{expr}'."),
             remediation="Contact your operator; install license-expression>=30.",
             spec_reference="SPDX 2.3 Annex D",
         )
@@ -308,8 +301,8 @@ def _check_describes_relationship(doc: dict, ctx: ValidationContext) -> None:
         path="relationships",
         message="No DESCRIBES relationship from SPDXRef-DOCUMENT was found.",
         remediation=(
-            "Add a relationship `{ \"spdxElementId\": \"SPDXRef-DOCUMENT\", "
-            "\"relationshipType\": \"DESCRIBES\", \"relatedSpdxElement\": \"...\" }`."
+            'Add a relationship `{ "spdxElementId": "SPDXRef-DOCUMENT", '
+            '"relationshipType": "DESCRIBES", "relatedSpdxElement": "..." }`.'
         ),
         spec_reference="SPDX 2.3 §11",
     )

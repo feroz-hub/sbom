@@ -305,9 +305,7 @@ async def test_budget_per_scan_halts_remaining_findings(client):
     store = InMemoryProgressStore()
     db = SessionLocal()
     try:
-        pipeline = AiFixBatchPipeline(
-            db, registry=_registry_with(fake), store=store, budget=guard
-        )
+        pipeline = AiFixBatchPipeline(db, registry=_registry_with(fake), store=store, budget=guard)
         summary = await pipeline.run(run_id)
     finally:
         db.close()

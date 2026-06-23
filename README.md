@@ -328,11 +328,14 @@ DATABASE_URL=postgresql+psycopg://sbom:sbom@localhost:5432/sbom_analyser
 
 Create or upgrade the schema, then run the API:
 
+> [!WARNING]
+> Do not use global `alembic`; use `python -m alembic` from the project virtual environment (after activating it).
+
 ```bash
-alembic heads
-alembic upgrade head
-alembic current
-alembic check
+python -m alembic heads
+python -m alembic upgrade head
+python -m alembic current
+python -m alembic check
 uvicorn app.main:app --reload
 ```
 

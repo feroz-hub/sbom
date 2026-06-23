@@ -94,10 +94,10 @@ def normalize_details(details: dict | None, components: list[dict]) -> dict:
 
 
 # Run-status enum (ADR-0001). One word, one meaning.
-RUN_STATUS_OK = "OK"            # completed cleanly, zero findings
+RUN_STATUS_OK = "OK"  # completed cleanly, zero findings
 RUN_STATUS_FINDINGS = "FINDINGS"  # completed cleanly, >=1 finding (NOT a pipeline failure)
 RUN_STATUS_PARTIAL = "PARTIAL"  # completed but some upstream feeds errored
-RUN_STATUS_ERROR = "ERROR"      # technical failure
+RUN_STATUS_ERROR = "ERROR"  # technical failure
 RUN_STATUS_RUNNING = "RUNNING"
 RUN_STATUS_PENDING = "PENDING"
 RUN_STATUS_NO_DATA = "NO_DATA"

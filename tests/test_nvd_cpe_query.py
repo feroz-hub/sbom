@@ -61,9 +61,7 @@ def test_nvd_query_by_cpe_is_exact_only_no_virtual_match_fallback(monkeypatch):
     out = analysis_mod.nvd_query_by_cpe(cpe, None, analysis_mod.get_analysis_settings())
 
     assert out == []
-    assert len(calls) == 1, (
-        f"expected exactly ONE HTTP call (exact CPE only), got {len(calls)}: {calls}"
-    )
+    assert len(calls) == 1, f"expected exactly ONE HTTP call (exact CPE only), got {len(calls)}: {calls}"
     assert "cpeName" in calls[0]
     assert "virtualMatchString" not in calls[0], (
         "virtualMatchString fallback is deleted — nvd_query_by_cpe must not issue it"

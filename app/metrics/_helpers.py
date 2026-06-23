@@ -26,11 +26,9 @@ def active_head_sbom_ids_subquery() -> ScalarSelect:
     return (
         select(SBOMSource.id)
         .where(SBOMSource.is_active.is_(True))
-        .where(~SBOMSource.id.in_(
-            select(SBOMSource.parent_id)
-            .where(SBOMSource.parent_id.is_not(None))
-            .scalar_subquery()
-        ))
+        .where(
+            ~SBOMSource.id.in_(select(SBOMSource.parent_id).where(SBOMSource.parent_id.is_not(None)).scalar_subquery())
+        )
         .scalar_subquery()
     )
 
@@ -49,7 +47,6 @@ def latest_run_per_sbom_subquery() -> ScalarSelect:
         .group_by(AnalysisRun.sbom_id)
         .scalar_subquery()
     )
-
 
 
 def latest_run_per_sbom_as_of_subquery(as_of_iso: str) -> ScalarSelect:

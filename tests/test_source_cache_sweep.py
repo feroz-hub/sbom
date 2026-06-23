@@ -50,9 +50,7 @@ def test_delete_expired_removes_rows_past_expires_at(db: Session) -> None:
     write_repo = SourceResponseCacheRepository(db, clock=_frozen_clock(_T0))
     write_repo.set("OSV", "pkg:npm/lodash@1.0.0", {"vulns": []}, ttl_seconds=3600)
 
-    sweep_repo = SourceResponseCacheRepository(
-        db, clock=_frozen_clock(_T0 + timedelta(hours=2))
-    )
+    sweep_repo = SourceResponseCacheRepository(db, clock=_frozen_clock(_T0 + timedelta(hours=2)))
     deleted = sweep_repo.delete_expired()
     assert deleted == 1
 
@@ -71,9 +69,7 @@ def test_delete_expired_handles_many_rows(db: Session) -> None:
         )
     assert db.query(SourceResponseCache).count() == 50
 
-    sweep_repo = SourceResponseCacheRepository(
-        db, clock=_frozen_clock(_T0 + timedelta(hours=2))
-    )
+    sweep_repo = SourceResponseCacheRepository(db, clock=_frozen_clock(_T0 + timedelta(hours=2)))
     deleted = sweep_repo.delete_expired()
     assert deleted == 50
     assert db.query(SourceResponseCache).count() == 0
@@ -90,9 +86,7 @@ def test_delete_expired_keeps_fresh_rows(db: Session) -> None:
     write_repo.set("OSV", "pkg:npm/a@1.0.0", {"vulns": [], "tag": "a"}, ttl_seconds=3600)
     write_repo.set("OSV", "pkg:npm/b@1.0.0", {"vulns": [], "tag": "b"}, ttl_seconds=3600)
 
-    sweep_repo = SourceResponseCacheRepository(
-        db, clock=_frozen_clock(_T0 + timedelta(minutes=30))
-    )
+    sweep_repo = SourceResponseCacheRepository(db, clock=_frozen_clock(_T0 + timedelta(minutes=30)))
     deleted = sweep_repo.delete_expired()
     assert deleted == 0
     assert db.query(SourceResponseCache).count() == 2
@@ -104,18 +98,12 @@ def test_delete_expired_keeps_fresh_drops_only_stale(db: Session) -> None:
     write_repo_t0.set("OSV", "pkg:npm/stale@1.0.0", {"tag": "stale"}, ttl_seconds=3600)
 
     # The fresh row is written at T0+5h with TTL=2h → expires at T0+7h.
-    write_repo_t5 = SourceResponseCacheRepository(
-        db, clock=_frozen_clock(_T0 + timedelta(hours=5))
-    )
-    write_repo_t5.set(
-        "OSV", "pkg:npm/fresh@1.0.0", {"tag": "fresh"}, ttl_seconds=2 * 3600
-    )
+    write_repo_t5 = SourceResponseCacheRepository(db, clock=_frozen_clock(_T0 + timedelta(hours=5)))
+    write_repo_t5.set("OSV", "pkg:npm/fresh@1.0.0", {"tag": "fresh"}, ttl_seconds=2 * 3600)
 
     # Sweep at T0+6h: stale expired at T0+1h (already gone), fresh
     # expires at T0+7h (still good).
-    sweep_repo = SourceResponseCacheRepository(
-        db, clock=_frozen_clock(_T0 + timedelta(hours=6))
-    )
+    sweep_repo = SourceResponseCacheRepository(db, clock=_frozen_clock(_T0 + timedelta(hours=6)))
     deleted = sweep_repo.delete_expired()
     assert deleted == 1
 
@@ -131,9 +119,7 @@ def test_delete_expired_on_empty_table_is_noop(db: Session) -> None:
 def test_delete_expired_zero_or_negative_batch_size_is_noop(db: Session) -> None:
     write_repo = SourceResponseCacheRepository(db, clock=_frozen_clock(_T0))
     write_repo.set("OSV", "pkg:npm/lodash@1.0.0", {}, ttl_seconds=3600)
-    sweep_repo = SourceResponseCacheRepository(
-        db, clock=_frozen_clock(_T0 + timedelta(hours=2))
-    )
+    sweep_repo = SourceResponseCacheRepository(db, clock=_frozen_clock(_T0 + timedelta(hours=2)))
     assert sweep_repo.delete_expired(batch_size=0) == 0
     assert sweep_repo.delete_expired(batch_size=-5) == 0
     # Row is still there.

@@ -35,6 +35,7 @@ from datetime import UTC, datetime
 from sqlalchemy.orm import Session
 
 from .. import metrics
+from ..db import SessionLocal
 from ..metrics.cache import invalidation_key
 from .cost import BudgetGuard, estimate_cost_usd, estimate_tokens, write_usage_log_row
 from .fix_generator import _budget_caps_from_settings
@@ -80,18 +81,12 @@ def build_portfolio_snapshot(db: Session) -> dict:
             "sboms_analysed": int(metrics.sboms_analysed_total(db)),
             "active_projects": int(metrics.projects_active_total(db)),
             "total_findings_latest": int(metrics.findings_latest_per_sbom_total(db)),
-            "distinct_vulnerabilities": int(
-                metrics.findings_latest_per_sbom_distinct_vulnerabilities(db)
-            ),
+            "distinct_vulnerabilities": int(metrics.findings_latest_per_sbom_distinct_vulnerabilities(db)),
             "severity": severity,
             "kev_findings": int(metrics.findings_kev_in_scope(db, scope="latest_per_sbom")),
-            "high_epss_findings": int(
-                metrics.findings_high_epss_in_scope(db, scope="latest_per_sbom")
-            ),
+            "high_epss_findings": int(metrics.findings_high_epss_in_scope(db, scope="latest_per_sbom")),
             "fix_available": int(metrics.findings_latest_per_sbom_fix_available(db)),
-            "needs_review": int(
-                metrics.findings_needs_review_in_scope(db, scope="latest_per_sbom")
-            ),
+            "needs_review": int(metrics.findings_needs_review_in_scope(db, scope="latest_per_sbom")),
         },
         "net_7day": {
             "added": net.added,
@@ -142,8 +137,9 @@ async def generate_briefing(db: Session, *, force: bool = False) -> dict:
                 return {**hit[1], "cached": True}
 
     snapshot = build_portfolio_snapshot(db)
+    db.close()  # Close session early before external provider call!
+
     result = await _call_llm(
-        db,
         system=_BRIEFING_SYSTEM,
         user=json.dumps(snapshot, separators=(",", ":")),
         purpose="copilot_briefing",
@@ -173,14 +169,10 @@ async def answer_question(db: Session, question: str) -> dict:
     if not q:
         raise ValueError("question must not be empty")
     snapshot = build_portfolio_snapshot(db)
-    user = (
-        "SNAPSHOT:\n"
-        + json.dumps(snapshot, separators=(",", ":"))
-        + "\n\nQUESTION: "
-        + q
-    )
+    db.close()  # Close session early before external provider call!
+
+    user = "SNAPSHOT:\n" + json.dumps(snapshot, separators=(",", ":")) + "\n\nQUESTION: " + q
     result = await _call_llm(
-        db,
         system=_ASK_SYSTEM,
         user=user,
         purpose="copilot_ask",
@@ -197,22 +189,21 @@ async def answer_question(db: Session, question: str) -> dict:
     }
 
 
-async def _call_llm(
-    db: Session, *, system: str, user: str, purpose: str, max_output_tokens: int
-) -> dict:
+async def _call_llm(*, system: str, user: str, purpose: str, max_output_tokens: int) -> dict:
     """Shared provider call: pre-flight budget, generate, record, ledger."""
-    registry = get_registry(db)
-    provider = registry.get_default()
-    model = provider.default_model
+    with SessionLocal() as db:
+        registry = get_registry(db)
+        provider = registry.get_default()
+        model = provider.default_model
 
-    guard = BudgetGuard(_budget_caps_from_settings(), db)
-    estimated = estimate_cost_usd(
-        provider=provider.name,
-        model=model,
-        input_tokens=estimate_tokens(system) + estimate_tokens(user),
-        output_tokens=max_output_tokens,
-    )
-    guard.check_request(estimated_usd=estimated)
+        guard = BudgetGuard(_budget_caps_from_settings(), db)
+        estimated = estimate_cost_usd(
+            provider=provider.name,
+            model=model,
+            input_tokens=estimate_tokens(system) + estimate_tokens(user),
+            output_tokens=max_output_tokens,
+        )
+        guard.check_request(estimated_usd=estimated)
 
     request_id = uuid.uuid4().hex
     started = time.monotonic()
@@ -229,20 +220,24 @@ async def _call_llm(
     latency_ms = int((time.monotonic() - started) * 1000)
 
     actual_cost = float(response.usage.cost_usd or 0.0)
-    guard.record(actual_usd=actual_cost)
-    write_usage_log_row(
-        db,
-        request_id=request_id,
-        provider=response.provider,
-        model=response.model,
-        purpose=purpose,
-        finding_cache_key=None,
-        input_tokens=response.usage.input_tokens,
-        output_tokens=response.usage.output_tokens,
-        cost_usd=actual_cost,
-        latency_ms=latency_ms,
-        cache_hit=False,
-    )
+    with SessionLocal() as db:
+        guard = BudgetGuard(_budget_caps_from_settings(), db)
+        guard.record(actual_usd=actual_cost)
+        write_usage_log_row(
+            db,
+            request_id=request_id,
+            provider=response.provider,
+            model=response.model,
+            purpose=purpose,
+            finding_cache_key=None,
+            input_tokens=response.usage.input_tokens,
+            output_tokens=response.usage.output_tokens,
+            cost_usd=actual_cost,
+            latency_ms=latency_ms,
+            cache_hit=False,
+        )
+        db.commit()
+
     return {
         "text": response.text.strip(),
         "provider": response.provider,

@@ -90,9 +90,7 @@ async def test_window_success_counter_increments_per_window() -> None:
     rec2 = make_record("CVE-W2", last_modified=w2[1] - timedelta(seconds=1))
     rec3 = make_record("CVE-W3", last_modified=w3[1] - timedelta(seconds=1))
 
-    remote = FakeNvdRemote(
-        {w1: [batch([rec1])], w2: [batch([rec2])], w3: [batch([rec3])]}
-    )
+    remote = FakeNvdRemote({w1: [batch([rec1])], w2: [batch([rec2])], w3: [batch([rec3])]})
 
     await BootstrapMirror(
         remote=remote,
@@ -114,9 +112,7 @@ async def test_window_failure_counter_on_remote_error() -> None:
     target = HISTORICAL_FLOOR + timedelta(days=15)
     snap = make_snapshot(window_days=30, last_modified_utc=None)
 
-    remote = FakeNvdRemote(
-        raise_on_nth_call=1, raise_exc=RuntimeError("boom")
-    )
+    remote = FakeNvdRemote(raise_on_nth_call=1, raise_exc=RuntimeError("boom"))
 
     await BootstrapMirror(
         remote=remote,
@@ -219,9 +215,7 @@ async def test_429_counter_increments_per_429(monkeypatch: pytest.MonkeyPatch) -
         return httpx.Response(429, headers={"Retry-After": "0"}, json={})
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    adapter = NvdHttpAdapter(
-        api_endpoint="https://nvd.test/cves/2.0", api_key="k", client=client
-    )
+    adapter = NvdHttpAdapter(api_endpoint="https://nvd.test/cves/2.0", api_key="k", client=client)
 
     window = MirrorWindow(
         start=datetime(2024, 4, 1, tzinfo=UTC),

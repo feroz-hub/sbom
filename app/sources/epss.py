@@ -118,9 +118,7 @@ def get_epss_scores(db: Session, cve_ids: list[str]) -> dict[str, float]:
 
     # 1. Load what's already cached.
     cached_rows = db.execute(
-        select(EpssScore.cve_id, EpssScore.epss, EpssScore.refreshed_at).where(
-            EpssScore.cve_id.in_(norm)
-        )
+        select(EpssScore.cve_id, EpssScore.epss, EpssScore.refreshed_at).where(EpssScore.cve_id.in_(norm))
     ).all()
     cached: dict[str, float] = {}
     fresh_ids: set[str] = set()

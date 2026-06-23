@@ -276,26 +276,26 @@ class ValidationRepairService:
         session = self.get_session(session_id)
         if not session.can_edit:
             raise HTTPException(status_code=403, detail="This validation session is not editable")
-        
+
         summary_parts = []
         before = content_hash(session.current_content)
-        
+
         if content is not None:
             session.current_content = content
             session.content_sha256 = content_hash(content)
             session.validation_status = "edited"
             summary_parts.append("content edited")
-            
+
         if project_id is not None:
             project = self.db.get(Projects, project_id)
             if not project:
                 raise HTTPException(status_code=404, detail="Project not found")
             session.project_id = project_id
             summary_parts.append(f"project assigned to '{project.project_name}'")
-            
+
         session.updated_at = now_iso()
         self.db.add(session)
-        
+
         summary = "SBOM " + " and ".join(summary_parts) + " in validation repair workspace."
         self._record_event(
             session,
@@ -309,7 +309,9 @@ class ValidationRepairService:
         self.db.refresh(session)
         return session
 
-    def update_content(self, session_id: str, content: str, *, actor_user_id: str | None = None) -> SBOMValidationSession:
+    def update_content(
+        self, session_id: str, content: str, *, actor_user_id: str | None = None
+    ) -> SBOMValidationSession:
         return self.update_session(session_id, content=content, actor_user_id=actor_user_id)
 
     def validate_session(
@@ -329,7 +331,9 @@ class ValidationRepairService:
         serialized = serialize_report(report)
         safe, reason = payload_is_safe_to_stage(report)
         session.latest_error_report_json = serialized
-        session.validation_status = "passed" if not report.has_errors() else ("security_blocked" if not safe else "failed")
+        session.validation_status = (
+            "passed" if not report.has_errors() else ("security_blocked" if not safe else "failed")
+        )
         session.can_edit = bool(safe)
         session.can_ai_fix = bool(safe)
         session.security_blocked_reason = reason
@@ -474,7 +478,9 @@ class ValidationRepairService:
         if not session.can_ai_fix:
             raise HTTPException(status_code=403, detail="AI fixes are disabled for this validation session")
         report = session.latest_error_report_json or {}
-        if any(not entry.get("can_ai_fix", True) for entry in report.get("entries", []) if entry.get("severity") == "error"):
+        if any(
+            not entry.get("can_ai_fix", True) for entry in report.get("entries", []) if entry.get("severity") == "error"
+        ):
             # The session may still have safe structural errors, but signature
             # and security failures must be explained by humans/tools rather
             # than patched by an LLM.
@@ -513,8 +519,12 @@ class ValidationRepairService:
             raise HTTPException(status_code=403, detail="This validation session is not editable")
         try:
             typed_patches = [ValidationRepairPatch.model_validate(p).model_dump(mode="json") for p in patches]
-            typed_patches = [p for p in _filter_ai_suggestion(AiRepairSuggestion(summary="selected", patches=typed_patches)).patches]
-            new_content = apply_repair_patches(session.current_content or "", [p.model_dump(mode="json") for p in typed_patches])
+            typed_patches = [
+                p for p in _filter_ai_suggestion(AiRepairSuggestion(summary="selected", patches=typed_patches)).patches
+            ]
+            new_content = apply_repair_patches(
+                session.current_content or "", [p.model_dump(mode="json") for p in typed_patches]
+            )
         except (PatchApplyError, ValueError) as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 

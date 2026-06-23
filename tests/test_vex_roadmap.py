@@ -415,7 +415,9 @@ def test_rbac_blocks_viewer_and_allows_security_override(client, monkeypatch):
             headers={**headers, "X-SBOM-Roles": "security", "X-SBOM-User": "sec@example.test"},
         )
         assert allowed.status_code == 200
-        audit = db.execute(select(VexOverrideAudit).where(VexOverrideAudit.component_id == component.id)).scalars().first()
+        audit = (
+            db.execute(select(VexOverrideAudit).where(VexOverrideAudit.component_id == component.id)).scalars().first()
+        )
         assert audit is not None
         assert audit.changed_by == "sec@example.test"
     finally:

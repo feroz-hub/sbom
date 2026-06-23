@@ -72,7 +72,7 @@ def create_batch(
     persisted row (refreshed from DB).
     """
     bid = batch_id or new_batch_id()
-    label = (scope.label if scope and scope.label else None)
+    label = scope.label if scope and scope.label else None
     scope_payload: dict[str, Any] | None = None
     if scope is not None:
         scope_payload = scope.model_dump(mode="json", exclude_none=True)
@@ -115,9 +115,7 @@ def update_batch_from_progress(
     was the outcome." The two converge at terminal status.
     """
     try:
-        row = db.execute(
-            select(AiFixBatch).where(AiFixBatch.id == batch_id)
-        ).scalar_one_or_none()
+        row = db.execute(select(AiFixBatch).where(AiFixBatch.id == batch_id)).scalar_one_or_none()
         if row is None:
             log.warning("ai.batch.update.not_found: batch=%s", batch_id)
             return
@@ -159,9 +157,7 @@ def list_batches_for_run(
     """Return all batches for a run, newest-first."""
     return list(
         db.execute(
-            select(AiFixBatch)
-            .where(AiFixBatch.run_id == run_id)
-            .order_by(AiFixBatch.created_at.desc())
+            select(AiFixBatch).where(AiFixBatch.run_id == run_id).order_by(AiFixBatch.created_at.desc())
         ).scalars()
     )
 
@@ -173,10 +169,7 @@ def latest_batch_for_run(db: Session, *, run_id: int) -> AiFixBatch | None:
     most-recent batch during the 30-day deprecation window.
     """
     return db.execute(
-        select(AiFixBatch)
-        .where(AiFixBatch.run_id == run_id)
-        .order_by(AiFixBatch.created_at.desc())
-        .limit(1)
+        select(AiFixBatch).where(AiFixBatch.run_id == run_id).order_by(AiFixBatch.created_at.desc()).limit(1)
     ).scalar_one_or_none()
 
 

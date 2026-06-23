@@ -28,9 +28,7 @@ def fernet_key(monkeypatch: pytest.MonkeyPatch) -> str:
 
 
 @pytest.fixture()
-def health_client(
-    app, fernet_key: str, monkeypatch: pytest.MonkeyPatch
-) -> Iterator[TestClient]:
+def health_client(app, fernet_key: str, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     """TestClient with an isolated DB so prior tests cannot pollute the
     nvd_settings row that the /health endpoint reads.
 
@@ -97,9 +95,7 @@ def test_health_includes_counter_snapshot(health_client: TestClient) -> None:
     mirror_counters.reset()
 
 
-def test_health_survives_db_failure(
-    health_client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_health_survives_db_failure(health_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     """/health must NEVER 500 just because the mirror sub-system is broken."""
 
     def _explode(*_a, **_kw):
@@ -108,9 +104,7 @@ def test_health_survives_db_failure(
     # Make the settings_repo.load() raise.
     from app.nvd_mirror.adapters import settings_repository
 
-    monkeypatch.setattr(
-        settings_repository.SqlAlchemySettingsRepository, "load", _explode
-    )
+    monkeypatch.setattr(settings_repository.SqlAlchemySettingsRepository, "load", _explode)
 
     r = health_client.get("/health")
     assert r.status_code == 200

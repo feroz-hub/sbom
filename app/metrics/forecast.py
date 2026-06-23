@@ -132,9 +132,7 @@ def findings_forecast(
     )
 
 
-def _forecast_uncached(
-    db: Session, history_days: int, horizon_days: int, end: date
-) -> dict:
+def _forecast_uncached(db: Session, history_days: int, horizon_days: int, end: date) -> dict:
     points = findings_daily_distinct_active(db, days=history_days, today=end)
     totals = [p.total for p in points]
     history = [{"date": p.date, "total": p.total} for p in points]

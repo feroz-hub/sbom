@@ -24,16 +24,21 @@ _SPDX_VALID = {
         "creators": ["Tool: tests"],
     },
     "packages": [
-        {"SPDXID": "SPDXRef-Package", "name": "x", "versionInfo": "1.0.0",
-         "downloadLocation": "NOASSERTION", "filesAnalyzed": False,
-         "supplier": "Organization: ACME",
-         "licenseConcluded": "Apache-2.0", "licenseDeclared": "Apache-2.0",
-         "copyrightText": "NOASSERTION",
-         "checksums": [{"algorithm": "SHA256", "checksumValue": "a" * 64}]}
+        {
+            "SPDXID": "SPDXRef-Package",
+            "name": "x",
+            "versionInfo": "1.0.0",
+            "downloadLocation": "NOASSERTION",
+            "filesAnalyzed": False,
+            "supplier": "Organization: ACME",
+            "licenseConcluded": "Apache-2.0",
+            "licenseDeclared": "Apache-2.0",
+            "copyrightText": "NOASSERTION",
+            "checksums": [{"algorithm": "SHA256", "checksumValue": "a" * 64}],
+        }
     ],
     "relationships": [
-        {"spdxElementId": "SPDXRef-DOCUMENT", "relationshipType": "DESCRIBES",
-         "relatedSpdxElement": "SPDXRef-Package"}
+        {"spdxElementId": "SPDXRef-DOCUMENT", "relationshipType": "DESCRIBES", "relatedSpdxElement": "SPDXRef-Package"}
     ],
 }
 
@@ -125,9 +130,14 @@ _CDX_VALID = {
     "version": 1,
     "metadata": {"timestamp": "2026-04-30T12:00:00Z", "tools": [{"name": "test"}]},
     "components": [
-        {"type": "library", "bom-ref": "pkg:npm/foo@1.0.0", "name": "foo",
-         "version": "1.0.0", "purl": "pkg:npm/foo@1.0.0",
-         "supplier": {"name": "ACME"}}
+        {
+            "type": "library",
+            "bom-ref": "pkg:npm/foo@1.0.0",
+            "name": "foo",
+            "version": "1.0.0",
+            "purl": "pkg:npm/foo@1.0.0",
+            "supplier": {"name": "ACME"},
+        }
     ],
     "dependencies": [{"ref": "pkg:npm/foo@1.0.0", "dependsOn": []}],
 }

@@ -93,7 +93,9 @@ ANTHROPIC = ProviderCatalogEntry(
         ModelInfo(name="claude-opus-4-7", display_name="Claude Opus 4.7", default_tier="paid"),
         ModelInfo(name="claude-sonnet-4-6", display_name="Claude Sonnet 4.6", default_tier="paid"),
         ModelInfo(name="claude-sonnet-4-5", display_name="Claude Sonnet 4.5", default_tier="paid"),
-        ModelInfo(name="claude-haiku-4-5", display_name="Claude Haiku 4.5", default_tier="paid", notes="Cheapest in family"),
+        ModelInfo(
+            name="claude-haiku-4-5", display_name="Claude Haiku 4.5", default_tier="paid", notes="Cheapest in family"
+        ),
     ],
     docs_url="https://docs.anthropic.com/en/api/messages",
     api_key_url="https://console.anthropic.com/settings/keys",
@@ -112,7 +114,9 @@ OPENAI = ProviderCatalogEntry(
     requires_base_url=False,
     available_models=[
         ModelInfo(name="gpt-4o", display_name="GPT-4o", default_tier="paid"),
-        ModelInfo(name="gpt-4o-mini", display_name="GPT-4o mini", default_tier="paid", notes="Cheapest paid OpenAI tier"),
+        ModelInfo(
+            name="gpt-4o-mini", display_name="GPT-4o mini", default_tier="paid", notes="Cheapest paid OpenAI tier"
+        ),
         ModelInfo(name="gpt-4.1", display_name="GPT-4.1", default_tier="paid"),
         ModelInfo(name="gpt-4.1-mini", display_name="GPT-4.1 mini", default_tier="paid"),
     ],
@@ -222,7 +226,9 @@ OLLAMA = ProviderCatalogEntry(
         ModelInfo(name="llama3.3:70b", display_name="Llama 3.3 70B", default_tier="free"),
         ModelInfo(name="llama3.1:70b", display_name="Llama 3.1 70B", default_tier="free"),
         ModelInfo(name="qwen2.5:72b", display_name="Qwen 2.5 72B", default_tier="free"),
-        ModelInfo(name="qwen2.5:32b", display_name="Qwen 2.5 32B", default_tier="free", notes="Smaller — fits more GPUs"),
+        ModelInfo(
+            name="qwen2.5:32b", display_name="Qwen 2.5 32B", default_tier="free", notes="Smaller — fits more GPUs"
+        ),
     ],
     docs_url="https://github.com/ollama/ollama/blob/main/docs/api.md",
     api_key_url="",

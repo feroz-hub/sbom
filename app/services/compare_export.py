@@ -57,8 +57,7 @@ def _to_markdown(r: CompareResult) -> str:
     lines.append("## Posture")
     lines.append("")
     lines.append(
-        f"- **KEV exposure**: {r.posture.kev_count_a} → {r.posture.kev_count_b} "
-        f"({_signed(r.posture.kev_count_delta)})"
+        f"- **KEV exposure**: {r.posture.kev_count_a} → {r.posture.kev_count_b} ({_signed(r.posture.kev_count_delta)})"
     )
     lines.append(
         f"- **Fix-available coverage**: {r.posture.fix_available_pct_a:.1f}% → "
@@ -79,9 +78,7 @@ def _to_markdown(r: CompareResult) -> str:
 
     resolved = [f for f in r.findings if f.change_kind == FindingChangeKind.RESOLVED]
     added = [f for f in r.findings if f.change_kind == FindingChangeKind.ADDED]
-    sev_changed = [
-        f for f in r.findings if f.change_kind == FindingChangeKind.SEVERITY_CHANGED
-    ]
+    sev_changed = [f for f in r.findings if f.change_kind == FindingChangeKind.SEVERITY_CHANGED]
 
     if resolved:
         lines.append(f"## Resolved ({len(resolved)})")
@@ -109,11 +106,7 @@ def _to_markdown(r: CompareResult) -> str:
             )
         lines.append("")
 
-    component_events = [
-        c
-        for c in r.components
-        if c.change_kind != ComponentChangeKind.UNCHANGED
-    ]
+    component_events = [c for c in r.components if c.change_kind != ComponentChangeKind.UNCHANGED]
     if component_events:
         lines.append(f"## Component changes ({len(component_events)})")
         lines.append("")
@@ -201,9 +194,7 @@ def _to_csv(r: CompareResult) -> str:
                 f.severity_b.value if f.severity_b else "",
                 "true" if f.kev_current else "false",
                 "" if f.epss_current is None else f"{f.epss_current:.4f}",
-                ""
-                if f.epss_percentile_current is None
-                else f"{f.epss_percentile_current:.4f}",
+                "" if f.epss_percentile_current is None else f"{f.epss_percentile_current:.4f}",
                 f.component_name,
                 f.component_version_a or "",
                 f.component_version_b or "",

@@ -88,7 +88,9 @@ class GroundingContext(BaseModel):
 
     component: ComponentRef
 
-    cve_summary_from_db: str = Field(default="", description="Existing prose from cve_cache; never written by the model.")
+    cve_summary_from_db: str = Field(
+        default="", description="Existing prose from cve_cache; never written by the model."
+    )
     severity: Literal["critical", "high", "medium", "low", "none", "unknown"] = "unknown"
     cvss_v3_score: float | None = None
     cvss_v3_vector: str | None = None
@@ -107,9 +109,7 @@ class GroundingContext(BaseModel):
 
     # Provenance: which sources contributed to this context. The model
     # should only cite sources that appear here.
-    sources_used: list[Literal["osv", "ghsa", "nvd", "epss", "kev", "fix_version_data"]] = Field(
-        default_factory=list
-    )
+    sources_used: list[Literal["osv", "ghsa", "nvd", "epss", "kev", "fix_version_data"]] = Field(default_factory=list)
 
     def model_dump_for_prompt(self) -> str:
         """Compact JSON serialization for prompt injection.
@@ -233,9 +233,7 @@ def build_grounding_context(
             select(SBOMComponent).where(SBOMComponent.id == finding.component_id)
         ).scalar_one_or_none()
 
-    cve_cache_row = db.execute(
-        select(CveCache).where(CveCache.cve_id == finding.vuln_id)
-    ).scalar_one_or_none()
+    cve_cache_row = db.execute(select(CveCache).where(CveCache.cve_id == finding.vuln_id)).scalar_one_or_none()
     cve_payload: dict[str, Any] | None = None
     if cve_cache_row is not None:
         if isinstance(cve_cache_row.payload, dict):
@@ -248,10 +246,7 @@ def build_grounding_context(
 
     sources_used: list[str] = []
     if cve_payload:
-        sources_used.extend(
-            s for s in (cve_payload.get("sources_used") or [])
-            if isinstance(s, str)
-        )
+        sources_used.extend(s for s in (cve_payload.get("sources_used") or []) if isinstance(s, str))
 
     fix_versions = _fix_versions_from_cve_cache(cve_payload) or _fix_versions_from_finding(finding, component)
     if fix_versions and "fix_version_data" not in sources_used:
@@ -271,9 +266,7 @@ def build_grounding_context(
         except Exception:
             kev_due_date = None
     if not kev_listed:
-        kev_row = db.execute(
-            select(KevEntry).where(KevEntry.cve_id == finding.vuln_id)
-        ).scalar_one_or_none()
+        kev_row = db.execute(select(KevEntry).where(KevEntry.cve_id == finding.vuln_id)).scalar_one_or_none()
         if kev_row is not None:
             kev_listed = True
             if "kev" not in sources_used:
@@ -286,9 +279,7 @@ def build_grounding_context(
         epss_score = exp.get("epss_score")
         epss_percentile = exp.get("epss_percentile")
     if epss_score is None:
-        epss_row = db.execute(
-            select(EpssScore).where(EpssScore.cve_id == finding.vuln_id)
-        ).scalar_one_or_none()
+        epss_row = db.execute(select(EpssScore).where(EpssScore.cve_id == finding.vuln_id)).scalar_one_or_none()
         if epss_row is not None:
             epss_score = float(epss_row.epss) if epss_row.epss is not None else None
             epss_percentile = float(epss_row.percentile) if epss_row.percentile is not None else None
@@ -325,7 +316,5 @@ def build_grounding_context(
         fix_versions=fix_versions,
         workaround=(cve_payload.get("workaround") if cve_payload else None),
         references=_references_from_cve_cache(cve_payload),
-        sources_used=[
-            s for s in sources_used if s in {"osv", "ghsa", "nvd", "epss", "kev", "fix_version_data"}
-        ],
+        sources_used=[s for s in sources_used if s in {"osv", "ghsa", "nvd", "epss", "kev", "fix_version_data"}],
     )

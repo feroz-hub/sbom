@@ -247,7 +247,9 @@ async def cached_fetch(
         except Exception as exc:  # pragma: no cover — defensive
             log.warning(
                 "source_cache: read failed (source=%r key=%r): %s",
-                source, component_key, exc,
+                source,
+                component_key,
+                exc,
             )
             cached = None
 
@@ -263,9 +265,7 @@ async def cached_fetch(
     # Write phase. Repository's ``set`` is already defensive (rollback
     # on failure, never raises) but wrap defensively in case the
     # session-open itself fails.
-    ttl = int(
-        getattr(settings, "source_cache_ttl_seconds", 4 * 60 * 60) or 4 * 60 * 60
-    )
+    ttl = int(getattr(settings, "source_cache_ttl_seconds", 4 * 60 * 60) or 4 * 60 * 60)
     try:
         with SessionLocal() as session:
             repo = SourceResponseCacheRepository(session)
@@ -273,7 +273,9 @@ async def cached_fetch(
     except Exception as exc:  # pragma: no cover — defensive
         log.warning(
             "source_cache: write failed (source=%r key=%r): %s",
-            source, component_key, exc,
+            source,
+            component_key,
+            exc,
         )
 
     return payload
@@ -326,7 +328,8 @@ async def partition_by_cache(
         for key, _value in items_with_keys:
             if key is not None:
                 _emit_source_cache_metric(
-                    "source_cache.miss_total", source=source,
+                    "source_cache.miss_total",
+                    source=source,
                 )
         return {}, [v for _, v in items_with_keys]
 
@@ -349,17 +352,20 @@ async def partition_by_cache(
                 if cached is not None:
                     hits[key] = cached
                     _emit_source_cache_metric(
-                        "source_cache.hit_total", source=source,
+                        "source_cache.hit_total",
+                        source=source,
                     )
                 else:
                     misses.append(value)
                     _emit_source_cache_metric(
-                        "source_cache.miss_total", source=source,
+                        "source_cache.miss_total",
+                        source=source,
                     )
     except Exception as exc:  # pragma: no cover — defensive
         log.warning(
             "source_cache: batch read failed (source=%r): %s — falling open",
-            source, exc,
+            source,
+            exc,
         )
         return {}, [v for _, v in items_with_keys]
 
@@ -387,9 +393,7 @@ def write_cache_entries(
         return
     if not entries:
         return
-    ttl = int(
-        getattr(settings, "source_cache_ttl_seconds", 4 * 60 * 60) or 4 * 60 * 60
-    )
+    ttl = int(getattr(settings, "source_cache_ttl_seconds", 4 * 60 * 60) or 4 * 60 * 60)
 
     from app.db import SessionLocal
     from app.services.source_response_cache import (
@@ -406,7 +410,9 @@ def write_cache_entries(
     except Exception as exc:  # pragma: no cover — defensive
         log.warning(
             "source_cache: bulk write failed (source=%r entries=%d): %s",
-            source, len(entries), exc,
+            source,
+            len(entries),
+            exc,
         )
 
 

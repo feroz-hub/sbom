@@ -73,8 +73,8 @@ from .routers import (
     sbom_versions,
     sboms_crud,
     schedules,
-    vex,
     tenants,
+    vex,
 )
 from .routers import analysis as analysis_export_router
 from .routers import dashboard as dashboard_trend_router
@@ -160,10 +160,7 @@ def _ensure_remediation_audit_table() -> None:
             )
         )
         conn.execute(
-            text(
-                "CREATE INDEX ix_vulnerability_remediation_audit_vuln_id "
-                "ON vulnerability_remediation_audit (vuln_id)"
-            )
+            text("CREATE INDEX ix_vulnerability_remediation_audit_vuln_id ON vulnerability_remediation_audit (vuln_id)")
         )
         conn.execute(
             text(
@@ -250,10 +247,14 @@ def _ensure_validation_repair_tables() -> None:
 
 def _ensure_seed_data() -> None:
     """Prepare legacy SQLite or validate PostgreSQL, then seed reference data."""
+    # Enforce schema check before doing any operations
+    _verify_schema_is_current()
+
     if engine.dialect.name == "sqlite":
         Base.metadata.create_all(bind=engine)
     elif engine.dialect.name == "postgresql":
-        _verify_postgresql_schema_at_head()
+        # Handled by _verify_schema_is_current
+        pass
     else:
         raise RuntimeError(f"Unsupported database dialect: {engine.dialect.name}")
 
@@ -284,10 +285,7 @@ def _ensure_seed_data() -> None:
     if engine.dialect.name == "sqlite":
         with engine.connect() as conn:
             conn.execute(
-                text(
-                    "UPDATE sbom_source SET status = 'pending' "
-                    "WHERE validated_at IS NULL AND status = 'validated'"
-                )
+                text("UPDATE sbom_source SET status = 'pending' WHERE validated_at IS NULL AND status = 'validated'")
             )
             conn.commit()
 
@@ -355,7 +353,6 @@ def _ensure_seed_data() -> None:
         ("provider_errors_json", "TEXT"),
     ):
         _ensure_column("vex_documents", column, type_sql)
-
 
     db = SessionLocal()
     try:
@@ -443,28 +440,66 @@ def _ensure_seed_data() -> None:
         db.close()
 
 
-def _verify_postgresql_schema_at_head() -> None:
-    """Fail fast when PostgreSQL has not been provisioned by Alembic."""
+def _verify_schema_is_current() -> None:
+    """Verify that the database schema is current and not stale before starting the API."""
     from alembic.config import Config
     from alembic.script import ScriptDirectory
+    from sqlalchemy import inspect
 
-    config = Config(str(Path(__file__).resolve().parent.parent / "alembic.ini"))
-    expected_heads = set(ScriptDirectory.from_config(config).get_heads())
     try:
-        with engine.connect() as conn:
-            actual_heads = {
-                str(row[0])
-                for row in conn.execute(text("SELECT version_num FROM alembic_version"))
-            }
+        inspector = inspect(engine)
+        table_names = inspector.get_table_names()
     except Exception as exc:
-        raise RuntimeError(
-            "PostgreSQL schema is missing or unreadable; run 'alembic upgrade head' before starting the API."
-        ) from exc
-    if actual_heads != expected_heads:
-        raise RuntimeError(
-            "PostgreSQL schema is not at Alembic head; run 'alembic upgrade head' before starting the API. "
-            f"Expected {sorted(expected_heads)}, found {sorted(actual_heads)}."
-        )
+        exc_str = str(exc)
+        if (
+            "password authentication failed" in exc_str
+            or "authentication failed" in exc_str
+            or "fe_sendauth" in exc_str
+        ):
+            import sys
+
+            msg = "PostgreSQL authentication failed for user 'sbom'. Check DATABASE_URL password or reset the PostgreSQL user password."
+            print(f"\nERROR: {msg}\n", file=sys.stderr)
+            raise RuntimeError(msg) from None
+        raise
+
+    # If the database is completely empty, it's either SQLite waiting for create_all or Postgres waiting for migrations
+    if not table_names:
+        return
+
+    # Check Alembic migrations status if alembic_version table exists
+    if "alembic_version" in table_names:
+        config = Config(str(Path(__file__).resolve().parent.parent / "alembic.ini"))
+        expected_heads = set(ScriptDirectory.from_config(config).get_heads())
+        try:
+            with engine.connect() as conn:
+                actual_heads = {str(row[0]) for row in conn.execute(text("SELECT version_num FROM alembic_version"))}
+        except Exception as exc:
+            exc_str = str(exc)
+            if (
+                "password authentication failed" in exc_str
+                or "authentication failed" in exc_str
+                or "fe_sendauth" in exc_str
+            ):
+                import sys
+
+                msg = "PostgreSQL authentication failed for user 'sbom'. Check DATABASE_URL password or reset the PostgreSQL user password."
+                print(f"\nERROR: {msg}\n", file=sys.stderr)
+                raise RuntimeError(msg) from None
+            raise RuntimeError(
+                "Database schema is missing or unreadable; run 'alembic upgrade head' before starting the API."
+            ) from exc
+        if actual_heads != expected_heads:
+            raise RuntimeError(
+                "Database schema is not at Alembic head; run 'alembic upgrade head' before starting the API. "
+                f"Expected {sorted(expected_heads)}, found {sorted(actual_heads)}."
+            )
+    else:
+        # If alembic_version is missing but key tables exist, check for required columns
+        if "sbom_source" in table_names:
+            columns = [col["name"] for col in inspector.get_columns("sbom_source")]
+            if "tenant_id" not in columns:
+                raise RuntimeError("Database schema is not up to date. Run alembic upgrade head.")
 
 
 def _update_sbom_names() -> None:
@@ -532,6 +567,18 @@ async def lifespan(app: FastAPI):
     setup_logging()
     await init_async_http_client()
     log.info("SBOM Analyzer starting up — initialising database …")
+
+    # Securely log database details
+    from sqlalchemy.engine import make_url
+
+    try:
+        url = make_url(engine.url)
+        safe_host = f"{url.host or ''}:{url.port or ''}" if url.port else (url.host or "")
+        log.info("Database dialect: %s", engine.dialect.name)
+        log.info("Database URL host/db: %s/%s", safe_host, url.database or "")
+    except Exception as e:
+        log.error("Failed to parse database URL for logging: %s", e)
+
     _ensure_seed_data()
     _update_sbom_names()
     _reconcile_zombie_ai_fix_batches()
@@ -546,6 +593,34 @@ app = FastAPI(title="SBOM & Projects API", version=APP_VERSION, lifespan=lifespa
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
+
+
+@app.exception_handler(SQLAlchemyTimeoutError)
+async def sqlalchemy_timeout_exception_handler(request: Request, exc: SQLAlchemyTimeoutError):
+    from .db import engine
+
+    pool = engine.pool
+    log.error(
+        "Database connection pool checkout timeout occurred! "
+        "Pool stats: size=%s, checked_in=%s, checked_out=%s, overflow=%s",
+        getattr(pool, "size", lambda: "N/A")()
+        if callable(getattr(pool, "size", None))
+        else getattr(pool, "size", "N/A"),
+        pool.checkedin() if hasattr(pool, "checkedin") else "N/A",
+        pool.checkedout() if hasattr(pool, "checkedout") else "N/A",
+        getattr(pool, "overflow", lambda: "N/A")()
+        if callable(getattr(pool, "overflow", None))
+        else getattr(pool, "overflow", "N/A"),
+    )
+    return JSONResponse(
+        status_code=503,
+        content={"detail": {"error_code": "DATABASE_BUSY", "message": "Database is busy. Please retry shortly."}},
+    )
+
+
 app.add_middleware(SlowAPIMiddleware)
 
 app.add_middleware(
@@ -604,9 +679,7 @@ async def log_requests(request: Request, call_next):
         audit_action = "tenant.switch"
     elif request.method in {"POST", "PUT", "PATCH", "DELETE"}:
         audit_action = f"api.{request.method.lower()}"
-    elif request.method == "GET" and any(
-        value in request.url.path for value in ("/export", "/reports/")
-    ):
+    elif request.method == "GET" and any(value in request.url.path for value in ("/export", "/reports/")):
         audit_action = "export.download"
     if context is not None and audit_action and response.status_code < 400:
         try:

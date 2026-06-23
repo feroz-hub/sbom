@@ -99,6 +99,7 @@ def list_analysis_runs(
 
     if run_status:
         from ..services.analysis_service import normalize_run_status
+
         norm = normalize_run_status(run_status)
         base = base.where(AnalysisRun.run_status == norm)
         count = count.where(AnalysisRun.run_status == norm)
@@ -191,14 +192,8 @@ def list_recent_runs(
     from ..models import Projects
     from ..schemas_compare import RunSummary
 
-    sbom_subq = (
-        db.query(SBOMSource.id.label("sbom_id"), SBOMSource.sbom_name.label("sbom_name"))
-        .subquery()
-    )
-    proj_subq = (
-        db.query(Projects.id.label("project_id"), Projects.project_name.label("project_name"))
-        .subquery()
-    )
+    sbom_subq = db.query(SBOMSource.id.label("sbom_id"), SBOMSource.sbom_name.label("sbom_name")).subquery()
+    proj_subq = db.query(Projects.id.label("project_id"), Projects.project_name.label("project_name")).subquery()
     stmt = (
         select(AnalysisRun, sbom_subq.c.sbom_name, proj_subq.c.project_name)
         .outerjoin(sbom_subq, AnalysisRun.sbom_id == sbom_subq.c.sbom_id)
@@ -237,14 +232,8 @@ def search_runs(
     from ..schemas_compare import RunSummary
 
     needle = (q or "").strip()
-    sbom_subq = (
-        db.query(SBOMSource.id.label("sbom_id"), SBOMSource.sbom_name.label("sbom_name"))
-        .subquery()
-    )
-    proj_subq = (
-        db.query(Projects.id.label("project_id"), Projects.project_name.label("project_name"))
-        .subquery()
-    )
+    sbom_subq = db.query(SBOMSource.id.label("sbom_id"), SBOMSource.sbom_name.label("sbom_name")).subquery()
+    proj_subq = db.query(Projects.id.label("project_id"), Projects.project_name.label("project_name")).subquery()
     stmt = (
         select(AnalysisRun, sbom_subq.c.sbom_name, proj_subq.c.project_name)
         .outerjoin(sbom_subq, AnalysisRun.sbom_id == sbom_subq.c.sbom_id)
@@ -323,13 +312,13 @@ def list_run_findings(
     items = db.execute(stmt).scalars().all()
 
     from ..models import VulnerabilityRemediation
-    remediations = db.execute(
-        select(VulnerabilityRemediation).where(VulnerabilityRemediation.project_id == run.project_id)
-    ).scalars().all()
-    rem_map = {
-        (r.vuln_id, r.component_name, r.component_version): r
-        for r in remediations
-    }
+
+    remediations = (
+        db.execute(select(VulnerabilityRemediation).where(VulnerabilityRemediation.project_id == run.project_id))
+        .scalars()
+        .all()
+    )
+    rem_map = {(r.vuln_id, r.component_name, r.component_version): r for r in remediations}
 
     for item in items:
         key = (item.vuln_id, item.component_name, item.component_version)
@@ -345,7 +334,7 @@ def list_run_findings(
                 "resolution_date": None,
                 "fix_notes": None,
                 "fixed_version": None,
-                "updated_on": None
+                "updated_on": None,
             }
 
     if response is not None:
@@ -417,21 +406,19 @@ def list_run_findings_enriched(
     epss_map: dict[str, dict[str, float | None]] = {}
     if cve_list:
         rows = db.execute(
-            select(EpssScore.cve_id, EpssScore.epss, EpssScore.percentile).where(
-                EpssScore.cve_id.in_(cve_list)
-            )
+            select(EpssScore.cve_id, EpssScore.epss, EpssScore.percentile).where(EpssScore.cve_id.in_(cve_list))
         ).all()
         for cve_id, epss_val, percentile in rows:
             epss_map[cve_id] = {"epss": epss_val, "percentile": percentile}
 
     from ..models import VulnerabilityRemediation
-    remediations = db.execute(
-        select(VulnerabilityRemediation).where(VulnerabilityRemediation.project_id == run.project_id)
-    ).scalars().all()
-    rem_map = {
-        (r.vuln_id, r.component_name, r.component_version): r
-        for r in remediations
-    }
+
+    remediations = (
+        db.execute(select(VulnerabilityRemediation).where(VulnerabilityRemediation.project_id == run.project_id))
+        .scalars()
+        .all()
+    )
+    rem_map = {(r.vuln_id, r.component_name, r.component_version): r for r in remediations}
 
     items: list[dict] = []
     for f in findings:
@@ -466,7 +453,7 @@ def list_run_findings_enriched(
                 "resolution_date": r.resolution_date,
                 "fix_notes": r.fix_notes,
                 "fixed_version": r.fixed_version,
-                "updated_on": r.updated_on
+                "updated_on": r.updated_on,
             }
         else:
             rem_data = {
@@ -477,7 +464,7 @@ def list_run_findings_enriched(
                 "resolution_date": None,
                 "fix_notes": None,
                 "fixed_version": None,
-                "updated_on": None
+                "updated_on": None,
             }
 
         items.append(
@@ -505,9 +492,7 @@ def list_run_findings_enriched(
                 # Enriched fields
                 "in_kev": in_kev,
                 "epss": round(epss, 4),
-                "epss_percentile": (
-                    round(epss_percentile, 4) if epss_percentile is not None else None
-                ),
+                "epss_percentile": (round(epss_percentile, 4) if epss_percentile is not None else None),
                 "risk_score": risk_score,
                 "cve_aliases": cves,
                 "remediation": rem_data,

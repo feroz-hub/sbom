@@ -52,17 +52,13 @@ class TestSpdxToCyclonedxConversionService:
 
     def test_spdx_spdxid_preserved_as_property(self):
         result = convert_spdx_to_cyclonedx(_load_spdx())
-        pkg_component = next(
-            c for c in result.cyclonedx_bom["components"] if c.get("name") == "foo"
-        )
+        pkg_component = next(c for c in result.cyclonedx_bom["components"] if c.get("name") == "foo")
         props = {p["name"]: p["value"] for p in pkg_component.get("properties") or []}
         assert props.get("spdx:SPDXID") == "SPDXRef-Package-foo"
 
     def test_spdx_license_declared_maps_to_cyclonedx_license(self):
         result = convert_spdx_to_cyclonedx(_load_spdx())
-        pkg_component = next(
-            c for c in result.cyclonedx_bom["components"] if c.get("name") == "foo"
-        )
+        pkg_component = next(c for c in result.cyclonedx_bom["components"] if c.get("name") == "foo")
         licenses = pkg_component.get("licenses") or []
         assert any(lic.get("expression") == "Apache-2.0" for lic in licenses)
 
@@ -75,9 +71,7 @@ class TestSpdxToCyclonedxConversionService:
 
     def test_spdx_purl_external_ref_maps_to_cyclonedx_purl(self):
         result = convert_spdx_to_cyclonedx(_load_spdx())
-        pkg_component = next(
-            c for c in result.cyclonedx_bom["components"] if c.get("name") == "foo"
-        )
+        pkg_component = next(c for c in result.cyclonedx_bom["components"] if c.get("name") == "foo")
         assert pkg_component.get("purl") == "pkg:npm/foo@1.0.0"
 
     def test_spdx_depends_on_maps_to_cyclonedx_dependencies(self):
@@ -243,9 +237,7 @@ class TestSpdxToCyclonedxConversionApi:
         finally:
             db.close()
 
-        export = client.get(
-            f"/api/sboms/{sbom_id}/export?format=cyclonedx&export_mode=enriched"
-        )
+        export = client.get(f"/api/sboms/{sbom_id}/export?format=cyclonedx&export_mode=enriched")
         assert export.status_code == 200
         doc = json.loads(export.text)
         foo = next(c for c in doc["components"] if c.get("name") == "foo")

@@ -72,9 +72,7 @@ def get_settings_repo(
     db: Session = Depends(get_db),
     secrets: SecretsPort = Depends(get_secrets),
 ) -> SettingsRepositoryPort:
-    return SqlAlchemySettingsRepository(
-        db, secrets, env_defaults=load_mirror_settings_from_env()
-    )
+    return SqlAlchemySettingsRepository(db, secrets, env_defaults=load_mirror_settings_from_env())
 
 
 def get_sync_run_repo(db: Session = Depends(get_db)) -> SyncRunRepositoryPort:
@@ -129,9 +127,7 @@ def put_settings(
             "download_feeds_enabled" in fields_set,
         ),
         page_size=_pick(payload.page_size, current.page_size, "page_size" in fields_set),
-        window_days=_pick(
-            payload.window_days, current.window_days, "window_days" in fields_set
-        ),
+        window_days=_pick(payload.window_days, current.window_days, "window_days" in fields_set),
         min_freshness_hours=_pick(
             payload.min_freshness_hours,
             current.min_freshness_hours,

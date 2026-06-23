@@ -211,9 +211,7 @@ def test_orchestrator_uses_mirror_when_enabled_and_fresh(
         )
         settings_repo.save(snap)
         # save() doesn't move the watermark — set it via advance_watermark.
-        settings_repo.advance_watermark(
-            last_modified_utc=now, last_successful_sync_at=now
-        )
+        settings_repo.advance_watermark(last_modified_utc=now, last_successful_sync_at=now)
 
         criterion = CpeCriterion(
             criteria=_EXPECTED_CRITERIA,
@@ -353,9 +351,7 @@ def test_session_scoped_facade_opens_and_closes_session_per_call(
     # sentinel.
     import app.analysis as analysis_mod
 
-    monkeypatch.setattr(
-        analysis_mod, "nvd_query_by_cpe", lambda cpe, api_key, settings=None: []
-    )
+    monkeypatch.setattr(analysis_mod, "nvd_query_by_cpe", lambda cpe, api_key, settings=None: [])
 
     from app.nvd_mirror.application import build_nvd_lookup_for_pipeline
 

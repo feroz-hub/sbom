@@ -91,12 +91,8 @@ def dashboard_trend(
         }
     else:
         # ── Manager path — period buckets + app filter + fix overlays. ──
-        point_dicts = metrics.findings_trend(
-            db, granularity=granularity, application_ids=application_ids
-        )
-        avg_total = (
-            fmean(p["total"] for p in point_dicts) if point_dicts else 0.0
-        )
+        point_dicts = metrics.findings_trend(db, granularity=granularity, application_ids=application_ids)
+        avg_total = fmean(p["total"] for p in point_dicts) if point_dicts else 0.0
         payload_dict = {
             "days": days,
             "points": point_dicts,

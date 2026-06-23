@@ -51,9 +51,7 @@ def _validate_base_url(url: str) -> str:
         raise ProviderUnavailableError("custom_openai: base_url is required")
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
-        raise ProviderUnavailableError(
-            f"custom_openai: base_url must start with https:// or http:// (got {url!r})"
-        )
+        raise ProviderUnavailableError(f"custom_openai: base_url must start with https:// or http:// (got {url!r})")
     if parsed.scheme == "http":
         host = (parsed.hostname or "").lower()
         if host not in {"localhost", "127.0.0.1", "::1", "host.docker.internal"}:
@@ -117,10 +115,7 @@ class CustomOpenAiCompatibleProvider(LlmProvider):
         resp = await self._inner.generate(req)
         # Override the cost calculation: the OpenAI cost table doesn't
         # know this provider; the user supplied (possibly zero) overrides.
-        cost = (
-            (resp.usage.input_tokens / 1000.0) * self._cost_in
-            + (resp.usage.output_tokens / 1000.0) * self._cost_out
-        )
+        cost = (resp.usage.input_tokens / 1000.0) * self._cost_in + (resp.usage.output_tokens / 1000.0) * self._cost_out
         return resp.model_copy(
             update={
                 "provider": self.name,
@@ -153,8 +148,7 @@ class CustomOpenAiCompatibleProvider(LlmProvider):
 
         in_tok = estimate_tokens(input_text)
         return round(
-            (in_tok / 1000.0) * self._cost_in
-            + (max_output_tokens / 1000.0) * self._cost_out,
+            (in_tok / 1000.0) * self._cost_in + (max_output_tokens / 1000.0) * self._cost_out,
             6,
         )
 

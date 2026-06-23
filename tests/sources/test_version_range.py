@@ -404,9 +404,9 @@ class TestUnparseableVersions:
         assert v.reason == "version_unparseable"
         assert v.matched_range == ">= 1.0.0, < 2.0.0"
         # Structured warning fired so operators can find silent-drop bugs.
-        assert any(
-            "unparseable version" in r.getMessage() for r in caplog.records
-        ), "expected unparseable-version warning to be emitted"
+        assert any("unparseable version" in r.getMessage() for r in caplog.records), (
+            "expected unparseable-version warning to be emitted"
+        )
 
     def test_empty_component_version_keeps_finding(self) -> None:
         bounds = _bounds(start_inc="1.0.0", end_exc="2.0.0")
@@ -434,9 +434,7 @@ class TestMissingConfigurations:
         assert v.reason == "no_configurations"
 
     def test_configurations_with_no_nodes(self) -> None:
-        v = cve_affects_component(
-            {"configurations": [{"nodes": []}]}, "1.0.0", "npm"
-        )
+        v = cve_affects_component({"configurations": [{"nodes": []}]}, "1.0.0", "npm")
         assert v.affected is True
         assert v.reason == "no_configurations"
 
@@ -483,9 +481,7 @@ class TestUnsupportedEcosystem:
     # ----- Flag OFF — legacy conservative-keep ------------------------------
 
     @pytest.mark.parametrize("eco", ["deb", "rpm", "apk", "conan", "alpine"])
-    def test_flag_off_distro_ecosystems_are_conservative_keep(
-        self, eco: str
-    ) -> None:
+    def test_flag_off_distro_ecosystems_are_conservative_keep(self, eco: str) -> None:
         bounds = _bounds(start_inc="1.0", end_exc="2.0")
         v = version_in_range("1.5", eco, bounds)
         assert v.affected is True
@@ -508,7 +504,10 @@ class TestUnsupportedEcosystem:
         # ``< 3.0.7`` — affected.
         bounds = _bounds(end_exc="3.0.7")
         v = version_in_range(
-            "2:3.0.2-1", "deb", bounds, distro_cpe_enabled=True,
+            "2:3.0.2-1",
+            "deb",
+            bounds,
+            distro_cpe_enabled=True,
         )
         assert v.affected is True
         assert v.reason == "matched"
@@ -517,7 +516,10 @@ class TestUnsupportedEcosystem:
         # ``3.0.2-1.el8`` strips to ``3.0.2`` and falls inside.
         bounds = _bounds(start_inc="3.0.0", end_exc="3.0.7")
         v = version_in_range(
-            "3.0.2-1.el8", "rpm", bounds, distro_cpe_enabled=True,
+            "3.0.2-1.el8",
+            "rpm",
+            bounds,
+            distro_cpe_enabled=True,
         )
         assert v.reason == "matched"
 
@@ -525,7 +527,10 @@ class TestUnsupportedEcosystem:
         # ``3.0.2-r0`` strips to ``3.0.2``.
         bounds = _bounds(end_exc="3.0.7")
         v = version_in_range(
-            "3.0.2-r0", "apk", bounds, distro_cpe_enabled=True,
+            "3.0.2-r0",
+            "apk",
+            bounds,
+            distro_cpe_enabled=True,
         )
         assert v.reason == "matched"
 
@@ -533,7 +538,10 @@ class TestUnsupportedEcosystem:
         # Conan versions pass through; ``1.81.0`` compares directly.
         bounds = _bounds(start_inc="1.80.0", end_exc="2.0.0")
         v = version_in_range(
-            "1.81.0", "conan", bounds, distro_cpe_enabled=True,
+            "1.81.0",
+            "conan",
+            bounds,
+            distro_cpe_enabled=True,
         )
         assert v.reason == "matched"
 
@@ -544,7 +552,10 @@ class TestUnsupportedEcosystem:
         # → above → out_of_range (the finding is dropped).
         bounds = _bounds(end_exc="3.0.7")
         v = version_in_range(
-            "3.0.8-1", "deb", bounds, distro_cpe_enabled=True,
+            "3.0.8-1",
+            "deb",
+            bounds,
+            distro_cpe_enabled=True,
         )
         assert v.affected is False
         assert v.reason == "out_of_range"
@@ -552,7 +563,10 @@ class TestUnsupportedEcosystem:
     def test_flag_on_apk_below_range_drops(self) -> None:
         bounds = _bounds(start_inc="2.0.0", end_exc="3.0.0")
         v = version_in_range(
-            "1.9.9-r5", "apk", bounds, distro_cpe_enabled=True,
+            "1.9.9-r5",
+            "apk",
+            bounds,
+            distro_cpe_enabled=True,
         )
         assert v.affected is False
         assert v.reason == "out_of_range"
@@ -566,7 +580,10 @@ class TestUnsupportedEcosystem:
         # After normalisation: ``3.0.2``. Range ``< 3.0.7`` → matched.
         bounds = _bounds(end_exc="3.0.7")
         v = version_in_range(
-            "2:3.0.2-1+deb11u5", "deb", bounds, distro_cpe_enabled=True,
+            "2:3.0.2-1+deb11u5",
+            "deb",
+            bounds,
+            distro_cpe_enabled=True,
         )
         assert v.reason == "matched"
         # Confirm the matched_range label uses the bound (proves the
@@ -577,7 +594,10 @@ class TestUnsupportedEcosystem:
         # ``1:3.0.2-1.el8`` — epoch + release with .el8 dist suffix.
         bounds = _bounds(end_exc="3.0.7")
         v = version_in_range(
-            "1:3.0.2-1.el8", "rpm", bounds, distro_cpe_enabled=True,
+            "1:3.0.2-1.el8",
+            "rpm",
+            bounds,
+            distro_cpe_enabled=True,
         )
         assert v.reason == "matched"
 
@@ -589,7 +609,10 @@ class TestUnsupportedEcosystem:
         bounds = _bounds(start_inc="1.0.0", end_exc="2.0.0")
         v_off = version_in_range("1.5.0", "npm", bounds)
         v_on = version_in_range(
-            "1.5.0", "npm", bounds, distro_cpe_enabled=True,
+            "1.5.0",
+            "npm",
+            bounds,
+            distro_cpe_enabled=True,
         )
         assert v_off == v_on
         assert v_on.reason == "matched"
@@ -598,7 +621,10 @@ class TestUnsupportedEcosystem:
         bounds = _bounds(end_exc="1.0.0")
         v_off = version_in_range("1.0.0rc1", "pypi", bounds)
         v_on = version_in_range(
-            "1.0.0rc1", "pypi", bounds, distro_cpe_enabled=True,
+            "1.0.0rc1",
+            "pypi",
+            bounds,
+            distro_cpe_enabled=True,
         )
         assert v_off == v_on
         assert v_on.reason == "matched"
@@ -612,7 +638,10 @@ class TestUnsupportedEcosystem:
         # (conservative-keep), not a successful match.
         bounds = _bounds(end_exc="3.0.7")
         v = version_in_range(
-            "1:-1", "deb", bounds, distro_cpe_enabled=True,
+            "1:-1",
+            "deb",
+            bounds,
+            distro_cpe_enabled=True,
         )
         # ``1:-1`` → strip epoch → ``-1`` → rsplit("-",1)[0] → ""
         # → falls into the empty-after-normalise branch.
@@ -696,7 +725,9 @@ class TestEveryReasonReachable:
     def test_exact_version_mismatch(self) -> None:
         cve = _load_cve("cve_exact_pinned.json")
         v = cve_affects_component(
-            cve, "9.9.9", "generic",
+            cve,
+            "9.9.9",
+            "generic",
             target_cpe="cpe:2.3:a:examplecorp:thing:9.9.9:*:*:*:*:*:*:*",
         )
         assert v.reason == "exact_version_mismatch"

@@ -122,9 +122,7 @@ class SqlAlchemyCveRepository:
                     where=stmt.excluded.last_modified > CveRow.last_modified,
                 )
             else:
-                raise NotImplementedError(
-                    f"upsert_batch only supports postgresql/sqlite; got {dialect!r}"
-                )
+                raise NotImplementedError(f"upsert_batch only supports postgresql/sqlite; got {dialect!r}")
 
             result = self._session.execute(stmt)
             total += result.rowcount or 0
@@ -136,9 +134,7 @@ class SqlAlchemyCveRepository:
         if not cve_ids:
             return 0
         result = self._session.execute(
-            CveRow.__table__.update()
-            .where(CveRow.cve_id.in_(list(cve_ids)))
-            .values(vuln_status="Rejected")
+            CveRow.__table__.update().where(CveRow.cve_id.in_(list(cve_ids))).values(vuln_status="Rejected")
         )
         self._session.flush()
         return result.rowcount or 0

@@ -44,9 +44,7 @@ _NVD_FINDING_WITH_MATCH_TAGS = {
 }
 
 
-async def _fake_nvd_with_match_tags(
-    components, settings, nvd_api_key=None, lookup_service=None
-):
+async def _fake_nvd_with_match_tags(components, settings, nvd_api_key=None, lookup_service=None):
     return ([_NVD_FINDING_WITH_MATCH_TAGS], [], [])
 
 
@@ -58,16 +56,12 @@ async def _fake_empty_async(*args, **kwargs):
 def mock_nvd_with_match_tagged_finding(monkeypatch):
     import app.analysis as analysis_mod
 
-    monkeypatch.setattr(
-        analysis_mod, "nvd_query_by_components_async", _fake_nvd_with_match_tags
-    )
+    monkeypatch.setattr(analysis_mod, "nvd_query_by_components_async", _fake_nvd_with_match_tags)
     monkeypatch.setattr(analysis_mod, "osv_query_by_components", _fake_empty_async)
     monkeypatch.setattr(analysis_mod, "github_query_by_components", _fake_empty_async)
 
 
-def test_persist_analysis_run_forwards_match_reason_and_range(
-    client, seeded_sbom, mock_nvd_with_match_tagged_finding
-):
+def test_persist_analysis_run_forwards_match_reason_and_range(client, seeded_sbom, mock_nvd_with_match_tagged_finding):
     """A finding dict carrying ``match_reason`` / ``matched_range`` must
     produce an ``analysis_finding`` row with both columns populated.
     Guards against the explicit-column-list pattern silently dropping
@@ -94,10 +88,7 @@ def test_persist_analysis_run_forwards_match_reason_and_range(
             .scalars()
             .all()
         )
-        assert len(rows) == 1, (
-            f"expected exactly one row for the synthetic finding, "
-            f"got {len(rows)}"
-        )
+        assert len(rows) == 1, f"expected exactly one row for the synthetic finding, got {len(rows)}"
         row = rows[0]
         assert row.match_reason == "matched", (
             f"match_reason was {row.match_reason!r}; "
@@ -105,8 +96,7 @@ def test_persist_analysis_run_forwards_match_reason_and_range(
             "PR3's follow-up note #5 hit"
         )
         assert row.matched_range == ">= 2.0.0, < 2.17.0", (
-            f"matched_range was {row.matched_range!r}; "
-            "persist_analysis_run is dropping the field"
+            f"matched_range was {row.matched_range!r}; persist_analysis_run is dropping the field"
         )
     finally:
         db.close()
@@ -119,22 +109,16 @@ def test_persist_analysis_run_tolerates_missing_match_keys(client, seeded_sbom, 
     future refactor to ``finding["match_reason"]`` is caught immediately.
     """
     pre_pr3_finding = {
-        k: v
-        for k, v in _NVD_FINDING_WITH_MATCH_TAGS.items()
-        if k not in {"match_reason", "matched_range"}
+        k: v for k, v in _NVD_FINDING_WITH_MATCH_TAGS.items() if k not in {"match_reason", "matched_range"}
     }
     pre_pr3_finding["vuln_id"] = "CVE-PRE-PR3-SHAPE"
 
-    async def _fake_nvd_without_match_tags(
-        components, settings, nvd_api_key=None, lookup_service=None
-    ):
+    async def _fake_nvd_without_match_tags(components, settings, nvd_api_key=None, lookup_service=None):
         return ([pre_pr3_finding], [], [])
 
     import app.analysis as analysis_mod
 
-    monkeypatch.setattr(
-        analysis_mod, "nvd_query_by_components_async", _fake_nvd_without_match_tags
-    )
+    monkeypatch.setattr(analysis_mod, "nvd_query_by_components_async", _fake_nvd_without_match_tags)
     monkeypatch.setattr(analysis_mod, "osv_query_by_components", _fake_empty_async)
     monkeypatch.setattr(analysis_mod, "github_query_by_components", _fake_empty_async)
 

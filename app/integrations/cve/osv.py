@@ -84,9 +84,7 @@ class OsvClient:
                 log.info("osv 404", extra={"cve_id": cve_id, "latency_ms": latency_ms})
                 return FetchResult(source=self.name, outcome=FetchOutcome.NOT_FOUND, latency_ms=latency_ms)
             if resp.status_code >= 500:
-                last_exc = httpx.HTTPStatusError(
-                    f"osv {resp.status_code}", request=resp.request, response=resp
-                )
+                last_exc = httpx.HTTPStatusError(f"osv {resp.status_code}", request=resp.request, response=resp)
                 if attempt < self._retries:
                     continue
                 break

@@ -27,9 +27,7 @@ from .cache import memoize_with_ttl
 _VERIFIED_REASON = "matched"
 
 
-def findings_needs_review_in_scope(
-    db: Session, *, scope: KevScope, run_id: int | None = None
-) -> int:
+def findings_needs_review_in_scope(db: Session, *, scope: KevScope, run_id: int | None = None) -> int:
     """findings.needs_review_in_scope — count of low-confidence / not-verified findings.
 
     Scopes mirror :func:`app.metrics.findings_kev_in_scope`.

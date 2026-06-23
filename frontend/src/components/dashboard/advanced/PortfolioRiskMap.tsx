@@ -95,17 +95,28 @@ function MapTooltip({ active, payload }: TooltipProps<number, string>) {
   );
 }
 
-export function PortfolioRiskMap() {
+export interface PortfolioRiskMapProps {
+  riskMap?: any;
+  isLoading?: boolean;
+}
+
+export function PortfolioRiskMap({ riskMap, isLoading: propsIsLoading }: PortfolioRiskMapProps = {}) {
   const router = useRouter();
-  const query = useQuery({
+  const hasProps = riskMap !== undefined;
+
+  const queryResult = useQuery({
     queryKey: ['dashboard-risk-map'],
     queryFn: ({ signal }) => getDashboardRiskMap(signal),
+    enabled: !hasProps,
   });
 
-  const items = query.data?.items ?? [];
+  const apiData = hasProps ? riskMap : queryResult.data;
+  const isLoading = hasProps ? !!propsIsLoading : queryResult.isLoading;
+
+  const items = apiData?.items ?? [];
   const data: TreemapDatum[] = items
-    .filter((i) => i.findings_total > 0)
-    .map((i) => ({ ...i, size: i.findings_total }));
+    .filter((i: any) => i.findings_total > 0)
+    .map((i: any) => ({ ...i, size: i.findings_total }));
   const clean = items.length - data.length;
 
   return (
@@ -120,7 +131,7 @@ export function PortfolioRiskMap() {
         </div>
       </SurfaceHeader>
       <SurfaceContent>
-        {query.isLoading ? (
+        {isLoading ? (
           <div className="flex h-64 items-center justify-center">
             <Spinner />
           </div>

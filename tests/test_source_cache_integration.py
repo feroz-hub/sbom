@@ -134,6 +134,7 @@ def network_mock(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         state["calls"] += 1
         # Deep-copy so consumers can't mutate the canned payload.
         import copy
+
         return copy.deepcopy(_VULDB_OK_PAYLOAD)
 
     import app.sources.vulndb as vulndb_mod
@@ -188,19 +189,14 @@ def test_flag_on_second_scan_hits_cache_and_skips_fetch(
     second_calls = network_mock["calls"]
 
     assert first_calls == 1, "scan 1 should have fetched exactly once"
-    assert second_calls == 1, (
-        f"scan 2 should not have fetched (cache hit); "
-        f"total fetches now {second_calls}"
-    )
+    assert second_calls == 1, f"scan 2 should not have fetched (cache hit); total fetches now {second_calls}"
 
     with isolated_session_factory() as s:
         rows = s.query(SourceResponseCache).all()
         assert len(rows) == 1
         assert rows[0].source == "VULNDB"
         # Canonical PURL key (Maven preserves case).
-        assert rows[0].component_key == (
-            "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.0"
-        )
+        assert rows[0].component_key == ("pkg:maven/org.apache.logging.log4j/log4j-core@2.14.0")
 
 
 # ---------------------------------------------------------------------------
@@ -222,8 +218,7 @@ def test_cached_findings_identical_to_live_findings(
     second = asyncio.run(src.query(components, settings))
 
     assert first["findings"] == second["findings"], (
-        "cached re-scan must produce identical findings; "
-        "processing is supposed to run fresh on every hit"
+        "cached re-scan must produce identical findings; processing is supposed to run fresh on every hit"
     )
     assert len(first["findings"]) == 1
     assert first["findings"][0]["vuln_id"] == "CVE-2024-99999"
@@ -309,9 +304,7 @@ def test_metrics_emitted_only_when_flag_on(
     with caplog.at_level(logging.INFO, logger="sbom.source_cache.metrics"):
         asyncio.run(src.query(components, settings_off))
         flag_off_records = [r for r in caplog.records if r.name == "sbom.source_cache.metrics"]
-        assert flag_off_records == [], (
-            "flag off must emit no source_cache metrics (byte-identical path)"
-        )
+        assert flag_off_records == [], "flag off must emit no source_cache metrics (byte-identical path)"
 
         asyncio.run(src.query(components, settings_on))  # miss
         asyncio.run(src.query(components, settings_on))  # hit

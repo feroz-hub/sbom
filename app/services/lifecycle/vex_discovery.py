@@ -53,10 +53,18 @@ class VendorVexDiscoveryProvider:
         if isinstance(raw, dict):
             urls.extend(_urls_from_external_references(raw.get("externalReferences") or raw.get("external_references")))
             metadata = raw.get("metadata") if isinstance(raw.get("metadata"), dict) else {}
-            urls.extend(_urls_from_external_references(metadata.get("externalReferences") or metadata.get("external_references")))
+            urls.extend(
+                _urls_from_external_references(
+                    metadata.get("externalReferences") or metadata.get("external_references")
+                )
+            )
             for component in raw.get("components") or raw.get("packages") or []:
                 if isinstance(component, dict):
-                    urls.extend(_urls_from_external_references(component.get("externalReferences") or component.get("external_references")))
+                    urls.extend(
+                        _urls_from_external_references(
+                            component.get("externalReferences") or component.get("external_references")
+                        )
+                    )
         for component in components:
             for value in (component.purl, component.cpe):
                 if isinstance(value, str) and value.startswith(("http://", "https://")):
@@ -245,12 +253,7 @@ def _is_safe_public_http_url(url: str) -> bool:
     except ValueError:
         return True
     return not (
-        ip.is_private
-        or ip.is_loopback
-        or ip.is_link_local
-        or ip.is_multicast
-        or ip.is_reserved
-        or ip.is_unspecified
+        ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved or ip.is_unspecified
     )
 
 

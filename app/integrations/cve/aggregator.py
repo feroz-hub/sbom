@@ -129,10 +129,7 @@ def merge(cve_id: str, results: list[FetchResult]) -> CveDetail:
     kev = by_source.get("kev", {})
 
     # ---- summary / title -------------------------------------------------
-    summary_raw = (
-        _first_non_null(ghsa.get("summary"), osv.get("summary"), osv.get("details"), nvd.get("summary"))
-        or ""
-    )
+    summary_raw = _first_non_null(ghsa.get("summary"), osv.get("summary"), osv.get("details"), nvd.get("summary")) or ""
     summary = str(summary_raw)[:2000]
     title = ghsa.get("title")
 
@@ -330,11 +327,7 @@ async def aggregate(vid: VulnId, sources: Sequence[CveSource]) -> CveDetail:
     # Sources that never ran show up as DISABLED so the status calculation
     # can tell "didn't try" apart from "tried and failed".
     ran = {r.source for r in primary_results} | {r.source for r in secondary_results}
-    skipped = [
-        FetchResult(source=s.name, outcome=FetchOutcome.DISABLED)
-        for s in sources
-        if s.name not in ran
-    ]
+    skipped = [FetchResult(source=s.name, outcome=FetchOutcome.DISABLED) for s in sources if s.name not in ran]
 
     all_results = [*primary_results, *secondary_results, *skipped]
     detail = merge(vid.normalized, all_results)
@@ -356,9 +349,7 @@ async def aggregate(vid: VulnId, sources: Sequence[CveSource]) -> CveDetail:
     return final
 
 
-def _split_by_kind(
-    sources: Sequence[CveSource], kind: IdKind
-) -> tuple[list[CveSource], list[CveSource]]:
+def _split_by_kind(sources: Sequence[CveSource], kind: IdKind) -> tuple[list[CveSource], list[CveSource]]:
     """Partition sources into (accepts-this-kind, defers)."""
     primary = [s for s in sources if kind in s.accepted_kinds]
     deferred = [s for s in sources if kind not in s.accepted_kinds]
@@ -373,17 +364,13 @@ async def _gather(sources: Sequence[CveSource], vuln_id: str) -> list[FetchResul
     """
     if not sources:
         return []
-    gathered = await asyncio.gather(
-        *(s.fetch(vuln_id) for s in sources), return_exceptions=True
-    )
+    gathered = await asyncio.gather(*(s.fetch(vuln_id) for s in sources), return_exceptions=True)
     out: list[FetchResult] = []
     for src, res in zip(sources, gathered, strict=True):
         if isinstance(res, FetchResult):
             out.append(res)
             continue
-        log.warning(
-            "cve source raised", extra={"source": src.name, "error": repr(res)}
-        )
+        log.warning("cve source raised", extra={"source": src.name, "error": repr(res)})
         out.append(FetchResult(source=src.name, outcome=FetchOutcome.ERROR, error=str(res)))
     return out
 
@@ -427,11 +414,7 @@ def _derive_status(results: list[FetchResult]) -> CveResultStatus:
     for r in results:
         counts[r.outcome] = counts.get(r.outcome, 0) + 1
     if counts.get(FetchOutcome.OK):
-        return (
-            CveResultStatus.PARTIAL
-            if counts.get(FetchOutcome.ERROR, 0) > 0
-            else CveResultStatus.OK
-        )
+        return CveResultStatus.PARTIAL if counts.get(FetchOutcome.ERROR, 0) > 0 else CveResultStatus.OK
     if counts.get(FetchOutcome.ERROR, 0) > 0:
         return CveResultStatus.UNREACHABLE
     return CveResultStatus.NOT_FOUND

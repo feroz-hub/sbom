@@ -111,10 +111,14 @@ class PackageRegistryProvider(LifecycleProvider):
 
         info = payload.get("info") if isinstance(payload.get("info"), dict) else {}
         latest = info.get("version")
-        repository_url = _first_project_url(info, "Source", "Source Code", "Code", "Repository", "Homepage", "Home-page")
+        repository_url = _first_project_url(
+            info, "Source", "Source Code", "Code", "Repository", "Homepage", "Home-page"
+        )
         releases = payload.get("releases") if isinstance(payload.get("releases"), dict) else {}
         current_files = releases.get(component.normalized_version or "") or []
-        yanked = bool(current_files) and all(bool(file.get("yanked")) for file in current_files if isinstance(file, dict))
+        yanked = bool(current_files) and all(
+            bool(file.get("yanked")) for file in current_files if isinstance(file, dict)
+        )
         if yanked:
             return LifecycleResult(
                 component_name=component.normalized_name,
@@ -128,7 +132,9 @@ class PackageRegistryProvider(LifecycleProvider):
                 latest_version=latest,
                 latest_supported_version=latest,
                 recommended_version=latest if _is_newer(latest, component.normalized_version) else None,
-                recommendation=_registry_recommendation(latest, component.normalized_version, "Release is yanked on PyPI."),
+                recommendation=_registry_recommendation(
+                    latest, component.normalized_version, "Release is yanked on PyPI."
+                ),
                 source_name="PyPI",
                 source_url=f"https://pypi.org/project/{component.normalized_name}/",
                 evidence={"release_files": current_files[:5], "latest": latest, "repository_url": repository_url},
@@ -170,10 +176,16 @@ class PackageRegistryProvider(LifecycleProvider):
                 latest_version=latest,
                 latest_supported_version=latest,
                 recommended_version=latest if _is_newer(latest, component.normalized_version) else None,
-                recommendation=_registry_recommendation(latest, component.normalized_version, "Package version is deprecated."),
+                recommendation=_registry_recommendation(
+                    latest, component.normalized_version, "Package version is deprecated."
+                ),
                 source_name="NuGet",
                 source_url=f"https://www.nuget.org/packages/{package_name}",
-                evidence={"deprecation": deprecation, "version": component.normalized_version, "repository_url": repository_url},
+                evidence={
+                    "deprecation": deprecation,
+                    "version": component.normalized_version,
+                    "repository_url": repository_url,
+                },
                 confidence=MEDIUM,
             ).canonicalized()
 

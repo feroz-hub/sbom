@@ -84,13 +84,7 @@ def find_due_targets(db: Session, now_iso_str: str) -> list[DueTarget]:
     targets: list[DueTarget] = list(sbom_scope_targets.values())
 
     for sched in project_scope_schedules:
-        member_ids = (
-            db.execute(
-                select(SBOMSource.id).where(SBOMSource.projectid == sched.project_id)
-            )
-            .scalars()
-            .all()
-        )
+        member_ids = db.execute(select(SBOMSource.id).where(SBOMSource.projectid == sched.project_id)).scalars().all()
         for sid in member_ids:
             if sid in overridden_sbom_ids:
                 continue

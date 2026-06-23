@@ -92,8 +92,13 @@ def test_posture_exposes_counter_tiles(client, db):
     from app import metrics
 
     sbom, proj = _seed(db, "counters")
-    _seed_run(db, sbom=sbom, project=proj, started=_iso_days_ago(1),
-              findings=[{"vuln_id": "CVE-2021-0001", "severity": "HIGH"}])
+    _seed_run(
+        db,
+        sbom=sbom,
+        project=proj,
+        started=_iso_days_ago(1),
+        findings=[{"vuln_id": "CVE-2021-0001", "severity": "HIGH"}],
+    )
 
     assert metrics.sboms_analysed_total(db) >= 1
     assert metrics.applications_scanned_total(db) >= 1
@@ -116,13 +121,13 @@ def test_age_bucket_boundaries():
     from app.metrics.age import _bucket_for
 
     today = date(2026, 6, 8)
-    assert _bucket_for("2026-06-08", today) == "le_30d"           # 0d
-    assert _bucket_for("2026-05-09", today) == "le_30d"           # 30d
-    assert _bucket_for("2026-05-08", today) == "d31_90"           # 31d
-    assert _bucket_for("2026-03-10", today) == "d31_90"           # 90d
-    assert _bucket_for("2026-03-09", today) == "d91_365"          # 91d
-    assert _bucket_for("2025-06-08", today) == "d91_365"          # 365d
-    assert _bucket_for("2025-06-07", today) == "gt_365"           # 366d
+    assert _bucket_for("2026-06-08", today) == "le_30d"  # 0d
+    assert _bucket_for("2026-05-09", today) == "le_30d"  # 30d
+    assert _bucket_for("2026-05-08", today) == "d31_90"  # 31d
+    assert _bucket_for("2026-03-10", today) == "d31_90"  # 90d
+    assert _bucket_for("2026-03-09", today) == "d91_365"  # 91d
+    assert _bucket_for("2025-06-08", today) == "d91_365"  # 365d
+    assert _bucket_for("2025-06-07", today) == "gt_365"  # 366d
     assert _bucket_for(None, today) == "unknown"
     assert _bucket_for("", today) == "unknown"
     assert _bucket_for("not-a-date", today) == "unknown"
@@ -133,8 +138,13 @@ def test_age_distribution_window_excludes_out_of_window_scans(client, db):
     from app.metrics.cache import reset_cache
 
     sbom, proj = _seed(db, "age-window")
-    _seed_run(db, sbom=sbom, project=proj, started=_iso_days_ago(2),
-              findings=[{"vuln_id": "CVE-2021-0002", "published_on": _iso_days_ago(5)}])
+    _seed_run(
+        db,
+        sbom=sbom,
+        project=proj,
+        started=_iso_days_ago(2),
+        findings=[{"vuln_id": "CVE-2021-0002", "published_on": _iso_days_ago(5)}],
+    )
 
     reset_cache()
     # A window entirely in the future selects no scans → all buckets zero.
@@ -148,11 +158,17 @@ def test_age_distribution_buckets_seeded_findings(client, db):
     from app.metrics.cache import reset_cache
 
     sbom, proj = _seed(db, "age-buckets")
-    _seed_run(db, sbom=sbom, project=proj, started=_iso_days_ago(1), findings=[
-        {"vuln_id": "CVE-2021-0003", "published_on": _iso_days_ago(10)},   # le_30d
-        {"vuln_id": "CVE-2021-0004", "published_on": _iso_days_ago(800)},  # gt_365
-        {"vuln_id": "CVE-2021-0005", "published_on": None},                # unknown
-    ])
+    _seed_run(
+        db,
+        sbom=sbom,
+        project=proj,
+        started=_iso_days_ago(1),
+        findings=[
+            {"vuln_id": "CVE-2021-0003", "published_on": _iso_days_ago(10)},  # le_30d
+            {"vuln_id": "CVE-2021-0004", "published_on": _iso_days_ago(800)},  # gt_365
+            {"vuln_id": "CVE-2021-0005", "published_on": None},  # unknown
+        ],
+    )
 
     reset_cache()
     buckets = metrics.findings_age_distribution(db)
@@ -164,8 +180,13 @@ def test_age_distribution_buckets_seeded_findings(client, db):
 
 def test_vulnerability_age_endpoint(client, db):
     sbom, proj = _seed(db, "age-endpoint")
-    _seed_run(db, sbom=sbom, project=proj, started=_iso_days_ago(1),
-              findings=[{"vuln_id": "CVE-2021-0006", "published_on": _iso_days_ago(15)}])
+    _seed_run(
+        db,
+        sbom=sbom,
+        project=proj,
+        started=_iso_days_ago(1),
+        findings=[{"vuln_id": "CVE-2021-0006", "published_on": _iso_days_ago(15)}],
+    )
 
     body = client.get("/dashboard/vulnerability-age").json()
     assert "buckets" in body and "total" in body
@@ -183,13 +204,25 @@ def test_trend_app_filter_fix_and_resolved(client, db):
 
     sbom, proj = _seed(db, "trend")
     # Run 1 (older): findings A (with fix) + B. Run 2 (latest): only A → B resolved.
-    _seed_run(db, sbom=sbom, project=proj, started=_iso_days_ago(5), findings=[
-        {"vuln_id": "CVE-2021-0007", "severity": "HIGH", "fixed_versions": '["1.2.3"]'},  # A
-        {"vuln_id": "CVE-2021-0008", "severity": "HIGH"},                                  # B
-    ])
-    _seed_run(db, sbom=sbom, project=proj, started=_iso_days_ago(1), findings=[
-        {"vuln_id": "CVE-2021-0007", "severity": "HIGH", "fixed_versions": '["1.2.3"]'},  # A only
-    ])
+    _seed_run(
+        db,
+        sbom=sbom,
+        project=proj,
+        started=_iso_days_ago(5),
+        findings=[
+            {"vuln_id": "CVE-2021-0007", "severity": "HIGH", "fixed_versions": '["1.2.3"]'},  # A
+            {"vuln_id": "CVE-2021-0008", "severity": "HIGH"},  # B
+        ],
+    )
+    _seed_run(
+        db,
+        sbom=sbom,
+        project=proj,
+        started=_iso_days_ago(1),
+        findings=[
+            {"vuln_id": "CVE-2021-0007", "severity": "HIGH", "fixed_versions": '["1.2.3"]'},  # A only
+        ],
+    )
 
     reset_cache()
     # App filter isolates this project → exact assertions.
@@ -197,8 +230,8 @@ def test_trend_app_filter_fix_and_resolved(client, db):
     assert len(points) == 30  # 30 day points
 
     latest = points[-1]
-    assert latest["total"] == 1            # only A is active in the latest snapshot
-    assert latest["fix_available"] == 1    # A carries a fixed version
+    assert latest["total"] == 1  # only A is active in the latest snapshot
+    assert latest["fix_available"] == 1  # A carries a fixed version
     # B resolved exactly once across the window.
     assert sum(p["resolved"] for p in points) == 1
 
@@ -208,8 +241,13 @@ def test_trend_granularity_point_counts(client, db):
     from app.metrics.cache import reset_cache
 
     sbom, proj = _seed(db, "trend-gran")
-    _seed_run(db, sbom=sbom, project=proj, started=_iso_days_ago(1),
-              findings=[{"vuln_id": "CVE-2021-0009", "severity": "HIGH"}])
+    _seed_run(
+        db,
+        sbom=sbom,
+        project=proj,
+        started=_iso_days_ago(1),
+        findings=[{"vuln_id": "CVE-2021-0009", "severity": "HIGH"}],
+    )
 
     reset_cache()
     assert len(metrics.findings_trend(db, granularity="week", application_ids=[proj.id])) == 12

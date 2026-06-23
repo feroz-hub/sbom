@@ -138,9 +138,7 @@ def test_delete_project_schedule_idempotent(client, project_id):
 # ---------------------------------------------------------------------------
 
 
-def test_get_sbom_schedule_returns_inherited_from_project(
-    client, project_id, sbom_id
-):
+def test_get_sbom_schedule_returns_inherited_from_project(client, project_id, sbom_id):
     client.post(
         f"/api/projects/{project_id}/schedule",
         json={"cadence": "WEEKLY", "day_of_week": 0},
@@ -229,9 +227,7 @@ def test_pause_then_resume_cycles_next_run_at(client, project_id):
     assert resumed.json()["next_run_at"] is not None
 
 
-def test_run_now_for_project_fans_out_to_member_sboms(
-    client, project_id, sbom_id, _stub_celery
-):
+def test_run_now_for_project_fans_out_to_member_sboms(client, project_id, sbom_id, _stub_celery):
     create = client.post(
         f"/api/projects/{project_id}/schedule",
         json={"cadence": "DAILY"},
@@ -259,9 +255,7 @@ def test_run_now_for_sbom_enqueues_only_that_sbom(client, sbom_id, _stub_celery)
     assert _stub_celery == [(sbom_id, sched_id)]
 
 
-def test_run_now_returns_502_when_broker_drops_every_enqueue(
-    client, sbom_id, monkeypatch
-):
+def test_run_now_returns_502_when_broker_drops_every_enqueue(client, sbom_id, monkeypatch):
     """Silent enqueue failure must surface — 202 with empty list lies to the user."""
     create = client.post(
         f"/api/sboms/{sbom_id}/schedule",
@@ -284,9 +278,7 @@ def test_run_now_returns_502_when_broker_drops_every_enqueue(
     assert sbom_id in body["detail"]["failed_sbom_ids"]
 
 
-def test_run_now_skips_overridden_sbom_in_project_fan_out(
-    client, project_id, sbom_id, _stub_celery
-):
+def test_run_now_skips_overridden_sbom_in_project_fan_out(client, project_id, sbom_id, _stub_celery):
     """SBOM-level row (even disabled) opts the SBOM out of project fan-out."""
     proj = client.post(
         f"/api/projects/{project_id}/schedule",

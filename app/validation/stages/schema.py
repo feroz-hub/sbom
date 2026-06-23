@@ -63,9 +63,7 @@ def _load_json_schema(spec: str, version: str) -> dict[str, Any] | None:
     """
     pkg = f"app.validation.schemas.{spec}"
     sub_dir = _vendored_dir(spec, version)
-    file_name = (
-        "spdx-schema.json" if spec == "spdx" else f"bom-{sub_dir}.schema.json"
-    )
+    file_name = "spdx-schema.json" if spec == "spdx" else f"bom-{sub_dir}.schema.json"
     try:
         path = resources.files(pkg).joinpath(sub_dir, file_name)
         text = path.read_text(encoding="utf-8")
@@ -281,6 +279,7 @@ def _validate_xml(ctx: ValidationContext) -> ValidationContext:
     # specific error codes, even though our lxml parser is also locked down.
     try:
         from defusedxml import ElementTree as DefusedET  # type: ignore[import-untyped]
+
         DefusedET.fromstring(
             text.encode("utf-8"),
             forbid_dtd=True,

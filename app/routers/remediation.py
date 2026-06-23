@@ -35,29 +35,18 @@ def get_finding_remediation(finding_id: int, db: Session = Depends(get_db)):
     """Fetch the remediation record associated with a specific finding."""
     finding = db.get(AnalysisFinding, finding_id)
     if not finding:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Finding with ID {finding_id} not found."
-        )
-        
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Finding with ID {finding_id} not found.")
+
     run = db.get(AnalysisRun, finding.analysis_run_id)
     if not run or not run.project_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Finding is not associated with a project."
-        )
-        
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Finding is not associated with a project.")
+
     rem = get_remediation_for_finding(
-        db,
-        run.project_id,
-        finding.vuln_id,
-        finding.component_name,
-        finding.component_version
+        db, run.project_id, finding.vuln_id, finding.component_name, finding.component_version
     )
     if not rem:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No remediation record found for this finding."
+            status_code=status.HTTP_404_NOT_FOUND, detail="No remediation record found for this finding."
         )
     return rem
 
@@ -80,7 +69,7 @@ def upsert_remediation(
     payload: VulnerabilityRemediationUpsert,
     project_id: int,  # pass via query param or header
     user_id: str | None = Query(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Create or update a remediation tracking record for a vulnerability."""
     try:
@@ -92,7 +81,4 @@ def upsert_remediation(
         )
         return record
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

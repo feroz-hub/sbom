@@ -80,9 +80,9 @@ def generate_run_fixes(
 
     caps = BudgetCaps(
         per_request_usd=float(s.ai_budget_per_request_usd) if s.ai_budget_per_request_usd is not None else None,
-        per_scan_usd=float(budget_usd) if budget_usd is not None else (
-            float(s.ai_budget_per_scan_usd) if s.ai_budget_per_scan_usd is not None else None
-        ),
+        per_scan_usd=float(budget_usd)
+        if budget_usd is not None
+        else (float(s.ai_budget_per_scan_usd) if s.ai_budget_per_scan_usd is not None else None),
         per_day_org_usd=float(s.ai_budget_per_day_org_usd) if s.ai_budget_per_day_org_usd is not None else None,
     )
 

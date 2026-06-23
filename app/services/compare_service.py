@@ -203,10 +203,7 @@ class CompareService:
         """Delete every cache row referencing ``run_id``. Returns row count."""
         rows = (
             self._db.execute(
-                select(CompareCache).where(
-                    (CompareCache.run_a_id == run_id)
-                    | (CompareCache.run_b_id == run_id)
-                )
+                select(CompareCache).where((CompareCache.run_a_id == run_id) | (CompareCache.run_b_id == run_id))
             )
             .scalars()
             .all()
@@ -336,13 +333,7 @@ class CompareService:
     def _load_components(self, sbom_id: int | None) -> dict[_ComponentKey, _LoadedComponent]:
         if sbom_id is None:
             return {}
-        rows = (
-            self._db.execute(
-                select(SBOMComponent).where(SBOMComponent.sbom_id == sbom_id)
-            )
-            .scalars()
-            .all()
-        )
+        rows = self._db.execute(select(SBOMComponent).where(SBOMComponent.sbom_id == sbom_id)).scalars().all()
         out: dict[_ComponentKey, _LoadedComponent] = {}
         for r in rows:
             name = (r.name or "").strip()
@@ -374,9 +365,7 @@ class CompareService:
         stmt = (
             select(AnalysisFinding, SBOMComponent.purl)
             .where(AnalysisFinding.analysis_run_id == run_id)
-            .outerjoin(
-                SBOMComponent, SBOMComponent.id == AnalysisFinding.component_id
-            )
+            .outerjoin(SBOMComponent, SBOMComponent.id == AnalysisFinding.component_id)
         )
         out: dict[_FindingKey, _LoadedFinding] = {}
         for finding, purl in self._db.execute(stmt).all():
@@ -431,23 +420,14 @@ class CompareService:
                 continue
             assert la is not None and lb is not None
             if la.version != lb.version:
-                out.append(
-                    _component_row(ComponentChangeKind.VERSION_BUMPED, key, la, lb)
-                )
+                out.append(_component_row(ComponentChangeKind.VERSION_BUMPED, key, la, lb))
                 continue
             # Same version: license / hash diffs. These NEVER fire today
             # because the columns aren't stored, AND additionally the hard
             # guard ``compare_license_hash_enabled`` must be true. See
             # ADR-0008 §10 OOS and Phase 3 user clarification §4.
-            if (
-                license_hash_enabled
-                and la.license is not None
-                and lb.license is not None
-                and la.license != lb.license
-            ):
-                out.append(
-                    _component_row(ComponentChangeKind.LICENSE_CHANGED, key, la, lb)
-                )
+            if license_hash_enabled and la.license is not None and lb.license is not None and la.license != lb.license:
+                out.append(_component_row(ComponentChangeKind.LICENSE_CHANGED, key, la, lb))
                 continue
             if (
                 license_hash_enabled
@@ -455,9 +435,7 @@ class CompareService:
                 and lb.content_hash is not None
                 and la.content_hash != lb.content_hash
             ):
-                out.append(
-                    _component_row(ComponentChangeKind.HASH_CHANGED, key, la, lb)
-                )
+                out.append(_component_row(ComponentChangeKind.HASH_CHANGED, key, la, lb))
                 continue
             # Otherwise unchanged — emitted so the Components tab can show
             # ``show_unchanged=true`` rows; client filter excludes by default.
@@ -484,9 +462,7 @@ class CompareService:
                 continue
             assert la is not None and lb is not None
             if la.severity != lb.severity:
-                out.append(
-                    _finding_row(FindingChangeKind.SEVERITY_CHANGED, la, lb)
-                )
+                out.append(_finding_row(FindingChangeKind.SEVERITY_CHANGED, la, lb))
                 continue
             out.append(_finding_row(FindingChangeKind.UNCHANGED, la, lb))
         return out
@@ -549,16 +525,8 @@ class CompareService:
         fix_pct_b = round((b_fix * 100.0 / b_total), 2) if b_total else 0.0
 
         # High+Critical exposure.
-        hc_a = sum(
-            1
-            for f in findings
-            if _present_in_a(f) and f.severity_a in (CveSeverity.HIGH, CveSeverity.CRITICAL)
-        )
-        hc_b = sum(
-            1
-            for f in findings
-            if _present_in_b(f) and f.severity_b in (CveSeverity.HIGH, CveSeverity.CRITICAL)
-        )
+        hc_a = sum(1 for f in findings if _present_in_a(f) and f.severity_a in (CveSeverity.HIGH, CveSeverity.CRITICAL))
+        hc_b = sum(1 for f in findings if _present_in_b(f) and f.severity_b in (CveSeverity.HIGH, CveSeverity.CRITICAL))
 
         # Severity composition.
         dist_a = _severity_distribution(findings, side="a")
@@ -567,21 +535,13 @@ class CompareService:
         # Distribution-bar / event counts.
         added = sum(1 for f in findings if f.change_kind == FindingChangeKind.ADDED)
         resolved = sum(1 for f in findings if f.change_kind == FindingChangeKind.RESOLVED)
-        sev_changed = sum(
-            1 for f in findings if f.change_kind == FindingChangeKind.SEVERITY_CHANGED
-        )
+        sev_changed = sum(1 for f in findings if f.change_kind == FindingChangeKind.SEVERITY_CHANGED)
         unchanged = sum(1 for f in findings if f.change_kind == FindingChangeKind.UNCHANGED)
 
         comp_added = sum(1 for c in components if c.change_kind == ComponentChangeKind.ADDED)
-        comp_removed = sum(
-            1 for c in components if c.change_kind == ComponentChangeKind.REMOVED
-        )
-        comp_bumped = sum(
-            1 for c in components if c.change_kind == ComponentChangeKind.VERSION_BUMPED
-        )
-        comp_unchanged = sum(
-            1 for c in components if c.change_kind == ComponentChangeKind.UNCHANGED
-        )
+        comp_removed = sum(1 for c in components if c.change_kind == ComponentChangeKind.REMOVED)
+        comp_bumped = sum(1 for c in components if c.change_kind == ComponentChangeKind.VERSION_BUMPED)
+        comp_unchanged = sum(1 for c in components if c.change_kind == ComponentChangeKind.UNCHANGED)
 
         # Top contributors — display-only ordinal rank, NOT a weighted score.
         top_resolutions = _top_contributors(findings, FindingChangeKind.RESOLVED, n=5)
@@ -613,13 +573,9 @@ class CompareService:
 
     # -- step 8 (relationship) -----------------------------------------------
 
-    def _compute_relationship(
-        self, run_a: AnalysisRun, run_b: AnalysisRun
-    ) -> RunRelationship:
+    def _compute_relationship(self, run_a: AnalysisRun, run_b: AnalysisRun) -> RunRelationship:
         same_project = (
-            run_a.project_id is not None
-            and run_b.project_id is not None
-            and run_a.project_id == run_b.project_id
+            run_a.project_id is not None and run_b.project_id is not None and run_a.project_id == run_b.project_id
         )
         same_sbom = run_a.sbom_id == run_b.sbom_id
         days_between = _days_between(run_a.completed_on, run_b.completed_on)
@@ -627,8 +583,7 @@ class CompareService:
         if days_between is not None:
             if _parse_iso(run_b.completed_on) < _parse_iso(run_a.completed_on):
                 direction_warning = (
-                    f"Run B is older than Run A by {_format_time_gap(abs(days_between))} "
-                    f"— did you mean to swap?"
+                    f"Run B is older than Run A by {_format_time_gap(abs(days_between))} — did you mean to swap?"
                 )
         return RunRelationship(
             same_project=same_project,
@@ -643,24 +598,14 @@ class CompareService:
         ids = {f.vuln_id.upper() for f in findings if f.vuln_id}
         if not ids:
             return set()
-        rows = (
-            self._db.execute(select(KevEntry.cve_id).where(KevEntry.cve_id.in_(ids)))
-            .scalars()
-            .all()
-        )
+        rows = self._db.execute(select(KevEntry.cve_id).where(KevEntry.cve_id.in_(ids))).scalars().all()
         return {(r or "").upper() for r in rows}
 
-    def _lookup_current_epss(
-        self, findings: list[FindingDiffRow]
-    ) -> dict[str, tuple[float | None, float | None]]:
+    def _lookup_current_epss(self, findings: list[FindingDiffRow]) -> dict[str, tuple[float | None, float | None]]:
         ids = {f.vuln_id.upper() for f in findings if f.vuln_id}
         if not ids:
             return {}
-        rows = (
-            self._db.execute(
-                select(CveCache.cve_id, CveCache.payload).where(CveCache.cve_id.in_(ids))
-            ).all()
-        )
+        rows = self._db.execute(select(CveCache.cve_id, CveCache.payload).where(CveCache.cve_id.in_(ids))).all()
         out: dict[str, tuple[float | None, float | None]] = {}
         for cve_id, payload in rows:
             if not isinstance(payload, dict):
@@ -783,9 +728,7 @@ def _parse_iso(value: str | None) -> datetime:
 def _days_between(a_iso: str | None, b_iso: str | None) -> float | None:
     a = _parse_iso(a_iso)
     b = _parse_iso(b_iso)
-    if a == datetime.min.replace(tzinfo=UTC) or b == datetime.min.replace(
-        tzinfo=UTC
-    ):
+    if a == datetime.min.replace(tzinfo=UTC) or b == datetime.min.replace(tzinfo=UTC):
         return None
     delta = b - a
     return round(delta.total_seconds() / 86400.0, 2)
@@ -821,9 +764,7 @@ def _present_in_b(f: FindingDiffRow) -> bool:
     )
 
 
-def _severity_distribution(
-    findings: list[FindingDiffRow], *, side: str
-) -> dict[str, int]:
+def _severity_distribution(findings: list[FindingDiffRow], *, side: str) -> dict[str, int]:
     keys = ("CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN")
     out = dict.fromkeys(keys, 0)
     for f in findings:
@@ -846,9 +787,7 @@ def _severity_distribution(
     return out
 
 
-def _top_contributors(
-    findings: list[FindingDiffRow], kind: FindingChangeKind, *, n: int
-) -> list[FindingDiffRow]:
+def _top_contributors(findings: list[FindingDiffRow], kind: FindingChangeKind, *, n: int) -> list[FindingDiffRow]:
     """Display-only ordinal rank — NOT a weighted score. ADR-0008 §5 / Tab 3.
 
     Sort key: (KEV first, severity ord desc, fix-available first, vuln_id asc).
@@ -941,9 +880,7 @@ def _finding_row(
     )
 
 
-def _attribution_string(
-    kind: FindingChangeKind, comp: ComponentDiffRow | None
-) -> str | None:
+def _attribution_string(kind: FindingChangeKind, comp: ComponentDiffRow | None) -> str | None:
     if kind not in (FindingChangeKind.ADDED, FindingChangeKind.RESOLVED):
         return None
     if comp is None:

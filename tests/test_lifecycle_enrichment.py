@@ -578,6 +578,7 @@ def test_manual_lifecycle_override_validation_and_audit(client, db):
     # 1. Success validation
     # Check date validation and manual override flag setting
     import time
+
     start_time = time.time()
 
     override_res = client.patch(
@@ -593,8 +594,8 @@ def test_manual_lifecycle_override_validation_and_audit(client, db):
             "recommended_version": "2.0.0",
             "reason": "Explicit test reason.",
             "evidence_url": "https://example.com/eol-news",
-            "updated_by": "test-user"
-        }
+            "updated_by": "test-user",
+        },
     )
     end_time = time.time()
     assert override_res.status_code == 200
@@ -614,46 +615,46 @@ def test_manual_lifecycle_override_validation_and_audit(client, db):
 
     # 3. Verify audit history is written
     from app.models import AuditLog, ComponentLifecycleOverrideAudit
-    audit_logs = db.execute(
-        select(AuditLog).where(AuditLog.target_id == component.id, AuditLog.action == "component.lifecycle_override")
-    ).scalars().all()
+
+    audit_logs = (
+        db.execute(
+            select(AuditLog).where(
+                AuditLog.target_id == component.id, AuditLog.action == "component.lifecycle_override"
+            )
+        )
+        .scalars()
+        .all()
+    )
     assert len(audit_logs) == 1
     assert audit_logs[0].user_id == "test-user"
 
-    override_audit = db.execute(
-        select(ComponentLifecycleOverrideAudit).where(ComponentLifecycleOverrideAudit.component_id == component.id)
-    ).scalars().all()
+    override_audit = (
+        db.execute(
+            select(ComponentLifecycleOverrideAudit).where(ComponentLifecycleOverrideAudit.component_id == component.id)
+        )
+        .scalars()
+        .all()
+    )
     assert len(override_audit) == 1
     assert override_audit[0].reason == "Explicit test reason."
 
     # 4. Invalid status returns 422
     invalid_status = client.patch(
         f"/api/components/{component.id}/lifecycle-override",
-        json={
-            "lifecycle_status": "Not A Status",
-            "reason": "Test reason"
-        }
+        json={"lifecycle_status": "Not A Status", "reason": "Test reason"},
     )
     assert invalid_status.status_code == 422
 
     # 5. Invalid date format returns 422
     invalid_date = client.patch(
         f"/api/components/{component.id}/lifecycle-override",
-        json={
-            "lifecycle_status": "EOL",
-            "eos_date": "2026/06/30",
-            "reason": "Test reason"
-        }
+        json={"lifecycle_status": "EOL", "eos_date": "2026/06/30", "reason": "Test reason"},
     )
     assert invalid_date.status_code == 422
 
     # 6. Missing component returns 404
     missing_comp = client.patch(
-        "/api/components/999999/lifecycle-override",
-        json={
-            "lifecycle_status": "EOL",
-            "reason": "Test reason"
-        }
+        "/api/components/999999/lifecycle-override", json={"lifecycle_status": "EOL", "reason": "Test reason"}
     )
     assert missing_comp.status_code == 404
 

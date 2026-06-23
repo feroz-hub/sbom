@@ -257,9 +257,7 @@ def test_branch5_mirror_raises_falls_back_to_live_with_error_log(
     assert "nvd_mirror_query_failed_falling_back" in caplog.text
     # The "circuit hint" lives on extra={"hint": ...}; caplog.text shows
     # only the message string, so inspect the record directly.
-    error_records = [
-        r for r in caplog.records if r.message == "nvd_mirror_query_failed_falling_back"
-    ]
+    error_records = [r for r in caplog.records if r.message == "nvd_mirror_query_failed_falling_back"]
     assert error_records, "expected an error record for the failed mirror query"
     assert "consider disabling mirror" in getattr(error_records[0], "hint", "")
 

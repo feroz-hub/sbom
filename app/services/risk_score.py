@@ -288,10 +288,14 @@ def score_findings(db: Session, findings: Iterable[AnalysisFinding]) -> dict:
                 "worst_finding_score": round(comp_max, 2),
                 "component_score": round(comp_score, 2),
                 "highest_severity": (
-                    "CRITICAL" if sev_counts["CRITICAL"]
-                    else "HIGH" if sev_counts["HIGH"]
-                    else "MEDIUM" if sev_counts["MEDIUM"]
-                    else "LOW" if sev_counts["LOW"]
+                    "CRITICAL"
+                    if sev_counts["CRITICAL"]
+                    else "HIGH"
+                    if sev_counts["HIGH"]
+                    else "MEDIUM"
+                    if sev_counts["MEDIUM"]
+                    else "LOW"
+                    if sev_counts["LOW"]
                     else "UNKNOWN"
                 ),
             }

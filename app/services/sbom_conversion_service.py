@@ -94,7 +94,7 @@ def _parse_supplier(raw: str | None) -> dict[str, str] | None:
     name = raw
     for prefix in ("Organization: ", "Person: ", "Tool: "):
         if name.startswith(prefix):
-            name = name[len(prefix):]
+            name = name[len(prefix) :]
             break
     return {"name": name.strip()} if name.strip() else None
 
@@ -112,9 +112,7 @@ def _map_checksums(checksums: list[Any], state: _ConversionState, path: str) -> 
         if alg:
             hashes.append({"alg": alg, "content": value})
         else:
-            state.warnings.append(
-                f"Unsupported SPDX checksum algorithm '{alg_raw}' at {path}; checksum skipped."
-            )
+            state.warnings.append(f"Unsupported SPDX checksum algorithm '{alg_raw}' at {path}; checksum skipped.")
     return hashes
 
 
@@ -222,7 +220,9 @@ def _map_package_to_component(
     if supplier:
         component["supplier"] = supplier
 
-    licenses = _map_license_declared(pkg.get("licenseDeclared") if isinstance(pkg.get("licenseDeclared"), str) else None)
+    licenses = _map_license_declared(
+        pkg.get("licenseDeclared") if isinstance(pkg.get("licenseDeclared"), str) else None
+    )
     if licenses:
         expr = licenses[0].get("expression", "")
         if " " in expr or expr.startswith("("):
@@ -235,9 +235,7 @@ def _map_package_to_component(
     license_concluded = pkg.get("licenseConcluded")
     if isinstance(license_concluded, str) and license_concluded not in ("NOASSERTION", "NONE"):
         if " " in license_concluded or license_concluded.startswith("("):
-            state.warnings.append(
-                f"SPDX licenseConcluded expression at {path} preserved as property only."
-            )
+            state.warnings.append(f"SPDX licenseConcluded expression at {path} preserved as property only.")
 
     hashes = _map_checksums(pkg.get("checksums") or [], state, path)
     if hashes:
@@ -331,9 +329,7 @@ def _map_relationships(
                     f"SPDX DEPENDS_ON at relationships[{index}] involves non-package element; skipped."
                 )
             else:
-                state.warnings.append(
-                    f"SPDX DEPENDS_ON at relationships[{index}] has unresolved refs; skipped."
-                )
+                state.warnings.append(f"SPDX DEPENDS_ON at relationships[{index}] has unresolved refs; skipped.")
             continue
 
         if rel_type == "DEPENDENCY_OF":
@@ -350,9 +346,7 @@ def _map_relationships(
             if source_ref and target_ref:
                 _add_dep(source_ref, target_ref, rel_type)
             else:
-                state.warnings.append(
-                    f"SPDX CONTAINS at relationships[{index}] has unresolved refs; skipped."
-                )
+                state.warnings.append(f"SPDX CONTAINS at relationships[{index}] has unresolved refs; skipped.")
             continue
 
         if rel_type in _PROPERTY_REL_TYPES:
@@ -390,9 +384,7 @@ def _map_relationships(
         if valid_depends:
             dependencies.append({"ref": ref, "dependsOn": valid_depends})
         elif depends:
-            state.warnings.append(
-                f"Dependency entry for '{ref}' dropped because dependsOn targets were unresolved."
-            )
+            state.warnings.append(f"Dependency entry for '{ref}' dropped because dependsOn targets were unresolved.")
     return dependencies
 
 
@@ -447,9 +439,9 @@ def convert_spdx_to_cyclonedx(spdx_data: dict[str, Any], *, validate: bool = Tru
     tools: list[dict[str, str]] = []
     for creator in creators:
         if creator.startswith("Tool: "):
-            tools.append({"name": creator[len("Tool: "):], "vendor": "SPDX"})
+            tools.append({"name": creator[len("Tool: ") :], "vendor": "SPDX"})
         elif creator.startswith("Organization: "):
-            tools.append({"name": creator, "vendor": creator[len("Organization: "):]})
+            tools.append({"name": creator, "vendor": creator[len("Organization: ") :]})
         else:
             tools.append({"name": creator})
 
@@ -510,7 +502,10 @@ def convert_spdx_to_cyclonedx(spdx_data: dict[str, Any], *, validate: bool = Tru
         for edr_index, edr in enumerate(external_doc_refs):
             if isinstance(edr, dict):
                 metadata_properties.append(
-                    {"name": f"spdx:externalDocumentRef:{edr_index}", "value": str(edr.get("externalDocumentId") or edr)}
+                    {
+                        "name": f"spdx:externalDocumentRef:{edr_index}",
+                        "value": str(edr.get("externalDocumentId") or edr),
+                    }
                 )
 
     dependencies = _map_relationships(spdx_data, doc_spdx_id, doc_bom_ref, state)
@@ -609,9 +604,7 @@ def convert_and_persist_spdx_to_cyclonedx(
     if source_sbom.converted_sbom_id is not None:
         existing = db.get(SBOMSource, source_sbom.converted_sbom_id)
         if existing is not None:
-            raise ValueError(
-                f"SPDX SBOM already converted to CycloneDX (converted_sbom_id={existing.id})."
-            )
+            raise ValueError(f"SPDX SBOM already converted to CycloneDX (converted_sbom_id={existing.id}).")
 
     started_at = _now_iso()
     source_sbom.conversion_started_at = started_at

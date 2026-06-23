@@ -24,17 +24,17 @@ def lifecycle_eos_upcoming_total(db: Session) -> int:
     head_ids = active_head_sbom_ids_subquery()
     today_str = datetime.now(UTC).date().isoformat()
     upcoming_str = (datetime.now(UTC).date() + timedelta(days=90)).isoformat()
-    
+
     return (
         db.execute(
             select(func.count(SBOMComponent.id))
             .where(SBOMComponent.sbom_id.in_(head_ids))
             .where(
-                (func.lower(SBOMComponent.lifecycle_status) == "eos") |
-                (
-                    (SBOMComponent.eos_date.is_not(None)) & 
-                    (SBOMComponent.eos_date >= today_str) & 
-                    (SBOMComponent.eos_date <= upcoming_str)
+                (func.lower(SBOMComponent.lifecycle_status) == "eos")
+                | (
+                    (SBOMComponent.eos_date.is_not(None))
+                    & (SBOMComponent.eos_date >= today_str)
+                    & (SBOMComponent.eos_date <= upcoming_str)
                 )
             )
         ).scalar()

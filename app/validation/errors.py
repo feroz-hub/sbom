@@ -123,7 +123,6 @@ W113_SIGNATURE_NOT_PRESENT = "SBOM_VAL_W113_SIGNATURE_NOT_PRESENT"
 W120_DUPLICATE_COMPONENT_DETECTED = "SBOM_VAL_W120_DUPLICATE_COMPONENT_DETECTED"
 
 
-
 # ---------------------------------------------------------------------------
 # Code → (HTTP status, default severity) mapping
 # ---------------------------------------------------------------------------

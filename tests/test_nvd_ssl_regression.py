@@ -64,14 +64,12 @@ def test_nvd_analysis_module_has_no_sslcontext_references():
         ("SSLContext", "NVD client must not use SSLContext"),
         (
             "create_default_context",
-            "NVD client must not build a custom SSL context — "
-            "certifi.where() is all we need",
+            "NVD client must not build a custom SSL context — certifi.where() is all we need",
         ),
         ("truststore", "NVD client must not depend on truststore"),
         (
             "tls_ssl_context",
-            "tls_ssl_context() returns an SSLContext — "
-            "it must never reach the NVD code path",
+            "tls_ssl_context() returns an SSLContext — it must never reach the NVD code path",
         ),
     )
 
@@ -80,14 +78,9 @@ def test_nvd_analysis_module_has_no_sslcontext_references():
         return bool(stripped) and not stripped.startswith("#")
 
     for needle, message in forbidden:
-        offenders = [
-            (i + 1, ln)
-            for i, ln in enumerate(text.splitlines())
-            if needle in ln and _is_executable(ln)
-        ]
-        assert not offenders, (
-            f"{message}. Offending executable line(s):\n  "
-            + "\n  ".join(f"{n}: {ln}" for n, ln in offenders)
+        offenders = [(i + 1, ln) for i, ln in enumerate(text.splitlines()) if needle in ln and _is_executable(ln)]
+        assert not offenders, f"{message}. Offending executable line(s):\n  " + "\n  ".join(
+            f"{n}: {ln}" for n, ln in offenders
         )
 
 
@@ -101,14 +94,11 @@ def test_nvd_analysis_module_has_no_verify_kwargs():
     text = src.read_text()
 
     bad_lines = [
-        (i + 1, ln)
-        for i, ln in enumerate(text.splitlines())
-        if "verify=" in ln and not ln.lstrip().startswith("#")
+        (i + 1, ln) for i, ln in enumerate(text.splitlines()) if "verify=" in ln and not ln.lstrip().startswith("#")
     ]
     assert not bad_lines, (
         "verify= found in executable code in analysis.py — the NVD path must "
-        "use default SSL. Offending lines:\n  "
-        + "\n  ".join(f"{n}: {ln}" for n, ln in bad_lines)
+        "use default SSL. Offending lines:\n  " + "\n  ".join(f"{n}: {ln}" for n, ln in bad_lines)
     )
 
 
@@ -137,12 +127,9 @@ def test_nvd_session_verify_is_certifi_path_string():
 
     # Must not be the failure modes.
     assert verify is not True, (
-        "_nvd_session.verify must be an explicit path — bare True silently "
-        "breaks on Windows (venv / corporate CA)."
+        "_nvd_session.verify must be an explicit path — bare True silently breaks on Windows (venv / corporate CA)."
     )
-    assert verify is not False, (
-        "_nvd_session.verify must not disable verification."
-    )
+    assert verify is not False, "_nvd_session.verify must not disable verification."
     assert not isinstance(verify, ssl.SSLContext), (
         f"_nvd_session.verify must never be an SSLContext "
         f"(retriggers the original TypeError), got {type(verify).__name__}"
@@ -150,15 +137,11 @@ def test_nvd_session_verify_is_certifi_path_string():
 
     # Must be a path string pointing at certifi's bundle.
     assert isinstance(verify, str), (
-        f"_nvd_session.verify must be a path STRING, "
-        f"got {type(verify).__name__}: {verify!r}"
+        f"_nvd_session.verify must be a path STRING, got {type(verify).__name__}: {verify!r}"
     )
-    assert pathlib.Path(verify).is_file(), (
-        f"_nvd_session.verify should point to a readable CA bundle, got {verify!r}"
-    )
+    assert pathlib.Path(verify).is_file(), f"_nvd_session.verify should point to a readable CA bundle, got {verify!r}"
     assert verify == certifi.where(), (
-        f"_nvd_session.verify should be certifi.where() "
-        f"(= {certifi.where()!r}), got {verify!r}"
+        f"_nvd_session.verify should be certifi.where() (= {certifi.where()!r}), got {verify!r}"
     )
 
 

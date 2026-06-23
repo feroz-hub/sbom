@@ -238,14 +238,15 @@ def test_compare_diffs_findings_and_components(client, db):
 
     # Components — name+ecosystem identity.
     # Run A's SBOM has log4j-core@2.16.0, requests@2.31.0.
-    _add_component(db, sbom_a, name="log4j-core", version="2.16.0",
-                   purl="pkg:maven/org.apache.logging.log4j/log4j-core@2.16.0")
+    _add_component(
+        db, sbom_a, name="log4j-core", version="2.16.0", purl="pkg:maven/org.apache.logging.log4j/log4j-core@2.16.0"
+    )
     _add_component(db, sbom_a, name="requests", version="2.31.0")
     # Run B's SBOM has log4j-core@2.17.1 (upgrade), pyyaml@6.0.1 (added).
-    _add_component(db, sbom_b, name="log4j-core", version="2.17.1",
-                   purl="pkg:maven/org.apache.logging.log4j/log4j-core@2.17.1")
-    _add_component(db, sbom_b, name="pyyaml", version="6.0.1",
-                   purl="pkg:pypi/pyyaml@6.0.1")
+    _add_component(
+        db, sbom_b, name="log4j-core", version="2.17.1", purl="pkg:maven/org.apache.logging.log4j/log4j-core@2.17.1"
+    )
+    _add_component(db, sbom_b, name="pyyaml", version="6.0.1", purl="pkg:pypi/pyyaml@6.0.1")
     db.commit()
 
     run_a = _add_run(db, sbom=sbom_a, project=proj)
@@ -256,18 +257,30 @@ def test_compare_diffs_findings_and_components(client, db):
     #       CVE-2023-9999  on requests@2.31.0 (MEDIUM)
     #   B:  CVE-2024-12345 on pyyaml@6.0.1 (HIGH) — added in B
     #       CVE-2023-9999  on requests@2.31.0 (CRITICAL) — severity_changed
-    _add_finding(db, run_a, vuln_id="CVE-2021-44832",
-                 component_name="log4j-core", component_version="2.16.0",
-                 severity="CRITICAL", fixed_versions=["2.17.1"])
-    _add_finding(db, run_a, vuln_id="CVE-2023-9999",
-                 component_name="requests", component_version="2.31.0",
-                 severity="MEDIUM")
-    _add_finding(db, run_b, vuln_id="CVE-2024-12345",
-                 component_name="pyyaml", component_version="6.0.1",
-                 severity="HIGH", fixed_versions=["6.0.2"])
-    _add_finding(db, run_b, vuln_id="CVE-2023-9999",
-                 component_name="requests", component_version="2.31.0",
-                 severity="CRITICAL")
+    _add_finding(
+        db,
+        run_a,
+        vuln_id="CVE-2021-44832",
+        component_name="log4j-core",
+        component_version="2.16.0",
+        severity="CRITICAL",
+        fixed_versions=["2.17.1"],
+    )
+    _add_finding(
+        db, run_a, vuln_id="CVE-2023-9999", component_name="requests", component_version="2.31.0", severity="MEDIUM"
+    )
+    _add_finding(
+        db,
+        run_b,
+        vuln_id="CVE-2024-12345",
+        component_name="pyyaml",
+        component_version="6.0.1",
+        severity="HIGH",
+        fixed_versions=["6.0.2"],
+    )
+    _add_finding(
+        db, run_b, vuln_id="CVE-2023-9999", component_name="requests", component_version="2.31.0", severity="CRITICAL"
+    )
     db.commit()
 
     svc = CompareService(db)
@@ -439,9 +452,14 @@ def test_kev_current_state_is_picked_up_from_kev_entry(client, db):
     _, sbom_b = _seed_project_and_sbom(db, slug="kev-b")
     run_a = _add_run(db, sbom=sbom_a, project=proj)
     run_b = _add_run(db, sbom=sbom_b, project=proj)
-    _add_finding(db, run_a, vuln_id="CVE-2021-44832",
-                 component_name="log4j-core", component_version="2.16.0",
-                 severity="CRITICAL")
+    _add_finding(
+        db,
+        run_a,
+        vuln_id="CVE-2021-44832",
+        component_name="log4j-core",
+        component_version="2.16.0",
+        severity="CRITICAL",
+    )
     db.add(KevEntry(cve_id="CVE-2021-44832", refreshed_at=_now_iso()))
     db.commit()
 
@@ -463,15 +481,9 @@ def test_top_resolutions_orders_kev_first_then_severity(client, db):
     # CVE-LOW (low) — not KEV
     # CVE-MED (medium) — KEV
     # CVE-CRIT (critical) — not KEV
-    _add_finding(db, run_a, vuln_id="CVE-2024-LOW",
-                 component_name="a", component_version="1.0",
-                 severity="LOW")
-    _add_finding(db, run_a, vuln_id="CVE-2024-MED",
-                 component_name="b", component_version="1.0",
-                 severity="MEDIUM")
-    _add_finding(db, run_a, vuln_id="CVE-2024-CRIT",
-                 component_name="c", component_version="1.0",
-                 severity="CRITICAL")
+    _add_finding(db, run_a, vuln_id="CVE-2024-LOW", component_name="a", component_version="1.0", severity="LOW")
+    _add_finding(db, run_a, vuln_id="CVE-2024-MED", component_name="b", component_version="1.0", severity="MEDIUM")
+    _add_finding(db, run_a, vuln_id="CVE-2024-CRIT", component_name="c", component_version="1.0", severity="CRITICAL")
     db.add(KevEntry(cve_id="CVE-2024-MED", refreshed_at=_now_iso()))
     db.commit()
 

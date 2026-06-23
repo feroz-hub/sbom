@@ -39,10 +39,7 @@ def run(ctx: ValidationContext) -> ValidationContext:
             stage=_STAGE,
             path="signature",
             message="Signature verification is enabled but no signature block is present.",
-            remediation=(
-                "Embed a JSF signature (CycloneDX) or upload an external signature "
-                "sidecar (SPDX)."
-            ),
+            remediation=("Embed a JSF signature (CycloneDX) or upload an external signature sidecar (SPDX)."),
         )
         return ctx
 
@@ -54,9 +51,6 @@ def run(ctx: ValidationContext) -> ValidationContext:
         stage=_STAGE,
         path="signature",
         message="Signature verification is enabled but the verifier is not yet implemented.",
-        remediation=(
-            "Disable SBOM_SIGNATURE_VERIFICATION until the rollout ADR ships, "
-            "or omit the signature block."
-        ),
+        remediation=("Disable SBOM_SIGNATURE_VERIFICATION until the rollout ADR ships, or omit the signature block."),
     )
     return ctx

@@ -41,9 +41,7 @@ class DepsDevProvider(LifecycleProvider):
         if not system or not component.normalized_name:
             return unknown_result(component, self.name)
 
-        package_url = (
-            f"https://api.deps.dev/v3/systems/{system}/packages/{quote(component.normalized_name, safe='')}"
-        )
+        package_url = f"https://api.deps.dev/v3/systems/{system}/packages/{quote(component.normalized_name, safe='')}"
         package_payload = self._get_json(package_url)
         if not isinstance(package_payload, dict):
             return unknown_result(component, self.name)
@@ -51,9 +49,7 @@ class DepsDevProvider(LifecycleProvider):
         latest = _latest_version(package_payload)
         version_payload: dict[str, Any] = {}
         if component.normalized_version:
-            version_url = (
-                f"{package_url}/versions/{quote(component.normalized_version, safe='')}"
-            )
+            version_url = f"{package_url}/versions/{quote(component.normalized_version, safe='')}"
             fetched_version = self._get_json(version_url)
             if isinstance(fetched_version, dict):
                 version_payload = fetched_version
@@ -76,9 +72,7 @@ class DepsDevProvider(LifecycleProvider):
                 latest_supported_version=latest,
                 recommended_version=recommended,
                 recommendation=(
-                    f"{deprecation} Upgrade to {latest} after compatibility testing."
-                    if recommended
-                    else deprecation
+                    f"{deprecation} Upgrade to {latest} after compatibility testing." if recommended else deprecation
                 ),
                 source_name=self.name,
                 source_url=f"https://deps.dev/{system}/{'p/' if system != 'GO' else ''}{component.normalized_name}",
@@ -139,7 +133,11 @@ def _latest_version(payload: dict[str, Any]) -> str | None:
     versions = payload.get("versions")
     if not isinstance(versions, list):
         return None
-    values = [str(row.get("versionKey", {}).get("version") or row.get("version") or "") for row in versions if isinstance(row, dict)]
+    values = [
+        str(row.get("versionKey", {}).get("version") or row.get("version") or "")
+        for row in versions
+        if isinstance(row, dict)
+    ]
     values = [value for value in values if value]
     if not values:
         return None
@@ -168,7 +166,11 @@ def _advisories(*payloads: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _compact(payload: dict[str, Any]) -> dict[str, Any]:
-    return {key: payload.get(key) for key in ("versionKey", "isDefault", "licenses", "links", "publishedAt") if key in payload}
+    return {
+        key: payload.get(key)
+        for key in ("versionKey", "isDefault", "licenses", "links", "publishedAt")
+        if key in payload
+    }
 
 
 def _is_newer(candidate: str | None, current: str | None) -> bool:

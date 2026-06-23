@@ -62,18 +62,12 @@ def test_nvd_source_routes_through_lookup_service_when_provided(monkeypatch):
     result = asyncio.run(src.query(components, cfg))
 
     assert captured, "lookup_service was not called"
-    assert captured[0][0] == components[0]["cpe"], (
-        f"lookup_service got the wrong CPE: {captured!r}"
+    assert captured[0][0] == components[0]["cpe"], f"lookup_service got the wrong CPE: {captured!r}"
+    assert captured[0][1] == "fake", f"lookup_service did not receive the constructor api_key: {captured!r}"
+    assert live_calls == [], f"live nvd_query_by_cpe was called despite lookup_service: {live_calls!r}"
+    assert any(f.get("vuln_id") == "CVE-LOOKUP-1" for f in result["findings"]), (
+        f"lookup result did not flow through to findings: {result['findings']!r}"
     )
-    assert captured[0][1] == "fake", (
-        f"lookup_service did not receive the constructor api_key: {captured!r}"
-    )
-    assert live_calls == [], (
-        f"live nvd_query_by_cpe was called despite lookup_service: {live_calls!r}"
-    )
-    assert any(
-        f.get("vuln_id") == "CVE-LOOKUP-1" for f in result["findings"]
-    ), f"lookup result did not flow through to findings: {result['findings']!r}"
 
 
 def test_nvd_source_does_not_send_unknown_cpe_live(monkeypatch):

@@ -1,12 +1,12 @@
-import type { Metadata } from 'next';
+'use client';
+
+import { useEffect } from 'react';
 import Link from 'next/link';
 
-export const metadata: Metadata = {
-  title: 'Access Denied — SBOM Analyzer',
-  description: 'You do not have permission to access this resource.',
-};
-
 export default function AccessDeniedPage() {
+  useEffect(() => {
+    document.title = 'Access Denied — SBOM Analyzer';
+  }, []);
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="w-full max-w-md rounded-xl border border-border bg-surface p-8 shadow-elev-2 text-center">

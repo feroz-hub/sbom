@@ -53,6 +53,7 @@ def _normalize_enum_value(v: object) -> object:
         return v.strip().lower().replace("-", "_").replace(" ", "_")
     return v
 
+
 # Bumping :data:`SCHEMA_VERSION` is a hard cache invalidation — every
 # existing ``ai_fix_cache`` row becomes stale on upgrade. Keep stable and
 # only bump when the bundle shape changes in a backward-incompatible way.

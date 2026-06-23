@@ -130,11 +130,7 @@ class GeminiProvider(LlmProvider):
             default_model=self.default_model,
             supports_structured_output=True,
             is_local=False,
-            notes=(
-                "Free tier (15 req/min · 1M tokens/day)."
-                if self._tier == "free"
-                else "Paid tier."
-            ),
+            notes=("Free tier (15 req/min · 1M tokens/day)." if self._tier == "free" else "Paid tier."),
         )
 
     def breaker_state(self) -> dict[str, object]:

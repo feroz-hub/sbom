@@ -79,7 +79,9 @@ def failed_sbom_id(client) -> int:
     db = SessionLocal()
     try:
         db.execute(
-            text("INSERT INTO sbom_source (sbom_name, sbom_data, status) VALUES (:name, :data, 'pending')"),
+            text(
+                "INSERT INTO sbom_source (sbom_name, sbom_data, status, tenant_id) VALUES (:name, :data, 'pending', 1)"
+            ),
             {"name": name, "data": json.dumps(_BAD_PURL_CYCLONEDX)},
         )
         db.commit()

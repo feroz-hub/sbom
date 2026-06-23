@@ -39,6 +39,9 @@ def _days_ago_iso(n: int) -> str:
 
 def _seed_run_with_findings(db, *, started_on: str, severity_counts: dict[str, int]):
     """Insert a (Project, SBOMSource, AnalysisRun, AnalysisFindings) tuple."""
+    # Use unique names to avoid collisions across tests in the same session.
+    import uuid
+
     from app.models import (
         AnalysisFinding,
         AnalysisRun,
@@ -46,8 +49,7 @@ def _seed_run_with_findings(db, *, started_on: str, severity_counts: dict[str, i
         SBOMSource,
     )
 
-    # Use unique names to avoid collisions across tests in the same session.
-    suffix = started_on.replace(":", "").replace("-", "").replace("+", "")[-12:]
+    suffix = started_on.replace(":", "").replace("-", "").replace("+", "")[-12:] + "-" + uuid.uuid4().hex[:6]
     proj = Projects(project_name=f"trend-proj-{suffix}", project_status=1, created_on=_now_iso())
     db.add(proj)
     db.flush()

@@ -112,9 +112,7 @@ def test_canary_50pct_distribution_within_tolerance(_env):
         AI_FIXES_ENABLED="true",
         AI_CANARY_PERCENTAGE="50",
     )
-    allowed = sum(
-        1 for i in range(1000) if evaluate_access(rollout_key=f"run:{i}").allowed
-    )
+    allowed = sum(1 for i in range(1000) if evaluate_access(rollout_key=f"run:{i}").allowed)
     # 50% ± 5% on 1000 samples — very wide bound, but catches a stuck-at-0/100 bug.
     assert 450 <= allowed <= 550
 

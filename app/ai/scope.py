@@ -120,9 +120,7 @@ def resolve_scope_findings(
         # KEV is a separate table keyed on cve_id == finding.vuln_id.
         # IN-subquery is portable across SQLite + Postgres; correlated
         # EXISTS would also work but is less readable here.
-        base = base.where(
-            AnalysisFinding.vuln_id.in_(select(KevEntry.cve_id))
-        )
+        base = base.where(AnalysisFinding.vuln_id.in_(select(KevEntry.cve_id)))
 
     if scope.fix_available_only:
         # ``fixed_versions`` is a JSON-array string; "[]" / "" / NULL all

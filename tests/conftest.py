@@ -47,9 +47,7 @@ import pytest
 # collecting any test modules, so this DATABASE_URL is present when any
 # subsequent ``from app.db import ...`` happens.
 # ---------------------------------------------------------------------------
-_SESSION_DB_FD, _SESSION_DB_PATH = tempfile.mkstemp(
-    prefix="sbom_test_session_", suffix=".db"
-)
+_SESSION_DB_FD, _SESSION_DB_PATH = tempfile.mkstemp(prefix="sbom_test_session_", suffix=".db")
 os.close(_SESSION_DB_FD)
 Path(_SESSION_DB_PATH).unlink(missing_ok=True)
 # PostgreSQL integration tests opt in through a dedicated, disposable test
@@ -180,9 +178,7 @@ from .fixtures import canned_responses as canned  # noqa: E402
 # place.
 
 
-async def _fake_nvd_query_by_components_async(
-    components, settings, nvd_api_key=None, lookup_service=None
-):
+async def _fake_nvd_query_by_components_async(components, settings, nvd_api_key=None, lookup_service=None):
     # `lookup_service` is the R6 mirror-facade hook. The fake intentionally
     # ignores it: snapshot tests assert on the orchestrator-level shape,
     # not on whether the mirror branch was taken — that's covered by the

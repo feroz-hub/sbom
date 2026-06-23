@@ -37,18 +37,14 @@ class FernetSecretsAdapter:
         else:
             key_bytes = key.strip() if isinstance(key, bytes) else key
         if not key_bytes:
-            raise MissingFernetKeyError(
-                "Fernet key must be a non-empty url-safe base64 string"
-            )
+            raise MissingFernetKeyError("Fernet key must be a non-empty url-safe base64 string")
         # Fernet's constructor validates the key format (44 chars b64).
         # We surface its ValueError as the same MissingFernetKeyError so
         # callers don't have to catch two exception types.
         try:
             self._fernet = Fernet(key_bytes)
         except (ValueError, TypeError) as exc:
-            raise MissingFernetKeyError(
-                f"Fernet key is malformed (expected 32-byte url-safe b64): {exc}"
-            ) from exc
+            raise MissingFernetKeyError(f"Fernet key is malformed (expected 32-byte url-safe b64): {exc}") from exc
 
     @classmethod
     def from_env(cls, env_var: str = "NVD_MIRROR_FERNET_KEY") -> FernetSecretsAdapter:

@@ -116,9 +116,7 @@ class NvdLookupService:
                     "cpe": cpe23,
                     "age_hours": verdict.age_hours,
                     "last_success": (
-                        verdict.last_successful_sync_at.isoformat()
-                        if verdict.last_successful_sync_at
-                        else None
+                        verdict.last_successful_sync_at.isoformat() if verdict.last_successful_sync_at else None
                     ),
                 },
             )
@@ -200,16 +198,12 @@ class SessionScopedNvdLookupService:
         session = self._session_factory()
         try:
             inner = NvdLookupService(
-                settings_repo=SqlAlchemySettingsRepository(
-                    session, self._secrets, env_defaults=self._env_defaults
-                ),
+                settings_repo=SqlAlchemySettingsRepository(session, self._secrets, env_defaults=self._env_defaults),
                 cve_repo=SqlAlchemyCveRepository(session),
                 clock=self._clock,
                 live_query=self._live_query,
             )
-            result = inner.query_legacy(
-                cpe23, api_key=api_key, settings=settings
-            )
+            result = inner.query_legacy(cpe23, api_key=api_key, settings=settings)
             # The seed-on-load path inside SettingsRepository writes a row
             # the first time; commit so subsequent calls see it.
             session.commit()
@@ -225,9 +219,7 @@ class SessionScopedNvdLookupService:
 
         session = self._session_factory()
         try:
-            settings_repo = SqlAlchemySettingsRepository(
-                session, self._secrets, env_defaults=self._env_defaults
-            )
+            settings_repo = SqlAlchemySettingsRepository(session, self._secrets, env_defaults=self._env_defaults)
             snapshot = settings_repo.load()
             if not snapshot.enabled:
                 session.commit()
@@ -264,9 +256,7 @@ def build_nvd_lookup_for_pipeline() -> SessionScopedNvdLookupService:
 
     env_defaults = load_mirror_settings_from_env()
     try:
-        secrets: SecretsPort = FernetSecretsAdapter.from_env(
-            env_var=env_defaults.fernet_key_env_var
-        )
+        secrets: SecretsPort = FernetSecretsAdapter.from_env(env_var=env_defaults.fernet_key_env_var)
     except MissingFernetKeyError:
         secrets = _StubSecrets(env_defaults.fernet_key_env_var)
 

@@ -37,9 +37,7 @@ class Tenant(Base):
 
     __table_args__ = (
         UniqueConstraint("slug", name="uq_tenants_slug"),
-        UniqueConstraint(
-            "external_iam_tenant_id", name="uq_tenants_external_iam_tenant_id"
-        ),
+        UniqueConstraint("external_iam_tenant_id", name="uq_tenants_external_iam_tenant_id"),
     )
 
 
@@ -55,11 +53,7 @@ class IAMUser(Base):
     created_at = Column(DateTime(timezone=True), nullable=False)
     updated_at = Column(DateTime(timezone=True), nullable=False)
 
-    __table_args__ = (
-        UniqueConstraint(
-            "external_iam_user_id", name="uq_iam_users_external_iam_user_id"
-        ),
-    )
+    __table_args__ = (UniqueConstraint("external_iam_user_id", name="uq_iam_users_external_iam_user_id"),)
 
 
 class TenantUser(Base):
@@ -198,7 +192,9 @@ class SBOMSource(Base, SoftDeleteMixin, TenantOwnedMixin):
 
     __table_args__ = (
         UniqueConstraint(
-            "tenant_id", "sbom_name", "sbom_version",
+            "tenant_id",
+            "sbom_name",
+            "sbom_version",
             name="uq_sbom_source_tenant_name_version",
         ),
         Index("ix_sbom_source_tenant_project", "tenant_id", "projectid"),
@@ -1221,11 +1217,26 @@ for _model in (
     )
 
 for _tenant_model in (
-    Projects, SBOMSource, SBOMValidationSession, SBOMValidationSessionEvent,
-    SBOMAnalysisReport, SBOMComponent, VexDocument, VexStatement,
-    ComponentLifecycleOverrideAudit, VexOverrideAudit, AnalysisRun,
-    AnalysisFinding, RunCache, AnalysisSchedule, CompareCache, AiUsageLog,
-    AiFixBatch, AuditLog, VulnerabilityRemediation, VulnerabilityRemediationAudit,
+    Projects,
+    SBOMSource,
+    SBOMValidationSession,
+    SBOMValidationSessionEvent,
+    SBOMAnalysisReport,
+    SBOMComponent,
+    VexDocument,
+    VexStatement,
+    ComponentLifecycleOverrideAudit,
+    VexOverrideAudit,
+    AnalysisRun,
+    AnalysisFinding,
+    RunCache,
+    AnalysisSchedule,
+    CompareCache,
+    AiUsageLog,
+    AiFixBatch,
+    AuditLog,
+    VulnerabilityRemediation,
+    VulnerabilityRemediationAudit,
 ):
     _pk_column = next(iter(_tenant_model.__table__.primary_key.columns))
     Index(

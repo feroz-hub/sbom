@@ -87,9 +87,7 @@ def test_put_settings_partial_update_preserves_unspecified_fields(
         },
     )
     # Now update only enabled — page_size and api_key must persist.
-    r = api_client.put(
-        "/admin/nvd-mirror/settings", json={"enabled": False}
-    )
+    r = api_client.put("/admin/nvd-mirror/settings", json={"enabled": False})
     body = r.json()
     assert body["enabled"] is False
     assert body["page_size"] == 1000
@@ -101,32 +99,24 @@ def test_put_settings_clear_api_key(api_client: TestClient) -> None:
         "/admin/nvd-mirror/settings",
         json={"api_key": "key-to-clear-1234567"},
     )
-    r = api_client.put(
-        "/admin/nvd-mirror/settings", json={"clear_api_key": True}
-    )
+    r = api_client.put("/admin/nvd-mirror/settings", json={"clear_api_key": True})
     body = r.json()
     assert body["api_key_present"] is False
     assert body["api_key_masked"] == "(not set)"
 
 
 def test_put_settings_validates_window_days_range(api_client: TestClient) -> None:
-    r = api_client.put(
-        "/admin/nvd-mirror/settings", json={"window_days": 200}
-    )
+    r = api_client.put("/admin/nvd-mirror/settings", json={"window_days": 200})
     assert r.status_code == 422
 
 
 def test_put_settings_validates_page_size_range(api_client: TestClient) -> None:
-    r = api_client.put(
-        "/admin/nvd-mirror/settings", json={"page_size": 5000}
-    )
+    r = api_client.put("/admin/nvd-mirror/settings", json={"page_size": 5000})
     assert r.status_code == 422
 
 
 def test_put_settings_rejects_unknown_fields(api_client: TestClient) -> None:
-    r = api_client.put(
-        "/admin/nvd-mirror/settings", json={"some_unknown_field": "x"}
-    )
+    r = api_client.put("/admin/nvd-mirror/settings", json={"some_unknown_field": "x"})
     assert r.status_code == 422
 
 
@@ -148,9 +138,7 @@ def test_put_settings_does_not_advance_watermark(api_client: TestClient) -> None
     try:
         repo = SqlAlchemySettingsRepository(s, FernetSecretsAdapter(key))
         target = datetime(2024, 6, 1, tzinfo=UTC)
-        repo.advance_watermark(
-            last_modified_utc=target, last_successful_sync_at=target
-        )
+        repo.advance_watermark(last_modified_utc=target, last_successful_sync_at=target)
         s.commit()
     finally:
         s.close()
@@ -260,9 +248,7 @@ def test_watermark_reset_clears_last_modified_utc(api_client: TestClient) -> Non
     try:
         repo = SqlAlchemySettingsRepository(s, FernetSecretsAdapter(key))
         target = datetime(2024, 6, 1, tzinfo=UTC)
-        repo.advance_watermark(
-            last_modified_utc=target, last_successful_sync_at=target
-        )
+        repo.advance_watermark(last_modified_utc=target, last_successful_sync_at=target)
         s.commit()
     finally:
         s.close()

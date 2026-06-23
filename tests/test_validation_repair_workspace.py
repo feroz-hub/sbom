@@ -282,6 +282,7 @@ def test_lazy_session_creation_and_inplace_import(client):
     sbom_id = sbom_data["id"]
 
     from app.db import SessionLocal
+
     db = SessionLocal()
     try:
         sbom = db.get(SBOMSource, sbom_id)
@@ -303,10 +304,7 @@ def test_lazy_session_creation_and_inplace_import(client):
     assert report_body["can_edit"] is True
 
     patched_content = json.dumps(CLEAN_CYCLONEDX)
-    patch_resp = client.patch(
-        f"/api/sbom-validation-sessions/{session_id}",
-        json={"current_content": patched_content}
-    )
+    patch_resp = client.patch(f"/api/sbom-validation-sessions/{session_id}", json={"current_content": patched_content})
     assert patch_resp.status_code == 200
 
     import_resp = client.post(f"/api/sbom-validation-sessions/{session_id}/import")
@@ -323,4 +321,3 @@ def test_lazy_session_creation_and_inplace_import(client):
         assert "pkg:generic/x@1.0.0" in updated_sbom.sbom_data
     finally:
         db.close()
-

@@ -6,27 +6,44 @@ import { Surface } from '@/components/ui/Surface';
 import { Skeleton } from '@/components/ui/Spinner';
 import { getDashboardLifecycle, getDashboardHealth, getDashboardVex } from '@/lib/api';
 
-export function LifecycleHealthTiles() {
+export interface LifecycleHealthTilesProps {
+  lifecycle?: any;
+  health?: any;
+  vex?: any;
+  isLoading?: boolean;
+}
+
+export function LifecycleHealthTiles({
+  lifecycle: propsLifecycle,
+  health: propsHealth,
+  vex: propsVex,
+  isLoading: propsIsLoading,
+}: LifecycleHealthTilesProps = {}) {
+  const hasProps = propsLifecycle !== undefined && propsHealth !== undefined && propsVex !== undefined;
+
   const lifecycleQuery = useQuery({
     queryKey: ['dashboard-lifecycle'],
     queryFn: ({ signal }) => getDashboardLifecycle(signal),
+    enabled: !hasProps,
   });
 
   const healthQuery = useQuery({
     queryKey: ['dashboard-health'],
     queryFn: ({ signal }) => getDashboardHealth(signal),
+    enabled: !hasProps,
   });
 
   const vexQuery = useQuery({
     queryKey: ['dashboard-vex'],
     queryFn: ({ signal }) => getDashboardVex(signal),
+    enabled: !hasProps,
   });
 
-  const lifecycle = lifecycleQuery.data;
-  const health = healthQuery.data;
-  const vex = vexQuery.data;
-  const loading = lifecycleQuery.isLoading || healthQuery.isLoading || vexQuery.isLoading;
-  const lifecycleError = lifecycleQuery.isError;
+  const lifecycle = hasProps ? propsLifecycle : lifecycleQuery.data;
+  const health = hasProps ? propsHealth : healthQuery.data;
+  const vex = hasProps ? propsVex : vexQuery.data;
+  const loading = hasProps ? !!propsIsLoading : (lifecycleQuery.isLoading || healthQuery.isLoading || vexQuery.isLoading);
+  const lifecycleError = hasProps ? false : lifecycleQuery.isError;
   const lifecycleEmpty = !loading && !lifecycleError && (lifecycle?.total_components ?? 0) === 0;
 
   return (
@@ -122,7 +139,7 @@ export function LifecycleHealthTiles() {
           <div className="mt-3 border-t border-gray-200 pt-3 dark:border-gray-800">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-hcl-muted">Recommended Upgrades</div>
             <div className="mt-2 space-y-1.5">
-              {lifecycle?.recommended_upgrades.slice(0, 3).map((item) => (
+              {lifecycle?.recommended_upgrades.slice(0, 3).map((item: any) => (
                 <div key={`${item.id}-${item.name}`} className="flex items-center justify-between gap-3 text-xs">
                   <span className="truncate font-medium text-hcl-navy">{item.name}</span>
                   <span className="shrink-0 text-hcl-muted">{item.recommended_version ?? item.lifecycle_status}</span>
@@ -236,7 +253,7 @@ export function LifecycleHealthTiles() {
           <div className="mt-3 border-t border-gray-200 pt-3 dark:border-gray-800">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-hcl-muted">Top Affected</div>
             <div className="mt-2 space-y-1.5">
-              {vex?.top_affected_components.slice(0, 3).map((item) => (
+              {vex?.top_affected_components.slice(0, 3).map((item: any) => (
                 <div key={`${item.id}-${item.vulnerability_id}`} className="flex items-center justify-between gap-3 text-xs">
                   <span className="truncate font-medium text-hcl-navy">{item.component_name ?? 'Component'}</span>
                   <span className="shrink-0 text-hcl-muted">{item.vulnerability_id}</span>

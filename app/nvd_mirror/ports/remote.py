@@ -19,6 +19,4 @@ class NvdRemotePort(Protocol):
         windows (no shared mutable state).
     """
 
-    def fetch_window(
-        self, window: MirrorWindow, *, page_size: int
-    ) -> AsyncIterator[CveBatch]: ...
+    def fetch_window(self, window: MirrorWindow, *, page_size: int) -> AsyncIterator[CveBatch]: ...

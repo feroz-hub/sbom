@@ -38,9 +38,7 @@ class NvdSettingsResponse(BaseModel):
 
     enabled: bool
     api_endpoint: str
-    api_key_masked: str = Field(
-        description="Masked form (first3...last3) or '(not set)'. Plaintext never returned."
-    )
+    api_key_masked: str = Field(description="Masked form (first3...last3) or '(not set)'. Plaintext never returned.")
     api_key_present: bool
     download_feeds_enabled: bool
     page_size: int

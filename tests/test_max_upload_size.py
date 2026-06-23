@@ -38,13 +38,10 @@ def test_post_with_oversize_content_length_returns_413(client):
     )
 
     assert resp.status_code == 413, (
-        f"expected 413 from MAX_UPLOAD_BYTES enforcement; "
-        f"got {resp.status_code} (body: {resp.text[:200]!r})"
+        f"expected 413 from MAX_UPLOAD_BYTES enforcement; got {resp.status_code} (body: {resp.text[:200]!r})"
     )
     payload = resp.json()
-    assert payload.get("detail", {}).get("code") == "payload_too_large", (
-        f"413 envelope shape drifted; got {payload!r}"
-    )
+    assert payload.get("detail", {}).get("code") == "payload_too_large", f"413 envelope shape drifted; got {payload!r}"
 
 
 @pytest.mark.asyncio
@@ -80,16 +77,11 @@ async def test_post_with_chunked_oversize_returns_413(app):
         )
 
     assert resp.status_code == 413, (
-        f"expected 413 from streaming oversize body; "
-        f"got {resp.status_code} (body: {resp.text[:200]!r})"
+        f"expected 413 from streaming oversize body; got {resp.status_code} (body: {resp.text[:200]!r})"
     )
     payload = resp.json()
-    assert payload.get("detail", {}).get("code") == "payload_too_large", (
-        f"413 envelope shape drifted; got {payload!r}"
-    )
+    assert payload.get("detail", {}).get("code") == "payload_too_large", f"413 envelope shape drifted; got {payload!r}"
     # Soft bound — confirm the middleware did not let the entire body
     # through. Allow some slack because chunk boundaries don't align
     # exactly with the limit.
-    assert sent <= max_bytes + 2 * len(chunk), (
-        f"streamed {sent} bytes through; middleware did not cut off"
-    )
+    assert sent <= max_bytes + 2 * len(chunk), f"streamed {sent} bytes through; middleware did not cut off"

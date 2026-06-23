@@ -124,7 +124,7 @@ def _seeded_run(client):
         db.flush()
 
         findings_spec = [
-            ("CRITICAL", "9.8", "kev-pkg", True),     # KEV-listed
+            ("CRITICAL", "9.8", "kev-pkg", True),  # KEV-listed
             ("CRITICAL", "9.5", "crit-pkg", False),
             ("HIGH", "8.0", "high-pkg", False),
             ("HIGH", "7.5", "high-pkg-2", False),
@@ -247,9 +247,7 @@ def test_scenario2_two_concurrent_batches_have_distinct_ids_and_labels(
 # ---------------------------------------------------------------------------
 
 
-def test_scenario3_selection_driven_uses_finding_ids(
-    client, _seeded_run, _enable_ai, _fake_registry, _memory_store
-):
+def test_scenario3_selection_driven_uses_finding_ids(client, _seeded_run, _enable_ai, _fake_registry, _memory_store):
     """Multi-select 3 specific finding ids; CTA fires with finding_ids
     + label='Selected (3)'. Batch processes exactly those 3 rows."""
     run_id = _seeded_run["run_id"]
@@ -455,9 +453,7 @@ def test_scenario10_all_cached_scope_reports_zero_llm_calls(
 # ---------------------------------------------------------------------------
 
 
-def test_legacy_get_estimate_endpoint_still_returns_full_run_count(
-    client, _seeded_run, _fake_registry
-):
+def test_legacy_get_estimate_endpoint_still_returns_full_run_count(client, _seeded_run, _fake_registry):
     """Pre-Phase-4 frontends call ``GET /estimate`` and expect the
     legacy ``findings_total`` shape."""
     run_id = _seeded_run["run_id"]
@@ -487,9 +483,7 @@ def test_legacy_get_progress_endpoint_returns_latest_batch(
     assert body["from_cache"] == 1
 
 
-def test_legacy_post_cancel_sets_run_level_flag(
-    client, _seeded_run, _enable_ai, _memory_store
-):
+def test_legacy_post_cancel_sets_run_level_flag(client, _seeded_run, _enable_ai, _memory_store):
     """The legacy run-scoped cancel endpoint sets the legacy flag,
     which halts every batch on the run."""
     run_id = _seeded_run["run_id"]
@@ -502,9 +496,7 @@ def test_legacy_post_cancel_sets_run_level_flag(
     assert _memory_store.is_cancel_requested(run_id, "batch-a") is True
 
 
-def test_trigger_without_scope_processes_all_findings(
-    client, _seeded_run, _enable_ai, _fake_registry, _memory_store
-):
+def test_trigger_without_scope_processes_all_findings(client, _seeded_run, _enable_ai, _fake_registry, _memory_store):
     """An empty body or no scope → run-wide batch (legacy behaviour)."""
     run_id = _seeded_run["run_id"]
     resp = client.post(f"/api/v1/runs/{run_id}/ai-fixes")

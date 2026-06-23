@@ -39,7 +39,17 @@ audit_log = logging.getLogger("sbom.ai.audit")
 # Latency buckets (seconds) chosen to span LLM call distributions:
 #   sub-100ms cache hits, 1-3s warm small models, 5-15s large models, 30s+ batches.
 _DEFAULT_BUCKETS: tuple[float, ...] = (
-    0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 15.0, 30.0, 60.0,
+    0.05,
+    0.1,
+    0.25,
+    0.5,
+    1.0,
+    2.0,
+    4.0,
+    8.0,
+    15.0,
+    30.0,
+    60.0,
 )
 
 
@@ -147,9 +157,7 @@ class AiTelemetry:
         with self._lock:
             return {
                 "counters": {
-                    metric: [
-                        {"labels": dict(k), "value": v} for k, v in series.items()
-                    ]
+                    metric: [{"labels": dict(k), "value": v} for k, v in series.items()]
                     for metric, series in self._counters.items()
                 },
                 "histograms": {
@@ -158,10 +166,7 @@ class AiTelemetry:
                             "labels": dict(k),
                             "count": h.count_total,
                             "sum": h.sum_total,
-                            "buckets": [
-                                {"le": str(b), "count": h.counts[i]}
-                                for i, b in enumerate(h.buckets)
-                            ]
+                            "buckets": [{"le": str(b), "count": h.counts[i]} for i, b in enumerate(h.buckets)]
                             + [{"le": "+Inf", "count": h.counts[-1]}],
                         }
                         for k, h in series.items()
@@ -169,9 +174,7 @@ class AiTelemetry:
                     for metric, series in self._histograms.items()
                 },
                 "gauges": {
-                    metric: [
-                        {"labels": dict(k), "value": v} for k, v in series.items()
-                    ]
+                    metric: [{"labels": dict(k), "value": v} for k, v in series.items()]
                     for metric, series in self._gauges.items()
                 },
             }

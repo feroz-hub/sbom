@@ -25,7 +25,7 @@ class MalformedCveError(ValueError):
 
 _NVD_DATE_FORMATS = (
     "%Y-%m-%dT%H:%M:%S.%f",  # "2024-04-16T01:23:45.123"
-    "%Y-%m-%dT%H:%M:%S",      # "2024-04-16T01:23:45"
+    "%Y-%m-%dT%H:%M:%S",  # "2024-04-16T01:23:45"
 )
 
 
@@ -95,12 +95,14 @@ def _best_metric(metrics: dict[str, Any] | None, key: str) -> dict[str, Any] | N
     return primary if isinstance(primary, dict) else None
 
 
-def _extract_cvss(metrics: dict[str, Any] | None) -> tuple[
+def _extract_cvss(
+    metrics: dict[str, Any] | None,
+) -> tuple[
     float | None,  # v40 score
     float | None,  # v31 score
     float | None,  # v2 score
-    str | None,    # severity_text — best-available baseSeverity
-    str | None,    # vector_string — best-available
+    str | None,  # severity_text — best-available baseSeverity
+    str | None,  # vector_string — best-available
 ]:
     score_v40: float | None = None
     score_v31: float | None = None
@@ -245,9 +247,7 @@ def map_cve(cve_json: Mapping[str, Any]) -> CveRecord:
     last_modified = _parse_nvd_datetime(cve_dict.get("lastModified"), field="lastModified")
     published = _parse_nvd_datetime(cve_dict.get("published"), field="published")
 
-    score_v40, score_v31, score_v2, severity_text, vector_string = _extract_cvss(
-        cve_dict.get("metrics")
-    )
+    score_v40, score_v31, score_v2, severity_text, vector_string = _extract_cvss(cve_dict.get("metrics"))
 
     return CveRecord(
         cve_id=str(cve_id),

@@ -106,9 +106,7 @@ def test_migration_script_copies_rows_and_resets_sequences(
     Base.metadata.create_all(source_engine)
     with source_engine.begin() as connection:
         connection.execute(sa.text("CREATE TABLE alembic_version (version_num VARCHAR(128) NOT NULL)"))
-        connection.execute(
-            sa.text("INSERT INTO alembic_version(version_num) VALUES ('032_postgres_compat')")
-        )
+        connection.execute(sa.text("INSERT INTO alembic_version(version_num) VALUES ('032_postgres_compat')"))
     session_factory = sa.orm.sessionmaker(bind=source_engine)
     with session_factory() as session:
         project = Projects(id=10, project_name="migration-project", project_status=1)
@@ -142,36 +140,38 @@ def test_migration_script_copies_rows_and_resets_sequences(
         session.commit()
     source_engine.dispose()
 
-    assert main(
-        [
-            "--sqlite-url",
-            source_url,
-            "--postgres-url",
-            postgres_url,
-            "--dry-run",
-        ]
-    ) == 0
+    assert (
+        main(
+            [
+                "--sqlite-url",
+                source_url,
+                "--postgres-url",
+                postgres_url,
+                "--dry-run",
+            ]
+        )
+        == 0
+    )
     assert main(["--sqlite-url", source_url, "--postgres-url", postgres_url]) == 0
-    assert main(
-        ["--sqlite-url", source_url, "--postgres-url", postgres_url, "--verify-only"]
-    ) == 0
-    assert main(
-        [
-            "--sqlite-url",
-            source_url,
-            "--postgres-url",
-            postgres_url,
-            "--truncate-target",
-            "--confirm-truncate",
-        ]
-    ) == 0
+    assert main(["--sqlite-url", source_url, "--postgres-url", postgres_url, "--verify-only"]) == 0
+    assert (
+        main(
+            [
+                "--sqlite-url",
+                source_url,
+                "--postgres-url",
+                postgres_url,
+                "--truncate-target",
+                "--confirm-truncate",
+            ]
+        )
+        == 0
+    )
 
     target_engine = sa.create_engine(postgres_url)
     with target_engine.begin() as connection:
         assert connection.scalar(sa.text("SELECT COUNT(*) FROM sbom_source")) == 2
-        assert connection.scalar(
-            sa.text("SELECT parent_id FROM sbom_source WHERE id = 21")
-        ) == 20
+        assert connection.scalar(sa.text("SELECT parent_id FROM sbom_source WHERE id = 21")) == 20
         next_project_id = connection.scalar(
             sa.text(
                 "INSERT INTO projects(project_name, project_status, is_active) "
@@ -241,9 +241,9 @@ def test_postgresql_feature_smoke(
         from app.models import SBOMComponent
 
         with SessionLocal() as session:
-            component = session.execute(
-                sa.select(SBOMComponent).where(SBOMComponent.sbom_id == sbom_id)
-            ).scalars().first()
+            component = (
+                session.execute(sa.select(SBOMComponent).where(SBOMComponent.sbom_id == sbom_id)).scalars().first()
+            )
             assert component is not None
             component.lifecycle_status = "EOL"
             component.eol_date = "2025-01-01"
