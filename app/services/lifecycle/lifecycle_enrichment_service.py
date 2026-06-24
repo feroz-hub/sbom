@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from concurrent.futures import TimeoutError as FuturesTimeoutError
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from math import ceil
 from typing import Any
 
@@ -17,6 +17,7 @@ from ...settings import get_settings
 from .decision_engine import choose_lifecycle_result
 from .deps_dev_provider import DepsDevProvider
 from .endoflife_date_provider import EndOfLifeDateProvider
+from .lifecycle_cache_repository import lifecycle_cache_row_from_result, upsert_lifecycle_cache_entries
 from .manual_override_provider import ManualOverrideProvider
 from .normalizer import build_lifecycle_lookup_key, normalize_component
 from .osv_provider import OSVProvider
@@ -329,51 +330,22 @@ class LifecycleEnrichmentService:
         )
         if cached is not None:
             return cached
-        name, version, ecosystem, purl, cpe = component.cache_identity
+        name, version, ecosystem, purl, _cpe = component.cache_identity
         statement = select(ComponentLifecycleCache).where(
             ComponentLifecycleCache.normalized_name == name,
             ComponentLifecycleCache.normalized_version == version,
             ComponentLifecycleCache.ecosystem == ecosystem,
             ComponentLifecycleCache.purl == purl,
-            ComponentLifecycleCache.cpe == cpe,
         )
         return db.execute(statement).scalars().first()
 
     def _write_cache(self, db: Session, component: NormalizedComponent, result: LifecycleResult) -> None:
         if result.manual_override:
             return
-        name, version, ecosystem, purl, cpe = component.cache_identity
-        cache_entry = self._read_cache(db, component) or ComponentLifecycleCache(
-            normalized_name=name,
-            normalized_version=version,
-            ecosystem=ecosystem,
-            purl=purl,
-            cpe=cpe,
+        upsert_lifecycle_cache_entries(
+            db,
+            [lifecycle_cache_row_from_result(component, result, cache_ttl_days=self.cache_ttl_days)],
         )
-        cache_entry.lookup_key = build_lifecycle_lookup_key(component)
-        cache_entry.cpe = cpe
-        cache_entry.lifecycle_status = result.lifecycle_status
-        cache_entry.eos_date = result.eos_date
-        cache_entry.eol_date = result.eol_date
-        cache_entry.eof_date = result.eof_date
-        cache_entry.deprecated = bool(result.deprecated)
-        cache_entry.unsupported = bool(result.unsupported)
-        cache_entry.maintenance_status = result.maintenance_status
-        cache_entry.latest_version = result.latest_version
-        cache_entry.latest_supported_version = result.latest_supported_version
-        cache_entry.recommended_version = result.recommended_version
-        cache_entry.recommendation = result.recommendation
-        cache_entry.source_name = result.source_name
-        cache_entry.source_url = result.source_url
-        cache_entry.evidence_json = result.evidence
-        cache_entry.confidence = result.confidence
-        cache_entry.checked_at = result.checked_at or now_iso()
-
-        # Unknown cache should have a shorter TTL than confirmed lifecycle evidence (1 day vs cache_ttl_days)
-        ttl_days = 1 if result.lifecycle_status == UNKNOWN else self.cache_ttl_days
-        cache_entry.expires_at = (datetime.now(UTC).replace(microsecond=0) + timedelta(days=ttl_days)).isoformat()
-        cache_entry.is_stale = False
-        db.add(cache_entry)
 
     def _cache_expired(self, cache_entry: ComponentLifecycleCache) -> bool:
         try:
