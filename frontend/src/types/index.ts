@@ -814,6 +814,33 @@ export interface SBOMInfo {
   components_preview: string[];
 }
 
+export interface SbomDocumentStats {
+  sbom_id: number;
+  sbom_name: string;
+  format: string | null;
+  spec_version: string | null;
+  file_size_bytes: number;
+  line_count: number;
+  parsed_component_count: number;
+  component_count: number;
+  component_total_rows: number;
+  duplicate_component_count: number;
+  dependency_count: number;
+  relationship_count: number;
+  content_sha256: string | null;
+  validation_status: string | null;
+}
+
+export interface SbomRawChunk {
+  sbom_id: number;
+  offset: number;
+  limit: number;
+  total_lines: number;
+  lines: string[];
+  preview: boolean;
+  truncated: boolean;
+}
+
 export interface SbomConversionResponse {
   source_sbom_id: number;
   converted_sbom_id: number;

@@ -29,6 +29,7 @@ from ..core.security import get_current_tenant_context
 from ..db import get_db
 from ..models import SBOMSource, SBOMType
 from ..services import audit_service
+from ..services.sbom_document_service import byte_size, count_lines, parsed_component_count
 from ..services.sbom_enrichment_service import mark_enrichment_pending, run_post_upload_enrichment
 from ..services.sbom_service import sync_sbom_components
 from ..services.tenant_access import get_project_for_tenant
@@ -211,9 +212,23 @@ async def upload_sbom(
     try:
         sync_sbom_components(db, obj)
         db.commit()
+        components_count = parsed_component_count(obj.sbom_data)
     except Exception as exc:  # pragma: no cover - defensive enrichment path
         db.rollback()
         log.warning("Failed to sync uploaded SBOM components %s: %s", obj.id, exc)
+        components_count = 0
+
+    log.info(
+        "upload_sbom: persisted sbom_id=%s name=%s filename=%s bytes=%s lines=%s format=%s components=%s validation=%s",
+        obj.id,
+        obj.sbom_name,
+        file.filename,
+        byte_size(body_text),
+        count_lines(body_text),
+        spec or "unknown",
+        components_count,
+        obj.status,
+    )
 
     background_tasks.add_task(run_post_upload_enrichment, obj.id, context.tenant_id)
 

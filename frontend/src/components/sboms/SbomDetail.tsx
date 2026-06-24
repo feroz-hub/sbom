@@ -19,6 +19,7 @@ import { Pagination } from '@/components/ui/Pagination';
 import { AnalysisProgress } from '@/components/analysis/AnalysisProgress';
 import { ScheduleCard } from '@/components/schedules/ScheduleCard';
 import { SbomConversionCard } from '@/components/sboms/SbomConversionCard';
+import { SbomRawViewer } from '@/components/sboms/SbomRawViewer';
 import { ValidationReportSection } from '@/components/sboms/ValidationReportSection';
 import { 
   getSbomComponents, 
@@ -26,6 +27,7 @@ import {
   getRuns, 
   getSbomInfo, 
   getSbomRiskSummary, 
+  getSbomStats,
   getSbomValidationReport,
   editSbom,
   getSbomVersions,
@@ -363,6 +365,11 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
     queryKey: ['sbom-info', sbom.id],
     queryFn: ({ signal }) => getSbomInfo(sbom.id, signal),
     retry: false,
+  });
+
+  const { data: documentStats } = useQuery({
+    queryKey: ['sbom-stats', sbom.id],
+    queryFn: ({ signal }) => getSbomStats(sbom.id, signal),
   });
 
   // 8-stage validation report
@@ -908,6 +915,8 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
 
           <SbomConversionCard sbom={sbom} formatLabel={info?.format} />
 
+          <SbomRawViewer sbomId={sbom.id} stats={documentStats} />
+
           {info && (
             <Card>
               <CardHeader>
@@ -925,7 +934,12 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                   </div>
                   <div>
                     <dt className="text-xs font-medium text-hcl-muted uppercase tracking-wide">Components</dt>
-                    <dd className="mt-1 text-sm font-medium text-hcl-navy">{info.component_count.toLocaleString()}</dd>
+                    <dd className="mt-1 text-sm font-medium text-hcl-navy">
+                      {(documentStats?.component_count ?? info.component_count).toLocaleString()}
+                      {documentStats && documentStats.parsed_component_count !== documentStats.component_count
+                        ? ` (${documentStats.parsed_component_count.toLocaleString()} parsed)`
+                        : null}
+                    </dd>
                   </div>
                   <div>
                     <dt className="text-xs font-medium text-hcl-muted uppercase tracking-wide">Identifiers</dt>
@@ -946,6 +960,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
               <CardHeader>
                 <CardTitle>
                   Risk Summary
+                  <span className="ml-2 text-xs font-normal text-hcl-muted">Top 10 vulnerable components</span>
                   <span
                     className={`ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
                       risk.risk_band === 'CRITICAL'

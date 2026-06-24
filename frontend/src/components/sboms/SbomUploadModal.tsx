@@ -93,6 +93,11 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [validationFailure, setValidationFailure] = useState<SbomValidationFailureDetail | null>(null);
   const [duplicateNameError, setDuplicateNameError] = useState<string | null>(null);
+  const [documentPreviewMeta, setDocumentPreviewMeta] = useState<{
+    bytes: number;
+    lines: number;
+    filename: string;
+  } | null>(null);
   const { showToast } = useToast();
   const uploadMutation = useUploadSbom();
   const uploading = uploadMutation.isPending;
@@ -142,6 +147,9 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
     reader.onload = (ev) => {
       const content = ev.target?.result as string;
       setValue('sbom_data', content, { shouldValidate: true });
+      const bytes = new TextEncoder().encode(content).length;
+      const lines = content ? content.split(/\r?\n/).length : 0;
+      setDocumentPreviewMeta({ bytes, lines, filename: file.name });
       if (!watch('sbom_name')) {
         setValue('sbom_name', file.name.replace(/\.[^/.]+$/, ''));
       }
@@ -219,6 +227,7 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
     setUploadError(null);
     setValidationFailure(null);
     setDuplicateNameError(null);
+    setDocumentPreviewMeta(null);
     onClose();
   };
 
@@ -332,7 +341,7 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
                 <Upload className="h-3.5 w-3.5" />
                 Upload from file
               </button>
-              <span className="text-xs text-hcl-muted">or paste JSON / XML below</span>
+              <span className="text-xs text-hcl-muted">or paste JSON / XML below (full file is uploaded; textarea is an editor preview)</span>
               <input
                 ref={fileRef}
                 type="file"
@@ -341,6 +350,12 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
                 className="hidden"
               />
             </div>
+            {documentPreviewMeta ? (
+              <p className="mb-2 text-xs text-hcl-muted">
+                Loaded preview: {documentPreviewMeta.filename} · {documentPreviewMeta.lines.toLocaleString()} lines ·{' '}
+                {(documentPreviewMeta.bytes / 1024).toFixed(1)} KB. The complete file will be uploaded.
+              </p>
+            ) : null}
             <Textarea
               placeholder='{"bomFormat": "CycloneDX", ...}'
               error={errors.sbom_data?.message}

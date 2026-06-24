@@ -139,6 +139,33 @@ class SBOMSourceOut(ORMModel):
         return data
 
 
+class SbomDocumentStatsResponse(BaseModel):
+    sbom_id: int
+    sbom_name: str
+    format: str | None = None
+    spec_version: str | None = None
+    file_size_bytes: int = 0
+    line_count: int = 0
+    parsed_component_count: int = 0
+    component_count: int = 0
+    component_total_rows: int = 0
+    duplicate_component_count: int = 0
+    dependency_count: int = 0
+    relationship_count: int = 0
+    content_sha256: str | None = None
+    validation_status: str | None = None
+
+
+class SbomRawChunkResponse(BaseModel):
+    sbom_id: int
+    offset: int
+    limit: int
+    total_lines: int
+    lines: list[str]
+    preview: bool = False
+    truncated: bool = False
+
+
 class ValidationErrorEntry(BaseModel):
     """One entry of the persisted validation report, enriched for the UI.
 

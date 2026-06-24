@@ -51,6 +51,8 @@ import type {
   UploadSBOMAcceptedResponse,
   SbomComponentListResponse,
   GetSbomComponentsOptions,
+  SbomDocumentStats,
+  SbomRawChunk,
 } from '@/types';
 
 // Direct calls to FastAPI — no Next.js proxy (proxy caused ECONNRESET on
@@ -427,8 +429,30 @@ export function getSboms(page = 1, pageSize = 50, signal?: AbortSignal) {
   return request<SBOMSource[]>(`/api/sboms?page=${page}&page_size=${pageSize}`, { signal });
 }
 
-export function getSbom(id: number, signal?: AbortSignal) {
-  return request<SBOMSource>(`/api/sboms/${id}`, { signal });
+export function getSbom(id: number, signal?: AbortSignal, includeRaw = false) {
+  const qs = includeRaw ? '?include_raw=true' : '';
+  return request<SBOMSource>(`/api/sboms/${id}${qs}`, { signal });
+}
+
+export function getSbomStats(sbomId: number, signal?: AbortSignal) {
+  return request<SbomDocumentStats>(`/api/sboms/${sbomId}/stats`, { signal });
+}
+
+export function getSbomRawChunk(
+  sbomId: number,
+  offset = 0,
+  limit = 500,
+  signal?: AbortSignal,
+) {
+  return request<SbomRawChunk>(
+    `/api/sboms/${sbomId}/raw?offset=${offset}&limit=${limit}`,
+    { signal },
+  );
+}
+
+export async function downloadSbomOriginal(sbomId: number, signal?: AbortSignal): Promise<Blob> {
+  const res = await performRequest(`/api/sboms/${sbomId}/download`, { signal }, 120_000);
+  return res.blob();
 }
 
 export function createSbom(payload: CreateSBOMPayload, signal?: AbortSignal) {

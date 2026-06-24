@@ -46,7 +46,6 @@ from ..idempotency import (
 )
 from ..models import (
     AnalysisRun,
-    Projects,
     SBOMSource,
     SBOMType,
 )
@@ -54,17 +53,27 @@ from ..rate_limit import analyze_route_limit
 from ..schemas import (
     AnalysisRunOut,
     SBOMComponentListResponse,
+    SbomDocumentStatsResponse,
     SbomPatchRequest,
+    SbomRawChunkResponse,
     SBOMSourceCreate,
     SBOMSourceOut,
 )
-from ..services import audit_log
+from ..services import audit_log, audit_service
 from ..services.analysis_service import compute_report_status, persist_analysis_run
 from ..services.sbom_delete_service import SBOMDeleteConflict, SBOMDeleteService
+from ..services.sbom_document_service import (
+    DEFAULT_RAW_CHUNK_LIMIT,
+    MAX_RAW_CHUNK_LIMIT,
+    compute_document_stats,
+    detect_format,
+    parse_sbom_dict,
+    read_raw_chunk,
+)
 from ..services.sbom_enrichment_service import mark_enrichment_pending, run_post_upload_enrichment
-from ..services.tenant_access import get_project_for_tenant, get_sbom_for_tenant
 from ..services.sbom_service import coerce_sbom_data
 from ..services.soft_delete import SoftDeleteService
+from ..services.tenant_access import get_project_for_tenant, get_sbom_for_tenant
 from ..services.validation_repair_service import (
     ValidationRepairService,
     build_validation_failed_detail,
@@ -91,6 +100,13 @@ router = APIRouter(prefix="/api", tags=["sboms"])
 
 def now_iso() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat()
+
+
+def _serialize_sbom_out(sbom: SBOMSource, *, include_raw: bool = False) -> SBOMSourceOut:
+    out = SBOMSourceOut.model_validate(sbom, from_attributes=True)
+    if not include_raw:
+        out.sbom_data = None
+    return out
 
 
 def _coerce_sbom_data(value: Any) -> str | None:
@@ -329,13 +345,72 @@ def _validate_positive_int(value: int, param_name: str = "id") -> int:
 @router.get("/sboms/{sbom_id}", response_model=SBOMSourceOut)
 def get_sbom(
     sbom_id: int,
+    include_raw: bool = Query(False, description="Include full raw SBOM document content in the response"),
     context: CurrentContext = Depends(get_current_tenant_context),
     db: Session = Depends(get_db),
 ):
     sbom = get_sbom_for_tenant(db, sbom_id, context.tenant_id)
     if not sbom:
         raise HTTPException(status_code=404, detail="SBOM not found")
-    return sbom
+    return _serialize_sbom_out(sbom, include_raw=include_raw)
+
+
+@router.get("/sboms/{sbom_id}/stats", response_model=SbomDocumentStatsResponse)
+def get_sbom_document_stats(
+    sbom_id: int,
+    context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
+):
+    sbom = get_sbom_for_tenant(db, sbom_id, context.tenant_id)
+    if not sbom:
+        raise HTTPException(status_code=404, detail="SBOM not found")
+    return compute_document_stats(db, sbom)
+
+
+@router.get("/sboms/{sbom_id}/raw", response_model=SbomRawChunkResponse)
+def get_sbom_raw_chunk(
+    sbom_id: int,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(DEFAULT_RAW_CHUNK_LIMIT, ge=1, le=MAX_RAW_CHUNK_LIMIT),
+    context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
+):
+    sbom = get_sbom_for_tenant(db, sbom_id, context.tenant_id)
+    if not sbom:
+        raise HTTPException(status_code=404, detail="SBOM not found")
+    if not sbom.sbom_data:
+        raise HTTPException(status_code=404, detail="SBOM has no stored document content")
+    chunk = read_raw_chunk(sbom.sbom_data, offset=offset, limit=limit)
+    return SbomRawChunkResponse(sbom_id=sbom.id, **chunk)
+
+
+@router.get("/sboms/{sbom_id}/download")
+def download_sbom_original(
+    sbom_id: int,
+    context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
+):
+    sbom = get_sbom_for_tenant(db, sbom_id, context.tenant_id)
+    if not sbom or not sbom.sbom_data:
+        raise HTTPException(status_code=404, detail="SBOM not found")
+    fmt, _spec = detect_format(parse_sbom_dict(sbom.sbom_data))
+    extension = "xml" if sbom.sbom_data.lstrip().startswith("<") else "json"
+    media_type = "application/xml" if extension == "xml" else "application/json"
+    filename = f"{sbom.sbom_name or f'sbom_{sbom_id}'}.{extension}"
+    audit_service.write_audit_log(
+        db,
+        context,
+        "sbom.download",
+        entity_type="sbom",
+        entity_id=sbom.id,
+        new_value={"sbom_name": sbom.sbom_name, "bytes": len(sbom.sbom_data.encode('utf-8'))},
+    )
+    db.commit()
+    return StreamingResponse(
+        iter([sbom.sbom_data.encode("utf-8")]),
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.post("/sboms", response_model=SBOMSourceOut, status_code=status.HTTP_201_CREATED)
@@ -500,6 +575,7 @@ def get_sbom_details(
         description="Keyset pagination: return SBOMs with id strictly less than this value (desc by id). When set, page offset is ignored.",
     ),
     response: Response = None,
+    context: CurrentContext = Depends(get_current_tenant_context),
     db: Session = Depends(get_db),
 ):
     user_id = _validate_user_id(user_id)
@@ -518,8 +594,8 @@ def get_sbom_details(
         )
 
     try:
-        stmt = select(SBOMSource)
-        count_stmt = select(func.count(SBOMSource.id))
+        stmt = select(SBOMSource).where(SBOMSource.tenant_id == context.tenant_id)
+        count_stmt = select(func.count(SBOMSource.id)).where(SBOMSource.tenant_id == context.tenant_id)
         if user_id is not None:
             stmt = stmt.where(SBOMSource.created_by == user_id)
             count_stmt = count_stmt.where(SBOMSource.created_by == user_id)
@@ -548,7 +624,7 @@ def get_sbom_details(
             if items and len(items) == page_size:
                 response.headers["X-Next-Cursor"] = str(items[-1].id)
 
-        return items
+        return [_serialize_sbom_out(item) for item in items]
     except SQLAlchemyError as exc:
         raise HTTPException(status_code=500, detail="Internal database error while fetching SBOMs.") from exc
 
@@ -562,6 +638,7 @@ def get_sbom_components(
     search: str | None = Query(None, description="Case-insensitive search across component fields"),
     sort_by: str = Query("name", description="Sort field: name, version, component_type, license, lifecycle_status"),
     sort_order: str = Query("asc", description="Sort direction: asc or desc"),
+    context: CurrentContext = Depends(get_current_tenant_context),
     db: Session = Depends(get_db),
 ):
     sbom_id = _validate_positive_int(sbom_id, param_name="sbom_id")
@@ -571,7 +648,7 @@ def get_sbom_components(
         raise HTTPException(status_code=400, detail=f"Unsupported sort_order value: {sort_order}")
 
     try:
-        sbom = db.get(SBOMSource, sbom_id)
+        sbom = get_sbom_for_tenant(db, sbom_id, context.tenant_id)
         if not sbom:
             raise HTTPException(status_code=404, detail="SBOM not found")
 
