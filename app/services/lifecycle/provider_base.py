@@ -9,6 +9,11 @@ from .types import LifecycleResult, NormalizedComponent, unknown_result
 
 class LifecycleProvider(ABC):
     name: str
+    priority: int = 100
+
+    def supports(self, component: NormalizedComponent) -> bool:
+        """Return True when this provider is applicable to the component identity."""
+        return True
 
     @abstractmethod
     def lookup(self, component: NormalizedComponent) -> LifecycleResult:

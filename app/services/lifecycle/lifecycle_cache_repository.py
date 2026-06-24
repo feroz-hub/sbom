@@ -11,8 +11,9 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from ...models import ComponentLifecycleCache
+from ...settings import get_settings
 from .normalizer import build_lifecycle_lookup_key
-from .types import UNKNOWN, LifecycleResult, NormalizedComponent, now_iso
+from .types import DEPRECATED, UNKNOWN, LifecycleResult, NormalizedComponent, now_iso
 
 LIFECYCLE_CACHE_IDENTITY_CONSTRAINT = "uq_component_lifecycle_cache_identity"
 
@@ -62,16 +63,36 @@ def lifecycle_cache_identity_key(
     )
 
 
+def _cache_ttl_for_result(result: LifecycleResult) -> timedelta:
+    settings = get_settings()
+    if result.evidence.get("provider_failure") if isinstance(result.evidence, dict) else False:
+        minutes = int(getattr(settings, "lifecycle_cache_ttl_provider_failure_minutes", 30))
+        return timedelta(minutes=minutes)
+    if result.lifecycle_status == UNKNOWN:
+        hours = int(getattr(settings, "lifecycle_cache_ttl_unknown_hours", 24))
+        return timedelta(hours=hours)
+    if result.lifecycle_status == DEPRECATED or result.deprecated:
+        days = int(getattr(settings, "lifecycle_cache_ttl_deprecated_days", 7))
+        return timedelta(days=days)
+    if result.eol_date or result.eos_date or result.eof_date or result.lifecycle_status not in {UNKNOWN}:
+        days = int(getattr(settings, "lifecycle_cache_ttl_known_days", 14))
+        return timedelta(days=days)
+    hours = int(getattr(settings, "lifecycle_cache_ttl_unknown_hours", 24))
+    return timedelta(hours=hours)
+
+
 def lifecycle_cache_row_from_result(
     component: NormalizedComponent,
     result: LifecycleResult,
     *,
-    cache_ttl_days: int,
+    cache_ttl_days: int | None = None,
 ) -> dict[str, Any]:
     """Serialize a provider result into a cache row payload."""
     name, version, ecosystem, purl, cpe = component.cache_identity
-    ttl_days = 1 if result.lifecycle_status == UNKNOWN else cache_ttl_days
-    expires_at = (datetime.now(UTC).replace(microsecond=0) + timedelta(days=ttl_days)).isoformat()
+    ttl = _cache_ttl_for_result(result)
+    if cache_ttl_days is not None and result.lifecycle_status != UNKNOWN:
+        ttl = timedelta(days=cache_ttl_days)
+    expires_at = (datetime.now(UTC).replace(microsecond=0) + ttl).isoformat()
     return {
         "lookup_key": build_lifecycle_lookup_key(component),
         "normalized_name": name,

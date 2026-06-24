@@ -11,6 +11,8 @@ from .lifecycle_enrichment_service import (
     sync_lifecycle_for_sbom,
 )
 from .normalizer import normalize_component
+from .official_vendor_providers import RedHatLifecycleProvider, build_vendor_providers
+from .openeox_provider import OpenEoXProvider
 from .openeox_report import lifecycle_report_openeox
 from .osv_provider import OSVProvider
 from .package_registry_provider import PackageRegistryProvider
@@ -32,7 +34,10 @@ __all__ = [
     "LifecycleEnrichmentService",
     "LifecycleResult",
     "NormalizedComponent",
+    "OpenEoXProvider",
     "OSVProvider",
+    "RedHatLifecycleProvider",
+    "build_vendor_providers",
     "PackageRegistryProvider",
     "RepositoryHealthProvider",
     "VendorLifecycleProvider",

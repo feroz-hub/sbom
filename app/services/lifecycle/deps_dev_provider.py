@@ -10,6 +10,7 @@ import httpx
 from packaging.version import InvalidVersion, Version
 
 from .provider_base import LifecycleProvider
+from .provider_chain import PRIORITY_DEPS_DEV
 from .types import DEPRECATED, LOW, MEDIUM, UNKNOWN, LifecycleResult, NormalizedComponent, unknown_result
 
 DEPS_DEV_SYSTEMS = {
@@ -26,6 +27,10 @@ class DepsDevProvider(LifecycleProvider):
     """Query deps.dev for package/version metadata and advisory hints."""
 
     name = "deps.dev"
+    priority = PRIORITY_DEPS_DEV
+
+    def supports(self, component: NormalizedComponent) -> bool:
+        return component.ecosystem in DEPS_DEV_SYSTEMS and bool(component.normalized_name)
 
     def __init__(
         self,

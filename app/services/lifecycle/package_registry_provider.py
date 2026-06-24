@@ -14,6 +14,7 @@ import httpx
 from packaging.version import InvalidVersion, Version
 
 from .provider_base import LifecycleProvider
+from .provider_chain import PRIORITY_REGISTRY
 from .types import (
     DEPRECATED,
     LOW,
@@ -27,6 +28,12 @@ from .types import (
 
 class PackageRegistryProvider(LifecycleProvider):
     name = "Package Registry"
+    priority = PRIORITY_REGISTRY
+
+    SUPPORTED_ECOSYSTEMS = {"npm", "pypi", "nuget", "maven", "gem"}
+
+    def supports(self, component: NormalizedComponent) -> bool:
+        return component.ecosystem in self.SUPPORTED_ECOSYSTEMS and bool(component.normalized_name)
 
     def __init__(
         self,
@@ -49,6 +56,8 @@ class PackageRegistryProvider(LifecycleProvider):
                 return self._lookup_nuget(component)
             if component.ecosystem == "maven":
                 return self._lookup_maven(component)
+            if component.ecosystem == "gem":
+                return self._lookup_rubygems(component)
         except (httpx.HTTPError, ValueError, TypeError, KeyError):
             return unknown_result(component, self.name)
         return unknown_result(component, self.name)
@@ -215,6 +224,27 @@ class PackageRegistryProvider(LifecycleProvider):
             "https://search.maven.org/",
             latest,
             {"latest": latest},
+        )
+
+    def _lookup_rubygems(self, component: NormalizedComponent) -> LifecycleResult:
+        encoded = quote(component.normalized_name, safe="")
+        url = f"https://rubygems.org/api/v1/gems/{encoded}.json"
+        payload = self._get_json(url)
+        if not isinstance(payload, dict):
+            return unknown_result(component, "RubyGems")
+        latest = payload.get("version")
+        source_url = f"https://rubygems.org/gems/{component.normalized_name}"
+        return _unknown_with_latest(
+            component,
+            "RubyGems",
+            source_url,
+            str(latest) if latest else None,
+            {
+                "latest": latest,
+                "version_created_at": payload.get("version_created_at"),
+                "homepage_uri": payload.get("homepage_uri"),
+                "source_code_uri": payload.get("source_code_uri"),
+            },
         )
 
     def _get_json(self, url: str) -> Any | None:

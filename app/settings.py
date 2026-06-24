@@ -123,6 +123,40 @@ class Settings(BaseSettings):
         default="[]",
         description="JSON array of lifecycle records transcribed from official vendor pages.",
     )
+    openeox_enabled: bool = Field(
+        default=False,
+        description="Enable OpenEoX-compatible lifecycle feed ingestion.",
+    )
+    openeox_feed_urls: str = Field(
+        default="",
+        description="Comma-separated OpenEoX feed URLs.",
+    )
+    xeol_enabled: bool = Field(
+        default=False,
+        description="Enable local Xeol DB/JSON lifecycle lookups.",
+    )
+    xeol_db_path: str | None = Field(
+        default=None,
+        description="Path to local Xeol-compatible JSON export (synced offline, not per-request CLI).",
+    )
+    xeol_cli_path: str | None = Field(
+        default=None,
+        description="Xeol CLI path for scheduled sync jobs only (not used in request path).",
+    )
+    lifecycle_cache_ttl_known_days: int = Field(default=14, ge=1, description="Cache TTL for known EOL/EOS dates.")
+    lifecycle_cache_ttl_unknown_hours: int = Field(default=24, ge=1, description="Cache TTL for unknown lifecycle results.")
+    lifecycle_cache_ttl_provider_failure_minutes: int = Field(
+        default=30, ge=1, description="Cache TTL after provider failure."
+    )
+    lifecycle_cache_ttl_deprecated_days: int = Field(default=7, ge=1, description="Cache TTL for deprecated registry signals.")
+    lifecycle_eol_soon_days: int = Field(default=90, ge=1, description="Days before EOL to classify as soon/at-risk.")
+    lifecycle_eos_soon_days: int = Field(default=90, ge=1, description="Days before EOS to classify as soon/at-risk.")
+    lifecycle_provider_failure_threshold: int = Field(
+        default=3, ge=1, description="Consecutive failures before provider circuit opens."
+    )
+    lifecycle_provider_circuit_cooldown_minutes: int = Field(
+        default=15, ge=1, description="Circuit breaker cooldown after repeated provider failures."
+    )
 
     # NVD version-range filter (roadmap #1).
     #

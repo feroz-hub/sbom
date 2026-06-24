@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from concurrent.futures import TimeoutError as FuturesTimeoutError
 from datetime import UTC, datetime
-from math import ceil
 from typing import Any
 
 from fastapi import HTTPException
@@ -14,16 +11,20 @@ from sqlalchemy.orm import Session
 
 from ...models import AuditLog, ComponentLifecycleCache, ComponentLifecycleOverrideAudit, SBOMComponent, SBOMSource
 from ...settings import get_settings
-from .decision_engine import choose_lifecycle_result
 from .deps_dev_provider import DepsDevProvider
 from .endoflife_date_provider import EndOfLifeDateProvider
 from .lifecycle_cache_repository import lifecycle_cache_row_from_result, upsert_lifecycle_cache_entries
 from .manual_override_provider import ManualOverrideProvider
 from .normalizer import build_lifecycle_lookup_key, normalize_component
+from .official_vendor_providers import build_vendor_providers
+from .openeox_provider import OpenEoXProvider
 from .osv_provider import OSVProvider
 from .package_registry_provider import PackageRegistryProvider
 from .provider_base import LifecycleProvider
+from .provider_chain import lookup_provider_chain
+from .provider_status import get_provider_status_tracker
 from .repository_health_provider import RepositoryHealthProvider
+from .risk_classification import classify_lifecycle_risk
 from .types import (
     ALLOWED_LIFECYCLE_STATUSES,
     DEPRECATED,
@@ -44,6 +45,7 @@ from .types import (
     unknown_result,
 )
 from .vendor_lifecycle_provider import VendorLifecycleProvider
+from .xeol_db_provider import XeolDbProvider
 from .xeol_provider import XeolProvider
 
 DEFAULT_CACHE_TTL_DAYS = 7
@@ -71,12 +73,33 @@ class LifecycleEnrichmentService:
         )
         self.providers = providers if providers is not None else self._default_providers(settings)
         self.cache_ttl_days = cache_ttl_days
+        self._status_tracker = get_provider_status_tracker()
+        for provider in self.providers:
+            self._status_tracker.register(
+                provider.name,
+                priority=getattr(provider, "priority", 100),
+                enabled=True,
+            )
 
     def _default_providers(self, settings: Any) -> list[LifecycleProvider]:
         providers: list[LifecycleProvider] = []
         vendor = VendorLifecycleProvider.from_json(getattr(settings, "lifecycle_vendor_records_json", "[]"))
         if vendor.records:
             providers.append(vendor)
+        providers.extend(build_vendor_providers(timeout_seconds=self.provider_timeout_seconds))
+        if bool(getattr(settings, "openeox_enabled", False)):
+            feed_urls = [
+                url.strip()
+                for url in str(getattr(settings, "openeox_feed_urls", "") or "").split(",")
+                if url.strip()
+            ]
+            providers.append(
+                OpenEoXProvider(
+                    feed_urls=feed_urls,
+                    timeout_seconds=self.provider_timeout_seconds,
+                )
+            )
+        providers.append(EndOfLifeDateProvider(timeout_seconds=self.provider_timeout_seconds))
         xeol_key = getattr(settings, "lifecycle_xeol_api_key", None)
         if bool(getattr(settings, "lifecycle_xeol_enabled", False) or xeol_key):
             providers.append(
@@ -86,13 +109,15 @@ class LifecycleEnrichmentService:
                     timeout_seconds=self.provider_timeout_seconds,
                 )
             )
+        xeol_db_path = getattr(settings, "xeol_db_path", None)
+        if bool(getattr(settings, "xeol_enabled", False) or xeol_db_path):
+            providers.append(XeolDbProvider(db_path=xeol_db_path))
         providers.extend(
             [
-                EndOfLifeDateProvider(timeout_seconds=self.provider_timeout_seconds),
-                DepsDevProvider(timeout_seconds=self.provider_timeout_seconds),
                 PackageRegistryProvider(timeout_seconds=self.provider_timeout_seconds),
-                RepositoryHealthProvider(timeout_seconds=self.provider_timeout_seconds),
+                DepsDevProvider(timeout_seconds=self.provider_timeout_seconds),
                 OSVProvider(timeout_seconds=self.provider_timeout_seconds),
+                RepositoryHealthProvider(timeout_seconds=self.provider_timeout_seconds),
             ]
         )
         return providers
@@ -111,14 +136,81 @@ class LifecycleEnrichmentService:
             .scalars()
             .all()
         )
-        enriched = 0
-        stale = 0
-        for component in components:
-            result = self.enrich_component(db, component, force_refresh=force_refresh)
-            enriched += 1
-            stale += 1 if result.stale else 0
+        summary = {
+            "sbom_id": sbom_id,
+            "total_components": len(components),
+            "unique_identities": 0,
+            "cache_hits": 0,
+            "provider_lookups": 0,
+            "updated_components": 0,
+            "unknown_count": 0,
+            "eol_count": 0,
+            "eos_count": 0,
+            "deprecated_count": 0,
+            "provider_errors": [],
+            "components_enriched": 0,
+            "stale_components": 0,
+        }
+        identity_groups = _group_components_by_identity(components)
+        summary["unique_identities"] = len(identity_groups)
+        cache_rows: list[dict[str, Any]] = []
+
+        for _lookup_key, group in identity_groups.items():
+            representative = group[0]
+            normalized = normalize_component(representative)
+            for component in group:
+                component.ecosystem = normalized.ecosystem
+
+            manual = ManualOverrideProvider(representative).lookup(normalized)
+            if manual.manual_override:
+                for component in group:
+                    self._apply_result(component, manual, normalized)
+                    summary["updated_components"] += 1
+                summary["components_enriched"] += len(group)
+                continue
+
+            cache_entry = self._read_cache(db, normalized)
+            if cache_entry is not None and not force_refresh and not self._cache_expired(cache_entry):
+                result = self._result_from_cache(cache_entry, normalized, stale=False)
+                summary["cache_hits"] += 1
+                for component in group:
+                    self._apply_result(component, result, normalized)
+                    summary["updated_components"] += 1
+                summary["components_enriched"] += len(group)
+                _tally_status(summary, result)
+                continue
+
+            result, errors = self._lookup_providers(normalized)
+            summary["provider_lookups"] += 1
+            if errors:
+                summary["provider_errors"].extend(errors)
+
+            if cache_entry is not None:
+                cache_confidence = cache_entry.confidence or "Unknown"
+                cache_status = cache_entry.lifecycle_status or UNKNOWN
+                if cache_status != UNKNOWN and cache_confidence in {HIGH, MEDIUM} and result.lifecycle_status == UNKNOWN:
+                    stale = self._cache_expired(cache_entry)
+                    result = self._result_from_cache(cache_entry, normalized, stale=stale)
+                    summary["cache_hits"] += 1
+                    if stale:
+                        summary["stale_components"] += len(group)
+
+            if not result.manual_override:
+                cache_rows.append(lifecycle_cache_row_from_result(normalized, result, cache_ttl_days=self.cache_ttl_days))
+
+            for component in group:
+                self._apply_result(component, result, normalized)
+                summary["updated_components"] += 1
+                if result.stale:
+                    summary["stale_components"] += 1
+            summary["components_enriched"] += len(group)
+            _tally_status(summary, result)
+
+        if cache_rows:
+            upsert_lifecycle_cache_entries(db, cache_rows)
         db.commit()
-        return {"sbom_id": sbom_id, "components_enriched": enriched, "stale_components": stale}
+        summary["provider_errors"] = list(dict.fromkeys(summary["provider_errors"]))
+        return summary
 
     def enrich_component(
         self,
@@ -141,9 +233,8 @@ class LifecycleEnrichmentService:
             self._apply_result(component, result, normalized)
             return result
 
-        result = self._lookup_providers(normalized)
+        result, _errors = self._lookup_providers(normalized)
 
-        # Rule: Do not overwrite High/Medium confidence lifecycle evidence with Unknown
         if cache_entry is not None:
             cache_confidence = cache_entry.confidence or "Unknown"
             cache_status = cache_entry.lifecycle_status or UNKNOWN
@@ -177,7 +268,6 @@ class LifecycleEnrichmentService:
         ):
             raise HTTPException(status_code=422, detail="Invalid lifecycle_status")
 
-        # Validate dates if provided
         for date_field in ("eos_date", "eol_date", "eof_date"):
             val = payload.get(date_field)
             if val:
@@ -265,61 +355,15 @@ class LifecycleEnrichmentService:
             "components": [component_lifecycle_dict(component) for component in components],
         }
 
-    def _lookup_providers(self, component: NormalizedComponent) -> LifecycleResult:
-        results: list[LifecycleResult] = []
+    def _lookup_providers(self, component: NormalizedComponent) -> tuple[LifecycleResult, list[str]]:
         if not self.providers:
-            return unknown_result(component).canonicalized()
-
-        max_workers = min(self.provider_max_concurrent, len(self.providers))
-        timeout_budget = max(
-            self.provider_timeout_seconds,
-            self.provider_timeout_seconds * ceil(len(self.providers) / max_workers),
+            return unknown_result(component).canonicalized(), []
+        return lookup_provider_chain(
+            self.providers,
+            component,
+            timeout_seconds=self.provider_timeout_seconds,
+            status_tracker=self._status_tracker,
         )
-        executor = ThreadPoolExecutor(max_workers=max_workers)
-        future_to_provider = {
-            executor.submit(self._lookup_provider_safely, provider, component): provider for provider in self.providers
-        }
-        completed = set()
-        try:
-            for future in as_completed(future_to_provider, timeout=timeout_budget):
-                completed.add(future)
-                result = future.result()
-                results.append(result)
-                repository_url = result.evidence.get("repository_url") if isinstance(result.evidence, dict) else None
-                if repository_url and not component.repository_url:
-                    component.repository_url = str(repository_url)
-
-            for future, provider in future_to_provider.items():
-                if future not in completed:
-                    future.cancel()
-                    results.append(unknown_result(component, getattr(provider, "name", None)).canonicalized())
-        except FuturesTimeoutError:
-            for future, provider in future_to_provider.items():
-                if future in completed:
-                    continue
-                if future.done():
-                    try:
-                        result = future.result()
-                    except Exception:
-                        result = unknown_result(component, getattr(provider, "name", None)).canonicalized()
-                else:
-                    future.cancel()
-                    result = unknown_result(component, getattr(provider, "name", None)).canonicalized()
-                results.append(result)
-        finally:
-            executor.shutdown(wait=False, cancel_futures=True)
-        return (choose_lifecycle_result(results) or unknown_result(component)).canonicalized()
-
-    def _lookup_provider_safely(
-        self,
-        provider: LifecycleProvider,
-        component: NormalizedComponent,
-    ) -> LifecycleResult:
-        try:
-            result = provider.lookup(component).canonicalized()
-        except Exception:
-            result = unknown_result(component, getattr(provider, "name", None)).canonicalized()
-        return result
 
     def _read_cache(self, db: Session, component: NormalizedComponent) -> ComponentLifecycleCache | None:
         lookup_key = build_lifecycle_lookup_key(component)
@@ -412,10 +456,43 @@ class LifecycleEnrichmentService:
         component.lifecycle_source_url = result.source_url
         component.lifecycle_confidence = result.confidence
         component.lifecycle_checked_at = result.checked_at or now_iso()
-        component.lifecycle_evidence_json = result.evidence
+        evidence = dict(result.evidence) if isinstance(result.evidence, dict) else {}
+        evidence["risk_level"] = classify_lifecycle_risk(
+            lifecycle_status=result.lifecycle_status,
+            eol_date=result.eol_date,
+            eos_date=result.eos_date,
+            deprecated=result.deprecated,
+            unsupported=result.unsupported,
+            maintenance_status=result.maintenance_status,
+            confidence=result.confidence,
+        )
+        component.lifecycle_evidence_json = evidence
         component.lifecycle_is_stale = bool(result.stale)
         if not result.manual_override:
             component.lifecycle_manual_override = False
+
+
+def _group_components_by_identity(components: list[SBOMComponent]) -> dict[str, list[SBOMComponent]]:
+    groups: dict[str, list[SBOMComponent]] = {}
+    for component in components:
+        if component.lifecycle_manual_override:
+            key = f"manual:{component.id}"
+        else:
+            key = build_lifecycle_lookup_key(normalize_component(component))
+        groups.setdefault(key, []).append(component)
+    return groups
+
+
+def _tally_status(summary: dict[str, Any], result: LifecycleResult) -> None:
+    status = canonical_status(result.lifecycle_status)
+    if status == UNKNOWN:
+        summary["unknown_count"] += 1
+    elif status == EOL:
+        summary["eol_count"] += 1
+    elif status == EOS:
+        summary["eos_count"] += 1
+    elif status == DEPRECATED:
+        summary["deprecated_count"] += 1
 
 
 def summarize_components(components: list[SBOMComponent]) -> dict[str, Any]:
@@ -470,6 +547,7 @@ def summarize_components(components: list[SBOMComponent]) -> dict[str, Any]:
 
 
 def component_lifecycle_dict(component: SBOMComponent) -> dict[str, Any]:
+    evidence = component.lifecycle_evidence_json if isinstance(component.lifecycle_evidence_json, dict) else {}
     return {
         "id": component.id,
         "name": component.name,
@@ -494,7 +572,8 @@ def component_lifecycle_dict(component: SBOMComponent) -> dict[str, Any]:
         "source_url": component.lifecycle_source_url,
         "confidence": component.lifecycle_confidence,
         "checked_at": component.lifecycle_checked_at,
-        "evidence": component.lifecycle_evidence_json,
+        "evidence": evidence,
+        "risk_level": evidence.get("risk_level"),
         "is_stale": bool(component.lifecycle_is_stale),
         "manual_override": bool(component.lifecycle_manual_override),
     }

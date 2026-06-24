@@ -9,7 +9,9 @@ from typing import Any
 import httpx
 from packaging.version import InvalidVersion, Version
 
+from .aliases import resolve_lifecycle_alias
 from .provider_base import LifecycleProvider
+from .provider_chain import PRIORITY_ENDOFLIFE_DATE
 from .types import (
     EOF,
     EOL,
@@ -71,6 +73,10 @@ PRODUCT_SLUGS: dict[str, str] = {
 
 class EndOfLifeDateProvider(LifecycleProvider):
     name = "endoflife.date"
+    priority = PRIORITY_ENDOFLIFE_DATE
+
+    def supports(self, component: NormalizedComponent) -> bool:
+        return slug_for_component(component) is not None and bool(component.normalized_version)
 
     def __init__(
         self,
@@ -201,6 +207,9 @@ class EndOfLifeDateProvider(LifecycleProvider):
 
 
 def slug_for_component(component: NormalizedComponent) -> str | None:
+    alias = resolve_lifecycle_alias(component.normalized_name, component.ecosystem)
+    if alias and alias.source == "endoflife.date":
+        return alias.provider_product_name
     candidates = [
         component.normalized_name,
         component.name,

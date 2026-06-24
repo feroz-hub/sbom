@@ -125,8 +125,9 @@ def test_default_provider_chain_wires_configured_vendor_and_xeol(monkeypatch):
         reset_settings()
 
     assert isinstance(providers[0], VendorLifecycleProvider)
-    assert isinstance(providers[1], XeolProvider)
-    assert providers[1].api_key == "configured-key"
+    xeol_providers = [provider for provider in providers if isinstance(provider, XeolProvider)]
+    assert len(xeol_providers) == 1
+    assert xeol_providers[0].api_key == "configured-key"
 
 
 def test_vendor_lifecycle_record_is_authoritative_over_aggregator():

@@ -9,6 +9,7 @@ from typing import Any
 import httpx
 
 from .provider_base import LifecycleProvider
+from .provider_chain import PRIORITY_XEOL
 from .types import (
     DEPRECATED,
     EOL,
@@ -31,6 +32,10 @@ class XeolProvider(LifecycleProvider):
     """Query Xeol using the documented name/version/ecosystem request."""
 
     name = "Xeol"
+    priority = PRIORITY_XEOL
+
+    def supports(self, component: NormalizedComponent) -> bool:
+        return self.enabled and bool(component.normalized_name and component.normalized_version)
 
     def __init__(
         self,

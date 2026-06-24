@@ -621,7 +621,7 @@ export function getSbomDedupeReport(sbomId: number, signal?: AbortSignal) {
 }
 
 export function refreshSbomLifecycle(sbomId: number, force = true, signal?: AbortSignal) {
-  return request<{ sbom_id: number; components_enriched: number; stale_components: number }>(
+  return request<import('@/types').LifecycleRefreshSummary>(
     `/api/sboms/${sbomId}/lifecycle/refresh?force=${force ? 'true' : 'false'}`,
     {
       method: 'POST',
@@ -629,6 +629,14 @@ export function refreshSbomLifecycle(sbomId: number, force = true, signal?: Abor
     },
     120_000,
   );
+}
+
+export function getLifecycleProviderStatus(signal?: AbortSignal) {
+  return request<import('@/types').LifecycleProviderStatus>('/api/lifecycle/provider-status', { signal });
+}
+
+export function getLifecycleSources(signal?: AbortSignal) {
+  return request<{ sources: import('@/types').LifecycleProviderSource[] }>('/api/lifecycle/sources', { signal });
 }
 
 export function getSbomLifecycleReport(sbomId: number, signal?: AbortSignal) {

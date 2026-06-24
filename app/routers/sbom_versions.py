@@ -312,6 +312,40 @@ def refresh_sbom_lifecycle(
     return LifecycleEnrichmentService().enrich_sbom(db, id, force_refresh=force)
 
 
+@router.get("/{id}/lifecycle")
+def list_sbom_lifecycle(
+    id: int,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    """Return paginated lifecycle findings for an SBOM."""
+    sbom = db.get(SBOMSource, id)
+    if sbom is None:
+        raise HTTPException(status_code=404, detail="SBOM not found")
+    components = (
+        db.execute(
+            select(SBOMComponent).where(
+                SBOMComponent.sbom_id == id,
+                (SBOMComponent.is_duplicate.is_(False)) | (SBOMComponent.is_duplicate.is_(None)),
+            )
+        )
+        .scalars()
+        .all()
+    )
+    total = len(components)
+    start = (page - 1) * page_size
+    end = start + page_size
+    page_components = components[start:end]
+    return {
+        "sbom_id": id,
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "items": [component_lifecycle_dict(component) for component in page_components],
+    }
+
+
 @router.get("/{id}/lifecycle/report")
 def get_sbom_lifecycle_report(
     id: int,

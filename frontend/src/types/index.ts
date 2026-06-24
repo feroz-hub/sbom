@@ -419,6 +419,40 @@ export interface LifecycleReport {
   components: LifecycleSummaryComponent[];
 }
 
+export interface LifecycleRefreshSummary {
+  sbom_id: number;
+  total_components: number;
+  unique_identities: number;
+  cache_hits: number;
+  provider_lookups: number;
+  updated_components: number;
+  unknown_count: number;
+  eol_count: number;
+  eos_count: number;
+  deprecated_count: number;
+  provider_errors: string[];
+  components_enriched: number;
+  stale_components: number;
+}
+
+export interface LifecycleProviderSource {
+  name: string;
+  priority: number;
+  enabled: boolean;
+  status: 'healthy' | 'degraded';
+  last_success?: string | null;
+  last_failure?: string | null;
+  consecutive_failures: number;
+  circuit_open: boolean;
+  last_error?: string | null;
+}
+
+export interface LifecycleProviderStatus {
+  overall_status: 'healthy' | 'degraded';
+  degraded_count: number;
+  providers: LifecycleProviderSource[];
+}
+
 export interface LifecycleOverridePayload {
   lifecycle_status: LifecycleStatus | string;
   eos_date?: string | null;

@@ -8,6 +8,7 @@ from typing import Any
 import httpx
 
 from .provider_base import LifecycleProvider
+from .provider_chain import PRIORITY_OSV
 from .types import LOW, UNKNOWN, LifecycleResult, NormalizedComponent, unknown_result
 
 OSV_URL = "https://api.osv.dev/v1/query"
@@ -25,6 +26,14 @@ OSV_ECOSYSTEMS = {
 
 class OSVProvider(LifecycleProvider):
     name = "OSV"
+    priority = PRIORITY_OSV
+
+    def supports(self, component: NormalizedComponent) -> bool:
+        return (
+            component.ecosystem in OSV_ECOSYSTEMS
+            and bool(component.normalized_name)
+            and bool(component.normalized_version)
+        )
 
     def __init__(
         self,

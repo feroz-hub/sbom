@@ -7,6 +7,7 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from .provider_base import LifecycleProvider
+from .provider_chain import PRIORITY_VENDOR
 from .types import (
     EOF,
     EOL,
@@ -28,6 +29,10 @@ class VendorLifecycleProvider(LifecycleProvider):
     """Match curated lifecycle records that cite an official vendor URL."""
 
     name = "Vendor Lifecycle"
+    priority = PRIORITY_VENDOR
+
+    def supports(self, component: NormalizedComponent) -> bool:
+        return _match_record(self.records, component) is not None
 
     def __init__(self, records: list[dict[str, Any]] | None = None, *, today: date | None = None) -> None:
         self.records = [record for record in (records or []) if isinstance(record, dict)]

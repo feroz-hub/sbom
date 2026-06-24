@@ -15,10 +15,24 @@ from ..db import get_db
 from ..models import SBOMComponent
 from ..schemas import LifecycleInfoUpdate, SBOMComponentOut
 from ..services.lifecycle import LifecycleEnrichmentService, refresh_component_lifecycle
+from ..services.lifecycle.provider_status import get_provider_status_tracker
 
 log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["lifecycle"])
+
+
+@router.get("/api/lifecycle/sources")
+def list_lifecycle_sources():
+    """Return enabled lifecycle providers, priority, and health status."""
+    tracker = get_provider_status_tracker()
+    return {"sources": tracker.list_sources()}
+
+
+@router.get("/api/lifecycle/provider-status")
+def lifecycle_provider_status():
+    """Return aggregate provider health/degraded status."""
+    return get_provider_status_tracker().provider_status_summary()
 
 
 @router.get("/api/lifecycle/component/{component_id}", response_model=SBOMComponentOut)

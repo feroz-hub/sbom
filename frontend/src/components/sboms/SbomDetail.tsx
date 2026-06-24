@@ -35,6 +35,7 @@ import {
   restoreSbomVersion,
   refreshSbomLifecycle,
   refreshComponentLifecycle,
+  getLifecycleProviderStatus,
   overrideComponentLifecycle,
   discoverSbomVexDocuments,
   exportSbomLifecycleReportCsv,
@@ -87,6 +88,18 @@ function canonicalLifecycleStatus(status?: string | null) {
   if (normalized === 'unsupported' || normalized === 'unmaintained') return 'Unsupported';
   if (normalized === 'eol soon' || normalized === 'nearing eol') return 'EOL Soon';
   return status || 'Unknown';
+}
+
+function lifecycleDisplayLabel(status?: string | null, confidence?: string | null) {
+  const canonical = canonicalLifecycleStatus(status);
+  const lowConfidence = !confidence || confidence === 'Low' || confidence === 'Unknown';
+  if (lowConfidence && ['EOL', 'EOS', 'EOF', 'Unsupported'].includes(canonical)) {
+    return `Possible ${canonical}`;
+  }
+  if (lowConfidence && canonical === 'Unknown') {
+    return 'Unknown';
+  }
+  return canonical;
 }
 
 function lifecycleBadgeClass(status?: string | null) {
@@ -223,6 +236,14 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
   const [detailChangeReason, setDetailChangeReason] = useState('');
   const [isSavingDetails, setIsSavingDetails] = useState(false);
   const [detailsError, setDetailsError] = useState('');
+
+  const { data: lifecycleProviderStatus } = useQuery({
+    queryKey: ['lifecycle-provider-status'],
+    queryFn: ({ signal }) => getLifecycleProviderStatus(signal),
+    staleTime: 60_000,
+  });
+
+  const lifecycleProvidersDegraded = lifecycleProviderStatus?.overall_status === 'degraded';
 
   const { data: projects } = useQuery({
     queryKey: ['projects'],
@@ -620,7 +641,9 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
     try {
       const result = await refreshSbomLifecycle(sbom.id, true);
       invalidateLifecycleQueries();
-      setLifecycleMessage(`Lifecycle refreshed for ${result.components_enriched} components.`);
+      setLifecycleMessage(
+        `Lifecycle refreshed: ${result.updated_components} components, ${result.cache_hits} cache hits, ${result.provider_lookups} provider lookups.`,
+      );
     } catch (err: any) {
       setLifecycleMessage(err.message || 'Lifecycle refresh failed.');
     } finally {
@@ -1211,6 +1234,11 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                   </>
                 )}
               </p>
+              {lifecycleProvidersDegraded ? (
+                <p className="mt-1 text-xs font-semibold text-amber-700">
+                  Lifecycle provider degraded — evidence may be incomplete. Refresh again later or check provider status.
+                </p>
+              ) : null}
               {lifecycleMessage ? (
                 <p className="mt-1 text-xs text-hcl-muted">{lifecycleMessage}</p>
               ) : null}
@@ -1325,7 +1353,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                       </Td>
                       <Td>
                         <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${lifecycleBadgeClass(c.lifecycle_status)}`}>
-                          {canonicalLifecycleStatus(c.lifecycle_status)}
+                          {lifecycleDisplayLabel(c.lifecycle_status, c.lifecycle_confidence)}
                         </span>
                         <div className="mt-1 max-w-[220px] space-y-0.5 text-[10px] leading-4 text-hcl-muted">
                           {(c.eol_date || c.eos_date || c.eof_date) && (
@@ -1701,7 +1729,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
               <div className="grid gap-3 md:grid-cols-2">
                 {[
                   ['Component', `${evidenceModal.component.name}${evidenceModal.component.version ? ` @ ${evidenceModal.component.version}` : ''}`],
-                  ['Status', canonicalLifecycleStatus(evidenceModal.component.lifecycle_status)],
+                  ['Status', lifecycleDisplayLabel(evidenceModal.component.lifecycle_status, evidenceModal.component.lifecycle_confidence)],
                   ['Source', evidenceModal.component.lifecycle_source || 'Unknown'],
                   ['Confidence', evidenceModal.component.lifecycle_confidence || 'Unknown'],
                   ['Checked', formatDate(evidenceModal.component.lifecycle_checked_at)],

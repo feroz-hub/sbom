@@ -44,6 +44,7 @@ except ModuleNotFoundError:  # pragma: no cover - fallback covered via parse_pur
             return cls(type=package_type, namespace=namespace, name=name, version=unquote(version) or None)
 
 
+from .aliases import apply_alias_to_component_fields
 from .types import NormalizedComponent, canonical_ecosystem
 
 
@@ -84,6 +85,10 @@ def normalize_component(component: Any) -> NormalizedComponent:
 
     if raw_name:
         normalized_name = normalize_component_name(normalized_name or raw_name, ecosystem)
+        canonical_name, alias_ecosystem, _provider_slug = apply_alias_to_component_fields(normalized_name, ecosystem)
+        normalized_name = canonical_name
+        if alias_ecosystem != "generic":
+            ecosystem = alias_ecosystem
 
     return NormalizedComponent(
         component_id=getattr(component, "id", None),

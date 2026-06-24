@@ -15,13 +15,18 @@ from urllib.parse import quote_plus, urlparse
 import httpx
 
 from .provider_base import LifecycleProvider
-from .types import LOW, MEDIUM, UNKNOWN, UNSUPPORTED, LifecycleResult, NormalizedComponent, unknown_result
+from .provider_chain import PRIORITY_REPO_HEALTH
+from .types import LOW, MEDIUM, POSSIBLY_UNMAINTAINED, UNKNOWN, LifecycleResult, NormalizedComponent, unknown_result
 
 STALE_ACTIVITY_DAYS = 730
 
 
 class RepositoryHealthProvider(LifecycleProvider):
     name = "Repository Health"
+    priority = PRIORITY_REPO_HEALTH
+
+    def supports(self, component: NormalizedComponent) -> bool:
+        return bool(component.repository_url or _repository_url_from_evidence(component.external_references))
 
     def __init__(
         self,
@@ -101,8 +106,8 @@ class RepositoryHealthProvider(LifecycleProvider):
                 ecosystem=component.ecosystem,
                 purl=component.purl,
                 cpe=component.cpe,
-                lifecycle_status=UNSUPPORTED,
-                unsupported=True,
+                lifecycle_status=POSSIBLY_UNMAINTAINED,
+                unsupported=False,
                 maintenance_status="Repository archived or disabled",
                 source_name="GitHub Repository",
                 source_url=repo_url,
@@ -145,8 +150,8 @@ class RepositoryHealthProvider(LifecycleProvider):
                 ecosystem=component.ecosystem,
                 purl=component.purl,
                 cpe=component.cpe,
-                lifecycle_status=UNSUPPORTED,
-                unsupported=True,
+                lifecycle_status=UNKNOWN,
+                unsupported=False,
                 maintenance_status="Repository unavailable",
                 source_name="GitLab Repository",
                 source_url=repo_url,
@@ -180,8 +185,8 @@ class RepositoryHealthProvider(LifecycleProvider):
                 ecosystem=component.ecosystem,
                 purl=component.purl,
                 cpe=component.cpe,
-                lifecycle_status=UNSUPPORTED,
-                unsupported=True,
+                lifecycle_status=POSSIBLY_UNMAINTAINED,
+                unsupported=False,
                 maintenance_status="Repository archived",
                 source_name="GitLab Repository",
                 source_url=repo_url,
@@ -223,8 +228,8 @@ class RepositoryHealthProvider(LifecycleProvider):
                 ecosystem=component.ecosystem,
                 purl=component.purl,
                 cpe=component.cpe,
-                lifecycle_status=UNSUPPORTED,
-                unsupported=True,
+                lifecycle_status=UNKNOWN,
+                unsupported=False,
                 maintenance_status="Repository unavailable",
                 source_name="Bitbucket Repository",
                 source_url=repo_url,
