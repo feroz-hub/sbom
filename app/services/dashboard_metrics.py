@@ -21,7 +21,7 @@ import time
 from collections import defaultdict
 from datetime import UTC, date, datetime, timedelta
 
-from sqlalchemy import func, select, text
+from sqlalchemy import Date, String, cast, func, select, text
 from sqlalchemy.orm import Session
 
 from ..models import (
@@ -97,6 +97,24 @@ def _date_range(days: int, *, today: date | None = None) -> list[str]:
     return [(end - timedelta(days=i)).isoformat() for i in range(days - 1, -1, -1)]
 
 
+def _dialect_name(db: Session) -> str:
+    try:
+        bind = db.get_bind()
+    except Exception:
+        bind = getattr(db, "bind", None)
+    return getattr(getattr(bind, "dialect", None), "name", "") or ""
+
+
+def day_bucket_expr(db: Session, column):
+    """Cross-database YYYY-MM-DD expression for text/timestamp date columns."""
+    dialect = _dialect_name(db)
+    if dialect == "postgresql":
+        return cast(cast(column, Date), String)
+    if dialect == "sqlite":
+        return func.substr(cast(column, String), 1, 10)
+    return cast(cast(column, Date), String)
+
+
 def build_trend_points(db: Session, *, days: int) -> list[TrendDataPoint]:
     """Return exactly ``days`` data points with severity breakdowns, zero-filled.
 
@@ -109,11 +127,8 @@ def build_trend_points(db: Session, *, days: int) -> list[TrendDataPoint]:
     """
     cutoff = (datetime.now(UTC) - timedelta(days=days - 1)).date().isoformat()
 
-    # SQL aggregation by (day, severity). The ``substr(started_on, 1, 10)``
-    # trick extracts ``YYYY-MM-DD`` from the ISO string we store and avoids
-    # a backend-specific date cast. Successful-run scoping aligns with every
-    # other dashboard aggregate per ADR-0001.
-    date_expr = func.substr(AnalysisRun.started_on, 1, 10).label("day")
+    # Successful-run scoping aligns with every other dashboard aggregate per ADR-0001.
+    date_expr = day_bucket_expr(db, AnalysisRun.started_on).label("day")
     rows = db.execute(
         select(
             date_expr,
@@ -174,14 +189,17 @@ def build_trend_annotations(db: Session, *, days: int) -> list[TrendAnnotation]:
     in_window = set(_date_range(days))
 
     # SBOM uploads.
+    upload_day_expr = day_bucket_expr(db, SBOMSource.created_on).label("day")
     upload_rows = db.execute(
         select(
-            func.substr(SBOMSource.created_on, 1, 10).label("day"),
+            upload_day_expr,
             func.count(SBOMSource.id).label("n"),
             func.min(SBOMSource.sbom_name).label("sample_name"),
         )
         .where(SBOMSource.created_on.is_not(None))
-        .group_by(func.substr(SBOMSource.created_on, 1, 10))
+        .where(SBOMSource.is_active.is_(True))
+        .group_by(upload_day_expr)
+        .order_by(upload_day_expr)
     ).all()
     for day, n, sample_name in upload_rows:
         if day not in in_window:

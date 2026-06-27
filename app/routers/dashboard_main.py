@@ -27,6 +27,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from .. import metrics
@@ -444,7 +445,11 @@ def get_dashboard_summary(
     runs_distinct_dates = metrics.runs_distinct_dates_with_data(db)
 
     points = metrics.findings_daily_distinct_active(db, days=30)
-    annotations = build_trend_annotations(db, days=30)
+    try:
+        annotations = build_trend_annotations(db, days=30)
+    except SQLAlchemyError:
+        log.exception("Failed to build dashboard trend annotations")
+        annotations = []
     point_dicts = [
         {
             "date": p.date,

@@ -15,6 +15,7 @@ from statistics import fmean
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query, Request, Response
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from .. import metrics
@@ -63,7 +64,11 @@ def dashboard_trend(
     if granularity is None:
         # ── Legacy daily path — behaviour preserved verbatim. ──
         points = metrics.findings_daily_distinct_active(db, days=days)
-        annotations = build_trend_annotations(db, days=days)
+        try:
+            annotations = build_trend_annotations(db, days=days)
+        except SQLAlchemyError:
+            log.exception("Failed to build dashboard trend annotations")
+            annotations = []
         point_dicts = [
             {
                 "date": p.date,

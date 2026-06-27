@@ -15,6 +15,9 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from sqlalchemy import func, select
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.exc import SQLAlchemyError
 
 
 @pytest.fixture
@@ -35,6 +38,14 @@ def _now_iso() -> str:
 
 def _days_ago_iso(n: int) -> str:
     return (datetime.now(UTC) - timedelta(days=n)).replace(microsecond=0).isoformat()
+
+
+class _FakePostgresSession:
+    def get_bind(self):
+        class _Bind:
+            dialect = postgresql.dialect()
+
+        return _Bind()
 
 
 def _seed_run_with_findings(db, *, started_on: str, severity_counts: dict[str, int]):
@@ -161,3 +172,83 @@ def test_trend_returns_etag_and_serves_304_on_match(client, db):
 
     second = client.get("/dashboard/trend?days=7", headers={"If-None-Match": etag})
     assert second.status_code == 304
+
+
+def test_day_bucket_expr_uses_postgresql_date_cast_not_substr():
+    from app.models import SBOMSource
+    from app.services.dashboard_metrics import day_bucket_expr
+
+    day_expr = day_bucket_expr(_FakePostgresSession(), SBOMSource.created_on).label("day")
+    stmt = select(day_expr, func.count(SBOMSource.id)).group_by(day_expr)
+
+    compiled = str(stmt.compile(dialect=postgresql.dialect()))
+
+    assert "substr" not in compiled.lower()
+    assert "CAST(CAST(sbom_source.created_on AS DATE) AS VARCHAR)" in compiled
+
+
+def test_trend_annotations_group_uploads_by_day(client, db):
+    from app.models import SBOMSource
+    from app.services.dashboard_metrics import build_trend_annotations
+
+    day = _days_ago_iso(29)
+    db.add(SBOMSource(sbom_name=f"grouped-upload-a-{day}", created_on=day, status="validated"))
+    db.add(SBOMSource(sbom_name=f"grouped-upload-b-{day}", created_on=day, status="validated"))
+    db.commit()
+
+    annotations = build_trend_annotations(db, days=30)
+    matches = [item for item in annotations if item.kind == "sbom_uploaded" and item.date == day[:10]]
+
+    assert matches
+    assert matches[0].count >= 2
+    assert "SBOMs uploaded" in matches[0].label
+
+
+def test_trend_annotations_ignore_null_created_on(client, db):
+    from app.models import SBOMSource
+    from app.services.dashboard_metrics import build_trend_annotations
+
+    name = f"null-created-{datetime.now(UTC).timestamp()}"
+    db.add(SBOMSource(sbom_name=name, created_on=None, status="validated"))
+    db.commit()
+
+    annotations = build_trend_annotations(db, days=30)
+
+    assert all(name not in item.label for item in annotations)
+
+
+def test_trend_annotations_ignore_inactive_sboms(client, db):
+    from app.models import SBOMSource
+    from app.services.dashboard_metrics import build_trend_annotations
+
+    name = f"inactive-upload-{datetime.now(UTC).timestamp()}"
+    db.add(SBOMSource(sbom_name=name, created_on=_now_iso(), status="validated", is_active=False))
+    db.commit()
+
+    annotations = build_trend_annotations(db, days=30)
+
+    assert all(name not in item.label for item in annotations)
+
+
+def test_trend_annotations_empty_window_returns_empty_list(client, db, monkeypatch):
+    from app.services import dashboard_metrics
+
+    monkeypatch.setattr(dashboard_metrics, "_date_range", lambda days: ["2099-01-01"])
+
+    assert dashboard_metrics.build_trend_annotations(db, days=1) == []
+
+
+def test_dashboard_summary_annotation_failure_does_not_crash(client, monkeypatch):
+    from app.services import dashboard_metrics
+
+    def _fail_annotations(db, *, days):
+        raise SQLAlchemyError("synthetic annotation failure")
+
+    monkeypatch.setattr(dashboard_metrics, "build_trend_annotations", _fail_annotations)
+
+    response = client.get("/dashboard/summary")
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert "trend" in body
+    assert body["trend"]["annotations"] == []
