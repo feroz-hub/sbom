@@ -101,6 +101,8 @@ const DEV_USER: AuthUser = {
     'project:read', 'project:create', 'project:update', 'project:delete',
     'component:read', 'component:update',
     'lifecycle:read', 'lifecycle:override',
+    'lifecycle:provider:read', 'lifecycle:provider:update', 'lifecycle:provider:test', 'lifecycle:provider:sync',
+    'lifecycle:vendor-record:read', 'lifecycle:vendor-record:write', 'lifecycle:vendor-record:delete',
     'vex:read', 'vex:write',
     'remediation:read', 'remediation:write', 'remediation:close',
     'dashboard:read',

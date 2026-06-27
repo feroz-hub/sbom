@@ -6,7 +6,6 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
-
 from app.core.context import bind_context, minimal_background_context, reset_context
 from app.models import IAMUser, Projects, SBOMSource, Tenant, TenantUser
 
@@ -33,8 +32,8 @@ def two_tenant_setup():
         token = bind_context(minimal_background_context(t2.id, t2.external_iam_tenant_id))
         try:
             user_b = IAMUser(
-                external_iam_user_id="user-b",
-                email="b@example.com",
+                external_iam_user_id=f"user-b-{suffix}",
+                email=f"b-{suffix}@example.com",
                 display_name="User B",
                 status="ACTIVE",
                 created_at=now,

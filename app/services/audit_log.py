@@ -66,8 +66,9 @@ def record(
         )
         if context is None and tenant_id is not None:
             # Legacy path without bound context
-            from ..models import AuditLog
             from datetime import UTC, datetime
+
+            from ..models import AuditLog
 
             db.add(
                 AuditLog(

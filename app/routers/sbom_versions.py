@@ -15,8 +15,6 @@ from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..core.context import CurrentContext
-from ..core.security import get_current_tenant_context
 from ..db import get_db
 from ..models import SBOMComponent, SBOMSource
 from ..schemas import SbomConversionReportResponse, SbomConversionResponse, SbomEditPayload, SBOMSourceOut

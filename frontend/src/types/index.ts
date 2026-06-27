@@ -324,6 +324,127 @@ export interface DashboardLifecycle {
   unsupported: number;
 }
 
+export interface LifecycleProviderConfig {
+  provider_key: string;
+  display_name: string;
+  provider_type: string;
+  enabled: boolean;
+  priority: number;
+  base_url: string | null;
+  feed_urls: string[];
+  config: Record<string, unknown>;
+  timeout_seconds: number;
+  max_retries: number;
+  circuit_breaker_enabled: boolean;
+  cache_ttl: {
+    known_days: number | null;
+    unknown_hours: number | null;
+    failure_minutes: number | null;
+    deprecated_days: number | null;
+  };
+  health_status: 'healthy' | 'degraded' | 'disabled' | 'unknown';
+  last_success_at: string | null;
+  last_failure_at: string | null;
+  last_failure_message: string | null;
+  has_secret: boolean;
+  secret_preview: string | null;
+  updated_at: string;
+}
+
+export interface LifecycleProviderUpdatePayload {
+  enabled?: boolean;
+  priority?: number;
+  base_url?: string | null;
+  feed_urls?: string[];
+  config?: Record<string, unknown>;
+  timeout_seconds?: number;
+  max_retries?: number;
+  circuit_breaker_enabled?: boolean;
+  cache_ttl_known_days?: number | null;
+  cache_ttl_unknown_hours?: number | null;
+  cache_ttl_failure_minutes?: number | null;
+  cache_ttl_deprecated_days?: number | null;
+}
+
+export interface LifecycleProviderTestResult {
+  success: boolean;
+  status: string;
+  latency_ms: number;
+  message: string;
+  sample_result?: Record<string, unknown> | null;
+  checked_at: string;
+}
+
+export interface LifecycleProviderSyncResult {
+  job_id: string | null;
+  status: string;
+  message: string;
+  triggered_at: string;
+}
+
+export interface LifecycleProviderSecretResult {
+  provider_key: string;
+  secret_name: string;
+  value_preview: string | null;
+  updated_at: string;
+}
+
+export interface LifecycleVendorRecord {
+  id: number;
+  vendor_name: string;
+  product_name: string;
+  product_aliases: string[];
+  ecosystem: string | null;
+  version_pattern: string | null;
+  version_start: string | null;
+  version_end: string | null;
+  lifecycle_status: LifecycleStatus | string;
+  maintenance_status: string | null;
+  eol_date: string | null;
+  eos_date: string | null;
+  eof_date: string | null;
+  deprecated: boolean;
+  unsupported: boolean;
+  latest_supported_version: string | null;
+  recommended_version: string | null;
+  evidence_url: string | null;
+  evidence: Record<string, unknown>;
+  confidence: string;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LifecycleVendorRecordPayload {
+  vendor_name?: string;
+  product_name?: string;
+  product_aliases?: string[];
+  ecosystem?: string | null;
+  version_pattern?: string | null;
+  version_start?: string | null;
+  version_end?: string | null;
+  lifecycle_status?: string;
+  maintenance_status?: string | null;
+  eol_date?: string | null;
+  eos_date?: string | null;
+  eof_date?: string | null;
+  deprecated?: boolean;
+  unsupported?: boolean;
+  latest_supported_version?: string | null;
+  recommended_version?: string | null;
+  evidence_url?: string | null;
+  evidence?: Record<string, unknown>;
+  confidence?: string;
+  enabled?: boolean;
+}
+
+export interface LifecycleVendorRecordListResponse {
+  items: LifecycleVendorRecord[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 export type VexStatus = 'affected' | 'not_affected' | 'fixed' | 'under_investigation' | 'unknown';
 
 export interface VexStatement {

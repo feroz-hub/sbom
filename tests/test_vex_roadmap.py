@@ -386,8 +386,8 @@ def test_generic_repository_health_remains_unknown_low_confidence():
 
 def test_rbac_blocks_viewer_and_allows_security_override(client, monkeypatch):
     """VEX write requires vex:write — enforced via HCL IAM permissions."""
-    from app.core.permissions import permissions_for_roles
     from app.core.context import CurrentContext
+    from app.core.permissions import permissions_for_roles
     from app.core.security import get_current_tenant_context
 
     db = _session()

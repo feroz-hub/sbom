@@ -48,7 +48,6 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-
 revision = "016_analysis_finding_match_reason"
 down_revision = "015_audit_log_table"
 branch_labels = None

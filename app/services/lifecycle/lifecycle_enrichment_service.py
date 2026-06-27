@@ -22,6 +22,7 @@ from .osv_provider import OSVProvider
 from .package_registry_provider import PackageRegistryProvider
 from .provider_base import LifecycleProvider
 from .provider_chain import lookup_provider_chain
+from .provider_registry import LifecycleProviderRegistry
 from .provider_status import get_provider_status_tracker
 from .repository_health_provider import RepositoryHealthProvider
 from .risk_classification import classify_lifecycle_risk
@@ -71,15 +72,12 @@ class LifecycleEnrichmentService:
             1,
             int(provider_max_concurrent or getattr(settings, "lifecycle_provider_max_concurrent", 3)),
         )
+        self._explicit_providers = providers is not None
         self.providers = providers if providers is not None else self._default_providers(settings)
+        self._provider_registry = LifecycleProviderRegistry()
         self.cache_ttl_days = cache_ttl_days
         self._status_tracker = get_provider_status_tracker()
-        for provider in self.providers:
-            self._status_tracker.register(
-                provider.name,
-                priority=getattr(provider, "priority", 100),
-                enabled=True,
-            )
+        self._register_providers(self.providers)
 
     def _default_providers(self, settings: Any) -> list[LifecycleProvider]:
         providers: list[LifecycleProvider] = []
@@ -154,6 +152,7 @@ class LifecycleEnrichmentService:
         identity_groups = _group_components_by_identity(components)
         summary["unique_identities"] = len(identity_groups)
         cache_rows: list[dict[str, Any]] = []
+        providers = self._providers_for_run(db)
 
         for _lookup_key, group in identity_groups.items():
             representative = group[0]
@@ -180,7 +179,7 @@ class LifecycleEnrichmentService:
                 _tally_status(summary, result)
                 continue
 
-            result, errors = self._lookup_providers(normalized)
+            result, errors = self._lookup_providers(normalized, providers)
             summary["provider_lookups"] += 1
             if errors:
                 summary["provider_errors"].extend(errors)
@@ -221,6 +220,7 @@ class LifecycleEnrichmentService:
     ) -> LifecycleResult:
         normalized = normalize_component(component)
         component.ecosystem = normalized.ecosystem
+        providers = self._providers_for_run(db)
 
         manual = ManualOverrideProvider(component).lookup(normalized)
         if manual.manual_override:
@@ -233,7 +233,7 @@ class LifecycleEnrichmentService:
             self._apply_result(component, result, normalized)
             return result
 
-        result, _errors = self._lookup_providers(normalized)
+        result, _errors = self._lookup_providers(normalized, providers)
 
         if cache_entry is not None:
             cache_confidence = cache_entry.confidence or "Unknown"
@@ -355,11 +355,35 @@ class LifecycleEnrichmentService:
             "components": [component_lifecycle_dict(component) for component in components],
         }
 
-    def _lookup_providers(self, component: NormalizedComponent) -> tuple[LifecycleResult, list[str]]:
-        if not self.providers:
+    def _providers_for_run(self, db: Session) -> list[LifecycleProvider]:
+        providers = (
+            self.providers
+            if self._explicit_providers
+            else self._provider_registry.build_provider_chain(
+                db,
+                fallback_timeout_seconds=self.provider_timeout_seconds,
+            )
+        )
+        self._register_providers(providers)
+        return providers
+
+    def _register_providers(self, providers: list[LifecycleProvider]) -> None:
+        for provider in providers:
+            self._status_tracker.register(
+                provider.name,
+                priority=getattr(provider, "priority", 100),
+                enabled=True,
+            )
+
+    def _lookup_providers(
+        self,
+        component: NormalizedComponent,
+        providers: list[LifecycleProvider],
+    ) -> tuple[LifecycleResult, list[str]]:
+        if not providers:
             return unknown_result(component).canonicalized(), []
         return lookup_provider_chain(
-            self.providers,
+            providers,
             component,
             timeout_seconds=self.provider_timeout_seconds,
             status_tracker=self._status_tracker,

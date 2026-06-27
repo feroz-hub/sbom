@@ -57,6 +57,14 @@ os.environ.setdefault(
     "DATABASE_URL",
     _TEST_POSTGRES_DATABASE_URL or f"sqlite:///{_SESSION_DB_PATH}",
 )
+os.environ["ANALYSIS_SOURCES"] = "NVD,OSV,GITHUB"
+os.environ["API_AUTH_MODE"] = "none"
+os.environ["API_RATE_LIMIT_ENABLED"] = "false"
+os.environ["NVD_ENABLED"] = "false"
+os.environ.pop("API_AUTH_TOKENS", None)
+os.environ.pop("GITHUB_TOKEN", None)
+os.environ.pop("NVD_API_KEY", None)
+os.environ.pop("VULNDB_API_KEY", None)
 
 
 # ---------------------------------------------------------------------------
@@ -95,7 +103,7 @@ def app(_tmp_database_path: str):
         os.environ["DATABASE_URL"] = f"sqlite:///{_tmp_database_path}"
     # Avoid CORS noise + force deterministic settings.
     os.environ.setdefault("CORS_ORIGINS", "http://testserver")
-    os.environ.setdefault("ANALYSIS_SOURCES", "NVD,OSV,GITHUB")
+    os.environ["ANALYSIS_SOURCES"] = "NVD,OSV,GITHUB"
     # Finding A: lock the existing snapshot suite to mode=none so the
     # bearer-auth dependency is a no-op for these tests. The dedicated
     # auth tests in test_auth.py override this per-test via monkeypatch.
@@ -129,6 +137,39 @@ def client(app):
 
     with TestClient(app) as c:
         yield c
+
+
+@pytest.fixture(autouse=True)
+def _reset_settings_and_base_env_after_test():
+    os.environ["ANALYSIS_SOURCES"] = "NVD,OSV,GITHUB"
+    os.environ["API_AUTH_MODE"] = "none"
+    os.environ["API_RATE_LIMIT_ENABLED"] = "false"
+    os.environ["NVD_ENABLED"] = "false"
+    os.environ.pop("API_AUTH_TOKENS", None)
+    os.environ.pop("GITHUB_TOKEN", None)
+    os.environ.pop("NVD_API_KEY", None)
+    os.environ.pop("VULNDB_API_KEY", None)
+    try:
+        from app.settings import reset_settings
+
+        reset_settings()
+    except Exception:
+        pass
+    yield
+    os.environ["ANALYSIS_SOURCES"] = "NVD,OSV,GITHUB"
+    os.environ["API_AUTH_MODE"] = "none"
+    os.environ["API_RATE_LIMIT_ENABLED"] = "false"
+    os.environ["NVD_ENABLED"] = "false"
+    os.environ.pop("API_AUTH_TOKENS", None)
+    os.environ.pop("GITHUB_TOKEN", None)
+    os.environ.pop("NVD_API_KEY", None)
+    os.environ.pop("VULNDB_API_KEY", None)
+    try:
+        from app.settings import reset_settings
+
+        reset_settings()
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------------------

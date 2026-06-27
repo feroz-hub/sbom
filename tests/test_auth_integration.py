@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 
 def test_auth_me_dev_mode(client):
     resp = client.get("/api/auth/me")

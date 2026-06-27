@@ -127,6 +127,10 @@ class SBOMSourceOut(ORMModel):
     last_enriched_at: str | None = None
     conversion_error: str | None = None
     enrichment_error: str | None = None
+    component_extraction_status: str | None = None
+    component_extraction_error: str | None = None
+    component_extraction_attempted_at: str | None = None
+    component_extraction_completed_at: str | None = None
 
     @model_validator(mode="before")
     @classmethod

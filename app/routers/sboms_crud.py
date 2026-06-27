@@ -71,7 +71,11 @@ from ..services.sbom_document_service import (
     read_raw_chunk,
 )
 from ..services.sbom_enrichment_service import mark_enrichment_pending, run_post_upload_enrichment
-from ..services.sbom_service import coerce_sbom_data
+from ..services.sbom_service import (
+    ComponentExtractionSkipped,
+    coerce_sbom_data,
+    detect_supported_component_extraction_format,
+)
 from ..services.soft_delete import SoftDeleteService
 from ..services.tenant_access import get_project_for_tenant, get_sbom_for_tenant
 from ..services.validation_repair_service import (
@@ -668,6 +672,113 @@ def get_sbom_components(
         raise
     except SQLAlchemyError as exc:
         raise HTTPException(status_code=500, detail="Internal database error while fetching SBOM components.") from exc
+
+
+@router.post("/sboms/{sbom_id}/components/reprocess", status_code=status.HTTP_200_OK)
+def reprocess_sbom_components(
+    sbom_id: int = Path(..., description="SBOM ID (positive integer)"),
+    context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
+):
+    sbom_id = _validate_positive_int(sbom_id, param_name="sbom_id")
+    sbom = get_sbom_for_tenant(db, sbom_id, context.tenant_id)
+    if not sbom:
+        raise HTTPException(status_code=404, detail="SBOM not found")
+    if not sbom.sbom_data:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "sbom_data_missing",
+                "message": "Cannot reprocess components because this SBOM has no stored document content.",
+            },
+        )
+
+    raw = sbom.sbom_data.encode("utf-8") if isinstance(sbom.sbom_data, str) else bytes(sbom.sbom_data)
+    report = run_validation(raw)
+    sbom.status = _classify_status(report)
+    sbom.failed_stage = report.first_error_stage
+    sbom.validation_errors = [e.model_dump(mode="json") for e in report.entries] if report.entries else None
+    sbom.error_count = report.error_count
+    sbom.warning_count = report.warning_count
+    sbom.validated_at = now_iso()
+
+    if report.has_errors():
+        sbom.component_extraction_status = "skipped"
+        sbom.component_extraction_error = (
+            "SBOM validation failed; repair or re-upload the SBOM before extracting components."
+        )
+        sbom.component_extraction_attempted_at = now_iso()
+        sbom.component_extraction_completed_at = None
+        db.add(sbom)
+        db.commit()
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "sbom_validation_failed",
+                "message": "Cannot reprocess components until SBOM validation passes.",
+                "status": sbom.status,
+                "failed_stage": sbom.failed_stage,
+                "entries": [e.model_dump(mode="json") for e in report.entries],
+            },
+        )
+
+    fmt, spec_version, skip_reason = detect_supported_component_extraction_format(sbom.sbom_data)
+    if skip_reason is not None:
+        sbom.component_extraction_status = "skipped"
+        sbom.component_extraction_error = skip_reason
+        sbom.component_extraction_attempted_at = now_iso()
+        sbom.component_extraction_completed_at = None
+        db.add(sbom)
+        db.commit()
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "unsupported_sbom_format", "message": skip_reason},
+        )
+
+    sbom.original_format = sbom.original_format or fmt
+    sbom.current_format = fmt or sbom.current_format
+
+    try:
+        components = sync_sbom_components(db, sbom)
+        audit_service.write_audit_log(
+            db,
+            context,
+            "sbom.components.reprocess",
+            entity_type="sbom",
+            entity_id=sbom.id,
+            new_value={"component_count": len(components), "format": fmt, "spec_version": spec_version},
+        )
+        db.commit()
+        db.refresh(sbom)
+    except ComponentExtractionSkipped as exc:
+        db.commit()
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "unsupported_sbom_format", "message": exc.reason},
+        ) from exc
+    except SQLAlchemyError as exc:
+        db.rollback()
+        log.error("component reprocess DB error sbom_id=%d: %s", sbom_id, exc, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "db_error", "message": "Failed to reprocess SBOM components."},
+        ) from exc
+    except Exception as exc:
+        db.rollback()
+        log.warning("Component reprocess failed for SBOM id=%d: %s", sbom_id, exc)
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "component_extraction_failed", "message": "Component extraction failed."},
+        ) from exc
+
+    return {
+        "sbom_id": sbom.id,
+        "component_extraction_status": sbom.component_extraction_status,
+        "component_extraction_error": sbom.component_extraction_error,
+        "component_count": len(components),
+        "format": fmt,
+        "spec_version": spec_version,
+    }
 
 
 @router.get("/sboms/{sbom_id}/dedupe-report")

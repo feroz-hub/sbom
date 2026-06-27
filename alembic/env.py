@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+
 # Load .env file if present before importing db or resolving URLs
 try:
     from dotenv import load_dotenv
@@ -12,14 +13,11 @@ except ImportError:
 
 from logging.config import fileConfig
 
-from alembic import context
-from sqlalchemy import create_engine
-from sqlalchemy import pool
-
-from app.db import Base, DATABASE_URL
-
 import app.models  # noqa: F401 — register tables on Base.metadata
 import app.nvd_mirror.db.models  # noqa: F401 — register mirror tables on Base.metadata
+from alembic import context
+from app.db import DATABASE_URL, Base
+from sqlalchemy import create_engine, pool
 
 config = context.config
 if config.config_file_name is not None:

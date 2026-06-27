@@ -37,7 +37,6 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-
 revision = "015_audit_log_table"
 down_revision = "014_add_soft_delete_columns"
 branch_labels = None

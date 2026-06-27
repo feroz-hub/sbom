@@ -1,962 +1,959 @@
-# SBOM Analyzer
+# SBOM Analyser
 
-A full-stack **Software Bill of Materials (SBOM) vulnerability analysis platform**.
+SBOM Analyser is a FastAPI + Next.js platform for uploading, validating, converting, enriching, analysing, and managing SBOMs across their lifecycle.
 
-Upload SBOMs, persist extracted components, scan them against NVD, GitHub Security Advisories, OSV, and VulDB, and generate PDF vulnerability reports from a Next.js dashboard backed by FastAPI.
+## 1. Overview
 
-| Service | URL |
-|---------|-----|
-| Frontend UI | http://localhost:3000 |
-| Backend API | http://localhost:8000 |
-| Swagger docs | http://localhost:8000/docs |
-| Health check | http://localhost:8000/health |
+SBOM Analyser helps security, product, compliance, and platform teams manage software bills of materials after they are created. It accepts SBOM uploads, validates them, extracts and deduplicates components, enriches those components with vulnerability and lifecycle intelligence, and provides workflows for VEX, remediation, reporting, versioning, comparison, and administrative governance.
 
----
+The project supports CycloneDX and SPDX SBOM workflows, including SPDX to CycloneDX conversion where implemented. It is designed as a modular monolith: the backend exposes FastAPI routers over a service layer and SQLAlchemy models, while the frontend provides a Next.js UI for operational workflows.
 
-## Quick start (full stack)
+Main workflows include:
 
-Run these in order on a fresh machine. Use **two terminals** for the API and UI at the end.
+| Workflow | Purpose |
+| --- | --- |
+| SBOM upload and validation | Import SBOMs safely through validation, quarantine, repair, and revalidation workflows. |
+| SBOM conversion | Convert supported SPDX input into CycloneDX representation for downstream processing. |
+| Component inventory | Extract, normalize, deduplicate, paginate, and inspect SBOM components. |
+| Lifecycle enrichment | Detect EOL, EOS, EOF, deprecated, unsupported, and possibly unmaintained components. |
+| Vulnerability analysis | Query configured vulnerability providers and cache results. |
+| VEX and remediation | Manage VEX statements, overrides, remediation records, and status. |
+| Governance | Use tenants, RBAC, audit logs, provider configuration, and IAM integration. |
+| Reporting | Export reports and analysis artifacts for review and compliance. |
+
+## 2. Current Project Status
+
+| Area | Status |
+| --- | --- |
+| Local development | Supported with PostgreSQL and `AUTH_ENABLED=false`. |
+| Internal demo | Supported when local database, migrations, frontend, and dev auth are configured. |
+| Production | Not claimed as production-ready from the current repository state. Production use requires full backend and frontend test verification, real HCL IAM verification, secure secrets, restricted CORS, operational monitoring, and deployment hardening. |
+| HCL IAM | Implemented in code with backend JWT/JWKS validation and frontend OIDC/PKCE configuration. Real IdP verification is environment-specific and should be completed before production. |
+| Multi-tenancy and RBAC | Implemented in backend models, context binding, request access enforcement, and permissions. |
+| Lifecycle provider admin | Implemented in backend APIs, database migrations, services, tests, and frontend admin pages. |
+| Current verified tests | Targeted lifecycle provider admin tests and lifecycle provider tests have been verified recently. Full backend suite is not documented here as green because it was not reverified as fully passing after all repository changes. |
+
+Recently verified command status in this branch:
 
 ```bash
-# 1. Bootstrap (optional — installs Python 3.11, Node 20, venv, npm deps, seeds .env files)
-cd /path/to/sbom
-./scripts/bootstrap.sh
+python -m pytest -q tests/test_lifecycle_provider_admin.py
+# 12 passed
 
-# 2. PostgreSQL
-docker compose up -d postgres
-docker compose ps
+python -m pytest -q tests -k "lifecycle and provider"
+# 34 passed
 
-# 3. Configure backend environment
-cp .env.example .env
-# Edit .env if needed — default DATABASE_URL uses host port 55439
-
-# 4. Migrate database
-source .venv/bin/activate
-export DATABASE_URL="postgresql+psycopg://sbom:sbom@localhost:55439/sbom_analyser"
-python -m alembic upgrade head
-python scripts/check_database.py
-
-# 5. Terminal A — backend API (local dev, no HCL IAM login)
-export AUTH_ENABLED=false
-python3 run.py
-
-# 6. Terminal B — frontend UI
 cd frontend
-cp .env.local.example .env.local
-npm ci
-npm run dev
-```
-
-Open **http://localhost:3000**. In dev mode (`AUTH_ENABLED=false`) the API uses a synthetic admin context — no login required.
-
----
-
-## Commands reference
-
-All commands assume the repository root unless noted. Activate the virtual environment first:
-
-```bash
-source .venv/bin/activate          # macOS / Linux
-# .\.venv\Scripts\Activate.ps1     # Windows PowerShell
-```
-
-### One-time setup
-
-```bash
-# Automated bootstrap (recommended)
-./scripts/bootstrap.sh               # add --skip-system if Python/Node already installed
-
-# Manual backend
-python3 -m venv .venv
-source .venv/bin/activate
-python3 -m pip install -r requirements.txt
-cp .env.example .env
-
-# Manual frontend
-cd frontend
-npm ci
-cp .env.local.example .env.local
-```
-
-Windows bootstrap:
-
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\scripts\bootstrap.ps1            # add -SkipSystem if Python/Node already installed
-```
-
-### PostgreSQL
-
-```bash
-# Start / stop / status
-docker compose up -d postgres
-docker compose ps
-docker compose logs -f postgres
-docker compose stop postgres
-docker compose down                  # removes containers; keeps volume data
-
-# Default connection (host port 55439 → container 5432)
-export DATABASE_URL="postgresql+psycopg://sbom:sbom@localhost:55439/sbom_analyser"
-```
-
-Set in `.env`:
-
-```env
-DATABASE_URL=postgresql+psycopg://sbom:sbom@localhost:55439/sbom_analyser
-POSTGRES_PORT=55439
-```
-
-### Database migrations (Alembic)
-
-PostgreSQL schema changes **must** be applied before starting the API. Use the project venv — do not call a global `alembic` binary.
-
-```bash
-source .venv/bin/activate
-export DATABASE_URL="postgresql+psycopg://sbom:sbom@localhost:55439/sbom_analyser"
-
-python -m alembic heads
-python -m alembic current
-python -m alembic upgrade head
-python -m alembic check
-python -m alembic history            # list migration chain
-python scripts/check_database.py   # verify connectivity, dialect, alembic head
-```
-
-### Run the backend API
-
-```bash
-source .venv/bin/activate
-export DATABASE_URL="postgresql+psycopg://sbom:sbom@localhost:55439/sbom_analyser"
-
-# Local development (no HCL IAM — synthetic admin context)
-export AUTH_ENABLED=false
-python3 run.py
-
-# With auto-reload on code changes
-export RELOAD=true
-python3 run.py
-
-# Alternative entry point
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-```
-
-Verify after start:
-
-```bash
-curl -s http://localhost:8000/health
-curl -s http://localhost:8000/api/auth/me    # dev context when AUTH_ENABLED=false
-```
-
-### Run the frontend
-
-```bash
-cd frontend
-
-# Development server (hot reload)
-npm run dev
-
-# Type-check
 npx tsc --noEmit
-
-# Unit tests
 npm test
-npm run test:watch
-
-# Production build + serve
 npm run build
-npm run start
-
-# Lint
-npm run lint
+# Verified earlier after the lifecycle admin UI changes
 ```
 
-Required in `frontend/.env.local`:
+Use the project virtual environment when running Python commands. Avoid invoking a global or Anaconda `pytest`.
 
-```env
-NEXT_PUBLIC_API_URL=http://localhost:8000
-NEXT_PUBLIC_AUTH_ENABLED=false
+## 3. Tech Stack
+
+### Backend
+
+| Technology | Usage |
+| --- | --- |
+| Python | Project requires Python 3.11 or newer. |
+| FastAPI | HTTP API and router layer. |
+| SQLAlchemy 2.x | ORM and database access. |
+| Alembic | Database migrations. |
+| PostgreSQL | Primary database for development and deployment. |
+| psycopg 3 | PostgreSQL driver. |
+| Pydantic / pydantic-settings | Schemas and settings. |
+| pytest | Backend tests. |
+| ruff | Python linting. |
+| Celery / Redis | Present in dependencies and environment configuration for background jobs where used. |
+| PyJWT / JWKS | HCL IAM token validation. |
+| cryptography | Secret encryption support. |
+
+### Frontend
+
+| Technology | Usage |
+| --- | --- |
+| Next.js | Frontend application framework. |
+| React | UI runtime. |
+| TypeScript | Frontend type safety. |
+| TanStack Query | API data fetching and caching. |
+| Tailwind CSS | Styling. |
+| lucide-react | Icon set. |
+| Recharts | Charts and dashboard visuals. |
+| Vitest / Testing Library | Frontend tests. |
+
+### External Integrations
+
+The repository includes code or configuration for:
+
+| Integration | Purpose |
+| --- | --- |
+| NVD | CVE and vulnerability intelligence. |
+| OSV | Open source vulnerability lookup. |
+| deps.dev | Package and dependency intelligence. |
+| endoflife.date | Product lifecycle data. |
+| OpenEoX | Configurable lifecycle feed source. |
+| Xeol API / Xeol DB | Optional lifecycle source. |
+| Package registries | Package metadata and lifecycle hints. |
+| GitHub / repository health | Repository status and inactivity signals. |
+| AI providers | Optional AI copilot/fix support via configured providers. |
+
+## 4. Architecture
+
+SBOM Analyser is organized as a Clean Architecture inspired modular monolith.
+
+```text
+Frontend (Next.js)
+  -> FastAPI API
+  -> Service Layer
+  -> SQLAlchemy Models
+  -> PostgreSQL
+  -> External Providers
 ```
 
-### HCL IAM authentication (production)
+The backend is split into routers, schemas, services, models, validation modules, lifecycle providers, and migrations. Routers keep HTTP concerns at the edge. Services own business behavior such as validation, enrichment, vulnerability lookup, VEX, remediation, audit logging, tenant handling, and provider configuration. SQLAlchemy models represent persistent state, and Alembic owns schema evolution.
 
-Backend `.env`:
+Lifecycle enrichment uses a provider chain:
 
-```env
-AUTH_ENABLED=true
-DEV_DEFAULT_TENANT=true
-API_AUTH_MODE=none
-HCL_IAM_ISSUER=https://<hcl-iam-domain>/<issuer-path>
-HCL_IAM_AUDIENCE=sbom-analyser-api
-HCL_IAM_JWKS_URL=https://<hcl-iam-domain>/<jwks-path>
-HCL_IAM_CLIENT_ID=sbom-analyser-ui
-HCL_IAM_ALLOWED_ALGORITHMS=RS256
-HCL_IAM_ROLE_CLAIM=roles
-HCL_IAM_TENANT_CLAIM=tenant_id
+```text
+Component
+  -> manual lifecycle override
+  -> lifecycle cache
+  -> enabled providers sorted by priority
+  -> cache upsert
+  -> component lifecycle result
 ```
 
-Frontend `frontend/.env.local`:
+Provider configuration is cached for short periods, invalidated after admin changes, and falls back to static defaults when database-backed configuration is unavailable.
 
-```env
-NEXT_PUBLIC_API_URL=http://localhost:8000
-NEXT_PUBLIC_AUTH_ENABLED=true
-NEXT_PUBLIC_HCL_IAM_ISSUER=https://<hcl-iam-domain>/<issuer-path>
-NEXT_PUBLIC_HCL_IAM_CLIENT_ID=sbom-analyser-ui
-NEXT_PUBLIC_HCL_IAM_REDIRECT_URI=http://localhost:3000/auth/callback
-NEXT_PUBLIC_HCL_IAM_POST_LOGOUT_URI=http://localhost:3000
-# Optional explicit OIDC URLs (override issuer-derived Keycloak-style paths):
-# NEXT_PUBLIC_HCL_IAM_AUTHORIZATION_URL=...
-# NEXT_PUBLIC_HCL_IAM_TOKEN_URL=...
-# NEXT_PUBLIC_HCL_IAM_LOGOUT_URL=...
+IAM and request authorization flow:
+
+```text
+HCL IAM
+  -> Frontend OIDC/PKCE
+  -> Backend JWT/JWKS validation
+  -> CurrentContext
+  -> RBAC
+  -> Tenant-scoped data access
 ```
 
-Then start backend and frontend as above. The UI redirects to HCL IAM for login; the API validates JWTs via JWKS and enforces tenant RBAC.
+Tenant isolation is enforced in the backend. The UI may hide controls, but backend permissions and tenant checks are authoritative.
 
-Identity / tenant admin API (requires valid bearer token + tenant context):
+## 5. Core Features
 
-```bash
-curl -s -H "Authorization: Bearer <token>" \
-     -H "X-Tenant-ID: 1" \
-     http://localhost:8000/api/auth/me
+| Feature | Description | Status |
+| --- | --- | --- |
+| SBOM upload | Upload SBOM documents through the backend API and frontend UI. | Implemented |
+| SPDX parsing | Parse supported SPDX SBOMs. | Implemented |
+| CycloneDX parsing | Parse supported CycloneDX SBOMs. | Implemented |
+| SPDX to CycloneDX conversion | Convert supported SPDX documents to CycloneDX representation. | Implemented |
+| 8-stage validation | Guard, detect, schema, semantic, integrity, security, NTIA, and signature stages. | Implemented |
+| Validation repair | Quarantine invalid SBOMs, repair validation sessions, and revalidate before import. | Implemented |
+| Component extraction | Extract components from accepted SBOMs. | Implemented |
+| Component deduplication | Normalize and deduplicate component identities. | Implemented |
+| Lifecycle enrichment | Enrich components with lifecycle status, confidence, evidence, and recommendations. | Implemented |
+| Vulnerability scanning | Query configured vulnerability sources and cache provider responses. | Implemented |
+| VEX | Upload/list/view VEX data and apply statement/override behavior. | Implemented |
+| Remediation | Track remediation records, statuses, and history. | Implemented |
+| Dashboard | Dashboard APIs and frontend views for summary data. | Implemented |
+| Reports/export | Export analysis and reporting artifacts. | Implemented |
+| Versioning | Track SBOM versions. | Implemented |
+| Compare/restore | Compare versions and restore where supported by the UI/API. | Implemented |
+| Project assignment | Assign and organize SBOMs by project. | Implemented |
+| Soft/permanent delete | Soft-delete behavior and permanent delete paths exist. | Implemented |
+| Scheduled scans | Schedule APIs and frontend route exist. | Implemented |
+| AI copilot / AI fixes | Optional AI-assisted workflows with provider configuration. | Optional/configurable |
+| Audit logs | Audit log model, service usage, and lifecycle provider admin audit events. | Implemented |
+| HCL IAM | OIDC/JWT/JWKS integration and RBAC context. | Implemented but real IdP verification is environment-dependent |
+| Multi-tenancy | Tenant models, memberships, tenant context, and scoped data access. | Implemented |
+| RBAC | Role and permission checks in backend request handling. | Implemented |
+| Lifecycle provider admin UI | Admin pages and APIs for provider configuration, secrets, testing, sync, and vendor records. | Implemented |
 
-curl -s -H "Authorization: Bearer <token>" \
-     http://localhost:8000/api/tenants
+## 6. Supported SBOM Formats
+
+The repository includes parsers, validators, and conversion logic for CycloneDX and SPDX.
+
+| Format | Support |
+| --- | --- |
+| CycloneDX JSON | Supported. |
+| CycloneDX XML | Supported where parser/validator paths accept XML. |
+| SPDX JSON | Supported. |
+| SPDX tag-value | Supported where parser paths accept tag-value input. |
+| SPDX 3.0 | Not treated as fully supported. Detection/semantic validation paths indicate SPDX 3.0 support is deferred. |
+| Large SBOMs | Upload and validation limits exist; component lists are paginated in the UI/API. |
+
+The original SBOM payload is preserved for raw view/download flows where stored. The UI may show a preview rather than the full raw document for very large SBOMs.
+
+## 7. Validation Pipeline
+
+The validation pipeline is organized into eight stages:
+
+| Stage | Name | Purpose |
+| --- | --- | --- |
+| 1 | Ingress Guard | Enforce upload size, decompression, and basic safety checks. |
+| 2 | Format & Version Detection | Detect SBOM format and supported version. |
+| 3 | Structural Schema Validation | Validate document structure against expected schema behavior. |
+| 4 | Semantic Validation | Validate domain-level SBOM meaning. |
+| 5 | Cross-Reference Integrity | Check references and internal consistency. |
+| 6 | Security Checks | Detect unsafe payload characteristics. |
+| 7 | NTIA Minimum Elements | Check NTIA minimum SBOM element coverage. |
+| 8 | Signature Verification | Feature-flagged signature verification path. |
+
+Valid SBOMs continue into import, component extraction, deduplication, enrichment, and analysis workflows.
+
+Invalid SBOMs can be placed into validation sessions rather than blindly imported. The repair workflow lets users inspect validation errors, apply fixes, and revalidate before import. This prevents failed uploads from becoming corrupted inventory records.
+
+Signature verification is feature-flagged. The current code path treats it as optional and should be verified in the target environment before relying on it for compliance gates.
+
+## 8. Lifecycle Enrichment
+
+Lifecycle enrichment detects and stores component lifecycle state.
+
+Recognized lifecycle statuses include:
+
+| Status | Meaning |
+| --- | --- |
+| Supported | The product/component appears supported. |
+| EOL | End of life. |
+| EOS | End of support. |
+| EOF | End of fix. |
+| Deprecated | Deprecated by vendor/source metadata. |
+| Unsupported | Unsupported or archived/disabled by authoritative source. |
+| Maintenance | In maintenance mode when provider data indicates it. |
+| Extended Support | Extended support period where provider data indicates it. |
+| EOL Soon | Approaching configured EOL threshold. |
+| Possibly Unmaintained | Repository or metadata signals inactivity without official EOL evidence. |
+| Unknown | No reliable lifecycle conclusion. |
+
+Default enabled providers:
+
+| Provider | Default priority |
+| --- | --- |
+| Red Hat Lifecycle | 10 |
+| Official Vendor Lifecycle | 10 |
+| endoflife.date | 30 |
+| Package Registry | 50 |
+| deps.dev | 60 |
+| OSV | 70 |
+| Repository Health | 80 |
+
+Conditional/configurable providers:
+
+| Provider | Configuration |
+| --- | --- |
+| Custom Vendor Records | Managed through database-backed admin records and optional `LIFECYCLE_VENDOR_RECORDS_JSON` defaults. |
+| OpenEoX | Enabled with provider admin config or `OPENEOX_ENABLED` and feed URLs. |
+| Xeol API | Enabled with provider admin config or lifecycle Xeol API environment settings. |
+| Local Xeol DB | Enabled with provider admin config or local Xeol DB path. |
+
+Provider behavior:
+
+| Concept | Behavior |
+| --- | --- |
+| Priority | Lower priority numbers run earlier. Providers are sorted by priority and provider name. |
+| Cache-first | Lifecycle cache is checked before calling providers. |
+| Deduplication | Duplicate component identities are grouped before provider lookup. |
+| Confidence | Provider results include confidence; authoritative high-confidence results can stop fallback. |
+| Evidence | Results can include source name, checked time, and evidence URL. |
+| Manual override | Manual lifecycle override is checked before provider chain results. |
+| Repository health | Repository inactivity should be treated as possibly unmaintained, not official EOL. Archived or disabled repositories may produce a stronger unsupported signal. |
+
+## 9. Lifecycle Provider Admin UI
+
+Lifecycle provider administration is implemented under the admin UI.
+
+Admin users can:
+
+| Capability | Status |
+| --- | --- |
+| View lifecycle providers | Implemented |
+| Enable/disable providers | Implemented |
+| Change provider priority | Implemented |
+| Configure OpenEoX feed URLs | Implemented |
+| Configure Xeol API settings | Implemented |
+| Configure local Xeol DB path | Implemented |
+| Manage custom vendor lifecycle records | Implemented |
+| Store provider secrets securely | Implemented |
+| Test provider connection | Implemented |
+| Trigger provider sync/refresh | Implemented |
+| View provider health and last failure | Implemented |
+| View evidence/confidence in lifecycle results | Implemented in lifecycle result display paths |
+
+Security and operational behavior:
+
+| Area | Behavior |
+| --- | --- |
+| Secrets | Stored separately from provider config and encrypted at rest using an application secret key. |
+| API responses | Secret values are never returned; only masked previews are returned. |
+| UI | Existing secrets are shown as masked previews. |
+| Audit | Provider config, secret, test, sync, and custom vendor record actions are audit logged. |
+| Disabled providers | Disabled providers are not instantiated or called. |
+| Runtime changes | Normal enable/disable and priority changes apply without application restart through config cache invalidation. |
+
+Backend routes:
+
+```text
+/api/admin/lifecycle-providers
+/api/admin/lifecycle-vendor-records
+/api/lifecycle/sources
+/api/lifecycle/provider-status
 ```
 
-### Legacy bearer / JWT gate (deprecated for production)
+Frontend routes:
 
-Use HCL IAM in production. Legacy modes remain for isolated tooling:
-
-```bash
-# Bearer allowlist
-export API_AUTH_MODE=bearer
-export API_AUTH_TOKENS=tok-strong-random-1,tok-strong-random-2
-python3 run.py
-
-# HS256 JWT
-export API_AUTH_MODE=jwt
-export JWT_SECRET_KEY=your-secret
-python3 run.py
+```text
+/admin/lifecycle-providers
+/admin/lifecycle-vendor-records
 ```
 
-The server refuses to start if `API_AUTH_MODE=bearer` and `API_AUTH_TOKENS` is empty.
+## 10. Vulnerability Analysis
 
-### Background analysis (Celery + Redis)
+The vulnerability layer integrates with provider clients and cache tables to avoid unnecessary repeated external calls.
 
-Default dev runs scans **synchronously** in the API process. For background workers:
+| Provider/source | Notes |
+| --- | --- |
+| NVD | Supports CVE-centric lookup and NVD mirror/cache related paths. Use `NVD_API_KEY` for higher limits. |
+| OSV | Used for open source vulnerability lookup. |
+| deps.dev | Used for dependency/package intelligence. |
+| Package registries | Used for ecosystem metadata and package-derived signals. |
+| GitHub/GHSA | GitHub token support exists for repository/provider workflows where configured. |
+| KEV/EPSS | Migration history and services include KEV/EPSS-related support. |
 
-```bash
-# .env
-REDIS_URL=redis://localhost:6379/0
-CELERY_BROKER_URL=redis://localhost:6379/0
-```
+Provider calls should use timeouts, caching, and circuit-breaker style behavior where implemented. NVD lookups should prefer precise identifiers such as CVE IDs when available and avoid broad expensive queries when component metadata is incomplete.
 
-```bash
-# macOS / Linux — one process per terminal
-./scripts/celery_worker.sh
-./scripts/celery_beat.sh        # beat must run as a SINGLE instance
-```
+## 11. VEX and Remediation
 
-```powershell
-# Windows (PowerShell)
-celery -A app.workers.celery_app worker --loglevel=info
-celery -A app.workers.celery_app beat --loglevel=info
-```
+The repository includes VEX and remediation workflows.
 
-### Tests and quality checks
+| Area | Behavior |
+| --- | --- |
+| VEX upload/list/view | VEX routes support SBOM-scoped VEX workflows. |
+| VEX statements | Statements can affect vulnerability interpretation. |
+| VEX overrides | Component-level VEX override and history endpoints exist. |
+| Remediation records | Remediation APIs track work items and status. |
+| Remediation status | Status transitions and close workflows are present. |
+| Audit history | Remediation and provider-admin actions are audit logged where services use the audit layer. |
 
-```bash
-source .venv/bin/activate
-export DATABASE_URL="postgresql+psycopg://sbom:sbom@localhost:55439/sbom_analyser"
+## 12. Authentication and Authorization
 
-# Full backend test suite (most tests use isolated temp SQLite automatically)
-python -m pytest -q
-python -m pytest tests/ -v
+### Local Development
 
-# Targeted suites
-python -m pytest tests/test_hcl_iam_auth.py -q
-python -m pytest tests/test_auth_integration.py -q
-python -m pytest tests/test_rbac_permissions.py -q
-python -m pytest tests/test_tenant_isolation.py -q
-
-# PostgreSQL integration tests (optional — requires disposable test DB)
-export TEST_POSTGRES_DATABASE_URL="postgresql+psycopg://sbom:sbom@localhost:55439/sbom_analyser_test"
-python -m pytest tests/test_postgresql_integration.py -q
-
-# Lint / format
-ruff check .
-ruff check . --fix
-git diff --check
-```
-
-```bash
-cd frontend
-npm test
-npx tsc --noEmit
-npm run build
-```
-
-Re-baseline snapshot tests: delete the file under `tests/snapshots/`, run pytest once to capture, run again to lock.
-
-### AI fix tooling
-
-```bash
-source .venv/bin/activate
-
-# Generate credential encryption key (required for DB-stored AI providers)
-python scripts/generate_encryption_key.py
-python scripts/generate_encryption_key.py --append-to-env
-
-# Migrate .env provider keys into encrypted DB store
-python scripts/migrate_env_to_db.py --dry-run
-python scripts/migrate_env_to_db.py
-
-# Verify rollout gates
-python scripts/verify_ai_rollout.py --pretty
-
-# Smoke-test live provider
-python scripts/ai_fix_smoke.py
-python scripts/ai_fix_smoke.py --provider openai
-```
-
-### SQLite → PostgreSQL migration
-
-Use a maintenance window — stop API, Celery, and beat before migrating.
-
-```bash
-mkdir -p backups
-sqlite3 ./sbom_api.db ".backup './backups/sbom_api-pre-postgres.db'"
-shasum -a 256 ./sbom_api.db ./backups/sbom_api-pre-postgres.db
-
-# Preflight (read-only)
-python scripts/migrate_sqlite_to_postgres.py \
-  --sqlite-url sqlite:///./sbom_api.db \
-  --postgres-url postgresql+psycopg://sbom:sbom@localhost:55439/sbom_analyser \
-  --dry-run
-
-# Copy (single transaction)
-python scripts/migrate_sqlite_to_postgres.py \
-  --sqlite-url sqlite:///./sbom_api.db \
-  --postgres-url postgresql+psycopg://sbom:sbom@localhost:55439/sbom_analyser
-
-# Verify only
-python scripts/migrate_sqlite_to_postgres.py \
-  --sqlite-url sqlite:///./sbom_api.db \
-  --postgres-url postgresql+psycopg://sbom:sbom@localhost:55439/sbom_analyser \
-  --verify-only
-
-# Clear disposable target (requires explicit flags)
-python scripts/migrate_sqlite_to_postgres.py \
-  --sqlite-url sqlite:///./sbom_api.db \
-  --postgres-url postgresql+psycopg://sbom:sbom@localhost:55439/sbom_analyser \
-  --truncate-target --confirm-truncate
-
-# Post-migration backup
-pg_dump --format=custom \
-  --file=./backups/sbom_analyser-post-migration.dump \
-  postgresql://sbom:sbom@localhost:55439/sbom_analyser
-```
-
-### Diagnostics
-
-```bash
-source .venv/bin/activate
-export DATABASE_URL="postgresql+psycopg://sbom:sbom@localhost:55439/sbom_analyser"
-
-python scripts/check_database.py
-python scripts/db_pool_diagnostics.py
-```
-
-### Docs maintenance
-
-```bash
-source .venv/bin/activate
-python scripts/gen_error_code_reference.py          # regenerate validation error code table
-python scripts/gen_error_code_reference.py --check  # CI: fail if doc is out of sync
-```
-
-### Manual verification checklist (HCL IAM / multi-tenant)
-
-```bash
-source .venv/bin/activate
-export DATABASE_URL="postgresql+psycopg://sbom:sbom@localhost:55439/sbom_analyser"
-export AUTH_ENABLED=false
-
-python -m alembic upgrade head
-python scripts/check_database.py
-python3 run.py &
-sleep 3
-curl -s http://localhost:8000/health
-curl -s http://localhost:8000/api/auth/me
-kill %1
-
-cd frontend && npm run dev
-```
-
-Confirm: upload SBOM sets `tenant_id`, dashboard is tenant-scoped, cross-tenant ID access returns 404/403, tenant admin UI at `/settings/tenant`.
-
----
-
-## Local Development
-
-The **[Commands reference](#commands-reference)** above lists every setup, run, test, and migration command. The subsections below summarize the same flows with platform-specific notes.
-
-### One-command bootstrap (recommended)
-
-Installer scripts bring a fresh machine to a working dev state — they install
-Python 3.11 + Node 20, create the venv, run `npm ci`, and seed `.env` /
-`.env.local` from the example files. Both are idempotent.
-
-```bash
-# macOS / Linux
-./scripts/bootstrap.sh            # add --skip-system if you already have Python/Node
-```
-
-```powershell
-# Windows (PowerShell)
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\scripts\bootstrap.ps1           # add -SkipSystem if you already have Python/Node
-```
-
-See [`scripts/BOOTSTRAP.md`](./scripts/BOOTSTRAP.md) for what gets installed per OS.
-
-After bootstrap, start PostgreSQL, run migrations, then launch backend and frontend — see [Quick start](#quick-start-full-stack).
-
-### Manual backend setup
-
-```bash
-# macOS / Linux
-python3 -m venv .venv
-. .venv/bin/activate
-python3 -m pip install -r requirements.txt
-cp .env.example .env
-docker compose up -d postgres
-python -m alembic upgrade head
-export AUTH_ENABLED=false
-python3 run.py
-```
-
-```powershell
-# Windows (PowerShell)
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-Copy-Item .env.example .env
-docker compose up -d postgres
-python -m alembic upgrade head
-$env:AUTH_ENABLED="false"
-python run.py
-```
-
-The backend API starts on **http://localhost:8000**.
-
-- `GET /` returns API service metadata
-- `GET /docs` opens the FastAPI Swagger UI
-- `GET /health` returns the API health check
-- `GET /api/auth/me` returns the current identity context
-
-### Manual frontend setup
-
-```bash
-# macOS / Linux
-cd frontend
-npm ci
-cp .env.local.example .env.local
-npm run dev
-```
-
-```powershell
-# Windows (PowerShell)
-cd frontend
-npm ci
-Copy-Item .env.local.example .env.local
-npm run dev
-```
-
-Open the primary Next.js UI at **http://localhost:3000**.
-
----
-
-## Runtime Behavior
-
-- Uploading an SBOM to `POST /api/sboms` stores the SBOM row first, then immediately extracts and persists its components.
-- After component sync, the backend triggers best-effort multi-source analysis automatically.
-- If analysis fails, the uploaded SBOM and its extracted components still remain available in the UI and API.
-- Manual re-analysis is available via `POST /api/sboms/{id}/analyze`.
-
-The root API endpoint returns this shape:
-
-```json
-{
-  "service": "sbom-analyzer-api",
-  "version": "2.0.0",
-  "docs_url": "/docs",
-  "health_url": "/health"
-}
-```
-
----
-
-## Project Structure
-
-```
-sbom/
-├── run.py                  # Entry point
-├── requirements.txt        # Python dependencies
-├── pytest.ini              # Pytest configuration
-├── .env.example            # Environment variable template
-├── samples/                # Sample SBOM payloads for local testing
-├── tests/                  # Pytest snapshot regression suite (see "Tests")
-├── frontend/               # Primary Next.js dashboard
-│   ├── package.json
-│   ├── next.config.mjs     # API rewrites to the FastAPI backend
-│   └── src/
-│       ├── app/            # Route entry points
-│       ├── components/     # UI building blocks and feature components
-│       └── lib/            # API client and shared utilities
-└── app/
-    ├── main.py             # FastAPI application wiring + startup hook
-    ├── settings.py         # Pydantic Settings singleton
-    ├── analysis.py         # SBOM parsers + multi-source orchestrator
-    ├── models.py           # SQLAlchemy ORM models
-    ├── schemas.py          # Pydantic request/response schemas
-    ├── db.py               # PostgreSQL/SQLite engine and session setup
-    ├── pdf_report.py       # PDF report generation (ReportLab)
-    ├── logger.py           # Structured/text logging setup
-    ├── routers/            # HTTP handlers (sboms_crud, analyze_endpoints,
-    │                       #  runs, projects, pdf, dashboard, health, ...)
-    ├── services/           # Business logic + persistence helpers
-    └── sources/            # Vulnerability source adapter package
-        ├── base.py         # `VulnSource` Protocol + `SourceResult` TypedDict
-        ├── nvd.py          # `NvdSource(api_key=...)`
-        ├── osv.py          # `OsvSource()`
-        ├── ghsa.py         # `GhsaSource(token=...)`
-        ├── vulndb.py       # `VulnDbSource(api_key=...)`
-        ├── registry.py     # name → adapter class lookup
-        ├── runner.py       # `run_sources_concurrently(...)` fan-out
-        ├── purl.py         # PURL parser
-        ├── cpe.py          # PURL → CPE 2.3 generator
-        ├── severity.py     # CVSS helpers + severity bucketing
-        └── dedupe.py       # Two-pass CVE↔GHSA cross-deduplication
-```
-
-Every analyze endpoint — `POST /api/sboms/{id}/analyze`, `POST /api/sboms/{id}/analyze/stream`,
-and the five `POST /analyze-sbom-{nvd,github,osv,vulndb,consolidated}` ad-hoc routes — fans
-out through the `app.sources` adapter registry via `run_sources_concurrently`.
-Adding a fourth source (e.g. Snyk, OSS Index) is a one-line change in
-`app/sources/registry.py` plus a new module under `app/sources/`.
-
-## Tests
-
-See [Tests and quality checks](#tests-and-quality-checks) in the commands reference for the full list. Quick run:
-
-```bash
-# macOS / Linux
-source .venv/bin/activate
-python -m pytest tests/
-```
-
-```powershell
-# Windows (PowerShell) — after activating the venv
-python -m pytest tests/
-```
-
-The suite is a deterministic snapshot regression net: every analyze endpoint
-is exercised against an isolated temp SQLite database with the underlying
-NVD/GHSA/OSV coroutines monkeypatched to return canned data, and the JSON
-responses are diffed against locked baseline files in
-`tests/snapshots/`. To intentionally re-baseline a snapshot, delete its
-file under `tests/snapshots/` and re-run pytest — the next run captures
-the new shape and the run after that asserts it stays stable.
-
----
-
-## Authentication
-
-Production uses **HCL IAM** (OIDC + JWKS JWT validation) with multi-tenant RBAC.
-Local development uses `AUTH_ENABLED=false`, which injects a synthetic admin
-context so no login is required.
-
-### HCL IAM (production)
-
-```bash
-# .env
-AUTH_ENABLED=true
-API_AUTH_MODE=none
-HCL_IAM_ISSUER=https://<hcl-iam-domain>/<issuer-path>
-HCL_IAM_AUDIENCE=sbom-analyser-api
-HCL_IAM_JWKS_URL=https://<hcl-iam-domain>/<jwks-path>
-HCL_IAM_CLIENT_ID=sbom-analyser-ui
-```
-
-The server refuses to start when `AUTH_ENABLED=true` but required HCL IAM
-variables are missing. Set matching `NEXT_PUBLIC_*` values in
-`frontend/.env.local` — see [HCL IAM authentication](#hcl-iam-authentication-production).
-
-**Protected routes** (require a valid HCL IAM bearer token when `AUTH_ENABLED=true`):
-
-- All `/api/*` routes (sboms, projects, runs, findings, tenants, auth, …)
-- All `/analyze-sbom-*` ad-hoc routes
-- All `/dashboard/*` routes
-
-**Open routes** (no auth required, for liveness probes and `/docs`):
-
-- `GET /`
-- `GET /health`
-- `GET /docs`, `GET /openapi.json`, `GET /redoc`
-
-Roles (`TENANT_ADMIN`, `SECURITY_ANALYST`, `VIEWER`, …) are enforced via
-`enforce_request_access` and tenant-scoped ORM filters. Cross-tenant resource
-access returns 404 or 403.
-
-### Local development (no login)
+For local development, the simplest mode is:
 
 ```bash
 export AUTH_ENABLED=false
 export DEV_DEFAULT_TENANT=true
-python3 run.py
 ```
 
-### Legacy bearer / JWT gate (deprecated)
+In this mode, the backend creates or uses a development tenant and user context. This is for local development and internal demos only.
 
-Bearer-token and HS256 JWT gates are **deprecated for production** — use HCL IAM
-instead. They remain available for isolated tooling:
+### HCL IAM
+
+HCL IAM is the configured production identity-provider path.
+
+Expected flow:
+
+```text
+Frontend OIDC Authorization Code + PKCE
+  -> HCL IAM token endpoint
+  -> Backend receives bearer JWT
+  -> Backend validates JWKS signature, issuer, audience, expiry, and algorithm
+  -> Backend resolves local user, tenant membership, role, and permissions
+  -> Backend validates X-Tenant-ID against membership
+  -> Backend enforces RBAC
+```
+
+Required IAM details:
+
+| Detail | Environment/config |
+| --- | --- |
+| Issuer | `HCL_IAM_ISSUER` |
+| Authorization endpoint | Frontend `NEXT_PUBLIC_HCL_IAM_AUTHORIZATION_URL` |
+| Token endpoint | Frontend `NEXT_PUBLIC_HCL_IAM_TOKEN_URL` |
+| JWKS URL | `HCL_IAM_JWKS_URL` |
+| Client ID | `HCL_IAM_CLIENT_ID` and frontend client ID |
+| API audience | `HCL_IAM_AUDIENCE` |
+| Role claim | `HCL_IAM_ROLE_CLAIM` |
+| Tenant claim | `HCL_IAM_TENANT_CLAIM` |
+| Test users | Must be provisioned in the target IdP. |
+| Test tenants | Must map to local tenant records/memberships. |
+
+Backend authorization is mandatory. The frontend hides unauthorized pages, but the backend is the enforcement point.
+
+## 13. Multi-Tenancy
+
+Tenant-owned records use `tenant_id` where applicable. The backend binds a `CurrentContext` to requests and applies tenant-scoped access rules through SQLAlchemy session behavior and route-level permission checks.
+
+Important behavior:
+
+| Area | Behavior |
+| --- | --- |
+| Tenant context | Derived from authenticated identity and optional `X-Tenant-ID`. |
+| Tenant switch | Supported by frontend context where tenant membership allows it. |
+| Platform admin | Intended for global administration and cross-tenant operations. |
+| Tenant admin | Operates within tenant policy boundaries. In current permissions, tenant admin is broad; production policy should review exact grants. |
+| Dev tenant | Used only when dev auth mode is enabled. |
+
+## 14. RBAC
+
+Defined roles:
+
+| Role | Intended use |
+| --- | --- |
+| PLATFORM_ADMIN | Platform-wide administration. |
+| TENANT_ADMIN | Tenant administration. |
+| SECURITY_ANALYST | Security analysis, lifecycle, VEX, remediation, dashboard, schedules, and analysis workflows. |
+| DEVELOPER | Development-team read and limited remediation workflows. |
+| VIEWER | Read-only access. |
+
+Major permission groups:
+
+| Permission area | Examples |
+| --- | --- |
+| SBOM | Read, upload, update, delete, export. |
+| Project | Read, create, update, delete. |
+| Component | Read and update. |
+| Lifecycle | Read, override, provider read/update/test/sync, vendor record read/write/delete. |
+| VEX | Read and write. |
+| Remediation | Read, write, close. |
+| Dashboard | Read. |
+| Analysis | Read and run. |
+| Schedule | Read and write. |
+| Tenant | User and settings administration. |
+| Platform | Platform administration. |
+
+## 15. Environment Variables
+
+Start from `.env.example` and keep local secrets out of git.
+
+### Database
+
+| Variable | Required | Description |
+| --- | --- | --- |
+| `DATABASE_URL` | Yes for PostgreSQL | SQLAlchemy database URL. Example: `postgresql+psycopg://sbom:sbom@localhost:55439/sbom_analyser`. |
+| `ALLOW_SQLITE` | Optional | Set to `true` only for explicit SQLite test/dev fallback. |
+| `DB_POOL_SIZE` | Optional | PostgreSQL pool size. |
+| `DB_MAX_OVERFLOW` | Optional | Additional PostgreSQL overflow connections. |
+| `DB_POOL_TIMEOUT` | Optional | Pool checkout timeout. |
+| `DB_POOL_RECYCLE` | Optional | Connection recycle seconds. |
+| `DB_POOL_PRE_PING` | Optional | Enable/disable pre-ping. |
+
+### Auth
+
+| Variable | Required | Description |
+| --- | --- | --- |
+| `AUTH_ENABLED` | Recommended | `false` for local dev; `true` for IAM-backed environments. |
+| `DEV_DEFAULT_TENANT` | Optional | Enable default dev tenant/user in local mode. |
+| `HCL_IAM_ISSUER` | IAM | Expected JWT issuer. |
+| `HCL_IAM_AUDIENCE` | IAM | Expected API audience. |
+| `HCL_IAM_JWKS_URL` | IAM | JWKS endpoint. |
+| `HCL_IAM_CLIENT_ID` | IAM | OIDC client ID. |
+| `HCL_IAM_ALLOWED_ALGORITHMS` | Optional | JWT algorithms, normally asymmetric algorithms such as `RS256`. |
+| `HCL_IAM_ROLE_CLAIM` | Optional | Claim used for role mapping. |
+| `HCL_IAM_TENANT_CLAIM` | Optional | Claim used for tenant mapping. |
+
+### Security
+
+| Variable | Required | Description |
+| --- | --- | --- |
+| `APP_SECRET_KEY` | Required for encrypted provider secrets | Application secret used by lifecycle provider secret encryption. Use a strong value outside local dev. |
+| `SETTINGS_SECRET_KEY` | Alternative | Alternative secret key accepted by the lifecycle secret service. |
+| `CORS_ORIGINS` | Recommended | Comma-separated allowed frontend origins. Restrict in production. |
+
+### Upload
+
+| Variable/setting | Current default | Description |
+| --- | --- | --- |
+| `MAX_UPLOAD_BYTES` | 50 MB | Maximum upload size constant in backend settings. Environment override should be verified before relying on it. |
+| `MAX_DECOMPRESSED_BYTES` | 200 MB | Maximum decompressed payload size constant. |
+| `MAX_DECOMPRESSION_RATIO` | 100 | Decompression bomb guard ratio constant. |
+
+### Lifecycle
+
+| Variable | Description |
+| --- | --- |
+| `OPENEOX_ENABLED` | Enables OpenEoX environment fallback provider. DB admin config can override runtime behavior. |
+| `OPENEOX_FEED_URLS` | Comma-separated OpenEoX feed URLs. |
+| `XEOL_ENABLED` | Enables local Xeol DB fallback provider. |
+| `XEOL_DB_PATH` | Local Xeol database path. |
+| `XEOL_CLI_PATH` | Optional Xeol CLI path. |
+| `LIFECYCLE_XEOL_ENABLED` | Enables Xeol API fallback provider. |
+| `LIFECYCLE_XEOL_API_URL` | Xeol API base URL. |
+| `LIFECYCLE_XEOL_API_KEY` | Xeol API key fallback; prefer encrypted provider secret in DB. |
+| `LIFECYCLE_VENDOR_RECORDS_JSON` | JSON defaults for custom vendor records. DB records are runtime source when configured. |
+| `LIFECYCLE_CACHE_TTL_KNOWN_DAYS` | TTL for known lifecycle results. |
+| `LIFECYCLE_CACHE_TTL_UNKNOWN_HOURS` | TTL for unknown results. |
+| `LIFECYCLE_CACHE_TTL_PROVIDER_FAILURE_MINUTES` | TTL for provider failure cache entries. |
+| `LIFECYCLE_CACHE_TTL_DEPRECATED_DAYS` | TTL for deprecated results. |
+| `LIFECYCLE_EOL_SOON_DAYS` | Threshold for EOL soon. |
+| `LIFECYCLE_EOS_SOON_DAYS` | Threshold for EOS soon. |
+
+### Vulnerability Providers
+
+| Variable | Description |
+| --- | --- |
+| `NVD_API_KEY` | Optional NVD API key for higher request limits. |
+| `GITHUB_TOKEN` | Optional GitHub token for GitHub/repository-related provider behavior. |
+| `VULNDB_API_KEY` | Optional VulnDB key if that source is configured. |
+| `ANALYSIS_SOURCES` | Comma-separated analysis providers in `.env.example`. |
+
+OSV and deps.dev provider settings are primarily code/config driven in the current repository. Add explicit environment variables only when provider code supports them.
+
+### AI Providers
+
+AI support is optional/configurable. Variables present in `.env.example` include:
+
+| Variable | Description |
+| --- | --- |
+| `AI_FIXES_ENABLED` | Enable AI fix workflows. |
+| `AI_FIXES_UI_CONFIG_ENABLED` | Enable UI configuration for AI fixes. |
+| `OPENAI_API_KEY` | OpenAI API key. |
+| `ANTHROPIC_API_KEY` | Anthropic API key. |
+| `GEMINI_API_KEY` | Gemini API key. |
+| `GROK_API_KEY` | Grok API key. |
+| `SARVAM_API_KEY` | Sarvam API key. |
+
+`OLLAMA_BASE_URL` and `VLLM_BASE_URL` are not present in the inspected `.env.example`; add them only if the corresponding provider code/config is introduced.
+
+## 16. Local Setup
+
+macOS/Linux:
 
 ```bash
-export API_AUTH_MODE=bearer
-export API_AUTH_TOKENS=tok-strong-random-1,tok-strong-random-2
-python3 run.py
+cd /path/to/sbom
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -U pip
+pip install -r requirements.txt
+
+export DATABASE_URL="postgresql+psycopg://sbom:sbom@localhost:55439/sbom_analyser"
+export APP_SECRET_KEY="dev-secret-change-this"
+export AUTH_ENABLED=false
+
+python -m alembic upgrade head
+python run.py
 ```
 
-The server will refuse to start if `API_AUTH_MODE=bearer` is set but
-`API_AUTH_TOKENS` is empty.
-
-Multiple tokens in `API_AUTH_TOKENS` (comma-separated) lets you rotate
-per-client without downtime: add a new one, redeploy clients, then
-remove the old one.
-
----
-
-## AI Fix Configuration
-
-See [AI fix tooling](#ai-fix-tooling) in the commands reference for script invocations.
-
-The platform can generate AI-assisted remediation guidance for findings.
-This is **opt-in** and supports seven providers — Anthropic, OpenAI, Google
-Gemini (free tier), xAI Grok (free tier), Sarvam AI, Ollama (self-hosted),
-vLLM (self-hosted) — plus any custom OpenAI-compatible endpoint.
-
-There are two ways to configure providers:
-
-- **Settings → AI page** (`/settings/ai`) — add/edit providers at runtime,
-  stored **encrypted in the DB**, no restart needed. Recommended for production.
-- **Environment variables** (`.env`) — seed a provider at boot. Good for local dev.
-
-### 1. Generate the credential encryption key (required for DB-stored providers)
-
-Any provider credential saved through the Settings UI is encrypted at rest with
-`AI_CONFIG_ENCRYPTION_KEY`. Generate one once and store it like any other
-production secret — **losing it makes every saved provider credential
-unrecoverable**.
+Frontend:
 
 ```bash
-# macOS / Linux
-python scripts/generate_encryption_key.py                 # prints the key
-python scripts/generate_encryption_key.py --append-to-env # writes it into .env
+cd frontend
+npm install
+npm run dev
 ```
+
+Default local URLs:
+
+| Service | URL |
+| --- | --- |
+| Backend | `http://localhost:8000` |
+| Frontend | `http://localhost:3000` |
+| Health | `http://localhost:8000/health` |
+
+## 17. Windows Setup
+
+PowerShell backend setup:
 
 ```powershell
-# Windows (PowerShell) — after activating the venv
-python scripts\generate_encryption_key.py
-python scripts\generate_encryption_key.py --append-to-env
+cd C:\sbom
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -U pip
+pip install -r requirements.txt
+
+$env:DATABASE_URL="postgresql+psycopg://sbom:sbom@localhost:5432/sbom_analyser"
+$env:APP_SECRET_KEY="dev-secret-change-this"
+$env:AUTH_ENABLED="false"
+
+python -m alembic upgrade head
+python run.py
 ```
 
-### 2. Configure providers via `.env`
-
-The AI provider keys live at the bottom of `.env.example`. Set at least one and
-point `AI_DEFAULT_PROVIDER` at an enabled provider:
-
-```bash
-AI_FIXES_ENABLED=true
-AI_FIXES_UI_CONFIG_ENABLED=true       # exposes the Settings → AI page
-AI_DEFAULT_PROVIDER=anthropic
-AI_CONFIG_ENCRYPTION_KEY=<from step 1>
-
-ANTHROPIC_API_KEY=     # AI_ANTHROPIC_MODEL=claude-sonnet-4-5
-OPENAI_API_KEY=        # AI_OPENAI_MODEL=gpt-4o-mini
-GEMINI_API_KEY=        # AI_GEMINI_MODEL=gemini-2.5-flash   (free tier)
-GROK_API_KEY=          # AI_GROK_MODEL=grok-2-mini          (free tier)
-SARVAM_API_KEY=        # AI_SARVAM_MODEL=sarvam-m  AI_SARVAM_BASE_URL=https://api.sarvam.ai/v1
-# Ollama / vLLM / custom — add via the Settings → AI page (base URL + model)
-```
-
-Get API keys: Anthropic `console.anthropic.com/settings/keys` ·
-OpenAI `platform.openai.com/api-keys` · Gemini `aistudio.google.com/app/apikey` ·
-Grok `console.x.ai` · Sarvam `dashboard.sarvam.ai`. Full provider matrix and
-pricing: [`docs/ai-providers.md`](./docs/ai-providers.md). Admin walkthrough:
-[`docs/features/ai-configuration.md`](./docs/features/ai-configuration.md).
-
-### 3. Migrate `.env` providers into the encrypted DB store (optional)
-
-If you started with env-var keys and want them managed through the UI:
-
-```bash
-python scripts/migrate_env_to_db.py --dry-run   # preview, no writes
-python scripts/migrate_env_to_db.py             # actually migrate (idempotent)
-```
-
-### 4. Verify and smoke-test
-
-```bash
-# Confirm every AI rollout gate behaves as specified
-python scripts/verify_ai_rollout.py --pretty
-
-# Run the orchestrator against real provider output (needs a live key)
-python scripts/ai_fix_smoke.py                  # uses the default provider
-python scripts/ai_fix_smoke.py --provider openai
-```
-
----
-
-## Background Analysis (Celery)
-
-Default dev runs scans **synchronously** inside the API process — no broker
-needed. See [Background analysis (Celery + Redis)](#background-analysis-celery--redis) in the commands reference.
-
-```bash
-# .env
-REDIS_URL=redis://localhost:6379/0
-CELERY_BROKER_URL=redis://localhost:6379/0
-```
-
-```bash
-# macOS / Linux — one process per command, in separate terminals
-./scripts/celery_worker.sh
-./scripts/celery_beat.sh        # beat must run as a SINGLE instance
-```
+PowerShell frontend setup:
 
 ```powershell
-# Windows (PowerShell) — equivalent invocations
-celery -A app.workers.celery_app worker --loglevel=info
-celery -A app.workers.celery_app beat --loglevel=info
+cd C:\sbom\frontend
+npm install
+npm run dev
 ```
 
----
+If you use Docker PostgreSQL on Windows and Docker maps PostgreSQL to `55439`, use that port in `DATABASE_URL` instead of `5432`.
 
-## Database Migrations (Alembic)
+## 18. PostgreSQL Setup
 
-PostgreSQL 16 is the development and production database. SQLite remains
-supported for isolated tests and emergency rollback. PostgreSQL schema changes
-must be applied by Alembic before the API starts; the API deliberately does not
-create or alter PostgreSQL tables during startup.
+### Local PostgreSQL
 
-Full command list: [Database migrations (Alembic)](#database-migrations-alembic) and [SQLite → PostgreSQL migration](#sqlite--postgresql-migration).
+Use this URL when PostgreSQL listens on the default host port:
 
-### Start PostgreSQL locally
+```bash
+export DATABASE_URL="postgresql+psycopg://sbom:sbom@localhost:5432/sbom_analyser"
+```
 
-Docker maps container port `5432` to host port `55439` by default so the stack does not
-conflict with a system PostgreSQL instance already bound to `5432`.
+Create database/user:
+
+```sql
+CREATE USER sbom WITH PASSWORD 'sbom';
+CREATE DATABASE sbom_analyser OWNER sbom;
+GRANT ALL PRIVILEGES ON DATABASE sbom_analyser TO sbom;
+```
+
+### Docker PostgreSQL
+
+The repository `docker-compose.yml` defines a PostgreSQL 16 service and maps the container port to host port `${POSTGRES_PORT:-55439}`.
 
 ```bash
 docker compose up -d postgres
 docker compose ps
 ```
 
-Configure `.env`:
+If Docker maps PostgreSQL to host port `55439`, use:
 
-```env
-DATABASE_URL=postgresql+psycopg://sbom:sbom@localhost:55439/sbom_analyser
+```bash
+export DATABASE_URL="postgresql+psycopg://sbom:sbom@localhost:55439/sbom_analyser"
 ```
 
-Create or upgrade the schema, verify, then run the API:
+Always use the mapped host port shown by `docker compose ps`; do not assume it is always `5432`.
 
-> [!WARNING]
-> Do not use global `alembic`; use `python -m alembic` from the project virtual environment (after activating it).
+## 19. Database Migrations
+
+Alembic is used for schema migrations.
+
+Always run Alembic through the project Python environment:
 
 ```bash
 source .venv/bin/activate
+which python
+python -m alembic current
 python -m alembic heads
 python -m alembic upgrade head
+```
+
+The latest inspected migration is:
+
+```text
+035_widen_audit_log_fields
+```
+
+Migration `034_lifecycle_provider_admin` adds:
+
+| Table | Purpose |
+| --- | --- |
+| `lifecycle_provider_configs` | DB-backed lifecycle provider settings. |
+| `lifecycle_provider_secrets` | Encrypted provider secrets and masked previews. |
+| `lifecycle_vendor_records` | Custom vendor lifecycle records. |
+
+Migration `035_widen_audit_log_fields` widens audit log fields so namespaced actions such as `lifecycle.provider_config.update` are stored without truncation.
+
+Common migration rule:
+
+If `DATABASE_URL` is missing, the app fails unless `ALLOW_SQLITE=true` is explicitly set. PostgreSQL is the normal development database.
+
+## 20. Frontend Setup
+
+Create `frontend/.env.local` from `frontend/.env.local.example`.
+
+Local dev:
+
+```bash
+NEXT_PUBLIC_API_URL=http://localhost:8000
+NEXT_PUBLIC_AUTH_ENABLED=false
+```
+
+HCL IAM mode:
+
+```bash
+NEXT_PUBLIC_AUTH_ENABLED=true
+NEXT_PUBLIC_HCL_IAM_CLIENT_ID=
+NEXT_PUBLIC_HCL_IAM_AUTHORIZATION_URL=
+NEXT_PUBLIC_HCL_IAM_TOKEN_URL=
+NEXT_PUBLIC_HCL_IAM_LOGOUT_URL=
+NEXT_PUBLIC_HCL_IAM_REDIRECT_URI=http://localhost:3000/auth/callback
+NEXT_PUBLIC_HCL_IAM_POST_LOGOUT_REDIRECT_URI=http://localhost:3000
+NEXT_PUBLIC_HCL_IAM_SCOPE="openid profile email"
+```
+
+Install and run:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Build and type-check:
+
+```bash
+cd frontend
+npx tsc --noEmit
+npm run build
+```
+
+## 21. Running Tests
+
+Use the virtual environment explicitly:
+
+```bash
+cd /path/to/sbom
+source .venv/bin/activate
+which python
+python -c "import sys; print(sys.executable)"
+```
+
+Backend:
+
+```bash
+python -m ruff check .
+python -m pytest -q
+python -m pytest -q tests -k "lifecycle"
+python -m pytest -q tests/test_lifecycle_provider_admin.py
+```
+
+Frontend:
+
+```bash
+cd frontend
+npx tsc --noEmit
+npm test
+npm run build
+```
+
+Current verified targeted backend status:
+
+```text
+tests/test_lifecycle_provider_admin.py: passed
+tests -k "lifecycle and provider": passed
+```
+
+The full backend test suite should be run before release. This README does not claim the full backend suite is currently green.
+
+## 22. API Overview
+
+Major API groups present in the repository:
+
+| API | Purpose |
+| --- | --- |
+| `/health` | Health check. |
+| `/api/sboms` | SBOM CRUD, upload, raw/download, analysis entry points, components. |
+| `/api/sboms/{id}/components` | SBOM component listing. |
+| `/api/sboms/{id}/lifecycle` | Lifecycle-related SBOM/component views where routed. |
+| `/api/components/{component_id}/lifecycle/refresh` | Refresh lifecycle for a component. |
+| `/api/lifecycle/sources` | Safe lifecycle provider source list. |
+| `/api/lifecycle/provider-status` | Provider health/status view. |
+| `/api/admin/lifecycle-providers` | Admin provider configuration. |
+| `/api/admin/lifecycle-vendor-records` | Admin custom vendor records. |
+| `/api/projects` | Project management. |
+| `/api/runs` | Analysis run management. |
+| `/api/dashboard` | Dashboard data. |
+| `/api/v1/compare` | SBOM comparison API. |
+| `/api/vex` and SBOM-scoped VEX paths | VEX workflows. |
+| `/api/remediation` | Remediation workflows. |
+| `/api/tenants` | Tenant/user administration. |
+| `/api/auth/me` | Current authenticated user/context. |
+| `/api/ai/copilot` and `/api/v1/ai` | AI copilot, AI usage, credentials, and AI fix workflows when enabled. |
+| `/api/schedules` | Scheduled analysis workflows. |
+| `/api/sbom-validation-sessions` | Validation repair session workflows. |
+
+Use the generated OpenAPI schema from the running FastAPI app for exact request/response shapes.
+
+## 23. Large SBOM Handling
+
+Large SBOM behavior includes:
+
+| Area | Behavior |
+| --- | --- |
+| Upload size | Guarded by backend upload size limits. |
+| Decompression | Protected by maximum decompressed size and decompression ratio checks. |
+| Raw view | UI may show a preview rather than the entire raw SBOM. |
+| Raw download | Use raw/download endpoints to inspect the preserved original when available. |
+| Components | Component lists are paginated. |
+| Validation | Large files may use asynchronous or session-oriented validation behavior depending on size/path. |
+
+If the UI shows only 10 lines or 10 items, it may be preview or pagination. Check raw download, SBOM stats, and total component counts before assuming the upload failed.
+
+## 24. Troubleshooting
+
+### DATABASE_URL missing
+
+Error:
+
+```text
+DATABASE_URL is not configured and fallback to SQLite is not explicitly allowed
+```
+
+Fix:
+
+```bash
+export DATABASE_URL="postgresql+psycopg://sbom:sbom@localhost:55439/sbom_analyser"
+```
+
+Only use SQLite fallback intentionally:
+
+```bash
+export ALLOW_SQLITE=true
+```
+
+### Wrong PostgreSQL port
+
+Docker may expose PostgreSQL on `55439` instead of `5432`.
+
+Fix:
+
+```bash
+docker compose ps
+export DATABASE_URL="postgresql+psycopg://sbom:sbom@localhost:<mapped-port>/sbom_analyser"
+```
+
+### PostgreSQL password failed
+
+Check username, password, database, and port:
+
+```bash
+psql "postgresql://sbom:sbom@localhost:55439/sbom_analyser"
+```
+
+### Alembic migration ambiguous parameter
+
+Migration `034_lifecycle_provider_admin` seeds lifecycle provider defaults. The migration should use SQLAlchemy Core upsert behavior rather than fragile raw SQL so PostgreSQL/psycopg can type parameters correctly.
+
+Run:
+
+```bash
+python -m alembic heads
 python -m alembic current
-python -m alembic check
-python scripts/check_database.py
-export AUTH_ENABLED=false
-python3 run.py
+python -m alembic upgrade head
 ```
 
-### Migrate an existing SQLite database
+### Audit log StringDataRightTruncation
 
-See [SQLite → PostgreSQL migration](#sqlite--postgresql-migration) for the full command sequence. Summary:
+Lifecycle provider admin writes namespaced audit actions such as `lifecycle.provider_config.update`. Migration `035_widen_audit_log_fields` widens audit log string columns. Run migrations if these writes fail.
+
+### Lifecycle duplicate cache UniqueViolation
+
+Lifecycle cache writes must use idempotent upsert behavior. If duplicate cache keys fail during refresh, inspect lifecycle cache upsert logic and database uniqueness constraints.
+
+### Large SBOM shows only 10 lines/items
+
+This is often pagination or preview behavior. Verify:
+
+```text
+raw download
+component total count
+pagination controls
+validation session status
+backend logs
+```
+
+### HCL IAM not working
+
+Check:
+
+| Item | What to verify |
+| --- | --- |
+| Issuer | Token `iss` exactly matches `HCL_IAM_ISSUER`. |
+| Audience | Token `aud` includes `HCL_IAM_AUDIENCE`. |
+| JWKS URL | Backend can fetch keys over HTTPS. |
+| Client ID | Frontend and backend agree on client ID. |
+| Redirect URI | Registered in IAM and matches frontend env. |
+| Role claim | Claim maps to local role names. |
+| Tenant claim | Claim maps to tenant membership. |
+| CORS | Frontend origin is allowed. |
+| Expiry | Token is not expired and clocks are sane. |
+
+### QueuePool exhaustion
+
+QueuePool exhaustion usually means too many concurrent database requests or sessions held too long.
+
+Suggested checks:
+
+| Check | Why |
+| --- | --- |
+| `DB_POOL_SIZE` / `DB_MAX_OVERFLOW` | Ensure capacity fits local workload. |
+| Session lifecycle | Make sure sessions close after request work. |
+| Dashboard load | Dashboard endpoints can fan out across several queries. |
+| External calls | Avoid holding DB sessions while waiting on slow providers. |
+
+## 25. Security Notes
+
+| Rule | Reason |
+| --- | --- |
+| Do not commit `.env` files. | They contain secrets and environment-specific values. |
+| Do not commit API keys or provider tokens. | Provider secrets must be stored encrypted/masked. |
+| Use a strong `APP_SECRET_KEY` in production. | Required for encrypted provider secrets. |
+| Restrict `CORS_ORIGINS` in production. | Avoid exposing API access to unintended origins. |
+| Use HTTPS for IAM and JWKS URLs. | Protect identity and token validation. |
+| Do not use `AUTH_ENABLED=false` in production. | Dev auth bypasses real identity checks. |
+| Do not expose provider secrets in logs/API/UI. | Only masked previews should be shown. |
+| Enforce tenant isolation in backend code. | UI hiding is not security. |
+| Enforce RBAC in backend routes/services. | Every sensitive action must have backend permission checks. |
+
+## 26. Developer Workflow
+
+Recommended workflow:
 
 ```bash
-mkdir -p backups
-sqlite3 ./sbom_api.db ".backup './backups/sbom_api-pre-postgres.db'"
-shasum -a 256 ./sbom_api.db ./backups/sbom_api-pre-postgres.db
+git checkout -b codex/your-change-name
+source .venv/bin/activate
+python -m ruff check .
+python -m pytest -q tests/test_lifecycle_provider_admin.py
+python -m alembic upgrade head
+
+cd frontend
+npx tsc --noEmit
+npm run build
 ```
 
-The PostgreSQL schema must already be at Alembic head. First perform a read-only
-preflight:
+Before submitting a PR:
 
-```bash
-python scripts/migrate_sqlite_to_postgres.py \
-  --sqlite-url sqlite:///./sbom_api.db \
-  --postgres-url postgresql+psycopg://sbom:sbom@localhost:55439/sbom_analyser \
-  --dry-run
-```
+| Requirement | Rule |
+| --- | --- |
+| Code style | Run `python -m ruff check .`. |
+| Tests | Run targeted tests for your area and the broader suite when practical. |
+| Migrations | Add a new Alembic revision for schema changes; do not silently mutate already-applied production migrations. |
+| Secrets | Never log, return, or commit raw secrets. |
+| Tenancy | Do not bypass tenant checks. |
+| Providers | Do not call slow external providers without timeout/cache behavior. |
+| Upload path | Avoid blocking SBOM upload on slow external provider calls where practical. |
+| Docs | Update README/docs when setup, APIs, migrations, or behavior changes. |
 
-Copy all application tables in one PostgreSQL transaction:
+## 27. Known Limitations
 
-```bash
-python scripts/migrate_sqlite_to_postgres.py \
-  --sqlite-url sqlite:///./sbom_api.db \
-  --postgres-url postgresql+psycopg://sbom:sbom@localhost:55439/sbom_analyser
-```
+| Limitation | Notes |
+| --- | --- |
+| Production readiness | Not claimed from current repo state without full test pass, real IAM verification, and deployment hardening. |
+| HCL IAM | Code exists, but real IdP behavior must be verified in the target HCL IAM tenant. |
+| Full backend suite | Targeted lifecycle/provider tests are verified; full backend suite should be run before release. |
+| Official vendor lifecycle data | Some vendor provider behavior may depend on static mappings or provider-specific implementation depth. Verify before relying on a given vendor. |
+| Xeol CLI/sync | Local DB/API paths are configurable; scheduled or CLI sync behavior should be verified per deployment. |
+| SPDX 3.0 | Support is deferred/not fully supported by current validation behavior. |
+| Upload limits | Upload/decompression limits are code-defined and should be reviewed before large production imports. |
 
-Verify row counts, complete primary-key digests, raw SBOM hashes, foreign keys,
-constraints, and relationships:
+## 28. Roadmap
 
-```bash
-python scripts/migrate_sqlite_to_postgres.py \
-  --sqlite-url sqlite:///./sbom_api.db \
-  --postgres-url postgresql+psycopg://sbom:sbom@localhost:55439/sbom_analyser \
-  --verify-only
-```
+Short-term roadmap:
 
-The target must be empty by default. Clearing a disposable or pre-backed-up
-target requires both explicit flags:
+| Item | Goal |
+| --- | --- |
+| Real HCL IAM staging verification | Validate OIDC/JWKS/claims/tenant mapping with real IdP users. |
+| Full test suite stabilization | Keep backend and frontend suites green together. |
+| Scheduled lifecycle provider sync | Expand background sync for feed and local DB providers. |
+| Expanded official vendor APIs | Improve vendor-specific authoritative lifecycle coverage. |
+| Better large SBOM viewer | Improve raw preview, pagination, and navigation for very large files. |
+| Production deployment hardening | Secrets, TLS, monitoring, migrations, backup, and operational runbooks. |
 
-```bash
-python scripts/migrate_sqlite_to_postgres.py \
-  --sqlite-url sqlite:///./sbom_api.db \
-  --postgres-url postgresql+psycopg://sbom:sbom@localhost:55439/sbom_analyser \
-  --truncate-target --confirm-truncate
-```
+## 29. Contributing
 
-After verification and API smoke tests, create a PostgreSQL backup before
-opening traffic:
+Contributions should keep the platform secure, tenant-aware, and testable.
 
-```bash
-pg_dump --format=custom \
-  --file=./backups/sbom_analyser-post-migration.dump \
-  postgresql://sbom:sbom@localhost:55439/sbom_analyser
-```
+Guidelines:
 
-### Rollback
-
-- Never remove or overwrite the original SQLite database during migration.
-- If copy or verification fails, keep `DATABASE_URL` pointed at SQLite.
-- If pre-traffic API smoke tests fail, stop the API and restore the SQLite URL.
-- Do not permit application writes on PostgreSQL until all smoke tests pass;
-  this avoids split-brain reconciliation during rollback.
-- If a populated PostgreSQL target was cleared, restore its pre-migration
-  `pg_dump` before investigating.
-- Retain both the SQLite backup and the post-migration PostgreSQL dump for the
-  agreed operational retention period.
-
----
-
-## API Overview
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/` | API service metadata |
-| GET | `/health` | Health check |
-| GET | `/dashboard/stats` | Project / SBOM / vulnerability counts |
-| GET | `/dashboard/recent-sboms` | Recently uploaded SBOMs |
-| GET | `/dashboard/activity` | Active vs stale SBOM chart data |
-| GET | `/dashboard/severity` | Vulnerability severity breakdown |
-
-> Every row below requires a valid bearer token when `AUTH_ENABLED=true` (HCL IAM)
-> or when `API_AUTH_MODE=bearer`. See the **Authentication** section above.
-| GET/POST | `/api/projects` | List / create projects |
-| GET/PATCH/DELETE | `/api/projects/{id}` | Get / update / delete project |
-| GET/POST | `/api/sboms` | List / upload SBOMs; upload also persists extracted components |
-| GET/PATCH/DELETE | `/api/sboms/{id}` | Get / update / delete SBOM |
-| GET | `/api/sboms/{id}/components` | List components extracted from an SBOM |
-| POST | `/api/sboms/{id}/analyze` | Trigger or re-run multi-source analysis |
-| GET | `/api/runs` | List analysis runs |
-| GET | `/api/runs/{id}/findings` | List vulnerability findings for a run |
-| POST | `/analyze-sbom-nvd` | NVD-only ad-hoc scan |
-| POST | `/analyze-sbom-github` | GitHub Advisory ad-hoc scan |
-| POST | `/analyze-sbom-osv` | OSV ad-hoc scan |
-| POST | `/analyze-sbom-vulndb` | VulDB / VulnDB ad-hoc scan |
-| POST | `/analyze-sbom-consolidated` | Combined NVD + GHSA + OSV + VulDB scan |
-| POST | `/api/pdf-report` | Generate PDF for a completed run |
-
-Full interactive docs: **http://localhost:8000/docs**
-
----
-
-## Environment Variables
-
-### Backend (`.env`)
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `NVD_API_KEY` | *(none)* | NIST NVD API key (faster rate limit) |
-| `GITHUB_TOKEN` | *(none)* | GitHub token for GHSA queries |
-| `VULNDB_API_KEY` | *(none)* | VulDB API key for VulDB / VulnDB queries |
-| `VULNDB_API_BASE_URL` | `https://vuldb.com/?api` | VulDB API endpoint |
-| `VULNDB_LIMIT` | `5` | Max VulDB results returned per component query |
-| `VULNDB_DETAILS` | `false` | Request detailed VulDB results; consumes more VulDB credits |
-| `ANALYSIS_SOURCES` | `NVD,OSV,GITHUB,VULNDB` | Sources to use |
-| `CORS_ORIGINS` | `*` runtime fallback | Comma-separated allowed origins |
-| `AUTH_ENABLED` | `false` | `true` = HCL IAM JWT validation; `false` = synthetic dev admin context |
-| `DEV_DEFAULT_TENANT` | `true` | Seed default tenant in dev when `AUTH_ENABLED=false` |
-| `HCL_IAM_ISSUER` | *(none)* | OIDC issuer URL (required when `AUTH_ENABLED=true`) |
-| `HCL_IAM_AUDIENCE` | *(none)* | Expected JWT `aud` claim |
-| `HCL_IAM_JWKS_URL` | *(none)* | JWKS endpoint for JWT signature verification |
-| `HCL_IAM_CLIENT_ID` | *(none)* | OIDC client id (audience alignment) |
-| `HCL_IAM_ALLOWED_ALGORITHMS` | `RS256` | Comma-separated JWT algorithms |
-| `HCL_IAM_ROLE_CLAIM` | `roles` | JWT claim holding role list |
-| `HCL_IAM_TENANT_CLAIM` | `tenant_id` | JWT claim holding external tenant id |
-| `API_AUTH_MODE` | `none` | Legacy gate: `none`, `bearer`, or `jwt` — use `none` with HCL IAM |
-| `API_AUTH_TOKENS` | *(none)* | Comma-separated bearer allowlist (legacy `bearer` mode only) |
-| `JWT_SECRET_KEY` | *(none)* | HS256 secret (legacy `jwt` mode only) |
-| `DATABASE_URL` | *(required for PostgreSQL)* | SQLAlchemy URL; use `postgresql+psycopg://…` outside isolated SQLite tests |
-| `DB_POOL_SIZE` | `20` | PostgreSQL persistent connection-pool size |
-| `DB_MAX_OVERFLOW` | `20` | PostgreSQL overflow connections |
-| `DB_POOL_TIMEOUT` | `30` | Seconds to wait for a PostgreSQL pool connection |
-| `DB_POOL_RECYCLE` | `1800` | Seconds before a PostgreSQL pooled connection is recycled |
-| `DB_POOL_PRE_PING` | `true` | Ping connections before checkout |
-| `POSTGRES_PORT` | `55439` | Host port for `docker compose` PostgreSQL |
-| `HOST` | `0.0.0.0` | Server host |
-| `PORT` | `8000` | Server port |
-| `RELOAD` | `false` | Auto-reload when using `run.py` |
-| `REDIS_URL` / `CELERY_BROKER_URL` | *(none)* | Redis broker for Celery background analysis (optional) |
-| `LOG_LEVEL` / `LOG_FORMAT` | `INFO` / `text` | Log verbosity and format (`text` or `json`) |
-
-### AI fixes (`.env`)
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `AI_FIXES_ENABLED` | `true` | Master switch for AI fix generation |
-| `AI_FIXES_UI_CONFIG_ENABLED` | `true` | Exposes the Settings → AI provider config page |
-| `AI_CONFIG_ENCRYPTION_KEY` | *(none)* | AES-256 key encrypting DB-stored provider credentials — see **AI Fix Configuration** |
-| `AI_DEFAULT_PROVIDER` | `anthropic` | Provider used for every AI fix request; must name an enabled provider |
-| `ANTHROPIC_API_KEY` / `AI_ANTHROPIC_MODEL` | *(none)* / `claude-sonnet-4-5` | Anthropic credentials + model |
-| `OPENAI_API_KEY` / `AI_OPENAI_MODEL` | *(none)* / `gpt-4o-mini` | OpenAI credentials + model |
-| `GEMINI_API_KEY` / `AI_GEMINI_MODEL` | *(none)* / `gemini-2.5-flash` | Google Gemini credentials + model (free tier) |
-| `GROK_API_KEY` / `AI_GROK_MODEL` | *(none)* / `grok-2-mini` | xAI Grok credentials + model (free tier) |
-| `SARVAM_API_KEY` / `AI_SARVAM_MODEL` / `AI_SARVAM_BASE_URL` | *(none)* / `sarvam-m` / `https://api.sarvam.ai/v1` | Sarvam AI (OpenAI-compatible) |
-
-### Frontend (`frontend/.env.local`)
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | Backend base URL used by Next.js rewrites |
-| `NEXT_PUBLIC_AUTH_ENABLED` | `false` | `true` = OIDC login via HCL IAM |
-| `NEXT_PUBLIC_HCL_IAM_ISSUER` | *(none)* | OIDC issuer (required when auth enabled) |
-| `NEXT_PUBLIC_HCL_IAM_CLIENT_ID` | *(none)* | OIDC client id |
-| `NEXT_PUBLIC_HCL_IAM_REDIRECT_URI` | `http://localhost:3000/auth/callback` | OAuth redirect URI |
-| `NEXT_PUBLIC_HCL_IAM_POST_LOGOUT_URI` | `http://localhost:3000` | Post-logout redirect |
-| `NEXT_PUBLIC_HCL_IAM_AUTHORIZATION_URL` | *(issuer-derived)* | Optional explicit authorize endpoint |
-| `NEXT_PUBLIC_HCL_IAM_TOKEN_URL` | *(issuer-derived)* | Optional explicit token endpoint |
-| `NEXT_PUBLIC_HCL_IAM_LOGOUT_URL` | *(issuer-derived)* | Optional explicit logout endpoint |
-
----
-
-## Supported SBOM Formats
-
-- **CycloneDX** (JSON and XML)
-- **SPDX** (JSON)
-- **SPDX XML** is parsed on a best-effort basis where supported by the backend parser
+| Area | Expectation |
+| --- | --- |
+| Style | Follow existing FastAPI, service, schema, model, and frontend conventions. |
+| Tests | Add focused tests for new behavior and regressions. |
+| Migrations | Use Alembic for schema changes and keep migrations idempotent where practical. |
+| Secrets | Never store raw secrets in config tables, logs, responses, or tests. |
+| RBAC | Add and enforce permissions for new privileged actions. |
+| Tenancy | Ensure tenant-owned data is scoped. |
+| Providers | Use cache, timeout, and fallback behavior for external integrations. |
+| Documentation | Update README or docs when developer workflow changes. |

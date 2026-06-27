@@ -53,6 +53,14 @@ import type {
   GetSbomComponentsOptions,
   SbomDocumentStats,
   SbomRawChunk,
+  LifecycleProviderConfig,
+  LifecycleProviderUpdatePayload,
+  LifecycleProviderSecretResult,
+  LifecycleProviderTestResult,
+  LifecycleProviderSyncResult,
+  LifecycleVendorRecord,
+  LifecycleVendorRecordPayload,
+  LifecycleVendorRecordListResponse,
 } from '@/types';
 
 // Direct calls to FastAPI — no Next.js proxy (proxy caused ECONNRESET on
@@ -1951,4 +1959,129 @@ export function upsertRemediation(projectId: number, payload: any, signal?: Abor
     body: JSON.stringify(payload),
     signal,
   });
+}
+
+// ─── Lifecycle provider admin ────────────────────────────────────────────────
+
+export function listLifecycleProviders(signal?: AbortSignal): Promise<LifecycleProviderConfig[]> {
+  return request<LifecycleProviderConfig[]>('/api/admin/lifecycle-providers', { signal });
+}
+
+export function updateLifecycleProvider(
+  providerKey: string,
+  body: LifecycleProviderUpdatePayload,
+  signal?: AbortSignal,
+): Promise<LifecycleProviderConfig> {
+  return request<LifecycleProviderConfig>(`/api/admin/lifecycle-providers/${encodeURIComponent(providerKey)}`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+    signal,
+  });
+}
+
+export function setLifecycleProviderSecret(
+  providerKey: string,
+  body: { secret_name: string; secret_value: string },
+  signal?: AbortSignal,
+): Promise<LifecycleProviderSecretResult> {
+  return request<LifecycleProviderSecretResult>(
+    `/api/admin/lifecycle-providers/${encodeURIComponent(providerKey)}/secret`,
+    {
+      method: 'PUT',
+      body: JSON.stringify(body),
+      signal,
+    },
+  );
+}
+
+export function deleteLifecycleProviderSecret(
+  providerKey: string,
+  secretName: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  return requestVoid(
+    `/api/admin/lifecycle-providers/${encodeURIComponent(providerKey)}/secret/${encodeURIComponent(secretName)}`,
+    { method: 'DELETE', signal },
+  );
+}
+
+export function testLifecycleProvider(
+  providerKey: string,
+  signal?: AbortSignal,
+): Promise<LifecycleProviderTestResult> {
+  return request<LifecycleProviderTestResult>(
+    `/api/admin/lifecycle-providers/${encodeURIComponent(providerKey)}/test`,
+    { method: 'POST', signal },
+    65_000,
+  );
+}
+
+export function syncLifecycleProvider(
+  providerKey: string,
+  signal?: AbortSignal,
+): Promise<LifecycleProviderSyncResult> {
+  return request<LifecycleProviderSyncResult>(
+    `/api/admin/lifecycle-providers/${encodeURIComponent(providerKey)}/sync`,
+    { method: 'POST', signal },
+    65_000,
+  );
+}
+
+export function listLifecycleVendorRecords(
+  args: { search?: string; status?: string; ecosystem?: string; limit?: number; offset?: number } = {},
+  signal?: AbortSignal,
+): Promise<LifecycleVendorRecordListResponse> {
+  const params = new URLSearchParams();
+  if (args.search) params.set('search', args.search);
+  if (args.status) params.set('status', args.status);
+  if (args.ecosystem) params.set('ecosystem', args.ecosystem);
+  if (args.limit) params.set('limit', String(args.limit));
+  if (args.offset) params.set('offset', String(args.offset));
+  const query = params.toString();
+  return request<LifecycleVendorRecordListResponse>(
+    `/api/admin/lifecycle-vendor-records${query ? `?${query}` : ''}`,
+    { signal },
+  );
+}
+
+export function createLifecycleVendorRecord(
+  body: LifecycleVendorRecordPayload,
+  signal?: AbortSignal,
+): Promise<LifecycleVendorRecord> {
+  return request<LifecycleVendorRecord>('/api/admin/lifecycle-vendor-records', {
+    method: 'POST',
+    body: JSON.stringify(body),
+    signal,
+  });
+}
+
+export function updateLifecycleVendorRecord(
+  id: number,
+  body: LifecycleVendorRecordPayload,
+  signal?: AbortSignal,
+): Promise<LifecycleVendorRecord> {
+  return request<LifecycleVendorRecord>(`/api/admin/lifecycle-vendor-records/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+    signal,
+  });
+}
+
+export function deleteLifecycleVendorRecord(id: number, signal?: AbortSignal): Promise<void> {
+  return requestVoid(`/api/admin/lifecycle-vendor-records/${id}`, { method: 'DELETE', signal });
+}
+
+export function importLifecycleVendorRecords(
+  records: LifecycleVendorRecordPayload[],
+  signal?: AbortSignal,
+): Promise<{ created: number; errors: string[] }> {
+  return request<{ created: number; errors: string[] }>('/api/admin/lifecycle-vendor-records/import', {
+    method: 'POST',
+    body: JSON.stringify({ records }),
+    signal,
+  });
+}
+
+export function exportLifecycleVendorRecords(signal?: AbortSignal): Promise<{ records: LifecycleVendorRecordPayload[] }> {
+  return request<{ records: LifecycleVendorRecordPayload[] }>('/api/admin/lifecycle-vendor-records/export', { signal });
 }

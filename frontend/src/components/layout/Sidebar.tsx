@@ -24,10 +24,12 @@ import { SidebarStatus } from './SidebarStatus';
 import { TenantSwitcher } from './TenantSwitcher';
 import { usePinned, unpin } from '@/lib/pinned';
 import { getRecentSboms, getRuns } from '@/lib/api';
+import { useAuth } from '@/hooks/useAuth';
 
 interface SubNavItem {
   href: string;
   label: string;
+  permission?: string;
 }
 
 interface NavItem {
@@ -36,6 +38,7 @@ interface NavItem {
   icon: LucideIcon;
   /** Optional nested children — renders an expandable accordion. */
   children?: SubNavItem[];
+  permission?: string;
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -61,6 +64,8 @@ const NAV_ITEMS: NavItem[] = [
       { href: '/settings/ai', label: 'AI configuration' },
       { href: '/settings/tenant', label: 'Tenant users' },
       { href: '/admin/ai-usage', label: 'AI usage' },
+      { href: '/admin/lifecycle-providers', label: 'Lifecycle providers', permission: 'lifecycle:provider:read' },
+      { href: '/admin/lifecycle-vendor-records', label: 'Vendor records', permission: 'lifecycle:vendor-record:read' },
     ],
   },
 ];
@@ -74,7 +79,7 @@ function isActiveItem(item: NavItem, pathname: string): boolean {
   // Settings is the parent for both /settings/* and the AI cost dashboard
   // /admin/ai-usage — both are operator-side configuration surfaces.
   if (item.href === '/settings') {
-    return pathname.startsWith('/settings') || pathname.startsWith('/admin/ai-usage');
+    return pathname.startsWith('/settings') || pathname.startsWith('/admin/');
   }
   return pathname.startsWith(item.href);
 }
@@ -82,6 +87,13 @@ function isActiveItem(item: NavItem, pathname: string): boolean {
 export function Sidebar() {
   const pathname = usePathname();
   const { collapsed, toggleCollapsed, mobileOpen, closeMobile } = useSidebar();
+  const { hasPermission } = useAuth();
+  const navItems = NAV_ITEMS
+    .filter((item) => !item.permission || hasPermission(item.permission))
+    .map((item) => ({
+      ...item,
+      children: item.children?.filter((child) => !child.permission || hasPermission(child.permission)),
+    }));
 
   // Auto-close drawer on navigation (mobile only).
   useEffect(() => {
@@ -154,7 +166,7 @@ export function Sidebar() {
         {/* Scrollable middle: nav + pinned + recent */}
         <div className="flex-1 overflow-y-auto">
           <nav className="space-y-2 px-2 py-3" aria-label="Main">
-            {NAV_ITEMS.map((item) => (
+            {navItems.map((item) => (
               <NavLink
                 key={`${item.href}-${item.label}`}
                 item={item}

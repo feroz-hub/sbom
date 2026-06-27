@@ -60,7 +60,6 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-
 revision = "017_analysis_finding_confidence_and_strategy"
 down_revision = "016_analysis_finding_match_reason"
 branch_labels = None

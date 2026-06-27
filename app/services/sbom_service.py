@@ -19,6 +19,94 @@ from ..schemas import SBOMComponentListItem, SBOMComponentListResponse
 
 log = logging.getLogger(__name__)
 
+COMPONENT_EXTRACTION_PENDING = "pending"
+COMPONENT_EXTRACTION_COMPLETED = "completed"
+COMPONENT_EXTRACTION_SKIPPED = "skipped"
+COMPONENT_EXTRACTION_FAILED = "failed"
+
+UNSUPPORTED_SBOM_FORMAT_REASON = "Unsupported SBOM format: expected CycloneDX or SPDX"
+MISSING_SBOM_CONTENT_REASON = "SBOM content is missing; re-upload or repair the SBOM before extracting components."
+UNPARSEABLE_SBOM_CONTENT_REASON = "SBOM content is not parseable as supported CycloneDX or SPDX."
+
+
+class ComponentExtractionSkipped(ValueError):
+    """Raised when component extraction is intentionally skipped for known-bad input."""
+
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
+
+
+def _mark_component_extraction(
+    db: Session,
+    sbom_obj: SBOMSource,
+    status: str,
+    *,
+    error: str | None = None,
+    completed: bool = False,
+) -> None:
+    now = now_iso()
+    sbom_obj.component_extraction_status = status
+    sbom_obj.component_extraction_error = error
+    sbom_obj.component_extraction_attempted_at = now
+    if completed:
+        sbom_obj.component_extraction_completed_at = now
+    elif status != COMPONENT_EXTRACTION_COMPLETED:
+        sbom_obj.component_extraction_completed_at = None
+    db.add(sbom_obj)
+    db.flush()
+
+
+def _known_unsupported_extraction_error(exc: Exception) -> str | None:
+    message = str(exc)
+    if isinstance(exc, ComponentExtractionSkipped):
+        return exc.reason
+    if isinstance(exc, json.JSONDecodeError):
+        return UNPARSEABLE_SBOM_CONTENT_REASON
+    if isinstance(exc, ValueError) and "Unsupported SBOM format" in message:
+        return UNSUPPORTED_SBOM_FORMAT_REASON
+    return None
+
+
+def detect_supported_component_extraction_format(sbom_data: Any) -> tuple[str | None, str | None, str | None]:
+    """Return (format, spec_version, skip_reason) for startup-safe extraction checks."""
+    if not sbom_data:
+        return None, None, MISSING_SBOM_CONTENT_REASON
+
+    if isinstance(sbom_data, dict):
+        try:
+            fmt, version = detect_sbom_format(sbom_data)
+            return fmt, version, None
+        except ValueError:
+            return None, None, UNSUPPORTED_SBOM_FORMAT_REASON
+
+    text = sbom_data.strip() if isinstance(sbom_data, str) else ""
+    if not text:
+        return None, None, MISSING_SBOM_CONTENT_REASON
+
+    if text.startswith("{") or text.startswith("["):
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError:
+            return None, None, UNPARSEABLE_SBOM_CONTENT_REASON
+        if not isinstance(parsed, dict):
+            return None, None, UNSUPPORTED_SBOM_FORMAT_REASON
+        try:
+            fmt, version = detect_sbom_format(parsed)
+            return fmt, version, None
+        except ValueError:
+            return None, None, UNSUPPORTED_SBOM_FORMAT_REASON
+
+    if text.startswith("<"):
+        lower = text[:4096].lower()
+        if "cyclonedx" in lower or "<bom" in lower:
+            return "cyclonedx", None, None
+        if "spdx" in lower:
+            return "spdx", None, None
+        return None, None, UNSUPPORTED_SBOM_FORMAT_REASON
+
+    return None, None, UNPARSEABLE_SBOM_CONTENT_REASON
+
 
 # ============================================================
 # Utility Functions
@@ -110,42 +198,68 @@ def sync_sbom_components(db: Session, sbom_obj: SBOMSource) -> list[dict]:
     Returns:
         List of extracted canonical component dictionaries
     """
-    if not sbom_obj.sbom_data:
-        return []
+    _mark_component_extraction(db, sbom_obj, COMPONENT_EXTRACTION_PENDING)
 
-    components = extract_components(sbom_obj.sbom_data)
+    fmt, _spec_version, skip_reason = detect_supported_component_extraction_format(sbom_obj.sbom_data)
+    if skip_reason is not None:
+        _mark_component_extraction(db, sbom_obj, COMPONENT_EXTRACTION_SKIPPED, error=skip_reason)
+        raise ComponentExtractionSkipped(skip_reason)
 
-    # Parse dependencies from raw SBOM JSON
+    if fmt not in {"cyclonedx", "spdx"}:
+        _mark_component_extraction(
+            db,
+            sbom_obj,
+            COMPONENT_EXTRACTION_SKIPPED,
+            error=UNSUPPORTED_SBOM_FORMAT_REASON,
+        )
+        raise ComponentExtractionSkipped(UNSUPPORTED_SBOM_FORMAT_REASON)
+
     try:
-        if isinstance(sbom_obj.sbom_data, str):
-            sbom_dict = json.loads(sbom_obj.sbom_data)
-        elif isinstance(sbom_obj.sbom_data, dict):
-            sbom_dict = sbom_obj.sbom_data
-        else:
+        components = extract_components(sbom_obj.sbom_data)
+    except Exception as exc:
+        skip_reason = _known_unsupported_extraction_error(exc)
+        if skip_reason is not None:
+            _mark_component_extraction(db, sbom_obj, COMPONENT_EXTRACTION_SKIPPED, error=skip_reason)
+            raise ComponentExtractionSkipped(skip_reason) from exc
+        _mark_component_extraction(db, sbom_obj, COMPONENT_EXTRACTION_FAILED, error=str(exc)[:1000])
+        raise
+
+    try:
+        # Parse dependencies from raw SBOM JSON
+        try:
+            if isinstance(sbom_obj.sbom_data, str):
+                sbom_dict = json.loads(sbom_obj.sbom_data)
+            elif isinstance(sbom_obj.sbom_data, dict):
+                sbom_dict = sbom_obj.sbom_data
+            else:
+                sbom_dict = {}
+        except Exception:
             sbom_dict = {}
-    except Exception:
-        sbom_dict = {}
 
-    dependencies = []
-    if isinstance(sbom_dict, dict):
-        if sbom_dict.get("bomFormat") == "CycloneDX":
-            dependencies = sbom_dict.get("dependencies") or []
-        elif sbom_dict.get("spdxVersion") or sbom_dict.get("SPDXID"):
-            dependencies = sbom_dict.get("relationships") or []
+        dependencies = []
+        if isinstance(sbom_dict, dict):
+            if sbom_dict.get("bomFormat") == "CycloneDX":
+                dependencies = sbom_dict.get("dependencies") or []
+            elif sbom_dict.get("spdxVersion") or sbom_dict.get("SPDXID"):
+                dependencies = sbom_dict.get("relationships") or []
 
-    from .component_deduplication_service import ComponentDeduplicationService
+        from .component_deduplication_service import ComponentDeduplicationService
 
-    canonical_components, duplicate_components, _, dedupe_report, _ = (
-        ComponentDeduplicationService.deduplicate_components(components, dependencies)
-    )
+        canonical_components, duplicate_components, _, dedupe_report, _ = (
+            ComponentDeduplicationService.deduplicate_components(components, dependencies)
+        )
 
-    # Save dedupe report to SBOMSource
-    sbom_obj.dedupe_report_json = dedupe_report
-    db.add(sbom_obj)
-    db.flush()
+        # Save dedupe report to SBOMSource
+        sbom_obj.dedupe_report_json = dedupe_report
+        db.add(sbom_obj)
+        db.flush()
 
-    _upsert_components(db, sbom_obj, canonical_components, duplicate_components)
-    return canonical_components
+        _upsert_components(db, sbom_obj, canonical_components, duplicate_components)
+        _mark_component_extraction(db, sbom_obj, COMPONENT_EXTRACTION_COMPLETED, completed=True)
+        return canonical_components
+    except Exception as exc:
+        _mark_component_extraction(db, sbom_obj, COMPONENT_EXTRACTION_FAILED, error=str(exc)[:1000])
+        raise
 
 
 def _upsert_components(

@@ -43,7 +43,7 @@ log = get_logger("api")
 from datetime import UTC, datetime
 
 from . import error_handlers
-from .auth import require_auth, validate_auth_setup
+from .auth import validate_auth_setup
 from .core.security import enforce_request_access
 from .db import Base, SessionLocal, engine
 from .http_client import close_async_http_client, init_async_http_client
@@ -64,6 +64,7 @@ from .routers import (
     dashboard_main,
     health,
     lifecycle,
+    lifecycle_admin,
     pdf,
     projects,
     remediation,
@@ -312,6 +313,10 @@ def _ensure_seed_data() -> None:
     _ensure_column("sbom_source", "change_summary", "TEXT")
     _ensure_column("sbom_source", "completeness_score", "FLOAT", "100.0")
     _ensure_column("sbom_source", "completeness_report", "TEXT")
+    _ensure_column("sbom_source", "component_extraction_status", "TEXT")
+    _ensure_column("sbom_source", "component_extraction_error", "TEXT")
+    _ensure_column("sbom_source", "component_extraction_attempted_at", "TEXT")
+    _ensure_column("sbom_source", "component_extraction_completed_at", "TEXT")
 
     _ensure_column("sbom_component", "license", "TEXT")
     _ensure_column("sbom_component", "hashes", "TEXT")
@@ -442,6 +447,10 @@ def _ensure_seed_data() -> None:
             db.commit()
 
         backfill_analytics_tables(db)
+        from .services.lifecycle.provider_config_service import LifecycleProviderConfigService
+
+        LifecycleProviderConfigService().bootstrap_defaults(db)
+        db.commit()
     finally:
         db.close()
 
@@ -766,6 +775,7 @@ app.include_router(ai_usage.router, dependencies=_protected)
 app.include_router(ai_fixes.router, dependencies=_protected)
 app.include_router(ai_credentials.router, dependencies=_protected)
 app.include_router(lifecycle.router, dependencies=_protected)
+app.include_router(lifecycle_admin.router, dependencies=_protected)
 app.include_router(vex.router, dependencies=_protected)
 app.include_router(remediation.router, dependencies=_protected)
 app.include_router(tenants.router, dependencies=_protected)

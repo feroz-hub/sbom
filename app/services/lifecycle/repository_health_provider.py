@@ -16,7 +16,15 @@ import httpx
 
 from .provider_base import LifecycleProvider
 from .provider_chain import PRIORITY_REPO_HEALTH
-from .types import LOW, MEDIUM, POSSIBLY_UNMAINTAINED, UNKNOWN, LifecycleResult, NormalizedComponent, unknown_result
+from .types import (
+    LOW,
+    MEDIUM,
+    UNKNOWN,
+    UNSUPPORTED,
+    LifecycleResult,
+    NormalizedComponent,
+    unknown_result,
+)
 
 STALE_ACTIVITY_DAYS = 730
 
@@ -106,8 +114,8 @@ class RepositoryHealthProvider(LifecycleProvider):
                 ecosystem=component.ecosystem,
                 purl=component.purl,
                 cpe=component.cpe,
-                lifecycle_status=POSSIBLY_UNMAINTAINED,
-                unsupported=False,
+                lifecycle_status=UNSUPPORTED,
+                unsupported=True,
                 maintenance_status="Repository archived or disabled",
                 source_name="GitHub Repository",
                 source_url=repo_url,
@@ -185,8 +193,8 @@ class RepositoryHealthProvider(LifecycleProvider):
                 ecosystem=component.ecosystem,
                 purl=component.purl,
                 cpe=component.cpe,
-                lifecycle_status=POSSIBLY_UNMAINTAINED,
-                unsupported=False,
+                lifecycle_status=UNSUPPORTED,
+                unsupported=True,
                 maintenance_status="Repository archived",
                 source_name="GitLab Repository",
                 source_url=repo_url,

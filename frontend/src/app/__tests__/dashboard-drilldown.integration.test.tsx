@@ -18,6 +18,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ToastProvider } from '@/hooks/useToast';
+import { AuthProvider } from '@/hooks/useAuth';
 import { ThemeProvider } from '@/components/theme/ThemeProvider';
 import type { AnalysisRun } from '@/types';
 
@@ -28,17 +29,13 @@ vi.mock('next/navigation', () => ({
   usePathname: () => '/',
 }));
 
-const getDashboardPosture = vi.fn();
-const getDashboardTrend = vi.fn();
-const getDashboardLifetime = vi.fn();
+const getDashboardSummary = vi.fn();
 const getRuns = vi.fn();
 vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api');
   return {
     ...actual,
-    getDashboardPosture: (...a: unknown[]) => getDashboardPosture(...a),
-    getDashboardTrend: (...a: unknown[]) => getDashboardTrend(...a),
-    getDashboardLifetime: (...a: unknown[]) => getDashboardLifetime(...a),
+    getDashboardSummary: (...a: unknown[]) => getDashboardSummary(...a),
     getRuns: (...a: unknown[]) => getRuns(...a),
   };
 });
@@ -117,30 +114,30 @@ function wrap(children: ReactNode) {
   });
   return (
     <QueryClientProvider client={qc}>
-      <ThemeProvider>
-        <ToastProvider>{children}</ToastProvider>
-      </ThemeProvider>
+      <AuthProvider>
+        <ThemeProvider>
+          <ToastProvider>{children}</ToastProvider>
+        </ThemeProvider>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }
 
 beforeEach(() => {
   push.mockReset();
-  getDashboardPosture.mockReset();
-  getDashboardTrend.mockReset();
-  getDashboardLifetime.mockReset();
+  getDashboardSummary.mockReset();
   getRuns.mockReset();
-  getDashboardPosture.mockResolvedValue({
-    severity: { critical: 42, high: 0, medium: 0, low: 0, unknown: 0 },
-    kev_count: 0,
-    fix_available_count: 0,
-    last_successful_run_at: '2026-05-01T10:02:00Z',
-    total_sboms: 3,
-    total_active_projects: 1,
-    headline_state: 'criticals_no_kev',
+  getDashboardSummary.mockResolvedValue({
+    posture: {
+      severity: { critical: 42, high: 0, medium: 0, low: 0, unknown: 0 },
+      kev_count: 0,
+      fix_available_count: 0,
+      last_successful_run_at: '2026-05-01T10:02:00Z',
+      total_sboms: 3,
+      total_active_projects: 1,
+      headline_state: 'criticals_no_kev',
+    },
   });
-  getDashboardTrend.mockResolvedValue({ days: 30, series: [], points: [] });
-  getDashboardLifetime.mockResolvedValue({});
   getRuns.mockResolvedValue([RUN]);
 });
 
@@ -164,14 +161,16 @@ describe('dashboard hero — Critical drill-down', () => {
 
   it('does not make non-resolvable severities clickable (no dead buttons)', async () => {
     // Portfolio reports highs, but no FINDINGS run carries any → not clickable.
-    getDashboardPosture.mockResolvedValue({
-      severity: { critical: 42, high: 9, medium: 0, low: 0, unknown: 0 },
-      kev_count: 0,
-      fix_available_count: 0,
-      last_successful_run_at: '2026-05-01T10:02:00Z',
-      total_sboms: 3,
-      total_active_projects: 1,
-      headline_state: 'criticals_no_kev',
+    getDashboardSummary.mockResolvedValue({
+      posture: {
+        severity: { critical: 42, high: 9, medium: 0, low: 0, unknown: 0 },
+        kev_count: 0,
+        fix_available_count: 0,
+        last_successful_run_at: '2026-05-01T10:02:00Z',
+        total_sboms: 3,
+        total_active_projects: 1,
+        headline_state: 'criticals_no_kev',
+      },
     });
     // RUN has high_count: 0 → topRunForSeverity('high') is undefined.
     render(wrap(<DashboardPage />));
@@ -199,7 +198,7 @@ describe('dashboard hero — Phase 2 gated signals (EPSS tile + needs-review chi
   };
 
   it('shows the likely-exploited tile and drills to ?epss=90 when high_epss_count is present', async () => {
-    getDashboardPosture.mockResolvedValue({ ...POSTURE_BASE, high_epss_count: 5 });
+    getDashboardSummary.mockResolvedValue({ posture: { ...POSTURE_BASE, high_epss_count: 5 } });
     render(wrap(<DashboardPage />));
 
     const epssBtn = await screen.findByRole(
@@ -212,7 +211,7 @@ describe('dashboard hero — Phase 2 gated signals (EPSS tile + needs-review chi
   });
 
   it('shows the needs-review chip and drills to ?review=1 when needs_review_count > 0', async () => {
-    getDashboardPosture.mockResolvedValue({ ...POSTURE_BASE, needs_review_count: 3 });
+    getDashboardSummary.mockResolvedValue({ posture: { ...POSTURE_BASE, needs_review_count: 3 } });
     render(wrap(<DashboardPage />));
 
     const chip = await screen.findByRole(

@@ -39,7 +39,6 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-
 revision = "019_ai_fix_cache_overall_confidence"
 down_revision = "018_source_response_cache"
 branch_labels = None

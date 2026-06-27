@@ -10,7 +10,6 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-
 revision = "028_add_sbom_product_name_description"
 down_revision = "027_vex_discovery_metadata"
 branch_labels = None

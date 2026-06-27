@@ -8,13 +8,23 @@ import json
 import logging
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..analysis import extract_components
-from ..models import AnalysisRun, SBOMAnalysisReport, SBOMComponent, SBOMSource
+from ..models import AnalysisRun, SBOMAnalysisReport, SBOMSource
 from ..settings import get_analysis_legacy_level
-from .sbom_service import _upsert_components, now_iso, resolve_component_id, safe_int
+from .sbom_service import (
+    COMPONENT_EXTRACTION_COMPLETED,
+    COMPONENT_EXTRACTION_FAILED,
+    COMPONENT_EXTRACTION_SKIPPED,
+    ComponentExtractionSkipped,
+    _upsert_components,
+    detect_supported_component_extraction_format,
+    now_iso,
+    resolve_component_id,
+    safe_int,
+    sync_sbom_components,
+)
 
 log = logging.getLogger(__name__)
 
@@ -326,6 +336,40 @@ def _safe_float(value: Any) -> float | None:
 # legacy SBOMAnalysisReport rows into the AnalysisRun table on first run.
 
 
+_TRUSTED_SBOM_STATUSES = {"validated", "accepted", "imported", "trusted"}
+_FINAL_EXTRACTION_STATUSES = {COMPONENT_EXTRACTION_COMPLETED, COMPONENT_EXTRACTION_SKIPPED}
+
+
+def _mark_startup_extraction_skipped(db: Session, sbom: SBOMSource, reason: str) -> None:
+    sbom.component_extraction_status = COMPONENT_EXTRACTION_SKIPPED
+    sbom.component_extraction_error = reason
+    sbom.component_extraction_attempted_at = now_iso()
+    sbom.component_extraction_completed_at = None
+    db.add(sbom)
+    db.flush()
+
+
+def _mark_startup_extraction_failed(db: Session, sbom: SBOMSource, reason: str) -> None:
+    sbom.component_extraction_status = COMPONENT_EXTRACTION_FAILED
+    sbom.component_extraction_error = reason[:1000]
+    sbom.component_extraction_attempted_at = now_iso()
+    sbom.component_extraction_completed_at = None
+    db.add(sbom)
+    db.flush()
+
+
+def _startup_component_extraction_needed(sbom: SBOMSource) -> bool:
+    return (sbom.component_extraction_status or "").strip().lower() not in _FINAL_EXTRACTION_STATUSES
+
+
+def _startup_skip_reason(sbom: SBOMSource) -> str | None:
+    status = (sbom.status or "").strip().lower()
+    if status not in _TRUSTED_SBOM_STATUSES:
+        return f"SBOM validation status is '{status or 'unknown'}'; repair or revalidate before extracting components."
+    _fmt, _spec_version, reason = detect_supported_component_extraction_format(sbom.sbom_data)
+    return reason
+
+
 def backfill_analytics_tables(db: Session) -> None:
     """
     Backfill the AnalysisRun table from existing SBOMSource and SBOMAnalysisReport records.
@@ -340,19 +384,32 @@ def backfill_analytics_tables(db: Session) -> None:
 
     for sbom in sboms:
         components = []
-        has_components = db.execute(
-            select(func.count(SBOMComponent.id)).where(SBOMComponent.sbom_id == sbom.id)
-        ).scalar_one()
 
-        # Extract components if not already stored
-        if sbom.sbom_data:
-            try:
-                components = extract_components(sbom.sbom_data)
-                if not has_components and components:
-                    _upsert_components(db, sbom, components)
-            except Exception as e:
-                log.warning("Component extraction failed for SBOM id=%d: %s", sbom.id, e)
-                components = []
+        if _startup_component_extraction_needed(sbom):
+            skip_reason = _startup_skip_reason(sbom)
+            if skip_reason is not None:
+                _mark_startup_extraction_skipped(db, sbom, skip_reason)
+                log.info(
+                    "Skipping component extraction for SBOM id=%d because %s; status marked skipped.",
+                    sbom.id,
+                    skip_reason,
+                )
+            else:
+                try:
+                    components = sync_sbom_components(db, sbom)
+                except ComponentExtractionSkipped as exc:
+                    log.info(
+                        "Skipping component extraction for SBOM id=%d because %s; status marked skipped.",
+                        sbom.id,
+                        exc.reason,
+                    )
+                    components = []
+                except Exception as e:
+                    _mark_startup_extraction_failed(db, sbom, str(e))
+                    log.warning("Component extraction failed for SBOM id=%d: %s", sbom.id, e)
+                    components = []
+        elif sbom.component_extraction_status == COMPONENT_EXTRACTION_SKIPPED:
+            log.debug("Component extraction already skipped for SBOM id=%d: %s", sbom.id, sbom.component_extraction_error)
 
         # Check if analysis run already exists
         has_run = db.execute(select(AnalysisRun.id).where(AnalysisRun.sbom_id == sbom.id).limit(1)).scalar_one_or_none()

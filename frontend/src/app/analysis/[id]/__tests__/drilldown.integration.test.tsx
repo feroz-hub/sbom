@@ -21,6 +21,7 @@ import { render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ToastProvider } from '@/hooks/useToast';
+import { AuthProvider } from '@/hooks/useAuth';
 import { ThemeProvider } from '@/components/theme/ThemeProvider';
 import type { AnalysisRun } from '@/types';
 
@@ -106,9 +107,11 @@ function wrap(children: ReactNode) {
   });
   return (
     <QueryClientProvider client={qc}>
-      <ThemeProvider>
-        <ToastProvider>{children}</ToastProvider>
-      </ThemeProvider>
+      <AuthProvider>
+        <ThemeProvider>
+          <ToastProvider>{children}</ToastProvider>
+        </ThemeProvider>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

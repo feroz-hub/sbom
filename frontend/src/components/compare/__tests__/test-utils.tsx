@@ -15,6 +15,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, type RenderOptions } from '@testing-library/react';
 import type { ReactElement, ReactNode } from 'react';
 import { ToastProvider } from '@/hooks/useToast';
+import { AuthProvider } from '@/hooks/useAuth';
 import { ThemeProvider } from '@/components/theme/ThemeProvider';
 import type { CompareResult } from '@/types/compare';
 
@@ -37,9 +38,11 @@ export function Providers({
   const qc = client ?? newQueryClient();
   return (
     <QueryClientProvider client={qc}>
-      <ThemeProvider>
-        <ToastProvider>{children}</ToastProvider>
-      </ThemeProvider>
+      <AuthProvider>
+        <ThemeProvider>
+          <ToastProvider>{children}</ToastProvider>
+        </ThemeProvider>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

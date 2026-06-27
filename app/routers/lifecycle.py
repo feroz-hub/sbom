@@ -15,6 +15,7 @@ from ..db import get_db
 from ..models import SBOMComponent
 from ..schemas import LifecycleInfoUpdate, SBOMComponentOut
 from ..services.lifecycle import LifecycleEnrichmentService, refresh_component_lifecycle
+from ..services.lifecycle.provider_config_service import LifecycleProviderConfigService
 from ..services.lifecycle.provider_status import get_provider_status_tracker
 
 log = logging.getLogger(__name__)
@@ -23,16 +24,59 @@ router = APIRouter(tags=["lifecycle"])
 
 
 @router.get("/api/lifecycle/sources")
-def list_lifecycle_sources():
+def list_lifecycle_sources(db: Session = Depends(get_db)):
     """Return enabled lifecycle providers, priority, and health status."""
+    config_service = LifecycleProviderConfigService()
+    try:
+        rows = config_service.list_configs(db, include_disabled=False)
+        return {
+            "sources": [
+                {
+                    "name": row.display_name,
+                    "provider_key": row.provider_key,
+                    "provider_type": row.provider_type,
+                    "priority": row.priority,
+                    "enabled": bool(row.enabled),
+                    "status": row.health_status or "unknown",
+                    "last_success": row.last_success_at,
+                    "last_failure": row.last_failure_at,
+                    "last_error": row.last_failure_message,
+                }
+                for row in rows
+            ]
+        }
+    except Exception:
+        pass
     tracker = get_provider_status_tracker()
     return {"sources": tracker.list_sources()}
 
 
 @router.get("/api/lifecycle/provider-status")
-def lifecycle_provider_status():
+def lifecycle_provider_status(db: Session = Depends(get_db)):
     """Return aggregate provider health/degraded status."""
-    return get_provider_status_tracker().provider_status_summary()
+    try:
+        rows = LifecycleProviderConfigService().list_configs(db)
+        providers = [
+            {
+                "name": row.display_name,
+                "provider_key": row.provider_key,
+                "priority": row.priority,
+                "enabled": bool(row.enabled),
+                "status": row.health_status or ("disabled" if not row.enabled else "unknown"),
+                "last_success": row.last_success_at,
+                "last_failure": row.last_failure_at,
+                "last_error": row.last_failure_message,
+            }
+            for row in rows
+        ]
+        degraded = [row for row in providers if row["status"] == "degraded"]
+        return {
+            "overall_status": "degraded" if degraded else "healthy",
+            "degraded_count": len(degraded),
+            "providers": providers,
+        }
+    except Exception:
+        return get_provider_status_tracker().provider_status_summary()
 
 
 @router.get("/api/lifecycle/component/{component_id}", response_model=SBOMComponentOut)

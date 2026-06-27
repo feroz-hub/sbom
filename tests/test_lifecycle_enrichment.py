@@ -26,7 +26,6 @@ from app.services.lifecycle.types import (
     HIGH,
     LOW,
     MEDIUM,
-    POSSIBLY_UNMAINTAINED,
     UNKNOWN,
     UNSUPPORTED,
     LifecycleResult,
@@ -282,8 +281,8 @@ def test_repository_health_provider_marks_archived_repo_unsupported():
 
     result = provider.lookup(component)
 
-    assert result.lifecycle_status == POSSIBLY_UNMAINTAINED
-    assert result.unsupported is False
+    assert result.lifecycle_status == UNSUPPORTED
+    assert result.unsupported is True
     assert result.confidence == MEDIUM
     assert result.evidence["repository_url"] == "https://github.com/example/pkg"
 

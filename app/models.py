@@ -177,6 +177,10 @@ class SBOMSource(Base, SoftDeleteMixin, TenantOwnedMixin):
     enrichment_completed_at = Column(String, nullable=True)
     conversion_error = Column(Text, nullable=True)
     enrichment_error = Column(Text, nullable=True)
+    component_extraction_status = Column(String(32), nullable=True, index=True)
+    component_extraction_error = Column(Text, nullable=True)
+    component_extraction_attempted_at = Column(String, nullable=True)
+    component_extraction_completed_at = Column(String, nullable=True)
 
     project = relationship("Projects", back_populates="sboms")
     sbom_type_rel = relationship("SBOMType", back_populates="sboms")
@@ -449,6 +453,102 @@ class ComponentLifecycleCache(Base):
             name="uq_component_lifecycle_cache_identity",
         ),
         Index("ix_component_lifecycle_cache_lookup", "ecosystem", "normalized_name", "normalized_version"),
+    )
+
+
+class LifecycleProviderConfig(Base):
+    """Global runtime configuration for lifecycle enrichment providers."""
+
+    __tablename__ = "lifecycle_provider_configs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    provider_key = Column(String(64), nullable=False, unique=True, index=True)
+    display_name = Column(String(128), nullable=False)
+    provider_type = Column(String(64), nullable=False, index=True)
+    enabled = Column(Boolean, nullable=False, default=True)
+    priority = Column(Integer, nullable=False, default=100)
+    base_url = Column(String(512), nullable=True)
+    feed_urls_json = Column(JSON, nullable=True)
+    config_json = Column(JSON, nullable=True)
+    timeout_seconds = Column(Integer, nullable=False, default=5)
+    max_retries = Column(Integer, nullable=False, default=0)
+    circuit_breaker_enabled = Column(Boolean, nullable=False, default=True)
+    cache_ttl_known_days = Column(Integer, nullable=True)
+    cache_ttl_unknown_hours = Column(Integer, nullable=True)
+    cache_ttl_failure_minutes = Column(Integer, nullable=True)
+    cache_ttl_deprecated_days = Column(Integer, nullable=True)
+    last_success_at = Column(String, nullable=True)
+    last_failure_at = Column(String, nullable=True)
+    last_failure_message = Column(Text, nullable=True)
+    health_status = Column(String(32), nullable=False, default="unknown", index=True)
+    created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=False)
+    updated_by_user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="SET NULL"), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("priority BETWEEN 1 AND 1000", name="ck_lifecycle_provider_config_priority"),
+        CheckConstraint("timeout_seconds BETWEEN 1 AND 60", name="ck_lifecycle_provider_config_timeout"),
+        CheckConstraint("max_retries BETWEEN 0 AND 10", name="ck_lifecycle_provider_config_retries"),
+        CheckConstraint(
+            "health_status IN ('healthy','degraded','disabled','unknown')",
+            name="ck_lifecycle_provider_config_health",
+        ),
+        Index("ix_lifecycle_provider_configs_enabled_priority", "enabled", "priority"),
+    )
+
+
+class LifecycleProviderSecret(Base):
+    """Encrypted provider API keys/tokens. Raw secret values never leave the server."""
+
+    __tablename__ = "lifecycle_provider_secrets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    provider_key = Column(String(64), nullable=False, index=True)
+    secret_name = Column(String(64), nullable=False)
+    encrypted_value = Column(Text, nullable=False)
+    value_preview = Column(String(64), nullable=True)
+    created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=False)
+    updated_by_user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="SET NULL"), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("provider_key", "secret_name", name="uq_lifecycle_provider_secret_provider_name"),
+        Index("ix_lifecycle_provider_secrets_provider", "provider_key"),
+    )
+
+
+class LifecycleVendorRecord(Base):
+    """UI-managed custom vendor lifecycle evidence."""
+
+    __tablename__ = "lifecycle_vendor_records"
+
+    id = Column(Integer, primary_key=True, index=True)
+    vendor_name = Column(String(128), nullable=False, index=True)
+    product_name = Column(String(255), nullable=False, index=True)
+    product_aliases_json = Column(JSON, nullable=True)
+    ecosystem = Column(String(64), nullable=True, index=True)
+    version_pattern = Column(String(128), nullable=True)
+    version_start = Column(String(64), nullable=True)
+    version_end = Column(String(64), nullable=True)
+    lifecycle_status = Column(String(64), nullable=False)
+    maintenance_status = Column(String(128), nullable=True)
+    eol_date = Column(String, nullable=True)
+    eos_date = Column(String, nullable=True)
+    eof_date = Column(String, nullable=True)
+    deprecated = Column(Boolean, nullable=False, default=False)
+    unsupported = Column(Boolean, nullable=False, default=False)
+    latest_supported_version = Column(String(128), nullable=True)
+    recommended_version = Column(String(128), nullable=True)
+    evidence_url = Column(String(512), nullable=True)
+    evidence_json = Column(JSON, nullable=True)
+    confidence = Column(String(32), nullable=False, default="High")
+    enabled = Column(Boolean, nullable=False, default=True, index=True)
+    created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=False)
+    updated_by_user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="SET NULL"), nullable=True)
+
+    __table_args__ = (
+        Index("ix_lifecycle_vendor_records_lookup", "enabled", "ecosystem", "product_name"),
     )
 
 
@@ -1127,18 +1227,18 @@ class AuditLog(Base, TenantOwnedMixin):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(String(128), nullable=True)
-    action = Column(String(48), nullable=False, index=True)
-    target_kind = Column(String(24), nullable=False, index=True)
+    action = Column(String(128), nullable=False, index=True)
+    target_kind = Column(String(128), nullable=False, index=True)
     target_id = Column(Integer, nullable=True, index=True)
-    detail = Column(String(240), nullable=True)
+    detail = Column(Text, nullable=True)
     metadata_json = Column(JSON, nullable=True)
     user_ref_id = Column(Integer, ForeignKey("iam_users.id", ondelete="SET NULL"), nullable=True, index=True)
-    entity_type = Column(String(64), nullable=True, index=True)
+    entity_type = Column(String(128), nullable=True, index=True)
     entity_id = Column(String(128), nullable=True, index=True)
     old_value = Column(JSON, nullable=True)
     new_value = Column(JSON, nullable=True)
     ip_address = Column(String(64), nullable=True)
-    user_agent = Column(String(512), nullable=True)
+    user_agent = Column(Text, nullable=True)
     created_at = Column(String, nullable=False, index=True)
 
 

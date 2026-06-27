@@ -46,7 +46,6 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.sql import expression
 
-
 revision = "014_add_soft_delete_columns"
 down_revision = "013_reclassify_unvalidated_sbom_source"
 branch_labels = None
