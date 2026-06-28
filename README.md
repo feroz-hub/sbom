@@ -570,6 +570,25 @@ python -m alembic upgrade head
 python run.py
 ```
 
+Windows local PostgreSQL setup:
+
+```powershell
+# Run these from PowerShell after PostgreSQL is installed and psql is on PATH.
+psql -U postgres -c "CREATE USER sbom WITH PASSWORD 'sbom';"
+psql -U postgres -c "CREATE DATABASE sbom_analyser OWNER sbom;"
+psql -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE sbom_analyser TO sbom;"
+
+$env:DATABASE_URL="postgresql+psycopg://sbom:sbom@localhost:5432/sbom_analyser"
+```
+
+If `psql` is not on PATH, run it from the PostgreSQL install directory, for example:
+
+```powershell
+& "C:\Program Files\PostgreSQL\16\bin\psql.exe" -U postgres -c "CREATE USER sbom WITH PASSWORD 'sbom';"
+& "C:\Program Files\PostgreSQL\16\bin\psql.exe" -U postgres -c "CREATE DATABASE sbom_analyser OWNER sbom;"
+& "C:\Program Files\PostgreSQL\16\bin\psql.exe" -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE sbom_analyser TO sbom;"
+```
+
 PowerShell frontend setup:
 
 ```powershell
@@ -590,12 +609,26 @@ Use this URL when PostgreSQL listens on the default host port:
 export DATABASE_URL="postgresql+psycopg://sbom:sbom@localhost:5432/sbom_analyser"
 ```
 
+PowerShell:
+
+```powershell
+$env:DATABASE_URL="postgresql+psycopg://sbom:sbom@localhost:5432/sbom_analyser"
+```
+
 Create database/user:
 
 ```sql
 CREATE USER sbom WITH PASSWORD 'sbom';
 CREATE DATABASE sbom_analyser OWNER sbom;
 GRANT ALL PRIVILEGES ON DATABASE sbom_analyser TO sbom;
+```
+
+Windows PowerShell with `psql`:
+
+```powershell
+psql -U postgres -c "CREATE USER sbom WITH PASSWORD 'sbom';"
+psql -U postgres -c "CREATE DATABASE sbom_analyser OWNER sbom;"
+psql -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE sbom_analyser TO sbom;"
 ```
 
 ### Docker PostgreSQL
