@@ -85,6 +85,11 @@ const CANONICAL: SBOMComponent = {
   version: '4.17.21',
   cpe: null,
   purl: 'pkg:npm/lodash@4.17.21',
+  normalized_name: 'lodash',
+  normalized_version: '4.17.21',
+  normalized_purl: 'pkg:npm/lodash@4.17.21',
+  primary_cpe: null,
+  dedupe_confidence: 'High',
   component_type: 'library',
   scope: null,
   created_on: null,
@@ -139,6 +144,23 @@ beforeEach(() => {
   getSbomDedupeReport.mockResolvedValue({
     duplicates_found: 1,
     duplicates_merged: 1,
+    summary: {
+      total_components: 2,
+      canonical_components: 1,
+      duplicate_components: 1,
+      duplicate_groups: 1,
+      normalized_purls: 1,
+    },
+    duplicate_groups: [
+      {
+        group_id: 'group-1',
+        normalized_component_key: 'purl:pkg:npm/lodash@4.17.21',
+        canonical_ref: 'ref-lodash-1',
+        duplicate_refs: ['ref-lodash-2'],
+        confidence: 'High',
+        reason: 'same_normalized_purl',
+      },
+    ],
     conflicts: [],
     ref_mapping: { 'ref-lodash-2': 'ref-lodash-1' },
     remapped_dependencies: {},
@@ -212,6 +234,20 @@ describe('SbomDetail components list', () => {
     expect(await screen.findByText('Duplicate')).toBeInTheDocument();
     expect(screen.getByText(/Duplicate of lodash 4\.17\.21/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Hide Duplicates' })).toBeInTheDocument();
+  });
+
+  it('renders normalization summary and duplicate groups', async () => {
+    getSbomComponents.mockResolvedValue(
+      listResponse([CANONICAL], { unique_count: 1, duplicate_count: 1, total_count: 1 }),
+    );
+
+    render(wrap(<SbomDetail sbom={SBOM} />));
+    fireEvent.click(screen.getByRole('button', { name: /Normalization/i }));
+
+    expect(await screen.findByText('Stage 9 component identity and duplicate evidence.')).toBeInTheDocument();
+    expect(screen.getByText('Canonical')).toBeInTheDocument();
+    expect(await screen.findByText('ref-lodash-1')).toBeInTheDocument();
+    expect(screen.getByText('same_normalized_purl')).toBeInTheDocument();
   });
 
   it('hides duplicates again when Hide Duplicates is clicked', async () => {

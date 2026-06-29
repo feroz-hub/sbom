@@ -47,6 +47,8 @@ import type {
   ValidationRepairEvent,
   ValidationRepairPatch,
   ValidationRepairSession,
+  ValidationSessionContentChunk,
+  ValidationSessionContentLines,
   ValidationSessionImportResponse,
   UploadSBOMAcceptedResponse,
   SbomComponentListResponse,
@@ -628,6 +630,17 @@ export function getSbomDedupeReport(sbomId: number, signal?: AbortSignal) {
   return request<any>(`/api/sboms/${sbomId}/dedupe-report`, { signal });
 }
 
+export function getSbomNormalizationReport(sbomId: number, signal?: AbortSignal) {
+  return request<any>(`/api/sboms/${sbomId}/normalization-report`, { signal });
+}
+
+export function normalizeDeduplicateSbom(sbomId: number, force = true, signal?: AbortSignal) {
+  return request<any>(`/api/sboms/${sbomId}/normalize-deduplicate?force=${force ? 'true' : 'false'}`, {
+    method: 'POST',
+    signal,
+  });
+}
+
 export function refreshSbomLifecycle(sbomId: number, force = true, signal?: AbortSignal) {
   return request<import('@/types').LifecycleRefreshSummary>(
     `/api/sboms/${sbomId}/lifecycle/refresh?force=${force ? 'true' : 'false'}`,
@@ -1051,6 +1064,53 @@ export function getValidationSession(sessionId: string, signal?: AbortSignal) {
   return request<ValidationRepairSession>(`/api/sbom-validation-sessions/${sessionId}`, { signal });
 }
 
+export function getValidationSessionContent(
+  sessionId: string,
+  offset = 0,
+  limit = 65_536,
+  signal?: AbortSignal,
+) {
+  const params = new URLSearchParams({ offset: String(offset), limit: String(limit) });
+  return request<ValidationSessionContentChunk>(
+    `/api/sbom-validation-sessions/${sessionId}/content?${params.toString()}`,
+    { signal },
+  );
+}
+
+export function getValidationSessionContentLines(
+  sessionId: string,
+  startLine = 1,
+  lineCount = 500,
+  signal?: AbortSignal,
+) {
+  const params = new URLSearchParams({ start_line: String(startLine), line_count: String(lineCount) });
+  return request<ValidationSessionContentLines>(
+    `/api/sbom-validation-sessions/${sessionId}/content-lines?${params.toString()}`,
+    { signal },
+  );
+}
+
+export function downloadValidationSessionOriginal(sessionId: string, signal?: AbortSignal) {
+  return downloadBinary(
+    `/api/sbom-validation-sessions/${sessionId}/download-original`,
+    `invalid-sbom-${sessionId}.txt`,
+    signal,
+  );
+}
+
+export function saveValidationSessionRepairDraft(
+  sessionId: string,
+  content: string,
+  baseVersion?: string | null,
+  signal?: AbortSignal,
+) {
+  return request<ValidationRepairSession>(`/api/sbom-validation-sessions/${sessionId}/repair-draft`, {
+    method: 'PUT',
+    body: JSON.stringify({ content, base_version: baseVersion ?? null }),
+    signal,
+  });
+}
+
 export function updateValidationSession(
   sessionId: string,
   content: string | null | { current_content?: string | null; project_id?: number | null },
@@ -1067,7 +1127,7 @@ export function updateValidationSession(
 }
 
 export function validateValidationSession(sessionId: string, signal?: AbortSignal) {
-  return request<ValidationRepairSession>(`/api/sbom-validation-sessions/${sessionId}/validate`, {
+  return request<ValidationRepairSession>(`/api/sbom-validation-sessions/${sessionId}/revalidate`, {
     method: 'POST',
     signal,
   });
@@ -1114,6 +1174,8 @@ export function getValidationSessionHistory(sessionId: string, signal?: AbortSig
 }
 
 export const getValidationRepairSession = getValidationSession;
+export const getValidationRepairContent = getValidationSessionContent;
+export const saveValidationRepairDraft = saveValidationSessionRepairDraft;
 export const updateValidationRepairSession = updateValidationSession;
 export const validateRepairSession = validateValidationSession;
 export const importRepairSession = importValidationSession;

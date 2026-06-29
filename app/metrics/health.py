@@ -53,6 +53,7 @@ def health_outdated_components_count(db: Session) -> int:
         db.execute(
             select(func.count(SBOMComponent.id))
             .where(SBOMComponent.sbom_id.in_(head_ids))
+            .where((SBOMComponent.is_duplicate.is_(False)) | (SBOMComponent.is_duplicate.is_(None)))
             .where(
                 (
                     func.lower(SBOMComponent.lifecycle_status).in_(

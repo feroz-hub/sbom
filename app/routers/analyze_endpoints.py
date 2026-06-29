@@ -126,7 +126,13 @@ async def _run_legacy_analysis(
 
     # 2. CPE augmentation + OSV enrichment so the adapters get the same
     #    component shape that the production multi-source path uses.
-    enriched = [enrich_component_for_osv(c) for c in raw_components]
+    from ..services.component_deduplication_service import ComponentDeduplicationService
+
+    canonical_components, _duplicates, _mapping, _report, _warnings = ComponentDeduplicationService.deduplicate_components(
+        raw_components,
+        [],
+    )
+    enriched = [enrich_component_for_osv(c) for c in canonical_components]
     components, _generated_cpe = _augment_components_with_cpe(enriched)
 
     # 3. Build per-request adapters. Credentials are bound at construction

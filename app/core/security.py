@@ -283,6 +283,12 @@ def permission_for_request(request: Request) -> str:
             "PUT": "project:update",
             "DELETE": "project:delete",
         }.get(method, "project:read")
+    if path.startswith("/api/sbom-validation-sessions") or path.startswith("/api/validation-sessions"):
+        if method == "GET":
+            return "sbom:repair:download" if path.endswith("/download-original") else "sbom:repair:read"
+        if path.endswith("/validate") or path.endswith("/revalidate") or path.endswith("/import"):
+            return "sbom:repair:revalidate"
+        return "sbom:repair:update"
     if path.startswith("/api/sboms"):
         if method == "GET":
             return "sbom:export" if any(part in path for part in ("/export", "/reports/")) else "sbom:read"

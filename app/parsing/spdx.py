@@ -17,12 +17,16 @@ def parse_spdx_dict(doc: dict[str, Any]) -> list[dict[str, Any]]:
     for pkg in doc.get("packages", []) or []:
         purl = None
         cpe = None
+        cpes = []
+        external_refs = pkg.get("externalRefs") or []
         for ref in pkg.get("externalRefs") or []:
             rtype = (ref.get("referenceType") or "").lower()
             if rtype == "purl":
                 purl = norm(ref.get("referenceLocator"))
             if "cpe" in rtype:
                 cpe = norm(ref.get("referenceLocator"))
+                if cpe:
+                    cpes.append(cpe)
         supplier = None
         supplier_info = pkg.get("supplier")
         if isinstance(supplier_info, str):
@@ -57,6 +61,8 @@ def parse_spdx_dict(doc: dict[str, Any]) -> list[dict[str, Any]]:
                 "scope": None,
                 "purl": purl,
                 "cpe": cpe,
+                "cpes": cpes,
+                "external_references": external_refs if isinstance(external_refs, list) else [],
                 "cpe_source": "sbom_provided" if cpe else None,
                 "bom_ref": norm(pkg.get("SPDXID")),
                 "license": license_str,
@@ -68,10 +74,14 @@ def parse_spdx_dict(doc: dict[str, Any]) -> list[dict[str, Any]]:
         if obj.get("type") == "software:package":
             purl = norm(obj.get("packageUrl") or obj.get("packageURL"))
             cpe = None
+            cpes = []
+            external_refs = obj.get("externalRefs") or obj.get("externalIdentifiers") or []
             for ref in obj.get("externalRefs") or obj.get("externalIdentifiers") or []:
                 rtype = (ref.get("referenceType") or ref.get("type") or "").lower()
                 if "cpe" in rtype:
                     cpe = norm(ref.get("referenceLocator") or ref.get("locator"))
+                    if cpe:
+                        cpes.append(cpe)
                 if rtype == "purl" and not purl:
                     purl = norm(ref.get("referenceLocator") or ref.get("locator"))
 
@@ -106,6 +116,8 @@ def parse_spdx_dict(doc: dict[str, Any]) -> list[dict[str, Any]]:
                     "scope": None,
                     "purl": purl,
                     "cpe": cpe,
+                    "cpes": cpes,
+                    "external_references": external_refs if isinstance(external_refs, list) else [],
                     "cpe_source": "sbom_provided" if cpe else None,
                     "bom_ref": norm(obj.get("id") or obj.get("spdx-id")),
                     "license": license_str,

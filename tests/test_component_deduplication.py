@@ -228,10 +228,10 @@ def test_component_list_does_not_modify_stored_sbom(client, unique_name):
     assert resp.status_code == 201
     sbom_id = resp.json()["id"]
 
-    before = client.get(f"/api/sboms/{sbom_id}").json()["sbom_data"]
+    before = client.get(f"/api/sboms/{sbom_id}?include_raw=true").json()["sbom_data"]
     list_resp = client.get(f"/api/sboms/{sbom_id}/components?include_duplicates=false")
     assert list_resp.status_code == 200
-    after = client.get(f"/api/sboms/{sbom_id}").json()["sbom_data"]
+    after = client.get(f"/api/sboms/{sbom_id}?include_raw=true").json()["sbom_data"]
     assert before == after
     stored = json.loads(after)
     assert len(stored["components"]) == 3

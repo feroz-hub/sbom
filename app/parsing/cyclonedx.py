@@ -14,6 +14,17 @@ if XMLTODICT_AVAILABLE:
 def parse_cyclonedx_dict(doc: dict[str, Any]) -> list[dict[str, Any]]:
     comps = []
     for c in doc.get("components", []) or []:
+        external_refs = c.get("externalReferences") or c.get("externalRefs") or []
+        cpes = []
+        if norm(c.get("cpe")):
+            cpes.append(norm(c.get("cpe")))
+        for ref in external_refs if isinstance(external_refs, list) else []:
+            if not isinstance(ref, dict):
+                continue
+            rtype = (ref.get("type") or ref.get("referenceType") or "").lower()
+            locator = norm(ref.get("url") or ref.get("referenceLocator"))
+            if "cpe" in rtype and locator:
+                cpes.append(locator)
         # Extract license
         licenses = c.get("licenses")
         license_str = None
@@ -80,6 +91,8 @@ def parse_cyclonedx_dict(doc: dict[str, Any]) -> list[dict[str, Any]]:
                 "scope": norm(c.get("scope")),
                 "purl": norm(c.get("purl")),
                 "cpe": norm(c.get("cpe")),
+                "cpes": cpes,
+                "external_references": external_refs if isinstance(external_refs, list) else [],
                 "cpe_source": "sbom_provided" if norm(c.get("cpe")) else None,
                 "bom_ref": norm(c.get("bom-ref") or c.get("bomRef")),
                 "license": norm(license_str),
@@ -169,6 +182,8 @@ def parse_cyclonedx_xml(xml_string: str) -> list[dict[str, Any]]:
                     "scope": norm(c.get("@scope")),
                     "purl": purl,
                     "cpe": cpe,
+                    "cpes": [cpe] if cpe else [],
+                    "external_references": ref_list if isinstance(ref_list, list) else [],
                     "cpe_source": "sbom_provided" if cpe else None,
                     "bom_ref": norm(c.get("@bom-ref")),
                     "license": norm(license_str),
@@ -236,6 +251,8 @@ def parse_cyclonedx_xml(xml_string: str) -> list[dict[str, Any]]:
                 "scope": norm(comp.get("scope")),
                 "purl": norm(purl_el.text if purl_el is not None else None),
                 "cpe": norm(cpe_el.text if cpe_el is not None else None),
+                "cpes": [norm(cpe_el.text)] if cpe_el is not None and norm(cpe_el.text) else [],
+                "external_references": [],
                 "cpe_source": "sbom_provided" if cpe_el is not None and norm(cpe_el.text) else None,
                 "bom_ref": norm(comp.get("bom-ref")),
                 "license": norm(license_str),

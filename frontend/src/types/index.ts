@@ -11,7 +11,15 @@ export interface Project {
 }
 
 export type SbomValidationStatus = 'validated' | 'failed' | 'quarantined' | 'pending';
-export type ValidationRepairStatus = 'failed' | 'edited' | 'passed' | 'security_blocked' | 'imported';
+export type ValidationRepairStatus =
+  | 'failed'
+  | 'edited'
+  | 'repair_draft'
+  | 'passed'
+  | 'repaired_valid'
+  | 'security_blocked'
+  | 'imported'
+  | 'abandoned';
 
 export interface SBOMSource {
   id: number;
@@ -123,6 +131,10 @@ export interface SbomValidationFailureDetail {
   message: string;
   sbom_id: number | null;
   session_id?: string | null;
+  validation_session_id?: string | null;
+  repair_workspace_url?: string | null;
+  file_size_bytes?: number | null;
+  sha256?: string | null;
   can_edit?: boolean;
   can_ai_fix?: boolean;
   reason?: string | null;
@@ -154,9 +166,19 @@ export interface ValidationRepairSession {
   sbom_type: number | null;
   detected_format: string | null;
   detected_version: string | null;
+  content_type?: string | null;
+  file_size_bytes?: number | null;
+  sha256?: string | null;
+  original_size_bytes?: number | null;
+  original_sha256?: string | null;
+  stored_size_bytes?: number | null;
+  stored_sha256?: string | null;
+  total_lines?: number | null;
   current_content: string;
+  content_inline_truncated?: boolean;
   validation_status: ValidationRepairStatus;
   latest_error_report: ValidationRepairReport;
+  validation_errors?: ValidationErrorEntry[];
   can_edit: boolean;
   can_ai_fix: boolean;
   security_blocked_reason: string | null;
@@ -192,6 +214,23 @@ export interface ValidationRepairEvent {
   before_hash: string | null;
   after_hash: string | null;
   metadata: Record<string, unknown>;
+}
+
+export interface ValidationSessionContentChunk {
+  offset: number;
+  limit: number;
+  total_size: number;
+  content: string;
+  eof: boolean;
+  sha256: string;
+}
+
+export interface ValidationSessionContentLines {
+  start_line: number;
+  line_count: number;
+  total_lines: number;
+  lines: string[];
+  eof: boolean;
 }
 
 export type ValidationSession = ValidationRepairSession;
@@ -245,9 +284,27 @@ export interface SBOMComponent {
   lifecycle_evidence_json?: Record<string, unknown> | null;
   lifecycle_is_stale?: boolean | null;
   lifecycle_manual_override?: boolean | null;
+  original_name?: string | null;
+  normalized_name?: string | null;
+  original_version?: string | null;
+  normalized_version?: string | null;
+  normalized_ecosystem?: string | null;
+  original_purl?: string | null;
+  normalized_purl?: string | null;
+  primary_cpe?: string | null;
+  normalized_cpes?: string[] | null;
+  normalized_supplier?: string | null;
+  normalized_package_key?: string | null;
+  canonical_identity_confidence?: string | null;
   normalized_component_key?: string | null;
+  dedupe_canonical_id?: string | null;
+  dedupe_group_id?: string | null;
   is_duplicate?: boolean | null;
   duplicate_of_component_id?: number | null;
+  dedupe_reason?: string | null;
+  dedupe_confidence?: string | null;
+  normalization_notes_json?: string[] | null;
+  dedupe_evidence_json?: Record<string, unknown> | null;
   canonical_component_name?: string | null;
   canonical_component_version?: string | null;
   duplicate_reason?: string | null;

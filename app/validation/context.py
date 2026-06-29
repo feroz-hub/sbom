@@ -8,6 +8,7 @@ Slots become populated as the pipeline progresses:
   Stage 3 (schema)   → ``parsed_dict``
   Stage 4 (semantic) → ``internal_model`` (via stages.normalize)
   Stages 5-8 read the internal model.
+  Stage 9 (normalization) → ``normalization_report``.
 
 The dataclass is intentionally untyped-Pydantic — the ``parsed_dict`` field
 can be a deeply nested ``dict[str, Any]`` whose shape varies by SBOM spec,
@@ -48,6 +49,7 @@ class ValidationContext:
     encoding: Encoding | None = None
     parsed_dict: dict[str, Any] | None = None
     internal_model: InternalSbom | None = None
+    normalization_report: dict[str, Any] | None = None
 
     # Always-on accumulator -----------------------------------------------
     report: ErrorReport = field(default_factory=ErrorReport)

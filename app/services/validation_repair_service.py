@@ -67,8 +67,48 @@ def now_iso() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat()
 
 
+def bytes_hash(content: bytes | None) -> str:
+    return sha256(content or b"").hexdigest()
+
+
 def content_hash(content: str | None) -> str:
     return sha256((content or "").encode("utf-8", errors="replace")).hexdigest()
+
+
+def content_size(content: str | None) -> int:
+    return len((content or "").encode("utf-8", errors="replace"))
+
+
+def count_text_lines(content: str | None) -> int:
+    if not content:
+        return 0
+    return len(content.splitlines()) or 1
+
+
+def session_original_text(session: SBOMValidationSession) -> str:
+    return session.raw_content_text if session.raw_content_text is not None else (session.sanitized_content or "")
+
+
+def session_original_bytes(session: SBOMValidationSession) -> bytes:
+    if session.raw_content_blob is not None:
+        return bytes(session.raw_content_blob)
+    return session_original_text(session).encode("utf-8", errors="replace")
+
+
+def session_repair_text(session: SBOMValidationSession) -> str:
+    if session.repair_content_text is not None:
+        return session.repair_content_text
+    return session.current_content if session.current_content is not None else session_original_text(session)
+
+
+def set_session_repair_text(session: SBOMValidationSession, content: str) -> None:
+    session.repair_content_text = content
+    session.repair_content_blob = content.encode("utf-8", errors="replace")
+    session.current_content = content
+    session.content_sha256 = content_hash(content)
+    session.stored_size_bytes = content_size(content)
+    session.stored_sha256 = content_hash(content)
+    session.total_lines = count_text_lines(content)
 
 
 class ValidationRepairPatch(BaseModel):
@@ -123,6 +163,10 @@ def serialize_report(report: ErrorReport) -> dict[str, Any]:
 
 
 def session_to_dict(session: SBOMValidationSession) -> dict[str, Any]:
+    current_content = session_repair_text(session)
+    inline_content = current_content if len(current_content) <= 1024 * 1024 else ""
+    original_size = session.original_size_bytes or session.file_size_bytes or len(session_original_bytes(session))
+    original_hash = session.original_sha256 or session.sha256 or bytes_hash(session_original_bytes(session))
     return {
         "id": session.id,
         "project_id": session.project_id,
@@ -130,11 +174,24 @@ def session_to_dict(session: SBOMValidationSession) -> dict[str, Any]:
         "original_filename": session.original_filename,
         "sbom_name": session.sbom_name,
         "sbom_type": session.sbom_type,
+        "content_type": session.content_type,
+        "file_size_bytes": session.file_size_bytes or original_size,
+        "sha256": session.sha256 or original_hash,
+        "original_size_bytes": original_size,
+        "original_sha256": original_hash,
+        "stored_size_bytes": session.stored_size_bytes,
+        "stored_sha256": session.stored_sha256,
         "detected_format": session.detected_format,
         "detected_version": session.detected_version,
-        "current_content": session.current_content or "",
+        # Backward compatibility for older clients. New repair UIs should
+        # load /content chunks instead of relying on this inline field.
+        "current_content": inline_content,
+        "content_inline_truncated": inline_content != current_content,
         "validation_status": session.validation_status,
         "latest_error_report": session.latest_error_report_json or {},
+        "validation_errors": session.validation_errors_json
+        or (session.latest_error_report_json or {}).get("entries", []),
+        "total_lines": session.total_lines if session.total_lines is not None else count_text_lines(current_content),
         "can_edit": bool(session.can_edit),
         "can_ai_fix": bool(session.can_ai_fix),
         "security_blocked_reason": session.security_blocked_reason,
@@ -186,11 +243,19 @@ def build_validation_failed_detail(
         "code": "sbom_validation_failed",
         "status": "validation_failed",
         "message": (
-            f"SBOM '{sbom_name}' did not pass validation; "
-            f"{report.error_count} error(s) at stage '{report.first_error_stage}'."
+            "SBOM validation failed. Full content is available in repair workspace."
+            if session
+            else (
+                f"SBOM '{sbom_name}' did not pass validation; "
+                f"{report.error_count} error(s) at stage '{report.first_error_stage}'."
+            )
         ),
         "session_id": session.id if session else None,
+        "validation_session_id": session.id if session else None,
+        "repair_workspace_url": f"/sbom-validation-sessions/{session.id}" if session else None,
         "sbom_id": None,
+        "file_size_bytes": session.file_size_bytes if session else None,
+        "sha256": session.sha256 if session else None,
         "can_edit": bool(session and session.can_edit),
         "can_ai_fix": bool(session and session.can_ai_fix),
         "reason": blocked_reason,
@@ -204,13 +269,16 @@ def build_validation_failed_detail(
 
 
 class ValidationRepairService:
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, *, tenant_id: int | None = None):
         self.db = db
+        self.tenant_id = tenant_id
 
     def create_failed_upload_session(
         self,
         *,
         raw_text: str,
+        raw_bytes: bytes | None = None,
+        content_type: str | None = None,
         report: ErrorReport,
         sbom_name: str,
         original_filename: str | None = None,
@@ -223,6 +291,9 @@ class ValidationRepairService:
         if not safe:
             return None, reason
 
+        original_bytes = raw_bytes if raw_bytes is not None else raw_text.encode("utf-8", errors="replace")
+        original_hash = bytes_hash(original_bytes)
+        original_size = len(original_bytes)
         detected_format, detected_version = detect_format_version(raw_text)
         created = now_iso()
         session = SBOMValidationSession(
@@ -232,12 +303,26 @@ class ValidationRepairService:
             original_filename=original_filename,
             sbom_name=sbom_name.strip(),
             sbom_type=sbom_type,
+            content_type=content_type,
+            file_size_bytes=original_size,
+            sha256=original_hash,
+            original_size_bytes=original_size,
+            original_sha256=original_hash,
+            stored_size_bytes=original_size,
+            stored_sha256=original_hash,
             detected_format=detected_format,
             detected_version=detected_version,
+            raw_content_text=raw_text,
+            raw_content_blob=original_bytes,
             sanitized_content=raw_text,
             current_content=raw_text,
+            repair_content_text=raw_text,
+            repair_content_blob=raw_text.encode("utf-8", errors="replace"),
             validation_status="failed",
+            validation_errors_json=serialize_report(report)["entries"],
+            stage_results_json=serialize_report(report),
             latest_error_report_json=serialize_report(report),
+            total_lines=count_text_lines(raw_text),
             can_edit=True,
             can_ai_fix=True,
             content_sha256=content_hash(raw_text),
@@ -253,7 +338,12 @@ class ValidationRepairService:
             actor_user_id=user_id,
             summary="Validation repair session created after failed upload.",
             after_hash=session.content_sha256,
-            metadata={"error_count": report.error_count, "failed_stage": report.first_error_stage},
+            metadata={
+                "error_count": report.error_count,
+                "failed_stage": report.first_error_stage,
+                "file_size_bytes": original_size,
+                "sha256": original_hash,
+            },
         )
         self.db.commit()
         self.db.refresh(session)
@@ -261,7 +351,7 @@ class ValidationRepairService:
 
     def get_session(self, session_id: str) -> SBOMValidationSession:
         session = self.db.get(SBOMValidationSession, session_id)
-        if not session:
+        if not session or (self.tenant_id is not None and session.tenant_id != self.tenant_id):
             raise HTTPException(status_code=404, detail="Validation session not found")
         return session
 
@@ -278,12 +368,11 @@ class ValidationRepairService:
             raise HTTPException(status_code=403, detail="This validation session is not editable")
 
         summary_parts = []
-        before = content_hash(session.current_content)
+        before = content_hash(session_repair_text(session))
 
         if content is not None:
-            session.current_content = content
-            session.content_sha256 = content_hash(content)
-            session.validation_status = "edited"
+            set_session_repair_text(session, content)
+            session.validation_status = "repair_draft"
             summary_parts.append("content edited")
 
         if project_id is not None:
@@ -323,22 +412,28 @@ class ValidationRepairService:
         actor_user_id: str | None = None,
     ) -> SBOMValidationSession:
         session = self.get_session(session_id)
+        content = session_repair_text(session)
         report = run_validation(
-            (session.current_content or "").encode("utf-8"),
+            content.encode("utf-8"),
             strict_ntia=strict_ntia,
             verify_signature=verify_signature,
         )
         serialized = serialize_report(report)
         safe, reason = payload_is_safe_to_stage(report)
         session.latest_error_report_json = serialized
+        session.validation_errors_json = serialized["entries"]
+        session.stage_results_json = serialized
         session.validation_status = (
-            "passed" if not report.has_errors() else ("security_blocked" if not safe else "failed")
+            "repaired_valid" if not report.has_errors() else ("security_blocked" if not safe else "failed")
         )
         session.can_edit = bool(safe)
         session.can_ai_fix = bool(safe)
         session.security_blocked_reason = reason
         session.updated_at = now_iso()
-        session.content_sha256 = content_hash(session.current_content)
+        session.content_sha256 = content_hash(content)
+        session.stored_size_bytes = content_size(content)
+        session.stored_sha256 = content_hash(content)
+        session.total_lines = count_text_lines(content)
         self.db.add(session)
         self._record_event(
             session,
@@ -375,6 +470,7 @@ class ValidationRepairService:
         report = _report_from_serialized(session.latest_error_report_json or {})
         if (session.latest_error_report_json or {}).get("error_count", 0) != 0:
             raise HTTPException(status_code=422, detail="Cannot import until validation passes")
+        repaired_content = session_repair_text(session)
         if session.imported_sbom_id:
             existing = self.db.get(SBOMSource, session.imported_sbom_id)
             if existing:
@@ -382,7 +478,7 @@ class ValidationRepairService:
                     return existing
 
                 # Update the existing SBOMSource with repaired content
-                existing.sbom_data = session.current_content or ""
+                existing.sbom_data = repaired_content
                 existing.status = "validated"
                 existing.failed_stage = None
                 existing.validation_errors = (session.latest_error_report_json or {}).get("entries") or None
@@ -428,7 +524,7 @@ class ValidationRepairService:
 
         obj = SBOMSource(
             sbom_name=name,
-            sbom_data=session.current_content or "",
+            sbom_data=repaired_content,
             sbom_type=session.sbom_type,
             projectid=session.project_id,
             created_by=actor_user_id or session.user_id,
@@ -523,14 +619,13 @@ class ValidationRepairService:
                 p for p in _filter_ai_suggestion(AiRepairSuggestion(summary="selected", patches=typed_patches)).patches
             ]
             new_content = apply_repair_patches(
-                session.current_content or "", [p.model_dump(mode="json") for p in typed_patches]
+                session_repair_text(session), [p.model_dump(mode="json") for p in typed_patches]
             )
         except (PatchApplyError, ValueError) as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-        before = content_hash(session.current_content)
-        session.current_content = new_content
-        session.content_sha256 = content_hash(new_content)
+        before = content_hash(session_repair_text(session))
+        set_session_repair_text(session, new_content)
         session.updated_at = now_iso()
         self.db.add(session)
         self._record_event(
@@ -553,6 +648,53 @@ class ValidationRepairService:
     def history(self, session_id: str) -> list[dict[str, Any]]:
         session = self.get_session(session_id)
         return [event_to_dict(event) for event in session.events]
+
+    def content_chunk(self, session_id: str, *, offset: int = 0, limit: int = 65536) -> dict[str, Any]:
+        session = self.get_session(session_id)
+        content = session_repair_text(session)
+        safe_offset = max(0, offset)
+        safe_limit = max(1, min(limit, 1024 * 1024))
+        chunk = content[safe_offset : safe_offset + safe_limit]
+        total_size = len(content)
+        return {
+            "offset": safe_offset,
+            "limit": safe_limit,
+            "total_size": total_size,
+            "content": chunk,
+            "eof": safe_offset + len(chunk) >= total_size,
+            "sha256": content_hash(content),
+        }
+
+    def content_lines(self, session_id: str, *, start_line: int = 1, line_count: int = 500) -> dict[str, Any]:
+        session = self.get_session(session_id)
+        content = session_repair_text(session)
+        lines = content.splitlines()
+        safe_start = max(1, start_line)
+        safe_count = max(1, min(line_count, 5000))
+        selected = lines[safe_start - 1 : safe_start - 1 + safe_count]
+        return {
+            "start_line": safe_start,
+            "line_count": safe_count,
+            "total_lines": len(lines),
+            "lines": selected,
+            "eof": safe_start - 1 + len(selected) >= len(lines),
+        }
+
+    def original_download(self, session_id: str, *, actor_user_id: str | None = None) -> tuple[bytes, str, str]:
+        session = self.get_session(session_id)
+        payload = session_original_bytes(session)
+        media_type = session.content_type or "application/octet-stream"
+        filename = session.original_filename or session.sbom_name or f"invalid-sbom-{session.id}.txt"
+        self._record_event(
+            session,
+            "original_downloaded",
+            actor_user_id=actor_user_id,
+            summary="Original invalid SBOM downloaded for audit.",
+            after_hash=session.original_sha256 or session.sha256 or bytes_hash(payload),
+            metadata={"file_size_bytes": len(payload), "sha256": bytes_hash(payload)},
+        )
+        self.db.commit()
+        return payload, media_type, filename
 
     async def _call_ai_for_suggestion(
         self,
@@ -577,7 +719,7 @@ class ValidationRepairService:
                 "format": session.detected_format,
                 "version": session.detected_version,
                 "validation_report": session.latest_error_report_json,
-                "content_snippet": (session.current_content or "")[:12000],
+                "content_snippet": session_repair_text(session)[:12000],
                 "user_instruction": user_instruction or "",
                 "output_contract": {
                     "requires_user_review": True,

@@ -194,12 +194,28 @@ def _ensure_validation_repair_tables() -> None:
                         original_filename VARCHAR(255),
                         sbom_name VARCHAR(255),
                         sbom_type INTEGER REFERENCES sbom_type(id),
+                        content_type VARCHAR(255),
+                        file_size_bytes INTEGER,
+                        sha256 VARCHAR(64),
+                        original_size_bytes INTEGER,
+                        original_sha256 VARCHAR(64),
+                        stored_size_bytes INTEGER,
+                        stored_sha256 VARCHAR(64),
                         detected_format VARCHAR(64),
                         detected_version VARCHAR(64),
+                        raw_content_text TEXT,
+                        raw_content_blob BLOB,
+                        raw_storage_path VARCHAR(1024),
                         sanitized_content TEXT,
                         current_content TEXT,
+                        repair_content_text TEXT,
+                        repair_content_blob BLOB,
+                        repair_storage_path VARCHAR(1024),
                         validation_status VARCHAR(32) NOT NULL DEFAULT 'failed',
+                        validation_errors_json JSON,
+                        stage_results_json JSON,
                         latest_error_report_json JSON,
+                        total_lines INTEGER,
                         can_edit BOOLEAN NOT NULL DEFAULT 1,
                         can_ai_fix BOOLEAN NOT NULL DEFAULT 1,
                         security_blocked_reason TEXT,
@@ -212,6 +228,30 @@ def _ensure_validation_repair_tables() -> None:
                     """
                 )
             )
+        existing_columns = {
+            row[1]
+            for row in conn.execute(text("PRAGMA table_info(sbom_validation_sessions)"))
+        }
+        for column_name, column_type in (
+            ("content_type", "VARCHAR(255)"),
+            ("file_size_bytes", "INTEGER"),
+            ("sha256", "VARCHAR(64)"),
+            ("original_size_bytes", "INTEGER"),
+            ("original_sha256", "VARCHAR(64)"),
+            ("stored_size_bytes", "INTEGER"),
+            ("stored_sha256", "VARCHAR(64)"),
+            ("raw_content_text", "TEXT"),
+            ("raw_content_blob", "BLOB"),
+            ("raw_storage_path", "VARCHAR(1024)"),
+            ("repair_content_text", "TEXT"),
+            ("repair_content_blob", "BLOB"),
+            ("repair_storage_path", "VARCHAR(1024)"),
+            ("validation_errors_json", "JSON"),
+            ("stage_results_json", "JSON"),
+            ("total_lines", "INTEGER"),
+        ):
+            if column_name not in existing_columns:
+                conn.execute(text(f"ALTER TABLE sbom_validation_sessions ADD COLUMN {column_name} {column_type}"))
         if "sbom_validation_session_events" not in tables:
             conn.execute(
                 text(
@@ -235,6 +275,9 @@ def _ensure_validation_repair_tables() -> None:
             "CREATE INDEX IF NOT EXISTS ix_sbom_validation_sessions_user_id ON sbom_validation_sessions (user_id)",
             "CREATE INDEX IF NOT EXISTS ix_sbom_validation_sessions_validation_status ON sbom_validation_sessions (validation_status)",
             "CREATE INDEX IF NOT EXISTS ix_sbom_validation_sessions_content_sha256 ON sbom_validation_sessions (content_sha256)",
+            "CREATE INDEX IF NOT EXISTS ix_sbom_validation_sessions_sha256 ON sbom_validation_sessions (sha256)",
+            "CREATE INDEX IF NOT EXISTS ix_sbom_validation_sessions_original_sha256 ON sbom_validation_sessions (original_sha256)",
+            "CREATE INDEX IF NOT EXISTS ix_sbom_validation_sessions_stored_sha256 ON sbom_validation_sessions (stored_sha256)",
             "CREATE INDEX IF NOT EXISTS ix_sbom_validation_sessions_created_at ON sbom_validation_sessions (created_at)",
             "CREATE INDEX IF NOT EXISTS ix_sbom_validation_sessions_expires_at ON sbom_validation_sessions (expires_at)",
             "CREATE INDEX IF NOT EXISTS ix_sbom_validation_sessions_imported_sbom_id ON sbom_validation_sessions (imported_sbom_id)",
@@ -340,6 +383,34 @@ def _ensure_seed_data() -> None:
     _ensure_column("sbom_component", "lifecycle_evidence_json", "TEXT")
     _ensure_column("sbom_component", "lifecycle_is_stale", "BOOLEAN", "0")
     _ensure_column("sbom_component", "lifecycle_manual_override", "BOOLEAN", "0")
+    for column, type_sql, default in (
+        ("original_name", "TEXT", None),
+        ("normalized_name", "TEXT", None),
+        ("original_version", "TEXT", None),
+        ("normalized_version", "TEXT", None),
+        ("normalized_ecosystem", "TEXT", None),
+        ("original_purl", "TEXT", None),
+        ("normalized_purl", "TEXT", None),
+        ("purl_type", "TEXT", None),
+        ("purl_namespace", "TEXT", None),
+        ("purl_name", "TEXT", None),
+        ("purl_version", "TEXT", None),
+        ("purl_qualifiers_json", "TEXT", None),
+        ("purl_subpath", "TEXT", None),
+        ("normalized_cpes", "TEXT", None),
+        ("primary_cpe", "TEXT", None),
+        ("cpe_evidence_json", "TEXT", None),
+        ("normalized_supplier", "TEXT", None),
+        ("normalized_package_key", "TEXT", None),
+        ("canonical_identity_confidence", "TEXT", None),
+        ("dedupe_canonical_id", "TEXT", None),
+        ("dedupe_group_id", "TEXT", None),
+        ("dedupe_reason", "TEXT", None),
+        ("dedupe_confidence", "TEXT", None),
+        ("normalization_notes_json", "TEXT", None),
+        ("dedupe_evidence_json", "TEXT", None),
+    ):
+        _ensure_column("sbom_component", column, type_sql, default)
     _ensure_remediation_audit_table()
     _ensure_validation_repair_tables()
     for column, type_sql, default in (
@@ -761,6 +832,7 @@ app.include_router(sboms_crud.router, dependencies=_protected)
 # Path /api/sboms/upload — see ADR-0007.
 app.include_router(sbom_upload.router, dependencies=_protected)
 app.include_router(sbom_validation_sessions.router, dependencies=_protected)
+app.include_router(sbom_validation_sessions.compat_router, dependencies=_protected)
 app.include_router(runs.router, dependencies=_protected)
 app.include_router(projects.router, dependencies=_protected)
 app.include_router(analyze_endpoints.router, dependencies=_protected)

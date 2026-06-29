@@ -129,14 +129,17 @@ async def upload_sbom(
         verify_signature=bool(getattr(settings, "SBOM_SIGNATURE_VERIFICATION", False)),
     )
 
-    body_text = raw.decode("utf-8", errors="replace")
+    body_text_original = raw.decode("utf-8", errors="replace")
+    body_text = body_text_original
     if body_text.startswith("﻿"):
         body_text = body_text.lstrip("﻿")
 
     if report.has_errors():
         service = ValidationRepairService(db)
         session, blocked_reason = service.create_failed_upload_session(
-            raw_text=body_text,
+            raw_text=body_text_original,
+            raw_bytes=raw,
+            content_type=file.content_type,
             report=report,
             sbom_name=sbom_name,
             original_filename=file.filename,
@@ -144,6 +147,22 @@ async def upload_sbom(
             sbom_type=sbom_type,
             user_id=created_by,
         )
+        if session is not None:
+            audit_service.write_audit_log(
+                db,
+                context,
+                "sbom.validation_session.created",
+                entity_type="sbom_validation_session",
+                entity_id=session.id,
+                new_value={
+                    "sbom_name": sbom_name,
+                    "project_id": project_id,
+                    "file_size_bytes": session.file_size_bytes,
+                    "sha256": session.sha256,
+                    "error_count": report.error_count,
+                },
+            )
+            db.commit()
         raise HTTPException(
             status_code=report.http_status,
             detail=build_validation_failed_detail(

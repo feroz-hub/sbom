@@ -230,6 +230,25 @@ class SBOMComponentOut(ORMModel):
     scope: str | None = None
     created_on: str | None = None
     ecosystem: str | None = None
+    original_name: str | None = None
+    normalized_name: str | None = None
+    original_version: str | None = None
+    normalized_version: str | None = None
+    normalized_ecosystem: str | None = None
+    original_purl: str | None = None
+    normalized_purl: str | None = None
+    purl_type: str | None = None
+    purl_namespace: str | None = None
+    purl_name: str | None = None
+    purl_version: str | None = None
+    purl_qualifiers_json: dict[str, Any] | None = None
+    purl_subpath: str | None = None
+    normalized_cpes: list[str] | None = None
+    primary_cpe: str | None = None
+    cpe_evidence_json: dict[str, Any] | None = None
+    normalized_supplier: str | None = None
+    normalized_package_key: str | None = None
+    canonical_identity_confidence: str | None = None
     license: str | None = None
     hashes: str | None = None
     lifecycle_status: str | None = None
@@ -252,8 +271,14 @@ class SBOMComponentOut(ORMModel):
     lifecycle_is_stale: bool | None = None
     lifecycle_manual_override: bool | None = None
     normalized_component_key: str | None = None
+    dedupe_canonical_id: str | None = None
+    dedupe_group_id: str | None = None
     is_duplicate: bool | None = False
     duplicate_of_component_id: int | None = None
+    dedupe_reason: str | None = None
+    dedupe_confidence: str | None = None
+    normalization_notes_json: list[str] | None = None
+    dedupe_evidence_json: dict[str, Any] | None = None
 
 
 class SBOMComponentListItem(SBOMComponentOut):

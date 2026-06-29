@@ -307,7 +307,7 @@ def _upsert_components(
         if row.cpe:
             by_cpe.setdefault(normalized_key(row.cpe), []).append(row)
 
-    def save_comp_row(comp: dict, is_dup: bool, dup_of_id: int | None = None) -> SBOMComponent:
+    def _component_field_values(comp: dict, is_dup: bool, dup_of_id: int | None = None) -> dict[str, Any]:
         name = (comp.get("name") or "").strip()
         if not name:
             fallback = (comp.get("bom_ref") or comp.get("purl") or comp.get("cpe") or "component").strip()
@@ -316,16 +316,68 @@ def _upsert_components(
         version = (comp.get("version") or "").strip() or None
         cpe = (comp.get("cpe") or "").strip() or None
         cpe_source = (comp.get("cpe_source") or "").strip() or None
-        triplet = (normalized_key(cpe), normalized_key(name), normalized_key(version))
         ref = (comp.get("bom_ref") or "").strip() or None
+        return {
+            "bom_ref": ref,
+            "component_type": (comp.get("type") or "").strip() or None,
+            "component_group": (comp.get("group") or "").strip() or None,
+            "name": name,
+            "version": version,
+            "purl": (comp.get("purl") or "").strip() or None,
+            "cpe": cpe,
+            "cpe_source": cpe_source,
+            "supplier": (comp.get("supplier") or "").strip() or None,
+            "scope": (comp.get("scope") or "").strip() or None,
+            "license": (comp.get("license") or "").strip() or None,
+            "hashes": (comp.get("hashes") or "").strip() or None,
+            "ecosystem": (comp.get("ecosystem") or comp.get("normalized_ecosystem") or "").strip() or None,
+            "original_name": comp.get("original_name"),
+            "normalized_name": comp.get("normalized_name"),
+            "original_version": comp.get("original_version"),
+            "normalized_version": comp.get("normalized_version"),
+            "normalized_ecosystem": comp.get("normalized_ecosystem"),
+            "original_purl": comp.get("original_purl"),
+            "normalized_purl": comp.get("normalized_purl"),
+            "purl_type": comp.get("purl_type"),
+            "purl_namespace": comp.get("purl_namespace"),
+            "purl_name": comp.get("purl_name"),
+            "purl_version": comp.get("purl_version"),
+            "purl_qualifiers_json": comp.get("purl_qualifiers_json"),
+            "purl_subpath": comp.get("purl_subpath"),
+            "normalized_cpes": comp.get("normalized_cpes"),
+            "primary_cpe": comp.get("primary_cpe"),
+            "cpe_evidence_json": comp.get("cpe_evidence_json"),
+            "normalized_supplier": comp.get("normalized_supplier"),
+            "normalized_package_key": comp.get("normalized_package_key"),
+            "canonical_identity_confidence": comp.get("canonical_identity_confidence"),
+            "normalized_component_key": comp.get("normalized_component_key") or get_component_identity_key(comp),
+            "dedupe_canonical_id": comp.get("dedupe_canonical_id"),
+            "dedupe_group_id": comp.get("dedupe_group_id"),
+            "is_duplicate": is_dup,
+            "duplicate_of_component_id": dup_of_id,
+            "dedupe_reason": comp.get("dedupe_reason"),
+            "dedupe_confidence": comp.get("dedupe_confidence"),
+            "normalization_notes_json": comp.get("normalization_notes_json"),
+            "dedupe_evidence_json": comp.get("dedupe_evidence_json"),
+        }
+
+    def _apply_component_values(row: SBOMComponent, values: dict[str, Any]) -> SBOMComponent:
+        for key, value in values.items():
+            setattr(row, key, value)
+        return row
+
+    def save_comp_row(comp: dict, is_dup: bool, dup_of_id: int | None = None) -> SBOMComponent:
+        values = _component_field_values(comp, is_dup, dup_of_id)
+        name = values["name"]
+        version = values["version"]
+        cpe = values["cpe"]
+        ref = values["bom_ref"]
+        triplet = (normalized_key(cpe), normalized_key(name), normalized_key(version))
 
         # If it already exists by bom-ref, update fields in place
         if ref and ref in by_bom_ref:
             row = by_bom_ref[ref]
-            row.is_duplicate = is_dup
-            row.cpe_source = cpe_source
-            row.duplicate_of_component_id = dup_of_id
-            row.normalized_component_key = get_component_identity_key(comp)
+            _apply_component_values(row, values)
             db.add(row)
             db.flush()
             return row
@@ -338,10 +390,7 @@ def _upsert_components(
                 None,
             )
             if backfill_target is not None:
-                backfill_target.cpe = cpe
-                backfill_target.cpe_source = cpe_source
-                backfill_target.is_duplicate = False
-                backfill_target.normalized_component_key = get_component_identity_key(comp)
+                _apply_component_values(backfill_target, values)
                 db.add(backfill_target)
                 db.flush()
                 # Maintain lookup maps
@@ -353,25 +402,7 @@ def _upsert_components(
                     by_bom_ref[ref] = backfill_target
                 return backfill_target
 
-        row = SBOMComponent(
-            sbom_id=sbom_obj.id,
-            bom_ref=ref,
-            component_type=(comp.get("type") or "").strip() or None,
-            component_group=(comp.get("group") or "").strip() or None,
-            name=name,
-            version=version,
-            purl=(comp.get("purl") or "").strip() or None,
-            cpe=cpe,
-            cpe_source=cpe_source,
-            supplier=(comp.get("supplier") or "").strip() or None,
-            scope=(comp.get("scope") or "").strip() or None,
-            license=(comp.get("license") or "").strip() or None,
-            hashes=(comp.get("hashes") or "").strip() or None,
-            created_on=now_iso(),
-            is_duplicate=is_dup,
-            duplicate_of_component_id=dup_of_id,
-            normalized_component_key=get_component_identity_key(comp),
-        )
+        row = SBOMComponent(sbom_id=sbom_obj.id, created_on=now_iso(), **values)
         db.add(row)
         db.flush()
 
@@ -388,16 +419,21 @@ def _upsert_components(
 
     # Upsert canonical components first
     canonical_rows = {}
+    canonical_by_key = {}
     for comp in canonical_components:
         row = save_comp_row(comp, is_dup=False)
         ref = comp.get("bom_ref") or comp.get("SPDXID") or ""
         if ref:
             canonical_rows[ref] = row
+        if comp.get("normalized_component_key"):
+            canonical_by_key[comp["normalized_component_key"]] = row
 
     # Upsert duplicate components next, resolving parent IDs
     for comp in duplicate_components:
         parent_ref = comp.get("duplicate_of_ref")
         parent_row = canonical_rows.get(parent_ref) if parent_ref else None
+        if parent_row is None and comp.get("normalized_component_key"):
+            parent_row = canonical_by_key.get(comp["normalized_component_key"])
         parent_id = parent_row.id if parent_row else None
         save_comp_row(comp, is_dup=True, dup_of_id=parent_id)
 
@@ -528,6 +564,10 @@ def list_sbom_components(
     sbom_id: int,
     *,
     include_duplicates: bool = False,
+    duplicate_only: bool = False,
+    dedupe_group_id: str | None = None,
+    normalized_name: str | None = None,
+    normalized_purl: str | None = None,
     page: int = 1,
     page_size: int = 100,
     search: str | None = None,
@@ -556,8 +596,16 @@ def list_sbom_components(
     total_count = unique_count + duplicate_count
 
     where_clause = [sbom_clause]
-    if not include_duplicates:
+    if duplicate_only:
+        where_clause.append(SBOMComponent.is_duplicate.is_(True))
+    elif not include_duplicates:
         where_clause.append(_canonical_only_clause())
+    if dedupe_group_id:
+        where_clause.append(SBOMComponent.dedupe_group_id == dedupe_group_id)
+    if normalized_name:
+        where_clause.append(SBOMComponent.normalized_name == normalized_name.strip())
+    if normalized_purl:
+        where_clause.append(SBOMComponent.normalized_purl == normalized_purl.strip())
 
     if search and search.strip():
         term = f"%{search.strip()}%"

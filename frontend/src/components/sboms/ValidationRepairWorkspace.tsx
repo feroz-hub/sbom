@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bot, CheckCircle, FileInput, RefreshCw, Save, ShieldAlert, Wand2 } from 'lucide-react';
+import { Bot, CheckCircle, Download, FileInput, RefreshCw, Save, ShieldAlert, Wand2 } from 'lucide-react';
 import { Alert } from '@/components/ui/Alert';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -13,11 +13,14 @@ import { Textarea } from '@/components/ui/Input';
 import { PageSpinner } from '@/components/ui/Spinner';
 import {
   applyValidationSessionPatch,
+  downloadValidationSessionOriginal,
+  getValidationSessionContent,
   getProject,
   getProjects,
   getValidationSession,
   getValidationSessionHistory,
   importValidationSession,
+  saveValidationSessionRepairDraft,
   suggestValidationSessionFixes,
   updateValidationSession,
   validateValidationSession,
@@ -71,10 +74,24 @@ function mutationErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
+const CONTENT_CHUNK_SIZE = 65_536;
+
+function formatBytes(value: number | null | undefined) {
+  if (value == null) return 'Unknown';
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspaceProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [content, setContent] = useState('');
+  const [loadedContentSize, setLoadedContentSize] = useState(0);
+  const [totalContentSize, setTotalContentSize] = useState(0);
+  const [contentEof, setContentEof] = useState(false);
+  const [contentSha256, setContentSha256] = useState<string | null>(null);
+  const [contentLoaded, setContentLoaded] = useState(false);
   const [suggestion, setSuggestion] = useState<AiRepairSuggestion | null>(null);
   const [selected, setSelected] = useState<Record<number, boolean>>({});
   const [localMessage, setLocalMessage] = useState<string | null>(null);
@@ -82,6 +99,11 @@ export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspa
   const sessionQuery = useQuery({
     queryKey: ['validation-repair-session', sessionId],
     queryFn: ({ signal }) => getValidationSession(sessionId, signal),
+  });
+
+  const initialContentQuery = useQuery({
+    queryKey: ['validation-repair-content', sessionId, 0, CONTENT_CHUNK_SIZE],
+    queryFn: ({ signal }) => getValidationSessionContent(sessionId, 0, CONTENT_CHUNK_SIZE, signal),
   });
 
   const historyQuery = useQuery({
@@ -112,22 +134,33 @@ export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspa
   };
 
   useEffect(() => {
-    if (sessionQuery.data) setContent(sessionQuery.data.current_content);
-  }, [sessionQuery.data?.id, sessionQuery.data?.current_content]);
+    const chunk = initialContentQuery.data;
+    if (!chunk || contentLoaded) return;
+    setContent(chunk.content);
+    setLoadedContentSize(chunk.offset + chunk.content.length);
+    setTotalContentSize(chunk.total_size);
+    setContentEof(chunk.eof);
+    setContentSha256(chunk.sha256);
+    setContentLoaded(true);
+  }, [initialContentQuery.data, contentLoaded]);
 
   const updateMutation = useMutation({
-    mutationFn: () => updateValidationSession(sessionId, content),
+    mutationFn: () => saveValidationSessionRepairDraft(sessionId, content, sessionQuery.data?.updated_at),
     onSuccess: (updated) => {
       queryClient.setQueryData(['validation-repair-session', sessionId], updated);
       queryClient.invalidateQueries({ queryKey: ['validation-repair-history', sessionId] });
+      setLoadedContentSize(content.length);
+      setTotalContentSize(content.length);
+      setContentEof(true);
+      setContentSha256(updated.stored_sha256 ?? null);
       setLocalMessage('Draft saved in the repair workspace.');
     },
   });
 
   const validateMutation = useMutation({
     mutationFn: async () => {
-      if (sessionQuery.data && content !== sessionQuery.data.current_content) {
-        const saved = await updateValidationSession(sessionId, content);
+      if (hasUnsavedChanges) {
+        const saved = await saveValidationSessionRepairDraft(sessionId, content, sessionQuery.data?.updated_at);
         queryClient.setQueryData(['validation-repair-session', sessionId], saved);
       }
       return validateValidationSession(sessionId);
@@ -135,7 +168,37 @@ export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspa
     onSuccess: (updated) => {
       queryClient.setQueryData(['validation-repair-session', sessionId], updated);
       queryClient.invalidateQueries({ queryKey: ['validation-repair-history', sessionId] });
-      setLocalMessage(updated.validation_status === 'passed' ? 'Validation passed. Import is now available.' : 'Validation completed with remaining issues.');
+      setContentSha256(updated.stored_sha256 ?? null);
+      setLocalMessage(
+        updated.validation_status === 'passed' || updated.validation_status === 'repaired_valid'
+          ? 'Validation passed. Import is now available.'
+          : 'Validation completed with remaining issues.',
+      );
+    },
+  });
+
+  const loadMoreMutation = useMutation({
+    mutationFn: () => getValidationSessionContent(sessionId, content.length, CONTENT_CHUNK_SIZE),
+    onSuccess: (chunk) => {
+      setContent((old) => old + chunk.content);
+      setLoadedContentSize(chunk.offset + chunk.content.length);
+      setTotalContentSize(chunk.total_size);
+      setContentEof(chunk.eof);
+      setContentSha256(chunk.sha256);
+    },
+  });
+
+  const downloadOriginalMutation = useMutation({
+    mutationFn: () => downloadValidationSessionOriginal(sessionId),
+    onSuccess: ({ blob, filename }) => {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
     },
   });
 
@@ -175,6 +238,10 @@ export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspa
       queryClient.setQueryData(['validation-repair-session', sessionId], updated);
       queryClient.invalidateQueries({ queryKey: ['validation-repair-history', sessionId] });
       setContent(updated.current_content);
+      setLoadedContentSize(updated.current_content.length);
+      setTotalContentSize(updated.current_content.length);
+      setContentEof(true);
+      setContentSha256(updated.stored_sha256 ?? null);
       setSuggestion(null);
       setSelected({});
       setLocalMessage(updated.validation_status === 'passed' ? 'Patch applied and validation passed.' : 'Patch applied and validation reran.');
@@ -186,16 +253,18 @@ export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspa
   const entries = report?.entries ?? [];
   const grouped = useMemo(() => groupErrors(entries), [entries]);
   const hardErrorCount = entries.filter((entry) => entry.severity === 'error').length;
-  const canImport = session?.validation_status === 'passed' && (report?.error_count ?? hardErrorCount) === 0 && hardErrorCount === 0 && session?.project_id != null;
+  const canImport = (session?.validation_status === 'passed' || session?.validation_status === 'repaired_valid') && (report?.error_count ?? hardErrorCount) === 0 && hardErrorCount === 0 && session?.project_id != null;
   const hasSelectedPatch = suggestion?.patches.some((_, idx) => selected[idx]) ?? false;
-  const hasUnsavedChanges = Boolean(session && content !== session.current_content);
+  const serverDraftSize = session?.stored_size_bytes ?? session?.file_size_bytes ?? session?.current_content.length ?? 0;
+  const hasUnsavedChanges = Boolean(session && (contentSha256 == null || content.length !== serverDraftSize || content !== session.current_content));
+  const contentIsPartial = !contentEof;
 
-  if (sessionQuery.isLoading) return <PageSpinner />;
+  if (sessionQuery.isLoading || initialContentQuery.isLoading) return <PageSpinner />;
 
-  if (sessionQuery.error || !session) {
+  if (sessionQuery.error || initialContentQuery.error || !session) {
     return (
       <Alert variant="error" title="Could not load validation session">
-        {sessionQuery.error instanceof Error ? sessionQuery.error.message : 'The repair session does not exist or expired.'}
+        {mutationErrorMessage(sessionQuery.error || initialContentQuery.error, 'The repair session does not exist or expired.')}
       </Alert>
     );
   }
@@ -264,6 +333,18 @@ export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspa
               </dd>
             </div>
             <div>
+              <dt className="text-xs font-medium text-hcl-muted">Original size</dt>
+              <dd className="mt-1 text-hcl-navy">{formatBytes(session.file_size_bytes ?? session.original_size_bytes)}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-medium text-hcl-muted">Total lines</dt>
+              <dd className="mt-1 text-hcl-navy">{(session.total_lines ?? 0).toLocaleString()}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-medium text-hcl-muted">SHA-256</dt>
+              <dd className="mt-1 font-mono text-xs text-hcl-navy break-all">{session.sha256 || session.original_sha256 || 'Unknown'}</dd>
+            </div>
+            <div>
               <dt className="text-xs font-medium text-hcl-muted">Current status</dt>
               <dd className="mt-1">
                 <Badge variant={session.validation_status === 'passed' || session.validation_status === 'imported' ? 'success' : 'warning'}>
@@ -288,9 +369,18 @@ export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspa
               <Button
                 size="sm"
                 variant="secondary"
+                onClick={() => downloadOriginalMutation.mutate()}
+                loading={downloadOriginalMutation.isPending}
+              >
+                <Download className="h-4 w-4" />
+                Download original
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
                 onClick={() => updateMutation.mutate()}
                 loading={updateMutation.isPending}
-                disabled={!session.can_edit || !hasUnsavedChanges}
+                disabled={!session.can_edit || !hasUnsavedChanges || contentIsPartial}
               >
                 <Save className="h-4 w-4" />
                 {hasUnsavedChanges ? 'Save changes' : 'Saved'}
@@ -300,6 +390,7 @@ export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspa
                 variant="secondary"
                 onClick={() => validateMutation.mutate()}
                 loading={validateMutation.isPending}
+                disabled={contentIsPartial}
               >
                 <RefreshCw className="h-4 w-4" />
                 Revalidate
@@ -316,13 +407,37 @@ export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspa
             </div>
           </CardHeader>
           <CardContent>
+            <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-hcl-muted">
+              <Badge variant={contentIsPartial ? 'warning' : 'success'}>
+                {contentIsPartial ? 'Preview loaded' : 'Full repair draft loaded'}
+              </Badge>
+              <span>
+                Loaded {formatBytes(loadedContentSize)} of {formatBytes(totalContentSize)}
+              </span>
+              {contentSha256 && <span className="font-mono break-all">Draft SHA-256 {contentSha256}</span>}
+              {contentIsPartial && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => loadMoreMutation.mutate()}
+                  loading={loadMoreMutation.isPending}
+                >
+                  Load more
+                </Button>
+              )}
+            </div>
             <Textarea
               aria-label="SBOM repair editor"
               value={content}
               onChange={(event) => setContent(event.target.value)}
               className="min-h-[520px] font-mono text-xs leading-relaxed"
-              disabled={!session.can_edit}
+              disabled={!session.can_edit || contentIsPartial}
             />
+            {contentIsPartial && (
+              <p className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-300">
+                Editing is disabled until the loaded draft is complete. Load more chunks or download the original for offline review.
+              </p>
+            )}
             {hasUnsavedChanges && (
               <p className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-300">
                 Unsaved changes

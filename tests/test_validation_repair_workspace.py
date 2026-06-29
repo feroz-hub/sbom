@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
+from hashlib import sha256
 from pathlib import Path
 
-from app.models import SBOMSource, SBOMValidationSession, SBOMValidationSessionEvent
+from app.models import AuditLog, SBOMSource, SBOMValidationSession, SBOMValidationSessionEvent
 
 BAD_PURL_CYCLONEDX = {
     "bomFormat": "CycloneDX",
@@ -55,6 +57,8 @@ def test_upload_invalid_sbom_creates_validation_session_not_normal_sbom(client):
     session_id, detail = _create_failed_session(client, name)
 
     assert detail["status"] == "validation_failed"
+    assert detail["validation_session_id"] == session_id
+    assert detail["repair_workspace_url"] == f"/sbom-validation-sessions/{session_id}"
     assert detail["sbom_id"] is None
     assert detail["can_edit"] is True
     assert detail["can_ai_fix"] is True
@@ -68,6 +72,10 @@ def test_upload_invalid_sbom_creates_validation_session_not_normal_sbom(client):
         assert session is not None
         assert session.validation_status == "failed"
         assert session.imported_sbom_id is None
+        assert session.raw_content_text == json.dumps(BAD_PURL_CYCLONEDX)
+        assert session.repair_content_text == json.dumps(BAD_PURL_CYCLONEDX)
+        assert session.original_size_bytes == len(json.dumps(BAD_PURL_CYCLONEDX).encode("utf-8"))
+        assert session.original_sha256 == sha256(json.dumps(BAD_PURL_CYCLONEDX).encode("utf-8")).hexdigest()
         assert db.query(SBOMValidationSessionEvent).filter_by(session_id=session_id, event_type="created").count() == 1
     finally:
         db.close()
@@ -91,7 +99,7 @@ def test_get_patch_and_history_records_manual_edit(client):
     resp = client.patch(f"/api/sbom-validation-sessions/{session_id}", json={"current_content": edited})
     assert resp.status_code == 200, resp.text
     assert resp.json()["current_content"] == edited
-    assert resp.json()["validation_status"] == "edited"
+    assert resp.json()["validation_status"] == "repair_draft"
 
     history = client.get(f"/api/sbom-validation-sessions/{session_id}/history")
     assert history.status_code == 200
@@ -107,6 +115,181 @@ def test_revalidate_session_updates_report(client):
     assert body["validation_status"] == "failed"
     assert body["latest_error_report"]["failed_stage"] == "semantic"
     assert body["latest_error_report"]["error_count"] >= 1
+
+
+def test_validation_session_content_chunks_and_download_preserve_original_bytes(client):
+    original = b'{\r\n  "bomFormat": "CycloneDX",\r\n  "components": [\r\n'
+    original_hash = sha256(original).hexdigest()
+    resp = client.post(
+        "/api/sboms/upload",
+        data={"sbom_name": _unique("multipart-invalid")},
+        files={"file": ("invalid.json", original, "application/json")},
+    )
+    assert resp.status_code in {400, 422}, resp.text
+    detail = resp.json()["detail"]
+    session_id = detail["validation_session_id"]
+    assert detail["file_size_bytes"] == len(original)
+    assert detail["sha256"] == original_hash
+
+    first = client.get(f"/api/sbom-validation-sessions/{session_id}/content?offset=0&limit=10")
+    assert first.status_code == 200, first.text
+    first_body = first.json()
+    assert first_body["content"] == original.decode("utf-8")[:10]
+    assert first_body["eof"] is False
+
+    rest = client.get(f"/api/sbom-validation-sessions/{session_id}/content?offset=10&limit=10000")
+    assert rest.status_code == 200, rest.text
+    assert first_body["content"] + rest.json()["content"] == original.decode("utf-8")
+
+    downloaded = client.get(f"/api/sbom-validation-sessions/{session_id}/download-original")
+    assert downloaded.status_code == 200, downloaded.text
+    assert downloaded.content == original
+    assert sha256(downloaded.content).hexdigest() == original_hash
+
+    from app.db import SessionLocal
+
+    db = SessionLocal()
+    try:
+        actions = {
+            row.action
+            for row in db.query(AuditLog)
+            .filter(AuditLog.entity_id == session_id)
+            .all()
+        }
+        assert "sbom.validation_session.created" in actions
+        assert "sbom.validation_session.download_original" in actions
+    finally:
+        db.close()
+
+
+def test_large_invalid_upload_retrieves_more_than_first_ten_lines(client):
+    lines = ["{", '  "bomFormat": "CycloneDX",']
+    lines.extend(f'  "pad{i}": "x",' for i in range(40_000))
+    lines.append('  "components": [')
+    raw = ("\n".join(lines)).encode("utf-8")
+    resp = client.post(
+        "/api/sboms/upload",
+        data={"sbom_name": _unique("large-invalid")},
+        files={"file": ("large-invalid.json", raw, "application/json")},
+    )
+    assert resp.status_code in {400, 422}, resp.text
+    session_id = resp.json()["detail"]["validation_session_id"]
+
+    meta = client.get(f"/api/sbom-validation-sessions/{session_id}")
+    assert meta.status_code == 200, meta.text
+    assert meta.json()["total_lines"] > 40_000
+
+    chunk = client.get(f"/api/sbom-validation-sessions/{session_id}/content-lines?start_line=11&line_count=20")
+    assert chunk.status_code == 200, chunk.text
+    body = chunk.json()
+    assert body["start_line"] == 11
+    assert len(body["lines"]) == 20
+    assert body["lines"][0].startswith('  "pad8"')
+    assert body["total_lines"] > 40_000
+
+
+def test_save_repair_draft_stores_full_content_and_revalidate_uses_it(client):
+    session_id, _ = _create_failed_session(client)
+    full_draft = "\n".join(f"line-{i}" for i in range(200)) + "\nnot-json"
+    draft = client.put(f"/api/sbom-validation-sessions/{session_id}/repair-draft", json={"content": full_draft})
+    assert draft.status_code == 200, draft.text
+    body = draft.json()
+    assert body["validation_status"] == "repair_draft"
+    assert body["current_content"] == full_draft
+    assert body["stored_sha256"] == sha256(full_draft.encode("utf-8")).hexdigest()
+    assert body["total_lines"] == 201
+
+    chunk = client.get(f"/api/sbom-validation-sessions/{session_id}/content?offset=0&limit=100000")
+    assert chunk.status_code == 200, chunk.text
+    assert chunk.json()["content"] == full_draft
+
+    revalidated = client.post(f"/api/sbom-validation-sessions/{session_id}/revalidate")
+    assert revalidated.status_code == 200, revalidated.text
+    assert revalidated.json()["validation_status"] == "failed"
+    assert revalidated.json()["latest_error_report"]["error_count"] >= 1
+
+
+def test_valid_repaired_draft_revalidates_then_imports_trusted_sbom(client):
+    name = _unique("valid-draft-import")
+    session_id, _ = _create_failed_session(client, name)
+    fixed = json.dumps(
+        {
+            **BAD_PURL_CYCLONEDX,
+            "components": [
+                {
+                    **BAD_PURL_CYCLONEDX["components"][0],
+                    "purl": "pkg:generic/x@1.0.0",
+                }
+            ],
+        }
+    )
+    draft = client.put(f"/api/sbom-validation-sessions/{session_id}/repair-draft", json={"content": fixed})
+    assert draft.status_code == 200, draft.text
+    revalidated = client.post(f"/api/sbom-validation-sessions/{session_id}/revalidate")
+    assert revalidated.status_code == 200, revalidated.text
+    assert revalidated.json()["validation_status"] == "repaired_valid"
+
+    imported = client.post(f"/api/sbom-validation-sessions/{session_id}/import")
+    assert imported.status_code == 200, imported.text
+    sbom_id = imported.json()["id"]
+
+    from app.db import SessionLocal
+
+    db = SessionLocal()
+    try:
+        trusted = db.get(SBOMSource, sbom_id)
+        assert trusted is not None
+        assert trusted.sbom_name == name
+        assert "pkg:generic/x@1.0.0" in trusted.sbom_data
+    finally:
+        db.close()
+
+
+def test_validation_session_cross_tenant_access_denied(client):
+    from app.core.context import minimal_background_context, tenant_scope
+    from app.db import SessionLocal
+    from app.models import Tenant
+
+    db = SessionLocal()
+    try:
+        now_dt = datetime.now(UTC)
+        now = now_dt.isoformat()
+        tenant = Tenant(
+            name="Other Tenant",
+            slug=_unique("other-tenant"),
+            external_iam_tenant_id=_unique("other-tenant-ext"),
+            status="ACTIVE",
+            created_at=now_dt,
+            updated_at=now_dt,
+        )
+        db.add(tenant)
+        db.flush()
+        with tenant_scope(minimal_background_context(tenant.id, tenant.external_iam_tenant_id)):
+            session = SBOMValidationSession(
+                id=_unique("cross-tenant-session"),
+                original_filename="other.json",
+                sbom_name="other",
+                sanitized_content="{}",
+                current_content="{}",
+                raw_content_text="{}",
+                repair_content_text="{}",
+                validation_status="failed",
+                latest_error_report_json={"entries": [], "error_count": 0, "warning_count": 0},
+                can_edit=True,
+                can_ai_fix=True,
+                content_sha256=sha256(b"{}").hexdigest(),
+                created_at=now,
+                updated_at=now,
+                expires_at=now,
+            )
+            db.add(session)
+            db.commit()
+            session_id = session.id
+    finally:
+        db.close()
+
+    denied = client.get(f"/api/sbom-validation-sessions/{session_id}")
+    assert denied.status_code == 404
 
 
 def test_import_blocked_until_validation_passes_then_succeeds_after_patch(client):
@@ -132,7 +315,7 @@ def test_import_blocked_until_validation_passes_then_succeeds_after_patch(client
         },
     )
     assert patch_resp.status_code == 200, patch_resp.text
-    assert patch_resp.json()["validation_status"] == "passed"
+    assert patch_resp.json()["validation_status"] == "repaired_valid"
 
     imported = client.post(f"/api/sbom-validation-sessions/{session_id}/import")
     assert imported.status_code == 200, imported.text
@@ -178,7 +361,7 @@ def test_failed_upload_session_and_repair_import_preserve_project_id(client):
         },
     )
     assert patch_resp.status_code == 200, patch_resp.text
-    assert patch_resp.json()["validation_status"] == "passed"
+    assert patch_resp.json()["validation_status"] == "repaired_valid"
 
     imported = client.post(f"/api/sbom-validation-sessions/{session_id}/import")
     assert imported.status_code == 200, imported.text

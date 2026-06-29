@@ -35,7 +35,7 @@ from ..analysis import (
     get_analysis_settings_multi,
 )
 from ..core.context import CurrentContext
-from ..core.security import get_current_tenant_context
+from ..core.security import get_current_tenant_context, require_permission
 from ..db import get_db
 from ..idempotency import (
     analysis_run_to_dict,
@@ -450,17 +450,36 @@ def create_sbom(
     # staged in sbom_validation_sessions when safe; they are never inserted
     # into sbom_source as trusted records. ---
     raw_text = _coerce_sbom_data(payload.sbom_data) or ""
-    report = run_validation(raw_text.encode("utf-8"))
+    raw_bytes = raw_text.encode("utf-8")
+    report = run_validation(raw_bytes)
     if report.has_errors():
         session, blocked_reason = ValidationRepairService(db).create_failed_upload_session(
             raw_text=raw_text,
+            raw_bytes=raw_bytes,
+            content_type="application/json" if raw_text.lstrip().startswith(("{", "[")) else "text/plain",
             report=report,
             sbom_name=payload.sbom_name,
             original_filename=payload.sbom_name,
             project_id=payload.projectid,
             sbom_type=payload.sbom_type,
-            user_id=payload.created_by,
+            user_id=payload.created_by or context.actor_label(),
         )
+        if session is not None:
+            audit_service.write_audit_log(
+                db,
+                context,
+                "sbom.validation_session.created",
+                entity_type="sbom_validation_session",
+                entity_id=session.id,
+                new_value={
+                    "sbom_name": payload.sbom_name,
+                    "project_id": payload.projectid,
+                    "file_size_bytes": session.file_size_bytes,
+                    "sha256": session.sha256,
+                    "error_count": report.error_count,
+                },
+            )
+            db.commit()
         raise HTTPException(
             status_code=report.http_status,
             detail=build_validation_failed_detail(
@@ -637,6 +656,10 @@ def get_sbom_details(
 def get_sbom_components(
     sbom_id: int = Path(..., description="SBOM ID (positive integer)"),
     include_duplicates: bool = Query(False, description="Whether to include duplicate components in the response"),
+    duplicate_only: bool = Query(False, description="Return only duplicate component rows"),
+    dedupe_group_id: str | None = Query(None, description="Filter by Stage 9 dedupe group id"),
+    normalized_name: str | None = Query(None, description="Filter by normalized component name"),
+    normalized_purl: str | None = Query(None, description="Filter by normalized PURL"),
     page: int = Query(1, ge=1),
     page_size: int = Query(100, ge=1, le=1000),
     search: str | None = Query(None, description="Case-insensitive search across component fields"),
@@ -662,6 +685,10 @@ def get_sbom_components(
             db,
             sbom_id,
             include_duplicates=include_duplicates,
+            duplicate_only=duplicate_only,
+            dedupe_group_id=dedupe_group_id,
+            normalized_name=normalized_name,
+            normalized_purl=normalized_purl,
             page=page,
             page_size=page_size,
             search=search,
@@ -781,14 +808,61 @@ def reprocess_sbom_components(
     }
 
 
+@router.post("/sboms/{sbom_id}/normalize-deduplicate", status_code=status.HTTP_200_OK)
+def normalize_deduplicate_sbom(
+    sbom_id: int = Path(..., description="SBOM ID (positive integer)"),
+    force: bool = Query(False, description="Re-run Stage 9 even if prior normalized fields exist"),
+    context: CurrentContext = Depends(require_permission("sbom:update")),
+    db: Session = Depends(get_db),
+):
+    sbom_id = _validate_positive_int(sbom_id, param_name="sbom_id")
+    sbom = get_sbom_for_tenant(db, sbom_id, context.tenant_id)
+    if not sbom:
+        raise HTTPException(status_code=404, detail="SBOM not found")
+    if not sbom.sbom_data:
+        raise HTTPException(status_code=400, detail={"code": "sbom_data_missing", "message": "SBOM has no stored content."})
+    if not force and sbom.dedupe_report_json:
+        return {
+            "sbom_id": sbom.id,
+            "status": "unchanged",
+            "report": sbom.dedupe_report_json,
+        }
+    try:
+        components = sync_sbom_components(db, sbom)
+        audit_service.write_audit_log(
+            db,
+            context,
+            "sbom.normalization_dedup.reprocess",
+            entity_type="sbom",
+            entity_id=sbom.id,
+            new_value={"component_count": len(components), "force": force},
+        )
+        db.commit()
+        db.refresh(sbom)
+    except ComponentExtractionSkipped as exc:
+        db.commit()
+        raise HTTPException(status_code=422, detail={"code": "unsupported_sbom_format", "message": exc.reason}) from exc
+    except Exception as exc:
+        db.rollback()
+        log.warning("Normalization reprocess failed for SBOM id=%d: %s", sbom_id, exc)
+        raise HTTPException(status_code=500, detail={"code": "normalization_failed", "message": "Normalization failed."}) from exc
+    return {
+        "sbom_id": sbom.id,
+        "status": "completed",
+        "component_count": len(components),
+        "report": sbom.dedupe_report_json,
+    }
+
+
 @router.get("/sboms/{sbom_id}/dedupe-report")
 def get_sbom_dedupe_report(
     sbom_id: int = Path(..., description="SBOM ID (positive integer)"),
+    context: CurrentContext = Depends(get_current_tenant_context),
     db: Session = Depends(get_db),
 ):
     sbom_id = _validate_positive_int(sbom_id, param_name="sbom_id")
     try:
-        sbom = db.get(SBOMSource, sbom_id)
+        sbom = get_sbom_for_tenant(db, sbom_id, context.tenant_id)
         if not sbom:
             raise HTTPException(status_code=404, detail="SBOM not found")
         report = sbom.dedupe_report_json
@@ -805,6 +879,15 @@ def get_sbom_dedupe_report(
         raise
     except SQLAlchemyError as exc:
         raise HTTPException(status_code=500, detail="Internal database error while fetching dedupe report.") from exc
+
+
+@router.get("/sboms/{sbom_id}/normalization-report")
+def get_sbom_normalization_report(
+    sbom_id: int = Path(..., description="SBOM ID (positive integer)"),
+    context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
+):
+    return get_sbom_dedupe_report(sbom_id=sbom_id, context=context, db=db)
 
 
 @router.patch("/sboms/{sbom_id}", response_model=SBOMSourceOut)

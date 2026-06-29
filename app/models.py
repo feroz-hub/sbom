@@ -10,6 +10,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -288,12 +289,28 @@ class SBOMValidationSession(Base, TenantOwnedMixin):
     original_filename = Column(String(255), nullable=True)
     sbom_name = Column(String(255), nullable=True)
     sbom_type = Column(Integer, ForeignKey("sbom_type.id"), nullable=True)
+    content_type = Column(String(255), nullable=True)
+    file_size_bytes = Column(Integer, nullable=True)
+    sha256 = Column(String(64), nullable=True, index=True)
+    original_size_bytes = Column(Integer, nullable=True)
+    original_sha256 = Column(String(64), nullable=True, index=True)
+    stored_size_bytes = Column(Integer, nullable=True)
+    stored_sha256 = Column(String(64), nullable=True, index=True)
     detected_format = Column(String(64), nullable=True)
     detected_version = Column(String(64), nullable=True)
+    raw_content_text = Column(Text, nullable=True)
+    raw_content_blob = Column(LargeBinary, nullable=True)
+    raw_storage_path = Column(String(1024), nullable=True)
     sanitized_content = Column(Text, nullable=True)
     current_content = Column(Text, nullable=True)
+    repair_content_text = Column(Text, nullable=True)
+    repair_content_blob = Column(LargeBinary, nullable=True)
+    repair_storage_path = Column(String(1024), nullable=True)
     validation_status = Column(String(32), nullable=False, default="failed", server_default="failed", index=True)
+    validation_errors_json = Column(JSON, nullable=True)
+    stage_results_json = Column(JSON, nullable=True)
     latest_error_report_json = Column(JSON, nullable=True)
+    total_lines = Column(Integer, nullable=True)
     can_edit = Column(Boolean, nullable=False, default=True, server_default=expression.true())
     can_ai_fix = Column(Boolean, nullable=False, default=True, server_default=expression.true())
     security_blocked_reason = Column(Text, nullable=True)
@@ -368,6 +385,26 @@ class SBOMComponent(Base, SoftDeleteMixin, TenantOwnedMixin):
     created_on = Column(String, nullable=True)
     ecosystem = Column(String, nullable=True, index=True)
 
+    original_name = Column(String, nullable=True)
+    normalized_name = Column(String, nullable=True, index=True)
+    original_version = Column(String, nullable=True)
+    normalized_version = Column(String, nullable=True, index=True)
+    normalized_ecosystem = Column(String, nullable=True, index=True)
+    original_purl = Column(String, nullable=True)
+    normalized_purl = Column(String, nullable=True, index=True)
+    purl_type = Column(String, nullable=True)
+    purl_namespace = Column(String, nullable=True)
+    purl_name = Column(String, nullable=True)
+    purl_version = Column(String, nullable=True)
+    purl_qualifiers_json = Column(JSON, nullable=True)
+    purl_subpath = Column(String, nullable=True)
+    normalized_cpes = Column(JSON, nullable=True)
+    primary_cpe = Column(String, nullable=True, index=True)
+    cpe_evidence_json = Column(JSON, nullable=True)
+    normalized_supplier = Column(String, nullable=True)
+    normalized_package_key = Column(String, nullable=True, index=True)
+    canonical_identity_confidence = Column(String, nullable=True)
+
     license = Column(String, nullable=True)
     hashes = Column(Text, nullable=True)
     lifecycle_status = Column(String, nullable=True)
@@ -391,8 +428,14 @@ class SBOMComponent(Base, SoftDeleteMixin, TenantOwnedMixin):
     lifecycle_manual_override = Column(Boolean, nullable=False, default=False)
 
     normalized_component_key = Column(String, nullable=True, index=True)
+    dedupe_canonical_id = Column(String, nullable=True, index=True)
+    dedupe_group_id = Column(String, nullable=True, index=True)
     is_duplicate = Column(Boolean, nullable=False, default=False)
     duplicate_of_component_id = Column(Integer, ForeignKey("sbom_component.id", ondelete="CASCADE"), nullable=True)
+    dedupe_reason = Column(String, nullable=True)
+    dedupe_confidence = Column(String, nullable=True)
+    normalization_notes_json = Column(JSON, nullable=True)
+    dedupe_evidence_json = Column(JSON, nullable=True)
 
     sbom = relationship("SBOMSource", back_populates="components")
     findings = relationship("AnalysisFinding", back_populates="component")
@@ -410,6 +453,14 @@ class SBOMComponent(Base, SoftDeleteMixin, TenantOwnedMixin):
         ),
         Index("ix_sbom_component_sbom_name", "sbom_id", "name"),
         Index("ix_sbom_component_lifecycle", "lifecycle_status", "ecosystem"),
+        Index("ix_sbom_component_sbom_normalized_key", "sbom_id", "normalized_component_key"),
+        Index("ix_sbom_component_sbom_is_duplicate", "sbom_id", "is_duplicate"),
+        Index(
+            "ix_sbom_component_normalized_identity",
+            "normalized_ecosystem",
+            "normalized_name",
+            "normalized_version",
+        ),
     )
 
 

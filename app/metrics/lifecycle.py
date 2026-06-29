@@ -29,6 +29,7 @@ def lifecycle_eos_upcoming_total(db: Session) -> int:
         db.execute(
             select(func.count(SBOMComponent.id))
             .where(SBOMComponent.sbom_id.in_(head_ids))
+            .where((SBOMComponent.is_duplicate.is_(False)) | (SBOMComponent.is_duplicate.is_(None)))
             .where(
                 (func.lower(SBOMComponent.lifecycle_status) == "eos")
                 | (
@@ -51,5 +52,14 @@ def lifecycle_unsupported_total(db: Session) -> int:
 def lifecycle_summary(db: Session) -> dict:
     """Lifecycle summary over active HEAD SBOM components."""
     head_ids = active_head_sbom_ids_subquery()
-    components = db.execute(select(SBOMComponent).where(SBOMComponent.sbom_id.in_(head_ids))).scalars().all()
+    components = (
+        db.execute(
+            select(SBOMComponent).where(
+                SBOMComponent.sbom_id.in_(head_ids),
+                (SBOMComponent.is_duplicate.is_(False)) | (SBOMComponent.is_duplicate.is_(None)),
+            )
+        )
+        .scalars()
+        .all()
+    )
     return summarize_components(list(components))

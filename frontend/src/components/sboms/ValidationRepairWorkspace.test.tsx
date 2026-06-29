@@ -12,11 +12,14 @@ vi.mock('next/navigation', () => ({
 }));
 
 const getValidationRepairSession = vi.fn();
+const getValidationRepairContent = vi.fn();
 const getProject = vi.fn();
 const getProjects = vi.fn();
 const updateValidationRepairSession = vi.fn();
+const saveValidationRepairDraft = vi.fn();
 const validateRepairSession = vi.fn();
 const importRepairSession = vi.fn();
+const downloadValidationSessionOriginal = vi.fn();
 const suggestValidationRepairFixes = vi.fn();
 const applyValidationRepairPatch = vi.fn();
 const getValidationRepairHistory = vi.fn();
@@ -28,14 +31,19 @@ vi.mock('@/lib/api', async () => {
     getProject: (...args: unknown[]) => getProject(...args),
     getProjects: (...args: unknown[]) => getProjects(...args),
     getValidationSession: (...args: unknown[]) => getValidationRepairSession(...args),
+    getValidationSessionContent: (...args: unknown[]) => getValidationRepairContent(...args),
     updateValidationSession: (...args: unknown[]) => updateValidationRepairSession(...args),
+    saveValidationSessionRepairDraft: (...args: unknown[]) => saveValidationRepairDraft(...args),
     validateValidationSession: (...args: unknown[]) => validateRepairSession(...args),
     importValidationSession: (...args: unknown[]) => importRepairSession(...args),
+    downloadValidationSessionOriginal: (...args: unknown[]) => downloadValidationSessionOriginal(...args),
     suggestValidationSessionFixes: (...args: unknown[]) => suggestValidationRepairFixes(...args),
     applyValidationSessionPatch: (...args: unknown[]) => applyValidationRepairPatch(...args),
     getValidationSessionHistory: (...args: unknown[]) => getValidationRepairHistory(...args),
     getValidationRepairSession: (...args: unknown[]) => getValidationRepairSession(...args),
+    getValidationRepairContent: (...args: unknown[]) => getValidationRepairContent(...args),
     updateValidationRepairSession: (...args: unknown[]) => updateValidationRepairSession(...args),
+    saveValidationRepairDraft: (...args: unknown[]) => saveValidationRepairDraft(...args),
     validateRepairSession: (...args: unknown[]) => validateRepairSession(...args),
     importRepairSession: (...args: unknown[]) => importRepairSession(...args),
     suggestValidationRepairFixes: (...args: unknown[]) => suggestValidationRepairFixes(...args),
@@ -56,6 +64,14 @@ const FAILED_SESSION: ValidationRepairSession = {
   detected_format: 'cyclonedx',
   detected_version: '1.6',
   current_content: '{"bomFormat":"CycloneDX","components":[{"purl":"not-a-purl"}]}',
+  content_inline_truncated: false,
+  file_size_bytes: 61,
+  sha256: 'abc',
+  original_size_bytes: 61,
+  original_sha256: 'abc',
+  stored_size_bytes: 61,
+  stored_sha256: 'abc',
+  total_lines: 1,
   validation_status: 'failed',
   latest_error_report: {
     status: 'failed',
@@ -136,6 +152,15 @@ beforeEach(() => {
     }
   ]);
   getValidationRepairSession.mockResolvedValue(FAILED_SESSION);
+  getValidationRepairContent.mockReset();
+  getValidationRepairContent.mockResolvedValue({
+    offset: 0,
+    limit: 65536,
+    total_size: FAILED_SESSION.current_content.length,
+    content: FAILED_SESSION.current_content,
+    eof: true,
+    sha256: 'abc',
+  });
   getValidationRepairHistory.mockResolvedValue([
     {
       id: 1,
@@ -150,7 +175,11 @@ beforeEach(() => {
     },
   ]);
   updateValidationRepairSession.mockResolvedValue(FAILED_SESSION);
+  saveValidationRepairDraft.mockReset();
+  saveValidationRepairDraft.mockResolvedValue(FAILED_SESSION);
   validateRepairSession.mockResolvedValue(FAILED_SESSION);
+  downloadValidationSessionOriginal.mockReset();
+  downloadValidationSessionOriginal.mockResolvedValue({ blob: new Blob(['original']), filename: 'bad.json' });
   suggestValidationRepairFixes.mockResolvedValue({
     summary: 'Fix malformed purl',
     risk: 'low',
@@ -190,6 +219,7 @@ describe('ValidationRepairWorkspace', () => {
     render(wrap(<ValidationRepairWorkspace sessionId="session-1" />));
 
     expect(await screen.findByLabelText('SBOM repair editor')).toHaveValue(FAILED_SESSION.current_content);
+    expect(getValidationRepairContent).toHaveBeenCalledWith('session-1', 0, 65536, expect.any(AbortSignal));
     expect(screen.getByText('session-1')).toBeInTheDocument();
     expect(screen.getByText('bad.json')).toBeInTheDocument();
     expect(await screen.findByText('Payments')).toBeInTheDocument();
@@ -206,8 +236,41 @@ describe('ValidationRepairWorkspace', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Revalidate/i }));
 
-    await waitFor(() => expect(updateValidationRepairSession).toHaveBeenCalledWith('session-1', '{"changed":true}'));
+    await waitFor(() => expect(saveValidationRepairDraft).toHaveBeenCalledWith('session-1', '{"changed":true}', FAILED_SESSION.updated_at));
     await waitFor(() => expect(validateRepairSession).toHaveBeenCalledWith('session-1'));
+  });
+
+  it('loads more content before enabling full-draft editing for partial chunks', async () => {
+    getValidationRepairContent
+      .mockResolvedValueOnce({
+        offset: 0,
+        limit: 65536,
+        total_size: 12,
+        content: 'first ',
+        eof: false,
+        sha256: 'chunked',
+      })
+      .mockResolvedValueOnce({
+        offset: 6,
+        limit: 65536,
+        total_size: 12,
+        content: 'second',
+        eof: true,
+        sha256: 'chunked',
+      });
+
+    render(wrap(<ValidationRepairWorkspace sessionId="session-1" />));
+
+    const editor = await screen.findByLabelText('SBOM repair editor');
+    expect(editor).toHaveValue('first ');
+    expect(editor).toBeDisabled();
+    expect(screen.getByText('Preview loaded')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Load more/i }));
+
+    await waitFor(() => expect(getValidationRepairContent).toHaveBeenCalledWith('session-1', 6, 65536));
+    expect(await screen.findByText('Full repair draft loaded')).toBeInTheDocument();
+    expect(screen.getByLabelText('SBOM repair editor')).toHaveValue('first second');
   });
 
   it('shows AI diff suggestions and applies selected patches', async () => {
@@ -260,7 +323,7 @@ describe('ValidationRepairWorkspace', () => {
 
   it('renders a user-friendly API error state for failed actions and history loading', async () => {
     getValidationRepairHistory.mockRejectedValue(new Error('history unavailable'));
-    updateValidationRepairSession.mockRejectedValue(new Error('save failed'));
+    saveValidationRepairDraft.mockRejectedValue(new Error('save failed'));
 
     render(wrap(<ValidationRepairWorkspace sessionId="session-1" />));
     const editor = await screen.findByLabelText('SBOM repair editor');

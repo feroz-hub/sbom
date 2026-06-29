@@ -22,6 +22,7 @@ def test_default_stages_have_canonical_names() -> None:
         "security",
         "ntia",
         "signature",
+        "normalization",
     ]
 
 

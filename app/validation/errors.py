@@ -121,6 +121,7 @@ W113_SIGNATURE_NOT_PRESENT = "SBOM_VAL_W113_SIGNATURE_NOT_PRESENT"
 
 # Stage 9 — Component Deduplication ------------------------------------------
 W120_DUPLICATE_COMPONENT_DETECTED = "SBOM_VAL_W120_DUPLICATE_COMPONENT_DETECTED"
+W121_NORMALIZATION_WARNING = "SBOM_VAL_W121_NORMALIZATION_WARNING"
 
 
 # ---------------------------------------------------------------------------
@@ -208,6 +209,7 @@ _CODE_TABLE: dict[str, tuple[int, Severity]] = {
     W113_SIGNATURE_NOT_PRESENT: (200, Severity.WARNING),
     # Stage 9
     W120_DUPLICATE_COMPONENT_DETECTED: (422, Severity.WARNING),
+    W121_NORMALIZATION_WARNING: (422, Severity.WARNING),
 }
 
 

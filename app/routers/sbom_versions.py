@@ -125,7 +125,16 @@ def _media_type(standard: str, encoding: str) -> str:
 
 
 def _components_for_sbom(db: Session, sbom_id: int) -> list[SBOMComponent]:
-    return db.execute(select(SBOMComponent).where(SBOMComponent.sbom_id == sbom_id)).scalars().all()
+    return (
+        db.execute(
+            select(SBOMComponent).where(
+                SBOMComponent.sbom_id == sbom_id,
+                (SBOMComponent.is_duplicate.is_(False)) | (SBOMComponent.is_duplicate.is_(None)),
+            )
+        )
+        .scalars()
+        .all()
+    )
 
 
 def _lifecycle_properties(component: SBOMComponent) -> list[dict[str, str]]:
@@ -597,6 +606,7 @@ def export_sbom(
     export_mode: str = Query(
         "original", description="Export mode: 'original', 'converted', 'enriched', or 'normalized'"
     ),
+    include_duplicates: bool = Query(False, description="Include duplicate component rows in normalized export"),
     db: Session = Depends(get_db),
 ):
     """
@@ -706,17 +716,18 @@ def export_sbom(
                 flat["raw"] = raw
 
             dependencies = doc.get("dependencies") or []
-            canonical_flat, _, ref_mapping, _, _ = ComponentDeduplicationService.deduplicate_components(
+            canonical_flat, duplicate_flat, ref_mapping, _, _ = ComponentDeduplicationService.deduplicate_components(
                 flat_comps, dependencies
             )
+            export_flat = canonical_flat + duplicate_flat if include_duplicates else canonical_flat
 
             # Sync flat canonical attributes back to raw
-            for flat in canonical_flat:
+            for flat in export_flat:
                 if "raw" in flat:
                     _sync_flat_to_raw(flat, flat["raw"], "cyclonedx")
 
             # Update doc components
-            doc["components"] = [flat["raw"] for flat in canonical_flat if "raw" in flat]
+            doc["components"] = [flat["raw"] for flat in export_flat if "raw" in flat]
 
             # Remap and merge dependencies
             cdx_deps_by_ref = {}
@@ -754,17 +765,18 @@ def export_sbom(
                 flat["raw"] = raw
 
             relationships = doc.get("relationships") or []
-            canonical_flat, _, ref_mapping, _, _ = ComponentDeduplicationService.deduplicate_components(
+            canonical_flat, duplicate_flat, ref_mapping, _, _ = ComponentDeduplicationService.deduplicate_components(
                 flat_comps, relationships
             )
+            export_flat = canonical_flat + duplicate_flat if include_duplicates else canonical_flat
 
             # Sync flat canonical attributes back to raw
-            for flat in canonical_flat:
+            for flat in export_flat:
                 if "raw" in flat:
                     _sync_flat_to_raw(flat, flat["raw"], "spdx")
 
             # Rebuild packages and elements lists, keeping only canonical ones
-            canonical_raw_set = {id(flat["raw"]) for flat in canonical_flat if "raw" in flat}
+            canonical_raw_set = {id(flat["raw"]) for flat in export_flat if "raw" in flat}
 
             new_packages = [pkg for pkg in original_packages if id(pkg) in canonical_raw_set]
             new_elements = [

@@ -1,4 +1,4 @@
-"""Validation pipeline orchestrator — runs the eight stages in order.
+"""Validation pipeline orchestrator — runs the nine stages in order.
 
 Stages are pure callables ``run(ctx) -> ctx``. The orchestrator short-circuits
 to "fail" after a stage that emits an error-severity entry, **except** that
@@ -26,6 +26,7 @@ from .stages import (
     detect,
     ingress,
     integrity,
+    normalization,
     ntia,
     schema,
     security,
@@ -63,7 +64,7 @@ class _CallableStage:
 
 
 def default_stages() -> list[Stage]:
-    """Return the canonical 8-stage ordering used in production.
+    """Return the canonical 9-stage ordering used in production.
 
     The semantic stage dispatches on ``ctx.spec`` / ``ctx.spec_version``;
     SPDX 2.x → :mod:`semantic_spdx`, SPDX 3.0 → :mod:`semantic_spdx3` (deferred,
@@ -91,6 +92,7 @@ def default_stages() -> list[Stage]:
         # stage failed — this gives a more complete report on partial input.
         _CallableStage("ntia", ntia.run, skip_on_errors=False),
         _CallableStage("signature", signature.run),
+        _CallableStage("normalization", normalization.run),
     ]
 
 

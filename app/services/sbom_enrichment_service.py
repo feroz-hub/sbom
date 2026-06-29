@@ -89,14 +89,24 @@ def _run_background_nvd_enrichment(db: Session, sbom_id: int) -> dict | None:
     settings = get_settings()
     if not settings.nvd_enabled or not settings.nvd_background_enrichment:
         return None
-    rows = db.execute(select(SBOMComponent).where(SBOMComponent.sbom_id == sbom_id)).scalars().all()
+    rows = (
+        db.execute(
+            select(SBOMComponent).where(
+                SBOMComponent.sbom_id == sbom_id,
+                (SBOMComponent.is_duplicate.is_(False)) | (SBOMComponent.is_duplicate.is_(None)),
+            )
+        )
+        .scalars()
+        .all()
+    )
     components = [
         {
-            "name": row.name,
-            "version": row.version,
-            "purl": row.purl,
-            "cpe": row.cpe,
+            "name": row.normalized_name or row.name,
+            "version": row.normalized_version or row.version,
+            "purl": row.normalized_purl or row.purl,
+            "cpe": row.primary_cpe or row.cpe,
             "cpe_source": row.cpe_source,
+            "normalized_component_key": row.normalized_component_key,
         }
         for row in rows
     ]

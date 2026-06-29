@@ -156,7 +156,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
   const { state, startAnalysis, cancel, reset } = useAnalysisStream(sbom.id);
-  const [activeTab, setActiveTab] = useState<'overview' | 'components' | 'versions' | 'runs'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'components' | 'normalization' | 'versions' | 'runs'>('overview');
   
   // Edit Component State
   const [editingComp, setEditingComp] = useState<SBOMComponent | null>(null);
@@ -817,6 +817,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
         {[
           { id: 'overview', label: 'Overview & Risk', icon: Eye },
           { id: 'components', label: 'Components List', icon: Layers },
+          { id: 'normalization', label: 'Normalization', icon: Check },
           { id: 'versions', label: 'Version History', icon: GitBranch },
           { id: 'runs', label: 'Analysis Runs', icon: History }
         ].map(tab => {
@@ -1335,6 +1336,13 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                               {c.canonical_component_version ? ` ${c.canonical_component_version}` : ''}
                             </span>
                           )}
+                          {(c.normalized_name || c.primary_cpe) && (
+                            <span className="text-[10px] text-hcl-muted">
+                              {c.normalized_name ? `Normalized ${c.normalized_name}` : ''}
+                              {c.normalized_version ? ` ${c.normalized_version}` : ''}
+                              {c.primary_cpe ? ` · ${c.primary_cpe}` : ''}
+                            </span>
+                          )}
                         </div>
                       </Td>
                       <Td className="font-mono text-xs">{c.version || '—'}</Td>
@@ -1424,6 +1432,66 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
           </div>
         </Card>
       </div>
+      )}
+
+      {activeTab === 'normalization' && (
+        <div className="space-y-6">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Normalization</CardTitle>
+                <p className="mt-1 text-xs text-hcl-muted">Stage 9 component identity and duplicate evidence.</p>
+              </div>
+              {(dedupeReport?.duplicates_found ?? 0) > 0 ? (
+                <Button size="sm" variant="outline" onClick={() => setIsDedupeModalOpen(true)}>
+                  <Layers className="h-3.5 w-3.5" /> Duplicate Groups
+                </Button>
+              ) : null}
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                {[
+                  ['Total', dedupeReport?.summary?.total_components ?? componentList?.total_count ?? 0],
+                  ['Canonical', dedupeReport?.summary?.canonical_components ?? componentList?.unique_count ?? 0],
+                  ['Duplicates', dedupeReport?.summary?.duplicate_components ?? componentList?.duplicate_count ?? 0],
+                  ['Groups', dedupeReport?.summary?.duplicate_groups ?? 0],
+                  ['PURLs', dedupeReport?.summary?.normalized_purls ?? 0],
+                ].map(([label, value]) => (
+                  <div key={String(label)} className="border border-hcl-border rounded-lg p-3">
+                    <div className="text-[10px] uppercase tracking-wide text-hcl-muted">{label}</div>
+                    <div className="mt-1 text-xl font-bold text-hcl-navy">{String(value)}</div>
+                  </div>
+                ))}
+              </div>
+              {dedupeReport?.duplicate_groups?.length ? (
+                <div className="border border-hcl-border rounded-lg overflow-hidden">
+                  <Table ariaLabel="Duplicate groups">
+                    <TableHead>
+                      <tr>
+                        <Th>Canonical</Th>
+                        <Th>Duplicates</Th>
+                        <Th>Confidence</Th>
+                        <Th>Reason</Th>
+                      </tr>
+                    </TableHead>
+                    <TableBody>
+                      {dedupeReport.duplicate_groups.slice(0, 20).map((group: any) => (
+                        <tr key={group.group_id || group.normalized_component_key}>
+                          <Td className="font-mono text-xs">{group.canonical_ref || '—'}</Td>
+                          <Td className="text-xs">{group.duplicate_refs?.length ?? 0}</Td>
+                          <Td className="text-xs">{group.confidence || '—'}</Td>
+                          <Td className="text-xs">{group.reason || '—'}</Td>
+                        </tr>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <p className="text-xs text-hcl-muted">No duplicate groups recorded for this SBOM.</p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {/* TAB 3: VERSION CONTROL */}
