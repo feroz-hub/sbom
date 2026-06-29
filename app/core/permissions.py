@@ -13,6 +13,7 @@ ALL_PERMISSIONS = frozenset(
         "sbom:repair:update",
         "sbom:repair:revalidate",
         "sbom:repair:download",
+        "sbom:repair:search",
         "project:read",
         "project:create",
         "project:update",
@@ -59,6 +60,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             "sbom:repair:update",
             "sbom:repair:revalidate",
             "sbom:repair:download",
+            "sbom:repair:search",
             "project:read",
             "project:create",
             "project:update",
@@ -85,6 +87,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
         {
             "sbom:read",
             "sbom:repair:read",
+            "sbom:repair:search",
             "project:read",
             "component:read",
             "lifecycle:read",
@@ -100,6 +103,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
         {
             "sbom:read",
             "sbom:repair:read",
+            "sbom:repair:search",
             "project:read",
             "component:read",
             "lifecycle:read",

@@ -18,6 +18,10 @@ import { useUploadSbom } from '@/hooks/useSbomMutations';
 import { stageLabel, stageNumber } from '@/lib/sbomValidation';
 import type { SBOMSource, SbomValidationFailureDetail } from '@/types';
 
+const MAX_BROWSER_PASTE_BYTES = 5 * 1024 * 1024;
+const MAX_BROWSER_PASTE_LINES = 20_000;
+const FILE_PREVIEW_BYTES = 65_536;
+
 function normalizeValidationFailureDetail(detail: unknown): SbomValidationFailureDetail | null {
   if (typeof detail !== 'object' || detail === null || Array.isArray(detail)) return null;
   const raw = detail as Partial<SbomValidationFailureDetail>;
@@ -52,7 +56,7 @@ function normalizeValidationFailureDetail(detail: unknown): SbomValidationFailur
 
 const schema = z.object({
   sbom_name: z.string().min(1, 'Name is required'),
-  sbom_data: z.string().min(2, 'SBOM content is required'),
+  sbom_data: z.string().optional().default(''),
   sbom_type_id: z.string().optional(),
   projectid: z.string().min(1, 'Project is required'),
   sbom_version: z.string().optional(),
@@ -96,6 +100,8 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [validationFailure, setValidationFailure] = useState<SbomValidationFailureDetail | null>(null);
+  const [uploadResult, setUploadResult] = useState<SBOMSource | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [duplicateNameError, setDuplicateNameError] = useState<string | null>(null);
   const [documentPreviewMeta, setDocumentPreviewMeta] = useState<{
     bytes: number;
@@ -140,29 +146,37 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
   const canSubmit = Boolean(
     selectedProjectId &&
     sbomNameValue?.trim() &&
-    sbomDataValue?.trim() &&
+    (selectedFile || sbomDataValue?.trim()) &&
     !duplicateNameError,
   );
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const content = ev.target?.result as string;
-      setValue('sbom_data', content, { shouldValidate: true });
-      const bytes = new TextEncoder().encode(content).length;
-      const lines = content ? content.split(/\r?\n/).length : 0;
-      setDocumentPreviewMeta({ bytes, lines, filename: file.name });
-      if (!watch('sbom_name')) {
-        setValue('sbom_name', file.name.replace(/\.[^/.]+$/, ''));
-      }
-      if (!watch('sbom_type_id') && sbomTypes?.length) {
-        const detected = detectSbomTypeId(file.name, sbomTypes);
-        if (detected) setValue('sbom_type_id', detected);
-      }
-    };
-    reader.readAsText(file);
+    setSelectedFile(file);
+    const preview = await file.slice(0, FILE_PREVIEW_BYTES).text();
+    const previewLines = preview ? preview.split(/\r?\n/).length : 0;
+    setValue('sbom_data', preview, { shouldValidate: true });
+    setDocumentPreviewMeta({ bytes: file.size, lines: previewLines, filename: file.name });
+    if (!watch('sbom_name')) {
+      setValue('sbom_name', file.name.replace(/\.[^/.]+$/, ''));
+    }
+    if (!watch('sbom_type_id') && sbomTypes?.length) {
+      const detected = detectSbomTypeId(file.name, sbomTypes);
+      if (detected) setValue('sbom_type_id', detected);
+    }
+  };
+
+  const handlePaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const text = event.clipboardData.getData('text');
+    const bytes = new TextEncoder().encode(text).length;
+    const lines = text ? text.split(/\r?\n/).length : 0;
+    if (bytes > MAX_BROWSER_PASTE_BYTES || lines > MAX_BROWSER_PASTE_LINES) {
+      event.preventDefault();
+      setUploadError(
+        'This SBOM is too large for browser paste editing. Please upload it as a file or use Large File Repair Mode.',
+      );
+    }
   };
 
   const handleNameBlur = (name: string) => {
@@ -180,11 +194,13 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
   const onSubmit = (values: FormValues) => {
     setUploadError(null);
     setValidationFailure(null);
+    setUploadResult(null);
 
     uploadMutation.mutate(
       {
         sbom_name: values.sbom_name,
-        sbom_data: values.sbom_data,
+        sbom_data: selectedFile ? '' : (values.sbom_data || ''),
+        sbom_file: selectedFile || undefined,
         sbom_type: values.sbom_type_id ? Number(values.sbom_type_id) : undefined,
         projectid: values.projectid ? Number(values.projectid) : undefined,
         project_id: values.projectid ? Number(values.projectid) : undefined,
@@ -194,19 +210,17 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
       },
       {
         onSuccess: (sbom) => {
-          // Close modal IMMEDIATELY — user should never wait for analysis.
-          reset();
           setUploadError(null);
           setValidationFailure(null);
+          setUploadResult(sbom);
           setDuplicateNameError(null);
-          onClose();
           showToast(
             `"${sbom.sbom_name}" uploaded successfully. Enrichment is running in background.`,
             'success',
             { duration: 5000 },
           );
-          // Parent triggers background analysis after the modal closes.
           onSuccess?.(sbom);
+          onClose();
         },
         onError: (err) => {
           // Validation failure (4xx with structured detail) → render the
@@ -230,6 +244,8 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
     reset();
     setUploadError(null);
     setValidationFailure(null);
+    setUploadResult(null);
+    setSelectedFile(null);
     setDuplicateNameError(null);
     setDocumentPreviewMeta(null);
     onClose();
@@ -320,6 +336,30 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
             </div>
           )}
 
+          {uploadResult && (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm dark:border-emerald-800 dark:bg-emerald-950/40">
+              <p className="font-semibold text-emerald-800 dark:text-emerald-200">
+                Upload stored and validated: {uploadResult.upload_status?.replaceAll('_', ' ') || 'valid'}
+              </p>
+              <dl className="mt-2 grid gap-2 text-xs text-emerald-900 dark:text-emerald-100 sm:grid-cols-2">
+                <div>Detected format: <span className="font-medium">{uploadResult.detected_format || 'Unknown'} {uploadResult.detected_spec_version || ''}</span></div>
+                <div>Lines: <span className="font-mono">{uploadResult.total_lines?.toLocaleString() || 'Unknown'}</span></div>
+                <div>Size: <span className="font-mono">{uploadResult.file_size_bytes?.toLocaleString() || 'Unknown'} bytes</span></div>
+                <div>SHA-256: <span className="font-mono break-all">{uploadResult.sha256 || 'Unknown'}</span></div>
+              </dl>
+              {uploadResult.validation_session_id && (
+                <Link
+                  href={`/sbom-validation-sessions/${uploadResult.validation_session_id}`}
+                  className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-emerald-800 hover:underline dark:text-emerald-200"
+                  onClick={handleClose}
+                >
+                  Open Repair Workspace
+                  <ArrowRight className="h-3 w-3" aria-hidden />
+                </Link>
+              )}
+            </div>
+          )}
+
           <Input
             label="SBOM Name"
             required
@@ -345,7 +385,7 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
                 <Upload className="h-3.5 w-3.5" />
                 Upload from file
               </button>
-              <span className="text-xs text-hcl-muted">or paste JSON / XML below (full file is uploaded; textarea is an editor preview)</span>
+              <span className="text-xs text-hcl-muted">or paste small JSON / XML below</span>
               <input
                 ref={fileRef}
                 type="file"
@@ -356,8 +396,8 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
             </div>
             {documentPreviewMeta ? (
               <p className="mb-2 text-xs text-hcl-muted">
-                Loaded preview: {documentPreviewMeta.filename} · {documentPreviewMeta.lines.toLocaleString()} lines ·{' '}
-                {(documentPreviewMeta.bytes / 1024).toFixed(1)} KB. The complete file will be uploaded.
+                Preview only. Validation uses full backend-stored file. {documentPreviewMeta.filename} · preview{' '}
+                {documentPreviewMeta.lines.toLocaleString()} lines · full size {(documentPreviewMeta.bytes / 1024).toFixed(1)} KB.
               </p>
             ) : null}
             <Textarea
@@ -365,8 +405,12 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
               error={errors.sbom_data?.message}
               className="font-mono text-xs min-h-[160px]"
               disabled={uploading}
+              onPaste={handlePaste}
               {...register('sbom_data')}
             />
+            <p className="text-xs text-hcl-muted">
+              Preview only. Validation and repair use the full file stored by the backend.
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">

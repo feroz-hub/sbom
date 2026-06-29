@@ -23,6 +23,7 @@ from ..services.validation_repair_service import (
 
 router = APIRouter(prefix="/api/sbom-validation-sessions", tags=["sbom-validation-sessions"])
 compat_router = APIRouter(prefix="/api/validation-sessions", tags=["validation-sessions"])
+workspace_router = APIRouter(prefix="/api/sbom-workspaces", tags=["sbom-workspaces"])
 
 
 class SessionUpdateRequest(BaseModel):
@@ -43,6 +44,10 @@ class ApplyPatchRequest(BaseModel):
     patches: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class ApplyLinePatchRequest(BaseModel):
+    patches: list[dict[str, Any]] = Field(default_factory=list)
+
+
 @router.get("/{session_id}")
 def get_validation_session(
     session_id: str,
@@ -56,25 +61,53 @@ def get_validation_session(
 @router.get("/{session_id}/content")
 def get_validation_session_content(
     session_id: str,
+    source: str = Query("repair_draft", pattern="^(original|repair_draft|repair)$"),
     offset: int = Query(0, ge=0),
     limit: int = Query(65536, ge=1, le=1048576),
     context: CurrentContext = Depends(get_current_tenant_context),
     db: Session = Depends(get_db),
 ):
     service = ValidationRepairService(db, tenant_id=context.tenant_id)
-    return service.content_chunk(session_id, offset=offset, limit=limit)
+    return service.content_chunk_for_source(session_id, source=source, offset=offset, limit=limit)
+
+
+@router.get("/{session_id}/content/chunk")
+def get_validation_session_content_chunk(
+    session_id: str,
+    source: str = Query("repair_draft", pattern="^(original|repair_draft|repair)$"),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(65536, ge=1, le=1048576),
+    context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
+):
+    service = ValidationRepairService(db, tenant_id=context.tenant_id)
+    return service.content_chunk_for_source(session_id, source=source, offset=offset, limit=limit)
 
 
 @router.get("/{session_id}/content-lines")
 def get_validation_session_content_lines(
     session_id: str,
+    source: str = Query("repair_draft", pattern="^(original|repair_draft|repair)$"),
     start_line: int = Query(1, ge=1),
     line_count: int = Query(500, ge=1, le=5000),
     context: CurrentContext = Depends(get_current_tenant_context),
     db: Session = Depends(get_db),
 ):
     service = ValidationRepairService(db, tenant_id=context.tenant_id)
-    return service.content_lines(session_id, start_line=start_line, line_count=line_count)
+    return service.content_lines_for_source(session_id, source=source, start_line=start_line, line_count=line_count)
+
+
+@router.get("/{session_id}/content/lines")
+def get_validation_session_content_lines_alias(
+    session_id: str,
+    source: str = Query("repair_draft", pattern="^(original|repair_draft|repair)$"),
+    start_line: int = Query(1, ge=1),
+    line_count: int = Query(500, ge=1, le=5000),
+    context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
+):
+    service = ValidationRepairService(db, tenant_id=context.tenant_id)
+    return service.content_lines_for_source(session_id, source=source, start_line=start_line, line_count=line_count)
 
 
 @router.get("/{session_id}/download-original")
@@ -84,22 +117,60 @@ def download_original_validation_session(
     db: Session = Depends(get_db),
 ):
     service = ValidationRepairService(db, tenant_id=context.tenant_id)
-    payload, media_type, filename = service.original_download(session_id, actor_user_id=context.actor_label())
+    iterator, media_type, filename, size = service.original_download_stream(session_id, actor_user_id=context.actor_label())
     audit_service.write_audit_log(
         db,
         context,
         "sbom.validation_session.download_original",
         entity_type="sbom_validation_session",
         entity_id=session_id,
-        new_value={"file_size_bytes": len(payload)},
+        new_value={"file_size_bytes": size},
     )
     db.commit()
     safe_filename = filename.replace('"', "").replace("\r", "").replace("\n", "")
     return StreamingResponse(
-        iter([payload]),
+        iterator,
         media_type=media_type,
         headers={"Content-Disposition": f'attachment; filename="{safe_filename}"'},
     )
+
+
+@router.get("/{session_id}/download-repair-draft")
+def download_repair_draft_validation_session(
+    session_id: str,
+    context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
+):
+    service = ValidationRepairService(db, tenant_id=context.tenant_id)
+    iterator, media_type, filename, size = service.repair_download_stream(session_id, actor_user_id=context.actor_label())
+    audit_service.write_audit_log(
+        db,
+        context,
+        "sbom.validation_session.download_repair_draft",
+        entity_type="sbom_validation_session",
+        entity_id=session_id,
+        new_value={"file_size_bytes": size},
+    )
+    db.commit()
+    safe_filename = filename.replace('"', "").replace("\r", "").replace("\n", "")
+    return StreamingResponse(
+        iterator,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{safe_filename}"'},
+    )
+
+
+@router.get("/{session_id}/search")
+def search_validation_session(
+    session_id: str,
+    q: str = Query(..., min_length=1, max_length=256),
+    source: str = Query("repair_draft", pattern="^(original|repair_draft|repair)$"),
+    limit: int = Query(100, ge=1, le=1000),
+    context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
+):
+    service = ValidationRepairService(db, tenant_id=context.tenant_id)
+    return service.search(session_id, query=q, source=source, limit=limit)
 
 
 @router.patch("/{session_id}")
@@ -296,6 +367,32 @@ def apply_patch(
     )
 
 
+@router.post("/{session_id}/repair/patches")
+def apply_line_patches(
+    session_id: str,
+    payload: ApplyLinePatchRequest,
+    context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
+    x_user_id: str | None = Header(None, alias="X-User-Id"),
+):
+    service = ValidationRepairService(db, tenant_id=context.tenant_id)
+    updated = service.apply_line_patches(
+        session_id,
+        payload.patches,
+        actor_user_id=x_user_id or context.actor_label(),
+    )
+    audit_service.write_audit_log(
+        db,
+        context,
+        "sbom.validation_session.patch_created",
+        entity_type="sbom_validation_session",
+        entity_id=session_id,
+        new_value={"patch_count": len(payload.patches), "stored_sha256": updated.stored_sha256},
+    )
+    db.commit()
+    return session_to_dict(updated)
+
+
 @router.get("/{session_id}/history")
 def session_history(
     session_id: str,
@@ -308,8 +405,12 @@ def session_history(
 
 compat_router.add_api_route("/{session_id}", get_validation_session, methods=["GET"])
 compat_router.add_api_route("/{session_id}/content", get_validation_session_content, methods=["GET"])
+compat_router.add_api_route("/{session_id}/content/chunk", get_validation_session_content_chunk, methods=["GET"])
 compat_router.add_api_route("/{session_id}/content-lines", get_validation_session_content_lines, methods=["GET"])
+compat_router.add_api_route("/{session_id}/content/lines", get_validation_session_content_lines_alias, methods=["GET"])
 compat_router.add_api_route("/{session_id}/download-original", download_original_validation_session, methods=["GET"])
+compat_router.add_api_route("/{session_id}/download-repair-draft", download_repair_draft_validation_session, methods=["GET"])
+compat_router.add_api_route("/{session_id}/search", search_validation_session, methods=["GET"])
 compat_router.add_api_route("/{session_id}", update_validation_session, methods=["PATCH"])
 compat_router.add_api_route("/{session_id}/repair-draft", save_repair_draft, methods=["PUT"])
 compat_router.add_api_route("/{session_id}/validate", validate_session, methods=["POST"])
@@ -317,4 +418,23 @@ compat_router.add_api_route("/{session_id}/revalidate", revalidate_session, meth
 compat_router.add_api_route("/{session_id}/import", import_session, methods=["POST"], response_model=SBOMSourceOut)
 compat_router.add_api_route("/{session_id}/ai/suggest-fixes", suggest_fixes, methods=["POST"])
 compat_router.add_api_route("/{session_id}/apply-patch", apply_patch, methods=["POST"])
+compat_router.add_api_route("/{session_id}/repair/patches", apply_line_patches, methods=["POST"])
 compat_router.add_api_route("/{session_id}/history", session_history, methods=["GET"])
+
+workspace_router.add_api_route("/{session_id}", get_validation_session, methods=["GET"])
+workspace_router.add_api_route("/{session_id}/content", get_validation_session_content, methods=["GET"])
+workspace_router.add_api_route("/{session_id}/content/chunk", get_validation_session_content_chunk, methods=["GET"])
+workspace_router.add_api_route("/{session_id}/content-lines", get_validation_session_content_lines, methods=["GET"])
+workspace_router.add_api_route("/{session_id}/content/lines", get_validation_session_content_lines_alias, methods=["GET"])
+workspace_router.add_api_route("/{session_id}/download-original", download_original_validation_session, methods=["GET"])
+workspace_router.add_api_route("/{session_id}/download-repair-draft", download_repair_draft_validation_session, methods=["GET"])
+workspace_router.add_api_route("/{session_id}/search", search_validation_session, methods=["GET"])
+workspace_router.add_api_route("/{session_id}", update_validation_session, methods=["PATCH"])
+workspace_router.add_api_route("/{session_id}/repair-draft", save_repair_draft, methods=["PUT"])
+workspace_router.add_api_route("/{session_id}/validate", validate_session, methods=["POST"])
+workspace_router.add_api_route("/{session_id}/revalidate", revalidate_session, methods=["POST"])
+workspace_router.add_api_route("/{session_id}/import", import_session, methods=["POST"], response_model=SBOMSourceOut)
+workspace_router.add_api_route("/{session_id}/ai/suggest-fixes", suggest_fixes, methods=["POST"])
+workspace_router.add_api_route("/{session_id}/apply-patch", apply_patch, methods=["POST"])
+workspace_router.add_api_route("/{session_id}/repair/patches", apply_line_patches, methods=["POST"])
+workspace_router.add_api_route("/{session_id}/history", session_history, methods=["GET"])

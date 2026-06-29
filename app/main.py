@@ -201,8 +201,11 @@ def _ensure_validation_repair_tables() -> None:
                         original_sha256 VARCHAR(64),
                         stored_size_bytes INTEGER,
                         stored_sha256 VARCHAR(64),
+                        storage_backend VARCHAR(32),
                         detected_format VARCHAR(64),
                         detected_version VARCHAR(64),
+                        detection_confidence FLOAT,
+                        detection_evidence_json JSON,
                         raw_content_text TEXT,
                         raw_content_blob BLOB,
                         raw_storage_path VARCHAR(1024),
@@ -216,6 +219,8 @@ def _ensure_validation_repair_tables() -> None:
                         stage_results_json JSON,
                         latest_error_report_json JSON,
                         total_lines INTEGER,
+                        is_large_file BOOLEAN NOT NULL DEFAULT 0,
+                        full_editor_allowed BOOLEAN NOT NULL DEFAULT 1,
                         can_edit BOOLEAN NOT NULL DEFAULT 1,
                         can_ai_fix BOOLEAN NOT NULL DEFAULT 1,
                         security_blocked_reason TEXT,
@@ -240,6 +245,7 @@ def _ensure_validation_repair_tables() -> None:
             ("original_sha256", "VARCHAR(64)"),
             ("stored_size_bytes", "INTEGER"),
             ("stored_sha256", "VARCHAR(64)"),
+            ("storage_backend", "VARCHAR(32)"),
             ("raw_content_text", "TEXT"),
             ("raw_content_blob", "BLOB"),
             ("raw_storage_path", "VARCHAR(1024)"),
@@ -249,6 +255,10 @@ def _ensure_validation_repair_tables() -> None:
             ("validation_errors_json", "JSON"),
             ("stage_results_json", "JSON"),
             ("total_lines", "INTEGER"),
+            ("detection_confidence", "FLOAT"),
+            ("detection_evidence_json", "JSON"),
+            ("is_large_file", "BOOLEAN NOT NULL DEFAULT 0"),
+            ("full_editor_allowed", "BOOLEAN NOT NULL DEFAULT 1"),
         ):
             if column_name not in existing_columns:
                 conn.execute(text(f"ALTER TABLE sbom_validation_sessions ADD COLUMN {column_name} {column_type}"))
@@ -833,6 +843,7 @@ app.include_router(sboms_crud.router, dependencies=_protected)
 app.include_router(sbom_upload.router, dependencies=_protected)
 app.include_router(sbom_validation_sessions.router, dependencies=_protected)
 app.include_router(sbom_validation_sessions.compat_router, dependencies=_protected)
+app.include_router(sbom_validation_sessions.workspace_router, dependencies=_protected)
 app.include_router(runs.router, dependencies=_protected)
 app.include_router(projects.router, dependencies=_protected)
 app.include_router(analyze_endpoints.router, dependencies=_protected)

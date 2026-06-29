@@ -49,6 +49,7 @@ import type {
   ValidationRepairSession,
   ValidationSessionContentChunk,
   ValidationSessionContentLines,
+  ValidationSessionSearchResponse,
   ValidationSessionImportResponse,
   UploadSBOMAcceptedResponse,
   SbomComponentListResponse,
@@ -63,6 +64,7 @@ import type {
   LifecycleVendorRecord,
   LifecycleVendorRecordPayload,
   LifecycleVendorRecordListResponse,
+  LineRepairPatch,
 } from '@/types';
 
 // Direct calls to FastAPI — no Next.js proxy (proxy caused ECONNRESET on
@@ -475,8 +477,12 @@ export function createSbom(payload: CreateSBOMPayload, signal?: AbortSignal) {
 
 export async function uploadSbom(payload: CreateSBOMPayload, signal?: AbortSignal) {
   const form = new FormData();
-  const filename = `${payload.sbom_name || 'sbom'}.${payload.sbom_data.trimStart().startsWith('<') ? 'xml' : 'json'}`;
-  form.set('file', new Blob([payload.sbom_data], { type: 'application/octet-stream' }), filename);
+  if (payload.sbom_file) {
+    form.set('file', payload.sbom_file, payload.sbom_file.name);
+  } else {
+    const filename = `${payload.sbom_name || 'sbom'}.${payload.sbom_data.trimStart().startsWith('<') ? 'xml' : 'json'}`;
+    form.set('file', new Blob([payload.sbom_data], { type: 'application/octet-stream' }), filename);
+  }
   form.set('sbom_name', payload.sbom_name);
   const projectId = payload.project_id ?? payload.projectid;
   if (projectId != null) form.set('project_id', String(projectId));
@@ -492,7 +498,24 @@ export async function uploadSbom(payload: CreateSBOMPayload, signal?: AbortSigna
     },
     120_000,
   );
-  return getSbom(accepted.sbom_id, signal);
+  const sbom = await getSbom(accepted.sbom_id, signal);
+  return {
+    ...sbom,
+    upload_status: accepted.status,
+    workspace_id: accepted.workspace_id,
+    validation_session_id: accepted.validation_session_id,
+    repair_workspace_url: accepted.repair_workspace_url,
+    detected_format: accepted.detected_format ?? accepted.spec,
+    detected_spec_version: accepted.detected_spec_version ?? accepted.spec_version,
+    detection_confidence: accepted.detection_confidence,
+    file_size_bytes: accepted.file_size_bytes,
+    total_lines: accepted.total_lines,
+    sha256: accepted.sha256,
+    is_large_file: accepted.is_large_file,
+    full_editor_allowed: accepted.full_editor_allowed,
+    validation_errors: accepted.validation_errors ?? [],
+    warning_count: accepted.validation_warnings?.length ?? accepted.warnings?.length ?? sbom.warning_count,
+  };
 }
 
 export function updateSbom(
@@ -1069,8 +1092,9 @@ export function getValidationSessionContent(
   offset = 0,
   limit = 65_536,
   signal?: AbortSignal,
+  source: 'original' | 'repair_draft' | 'repair' = 'repair_draft',
 ) {
-  const params = new URLSearchParams({ offset: String(offset), limit: String(limit) });
+  const params = new URLSearchParams({ offset: String(offset), limit: String(limit), source });
   return request<ValidationSessionContentChunk>(
     `/api/sbom-validation-sessions/${sessionId}/content?${params.toString()}`,
     { signal },
@@ -1082,10 +1106,25 @@ export function getValidationSessionContentLines(
   startLine = 1,
   lineCount = 500,
   signal?: AbortSignal,
+  source: 'original' | 'repair_draft' | 'repair' = 'repair_draft',
 ) {
-  const params = new URLSearchParams({ start_line: String(startLine), line_count: String(lineCount) });
+  const params = new URLSearchParams({ start_line: String(startLine), line_count: String(lineCount), source });
   return request<ValidationSessionContentLines>(
     `/api/sbom-validation-sessions/${sessionId}/content-lines?${params.toString()}`,
+    { signal },
+  );
+}
+
+export function searchValidationSession(
+  sessionId: string,
+  query: string,
+  source: 'original' | 'repair_draft' | 'repair' = 'repair_draft',
+  limit = 100,
+  signal?: AbortSignal,
+) {
+  const params = new URLSearchParams({ q: query, source, limit: String(limit) });
+  return request<ValidationSessionSearchResponse>(
+    `/api/sbom-validation-sessions/${sessionId}/search?${params.toString()}`,
     { signal },
   );
 }
@@ -1094,6 +1133,14 @@ export function downloadValidationSessionOriginal(sessionId: string, signal?: Ab
   return downloadBinary(
     `/api/sbom-validation-sessions/${sessionId}/download-original`,
     `invalid-sbom-${sessionId}.txt`,
+    signal,
+  );
+}
+
+export function downloadValidationSessionRepairDraft(sessionId: string, signal?: AbortSignal) {
+  return downloadBinary(
+    `/api/sbom-validation-sessions/${sessionId}/download-repair-draft`,
+    `repair-draft-${sessionId}.txt`,
     signal,
   );
 }
@@ -1165,6 +1212,18 @@ export function applyValidationSessionPatch(
   return request<ValidationRepairSession>(`/api/sbom-validation-sessions/${sessionId}/apply-patch`, {
     method: 'POST',
     body: JSON.stringify(patchPayload),
+    signal,
+  });
+}
+
+export function applyValidationSessionLinePatches(
+  sessionId: string,
+  patches: LineRepairPatch[],
+  signal?: AbortSignal,
+) {
+  return request<ValidationRepairSession>(`/api/sbom-validation-sessions/${sessionId}/repair/patches`, {
+    method: 'POST',
+    body: JSON.stringify({ patches }),
     signal,
   });
 }

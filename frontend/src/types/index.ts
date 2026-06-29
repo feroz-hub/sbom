@@ -16,7 +16,10 @@ export type ValidationRepairStatus =
   | 'edited'
   | 'repair_draft'
   | 'passed'
+  | 'valid'
+  | 'valid_with_warnings'
   | 'repaired_valid'
+  | 'unsupported_format'
   | 'security_blocked'
   | 'imported'
   | 'abandoned';
@@ -87,6 +90,18 @@ export interface SBOMSource {
     | 'PASS' // legacy alias for OK
     | 'FAIL'; // legacy alias for FINDINGS
   _findingsCount?: number;
+  upload_status?: string;
+  workspace_id?: string;
+  validation_session_id?: string;
+  repair_workspace_url?: string;
+  detected_format?: string | null;
+  detected_spec_version?: string | null;
+  detection_confidence?: number | null;
+  file_size_bytes?: number;
+  total_lines?: number;
+  sha256?: string;
+  is_large_file?: boolean;
+  full_editor_allowed?: boolean;
 }
 
 export interface ValidationErrorEntry {
@@ -159,6 +174,8 @@ export interface ValidationRepairReport {
 
 export interface ValidationRepairSession {
   id: string;
+  workspace_id?: string;
+  validation_session_id?: string;
   project_id: number | null;
   user_id: string | null;
   original_filename: string | null;
@@ -166,6 +183,10 @@ export interface ValidationRepairSession {
   sbom_type: number | null;
   detected_format: string | null;
   detected_version: string | null;
+  detected_spec_version?: string | null;
+  detection_confidence?: number | null;
+  detection_evidence?: { evidence?: string[]; warnings?: string[] } | string[] | null;
+  storage_backend?: string | null;
   content_type?: string | null;
   file_size_bytes?: number | null;
   sha256?: string | null;
@@ -174,11 +195,15 @@ export interface ValidationRepairSession {
   stored_size_bytes?: number | null;
   stored_sha256?: string | null;
   total_lines?: number | null;
+  is_large_file?: boolean;
+  full_editor_allowed?: boolean;
   current_content: string;
   content_inline_truncated?: boolean;
   validation_status: ValidationRepairStatus;
   latest_error_report: ValidationRepairReport;
   validation_errors?: ValidationErrorEntry[];
+  validation_warnings?: ValidationErrorEntry[];
+  stage_results?: ValidationRepairReport;
   can_edit: boolean;
   can_ai_fix: boolean;
   security_blocked_reason: string | null;
@@ -186,6 +211,7 @@ export interface ValidationRepairSession {
   updated_at: string;
   expires_at: string;
   imported_sbom_id: number | null;
+  repair_workspace_url?: string;
 }
 
 export interface ValidationRepairPatch {
@@ -231,6 +257,21 @@ export interface ValidationSessionContentLines {
   total_lines: number;
   lines: string[];
   eof: boolean;
+}
+
+export interface ValidationSessionSearchResponse {
+  query: string;
+  source: 'original' | 'repair_draft' | 'repair';
+  limit: number;
+  matches: Array<{ line_number: number; column: number; preview: string }>;
+  truncated: boolean;
+}
+
+export interface LineRepairPatch {
+  operation: 'replace_lines' | 'insert_before_line' | 'delete_lines';
+  start_line: number;
+  end_line?: number;
+  replacement_text?: string;
 }
 
 export type ValidationSession = ValidationRepairSession;
@@ -964,6 +1005,7 @@ export interface UpdateProjectPayload {
 export interface CreateSBOMPayload {
   sbom_name: string;
   sbom_data: string;
+  sbom_file?: File;
   sbom_type?: number;       // integer FK to SBOMType
   projectid?: number;
   project_id?: number;
@@ -973,13 +1015,28 @@ export interface CreateSBOMPayload {
 }
 
 export interface UploadSBOMAcceptedResponse {
+  status: string;
+  workspace_id: string;
+  validation_session_id: string;
+  repair_workspace_url: string;
   sbom_id: number;
   sbom_name: string;
   project_id: number | null;
   project_name?: string | null;
   spec: string;
   spec_version: string;
+  detected_format?: string | null;
+  detected_spec_version?: string | null;
+  detection_confidence?: number | null;
+  detection_evidence?: Record<string, unknown> | unknown[] | null;
+  file_size_bytes: number;
+  total_lines: number;
+  sha256: string;
+  is_large_file: boolean;
+  full_editor_allowed: boolean;
   components: number;
+  validation_errors?: ValidationErrorEntry[];
+  validation_warnings?: ValidationErrorEntry[];
   warnings: ValidationErrorEntry[];
   info: ValidationErrorEntry[];
   enrichment_status?: string | null;

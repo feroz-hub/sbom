@@ -696,6 +696,16 @@ Settings.SBOM_SYNC_VALIDATION_BYTES = 5 * 1024 * 1024
 # documents that carry a signature block. Default OFF in v1.
 Settings.SBOM_SIGNATURE_VERIFICATION = False
 
+# SBOM upload/repair workspace storage controls.
+Settings.SBOM_WORKSPACE_STORAGE_DIR = "./data/sbom-workspaces"
+Settings.SBOM_SMALL_FILE_MAX_BYTES = 5 * 1024 * 1024
+Settings.SBOM_FULL_EDITOR_MAX_LINES = 20_000
+Settings.SBOM_CONTENT_CHUNK_SIZE_BYTES = 65_536
+Settings.SBOM_LINE_PAGE_SIZE = 500
+Settings.SBOM_MAX_PASTE_BYTES = 5 * 1024 * 1024
+Settings.SBOM_REPAIR_MAX_PATCH_BYTES = 1024 * 1024
+Settings.SBOM_SEARCH_MAX_RESULTS = 1000
+
 # Default pagination size
 Settings.DEFAULT_RESULTS_PER_PAGE = 20
 

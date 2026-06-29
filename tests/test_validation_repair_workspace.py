@@ -188,6 +188,90 @@ def test_large_invalid_upload_retrieves_more_than_first_ten_lines(client):
     assert body["total_lines"] > 40_000
 
 
+def test_valid_multipart_upload_creates_accessible_workspace(client):
+    valid = {
+        "bomFormat": "CycloneDX",
+        "specVersion": "1.5",
+        "version": 1,
+        "metadata": {"timestamp": "2026-04-30T12:00:00Z"},
+        "components": [{"type": "library", "name": "ok", "version": "1.0.0"}],
+    }
+    raw = json.dumps(valid).encode("utf-8")
+    resp = client.post(
+        "/api/sboms/upload",
+        data={"sbom_name": _unique("valid-workspace")},
+        files={"file": ("valid.cdx.json", raw, "application/json")},
+    )
+    assert resp.status_code == 202, resp.text
+    body = resp.json()
+    assert body["workspace_id"]
+    assert body["validation_session_id"] == body["workspace_id"]
+    assert body["repair_workspace_url"] == f"/sbom-validation-sessions/{body['workspace_id']}"
+    assert body["detected_format"] == "cyclonedx"
+    assert body["sha256"] == sha256(raw).hexdigest()
+
+    workspace = client.get(f"/api/sbom-workspaces/{body['workspace_id']}")
+    assert workspace.status_code == 200, workspace.text
+    meta = workspace.json()
+    assert meta["imported_sbom_id"] == body["sbom_id"]
+    assert meta["validation_status"] in {"valid", "valid_with_warnings"}
+    assert meta["full_editor_allowed"] is True
+
+
+def test_workspace_search_and_original_source_lines(client):
+    session_id, _ = _create_failed_session(client)
+    lines = client.get(
+        f"/api/sbom-validation-sessions/{session_id}/content/lines",
+        params={"source": "original", "start_line": 1, "line_count": 3},
+    )
+    assert lines.status_code == 200, lines.text
+    assert lines.json()["lines"]
+
+    search = client.get(
+        f"/api/sbom-validation-sessions/{session_id}/search",
+        params={"q": "not-a-purl", "source": "repair_draft", "limit": 10},
+    )
+    assert search.status_code == 200, search.text
+    assert search.json()["matches"][0]["line_number"] >= 1
+
+
+def test_large_line_patch_updates_full_repair_draft(client):
+    lines = ["{", '  "bomFormat": "CycloneDX",', '  "specVersion": "1.4",', '  "components": [']
+    lines.extend(f'    {{"type":"library","name":"pkg-{i}","version":"1.0.0"}},' for i in range(25_000))
+    lines.append("  ]")
+    raw = ("\n".join(lines)).encode("utf-8")
+    resp = client.post(
+        "/api/sboms/upload",
+        data={"sbom_name": _unique("line-patch-large")},
+        files={"file": ("line-patch-large.json", raw, "application/json")},
+    )
+    assert resp.status_code in {400, 422}, resp.text
+    session_id = resp.json()["detail"]["validation_session_id"]
+
+    patched = client.post(
+        f"/api/sbom-validation-sessions/{session_id}/repair/patches",
+        json={
+            "patches": [
+                {
+                    "operation": "replace_lines",
+                    "start_line": len(lines),
+                    "end_line": len(lines),
+                    "replacement_text": "  ]\n}",
+                }
+            ]
+        },
+    )
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["validation_status"] == "repair_draft"
+
+    tail = client.get(
+        f"/api/sbom-validation-sessions/{session_id}/content/lines",
+        params={"start_line": len(lines), "line_count": 2},
+    )
+    assert tail.status_code == 200, tail.text
+    assert tail.json()["lines"][-1] == "}"
+
+
 def test_save_repair_draft_stores_full_content_and_revalidate_uses_it(client):
     session_id, _ = _create_failed_session(client)
     full_draft = "\n".join(f"line-{i}" for i in range(200)) + "\nnot-json"

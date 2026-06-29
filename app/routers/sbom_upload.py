@@ -48,13 +48,28 @@ router = APIRouter(prefix="/api/sboms", tags=["sboms"])
 class SbomAcceptedResponse(BaseModel):
     """Response body for a successful upload."""
 
+    status: str = "valid"
+    workspace_id: str
+    validation_session_id: str
+    repair_workspace_url: str
     sbom_id: int
     sbom_name: str
     project_id: int | None = None
     project_name: str | None = None
     spec: str
     spec_version: str
+    detected_format: str | None = None
+    detected_spec_version: str | None = None
+    detection_confidence: float | None = None
+    detection_evidence: dict | list | None = None
+    file_size_bytes: int
+    total_lines: int
+    sha256: str
+    is_large_file: bool
+    full_editor_allowed: bool
     components: int
+    validation_errors: list[dict] = []
+    validation_warnings: list[dict] = []
     warnings: list[dict]
     info: list[dict]
     enrichment_status: str = "pending"
@@ -173,8 +188,41 @@ async def upload_sbom(
             ),
         )
 
-    spec = ""
-    spec_version = ""
+    service = ValidationRepairService(db)
+    validation_status = "valid_with_warnings" if report.warning_count else "valid"
+    session, blocked_reason = service.create_upload_session(
+        raw_text=body_text_original,
+        raw_bytes=raw,
+        content_type=file.content_type,
+        report=report,
+        sbom_name=sbom_name,
+        original_filename=file.filename,
+        project_id=project_id,
+        sbom_type=sbom_type,
+        user_id=created_by,
+        validation_status=validation_status,
+    )
+    if session is None:
+        raise HTTPException(status_code=422, detail={"code": "workspace_blocked", "message": blocked_reason})
+    audit_service.write_audit_log(
+        db,
+        context,
+        "sbom.validation_session.created",
+        entity_type="sbom_validation_session",
+        entity_id=session.id,
+        new_value={
+            "sbom_name": sbom_name,
+            "project_id": project_id,
+            "file_size_bytes": session.file_size_bytes,
+            "sha256": session.sha256,
+            "validation_status": session.validation_status,
+            "detected_format": session.detected_format,
+        },
+    )
+    db.commit()
+
+    spec = session.detected_format or ""
+    spec_version = session.detected_version or ""
     components_count = 0
     try:
         as_dict = json.loads(body_text)
@@ -211,6 +259,10 @@ async def upload_sbom(
         db.add(obj)
         db.commit()
         db.refresh(obj)
+        session.imported_sbom_id = obj.id
+        session.updated_at = _now_iso()
+        db.add(session)
+        db.commit()
         audit_service.write_audit_log(
             db,
             context,
@@ -252,13 +304,28 @@ async def upload_sbom(
     background_tasks.add_task(run_post_upload_enrichment, obj.id, context.tenant_id)
 
     return SbomAcceptedResponse(
+        status=validation_status,
+        workspace_id=session.id,
+        validation_session_id=session.id,
+        repair_workspace_url=f"/sbom-validation-sessions/{session.id}",
         sbom_id=obj.id,
         sbom_name=obj.sbom_name,
         project_id=obj.projectid,
         project_name=obj.project_name,
         spec=spec,
         spec_version=spec_version,
+        detected_format=session.detected_format,
+        detected_spec_version=session.detected_version,
+        detection_confidence=session.detection_confidence,
+        detection_evidence=session.detection_evidence_json,
+        file_size_bytes=session.file_size_bytes or len(raw),
+        total_lines=session.total_lines or count_lines(body_text),
+        sha256=session.sha256 or "",
+        is_large_file=bool(session.is_large_file),
+        full_editor_allowed=bool(session.full_editor_allowed),
         components=components_count,
+        validation_errors=[],
+        validation_warnings=[w.model_dump() for w in report.warnings],
         warnings=[w.model_dump() for w in report.warnings],
         info=[i.model_dump() for i in report.info],
         enrichment_status=obj.enrichment_status or "pending",
