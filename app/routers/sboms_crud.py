@@ -45,6 +45,7 @@ from ..idempotency import (
     run_idempotent,
 )
 from ..models import (
+    AnalysisFinding,
     AnalysisRun,
     SBOMSource,
     SBOMType,
@@ -53,6 +54,7 @@ from ..models import (
 from ..rate_limit import analyze_route_limit
 from ..schemas import (
     AnalysisRunOut,
+    LatestAnalysisOut,
     SBOMComponentListResponse,
     SbomDocumentStatsResponse,
     SbomPatchRequest,
@@ -157,16 +159,184 @@ def _workspace_fields(
     }
 
 
+def _analysis_result(status: str | None) -> str:
+    normalized = (status or "").strip().upper()
+    if normalized in {"PENDING", "QUEUED"}:
+        return "queued"
+    if normalized in {"RUNNING", "ANALYSING", "ANALYZING"}:
+        return "running"
+    if normalized in {"CANCELLED", "CANCELED"}:
+        return "cancelled"
+    if normalized in {"ERROR", "FAILED", "FAILURE"}:
+        return "failed"
+    if normalized:
+        return "completed"
+    return "not_run"
+
+
+def _analysis_outcome(status: str | None) -> str:
+    normalized = (status or "").strip().upper()
+    if normalized in {"OK", "PASS"}:
+        return "pass"
+    if normalized in {"FINDINGS", "FAIL"}:
+        return "findings"
+    if normalized == "PARTIAL":
+        return "partial"
+    return _analysis_result(status)
+
+
+def _risk_level(
+    *,
+    critical_count: int,
+    high_count: int,
+    medium_count: int,
+    low_count: int,
+    risk_score: float | None,
+) -> str:
+    if critical_count > 0:
+        return "critical"
+    if high_count > 0:
+        return "high"
+    if medium_count > 0:
+        return "medium"
+    if low_count > 0 or (risk_score is not None and risk_score > 0):
+        return "low"
+    return "none"
+
+
+def _analysis_error_message(raw_report: str | None, status: str | None) -> str | None:
+    if _analysis_result(status) != "failed" or not raw_report:
+        return None
+    try:
+        parsed = json.loads(raw_report)
+    except (TypeError, json.JSONDecodeError):
+        return raw_report[:240]
+    if not isinstance(parsed, dict):
+        return None
+    for key in ("error_message", "error", "message"):
+        value = parsed.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()[:240]
+    errors = parsed.get("query_errors")
+    if isinstance(errors, list) and errors:
+        first = errors[0]
+        if isinstance(first, str):
+            return first[:240]
+        if isinstance(first, dict):
+            for key in ("error", "message", "detail"):
+                value = first.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()[:240]
+    return None
+
+
+def _serialize_latest_analysis(
+    run: AnalysisRun | None,
+    *,
+    risk_score: float | None = None,
+) -> LatestAnalysisOut | None:
+    if not run:
+        return None
+    critical_count = int(run.critical_count or 0)
+    high_count = int(run.high_count or 0)
+    medium_count = int(run.medium_count or 0)
+    low_count = int(run.low_count or 0)
+    return LatestAnalysisOut(
+        run_id=int(run.id),
+        status=_analysis_result(run.run_status),
+        result=_analysis_outcome(run.run_status),
+        finding_count=int(run.total_findings or 0),
+        critical_count=critical_count,
+        high_count=high_count,
+        medium_count=medium_count,
+        low_count=low_count,
+        risk_score=risk_score,
+        risk_level=_risk_level(
+            critical_count=critical_count,
+            high_count=high_count,
+            medium_count=medium_count,
+            low_count=low_count,
+            risk_score=risk_score,
+        ),
+        started_at=run.started_on,
+        completed_at=run.completed_on,
+        error_message=_analysis_error_message(run.raw_report, run.run_status),
+    )
+
+
+def _latest_analysis_for_sbom(db: Session, sbom: SBOMSource) -> LatestAnalysisOut | None:
+    run = (
+        db.execute(
+            select(AnalysisRun)
+            .where(
+                AnalysisRun.sbom_id == sbom.id,
+                AnalysisRun.tenant_id == sbom.tenant_id,
+            )
+            .order_by(AnalysisRun.id.desc())
+        )
+        .scalars()
+        .first()
+    )
+    if not run:
+        return None
+    risk_score = db.execute(
+        select(func.coalesce(func.sum(AnalysisFinding.score), 0.0)).where(
+            AnalysisFinding.analysis_run_id == run.id,
+            AnalysisFinding.tenant_id == sbom.tenant_id,
+        )
+    ).scalar_one()
+    return _serialize_latest_analysis(run, risk_score=float(risk_score or 0.0))
+
+
+def _latest_analysis_by_sbom_id(
+    db: Session,
+    *,
+    sbom_ids: list[int],
+    tenant_id: int,
+) -> dict[int, LatestAnalysisOut]:
+    if not sbom_ids:
+        return {}
+
+    latest_run_ids = (
+        select(func.max(AnalysisRun.id).label("run_id"))
+        .where(AnalysisRun.tenant_id == tenant_id, AnalysisRun.sbom_id.in_(sbom_ids))
+        .group_by(AnalysisRun.sbom_id)
+        .subquery()
+    )
+    risk_by_run = (
+        select(
+            AnalysisFinding.analysis_run_id.label("run_id"),
+            func.coalesce(func.sum(AnalysisFinding.score), 0.0).label("risk_score"),
+        )
+        .where(AnalysisFinding.tenant_id == tenant_id)
+        .where(AnalysisFinding.analysis_run_id.in_(select(latest_run_ids.c.run_id)))
+        .group_by(AnalysisFinding.analysis_run_id)
+        .subquery()
+    )
+    rows = db.execute(
+        select(AnalysisRun, risk_by_run.c.risk_score)
+        .join(latest_run_ids, latest_run_ids.c.run_id == AnalysisRun.id)
+        .outerjoin(risk_by_run, risk_by_run.c.run_id == AnalysisRun.id)
+        .where(AnalysisRun.tenant_id == tenant_id)
+    ).all()
+    return {
+        int(run.sbom_id): _serialize_latest_analysis(run, risk_score=float(risk_score or 0.0))
+        for run, risk_score in rows
+    }
+
+
 def _serialize_sbom_out(
     sbom: SBOMSource,
     *,
     include_raw: bool = False,
     workspace: SBOMValidationSession | None = None,
     db: Session | None = None,
+    latest_analysis: LatestAnalysisOut | None = None,
 ) -> SBOMSourceOut:
     out = SBOMSourceOut.model_validate(sbom, from_attributes=True)
     for key, value in _workspace_fields(sbom, session=workspace, db=db).items():
         setattr(out, key, value)
+    out.latest_analysis = latest_analysis if latest_analysis is not None else (_latest_analysis_for_sbom(db, sbom) if db is not None else None)
     if not include_raw:
         out.sbom_data = None
     return out
@@ -726,6 +896,7 @@ def get_sbom_details(
             stmt = stmt.order_by(SBOMSource.id.desc()).limit(page_size).offset(offset)
 
         items = db.execute(stmt).scalars().all()
+        item_ids = [int(item.id) for item in items]
         workspace_by_sbom_id: dict[int, SBOMValidationSession] = {}
         if items:
             workspace_rows = (
@@ -743,13 +914,26 @@ def get_sbom_details(
             for workspace in workspace_rows:
                 if workspace.imported_sbom_id is not None:
                     workspace_by_sbom_id.setdefault(int(workspace.imported_sbom_id), workspace)
+        latest_analysis_by_sbom_id = _latest_analysis_by_sbom_id(
+            db,
+            sbom_ids=item_ids,
+            tenant_id=context.tenant_id,
+        )
 
         if response is not None:
             response.headers["X-Total-Count"] = str(total)
             if items and len(items) == page_size:
                 response.headers["X-Next-Cursor"] = str(items[-1].id)
 
-        return [_serialize_sbom_out(item, workspace=workspace_by_sbom_id.get(item.id), db=db) for item in items]
+        return [
+            _serialize_sbom_out(
+                item,
+                workspace=workspace_by_sbom_id.get(item.id),
+                db=db,
+                latest_analysis=latest_analysis_by_sbom_id.get(int(item.id)),
+            )
+            for item in items
+        ]
     except SQLAlchemyError as exc:
         raise HTTPException(status_code=500, detail="Internal database error while fetching SBOMs.") from exc
 
@@ -1325,6 +1509,7 @@ async def analyze_sbom_stream(
     sbom_id: int,
     payload: AnalyzeStreamPayload,
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
+    context: CurrentContext = Depends(get_current_tenant_context),
     db: Session = Depends(get_db),
 ):
     """
@@ -1336,7 +1521,7 @@ async def analyze_sbom_stream(
       error     — fatal error (SBOM not found, parse failure, etc.)
     """
     idem = normalize_idempotency_key(idempotency_key)
-    sbom_row = db.get(SBOMSource, sbom_id)
+    sbom_row = get_sbom_for_tenant(db, sbom_id, context.tenant_id)
 
     async def _stream_not_found():
         yield _sse_event("error", {"message": f"SBOM {sbom_id} not found", "code": 404})
@@ -1367,19 +1552,59 @@ async def analyze_sbom_stream(
 
     async def event_stream():
         started_at = time.perf_counter()
+        run_started_on = now_iso()
+        run = AnalysisRun(
+            sbom_id=sbom_row.id,
+            project_id=sbom_row.projectid,
+            run_status="PENDING",
+            sbom_name=sbom_row.sbom_name,
+            source=",".join(normalize_source_names(payload.sources, default=configured_default_sources())),
+            started_on=run_started_on,
+            completed_on=run_started_on,
+            duration_ms=0,
+            total_components=0,
+            components_with_cpe=0,
+            total_findings=0,
+            raw_report=json.dumps({"status": "queued", "message": "Analysis queued."}),
+        )
+        db.add(run)
+        db.commit()
+        db.refresh(run)
 
         def elapsed() -> int:
             return int((time.perf_counter() - started_at) * 1000)
+
+        def mark_failed(message: str, *, code: int = 500) -> dict:
+            run.run_status = "ERROR"
+            run.completed_on = now_iso()
+            run.duration_ms = elapsed()
+            run.raw_report = json.dumps(
+                {
+                    "error_message": message,
+                    "status": "failed",
+                    "code": code,
+                    "sources": normalize_source_names(payload.sources, default=configured_default_sources()),
+                }
+            )
+            db.add(run)
+            db.commit()
+            return {"message": message, "code": code, "runId": run.id, "status": "ERROR"}
 
         try:
             cfg = get_analysis_settings_multi()
 
             sources = normalize_source_names(payload.sources, default=configured_default_sources())
+            run.source = ",".join(sources)
+            run.run_status = "RUNNING"
+            run.raw_report = json.dumps({"status": "running", "sources": sources})
+            db.add(run)
+            db.commit()
 
             yield _sse_event(
                 "progress",
                 {
                     "phase": "started",
+                    "runId": run.id,
                     "sources": sources,
                     "elapsed_ms": elapsed(),
                 },
@@ -1392,7 +1617,7 @@ async def analyze_sbom_stream(
                 components_raw = [enrich_component_for_osv(c) for c in components_raw]
                 components, _gen_cpe = _augment_components_with_cpe(components_raw)
             except Exception as exc:
-                yield _sse_event("error", {"message": f"SBOM parse failed: {exc}", "code": 400})
+                yield _sse_event("error", mark_failed(f"SBOM parse failed: {exc}", code=400))
                 return
 
             yield _sse_event(
@@ -1527,9 +1752,10 @@ async def analyze_sbom_stream(
                 components=components,
                 run_status=run_status,
                 source=source_label,
-                started_on=now_iso(),
+                started_on=run_started_on,
                 completed_on=now_iso(),
                 duration_ms=duration_ms,
+                existing_run=run,
             )
             db.commit()
 
@@ -1552,7 +1778,7 @@ async def analyze_sbom_stream(
 
         except Exception as exc:
             log.error("SSE stream unhandled error: %s", exc, exc_info=True)
-            yield _sse_event("error", {"message": str(exc), "code": 500})
+            yield _sse_event("error", mark_failed(str(exc), code=500))
 
     return StreamingResponse(
         event_stream(),
@@ -1562,4 +1788,29 @@ async def analyze_sbom_stream(
             "X-Accel-Buffering": "no",
             "Connection": "keep-alive",
         },
+    )
+
+
+@router.get("/sboms/{sbom_id}/analysis-runs", response_model=list[AnalysisRunOut])
+def list_sbom_analysis_runs(
+    sbom_id: int,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=500),
+    context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
+):
+    sbom = get_sbom_for_tenant(db, sbom_id, context.tenant_id)
+    if not sbom:
+        raise HTTPException(status_code=404, detail="SBOM not found")
+    offset = (page - 1) * page_size
+    return (
+        db.execute(
+            select(AnalysisRun)
+            .where(AnalysisRun.sbom_id == sbom.id, AnalysisRun.tenant_id == context.tenant_id)
+            .order_by(AnalysisRun.id.desc())
+            .limit(page_size)
+            .offset(offset)
+        )
+        .scalars()
+        .all()
     )

@@ -16,8 +16,14 @@ Beat must run as a SINGLE instance (deploy as its own process).
 
 from __future__ import annotations
 
+import asyncio
+import logging
+
 from celery import Celery
 from celery.schedules import crontab
+from celery.signals import worker_process_init, worker_process_shutdown, worker_ready, worker_shutdown
+
+log = logging.getLogger(__name__)
 
 
 def _broker_url() -> str:
@@ -86,3 +92,31 @@ celery_app.conf.beat_schedule = {
         "schedule": crontab(minute=45, hour=3),
     },
 }
+
+
+def _run_http_client_lifecycle(coro) -> None:
+    try:
+        asyncio.run(coro)
+    except Exception:
+        log.exception("celery_http_client_lifecycle_failed")
+        raise
+
+
+def _init_worker_http_client(**_: object) -> None:
+    from app.http_client import init_async_http_client
+
+    _run_http_client_lifecycle(init_async_http_client())
+    log.info("celery_async_http_client_ready")
+
+
+def _close_worker_http_client(**_: object) -> None:
+    from app.http_client import close_async_http_client
+
+    _run_http_client_lifecycle(close_async_http_client())
+    log.info("celery_async_http_client_closed")
+
+
+worker_process_init.connect(_init_worker_http_client, weak=False)
+worker_ready.connect(_init_worker_http_client, weak=False)
+worker_process_shutdown.connect(_close_worker_http_client, weak=False)
+worker_shutdown.connect(_close_worker_http_client, weak=False)

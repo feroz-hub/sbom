@@ -26,6 +26,20 @@ from ..settings import get_settings
 log = logging.getLogger("sbom.ai.tasks")
 
 
+async def _run_pipeline_with_http_client(pipeline: AiFixBatchPipeline, **kwargs) -> object:
+    from ..http_client import close_async_http_client, init_async_http_client
+
+    # The Celery task owns this asyncio.run() loop. Build and close the
+    # shared AsyncClient inside the same loop so httpx connections are not
+    # left bound to a loop that Celery has already torn down.
+    await close_async_http_client()
+    await init_async_http_client()
+    try:
+        return await pipeline.run(**kwargs)
+    finally:
+        await close_async_http_client()
+
+
 @shared_task(name="ai_fix.generate_run_fixes", bind=True, ignore_result=True)
 def generate_run_fixes(
     self,
@@ -93,8 +107,9 @@ def generate_run_fixes(
             budget=BudgetGuard(caps, db_session_factory=SessionLocal),
         )
         summary = asyncio.run(
-            pipeline.run(
-                run_id,
+            _run_pipeline_with_http_client(
+                pipeline,
+                run_id=run_id,
                 provider_name=provider_name,
                 force_refresh=force_refresh,
                 finding_ids=finding_ids,

@@ -6,7 +6,7 @@
  * Phase 4 §4.1 — replaces every project / SBOM / schedule single-button
  * confirm modal with a two-mode dialog:
  *
- *  * "Move to deleted" (default radio) — soft-delete, recoverable.
+ *  * "Soft delete" (default radio)      — recoverable.
  *  * "Delete permanently"               — hard-delete, requires typing
  *                                         the record's name to confirm.
  *
@@ -116,7 +116,7 @@ export function DeleteConfirmDialog({
     loading || (permanentArmed && (!nameMatches || recordName.trim() === ''));
 
   const dialogTitle = title ?? `Delete ${recordKind}?`;
-  const confirmLabel = permanentArmed ? 'Delete permanently' : 'Delete';
+  const confirmLabel = permanentArmed ? 'Delete permanently' : 'Soft delete';
   const confirmVariant = permanentArmed ? 'danger' : 'primary';
 
   return (
@@ -182,7 +182,7 @@ export function DeleteConfirmDialog({
               />
               <div className="min-w-0 flex-1">
                 <label htmlFor={softRadioId} className="cursor-pointer font-medium text-hcl-navy">
-                  Move to deleted
+                  Soft delete
                 </label>
                 <p className="mt-1 text-xs leading-relaxed text-hcl-muted">
                   {hasImpact && totalImpactCount > 0 ? (

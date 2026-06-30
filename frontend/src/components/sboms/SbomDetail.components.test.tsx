@@ -201,6 +201,31 @@ describe('SbomDetail components list', () => {
     expect(push).toHaveBeenCalledWith('/repair/imported-workspace-1');
   });
 
+  it.each([
+    ['valid', 'Open Repair Workspace'],
+    ['valid_with_warnings', 'Review / Repair Workspace'],
+  ])('shows repair workspace actions for %s SBOMs with a workspace id', async (validationStatus, label) => {
+    getSbomComponents.mockResolvedValue(listResponse([CANONICAL]));
+
+    render(
+      wrap(
+        <SbomDetail
+          sbom={{
+            ...SBOM,
+            workspace_id: `${validationStatus}-workspace-1`,
+            validation_session_id: `${validationStatus}-workspace-1`,
+            repair_workspace_url: `/repair/${validationStatus}-workspace-1`,
+            validation_status: validationStatus,
+          }}
+        />,
+      ),
+    );
+
+    const detailButton = await screen.findByRole('button', { name: label });
+    fireEvent.click(detailButton);
+    expect(push).toHaveBeenCalledWith(`/repair/${validationStatus}-workspace-1`);
+  });
+
   it('creates a workspace for backfillable validated SBOMs before navigating', async () => {
     getSbomComponents.mockResolvedValue(listResponse([CANONICAL]));
     createWorkspaceForSbom.mockResolvedValue({

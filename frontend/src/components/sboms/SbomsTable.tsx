@@ -27,7 +27,6 @@ import {
   invalidateScheduleLists,
   invalidateSbomSurfaces,
 } from '@/lib/queryInvalidation';
-import { sbomAnalysisShortLabel } from '@/lib/analysisRunStatusLabels';
 import { stageLabel, validationStatusMeta } from '@/lib/sbomValidation';
 import { canOpenRepairWorkspace, getRepairWorkspaceUrl } from '@/lib/repairWorkspace';
 import type { AnalysisStatus } from '@/hooks/useBackgroundAnalysis';
@@ -48,17 +47,26 @@ function displayProject(sb: SBOMSource): string {
 }
 
 function normalizeAnalysis(sb: SBOMSource): AnalysisStatus {
-  return sb._analysisStatus ?? 'NOT_ANALYSED';
+  if (sb._analysisStatus) return sb._analysisStatus;
+  const latest = sb.latest_analysis;
+  if (!latest) return 'NOT_ANALYSED';
+  const result = String(latest.result || '').toLowerCase();
+  const status = String(latest.status || '').toUpperCase();
+  if (result === 'queued' || status === 'PENDING' || status === 'QUEUED') return 'QUEUED';
+  if (result === 'running' || status === 'RUNNING' || status === 'ANALYSING') return 'RUNNING';
+  if (result === 'cancelled' || result === 'canceled' || status === 'CANCELLED' || status === 'CANCELED') return 'CANCELLED';
+  if (result === 'failed' || status === 'ERROR' || status === 'FAILED') return 'ERROR';
+  return 'OK';
 }
 
 const ANALYSIS_OPTIONS: { value: string; label: string }[] = [
   { value: '', label: 'All analysis states' },
-  { value: 'NOT_ANALYSED', label: 'Not scanned' },
-  { value: 'ANALYSING', label: 'Scanning…' },
-  { value: 'PASS', label: sbomAnalysisShortLabel('PASS') },
-  { value: 'FAIL', label: sbomAnalysisShortLabel('FAIL') },
-  { value: 'PARTIAL', label: sbomAnalysisShortLabel('PARTIAL') },
-  { value: 'ERROR', label: sbomAnalysisShortLabel('ERROR') },
+  { value: 'NOT_ANALYSED', label: 'Not Run' },
+  { value: 'QUEUED', label: 'Queued' },
+  { value: 'RUNNING', label: 'Running' },
+  { value: 'OK', label: 'Completed' },
+  { value: 'ERROR', label: 'Failed' },
+  { value: 'CANCELLED', label: 'Cancelled' },
 ];
 
 const VALIDATION_OPTIONS: { value: string; label: string }[] = [
@@ -124,7 +132,7 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
       invalidateScheduleLists(queryClient);
       invalidateDashboardTiles(queryClient);
       showToast(
-        permanent ? 'SBOM permanently deleted' : 'SBOM moved to deleted',
+        permanent ? 'SBOM permanently deleted' : 'SBOM soft deleted',
         'success',
       );
       setDeleteTarget(null);
@@ -394,6 +402,7 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
                       sbomId={sbom.id}
                       initialStatus={sbom._analysisStatus}
                       initialFindings={sbom._findingsCount}
+                      latestAnalysis={sbom.latest_analysis}
                     />
                   </Td>
                   <Td className="text-hcl-muted">{sbom.created_by || '—'}</Td>
@@ -414,6 +423,7 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
                         onClick={() => router.push(`/sboms/${sbom.id}`)}
                         className="rounded-lg p-1.5 text-hcl-muted transition-colors hover:bg-hcl-light hover:text-hcl-blue"
                         aria-label="View SBOM"
+                        title="View SBOM"
                       >
                         <Eye className="h-4 w-4" />
                       </button>
@@ -421,6 +431,7 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
                         onClick={() => setDeleteTarget(sbom)}
                         className="rounded-lg p-1.5 text-hcl-muted transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
                         aria-label="Delete SBOM"
+                        title="Delete SBOM"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>

@@ -157,6 +157,7 @@ def persist_analysis_run(
     started_on: str,
     completed_on: str,
     duration_ms: int,
+    existing_run: AnalysisRun | None = None,
 ) -> AnalysisRun:
     """
     Persist an analysis run and its findings to the database.
@@ -179,25 +180,24 @@ def persist_analysis_run(
 
     component_maps = _upsert_components(db, sbom_obj, components)
 
-    run = AnalysisRun(
-        sbom_id=sbom_obj.id,
-        project_id=sbom_obj.projectid,
-        run_status=run_status,
-        source=source,
-        started_on=started_on,
-        completed_on=completed_on,
-        duration_ms=duration_ms,
-        total_components=safe_int(details.get("total_components")),
-        components_with_cpe=safe_int(details.get("components_with_cpe")),
-        total_findings=safe_int(details.get("total_findings")),
-        critical_count=safe_int(details.get("critical")),
-        high_count=safe_int(details.get("high")),
-        medium_count=safe_int(details.get("medium")),
-        low_count=safe_int(details.get("low")),
-        unknown_count=safe_int(details.get("unknown")),
-        query_error_count=len(details.get("query_errors") or []),
-        raw_report=json.dumps(details),
-    )
+    run = existing_run or AnalysisRun(sbom_id=sbom_obj.id, project_id=sbom_obj.projectid)
+    run.sbom_id = sbom_obj.id
+    run.project_id = sbom_obj.projectid
+    run.run_status = run_status
+    run.source = source
+    run.started_on = started_on
+    run.completed_on = completed_on
+    run.duration_ms = duration_ms
+    run.total_components = safe_int(details.get("total_components"))
+    run.components_with_cpe = safe_int(details.get("components_with_cpe"))
+    run.total_findings = safe_int(details.get("total_findings"))
+    run.critical_count = safe_int(details.get("critical"))
+    run.high_count = safe_int(details.get("high"))
+    run.medium_count = safe_int(details.get("medium"))
+    run.low_count = safe_int(details.get("low"))
+    run.unknown_count = safe_int(details.get("unknown"))
+    run.query_error_count = len(details.get("query_errors") or [])
+    run.raw_report = json.dumps(details)
     db.add(run)
     db.flush()
 

@@ -2,10 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Upload, AlertCircle, AlertOctagon, ArrowRight } from 'lucide-react';
 import { Dialog, DialogBody, DialogFooter } from '@/components/ui/Dialog';
 import { Input, Textarea } from '@/components/ui/Input';
@@ -17,7 +18,14 @@ import { detectSbomFormatFromText, formatFamily, formatSbomFormatLabel, type Sbo
 import { useToast } from '@/hooks/useToast';
 import { useSbomsList } from '@/hooks/useSbomsList';
 import { useUploadSbom } from '@/hooks/useSbomMutations';
+import { invalidateUploadSurfaces } from '@/lib/queryInvalidation';
 import { stageLabel, stageNumber } from '@/lib/sbomValidation';
+import {
+  isUnsupportedUploadStatus,
+  isWarningUploadStatus,
+  shouldAutoCloseUploadModal,
+  shouldAutoOpenRepairWorkspace,
+} from '@/lib/uploadStatus';
 import type { SBOMSource, SbomValidationFailureDetail } from '@/types';
 
 const MAX_BROWSER_PASTE_BYTES = 5 * 1024 * 1024;
@@ -27,10 +35,15 @@ const FILE_PREVIEW_BYTES = 65_536;
 function normalizeValidationFailureDetail(detail: unknown): SbomValidationFailureDetail | null {
   if (typeof detail !== 'object' || detail === null || Array.isArray(detail)) return null;
   const raw = detail as Partial<SbomValidationFailureDetail>;
+  const rawStatus = String(raw.status ?? '');
   const looksLikeValidationFailure =
     raw.code === 'sbom_validation_failed' ||
-    raw.status === 'validation_failed' ||
+    rawStatus === 'validation_failed' ||
+    rawStatus === 'failed' ||
+    rawStatus === 'unsupported' ||
+    rawStatus === 'unsupported_format' ||
     Array.isArray(raw.entries) ||
+    Array.isArray((raw as { validation_errors?: unknown }).validation_errors) ||
     Boolean(raw.error_report);
   if (!looksLikeValidationFailure) return null;
 
@@ -96,6 +109,7 @@ interface SbomUploadModalProps {
 
 export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalProps) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const handledUploadResultRef = useRef(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [validationFailure, setValidationFailure] = useState<SbomValidationFailureDetail | null>(null);
   const [uploadResult, setUploadResult] = useState<SBOMSource | null>(null);
@@ -108,6 +122,8 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
   } | null>(null);
   const [formatDetection, setFormatDetection] = useState<SbomFormatDetection | null>(null);
   const [userManuallyOverrodeFormat, setUserManuallyOverrodeFormat] = useState(false);
+  const router = useRouter();
+  const queryClient = useQueryClient();
   const { showToast } = useToast();
   const uploadMutation = useUploadSbom();
   const uploading = uploadMutation.isPending;
@@ -207,6 +223,7 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
   };
 
   const onSubmit = (values: FormValues) => {
+    handledUploadResultRef.current = false;
     setUploadError(null);
     setValidationFailure(null);
     setUploadResult(null);
@@ -225,9 +242,11 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
       },
       {
         onSuccess: (sbom) => {
+          if (handledUploadResultRef.current) return;
+          handledUploadResultRef.current = true;
+
           setUploadError(null);
           setValidationFailure(null);
-          setUploadResult(sbom);
           setFormatDetection({
             detected_format: sbom.detected_format || 'unknown',
             detected_spec_version: sbom.detected_spec_version || null,
@@ -235,6 +254,40 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
             detection_evidence: [],
           });
           setDuplicateNameError(null);
+          const status = sbom.validation_status ?? sbom.upload_status ?? sbom.status;
+          const repairUrl = getRepairWorkspaceUrl(sbom);
+          invalidateUploadSurfaces(queryClient, sbom.project_id ?? sbom.projectid);
+
+          if (shouldAutoOpenRepairWorkspace(status)) {
+            showToast(
+              isUnsupportedUploadStatus(status)
+                ? 'SBOM format could not be detected or is unsupported. Opening Repair Workspace.'
+                : 'SBOM validation failed. Opening Repair Workspace.',
+              'error',
+              { duration: 6000 },
+            );
+            onSuccess?.(sbom);
+            closeAfterUpload();
+            if (repairUrl) {
+              router.push(repairUrl);
+            }
+            return;
+          }
+
+          if (shouldAutoCloseUploadModal(status)) {
+            showToast(
+              isWarningUploadStatus(status)
+                ? 'SBOM uploaded with validation warnings.'
+                : 'SBOM uploaded and validated successfully.',
+              'success',
+              { duration: 5000 },
+            );
+            onSuccess?.(sbom);
+            closeAfterUpload();
+            return;
+          }
+
+          setUploadResult(sbom);
           showToast(
             `"${sbom.sbom_name}" uploaded successfully. Enrichment is running in background.`,
             'success',
@@ -243,10 +296,30 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
           onSuccess?.(sbom);
         },
         onError: (err) => {
+          if (handledUploadResultRef.current) return;
+          handledUploadResultRef.current = true;
+
           // Validation failure (4xx with structured detail) → render the
           // structured rejection card with stage info + "View full report" link.
           const validationDetail = err instanceof HttpError ? normalizeValidationFailureDetail(err.detail) : null;
           if (validationDetail) {
+            const status = validationDetail.status;
+            const repairUrl = getRepairWorkspaceUrl(validationDetail);
+            invalidateUploadSurfaces(queryClient, null);
+
+            if (shouldAutoOpenRepairWorkspace(status) && repairUrl) {
+              showToast(
+                isUnsupportedUploadStatus(status)
+                  ? 'SBOM format could not be detected or is unsupported. Opening Repair Workspace.'
+                  : 'SBOM validation failed. Opening Repair Workspace.',
+                'error',
+                { duration: 6000 },
+              );
+              closeAfterUpload();
+              router.push(repairUrl);
+              return;
+            }
+
             setValidationFailure(validationDetail);
             setUploadError(null);
           } else {
@@ -259,8 +332,7 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
     );
   };
 
-  const handleClose = () => {
-    if (uploading) return; // don't close mid-upload
+  const resetModalState = () => {
     reset();
     setUploadError(null);
     setValidationFailure(null);
@@ -270,6 +342,16 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
     setDocumentPreviewMeta(null);
     setFormatDetection(null);
     setUserManuallyOverrodeFormat(false);
+  };
+
+  const closeAfterUpload = () => {
+    resetModalState();
+    onClose();
+  };
+
+  const handleClose = () => {
+    if (uploading) return; // don't close mid-upload
+    resetModalState();
     onClose();
   };
 

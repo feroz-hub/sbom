@@ -24,6 +24,7 @@ import json
 import re
 
 import pytest
+from app.models import AnalysisRun, SBOMSource
 
 
 def _parse_sse_events(body: str) -> list[dict]:
@@ -51,9 +52,25 @@ def _parse_sse_events(body: str) -> list[dict]:
     return events
 
 
+@pytest.fixture()
+def db(client):
+    from app.db import SessionLocal
+
+    session = SessionLocal()
+    try:
+        yield session
+    finally:
+        session.rollback()
+        session.close()
+
+
 @pytest.mark.snapshot
-def test_analyze_stream_uses_registry_and_emits_per_source_progress(client, seeded_sbom, mock_external_sources):
+def test_analyze_stream_uses_registry_emits_progress_and_persists_run(client, seeded_sbom, mock_external_sources, db):
     sbom_id = seeded_sbom["id"]
+    before_ids = {
+        row.id
+        for row in db.query(AnalysisRun).filter(AnalysisRun.sbom_id == sbom_id).all()
+    }
 
     resp = client.post(
         f"/api/sboms/{sbom_id}/analyze/stream",
@@ -102,3 +119,68 @@ def test_analyze_stream_uses_registry_and_emits_per_source_progress(client, seed
     assert final["status"] == "FINDINGS"  # ADR-0001 (was FAIL)
     assert isinstance(final["runId"], int)
     assert final["errors"] == 0
+
+    db.expire_all()
+    persisted = db.get(AnalysisRun, final["runId"])
+    assert persisted is not None
+    assert persisted.id not in before_ids
+    assert persisted.sbom_id == sbom_id
+    assert persisted.run_status == "FINDINGS"
+    assert persisted.started_on
+    assert persisted.completed_on
+    assert persisted.total_findings == final["total"]
+    assert persisted.critical_count == final["critical"]
+    assert persisted.high_count == final["high"]
+
+    list_body = client.get(f"/api/sboms?user_id={seeded_sbom['created_by']}&page_size=500").json()
+    row = next(item for item in list_body if item["id"] == sbom_id)
+    assert row["latest_analysis"]["run_id"] == persisted.id
+    assert row["latest_analysis"]["status"] == "completed"
+    assert row["latest_analysis"]["result"] == "findings"
+    assert row["latest_analysis"]["finding_count"] == persisted.total_findings
+    assert row["latest_analysis"]["critical_count"] == persisted.critical_count
+    assert row["latest_analysis"]["high_count"] == persisted.high_count
+
+    detail = client.get(f"/api/sboms/{sbom_id}").json()
+    assert detail["latest_analysis"]["run_id"] == persisted.id
+
+
+def test_analyze_stream_parse_failure_persists_failed_run(client, db):
+    sbom = SBOMSource(
+        sbom_name="stream-parse-failure",
+        sbom_data="{not valid json",
+        status="validated",
+        created_by="stream-failure-test",
+    )
+    db.add(sbom)
+    db.commit()
+    db.refresh(sbom)
+
+    resp = client.post(
+        f"/api/sboms/{sbom.id}/analyze/stream",
+        json={"sources": ["NVD"]},
+    )
+
+    assert resp.status_code == 200, resp.text
+    events = _parse_sse_events(resp.text)
+    errors = [event for event in events if event["event"] == "error"]
+    assert errors
+    terminal = errors[-1]["data"]
+    assert terminal["status"] == "ERROR"
+    assert terminal["runId"]
+    assert "SBOM parse failed" in terminal["message"]
+
+    db.expire_all()
+    run = db.get(AnalysisRun, terminal["runId"])
+    assert run is not None
+    assert run.sbom_id == sbom.id
+    assert run.run_status == "ERROR"
+    assert run.started_on
+    assert run.completed_on
+    assert "SBOM parse failed" in (run.raw_report or "")
+
+    detail = client.get(f"/api/sboms/{sbom.id}").json()
+    assert detail["latest_analysis"]["run_id"] == run.id
+    assert detail["latest_analysis"]["status"] == "failed"
+    assert detail["latest_analysis"]["result"] == "failed"
+    assert "SBOM parse failed" in detail["latest_analysis"]["error_message"]

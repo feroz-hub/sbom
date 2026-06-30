@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useRef, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { BASE_URL } from '@/lib/api';
+import { invalidateAnalysisCompletion } from '@/lib/queryInvalidation';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -54,6 +56,7 @@ const INITIAL_STATE: AnalysisStreamState = {
 
 export function useAnalysisStream(sbomId: number) {
   const [state, setState] = useState<AnalysisStreamState>(INITIAL_STATE);
+  const queryClient = useQueryClient();
 
   // Elapsed wall-clock timer, updated every 500ms
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -221,6 +224,10 @@ export function useAnalysisStream(sbomId: number) {
           }
         } else if (eventType === 'complete') {
           stopTimer();
+          invalidateAnalysisCompletion(queryClient, { sbomId });
+          queryClient.invalidateQueries({ queryKey: ['sbom', sbomId] });
+          queryClient.invalidateQueries({ queryKey: ['sbom-stats', sbomId] });
+          queryClient.invalidateQueries({ queryKey: ['runs', { sbom_id: sbomId }] });
           setState((prev) => ({
             ...prev,
             phase: 'done',
@@ -237,6 +244,10 @@ export function useAnalysisStream(sbomId: number) {
           }));
         } else if (eventType === 'error') {
           stopTimer();
+          invalidateAnalysisCompletion(queryClient, { sbomId });
+          queryClient.invalidateQueries({ queryKey: ['sbom', sbomId] });
+          queryClient.invalidateQueries({ queryKey: ['sbom-stats', sbomId] });
+          queryClient.invalidateQueries({ queryKey: ['runs', { sbom_id: sbomId }] });
           setState((prev) => ({
             ...prev,
             phase: 'error',
@@ -265,7 +276,7 @@ export function useAnalysisStream(sbomId: number) {
         stopTimer();
       }
     },
-    [sbomId, startTimer, stopTimer],
+    [queryClient, sbomId, startTimer, stopTimer],
   );
 
   const reset = useCallback(() => {

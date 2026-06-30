@@ -68,7 +68,11 @@ export const sbomAnalysisShortLabel = (code: string | null | undefined): string 
   const k = (code ?? '').toUpperCase();
   switch (k) {
     case 'ANALYSING':
-      return 'Scanning…';
+    case 'RUNNING':
+      return 'Running';
+    case 'PENDING':
+    case 'QUEUED':
+      return 'Queued';
     case 'OK':
     case 'PASS':
       return 'No issues';
@@ -88,7 +92,8 @@ export const sbomAnalysisShortLabel = (code: string | null | undefined): string 
 
 export const sbomAnalysisDescription = (code: string | null | undefined): string => {
   const k = (code ?? '').toUpperCase();
-  if (k === 'ANALYSING') return 'Vulnerability scan is in progress.';
+  if (k === 'ANALYSING' || k === 'RUNNING') return 'Vulnerability scan is in progress.';
+  if (k === 'PENDING' || k === 'QUEUED') return 'Analysis is queued and will start shortly.';
   if (k === 'NOT_ANALYSED') return 'This SBOM has not been analysed yet.';
   if (k === 'ERROR') return 'The scan ended with an error. Check notifications or run details.';
   return runStatusDescription(code);

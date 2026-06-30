@@ -69,6 +69,22 @@ class SBOMSourceCreate(BaseModel):
         return data
 
 
+class LatestAnalysisOut(BaseModel):
+    run_id: int
+    status: str
+    result: str
+    finding_count: int = 0
+    critical_count: int = 0
+    high_count: int = 0
+    medium_count: int = 0
+    low_count: int = 0
+    risk_score: float | None = None
+    risk_level: str | None = None
+    started_at: str | None = None
+    completed_at: str | None = None
+    error_message: str | None = None
+
+
 class SBOMSourceOut(ORMModel):
     id: int
     sbom_name: str
@@ -142,6 +158,7 @@ class SBOMSourceOut(ORMModel):
     component_extraction_error: str | None = None
     component_extraction_attempted_at: str | None = None
     component_extraction_completed_at: str | None = None
+    latest_analysis: LatestAnalysisOut | None = None
 
     @model_validator(mode="before")
     @classmethod

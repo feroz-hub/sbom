@@ -3,7 +3,7 @@
  * DeleteConfirmDialog — behaviour + accessibility (Phase 4 §4.1, §4.4).
  *
  * Asserts:
- *   * Default radio is "Move to deleted" — onConfirm fires with permanent=false.
+ *   * Default radio is "Soft delete" — onConfirm fires with permanent=false.
  *   * Switching to permanent reveals the typed-name confirmation input.
  *   * The Delete button stays disabled until the typed name matches.
  *   * The button label / variant switch ("Delete" → "Delete permanently").
@@ -44,10 +44,10 @@ describe('DeleteConfirmDialog', () => {
     const user = userEvent.setup();
     const { onConfirm } = renderDialog();
 
-    expect(screen.getByLabelText(/move to deleted/i)).toBeChecked();
+    expect(screen.getByLabelText(/soft delete/i)).toBeChecked();
     expect(screen.queryByLabelText(/type production backend to confirm/i)).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: /^delete$/i }));
+    await user.click(screen.getByRole('button', { name: /^soft delete$/i }));
     expect(onConfirm).toHaveBeenCalledWith({ permanent: false });
   });
 

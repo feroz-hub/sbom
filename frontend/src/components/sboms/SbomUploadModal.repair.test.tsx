@@ -6,9 +6,14 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HttpError } from '@/lib/api';
 
+const push = vi.fn();
 const useUploadSbomMutate = vi.fn();
 const showToast = vi.fn();
 const getSbomTypes = vi.fn();
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push, replace: vi.fn(), back: vi.fn() }),
+}));
 
 vi.mock('@/hooks/useSbomMutations', () => ({
   useUploadSbom: () => ({ mutate: useUploadSbomMutate, isPending: false }),
@@ -52,11 +57,23 @@ function wrap(children: ReactNode) {
 }
 
 beforeEach(() => {
+  push.mockReset();
   useUploadSbomMutate.mockReset();
   showToast.mockReset();
   getSbomTypes.mockReset();
   getSbomTypes.mockResolvedValue([]);
+  vi.restoreAllMocks();
 });
+
+async function fillRequiredFieldsAndSubmit(name: string, content = '{"bomFormat":"CycloneDX","specVersion":"1.5","components":[]}') {
+  expect(await screen.findByRole('option', { name: 'Payments' })).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText(/SBOM Name/i), { target: { value: name } });
+  fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: '42' } });
+  fireEvent.change(screen.getByPlaceholderText('Paste a small SPDX, CycloneDX, or XML SBOM preview'), {
+    target: { value: content },
+  });
+  fireEvent.click(screen.getByRole('button', { name: /Upload SBOM/i }));
+}
 
 describe('SbomUploadModal validation repair handoff', () => {
   it('defaults the format selector to Auto-detect', async () => {
@@ -128,9 +145,10 @@ describe('SbomUploadModal validation repair handoff', () => {
     expect(useUploadSbomMutate.mock.calls[0][0].sbom_type).toBeUndefined();
   });
 
-  it('shows upload success copy that enrichment continues in background', async () => {
+  it('closes valid uploads, refreshes upload surfaces, and does not open repair workspace', async () => {
     const onClose = vi.fn();
     const onSuccess = vi.fn();
+    const invalidateSpy = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
     useUploadSbomMutate.mockImplementation((_payload, handlers) => {
       handlers.onSuccess({
         id: 7,
@@ -150,30 +168,26 @@ describe('SbomUploadModal validation repair handoff', () => {
 
     render(wrap(<SbomUploadModal open onClose={onClose} onSuccess={onSuccess} />));
 
-    expect(await screen.findByRole('option', { name: 'Payments' })).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText(/SBOM Name/i), { target: { value: 'good-sbom' } });
-    fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: '42' } });
-    fireEvent.change(screen.getByPlaceholderText('Paste a small SPDX, CycloneDX, or XML SBOM preview'), {
-      target: { value: '{"bomFormat":"CycloneDX","specVersion":"1.5","components":[]}' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: /Upload SBOM/i }));
+    await fillRequiredFieldsAndSubmit('good-sbom');
 
     await waitFor(() => {
       expect(showToast).toHaveBeenCalledWith(
-        '"good-sbom" uploaded successfully. Enrichment is running in background.',
+        'SBOM uploaded and validated successfully.',
         'success',
         { duration: 5000 },
       );
     });
-    expect(onClose).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledTimes(1);
     expect(onSuccess).toHaveBeenCalledWith(expect.objectContaining({ id: 7, enrichment_status: 'pending' }));
-    expect(screen.getByRole('link', { name: /Open Repair Workspace/i })).toHaveAttribute(
-      'href',
-      '/repair/valid-workspace-1',
-    );
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['sboms'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['dashboard-posture'] });
+    expect(push).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Upload stored and validated/i)).not.toBeInTheDocument();
   });
 
-  it('shows a Review / Repair Workspace link for valid uploads with warnings', async () => {
+  it('closes warning uploads, refreshes upload surfaces, and does not open repair workspace', async () => {
+    const onClose = vi.fn();
+    const invalidateSpy = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
     useUploadSbomMutate.mockImplementation((_payload, handlers) => {
       handlers.onSuccess({
         id: 8,
@@ -192,20 +206,21 @@ describe('SbomUploadModal validation repair handoff', () => {
       });
     });
 
-    render(wrap(<SbomUploadModal open onClose={vi.fn()} />));
+    render(wrap(<SbomUploadModal open onClose={onClose} />));
 
-    expect(await screen.findByRole('option', { name: 'Payments' })).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText(/SBOM Name/i), { target: { value: 'warning-sbom' } });
-    fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: '42' } });
-    fireEvent.change(screen.getByPlaceholderText('Paste a small SPDX, CycloneDX, or XML SBOM preview'), {
-      target: { value: '{"bomFormat":"CycloneDX","specVersion":"1.5","components":[]}' },
+    await fillRequiredFieldsAndSubmit('warning-sbom');
+
+    await waitFor(() => {
+      expect(showToast).toHaveBeenCalledWith(
+        'SBOM uploaded with validation warnings.',
+        'success',
+        { duration: 5000 },
+      );
     });
-    fireEvent.click(screen.getByRole('button', { name: /Upload SBOM/i }));
-
-    expect(await screen.findByRole('link', { name: /Review \/ Repair Workspace/i })).toHaveAttribute(
-      'href',
-      '/repair/warning-workspace-1',
-    );
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['sboms'] });
+    expect(push).not.toHaveBeenCalled();
+    expect(screen.queryByRole('link', { name: /Review \/ Repair Workspace/i })).not.toBeInTheDocument();
   });
 
   it('shows upload timeout or network errors without opening repair workspace', async () => {
@@ -215,19 +230,14 @@ describe('SbomUploadModal validation repair handoff', () => {
 
     render(wrap(<SbomUploadModal open onClose={vi.fn()} />));
 
-    expect(await screen.findByRole('option', { name: 'Payments' })).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText(/SBOM Name/i), { target: { value: 'slow-sbom' } });
-    fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: '42' } });
-    fireEvent.change(screen.getByPlaceholderText('Paste a small SPDX, CycloneDX, or XML SBOM preview'), {
-      target: { value: '{"bomFormat":"CycloneDX","specVersion":"1.5","components":[]}' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: /Upload SBOM/i }));
+    await fillRequiredFieldsAndSubmit('slow-sbom');
 
     expect(await screen.findByText('Request timed out after 120000ms')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Open repair workspace/i })).not.toBeInTheDocument();
   });
 
-  it('shows an Open repair workspace link when upload validation creates a session', async () => {
+  it('closes failed uploads and opens repair workspace automatically', async () => {
+    const onClose = vi.fn();
     useUploadSbomMutate.mockImplementation((_payload, handlers) => {
       handlers.onError(
         new HttpError('validation failed', 422, 'sbom_validation_failed', {
@@ -257,23 +267,26 @@ describe('SbomUploadModal validation repair handoff', () => {
       );
     });
 
-    render(wrap(<SbomUploadModal open onClose={vi.fn()} />));
+    render(wrap(<SbomUploadModal open onClose={onClose} />));
 
-    expect(await screen.findByRole('option', { name: 'Payments' })).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText(/SBOM Name/i), { target: { value: 'bad-sbom' } });
-    fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: '42' } });
-    fireEvent.change(screen.getByPlaceholderText('Paste a small SPDX, CycloneDX, or XML SBOM preview'), { target: { value: '{"bad":true}' } });
-    fireEvent.click(screen.getByRole('button', { name: /Upload SBOM/i }));
+    await fillRequiredFieldsAndSubmit('bad-sbom', '{"bad":true}');
 
     await waitFor(() => expect(useUploadSbomMutate).toHaveBeenCalledWith(
       expect.objectContaining({ projectid: 42, project_id: 42 }),
       expect.any(Object),
     ));
-    const link = await screen.findByRole('link', { name: /Open repair workspace/i });
-    expect(link).toHaveAttribute('href', '/repair/repair-123');
+    expect(showToast).toHaveBeenCalledWith(
+      'SBOM validation failed. Opening Repair Workspace.',
+      'error',
+      { duration: 6000 },
+    );
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(push).toHaveBeenCalledWith('/repair/repair-123');
+    expect(screen.queryByRole('link', { name: /Open repair workspace/i })).not.toBeInTheDocument();
   });
 
-  it('shows an Open Workspace link for unsupported uploads with a workspace session', async () => {
+  it('closes unsupported uploads and opens repair workspace automatically', async () => {
+    const onClose = vi.fn();
     useUploadSbomMutate.mockImplementation((_payload, handlers) => {
       handlers.onError(
         new HttpError('unsupported format', 415, 'unsupported_sbom_format', {
@@ -293,28 +306,31 @@ describe('SbomUploadModal validation repair handoff', () => {
       );
     });
 
-    render(wrap(<SbomUploadModal open onClose={vi.fn()} />));
+    render(wrap(<SbomUploadModal open onClose={onClose} />));
 
-    expect(await screen.findByRole('option', { name: 'Payments' })).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText(/SBOM Name/i), { target: { value: 'unsupported-sbom' } });
-    fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: '42' } });
-    fireEvent.change(screen.getByPlaceholderText('Paste a small SPDX, CycloneDX, or XML SBOM preview'), { target: { value: '{"not":"sbom"}' } });
-    fireEvent.click(screen.getByRole('button', { name: /Upload SBOM/i }));
+    await fillRequiredFieldsAndSubmit('unsupported-sbom', '{"not":"sbom"}');
 
-    expect(await screen.findByRole('link', { name: /Open Workspace/i })).toHaveAttribute(
-      'href',
-      '/repair/unsupported-workspace-1',
-    );
+    await waitFor(() => {
+      expect(showToast).toHaveBeenCalledWith(
+        'SBOM format could not be detected or is unsupported. Opening Repair Workspace.',
+        'error',
+        { duration: 6000 },
+      );
+    });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(push).toHaveBeenCalledWith('/repair/unsupported-workspace-1');
+    expect(screen.queryByRole('link', { name: /Open Workspace/i })).not.toBeInTheDocument();
   });
 
-  it('shows the repair link when the backend returns a session without can_edit', async () => {
+  it('constructs the repair URL from workspace_id when failed response omits repair_workspace_url', async () => {
+    const onClose = vi.fn();
     useUploadSbomMutate.mockImplementation((_payload, handlers) => {
       handlers.onError(
         new HttpError('validation failed', 422, 'sbom_validation_failed', {
           status: 'validation_failed',
           message: 'Validation failed',
           sbom_id: null,
-          session_id: 'repair-no-can-edit',
+          workspace_id: 'workspace-fallback-1',
           failed_stage: 'semantic',
           error_count: 1,
           warning_count: 0,
@@ -342,16 +358,43 @@ describe('SbomUploadModal validation repair handoff', () => {
       );
     });
 
-    render(wrap(<SbomUploadModal open onClose={vi.fn()} />));
+    render(wrap(<SbomUploadModal open onClose={onClose} />));
 
-    expect(await screen.findByRole('option', { name: 'Payments' })).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText(/SBOM Name/i), { target: { value: 'bad-sbom' } });
-    fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: '42' } });
-    fireEvent.change(screen.getByPlaceholderText('Paste a small SPDX, CycloneDX, or XML SBOM preview'), { target: { value: '{"bad":true}' } });
-    fireEvent.click(screen.getByRole('button', { name: /Upload SBOM/i }));
+    await fillRequiredFieldsAndSubmit('bad-sbom', '{"bad":true}');
 
-    const link = await screen.findByRole('link', { name: /Open repair workspace/i });
-    expect(link).toHaveAttribute('href', '/repair/repair-no-can-edit');
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(push).toHaveBeenCalledWith('/repair/workspace-fallback-1');
+  });
+
+  it('handles an upload result only once', async () => {
+    const onClose = vi.fn();
+    useUploadSbomMutate.mockImplementation((_payload, handlers) => {
+      const result = {
+        id: 9,
+        sbom_name: 'single-result-sbom',
+        projectid: 42,
+        project_id: 42,
+        project_name: 'Payments',
+        component_count: 1,
+        status: 'validated',
+        validation_status: 'valid',
+        upload_status: 'valid',
+        workspace_id: 'single-workspace-1',
+        validation_session_id: 'single-workspace-1',
+        repair_workspace_url: '/repair/single-workspace-1',
+        enrichment_status: 'pending',
+      };
+      handlers.onSuccess(result);
+      handlers.onSuccess(result);
+    });
+
+    render(wrap(<SbomUploadModal open onClose={onClose} />));
+
+    await fillRequiredFieldsAndSubmit('single-result-sbom');
+
+    await waitFor(() => expect(showToast).toHaveBeenCalledTimes(1));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(push).not.toHaveBeenCalled();
   });
 
   it('shows security-blocked text when no repair session is created', async () => {

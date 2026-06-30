@@ -38,6 +38,32 @@ export type ValidationRepairStatus =
   | 'imported'
   | 'abandoned';
 
+export type AnalysisStatus =
+  | 'not_run'
+  | 'queued'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
+
+export interface LatestAnalysisSummary {
+  run_id?: number | string;
+  status: AnalysisStatus | string;
+  result?: string | null;
+  finding_count?: number | null;
+  critical_count?: number | null;
+  high_count?: number | null;
+  medium_count?: number | null;
+  low_count?: number | null;
+  risk_score?: number | null;
+  risk_level?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  error_message?: string | null;
+}
+
+export type LatestAnalysis = LatestAnalysisSummary;
+
 export interface SBOMSource {
   id: number;
   sbom_name: string;
@@ -102,15 +128,20 @@ export interface SBOMSource {
   last_enriched_at?: string | null;
   conversion_error?: string | null;
   enrichment_error?: string | null;
+  latest_analysis?: LatestAnalysis | null;
   // Client-side only — not from API. Set during optimistic updates.
   // ADR-0001: OK / FINDINGS are the canonical names. PASS / FAIL accepted as
   // legacy aliases during the deprecation window.
   _analysisStatus?:
     | 'ANALYSING'
+    | 'PENDING'
+    | 'QUEUED'
+    | 'RUNNING'
     | 'OK'
     | 'FINDINGS'
     | 'PARTIAL'
     | 'ERROR'
+    | 'CANCELLED'
     | 'NOT_ANALYSED'
     | 'PASS' // legacy alias for OK
     | 'FAIL'; // legacy alias for FINDINGS
