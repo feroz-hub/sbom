@@ -502,6 +502,7 @@ export async function uploadSbom(payload: CreateSBOMPayload, signal?: AbortSigna
   return {
     ...sbom,
     upload_status: accepted.status,
+    validation_status: accepted.status,
     workspace_id: accepted.workspace_id,
     validation_session_id: accepted.validation_session_id,
     repair_workspace_url: accepted.repair_workspace_url,
@@ -535,6 +536,13 @@ export function editSbom(id: number, payload: any, userId?: string, signal?: Abo
   return request<SBOMSource>(`/api/sboms/${id}/edit${qs}`, {
     method: 'POST',
     body: JSON.stringify(payload),
+    signal,
+  });
+}
+
+export function createWorkspaceForSbom(sbomId: number, signal?: AbortSignal) {
+  return request<ValidationRepairSession>(`/api/sboms/${sbomId}/workspace`, {
+    method: 'POST',
     signal,
   });
 }

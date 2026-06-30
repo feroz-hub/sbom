@@ -107,6 +107,17 @@ class SBOMSourceOut(ORMModel):
     error_count: int = 0
     warning_count: int = 0
     validated_at: str | None = None
+    workspace_id: int | str | None = None
+    validation_session_id: int | str | None = None
+    repair_workspace_url: str | None = None
+    workspace_available: bool = False
+    workspace_source: str | None = None
+    workspace_unavailable_reason: str | None = None
+    validation_status: str | None = None
+    detected_format: str | None = None
+    detected_spec_version: str | None = None
+    original_size_bytes: int | None = None
+    original_sha256: str | None = None
 
     # SPDX → CycloneDX conversion tracking
     original_format: str | None = None
@@ -213,6 +224,10 @@ class ValidationReportResponse(BaseModel):
     stage_summary: dict[str, int] = Field(default_factory=dict)
     truncated: bool = False
     session_id: str | None = None
+    workspace_id: int | str | None = None
+    validation_session_id: int | str | None = None
+    repair_workspace_url: str | None = None
+    validation_status: str | None = None
     can_edit: bool = False
 
 

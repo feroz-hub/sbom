@@ -12,6 +12,7 @@ import { Input, Textarea } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
 import { getProjects, getSbomTypes, HttpError } from '@/lib/api';
+import { getRepairWorkspaceUrl, repairWorkspaceLabel } from '@/lib/repairWorkspace';
 import { useToast } from '@/hooks/useToast';
 import { useSbomsList } from '@/hooks/useSbomsList';
 import { useUploadSbom } from '@/hooks/useSbomMutations';
@@ -37,6 +38,7 @@ function normalizeValidationFailureDetail(detail: unknown): SbomValidationFailur
     status: raw.status ?? 'validation_failed',
     message: raw.message ?? 'SBOM validation failed.',
     sbom_id: raw.sbom_id ?? null,
+    workspace_id: raw.workspace_id ?? raw.validation_session_id ?? raw.session_id ?? null,
     session_id: raw.session_id ?? raw.validation_session_id ?? null,
     validation_session_id: raw.validation_session_id ?? raw.session_id ?? null,
     repair_workspace_url: raw.repair_workspace_url ?? null,
@@ -149,6 +151,8 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
     (selectedFile || sbomDataValue?.trim()) &&
     !duplicateNameError,
   );
+  const uploadRepairUrl = uploadResult ? getRepairWorkspaceUrl(uploadResult) : null;
+  const validationFailureRepairUrl = validationFailure ? getRepairWorkspaceUrl(validationFailure) : null;
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -220,7 +224,6 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
             { duration: 5000 },
           );
           onSuccess?.(sbom);
-          onClose();
         },
         onError: (err) => {
           // Validation failure (4xx with structured detail) → render the
@@ -300,13 +303,13 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
                     </div>
                   )}
                   <div className="mt-3 flex flex-wrap items-center gap-3">
-                    {validationFailure.session_id && validationFailure.can_edit !== false ? (
+                    {validationFailureRepairUrl && validationFailure.can_edit !== false ? (
                       <Link
-                        href={`/sbom-validation-sessions/${validationFailure.session_id}`}
+                        href={validationFailureRepairUrl}
                         className="inline-flex items-center gap-1 text-xs font-medium text-red-700 hover:underline dark:text-red-300"
                         onClick={handleClose}
                       >
-                        Open repair workspace
+                        {repairWorkspaceLabel(validationFailure.status)}
                         <ArrowRight className="h-3 w-3" aria-hidden />
                       </Link>
                     ) : (
@@ -347,13 +350,13 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
                 <div>Size: <span className="font-mono">{uploadResult.file_size_bytes?.toLocaleString() || 'Unknown'} bytes</span></div>
                 <div>SHA-256: <span className="font-mono break-all">{uploadResult.sha256 || 'Unknown'}</span></div>
               </dl>
-              {uploadResult.validation_session_id && (
+              {uploadRepairUrl && (
                 <Link
-                  href={`/sbom-validation-sessions/${uploadResult.validation_session_id}`}
+                  href={uploadRepairUrl}
                   className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-emerald-800 hover:underline dark:text-emerald-200"
                   onClick={handleClose}
                 >
-                  Open Repair Workspace
+                  {repairWorkspaceLabel(uploadResult.validation_status ?? uploadResult.upload_status)}
                   <ArrowRight className="h-3 w-3" aria-hidden />
                 </Link>
               )}

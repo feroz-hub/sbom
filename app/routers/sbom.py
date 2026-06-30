@@ -9,10 +9,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..core.context import CurrentContext
+from ..core.security import get_current_tenant_context
 from ..db import get_db
 from ..models import AnalysisFinding, AnalysisRun, SBOMSource, SBOMValidationSession
 from ..schemas import ValidationErrorEntry, ValidationReportResponse
 from ..services.risk_score import score_findings
+from ..services.tenant_access import get_sbom_for_tenant
 from ..validation.stages import STAGE_NUMBERS
 
 log = logging.getLogger("sbom.api.sbom")
@@ -89,7 +92,11 @@ def _detect_format_from_data(sbom_data: str | None) -> tuple[str | None, str | N
     status_code=200,
     response_model=ValidationReportResponse,
 )
-def get_sbom_validation_report(sbom_id: int, db: Session = Depends(get_db)):
+def get_sbom_validation_report(
+    sbom_id: int,
+    db: Session = Depends(get_db),
+    context: CurrentContext = Depends(get_current_tenant_context),
+):
     """Return the persisted 8-stage validation report for an SBOM.
 
     Always returns a row for any ``SBOMSource`` that exists, even rows
@@ -98,7 +105,7 @@ def get_sbom_validation_report(sbom_id: int, db: Session = Depends(get_db)):
     primary consumer; the JSON download affordance also calls this
     endpoint and serialises the response verbatim.
     """
-    sbom = db.get(SBOMSource, sbom_id)
+    sbom = get_sbom_for_tenant(db, sbom_id, context.tenant_id)
     if not sbom:
         raise HTTPException(status_code=404, detail="SBOM not found")
 
@@ -134,7 +141,10 @@ def get_sbom_validation_report(sbom_id: int, db: Session = Depends(get_db)):
     session = (
         db.execute(
             select(SBOMValidationSession)
-            .where(SBOMValidationSession.imported_sbom_id == sbom.id)
+            .where(
+                SBOMValidationSession.imported_sbom_id == sbom.id,
+                SBOMValidationSession.tenant_id == context.tenant_id,
+            )
             .order_by(SBOMValidationSession.created_at.desc())
         )
         .scalars()
@@ -180,6 +190,10 @@ def get_sbom_validation_report(sbom_id: int, db: Session = Depends(get_db)):
         stage_summary=dict(stage_summary),
         truncated=False,
         session_id=session.id if session else None,
+        workspace_id=session.id if session else None,
+        validation_session_id=session.id if session else None,
+        repair_workspace_url=f"/repair/{session.id}" if session else None,
+        validation_status=session.validation_status if session else None,
         can_edit=bool(session and session.can_edit),
     )
 

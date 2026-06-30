@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Eye, Trash2 } from 'lucide-react';
+import { Eye, Wrench, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Alert } from '@/components/ui/Alert';
@@ -29,6 +29,7 @@ import {
 } from '@/lib/queryInvalidation';
 import { sbomAnalysisShortLabel } from '@/lib/analysisRunStatusLabels';
 import { stageLabel, validationStatusMeta } from '@/lib/sbomValidation';
+import { canOpenRepairWorkspace, getRepairWorkspaceUrl } from '@/lib/repairWorkspace';
 import type { AnalysisStatus } from '@/hooks/useBackgroundAnalysis';
 import type { SBOMSource, SbomValidationStatus } from '@/types';
 
@@ -399,6 +400,16 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
                   <Td className="whitespace-nowrap text-hcl-muted">{formatDate(sbom.created_on)}</Td>
                   <Td className="text-right">
                     <div className="flex items-center justify-end gap-2">
+                      {canOpenRepairWorkspace(sbom) && getRepairWorkspaceUrl(sbom) ? (
+                        <button
+                          onClick={() => router.push(getRepairWorkspaceUrl(sbom)!)}
+                          className="rounded-lg p-1.5 text-hcl-muted transition-colors hover:bg-hcl-light hover:text-hcl-blue"
+                          aria-label="Open Repair Workspace"
+                          title="Workspace"
+                        >
+                          <Wrench className="h-4 w-4" />
+                        </button>
+                      ) : null}
                       <button
                         onClick={() => router.push(`/sboms/${sbom.id}`)}
                         className="rounded-lg p-1.5 text-hcl-muted transition-colors hover:bg-hcl-light hover:text-hcl-blue"

@@ -302,6 +302,8 @@ def permission_for_request(request: Request) -> str:
             return "sbom:export" if any(part in path for part in ("/export", "/reports/")) else "sbom:read"
         if method == "DELETE":
             return "sbom:delete"
+        if path.endswith("/workspace"):
+            return "sbom:repair:update"
         if method == "POST" and (path.endswith("/upload") or path == "/api/sboms"):
             return "sbom:upload"
         if "/analyze" in path:

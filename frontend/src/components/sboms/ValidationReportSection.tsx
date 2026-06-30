@@ -15,6 +15,7 @@ import {
   stageNumber,
   validationStatusMeta,
 } from '@/lib/sbomValidation';
+import { canOpenRepairWorkspace, getRepairWorkspaceUrl, repairWorkspaceLabel } from '@/lib/repairWorkspace';
 import { validationCodeAnchor } from '@/lib/validationCodeReference';
 import type { ValidationErrorEntry, ValidationReport } from '@/types';
 
@@ -150,6 +151,7 @@ export function ValidationReportSection({ report, onReupload }: ValidationReport
   const isFailed = report.status === 'failed' || report.status === 'quarantined';
   const isPending = report.status === 'pending';
   const isClean = report.status === 'validated' && report.warning_count === 0;
+  const repairUrl = canOpenRepairWorkspace(report) ? getRepairWorkspaceUrl(report) : null;
 
   // Status drives the default. Failed/quarantined/pending demand attention →
   // expanded by default. Validated (clean or warnings-only) is uneventful →
@@ -237,12 +239,12 @@ export function ValidationReportSection({ report, onReupload }: ValidationReport
               {revalidating ? 'Validating…' : 'Run validation'}
             </Button>
           )}
-          {isFailed && report.session_id && report.can_edit !== false && (
+          {repairUrl && report.can_edit !== false && (
             <Link
-              href={`/sbom-validation-sessions/${report.session_id}`}
+              href={repairUrl}
               className="inline-flex items-center gap-1.5 rounded-lg border border-hcl-border px-3 py-1.5 text-xs font-semibold text-hcl-navy hover:bg-hcl-light transition-colors"
             >
-              Open repair workspace
+              {repairWorkspaceLabel(report.validation_status ?? report.status)}
             </Link>
           )}
           {isFailed && onReupload && (

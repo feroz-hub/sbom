@@ -50,6 +50,7 @@ import {
   uploadSbomVexDocument,
   getProjects,
   updateSbom,
+  createWorkspaceForSbom,
   BASE_URL
 } from '@/lib/api';
 import { useAnalysisStream } from '@/hooks/useAnalysisStream';
@@ -63,6 +64,7 @@ import {
 import { useTableSort } from '@/hooks/useTableSort';
 import { usePagination } from '@/hooks/usePagination';
 import { formatDate, formatDuration } from '@/lib/utils';
+import { canOpenRepairWorkspace, getRepairWorkspaceUrl, repairWorkspaceLabel } from '@/lib/repairWorkspace';
 import type { SBOMSource, SBOMComponent, AnalysisRun, VexOverrideAuditEntry, VexStatement, VexStatus } from '@/types';
 
 type ComponentSortKey = 'name' | 'version' | 'component_type' | 'license' | 'lifecycle_status';
@@ -176,6 +178,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
   const [editEvidenceUrl, setEditEvidenceUrl] = useState('');
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [editError, setEditError] = useState('');
+  const [isOpeningWorkspace, setIsOpeningWorkspace] = useState(false);
   const [isRefreshingLifecycle, setIsRefreshingLifecycle] = useState(false);
   const [refreshingComponentId, setRefreshingComponentId] = useState<number | null>(null);
   const [lifecycleMessage, setLifecycleMessage] = useState('');
@@ -510,6 +513,45 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
   };
 
   const isAnalyzing = state.phase === 'connecting' || state.phase === 'parsing' || state.phase === 'running';
+  const canUseWorkspace = canOpenRepairWorkspace(sbom);
+  const repairUrl = canUseWorkspace ? getRepairWorkspaceUrl(sbom) : null;
+  const canBackfillWorkspace = canUseWorkspace && !repairUrl && sbom.workspace_available && sbom.workspace_source === 'backfillable';
+  const workspaceUnavailableReason =
+    !canUseWorkspace && sbom.workspace_available === false
+      ? `Repair Workspace unavailable because ${
+          sbom.workspace_unavailable_reason || 'original SBOM content is missing for this record.'
+        }`
+      : null;
+  const workspaceStatus = sbom.validation_status ?? sbom.status;
+  const workspaceButtonLabel = canBackfillWorkspace ? 'Create/Open Repair Workspace' : repairWorkspaceLabel(workspaceStatus);
+  const workspaceDocumentButtonLabel = canBackfillWorkspace ? 'Create/Open Workspace' : 'Open Workspace';
+  const formatTypeDisplay = [
+    sbom.detected_format || sbom.current_format || sbom.original_format || sbom.format,
+    sbom.detected_spec_version || sbom.spec_version,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    || (sbom.sbom_type ? `Type #${sbom.sbom_type}` : '—');
+
+  const handleOpenRepairWorkspace = async () => {
+    if (repairUrl) {
+      router.push(repairUrl);
+      return;
+    }
+    if (!canBackfillWorkspace) return;
+    setIsOpeningWorkspace(true);
+    try {
+      const workspace = await createWorkspaceForSbom(sbom.id);
+      const url = workspace.repair_workspace_url || (workspace.workspace_id ? `/repair/${workspace.workspace_id}` : null);
+      if (!url) throw new Error('Workspace was created but no repair URL was returned.');
+      showToast('Repair Workspace ready.', 'success');
+      router.push(url);
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to create Repair Workspace.', 'error');
+    } finally {
+      setIsOpeningWorkspace(false);
+    }
+  };
 
   // Handle opening edit modal
   const openEditModal = (c: SBOMComponent) => {
@@ -808,7 +850,15 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
       {/* 8-stage validation report */}
       {validationReport && (
         <div id="validation-report">
-          <ValidationReportSection report={validationReport} />
+          <ValidationReportSection
+            report={{
+              ...validationReport,
+              workspace_id: validationReport.workspace_id ?? sbom.workspace_id ?? null,
+              validation_session_id: validationReport.validation_session_id ?? sbom.validation_session_id ?? null,
+              repair_workspace_url: validationReport.repair_workspace_url ?? sbom.repair_workspace_url ?? null,
+              validation_status: validationReport.validation_status ?? sbom.validation_status ?? null,
+            }}
+          />
         </div>
       )}
 
@@ -846,6 +896,17 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>SBOM Details</CardTitle>
               <div className="flex gap-2">
+                {canUseWorkspace ? (
+                  <Button
+                    onClick={() => void handleOpenRepairWorkspace()}
+                    loading={isOpeningWorkspace}
+                    disabled={isOpeningWorkspace}
+                    variant="outline"
+                    size="sm"
+                  >
+                    {workspaceButtonLabel}
+                  </Button>
+                ) : null}
                 <Button
                   onClick={() => {
                     setDetailName(sbom.sbom_name || '');
@@ -900,7 +961,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                   { label: 'Product Name', value: sbom.product_name || '—' },
                   { label: 'Product Version', value: sbom.productver || '—' },
                   { label: 'SBOM Version', value: sbom.sbom_version || '1.0.0' },
-                  { label: 'Format / Type', value: sbom.format || sbom.sbom_type || '—' },
+                  { label: 'Format / Type', value: formatTypeDisplay },
                   {
                     label: 'Project',
                     value: (
@@ -939,7 +1000,24 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
 
           <SbomConversionCard sbom={sbom} formatLabel={info?.format} />
 
-          <SbomRawViewer sbomId={sbom.id} stats={documentStats} />
+          <SbomRawViewer
+            sbomId={sbom.id}
+            stats={documentStats}
+            workspaceUnavailableReason={workspaceUnavailableReason}
+            workspaceAction={
+              canUseWorkspace ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void handleOpenRepairWorkspace()}
+                  loading={isOpeningWorkspace}
+                  disabled={isOpeningWorkspace}
+                >
+                  {workspaceDocumentButtonLabel}
+                </Button>
+              ) : null
+            }
+          />
 
           {info && (
             <Card>

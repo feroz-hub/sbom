@@ -48,6 +48,7 @@ from ..models import (
     AnalysisRun,
     SBOMSource,
     SBOMType,
+    SBOMValidationSession,
 )
 from ..rate_limit import analyze_route_limit
 from ..schemas import (
@@ -61,6 +62,7 @@ from ..schemas import (
 )
 from ..services import audit_log, audit_service
 from ..services.analysis_service import compute_report_status, persist_analysis_run
+from ..services.repair.workspace_backfill_service import WorkspaceBackfillService
 from ..services.sbom_delete_service import SBOMDeleteConflict, SBOMDeleteService
 from ..services.sbom_document_service import (
     DEFAULT_RAW_CHUNK_LIMIT,
@@ -106,11 +108,80 @@ def now_iso() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat()
 
 
-def _serialize_sbom_out(sbom: SBOMSource, *, include_raw: bool = False) -> SBOMSourceOut:
+def _workspace_fields(
+    sbom: SBOMSource,
+    *,
+    session: SBOMValidationSession | None,
+    db: Session | None = None,
+) -> dict[str, int | str | bool | None]:
+    if not session:
+        if db is not None:
+            return WorkspaceBackfillService(db, tenant_id=sbom.tenant_id).availability_for_sbom(sbom).as_dict()
+        return WorkspaceBackfillService.locate_original_content(sbom) and {
+            "workspace_id": None,
+            "validation_session_id": None,
+            "repair_workspace_url": None,
+            "workspace_available": True,
+            "workspace_source": "backfillable",
+            "workspace_unavailable_reason": None,
+            "validation_status": sbom.status,
+            "detected_format": None,
+            "detected_spec_version": None,
+            "original_size_bytes": None,
+            "original_sha256": None,
+        } or {
+            "workspace_id": None,
+            "validation_session_id": None,
+            "repair_workspace_url": None,
+            "workspace_available": False,
+            "workspace_source": "unavailable",
+            "workspace_unavailable_reason": "Original SBOM content is not available for this legacy record.",
+            "validation_status": sbom.status,
+            "detected_format": None,
+            "detected_spec_version": None,
+            "original_size_bytes": None,
+            "original_sha256": None,
+        }
+    return {
+        "workspace_id": session.id,
+        "validation_session_id": session.id,
+        "repair_workspace_url": f"/repair/{session.id}",
+        "workspace_available": True,
+        "workspace_source": "existing_workspace",
+        "workspace_unavailable_reason": None,
+        "validation_status": session.validation_status,
+        "detected_format": session.detected_format,
+        "detected_spec_version": session.detected_version,
+        "original_size_bytes": session.original_size_bytes or session.file_size_bytes,
+        "original_sha256": session.original_sha256 or session.sha256,
+    }
+
+
+def _serialize_sbom_out(
+    sbom: SBOMSource,
+    *,
+    include_raw: bool = False,
+    workspace: SBOMValidationSession | None = None,
+    db: Session | None = None,
+) -> SBOMSourceOut:
     out = SBOMSourceOut.model_validate(sbom, from_attributes=True)
+    for key, value in _workspace_fields(sbom, session=workspace, db=db).items():
+        setattr(out, key, value)
     if not include_raw:
         out.sbom_data = None
     return out
+
+
+def _latest_workspace_for_sbom(db: Session, sbom: SBOMSource) -> SBOMValidationSession | None:
+    return (
+        db.execute(
+            select(SBOMValidationSession)
+            .where(SBOMValidationSession.imported_sbom_id == sbom.id, SBOMValidationSession.tenant_id == sbom.tenant_id)
+            .order_by(SBOMValidationSession.created_at.desc())
+        )
+        .scalars()
+        .first()
+    )
 
 
 def _coerce_sbom_data(value: Any) -> str | None:
@@ -356,7 +427,21 @@ def get_sbom(
     sbom = get_sbom_for_tenant(db, sbom_id, context.tenant_id)
     if not sbom:
         raise HTTPException(status_code=404, detail="SBOM not found")
-    return _serialize_sbom_out(sbom, include_raw=include_raw)
+    return _serialize_sbom_out(sbom, include_raw=include_raw, workspace=_latest_workspace_for_sbom(db, sbom), db=db)
+
+
+@router.post("/sboms/{sbom_id}/workspace")
+def create_sbom_workspace(
+    sbom_id: int,
+    context: CurrentContext = Depends(require_permission("sbom:repair:update")),
+    db: Session = Depends(get_db),
+):
+    sbom = get_sbom_for_tenant(db, sbom_id, context.tenant_id)
+    if not sbom:
+        raise HTTPException(status_code=404, detail="SBOM not found")
+    service = WorkspaceBackfillService(db, tenant_id=context.tenant_id)
+    session, created = service.get_or_create_workspace_for_sbom(sbom, context=context)
+    return service.create_response(session, created=created)
 
 
 @router.get("/sboms/{sbom_id}/stats", response_model=SbomDocumentStatsResponse)
@@ -641,13 +726,30 @@ def get_sbom_details(
             stmt = stmt.order_by(SBOMSource.id.desc()).limit(page_size).offset(offset)
 
         items = db.execute(stmt).scalars().all()
+        workspace_by_sbom_id: dict[int, SBOMValidationSession] = {}
+        if items:
+            workspace_rows = (
+                db.execute(
+                    select(SBOMValidationSession)
+                    .where(
+                        SBOMValidationSession.imported_sbom_id.in_([item.id for item in items]),
+                        SBOMValidationSession.tenant_id == context.tenant_id,
+                    )
+                    .order_by(SBOMValidationSession.imported_sbom_id, SBOMValidationSession.created_at.desc())
+                )
+                .scalars()
+                .all()
+            )
+            for workspace in workspace_rows:
+                if workspace.imported_sbom_id is not None:
+                    workspace_by_sbom_id.setdefault(int(workspace.imported_sbom_id), workspace)
 
         if response is not None:
             response.headers["X-Total-Count"] = str(total)
             if items and len(items) == page_size:
                 response.headers["X-Next-Cursor"] = str(items[-1].id)
 
-        return [_serialize_sbom_out(item) for item in items]
+        return [_serialize_sbom_out(item, workspace=workspace_by_sbom_id.get(item.id), db=db) for item in items]
     except SQLAlchemyError as exc:
         raise HTTPException(status_code=500, detail="Internal database error while fetching SBOMs.") from exc
 

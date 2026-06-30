@@ -11,12 +11,26 @@ export interface Project {
 }
 
 export type SbomValidationStatus = 'validated' | 'failed' | 'quarantined' | 'pending';
+export type ValidationStatus =
+  | 'not_validated'
+  | 'valid'
+  | 'validated'
+  | 'valid_with_warnings'
+  | 'warning'
+  | 'failed'
+  | 'unsupported'
+  | 'unsupported_format'
+  | 'repair_draft'
+  | 'repaired'
+  | 'repaired_valid'
+  | 'imported';
 export type ValidationRepairStatus =
   | 'failed'
   | 'edited'
   | 'repair_draft'
   | 'passed'
   | 'valid'
+  | 'validated'
   | 'valid_with_warnings'
   | 'repaired_valid'
   | 'unsupported_format'
@@ -58,6 +72,17 @@ export interface SBOMSource {
   error_count?: number;
   warning_count?: number;
   validated_at?: string | null;
+  workspace_id?: string | null;
+  validation_session_id?: string | null;
+  repair_workspace_url?: string | null;
+  workspace_available?: boolean;
+  workspace_source?: 'existing_workspace' | 'backfillable' | 'unavailable' | 'reconstructed_export' | 'original_upload' | string | null;
+  workspace_unavailable_reason?: string | null;
+  validation_status?: ValidationStatus | string | null;
+  detected_format?: string | null;
+  detected_spec_version?: string | null;
+  original_size_bytes?: number | null;
+  original_sha256?: string | null;
   // SPDX → CycloneDX conversion tracking
   original_format?: string | null;
   current_format?: string | null;
@@ -91,11 +116,6 @@ export interface SBOMSource {
     | 'FAIL'; // legacy alias for FINDINGS
   _findingsCount?: number;
   upload_status?: string;
-  workspace_id?: string;
-  validation_session_id?: string;
-  repair_workspace_url?: string;
-  detected_format?: string | null;
-  detected_spec_version?: string | null;
   detection_confidence?: number | null;
   file_size_bytes?: number;
   total_lines?: number;
@@ -136,6 +156,10 @@ export interface ValidationReport {
   stage_summary: Record<string, number>;
   truncated: boolean;
   session_id?: string | null;
+  workspace_id?: string | null;
+  validation_session_id?: string | null;
+  repair_workspace_url?: string | null;
+  validation_status?: ValidationStatus | string | null;
   can_edit?: boolean;
 }
 
@@ -145,6 +169,7 @@ export interface SbomValidationFailureDetail {
   status?: 'validation_failed' | SbomValidationStatus;
   message: string;
   sbom_id: number | null;
+  workspace_id?: string | null;
   session_id?: string | null;
   validation_session_id?: string | null;
   repair_workspace_url?: string | null;

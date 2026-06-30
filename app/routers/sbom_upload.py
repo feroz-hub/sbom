@@ -307,7 +307,7 @@ async def upload_sbom(
         status=validation_status,
         workspace_id=session.id,
         validation_session_id=session.id,
-        repair_workspace_url=f"/sbom-validation-sessions/{session.id}",
+        repair_workspace_url=f"/repair/{session.id}",
         sbom_id=obj.id,
         sbom_name=obj.sbom_name,
         project_id=obj.projectid,

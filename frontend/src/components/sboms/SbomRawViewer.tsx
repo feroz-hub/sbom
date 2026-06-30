@@ -1,6 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import { Download } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -21,9 +22,11 @@ function formatBytes(bytes: number): string {
 interface SbomRawViewerProps {
   sbomId: number;
   stats?: SbomDocumentStats | null;
+  workspaceAction?: ReactNode;
+  workspaceUnavailableReason?: string | null;
 }
 
-export function SbomRawViewer({ sbomId, stats }: SbomRawViewerProps) {
+export function SbomRawViewer({ sbomId, stats, workspaceAction, workspaceUnavailableReason }: SbomRawViewerProps) {
   const [page, setPage] = useState(1);
   const offset = (page - 1) * RAW_PAGE_SIZE;
 
@@ -70,6 +73,7 @@ export function SbomRawViewer({ sbomId, stats }: SbomRawViewerProps) {
           <Button size="sm" variant="outline" onClick={() => void handleDownload()}>
             <Download className="h-3.5 w-3.5" /> Download original
           </Button>
+          {workspaceAction}
           <a
             href={`${BASE_URL}/api/sboms/${sbomId}/download`}
             className="inline-flex items-center gap-1.5 rounded-lg border border-hcl-border px-3 py-1.5 text-xs font-semibold text-hcl-navy hover:bg-hcl-light"
@@ -80,6 +84,11 @@ export function SbomRawViewer({ sbomId, stats }: SbomRawViewerProps) {
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
+        {workspaceUnavailableReason ? (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            {workspaceUnavailableReason}
+          </p>
+        ) : null}
         <p className="text-xs font-medium text-hcl-muted">{previewLabel}</p>
         {isLoading ? (
           <PageSpinner />

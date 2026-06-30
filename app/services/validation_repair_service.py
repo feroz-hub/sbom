@@ -250,7 +250,7 @@ def session_to_dict(session: SBOMValidationSession) -> dict[str, Any]:
         "updated_at": session.updated_at,
         "expires_at": session.expires_at,
         "imported_sbom_id": session.imported_sbom_id,
-        "repair_workspace_url": f"/sbom-validation-sessions/{session.id}",
+        "repair_workspace_url": f"/repair/{session.id}",
     }
 
 
@@ -304,7 +304,7 @@ def build_validation_failed_detail(
         ),
         "session_id": session.id if session else None,
         "validation_session_id": session.id if session else None,
-        "repair_workspace_url": f"/sbom-validation-sessions/{session.id}" if session else None,
+        "repair_workspace_url": f"/repair/{session.id}" if session else None,
         "sbom_id": None,
         "file_size_bytes": session.file_size_bytes if session else None,
         "sha256": session.sha256 if session else None,
@@ -357,7 +357,6 @@ class ValidationRepairService:
             project_id=project_id,
             sbom_type=sbom_type,
             user_id=user_id,
-            validation_status="failed",
             expires_days=expires_days,
         )
 

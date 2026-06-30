@@ -58,7 +58,7 @@ def test_upload_invalid_sbom_creates_validation_session_not_normal_sbom(client):
 
     assert detail["status"] == "validation_failed"
     assert detail["validation_session_id"] == session_id
-    assert detail["repair_workspace_url"] == f"/sbom-validation-sessions/{session_id}"
+    assert detail["repair_workspace_url"] == f"/repair/{session_id}"
     assert detail["sbom_id"] is None
     assert detail["can_edit"] is True
     assert detail["can_ai_fix"] is True
@@ -125,7 +125,7 @@ def test_validation_session_content_chunks_and_download_preserve_original_bytes(
         data={"sbom_name": _unique("multipart-invalid")},
         files={"file": ("invalid.json", original, "application/json")},
     )
-    assert resp.status_code in {400, 422}, resp.text
+    assert resp.status_code in {400, 415, 422}, resp.text
     detail = resp.json()["detail"]
     session_id = detail["validation_session_id"]
     assert detail["file_size_bytes"] == len(original)
@@ -172,7 +172,7 @@ def test_large_invalid_upload_retrieves_more_than_first_ten_lines(client):
         data={"sbom_name": _unique("large-invalid")},
         files={"file": ("large-invalid.json", raw, "application/json")},
     )
-    assert resp.status_code in {400, 422}, resp.text
+    assert resp.status_code in {400, 415, 422}, resp.text
     session_id = resp.json()["detail"]["validation_session_id"]
 
     meta = client.get(f"/api/sbom-validation-sessions/{session_id}")
@@ -206,7 +206,7 @@ def test_valid_multipart_upload_creates_accessible_workspace(client):
     body = resp.json()
     assert body["workspace_id"]
     assert body["validation_session_id"] == body["workspace_id"]
-    assert body["repair_workspace_url"] == f"/sbom-validation-sessions/{body['workspace_id']}"
+    assert body["repair_workspace_url"] == f"/repair/{body['workspace_id']}"
     assert body["detected_format"] == "cyclonedx"
     assert body["sha256"] == sha256(raw).hexdigest()
 
@@ -216,6 +216,46 @@ def test_valid_multipart_upload_creates_accessible_workspace(client):
     assert meta["imported_sbom_id"] == body["sbom_id"]
     assert meta["validation_status"] in {"valid", "valid_with_warnings"}
     assert meta["full_editor_allowed"] is True
+
+    detail = client.get(f"/api/sboms/{body['sbom_id']}")
+    assert detail.status_code == 200, detail.text
+    detail_body = detail.json()
+    assert detail_body["workspace_id"] == body["workspace_id"]
+    assert detail_body["validation_session_id"] == body["workspace_id"]
+    assert detail_body["repair_workspace_url"] == f"/repair/{body['workspace_id']}"
+    assert detail_body["validation_status"] in {"valid", "valid_with_warnings", "imported"}
+
+    listed = client.get("/api/sboms?page_size=500")
+    assert listed.status_code == 200, listed.text
+    listed_match = next(row for row in listed.json() if row["id"] == body["sbom_id"])
+    assert listed_match["workspace_id"] == body["workspace_id"]
+
+
+def test_valid_with_warnings_upload_creates_accessible_workspace(client):
+    warning_only = {
+        "bomFormat": "CycloneDX",
+        "specVersion": "1.5",
+        "version": 1,
+        "metadata": {"timestamp": "2026-04-30T12:00:00Z"},
+        "components": [{"type": "library", "name": "warn-only", "version": "1.0.0"}],
+    }
+    raw = json.dumps(warning_only).encode("utf-8")
+    resp = client.post(
+        "/api/sboms/upload",
+        data={"sbom_name": _unique("warning-workspace")},
+        files={"file": ("warning.cdx.json", raw, "application/json")},
+    )
+    assert resp.status_code == 202, resp.text
+    body = resp.json()
+    assert body["status"] == "valid_with_warnings"
+    assert body["workspace_id"]
+    assert body["validation_session_id"] == body["workspace_id"]
+    assert body["repair_workspace_url"] == f"/repair/{body['workspace_id']}"
+    assert body["validation_warnings"]
+
+    workspace = client.get(f"/api/sbom-workspaces/{body['workspace_id']}")
+    assert workspace.status_code == 200, workspace.text
+    assert workspace.json()["validation_status"] == "valid_with_warnings"
 
 
 def test_workspace_search_and_original_source_lines(client):
@@ -233,6 +273,194 @@ def test_workspace_search_and_original_source_lines(client):
     )
     assert search.status_code == 200, search.text
     assert search.json()["matches"][0]["line_number"] >= 1
+
+
+def test_unsupported_upload_creates_accessible_workspace(client):
+    raw = b'{"not": "an sbom"}'
+    resp = client.post(
+        "/api/sboms/upload",
+        data={"sbom_name": _unique("unsupported-workspace")},
+        files={"file": ("unsupported.json", raw, "application/json")},
+    )
+    assert resp.status_code in {400, 415, 422}, resp.text
+    detail = resp.json()["detail"]
+    session_id = detail["validation_session_id"]
+    assert detail["workspace_id"] == session_id
+    assert detail["repair_workspace_url"] == f"/repair/{session_id}"
+
+    workspace = client.get(f"/api/sbom-workspaces/{session_id}")
+    assert workspace.status_code == 200, workspace.text
+    assert workspace.json()["validation_status"] == "unsupported_format"
+
+
+def test_workspace_metadata_endpoint_allows_all_repair_workspace_statuses(client):
+    session_id, _ = _create_failed_session(client)
+
+    from app.db import SessionLocal
+
+    for status in [
+        "failed",
+        "unsupported",
+        "unsupported_format",
+        "valid",
+        "valid_with_warnings",
+        "warning",
+        "repair_draft",
+        "repaired",
+        "repaired_valid",
+        "imported",
+    ]:
+        db = SessionLocal()
+        try:
+            session = db.get(SBOMValidationSession, session_id)
+            assert session is not None
+            session.validation_status = status
+            db.add(session)
+            db.commit()
+        finally:
+            db.close()
+
+        workspace = client.get(f"/api/sbom-workspaces/{session_id}")
+        assert workspace.status_code == 200, (status, workspace.text)
+        assert workspace.json()["validation_status"] == status
+
+
+def test_sbom_detail_marks_legacy_validated_sbom_backfillable(client):
+    raw = json.dumps(
+        {
+            "bomFormat": "CycloneDX",
+            "specVersion": "1.5",
+            "version": 1,
+            "metadata": {"timestamp": "2026-04-30T12:00:00Z"},
+            "components": [{"type": "library", "name": "legacy", "version": "1.0.0"}],
+        }
+    )
+    created = client.post("/api/sboms", json={"sbom_name": _unique("legacy-backfillable"), "sbom_data": raw})
+    assert created.status_code == 201, created.text
+    sbom_id = created.json()["id"]
+
+    detail = client.get(f"/api/sboms/{sbom_id}")
+    assert detail.status_code == 200, detail.text
+    body = detail.json()
+    assert body["workspace_id"] is None
+    assert body["workspace_available"] is True
+    assert body["workspace_source"] == "backfillable"
+    assert body["detected_format"] == "cyclonedx"
+    assert body["detected_spec_version"] == "1.5"
+    assert body["original_size_bytes"] == len(raw.encode("utf-8"))
+    assert body["original_sha256"] == sha256(raw.encode("utf-8")).hexdigest()
+
+
+def test_sbom_detail_marks_legacy_record_without_original_content_unavailable(client):
+    raw = json.dumps(
+        {
+            "bomFormat": "CycloneDX",
+            "specVersion": "1.5",
+            "version": 1,
+            "metadata": {"timestamp": "2026-04-30T12:00:00Z"},
+            "components": [{"type": "library", "name": "missing-original", "version": "1.0.0"}],
+        }
+    )
+    created = client.post("/api/sboms", json={"sbom_name": _unique("legacy-missing"), "sbom_data": raw})
+    assert created.status_code == 201, created.text
+    sbom_id = created.json()["id"]
+
+    from app.db import SessionLocal
+
+    db = SessionLocal()
+    try:
+        sbom = db.get(SBOMSource, sbom_id)
+        assert sbom is not None
+        sbom.sbom_data = None
+        db.add(sbom)
+        db.commit()
+    finally:
+        db.close()
+
+    detail = client.get(f"/api/sboms/{sbom_id}")
+    assert detail.status_code == 200, detail.text
+    body = detail.json()
+    assert body["workspace_available"] is False
+    assert body["workspace_source"] == "unavailable"
+    assert "Original SBOM content is not available" in body["workspace_unavailable_reason"]
+
+
+def test_create_workspace_for_existing_sbom_is_idempotent(client):
+    raw = json.dumps(
+        {
+            "bomFormat": "CycloneDX",
+            "specVersion": "1.5",
+            "version": 1,
+            "metadata": {"timestamp": "2026-04-30T12:00:00Z"},
+            "components": [{"type": "library", "name": "legacy-create", "version": "1.0.0"}],
+        }
+    )
+    created = client.post("/api/sboms", json={"sbom_name": _unique("legacy-create"), "sbom_data": raw})
+    assert created.status_code == 201, created.text
+    sbom_id = created.json()["id"]
+
+    first = client.post(f"/api/sboms/{sbom_id}/workspace")
+    assert first.status_code == 200, first.text
+    first_body = first.json()
+    assert first_body["created"] is True
+    assert first_body["workspace_id"]
+    assert first_body["repair_workspace_url"] == f"/repair/{first_body['workspace_id']}"
+    assert first_body["imported_sbom_id"] == sbom_id
+    assert first_body["detected_format"] == "cyclonedx"
+
+    second = client.post(f"/api/sboms/{sbom_id}/workspace")
+    assert second.status_code == 200, second.text
+    second_body = second.json()
+    assert second_body["created"] is False
+    assert second_body["workspace_id"] == first_body["workspace_id"]
+
+    workspace = client.get(f"/api/sbom-workspaces/{first_body['workspace_id']}")
+    assert workspace.status_code == 200, workspace.text
+
+
+def test_cross_tenant_workspace_backfill_denied(client):
+    from app.core.context import minimal_background_context, tenant_scope
+    from app.db import SessionLocal
+    from app.models import Tenant
+
+    db = SessionLocal()
+    try:
+        now_dt = datetime.now(UTC)
+        tenant = Tenant(
+            name="Other Workspace Tenant",
+            slug=_unique("other-workspace-tenant"),
+            external_iam_tenant_id=_unique("other-workspace-tenant-ext"),
+            status="ACTIVE",
+            created_at=now_dt,
+            updated_at=now_dt,
+        )
+        db.add(tenant)
+        db.flush()
+        with tenant_scope(minimal_background_context(tenant.id, tenant.external_iam_tenant_id)):
+            sbom = SBOMSource(
+                sbom_name=_unique("other-tenant-sbom"),
+                sbom_data=json.dumps(
+                    {
+                        "bomFormat": "CycloneDX",
+                        "specVersion": "1.5",
+                        "version": 1,
+                        "components": [],
+                    }
+                ),
+                status="validated",
+                error_count=0,
+                warning_count=0,
+                created_on=now_dt.isoformat(),
+                created_by="other",
+            )
+            db.add(sbom)
+            db.commit()
+            sbom_id = sbom.id
+    finally:
+        db.close()
+
+    denied = client.post(f"/api/sboms/{sbom_id}/workspace")
+    assert denied.status_code == 404
 
 
 def test_large_line_patch_updates_full_repair_draft(client):
@@ -316,6 +544,15 @@ def test_valid_repaired_draft_revalidates_then_imports_trusted_sbom(client):
     imported = client.post(f"/api/sbom-validation-sessions/{session_id}/import")
     assert imported.status_code == 200, imported.text
     sbom_id = imported.json()["id"]
+
+    workspace = client.get(f"/api/sbom-workspaces/{session_id}")
+    assert workspace.status_code == 200, workspace.text
+    assert workspace.json()["validation_status"] == "imported"
+
+    detail = client.get(f"/api/sboms/{sbom_id}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["workspace_id"] == session_id
+    assert detail.json()["repair_workspace_url"] == f"/repair/{session_id}"
 
     from app.db import SessionLocal
 

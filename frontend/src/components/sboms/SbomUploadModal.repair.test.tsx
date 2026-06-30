@@ -68,6 +68,10 @@ describe('SbomUploadModal validation repair handoff', () => {
         project_name: 'Payments',
         component_count: 1,
         status: 'validated',
+        validation_status: 'valid',
+        workspace_id: 'valid-workspace-1',
+        validation_session_id: 'valid-workspace-1',
+        repair_workspace_url: '/repair/valid-workspace-1',
         enrichment_status: 'pending',
       });
     });
@@ -89,8 +93,47 @@ describe('SbomUploadModal validation repair handoff', () => {
         { duration: 5000 },
       );
     });
-    expect(onClose).toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
     expect(onSuccess).toHaveBeenCalledWith(expect.objectContaining({ id: 7, enrichment_status: 'pending' }));
+    expect(screen.getByRole('link', { name: /Open Repair Workspace/i })).toHaveAttribute(
+      'href',
+      '/repair/valid-workspace-1',
+    );
+  });
+
+  it('shows a Review / Repair Workspace link for valid uploads with warnings', async () => {
+    useUploadSbomMutate.mockImplementation((_payload, handlers) => {
+      handlers.onSuccess({
+        id: 8,
+        sbom_name: 'warning-sbom',
+        projectid: 42,
+        project_id: 42,
+        project_name: 'Payments',
+        component_count: 1,
+        status: 'validated',
+        validation_status: 'valid_with_warnings',
+        upload_status: 'valid_with_warnings',
+        workspace_id: 'warning-workspace-1',
+        validation_session_id: 'warning-workspace-1',
+        repair_workspace_url: '/repair/warning-workspace-1',
+        enrichment_status: 'pending',
+      });
+    });
+
+    render(wrap(<SbomUploadModal open onClose={vi.fn()} />));
+
+    expect(await screen.findByRole('option', { name: 'Payments' })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/SBOM Name/i), { target: { value: 'warning-sbom' } });
+    fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: '42' } });
+    fireEvent.change(screen.getByPlaceholderText('{"bomFormat": "CycloneDX", ...}'), {
+      target: { value: '{"bomFormat":"CycloneDX","specVersion":"1.5","components":[]}' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Upload SBOM/i }));
+
+    expect(await screen.findByRole('link', { name: /Review \/ Repair Workspace/i })).toHaveAttribute(
+      'href',
+      '/repair/warning-workspace-1',
+    );
   });
 
   it('shows upload timeout or network errors without opening repair workspace', async () => {
@@ -155,7 +198,41 @@ describe('SbomUploadModal validation repair handoff', () => {
       expect.any(Object),
     ));
     const link = await screen.findByRole('link', { name: /Open repair workspace/i });
-    expect(link).toHaveAttribute('href', '/sbom-validation-sessions/repair-123');
+    expect(link).toHaveAttribute('href', '/repair/repair-123');
+  });
+
+  it('shows an Open Workspace link for unsupported uploads with a workspace session', async () => {
+    useUploadSbomMutate.mockImplementation((_payload, handlers) => {
+      handlers.onError(
+        new HttpError('unsupported format', 415, 'unsupported_sbom_format', {
+          status: 'unsupported_format',
+          message: 'Format could not be detected.',
+          sbom_id: null,
+          workspace_id: 'unsupported-workspace-1',
+          validation_session_id: 'unsupported-workspace-1',
+          repair_workspace_url: '/repair/unsupported-workspace-1',
+          can_edit: true,
+          can_ai_fix: false,
+          error_count: 1,
+          warning_count: 0,
+          entries: [],
+          truncated: false,
+        }),
+      );
+    });
+
+    render(wrap(<SbomUploadModal open onClose={vi.fn()} />));
+
+    expect(await screen.findByRole('option', { name: 'Payments' })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/SBOM Name/i), { target: { value: 'unsupported-sbom' } });
+    fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: '42' } });
+    fireEvent.change(screen.getByPlaceholderText('{"bomFormat": "CycloneDX", ...}'), { target: { value: '{"not":"sbom"}' } });
+    fireEvent.click(screen.getByRole('button', { name: /Upload SBOM/i }));
+
+    expect(await screen.findByRole('link', { name: /Open Workspace/i })).toHaveAttribute(
+      'href',
+      '/repair/unsupported-workspace-1',
+    );
   });
 
   it('shows the repair link when the backend returns a session without can_edit', async () => {
@@ -202,7 +279,7 @@ describe('SbomUploadModal validation repair handoff', () => {
     fireEvent.click(screen.getByRole('button', { name: /Upload SBOM/i }));
 
     const link = await screen.findByRole('link', { name: /Open repair workspace/i });
-    expect(link).toHaveAttribute('href', '/sbom-validation-sessions/repair-no-can-edit');
+    expect(link).toHaveAttribute('href', '/repair/repair-no-can-edit');
   });
 
   it('shows security-blocked text when no repair session is created', async () => {

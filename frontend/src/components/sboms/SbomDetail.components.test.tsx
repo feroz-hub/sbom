@@ -46,6 +46,7 @@ const getSbomRiskSummary = vi.fn();
 const getSbomValidationReport = vi.fn();
 const getSbomVersions = vi.fn();
 const getSbomVexStatements = vi.fn();
+const createWorkspaceForSbom = vi.fn();
 
 vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api');
@@ -59,6 +60,7 @@ vi.mock('@/lib/api', async () => {
     getSbomValidationReport: (...args: unknown[]) => getSbomValidationReport(...args),
     getSbomVersions: (...args: unknown[]) => getSbomVersions(...args),
     getSbomVexStatements: (...args: unknown[]) => getSbomVexStatements(...args),
+    createWorkspaceForSbom: (...args: unknown[]) => createWorkspaceForSbom(...args),
   };
 });
 
@@ -171,9 +173,84 @@ beforeEach(() => {
   getSbomValidationReport.mockResolvedValue(null);
   getSbomVersions.mockResolvedValue([]);
   getSbomVexStatements.mockResolvedValue({ sbom_id: 42, statements: [] });
+  createWorkspaceForSbom.mockReset();
+  push.mockReset();
 });
 
 describe('SbomDetail components list', () => {
+  it('shows repair workspace actions for imported SBOMs with a workspace id', async () => {
+    getSbomComponents.mockResolvedValue(listResponse([CANONICAL]));
+
+    render(
+      wrap(
+        <SbomDetail
+          sbom={{
+            ...SBOM,
+            workspace_id: 'imported-workspace-1',
+            validation_session_id: 'imported-workspace-1',
+            repair_workspace_url: '/repair/imported-workspace-1',
+            validation_status: 'imported',
+          }}
+        />,
+      ),
+    );
+
+    const detailButton = await screen.findByRole('button', { name: /Open Repair Workspace/i });
+    expect(screen.getByRole('button', { name: /Open Workspace/i })).toBeInTheDocument();
+    fireEvent.click(detailButton);
+    expect(push).toHaveBeenCalledWith('/repair/imported-workspace-1');
+  });
+
+  it('creates a workspace for backfillable validated SBOMs before navigating', async () => {
+    getSbomComponents.mockResolvedValue(listResponse([CANONICAL]));
+    createWorkspaceForSbom.mockResolvedValue({
+      workspace_id: 'created-workspace-1',
+      repair_workspace_url: '/repair/created-workspace-1',
+    });
+
+    render(
+      wrap(
+        <SbomDetail
+          sbom={{
+            ...SBOM,
+            workspace_available: true,
+            workspace_source: 'backfillable',
+            validation_status: 'validated',
+            detected_format: 'cyclonedx',
+            detected_spec_version: '1.5',
+          }}
+        />,
+      ),
+    );
+
+    expect(await screen.findByText('cyclonedx 1.5')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Create\/Open Workspace/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Create\/Open Repair Workspace/i }));
+
+    await waitFor(() => expect(createWorkspaceForSbom).toHaveBeenCalledWith(42));
+    expect(push).toHaveBeenCalledWith('/repair/created-workspace-1');
+  });
+
+  it('shows an unavailable repair workspace message when original content is missing', async () => {
+    getSbomComponents.mockResolvedValue(listResponse([CANONICAL]));
+
+    render(
+      wrap(
+        <SbomDetail
+          sbom={{
+            ...SBOM,
+            workspace_available: false,
+            workspace_source: 'unavailable',
+            workspace_unavailable_reason: 'Original SBOM content is not available for this legacy record.',
+          }}
+        />,
+      ),
+    );
+
+    expect(await screen.findByText(/Repair Workspace unavailable/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Open Repair Workspace/i })).not.toBeInTheDocument();
+  });
+
   it('hides duplicate rows by default and shows duplicate counts', async () => {
     getSbomComponents.mockImplementation((_sbomId: number, options?: { includeDuplicates?: boolean }) =>
       Promise.resolve(
