@@ -352,6 +352,10 @@ In this mode, the backend creates or uses a development tenant and user context.
 
 HCL IAM is the configured production identity-provider path.
 
+SBOM Analyser supports HCL IAM integration using OIDC Authorization Code + PKCE for the frontend and JWT/JWKS validation in the FastAPI backend. The backend maps IAM claims to internal tenants, roles, and RBAC permissions.
+
+See: [HCL IAM Configuration Guide](docs/HCL_IAM_CONFIGURATION.md)
+
 Expected flow:
 
 ```text
@@ -426,6 +430,8 @@ Major permission groups:
 ## 15. Environment Variables
 
 Start from `.env.example` and keep local secrets out of git.
+
+For IAM-specific setup, claim mapping, frontend OIDC configuration, and troubleshooting, see the [HCL IAM Configuration Guide](docs/HCL_IAM_CONFIGURATION.md).
 
 ### Database
 
@@ -702,8 +708,8 @@ NEXT_PUBLIC_HCL_IAM_AUTHORIZATION_URL=
 NEXT_PUBLIC_HCL_IAM_TOKEN_URL=
 NEXT_PUBLIC_HCL_IAM_LOGOUT_URL=
 NEXT_PUBLIC_HCL_IAM_REDIRECT_URI=http://localhost:3000/auth/callback
-NEXT_PUBLIC_HCL_IAM_POST_LOGOUT_REDIRECT_URI=http://localhost:3000
-NEXT_PUBLIC_HCL_IAM_SCOPE="openid profile email"
+NEXT_PUBLIC_HCL_IAM_POST_LOGOUT_URI=http://localhost:3000
+NEXT_PUBLIC_HCL_IAM_SCOPES="openid profile email roles"
 ```
 
 Install and run:

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { Bot, CheckCircle, Download, FileInput, RefreshCw, Save, ShieldAlert, Wand2 } from 'lucide-react';
 import { Alert } from '@/components/ui/Alert';
 import { Badge } from '@/components/ui/Badge';
@@ -81,6 +81,16 @@ function mutationErrorMessage(error: unknown, fallback: string) {
 
 const CONTENT_CHUNK_SIZE = 65_536;
 
+function invalidateValidationRepairHistory(queryClient: QueryClient, sessionId: string) {
+  queryClient.invalidateQueries({ queryKey: ['validation-repair-history', sessionId] });
+}
+
+function invalidateValidationRepairDraftQueries(queryClient: QueryClient, sessionId: string) {
+  queryClient.invalidateQueries({ queryKey: ['validation-repair-content', sessionId] });
+  queryClient.invalidateQueries({ queryKey: ['validation-repair-lines', sessionId] });
+  queryClient.invalidateQueries({ queryKey: ['validation-repair-search', sessionId] });
+}
+
 function formatBytes(value: number | null | undefined) {
   if (value == null) return 'Unknown';
   if (value < 1024) return `${value} B`;
@@ -105,6 +115,7 @@ function LargeFileRepairWorkspace({
   onToggleFocusMode: () => void;
   onToggleValidationPanel: () => void;
 }) {
+  const queryClient = useQueryClient();
   const [startLine, setStartLine] = useState(1);
   const [jumpLine, setJumpLine] = useState('1');
   const [query, setQuery] = useState('');
@@ -131,6 +142,9 @@ function LargeFileRepairWorkspace({
   const patchMutation = useMutation({
     mutationFn: () => applyValidationSessionLinePatches(sessionId, [patch]),
     onSuccess: (updated) => {
+      queryClient.setQueryData(['validation-repair-session', sessionId], updated);
+      invalidateValidationRepairHistory(queryClient, sessionId);
+      invalidateValidationRepairDraftQueries(queryClient, sessionId);
       onSessionUpdate(updated);
       setMessage('Patch saved to repair draft.');
       linesQuery.refetch();
@@ -140,16 +154,20 @@ function LargeFileRepairWorkspace({
   const revalidateMutation = useMutation({
     mutationFn: () => validateValidationSession(sessionId),
     onSuccess: (updated) => {
+      queryClient.setQueryData(['validation-repair-session', sessionId], updated);
+      invalidateValidationRepairHistory(queryClient, sessionId);
       onSessionUpdate(updated);
       setMessage('Revalidation completed using the full repair draft.');
     },
   });
 
+  // @no-invalidation-needed — downloads the immutable original payload without changing server state.
   const downloadOriginalMutation = useMutation({
     mutationFn: () => downloadValidationSessionOriginal(sessionId),
     onSuccess: ({ blob, filename }) => downloadBlob(blob, filename),
   });
 
+  // @no-invalidation-needed — downloads the current repair draft without changing server state.
   const downloadDraftMutation = useMutation({
     mutationFn: () => downloadValidationSessionRepairDraft(sessionId),
     onSuccess: ({ blob, filename }) => downloadBlob(blob, filename),
@@ -375,7 +393,8 @@ export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspa
     mutationFn: () => saveValidationSessionRepairDraft(sessionId, content, sessionQuery.data?.updated_at),
     onSuccess: (updated) => {
       queryClient.setQueryData(['validation-repair-session', sessionId], updated);
-      queryClient.invalidateQueries({ queryKey: ['validation-repair-history', sessionId] });
+      invalidateValidationRepairHistory(queryClient, sessionId);
+      invalidateValidationRepairDraftQueries(queryClient, sessionId);
       setLoadedContentSize(content.length);
       setTotalContentSize(content.length);
       setContentEof(true);
@@ -394,7 +413,8 @@ export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspa
     },
     onSuccess: (updated) => {
       queryClient.setQueryData(['validation-repair-session', sessionId], updated);
-      queryClient.invalidateQueries({ queryKey: ['validation-repair-history', sessionId] });
+      invalidateValidationRepairHistory(queryClient, sessionId);
+      invalidateValidationRepairDraftQueries(queryClient, sessionId);
       setContentSha256(updated.stored_sha256 ?? null);
       setLocalMessage(
         updated.validation_status === 'passed' || updated.validation_status === 'repaired_valid'
@@ -404,6 +424,7 @@ export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspa
     },
   });
 
+  // @no-invalidation-needed — appends an already-requested content chunk into local editor state only.
   const loadMoreMutation = useMutation({
     mutationFn: () => getValidationSessionContent(
       sessionId,
@@ -419,6 +440,7 @@ export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspa
     },
   });
 
+  // @no-invalidation-needed — downloads the immutable original payload without changing server state.
   const downloadOriginalMutation = useMutation({
     mutationFn: () => downloadValidationSessionOriginal(sessionId),
     onSuccess: ({ blob, filename }) => {
@@ -447,7 +469,7 @@ export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspa
         initial[idx] = true;
       });
       setSelected(initial);
-      queryClient.invalidateQueries({ queryKey: ['validation-repair-history', sessionId] });
+      invalidateValidationRepairHistory(queryClient, sessionId);
     },
   });
 
@@ -460,7 +482,8 @@ export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspa
     onSuccess: (updated) => {
       if (!updated) return;
       queryClient.setQueryData(['validation-repair-session', sessionId], updated);
-      queryClient.invalidateQueries({ queryKey: ['validation-repair-history', sessionId] });
+      invalidateValidationRepairHistory(queryClient, sessionId);
+      invalidateValidationRepairDraftQueries(queryClient, sessionId);
       setContent(updated.current_content);
       setLoadedContentSize(updated.current_content.length);
       setTotalContentSize(updated.current_content.length);
@@ -553,7 +576,7 @@ export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspa
               onToggleValidationPanel={() => setShowValidationPanel((old) => !old)}
               onSessionUpdate={(updated) => {
                 queryClient.setQueryData(['validation-repair-session', sessionId], updated);
-                queryClient.invalidateQueries({ queryKey: ['validation-repair-history', sessionId] });
+                invalidateValidationRepairHistory(queryClient, sessionId);
               }}
             />
           </main>
