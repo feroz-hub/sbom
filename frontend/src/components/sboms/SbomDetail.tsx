@@ -65,6 +65,7 @@ import { useTableSort } from '@/hooks/useTableSort';
 import { usePagination } from '@/hooks/usePagination';
 import { formatDate, formatDuration } from '@/lib/utils';
 import { canOpenRepairWorkspace, getRepairWorkspaceUrl, repairWorkspaceLabel } from '@/lib/repairWorkspace';
+import { formatSbomFormatLabel } from '@/lib/sbomFormat';
 import type { SBOMSource, SBOMComponent, AnalysisRun, VexOverrideAuditEntry, VexStatement, VexStatus } from '@/types';
 
 type ComponentSortKey = 'name' | 'version' | 'component_type' | 'license' | 'lifecycle_status';
@@ -526,10 +527,10 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
   const workspaceButtonLabel = canBackfillWorkspace ? 'Create/Open Repair Workspace' : repairWorkspaceLabel(workspaceStatus);
   const workspaceDocumentButtonLabel = canBackfillWorkspace ? 'Create/Open Workspace' : 'Open Workspace';
   const formatTypeDisplay = [
-    sbom.detected_format || sbom.current_format || sbom.original_format || sbom.format,
+    formatSbomFormatLabel(sbom.detected_format || sbom.current_format || sbom.original_format || sbom.format),
     sbom.detected_spec_version || sbom.spec_version,
   ]
-    .filter(Boolean)
+    .filter((value) => value && value !== 'Unknown')
     .join(' ')
     || (sbom.sbom_type ? `Type #${sbom.sbom_type}` : '—');
 

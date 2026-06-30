@@ -216,14 +216,14 @@ describe('SbomDetail components list', () => {
             workspace_available: true,
             workspace_source: 'backfillable',
             validation_status: 'validated',
-            detected_format: 'cyclonedx',
+            detected_format: 'cyclonedx_json',
             detected_spec_version: '1.5',
           }}
         />,
       ),
     );
 
-    expect(await screen.findByText('cyclonedx 1.5')).toBeInTheDocument();
+    expect(await screen.findByText('CycloneDX JSON 1.5')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Create\/Open Workspace/i })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Create\/Open Repair Workspace/i }));
 

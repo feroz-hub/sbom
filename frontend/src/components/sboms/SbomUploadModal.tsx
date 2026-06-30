@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -13,6 +13,7 @@ import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
 import { getProjects, getSbomTypes, HttpError } from '@/lib/api';
 import { getRepairWorkspaceUrl, repairWorkspaceLabel } from '@/lib/repairWorkspace';
+import { detectSbomFormatFromText, formatFamily, formatSbomFormatLabel, type SbomFormatDetection } from '@/lib/sbomFormat';
 import { useToast } from '@/hooks/useToast';
 import { useSbomsList } from '@/hooks/useSbomsList';
 import { useUploadSbom } from '@/hooks/useSbomMutations';
@@ -68,15 +69,10 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
-function detectSbomTypeId(filename: string, types: { id: number; typename: string }[]): string {
-  const lower = filename.toLowerCase();
-  const hint =
-    lower.includes('spdx') ? 'spdx' :
-    lower.includes('cyclonedx') || lower.includes('cdx') ? 'cyclonedx' :
-    lower.endsWith('.xml') ? 'spdx' :
-    lower.endsWith('.json') ? 'cyclonedx' : '';
-  if (!hint) return '';
-  const match = types.find((t) => t.typename.toLowerCase().includes(hint));
+function matchSbomTypeIdForFormat(format: string | null | undefined, types: { id: number; typename: string }[]): string {
+  const family = formatFamily(format);
+  if (!family) return '';
+  const match = types.find((t) => t.typename.toLowerCase().includes(family));
   return match ? String(match.id) : '';
 }
 
@@ -110,6 +106,8 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
     lines: number;
     filename: string;
   } | null>(null);
+  const [formatDetection, setFormatDetection] = useState<SbomFormatDetection | null>(null);
+  const [userManuallyOverrodeFormat, setUserManuallyOverrodeFormat] = useState(false);
   const { showToast } = useToast();
   const uploadMutation = useUploadSbom();
   const uploading = uploadMutation.isPending;
@@ -145,6 +143,7 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
   const selectedProjectId = watch('projectid');
   const sbomNameValue = watch('sbom_name');
   const sbomDataValue = watch('sbom_data');
+  const selectedSbomTypeId = watch('sbom_type_id');
   const canSubmit = Boolean(
     selectedProjectId &&
     sbomNameValue?.trim() &&
@@ -154,20 +153,32 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
   const uploadRepairUrl = uploadResult ? getRepairWorkspaceUrl(uploadResult) : null;
   const validationFailureRepairUrl = validationFailure ? getRepairWorkspaceUrl(validationFailure) : null;
 
+  useEffect(() => {
+    if (userManuallyOverrodeFormat || !formatDetection || !sbomTypes?.length) return;
+    const detectedTypeId = matchSbomTypeIdForFormat(formatDetection.detected_format, sbomTypes);
+    setValue('sbom_type_id', detectedTypeId, { shouldValidate: true });
+  }, [formatDetection, sbomTypes, setValue, userManuallyOverrodeFormat]);
+
+  const applyContentDetection = (content: string) => {
+    const detection = detectSbomFormatFromText(content);
+    setFormatDetection(detection);
+    if (!userManuallyOverrodeFormat && sbomTypes?.length) {
+      setValue('sbom_type_id', matchSbomTypeIdForFormat(detection.detected_format, sbomTypes), { shouldValidate: true });
+    }
+    return detection;
+  };
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setSelectedFile(file);
     const preview = await file.slice(0, FILE_PREVIEW_BYTES).text();
     const previewLines = preview ? preview.split(/\r?\n/).length : 0;
+    applyContentDetection(preview);
     setValue('sbom_data', preview, { shouldValidate: true });
     setDocumentPreviewMeta({ bytes: file.size, lines: previewLines, filename: file.name });
     if (!watch('sbom_name')) {
       setValue('sbom_name', file.name.replace(/\.[^/.]+$/, ''));
-    }
-    if (!watch('sbom_type_id') && sbomTypes?.length) {
-      const detected = detectSbomTypeId(file.name, sbomTypes);
-      if (detected) setValue('sbom_type_id', detected);
     }
   };
 
@@ -217,6 +228,12 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
           setUploadError(null);
           setValidationFailure(null);
           setUploadResult(sbom);
+          setFormatDetection({
+            detected_format: sbom.detected_format || 'unknown',
+            detected_spec_version: sbom.detected_spec_version || null,
+            detection_confidence: sbom.detection_confidence ?? 0,
+            detection_evidence: [],
+          });
           setDuplicateNameError(null);
           showToast(
             `"${sbom.sbom_name}" uploaded successfully. Enrichment is running in background.`,
@@ -251,8 +268,21 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
     setSelectedFile(null);
     setDuplicateNameError(null);
     setDocumentPreviewMeta(null);
+    setFormatDetection(null);
+    setUserManuallyOverrodeFormat(false);
     onClose();
   };
+
+  const sbomDataRegistration = register('sbom_data', {
+    onChange: (event) => applyContentDetection(event.target.value),
+  });
+  const sbomTypeRegistration = register('sbom_type_id', {
+    onChange: (event) => {
+      const value = event.target.value;
+      setUserManuallyOverrodeFormat(Boolean(value));
+    },
+  });
+  const selectedTypeName = sbomTypes?.find((type) => String(type.id) === selectedSbomTypeId)?.typename;
 
   return (
     <Dialog open={open} onClose={handleClose} title="Upload SBOM" maxWidth="lg">
@@ -345,7 +375,7 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
                 Upload stored and validated: {uploadResult.upload_status?.replaceAll('_', ' ') || 'valid'}
               </p>
               <dl className="mt-2 grid gap-2 text-xs text-emerald-900 dark:text-emerald-100 sm:grid-cols-2">
-                <div>Detected format: <span className="font-medium">{uploadResult.detected_format || 'Unknown'} {uploadResult.detected_spec_version || ''}</span></div>
+                <div>Detected format: <span className="font-medium">{formatSbomFormatLabel(uploadResult.detected_format)} {uploadResult.detected_spec_version || ''}</span></div>
                 <div>Lines: <span className="font-mono">{uploadResult.total_lines?.toLocaleString() || 'Unknown'}</span></div>
                 <div>Size: <span className="font-mono">{uploadResult.file_size_bytes?.toLocaleString() || 'Unknown'} bytes</span></div>
                 <div>SHA-256: <span className="font-mono break-all">{uploadResult.sha256 || 'Unknown'}</span></div>
@@ -403,13 +433,37 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
                 {documentPreviewMeta.lines.toLocaleString()} lines · full size {(documentPreviewMeta.bytes / 1024).toFixed(1)} KB.
               </p>
             ) : null}
+            <div className="rounded-lg border border-border bg-surface-muted px-3 py-2 text-xs text-hcl-muted">
+              <div>
+                Detected format:{' '}
+                <span className="font-medium text-hcl-navy">
+                  {formatSbomFormatLabel(formatDetection?.detected_format)}
+                  {formatDetection?.detected_spec_version ? ` ${formatDetection.detected_spec_version}` : ''}
+                </span>
+                {formatDetection ? (
+                  <span> · Confidence {Math.round(formatDetection.detection_confidence * 100)}%</span>
+                ) : (
+                  <span> · Auto-detect runs when content is selected or pasted.</span>
+                )}
+              </div>
+              {formatDetection?.detected_format === 'unknown' && (
+                <p className="mt-1 text-amber-700">
+                  Format could not be detected automatically. The upload will not default to CycloneDX.
+                </p>
+              )}
+              {userManuallyOverrodeFormat && selectedTypeName && (
+                <p className="mt-1 text-amber-700">
+                  Manual format override enabled. Validation metadata will keep the backend-detected format.
+                </p>
+              )}
+            </div>
             <Textarea
-              placeholder='{"bomFormat": "CycloneDX", ...}'
+              placeholder='Paste a small SPDX, CycloneDX, or XML SBOM preview'
               error={errors.sbom_data?.message}
               className="font-mono text-xs min-h-[160px]"
               disabled={uploading}
               onPaste={handlePaste}
-              {...register('sbom_data')}
+              {...sbomDataRegistration}
             />
             <p className="text-xs text-hcl-muted">
               Preview only. Validation and repair use the full file stored by the backend.
@@ -430,7 +484,13 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
                 <option key={p.id} value={p.id}>{p.project_name}</option>
               ))}
             </Select>
-            <Select label="SBOM Type / Format" placeholder="Select type..." disabled={uploading} {...register('sbom_type_id')}>
+            <Select
+              label="SBOM Type / Format"
+              disabled={uploading}
+              hint="Leave as Auto-detect unless you need a manual type override."
+              {...sbomTypeRegistration}
+            >
+              <option value="">Auto-detect</option>
               {sbomTypes?.length
                 ? sbomTypes.map((t) => <option key={t.id} value={t.id}>{t.typename}</option>)
                 : <option value="">Unknown</option>}

@@ -61,6 +61,36 @@ _BAD_PURL_CYCLONEDX = {
     "dependencies": [],
 }
 
+_VALID_SPDX = {
+    "spdxVersion": "SPDX-2.3",
+    "dataLicense": "CC0-1.0",
+    "SPDXID": "SPDXRef-DOCUMENT",
+    "name": "test-spdx",
+    "documentNamespace": "https://example.com/spdx/test",
+    "creationInfo": {
+        "created": "2026-06-30T00:00:00Z",
+        "creators": ["Tool: SBOM Analyser Test"],
+    },
+    "packages": [
+        {
+            "name": "test-package",
+            "SPDXID": "SPDXRef-Package",
+            "downloadLocation": "NOASSERTION",
+            "filesAnalyzed": False,
+            "licenseConcluded": "NOASSERTION",
+            "licenseDeclared": "NOASSERTION",
+            "copyrightText": "NOASSERTION",
+        }
+    ],
+    "relationships": [
+        {
+            "spdxElementId": "SPDXRef-DOCUMENT",
+            "relationshipType": "DESCRIBES",
+            "relatedSpdxElement": "SPDXRef-Package",
+        }
+    ],
+}
+
 
 @pytest.fixture
 def unique_name(request) -> str:
@@ -119,6 +149,25 @@ def test_upload_with_project_id_assigns_project_and_syncs_details(client, unique
         assert db.query(SBOMComponent).filter(SBOMComponent.sbom_id == accepted["sbom_id"]).count() >= 1
     finally:
         db.close()
+
+
+def test_upload_spdx_json_returns_detected_format_and_workspace_metadata(client, unique_name):
+    raw = json.dumps(_VALID_SPDX)
+    resp = client.post(
+        "/api/sboms/upload",
+        data={"sbom_name": unique_name},
+        files={"file": ("valid-spdx.json", raw, "application/json")},
+    )
+
+    assert resp.status_code == 202, resp.text
+    accepted = resp.json()
+    assert accepted["detected_format"] == "spdx_json"
+    assert accepted["detected_spec_version"] == "SPDX-2.3"
+    assert accepted["repair_workspace_url"] == f"/repair/{accepted['workspace_id']}"
+
+    detail = client.get(f"/api/sboms/{accepted['sbom_id']}").json()
+    assert detail["detected_format"] == "spdx_json"
+    assert detail["detected_spec_version"] == "SPDX-2.3"
 
 
 def test_upload_schedules_background_enrichment_without_inline_provider_calls(client, unique_name, monkeypatch):

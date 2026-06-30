@@ -6,15 +6,32 @@ import json
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
+from typing import Literal
+
+SbomDetectedFormat = Literal[
+    "cyclonedx_json",
+    "cyclonedx_xml",
+    "spdx_json",
+    "spdx_tag_value",
+    "unknown",
+]
 
 
 @dataclass(slots=True)
 class SbomFormatDetection:
-    format: str
+    format: SbomDetectedFormat
     spec_version: str | None = None
     confidence: float = 0.0
     evidence: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+
+    @property
+    def family(self) -> str | None:
+        if self.format.startswith("cyclonedx"):
+            return "cyclonedx"
+        if self.format.startswith("spdx"):
+            return "spdx"
+        return None
 
 
 _BOM_FORMAT_RE = re.compile(r'"bomFormat"\s*:\s*"CycloneDX"', re.IGNORECASE)
@@ -57,16 +74,6 @@ def _detect_json(text: str) -> SbomFormatDetection | None:
         parse_warning = ""
 
     if isinstance(parsed, dict):
-        if parsed.get("bomFormat") == "CycloneDX":
-            evidence = ["bomFormat=CycloneDX"]
-            if "components" in parsed:
-                evidence.append("components present")
-            return SbomFormatDetection(
-                "cyclonedx",
-                spec_version=str(parsed.get("specVersion") or "") or None,
-                confidence=0.99,
-                evidence=evidence,
-            )
         if "spdxVersion" in parsed:
             evidence = ["spdxVersion present"]
             if "SPDXID" in parsed:
@@ -74,8 +81,18 @@ def _detect_json(text: str) -> SbomFormatDetection | None:
             if "packages" in parsed:
                 evidence.append("packages present")
             return SbomFormatDetection(
-                "spdx",
+                "spdx_json",
                 spec_version=str(parsed.get("spdxVersion") or "") or None,
+                confidence=0.99,
+                evidence=evidence,
+            )
+        if str(parsed.get("bomFormat") or "").lower() == "cyclonedx":
+            evidence = ["bomFormat=CycloneDX"]
+            if "components" in parsed:
+                evidence.append("components present")
+            return SbomFormatDetection(
+                "cyclonedx_json",
+                spec_version=str(parsed.get("specVersion") or "") or None,
                 confidence=0.99,
                 evidence=evidence,
             )
@@ -86,7 +103,7 @@ def _detect_json(text: str) -> SbomFormatDetection | None:
     if _BOM_FORMAT_RE.search(text[:65536]):
         version_match = _SPEC_VERSION_RE.search(text[:65536])
         return SbomFormatDetection(
-            "cyclonedx",
+            "cyclonedx_json",
             spec_version=version_match.group(1) if version_match else None,
             confidence=0.82,
             evidence=["bomFormat=CycloneDX"],
@@ -95,7 +112,7 @@ def _detect_json(text: str) -> SbomFormatDetection | None:
     spdx_match = _SPDX_VERSION_RE.search(text[:65536])
     if spdx_match:
         return SbomFormatDetection(
-            "spdx",
+            "spdx_json",
             spec_version=spdx_match.group(1),
             confidence=0.82,
             evidence=["spdxVersion present"],
@@ -112,7 +129,7 @@ def _detect_spdx_tag_value(text: str) -> SbomFormatDetection | None:
         if stripped.lower().startswith("spdxversion:"):
             version = stripped.split(":", 1)[1].strip() or None
             return SbomFormatDetection(
-                "spdx",
+                "spdx_tag_value",
                 spec_version=version,
                 confidence=0.95,
                 evidence=["SPDXVersion tag-value header"],
@@ -132,7 +149,7 @@ def _detect_xml(text: str) -> SbomFormatDetection | None:
         if "<bom" in lowered and "cyclonedx" in lowered:
             version_match = re.search(r'version="([^"]+)"', sample, re.IGNORECASE)
             return SbomFormatDetection(
-                "cyclonedx",
+                "cyclonedx_xml",
                 spec_version=version_match.group(1) if version_match else None,
                 confidence=0.72,
                 evidence=["CycloneDX XML bom root"],
@@ -142,10 +159,9 @@ def _detect_xml(text: str) -> SbomFormatDetection | None:
     tag = root.tag.lower()
     if tag.endswith("bom") and ("cyclonedx" in tag or "cyclonedx" in sample.lower()):
         return SbomFormatDetection(
-            "cyclonedx",
+            "cyclonedx_xml",
             spec_version=root.attrib.get("version"),
             confidence=0.96,
             evidence=["CycloneDX XML root"],
         )
     return None
-

@@ -8,6 +8,7 @@ import { HttpError } from '@/lib/api';
 
 const useUploadSbomMutate = vi.fn();
 const showToast = vi.fn();
+const getSbomTypes = vi.fn();
 
 vi.mock('@/hooks/useSbomMutations', () => ({
   useUploadSbom: () => ({ mutate: useUploadSbomMutate, isPending: false }),
@@ -37,7 +38,7 @@ vi.mock('@/lib/api', async () => {
         modified_on: null,
       },
     ]),
-    getSbomTypes: vi.fn().mockResolvedValue([]),
+    getSbomTypes: (...args: unknown[]) => getSbomTypes(...args),
   };
 });
 
@@ -53,9 +54,80 @@ function wrap(children: ReactNode) {
 beforeEach(() => {
   useUploadSbomMutate.mockReset();
   showToast.mockReset();
+  getSbomTypes.mockReset();
+  getSbomTypes.mockResolvedValue([]);
 });
 
 describe('SbomUploadModal validation repair handoff', () => {
+  it('defaults the format selector to Auto-detect', async () => {
+    getSbomTypes.mockResolvedValue([
+      { id: 1, typename: 'CycloneDX JSON' },
+      { id: 2, typename: 'SPDX JSON' },
+    ]);
+
+    render(wrap(<SbomUploadModal open onClose={vi.fn()} />));
+
+    const formatSelect = await screen.findByLabelText(/SBOM Type \/ Format/i);
+    expect(formatSelect).toHaveValue('');
+    expect(screen.getByRole('option', { name: 'Auto-detect' })).toBeInTheDocument();
+  });
+
+  it('detects SPDX JSON content and selects the matching SPDX type', async () => {
+    getSbomTypes.mockResolvedValue([
+      { id: 1, typename: 'CycloneDX JSON' },
+      { id: 2, typename: 'SPDX JSON' },
+    ]);
+
+    render(wrap(<SbomUploadModal open onClose={vi.fn()} />));
+
+    const editor = screen.getByPlaceholderText('Paste a small SPDX, CycloneDX, or XML SBOM preview');
+    fireEvent.change(editor, {
+      target: {
+        value: '{"spdxVersion":"SPDX-2.3","SPDXID":"SPDXRef-DOCUMENT","packages":[]}',
+      },
+    });
+
+    expect(await screen.findByText(/SPDX JSON SPDX-2.3/i)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText(/SBOM Type \/ Format/i)).toHaveValue('2'));
+  });
+
+  it('does not default unknown JSON to CycloneDX', async () => {
+    getSbomTypes.mockResolvedValue([
+      { id: 1, typename: 'CycloneDX JSON' },
+      { id: 2, typename: 'SPDX JSON' },
+    ]);
+
+    render(wrap(<SbomUploadModal open onClose={vi.fn()} />));
+
+    fireEvent.change(screen.getByPlaceholderText('Paste a small SPDX, CycloneDX, or XML SBOM preview'), {
+      target: { value: '{"ok":false,"dependencyCount":10052}' },
+    });
+
+    expect(await screen.findByText(/Format could not be detected automatically/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/SBOM Type \/ Format/i)).toHaveValue('');
+  });
+
+  it('does not send a CycloneDX type by default', async () => {
+    getSbomTypes.mockResolvedValue([
+      { id: 1, typename: 'CycloneDX JSON' },
+      { id: 2, typename: 'SPDX JSON' },
+    ]);
+    useUploadSbomMutate.mockImplementation((_payload, _handlers) => {});
+
+    render(wrap(<SbomUploadModal open onClose={vi.fn()} />));
+
+    expect(await screen.findByRole('option', { name: 'Payments' })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/SBOM Name/i), { target: { value: 'unknown-sbom' } });
+    fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: '42' } });
+    fireEvent.change(screen.getByPlaceholderText('Paste a small SPDX, CycloneDX, or XML SBOM preview'), {
+      target: { value: '{"ok":false}' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Upload SBOM/i }));
+
+    await waitFor(() => expect(useUploadSbomMutate).toHaveBeenCalled());
+    expect(useUploadSbomMutate.mock.calls[0][0].sbom_type).toBeUndefined();
+  });
+
   it('shows upload success copy that enrichment continues in background', async () => {
     const onClose = vi.fn();
     const onSuccess = vi.fn();
@@ -81,7 +153,7 @@ describe('SbomUploadModal validation repair handoff', () => {
     expect(await screen.findByRole('option', { name: 'Payments' })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/SBOM Name/i), { target: { value: 'good-sbom' } });
     fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: '42' } });
-    fireEvent.change(screen.getByPlaceholderText('{"bomFormat": "CycloneDX", ...}'), {
+    fireEvent.change(screen.getByPlaceholderText('Paste a small SPDX, CycloneDX, or XML SBOM preview'), {
       target: { value: '{"bomFormat":"CycloneDX","specVersion":"1.5","components":[]}' },
     });
     fireEvent.click(screen.getByRole('button', { name: /Upload SBOM/i }));
@@ -125,7 +197,7 @@ describe('SbomUploadModal validation repair handoff', () => {
     expect(await screen.findByRole('option', { name: 'Payments' })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/SBOM Name/i), { target: { value: 'warning-sbom' } });
     fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: '42' } });
-    fireEvent.change(screen.getByPlaceholderText('{"bomFormat": "CycloneDX", ...}'), {
+    fireEvent.change(screen.getByPlaceholderText('Paste a small SPDX, CycloneDX, or XML SBOM preview'), {
       target: { value: '{"bomFormat":"CycloneDX","specVersion":"1.5","components":[]}' },
     });
     fireEvent.click(screen.getByRole('button', { name: /Upload SBOM/i }));
@@ -146,7 +218,7 @@ describe('SbomUploadModal validation repair handoff', () => {
     expect(await screen.findByRole('option', { name: 'Payments' })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/SBOM Name/i), { target: { value: 'slow-sbom' } });
     fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: '42' } });
-    fireEvent.change(screen.getByPlaceholderText('{"bomFormat": "CycloneDX", ...}'), {
+    fireEvent.change(screen.getByPlaceholderText('Paste a small SPDX, CycloneDX, or XML SBOM preview'), {
       target: { value: '{"bomFormat":"CycloneDX","specVersion":"1.5","components":[]}' },
     });
     fireEvent.click(screen.getByRole('button', { name: /Upload SBOM/i }));
@@ -190,7 +262,7 @@ describe('SbomUploadModal validation repair handoff', () => {
     expect(await screen.findByRole('option', { name: 'Payments' })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/SBOM Name/i), { target: { value: 'bad-sbom' } });
     fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: '42' } });
-    fireEvent.change(screen.getByPlaceholderText('{"bomFormat": "CycloneDX", ...}'), { target: { value: '{"bad":true}' } });
+    fireEvent.change(screen.getByPlaceholderText('Paste a small SPDX, CycloneDX, or XML SBOM preview'), { target: { value: '{"bad":true}' } });
     fireEvent.click(screen.getByRole('button', { name: /Upload SBOM/i }));
 
     await waitFor(() => expect(useUploadSbomMutate).toHaveBeenCalledWith(
@@ -226,7 +298,7 @@ describe('SbomUploadModal validation repair handoff', () => {
     expect(await screen.findByRole('option', { name: 'Payments' })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/SBOM Name/i), { target: { value: 'unsupported-sbom' } });
     fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: '42' } });
-    fireEvent.change(screen.getByPlaceholderText('{"bomFormat": "CycloneDX", ...}'), { target: { value: '{"not":"sbom"}' } });
+    fireEvent.change(screen.getByPlaceholderText('Paste a small SPDX, CycloneDX, or XML SBOM preview'), { target: { value: '{"not":"sbom"}' } });
     fireEvent.click(screen.getByRole('button', { name: /Upload SBOM/i }));
 
     expect(await screen.findByRole('link', { name: /Open Workspace/i })).toHaveAttribute(
@@ -275,7 +347,7 @@ describe('SbomUploadModal validation repair handoff', () => {
     expect(await screen.findByRole('option', { name: 'Payments' })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/SBOM Name/i), { target: { value: 'bad-sbom' } });
     fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: '42' } });
-    fireEvent.change(screen.getByPlaceholderText('{"bomFormat": "CycloneDX", ...}'), { target: { value: '{"bad":true}' } });
+    fireEvent.change(screen.getByPlaceholderText('Paste a small SPDX, CycloneDX, or XML SBOM preview'), { target: { value: '{"bad":true}' } });
     fireEvent.click(screen.getByRole('button', { name: /Upload SBOM/i }));
 
     const link = await screen.findByRole('link', { name: /Open repair workspace/i });
@@ -318,7 +390,7 @@ describe('SbomUploadModal validation repair handoff', () => {
     expect(await screen.findByRole('option', { name: 'Payments' })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/SBOM Name/i), { target: { value: 'blocked-sbom' } });
     fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: '42' } });
-    fireEvent.change(screen.getByPlaceholderText('{"bomFormat": "CycloneDX", ...}'), { target: { value: '{"bad":true}' } });
+    fireEvent.change(screen.getByPlaceholderText('Paste a small SPDX, CycloneDX, or XML SBOM preview'), { target: { value: '{"bad":true}' } });
     fireEvent.click(screen.getByRole('button', { name: /Upload SBOM/i }));
 
     expect(await screen.findByText('Payload blocked by security validation')).toBeInTheDocument();
@@ -329,7 +401,7 @@ describe('SbomUploadModal validation repair handoff', () => {
     render(wrap(<SbomUploadModal open onClose={vi.fn()} />));
 
     fireEvent.change(screen.getByLabelText(/SBOM Name/i), { target: { value: 'needs-project' } });
-    fireEvent.change(screen.getByPlaceholderText('{"bomFormat": "CycloneDX", ...}'), { target: { value: '{"bomFormat":"CycloneDX"}' } });
+    fireEvent.change(screen.getByPlaceholderText('Paste a small SPDX, CycloneDX, or XML SBOM preview'), { target: { value: '{"bomFormat":"CycloneDX"}' } });
 
     expect(await screen.findByRole('button', { name: /Upload SBOM/i })).toBeDisabled();
     expect(useUploadSbomMutate).not.toHaveBeenCalled();

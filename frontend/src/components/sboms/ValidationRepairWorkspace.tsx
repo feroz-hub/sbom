@@ -32,6 +32,7 @@ import {
 import { Select } from '@/components/ui/Select';
 import { invalidateDashboardTiles, invalidateProjectSurfaces, invalidateSbomSurfaces } from '@/lib/queryInvalidation';
 import { STAGE_NUMBERS, stageLabel, stageNumber } from '@/lib/sbomValidation';
+import { formatSbomFormatLabel } from '@/lib/sbomFormat';
 import type { AiRepairSuggestion, ValidationErrorEntry, LineRepairPatch, ValidationRepairPatch, ValidationRepairSession } from '@/types';
 
 interface ValidationRepairWorkspaceProps {
@@ -91,10 +92,18 @@ function LargeFileRepairWorkspace({
   session,
   sessionId,
   onSessionUpdate,
+  focusMode,
+  showValidationPanel,
+  onToggleFocusMode,
+  onToggleValidationPanel,
 }: {
   session: ValidationRepairSession;
   sessionId: string;
   onSessionUpdate: (session: ValidationRepairSession) => void;
+  focusMode: boolean;
+  showValidationPanel: boolean;
+  onToggleFocusMode: () => void;
+  onToggleValidationPanel: () => void;
 }) {
   const [startLine, setStartLine] = useState(1);
   const [jumpLine, setJumpLine] = useState('1');
@@ -153,15 +162,15 @@ function LargeFileRepairWorkspace({
   };
 
   return (
-    <Card className="min-w-0">
-      <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+    <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <CardHeader className="sticky top-0 z-10 shrink-0 border-b border-border bg-white">
         <div>
           <CardTitle>Large File Mode</CardTitle>
           <p className="mt-1 text-xs text-hcl-muted">
             {formatBytes(session.file_size_bytes ?? session.original_size_bytes)} · {(session.total_lines ?? 0).toLocaleString()} lines · chunked repair draft
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="mt-3 flex flex-wrap gap-2">
           <Button size="sm" variant="secondary" onClick={() => downloadOriginalMutation.mutate()} loading={downloadOriginalMutation.isPending}>
             <Download className="h-4 w-4" />
             Original
@@ -174,9 +183,15 @@ function LargeFileRepairWorkspace({
             <RefreshCw className="h-4 w-4" />
             Revalidate
           </Button>
+          <Button size="sm" variant="secondary" onClick={onToggleValidationPanel}>
+            {showValidationPanel ? 'Hide validation panel' : 'Show validation panel'}
+          </Button>
+          <Button size="sm" variant="secondary" onClick={onToggleFocusMode}>
+            {focusMode ? 'Exit focus mode' : 'Focus mode'}
+          </Button>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-4">
         {message && <Alert variant="info" title="Workspace updated">{message}</Alert>}
         {(patchMutation.error || revalidateMutation.error) && (
           <Alert variant="error" title="Large file action failed">
@@ -199,12 +214,12 @@ function LargeFileRepairWorkspace({
           />
           <Button size="sm" variant="secondary" onClick={goToLine}>Jump</Button>
         </div>
-        <div className="overflow-hidden rounded-md border border-border">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border">
           <div className="flex items-center justify-between border-b border-border bg-surface-muted px-3 py-2 text-xs text-hcl-muted">
             <span>Lines {startLine.toLocaleString()}-{(startLine + (linesQuery.data?.lines.length ?? 0) - 1).toLocaleString()}</span>
             <span>{linesQuery.data?.eof ? 'End of file' : 'Page loaded'}</span>
           </div>
-          <pre className="max-h-[520px] overflow-auto bg-surface p-0 text-xs leading-relaxed">
+          <pre className="min-h-0 flex-1 overflow-auto bg-surface p-0 text-xs leading-relaxed">
             {(linesQuery.data?.lines ?? []).map((line, idx) => (
               <div key={`${startLine}-${idx}`} className="grid grid-cols-[5rem_minmax(0,1fr)] border-b border-border/40 last:border-b-0">
                 <span className="select-none bg-surface-muted px-2 py-1 text-right font-mono text-hcl-muted">{startLine + idx}</span>
@@ -303,6 +318,9 @@ export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspa
   const [suggestion, setSuggestion] = useState<AiRepairSuggestion | null>(null);
   const [selected, setSelected] = useState<Record<number, boolean>>({});
   const [localMessage, setLocalMessage] = useState<string | null>(null);
+  const [focusMode, setFocusMode] = useState(false);
+  const [showValidationPanel, setShowValidationPanel] = useState(true);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const sessionQuery = useQuery({
     queryKey: ['validation-repair-session', sessionId],
@@ -469,6 +487,12 @@ export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspa
   const serverDraftSize = session?.stored_size_bytes ?? session?.file_size_bytes ?? session?.current_content.length ?? 0;
   const hasUnsavedChanges = Boolean(session && (contentSha256 == null || content.length !== serverDraftSize || content !== session.current_content));
   const contentIsPartial = !contentEof;
+  const metadataMismatch = Boolean(
+    session &&
+    content.length > 0 &&
+    (((session.original_size_bytes ?? session.file_size_bytes ?? 0) === 0) || ((session.total_lines ?? 0) === 0)),
+  );
+  const effectiveShowValidationPanel = showValidationPanel && !focusMode;
 
   if (sessionQuery.isLoading || (sessionQuery.data?.full_editor_allowed !== false && initialContentQuery.isLoading)) return <PageSpinner />;
 
@@ -490,97 +514,120 @@ export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspa
 
   if (session.full_editor_allowed === false) {
     return (
-      <div className="space-y-5">
+      <div className="flex h-[calc(100vh-96px)] min-h-0 flex-col gap-3 overflow-hidden">
         {localMessage && <Alert variant="info" title="Workspace updated">{localMessage}</Alert>}
-        <Card>
-          <CardHeader>
-            <CardTitle>Validation Session</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-              <div>
-                <dt className="text-xs font-medium text-hcl-muted">Session ID</dt>
-                <dd className="mt-1 font-mono text-xs text-hcl-navy break-all">{session.id}</dd>
-              </div>
-              <div>
-                <dt className="text-xs font-medium text-hcl-muted">Original filename</dt>
-                <dd className="mt-1 text-hcl-navy">{session.original_filename || session.sbom_name || 'Unknown'}</dd>
-              </div>
-              <div>
-                <dt className="text-xs font-medium text-hcl-muted">Detected format</dt>
-                <dd className="mt-1 text-hcl-navy">{session.detected_format || 'Unknown'} {session.detected_version || ''}</dd>
-              </div>
-              <div>
-                <dt className="text-xs font-medium text-hcl-muted">Current status</dt>
-                <dd className="mt-1">
-                  <Badge variant={canImport ? 'success' : 'warning'}>{session.validation_status.replace('_', ' ')}</Badge>
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs font-medium text-hcl-muted">Total lines</dt>
-                <dd className="mt-1 text-hcl-navy">{(session.total_lines ?? 0).toLocaleString()}</dd>
-              </div>
-              <div className="lg:col-span-3">
-                <dt className="text-xs font-medium text-hcl-muted">SHA-256</dt>
-                <dd className="mt-1 font-mono text-xs text-hcl-navy break-all">{session.sha256 || session.original_sha256 || 'Unknown'}</dd>
-              </div>
-            </dl>
-          </CardContent>
-        </Card>
-        <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_24rem]">
-          <LargeFileRepairWorkspace
-            session={session}
-            sessionId={sessionId}
-            onSessionUpdate={(updated) => {
-              queryClient.setQueryData(['validation-repair-session', sessionId], updated);
-              queryClient.invalidateQueries({ queryKey: ['validation-repair-history', sessionId] });
-            }}
-          />
-          <div className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Validation Status</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant={canImport ? 'success' : 'warning'}>{session.validation_status.replace('_', ' ')}</Badge>
-                  <Badge variant={(report?.error_count ?? 0) > 0 ? 'error' : 'success'}>{report?.error_count ?? 0} errors</Badge>
-                  <Badge variant="warning">{report?.warning_count ?? 0} warnings</Badge>
+        {!focusMode && (
+          <Card className="shrink-0">
+            <CardContent className="py-3">
+              <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                <div>
+                  <dt className="text-xs font-medium text-hcl-muted">Session ID</dt>
+                  <dd className="mt-1 font-mono text-xs text-hcl-navy break-all">{session.id}</dd>
                 </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle>Validation Issues</CardTitle>
-              </CardHeader>
-              <CardContent className="max-h-[520px] space-y-3 overflow-auto">
-                {entries.length === 0 ? (
-                  <div className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-200">
-                    <CheckCircle className="h-4 w-4" />
-                    No validation issues remain.
+                <div>
+                  <dt className="text-xs font-medium text-hcl-muted">Original filename</dt>
+                  <dd className="mt-1 text-hcl-navy">{session.original_filename || session.sbom_name || 'Unknown'}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-medium text-hcl-muted">Detected format</dt>
+                  <dd className="mt-1 text-hcl-navy">{formatSbomFormatLabel(session.detected_format)} {session.detected_version || ''}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-medium text-hcl-muted">Current status</dt>
+                  <dd className="mt-1">
+                    <Badge variant={canImport ? 'success' : 'warning'}>{session.validation_status.replace('_', ' ')}</Badge>
+                  </dd>
+                </div>
+              </dl>
+            </CardContent>
+          </Card>
+        )}
+        <section className={`flex min-h-0 flex-1 flex-col gap-4 overflow-hidden lg:flex-row ${focusMode ? 'gap-0' : ''}`}>
+          <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+            <LargeFileRepairWorkspace
+              session={session}
+              sessionId={sessionId}
+              focusMode={focusMode}
+              showValidationPanel={effectiveShowValidationPanel}
+              onToggleFocusMode={() => setFocusMode((old) => !old)}
+              onToggleValidationPanel={() => setShowValidationPanel((old) => !old)}
+              onSessionUpdate={(updated) => {
+                queryClient.setQueryData(['validation-repair-session', sessionId], updated);
+                queryClient.invalidateQueries({ queryKey: ['validation-repair-history', sessionId] });
+              }}
+            />
+          </main>
+          {effectiveShowValidationPanel && (
+            <aside className="flex min-h-0 shrink-0 flex-col overflow-hidden lg:w-[360px] lg:min-w-[320px] lg:max-w-[520px] lg:resize-x xl:w-[420px]">
+              <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <CardHeader className="shrink-0 border-b border-border">
+                  <div className="flex items-center justify-between gap-2">
+                    <CardTitle>Validation Status</CardTitle>
+                    <Button size="sm" variant="secondary" onClick={() => setShowValidationPanel(false)}>
+                      Hide
+                    </Button>
                   </div>
-                ) : (
-                  entries.map((entry, idx) => (
-                    <div key={`${entry.code}-${idx}`} className="rounded-lg border border-border bg-surface-muted p-3 text-xs">
-                      <div className="mb-1 flex flex-wrap items-center gap-2">
-                        <Badge variant={severityVariant(entry.severity)}>{entry.severity}</Badge>
-                        <span className="font-mono font-semibold text-hcl-navy">{entry.code}</span>
-                      </div>
-                      {formatLocation(entry) && <p className="font-mono text-hcl-muted break-all">{formatLocation(entry)}</p>}
-                      <p className="mt-1 text-foreground">{entry.message}</p>
+                </CardHeader>
+                <CardContent className="min-h-0 flex-1 space-y-4 overflow-auto p-4">
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant={canImport ? 'success' : 'warning'}>{session.validation_status.replace('_', ' ')}</Badge>
+                    <Badge variant={(report?.error_count ?? 0) > 0 ? 'error' : 'success'}>{report?.error_count ?? 0} errors</Badge>
+                    <Badge variant="warning">{report?.warning_count ?? 0} warnings</Badge>
+                  </div>
+                  {entries.length === 0 ? (
+                    <div className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-200">
+                      <CheckCircle className="h-4 w-4" />
+                      No validation issues remain.
                     </div>
-                  ))
-                )}
-              </CardContent>
-            </Card>
-          </div>
+                  ) : (
+                    entries.map((entry, idx) => (
+                      <div key={`${entry.code}-${idx}`} className="rounded-lg border border-border bg-surface-muted p-3 text-xs">
+                        <div className="mb-1 flex flex-wrap items-center gap-2">
+                          <Badge variant={severityVariant(entry.severity)}>{entry.severity}</Badge>
+                          <span className="font-mono font-semibold text-hcl-navy">{entry.code}</span>
+                        </div>
+                        {formatLocation(entry) && <p className="font-mono text-hcl-muted break-all">{formatLocation(entry)}</p>}
+                        <p className="mt-1 text-foreground">{entry.message}</p>
+                      </div>
+                    ))
+                  )}
+                </CardContent>
+              </Card>
+            </aside>
+          )}
         </section>
+        {!focusMode && (
+          <details className="shrink-0 rounded-lg border border-border bg-white px-4 py-2" open={historyOpen} onToggle={(event) => setHistoryOpen(event.currentTarget.open)}>
+            <summary className="cursor-pointer text-sm font-semibold text-hcl-navy">Repair History</summary>
+            <div className="mt-3 max-h-56 overflow-auto">
+              {historyQuery.isLoading ? (
+                <p className="text-sm text-hcl-muted">Loading history…</p>
+              ) : historyQuery.error ? (
+                <Alert variant="error" title="Could not load repair history">
+                  {mutationErrorMessage(historyQuery.error, 'Repair history could not be loaded.')}
+                </Alert>
+              ) : !historyQuery.data?.length ? (
+                <p className="text-sm text-hcl-muted">No repair actions recorded yet.</p>
+              ) : (
+                <ol className="space-y-2">
+                  {historyQuery.data.map((event) => (
+                    <li key={event.id} className="flex flex-col gap-1 border-b border-border pb-2 text-sm last:border-b-0">
+                      <span className="font-medium text-hcl-navy">{event.event_type.replaceAll('_', ' ')}</span>
+                      <span className="text-xs text-hcl-muted">{event.timestamp}</span>
+                      {event.summary && <span className="text-sm text-foreground">{event.summary}</span>}
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
+          </details>
+        )}
       </div>
     );
   }
 
   return (
-    <div className="space-y-5">
+    <div className="flex h-[calc(100vh-96px)] min-h-0 flex-col gap-3 overflow-hidden">
       {localMessage && (
         <Alert variant={canImport ? 'success' : 'info'} title="Workspace updated">
           {localMessage}
@@ -595,231 +642,252 @@ export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspa
         </Alert>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Validation Session</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-            <div>
-              <dt className="text-xs font-medium text-hcl-muted">Session ID</dt>
-              <dd className="mt-1 font-mono text-xs text-hcl-navy break-all">{session.id}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium text-hcl-muted">Original filename</dt>
-              <dd className="mt-1 text-hcl-navy">{session.original_filename || session.sbom_name || 'Unknown'}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium text-hcl-muted">Assigned project</dt>
-              <dd className="mt-1">
-                <Select
-                  aria-label="Assign Project"
-                  value={session.project_id || ''}
-                  onChange={(e) => handleProjectChange(e.target.value ? Number(e.target.value) : null)}
-                  disabled={!session.can_edit}
-                  placeholder="Select a project..."
-                  className="h-8 py-0 text-xs font-medium"
-                >
-                  {projectsQuery.data?.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.project_name}
-                    </option>
-                  ))}
-                </Select>
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium text-hcl-muted">Detected format</dt>
-              <dd className="mt-1 text-hcl-navy">
-                {session.detected_format || 'Unknown'}{session.detected_version ? ` ${session.detected_version}` : ''}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium text-hcl-muted">Original size</dt>
-              <dd className="mt-1 text-hcl-navy">{formatBytes(session.file_size_bytes ?? session.original_size_bytes)}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium text-hcl-muted">Total lines</dt>
-              <dd className="mt-1 text-hcl-navy">{(session.total_lines ?? 0).toLocaleString()}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium text-hcl-muted">SHA-256</dt>
-              <dd className="mt-1 font-mono text-xs text-hcl-navy break-all">{session.sha256 || session.original_sha256 || 'Unknown'}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium text-hcl-muted">Current status</dt>
-              <dd className="mt-1">
-                <Badge variant={session.validation_status === 'passed' || session.validation_status === 'imported' ? 'success' : 'warning'}>
-                  {session.validation_status.replace('_', ' ')}
-                </Badge>
-              </dd>
-            </div>
-          </dl>
-        </CardContent>
-      </Card>
+      {metadataMismatch && (
+        <Alert variant="warning" title="Metadata mismatch">
+          Metadata mismatch: workspace reports 0 B or 0 lines but editor content is loaded. Please check backend workspace metadata.
+        </Alert>
+      )}
 
-      <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_24rem]">
-        <Card className="min-w-0">
-          <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <CardTitle>Repair Editor</CardTitle>
-              <p className="mt-1 text-xs text-hcl-muted">
-                {session.detected_format || 'Unknown format'} {session.detected_version ? `· ${session.detected_version}` : ''}
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => downloadOriginalMutation.mutate()}
-                loading={downloadOriginalMutation.isPending}
-              >
-                <Download className="h-4 w-4" />
-                Download original
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => updateMutation.mutate()}
-                loading={updateMutation.isPending}
-                disabled={!session.can_edit || !hasUnsavedChanges || contentIsPartial}
-              >
-                <Save className="h-4 w-4" />
-                {hasUnsavedChanges ? 'Save changes' : 'Saved'}
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => validateMutation.mutate()}
-                loading={validateMutation.isPending}
-                disabled={contentIsPartial}
-              >
-                <RefreshCw className="h-4 w-4" />
-                Revalidate
-              </Button>
-              <Button
-                size="sm"
-                disabled={!canImport}
-                onClick={() => importMutation.mutate()}
-                loading={importMutation.isPending}
-              >
-                <FileInput className="h-4 w-4" />
-                Import SBOM
-              </Button>
-            </div>
+      {!focusMode && (
+        <Card className="shrink-0">
+          <CardHeader>
+            <CardTitle>Validation Session</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-hcl-muted">
-              <Badge variant={contentIsPartial ? 'warning' : 'success'}>
-                {contentIsPartial ? 'Preview loaded' : 'Full repair draft loaded'}
-              </Badge>
-              <span>
-                Loaded {formatBytes(loadedContentSize)} of {formatBytes(totalContentSize)}
-              </span>
-              {contentSha256 && <span className="font-mono break-all">Draft SHA-256 {contentSha256}</span>}
-              {contentIsPartial && (
+            <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+              <div>
+                <dt className="text-xs font-medium text-hcl-muted">Session ID</dt>
+                <dd className="mt-1 font-mono text-xs text-hcl-navy break-all">{session.id}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium text-hcl-muted">Original filename</dt>
+                <dd className="mt-1 text-hcl-navy">{session.original_filename || session.sbom_name || 'Unknown'}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium text-hcl-muted">Assigned project</dt>
+                <dd className="mt-1">
+                  <Select
+                    aria-label="Assign Project"
+                    value={session.project_id || ''}
+                    onChange={(e) => handleProjectChange(e.target.value ? Number(e.target.value) : null)}
+                    disabled={!session.can_edit}
+                    placeholder="Select a project..."
+                    className="h-8 py-0 text-xs font-medium"
+                  >
+                    {projectsQuery.data?.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.project_name}
+                      </option>
+                    ))}
+                  </Select>
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium text-hcl-muted">Detected format</dt>
+                <dd className="mt-1 text-hcl-navy">
+                  {formatSbomFormatLabel(session.detected_format)}{session.detected_version ? ` ${session.detected_version}` : ''}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium text-hcl-muted">Original size</dt>
+                <dd className="mt-1 text-hcl-navy">{formatBytes(session.file_size_bytes ?? session.original_size_bytes)}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium text-hcl-muted">Total lines</dt>
+                <dd className="mt-1 text-hcl-navy">{(session.total_lines ?? 0).toLocaleString()}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium text-hcl-muted">SHA-256</dt>
+                <dd className="mt-1 font-mono text-xs text-hcl-navy break-all">{session.sha256 || session.original_sha256 || 'Unknown'}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium text-hcl-muted">Current status</dt>
+                <dd className="mt-1">
+                  <Badge variant={session.validation_status === 'passed' || session.validation_status === 'imported' ? 'success' : 'warning'}>
+                    {session.validation_status.replace('_', ' ')}
+                  </Badge>
+                </dd>
+              </div>
+            </dl>
+          </CardContent>
+        </Card>
+      )}
+
+      <section className={`flex min-h-0 flex-1 flex-col gap-4 overflow-hidden lg:flex-row ${focusMode ? 'gap-0' : ''}`}>
+        <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <CardHeader className="sticky top-0 z-10 shrink-0 border-b border-border bg-white">
+              <div>
+                <CardTitle>Repair Editor</CardTitle>
+                <p className="mt-1 text-xs text-hcl-muted">
+                  {formatSbomFormatLabel(session.detected_format)} {session.detected_version ? `· ${session.detected_version}` : ''}
+                </p>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
                 <Button
                   size="sm"
                   variant="secondary"
-                  onClick={() => loadMoreMutation.mutate()}
-                  loading={loadMoreMutation.isPending}
+                  onClick={() => downloadOriginalMutation.mutate()}
+                  loading={downloadOriginalMutation.isPending}
                 >
-                  Load more
+                  <Download className="h-4 w-4" />
+                  Download original
                 </Button>
-              )}
-            </div>
-            <Textarea
-              aria-label="SBOM repair editor"
-              value={content}
-              onChange={(event) => setContent(event.target.value)}
-              className="min-h-[520px] font-mono text-xs leading-relaxed"
-              disabled={!session.can_edit || contentIsPartial}
-            />
-            {contentIsPartial && (
-              <p className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-300">
-                Editing is disabled until the loaded draft is complete. Load more chunks or download the original for offline review.
-              </p>
-            )}
-            {hasUnsavedChanges && (
-              <p className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-300">
-                Unsaved changes
-              </p>
-            )}
-          </CardContent>
-        </Card>
-
-        <div className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Validation Status</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex flex-wrap gap-2">
-                <Badge variant={session.validation_status === 'passed' || session.validation_status === 'imported' ? 'success' : 'warning'}>
-                  {session.validation_status.replace('_', ' ')}
-                </Badge>
-                <Badge variant={(report?.error_count ?? 0) > 0 ? 'error' : 'success'}>
-                  {report?.error_count ?? 0} errors
-                </Badge>
-                <Badge variant="warning">{report?.warning_count ?? 0} warnings</Badge>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => updateMutation.mutate()}
+                  loading={updateMutation.isPending}
+                  disabled={!session.can_edit || !hasUnsavedChanges || contentIsPartial}
+                >
+                  <Save className="h-4 w-4" />
+                  {hasUnsavedChanges ? 'Save changes' : 'Saved'}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => validateMutation.mutate()}
+                  loading={validateMutation.isPending}
+                  disabled={contentIsPartial}
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Revalidate
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={!canImport}
+                  onClick={() => importMutation.mutate()}
+                  loading={importMutation.isPending}
+                >
+                  <FileInput className="h-4 w-4" />
+                  Import SBOM
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => setShowValidationPanel((old) => !old)}>
+                  {effectiveShowValidationPanel ? 'Hide validation panel' : 'Show validation panel'}
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => setFocusMode((old) => !old)}>
+                  {focusMode ? 'Exit focus mode' : 'Focus mode'}
+                </Button>
               </div>
-              {canImport ? (
-                <p className="text-sm text-emerald-700 dark:text-emerald-200">
-                  Validation passed through all required stages.
-                </p>
-              ) : (
-                <p className="text-sm text-hcl-muted">
-                  Import remains disabled until the current content revalidates successfully.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Validation Errors</CardTitle>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => suggestMutation.mutate()}
-                loading={suggestMutation.isPending}
-                disabled={!session.can_ai_fix || entries.length === 0}
-              >
-                <Wand2 className="h-4 w-4" />
-                AI fix
-              </Button>
             </CardHeader>
-            <CardContent className="max-h-[480px] space-y-4 overflow-auto">
-              {entries.length === 0 ? (
-                <div className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-200">
-                  <CheckCircle className="h-4 w-4" />
-                  No validation errors remain.
-                </div>
-              ) : (
-                grouped.map(([stage, stageEntries]) => (
-                  <div key={stage} className="space-y-2">
-                    <h3 className="text-sm font-semibold text-hcl-navy">
-                      Stage {stageNumber(stage)} · {stageLabel(stage)}
-                    </h3>
-                    {stageEntries.map((entry, idx) => (
-                      <div key={`${entry.code}-${idx}`} className="rounded-lg border border-border bg-surface-muted p-3 text-xs">
-                        <div className="mb-1 flex flex-wrap items-center gap-2">
-                          <Badge variant={severityVariant(entry.severity)}>{entry.severity}</Badge>
-                          <span className="font-mono font-semibold text-hcl-navy">{entry.code}</span>
-                          {entry.can_ai_fix === false && <ShieldAlert className="h-3.5 w-3.5 text-amber-600" aria-label="Manual fix required" />}
-                        </div>
-                        {formatLocation(entry) && <p className="font-mono text-hcl-muted break-all">{formatLocation(entry)}</p>}
-                        <p className="mt-1 text-foreground">{entry.message}</p>
-                        {entry.remediation && <p className="mt-1 text-hcl-muted">{entry.remediation}</p>}
-                        {entry.spec_reference && <p className="mt-1 text-hcl-muted">{entry.spec_reference}</p>}
-                      </div>
-                    ))}
-                  </div>
-                ))
+            <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden p-4">
+              <div className="mb-3 shrink-0 flex flex-wrap items-center gap-2 text-xs text-hcl-muted">
+                <Badge variant={contentIsPartial ? 'warning' : 'success'}>
+                  {contentIsPartial ? 'Preview loaded' : 'Full repair draft loaded'}
+                </Badge>
+                <span>
+                  Loaded {formatBytes(loadedContentSize)} of {formatBytes(totalContentSize)}
+                </span>
+                {contentSha256 && <span className="font-mono break-all">Draft SHA-256 {contentSha256}</span>}
+                {contentIsPartial && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => loadMoreMutation.mutate()}
+                    loading={loadMoreMutation.isPending}
+                  >
+                    Load more
+                  </Button>
+                )}
+              </div>
+              <div className="min-h-0 flex-1 overflow-hidden">
+                <textarea
+                  aria-label="SBOM repair editor"
+                  value={content}
+                  onChange={(event) => setContent(event.target.value)}
+                  className="h-full min-h-0 w-full flex-1 resize-none overflow-auto rounded-lg border border-border bg-surface px-3 py-2 font-mono text-xs leading-relaxed text-foreground placeholder:text-hcl-muted transition-colors duration-150 focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-hcl-muted motion-reduce:transition-none"
+                  disabled={!session.can_edit || contentIsPartial}
+                />
+              </div>
+              {contentIsPartial && (
+                <p className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-300">
+                  Editing is disabled until the loaded draft is complete. Load more chunks or download the original for offline review.
+                </p>
+              )}
+              {hasUnsavedChanges && (
+                <p className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-300">
+                  Unsaved changes
+                </p>
               )}
             </CardContent>
           </Card>
-        </div>
+        </main>
+
+        {effectiveShowValidationPanel && (
+          <aside className="flex min-h-0 shrink-0 flex-col overflow-hidden lg:w-[360px] lg:min-w-[320px] lg:max-w-[520px] lg:resize-x xl:w-[420px]">
+            <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <CardHeader className="shrink-0 border-b border-border">
+                <div className="flex items-center justify-between gap-2">
+                  <CardTitle>Validation Status</CardTitle>
+                  <Button size="sm" variant="secondary" onClick={() => setShowValidationPanel(false)}>
+                    Hide
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="min-h-0 flex-1 space-y-4 overflow-auto p-4">
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant={session.validation_status === 'passed' || session.validation_status === 'imported' ? 'success' : 'warning'}>
+                    {session.validation_status.replace('_', ' ')}
+                  </Badge>
+                  <Badge variant={(report?.error_count ?? 0) > 0 ? 'error' : 'success'}>
+                    {report?.error_count ?? 0} errors
+                  </Badge>
+                  <Badge variant="warning">{report?.warning_count ?? 0} warnings</Badge>
+                </div>
+                {canImport ? (
+                  <p className="text-sm text-emerald-700 dark:text-emerald-200">
+                    Validation passed through all required stages.
+                  </p>
+                ) : (
+                  <p className="text-sm text-hcl-muted">
+                    Import remains disabled until the current content revalidates successfully.
+                  </p>
+                )}
+
+                <div className="flex items-center justify-between gap-2 border-t border-border pt-4">
+                  <h3 className="text-sm font-semibold text-hcl-navy">Validation Errors</h3>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => suggestMutation.mutate()}
+                    loading={suggestMutation.isPending}
+                    disabled={!session.can_ai_fix || entries.length === 0}
+                  >
+                    <Wand2 className="h-4 w-4" />
+                    AI fix
+                  </Button>
+                </div>
+                {entries.length === 0 ? (
+                  <div className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-200">
+                    <CheckCircle className="h-4 w-4" />
+                    No validation errors remain.
+                  </div>
+                ) : (
+                  grouped.map(([stage, stageEntries]) => (
+                    <div key={stage} className="space-y-2">
+                      <h3 className="text-sm font-semibold text-hcl-navy">
+                        Stage {stageNumber(stage)} · {stageLabel(stage)}
+                      </h3>
+                      {stageEntries.map((entry, idx) => (
+                        <div key={`${entry.code}-${idx}`} className="rounded-lg border border-border bg-surface-muted p-3 text-xs">
+                          <div className="mb-1 flex flex-wrap items-center gap-2">
+                            <Badge variant={severityVariant(entry.severity)}>{entry.severity}</Badge>
+                            <span className="font-mono font-semibold text-hcl-navy">{entry.code}</span>
+                            {entry.can_ai_fix === false && <ShieldAlert className="h-3.5 w-3.5 text-amber-600" aria-label="Manual fix required" />}
+                          </div>
+                          {formatLocation(entry) && <p className="font-mono text-hcl-muted break-all">{formatLocation(entry)}</p>}
+                          <p className="mt-1 text-foreground">{entry.message}</p>
+                          {entry.remediation && <p className="mt-1 text-hcl-muted">{entry.remediation}</p>}
+                          {entry.spec_reference && <p className="mt-1 text-hcl-muted">{entry.spec_reference}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+          </aside>
+        )}
       </section>
 
       {suggestion && (
@@ -877,37 +945,37 @@ export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspa
         </Card>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Repair History</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {historyQuery.isLoading ? (
-            <p className="text-sm text-hcl-muted">Loading history…</p>
-          ) : historyQuery.error ? (
-            <Alert variant="error" title="Could not load repair history">
-              {mutationErrorMessage(historyQuery.error, 'Repair history could not be loaded.')}
-            </Alert>
-          ) : !historyQuery.data?.length ? (
-            <p className="text-sm text-hcl-muted">No repair actions recorded yet.</p>
-          ) : (
-            <ol className="space-y-2">
-              {historyQuery.data.map((event) => (
-                <li key={event.id} className="flex flex-col gap-1 border-b border-border pb-2 text-sm last:border-b-0">
-                  <span className="font-medium text-hcl-navy">{event.event_type.replaceAll('_', ' ')}</span>
-                  <span className="text-xs text-hcl-muted">{event.timestamp}</span>
-                  {event.summary && <span className="text-sm text-foreground">{event.summary}</span>}
-                </li>
-              ))}
-            </ol>
-          )}
-          {session.imported_sbom_id && (
-            <Link href={`/sboms/${session.imported_sbom_id}`} className="mt-4 inline-flex text-sm font-medium text-primary hover:underline">
-              View imported SBOM
-            </Link>
-          )}
-        </CardContent>
-      </Card>
+      {!focusMode && (
+        <details className="shrink-0 rounded-lg border border-border bg-white px-4 py-2" open={historyOpen} onToggle={(event) => setHistoryOpen(event.currentTarget.open)}>
+          <summary className="cursor-pointer text-sm font-semibold text-hcl-navy">Repair History</summary>
+          <div className="mt-3 max-h-56 overflow-auto">
+            {historyQuery.isLoading ? (
+              <p className="text-sm text-hcl-muted">Loading history…</p>
+            ) : historyQuery.error ? (
+              <Alert variant="error" title="Could not load repair history">
+                {mutationErrorMessage(historyQuery.error, 'Repair history could not be loaded.')}
+              </Alert>
+            ) : !historyQuery.data?.length ? (
+              <p className="text-sm text-hcl-muted">No repair actions recorded yet.</p>
+            ) : (
+              <ol className="space-y-2">
+                {historyQuery.data.map((event) => (
+                  <li key={event.id} className="flex flex-col gap-1 border-b border-border pb-2 text-sm last:border-b-0">
+                    <span className="font-medium text-hcl-navy">{event.event_type.replaceAll('_', ' ')}</span>
+                    <span className="text-xs text-hcl-muted">{event.timestamp}</span>
+                    {event.summary && <span className="text-sm text-foreground">{event.summary}</span>}
+                  </li>
+                ))}
+              </ol>
+            )}
+            {session.imported_sbom_id && (
+              <Link href={`/sboms/${session.imported_sbom_id}`} className="mt-4 inline-flex text-sm font-medium text-primary hover:underline">
+                View imported SBOM
+              </Link>
+            )}
+          </div>
+        </details>
+      )}
     </div>
   );
 }

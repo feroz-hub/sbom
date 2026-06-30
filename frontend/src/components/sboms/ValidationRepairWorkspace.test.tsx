@@ -20,8 +20,12 @@ const saveValidationRepairDraft = vi.fn();
 const validateRepairSession = vi.fn();
 const importRepairSession = vi.fn();
 const downloadValidationSessionOriginal = vi.fn();
+const downloadValidationSessionRepairDraft = vi.fn();
 const suggestValidationRepairFixes = vi.fn();
 const applyValidationRepairPatch = vi.fn();
+const getValidationSessionContentLines = vi.fn();
+const searchValidationSession = vi.fn();
+const applyValidationSessionLinePatches = vi.fn();
 const getValidationRepairHistory = vi.fn();
 
 vi.mock('@/lib/api', async () => {
@@ -37,8 +41,12 @@ vi.mock('@/lib/api', async () => {
     validateValidationSession: (...args: unknown[]) => validateRepairSession(...args),
     importValidationSession: (...args: unknown[]) => importRepairSession(...args),
     downloadValidationSessionOriginal: (...args: unknown[]) => downloadValidationSessionOriginal(...args),
+    downloadValidationSessionRepairDraft: (...args: unknown[]) => downloadValidationSessionRepairDraft(...args),
     suggestValidationSessionFixes: (...args: unknown[]) => suggestValidationRepairFixes(...args),
     applyValidationSessionPatch: (...args: unknown[]) => applyValidationRepairPatch(...args),
+    getValidationSessionContentLines: (...args: unknown[]) => getValidationSessionContentLines(...args),
+    searchValidationSession: (...args: unknown[]) => searchValidationSession(...args),
+    applyValidationSessionLinePatches: (...args: unknown[]) => applyValidationSessionLinePatches(...args),
     getValidationSessionHistory: (...args: unknown[]) => getValidationRepairHistory(...args),
     getValidationRepairSession: (...args: unknown[]) => getValidationRepairSession(...args),
     getValidationRepairContent: (...args: unknown[]) => getValidationRepairContent(...args),
@@ -180,6 +188,26 @@ beforeEach(() => {
   validateRepairSession.mockResolvedValue(FAILED_SESSION);
   downloadValidationSessionOriginal.mockReset();
   downloadValidationSessionOriginal.mockResolvedValue({ blob: new Blob(['original']), filename: 'bad.json' });
+  downloadValidationSessionRepairDraft.mockReset();
+  downloadValidationSessionRepairDraft.mockResolvedValue({ blob: new Blob(['draft']), filename: 'bad.repaired.json' });
+  getValidationSessionContentLines.mockReset();
+  getValidationSessionContentLines.mockResolvedValue({
+    start_line: 1,
+    line_count: 500,
+    total_lines: 120000,
+    lines: ['{', '"bomFormat":"CycloneDX"', '}'],
+    eof: false,
+  });
+  searchValidationSession.mockReset();
+  searchValidationSession.mockResolvedValue({
+    query: '',
+    source: 'repair_draft',
+    limit: 100,
+    matches: [],
+    truncated: false,
+  });
+  applyValidationSessionLinePatches.mockReset();
+  applyValidationSessionLinePatches.mockResolvedValue(FAILED_SESSION);
   suggestValidationRepairFixes.mockResolvedValue({
     summary: 'Fix malformed purl',
     risk: 'low',
@@ -226,7 +254,52 @@ describe('ValidationRepairWorkspace', () => {
     expect(screen.getByText('Stage 4 · Semantic Validation')).toBeInTheDocument();
     expect(screen.getByText('SBOM_VAL_E052_PURL_INVALID')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Import SBOM/i })).toBeDisabled();
-    expect(screen.getAllByText('created').length).toBeGreaterThan(0);
+    expect(screen.getByText('Repair History').closest('details')).not.toHaveAttribute('open');
+    expect(screen.getByLabelText('SBOM repair editor')).toHaveClass('h-full', 'flex-1', 'min-h-0', 'overflow-auto');
+  });
+
+  it('collapses the validation panel and expands the editor controls', async () => {
+    render(wrap(<ValidationRepairWorkspace sessionId="session-1" />));
+
+    expect(await screen.findByText('Validation Status')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Hide validation panel/i }));
+
+    expect(screen.queryByText('Validation Status')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Show validation panel/i })).toBeInTheDocument();
+  });
+
+  it('uses focus mode to hide summary and validation side panel', async () => {
+    render(wrap(<ValidationRepairWorkspace sessionId="session-1" />));
+
+    expect(await screen.findByText('Validation Session')).toBeInTheDocument();
+    expect(screen.getByText('Validation Status')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Focus mode$/i }));
+
+    expect(screen.queryByText('Validation Session')).not.toBeInTheDocument();
+    expect(screen.queryByText('Validation Status')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Exit focus mode/i })).toBeInTheDocument();
+  });
+
+  it('renders large file mode with a full-height chunked viewer', async () => {
+    getValidationRepairSession.mockResolvedValue({
+      ...FAILED_SESSION,
+      full_editor_allowed: false,
+      is_large_file: true,
+      file_size_bytes: 8_000_000,
+      original_size_bytes: 8_000_000,
+      total_lines: 120000,
+    });
+
+    render(wrap(<ValidationRepairWorkspace sessionId="session-1" />));
+
+    expect(await screen.findByText('Large File Mode')).toBeInTheDocument();
+    expect(getValidationSessionContentLines).toHaveBeenCalledWith('session-1', 1, 500, expect.any(AbortSignal));
+    expect(screen.getByText('Lines 1-3').closest('div')).toHaveClass('bg-surface-muted');
+    expect(screen.getByText('"bomFormat":"CycloneDX"')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Hide validation panel/i })).toBeInTheDocument();
+    expect(screen.queryByLabelText('SBOM repair editor')).not.toBeInTheDocument();
   });
 
   it('saves before revalidating the current editor content', async () => {

@@ -207,7 +207,7 @@ def test_valid_multipart_upload_creates_accessible_workspace(client):
     assert body["workspace_id"]
     assert body["validation_session_id"] == body["workspace_id"]
     assert body["repair_workspace_url"] == f"/repair/{body['workspace_id']}"
-    assert body["detected_format"] == "cyclonedx"
+    assert body["detected_format"] == "cyclonedx_json"
     assert body["sha256"] == sha256(raw).hexdigest()
 
     workspace = client.get(f"/api/sbom-workspaces/{body['workspace_id']}")
@@ -345,7 +345,7 @@ def test_sbom_detail_marks_legacy_validated_sbom_backfillable(client):
     assert body["workspace_id"] is None
     assert body["workspace_available"] is True
     assert body["workspace_source"] == "backfillable"
-    assert body["detected_format"] == "cyclonedx"
+    assert body["detected_format"] == "cyclonedx_json"
     assert body["detected_spec_version"] == "1.5"
     assert body["original_size_bytes"] == len(raw.encode("utf-8"))
     assert body["original_sha256"] == sha256(raw.encode("utf-8")).hexdigest()
@@ -406,7 +406,7 @@ def test_create_workspace_for_existing_sbom_is_idempotent(client):
     assert first_body["workspace_id"]
     assert first_body["repair_workspace_url"] == f"/repair/{first_body['workspace_id']}"
     assert first_body["imported_sbom_id"] == sbom_id
-    assert first_body["detected_format"] == "cyclonedx"
+    assert first_body["detected_format"] == "cyclonedx_json"
 
     second = client.post(f"/api/sboms/{sbom_id}/workspace")
     assert second.status_code == 200, second.text
