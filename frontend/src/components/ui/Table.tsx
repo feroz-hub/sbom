@@ -21,8 +21,8 @@ export function Table({ children, className, ariaLabel, striped }: TableProps) {
     >
       <table
         className={cn(
-          'w-full text-sm',
-          striped && '[&_tbody_tr:nth-child(even)]:bg-row-alt',
+          'w-full bg-surface text-sm text-foreground',
+          striped && '[&_tbody_tr:nth-child(odd)]:bg-surface [&_tbody_tr:nth-child(even)]:bg-row-alt',
           '[&_tbody_tr]:transition-colors [&_tbody_tr]:hover:bg-row-hover',
           className,
         )}
@@ -48,7 +48,7 @@ export function TableHead({ children }: { children: ReactNode }) {
 }
 
 export function TableBody({ children }: { children: ReactNode }) {
-  return <tbody className="divide-y divide-border/50">{children}</tbody>;
+  return <tbody className="divide-y divide-border/60">{children}</tbody>;
 }
 
 export function Th({
@@ -84,7 +84,7 @@ export function Td({
 }) {
   return (
     <td
-      className={cn('px-4 py-3 align-middle text-foreground/90', className)}
+      className={cn('px-4 py-3 align-middle text-foreground', className)}
       onClick={onClick}
     >
       {children}

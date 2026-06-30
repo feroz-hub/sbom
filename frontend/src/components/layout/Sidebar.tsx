@@ -1,18 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useEffect, useState, type ReactNode } from 'react';
+import { usePathname, useSearchParams } from 'next/navigation';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
-  Activity,
-  CalendarClock,
   ChevronDown,
   ChevronLeft,
-  FileText,
-  FolderOpen,
-  LayoutDashboard,
-  Settings as SettingsIcon,
   Sparkles,
   Star,
   X,
@@ -25,56 +19,30 @@ import { TenantSwitcher } from './TenantSwitcher';
 import { usePinned, unpin } from '@/lib/pinned';
 import { getRecentSboms, getRuns } from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
+import { navigationItems, type NavItem, type SubNavItem } from '@/lib/navigation';
 
-interface SubNavItem {
-  href: string;
-  label: string;
-  permission?: string;
+function splitHref(href: string): { path: string; params: URLSearchParams } {
+  const [path, query = ''] = href.split('?');
+  return { path, params: new URLSearchParams(query) };
 }
 
-interface NavItem {
-  href: string;
-  label: string;
-  icon: LucideIcon;
-  /** Optional nested children — renders an expandable accordion. */
-  children?: SubNavItem[];
-  permission?: string;
+function isActiveHref(href: string, pathname: string, searchParams: URLSearchParams): boolean {
+  const { path, params } = splitHref(href);
+  if (path !== pathname) return false;
+  for (const [key, value] of params.entries()) {
+    if (searchParams.get(key) !== value) return false;
+  }
+  if (href === '/analysis?tab=runs') {
+    const tab = searchParams.get('tab');
+    return pathname === '/analysis' && (!tab || tab === 'runs');
+  }
+  return true;
 }
-
-const NAV_ITEMS: NavItem[] = [
-  { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/projects', label: 'Projects', icon: FolderOpen },
-  { href: '/sboms', label: 'SBOMs', icon: FileText },
-  {
-    href: '/analysis',
-    label: 'Analysis',
-    icon: Activity,
-    children: [
-      { href: '/analysis?tab=runs', label: 'Runs' },
-      { href: '/analysis?tab=consolidated', label: 'Consolidated' },
-      { href: '/analysis/compare', label: 'Compare' },
-    ],
-  },
-  { href: '/schedules', label: 'Schedules', icon: CalendarClock },
-  {
-    href: '/settings',
-    label: 'Settings',
-    icon: SettingsIcon,
-    children: [
-      { href: '/settings/ai', label: 'AI configuration' },
-      { href: '/settings/tenant', label: 'Tenant users' },
-      { href: '/admin/ai-usage', label: 'AI usage' },
-      { href: '/admin/lifecycle-providers', label: 'Lifecycle providers', permission: 'lifecycle:provider:read' },
-      { href: '/admin/lifecycle-vendor-records', label: 'Vendor records', permission: 'lifecycle:vendor-record:read' },
-    ],
-  },
-];
 
 function isActiveItem(item: NavItem, pathname: string): boolean {
   if (item.href === '/') return pathname === '/';
-  if (item.href === '/analysis/compare') return pathname.startsWith('/analysis/compare');
   if (item.href === '/analysis') {
-    return pathname.startsWith('/analysis') && !pathname.startsWith('/analysis/compare');
+    return pathname.startsWith('/analysis');
   }
   // Settings is the parent for both /settings/* and the AI cost dashboard
   // /admin/ai-usage — both are operator-side configuration surfaces.
@@ -86,9 +54,10 @@ function isActiveItem(item: NavItem, pathname: string): boolean {
 
 export function Sidebar() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { collapsed, toggleCollapsed, mobileOpen, closeMobile } = useSidebar();
   const { hasPermission } = useAuth();
-  const navItems = NAV_ITEMS
+  const navItems = navigationItems
     .filter((item) => !item.permission || hasPermission(item.permission))
     .map((item) => ({
       ...item,
@@ -171,6 +140,7 @@ export function Sidebar() {
                 key={`${item.href}-${item.label}`}
                 item={item}
                 pathname={pathname}
+                searchParams={searchParams}
                 collapsed={collapsed}
               />
             ))}
@@ -239,31 +209,88 @@ export function Sidebar() {
 function NavLink({
   item,
   pathname,
+  searchParams,
   collapsed,
 }: {
   item: NavItem;
   pathname: string;
+  searchParams: URLSearchParams;
   collapsed: boolean;
 }) {
   const isActive = isActiveItem(item, pathname);
   const [expanded, setExpanded] = useState(isActive && !!item.children);
+  const [flyoutOpen, setFlyoutOpen] = useState(false);
+  const [flyoutTop, setFlyoutTop] = useState<number | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const flyoutId = `sidebar-flyout-${item.label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
 
   // Auto-expand when route enters this section.
   useEffect(() => {
     if (isActive && item.children) setExpanded(true);
   }, [isActive, item.children]);
 
+  useEffect(() => {
+    if (!collapsed) setFlyoutOpen(false);
+  }, [collapsed]);
+
+  useEffect(() => {
+    if (!flyoutOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setFlyoutOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (triggerRef.current?.contains(target)) return;
+      const flyout = document.getElementById(flyoutId);
+      if (flyout?.contains(target)) return;
+      setFlyoutOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('pointerdown', onPointerDown);
+    };
+  }, [flyoutId, flyoutOpen]);
+
   const Icon = item.icon;
+  const openCollapsedFlyout = () => {
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (rect) {
+      setFlyoutTop(Math.max(12, Math.min(rect.top, window.innerHeight - 220)));
+    }
+    setFlyoutOpen((open) => !open);
+  };
 
   if (item.children && item.children.length > 0) {
     return (
-      <div>
+      <div className="relative">
         <button
+          ref={triggerRef}
           type="button"
-          onClick={() => setExpanded((v) => !v)}
-          aria-expanded={expanded}
+          onClick={() => {
+            if (collapsed) {
+              openCollapsedFlyout();
+              return;
+            }
+            setExpanded((v) => !v);
+          }}
+          onMouseEnter={() => {
+            if (collapsed && !flyoutOpen) {
+              const rect = triggerRef.current?.getBoundingClientRect();
+              if (rect) setFlyoutTop(Math.max(12, Math.min(rect.top, window.innerHeight - 220)));
+            }
+          }}
+          aria-expanded={collapsed ? flyoutOpen : expanded}
+          aria-haspopup={collapsed ? 'menu' : undefined}
+          aria-controls={collapsed ? flyoutId : undefined}
           aria-current={isActive && !expanded ? 'page' : undefined}
           aria-label={collapsed ? item.label : undefined}
+          title={collapsed ? item.label : undefined}
           className={cn(
             'sidebar-menu-item w-full',
             isActive && 'active',
@@ -292,6 +319,17 @@ function NavLink({
           )}
         </button>
 
+        {collapsed && flyoutOpen && (
+          <CollapsedNavFlyout
+            id={flyoutId}
+            item={item}
+            pathname={pathname}
+            searchParams={searchParams}
+            top={flyoutTop}
+            onClose={() => setFlyoutOpen(false)}
+          />
+        )}
+
         {/* Sub-nav height animates via grid-rows so it folds with the rail
             instead of popping in and out. */}
         <div
@@ -309,11 +347,7 @@ function NavLink({
         >
           <ul className="mt-0.5 ml-3 min-h-0 space-y-1.5 overflow-hidden border-l border-white/15 pl-3">
             {item.children.map((child) => {
-              // Detect active child by pathname + query string approximation.
-              const childActive =
-                child.href === pathname ||
-                (child.href.startsWith(pathname) && child.href.includes('?')) ||
-                false;
+              const childActive = isActiveHref(child.href, pathname, searchParams);
               return (
                 <li key={child.href}>
                   <Link
@@ -368,6 +402,70 @@ function NavLink({
         {item.label}
       </span>
     </Link>
+  );
+}
+
+function CollapsedNavFlyout({
+  id,
+  item,
+  pathname,
+  searchParams,
+  top,
+  onClose,
+}: {
+  id: string;
+  item: NavItem;
+  pathname: string;
+  searchParams: URLSearchParams;
+  top: number | null;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      id={id}
+      role="menu"
+      aria-label={`${item.label} menu`}
+      className={cn(
+        'fixed left-[76px] z-[80] hidden min-w-52 rounded-xl border border-hcl-border bg-surface p-2 text-foreground shadow-elev-4 md:block',
+        'animate-in slide-in-from-right',
+      )}
+      style={{ top: top ?? 120 }}
+    >
+      <div className="px-3 pb-2 pt-1 text-xs font-semibold uppercase tracking-wide text-hcl-muted">
+        {item.label}
+      </div>
+      <ul className="space-y-1">
+        {item.children?.map((child) => {
+          const childActive = isActiveHref(child.href, pathname, searchParams);
+          return (
+            <li key={child.href}>
+              <Link
+                href={child.href}
+                role="menuitem"
+                aria-current={childActive ? 'page' : undefined}
+                onClick={onClose}
+                className={cn(
+                  'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/50',
+                  childActive
+                    ? 'bg-hcl-light text-hcl-navy dark:bg-hcl-blue/25 dark:text-foreground'
+                    : 'text-hcl-muted hover:bg-surface-muted hover:text-hcl-navy dark:hover:text-foreground',
+                )}
+              >
+                <span
+                  aria-hidden
+                  className={cn(
+                    'h-1.5 w-1.5 rounded-full',
+                    childActive ? 'bg-hcl-blue' : 'bg-hcl-muted/70',
+                  )}
+                />
+                {child.label}
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 

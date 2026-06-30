@@ -1,5 +1,6 @@
 'use client';
 
+import { Suspense } from 'react';
 import { Sidebar } from './Sidebar';
 import { SidebarProvider, useSidebar } from './SidebarContext';
 import { GlobalAiBatchBanner } from '@/components/ai-fixes/GlobalAiBatchProgress';
@@ -15,7 +16,9 @@ function Shell({ children }: { children: React.ReactNode }) {
         Skip to main content
       </a>
 
-      <Sidebar />
+      <Suspense fallback={null}>
+        <Sidebar />
+      </Suspense>
 
       <main
         id="main-content"

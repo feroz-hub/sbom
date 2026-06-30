@@ -130,4 +130,43 @@ describe('SbomsTable analysis column', () => {
     expect(badge).toHaveClass('text-green-700');
     expect(badge).toHaveAttribute('title', expect.stringContaining('No findings detected'));
   });
+
+  it('uses theme-aware table row and action classes for dark mode', () => {
+    render(
+      wrap(
+        <div className="dark">
+          <SbomsTable
+            sboms={[
+              sbomWithAnalysis(null),
+              {
+                ...sbomWithAnalysis({
+                  run_id: 101,
+                  status: 'completed',
+                  result: 'pass',
+                  finding_count: 0,
+                }),
+                id: 101,
+              },
+            ]}
+            isLoading={false}
+            error={null}
+          />
+        </div>,
+      ),
+    );
+
+    const table = screen.getByRole('table', { name: /SBOM inventory table/i });
+    expect(table).toHaveClass('bg-surface');
+    expect(table).toHaveClass('[&_tbody_tr:nth-child(odd)]:bg-surface');
+    expect(table).toHaveClass('[&_tbody_tr:nth-child(even)]:bg-row-alt');
+    expect(table).toHaveClass('[&_tbody_tr]:hover:bg-row-hover');
+
+    const row = screen.getByText('#100').closest('tr');
+    expect(row?.className).not.toMatch(/bg-(white|slate-50|gray-50|blue-50)/);
+    expect(row?.className).not.toContain('hover:bg-hcl-light/40');
+
+    const viewButton = screen.getAllByRole('button', { name: /View SBOM/i })[0];
+    expect(viewButton).toHaveClass('text-hcl-muted');
+    expect(viewButton).toHaveClass('hover:bg-row-hover');
+  });
 });

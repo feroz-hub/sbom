@@ -240,7 +240,7 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
 
   return (
     <>
-      <div className="overflow-hidden rounded-xl border border-hcl-border bg-surface shadow-card">
+      <div className="overflow-hidden rounded-xl border border-hcl-border bg-surface text-foreground shadow-card">
         {!isLoading && total > 0 ? (
           <TableFilterBar
             onClear={clearFilters}
@@ -363,7 +363,7 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
               />
             ) : (
               pagination.pageItems.map((sbom) => (
-                <tr key={sbom.id} className="group transition-colors hover:bg-hcl-light/40">
+                <tr key={sbom.id} className="group">
                   <Td className="font-mono text-xs text-hcl-muted">#{sbom.id}</Td>
                   <Td className="max-w-[220px] font-medium text-hcl-navy">
                     <div className="flex items-center gap-1.5">
@@ -412,7 +412,7 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
                       {canOpenRepairWorkspace(sbom) && getRepairWorkspaceUrl(sbom) ? (
                         <button
                           onClick={() => router.push(getRepairWorkspaceUrl(sbom)!)}
-                          className="rounded-lg p-1.5 text-hcl-muted transition-colors hover:bg-hcl-light hover:text-hcl-blue"
+                          className="rounded-lg p-1.5 text-hcl-muted transition-colors hover:bg-row-hover hover:text-hcl-blue"
                           aria-label="Open Repair Workspace"
                           title="Workspace"
                         >
@@ -421,7 +421,7 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
                       ) : null}
                       <button
                         onClick={() => router.push(`/sboms/${sbom.id}`)}
-                        className="rounded-lg p-1.5 text-hcl-muted transition-colors hover:bg-hcl-light hover:text-hcl-blue"
+                        className="rounded-lg p-1.5 text-hcl-muted transition-colors hover:bg-row-hover hover:text-hcl-blue"
                         aria-label="View SBOM"
                         title="View SBOM"
                       >
@@ -429,7 +429,7 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
                       </button>
                       <button
                         onClick={() => setDeleteTarget(sbom)}
-                        className="rounded-lg p-1.5 text-hcl-muted transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
+                        className="rounded-lg p-1.5 text-hcl-muted transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-300"
                         aria-label="Delete SBOM"
                         title="Delete SBOM"
                       >
