@@ -19,6 +19,7 @@ import json
 from pathlib import Path
 
 import pytest
+from app.models import AnalysisRun
 
 from ._normalize import normalize
 
@@ -91,3 +92,43 @@ def test_post_sbom_analyze_severity_buckets_and_status(client, seeded_sbom, mock
     assert "OSV" in body["source"]
     assert "GITHUB" in body["source"]
     assert "(partial)" not in body["source"]
+
+
+def test_post_sbom_analyze_returns_existing_active_run(client, seeded_sbom):
+    from app.db import SessionLocal
+
+    db = SessionLocal()
+    try:
+        active = AnalysisRun(
+            sbom_id=seeded_sbom["id"],
+            run_status="RUNNING",
+            sbom_name=seeded_sbom["sbom_name"],
+            source="NVD,OSV,GITHUB",
+            trigger_source="manual",
+            started_on="2026-07-01T00:00:00Z",
+            completed_on="2026-07-01T00:00:00Z",
+            duration_ms=0,
+        )
+        db.add(active)
+        db.commit()
+        db.refresh(active)
+        active_id = active.id
+    finally:
+        db.close()
+
+    resp = client.post(f"/api/sboms/{seeded_sbom['id']}/analyze")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["id"] == active_id
+    assert body["run_status"] == "RUNNING"
+    assert body["trigger_source"] == "manual"
+
+    db = SessionLocal()
+    try:
+        runs = db.query(AnalysisRun).filter(AnalysisRun.sbom_id == seeded_sbom["id"]).all()
+        assert [run.id for run in runs].count(active_id) == 1
+        assert sum(1 for run in runs if run.run_status == "RUNNING") == 1
+        db.query(AnalysisRun).filter(AnalysisRun.id == active_id).delete()
+        db.commit()
+    finally:
+        db.close()

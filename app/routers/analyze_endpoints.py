@@ -27,6 +27,7 @@ All four endpoints are thin wrappers around a single shared helper
      ``frontend/src/hooks/useBackgroundAnalysis.ts:65`` keeps working.
 """
 
+import json
 import logging
 import time
 
@@ -42,8 +43,9 @@ from ..analysis import (
 )
 from ..db import get_db
 from ..idempotency import normalize_idempotency_key, run_idempotent
+from ..models import AnalysisRun
 from ..rate_limit import analyze_route_limit
-from ..services.analysis_service import compute_report_status, persist_analysis_run
+from ..services.analysis_service import compute_report_status, get_active_analysis_run, persist_analysis_run
 from ..services.sbom_service import load_sbom_from_ref as _load_sbom_from_ref
 from ..services.sbom_service import now_iso
 from ..settings import get_settings
@@ -57,6 +59,34 @@ DEFAULT_RESULTS_PER_PAGE = get_settings().DEFAULT_RESULTS_PER_PAGE
 log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["analyze"])
+
+
+def _already_running_response(run: AnalysisRun) -> dict:
+    return {
+        "status": "already_running",
+        "run_status": run.run_status,
+        "run_id": run.id,
+        "runId": run.id,
+        "id": run.id,
+        "sbom_id": run.sbom_id,
+        "sbom_name": run.sbom_name,
+        "project_id": run.project_id,
+        "source": run.source,
+        "trigger_source": run.trigger_source,
+        "message": "Analysis is already running for this SBOM.",
+        "started_on": run.started_on,
+        "completed_on": run.completed_on,
+        "duration_ms": run.duration_ms,
+        "total_components": run.total_components,
+        "components_with_cpe": run.components_with_cpe,
+        "total_findings": run.total_findings,
+        "critical_count": run.critical_count,
+        "high_count": run.high_count,
+        "medium_count": run.medium_count,
+        "low_count": run.low_count,
+        "unknown_count": run.unknown_count,
+        "query_error_count": run.query_error_count,
+    }
 
 
 # ---- Request models -------------------------------------------------------
@@ -124,6 +154,16 @@ async def _run_legacy_analysis(
     if not raw_components:
         raise HTTPException(status_code=400, detail="No components detected in SBOM.")
 
+    existing = get_active_analysis_run(db, int(sbom_row.id))
+    if existing:
+        log.info(
+            "Legacy analysis already running trigger_source=%s sbom_id=%d run_id=%d",
+            existing.trigger_source,
+            int(sbom_row.id),
+            int(existing.id),
+        )
+        return _already_running_response(existing)
+
     # 2. CPE augmentation + OSV enrichment so the adapters get the same
     #    component shape that the production multi-source path uses.
     from ..services.component_deduplication_service import ComponentDeduplicationService
@@ -147,13 +187,47 @@ async def _run_legacy_analysis(
     # 4. Fan out concurrently via the registry runner.
     started_on = now_iso()
     started_at = time.perf_counter()
+    source_label = ",".join(sources_list)
+    run = AnalysisRun(
+        sbom_id=sbom_row.id,
+        project_id=sbom_row.projectid,
+        run_status="PENDING",
+        sbom_name=sbom_row.sbom_name,
+        source=source_label,
+        trigger_source="api",
+        started_on=started_on,
+        completed_on=started_on,
+        duration_ms=0,
+        total_components=0,
+        components_with_cpe=0,
+        total_findings=0,
+        raw_report=json.dumps({"status": "queued", "message": "Analysis queued.", "sources": sources_list}),
+    )
+    db.add(run)
+    db.commit()
+    db.refresh(run)
+    log.info("Analysis started trigger_source=api sbom_id=%d run_id=%d", int(sbom_row.id), int(run.id))
 
     cfg = get_analysis_settings_multi()
-    raw_findings, query_errors, query_warnings = await run_sources_concurrently(
-        sources=adapters,
-        components=components,
-        settings=cfg,
-    )
+    try:
+        run.run_status = "RUNNING"
+        run.raw_report = json.dumps({"status": "running", "sources": sources_list})
+        db.add(run)
+        db.commit()
+        raw_findings, query_errors, query_warnings = await run_sources_concurrently(
+            sources=adapters,
+            components=components,
+            settings=cfg,
+        )
+    except Exception:
+        db.rollback()
+        run.run_status = "ERROR"
+        run.completed_on = now_iso()
+        run.duration_ms = int((time.perf_counter() - started_at) * 1000)
+        run.raw_report = json.dumps({"status": "failed", "message": "Legacy analysis failed."})
+        db.add(run)
+        db.commit()
+        raise
 
     # 5. Two-pass CVE↔GHSA dedupe (same pass production uses).
     final_findings = deduplicate_findings(raw_findings)
@@ -185,7 +259,6 @@ async def _run_legacy_analysis(
     }
 
     run_status = compute_report_status(len(final_findings), query_errors)
-    source_label = ",".join(sources_list)
     if query_errors:
         source_label += " (partial)"
 
@@ -206,6 +279,8 @@ async def _run_legacy_analysis(
         started_on=started_on,
         completed_on=completed_on,
         duration_ms=duration_ms,
+        existing_run=run,
+        trigger_source="api",
     )
     db.commit()
 
@@ -235,6 +310,7 @@ async def _run_legacy_analysis(
         "run_status": run_status,
         "status": run_status,  # legacy alias
         "source": source_label,
+        "trigger_source": "api",
         "started_on": started_on,
         "completed_on": completed_on,
         "duration_ms": duration_ms,

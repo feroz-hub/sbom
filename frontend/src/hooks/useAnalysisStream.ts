@@ -62,6 +62,7 @@ export function useAnalysisStream(sbomId: number) {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number>(0);
   const abortRef = useRef<AbortController | null>(null);
+  const runningAnalysisRef = useRef<Set<number>>(new Set());
 
   const stopTimer = useCallback(() => {
     if (timerRef.current) {
@@ -92,8 +93,11 @@ export function useAnalysisStream(sbomId: number) {
 
   const startAnalysis = useCallback(
     async (options: StartAnalysisOptions = {}) => {
-      // Cancel any running stream
-      abortRef.current?.abort();
+      if (!sbomId || runningAnalysisRef.current.has(sbomId)) return;
+      runningAnalysisRef.current.add(sbomId);
+      const clearPending = () => {
+        runningAnalysisRef.current.delete(sbomId);
+      };
 
       const controller = new AbortController();
       abortRef.current = controller;
@@ -119,12 +123,18 @@ export function useAnalysisStream(sbomId: number) {
       startTimer();
 
       const url = `${BASE_URL}/api/sboms/${sbomId}/analyze/stream`;
+      const randomId =
+        globalThis.crypto?.randomUUID?.() ??
+        `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
       let response: Response;
       try {
         response = await fetch(url, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'Idempotency-Key': `analysis-sbom-${sbomId}-${randomId}`,
+          },
           body: JSON.stringify({
             sources: initialSources,
             nvd_api_key: options.nvdApiKey ?? null,
@@ -134,6 +144,7 @@ export function useAnalysisStream(sbomId: number) {
         });
       } catch (err: unknown) {
         stopTimer();
+        clearPending();
         if ((err as Error)?.name === 'AbortError') return;
         setState((prev) => ({
           ...prev,
@@ -145,6 +156,7 @@ export function useAnalysisStream(sbomId: number) {
 
       if (!response.ok) {
         stopTimer();
+        clearPending();
         let msg = `HTTP ${response.status}`;
         try {
           const body = await response.json();
@@ -158,6 +170,7 @@ export function useAnalysisStream(sbomId: number) {
       const reader = response.body?.getReader();
       if (!reader) {
         stopTimer();
+        clearPending();
         setState((prev) => ({ ...prev, phase: 'error', error: 'No response body' }));
         return;
       }
@@ -274,6 +287,7 @@ export function useAnalysisStream(sbomId: number) {
       } finally {
         reader.releaseLock();
         stopTimer();
+        clearPending();
       }
     },
     [queryClient, sbomId, startTimer, stopTimer],

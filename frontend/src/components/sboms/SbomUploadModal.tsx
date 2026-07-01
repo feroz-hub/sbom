@@ -103,7 +103,7 @@ function formatUploadError(err: unknown): string {
 interface SbomUploadModalProps {
   open: boolean;
   onClose: () => void;
-  /** Called AFTER upload succeeds — before background analysis starts. */
+  /** Called after upload succeeds so parent views can refresh/optimistically insert. */
   onSuccess?: (sbom: SBOMSource) => void;
 }
 

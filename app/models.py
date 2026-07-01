@@ -709,6 +709,7 @@ class AnalysisRun(Base, SoftDeleteMixin, TenantOwnedMixin):
     run_status = Column(String, nullable=False, index=True)
     sbom_name = Column(String, nullable=True)
     source = Column(String, nullable=False, default="NVD")
+    trigger_source = Column(String(32), nullable=False, default="unknown", server_default="unknown", index=True)
 
     started_on = Column(String, nullable=False)
     completed_on = Column(String, nullable=False)

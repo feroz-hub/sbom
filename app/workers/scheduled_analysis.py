@@ -190,7 +190,7 @@ def analyze_sbom_async(
             return {"status": "SKIPPED", "reason": "recent_run_within_gap"}
 
         try:
-            run = asyncio.run(create_auto_report(db, sbom, force_refresh=force_refresh))
+            run = asyncio.run(create_auto_report(db, sbom, force_refresh=force_refresh, trigger_source="schedule"))
         except Exception as exc:
             log.exception(
                 "scheduled_analysis_run_failed",

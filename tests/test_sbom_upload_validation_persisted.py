@@ -15,7 +15,7 @@ import uuid
 
 import pytest
 from app.db import SessionLocal
-from app.models import SBOMComponent, SBOMSource
+from app.models import AnalysisRun, SBOMComponent, SBOMSource
 
 _VALID_CYCLONEDX = {
     "bomFormat": "CycloneDX",
@@ -196,6 +196,12 @@ def test_upload_schedules_background_enrichment_without_inline_provider_calls(cl
     assert detail["status"] == "validated"
     assert detail["component_count"] >= 1
     assert detail["enrichment_status"] == "pending"
+
+    db = SessionLocal()
+    try:
+        assert db.query(AnalysisRun).filter(AnalysisRun.sbom_id == accepted["sbom_id"]).count() == 0
+    finally:
+        db.close()
 
 
 def test_post_upload_background_enrichment_updates_status(client, monkeypatch):

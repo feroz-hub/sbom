@@ -111,6 +111,7 @@ RUN_STATUS_ERROR = "ERROR"  # technical failure
 RUN_STATUS_RUNNING = "RUNNING"
 RUN_STATUS_PENDING = "PENDING"
 RUN_STATUS_NO_DATA = "NO_DATA"
+ACTIVE_ANALYSIS_RUN_STATUSES = ("PENDING", "QUEUED", "RUNNING", "ANALYSING", "ANALYZING")
 
 # Anything in this set counts as a successful run for dashboard scoping.
 SUCCESSFUL_RUN_STATUSES = (RUN_STATUS_OK, RUN_STATUS_FINDINGS, RUN_STATUS_PARTIAL)
@@ -142,6 +143,19 @@ def compute_report_status(total_findings: int, query_errors: list[dict]) -> str:
     return RUN_STATUS_OK
 
 
+def get_active_analysis_run(db: Session, sbom_id: int) -> AnalysisRun | None:
+    """Return the newest active analysis run for an SBOM, if one exists."""
+    return db.execute(
+        select(AnalysisRun)
+        .where(
+            AnalysisRun.sbom_id == sbom_id,
+            AnalysisRun.run_status.in_(ACTIVE_ANALYSIS_RUN_STATUSES),
+        )
+        .order_by(AnalysisRun.id.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+
+
 # ============================================================
 # Analysis Run Persistence
 # ============================================================
@@ -158,6 +172,7 @@ def persist_analysis_run(
     completed_on: str,
     duration_ms: int,
     existing_run: AnalysisRun | None = None,
+    trigger_source: str = "unknown",
 ) -> AnalysisRun:
     """
     Persist an analysis run and its findings to the database.
@@ -185,6 +200,7 @@ def persist_analysis_run(
     run.project_id = sbom_obj.projectid
     run.run_status = run_status
     run.source = source
+    run.trigger_source = trigger_source
     run.started_on = started_on
     run.completed_on = completed_on
     run.duration_ms = duration_ms

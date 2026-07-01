@@ -3,7 +3,7 @@
 import { useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
-import { analyzeConsolidated } from '@/lib/api';
+import { analyzeSbom } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
 import { addPendingAnalysis, removePendingAnalysis } from '@/lib/pendingAnalysis';
 import { invalidateAnalysisCompletion } from '@/lib/queryInvalidation';
@@ -75,17 +75,17 @@ export function useBackgroundAnalysis() {
         duration: 0,
       });
 
-      analyzeConsolidated({ sbom_id: sbomId, sbom_name: sbomName })
+      analyzeSbom(sbomId)
         .then((result) => {
           removePendingAnalysis(sbomId);
 
-          const raw = result as Record<string, unknown>;
+          const raw = result as unknown as Record<string, unknown>;
           const total: number =
             (raw.summary as Record<string, unknown> | undefined)?.findings != null
               ? ((raw.summary as Record<string, Record<string, unknown>>).findings.total as number) ?? 0
               : (result.total_findings ?? 0);
 
-          const status = ((result.status as string) ?? 'UNKNOWN').toUpperCase() as AnalysisStatus;
+          const status = ((result.run_status as string) ?? 'UNKNOWN').toUpperCase() as AnalysisStatus;
 
           queryClient.setQueryData<SBOMSource[]>(['sboms'], (old) =>
             old?.map((s) =>
@@ -95,7 +95,7 @@ export function useBackgroundAnalysis() {
                     _analysisStatus: status,
                     _findingsCount: total,
                     latest_analysis: {
-                      run_id: Number(raw.run_id ?? s.latest_analysis?.run_id ?? 0),
+                      run_id: Number(raw.run_id ?? raw.id ?? s.latest_analysis?.run_id ?? 0),
                       status,
                       result: status === 'ERROR' ? 'failed' : 'completed',
                       finding_count: total,

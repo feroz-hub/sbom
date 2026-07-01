@@ -15,6 +15,7 @@ import json
 from pathlib import Path
 
 import pytest
+from app.models import AnalysisRun
 
 from ._normalize import normalize
 
@@ -79,3 +80,47 @@ def test_analyze_sbom_consolidated(client, seeded_sbom, mock_external_sources):
     actual = normalize(resp.json())
     expected = _load_or_write("analyze_sbom_consolidated", actual)
     assert actual == expected
+
+
+def test_legacy_consolidated_returns_existing_active_run(client, seeded_sbom):
+    from app.db import SessionLocal
+
+    db = SessionLocal()
+    try:
+        active = AnalysisRun(
+            sbom_id=seeded_sbom["id"],
+            run_status="RUNNING",
+            sbom_name=seeded_sbom["sbom_name"],
+            source="NVD,OSV,GITHUB,VULNDB",
+            trigger_source="api",
+            started_on="2026-07-01T00:00:00Z",
+            completed_on="2026-07-01T00:00:00Z",
+            duration_ms=0,
+        )
+        db.add(active)
+        db.commit()
+        db.refresh(active)
+        active_id = active.id
+        before_count = db.query(AnalysisRun).filter(AnalysisRun.sbom_id == seeded_sbom["id"]).count()
+    finally:
+        db.close()
+
+    resp = client.post(
+        "/analyze-sbom-consolidated",
+        json={"sbom_id": seeded_sbom["id"]},
+    )
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["status"] == "already_running"
+    assert body["run_id"] == active_id
+    assert body["message"] == "Analysis is already running for this SBOM."
+
+    db = SessionLocal()
+    try:
+        after_count = db.query(AnalysisRun).filter(AnalysisRun.sbom_id == seeded_sbom["id"]).count()
+        assert after_count == before_count
+        db.query(AnalysisRun).filter(AnalysisRun.id == active_id).delete()
+        db.commit()
+    finally:
+        db.close()

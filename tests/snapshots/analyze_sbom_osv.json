@@ -41,5 +41,6 @@
   },
   "total_components": 2,
   "total_findings": 1,
+  "trigger_source": "api",
   "unknown_count": 0
 }

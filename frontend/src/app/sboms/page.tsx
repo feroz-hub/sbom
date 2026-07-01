@@ -8,34 +8,24 @@ import { Button } from '@/components/ui/Button';
 import { SbomsTable } from '@/components/sboms/SbomsTable';
 import { SbomUploadModal } from '@/components/sboms/SbomUploadModal';
 import { useSbomsList } from '@/hooks/useSbomsList';
-import { useBackgroundAnalysis } from '@/hooks/useBackgroundAnalysis';
-import { usePendingAnalysisRecovery } from '@/hooks/usePendingAnalysisRecovery';
 import type { SBOMSource } from '@/types';
 
 export default function SbomsPage() {
   const [showUpload, setShowUpload] = useState(false);
   const queryClient = useQueryClient();
-  const { triggerBackgroundAnalysis } = useBackgroundAnalysis();
 
   const { data: sboms, isLoading, error } = useSbomsList();
 
-  // On mount: resume any analysis jobs that were running before a page refresh
-  usePendingAnalysisRecovery(triggerBackgroundAnalysis);
-
   /**
    * Called when the upload modal successfully creates an SBOM.
-   * The hook (`useUploadSbom`) handles list invalidation. We only need:
-   * 1. An optimistic insert so the row appears with an ANALYSING badge
-   *    at zero perceived latency (the invalidated refetch follows).
-   * 2. Firing background analysis — never blocks the user.
+   * The upload modal invalidates the affected query surfaces. This optimistic
+   * insert makes the row appear immediately while the refetch follows.
    */
   const handleUploadSuccess = (newSbom: SBOMSource) => {
     queryClient.setQueryData<SBOMSource[]>(['sboms'], (old) => [
-      { ...newSbom, _analysisStatus: 'ANALYSING' as const },
+      { ...newSbom, _analysisStatus: 'NOT_ANALYSED' as const },
       ...(old ?? []),
     ]);
-
-    triggerBackgroundAnalysis(newSbom.id, newSbom.sbom_name);
   };
 
   return (

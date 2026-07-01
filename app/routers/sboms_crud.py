@@ -63,7 +63,7 @@ from ..schemas import (
     SBOMSourceOut,
 )
 from ..services import audit_log, audit_service
-from ..services.analysis_service import compute_report_status, persist_analysis_run
+from ..services.analysis_service import compute_report_status, get_active_analysis_run, persist_analysis_run
 from ..services.repair.workspace_backfill_service import WorkspaceBackfillService
 from ..services.sbom_delete_service import SBOMDeleteConflict, SBOMDeleteService
 from ..services.sbom_document_service import (
@@ -428,6 +428,7 @@ async def create_auto_report(
     sbom_obj: SBOMSource,
     *,
     force_refresh: bool = False,
+    trigger_source: str = "manual",
 ) -> AnalysisRun | None:
     """
     Trigger default multi-source analysis for an SBOM and persist the run.
@@ -445,6 +446,9 @@ async def create_auto_report(
     """
     if not sbom_obj.sbom_data:
         return None
+    existing = get_active_analysis_run(db, int(sbom_obj.id))
+    if existing:
+        return existing
 
     # Extract components up front so we can short-circuit empty SBOMs without
     # paying for any outbound HTTP, and so we can pass the same component list
@@ -543,6 +547,7 @@ async def create_auto_report(
         started_on=started_on,
         completed_on=now_iso(),
         duration_ms=duration_ms,
+        trigger_source=trigger_source,
     )
     db.commit()
     return run
@@ -1458,6 +1463,7 @@ def revalidate_sbom(
 @analyze_route_limit
 async def run_analysis_for_sbom(
     request: Request,
+    response: Response,
     sbom_id: int,
     force_refresh: bool = Query(
         False,
@@ -1483,8 +1489,18 @@ async def run_analysis_for_sbom(
         if not sbom:
             log.warning("Analysis requested for unknown SBOM id=%d", sbom_id)
             raise HTTPException(status_code=404, detail="SBOM not found")
+        existing = get_active_analysis_run(db, sbom_id)
+        if existing:
+            response.status_code = status.HTTP_200_OK
+            log.info(
+                "Analysis already running trigger_source=%s sbom_id=%d run_id=%d",
+                existing.trigger_source,
+                sbom_id,
+                existing.id,
+            )
+            return analysis_run_to_dict(existing)
         try:
-            report = await create_auto_report(db, sbom, force_refresh=force_refresh)
+            report = await create_auto_report(db, sbom, force_refresh=force_refresh, trigger_source="manual")
         except Exception as exc:
             db.rollback()
             log.error("Analysis run failed for SBOM id=%d: %s", sbom_id, exc, exc_info=True)
@@ -1492,6 +1508,7 @@ async def run_analysis_for_sbom(
         if not report:
             log.error("Analysis report generation failed for SBOM id=%d", sbom_id)
             raise HTTPException(status_code=500, detail="Unable to generate analysis report")
+        log.info("Analysis started trigger_source=manual sbom_id=%d run_id=%d", sbom_id, report.id)
         return analysis_run_to_dict(report)
 
     key = normalize_idempotency_key(idempotency_key)
@@ -1533,6 +1550,43 @@ async def analyze_sbom_stream(
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
+    existing = get_active_analysis_run(db, sbom_id)
+    if existing:
+
+        async def _already_running():
+            yield _sse_event(
+                "complete",
+                {
+                    "status": "already_running",
+                    "runId": existing.id,
+                    "message": "Analysis is already running for this SBOM.",
+                    "total": existing.total_findings,
+                    "critical": existing.critical_count,
+                    "high": existing.high_count,
+                    "medium": existing.medium_count,
+                    "low": existing.low_count,
+                    "unknown": existing.unknown_count,
+                    "duration_ms": existing.duration_ms,
+                    "already_running": True,
+                },
+            )
+
+        log.info(
+            "Analysis already running trigger_source=%s sbom_id=%d run_id=%d",
+            existing.trigger_source,
+            sbom_id,
+            existing.id,
+        )
+        return StreamingResponse(
+            _already_running(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+                "Connection": "keep-alive",
+            },
+        )
+
     if idem:
         cached_complete = await get_cached(f"analyze_stream:{sbom_id}", idem)
         if cached_complete:
@@ -1559,6 +1613,7 @@ async def analyze_sbom_stream(
             run_status="PENDING",
             sbom_name=sbom_row.sbom_name,
             source=",".join(normalize_source_names(payload.sources, default=configured_default_sources())),
+            trigger_source="manual",
             started_on=run_started_on,
             completed_on=run_started_on,
             duration_ms=0,
@@ -1570,6 +1625,7 @@ async def analyze_sbom_stream(
         db.add(run)
         db.commit()
         db.refresh(run)
+        log.info("Analysis started trigger_source=manual sbom_id=%d run_id=%d", sbom_id, run.id)
 
         def elapsed() -> int:
             return int((time.perf_counter() - started_at) * 1000)
@@ -1756,6 +1812,7 @@ async def analyze_sbom_stream(
                 completed_on=now_iso(),
                 duration_ms=duration_ms,
                 existing_run=run,
+                trigger_source="manual",
             )
             db.commit()
 

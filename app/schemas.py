@@ -338,6 +338,7 @@ class AnalysisRunOut(ORMModel):
     run_status: str
     sbom_name: str | None = None
     source: str
+    trigger_source: str = "unknown"
     started_on: str
     completed_on: str
     duration_ms: int

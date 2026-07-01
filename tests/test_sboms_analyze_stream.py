@@ -184,3 +184,40 @@ def test_analyze_stream_parse_failure_persists_failed_run(client, db):
     assert detail["latest_analysis"]["status"] == "failed"
     assert detail["latest_analysis"]["result"] == "failed"
     assert "SBOM parse failed" in detail["latest_analysis"]["error_message"]
+
+
+def test_analyze_stream_returns_existing_active_run_without_duplicate(client, seeded_sbom, db):
+    active = AnalysisRun(
+        sbom_id=seeded_sbom["id"],
+        run_status="RUNNING",
+        sbom_name=seeded_sbom["sbom_name"],
+        source="NVD,OSV,GITHUB",
+        trigger_source="manual",
+        started_on="2026-07-01T00:00:00Z",
+        completed_on="2026-07-01T00:00:00Z",
+        duration_ms=0,
+    )
+    db.add(active)
+    db.commit()
+    db.refresh(active)
+    before_count = db.query(AnalysisRun).filter(AnalysisRun.sbom_id == seeded_sbom["id"]).count()
+
+    resp = client.post(
+        f"/api/sboms/{seeded_sbom['id']}/analyze/stream",
+        json={"sources": ["NVD", "OSV", "GITHUB"]},
+    )
+
+    assert resp.status_code == 200, resp.text
+    events = _parse_sse_events(resp.text)
+    completes = [event for event in events if event["event"] == "complete"]
+    assert completes
+    final = completes[-1]["data"]
+    assert final["status"] == "already_running"
+    assert final["runId"] == active.id
+    assert final["already_running"] is True
+
+    db.expire_all()
+    after_count = db.query(AnalysisRun).filter(AnalysisRun.sbom_id == seeded_sbom["id"]).count()
+    assert after_count == before_count
+    db.query(AnalysisRun).filter(AnalysisRun.id == active.id).delete()
+    db.commit()

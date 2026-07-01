@@ -17,5 +17,6 @@
   "started_on": "<volatile>",
   "total_components": 2,
   "total_findings": 3,
+  "trigger_source": "manual",
   "unknown_count": 0
 }

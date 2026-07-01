@@ -18,18 +18,16 @@ function runStatusToBadgeStatus(runStatus: string | undefined): AnalysisStatus {
  * On mount, checks sessionStorage for any analysis jobs that were in-flight
  * before a page refresh. For each:
  *   - If the server already has a completed run → update React Query SBOM cache
- *   - If no run found yet → re-trigger background analysis (resumes waiting)
+ *   - If no run found yet → clear the stale client marker without starting one
  */
-export function usePendingAnalysisRecovery(
-  triggerBackgroundAnalysis: (sbomId: number, sbomName: string) => void,
-) {
+export function usePendingAnalysisRecovery() {
   const queryClient = useQueryClient();
 
   useEffect(() => {
     const pending = getStillPendingAnalyses();
     if (pending.length === 0) return;
 
-    for (const { sbomId, sbomName } of pending) {
+    for (const { sbomId } of pending) {
       getRuns({ sbom_id: sbomId, page: 1, page_size: 1 })
         .then((runs) => {
           if (runs.length > 0) {
@@ -47,7 +45,7 @@ export function usePendingAnalysisRecovery(
               ) ?? [],
             );
           } else {
-            triggerBackgroundAnalysis(sbomId, sbomName);
+            removePendingAnalysis(sbomId);
           }
         })
         .catch(() => {

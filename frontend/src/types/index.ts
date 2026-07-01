@@ -782,6 +782,7 @@ export interface AnalysisRun {
     | 'PASS' // legacy alias for OK
     | 'FAIL'; // legacy alias for FINDINGS
   source: string | null;
+  trigger_source?: 'manual' | 'upload_auto' | 'schedule' | 'api' | 'unknown' | string | null;
   total_components: number | null;
   components_with_cpe: number | null;
   total_findings: number | null;
