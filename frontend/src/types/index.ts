@@ -366,6 +366,9 @@ export interface SBOMComponent {
   eos_date?: string | null;
   eol_date?: string | null;
   eof_date?: string | null;
+  eol_eos_date?: string | null;
+  eol_eos_status?: 'expired' | 'less_than_3_months' | 'more_than_6_months' | 'unknown' | string | null;
+  eol_eos_status_label?: string | null;
   is_deprecated?: boolean | null;
   deprecated?: boolean | null;
   unsupported?: boolean | null;

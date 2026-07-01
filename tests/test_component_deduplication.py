@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime, timedelta
 
 import pytest
+from app.db import SessionLocal
+from app.models import SBOMComponent, SBOMSource
 from app.services.component_deduplication_service import ComponentDeduplicationService
 from app.validation.errors import W120_DUPLICATE_COMPONENT_DETECTED
 
@@ -235,6 +238,41 @@ def test_component_list_does_not_modify_stored_sbom(client, unique_name):
     assert before == after
     stored = json.loads(after)
     assert len(stored["components"]) == 3
+
+
+def test_component_list_includes_dynamic_eol_eos_status(client, unique_name):
+    db = SessionLocal()
+    try:
+        sbom = SBOMSource(sbom_name=unique_name, sbom_data="{}", status="validated")
+        db.add(sbom)
+        db.commit()
+        db.refresh(sbom)
+
+        today = datetime.now(UTC).date()
+        rows = [
+            SBOMComponent(sbom_id=sbom.id, name="expired", eol_date=(today - timedelta(days=1)).isoformat()),
+            SBOMComponent(sbom_id=sbom.id, name="soon", eos_date=(today + timedelta(days=30)).isoformat()),
+            SBOMComponent(sbom_id=sbom.id, name="future", eol_date=(today + timedelta(days=220)).isoformat()),
+            SBOMComponent(sbom_id=sbom.id, name="unknown"),
+        ]
+        db.add_all(rows)
+        db.commit()
+        sbom_id = sbom.id
+    finally:
+        db.close()
+
+    response = client.get(f"/api/sboms/{sbom_id}/components?page_size=10")
+    assert response.status_code == 200, response.text
+    by_name = {item["name"]: item for item in response.json()["items"]}
+
+    assert by_name["expired"]["eol_eos_status"] == "expired"
+    assert by_name["expired"]["eol_eos_status_label"] == "Expired"
+    assert by_name["soon"]["eol_eos_status"] == "less_than_3_months"
+    assert by_name["soon"]["eol_eos_status_label"] == "Less than 3 months"
+    assert by_name["future"]["eol_eos_status"] == "more_than_6_months"
+    assert by_name["future"]["eol_eos_status_label"] == "More than 6 months"
+    assert by_name["unknown"]["eol_eos_status"] == "unknown"
+    assert by_name["unknown"]["eol_eos_status_label"] == "Unknown / Not Available"
 
 
 def test_validation_warnings_for_duplicates(client, unique_name):

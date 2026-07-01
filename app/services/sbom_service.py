@@ -6,7 +6,8 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import UTC
+from calendar import monthrange
+from datetime import UTC, date, datetime
 from typing import Any
 
 from sqlalchemy import asc, desc, func, or_, select
@@ -554,6 +555,68 @@ _COMPONENT_SORT_COLUMNS = {
     "lifecycle_status": SBOMComponent.lifecycle_status,
 }
 
+EOL_EOS_STATUS_EXPIRED = "expired"
+EOL_EOS_STATUS_LESS_THAN_3_MONTHS = "less_than_3_months"
+EOL_EOS_STATUS_MORE_THAN_6_MONTHS = "more_than_6_months"
+EOL_EOS_STATUS_UNKNOWN = "unknown"
+
+EOL_EOS_STATUS_LABELS = {
+    EOL_EOS_STATUS_EXPIRED: "Expired",
+    EOL_EOS_STATUS_LESS_THAN_3_MONTHS: "Less than 3 months",
+    EOL_EOS_STATUS_MORE_THAN_6_MONTHS: "More than 6 months",
+    EOL_EOS_STATUS_UNKNOWN: "Unknown / Not Available",
+}
+
+
+def _add_months(value: date, months: int) -> date:
+    month_index = value.month - 1 + months
+    year = value.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(value.day, monthrange(year, month)[1])
+    return date(year, month, day)
+
+
+def _parse_lifecycle_date(value: str | None) -> date | None:
+    if not value:
+        return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+    try:
+        return date.fromisoformat(raw[:10])
+    except ValueError:
+        pass
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00")).date()
+    except ValueError:
+        return None
+
+
+def _component_eol_eos_status(component: SBOMComponent, today: date | None = None) -> tuple[str | None, str, str]:
+    """Derive EOL/EOS status from the nearest known EOL/EOS lifecycle date."""
+    today = today or datetime.now(UTC).date()
+    candidate_dates = [
+        parsed
+        for parsed in (
+            _parse_lifecycle_date(component.eol_date),
+            _parse_lifecycle_date(component.eos_date),
+        )
+        if parsed is not None
+    ]
+    if not candidate_dates:
+        return None, EOL_EOS_STATUS_UNKNOWN, EOL_EOS_STATUS_LABELS[EOL_EOS_STATUS_UNKNOWN]
+
+    lifecycle_date = min(candidate_dates)
+    if lifecycle_date < today:
+        status = EOL_EOS_STATUS_EXPIRED
+    elif lifecycle_date <= _add_months(today, 3):
+        status = EOL_EOS_STATUS_LESS_THAN_3_MONTHS
+    elif lifecycle_date > _add_months(today, 6):
+        status = EOL_EOS_STATUS_MORE_THAN_6_MONTHS
+    else:
+        status = EOL_EOS_STATUS_UNKNOWN
+    return lifecycle_date.isoformat(), status, EOL_EOS_STATUS_LABELS[status]
+
 
 def _canonical_only_clause():
     return (SBOMComponent.is_duplicate.is_(False)) | (SBOMComponent.is_duplicate.is_(None))
@@ -656,6 +719,10 @@ def list_sbom_components(
         payload.canonical_component_name = canonical_name
         payload.canonical_component_version = canonical_version
         payload.duplicate_reason = duplicate_reason
+        eol_eos_date, eol_eos_status, eol_eos_status_label = _component_eol_eos_status(row)
+        payload.eol_eos_date = eol_eos_date
+        payload.eol_eos_status = eol_eos_status
+        payload.eol_eos_status_label = eol_eos_status_label
         items.append(payload)
 
     return SBOMComponentListResponse(

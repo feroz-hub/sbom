@@ -319,6 +319,9 @@ class SBOMComponentListItem(SBOMComponentOut):
     canonical_component_name: str | None = None
     canonical_component_version: str | None = None
     duplicate_reason: str | None = None
+    eol_eos_date: str | None = None
+    eol_eos_status: str = "unknown"
+    eol_eos_status_label: str = "Unknown / Not Available"
 
 
 class SBOMComponentListResponse(BaseModel):

@@ -119,6 +119,72 @@ function lifecycleBadgeClass(status?: string | null) {
   return 'bg-gray-50 text-gray-700 border-gray-200';
 }
 
+function addMonths(date: Date, months: number) {
+  const next = new Date(date);
+  const targetMonth = next.getMonth() + months;
+  next.setMonth(targetMonth);
+  if (next.getMonth() !== ((targetMonth % 12) + 12) % 12) {
+    next.setDate(0);
+  }
+  return next;
+}
+
+function parseLifecycleDate(value?: string | null) {
+  if (!value) return null;
+  const isoDate = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const parsed = isoDate
+    ? new Date(Number(isoDate[1]), Number(isoDate[2]) - 1, Number(isoDate[3]))
+    : new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  parsed.setHours(0, 0, 0, 0);
+  return parsed;
+}
+
+function eolEosStatusForComponent(component: SBOMComponent) {
+  const backendStatus = component.eol_eos_status || null;
+  if (backendStatus) {
+    return {
+      status: backendStatus,
+      label: component.eol_eos_status_label || 'Unknown / Not Available',
+      date: component.eol_eos_date || component.eol_date || component.eos_date || null,
+    };
+  }
+
+  const dates = [parseLifecycleDate(component.eol_date), parseLifecycleDate(component.eos_date)]
+    .filter((value): value is Date => value !== null)
+    .sort((a, b) => a.getTime() - b.getTime());
+  if (!dates.length) {
+    return { status: 'unknown', label: 'Unknown / Not Available', date: null };
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const lifecycleDate = dates[0];
+  if (lifecycleDate < today) {
+    return { status: 'expired', label: 'Expired', date: lifecycleDate.toISOString().slice(0, 10) };
+  }
+  if (lifecycleDate <= addMonths(today, 3)) {
+    return { status: 'less_than_3_months', label: 'Less than 3 months', date: lifecycleDate.toISOString().slice(0, 10) };
+  }
+  if (lifecycleDate > addMonths(today, 6)) {
+    return { status: 'more_than_6_months', label: 'More than 6 months', date: lifecycleDate.toISOString().slice(0, 10) };
+  }
+  return { status: 'unknown', label: 'Unknown / Not Available', date: lifecycleDate.toISOString().slice(0, 10) };
+}
+
+function eolEosStatusBadgeClass(status?: string | null) {
+  switch (status) {
+    case 'expired':
+      return 'bg-red-50 text-red-700 border-red-200';
+    case 'less_than_3_months':
+      return 'bg-yellow-50 text-yellow-700 border-yellow-200';
+    case 'more_than_6_months':
+      return 'bg-blue-50 text-blue-700 border-blue-200';
+    default:
+      return 'bg-gray-50 text-gray-700 border-gray-200';
+  }
+}
+
 function labelize(value?: string | null) {
   return (value || 'Unknown').replace(/_/g, ' ');
 }
@@ -1385,108 +1451,122 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                   <SortableTh sortKey="component_type" activeKey={compSort.key} direction={compSort.direction} onToggle={(k) => toggleCompSort(k as ComponentSortKey)}>Type</SortableTh>
                   <SortableTh sortKey="license" activeKey={compSort.key} direction={compSort.direction} onToggle={(k) => toggleCompSort(k as ComponentSortKey)}>License</SortableTh>
                   <SortableTh sortKey="lifecycle_status" activeKey={compSort.key} direction={compSort.direction} onToggle={(k) => toggleCompSort(k as ComponentSortKey)}>Lifecycle</SortableTh>
+                  <Th>EOL / EOS Status</Th>
                   <Th className="text-right">Actions</Th>
                 </tr>
               </TableHead>
               <TableBody>
                 {compLoading ? (
-                  Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} cols={6} />)
+                  Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} cols={7} />)
                 ) : !displayedComponents.length ? (
-                  <EmptyRow cols={6} message="No components found for this SBOM" />
+                  <EmptyRow cols={7} message="No components found for this SBOM" />
                 ) : (
-                  displayedComponents.map((c) => (
-                    <tr
-                      key={c.id}
-                      className={c.is_duplicate ? 'bg-amber-50/40 hover:bg-amber-50/70' : 'hover:bg-hcl-light/40'}
-                    >
-                      <Td className="font-medium text-hcl-navy">
-                        <div className="flex flex-col">
-                          <div className="flex items-center gap-2">
-                            <span>{c.name}</span>
-                            {c.is_duplicate && (
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
-                                Duplicate
+                  displayedComponents.map((c) => {
+                    const eolEosStatus = eolEosStatusForComponent(c);
+                    return (
+                      <tr
+                        key={c.id}
+                        className={c.is_duplicate ? 'bg-amber-50/40 hover:bg-amber-50/70' : 'hover:bg-hcl-light/40'}
+                      >
+                        <Td className="font-medium text-hcl-navy">
+                          <div className="flex flex-col">
+                            <div className="flex items-center gap-2">
+                              <span>{c.name}</span>
+                              {c.is_duplicate && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                                  Duplicate
+                                </span>
+                              )}
+                            </div>
+                            {c.is_duplicate && (c.canonical_component_name || c.duplicate_of_component_id) && (
+                              <span className="text-[10px] text-hcl-muted">
+                                Duplicate of {c.canonical_component_name || 'component'}
+                                {c.canonical_component_version ? ` ${c.canonical_component_version}` : ''}
+                              </span>
+                            )}
+                            {(c.normalized_name || c.primary_cpe) && (
+                              <span className="text-[10px] text-hcl-muted">
+                                {c.normalized_name ? `Normalized ${c.normalized_name}` : ''}
+                                {c.normalized_version ? ` ${c.normalized_version}` : ''}
+                                {c.primary_cpe ? ` · ${c.primary_cpe}` : ''}
                               </span>
                             )}
                           </div>
-                          {c.is_duplicate && (c.canonical_component_name || c.duplicate_of_component_id) && (
-                            <span className="text-[10px] text-hcl-muted">
-                              Duplicate of {c.canonical_component_name || 'component'}
-                              {c.canonical_component_version ? ` ${c.canonical_component_version}` : ''}
+                        </Td>
+                        <Td className="font-mono text-xs">{c.version || '—'}</Td>
+                        <Td className="text-hcl-muted">
+                          <div>{c.component_type || '—'}</div>
+                          {c.ecosystem ? <div className="text-[10px] uppercase tracking-wide">{c.ecosystem}</div> : null}
+                        </Td>
+                        <Td className="max-w-[120px] truncate">
+                          {c.license ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-50 text-emerald-800 border border-emerald-100 dark:bg-emerald-950/20 dark:text-emerald-300">
+                              {c.license}
                             </span>
+                          ) : (
+                            <span className="text-hcl-muted text-xs font-medium">None</span>
                           )}
-                          {(c.normalized_name || c.primary_cpe) && (
-                            <span className="text-[10px] text-hcl-muted">
-                              {c.normalized_name ? `Normalized ${c.normalized_name}` : ''}
-                              {c.normalized_version ? ` ${c.normalized_version}` : ''}
-                              {c.primary_cpe ? ` · ${c.primary_cpe}` : ''}
-                            </span>
-                          )}
-                        </div>
-                      </Td>
-                      <Td className="font-mono text-xs">{c.version || '—'}</Td>
-                      <Td className="text-hcl-muted">
-                        <div>{c.component_type || '—'}</div>
-                        {c.ecosystem ? <div className="text-[10px] uppercase tracking-wide">{c.ecosystem}</div> : null}
-                      </Td>
-                      <Td className="max-w-[120px] truncate">
-                        {c.license ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-50 text-emerald-800 border border-emerald-100 dark:bg-emerald-950/20 dark:text-emerald-300">
-                            {c.license}
+                        </Td>
+                        <Td>
+                          <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${lifecycleBadgeClass(c.lifecycle_status)}`}>
+                            {lifecycleDisplayLabel(c.lifecycle_status, c.lifecycle_confidence)}
                           </span>
-                        ) : (
-                          <span className="text-hcl-muted text-xs font-medium">None</span>
-                        )}
-                      </Td>
-                      <Td>
-                        <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${lifecycleBadgeClass(c.lifecycle_status)}`}>
-                          {lifecycleDisplayLabel(c.lifecycle_status, c.lifecycle_confidence)}
-                        </span>
-                        <div className="mt-1 max-w-[220px] space-y-0.5 text-[10px] leading-4 text-hcl-muted">
-                          {(c.eol_date || c.eos_date || c.eof_date) && (
-                            <div>
-                              {c.eol_date ? `EOL ${c.eol_date}` : ''}
-                              {c.eos_date ? `${c.eol_date ? ' · ' : ''}EOS ${c.eos_date}` : ''}
-                              {c.eof_date ? `${c.eol_date || c.eos_date ? ' · ' : ''}EOF ${c.eof_date}` : ''}
-                            </div>
-                          )}
-                          {(c.lifecycle_source || c.lifecycle_confidence) && (
-                            <div className="truncate">
-                              {c.lifecycle_source || 'Provider'} {c.lifecycle_confidence ? `· ${c.lifecycle_confidence}` : ''}
-                            </div>
-                          )}
-                          {c.recommended_version || c.lifecycle_recommendation ? (
-                            <div className="truncate text-hcl-navy">
-                              {c.recommended_version ? `Upgrade ${c.recommended_version}` : c.lifecycle_recommendation}
+                          <div className="mt-1 max-w-[220px] space-y-0.5 text-[10px] leading-4 text-hcl-muted">
+                            {(c.eol_date || c.eos_date || c.eof_date) && (
+                              <div>
+                                {c.eol_date ? `EOL ${c.eol_date}` : ''}
+                                {c.eos_date ? `${c.eol_date ? ' · ' : ''}EOS ${c.eos_date}` : ''}
+                                {c.eof_date ? `${c.eol_date || c.eos_date ? ' · ' : ''}EOF ${c.eof_date}` : ''}
+                              </div>
+                            )}
+                            {(c.lifecycle_source || c.lifecycle_confidence) && (
+                              <div className="truncate">
+                                {c.lifecycle_source || 'Provider'} {c.lifecycle_confidence ? `· ${c.lifecycle_confidence}` : ''}
+                              </div>
+                            )}
+                            {c.recommended_version || c.lifecycle_recommendation ? (
+                              <div className="truncate text-hcl-navy">
+                                {c.recommended_version ? `Upgrade ${c.recommended_version}` : c.lifecycle_recommendation}
+                              </div>
+                            ) : null}
+                            {c.lifecycle_is_stale ? <div className="font-semibold text-amber-700">Stale data</div> : null}
+                            {c.lifecycle_manual_override ? <div className="font-semibold text-hcl-blue">Manual override</div> : null}
+                          </div>
+                        </Td>
+                        <Td>
+                          <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${eolEosStatusBadgeClass(eolEosStatus.status)}`}>
+                            {eolEosStatus.label}
+                          </span>
+                          {eolEosStatus.date ? (
+                            <div className="mt-1 text-[10px] leading-4 text-hcl-muted">
+                              EOL/EOS {eolEosStatus.date}
                             </div>
                           ) : null}
-                          {c.lifecycle_is_stale ? <div className="font-semibold text-amber-700">Stale data</div> : null}
-                          {c.lifecycle_manual_override ? <div className="font-semibold text-hcl-blue">Manual override</div> : null}
-                        </div>
-                      </Td>
-                      <Td className="text-right">
-                        <button
-                          onClick={() => setEvidenceModal({ kind: 'lifecycle', component: c })}
-                          className="mr-3 inline-flex items-center gap-1 text-xs font-medium text-hcl-muted transition-colors hover:text-hcl-navy"
-                        >
-                          <Eye className="h-3 w-3" /> Evidence
-                        </button>
-                        <button
-                          onClick={() => handleRefreshComponentLifecycle(c)}
-                          disabled={refreshingComponentId === c.id}
-                          className="mr-3 inline-flex items-center gap-1 text-xs font-medium text-hcl-muted transition-colors hover:text-hcl-navy disabled:opacity-60"
-                        >
-                          <RefreshCw className={`h-3 w-3 ${refreshingComponentId === c.id ? 'animate-spin' : ''}`} /> Refresh
-                        </button>
-                        <button
-                          onClick={() => openEditModal(c)}
-                          className="inline-flex items-center gap-1 text-xs text-hcl-blue hover:text-hcl-navy transition-colors font-medium"
-                        >
-                          <Edit2 className="h-3 w-3" /> Edit
-                        </button>
-                      </Td>
+                        </Td>
+                        <Td className="text-right">
+                          <button
+                            onClick={() => setEvidenceModal({ kind: 'lifecycle', component: c })}
+                            className="mr-3 inline-flex items-center gap-1 text-xs font-medium text-hcl-muted transition-colors hover:text-hcl-navy"
+                          >
+                            <Eye className="h-3 w-3" /> Evidence
+                          </button>
+                          <button
+                            onClick={() => handleRefreshComponentLifecycle(c)}
+                            disabled={refreshingComponentId === c.id}
+                            className="mr-3 inline-flex items-center gap-1 text-xs font-medium text-hcl-muted transition-colors hover:text-hcl-navy disabled:opacity-60"
+                          >
+                            <RefreshCw className={`h-3 w-3 ${refreshingComponentId === c.id ? 'animate-spin' : ''}`} /> Refresh
+                          </button>
+                          <button
+                            onClick={() => openEditModal(c)}
+                            className="inline-flex items-center gap-1 text-xs text-hcl-blue hover:text-hcl-navy transition-colors font-medium"
+                          >
+                            <Edit2 className="h-3 w-3" /> Edit
+                          </button>
+                        </Td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </TableBody>
             </Table>

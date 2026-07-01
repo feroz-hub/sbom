@@ -122,6 +122,9 @@ const COMPONENT: SBOMComponent = {
   eol_date: '2025-01-01',
   eos_date: '2024-06-01',
   eof_date: '2024-01-01',
+  eol_eos_date: '2024-06-01',
+  eol_eos_status: 'expired',
+  eol_eos_status_label: 'Expired',
   deprecated: false,
   is_deprecated: false,
   maintenance_status: 'End of life',
@@ -255,9 +258,12 @@ describe('SbomDetail lifecycle management', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Components List/i }));
 
+    expect(await screen.findByText('EOL / EOS Status')).toBeInTheDocument();
     expect(await screen.findByText('demo')).toBeInTheDocument();
     expect(screen.getByText('npm')).toBeInTheDocument();
     expect(screen.getByText('EOL')).toBeInTheDocument();
+    expect(screen.getByText('Expired')).toBeInTheDocument();
+    expect(screen.getByText('EOL/EOS 2024-06-01')).toBeInTheDocument();
     expect(screen.getByText(/EOL 2025-01-01/)).toBeInTheDocument();
     expect(screen.getByText(/endoflife.date · High/)).toBeInTheDocument();
     expect(screen.getByText('Upgrade 2.0.0')).toBeInTheDocument();
