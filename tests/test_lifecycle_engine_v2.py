@@ -214,6 +214,38 @@ def test_provider_failure_continues_fallback():
     assert result.lifecycle_status == DEPRECATED
 
 
+def test_unknown_provider_result_does_not_open_lifecycle_circuit():
+    tracker = get_provider_status_tracker()
+    tracker.reset()
+    component = NormalizedComponent(
+        component_id=None,
+        name="pkg",
+        version="1.0.0",
+        normalized_name="pkg",
+        normalized_version="1.0.0",
+        ecosystem="generic",
+    )
+
+    class NoDataProvider(LifecycleProvider):
+        name = "No Data Provider"
+        priority = 10
+
+        def lookup(self, comp: NormalizedComponent) -> LifecycleResult:
+            return unknown_result(comp, self.name)
+
+    for _ in range(5):
+        result, errors = lookup_provider_chain(
+            [NoDataProvider()],
+            component,
+            timeout_seconds=1.0,
+            status_tracker=tracker,
+        )
+        assert result.lifecycle_status == UNKNOWN
+        assert errors == []
+
+    assert tracker.is_circuit_open("No Data Provider") is False
+
+
 def test_provider_timeout_returns_unknown_not_exception():
     component = NormalizedComponent(
         component_id=None,

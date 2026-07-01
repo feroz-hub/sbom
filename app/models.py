@@ -446,6 +446,11 @@ class SBOMComponent(Base, SoftDeleteMixin, TenantOwnedMixin):
     findings = relationship("AnalysisFinding", back_populates="component")
     vex_statements = relationship("VexStatement", back_populates="component")
 
+    @property
+    def lifecycle_provider(self) -> str | None:
+        """Backward-compatible alias for the provider/source display name."""
+        return self.lifecycle_source
+
     __table_args__ = (
         UniqueConstraint(
             "tenant_id",

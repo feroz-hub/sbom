@@ -154,6 +154,49 @@ def test_endoflife_date_provider_marks_eol_from_matching_cycle():
     assert result.recommended_version == "3.11.9"
 
 
+def test_endoflife_date_provider_uses_debian_distro_qualifier_for_package_rows():
+    provider = EndOfLifeDateProvider(
+        http_get=lambda url: [
+            {
+                "cycle": "13",
+                "codename": "Trixie",
+                "eol": "2028-08-09",
+                "extendedSupport": "2030-06-30",
+                "latest": "13.5",
+            },
+            {
+                "cycle": "12",
+                "codename": "Bookworm",
+                "eol": "2026-07-11",
+                "extendedSupport": "2028-06-30",
+                "latest": "12.14",
+            },
+        ]
+        if "debian" in url
+        else [],
+        today=date(2026, 7, 2),
+    )
+    component = NormalizedComponent(
+        component_id=None,
+        name="apt",
+        version="2.6.1",
+        normalized_name="apt",
+        normalized_version="2.6.1",
+        ecosystem="debian",
+        purl="pkg:deb/debian/apt@2.6.1?distro=debian-bookworm",
+    )
+
+    result = provider.lookup(component)
+
+    assert result.lifecycle_status == "EOL Soon"
+    assert result.eol_date == "2026-07-11"
+    assert result.eos_date == "2028-06-30"
+    assert result.source_name == "endoflife.date"
+    assert result.recommended_version is None
+    assert result.evidence["lookup_version"] == "bookworm"
+    assert result.evidence["release_hint"]["source"] == "purl.distro"
+
+
 def test_endoflife_date_provider_marks_eos_and_eof_from_official_dates():
     provider = EndOfLifeDateProvider(
         http_get=lambda _url: [
@@ -371,6 +414,58 @@ def test_lifecycle_cache_hit_avoids_provider_call(db):
     assert component.lifecycle_source == "Cached Provider"
     assert component.lifecycle_is_stale is False
     assert component.latest_version == "2.0.0"
+
+
+def test_unknown_distro_package_cache_is_rechecked(db):
+    sbom = SBOMSource(sbom_name="distro-cache-refresh", sbom_data="{}", status="validated")
+    db.add(sbom)
+    db.flush()
+    component = SBOMComponent(
+        sbom_id=sbom.id,
+        name="apt",
+        version="2.6.1",
+        ecosystem="debian",
+        purl="pkg:deb/debian/apt@2.6.1?distro=debian-bookworm",
+        component_type="library",
+    )
+    db.add(component)
+    normalized = normalize_component(component)
+    db.add(
+        ComponentLifecycleCache(
+            lookup_key=build_lifecycle_lookup_key(normalized),
+            normalized_name=normalized.normalized_name,
+            normalized_version=normalized.normalized_version,
+            ecosystem=normalized.ecosystem,
+            purl=normalized.purl,
+            cpe=normalized.cpe,
+            lifecycle_status=UNKNOWN,
+            checked_at=_past_iso(),
+            expires_at=_future_iso(),
+            evidence_json={"provider_errors": ["endoflife.date: circuit open"]},
+        )
+    )
+    db.commit()
+
+    class DebianReleaseProvider(LifecycleProvider):
+        name = "Debian Release Provider"
+
+        def lookup(self, comp: NormalizedComponent) -> LifecycleResult:
+            return LifecycleResult(
+                component_name=comp.normalized_name,
+                component_version=comp.normalized_version,
+                ecosystem=comp.ecosystem,
+                purl=comp.purl,
+                lifecycle_status=EOL,
+                eol_date="2026-07-11",
+                source_name=self.name,
+                confidence=HIGH,
+            )
+
+    result = LifecycleEnrichmentService(providers=[DebianReleaseProvider()]).enrich_component(db, component)
+
+    assert result.lifecycle_status == EOL
+    assert component.lifecycle_source == "Debian Release Provider"
+    assert component.eol_date == "2026-07-11"
 
 
 def test_expired_cache_is_kept_as_stale_when_providers_have_no_data(db):

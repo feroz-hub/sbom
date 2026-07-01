@@ -296,6 +296,7 @@ class SBOMComponentOut(ORMModel):
     recommended_version: str | None = None
     lifecycle_recommendation: str | None = None
     lifecycle_source: str | None = None
+    lifecycle_provider: str | None = None
     lifecycle_source_url: str | None = None
     lifecycle_confidence: str | None = None
     lifecycle_checked_at: str | None = None

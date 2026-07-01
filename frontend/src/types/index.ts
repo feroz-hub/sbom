@@ -378,6 +378,7 @@ export interface SBOMComponent {
   recommended_version?: string | null;
   lifecycle_recommendation?: string | null;
   lifecycle_source?: string | null;
+  lifecycle_provider?: string | null;
   lifecycle_source_url?: string | null;
   lifecycle_confidence?: string | null;
   lifecycle_checked_at?: string | null;

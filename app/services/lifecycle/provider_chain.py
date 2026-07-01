@@ -60,9 +60,11 @@ def lookup_provider_chain(
             errors.append(f"{provider.name}: circuit open")
             continue
         result = _lookup_with_timeout(provider, component, timeout_seconds=timeout_seconds)
-        if result.lifecycle_status == UNKNOWN and result.source_name == provider.name:
+        provider_error = _provider_error(result)
+        if provider_error:
             if status_tracker:
-                status_tracker.record_failure(provider.name, "unknown or timeout")
+                status_tracker.record_failure(provider.name, provider_error)
+            errors.append(f"{provider.name}: {provider_error}")
         else:
             if status_tracker:
                 status_tracker.record_success(provider.name)
@@ -90,9 +92,13 @@ def _lookup_with_timeout(
     try:
         return future.result(timeout=max(0.1, timeout_seconds))
     except FuturesTimeoutError:
-        return unknown_result(component, provider.name).canonicalized()
+        result = unknown_result(component, provider.name)
+        result.evidence = {"provider_error": "timeout"}
+        return result.canonicalized()
     except Exception:
-        return unknown_result(component, provider.name).canonicalized()
+        result = unknown_result(component, provider.name)
+        result.evidence = {"provider_error": "provider exception"}
+        return result.canonicalized()
     finally:
         executor.shutdown(wait=False, cancel_futures=True)
 
@@ -100,8 +106,16 @@ def _lookup_with_timeout(
 def _lookup_provider_safely(provider: LifecycleProvider, component: NormalizedComponent) -> LifecycleResult:
     try:
         return provider.lookup(component).canonicalized()
-    except Exception:
-        return unknown_result(component, provider.name).canonicalized()
+    except Exception as exc:
+        result = unknown_result(component, provider.name)
+        result.evidence = {"provider_error": str(exc)[:300] or "provider exception"}
+        return result.canonicalized()
+
+
+def _provider_error(result: LifecycleResult) -> str | None:
+    evidence = result.evidence if isinstance(result.evidence, dict) else {}
+    error = evidence.get("provider_error")
+    return str(error) if error else None
 
 
 __all__ = [

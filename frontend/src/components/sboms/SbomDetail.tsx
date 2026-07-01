@@ -1521,7 +1521,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                             )}
                             {(c.lifecycle_source || c.lifecycle_confidence) && (
                               <div className="truncate">
-                                {c.lifecycle_source || 'Provider'} {c.lifecycle_confidence ? `· ${c.lifecycle_confidence}` : ''}
+                                {c.lifecycle_source || c.lifecycle_provider || 'Provider'} {c.lifecycle_confidence ? `· ${c.lifecycle_confidence}` : ''}
                               </div>
                             )}
                             {c.recommended_version || c.lifecycle_recommendation ? (
@@ -1957,11 +1957,11 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                 {[
                   ['Component', `${evidenceModal.component.name}${evidenceModal.component.version ? ` @ ${evidenceModal.component.version}` : ''}`],
                   ['Status', lifecycleDisplayLabel(evidenceModal.component.lifecycle_status, evidenceModal.component.lifecycle_confidence)],
-                  ['Source', evidenceModal.component.lifecycle_source || 'Unknown'],
+                  ['Source', evidenceModal.component.lifecycle_source || evidenceModal.component.lifecycle_provider || 'Unknown'],
                   ['Confidence', evidenceModal.component.lifecycle_confidence || 'Unknown'],
                   ['Checked', formatDate(evidenceModal.component.lifecycle_checked_at)],
                   ['Stale', evidenceModal.component.lifecycle_is_stale ? 'Yes' : 'No'],
-                  ['Provider', evidenceModal.component.lifecycle_source || 'Unknown'],
+                  ['Provider', evidenceModal.component.lifecycle_source || evidenceModal.component.lifecycle_provider || 'Unknown'],
                   ['Recommendation', evidenceModal.component.lifecycle_recommendation || evidenceModal.component.recommended_version || 'None recorded'],
                 ].map(([label, value]) => (
                   <div key={label} className="rounded-lg border border-hcl-border p-3">

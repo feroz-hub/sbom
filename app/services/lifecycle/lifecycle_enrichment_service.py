@@ -169,7 +169,12 @@ class LifecycleEnrichmentService:
                 continue
 
             cache_entry = self._read_cache(db, normalized)
-            if cache_entry is not None and not force_refresh and not self._cache_expired(cache_entry):
+            if (
+                cache_entry is not None
+                and not force_refresh
+                and not self._cache_expired(cache_entry)
+                and self._should_use_cached_result(cache_entry, normalized)
+            ):
                 result = self._result_from_cache(cache_entry, normalized, stale=False)
                 summary["cache_hits"] += 1
                 for component in group:
@@ -228,7 +233,12 @@ class LifecycleEnrichmentService:
             return manual
 
         cache_entry = self._read_cache(db, normalized)
-        if cache_entry is not None and not force_refresh and not self._cache_expired(cache_entry):
+        if (
+            cache_entry is not None
+            and not force_refresh
+            and not self._cache_expired(cache_entry)
+            and self._should_use_cached_result(cache_entry, normalized)
+        ):
             result = self._result_from_cache(cache_entry, normalized, stale=False)
             self._apply_result(component, result, normalized)
             return result
@@ -420,6 +430,22 @@ class LifecycleEnrichmentService:
             return datetime.fromisoformat(cache_entry.expires_at.replace("Z", "+00:00")) <= datetime.now(UTC)
         except (AttributeError, ValueError):
             return True
+
+    def _should_use_cached_result(
+        self,
+        cache_entry: ComponentLifecycleCache,
+        component: NormalizedComponent,
+    ) -> bool:
+        status = canonical_status(cache_entry.lifecycle_status)
+        if status != UNKNOWN:
+            return True
+        evidence = cache_entry.evidence_json if isinstance(cache_entry.evidence_json, dict) else {}
+        provider_errors = evidence.get("provider_errors")
+        if isinstance(provider_errors, list) and any("circuit open" in str(error).lower() for error in provider_errors):
+            return False
+        if component.ecosystem in {"debian", "ubuntu", "alpine"} and component.purl and "distro=" in component.purl:
+            return False
+        return True
 
     def _result_from_cache(
         self,

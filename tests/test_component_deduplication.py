@@ -250,7 +250,12 @@ def test_component_list_includes_dynamic_eol_eos_status(client, unique_name):
 
         today = datetime.now(UTC).date()
         rows = [
-            SBOMComponent(sbom_id=sbom.id, name="expired", eol_date=(today - timedelta(days=1)).isoformat()),
+            SBOMComponent(
+                sbom_id=sbom.id,
+                name="expired",
+                eol_date=(today - timedelta(days=1)).isoformat(),
+                lifecycle_source="endoflife.date",
+            ),
             SBOMComponent(sbom_id=sbom.id, name="soon", eos_date=(today + timedelta(days=30)).isoformat()),
             SBOMComponent(sbom_id=sbom.id, name="future", eol_date=(today + timedelta(days=220)).isoformat()),
             SBOMComponent(sbom_id=sbom.id, name="unknown"),
@@ -267,6 +272,7 @@ def test_component_list_includes_dynamic_eol_eos_status(client, unique_name):
 
     assert by_name["expired"]["eol_eos_status"] == "expired"
     assert by_name["expired"]["eol_eos_status_label"] == "Expired"
+    assert by_name["expired"]["lifecycle_provider"] == "endoflife.date"
     assert by_name["soon"]["eol_eos_status"] == "less_than_3_months"
     assert by_name["soon"]["eol_eos_status_label"] == "Less than 3 months"
     assert by_name["future"]["eol_eos_status"] == "more_than_6_months"

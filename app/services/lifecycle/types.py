@@ -116,14 +116,14 @@ def canonical_status(value: str | None) -> str:
         return EOF
     if "deprecated" in lower_cleaned:
         return DEPRECATED
-    if "unsupported" in lower_cleaned:
-        return UNSUPPORTED
-    if "unmaintained" in lower_cleaned:
-        return UNSUPPORTED
     if "eol soon" in lower_cleaned or "nearing eol" in lower_cleaned:
         return EOL_SOON
     if "possibly unmaintained" in lower_cleaned:
         return POSSIBLY_UNMAINTAINED
+    if "unsupported" in lower_cleaned:
+        return UNSUPPORTED
+    if "unmaintained" in lower_cleaned:
+        return UNSUPPORTED
     return UNKNOWN
 
 
