@@ -8,6 +8,41 @@ from typing import Any
 from .component_normalizer import normalize_component
 
 
+def get_fallback_identity_key(comp: dict[str, Any]) -> str:
+    """Deterministic identity key for components that yield no normalized key.
+
+    Pure string logic (no DB / services / HTTP) so it is safe to import from
+    ``app.validation`` as well as the service layer.
+    """
+    supplier = (comp.get("supplier") or "").strip().lower()
+    name = (comp.get("name") or "").strip().lower()
+    version = (comp.get("version") or "").strip().lower()
+    comp_type = (comp.get("type") or "").strip().lower()
+
+    hashes = comp.get("hashes")
+    hash_str = ""
+    if isinstance(hashes, list):
+        hash_parts = []
+        for h in hashes:
+            if isinstance(h, dict):
+                alg = (h.get("alg") or h.get("algorithm") or "").strip().upper()
+                val = (h.get("content") or h.get("checksumValue") or "").strip().lower()
+                if alg and val:
+                    hash_parts.append(f"{alg}:{val}")
+        if hash_parts:
+            hash_str = ",".join(sorted(hash_parts))
+    elif isinstance(hashes, str) and hashes.strip():
+        hash_str = hashes.strip().lower()
+
+    return f"fallback:{supplier}:{name}:{version}:{comp_type}:{hash_str}"
+
+
+def get_component_identity_key(comp: dict[str, Any]) -> str:
+    """Normalized identity key for a component, with a deterministic fallback."""
+    normalized = normalize_component(comp).component
+    return normalized.get("normalized_component_key") or get_fallback_identity_key(comp)
+
+
 class ComponentDeduplicator:
     """Normalize components, group high-confidence identities, and mark duplicates."""
 

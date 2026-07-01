@@ -29,7 +29,6 @@ from sqlalchemy.orm import Session
 
 from ..analysis import (
     _augment_components_with_cpe,
-    deduplicate_findings,
     enrich_component_for_osv,
     extract_components,
     get_analysis_settings_multi,
@@ -67,7 +66,7 @@ from ..schemas import (
     SBOMSourceOut,
 )
 from ..services import audit_log, audit_service
-from ..services.analysis_service import compute_report_status, persist_analysis_run
+from ..services.analysis_orchestrator import create_analysis_report, finalize_analysis_run
 from ..services.repair.workspace_backfill_service import WorkspaceBackfillService
 from ..services.sbom_delete_service import SBOMDeleteConflict, SBOMDeleteService
 from ..services.sbom_document_service import (
@@ -388,131 +387,6 @@ def safe_int(value: Any, default: int = 0) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
-
-
-async def create_auto_report(
-    db: Session,
-    sbom_obj: SBOMSource,
-    *,
-    force_refresh: bool = False,
-) -> AnalysisRun | None:
-    """
-    Trigger default multi-source analysis for an SBOM and persist the run.
-
-    Uses the shared ``app.sources`` adapter runner so configured sources
-    (NVD, OSV, GitHub, VulDB, etc.) are fanned out consistently with the
-    streaming and ad-hoc analysis endpoints.
-
-    ``force_refresh`` (roadmap #2 PR-E): when True AND the source-response
-    cache is enabled, every external-source fetch IGNORES cached hits and
-    re-queries upstream — then writes the fresh result, overwriting the
-    stale entry. Scheduled scans pass ``False`` (default) so they reuse
-    cached responses; only an operator-triggered "scan fresh" should
-    pass ``True``. No-op when ``source_cache_enabled`` is False.
-    """
-    if not sbom_obj.sbom_data:
-        return None
-
-    # Extract components up front so we can short-circuit empty SBOMs without
-    # paying for any outbound HTTP, and so we can pass the same component list
-    # into ``persist_analysis_run`` for component-row upserting.
-    try:
-        components_raw = extract_components(sbom_obj.sbom_data)
-
-        # Deduplicate components before scanning
-        try:
-            sbom_dict = json.loads(sbom_obj.sbom_data) if isinstance(sbom_obj.sbom_data, str) else sbom_obj.sbom_data
-        except Exception:
-            sbom_dict = {}
-        dependencies = []
-        if isinstance(sbom_dict, dict):
-            if sbom_dict.get("bomFormat") == "CycloneDX":
-                dependencies = sbom_dict.get("dependencies") or []
-            elif sbom_dict.get("spdxVersion") or sbom_dict.get("SPDXID"):
-                dependencies = sbom_dict.get("relationships") or []
-
-        from ..services.component_deduplication_service import ComponentDeduplicationService
-
-        canonical_raw, _, _, _, _ = ComponentDeduplicationService.deduplicate_components(components_raw, dependencies)
-
-        components_raw = [enrich_component_for_osv(c) for c in canonical_raw]
-        components, _ = _augment_components_with_cpe(components_raw)
-    except Exception as exc:
-        log.warning("Component extraction failed for SBOM id=%d: %s", sbom_obj.id, exc)
-        return None
-
-    if not components:
-        return None
-
-    started_on = now_iso()
-    started_at = time.perf_counter()
-
-    cfg = get_analysis_settings_multi()
-    if force_refresh:
-        # Per-run override via ``dataclasses.replace`` — never mutate
-        # the cached singleton, which is shared across requests.
-        from dataclasses import replace as _dc_replace
-
-        cfg = _dc_replace(cfg, source_cache_force_refresh=True)
-    sources_used = configured_default_sources()
-    try:
-        raw_findings, all_errors, all_warnings = await run_sources_concurrently(
-            sources=build_source_adapters(sources_used),
-            components=components,
-            settings=cfg,
-        )
-    except Exception as exc:
-        log.error("Auto-analysis failed for SBOM id=%d: %s", sbom_obj.id, exc, exc_info=True)
-        return None
-
-    final_findings: list[dict] = deduplicate_findings(raw_findings)
-
-    buckets = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "UNKNOWN": 0}
-    for f in final_findings:
-        sev = str((f or {}).get("severity", "UNKNOWN")).upper()
-        buckets[sev if sev in buckets else "UNKNOWN"] += 1
-
-    details: dict = {
-        "total_components": len(components),
-        "components_with_cpe": sum(1 for c in components if c.get("cpe")),
-        "total_findings": len(final_findings),
-        "critical": buckets["CRITICAL"],
-        "high": buckets["HIGH"],
-        "medium": buckets["MEDIUM"],
-        "low": buckets["LOW"],
-        "unknown": buckets["UNKNOWN"],
-        "query_errors": all_errors,
-        "query_warnings": all_warnings,
-        "findings": final_findings,
-        "analysis_metadata": {
-            "sources": sources_used,
-            "provider_status": [
-                warning["provider_status"]
-                for warning in all_warnings
-                if isinstance(warning, dict) and isinstance(warning.get("provider_status"), dict)
-            ],
-        },
-    }
-
-    run_status = compute_report_status(len(final_findings), all_errors)
-    source_label = ",".join(sources_used)
-    if all_errors:
-        source_label += " (partial)"
-
-    duration_ms = int((time.perf_counter() - started_at) * 1000)
-    run = persist_analysis_run(
-        db=db,
-        sbom_obj=sbom_obj,
-        details=details,
-        components=components,
-        run_status=run_status,
-        source=source_label,
-        started_on=started_on,
-        completed_on=now_iso(),
-        duration_ms=duration_ms,
-    )
-    db.commit()
-    return run
 
 
 def _sse_event(event_type: str, data: dict) -> str:
@@ -1463,7 +1337,7 @@ async def run_analysis_for_sbom(
             log.warning("Analysis requested for unknown SBOM id=%d", sbom_id)
             raise HTTPException(status_code=404, detail="SBOM not found")
         try:
-            report = await create_auto_report(db, sbom, force_refresh=force_refresh)
+            report = await create_analysis_report(db, sbom, force_refresh=force_refresh)
         except Exception as exc:
             db.rollback()
             log.error("Analysis run failed for SBOM id=%d: %s", sbom_id, exc, exc_info=True)
@@ -1690,57 +1564,33 @@ async def analyze_sbom_stream(
                 # Surface any unhandled exception from inside _drive_runner.
                 orchestrator.result()
 
-            final_findings = deduplicate_findings(all_findings)
-
-            buckets = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "UNKNOWN": 0}
-            for f in final_findings:
-                sev = str((f or {}).get("severity", "UNKNOWN")).upper()
-                buckets[sev if sev in buckets else "UNKNOWN"] += 1
-
-            details: dict = {
-                "total_components": len(components),
-                "components_with_cpe": sum(1 for c in components if c.get("cpe")),
-                "total_findings": len(final_findings),
-                "critical": buckets["CRITICAL"],
-                "high": buckets["HIGH"],
-                "medium": buckets["MEDIUM"],
-                "low": buckets["LOW"],
-                "unknown": buckets["UNKNOWN"],
-                "query_errors": all_errors,
-                "findings": final_findings,
-                "analysis_metadata": {
-                    "sources": sources,
-                    "provider_status": [
-                        warning["provider_status"]
-                        for warning in all_warnings
-                        if isinstance(warning, dict) and isinstance(warning.get("provider_status"), dict)
-                    ],
-                },
-            }
-
-            run_status = compute_report_status(len(final_findings), all_errors)
-            source_label = ",".join(sources)
-            if all_errors:
-                source_label += " (partial)"
-
+            # Shared finalization (dedup, severity buckets, report details, status,
+            # persistence) lives in the orchestrator service — same code path as
+            # the batch endpoint. ``include_query_warnings=False`` preserves the
+            # stream report's historical shape.
             duration_ms = elapsed()
-            run = persist_analysis_run(
-                db=db,
-                sbom_obj=sbom_row,
-                details=details,
+            result = finalize_analysis_run(
+                db,
+                sbom_row,
                 components=components,
-                run_status=run_status,
-                source=source_label,
+                raw_findings=all_findings,
+                all_errors=all_errors,
+                all_warnings=all_warnings,
+                sources_used=sources,
                 started_on=run_started_on,
-                completed_on=now_iso(),
                 duration_ms=duration_ms,
                 existing_run=run,
+                include_query_warnings=False,
             )
             db.commit()
 
+            run = result.run
+            buckets = result.buckets
+            final_findings = result.final_findings
+
             complete_payload = {
                 "runId": run.id,
-                "status": run_status,
+                "status": result.run_status,
                 "total": len(final_findings),
                 "critical": buckets["CRITICAL"],
                 "high": buckets["HIGH"],
@@ -1749,7 +1599,7 @@ async def analyze_sbom_stream(
                 "unknown": buckets["UNKNOWN"],
                 "errors": len(all_errors),
                 "duration_ms": duration_ms,
-                "provider_status": details["analysis_metadata"]["provider_status"],
+                "provider_status": result.details["analysis_metadata"]["provider_status"],
             }
             if idem:
                 put_cached(f"analyze_stream:{sbom_id}", idem, complete_payload)

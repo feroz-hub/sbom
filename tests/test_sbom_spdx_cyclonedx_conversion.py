@@ -171,7 +171,9 @@ class TestSpdxToCyclonedxConversionApi:
 
     def test_convert_spdx_creates_converted_sbom(self, client):
         sbom_id = _upload_spdx(client)
-        original = client.get(f"/api/sboms/{sbom_id}").json()
+        # Raw document content is opt-in via ?include_raw=true (matches the
+        # frontend and other tests); the default detail response omits it.
+        original = client.get(f"/api/sboms/{sbom_id}?include_raw=true").json()
         original_data = original["sbom_data"]
 
         convert = client.post(f"/api/sboms/{sbom_id}/convert/cyclonedx")
@@ -184,12 +186,12 @@ class TestSpdxToCyclonedxConversionApi:
         assert body["enrichment_status"] == "pending"
         assert "background" in body["message"].lower()
 
-        refreshed = client.get(f"/api/sboms/{sbom_id}").json()
+        refreshed = client.get(f"/api/sboms/{sbom_id}?include_raw=true").json()
         assert refreshed["sbom_data"] == original_data
         assert refreshed["converted_sbom_id"] == body["converted_sbom_id"]
         assert refreshed["conversion_status"] in {"completed", "completed_with_warnings"}
 
-        converted = client.get(f"/api/sboms/{body['converted_sbom_id']}").json()
+        converted = client.get(f"/api/sboms/{body['converted_sbom_id']}?include_raw=true").json()
         converted_doc = json.loads(converted["sbom_data"])
         assert converted_doc.get("bomFormat") == "CycloneDX"
 
@@ -207,7 +209,8 @@ class TestSpdxToCyclonedxConversionApi:
 
     def test_export_original_spdx_unchanged(self, client):
         sbom_id = _upload_spdx(client)
-        before = client.get(f"/api/sboms/{sbom_id}").json()["sbom_data"]
+        # Raw content is opt-in via ?include_raw=true (default detail omits it).
+        before = client.get(f"/api/sboms/{sbom_id}?include_raw=true").json()["sbom_data"]
         client.post(f"/api/sboms/{sbom_id}/convert/cyclonedx")
         export = client.get(f"/api/sboms/{sbom_id}/export?export_mode=original")
         assert export.status_code == 200

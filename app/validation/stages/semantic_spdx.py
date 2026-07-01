@@ -59,7 +59,7 @@ def run(ctx: ValidationContext) -> ValidationContext:
     _check_created(((doc.get("creationInfo") or {}).get("created")), ctx)
 
     seen_identities: dict[str, int] = {}
-    from ...services.component_deduplication_service import get_component_identity_key
+    from app.normalization.component_deduplicator import get_component_identity_key
 
     for index, pkg in enumerate(doc.get("packages") or []):
         if not isinstance(pkg, dict):

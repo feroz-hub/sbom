@@ -6,6 +6,8 @@ from typing import Any
 
 from app.normalization.component_deduplicator import (
     ComponentDeduplicator,
+    get_component_identity_key,  # noqa: F401  re-exported for service-layer callers
+    get_fallback_identity_key,  # noqa: F401  re-exported for service-layer callers
 )
 from app.normalization.component_deduplicator import (
     choose_canonical_component as _choose_canonical_component,
@@ -32,33 +34,10 @@ def get_cpe_identity_key(cpe_str: str | None) -> str | None:
     return str(key) if key and str(key).startswith("cpe:") else None
 
 
-def get_fallback_identity_key(comp: dict) -> str:
-    supplier = (comp.get("supplier") or "").strip().lower()
-    name = (comp.get("name") or "").strip().lower()
-    version = (comp.get("version") or "").strip().lower()
-    comp_type = (comp.get("type") or "").strip().lower()
-
-    hashes = comp.get("hashes")
-    hash_str = ""
-    if isinstance(hashes, list):
-        hash_parts = []
-        for h in hashes:
-            if isinstance(h, dict):
-                alg = (h.get("alg") or h.get("algorithm") or "").strip().upper()
-                val = (h.get("content") or h.get("checksumValue") or "").strip().lower()
-                if alg and val:
-                    hash_parts.append(f"{alg}:{val}")
-        if hash_parts:
-            hash_str = ",".join(sorted(hash_parts))
-    elif isinstance(hashes, str) and hashes.strip():
-        hash_str = hashes.strip().lower()
-
-    return f"fallback:{supplier}:{name}:{version}:{comp_type}:{hash_str}"
-
-
-def get_component_identity_key(comp: dict) -> str:
-    normalized = normalize_component(comp).component
-    return normalized.get("normalized_component_key") or get_fallback_identity_key(comp)
+# ``get_component_identity_key`` / ``get_fallback_identity_key`` now live in the
+# validation-safe ``app.normalization.component_deduplicator`` and are re-exported
+# here for backward compatibility (services import them from this facade). The
+# dependency direction is services -> validation-safe helper.
 
 
 def get_metadata_completeness(comp: dict) -> int:

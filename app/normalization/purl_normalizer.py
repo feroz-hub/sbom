@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
-from urllib.parse import unquote
 
 from .version_normalizer import normalize_version
 
@@ -82,10 +81,34 @@ def normalize_purl(value: Any, *, fallback_version: str | None = None) -> PurlNo
     )
 
 
+def _percent_decode(value: str) -> str:
+    """Decode percent-encoded (``%XX``) sequences as UTF-8, mirroring
+    ``urllib.parse.unquote``.
+
+    Kept dependency-free (no ``urllib``) so this module — and everything under
+    ``app.normalization`` that imports it — stays importable from
+    ``app.validation``, where import-linter forbids ``urllib``.
+    """
+    if "%" not in value:
+        return value
+    parts = value.split("%")
+    out: list[bytes] = [parts[0].encode("utf-8")]
+    for item in parts[1:]:
+        if len(item) >= 2:
+            try:
+                out.append(bytes([int(item[:2], 16)]))
+                out.append(item[2:].encode("utf-8"))
+                continue
+            except ValueError:
+                pass
+        out.append(("%" + item).encode("utf-8"))
+    return b"".join(out).decode("utf-8", errors="replace")
+
+
 def _clean_part(value: Any) -> str | None:
     if value is None:
         return None
-    cleaned = unquote(str(value).strip())
+    cleaned = _percent_decode(str(value).strip())
     return cleaned or None
 
 

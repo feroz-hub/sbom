@@ -206,10 +206,9 @@ def _check_purl(value: object, path: str, ctx: ValidationContext) -> None:
             spec_reference="CycloneDX 1.6 §4.4.1",
         )
         return
-    from ...services.lifecycle.normalizer import parse_purl
+    from app.normalization.purl_normalizer import normalize_purl
 
-    parsed = parse_purl(value)
-    if parsed is None:
+    if not normalize_purl(value).valid:
         ctx.report.add(
             E.E052_PURL_INVALID,
             stage=_STAGE,

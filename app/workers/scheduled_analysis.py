@@ -162,7 +162,7 @@ def analyze_sbom_async(
     scans defaults to using the cache.
     """
     from app.db import SessionLocal
-    from app.routers.sboms_crud import create_auto_report
+    from app.services.analysis_orchestrator import create_analysis_report
 
     db: Session = SessionLocal()
     try:
@@ -192,7 +192,7 @@ def analyze_sbom_async(
         try:
             # run_task_async (not bare asyncio.run) so the shared httpx client
             # is created on — and closed with — this task's own event loop.
-            run = run_task_async(create_auto_report(db, sbom, force_refresh=force_refresh))
+            run = run_task_async(create_analysis_report(db, sbom, force_refresh=force_refresh))
         except Exception as exc:
             log.exception(
                 "scheduled_analysis_run_failed",

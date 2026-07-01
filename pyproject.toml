@@ -79,6 +79,9 @@ explicit_package_bases = true
 
 [tool.importlinter]
 root_package = "app"
+# Required so the "Validation never makes runtime HTTP requests" contract can
+# graph external packages (requests / httpx / urllib.request) that it forbids.
+include_external_packages = true
 
 [[tool.importlinter.contracts]]
 name = "Parsing does not depend on HTTP or routers"
@@ -114,10 +117,13 @@ type = "forbidden"
 source_modules = [
     "app.validation",
 ]
+# import-linter forbids external subpackages (e.g. ``urllib.request``); forbid
+# the whole ``urllib`` package instead. This is stricter, not weaker, and safe:
+# app.validation imports no urllib at all (URL parsing lives outside validation).
 forbidden_modules = [
     "requests",
     "httpx",
-    "urllib.request",
+    "urllib",
 ]
 
 [tool.setuptools.packages.find]
