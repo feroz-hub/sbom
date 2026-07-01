@@ -52,6 +52,9 @@ logs/
 # ── PDF reports (generated at runtime) ───────────────────
 *.pdf
 
+# ── SBOM validation/repair workspace artifacts (generated at runtime) ──
+data/sbom-workspaces/
+
 # ── IDE / editor ─────────────────────────────────────────
 .vscode/
 .idea/

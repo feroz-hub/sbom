@@ -166,6 +166,82 @@ def test_sbom_list_selects_latest_run_when_multiple_exist(client, db):
     assert row["latest_analysis"]["error_message"] == "newer failed"
 
 
+def test_rename_sbom_propagates_name_to_analysis_runs(client, db):
+    """PATCH /api/sboms/{id} with a new name updates the denormalized
+    analysis_run.sbom_name on every related run, in the same transaction."""
+    created_by = f"rename-{uuid4().hex}"
+    old_name = f"old-{created_by}"
+    sbom = _seed_sbom(db, name=old_name, created_by=created_by)
+    run_a = _seed_run(db, sbom=sbom, status="OK")
+    run_b = _seed_run(db, sbom=sbom, status="FINDINGS", total_findings=1)
+    run_a.sbom_name = old_name
+    run_b.sbom_name = old_name
+    db.commit()
+
+    new_name = f"new-{created_by}"
+    resp = client.patch(f"/api/sboms/{sbom.id}", json={"name": new_name}, params={"user_id": created_by})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["sbom_name"] == new_name
+
+    db.expire_all()
+    for run in (run_a, run_b):
+        assert db.get(AnalysisRun, run.id).sbom_name == new_name
+
+
+def test_rename_sbom_does_not_touch_runs_when_name_unchanged(client, db):
+    """A PATCH that keeps the same name leaves related runs untouched (the
+    propagation only fires when the name actually changes)."""
+    created_by = f"norename-{uuid4().hex}"
+    name = f"stable-{created_by}"
+    sbom = _seed_sbom(db, name=name, created_by=created_by)
+    run = _seed_run(db, sbom=sbom, status="OK")
+    # A run whose denormalized name deliberately differs; a no-op rename (same
+    # name) must NOT rewrite it, proving the change-detection guard.
+    run.sbom_name = "drifted-name"
+    db.commit()
+
+    resp = client.patch(f"/api/sboms/{sbom.id}", json={"name": name}, params={"user_id": created_by})
+    assert resp.status_code == 200, resp.text
+
+    db.expire_all()
+    assert db.get(AnalysisRun, run.id).sbom_name == "drifted-name"
+
+
+def test_rename_sbom_only_updates_owning_tenant_runs(client, db):
+    """Renaming a tenant-1 SBOM must not alter another tenant's analysis runs."""
+    created_by = f"rename-tenant-{uuid4().hex}"
+    default_sbom = _seed_sbom(db, name=f"default-{created_by}", created_by=created_by)
+    default_run = _seed_run(db, sbom=default_sbom, status="OK")
+    default_run.sbom_name = default_sbom.sbom_name
+
+    now = datetime.now(UTC)
+    other_tenant = Tenant(
+        name=f"Tenant {created_by}",
+        slug=f"tenant-{uuid4().hex}",
+        external_iam_tenant_id=f"tenant-ext-{uuid4().hex}",
+        status="ACTIVE",
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(other_tenant)
+    db.flush()
+    with tenant_scope(minimal_background_context(other_tenant.id, other_tenant.external_iam_tenant_id)):
+        other_sbom = _seed_sbom(db, name=f"other-{created_by}", tenant_id=other_tenant.id, created_by=created_by)
+        other_run = _seed_run(db, sbom=other_sbom, status="OK")
+        other_run.sbom_name = "other-original"
+    db.commit()
+    other_run_id = other_run.id
+
+    new_name = f"renamed-{created_by}"
+    resp = client.patch(f"/api/sboms/{default_sbom.id}", json={"name": new_name}, params={"user_id": created_by})
+    assert resp.status_code == 200, resp.text
+
+    db.expire_all()
+    assert db.get(AnalysisRun, default_run.id).sbom_name == new_name
+    # The other tenant's run is untouched.
+    assert db.get(AnalysisRun, other_run_id).sbom_name == "other-original"
+
+
 def test_sbom_list_latest_analysis_preserves_tenant_isolation(client, db):
     created_by = f"latest-tenant-{uuid4().hex}"
     default_sbom = _seed_sbom(db, name=f"default-{created_by}", created_by=created_by)

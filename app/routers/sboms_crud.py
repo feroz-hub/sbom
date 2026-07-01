@@ -1191,7 +1191,19 @@ def update_sbom(
         )
 
     if "name" in data:
-        sbom.sbom_name = data["name"]
+        new_name = data["name"]
+        sbom.sbom_name = new_name
+        # Propagate the rename to the denormalized copy on related analysis runs,
+        # in this same transaction and tenant-scoped. Only when the name changed
+        # (replaces the removed startup-time _update_sbom_names re-sync).
+        if new_name != old_name:
+            from sqlalchemy import update as sa_update
+
+            db.execute(
+                sa_update(AnalysisRun)
+                .where(AnalysisRun.sbom_id == sbom.id, AnalysisRun.tenant_id == sbom.tenant_id)
+                .values(sbom_name=new_name)
+            )
     if "product_name" in data:
         sbom.product_name = data["product_name"]
     if "product_version" in data:

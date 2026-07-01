@@ -186,30 +186,11 @@ def test_revalidate_400_when_sbom_data_missing(client):
     assert detail["code"] == "sbom_data_missing"
 
 
-def test_legacy_rows_get_reclassified_to_pending_at_startup(client):
-    """The startup-time equivalent of migration 013 (in app.main._ensure_seed_data)
-    fires the same UPDATE so SQLite dev DBs don't need an alembic run.
-
-    Asserting through the running TestClient confirms the reclassification
-    is in effect by the time the first request is served.
-    """
-    name = _unique("startup-legacy")
-    # Insert a legacy-shaped row WITHOUT going through the route. This
-    # mimics what migration 012's server_default did to pre-existing rows:
-    # status='validated', validated_at IS NULL.
-    sbom_id = _seed_legacy_row(client, name, json.dumps(_SNYK_REPORT))
-
-    # Re-trigger the startup helper as a test would experience post-restart.
-    from app.main import _ensure_seed_data
-
-    _ensure_seed_data()
-
-    fetched = client.get(f"/api/sboms/{sbom_id}").json()
-    assert fetched["status"] == "pending"
-    assert fetched["validated_at"] is None
-    # Reclassification doesn't manufacture validation history.
-    assert fetched["validation_errors"] is None
-    assert fetched["failed_stage"] is None
+# The legacy 'validated' -> 'pending' reclassification is owned by Alembic
+# migration 013. DB Schema Management Phase 4 removed the duplicate per-boot
+# startup backfill (app.main._ensure_seed_data no longer re-runs it), so the
+# coverage moved to a disposable-DB migration test:
+# test_schema_management_safety.py::test_migration_013_reclassifies_legacy_validated_rows.
 
 
 @pytest.mark.parametrize("scenario", ["snyk", "clean"])

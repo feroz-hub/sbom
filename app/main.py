@@ -45,7 +45,7 @@ from datetime import UTC, datetime
 from . import error_handlers
 from .auth import validate_auth_setup
 from .core.security import enforce_request_access
-from .db import Base, SessionLocal, engine
+from .db import SessionLocal, engine
 from .http_client import close_async_http_client, init_async_http_client
 from .middleware import MaxBodySizeMiddleware
 
@@ -89,364 +89,82 @@ settings = get_settings()
 APP_VERSION = settings.APP_VERSION
 
 
-def _ensure_text_column(table_name: str, column_name: str) -> None:
-    """Idempotent ALTER TABLE … ADD COLUMN for SQLite text columns."""
-    if engine.dialect.name != "sqlite":
-        return
-    with engine.connect() as conn:
-        existing = {row[1] for row in conn.execute(text(f"PRAGMA table_info({table_name})"))}
-        if column_name in existing:
-            return
-        conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} TEXT"))
-        conn.commit()
+def _run_alembic(*args: str) -> None:
+    """Invoke the Alembic CLI in a subprocess bound to the current DB URL.
 
-
-def _ensure_column(table_name: str, column_name: str, type_sql: str, default_sql: str | None = None) -> None:
-    """Idempotent ALTER TABLE for SQLite columns of an arbitrary type.
-
-    SQLite forbids non-constant defaults in ``ADD COLUMN``; the caller
-    must pass a literal (e.g. ``"'validated'"``, ``"0"``) when the
-    column is ``NOT NULL``.
+    Runs out-of-process so Alembic's ``fileConfig`` logging setup and its own
+    engine never clobber the running app. Used only for SQLite dev/test schema
+    bootstrap — PostgreSQL is migrated by operators, never here.
     """
-    if engine.dialect.name != "sqlite":
-        return
-    with engine.connect() as conn:
-        existing = {row[1] for row in conn.execute(text(f"PRAGMA table_info({table_name})"))}
-        if column_name in existing:
-            return
-        ddl = f"ALTER TABLE {table_name} ADD COLUMN {column_name} {type_sql}"
-        if default_sql is not None:
-            ddl += f" DEFAULT {default_sql}"
-        conn.execute(text(ddl))
-        conn.commit()
+    import os
+    import subprocess
+    import sys
+
+    root = Path(__file__).resolve().parent.parent
+    env = dict(os.environ)
+    env["DATABASE_URL"] = str(engine.url)
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "alembic", *args],
+            cwd=str(root),
+            env=env,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:  # pragma: no cover - startup failure path
+        raise RuntimeError(
+            f"alembic {' '.join(args)} failed during SQLite schema bootstrap:\n{exc.stderr}"
+        ) from exc
 
 
-def _ensure_remediation_audit_table() -> None:
-    """Create the remediation audit table for legacy SQLite databases."""
-    if engine.dialect.name != "sqlite":
-        return
-    with engine.begin() as conn:
-        tables = {row[0] for row in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))}
-        if "vulnerability_remediation_audit" in tables:
-            return
-        conn.execute(
-            text(
-                """
-                CREATE TABLE vulnerability_remediation_audit (
-                    id INTEGER PRIMARY KEY,
-                    remediation_id INTEGER NOT NULL REFERENCES vulnerability_remediation(id) ON DELETE CASCADE,
-                    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-                    vuln_id VARCHAR NOT NULL,
-                    component_name VARCHAR NOT NULL,
-                    component_version VARCHAR NOT NULL,
-                    old_status VARCHAR,
-                    new_status VARCHAR NOT NULL,
-                    changed_by VARCHAR(128),
-                    changed_at VARCHAR NOT NULL,
-                    note TEXT
-                )
-                """
-            )
-        )
-        conn.execute(
-            text(
-                "CREATE INDEX ix_vulnerability_remediation_audit_remediation_id "
-                "ON vulnerability_remediation_audit (remediation_id)"
-            )
-        )
-        conn.execute(
-            text(
-                "CREATE INDEX ix_vulnerability_remediation_audit_project_id "
-                "ON vulnerability_remediation_audit (project_id)"
-            )
-        )
-        conn.execute(
-            text("CREATE INDEX ix_vulnerability_remediation_audit_vuln_id ON vulnerability_remediation_audit (vuln_id)")
-        )
-        conn.execute(
-            text(
-                "CREATE INDEX ix_vulnerability_remediation_audit_component_name "
-                "ON vulnerability_remediation_audit (component_name)"
-            )
-        )
-        conn.execute(
-            text(
-                "CREATE INDEX ix_vulnerability_remediation_audit_changed_at "
-                "ON vulnerability_remediation_audit (changed_at)"
-            )
-        )
+def _bootstrap_sqlite_schema() -> None:
+    """Create/upgrade the SQLite dev/test schema via Alembic (source of truth).
 
+    * Empty DB                     -> ``alembic upgrade head`` builds it.
+    * Tables but no ``alembic_version`` (a legacy DB from the pre-Phase-3
+      ``create_all`` path) -> ``alembic stamp head`` with a warning; its schema
+      already matches head, so migration 001 is never re-run over live tables.
+    * Has ``alembic_version``      -> left to ``_verify_schema_is_current`` to
+      confirm it is at head (cheap; no subprocess on the hot re-entry path).
+    """
+    from sqlalchemy import inspect
 
-def _ensure_validation_repair_tables() -> None:
-    """Create validation repair tables for legacy SQLite databases."""
-    if engine.dialect.name != "sqlite":
-        return
-    with engine.begin() as conn:
-        tables = {row[0] for row in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))}
-        if "sbom_validation_sessions" not in tables:
-            conn.execute(
-                text(
-                    """
-                    CREATE TABLE sbom_validation_sessions (
-                        id VARCHAR(36) PRIMARY KEY,
-                        project_id INTEGER REFERENCES projects(id),
-                        user_id VARCHAR(128),
-                        original_filename VARCHAR(255),
-                        sbom_name VARCHAR(255),
-                        sbom_type INTEGER REFERENCES sbom_type(id),
-                        content_type VARCHAR(255),
-                        file_size_bytes INTEGER,
-                        sha256 VARCHAR(64),
-                        original_size_bytes INTEGER,
-                        original_sha256 VARCHAR(64),
-                        stored_size_bytes INTEGER,
-                        stored_sha256 VARCHAR(64),
-                        storage_backend VARCHAR(32),
-                        detected_format VARCHAR(64),
-                        detected_version VARCHAR(64),
-                        detection_confidence FLOAT,
-                        detection_evidence_json JSON,
-                        raw_content_text TEXT,
-                        raw_content_blob BLOB,
-                        raw_storage_path VARCHAR(1024),
-                        sanitized_content TEXT,
-                        current_content TEXT,
-                        repair_content_text TEXT,
-                        repair_content_blob BLOB,
-                        repair_storage_path VARCHAR(1024),
-                        validation_status VARCHAR(32) NOT NULL DEFAULT 'failed',
-                        validation_errors_json JSON,
-                        stage_results_json JSON,
-                        latest_error_report_json JSON,
-                        total_lines INTEGER,
-                        is_large_file BOOLEAN NOT NULL DEFAULT 0,
-                        full_editor_allowed BOOLEAN NOT NULL DEFAULT 1,
-                        can_edit BOOLEAN NOT NULL DEFAULT 1,
-                        can_ai_fix BOOLEAN NOT NULL DEFAULT 1,
-                        security_blocked_reason TEXT,
-                        content_sha256 VARCHAR(64),
-                        created_at VARCHAR NOT NULL,
-                        updated_at VARCHAR NOT NULL,
-                        expires_at VARCHAR NOT NULL,
-                        imported_sbom_id INTEGER REFERENCES sbom_source(id)
-                    )
-                    """
-                )
-            )
-        existing_columns = {
-            row[1]
-            for row in conn.execute(text("PRAGMA table_info(sbom_validation_sessions)"))
-        }
-        for column_name, column_type in (
-            ("content_type", "VARCHAR(255)"),
-            ("file_size_bytes", "INTEGER"),
-            ("sha256", "VARCHAR(64)"),
-            ("original_size_bytes", "INTEGER"),
-            ("original_sha256", "VARCHAR(64)"),
-            ("stored_size_bytes", "INTEGER"),
-            ("stored_sha256", "VARCHAR(64)"),
-            ("storage_backend", "VARCHAR(32)"),
-            ("raw_content_text", "TEXT"),
-            ("raw_content_blob", "BLOB"),
-            ("raw_storage_path", "VARCHAR(1024)"),
-            ("repair_content_text", "TEXT"),
-            ("repair_content_blob", "BLOB"),
-            ("repair_storage_path", "VARCHAR(1024)"),
-            ("validation_errors_json", "JSON"),
-            ("stage_results_json", "JSON"),
-            ("total_lines", "INTEGER"),
-            ("detection_confidence", "FLOAT"),
-            ("detection_evidence_json", "JSON"),
-            ("is_large_file", "BOOLEAN NOT NULL DEFAULT 0"),
-            ("full_editor_allowed", "BOOLEAN NOT NULL DEFAULT 1"),
-        ):
-            if column_name not in existing_columns:
-                conn.execute(text(f"ALTER TABLE sbom_validation_sessions ADD COLUMN {column_name} {column_type}"))
-        if "sbom_validation_session_events" not in tables:
-            conn.execute(
-                text(
-                    """
-                    CREATE TABLE sbom_validation_session_events (
-                        id INTEGER PRIMARY KEY,
-                        session_id VARCHAR(36) NOT NULL REFERENCES sbom_validation_sessions(id) ON DELETE CASCADE,
-                        event_type VARCHAR(64) NOT NULL,
-                        actor_user_id VARCHAR(128),
-                        timestamp VARCHAR NOT NULL,
-                        summary TEXT,
-                        before_hash VARCHAR(64),
-                        after_hash VARCHAR(64),
-                        metadata_json JSON
-                    )
-                    """
-                )
-            )
-        for ddl in (
-            "CREATE INDEX IF NOT EXISTS ix_sbom_validation_sessions_project_id ON sbom_validation_sessions (project_id)",
-            "CREATE INDEX IF NOT EXISTS ix_sbom_validation_sessions_user_id ON sbom_validation_sessions (user_id)",
-            "CREATE INDEX IF NOT EXISTS ix_sbom_validation_sessions_validation_status ON sbom_validation_sessions (validation_status)",
-            "CREATE INDEX IF NOT EXISTS ix_sbom_validation_sessions_content_sha256 ON sbom_validation_sessions (content_sha256)",
-            "CREATE INDEX IF NOT EXISTS ix_sbom_validation_sessions_sha256 ON sbom_validation_sessions (sha256)",
-            "CREATE INDEX IF NOT EXISTS ix_sbom_validation_sessions_original_sha256 ON sbom_validation_sessions (original_sha256)",
-            "CREATE INDEX IF NOT EXISTS ix_sbom_validation_sessions_stored_sha256 ON sbom_validation_sessions (stored_sha256)",
-            "CREATE INDEX IF NOT EXISTS ix_sbom_validation_sessions_created_at ON sbom_validation_sessions (created_at)",
-            "CREATE INDEX IF NOT EXISTS ix_sbom_validation_sessions_expires_at ON sbom_validation_sessions (expires_at)",
-            "CREATE INDEX IF NOT EXISTS ix_sbom_validation_sessions_imported_sbom_id ON sbom_validation_sessions (imported_sbom_id)",
-            "CREATE INDEX IF NOT EXISTS ix_sbom_validation_session_events_session_id ON sbom_validation_session_events (session_id)",
-            "CREATE INDEX IF NOT EXISTS ix_sbom_validation_session_events_event_type ON sbom_validation_session_events (event_type)",
-            "CREATE INDEX IF NOT EXISTS ix_sbom_validation_session_events_actor_user_id ON sbom_validation_session_events (actor_user_id)",
-            "CREATE INDEX IF NOT EXISTS ix_sbom_validation_session_events_timestamp ON sbom_validation_session_events (timestamp)",
-        ):
-            conn.execute(text(ddl))
+    tables = set(inspect(engine).get_table_names())
+    if not tables:
+        _run_alembic("upgrade", "head")
+    elif "alembic_version" not in tables:
+        log.warning(
+            "sqlite_legacy_db_without_alembic_version: stamping Alembic head "
+            "(schema assumed current from the legacy create_all path). If the "
+            "app later reports missing columns, run 'alembic upgrade head'."
+        )
+        _run_alembic("stamp", "head")
 
 
 def _ensure_seed_data() -> None:
-    """Prepare legacy SQLite or validate PostgreSQL, then seed reference data."""
-    # Enforce schema check before doing any operations
-    _verify_schema_is_current()
+    """Bootstrap the schema via Alembic, then seed reference data.
 
+    Schema DDL is owned by Alembic (see ``alembic/versions/``). SQLite dev/test
+    databases are built/updated here at startup; PostgreSQL must already be at
+    the Alembic head and is never auto-upgraded (fail-closed).
+    """
     if engine.dialect.name == "sqlite":
-        Base.metadata.create_all(bind=engine)
-    elif engine.dialect.name == "postgresql":
-        # Handled by _verify_schema_is_current
-        pass
-    else:
+        _bootstrap_sqlite_schema()
+    elif engine.dialect.name != "postgresql":
         raise RuntimeError(f"Unsupported database dialect: {engine.dialect.name}")
 
-    # Lightweight migrations: add columns added in later versions of the schema
-    _ensure_text_column("analysis_run", "sbom_name")
-    _ensure_text_column("analysis_finding", "cwe")
-    _ensure_text_column("analysis_finding", "fixed_versions")
-    _ensure_text_column("analysis_finding", "attack_vector")
-    _ensure_text_column("analysis_finding", "cvss_version")
-    _ensure_text_column("analysis_finding", "aliases")
-    _ensure_text_column("run_cache", "source")
-    _ensure_text_column("run_cache", "sbom_id")
+    # Refuse to start unless the schema is at the Alembic head. For PostgreSQL
+    # this is the production fail-closed guard (no auto-upgrade); for SQLite it
+    # confirms the bootstrap above landed at head.
+    _verify_schema_is_current()
 
-    # Migration 012 — sbom_source validation columns. Idempotent for
-    # SQLite dev DBs that predate the Alembic chain. NOT NULL columns
-    # carry literal defaults so existing rows (legacy uploads) get a
-    # safe "validated" status.
-    _ensure_column("sbom_source", "status", "TEXT", "'validated'")
-    _ensure_column("sbom_source", "failed_stage", "TEXT")
-    _ensure_column("sbom_source", "validation_errors", "TEXT")
-    _ensure_column("sbom_source", "error_count", "INTEGER", "0")
-    _ensure_column("sbom_source", "warning_count", "INTEGER", "0")
-    _ensure_column("sbom_source", "validated_at", "TEXT")
-
-    # Migration 013 — reclassify legacy rows that predate the validator
-    # wiring as 'pending' (validation_at IS NULL is the unambiguous tell).
-    # Idempotent: the WHERE clause excludes already-reclassified rows.
-    if engine.dialect.name == "sqlite":
-        with engine.connect() as conn:
-            conn.execute(
-                text("UPDATE sbom_source SET status = 'pending' WHERE validated_at IS NULL AND status = 'validated'")
-            )
-            conn.commit()
-
-    # Migration 014 — soft-delete columns on the eight in-scope tables.
-    # ``Base.metadata.create_all`` already added the columns to fresh
-    # databases via the SoftDeleteMixin; these calls cover dev DBs that
-    # were created before this PR and therefore lack the columns.
-    for table in (
-        "projects",
-        "sbom_source",
-        "sbom_analysis_report",
-        "sbom_component",
-        "analysis_run",
-        "analysis_finding",
-        "analysis_schedule",
-        "ai_fix_batch",
-    ):
-        _ensure_column(table, "is_active", "BOOLEAN", "1")
-        _ensure_column(table, "deactivated_at", "TIMESTAMP")
-        _ensure_column(table, "deactivated_by", "VARCHAR(128)")
-
-    # New migrations for SBOM Lifecycle Management Platform features
-    _ensure_column("sbom_source", "parent_id", "INTEGER")
-    _ensure_column("sbom_source", "change_summary", "TEXT")
-    _ensure_column("sbom_source", "completeness_score", "FLOAT", "100.0")
-    _ensure_column("sbom_source", "completeness_report", "TEXT")
-    _ensure_column("sbom_source", "component_extraction_status", "TEXT")
-    _ensure_column("sbom_source", "component_extraction_error", "TEXT")
-    _ensure_column("sbom_source", "component_extraction_attempted_at", "TEXT")
-    _ensure_column("sbom_source", "component_extraction_completed_at", "TEXT")
-
-    _ensure_column("sbom_component", "license", "TEXT")
-    _ensure_column("sbom_component", "hashes", "TEXT")
-    _ensure_column("sbom_component", "lifecycle_status", "TEXT")
-    _ensure_column("sbom_component", "eos_date", "TEXT")
-    _ensure_column("sbom_component", "eol_date", "TEXT")
-    _ensure_column("sbom_component", "eof_date", "TEXT")
-    _ensure_column("sbom_component", "is_deprecated", "BOOLEAN", "0")
-    _ensure_column("sbom_component", "deprecated", "BOOLEAN", "0")
-    _ensure_column("sbom_component", "unsupported", "BOOLEAN", "0")
-    _ensure_column("sbom_component", "maintenance_status", "TEXT")
-    _ensure_column("sbom_component", "latest_version", "TEXT")
-    _ensure_column("sbom_component", "ecosystem", "TEXT")
-    _ensure_column("sbom_component", "latest_supported_version", "TEXT")
-    _ensure_column("sbom_component", "recommended_version", "TEXT")
-    _ensure_column("sbom_component", "lifecycle_recommendation", "TEXT")
-    _ensure_column("sbom_component", "lifecycle_source", "TEXT")
-    _ensure_column("sbom_component", "lifecycle_source_url", "TEXT")
-    _ensure_column("sbom_component", "lifecycle_confidence", "TEXT")
-    _ensure_column("sbom_component", "lifecycle_checked_at", "TEXT")
-    _ensure_column("sbom_component", "lifecycle_evidence_json", "TEXT")
-    _ensure_column("sbom_component", "lifecycle_is_stale", "BOOLEAN", "0")
-    _ensure_column("sbom_component", "lifecycle_manual_override", "BOOLEAN", "0")
-    for column, type_sql, default in (
-        ("original_name", "TEXT", None),
-        ("normalized_name", "TEXT", None),
-        ("original_version", "TEXT", None),
-        ("normalized_version", "TEXT", None),
-        ("normalized_ecosystem", "TEXT", None),
-        ("original_purl", "TEXT", None),
-        ("normalized_purl", "TEXT", None),
-        ("purl_type", "TEXT", None),
-        ("purl_namespace", "TEXT", None),
-        ("purl_name", "TEXT", None),
-        ("purl_version", "TEXT", None),
-        ("purl_qualifiers_json", "TEXT", None),
-        ("purl_subpath", "TEXT", None),
-        ("normalized_cpes", "TEXT", None),
-        ("primary_cpe", "TEXT", None),
-        ("cpe_evidence_json", "TEXT", None),
-        ("normalized_supplier", "TEXT", None),
-        ("normalized_package_key", "TEXT", None),
-        ("canonical_identity_confidence", "TEXT", None),
-        ("dedupe_canonical_id", "TEXT", None),
-        ("dedupe_group_id", "TEXT", None),
-        ("dedupe_reason", "TEXT", None),
-        ("dedupe_confidence", "TEXT", None),
-        ("normalization_notes_json", "TEXT", None),
-        ("dedupe_evidence_json", "TEXT", None),
-    ):
-        _ensure_column("sbom_component", column, type_sql, default)
-    _ensure_remediation_audit_table()
-    _ensure_validation_repair_tables()
-    for column, type_sql, default in (
-        ("lookup_key", "TEXT", None),
-        ("cpe", "TEXT", None),
-        ("unsupported", "BOOLEAN", "0"),
-        ("latest_version", "TEXT", None),
-        ("is_stale", "BOOLEAN", "0"),
-    ):
-        _ensure_column("component_lifecycle_cache", column, type_sql, default)
-
-    for column, type_sql in (
-        ("source_url", "TEXT"),
-        ("discovery_evidence_json", "TEXT"),
-        ("last_refresh_status", "TEXT"),
-        ("provider_errors_json", "TEXT"),
-    ):
-        _ensure_column("vex_documents", column, type_sql)
+    # Data backfills that were previously run here on every boot now live in
+    # Alembic migrations (owned by the chain): the legacy status reclassification
+    # is migration 013, and analysis_run.sbom_name backfill is migration 040.
 
     db = SessionLocal()
     try:
-        # PostgreSQL schema DDL belongs exclusively to Alembic. This
-        # compatibility index is retained only for legacy SQLite files.
-        if engine.dialect.name == "sqlite":
-            db.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_sbom_type_typename ON sbom_type(typename)"))
-
         # Seed the local development identity. Production HCL IAM users are
         # mapped from validated claims and explicit tenant memberships.
         from .models import IAMUser, Tenant, TenantUser
@@ -598,23 +316,6 @@ def _verify_schema_is_current() -> None:
                 raise RuntimeError("Database schema is not up to date. Run alembic upgrade head.")
 
 
-def _update_sbom_names() -> None:
-    """Backfill analysis_run.sbom_name from sbom_source for legacy rows."""
-    with engine.begin() as conn:
-        conn.execute(
-            text(
-                """
-                UPDATE analysis_run
-                SET sbom_name = (
-                    SELECT sbom_name
-                    FROM sbom_source
-                    WHERE sbom_source.id = analysis_run.sbom_id
-                )
-                """
-            )
-        )
-
-
 def _reconcile_zombie_ai_fix_batches() -> None:
     """Mark batches that were in-flight when the previous process exited
     as failed.
@@ -676,7 +377,6 @@ async def lifespan(app: FastAPI):
         log.error("Failed to parse database URL for logging: %s", e)
 
     _ensure_seed_data()
-    _update_sbom_names()
     _reconcile_zombie_ai_fix_batches()
     validate_auth_setup()
     log.info("Startup complete. API ready.")

@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -65,6 +66,22 @@ os.environ.pop("API_AUTH_TOKENS", None)
 os.environ.pop("GITHUB_TOKEN", None)
 os.environ.pop("NVD_API_KEY", None)
 os.environ.pop("VULNDB_API_KEY", None)
+
+# Redirect SBOM validation/repair workspace storage to a disposable temp dir so
+# tests never write runtime artifacts into the repo's ``data/sbom-workspaces``.
+# ``SbomWorkspaceStorage`` reads this env var first (see
+# app/services/sbom/workspace_storage.py::_str_setting) and is only instantiated
+# inside request handlers, so setting it here — before any request runs —
+# isolates every test. Cleaned up by the _cleanup_workspace_dir fixture below.
+_SESSION_WORKSPACE_DIR = tempfile.mkdtemp(prefix="sbom_test_workspaces_")
+os.environ["SBOM_WORKSPACE_STORAGE_DIR"] = _SESSION_WORKSPACE_DIR
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _cleanup_workspace_dir() -> Iterator[None]:
+    """Remove the disposable workspace storage dir at the end of the session."""
+    yield
+    shutil.rmtree(_SESSION_WORKSPACE_DIR, ignore_errors=True)
 
 
 # ---------------------------------------------------------------------------
