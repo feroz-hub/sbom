@@ -13,7 +13,6 @@ pipeline does the actual concurrency work; Celery is just the dispatcher.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 
 from celery import shared_task
@@ -21,23 +20,10 @@ from celery import shared_task
 from ..ai.batch import AiFixBatchPipeline
 from ..ai.cost import BudgetCaps, BudgetGuard
 from ..ai.progress import BatchProgress, get_progress_store
+from ..http_client import run_task_async
 from ..settings import get_settings
 
 log = logging.getLogger("sbom.ai.tasks")
-
-
-async def _run_pipeline_with_http_client(pipeline: AiFixBatchPipeline, **kwargs) -> object:
-    from ..http_client import close_async_http_client, init_async_http_client
-
-    # The Celery task owns this asyncio.run() loop. Build and close the
-    # shared AsyncClient inside the same loop so httpx connections are not
-    # left bound to a loop that Celery has already torn down.
-    await close_async_http_client()
-    await init_async_http_client()
-    try:
-        return await pipeline.run(**kwargs)
-    finally:
-        await close_async_http_client()
 
 
 @shared_task(name="ai_fix.generate_run_fixes", bind=True, ignore_result=True)
@@ -106,9 +92,11 @@ def generate_run_fixes(
             db,
             budget=BudgetGuard(caps, db_session_factory=SessionLocal),
         )
-        summary = asyncio.run(
-            _run_pipeline_with_http_client(
-                pipeline,
+        # run_task_async owns the asyncio loop and disposes the loop-local
+        # shared httpx client in a finally, so httpx connections are never
+        # left bound to a loop Celery has already torn down.
+        summary = run_task_async(
+            pipeline.run(
                 run_id=run_id,
                 provider_name=provider_name,
                 force_refresh=force_refresh,

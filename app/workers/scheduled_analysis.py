@@ -20,7 +20,6 @@ not stall the rest of the batch.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 
@@ -28,6 +27,7 @@ from celery import shared_task
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..http_client import run_task_async
 from ..models import AnalysisRun, AnalysisSchedule, SBOMSource
 from ..services.schedule_resolver import find_due_targets
 from ..services.scheduling import (
@@ -190,7 +190,9 @@ def analyze_sbom_async(
             return {"status": "SKIPPED", "reason": "recent_run_within_gap"}
 
         try:
-            run = asyncio.run(create_auto_report(db, sbom, force_refresh=force_refresh))
+            # run_task_async (not bare asyncio.run) so the shared httpx client
+            # is created on — and closed with — this task's own event loop.
+            run = run_task_async(create_auto_report(db, sbom, force_refresh=force_refresh))
         except Exception as exc:
             log.exception(
                 "scheduled_analysis_run_failed",
