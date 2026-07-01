@@ -412,28 +412,28 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
                       {canOpenRepairWorkspace(sbom) && getRepairWorkspaceUrl(sbom) ? (
                         <button
                           onClick={() => router.push(getRepairWorkspaceUrl(sbom)!)}
-                          className="rounded-lg p-1.5 text-hcl-muted transition-colors hover:bg-row-hover hover:text-hcl-blue"
+                          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-hcl-muted transition-colors hover:bg-row-hover hover:text-hcl-blue"
                           aria-label="Open Repair Workspace"
-                          title="Workspace"
                         >
                           <Wrench className="h-4 w-4" />
+                          Workspace
                         </button>
                       ) : null}
                       <button
                         onClick={() => router.push(`/sboms/${sbom.id}`)}
-                        className="rounded-lg p-1.5 text-hcl-muted transition-colors hover:bg-row-hover hover:text-hcl-blue"
+                        className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-hcl-muted transition-colors hover:bg-row-hover hover:text-hcl-blue"
                         aria-label="View SBOM"
-                        title="View SBOM"
                       >
                         <Eye className="h-4 w-4" />
+                        View SBOM
                       </button>
                       <button
                         onClick={() => setDeleteTarget(sbom)}
-                        className="rounded-lg p-1.5 text-hcl-muted transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-300"
+                        className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-hcl-muted transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-300"
                         aria-label="Delete SBOM"
-                        title="Delete SBOM"
                       >
                         <Trash2 className="h-4 w-4" />
+                        Delete SBOM
                       </button>
                     </div>
                   </Td>

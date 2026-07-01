@@ -1351,7 +1351,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                 <Download className="h-3.5 w-3.5" /> Lifecycle Pack
               </Button>
               <Button size="sm" variant="outline" onClick={handleRefreshLifecycle} loading={isRefreshingLifecycle}>
-                <RefreshCw className="h-3.5 w-3.5" /> Refresh Lifecycle
+                <RefreshCw className="h-3.5 w-3.5" /> Refresh EOL / EOS Details
               </Button>
             </div>
           </CardHeader>
@@ -1643,10 +1643,10 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                             <a
                               href={`${BASE_URL}/api/sboms/${v.id}/export`}
                               className="inline-flex items-center gap-1 text-xs text-hcl-muted hover:text-hcl-navy"
-                              title="Export CycloneDX"
                               download
                             >
                               <Download className="h-3.5 w-3.5" />
+                              Export CycloneDX
                             </a>
                             {!isCurrent && (
                               <button

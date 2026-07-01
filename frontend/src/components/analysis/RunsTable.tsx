@@ -396,18 +396,20 @@ export function RunsTable({ runs, isLoading, error, selectedIds, onToggleSelect 
                   <div className="flex items-center justify-end gap-2">
                     <button
                       onClick={() => router.push(`/analysis/${run.id}`)}
-                      className="rounded-lg p-1.5 text-hcl-muted transition-colors hover:bg-hcl-light hover:text-hcl-blue"
+                      className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-hcl-muted transition-colors hover:bg-hcl-light hover:text-hcl-blue"
                       aria-label="View run"
                     >
                       <Eye className="h-4 w-4" />
+                      View run
                     </button>
                     <button
                       onClick={() => handleDownloadPdf(run)}
                       disabled={downloadingId === run.id}
-                      className="rounded-lg p-1.5 text-hcl-muted transition-colors hover:bg-green-50 hover:text-green-600 disabled:opacity-50 dark:hover:bg-emerald-950/40"
+                      className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-hcl-muted transition-colors hover:bg-green-50 hover:text-green-600 disabled:opacity-50 dark:hover:bg-emerald-950/40"
                       aria-label="Download PDF"
                     >
                       <Download className="h-4 w-4" />
+                      Download PDF
                     </button>
                   </div>
                 </Td>

@@ -247,25 +247,27 @@ export function ProjectsTable({ projects, isLoading, error }: ProjectsTableProps
                     <div className="flex items-center justify-end gap-2">
                       <button
                         onClick={() => setScheduleProject(project)}
-                        className="rounded-lg p-1.5 text-hcl-muted transition-colors hover:bg-hcl-light hover:text-hcl-blue"
+                        className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-hcl-muted transition-colors hover:bg-hcl-light hover:text-hcl-blue"
                         aria-label="Configure periodic analysis schedule"
-                        title="Periodic analysis schedule"
                       >
                         <CalendarClock className="h-4 w-4" />
+                        Schedule
                       </button>
                       <button
                         onClick={() => setEditProject(project)}
-                        className="rounded-lg p-1.5 text-hcl-muted transition-colors hover:bg-hcl-light hover:text-hcl-blue"
+                        className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-hcl-muted transition-colors hover:bg-hcl-light hover:text-hcl-blue"
                         aria-label="Edit project"
                       >
                         <Pencil className="h-4 w-4" />
+                        Edit
                       </button>
                       <button
                         onClick={() => setDeleteTarget(project)}
-                        className="rounded-lg p-1.5 text-hcl-muted transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
+                        className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-hcl-muted transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
                         aria-label="Delete project"
                       >
                         <Trash2 className="h-4 w-4" />
+                        Delete
                       </button>
                     </div>
                   </Td>

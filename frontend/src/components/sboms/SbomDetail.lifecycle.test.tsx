@@ -264,7 +264,7 @@ describe('SbomDetail lifecycle management', () => {
     expect(screen.getByText('Stale data')).toBeInTheDocument();
     expect(screen.getByText('Manual override')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Refresh Lifecycle/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Refresh EOL \/ EOS Details/i }));
     await waitFor(() => expect(refreshSbomLifecycle).toHaveBeenCalledWith(42, true));
 
     fireEvent.click(screen.getByRole('button', { name: /^Refresh$/i }));

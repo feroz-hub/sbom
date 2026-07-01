@@ -371,9 +371,9 @@ export default function SchedulesPage() {
                           variant="secondary"
                           loading={runNowM.isPending && runNowM.variables === s.id}
                           onClick={() => runNowM.mutate(s.id)}
-                          title="Run now"
                         >
                           <Zap className="h-4 w-4" />
+                          Run now
                         </Button>
                         {s.enabled ? (
                           <Button
@@ -381,9 +381,9 @@ export default function SchedulesPage() {
                             variant="secondary"
                             loading={pauseM.isPending && pauseM.variables === s.id}
                             onClick={() => pauseM.mutate(s.id)}
-                            title="Pause"
                           >
                             <Pause className="h-4 w-4" />
+                            Pause
                           </Button>
                         ) : (
                           <Button
@@ -391,26 +391,26 @@ export default function SchedulesPage() {
                             variant="secondary"
                             loading={resumeM.isPending && resumeM.variables === s.id}
                             onClick={() => resumeM.mutate(s.id)}
-                            title="Resume"
                           >
                             <Play className="h-4 w-4" />
+                            Resume
                           </Button>
                         )}
                         <button
                           onClick={() => setEditing(s)}
                           aria-label="Edit"
-                          title="Edit"
-                          className="rounded-lg p-1.5 text-hcl-muted transition-colors hover:bg-hcl-light hover:text-hcl-blue"
+                          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-hcl-muted transition-colors hover:bg-hcl-light hover:text-hcl-blue"
                         >
                           <Pencil className="h-4 w-4" />
+                          Edit
                         </button>
                         <button
                           onClick={() => setConfirmDelete(s)}
                           aria-label="Remove"
-                          title="Remove"
-                          className="rounded-lg p-1.5 text-hcl-muted transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
+                          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-hcl-muted transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
                         >
                           <Trash2 className="h-4 w-4" />
+                          Remove
                         </button>
                       </div>
                     </Td>
