@@ -44,8 +44,12 @@ from ..idempotency import (
     put_cached,
     run_idempotent,
 )
+from ..metrics.latest_analysis import (
+    latest_run_with_risk_for_sbom,
+    latest_runs_with_risk_by_sbom_id,
+    list_runs_for_sbom,
+)
 from ..models import (
-    AnalysisFinding,
     AnalysisRun,
     SBOMSource,
     SBOMType,
@@ -265,27 +269,12 @@ def _serialize_latest_analysis(
 
 
 def _latest_analysis_for_sbom(db: Session, sbom: SBOMSource) -> LatestAnalysisOut | None:
-    run = (
-        db.execute(
-            select(AnalysisRun)
-            .where(
-                AnalysisRun.sbom_id == sbom.id,
-                AnalysisRun.tenant_id == sbom.tenant_id,
-            )
-            .order_by(AnalysisRun.id.desc())
-        )
-        .scalars()
-        .first()
-    )
-    if not run:
+    # Metric-shaped aggregation (latest run + risk score) lives in app/metrics/.
+    result = latest_run_with_risk_for_sbom(db, sbom_id=sbom.id, tenant_id=sbom.tenant_id)
+    if result is None:
         return None
-    risk_score = db.execute(
-        select(func.coalesce(func.sum(AnalysisFinding.score), 0.0)).where(
-            AnalysisFinding.analysis_run_id == run.id,
-            AnalysisFinding.tenant_id == sbom.tenant_id,
-        )
-    ).scalar_one()
-    return _serialize_latest_analysis(run, risk_score=float(risk_score or 0.0))
+    run, risk_score = result
+    return _serialize_latest_analysis(run, risk_score=risk_score)
 
 
 def _latest_analysis_by_sbom_id(
@@ -294,34 +283,12 @@ def _latest_analysis_by_sbom_id(
     sbom_ids: list[int],
     tenant_id: int,
 ) -> dict[int, LatestAnalysisOut]:
-    if not sbom_ids:
-        return {}
-
-    latest_run_ids = (
-        select(func.max(AnalysisRun.id).label("run_id"))
-        .where(AnalysisRun.tenant_id == tenant_id, AnalysisRun.sbom_id.in_(sbom_ids))
-        .group_by(AnalysisRun.sbom_id)
-        .subquery()
-    )
-    risk_by_run = (
-        select(
-            AnalysisFinding.analysis_run_id.label("run_id"),
-            func.coalesce(func.sum(AnalysisFinding.score), 0.0).label("risk_score"),
-        )
-        .where(AnalysisFinding.tenant_id == tenant_id)
-        .where(AnalysisFinding.analysis_run_id.in_(select(latest_run_ids.c.run_id)))
-        .group_by(AnalysisFinding.analysis_run_id)
-        .subquery()
-    )
-    rows = db.execute(
-        select(AnalysisRun, risk_by_run.c.risk_score)
-        .join(latest_run_ids, latest_run_ids.c.run_id == AnalysisRun.id)
-        .outerjoin(risk_by_run, risk_by_run.c.run_id == AnalysisRun.id)
-        .where(AnalysisRun.tenant_id == tenant_id)
-    ).all()
+    # Metric-shaped aggregation (latest run + risk score) lives in app/metrics/.
     return {
-        int(run.sbom_id): _serialize_latest_analysis(run, risk_score=float(risk_score or 0.0))
-        for run, risk_score in rows
+        sbom_id: _serialize_latest_analysis(run, risk_score=risk_score)
+        for sbom_id, (run, risk_score) in latest_runs_with_risk_by_sbom_id(
+            db, sbom_ids=sbom_ids, tenant_id=tenant_id
+        ).items()
     }
 
 
@@ -1803,14 +1770,10 @@ def list_sbom_analysis_runs(
     if not sbom:
         raise HTTPException(status_code=404, detail="SBOM not found")
     offset = (page - 1) * page_size
-    return (
-        db.execute(
-            select(AnalysisRun)
-            .where(AnalysisRun.sbom_id == sbom.id, AnalysisRun.tenant_id == context.tenant_id)
-            .order_by(AnalysisRun.id.desc())
-            .limit(page_size)
-            .offset(offset)
-        )
-        .scalars()
-        .all()
+    return list_runs_for_sbom(
+        db,
+        sbom_id=sbom.id,
+        tenant_id=context.tenant_id,
+        limit=page_size,
+        offset=offset,
     )
