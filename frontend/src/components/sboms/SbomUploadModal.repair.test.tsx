@@ -145,6 +145,33 @@ describe('SbomUploadModal validation repair handoff', () => {
     expect(useUploadSbomMutate.mock.calls[0][0].sbom_type).toBeUndefined();
   });
 
+  it('submits SBOM Version and Product Version as distinct metadata fields', async () => {
+    useUploadSbomMutate.mockImplementation((_payload, _handlers) => {});
+
+    render(wrap(<SbomUploadModal open onClose={vi.fn()} />));
+
+    expect(await screen.findByRole('option', { name: 'Payments' })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/SBOM Name/i), { target: { value: 'manual-metadata' } });
+    fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: '42' } });
+    fireEvent.change(screen.getByLabelText(/SBOM Version/i), { target: { value: '1.1.1' } });
+    fireEvent.change(screen.getByLabelText(/Product Version/i), { target: { value: '1.0.0' } });
+    fireEvent.change(screen.getByLabelText(/Created By/i), { target: { value: 'Feroze' } });
+    fireEvent.change(screen.getByPlaceholderText('Paste a small SPDX, CycloneDX, or XML SBOM preview'), {
+      target: { value: '{"bomFormat":"CycloneDX","specVersion":"1.5","components":[]}' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Upload SBOM/i }));
+
+    await waitFor(() => expect(useUploadSbomMutate).toHaveBeenCalled());
+    expect(useUploadSbomMutate.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        sbom_version: '1.1.1',
+        product_version: '1.0.0',
+        created_by: 'Feroze',
+      }),
+    );
+    expect(useUploadSbomMutate.mock.calls[0][0]).not.toHaveProperty('productver');
+  });
+
   it('closes valid uploads, refreshes upload surfaces, and does not open repair workspace', async () => {
     const onClose = vi.fn();
     const onSuccess = vi.fn();

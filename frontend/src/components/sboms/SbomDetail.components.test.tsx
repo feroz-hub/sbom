@@ -178,6 +178,36 @@ beforeEach(() => {
 });
 
 describe('SbomDetail components list', () => {
+  it('renders Product Version and SBOM Version from independent response fields', async () => {
+    getSbomComponents.mockResolvedValue(listResponse([CANONICAL]));
+
+    render(
+      wrap(
+        <SbomDetail
+          sbom={{
+            ...SBOM,
+            sbom_version: '1.1.1',
+            productver: null,
+            product_version: '1.0.0',
+          }}
+        />,
+      ),
+    );
+
+    expect(await screen.findByText('SBOM Details')).toBeInTheDocument();
+    expect(screen.getByText('Product Version').parentElement).toHaveTextContent('1.0.0');
+    expect(screen.getByText('SBOM Version').parentElement).toHaveTextContent('1.1.1');
+  });
+
+  it('displays a dash for existing SBOMs with no Product Version', async () => {
+    getSbomComponents.mockResolvedValue(listResponse([CANONICAL]));
+
+    render(wrap(<SbomDetail sbom={{ ...SBOM, productver: null, product_version: null }} />));
+
+    expect(await screen.findByText('SBOM Details')).toBeInTheDocument();
+    expect(screen.getByText('Product Version').parentElement).toHaveTextContent('—');
+  });
+
   it('shows repair workspace actions for imported SBOMs with a workspace id', async () => {
     getSbomComponents.mockResolvedValue(listResponse([CANONICAL]));
 

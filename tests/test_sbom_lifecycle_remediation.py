@@ -137,6 +137,9 @@ def test_sbom_editing_and_versioning(db):
         sbom_data=json.dumps(sbom_data),
         projectid=proj.id,
         sbom_version="1.0.0",
+        productver="1.0.0",
+        product_name="test-app",
+        description="manual product metadata",
         status="validated",
     )
     db.add(parent_sbom)
@@ -176,6 +179,9 @@ def test_sbom_editing_and_versioning(db):
     new_version = edit_sbom(db, parent_sbom.id, user_id="bob", updates=updates, change_summary="Updated log4j version")
     assert new_version.parent_id == parent_sbom.id
     assert new_version.sbom_version == "1.0.1"
+    assert new_version.productver == "1.0.0"
+    assert new_version.product_name == "test-app"
+    assert new_version.description == "manual product metadata"
 
     # Verify component overrides are mapped
     new_comp = db.execute(
@@ -199,6 +205,9 @@ def test_sbom_editing_and_versioning(db):
     # Restore version
     restored = restore_version(db, new_version.id, parent_sbom.id, user_id="bob")
     assert restored.sbom_version == "1.0.2"
+    assert restored.productver == "1.0.0"
+    assert restored.product_name == "test-app"
+    assert restored.description == "manual product metadata"
     assert restored.change_summary.startswith("Restored previous version")
 
 

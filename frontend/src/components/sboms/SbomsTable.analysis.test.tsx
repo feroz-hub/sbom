@@ -42,6 +42,32 @@ function sbomWithAnalysis(latestAnalysis: LatestAnalysis | null): SBOMSource {
 }
 
 describe('SbomsTable analysis column', () => {
+  it('shows only SBOM Version in the Version column', () => {
+    const withBoth = {
+      ...sbomWithAnalysis(null),
+      id: 201,
+      sbom_name: 'with-both',
+      sbom_version: '1.1.1',
+      productver: '1.0.0',
+      product_version: '1.0.0',
+    };
+    const productOnly = {
+      ...sbomWithAnalysis(null),
+      id: 202,
+      sbom_name: 'product-only',
+      sbom_version: null,
+      productver: '1.0.0',
+      product_version: '1.0.0',
+    };
+
+    render(wrap(<SbomsTable sboms={[withBoth, productOnly]} isLoading={false} error={null} />));
+
+    const withBothRow = screen.getByText('with-both').closest('tr');
+    const productOnlyRow = screen.getByText('product-only').closest('tr');
+    expect(withBothRow?.children[3]).toHaveTextContent('1.1.1');
+    expect(productOnlyRow?.children[3]).toHaveTextContent('—');
+  });
+
   it('renders Not Run when no latest analysis exists', () => {
     render(wrap(<SbomsTable sboms={[sbomWithAnalysis(null)]} isLoading={false} error={null} />));
 

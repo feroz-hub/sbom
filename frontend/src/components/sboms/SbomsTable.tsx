@@ -161,6 +161,7 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
           sb.sbom_name,
           displayProject(sb),
           sb.sbom_version,
+          sb.product_version,
           sb.productver,
           String(sb.sbom_type ?? ''),
           sb.created_by,
@@ -385,7 +386,7 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
                     </div>
                   </Td>
                   <Td className="text-hcl-muted">{displayProject(sbom)}</Td>
-                  <Td className="text-hcl-muted">{sbom.sbom_version || sbom.productver || '—'}</Td>
+                  <Td className="text-hcl-muted">{sbom.sbom_version || '—'}</Td>
                   <Td className="text-hcl-muted">{sbom.sbom_type || '—'}</Td>
                   <Td>
                     <button

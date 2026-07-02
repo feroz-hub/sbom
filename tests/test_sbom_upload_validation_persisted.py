@@ -151,6 +151,83 @@ def test_upload_with_project_id_assigns_project_and_syncs_details(client, unique
         db.close()
 
 
+def test_upload_persists_manual_sbom_and_product_versions_independently(client, unique_name):
+    document = json.loads(json.dumps(_VALID_CYCLONEDX))
+    document["version"] = 77
+    document["metadata"]["component"]["version"] = "9.9.9"
+
+    resp = client.post(
+        "/api/sboms/upload",
+        data={
+            "sbom_name": unique_name,
+            "sbom_version": "1.1.1",
+            "product_version": "1.0.0",
+            "created_by": "Feroze",
+        },
+        files={"file": ("valid.json", json.dumps(document), "application/json")},
+    )
+    assert resp.status_code == 202, resp.text
+    accepted = resp.json()
+    assert accepted["sbom_version"] == "1.1.1"
+    assert accepted["product_version"] == "1.0.0"
+
+    db = SessionLocal()
+    try:
+        row = db.get(SBOMSource, accepted["sbom_id"])
+        assert row is not None
+        assert row.sbom_version == "1.1.1"
+        assert row.productver == "1.0.0"
+        assert row.created_by == "Feroze"
+    finally:
+        db.close()
+
+    detail = client.get(f"/api/sboms/{accepted['sbom_id']}").json()
+    assert detail["sbom_version"] == "1.1.1"
+    assert detail["product_version"] == "1.0.0"
+    assert detail["productver"] == "1.0.0"
+
+    listed = client.get("/api/sboms").json()
+    row = next(item for item in listed if item["id"] == accepted["sbom_id"])
+    assert row["sbom_version"] == "1.1.1"
+    assert row["product_version"] == "1.0.0"
+
+
+def test_upload_blank_manual_versions_are_not_filled_from_document_metadata(client, unique_name):
+    document = json.loads(json.dumps(_VALID_CYCLONEDX))
+    document["version"] = 88
+    document["metadata"]["component"]["version"] = "9.9.9"
+
+    resp = client.post(
+        "/api/sboms/upload",
+        data={"sbom_name": unique_name, "sbom_version": "", "product_version": ""},
+        files={"file": ("valid.json", json.dumps(document), "application/json")},
+    )
+    assert resp.status_code == 202, resp.text
+    accepted = resp.json()
+    assert accepted["sbom_version"] is None
+    assert accepted["product_version"] is None
+
+    detail = client.get(f"/api/sboms/{accepted['sbom_id']}").json()
+    assert detail["sbom_version"] is None
+    assert detail["product_version"] is None
+
+
+def test_upload_rejects_unsupported_camelcase_metadata_fields(client, unique_name):
+    resp = client.post(
+        "/api/sboms/upload",
+        data={
+            "sbom_name": unique_name,
+            "sbomVersion": "1.1.1",
+            "productVersion": "1.0.0",
+        },
+        files={"file": ("valid.json", json.dumps(_VALID_CYCLONEDX), "application/json")},
+    )
+    assert resp.status_code == 422, resp.text
+    detail = resp.json()["detail"]
+    assert detail["code"] == "unsupported_form_fields"
+    assert detail["fields"] == ["productVersion", "sbomVersion"]
+
+
 def test_upload_spdx_json_returns_detected_format_and_workspace_metadata(client, unique_name):
     raw = json.dumps(_VALID_SPDX)
     resp = client.post(

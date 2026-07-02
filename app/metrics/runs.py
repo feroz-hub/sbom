@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..models import AnalysisRun
+from ..services.analysis_service import normalize_run_status
 from .base import COMPLETED_RUN_STATUSES
 
 
@@ -128,14 +129,25 @@ def runs_aggregate(
         .group_by(AnalysisRun.run_status)
     ).all()
 
-    raw: dict[str, int] = {(s or "").upper(): int(n) for s, n in rows}
     by_outcome: dict[str, int] = {
-        "no_issues": raw.pop("OK", 0),
-        "with_findings": raw.pop("FINDINGS", 0),
-        "source_errors": raw.pop("PARTIAL", 0),
-        "failed": raw.pop("ERROR", 0),
-        "other": sum(raw.values()),
+        "no_issues": 0,
+        "with_findings": 0,
+        "source_errors": 0,
+        "failed": 0,
+        "other": 0,
     }
+    for status, count in rows:
+        normalized = normalize_run_status(status)
+        if normalized == "OK":
+            by_outcome["no_issues"] += int(count)
+        elif normalized == "FINDINGS":
+            by_outcome["with_findings"] += int(count)
+        elif normalized == "PARTIAL":
+            by_outcome["source_errors"] += int(count)
+        elif normalized == "ERROR":
+            by_outcome["failed"] += int(count)
+        else:
+            by_outcome["other"] += int(count)
 
     findings_sum = (
         db.execute(select(func.coalesce(func.sum(AnalysisRun.total_findings), 0)).where(*scope_clauses)).scalar() or 0

@@ -978,7 +978,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                   onClick={() => {
                     setDetailName(sbom.sbom_name || '');
                     setDetailProductName(sbom.product_name || '');
-                    setDetailProductVersion(sbom.productver || '');
+                    setDetailProductVersion(sbom.product_version ?? sbom.productver ?? '');
                     setDetailSbomVersion(sbom.sbom_version || '');
                     setDetailDescription(sbom.description || '');
                     setDetailProjectId(sbom.projectid || null);
@@ -1026,8 +1026,8 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                 {[
                   { label: 'Name', value: sbom.sbom_name },
                   { label: 'Product Name', value: sbom.product_name || '—' },
-                  { label: 'Product Version', value: sbom.productver || '—' },
-                  { label: 'SBOM Version', value: sbom.sbom_version || '1.0.0' },
+                  { label: 'Product Version', value: sbom.product_version ?? sbom.productver ?? '—' },
+                  { label: 'SBOM Version', value: sbom.sbom_version || '—' },
                   { label: 'Format / Type', value: formatTypeDisplay },
                   {
                     label: 'Project',

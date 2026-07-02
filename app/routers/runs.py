@@ -101,8 +101,12 @@ def list_analysis_runs(
         from ..services.analysis_service import normalize_run_status
 
         norm = normalize_run_status(run_status)
-        base = base.where(AnalysisRun.run_status == norm)
-        count = count.where(AnalysisRun.run_status == norm)
+        status_values = {
+            "OK": ("OK", "PASS"),
+            "FINDINGS": ("FINDINGS", "FAIL"),
+        }.get(norm, (norm,))
+        base = base.where(AnalysisRun.run_status.in_(status_values))
+        count = count.where(AnalysisRun.run_status.in_(status_values))
 
     # Total count
     total = db.execute(count).scalar_one()

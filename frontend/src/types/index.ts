@@ -1072,6 +1072,7 @@ export interface CreateSBOMPayload {
   project_id?: number;
   sbom_version?: string;
   created_by?: string;
+  product_version?: string;
   productver?: string;
 }
 
@@ -1082,6 +1083,8 @@ export interface UploadSBOMAcceptedResponse {
   repair_workspace_url: string;
   sbom_id: number;
   sbom_name: string;
+  sbom_version?: string | null;
+  product_version?: string | null;
   project_id: number | null;
   project_name?: string | null;
   spec: string;

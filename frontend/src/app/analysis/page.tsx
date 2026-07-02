@@ -303,8 +303,8 @@ function AnalysisPageInner() {
                 placeholder="All outcomes"
               >
                 <option value="">All outcomes</option>
-                <option value="PASS">{runStatusShortLabel('PASS')}</option>
-                <option value="FAIL">{runStatusShortLabel('FAIL')}</option>
+                <option value="OK">{runStatusShortLabel('OK')}</option>
+                <option value="FINDINGS">{runStatusShortLabel('FINDINGS')}</option>
                 <option value="PARTIAL">{runStatusShortLabel('PARTIAL')}</option>
                 <option value="NO_DATA">{runStatusShortLabel('NO_DATA')}</option>
                 <option value="ERROR">{runStatusShortLabel('ERROR')}</option>

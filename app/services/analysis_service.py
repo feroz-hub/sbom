@@ -182,7 +182,7 @@ def persist_analysis_run(
         sbom_obj: SBOM source object
         details: Analysis details dict containing findings, totals, etc.
         components: List of component dictionaries
-        run_status: Overall status (PASS, FAIL, ERROR, etc.)
+        run_status: Overall status (OK, FINDINGS, ERROR, etc.; legacy PASS/FAIL accepted)
         source: Source identifier (NVD, OSV, GITHUB, VULNDB, MULTI, etc.)
         started_on: ISO timestamp when analysis started
         completed_on: ISO timestamp when analysis completed
@@ -198,7 +198,7 @@ def persist_analysis_run(
     run = existing_run or AnalysisRun(sbom_id=sbom_obj.id, project_id=sbom_obj.projectid)
     run.sbom_id = sbom_obj.id
     run.project_id = sbom_obj.projectid
-    run.run_status = run_status
+    run.run_status = normalize_run_status(run_status) or RUN_STATUS_ERROR
     run.source = source
     run.trigger_source = trigger_source
     run.started_on = started_on
@@ -450,7 +450,7 @@ def backfill_analytics_tables(db: Session) -> None:
                 details = {"message": "Legacy report was non-JSON", "findings": []}
 
             details = normalize_details(details, components)
-            run_status = latest_legacy.sbom_result or compute_report_status(
+            run_status = normalize_run_status(latest_legacy.sbom_result) or compute_report_status(
                 safe_int(details.get("total_findings")), details.get("query_errors") or []
             )
             used = (details.get("analysis_metadata") or {}).get("sources") or []
@@ -459,7 +459,7 @@ def backfill_analytics_tables(db: Session) -> None:
             completed_on = latest_legacy.created_on or started_on
         else:
             details = normalize_details({"message": "Backfilled from SBOM without legacy report."}, components)
-            run_status = "NO_DATA" if not sbom.sbom_data else "PASS"
+            run_status = "NO_DATA" if not sbom.sbom_data else RUN_STATUS_OK
             source = "BACKFILL"
             started_on = now_iso()
             completed_on = started_on

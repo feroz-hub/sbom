@@ -62,10 +62,13 @@ class SBOMSourceCreate(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def accept_project_id_alias(cls, data):
-        if isinstance(data, dict) and "project_id" in data and "projectid" not in data:
+    def accept_aliases(cls, data):
+        if isinstance(data, dict):
             data = dict(data)
-            data["projectid"] = data.get("project_id")
+            if "project_id" in data and "projectid" not in data:
+                data["projectid"] = data.get("project_id")
+            if "product_version" in data and "productver" not in data:
+                data["productver"] = data.get("product_version")
         return data
 
 
@@ -440,10 +443,13 @@ class SBOMSourceUpdate(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def accept_project_id_alias(cls, data):
-        if isinstance(data, dict) and "project_id" in data and "projectid" not in data:
+    def accept_aliases(cls, data):
+        if isinstance(data, dict):
             data = dict(data)
-            data["projectid"] = data.get("project_id")
+            if "project_id" in data and "projectid" not in data:
+                data["projectid"] = data.get("project_id")
+            if "product_version" in data and "productver" not in data:
+                data["productver"] = data.get("product_version")
         return data
 
 

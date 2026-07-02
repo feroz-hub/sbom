@@ -51,10 +51,10 @@ export function TopVulnerableSboms() {
           </p>
         </div>
         <Link
-          href="/analysis?tab=runs&status=FAIL"
+          href="/analysis?tab=runs&status=FINDINGS"
           className="inline-flex items-center gap-1 text-xs font-medium text-primary transition-colors hover:text-hcl-dark"
         >
-          All failing runs <ArrowUpRight className="h-3 w-3" aria-hidden />
+          All runs with findings <ArrowUpRight className="h-3 w-3" aria-hidden />
         </Link>
       </SurfaceHeader>
       <SurfaceContent>

@@ -77,7 +77,7 @@ const schema = z.object({
   projectid: z.string().min(1, 'Project is required'),
   sbom_version: z.string().optional(),
   created_by: z.string().optional(),
-  productver: z.string().optional(),
+  product_version: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -153,7 +153,7 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
     resolver: zodResolver(schema),
     defaultValues: {
       sbom_name: '', sbom_data: '', sbom_type_id: '',
-      projectid: '', sbom_version: '', created_by: '', productver: '',
+      projectid: '', sbom_version: '', created_by: '', product_version: '',
     },
   });
   const selectedProjectId = watch('projectid');
@@ -238,7 +238,7 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
         project_id: values.projectid ? Number(values.projectid) : undefined,
         sbom_version: values.sbom_version || undefined,
         created_by: values.created_by || undefined,
-        productver: values.productver || undefined,
+        product_version: values.product_version || undefined,
       },
       {
         onSuccess: (sbom) => {
@@ -581,7 +581,7 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
 
           <div className="grid grid-cols-2 gap-4">
             <Input label="SBOM Version" placeholder="e.g. 1.0.0" disabled={uploading} {...register('sbom_version')} />
-            <Input label="Product Version" placeholder="e.g. 2.3.1" disabled={uploading} {...register('productver')} />
+            <Input label="Product Version" placeholder="e.g. 2.3.1" disabled={uploading} {...register('product_version')} />
           </div>
 
           <Input label="Created By" placeholder="Your name or username" disabled={uploading} {...register('created_by')} />

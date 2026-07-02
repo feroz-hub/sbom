@@ -12,7 +12,7 @@ import { PinButton } from '@/components/ui/PinButton';
 import { SkeletonRow } from '@/components/ui/Spinner';
 import { Pagination } from '@/components/ui/Pagination';
 import { downloadPdfReport } from '@/lib/api';
-import { runStatusShortLabel } from '@/lib/analysisRunStatusLabels';
+import { canonicalRunStatus, runStatusShortLabel } from '@/lib/analysisRunStatusLabels';
 import { matchesMultiField } from '@/lib/tableFilters';
 import { formatDate, formatDuration, downloadBlob } from '@/lib/utils';
 import { useToast } from '@/hooks/useToast';
@@ -41,8 +41,8 @@ interface RunsTableProps {
 }
 
 const STATUS_VALUES: AnalysisRun['run_status'][] = [
-  'PASS',
-  'FAIL',
+  'OK',
+  'FINDINGS',
   'PARTIAL',
   'ERROR',
   'RUNNING',
@@ -91,7 +91,7 @@ export function RunsTable({ runs, isLoading, error, selectedIds, onToggleSelect 
     if (!runs?.length) return [];
     let rows = runs;
     if (statusFilter) {
-      rows = rows.filter((r) => r.run_status === statusFilter);
+      rows = rows.filter((r) => canonicalRunStatus(r.run_status) === statusFilter);
     }
     if (sourceFilter) {
       rows = rows.filter((r) =>
@@ -126,7 +126,7 @@ export function RunsTable({ runs, isLoading, error, selectedIds, onToggleSelect 
     () => ({
       id: (r: AnalysisRun) => r.id,
       sbom_name: (r: AnalysisRun) => (r.sbom_name ?? '').toLowerCase(),
-      run_status: (r: AnalysisRun) => r.run_status ?? '',
+      run_status: (r: AnalysisRun) => canonicalRunStatus(r.run_status),
       total_components: (r: AnalysisRun) => r.total_components ?? -1,
       total_findings: (r: AnalysisRun) => r.total_findings ?? -1,
       query_error_count: (r: AnalysisRun) => r.query_error_count ?? -1,

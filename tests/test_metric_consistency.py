@@ -694,6 +694,57 @@ def test_runs_aggregate_endpoint_does_not_filter_on_legacy_status(client, db):
     assert body["by_outcome"]["with_findings"] >= 1, "aggregate dropped FINDINGS-status runs — F1 has regressed"
 
 
+def test_runs_aggregate_counts_legacy_pass_fail_aliases_with_canonical_outcomes(client, db):
+    """Legacy PASS/FAIL rows must reconcile with the same labels the table
+    renders: PASS is no_issues, FAIL is with_findings.
+    """
+    s1, p1 = _seed_sbom_and_project(db, name="legacy-alias")
+    _seed_run(db, sbom=s1, project=p1, status="PASS", started_on=_now_iso(), findings=[])
+    _seed_run(
+        db,
+        sbom=s1,
+        project=p1,
+        status="FAIL",
+        started_on=_now_iso(),
+        findings=[{"vuln_id": "CVE-2026-ALIAS1", "severity": "HIGH"}],
+    )
+
+    body = client.get(f"/api/runs/aggregate?sbom_id={s1.id}").json()
+    assert body["total_runs"] == 2
+    assert body["by_outcome"]["no_issues"] == 1
+    assert body["by_outcome"]["with_findings"] == 1
+    assert body["by_outcome"]["other"] == 0
+    assert body["total_findings"] == 1
+
+
+def test_runs_filter_matches_canonical_status_and_legacy_alias_rows(client, db):
+    s1, p1 = _seed_sbom_and_project(db, name="legacy-filter")
+    ok = _seed_run(db, sbom=s1, project=p1, status="OK", started_on=_now_iso(), findings=[])
+    legacy_pass = _seed_run(db, sbom=s1, project=p1, status="PASS", started_on=_now_iso(), findings=[])
+    findings = _seed_run(
+        db,
+        sbom=s1,
+        project=p1,
+        status="FINDINGS",
+        started_on=_now_iso(),
+        findings=[{"vuln_id": "CVE-2026-FILTER1", "severity": "HIGH"}],
+    )
+    legacy_fail = _seed_run(
+        db,
+        sbom=s1,
+        project=p1,
+        status="FAIL",
+        started_on=_now_iso(),
+        findings=[{"vuln_id": "CVE-2026-FILTER2", "severity": "MEDIUM"}],
+    )
+
+    clean = client.get(f"/api/runs?sbom_id={s1.id}&run_status=OK").json()
+    assert {item["id"] for item in clean} == {ok.id, legacy_pass.id}
+
+    vulnerable = client.get(f"/api/runs?sbom_id={s1.id}&run_status=FINDINGS").json()
+    assert {item["id"] for item in vulnerable} == {findings.id, legacy_fail.id}
+
+
 # ---------------------------------------------------------------------------
 # F9 architectural lock — no new direct ORM access to AnalysisFinding /
 # AnalysisRun outside ``app/metrics/``.

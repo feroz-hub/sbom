@@ -66,13 +66,21 @@ export function SeverityBadge({ severity }: { severity: string }) {
 }
 
 const statusMap: Record<string, { cls: string; dot: string }> = {
+  OK: {
+    cls: 'bg-green-50 text-green-800 border-green-200 dark:bg-emerald-950/50 dark:text-emerald-200 dark:border-emerald-800',
+    dot: 'bg-green-500',
+  },
   PASS: {
     cls: 'bg-green-50 text-green-800 border-green-200 dark:bg-emerald-950/50 dark:text-emerald-200 dark:border-emerald-800',
     dot: 'bg-green-500',
   },
+  FINDINGS: {
+    cls: 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/50 dark:text-amber-200 dark:border-amber-800',
+    dot: 'bg-amber-500',
+  },
   FAIL: {
-    cls: 'bg-red-50 text-red-800 border-red-200 dark:bg-red-950/50 dark:text-red-200 dark:border-red-800',
-    dot: 'bg-red-500',
+    cls: 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/50 dark:text-amber-200 dark:border-amber-800',
+    dot: 'bg-amber-500',
   },
   PARTIAL: {
     cls: 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/50 dark:text-amber-200 dark:border-amber-800',

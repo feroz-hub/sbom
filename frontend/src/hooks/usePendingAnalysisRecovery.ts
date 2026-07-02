@@ -3,14 +3,15 @@
 import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { getRuns } from '@/lib/api';
+import { canonicalRunStatus } from '@/lib/analysisRunStatusLabels';
 import { getStillPendingAnalyses, removePendingAnalysis } from '@/lib/pendingAnalysis';
 import type { AnalysisStatus } from '@/hooks/useBackgroundAnalysis';
 import type { SBOMSource } from '@/types';
 
 function runStatusToBadgeStatus(runStatus: string | undefined): AnalysisStatus {
-  const u = (runStatus ?? 'ERROR').toUpperCase();
+  const u = canonicalRunStatus(runStatus ?? 'ERROR');
   if (u === 'RUNNING' || u === 'PENDING') return 'ANALYSING';
-  const allowed: AnalysisStatus[] = ['PASS', 'FAIL', 'PARTIAL', 'ERROR'];
+  const allowed: AnalysisStatus[] = ['OK', 'FINDINGS', 'PARTIAL', 'ERROR'];
   return allowed.includes(u as AnalysisStatus) ? (u as AnalysisStatus) : 'ERROR';
 }
 

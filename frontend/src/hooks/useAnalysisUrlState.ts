@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { canonicalRunStatus } from '@/lib/analysisRunStatusLabels';
 
 export type AnalysisHubTab = 'runs' | 'consolidated';
 
@@ -14,7 +15,8 @@ export function useAnalysisUrlState() {
 
   const projectFilter = searchParams.get('project') ?? '';
   const sbomFilter = searchParams.get('sbom') ?? '';
-  const statusFilter = searchParams.get('status') ?? '';
+  const rawStatusFilter = searchParams.get('status') ?? '';
+  const statusFilter = rawStatusFilter ? canonicalRunStatus(rawStatusFilter) : '';
   const hubTab: AnalysisHubTab =
     searchParams.get('tab') === 'consolidated' ? 'consolidated' : 'runs';
 
@@ -53,7 +55,7 @@ export function useAnalysisUrlState() {
   const setStatusFilter = useCallback(
     (value: string) => {
       replaceSearchParams((p) => {
-        if (value) p.set('status', value);
+        if (value) p.set('status', canonicalRunStatus(value));
         else p.delete('status');
       });
     },

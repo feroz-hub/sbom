@@ -20,7 +20,7 @@ import json
 import logging
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -44,6 +44,17 @@ log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/sboms", tags=["sboms"])
 
+_UPLOAD_FORM_FIELDS = {
+    "file",
+    "sbom_name",
+    "project_id",
+    "sbom_type",
+    "sbom_version",
+    "product_version",
+    "productver",
+    "created_by",
+}
+
 
 class SbomAcceptedResponse(BaseModel):
     """Response body for a successful upload."""
@@ -54,6 +65,8 @@ class SbomAcceptedResponse(BaseModel):
     repair_workspace_url: str
     sbom_id: int
     sbom_name: str
+    sbom_version: str | None = None
+    product_version: str | None = None
     project_id: int | None = None
     project_name: str | None = None
     spec: str
@@ -87,10 +100,15 @@ def _now_iso() -> str:
 )
 async def upload_sbom(
     background_tasks: BackgroundTasks,
+    request: Request,
     file: UploadFile = File(..., description="SBOM document (SPDX or CycloneDX)"),
     sbom_name: str = Form(..., min_length=1, max_length=255),
     project_id: int | None = Form(None),
     sbom_type: int | None = Form(None),
+    sbom_version: str | None = Form(None),
+    product_version: str | None = Form(None),
+    productver: str | None = Form(None),
+    created_by: str | None = Form(None),
     context: CurrentContext = Depends(get_current_tenant_context),
     strict_ntia: bool = Query(False, description="Promote NTIA warnings to hard errors."),
     db: Session = Depends(get_db),
@@ -105,7 +123,20 @@ async def upload_sbom(
     settings = get_settings()
     max_bytes = int(getattr(settings, "MAX_UPLOAD_BYTES", 50 * 1024 * 1024))
 
-    created_by = context.actor_label()
+    unsupported_fields = sorted(set((await request.form()).keys()) - _UPLOAD_FORM_FIELDS)
+    if unsupported_fields:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "unsupported_form_fields",
+                "message": "Unsupported upload form field(s). Use snake_case request fields.",
+                "fields": unsupported_fields,
+            },
+        )
+
+    actor = (created_by or "").strip() or context.actor_label()
+    manual_sbom_version = (sbom_version or "").strip() or None
+    manual_product_version = (product_version or productver or "").strip() or None
 
     if project_id is not None and get_project_for_tenant(db, project_id, context.tenant_id) is None:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -160,7 +191,7 @@ async def upload_sbom(
             original_filename=file.filename,
             project_id=project_id,
             sbom_type=sbom_type,
-            user_id=created_by,
+            user_id=actor,
         )
         if session is not None:
             audit_service.write_audit_log(
@@ -199,7 +230,7 @@ async def upload_sbom(
         original_filename=file.filename,
         project_id=project_id,
         sbom_type=sbom_type,
-        user_id=created_by,
+        user_id=actor,
         validation_status=validation_status,
     )
     if session is None:
@@ -243,7 +274,9 @@ async def upload_sbom(
         sbom_data=body_text,
         sbom_type=sbom_type,
         projectid=project_id,
-        created_by=created_by,
+        sbom_version=manual_sbom_version,
+        productver=manual_product_version,
+        created_by=actor,
         created_on=_now_iso(),
         status="validated",
         failed_stage=None,
@@ -269,7 +302,12 @@ async def upload_sbom(
             "sbom.upload",
             entity_type="sbom",
             entity_id=obj.id,
-            new_value={"sbom_name": obj.sbom_name, "project_id": obj.projectid},
+            new_value={
+                "sbom_name": obj.sbom_name,
+                "project_id": obj.projectid,
+                "sbom_version": obj.sbom_version,
+                "product_version": obj.productver,
+            },
         )
         db.commit()
     except Exception:
@@ -310,6 +348,8 @@ async def upload_sbom(
         repair_workspace_url=f"/repair/{session.id}",
         sbom_id=obj.id,
         sbom_name=obj.sbom_name,
+        sbom_version=obj.sbom_version,
+        product_version=obj.productver,
         project_id=obj.projectid,
         project_name=obj.project_name,
         spec=spec,

@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { getRecentSboms, getRuns } from '@/lib/api';
+import { canonicalRunStatus } from '@/lib/analysisRunStatusLabels';
 import { cn, formatDate } from '@/lib/utils';
 
 // ─── Command model ───────────────────────────────────────────────────────────
@@ -204,12 +205,12 @@ function useCommands(query: string, isOpen: boolean, onClose: () => void): Comma
       {
         id: 'action.failing-runs',
         group: 'actions',
-        title: 'Show failing runs',
-        subtitle: 'Filter analysis runs to FAIL',
+        title: 'Show runs with findings',
+        subtitle: 'Filter analysis runs to FINDINGS',
         Icon: ShieldAlert,
-        iconTone: 'text-red-600 dark:text-red-400',
+        iconTone: 'text-amber-600 dark:text-amber-400',
         keywords: 'fail findings vulnerable critical',
-        run: () => goto('/analysis?tab=runs&status=FAIL'),
+        run: () => goto('/analysis?tab=runs&status=FINDINGS'),
       },
       {
         id: 'action.toggle-theme',
@@ -274,22 +275,25 @@ function useCommands(query: string, isOpen: boolean, onClose: () => void): Comma
   // Recent runs.
   const runCommands = useMemo<CommandItem[]>(() => {
     const data = runsQuery.data ?? [];
-    return data.slice(0, 8).map((r) => ({
-      id: `run.${r.id}`,
-      group: 'runs' as const,
-      title: r.sbom_name ? `${r.sbom_name} — Run #${r.id}` : `Run #${r.id}`,
-      subtitle: `${r.run_status} · ${(r.total_findings ?? 0).toLocaleString()} findings · ${formatDate(r.completed_on ?? r.started_on)}`,
-      hint: '↵ Open',
-      Icon: Activity,
-      iconTone:
-        r.run_status === 'FAIL'
-          ? 'text-red-600 dark:text-red-400'
-          : r.run_status === 'PASS'
-            ? 'text-emerald-600 dark:text-emerald-400'
-            : 'text-hcl-muted',
-      keywords: `analysis ${r.run_status}`,
-      run: () => goto(`/analysis/${r.id}`),
-    }));
+    return data.slice(0, 8).map((r) => {
+      const status = canonicalRunStatus(r.run_status);
+      return {
+        id: `run.${r.id}`,
+        group: 'runs' as const,
+        title: r.sbom_name ? `${r.sbom_name} — Run #${r.id}` : `Run #${r.id}`,
+        subtitle: `${status} · ${(r.total_findings ?? 0).toLocaleString()} findings · ${formatDate(r.completed_on ?? r.started_on)}`,
+        hint: '↵ Open',
+        Icon: Activity,
+        iconTone:
+          status === 'FINDINGS'
+            ? 'text-amber-600 dark:text-amber-400'
+            : status === 'OK'
+              ? 'text-emerald-600 dark:text-emerald-400'
+              : 'text-hcl-muted',
+        keywords: `analysis ${status}`,
+        run: () => goto(`/analysis/${r.id}`),
+      };
+    });
   }, [runsQuery.data, goto]);
 
   // Filter + score.

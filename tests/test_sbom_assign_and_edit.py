@@ -130,6 +130,32 @@ def test_patch_sbom_metadata_updates_correctly(client):
     assert body["description"] == new_description
 
 
+def test_patch_sbom_version_fields_do_not_modify_each_other(client):
+    sbom = _create_sbom(client)
+
+    initial = client.patch(
+        f"/api/sboms/{sbom['id']}",
+        json={"product_version": "1.0.0", "sbom_version": "1.1.1"},
+    )
+    assert initial.status_code == 200, initial.text
+
+    product_only = client.patch(
+        f"/api/sboms/{sbom['id']}",
+        json={"product_version": "2.0.0"},
+    )
+    assert product_only.status_code == 200, product_only.text
+    assert product_only.json()["product_version"] == "2.0.0"
+    assert product_only.json()["sbom_version"] == "1.1.1"
+
+    sbom_only = client.patch(
+        f"/api/sboms/{sbom['id']}",
+        json={"sbom_version": "1.2.0"},
+    )
+    assert sbom_only.status_code == 200, sbom_only.text
+    assert sbom_only.json()["product_version"] == "2.0.0"
+    assert sbom_only.json()["sbom_version"] == "1.2.0"
+
+
 def test_project_assignment_preserves_components_and_runs(client):
     project = _create_project(client)
     sbom = _create_sbom(client)
