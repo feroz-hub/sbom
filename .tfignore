@@ -1,0 +1,149 @@
+# =========================================================
+#  SBOM Analyser — .tfignore  (TFS / TFVC)
+#
+#  Syntax:
+#    #   comment
+#    *   wildcard (matches any characters)
+#    !   exception — do NOT ignore / re-include a match
+#    \   folder separator; a leading "\" anchors a pattern
+#        to this folder only.
+#  A pattern WITHOUT a leading "\" is recursive: it matches
+#  in this folder and in every sub-folder.
+# =========================================================
+
+
+# ---------------------------------------------------------
+#  Python — bytecode, caches, build & packaging artifacts
+# ---------------------------------------------------------
+__pycache__
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info
+.eggs
+build
+dist
+pip-wheel-metadata
+*.whl
+.Python
+
+# ---------------------------------------------------------
+#  Python — virtual environments
+# ---------------------------------------------------------
+.venv
+venv
+env
+ENV
+.virtualenv
+
+# ---------------------------------------------------------
+#  Python — test, type-check & lint caches
+# ---------------------------------------------------------
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.hypothesis
+.benchmarks
+.tox
+.nox
+.coverage
+.coverage.*
+coverage.xml
+htmlcov
+_scratch_*.py
+
+# ---------------------------------------------------------
+#  Node / Frontend — dependencies & build output
+# ---------------------------------------------------------
+node_modules
+.next
+.vite
+dist
+build
+.turbo
+.eslintcache
+*.tsbuildinfo
+next-env.d.ts
+
+# ---------------------------------------------------------
+#  Environment & secrets  (keep the *.example templates)
+# ---------------------------------------------------------
+.env
+.env.local
+.env.*.local
+!.env.example
+!.env.*.example
+!.env.local.example
+
+# ---------------------------------------------------------
+#  Databases — local files, dumps & backups
+# ---------------------------------------------------------
+*.db
+*.db.bak
+*.sqlite
+*.sqlite3
+*.sql.gz
+*.dump
+*.bak
+
+# ---------------------------------------------------------
+#  Logs & local runtime files
+# ---------------------------------------------------------
+logs
+*.log
+*.log.*
+*.pid
+*.seed
+*.pdf
+
+# ---------------------------------------------------------
+#  Temporary / working files
+# ---------------------------------------------------------
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+*.orig
+*.rej
+
+# ---------------------------------------------------------
+#  IDE / editor — VS Code, Visual Studio, JetBrains/PyCharm
+# ---------------------------------------------------------
+.vscode
+.vs
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+.idea
+*.iml
+*.iws
+*.ipr
+
+# ---------------------------------------------------------
+#  OS-generated files
+# ---------------------------------------------------------
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN
+
+# ---------------------------------------------------------
+#  Keep — never ignore these (protects source & configs)
+# ---------------------------------------------------------
+!Dockerfile
+!.dockerignore
+!docker-compose.yml
+!docker-compose.*.yml
+!alembic.ini
+!requirements.txt
+!requirements-*.txt
+!package.json
+!package-lock.json
+!README.md
