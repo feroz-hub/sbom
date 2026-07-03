@@ -30,17 +30,27 @@ def deduplicate_findings(all_findings: list[dict]) -> list[dict]:
         if vid and vid not in alias_index:
             alias_index[vid] = vid
 
-    def _canonical_key(v: dict) -> str:
+    def _canonical_vuln(v: dict) -> str:
         vid = v.get("vuln_id") or ""
+        for a in v.get("aliases") or []:
+            if a and str(a).upper().startswith("CVE-"):
+                return alias_index.get(a, a)
         canonical = alias_index.get(vid, vid)
         if canonical:
             return canonical
         for a in v.get("aliases") or []:
             if a:
                 return alias_index.get(a, a)
-        return v.get("component_name") or ""
+        return vid or ""
 
-    merged: dict[str, dict] = {}
+    def _canonical_key(v: dict) -> tuple[str, str, str, str]:
+        ecosystem = str(v.get("ecosystem") or "").strip().lower()
+        package = str(v.get("normalized_name") or v.get("component_name") or "").strip().lower()
+        version = str(v.get("component_version") or v.get("version") or "").strip()
+        vuln = _canonical_vuln(v) or f"{package}:{version}:{v.get('description') or ''}"
+        return (ecosystem, package, version, vuln)
+
+    merged: dict[tuple[str, str, str, str], dict] = {}
     for v in all_findings:
         key = _canonical_key(v)
         if key not in merged:
@@ -55,6 +65,12 @@ def deduplicate_findings(all_findings: list[dict]) -> list[dict]:
             set([r for r in (existing.get("references") or []) if r] + [r for r in (v.get("references") or []) if r])
         )
         existing["fixed_versions"] = list(set((existing.get("fixed_versions") or []) + (v.get("fixed_versions") or [])))
+        for scalar in ("purl", "ecosystem", "normalized_name", "bom_ref", "package_type", "applicability"):
+            if not existing.get(scalar) and v.get(scalar):
+                existing[scalar] = v[scalar]
+        for scalar in ("match_reason", "matched_range", "matched_criteria", "applicability_status"):
+            if not existing.get(scalar) and v.get(scalar):
+                existing[scalar] = v[scalar]
         e_rank = _SEV_RANK.get(str(existing.get("severity", "UNKNOWN")).upper(), -1)
         v_rank = _SEV_RANK.get(str(v.get("severity", "UNKNOWN")).upper(), -1)
         if v_rank > e_rank:

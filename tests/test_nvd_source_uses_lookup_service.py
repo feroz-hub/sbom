@@ -28,7 +28,22 @@ def test_nvd_source_routes_through_lookup_service_when_provided(monkeypatch):
                 "descriptions": [{"lang": "en", "value": "from lookup"}],
                 "metrics": {},
                 "weaknesses": [],
-                "configurations": [],
+                    "configurations": [
+                        {
+                            "nodes": [
+                                {
+                                    "operator": "OR",
+                                    "cpeMatch": [
+                                        {
+                                            "vulnerable": True,
+                                            "criteria": "cpe:2.3:a:x:x:*:*:*:*:*:*:*:*",
+                                            "versionEndIncluding": "1.0",
+                                        }
+                                    ],
+                                }
+                            ]
+                        }
+                    ],
                 "references": [],
                 "published": "2024-01-01T00:00:00.000",
                 "lastModified": "2024-04-01T00:00:00.000",

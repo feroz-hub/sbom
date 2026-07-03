@@ -396,15 +396,13 @@ from .sources.cache_seam import (
     component_cache_key as _component_cache_key,
 )
 from .sources.cache_seam import (
-    component_cache_key_versionless as _component_cache_key_versionless,
-)
-from .sources.cache_seam import (
     partition_by_cache as _partition_by_cache,
 )
 from .sources.cache_seam import (
     write_cache_entries as _write_cache_entries,
 )
 from .sources.cpe import cpe23_from_purl as _cpe23_from_purl
+from .sources.cpe import trusted_cpe23_from_purl as _trusted_cpe23_from_purl
 from .sources.match_confidence import (
     apply_strategy_floor as _apply_strategy_floor,
 )
@@ -412,7 +410,21 @@ from .sources.match_confidence import (
     score_match as _score_match,
 )
 from .sources.purl import parse_purl as _parse_purl
+from .sources.applicability import (
+    NormalizedAdvisory as _NormalizedAdvisory,
+)
+from .sources.applicability import (
+    NormalizedComponent as _NormalizedComponent,
+)
+from .sources.applicability import (
+    evaluate_applicability as _evaluate_applicability,
+)
+from .sources.applicability import (
+    log_candidate_decision as _log_candidate_decision,
+)
+from .sources.version_range import ApplicabilityStatus as _ApplicabilityStatus
 from .sources.version_range import cve_affects_component as _cve_affects_component
+from .sources.version_range import evaluate_nvd_configurations as _evaluate_nvd_configurations
 
 
 class _GitHubGraphQLError(Exception):
@@ -555,10 +567,21 @@ def _augment_components_with_cpe(components: list[dict]) -> tuple[list[dict], in
             p = d.get("purl")
             if p:
                 comp_version = d.get("version")
+                mapped = _trusted_cpe23_from_purl(p, version_override=comp_version)
+                if mapped is not None:
+                    d["cpe"] = mapped.cpe
+                    d["cpe_source"] = "trusted_mapping"
+                    d["cpe_mapping_confidence"] = mapped.confidence
+                    parsed = _parse_purl(p)
+                    if parsed.get("type") and not d.get("ecosystem"):
+                        d["ecosystem"] = parsed["type"]
+                    out.append(d)
+                    continue
                 cpe = _cpe23_from_purl(p, version_override=comp_version)
                 if cpe:
                     d["cpe"] = cpe
                     d["cpe_source"] = "generated_fallback"
+                    d["cpe_mapping_confidence"] = "heuristic"
                     generated += 1
         out.append(d)
     return out, generated
@@ -813,6 +836,73 @@ def _finding_from_raw(
     }
 
 
+def _nvd_applicability_for_raw(
+    raw: dict[str, Any],
+    identifier: str | None,
+    component: dict[str, Any],
+) -> Any:
+    from .services.nvd_enrichment_service import is_trusted_cpe
+    from .sources.cpe import ecosystem_from_component as _ecosystem_from_component
+
+    target_cpe = None
+    if _classify_nvd_lookup_identifier(identifier) == "cpe":
+        target_cpe = identifier
+    elif component.get("cpe") and is_trusted_cpe(str(component.get("cpe")), component.get("cpe_source")):
+        target_cpe = str(component.get("cpe"))
+
+    comp = dict(component or {})
+    if not comp.get("ecosystem"):
+        eco = _ecosystem_from_component(comp)
+        if eco:
+            comp["ecosystem"] = eco
+    result = _evaluate_nvd_configurations(raw, comp, target_cpe=target_cpe)
+    return result
+
+
+def _finding_from_applicable_nvd_raw(
+    raw: dict[str, Any],
+    identifier: str | None,
+    component: dict[str, Any],
+    settings: AnalysisSettings,
+) -> dict[str, Any] | None:
+    applicability = _nvd_applicability_for_raw(raw, identifier, component)
+    if applicability.status is not _ApplicabilityStatus.AFFECTED:
+        _emit_nvd_metric(
+            "nvd.findings_rejected_total",
+            reason=applicability.reason,
+        )
+        return None
+
+    finding = _finding_from_raw(
+        raw,
+        identifier if _classify_nvd_lookup_identifier(identifier) == "cpe" else component.get("cpe"),
+        component.get("component_name") or component.get("name") or component.get("normalized_name") or "",
+        component.get("component_version") or component.get("version"),
+        settings,
+    )
+    finding["applicability_status"] = applicability.status.value
+    finding["match_reason"] = applicability.reason
+    finding["matched_criteria"] = applicability.matched_criteria
+    finding["matched_range"] = (
+        applicability.matched_range.get("label")
+        if isinstance(applicability.matched_range, dict)
+        else None
+    )
+    finding["applicability"] = {
+        "status": applicability.status.value,
+        "reason": applicability.reason,
+        "matched_criteria": applicability.matched_criteria,
+        "matched_range": applicability.matched_range,
+    }
+    for key in ("purl", "ecosystem", "normalized_name", "bom_ref", "purl_type", "package_type"):
+        if component.get(key) is not None:
+            finding[key] = component.get(key)
+    if not finding.get("package_type") and finding.get("purl"):
+        finding["package_type"] = _parse_purl(finding["purl"]).get("type")
+    _emit_nvd_metric("nvd.findings_emitted_total")
+    return finding
+
+
 # Phase 5 cleanup note: the legacy single-source `analyze_sbom_against_nvd`
 # function lived here. It had zero callers anywhere in the codebase
 # (verified by grep across `app/` and `tests/`) — the production NVD path
@@ -1033,6 +1123,7 @@ async def osv_query_by_components(
 
     # Build name-to-version lookup for comp_ver resolution (Bug A3)
     name_to_ver: dict[str, str | None] = {(c.get("name") or "").lower(): c.get("version") for c in components}
+    component_by_name: dict[str, dict] = {(c.get("name") or "").lower(): c for c in components}
 
     # Parallel lookup of name → PURL namespace for the confidence
     # scorer's vendor input (roadmap #3, PR-D). ``parse_purl`` returns
@@ -1338,6 +1429,7 @@ async def osv_query_by_components(
             pkg = (affected[0] or {}).get("package") or {}
             comp_name = pkg.get("name") or ""
             comp_ver = name_to_ver.get(comp_name.lower())  # Bug A3 fix
+        source_component = component_by_name.get((comp_name or "").lower(), {})
 
         finding_dict = {
             "vuln_id": v.get("id"),
@@ -1355,7 +1447,18 @@ async def osv_query_by_components(
             "fixed_versions": extract_fixed_versions_osv(v),
             "component_name": comp_name,
             "component_version": comp_ver,
+            "purl": source_component.get("purl"),
+            "ecosystem": source_component.get("ecosystem") or source_component.get("normalized_ecosystem"),
+            "normalized_name": source_component.get("normalized_name"),
+            "bom_ref": source_component.get("bom_ref"),
+            "package_type": source_component.get("purl_type") or (_parse_purl(source_component.get("purl") or {}).get("type") if source_component.get("purl") else None),
             "cpe": None,
+            "applicability_status": _ApplicabilityStatus.AFFECTED.value,
+            "applicability": {
+                "status": _ApplicabilityStatus.AFFECTED.value,
+                "reason": "osv_version_qualified_query",
+            },
+            "match_reason": "osv_version_qualified_query",
             # Roadmap #6 — OSV joins on the component PURL via
             # /v1/querybatch. Same tag on the /v1/query fallback
             # path in app/sources/osv_fallback.py.
@@ -1421,6 +1524,12 @@ async def osv_query_by_components(
                     extract_fixed_versions_fn=extract_fixed_versions_osv,
                     settings=settings,
                 )
+                finding["applicability_status"] = _ApplicabilityStatus.AFFECTED.value
+                finding["applicability"] = {
+                    "status": _ApplicabilityStatus.AFFECTED.value,
+                    "reason": "osv_version_qualified_query",
+                }
+                finding["match_reason"] = finding.get("match_reason") or "osv_version_qualified_query"
                 # Roadmap #3 — same wiring as osv_fallback's live path.
                 _tag_match_confidence(
                     finding,
@@ -1503,20 +1612,18 @@ async def github_query_by_components(
     url = settings.gh_graphql_url
 
     pkg_set: set[tuple[str, str]] = set()
-    # value-tuple is (component_name, component_version, purl_namespace)
+    # value-tuple is (component_name, component_version, purl_namespace, purl, ecosystem)
     # — namespace carries the PURL's vendor token (org name for Maven,
     # @scope for npm, github.com/user for golang) which the confidence
     # scorer reads as ``component_vendor``. ``None`` namespace is
     # passed through; the scorer's vendor-renormalization handles it.
-    name_for_component: dict[tuple[str, str], set[tuple[str, str | None, str | None]]] = {}
+    name_for_component: dict[tuple[str, str], set[tuple[str, str | None, str | None, str | None, str | None]]] = {}
 
-    # Roadmap #2 (PR-C) — versionless cache key per (eco, name).
-    # First contributing component sets the key; later components
-    # mapping to the same (eco, name) yield the same versionless key
-    # (the only varying part — version — is dropped), so first-wins is
-    # consistent. ``None`` values stay None and the cache seam falls
-    # through to a live fetch.
-    versionless_key_for_pkg: dict[tuple[str, str], str | None] = {}
+    # Cache raw GitHub candidates with an applicability-versioned component key.
+    # Candidate payloads are still re-evaluated locally on every cache hit, but
+    # the suffix prevents old pre-filter GitHub entries from being reused after
+    # the applicability algorithm changes.
+    cache_key_for_pkg: dict[tuple[str, str], str | None] = {}
 
     for comp in components:
         purl = comp.get("purl")
@@ -1529,11 +1636,22 @@ async def github_query_by_components(
             continue
         key = (eco, name)
         pkg_set.add(key)
-        if key not in versionless_key_for_pkg:
-            versionless_key_for_pkg[key] = _component_cache_key_versionless(comp)
+        if key not in cache_key_for_pkg:
+            component_cache_key = _component_cache_key(comp)
+            cache_key_for_pkg[key] = (
+                f"{component_cache_key}:github-applicability-v3" if component_cache_key else None
+            )
         ns_value = parsed.get("namespace") if isinstance(parsed, dict) else None
         ns: str | None = ns_value if isinstance(ns_value, str) and ns_value else None
-        name_for_component.setdefault(key, set()).add((comp.get("name") or name, comp.get("version"), ns))
+        name_for_component.setdefault(key, set()).add(
+            (
+                comp.get("name") or name,
+                comp.get("version"),
+                ns,
+                comp.get("purl"),
+                comp.get("ecosystem") or comp.get("normalized_ecosystem") or parsed.get("type"),
+            )
+        )
 
     if not pkg_set:
         return [], [], []
@@ -1609,7 +1727,7 @@ async def github_query_by_components(
             return nodes_acc
 
         try:
-            cache_key = versionless_key_for_pkg.get((eco, pkg))
+            cache_key = cache_key_for_pkg.get((eco, pkg))
             nodes = await _cached_fetch(
                 "GITHUB",
                 cache_key,
@@ -1651,68 +1769,119 @@ async def github_query_by_components(
                 vector = cvss.get("vectorString")
             bucket = _sev_bucket(score, settings=settings, severity_text=n.get("severity"))
             refs = adv.get("references") or []
-            comp_tuple = next(iter(name_for_component.get((eco, pkg), {(pkg, None, None)})))
-            compname, compver, compvendor = comp_tuple
             patched = (n.get("firstPatchedVersion") or {}).get("identifier")
             ghsa_pkg = n.get("package") or {}
-            ghsa_finding = {
-                "vuln_id": adv.get("ghsaId"),
-                "aliases": list(
-                    {
-                        v
-                        for v in [
-                            adv.get("ghsaId"),
-                            *[i["value"] for i in (adv.get("identifiers") or []) if i.get("type") in ("CVE", "GHSA")],
-                        ]
-                        if v
-                    }
-                ),
-                "sources": ["GITHUB"],
-                "description": adv.get("summary") or adv.get("description"),
-                "severity": bucket,
-                "score": score,
-                "vector": vector,
-                "attack_vector": _parse_cvss_attack_vector(vector),
-                "cvss_version": None,
-                "published": adv.get("publishedAt"),
-                "references": [r.get("url") for r in refs if r.get("url")],
-                "cwe": extract_cwe_from_ghsa(n),
-                "fixed_versions": [patched] if patched else [],
-                "component_name": compname,
-                "component_version": compver,
-                "cpe": None,
-                # Roadmap #6 — GHSA advisories are
-                # correlated to CVEs via the
-                # ``adv.identifiers`` block; the
-                # GraphQL query joins on
-                # ``(ecosystem, package_name)`` but
-                # the strategy label captures the
-                # alias-driven correlation per the
-                # roadmap-#6 spec vocabulary.
-                "match_strategy": "ghsa_alias",
-            }
-            # Roadmap #3 — GHSA cve_text: advisory
-            # summary/description + the package block +
-            # the GraphQL-supplied vulnerable version
-            # range. Together this anchors the scorer on
-            # both prose and structural identity tokens.
-            ghsa_text = " ".join(
-                s
-                for s in (
-                    adv.get("summary") or "",
-                    adv.get("description") or "",
-                    ghsa_pkg.get("name") or "",
-                    ghsa_pkg.get("ecosystem") or "",
-                    n.get("vulnerableVersionRange") or "",
+            component_tuples = name_for_component.get((eco, pkg), {(pkg, None, None, None, eco)})
+            for comp_tuple in component_tuples:
+                compname, compver, compvendor, comp_purl, comp_ecosystem = comp_tuple
+                component_identity = _NormalizedComponent(
+                    name=compname or pkg,
+                    normalized_name=compname or pkg,
+                    version=compver,
+                    ecosystem=comp_ecosystem or eco,
+                    purl=comp_purl,
                 )
-                if isinstance(s, str)
-            )
-            _tag_match_confidence(
-                ghsa_finding,
-                cve_text=ghsa_text,
-                component_vendor=compvendor,
-            )
-            findings.append(ghsa_finding)
+                advisory_identity = _NormalizedAdvisory(
+                    provider="GITHUB",
+                    advisory_id=adv.get("ghsaId"),
+                    package_name=ghsa_pkg.get("name") or pkg,
+                    ecosystem=ghsa_pkg.get("ecosystem") or eco,
+                    vulnerable_range=n.get("vulnerableVersionRange"),
+                    fixed_version=patched,
+                )
+                applicability = _evaluate_applicability(component_identity, advisory_identity)
+                if applicability.status is not _ApplicabilityStatus.AFFECTED:
+                    _log_candidate_decision(
+                        provider="github",
+                        component=component_identity,
+                        advisory=advisory_identity,
+                        result=applicability,
+                        persisted=False,
+                    )
+                    continue
+
+                ghsa_finding = {
+                    "vuln_id": adv.get("ghsaId"),
+                    "aliases": list(
+                        {
+                            v
+                            for v in [
+                                adv.get("ghsaId"),
+                                *[
+                                    i["value"]
+                                    for i in (adv.get("identifiers") or [])
+                                    if i.get("type") in ("CVE", "GHSA")
+                                ],
+                            ]
+                            if v
+                        }
+                    ),
+                    "sources": ["GITHUB"],
+                    "description": adv.get("summary") or adv.get("description"),
+                    "severity": bucket,
+                    "score": score,
+                    "vector": vector,
+                    "attack_vector": _parse_cvss_attack_vector(vector),
+                    "cvss_version": None,
+                    "published": adv.get("publishedAt"),
+                    "references": [r.get("url") for r in refs if r.get("url")],
+                    "cwe": extract_cwe_from_ghsa(n),
+                    "fixed_versions": [patched] if patched else [],
+                    "component_name": compname,
+                    "component_version": compver,
+                    "purl": comp_purl,
+                    "ecosystem": comp_ecosystem,
+                    "normalized_name": compname,
+                    "package_type": (_parse_purl(comp_purl).get("type") if comp_purl else None),
+                    "cpe": None,
+                    "applicability_status": applicability.status.value,
+                    "applicability": {
+                        "status": applicability.status.value,
+                        "reason": applicability.reason,
+                        "matched_range": applicability.matched_range,
+                        "fixed_version": applicability.fixed_version,
+                    },
+                    "match_reason": applicability.reason,
+                    "matched_range": applicability.matched_range,
+                    # Roadmap #6 — GHSA advisories are
+                    # correlated to CVEs via the
+                    # ``adv.identifiers`` block; the
+                    # GraphQL query joins on
+                    # ``(ecosystem, package_name)`` but
+                    # the strategy label captures the
+                    # alias-driven correlation per the
+                    # roadmap-#6 spec vocabulary.
+                    "match_strategy": "ghsa_alias",
+                }
+                # Roadmap #3 — GHSA cve_text: advisory
+                # summary/description + the package block +
+                # the GraphQL-supplied vulnerable version
+                # range. Together this anchors the scorer on
+                # both prose and structural identity tokens.
+                ghsa_text = " ".join(
+                    s
+                    for s in (
+                        adv.get("summary") or "",
+                        adv.get("description") or "",
+                        ghsa_pkg.get("name") or "",
+                        ghsa_pkg.get("ecosystem") or "",
+                        n.get("vulnerableVersionRange") or "",
+                    )
+                    if isinstance(s, str)
+                )
+                _tag_match_confidence(
+                    ghsa_finding,
+                    cve_text=ghsa_text,
+                    component_vendor=compvendor,
+                )
+                _log_candidate_decision(
+                    provider="github",
+                    component=component_identity,
+                    advisory=advisory_identity,
+                    result=applicability,
+                    persisted=True,
+                )
+                findings.append(ghsa_finding)
 
     await asyncio.gather(*[_run_one(eco, pkg) for eco, pkg in pkg_set])
     return findings, query_errors, []
@@ -1762,13 +1931,9 @@ async def nvd_query_by_components_async(
         for record in result["records"]:
             component = record.get("component") or {}
             identifier = record["identifier"]
-            finding = _finding_from_raw(
-                record["raw"],
-                identifier,
-                component.get("name") or "",
-                component.get("version"),
-                settings,
-            )
+            finding = _finding_from_applicable_nvd_raw(record["raw"], identifier, component, settings)
+            if finding is None:
+                continue
             finding["match_strategy"] = "cve_ids" if identifier.upper().startswith("CVE-") else "cpe_name"
             findings.append(finding)
         errors = []
@@ -1905,58 +2070,27 @@ async def nvd_query_by_components_async(
         else:
             succeeded += 1
             comp_name, comp_ver, ecosystem = name_by_cpe.get(identifier, ("", None, None))
-            range_filter_on = bool(getattr(settings, "nvd_version_range_filter_enabled", False))
             cpe_vendor = _vendor_from_cpe(identifier) if id_kind == "cpe" else None
             match_strategy = "cve_id" if id_kind == "cve" else "cpe_name"
             for raw in raw_list:
                 if not isinstance(raw, dict):
                     continue
-                if not range_filter_on:
-                    finding = _finding_from_raw(raw, identifier, comp_name, comp_ver, settings)
-                    finding["match_strategy"] = match_strategy
-                    _tag_match_confidence(
-                        finding,
-                        cve_text=_nvd_cve_text(raw, finding.get("description")),
-                        component_vendor=cpe_vendor,
-                    )
-                    findings.append(finding)
+                component = {
+                    "name": comp_name,
+                    "version": comp_ver,
+                    "ecosystem": ecosystem,
+                    "cpe": identifier if id_kind == "cpe" else None,
+                    "cpe_source": "manual_verified" if id_kind == "cpe" else None,
+                }
+                finding = _finding_from_applicable_nvd_raw(raw, identifier, component, settings)
+                if finding is None:
                     continue
-                verdict = _cve_affects_component(
-                    raw,
-                    comp_ver,
-                    ecosystem,
-                    target_cpe=identifier if id_kind == "cpe" else None,
-                    # Roadmap #5 PR-C — when the distro-CPE flag is
-                    # on, distro/Conan ecosystems skip the
-                    # ``ecosystem_unsupported`` short-circuit and
-                    # route through normalize-then-compare. Flag off
-                    # → byte-identical conservative-keep.
-                    distro_cpe_enabled=bool(getattr(settings, "distro_cpe_enabled", False)),
-                )
-                if verdict.reason == "version_unparseable":
-                    # The PR1 contract is to keep the finding here, but we
-                    # surface the comparator gap so operators can spot
-                    # ecosystems whose version syntax we mis-handle.
-                    _emit_nvd_metric(
-                        "nvd.version_unparseable_total",
-                        ecosystem=ecosystem or "unknown",
-                    )
-                if not verdict.affected:
-                    _emit_nvd_metric(
-                        "nvd.findings_filtered_by_range_total",
-                        reason=verdict.reason,
-                    )
-                    continue
-                finding = _finding_from_raw(raw, identifier, comp_name, comp_ver, settings)
-                finding["match_reason"] = verdict.reason
-                finding["matched_range"] = verdict.matched_range
                 finding["match_strategy"] = match_strategy
                 _tag_match_confidence(
                     finding,
                     cve_text=_nvd_cve_text(raw, finding.get("description")),
                     component_vendor=cpe_vendor,
                 )
-                _emit_nvd_metric("nvd.findings_emitted_total")
                 findings.append(finding)
 
         # Inter-request sleep (only between components, not after the last).

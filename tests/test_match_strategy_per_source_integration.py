@@ -43,6 +43,7 @@ def _make_finding(*, vuln_id: str, source: str, strategy: str) -> dict:
         "component_version": "2.14.0",
         "cpe": "cpe:2.3:a:apache:log4j:2.14.0:*:*:*:*:*:*:*",
         "match_strategy": strategy,
+        "applicability_status": "affected",
     }
 
 

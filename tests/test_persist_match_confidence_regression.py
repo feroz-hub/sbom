@@ -32,6 +32,7 @@ _NVD_FINDING_WITH_CONFIDENCE = {
     "component_name": "log4j-core",
     "component_version": "2.14.0",
     "cpe": "cpe:2.3:a:apache:log4j:2.14.0:*:*:*:*:*:*:*",
+    "applicability_status": "affected",
     "match_strategy": "cpe_name",
     # PR-D's scorer rounds to 3 decimals; pick a value that already is.
     "match_confidence": 0.825,

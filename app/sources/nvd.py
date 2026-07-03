@@ -79,7 +79,7 @@ class NvdSource:
             )
             return SourceResult(findings=findings, errors=errors, warnings=warnings)
 
-        from app.analysis import _finding_from_raw
+        from app.analysis import _finding_from_applicable_nvd_raw
         from app.db import SessionLocal
         from app.services.nvd_enrichment_service import NvdEnrichmentService, collect_nvd_identifiers
         from app.settings import get_settings
@@ -95,13 +95,9 @@ class NvdSource:
                     continue
                 mirror_hit_cpes.add(cpe)
                 for raw in records:
-                    finding = _finding_from_raw(
-                        raw,
-                        cpe,
-                        component.get("name") or "",
-                        component.get("version"),
-                        settings,
-                    )
+                    finding = _finding_from_applicable_nvd_raw(raw, cpe, component, settings)
+                    if finding is None:
+                        continue
                     finding["match_strategy"] = "cpe_name"
                     mirror_findings.append(finding)
             remaining_components = [
@@ -125,13 +121,9 @@ class NvdSource:
             raw = record["raw"]
             identifier = record["identifier"]
             component = record.get("component") or {}
-            finding = _finding_from_raw(
-                raw,
-                identifier,
-                component.get("component_name") or component.get("name") or "",
-                component.get("component_version") or component.get("version"),
-                settings,
-            )
+            finding = _finding_from_applicable_nvd_raw(raw, identifier, component, settings)
+            if finding is None:
+                continue
             finding["match_strategy"] = "cve_ids" if identifier.upper().startswith("CVE-") else "cpe_name"
             findings.append(finding)
         if mirror_findings:

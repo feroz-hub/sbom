@@ -10,7 +10,7 @@ from datetime import UTC
 
 from sqlalchemy.orm import Session
 
-from ..models import AnalysisFinding, AnalysisRun, RunCache, SBOMSource
+from ..models import AnalysisFinding, AnalysisRun, RunCache, SBOMComponent, SBOMSource
 from ..pdf_report import build_pdf_from_run_bytes
 
 log = logging.getLogger(__name__)
@@ -118,10 +118,28 @@ def rebuild_run_from_db(db: Session, run_id: int) -> dict | None:
 
     sbom_row = db.get(SBOMSource, run_row.sbom_id) if run_row.sbom_id else None
 
-    # Group findings by component name+version
+    component_rows = []
+    if run_row.sbom_id:
+        component_rows = (
+            db.query(SBOMComponent)
+            .filter(SBOMComponent.sbom_id == run_row.sbom_id)
+            .filter((SBOMComponent.is_duplicate.is_(False)) | (SBOMComponent.is_duplicate.is_(None)))
+            .all()
+        )
+
+    # Group findings by component row when possible, falling back to name+version.
     comp_map: dict = {}
+    for component in component_rows:
+        key = f"id:{component.id}"
+        comp_map[key] = {
+            "name": component.name or "",
+            "version": component.version or "",
+            "purl": component.purl or component.normalized_purl,
+            "cpe": component.primary_cpe or component.cpe,
+            "combined": [],
+        }
     for f in findings:
-        key = f"{f.component_name or ''}||{f.component_version or ''}"
+        key = f"id:{f.component_id}" if f.component_id else f"{f.component_name or ''}||{f.component_version or ''}"
         if key not in comp_map:
             comp_map[key] = {
                 "name": f.component_name or "",

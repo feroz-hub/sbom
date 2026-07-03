@@ -12,6 +12,8 @@ from sqlalchemy.orm import Session
 from ..models import NvdLookupCache
 from ..settings import Settings, get_settings
 
+NVD_CACHE_ALGORITHM_VERSION = "nvd-applicability-v2"
+
 
 def _now() -> datetime:
     return datetime.now(UTC)
@@ -28,7 +30,8 @@ class NvdCacheService:
 
     @staticmethod
     def identifier_hash(identifier: str) -> str:
-        return hashlib.sha256(identifier.strip().encode("utf-8")).hexdigest()
+        material = f"{NVD_CACHE_ALGORITHM_VERSION}:{identifier.strip()}"
+        return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
     def get_valid_cache(self, identifier: str, lookup_type: str) -> NvdLookupCache | None:
         row = self.db.execute(

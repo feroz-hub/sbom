@@ -10,9 +10,9 @@ Covers the brief's five scenarios:
   1. Flag OFF → fetch called every scan; no cache rows.
   2. Flag ON, re-scan reuse → second scan calls fetch ZERO times.
   3. Reprocess-equals-live → findings identical.
-  4. Versionless-key win → two components sharing ``(eco, name)`` but
-     different versions reuse one cache row across scans (the whole
-     reason GHSA needs a versionless key).
+  4. Version-safe keying → two components sharing ``(eco, name)`` but
+     different versions use separate cache rows across scans so cached
+     candidates cannot bypass local applicability.
   5. TTL expiry → advance the cache repository's clock; next scan
      fetches again.
 """
@@ -214,8 +214,7 @@ def test_flag_on_second_scan_hits_cache(
         rows = s.query(SourceResponseCache).all()
         assert len(rows) == 1
         assert rows[0].source == "GITHUB"
-        # Versionless PURL key (npm lowercases name).
-        assert rows[0].component_key == "pkg:npm/lodash"
+        assert rows[0].component_key == "pkg:npm/lodash@1.5.0:github-applicability-v3"
 
 
 # ---------------------------------------------------------------------------
@@ -245,21 +244,21 @@ def test_cached_findings_identical_to_live_findings(
 
 
 # ---------------------------------------------------------------------------
-# 4. VERSIONLESS-KEY WIN — different versions of same package reuse one cache row
+# 4. VERSION-SAFE KEYING — different versions of same package use separate rows
 # ---------------------------------------------------------------------------
 
 
-def test_versionless_key_reuse_across_versions(
+def test_version_safe_keying_across_versions(
     isolated_session_factory: sessionmaker,
     controlled_clock: dict[str, datetime],
     network_mock: dict[str, Any],
 ) -> None:
     """Two SBOMs differ in version (lodash@1.5.0 vs lodash@1.6.0) but
-    share the same (eco, name). The cache MUST reuse one row — that
-    is the whole reason GHSA needs a versionless key.
+    share the same (eco, name). The cache keeps separate rows because
+    provider candidates are evaluated against the installed version.
 
     Scan 1 contains lodash@1.5.0 → miss → fetch → cache.
-    Scan 2 contains lodash@1.6.0 → cache HIT (same versionless key).
+    Scan 2 contains lodash@1.6.0 → miss → fetch → cache.
 
     The existing (eco, name) dedup means a SINGLE scan with both
     versions ALREADY runs only one query; this test exercises the
@@ -278,13 +277,15 @@ def test_versionless_key_reuse_across_versions(
             settings,
         )
     )
-    assert network_mock["calls"] == 1, "scan 2 with a different version must have HIT the cache (versionless key)"
+    assert network_mock["calls"] == 2, "scan 2 with a different version must fetch under a version-safe key"
 
-    # Sanity — exactly one cache row.
+    # Sanity — one cache row per installed version.
     with isolated_session_factory() as s:
-        rows = s.query(SourceResponseCache).all()
-        assert len(rows) == 1
-        assert rows[0].component_key == "pkg:npm/lodash"
+        rows = sorted(row.component_key for row in s.query(SourceResponseCache).all())
+        assert rows == [
+            "pkg:npm/lodash@1.5.0:github-applicability-v3",
+            "pkg:npm/lodash@1.6.0:github-applicability-v3",
+        ]
 
 
 def test_existing_dedup_within_single_scan_still_holds(

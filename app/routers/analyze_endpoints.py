@@ -45,7 +45,12 @@ from ..db import get_db
 from ..idempotency import normalize_idempotency_key, run_idempotent
 from ..models import AnalysisRun
 from ..rate_limit import analyze_route_limit
-from ..services.analysis_service import compute_report_status, get_active_analysis_run, persist_analysis_run
+from ..services.analysis_service import (
+    compute_report_status,
+    filter_unconfirmed_provider_findings,
+    get_active_analysis_run,
+    persist_analysis_run,
+)
 from ..services.sbom_service import load_sbom_from_ref as _load_sbom_from_ref
 from ..services.sbom_service import now_iso
 from ..settings import get_settings
@@ -231,6 +236,7 @@ async def _run_legacy_analysis(
 
     # 5. Two-pass CVE↔GHSA dedupe (same pass production uses).
     final_findings = deduplicate_findings(raw_findings)
+    final_findings = filter_unconfirmed_provider_findings({"findings": final_findings}, components)["findings"]
 
     buckets = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "UNKNOWN": 0}
     for f in final_findings:

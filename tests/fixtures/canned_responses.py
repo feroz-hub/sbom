@@ -216,6 +216,7 @@ ASYNC_NVD_FINDING: dict[str, Any] = {
     "component_name": "log4j-core",
     "component_version": "2.14.1",
     "cpe": "cpe:2.3:a:log4j-core:log4j-core:2.14.1:*:*:*:*:*:*:*",
+    "applicability_status": "affected",
 }
 
 ASYNC_OSV_FINDING_REQUESTS: dict[str, Any] = {
@@ -235,6 +236,7 @@ ASYNC_OSV_FINDING_REQUESTS: dict[str, Any] = {
     "component_name": "requests",
     "component_version": "2.19.0",
     "cpe": None,
+    "applicability_status": "affected",
 }
 
 ASYNC_GHSA_FINDING: dict[str, Any] = {
@@ -254,4 +256,5 @@ ASYNC_GHSA_FINDING: dict[str, Any] = {
     "component_name": "log4j-core",
     "component_version": "2.14.1",
     "cpe": None,
+    "applicability_status": "affected",
 }

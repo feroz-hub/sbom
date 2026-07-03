@@ -40,6 +40,7 @@ _NVD_TAGGED_FINDING = {
     "component_name": "log4j-core",
     "component_version": "2.14.0",
     "cpe": "cpe:2.3:a:apache:log4j:2.14.0:*:*:*:*:*:*:*",
+    "applicability_status": "affected",
     "match_strategy": "cpe_name",
     "match_reason": "matched",
     "matched_range": ">= 2.0.0, < 2.17.0",

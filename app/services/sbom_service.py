@@ -292,6 +292,7 @@ def _upsert_components(
     by_comp_triplet: dict = {}
     by_name_version: dict = {}
     by_cpe: dict = {}
+    by_purl: dict = {}
 
     # Build lookup maps from existing components
     for row in existing_rows:
@@ -307,6 +308,8 @@ def _upsert_components(
         by_name_version.setdefault(nv, []).append(row)
         if row.cpe:
             by_cpe.setdefault(normalized_key(row.cpe), []).append(row)
+        if row.purl:
+            by_purl.setdefault(normalized_key(row.purl), []).append(row)
 
     def _component_field_values(comp: dict, is_dup: bool, dup_of_id: int | None = None) -> dict[str, Any]:
         name = (comp.get("name") or "").strip()
@@ -381,6 +384,8 @@ def _upsert_components(
             _apply_component_values(row, values)
             db.add(row)
             db.flush()
+            if values.get("purl"):
+                by_purl.setdefault(normalized_key(values.get("purl")), []).append(row)
             return row
 
         # Backfill case for canonical components
@@ -399,6 +404,8 @@ def _upsert_components(
                 by_comp_triplet.pop(empty_triplet, None)
                 by_comp_triplet[triplet] = backfill_target
                 by_cpe.setdefault(normalized_key(cpe), []).append(backfill_target)
+                if values.get("purl"):
+                    by_purl.setdefault(normalized_key(values.get("purl")), []).append(backfill_target)
                 if ref:
                     by_bom_ref[ref] = backfill_target
                 return backfill_target
@@ -415,6 +422,8 @@ def _upsert_components(
             by_name_version.setdefault(nv_key, []).append(row)
             if cpe:
                 by_cpe.setdefault(normalized_key(cpe), []).append(row)
+            if values.get("purl"):
+                by_purl.setdefault(normalized_key(values.get("purl")), []).append(row)
 
         return row
 
@@ -438,7 +447,7 @@ def _upsert_components(
         parent_id = parent_row.id if parent_row else None
         save_comp_row(comp, is_dup=True, dup_of_id=parent_id)
 
-    return {"triplet": by_comp_triplet, "cpe": by_cpe, "bom_ref": by_bom_ref}
+    return {"triplet": by_comp_triplet, "cpe": by_cpe, "bom_ref": by_bom_ref, "purl": by_purl, "name_version": by_name_version}
 
 
 def resolve_component_id(finding: dict, component_maps: dict) -> int | None:
@@ -472,6 +481,16 @@ def resolve_component_id(finding: dict, component_maps: dict) -> int | None:
         cpe_rows = component_maps["cpe"].get(normalized_key(cpe), [])
         if cpe_rows:
             return cpe_rows[0].id
+
+    purl = (finding.get("purl") or "").strip() or None
+    if purl:
+        purl_rows = component_maps.get("purl", {}).get(normalized_key(purl), [])
+        if purl_rows:
+            return purl_rows[0].id
+
+    nv_rows = component_maps.get("name_version", {}).get((normalized_key(name), normalized_key(version)), [])
+    if nv_rows:
+        return nv_rows[0].id
 
     return None
 

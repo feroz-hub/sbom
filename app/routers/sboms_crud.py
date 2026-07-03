@@ -63,7 +63,12 @@ from ..schemas import (
     SBOMSourceOut,
 )
 from ..services import audit_log, audit_service
-from ..services.analysis_service import compute_report_status, get_active_analysis_run, persist_analysis_run
+from ..services.analysis_service import (
+    compute_report_status,
+    filter_unconfirmed_provider_findings,
+    get_active_analysis_run,
+    persist_analysis_run,
+)
 from ..services.repair.workspace_backfill_service import WorkspaceBackfillService
 from ..services.sbom_delete_service import SBOMDeleteConflict, SBOMDeleteService
 from ..services.sbom_document_service import (
@@ -503,6 +508,7 @@ async def create_auto_report(
         return None
 
     final_findings: list[dict] = deduplicate_findings(raw_findings)
+    final_findings = filter_unconfirmed_provider_findings({"findings": final_findings}, components)["findings"]
 
     buckets = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "UNKNOWN": 0}
     for f in final_findings:
@@ -1768,6 +1774,7 @@ async def analyze_sbom_stream(
                 orchestrator.result()
 
             final_findings = deduplicate_findings(all_findings)
+            final_findings = filter_unconfirmed_provider_findings({"findings": final_findings}, components)["findings"]
 
             buckets = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "UNKNOWN": 0}
             for f in final_findings:

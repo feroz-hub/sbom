@@ -38,6 +38,7 @@ _NVD_FINDING_WITH_MATCH_TAGS = {
     "component_name": "log4j-core",
     "component_version": "2.14.0",
     "cpe": "cpe:2.3:a:apache:log4j:2.14.0:*:*:*:*:*:*:*",
+    "applicability_status": "affected",
     # PR3 sets these on every kept finding when the flag is on.
     "match_reason": "matched",
     "matched_range": ">= 2.0.0, < 2.17.0",

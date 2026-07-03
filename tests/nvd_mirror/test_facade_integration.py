@@ -150,7 +150,21 @@ def test_orchestrator_does_not_bypass_cache_boundary_when_mirror_disabled(
                 "descriptions": [{"lang": "en", "value": "from live"}],
                 "metrics": {},
                 "weaknesses": [],
-                "configurations": [],
+                "configurations": [
+                    {
+                        "nodes": [
+                            {
+                                "operator": "OR",
+                                "cpeMatch": [
+                                    {
+                                        "vulnerable": True,
+                                        "criteria": _EXPECTED_CRITERIA,
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                ],
                 "references": [],
                 "published": "2024-01-01T00:00:00.000",
                 "lastModified": "2024-04-01T00:00:00.000",
@@ -237,7 +251,21 @@ def test_orchestrator_uses_mirror_when_enabled_and_fresh(
                 "descriptions": [{"lang": "en", "value": "from mirror"}],
                 "metrics": {},
                 "weaknesses": [],
-                "configurations": [],
+                "configurations": [
+                    {
+                        "nodes": [
+                            {
+                                "operator": "OR",
+                                "cpeMatch": [
+                                    {
+                                        "vulnerable": True,
+                                        "criteria": _EXPECTED_CRITERIA,
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                ],
                 "references": [],
                 "published": (now - timedelta(days=10)).isoformat(),
                 "lastModified": (now - timedelta(hours=2)).isoformat(),

@@ -8,7 +8,7 @@ import json
 import logging
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from ..models import AnalysisRun, SBOMAnalysisReport, SBOMSource
@@ -27,6 +27,8 @@ from .sbom_service import (
 )
 
 log = logging.getLogger(__name__)
+
+_APPLICABILITY_GATED_SOURCES = {"GITHUB", "NVD", "OSV"}
 
 
 # ============================================================
@@ -194,11 +196,15 @@ def persist_analysis_run(
     from ..models import AnalysisFinding
 
     component_maps = _upsert_components(db, sbom_obj, components)
+    details = filter_unconfirmed_provider_findings(details, components)
 
     run = existing_run or AnalysisRun(sbom_id=sbom_obj.id, project_id=sbom_obj.projectid)
     run.sbom_id = sbom_obj.id
     run.project_id = sbom_obj.projectid
-    run.run_status = normalize_run_status(run_status) or RUN_STATUS_ERROR
+    normalized_status = normalize_run_status(run_status) or RUN_STATUS_ERROR
+    if normalized_status == RUN_STATUS_FINDINGS and safe_int(details.get("total_findings")) == 0:
+        normalized_status = compute_report_status(0, details.get("query_errors") or [])
+    run.run_status = normalized_status
     run.source = source
     run.trigger_source = trigger_source
     run.started_on = started_on
@@ -217,10 +223,18 @@ def persist_analysis_run(
     db.add(run)
     db.flush()
 
+    if existing_run is not None:
+        db.execute(delete(AnalysisFinding).where(AnalysisFinding.analysis_run_id == run.id))
+        db.flush()
+
     # Persist findings
+    persisted_keys: set[tuple[str, str | None, int | None]] = set()
     for finding in details.get("findings") or []:
         if not isinstance(finding, dict):
             continue
+        applicability_status = finding.get("applicability_status") or (finding.get("applicability") or {}).get("status")
+        if applicability_status and applicability_status != "affected":
+            raise AssertionError("Refusing to persist a non-affected vulnerability finding")
 
         # Multi-source orchestrator emits the canonical id under "vuln_id";
         # legacy callers may still use "id". Accept both, prefer the new
@@ -265,10 +279,17 @@ def persist_analysis_run(
                 reference_url = refs[0]
         reference_url = reference_url or None
 
+        component_id = resolve_component_id(finding, component_maps)
+        cpe_value = (finding.get("cpe") or "").strip() or None
+        unique_key = (vuln_id, cpe_value, component_id)
+        if unique_key in persisted_keys:
+            continue
+        persisted_keys.add(unique_key)
+
         db.add(
             AnalysisFinding(
                 analysis_run_id=run.id,
-                component_id=resolve_component_id(finding, component_maps),
+                component_id=component_id,
                 vuln_id=vuln_id,
                 source=sources_str,
                 title=(finding.get("title") or finding.get("vuln_id")),
@@ -279,7 +300,7 @@ def persist_analysis_run(
                 published_on=(finding.get("published") or "").strip() or None,
                 reference_url=reference_url,
                 cwe=cwe_value,
-                cpe=(finding.get("cpe") or "").strip() or None,
+                cpe=cpe_value,
                 component_name=(finding.get("component_name") or "").strip() or None,
                 component_version=(finding.get("component_version") or "").strip() or None,
                 fixed_versions=json.dumps(fv) if fv else None,
@@ -324,6 +345,48 @@ def persist_analysis_run(
     # see a CompareResult containing references to the mutated/deleted
     # run, which is a correctness bug.
     return run
+
+
+def filter_unconfirmed_provider_findings(details: dict, components: list[dict]) -> dict:
+    data = dict(details or {})
+    findings = data.get("findings") or []
+    if not isinstance(findings, list):
+        return normalize_details(data, components)
+
+    kept: list[dict] = []
+    dropped = 0
+    for finding in findings:
+        if not isinstance(finding, dict):
+            continue
+        applicability_status = finding.get("applicability_status") or (finding.get("applicability") or {}).get("status")
+        if applicability_status and applicability_status != "affected":
+            raise AssertionError("Refusing to persist a non-affected vulnerability finding")
+
+        sources = _finding_sources(finding)
+        if sources & _APPLICABILITY_GATED_SOURCES and applicability_status != "affected":
+            dropped += 1
+            continue
+        kept.append(finding)
+
+    if dropped:
+        log.warning("Dropped %d provider findings without affected applicability before persistence", dropped)
+    data["findings"] = kept
+    data.pop("total_findings", None)
+    data.pop("critical", None)
+    data.pop("high", None)
+    data.pop("medium", None)
+    data.pop("low", None)
+    data.pop("unknown", None)
+    return normalize_details(data, components)
+
+
+def _finding_sources(finding: dict) -> set[str]:
+    raw = finding.get("sources")
+    if isinstance(raw, list):
+        return {str(source).strip().upper() for source in raw if str(source).strip()}
+    if isinstance(raw, str):
+        return {source.strip().upper() for source in raw.split(",") if source.strip()}
+    return set()
 
 
 def _safe_float(value: Any) -> float | None:

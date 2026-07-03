@@ -36,6 +36,7 @@ _NVD_FINDING_WITH_STRATEGY = {
     "component_name": "log4j-core",
     "component_version": "2.14.0",
     "cpe": "cpe:2.3:a:apache:log4j:2.14.0:*:*:*:*:*:*:*",
+    "applicability_status": "affected",
     # PR-C sets this on every kept finding at the per-source emit step.
     "match_strategy": "cpe_name",
 }

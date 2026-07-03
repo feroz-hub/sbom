@@ -84,10 +84,8 @@ def _run_query(
 # ---------------------------------------------------------------------------
 
 
-def test_flag_off_keeps_finding_unfiltered_and_does_not_tag() -> None:
-    """With the flag off, behaviour is byte-identical to pre-PR1:
-    the finding is emitted regardless of range, and the two new keys
-    (``match_reason``, ``matched_range``) are absent from the dict."""
+def test_flag_off_still_applies_applicability_gate() -> None:
+    """NVD applicability validation is now unconditional."""
     raw = _load_cve("cve_log4j_window.json", cve_id="CVE-2021-44228")
     # Choose a component version that WOULD have been filtered if the
     # flag were on (2.17.0 sits at the exclusive upper bound).
@@ -101,11 +99,7 @@ def test_flag_off_keeps_finding_unfiltered_and_does_not_tag() -> None:
     ]
     result = _run_query(components, raw_cves=[raw], range_filter_on=False)
 
-    assert len(result["findings"]) == 1
-    f = result["findings"][0]
-    assert f["vuln_id"] == "CVE-2021-44228"
-    assert "match_reason" not in f
-    assert "matched_range" not in f
+    assert result["findings"] == []
 
 
 # ---------------------------------------------------------------------------
@@ -127,10 +121,7 @@ def test_flag_on_keeps_in_range_finding_and_tags_it() -> None:
 
     assert len(result["findings"]) == 1
     f = result["findings"][0]
-    # PR1's MatchReason for an in-range match is "matched". The brief
-    # asked for ``in_range`` / ``exact_version_match``; this test
-    # asserts against PR1's actual literal value. See follow-up note 1.
-    assert f["match_reason"] == "matched"
+    assert f["match_reason"] == "version_in_range"
     assert f["matched_range"] == ">= 2.0.0, < 2.17.0"
 
 
@@ -189,14 +180,13 @@ def test_emit_metrics_for_each_observation_point(caplog: pytest.LogCaptureFixtur
     """Three observation points fire on the right paths:
 
     * ``nvd.findings_emitted_total``           — kept-finding test
-    * ``nvd.findings_filtered_by_range_total`` — dropped-finding test
-    * ``nvd.version_unparseable_total``        — unparseable-version test
+    * ``nvd.findings_rejected_total``          — dropped/unknown candidates
     """
     raw = _load_cve("cve_log4j_window.json", cve_id="CVE-2021-44228")
     # Component A (maven): in range, kept.
     # Component B (maven): out of range, dropped.
-    # Component C (pypi): PEP-440-invalid version, conservative keep
-    # with ``version_unparseable`` reason. PyPI is used here because
+    # Component C (pypi): PEP-440-invalid version, rejected as unknown.
+    # PyPI is used here because
     # ``packaging.version.Version`` rejects malformed strings outright
     # — the maven/semver-ish comparator is permissive and would order
     # ``"not-a-version"`` rather than flagging it.
@@ -223,26 +213,21 @@ def test_emit_metrics_for_each_observation_point(caplog: pytest.LogCaptureFixtur
     with caplog.at_level(logging.INFO, logger="sbom.nvd.metrics"):
         result = _run_query(components, raw_cves=[raw], range_filter_on=True)
 
-    # A and C kept (C via conservative-keep), B dropped.
+    # A kept; B not affected and C unknown are rejected.
     kept_ids = {(f["component_name"], f["match_reason"]) for f in result["findings"]}
-    assert ("log4j-A", "matched") in kept_ids
-    assert ("requests-C", "version_unparseable") in kept_ids
+    assert ("log4j-A", "version_in_range") in kept_ids
+    assert all(name != "requests-C" for name, _ in kept_ids)
     assert all(name != "log4j-B" for name, _ in kept_ids)
 
     emitted = _events(caplog, "nvd.findings_emitted_total")
-    filtered = _events(caplog, "nvd.findings_filtered_by_range_total")
-    unparseable = _events(caplog, "nvd.version_unparseable_total")
+    rejected = _events(caplog, "nvd.findings_rejected_total")
 
-    assert len(emitted) == 2, f"expected two kept-finding events, got {len(emitted)}"
-    assert len(filtered) == 1, f"expected one dropped-finding event, got {len(filtered)}"
-    assert filtered[0].labels == {"reason": "out_of_range"}
-    assert len(unparseable) == 1, f"expected one unparseable event, got {len(unparseable)}"
-    # Ecosystem label is the normalized canonical name (lowercased by
-    # ``ecosystem_from_component``); "PyPI" → "pypi".
-    assert unparseable[0].labels == {"ecosystem": "pypi"}
+    assert len(emitted) == 1, f"expected one kept-finding event, got {len(emitted)}"
+    assert len(rejected) == 2, f"expected two rejected candidates, got {len(rejected)}"
+    assert {r.labels["reason"] for r in rejected} == {"version_end_excluding", "installed_or_bound_version_invalid"}
 
 
-def test_no_metrics_when_flag_off(caplog: pytest.LogCaptureFixture) -> None:
+def test_metrics_still_emit_when_legacy_flag_off(caplog: pytest.LogCaptureFixture) -> None:
     raw = _load_cve("cve_log4j_window.json", cve_id="CVE-2021-44228")
     components = [
         {
@@ -255,10 +240,8 @@ def test_no_metrics_when_flag_off(caplog: pytest.LogCaptureFixture) -> None:
     with caplog.at_level(logging.INFO, logger="sbom.nvd.metrics"):
         _run_query(components, raw_cves=[raw], range_filter_on=False)
 
-    # No structured metric events fire when the flag is off — the
-    # baseline path is byte-identical to pre-PR1.
     nvd_metric_records = [r for r in caplog.records if r.name == "sbom.nvd.metrics"]
-    assert nvd_metric_records == []
+    assert [r.metric for r in nvd_metric_records] == ["nvd.findings_emitted_total"]
 
 
 # ---------------------------------------------------------------------------
@@ -274,22 +257,18 @@ def _capture_ecosystem(monkeypatch: pytest.MonkeyPatch) -> list[str | None]:
     """
     seen: list[str | None] = []
     import app.analysis as analysis_mod
-    from app.sources.version_range import MatchVerdict
+    from app.sources.version_range import ApplicabilityResult, ApplicabilityStatus
 
     def recorder(
         cve_json,
-        component_version,
-        ecosystem,
+        component,
         *,
         target_cpe=None,
-        # PR-C added this kwarg to the production signature; the
-        # recorder accepts and ignores it.
-        distro_cpe_enabled: bool = False,
     ):
-        seen.append(ecosystem)
-        return MatchVerdict(affected=True, reason="matched", matched_range="*")
+        seen.append((component.get("ecosystem") or "").lower())
+        return ApplicabilityResult(ApplicabilityStatus.AFFECTED, "version_in_range", matched_range={"label": "*"})
 
-    monkeypatch.setattr(analysis_mod, "_cve_affects_component", recorder)
+    monkeypatch.setattr(analysis_mod, "_evaluate_nvd_configurations", recorder)
     return seen
 
 

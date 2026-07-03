@@ -55,9 +55,12 @@ import logging
 import re
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any, Final, Literal
 
 from packaging.version import InvalidVersion, Version
+
+from .cpe import trusted_cpe23_from_purl
 
 log = logging.getLogger(__name__)
 
@@ -89,6 +92,27 @@ class MatchVerdict:
     affected: bool
     reason: MatchReason
     matched_range: str | None = None
+
+
+class ApplicabilityStatus(str, Enum):
+    AFFECTED = "affected"
+    NOT_AFFECTED = "not_affected"
+    UNKNOWN = "unknown"
+
+
+@dataclass(frozen=True, slots=True)
+class ApplicabilityResult:
+    status: ApplicabilityStatus
+    reason: str
+    matched_criteria: str | None = None
+    matched_range: str | dict[str, str | None] | None = None
+    fixed_version: str | None = None
+
+
+class TriState(str, Enum):
+    TRUE = "true"
+    FALSE = "false"
+    UNKNOWN = "unknown"
 
 
 @dataclass(frozen=True, slots=True)
@@ -290,6 +314,216 @@ def version_in_range(
     return MatchVerdict(affected=True, reason="matched", matched_range=label)
 
 
+def compare_versions(ecosystem: str | None, left: str, right: str) -> int:
+    eco = _normalize_ecosystem(ecosystem)
+    cmp = _compare(left, right, eco)
+    if cmp is _INCOMPARABLE:
+        raise InvalidVersion(f"Cannot compare {left!r} to {right!r} for ecosystem {ecosystem!r}")
+    return int(cmp)
+
+
+def evaluate_version_bounds(
+    installed_version: str | None,
+    ecosystem: str | None,
+    match: Mapping[str, Any],
+) -> ApplicabilityResult:
+    bounds = parse_range(match)
+    criteria = str(match.get("criteria") or "") or None
+    if bounds is None:
+        return ApplicabilityResult(ApplicabilityStatus.UNKNOWN, "cpe_criteria_missing", criteria)
+    if not installed_version:
+        return ApplicabilityResult(
+            ApplicabilityStatus.UNKNOWN,
+            "installed_version_missing",
+            criteria,
+            _range_dict(bounds),
+        )
+    eco = _normalize_ecosystem(ecosystem)
+    if eco in _UNSUPPORTED_ECOSYSTEMS:
+        return ApplicabilityResult(
+            ApplicabilityStatus.UNKNOWN,
+            "ecosystem_unsupported",
+            criteria,
+            _range_dict(bounds),
+        )
+
+    has_bounds = any(
+        value is not None
+        for value in (
+            bounds.start_including,
+            bounds.start_excluding,
+            bounds.end_including,
+            bounds.end_excluding,
+        )
+    )
+    if not has_bounds:
+        if bounds.criteria_version is None:
+            return ApplicabilityResult(
+                ApplicabilityStatus.UNKNOWN,
+                "wildcard_version_without_range",
+                criteria,
+                _range_dict(bounds),
+            )
+        try:
+            cmp = compare_versions(eco, installed_version, bounds.criteria_version)
+        except InvalidVersion:
+            log.warning(
+                "version_range: rejecting candidate — unparseable version component=%r range=%s cpe=%r ecosystem=%r",
+                installed_version,
+                _fmt_range(bounds),
+                criteria,
+                ecosystem,
+            )
+            return ApplicabilityResult(
+                ApplicabilityStatus.UNKNOWN,
+                "installed_or_bound_version_invalid",
+                criteria,
+                _range_dict(bounds),
+            )
+        if cmp == 0:
+            return ApplicabilityResult(
+                ApplicabilityStatus.AFFECTED,
+                "exact_version_match",
+                criteria,
+                _range_dict(bounds),
+            )
+        return ApplicabilityResult(
+            ApplicabilityStatus.NOT_AFFECTED,
+            "exact_version_mismatch",
+            criteria,
+            _range_dict(bounds),
+        )
+
+    checks = (
+        (bounds.start_including, "version_start_including", lambda c: c < 0),
+        (bounds.start_excluding, "version_start_excluding", lambda c: c <= 0),
+        (bounds.end_including, "version_end_including", lambda c: c > 0),
+        (bounds.end_excluding, "version_end_excluding", lambda c: c >= 0),
+    )
+    for bound, reason, outside in checks:
+        if bound is None:
+            continue
+        try:
+            cmp = compare_versions(eco, installed_version, bound)
+        except InvalidVersion:
+            log.warning(
+                "version_range: rejecting candidate — unparseable version component=%r range=%s cpe=%r ecosystem=%r",
+                installed_version,
+                _fmt_range(bounds),
+                criteria,
+                ecosystem,
+            )
+            return ApplicabilityResult(
+                ApplicabilityStatus.UNKNOWN,
+                "installed_or_bound_version_invalid",
+                criteria,
+                _range_dict(bounds),
+            )
+        if outside(cmp):
+            return ApplicabilityResult(
+                ApplicabilityStatus.NOT_AFFECTED,
+                reason,
+                criteria,
+                _range_dict(bounds),
+            )
+
+    return ApplicabilityResult(
+        ApplicabilityStatus.AFFECTED,
+        "version_in_range",
+        criteria,
+        _range_dict(bounds),
+    )
+
+
+def evaluate_nvd_cpe_match(
+    component: Mapping[str, Any],
+    cpe_match: Mapping[str, Any],
+    *,
+    target_cpe: str | None = None,
+) -> ApplicabilityResult:
+    criteria = str(cpe_match.get("criteria") or "")
+    parsed = _parse_cpe23(criteria)
+    if parsed is None:
+        return ApplicabilityResult(ApplicabilityStatus.UNKNOWN, "cpe_criteria_invalid", criteria)
+    if cpe_match.get("vulnerable") is not True:
+        if parsed["part"] != "a":
+            return ApplicabilityResult(ApplicabilityStatus.UNKNOWN, "environmental_cpe_unsupported", criteria)
+        return ApplicabilityResult(ApplicabilityStatus.NOT_AFFECTED, "cpe_match_not_vulnerable", criteria)
+    if parsed["part"] != "a":
+        return ApplicabilityResult(ApplicabilityStatus.UNKNOWN, "environmental_cpe_unsupported", criteria)
+
+    identity = _component_identity_matches(component, criteria, target_cpe=target_cpe)
+    if identity.status is not ApplicabilityStatus.AFFECTED:
+        return identity
+
+    version_result = evaluate_version_bounds(
+        _component_value(component, "version", "component_version"),
+        _component_value(component, "ecosystem", "normalized_ecosystem"),
+        cpe_match,
+    )
+    if version_result.status is ApplicabilityStatus.AFFECTED:
+        return ApplicabilityResult(
+            ApplicabilityStatus.AFFECTED,
+            version_result.reason,
+            criteria,
+            version_result.matched_range,
+        )
+    return version_result
+
+
+def evaluate_nvd_configurations(
+    cve_json: Mapping[str, Any],
+    component: Mapping[str, Any],
+    *,
+    target_cpe: str | None = None,
+) -> ApplicabilityResult:
+    configurations = cve_json.get("configurations")
+    if not configurations:
+        return ApplicabilityResult(ApplicabilityStatus.UNKNOWN, "no_configurations")
+
+    states: list[tuple[TriState, ApplicabilityResult]] = []
+    for cfg in configurations:
+        if not isinstance(cfg, Mapping):
+            continue
+        node_states = [
+            _evaluate_node(node, component, target_cpe=target_cpe)
+            for node in (cfg.get("nodes") or [])
+            if isinstance(node, Mapping)
+        ]
+        if not node_states:
+            continue
+        operator = str(cfg.get("operator") or "OR").upper()
+        states.append(_combine_and(node_states) if operator == "AND" else _combine_or(node_states))
+
+    if not states:
+        return ApplicabilityResult(ApplicabilityStatus.UNKNOWN, "no_applicable_configurations")
+    state, result = _combine_or(states)
+    if state is TriState.TRUE:
+        return result
+    if state is TriState.FALSE:
+        return ApplicabilityResult(ApplicabilityStatus.NOT_AFFECTED, result.reason, result.matched_criteria, result.matched_range)
+    return ApplicabilityResult(ApplicabilityStatus.UNKNOWN, result.reason, result.matched_criteria, result.matched_range)
+
+
+def applicability_to_match_verdict(result: ApplicabilityResult) -> MatchVerdict:
+    if result.status is ApplicabilityStatus.AFFECTED:
+        return MatchVerdict(True, "matched", _format_result_range(result))
+    if result.status is ApplicabilityStatus.NOT_AFFECTED:
+        reason = "out_of_range" if result.reason.startswith("version_") else "exact_version_mismatch"
+        if result.reason in {"cpe_product_mismatch", "cpe_match_not_vulnerable"}:
+            reason = "no_configurations"
+        elif result.reason == "exact_version_mismatch":
+            reason = "exact_version_mismatch"
+        return MatchVerdict(False, reason, _format_result_range(result))
+    if result.reason.startswith("environmental_"):
+        reason = "and_node_ambiguous"
+    elif "version" in result.reason:
+        reason = "version_unparseable"
+    else:
+        reason = "no_configurations"
+    return MatchVerdict(False, reason, _format_result_range(result))
+
+
 def cve_affects_component(
     cve_json: Mapping[str, Any],
     component_version: str | None,
@@ -324,39 +558,14 @@ def cve_affects_component(
          CPE stem, or has no configurations at all) → conservative
          keep with reason ``no_configurations``.
     """
-    configurations = cve_json.get("configurations")
-    if not configurations:
-        return MatchVerdict(affected=True, reason="no_configurations", matched_range=None)
-
-    target_stem = _cpe_stem(target_cpe) if target_cpe else None
-
-    applicable: list[MatchVerdict] = []
-    for cfg in configurations:
-        if not isinstance(cfg, dict):
-            continue
-        for node in cfg.get("nodes") or []:
-            if not isinstance(node, dict):
-                continue
-            applicable.extend(
-                _walk_node(
-                    node,
-                    component_version=component_version,
-                    ecosystem=ecosystem,
-                    target_stem=target_stem,
-                    distro_cpe_enabled=distro_cpe_enabled,
-                )
-            )
-
-    if not applicable:
-        return MatchVerdict(affected=True, reason="no_configurations", matched_range=None)
-
-    for v in applicable:
-        if v.reason == "matched":
-            return v
-    for v in applicable:
-        if v.affected:
-            return v
-    return applicable[0]
+    del distro_cpe_enabled
+    component = {"version": component_version, "ecosystem": ecosystem}
+    if target_cpe:
+        component["cpe"] = target_cpe
+        component["cpe_source"] = "manual_verified"
+    return applicability_to_match_verdict(
+        evaluate_nvd_configurations(cve_json, component, target_cpe=target_cpe)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -638,6 +847,179 @@ def _cpe_stem(cpe23: str | None) -> str:
     return f"{vendor.lower()}:{product.lower()}"
 
 
+def _parse_cpe23(cpe23: str | None) -> dict[str, str] | None:
+    if not cpe23:
+        return None
+    parts = cpe23.split(":")
+    if len(parts) != 13 or parts[0] != "cpe" or parts[1] != "2.3":
+        return None
+    return {
+        "part": parts[2],
+        "vendor": parts[3],
+        "product": parts[4],
+        "version": parts[5],
+    }
+
+
+def _component_value(component: Mapping[str, Any], *keys: str) -> str | None:
+    for key in keys:
+        value = component.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _normalize_cpe_token(value: str | None) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", (value or "").strip().lower()).strip("_")
+
+
+def _trusted_component_stems(component: Mapping[str, Any], target_cpe: str | None = None) -> set[str]:
+    stems: set[str] = set()
+    if target_cpe and _parse_cpe23(target_cpe):
+        stems.add(_cpe_stem(target_cpe))
+
+    cpe = _component_value(component, "cpe", "primary_cpe")
+    cpe_source = (_component_value(component, "cpe_source") or "").lower()
+    if cpe and cpe_source in {"sbom_provided", "official_nvd_cpe", "manual_verified", "trusted_mapping"}:
+        stem = _cpe_stem(cpe)
+        if stem:
+            stems.add(stem)
+
+    purl = _component_value(component, "purl", "normalized_purl", "original_purl")
+    version = _component_value(component, "version", "component_version", "normalized_version")
+    if purl:
+        mapped = trusted_cpe23_from_purl(purl, version_override=version)
+        if mapped is not None:
+            stems.add(_cpe_stem(mapped.cpe))
+    return {stem for stem in stems if stem}
+
+
+def _component_identity_matches(
+    component: Mapping[str, Any],
+    criteria: str,
+    *,
+    target_cpe: str | None = None,
+) -> ApplicabilityResult:
+    parsed = _parse_cpe23(criteria)
+    if parsed is None:
+        return ApplicabilityResult(ApplicabilityStatus.UNKNOWN, "cpe_criteria_invalid", criteria)
+
+    allowed = _trusted_component_stems(component, target_cpe=target_cpe)
+    if not allowed:
+        return ApplicabilityResult(ApplicabilityStatus.UNKNOWN, "component_cpe_identity_unknown", criteria)
+
+    criteria_stem = _cpe_stem(criteria)
+    if criteria_stem in allowed:
+        return ApplicabilityResult(ApplicabilityStatus.AFFECTED, "cpe_product_matched", criteria)
+    return ApplicabilityResult(ApplicabilityStatus.NOT_AFFECTED, "cpe_product_mismatch", criteria)
+
+
+def _evaluate_node(
+    node: Mapping[str, Any],
+    component: Mapping[str, Any],
+    *,
+    target_cpe: str | None,
+) -> tuple[TriState, ApplicabilityResult]:
+    child_results: list[tuple[TriState, ApplicabilityResult]] = []
+    for match in node.get("cpeMatch") or []:
+        if not isinstance(match, Mapping):
+            continue
+        result = evaluate_nvd_cpe_match(component, match, target_cpe=target_cpe)
+        child_results.append((_state_from_result(result), result))
+    for child in node.get("children") or []:
+        if isinstance(child, Mapping):
+            child_results.append(_evaluate_node(child, component, target_cpe=target_cpe))
+
+    if not child_results:
+        combined = (
+            TriState.UNKNOWN,
+            ApplicabilityResult(ApplicabilityStatus.UNKNOWN, "empty_configuration_node"),
+        )
+    else:
+        operator = str(node.get("operator") or "OR").upper()
+        combined = _combine_and(child_results) if operator == "AND" else _combine_or(child_results)
+
+    if node.get("negate") is True:
+        state, result = combined
+        if state is TriState.TRUE:
+            return (
+                TriState.FALSE,
+                ApplicabilityResult(
+                    ApplicabilityStatus.NOT_AFFECTED,
+                    f"negated_{result.reason}",
+                    result.matched_criteria,
+                    result.matched_range,
+                ),
+            )
+        if state is TriState.FALSE:
+            return (
+                TriState.TRUE,
+                ApplicabilityResult(
+                    ApplicabilityStatus.AFFECTED,
+                    f"negated_{result.reason}",
+                    result.matched_criteria,
+                    result.matched_range,
+                ),
+            )
+    return combined
+
+
+def _state_from_result(result: ApplicabilityResult) -> TriState:
+    if result.status is ApplicabilityStatus.AFFECTED:
+        return TriState.TRUE
+    if result.status is ApplicabilityStatus.NOT_AFFECTED:
+        return TriState.FALSE
+    return TriState.UNKNOWN
+
+
+def _combine_or(items: list[tuple[TriState, ApplicabilityResult]]) -> tuple[TriState, ApplicabilityResult]:
+    unknown: ApplicabilityResult | None = None
+    first_false: ApplicabilityResult | None = None
+    for state, result in items:
+        if state is TriState.TRUE:
+            return state, result
+        if state is TriState.UNKNOWN and unknown is None:
+            unknown = result
+        if state is TriState.FALSE and first_false is None:
+            first_false = result
+    if unknown is not None:
+        return TriState.UNKNOWN, unknown
+    return TriState.FALSE, first_false or ApplicabilityResult(ApplicabilityStatus.NOT_AFFECTED, "no_or_match")
+
+
+def _combine_and(items: list[tuple[TriState, ApplicabilityResult]]) -> tuple[TriState, ApplicabilityResult]:
+    unknown: ApplicabilityResult | None = None
+    first_true: ApplicabilityResult | None = None
+    for state, result in items:
+        if state is TriState.FALSE:
+            return state, result
+        if state is TriState.UNKNOWN and unknown is None:
+            unknown = result
+        if state is TriState.TRUE and first_true is None:
+            first_true = result
+    if unknown is not None:
+        return TriState.UNKNOWN, unknown
+    return TriState.TRUE, first_true or ApplicabilityResult(ApplicabilityStatus.AFFECTED, "and_matched")
+
+
+def _range_dict(bounds: VersionRange) -> dict[str, str | None]:
+    return {
+        "versionStartIncluding": bounds.start_including,
+        "versionStartExcluding": bounds.start_excluding,
+        "versionEndIncluding": bounds.end_including,
+        "versionEndExcluding": bounds.end_excluding,
+        "criteriaVersion": bounds.criteria_version,
+        "label": _fmt_range(bounds),
+    }
+
+
+def _format_result_range(result: ApplicabilityResult) -> str | None:
+    if not result.matched_range:
+        return None
+    label = result.matched_range.get("label")
+    return str(label) if label else None
+
+
 def _str_or_none(v: Any) -> str | None:
     if v is None:
         return None
@@ -672,9 +1054,16 @@ def _fmt_range(bounds: VersionRange) -> str:
 
 
 __all__ = [
+    "ApplicabilityResult",
+    "ApplicabilityStatus",
     "MatchReason",
     "MatchVerdict",
+    "TriState",
     "VersionRange",
+    "compare_versions",
+    "evaluate_nvd_configurations",
+    "evaluate_nvd_cpe_match",
+    "evaluate_version_bounds",
     "parse_range",
     "version_in_range",
     "cve_affects_component",

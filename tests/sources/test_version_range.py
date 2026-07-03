@@ -113,7 +113,7 @@ class TestLog4Shell:
             "maven",
             target_cpe="cpe:2.3:a:other:other:1.0.0:*:*:*:*:*:*:*",
         )
-        assert v.affected is True
+        assert v.affected is False
         assert v.reason == "no_configurations"
 
 
@@ -190,7 +190,7 @@ class TestAndNode:
             "generic",
             target_cpe="cpe:2.3:a:examplecorp:webapp:2.3.0:*:*:*:*:*:*:*",
         )
-        assert v.affected is True
+        assert v.affected is False
         assert v.reason == "and_node_ambiguous"
         assert v.matched_range is None
 
@@ -399,8 +399,13 @@ class TestUnparseableVersions:
                     }
                 ]
             }
-            v = cve_affects_component(cve, "not-a-version-!!!", "pypi")
-        assert v.affected is True
+            v = cve_affects_component(
+                cve,
+                "not-a-version-!!!",
+                "pypi",
+                target_cpe="cpe:2.3:a:e:p:1.0.0:*:*:*:*:*:*:*",
+            )
+        assert v.affected is False
         assert v.reason == "version_unparseable"
         assert v.matched_range == ">= 1.0.0, < 2.0.0"
         # Structured warning fired so operators can find silent-drop bugs.
@@ -425,17 +430,17 @@ class TestUnparseableVersions:
 class TestMissingConfigurations:
     def test_configurations_key_absent(self) -> None:
         v = cve_affects_component({}, "1.0.0", "npm")
-        assert v.affected is True
+        assert v.affected is False
         assert v.reason == "no_configurations"
 
     def test_configurations_empty_list(self) -> None:
         v = cve_affects_component({"configurations": []}, "1.0.0", "npm")
-        assert v.affected is True
+        assert v.affected is False
         assert v.reason == "no_configurations"
 
     def test_configurations_with_no_nodes(self) -> None:
         v = cve_affects_component({"configurations": [{"nodes": []}]}, "1.0.0", "npm")
-        assert v.affected is True
+        assert v.affected is False
         assert v.reason == "no_configurations"
 
 
@@ -462,7 +467,7 @@ class TestNonVulnerableMatchIgnored:
         v = cve_affects_component(cve, "1.0.0", "generic")
         # No applicable cpeMatch (the only one is non-vulnerable) →
         # conservative no_configurations keep.
-        assert v.affected is True
+        assert v.affected is False
         assert v.reason == "no_configurations"
 
 
@@ -704,7 +709,7 @@ class TestEveryReasonReachable:
     def test_no_configurations(self) -> None:
         v = cve_affects_component({}, "1.0.0", "npm")
         assert v.reason == "no_configurations"
-        assert v.affected is True
+        assert v.affected is False
 
     def test_version_unparseable(self) -> None:
         v = version_in_range("???", "pypi", _bounds(end_exc="1.0.0"))
@@ -718,9 +723,14 @@ class TestEveryReasonReachable:
 
     def test_and_node_ambiguous(self) -> None:
         cve = _load_cve("cve_and_node.json")
-        v = cve_affects_component(cve, "2.3.0", "generic")
+        v = cve_affects_component(
+            cve,
+            "2.3.0",
+            "generic",
+            target_cpe="cpe:2.3:a:examplecorp:webapp:2.3.0:*:*:*:*:*:*:*",
+        )
         assert v.reason == "and_node_ambiguous"
-        assert v.affected is True
+        assert v.affected is False
 
     def test_exact_version_mismatch(self) -> None:
         cve = _load_cve("cve_exact_pinned.json")

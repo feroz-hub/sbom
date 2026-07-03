@@ -22,7 +22,7 @@ from .nvd_client import (
 log = logging.getLogger(__name__)
 
 CVE_RE = re.compile(r"^CVE-\d{4}-\d{4,}$", re.IGNORECASE)
-TRUSTED_CPE_SOURCES = frozenset({"sbom_provided", "official_nvd_cpe", "manual_verified"})
+TRUSTED_CPE_SOURCES = frozenset({"sbom_provided", "official_nvd_cpe", "manual_verified", "trusted_mapping"})
 BLOCKED_CPE_TOKENS = frozenset(
     {"valid-lifecycle", "test", "sample", "example", "generic", "internal", "unknown", "placeholder"}
 )

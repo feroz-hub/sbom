@@ -25,9 +25,26 @@ var ``DISTRO_CPE_ENABLED`` reaches the singleton automatically.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from .purl import parse_purl
+
+
+@dataclass(frozen=True, slots=True)
+class CpeMapping:
+    cpe: str
+    confidence: str
+    vendor: str
+    product: str
+
+
+# Explicit, reviewed package-to-CPE identities. This table is intentionally
+# small: it prevents broad PyPI/npm/etc. name aliases from turning unrelated
+# packages into confirmed NVD matches.
+TRUSTED_PURL_CPE_MAPPINGS: dict[tuple[str, str], tuple[str, str]] = {
+    ("pypi", "pillow"): ("python", "pillow"),
+}
 
 
 def _distro_cpe_enabled(settings: Any | None) -> bool:
@@ -215,3 +232,19 @@ def cpe23_from_purl(
     # cpe:2.3:<part>:<vendor>:<product>:<version>:<update>:<edition>:<language>
     #         :<sw_edition>:<target_sw>:<target_hw>:<other>
     return f"cpe:2.3:a:{vnd}:{prd}:{ver}:*:*:*:*:*:*:*"
+
+
+def trusted_cpe23_from_purl(purl: str, version_override: str | None = None) -> CpeMapping | None:
+    parsed = parse_purl(purl)
+    if not parsed:
+        return None
+    ptype = str(parsed.get("type") or "").strip().lower()
+    name = str(parsed.get("name") or "").strip().lower()
+    mapped = TRUSTED_PURL_CPE_MAPPINGS.get((ptype, name))
+    if mapped is None:
+        return None
+    vendor, product = mapped
+    version = parsed.get("version") or version_override or "*"
+    ver = version if version == "*" else "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in version)
+    cpe = f"cpe:2.3:a:{vendor}:{product}:{ver or '*'}:*:*:*:*:*:*:*"
+    return CpeMapping(cpe=cpe, confidence="mapped", vendor=vendor, product=product)
