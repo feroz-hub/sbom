@@ -112,6 +112,7 @@ function AnalysisDetailContent({ params }: AnalysisDetailPageProps) {
   });
   const findings = findingsData?.findings;
   const findingsTotalCount = findingsData?.totalCount;
+  const canonicalTotalFindings = run?.metrics?.total_findings ?? run?.total_findings ?? 0;
 
   // Pulls the in-app CVE modal feature flag from /api/analysis/config. We
   // default to ``true`` while the config is in flight so the dialog isn't
@@ -278,6 +279,7 @@ function AnalysisDetailContent({ params }: AnalysisDetailPageProps) {
               runId={id}
               filter={filter}
               selectedIds={Array.from(selectedIds)}
+              totalFindings={canonicalTotalFindings}
               onClearSelection={() => setSelectedIds(new Set())}
             />
           </Motion>
@@ -312,7 +314,9 @@ function AnalysisDetailContent({ params }: AnalysisDetailPageProps) {
                   Findings
                   {findingsData != null && (
                     <span className="ml-2 font-metric text-sm font-normal tabular-nums text-hcl-muted">
-                      {findingsTotalCount?.toLocaleString() ?? findings?.length ?? 0}
+                      {severityFilter
+                        ? `${(findingsTotalCount ?? findings?.length ?? 0).toLocaleString()} of ${canonicalTotalFindings.toLocaleString()}`
+                        : canonicalTotalFindings.toLocaleString()}
                     </span>
                   )}
                 </h3>

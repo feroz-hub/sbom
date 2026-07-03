@@ -531,6 +531,7 @@ async def create_auto_report(
         "findings": final_findings,
         "analysis_metadata": {
             "sources": sources_used,
+            "raw_observation_count": len(raw_findings),
             "provider_status": [
                 warning["provider_status"]
                 for warning in all_warnings
@@ -1840,6 +1841,7 @@ async def analyze_sbom_stream(
                 "findings": final_findings,
                 "analysis_metadata": {
                     "sources": sources,
+                    "raw_observation_count": len(all_findings),
                     "provider_status": [
                         warning["provider_status"]
                         for warning in all_warnings

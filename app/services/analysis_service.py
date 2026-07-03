@@ -13,6 +13,11 @@ from sqlalchemy.orm import Session
 
 from ..models import AnalysisRun, SBOMAnalysisReport, SBOMSource
 from ..settings import get_analysis_legacy_level
+from .finding_metrics import (
+    apply_metrics_to_run,
+    calculate_run_finding_metrics,
+    deduplicate_finding_dicts,
+)
 from .sbom_service import (
     COMPONENT_EXTRACTION_COMPLETED,
     COMPONENT_EXTRACTION_FAILED,
@@ -197,6 +202,16 @@ def persist_analysis_run(
 
     component_maps = _upsert_components(db, sbom_obj, components)
     details = filter_unconfirmed_provider_findings(details, components)
+    details["findings"] = deduplicate_finding_dicts(details.get("findings") or [])
+    raw_observation_count = safe_int(
+        (details.get("analysis_metadata") or {}).get("raw_observation_count")
+        or details.get("raw_observation_count")
+        or details.get("total_findings")
+    )
+    details = normalize_details(details, components)
+    details.setdefault("analysis_metadata", {})
+    if isinstance(details["analysis_metadata"], dict):
+        details["analysis_metadata"]["raw_observation_count"] = raw_observation_count
 
     run = existing_run or AnalysisRun(sbom_id=sbom_obj.id, project_id=sbom_obj.projectid, product_id=sbom_obj.product_id)
     run.sbom_id = sbom_obj.id
@@ -213,12 +228,12 @@ def persist_analysis_run(
     run.duration_ms = duration_ms
     run.total_components = safe_int(details.get("total_components"))
     run.components_with_cpe = safe_int(details.get("components_with_cpe"))
-    run.total_findings = safe_int(details.get("total_findings"))
-    run.critical_count = safe_int(details.get("critical"))
-    run.high_count = safe_int(details.get("high"))
-    run.medium_count = safe_int(details.get("medium"))
-    run.low_count = safe_int(details.get("low"))
-    run.unknown_count = safe_int(details.get("unknown"))
+    run.total_findings = 0
+    run.critical_count = 0
+    run.high_count = 0
+    run.medium_count = 0
+    run.low_count = 0
+    run.unknown_count = 0
     run.query_error_count = len(details.get("query_errors") or [])
     run.raw_report = json.dumps(details)
     db.add(run)
@@ -228,8 +243,10 @@ def persist_analysis_run(
         db.execute(delete(AnalysisFinding).where(AnalysisFinding.analysis_run_id == run.id))
         db.flush()
 
-    # Persist findings
-    persisted_keys: set[tuple[str, str | None, int | None]] = set()
+    # Persist canonical findings. Metrics are written after the actual rows
+    # exist so duplicate guards and component resolution cannot leave stale
+    # run-level counts behind.
+    persisted_rows: list[AnalysisFinding] = []
     for finding in details.get("findings") or []:
         if not isinstance(finding, dict):
             continue
@@ -282,53 +299,69 @@ def persist_analysis_run(
 
         component_id = resolve_component_id(finding, component_maps)
         cpe_value = (finding.get("cpe") or "").strip() or None
-        unique_key = (vuln_id, cpe_value, component_id)
-        if unique_key in persisted_keys:
-            continue
-        persisted_keys.add(unique_key)
-
-        db.add(
-            AnalysisFinding(
-                analysis_run_id=run.id,
-                component_id=component_id,
-                vuln_id=vuln_id,
-                source=sources_str,
-                title=(finding.get("title") or finding.get("vuln_id")),
-                description=(finding.get("description") or "").strip() or None,
-                severity=(finding.get("severity") or "UNKNOWN").upper(),
-                score=_safe_float(finding.get("score")),
-                vector=(finding.get("vector") or "").strip() or None,
-                published_on=(finding.get("published") or "").strip() or None,
-                reference_url=reference_url,
-                cwe=cwe_value,
-                cpe=cpe_value,
-                component_name=(finding.get("component_name") or "").strip() or None,
-                component_version=(finding.get("component_version") or "").strip() or None,
-                fixed_versions=json.dumps(fv) if fv else None,
-                attack_vector=(finding.get("attack_vector") or "").strip() or None,
-                cvss_version=finding.get("cvss_version"),
-                aliases=aliases_json,
-                # Roadmap #1 — populated by the NVD version-range filter
-                # when ``nvd_version_range_filter_enabled`` is on. Absent
-                # (and therefore NULL in the row) when the flag is off or
-                # the source is not NVD. ``.get`` rather than ``[]`` so
-                # the flag-off path never KeyErrors.
-                match_reason=finding.get("match_reason"),
-                matched_range=finding.get("matched_range"),
-                # Roadmap #6 — search-strategy provenance tag attached
-                # at the per-source emit step. NVD=cpe_name (only live
-                # path), OSV=purl_direct (querybatch + /v1/query
-                # fallback), GHSA=ghsa_alias. NULL on any source not
-                # yet wired or any pre-PR-C row.
-                match_strategy=finding.get("match_strategy"),
-                # Roadmap #3 — token-overlap confidence in [0.0, 1.0],
-                # post strategy-floor. Computed by the per-source emit
-                # step via app.sources.match_confidence.score_match +
-                # apply_strategy_floor. NULL on pre-PR-D rows and any
-                # source not yet wired into the scorer.
-                match_confidence=finding.get("match_confidence"),
-            )
+        row = AnalysisFinding(
+            analysis_run_id=run.id,
+            component_id=component_id,
+            vuln_id=vuln_id,
+            source=sources_str,
+            title=(finding.get("title") or finding.get("vuln_id")),
+            description=(finding.get("description") or "").strip() or None,
+            severity=(finding.get("severity") or "UNKNOWN").upper(),
+            score=_safe_float(finding.get("score")),
+            vector=(finding.get("vector") or "").strip() or None,
+            published_on=(finding.get("published") or "").strip() or None,
+            reference_url=reference_url,
+            cwe=cwe_value,
+            cpe=cpe_value,
+            component_name=(finding.get("component_name") or "").strip() or None,
+            component_version=(finding.get("component_version") or "").strip() or None,
+            fixed_versions=json.dumps(fv) if fv else None,
+            attack_vector=(finding.get("attack_vector") or "").strip() or None,
+            cvss_version=finding.get("cvss_version"),
+            aliases=aliases_json,
+            # Roadmap #1 — populated by the NVD version-range filter
+            # when ``nvd_version_range_filter_enabled`` is on. Absent
+            # (and therefore NULL in the row) when the flag is off or
+            # the source is not NVD. ``.get`` rather than ``[]`` so
+            # the flag-off path never KeyErrors.
+            match_reason=finding.get("match_reason"),
+            matched_range=finding.get("matched_range"),
+            # Roadmap #6 — search-strategy provenance tag attached
+            # at the per-source emit step. NVD=cpe_name (only live
+            # path), OSV=purl_direct (querybatch + /v1/query
+            # fallback), GHSA=ghsa_alias. NULL on any source not
+            # yet wired or any pre-PR-C row.
+            match_strategy=finding.get("match_strategy"),
+            # Roadmap #3 — token-overlap confidence in [0.0, 1.0],
+            # post strategy-floor. Computed by the per-source emit
+            # step via app.sources.match_confidence.score_match +
+            # apply_strategy_floor. NULL on pre-PR-D rows and any
+            # source not yet wired into the scorer.
+            match_confidence=finding.get("match_confidence"),
         )
+        db.add(row)
+        persisted_rows.append(row)
+
+    db.flush()
+    metrics = calculate_run_finding_metrics(persisted_rows, run=run)
+    apply_metrics_to_run(run, metrics)
+    if normalized_status in {RUN_STATUS_OK, RUN_STATUS_FINDINGS, RUN_STATUS_PARTIAL, "PASS", "FAIL"}:
+        run.run_status = compute_report_status(metrics.total_findings, details.get("query_errors") or [])
+    details["total_findings"] = metrics.total_findings
+    details["critical"] = metrics.severity_counts["critical"]
+    details["high"] = metrics.severity_counts["high"]
+    details["medium"] = metrics.severity_counts["medium"]
+    details["low"] = metrics.severity_counts["low"]
+    details["unknown"] = metrics.severity_counts["unknown"]
+    details["metrics"] = {
+        "raw_observation_count": metrics.raw_observation_count,
+        "total_findings": metrics.total_findings,
+        "unique_vulnerabilities": metrics.unique_vulnerabilities,
+        "ai_fix_eligible_findings": metrics.ai_fix_eligible_findings,
+        "severity_counts": metrics.severity_counts,
+    }
+    run.raw_report = json.dumps(details)
+    db.add(run)
 
     # CACHE INVALIDATION CONTRACT (ADR-0008)
     #

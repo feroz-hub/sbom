@@ -876,6 +876,19 @@ export interface AnalysisRun {
   started_on: string | null;
   completed_on: string | null;
   error_message: string | null;
+  metrics?: {
+    raw_observation_count: number;
+    total_findings: number;
+    unique_vulnerabilities: number;
+    ai_fix_eligible_findings: number;
+    severity_counts: {
+      critical: number;
+      high: number;
+      medium: number;
+      low: number;
+      unknown: number;
+    };
+  } | null;
 }
 
 /**

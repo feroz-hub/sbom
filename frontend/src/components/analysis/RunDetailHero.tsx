@@ -172,12 +172,14 @@ export function RunDetailHero({ run, findings, rightSlot }: RunDetailHeroProps) 
   const band = deriveBand(findings);
 
   const counts = {
-    critical: run.critical_count ?? 0,
-    high: run.high_count ?? 0,
-    medium: run.medium_count ?? 0,
-    low: run.low_count ?? 0,
-    unknown: run.unknown_count ?? 0,
+    critical: run.metrics?.severity_counts.critical ?? run.critical_count ?? 0,
+    high: run.metrics?.severity_counts.high ?? run.high_count ?? 0,
+    medium: run.metrics?.severity_counts.medium ?? run.medium_count ?? 0,
+    low: run.metrics?.severity_counts.low ?? run.low_count ?? 0,
+    unknown: run.metrics?.severity_counts.unknown ?? run.unknown_count ?? 0,
   };
+  const totalFindings = run.metrics?.total_findings ?? run.total_findings ?? 0;
+  const providerObservations = run.metrics?.raw_observation_count;
 
   return (
     <Surface
@@ -253,13 +255,15 @@ export function RunDetailHero({ run, findings, rightSlot }: RunDetailHeroProps) 
             <MetaTile
               Icon={ShieldAlert}
               label="Findings"
-              value={run.total_findings?.toLocaleString() ?? '0'}
+              value={totalFindings.toLocaleString()}
               hint={
-                worstRisk > 0
+                providerObservations != null && providerObservations !== totalFindings
+                  ? `${providerObservations.toLocaleString()} provider observations`
+                  : worstRisk > 0
                   ? `Worst risk score ${worstRisk.toFixed(1)}`
                   : undefined
               }
-              tone={(run.total_findings ?? 0) > 0 ? 'warn' : 'pass'}
+              tone={totalFindings > 0 ? 'warn' : 'pass'}
             />
             <MetaTile
               Icon={Layers}

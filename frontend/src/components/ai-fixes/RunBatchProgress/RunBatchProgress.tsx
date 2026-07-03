@@ -37,6 +37,8 @@ interface RunBatchProgressProps {
    * over ``filter`` when non-empty.
    */
   selectedIds?: number[];
+  /** Canonical unfiltered finding total for the run. */
+  totalFindings?: number | null;
   /**
    * Callback that resets ``selectedIds`` to empty. When supplied along
    * with a non-empty selection, the CTA renders a "Clear selection to
@@ -166,6 +168,7 @@ export function RunBatchProgress({
   enabled = true,
   filter,
   selectedIds,
+  totalFindings,
   onClearSelection,
 }: RunBatchProgressProps) {
   const hasSelection = (selectedIds?.length ?? 0) > 0;
@@ -256,6 +259,7 @@ export function RunBatchProgress({
     const ctaLabel = computeCtaLabel({
       scopeDescription,
       scopedTotal,
+      totalFindings,
       atMaxConcurrent,
       activeBatchCount: activeBatches.length,
       hasSelection,
@@ -442,11 +446,12 @@ export function RunBatchProgress({
 function computeCtaLabel(args: {
   scopeDescription: string | null;
   scopedTotal: number | null;
+  totalFindings?: number | null;
   atMaxConcurrent: boolean;
   activeBatchCount: number;
   hasSelection: boolean;
 }): string {
-  const { scopeDescription, scopedTotal, atMaxConcurrent, hasSelection } = args;
+  const { scopeDescription, scopedTotal, totalFindings, atMaxConcurrent, hasSelection } = args;
   if (atMaxConcurrent) {
     return 'Generate AI fixes (disabled — max concurrent batches reached)';
   }
@@ -466,6 +471,9 @@ function computeCtaLabel(args: {
     return `Generate AI fixes for ${scopeDescription}`;
   }
   if (total != null) {
+    if (totalFindings != null) {
+      return `Generate AI fixes for ${total} of ${totalFindings.toLocaleString()} findings eligible`;
+    }
     return `Generate AI fixes for ${total} finding${scopedTotal === 1 ? '' : 's'} in this run`;
   }
   return 'Generate AI fixes for every finding in this run';

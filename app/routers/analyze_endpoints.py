@@ -259,6 +259,7 @@ async def _run_legacy_analysis(
         "findings": final_findings,
         "analysis_metadata": {
             "sources": sources_list,
+            "raw_observation_count": len(raw_findings),
             "provider_status": [
                 warning["provider_status"]
                 for warning in query_warnings

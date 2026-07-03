@@ -262,6 +262,35 @@ describe('RunBatchProgress — idle CTA (no scope)', () => {
     );
   });
 
+  it('labels the default AI scope as an eligible subset when the run total is known', async () => {
+    getRunAiFixProgress.mockResolvedValue(
+      makeBatchProgress({
+        status: 'pending',
+        total: 0,
+        from_cache: 0,
+        generated: 0,
+        failed: 0,
+        remaining: 0,
+        provider_used: null,
+        model_used: null,
+        cost_so_far_usd: 0,
+        estimated_remaining_seconds: null,
+      }),
+    );
+    estimateRunAiFixesScoped.mockResolvedValue({
+      ...DEFAULT_ESTIMATE,
+      total_findings_in_scope: 24,
+      cached_count: 0,
+      llm_call_count: 24,
+    });
+    renderWithProviders(<RunBatchProgress runId={1} totalFindings={48} />);
+    await waitFor(() =>
+      expect(
+        screen.getByText(/Generate AI fixes for 24 of 48 findings eligible/i),
+      ).toBeInTheDocument(),
+    );
+  });
+
   it('shows the budget-paused CTA pointing at Settings', async () => {
     getRunAiFixProgress.mockResolvedValue(
       makeBatchProgress({ status: 'paused_budget' }),

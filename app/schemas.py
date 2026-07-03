@@ -428,6 +428,7 @@ class AnalysisRunOut(ORMModel):
     unknown_count: int
     query_error_count: int
     raw_report: str | None = None
+    metrics: dict[str, Any] | None = None
 
 
 class RunsAggregateBuckets(BaseModel):

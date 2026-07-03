@@ -12,6 +12,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from ..models import AnalysisFinding, AnalysisRun, SBOMComponent
+from ..services.finding_metrics import calculate_run_finding_metrics
 from ._helpers import (
     finding_key,
     latest_run_per_sbom_as_of_subquery,
@@ -19,6 +20,22 @@ from ._helpers import (
 )
 from .base import COMPLETED_RUN_STATUSES, SEVERITY_KEYS, TrendPoint
 from .cache import memoize_with_ttl
+
+
+def canonical_findings_for_run(db: Session, *, run_id: int) -> list[AnalysisFinding]:
+    """Load persisted finding rows for canonical run metrics."""
+    return list(
+        db.execute(
+            select(AnalysisFinding)
+            .where(AnalysisFinding.analysis_run_id == run_id)
+            .order_by(func.coalesce(AnalysisFinding.score, 0).desc(), AnalysisFinding.id.asc())
+        ).scalars()
+    )
+
+
+def canonical_finding_metrics_for_run(db: Session, *, run: AnalysisRun):
+    """Canonical component-vulnerability metrics for one analysis run."""
+    return calculate_run_finding_metrics(canonical_findings_for_run(db, run_id=int(run.id)), run=run)
 
 
 def latest_successful_run_for_sbom(db: Session, *, sbom_id: int) -> AnalysisRun | None:

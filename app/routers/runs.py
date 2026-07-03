@@ -17,8 +17,10 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..metrics import runs_aggregate
 from ..metrics._helpers import cves_for_finding
+from ..metrics.findings import canonical_finding_metrics_for_run, canonical_findings_for_run
 from ..models import AnalysisFinding, AnalysisRun, EpssScore, Product, SBOMSource
 from ..schemas import AnalysisFindingOut, AnalysisRunOut, RunsAggregateOut
+from ..services.finding_metrics import canonicalize_finding_rows, metrics_to_dict, normalize_severity
 from ..services.risk_score import (
     EPSS_AMPLIFIER,
     KEV_MULTIPLIER,
@@ -297,7 +299,10 @@ def get_analysis_run(run_id: int, db: Session = Depends(get_db)):
     run = db.get(AnalysisRun, run_id)
     if not run:
         raise HTTPException(status_code=404, detail="Analysis run not found")
-    return run
+    metrics = canonical_finding_metrics_for_run(db, run=run)
+    payload = {k: v for k, v in run.__dict__.items() if not k.startswith("_")}
+    payload["metrics"] = metrics_to_dict(metrics)
+    return payload
 
 
 @router.get("/runs/{run_id}/findings", response_model=list[AnalysisFindingOut])
@@ -317,18 +322,15 @@ def list_run_findings(
     page_size = max(1, min(page_size, 1000))
     offset = (page - 1) * page_size
 
-    base = select(AnalysisFinding).where(AnalysisFinding.analysis_run_id == run_id)
-    count = select(func.count(AnalysisFinding.id)).where(AnalysisFinding.analysis_run_id == run_id)
-
+    all_rows = canonical_findings_for_run(db, run_id=run_id)
+    all_items = canonicalize_finding_rows(all_rows)
+    unfiltered_total = len(all_items)
     if severity:
         norm = severity.strip().upper()
-        base = base.where(AnalysisFinding.severity == norm)
-        count = count.where(AnalysisFinding.severity == norm)
+        all_items = [item for item in all_items if normalize_severity(item.severity) == norm]
 
-    total = db.execute(count).scalar_one()
-
-    stmt = base.order_by(AnalysisFinding.score.desc()).limit(page_size).offset(offset)
-    items = db.execute(stmt).scalars().all()
+    total = len(all_items)
+    items = all_items[offset : offset + page_size]
 
     from ..models import VulnerabilityRemediation
 
@@ -358,6 +360,7 @@ def list_run_findings(
 
     if response is not None:
         response.headers["X-Total-Count"] = str(total)
+        response.headers["X-Unfiltered-Total-Count"] = str(unfiltered_total)
 
     return items
 
@@ -399,18 +402,15 @@ def list_run_findings_enriched(
     page_size = max(1, min(page_size, 1000))
     offset = (page - 1) * page_size
 
-    base = select(AnalysisFinding).where(AnalysisFinding.analysis_run_id == run_id)
-    count = select(func.count(AnalysisFinding.id)).where(AnalysisFinding.analysis_run_id == run_id)
-
+    all_rows = canonical_findings_for_run(db, run_id=run_id)
+    all_findings = canonicalize_finding_rows(all_rows)
+    unfiltered_total = len(all_findings)
     if severity:
         norm = severity.strip().upper()
-        base = base.where(AnalysisFinding.severity == norm)
-        count = count.where(AnalysisFinding.severity == norm)
+        all_findings = [item for item in all_findings if normalize_severity(item.severity) == norm]
 
-    total = db.execute(count).scalar_one()
-
-    stmt = base.order_by(AnalysisFinding.score.desc()).limit(page_size).offset(offset)
-    findings = db.execute(stmt).scalars().all()
+    total = len(all_findings)
+    findings = all_findings[offset : offset + page_size]
 
     # Collect every CVE alias on the page so KEV/EPSS lookups are batched.
     finding_cves: dict[int, list[str]] = {f.id: _cve_aliases_for(f) for f in findings}
@@ -520,5 +520,6 @@ def list_run_findings_enriched(
 
     if response is not None:
         response.headers["X-Total-Count"] = str(total)
+        response.headers["X-Unfiltered-Total-Count"] = str(unfiltered_total)
 
     return items

@@ -31,6 +31,7 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from ..models import AiFixCache, AnalysisFinding, KevEntry
+from ..services.finding_metrics import canonicalize_finding_rows
 
 log = logging.getLogger("sbom.ai.scope")
 
@@ -106,12 +107,12 @@ def resolve_scope_findings(
     base = select(AnalysisFinding).where(AnalysisFinding.analysis_run_id == run_id)
 
     if scope is None:
-        return list(db.execute(base).scalars())
+        return canonicalize_finding_rows(db.execute(base).scalars())
 
     # Explicit selection wins: filter to the requested IDs and stop.
     if scope.finding_ids:
         base = base.where(AnalysisFinding.id.in_(scope.finding_ids))
-        return list(db.execute(base).scalars())
+        return canonicalize_finding_rows(db.execute(base).scalars())
 
     if scope.severities:
         base = base.where(AnalysisFinding.severity.in_(scope.severities))
@@ -143,7 +144,7 @@ def resolve_scope_findings(
             )
         )
 
-    return list(db.execute(base).scalars())
+    return canonicalize_finding_rows(db.execute(base).scalars())
 
 
 def count_cached_for_finding_ids(
