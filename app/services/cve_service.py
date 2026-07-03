@@ -25,7 +25,7 @@ from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from ..integrations.cve.aggregator import aggregate
 from ..integrations.cve.epss import EpssSource
@@ -144,13 +144,13 @@ class CveDetailService:
         if cached is not None:
             return cached
 
+        write_bind = self._db.get_bind()
         # Cache miss: close active session before external API calls
         self._db.close()
 
         detail = await aggregate(vid, self._sources)
-        from ..db import SessionLocal
-
-        with SessionLocal() as db_write:
+        WriteSession = sessionmaker(bind=write_bind)
+        with WriteSession() as db_write:
             self._write_cache_with_db(db_write, detail)
         return detail
 
@@ -173,14 +173,15 @@ class CveDetailService:
             else:
                 cold.append(n)
         if cold:
+            write_bind = self._db.get_bind()
             # Cache miss: close active session before external API calls
             self._db.close()
 
             tasks = [aggregate(classify(c), self._sources) for c in cold]
             results = await asyncio.gather(*tasks)
-            from ..db import SessionLocal
 
-            with SessionLocal() as db_write:
+            WriteSession = sessionmaker(bind=write_bind)
+            with WriteSession() as db_write:
                 for c, r in zip(cold, results, strict=True):
                     self._write_cache_with_db(db_write, r)
                     out[c] = r
