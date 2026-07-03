@@ -8,12 +8,18 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..models import Projects, SBOMComponent, SBOMSource
+from ..models import Product, Projects, SBOMComponent, SBOMSource
 
 
 def get_project_for_tenant(db: Session, project_id: int, tenant_id: int) -> Projects | None:
     return db.execute(
         select(Projects).where(Projects.id == project_id, Projects.tenant_id == tenant_id)
+    ).scalar_one_or_none()
+
+
+def get_product_for_tenant(db: Session, product_id: int, tenant_id: int) -> Product | None:
+    return db.execute(
+        select(Product).where(Product.id == product_id, Product.tenant_id == tenant_id, Product.is_active.is_(True))
     ).scalar_one_or_none()
 
 

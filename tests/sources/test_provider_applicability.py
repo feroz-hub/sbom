@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import replace as dataclass_replace
 
 import pytest
-
 from app.analysis import get_analysis_settings_multi, github_query_by_components
 from app.sources.applicability import (
     NormalizedAdvisory,

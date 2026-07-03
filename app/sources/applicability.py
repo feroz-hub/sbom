@@ -11,7 +11,6 @@ import logging
 import os
 import re
 from dataclasses import dataclass
-from typing import Any
 
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.utils import canonicalize_name

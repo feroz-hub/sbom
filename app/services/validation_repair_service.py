@@ -32,6 +32,7 @@ from ..models import (
     SBOMValidationSession,
     SBOMValidationSessionEvent,
 )
+from ..services.product_service import get_or_create_default_product
 from ..services.sbom.format_detector import detect_sbom_format, detect_sbom_format_from_bytes
 from ..services.sbom.workspace_storage import SbomWorkspaceStorage, iter_file
 from ..services.sbom_enrichment_service import mark_enrichment_pending
@@ -622,6 +623,14 @@ class ValidationRepairService:
             raise HTTPException(status_code=404, detail="Project not found")
         if session.sbom_type is not None and self.db.get(SBOMType, session.sbom_type) is None:
             raise HTTPException(status_code=404, detail="SBOM type not found")
+        product = None
+        if session.project_id is not None:
+            product = get_or_create_default_product(
+                self.db,
+                tenant_id=session.tenant_id,
+                project_id=session.project_id,
+                actor=actor_user_id or session.user_id or "repair",
+            )
         name = (session.sbom_name or session.original_filename or f"repaired-{session.id}").strip()
         exists = self.db.execute(select(SBOMSource.id).where(SBOMSource.sbom_name == name)).first()
         if exists:
@@ -635,6 +644,8 @@ class ValidationRepairService:
             sbom_data=repaired_content,
             sbom_type=session.sbom_type,
             projectid=session.project_id,
+            product_id=product.id if product else None,
+            product_name=product.name if product else None,
             created_by=actor_user_id or session.user_id,
             created_on=now_iso(),
             status="validated",

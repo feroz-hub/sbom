@@ -1,5 +1,7 @@
 import type {
   Project,
+  Product,
+  ProductListResponse,
   SBOMSource,
   SBOMComponent,
   AnalysisRun,
@@ -397,6 +399,41 @@ export function createProject(payload: CreateProjectPayload, signal?: AbortSigna
   });
 }
 
+export function getProducts(projectId: number, signal?: AbortSignal) {
+  return request<ProductListResponse>(`/api/projects/${projectId}/products`, { signal });
+}
+
+export function getProduct(id: number, signal?: AbortSignal) {
+  return request<Product>(`/api/products/${id}`, { signal });
+}
+
+export function createProduct(projectId: number, payload: Partial<Product> & { name: string }, signal?: AbortSignal) {
+  return request<Product>(`/api/projects/${projectId}/products`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    signal,
+  });
+}
+
+export function updateProduct(id: number, payload: Partial<Product>, signal?: AbortSignal) {
+  return request<Product>(`/api/products/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+    signal,
+  });
+}
+
+export function deleteProduct(id: number, signal?: AbortSignal) {
+  return request<{ status: string; product_id: number }>(`/api/products/${id}`, {
+    method: 'DELETE',
+    signal,
+  });
+}
+
+export function getProductSboms(id: number, signal?: AbortSignal) {
+  return request<SBOMSource[]>(`/api/products/${id}/sboms`, { signal });
+}
+
 export function updateProject(
   id: number,
   payload: UpdateProjectPayload,
@@ -487,6 +524,7 @@ export async function uploadSbom(payload: CreateSBOMPayload, signal?: AbortSigna
   form.set('sbom_name', payload.sbom_name);
   const projectId = payload.project_id ?? payload.projectid;
   if (projectId != null) form.set('project_id', String(projectId));
+  if (payload.product_id != null) form.set('product_id', String(payload.product_id));
   if (payload.sbom_type != null) form.set('sbom_type', String(payload.sbom_type));
   if (payload.sbom_version) form.set('sbom_version', payload.sbom_version);
   const productVersion = payload.product_version ?? payload.productver;
@@ -507,6 +545,8 @@ export async function uploadSbom(payload: CreateSBOMPayload, signal?: AbortSigna
     ...sbom,
     upload_status: accepted.status,
     validation_status: accepted.status,
+    product_id: accepted.product_id ?? sbom.product_id,
+    product_name: accepted.product_name ?? sbom.product_name,
     workspace_id: accepted.workspace_id,
     validation_session_id: accepted.validation_session_id,
     repair_workspace_url: accepted.repair_workspace_url,
@@ -760,6 +800,7 @@ export function analyzeConsolidated(payload: AnalyzeSBOMPayload, signal?: AbortS
 export interface RunsFilter {
   sbom_id?: number;
   project_id?: number;
+  product_id?: number;
   run_status?: string;
   page?: number;
   page_size?: number;
@@ -781,6 +822,7 @@ function buildRunsQuery(filter: RunsFilter): URLSearchParams {
   };
   addPositiveInt('sbom_id', filter.sbom_id);
   addPositiveInt('project_id', filter.project_id);
+  addPositiveInt('product_id', filter.product_id);
   if (filter.run_status && filter.run_status.trim() !== '') {
     params.set('run_status', filter.run_status.trim());
   }

@@ -76,6 +76,8 @@ def _already_running_response(run: AnalysisRun) -> dict:
         "sbom_id": run.sbom_id,
         "sbom_name": run.sbom_name,
         "project_id": run.project_id,
+        "product_id": run.product_id,
+        "product_name": run.product_name,
         "source": run.source,
         "trigger_source": run.trigger_source,
         "message": "Analysis is already running for this SBOM.",
@@ -196,6 +198,7 @@ async def _run_legacy_analysis(
     run = AnalysisRun(
         sbom_id=sbom_row.id,
         project_id=sbom_row.projectid,
+        product_id=sbom_row.product_id,
         run_status="PENDING",
         sbom_name=sbom_row.sbom_name,
         source=source_label,
@@ -313,6 +316,8 @@ async def _run_legacy_analysis(
         "sbom_id": sbom_row.id,
         "sbom_name": sbom_row.sbom_name,
         "project_id": sbom_row.projectid,
+        "product_id": sbom_row.product_id,
+        "product_name": sbom_row.product_name,
         "run_status": run_status,
         "status": run_status,  # legacy alias
         "source": source_label,

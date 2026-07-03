@@ -198,9 +198,10 @@ def persist_analysis_run(
     component_maps = _upsert_components(db, sbom_obj, components)
     details = filter_unconfirmed_provider_findings(details, components)
 
-    run = existing_run or AnalysisRun(sbom_id=sbom_obj.id, project_id=sbom_obj.projectid)
+    run = existing_run or AnalysisRun(sbom_id=sbom_obj.id, project_id=sbom_obj.projectid, product_id=sbom_obj.product_id)
     run.sbom_id = sbom_obj.id
     run.project_id = sbom_obj.projectid
+    run.product_id = sbom_obj.product_id
     normalized_status = normalize_run_status(run_status) or RUN_STATUS_ERROR
     if normalized_status == RUN_STATUS_FINDINGS and safe_int(details.get("total_findings")) == 0:
         normalized_status = compute_report_status(0, details.get("query_errors") or [])

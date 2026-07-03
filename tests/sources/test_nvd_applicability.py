@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from app.sources.dedupe import deduplicate_findings
 from app.sources.version_range import (
     ApplicabilityStatus,
@@ -9,7 +8,6 @@ from app.sources.version_range import (
     evaluate_nvd_cpe_match,
     evaluate_version_bounds,
 )
-
 
 PILLOW = {
     "name": "pillow",

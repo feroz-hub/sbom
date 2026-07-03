@@ -90,6 +90,7 @@ class Projects(Base, SoftDeleteMixin, TenantOwnedMixin):
     modified_by = Column(String, nullable=True)
 
     sboms = relationship("SBOMSource", back_populates="project")
+    products = relationship("Product", back_populates="project")
     analysis_runs = relationship("AnalysisRun", back_populates="project")
     schedules = relationship(
         "AnalysisSchedule",
@@ -100,6 +101,62 @@ class Projects(Base, SoftDeleteMixin, TenantOwnedMixin):
     __table_args__ = (
         UniqueConstraint("tenant_id", "project_name", name="uq_projects_tenant_name"),
         Index("ix_projects_tenant_created", "tenant_id", "created_on"),
+    )
+
+    @property
+    def sbom_count(self) -> int:
+        return len([sbom for sbom in (self.sboms or []) if not getattr(sbom, "deleted_at", None)])
+
+    @property
+    def latest_sbom_id(self) -> int | None:
+        active_sboms = [sbom for sbom in (self.sboms or []) if not getattr(sbom, "deleted_at", None)]
+        if not active_sboms:
+            return None
+        return max(active_sboms, key=lambda sbom: sbom.id or 0).id
+
+    @property
+    def latest_sbom_version(self) -> str | None:
+        active_sboms = [sbom for sbom in (self.sboms or []) if not getattr(sbom, "deleted_at", None)]
+        if not active_sboms:
+            return None
+        latest = max(active_sboms, key=lambda sbom: sbom.id or 0)
+        return latest.sbom_version or latest.productver
+
+
+
+class Product(Base, SoftDeleteMixin, TenantOwnedMixin):
+    __tablename__ = "products"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(255), nullable=False)
+    normalized_name = Column(String(255), nullable=False)
+    slug = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    product_key = Column(String(128), nullable=True, index=True)
+    vendor = Column(String(255), nullable=True)
+    category = Column(String(128), nullable=True)
+    status = Column(String(32), nullable=False, default="active", server_default="active", index=True)
+    latest_version = Column(String(128), nullable=True)
+    metadata_json = Column(JSON, nullable=True)
+    created_by = Column(String(128), nullable=True, index=True)
+    created_at = Column(String, nullable=False, index=True)
+    updated_at = Column(String, nullable=True)
+    deleted_at = Column(String, nullable=True, index=True)
+
+    project = relationship("Projects", back_populates="products")
+    sboms = relationship("SBOMSource", back_populates="product")
+    analysis_runs = relationship("AnalysisRun", back_populates="product")
+    schedules = relationship(
+        "AnalysisSchedule",
+        primaryjoin="Product.id == foreign(AnalysisSchedule.product_id)",
+        viewonly=True,
+    )
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "project_id", "slug", name="uq_products_tenant_project_slug"),
+        Index("ix_products_tenant_project_name", "tenant_id", "project_id", "normalized_name"),
+        Index("ix_products_tenant_project", "tenant_id", "project_id"),
     )
 
     @property
@@ -129,6 +186,7 @@ class SBOMSource(Base, SoftDeleteMixin, TenantOwnedMixin):
     sbom_data = Column(Text, nullable=True)
     sbom_type = Column(Integer, ForeignKey("sbom_type.id"), nullable=True)
     projectid = Column(Integer, ForeignKey("projects.id"), nullable=True)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=True, index=True)
     created_on = Column(String, nullable=True)
     sbom_version = Column(String, nullable=True)
     created_by = Column(String, nullable=True, index=True)
@@ -184,6 +242,7 @@ class SBOMSource(Base, SoftDeleteMixin, TenantOwnedMixin):
     component_extraction_completed_at = Column(String, nullable=True)
 
     project = relationship("Projects", back_populates="sboms")
+    product = relationship("Product", back_populates="sboms")
     sbom_type_rel = relationship("SBOMType", back_populates="sboms")
     analysis_reports = relationship("SBOMAnalysisReport", back_populates="sbom")
     components = relationship("SBOMComponent", back_populates="sbom")
@@ -203,6 +262,7 @@ class SBOMSource(Base, SoftDeleteMixin, TenantOwnedMixin):
             name="uq_sbom_source_tenant_name_version",
         ),
         Index("ix_sbom_source_tenant_project", "tenant_id", "projectid"),
+        Index("ix_sbom_source_tenant_product", "tenant_id", "product_id"),
         Index("ix_sbom_source_tenant_created", "tenant_id", "created_on"),
     )
 
@@ -710,6 +770,7 @@ class AnalysisRun(Base, SoftDeleteMixin, TenantOwnedMixin):
     id = Column(Integer, primary_key=True, index=True)
     sbom_id = Column(Integer, ForeignKey("sbom_source.id"), nullable=False, index=True)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=True, index=True)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=True, index=True)
 
     run_status = Column(String, nullable=False, index=True)
     sbom_name = Column(String, nullable=True)
@@ -735,12 +796,17 @@ class AnalysisRun(Base, SoftDeleteMixin, TenantOwnedMixin):
 
     sbom = relationship("SBOMSource", back_populates="analysis_runs")
     project = relationship("Projects", back_populates="analysis_runs")
+    product = relationship("Product", back_populates="analysis_runs")
     findings = relationship("AnalysisFinding", back_populates="analysis_run")
     ai_fix_batches = relationship(
         "AiFixBatch",
         primaryjoin="AnalysisRun.id == foreign(AiFixBatch.run_id)",
         viewonly=True,
     )
+
+    @property
+    def product_name(self) -> str | None:
+        return self.product.name if self.product else None
 
 
 class AnalysisFinding(Base, SoftDeleteMixin, TenantOwnedMixin):
@@ -858,6 +924,7 @@ class AnalysisSchedule(Base, SoftDeleteMixin, TenantOwnedMixin):
     scope = Column(String(16), nullable=False)  # 'PROJECT' | 'SBOM'
 
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=True, index=True)
     sbom_id = Column(Integer, ForeignKey("sbom_source.id", ondelete="CASCADE"), nullable=True, index=True)
 
     cadence = Column(String(16), nullable=False)  # DAILY|WEEKLY|BIWEEKLY|MONTHLY|QUARTERLY|CUSTOM
@@ -883,17 +950,19 @@ class AnalysisSchedule(Base, SoftDeleteMixin, TenantOwnedMixin):
     modified_by = Column(String, nullable=True)
 
     project = relationship("Projects", foreign_keys=[project_id])
+    product = relationship("Product", foreign_keys=[product_id])
     sbom = relationship("SBOMSource", foreign_keys=[sbom_id])
 
     __table_args__ = (
-        CheckConstraint("scope IN ('PROJECT','SBOM')", name="ck_analysis_schedule_scope"),
+        CheckConstraint("scope IN ('PROJECT','PRODUCT','SBOM')", name="ck_analysis_schedule_scope"),
         CheckConstraint(
             "cadence IN ('DAILY','WEEKLY','BIWEEKLY','MONTHLY','QUARTERLY','CUSTOM')",
             name="ck_analysis_schedule_cadence",
         ),
         CheckConstraint(
-            "(scope = 'PROJECT' AND project_id IS NOT NULL AND sbom_id IS NULL) "
-            "OR (scope = 'SBOM' AND sbom_id IS NOT NULL AND project_id IS NULL)",
+            "(scope = 'PROJECT' AND project_id IS NOT NULL AND product_id IS NULL AND sbom_id IS NULL) "
+            "OR (scope = 'PRODUCT' AND product_id IS NOT NULL AND project_id IS NULL AND sbom_id IS NULL) "
+            "OR (scope = 'SBOM' AND sbom_id IS NOT NULL AND project_id IS NULL AND product_id IS NULL)",
             name="ck_analysis_schedule_target",
         ),
         CheckConstraint("hour_utc BETWEEN 0 AND 23", name="ck_analysis_schedule_hour_range"),

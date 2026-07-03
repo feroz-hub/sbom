@@ -20,7 +20,19 @@ import json
 import logging
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -29,10 +41,10 @@ from ..core.security import get_current_tenant_context
 from ..db import get_db
 from ..models import SBOMSource, SBOMType
 from ..services import audit_service
+from ..services.product_service import resolve_product_assignment
 from ..services.sbom_document_service import byte_size, count_lines, parsed_component_count
 from ..services.sbom_enrichment_service import mark_enrichment_pending, run_post_upload_enrichment
 from ..services.sbom_service import sync_sbom_components
-from ..services.tenant_access import get_project_for_tenant
 from ..services.validation_repair_service import (
     ValidationRepairService,
     build_validation_failed_detail,
@@ -48,6 +60,7 @@ _UPLOAD_FORM_FIELDS = {
     "file",
     "sbom_name",
     "project_id",
+    "product_id",
     "sbom_type",
     "sbom_version",
     "product_version",
@@ -68,6 +81,8 @@ class SbomAcceptedResponse(BaseModel):
     sbom_version: str | None = None
     product_version: str | None = None
     project_id: int | None = None
+    product_id: int | None = None
+    product_name: str | None = None
     project_name: str | None = None
     spec: str
     spec_version: str
@@ -86,6 +101,7 @@ class SbomAcceptedResponse(BaseModel):
     warnings: list[dict]
     info: list[dict]
     enrichment_status: str = "pending"
+    validation_status: str | None = None
     message: str = "SBOM uploaded successfully. Enrichment is running in background."
 
 
@@ -101,9 +117,11 @@ def _now_iso() -> str:
 async def upload_sbom(
     background_tasks: BackgroundTasks,
     request: Request,
+    response: Response,
     file: UploadFile = File(..., description="SBOM document (SPDX or CycloneDX)"),
     sbom_name: str = Form(..., min_length=1, max_length=255),
     project_id: int | None = Form(None),
+    product_id: int | None = Form(None),
     sbom_type: int | None = Form(None),
     sbom_version: str | None = Form(None),
     product_version: str | None = Form(None),
@@ -138,8 +156,17 @@ async def upload_sbom(
     manual_sbom_version = (sbom_version or "").strip() or None
     manual_product_version = (product_version or productver or "").strip() or None
 
-    if project_id is not None and get_project_for_tenant(db, project_id, context.tenant_id) is None:
-        raise HTTPException(status_code=404, detail="Project not found")
+    resolved_project_id, product, used_default_product = resolve_product_assignment(
+        db,
+        tenant_id=context.tenant_id,
+        project_id=project_id,
+        product_id=product_id,
+        actor=actor,
+        require_project=True,
+    )
+    project_id = resolved_project_id
+    if used_default_product:
+        response.headers["Warning"] = '299 - "product_id will become required in a future version."'
     if sbom_type is not None and db.get(SBOMType, sbom_type) is None:
         raise HTTPException(status_code=404, detail="SBOM type not found")
 
@@ -274,8 +301,10 @@ async def upload_sbom(
         sbom_data=body_text,
         sbom_type=sbom_type,
         projectid=project_id,
+        product_id=product.id if product else None,
         sbom_version=manual_sbom_version,
         productver=manual_product_version,
+        product_name=product.name if product else None,
         created_by=actor,
         created_on=_now_iso(),
         status="validated",
@@ -305,6 +334,8 @@ async def upload_sbom(
             new_value={
                 "sbom_name": obj.sbom_name,
                 "project_id": obj.projectid,
+                "product_id": obj.product_id,
+                "product_name": obj.product_name,
                 "sbom_version": obj.sbom_version,
                 "product_version": obj.productver,
             },
@@ -351,6 +382,8 @@ async def upload_sbom(
         sbom_version=obj.sbom_version,
         product_version=obj.productver,
         project_id=obj.projectid,
+        product_id=obj.product_id,
+        product_name=obj.product_name,
         project_name=obj.project_name,
         spec=spec,
         spec_version=spec_version,
@@ -369,5 +402,6 @@ async def upload_sbom(
         warnings=[w.model_dump() for w in report.warnings],
         info=[i.model_dump() for i in report.info],
         enrichment_status=obj.enrichment_status or "pending",
+        validation_status=validation_status,
         message="SBOM uploaded successfully. Enrichment is running in background.",
     )

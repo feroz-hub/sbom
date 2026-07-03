@@ -4,7 +4,6 @@ import json
 from datetime import UTC, datetime
 
 import pytest
-
 from app.analysis import _augment_components_with_cpe
 from app.models import SBOMSource, Tenant
 from app.parsing import extract_components

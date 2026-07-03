@@ -66,6 +66,7 @@ from .routers import (
     lifecycle,
     lifecycle_admin,
     pdf,
+    products,
     projects,
     remediation,
     reports,
@@ -371,6 +372,9 @@ def _ensure_seed_data() -> None:
     _ensure_column("sbom_source", "component_extraction_error", "TEXT")
     _ensure_column("sbom_source", "component_extraction_attempted_at", "TEXT")
     _ensure_column("sbom_source", "component_extraction_completed_at", "TEXT")
+    _ensure_column("sbom_source", "product_id", "INTEGER")
+    _ensure_column("analysis_run", "product_id", "INTEGER")
+    _ensure_column("analysis_schedule", "product_id", "INTEGER")
 
     _ensure_column("sbom_component", "license", "TEXT")
     _ensure_column("sbom_component", "hashes", "TEXT")
@@ -847,6 +851,7 @@ app.include_router(sbom_validation_sessions.compat_router, dependencies=_protect
 app.include_router(sbom_validation_sessions.workspace_router, dependencies=_protected)
 app.include_router(runs.router, dependencies=_protected)
 app.include_router(projects.router, dependencies=_protected)
+app.include_router(products.router, dependencies=_protected)
 app.include_router(reports.router, dependencies=_protected)
 app.include_router(analyze_endpoints.router, dependencies=_protected)
 app.include_router(pdf.router, dependencies=_protected)

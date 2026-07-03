@@ -10,6 +10,7 @@ const push = vi.fn();
 const useUploadSbomMutate = vi.fn();
 const showToast = vi.fn();
 const getSbomTypes = vi.fn();
+const getProducts = vi.fn();
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push, replace: vi.fn(), back: vi.fn() }),
@@ -43,6 +44,7 @@ vi.mock('@/lib/api', async () => {
         modified_on: null,
       },
     ]),
+    getProducts: (...args: unknown[]) => getProducts(...args),
     getSbomTypes: (...args: unknown[]) => getSbomTypes(...args),
   };
 });
@@ -61,7 +63,19 @@ beforeEach(() => {
   useUploadSbomMutate.mockReset();
   showToast.mockReset();
   getSbomTypes.mockReset();
+  getProducts.mockReset();
   getSbomTypes.mockResolvedValue([]);
+  getProducts.mockResolvedValue([
+    {
+      id: 77,
+      tenant_id: 1,
+      project_id: 42,
+      name: 'Payments API',
+      slug: 'payments-api',
+      description: null,
+      sbom_count: 0,
+    },
+  ]);
   vi.restoreAllMocks();
 });
 
@@ -69,6 +83,8 @@ async function fillRequiredFieldsAndSubmit(name: string, content = '{"bomFormat"
   expect(await screen.findByRole('option', { name: 'Payments' })).toBeInTheDocument();
   fireEvent.change(screen.getByLabelText(/SBOM Name/i), { target: { value: name } });
   fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: '42' } });
+  const productOption = await screen.findByRole('option', { name: 'Payments API' });
+  fireEvent.change(productOption.closest('select')!, { target: { value: '77' } });
   fireEvent.change(screen.getByPlaceholderText('Paste a small SPDX, CycloneDX, or XML SBOM preview'), {
     target: { value: content },
   });
@@ -136,6 +152,8 @@ describe('SbomUploadModal validation repair handoff', () => {
     expect(await screen.findByRole('option', { name: 'Payments' })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/SBOM Name/i), { target: { value: 'unknown-sbom' } });
     fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: '42' } });
+    const productOption = await screen.findByRole('option', { name: 'Payments API' });
+    fireEvent.change(productOption.closest('select')!, { target: { value: '77' } });
     fireEvent.change(screen.getByPlaceholderText('Paste a small SPDX, CycloneDX, or XML SBOM preview'), {
       target: { value: '{"ok":false}' },
     });
@@ -153,6 +171,8 @@ describe('SbomUploadModal validation repair handoff', () => {
     expect(await screen.findByRole('option', { name: 'Payments' })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/SBOM Name/i), { target: { value: 'manual-metadata' } });
     fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: '42' } });
+    const productOption = await screen.findByRole('option', { name: 'Payments API' });
+    fireEvent.change(productOption.closest('select')!, { target: { value: '77' } });
     fireEvent.change(screen.getByLabelText(/SBOM Version/i), { target: { value: '1.1.1' } });
     fireEvent.change(screen.getByLabelText(/Product Version/i), { target: { value: '1.0.0' } });
     fireEvent.change(screen.getByLabelText(/Created By/i), { target: { value: 'Feroze' } });
@@ -460,6 +480,8 @@ describe('SbomUploadModal validation repair handoff', () => {
     expect(await screen.findByRole('option', { name: 'Payments' })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/SBOM Name/i), { target: { value: 'blocked-sbom' } });
     fireEvent.change(screen.getByLabelText(/Project/i), { target: { value: '42' } });
+    const productOption = await screen.findByRole('option', { name: 'Payments API' });
+    fireEvent.change(productOption.closest('select')!, { target: { value: '77' } });
     fireEvent.change(screen.getByPlaceholderText('Paste a small SPDX, CycloneDX, or XML SBOM preview'), { target: { value: '{"bad":true}' } });
     fireEvent.click(screen.getByRole('button', { name: /Upload SBOM/i }));
 

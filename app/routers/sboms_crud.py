@@ -47,6 +47,7 @@ from ..idempotency import (
 from ..models import (
     AnalysisFinding,
     AnalysisRun,
+    Projects,
     SBOMSource,
     SBOMType,
     SBOMValidationSession,
@@ -69,6 +70,7 @@ from ..services.analysis_service import (
     get_active_analysis_run,
     persist_analysis_run,
 )
+from ..services.product_service import DEFAULT_UNASSIGNED_PROJECT_NAME, resolve_product_assignment
 from ..services.repair.workspace_backfill_service import WorkspaceBackfillService
 from ..services.sbom_delete_service import SBOMDeleteConflict, SBOMDeleteService
 from ..services.sbom_document_service import (
@@ -86,7 +88,7 @@ from ..services.sbom_service import (
     detect_supported_component_extraction_format,
 )
 from ..services.soft_delete import SoftDeleteService
-from ..services.tenant_access import get_project_for_tenant, get_sbom_for_tenant
+from ..services.tenant_access import get_sbom_for_tenant
 from ..services.validation_repair_service import (
     ValidationRepairService,
     build_validation_failed_detail,
@@ -692,9 +694,15 @@ def create_sbom(
 ):
     log.info("Creating SBOM: name='%s' project_id=%s", payload.sbom_name, payload.projectid)
     # --- Foreign key checks ---
-    if payload.projectid is not None and get_project_for_tenant(db, payload.projectid, context.tenant_id) is None:
-        log.warning("create_sbom: project_id=%s not found", payload.projectid)
-        raise HTTPException(status_code=404, detail="Project not found")
+    resolved_project_id, product, _used_default_product = resolve_product_assignment(
+        db,
+        tenant_id=context.tenant_id,
+        project_id=payload.projectid,
+        product_id=payload.product_id,
+        actor=payload.created_by or context.actor_label(),
+        require_project=True,
+    )
+    payload.projectid = resolved_project_id
     if payload.sbom_type is not None and db.get(SBOMType, payload.sbom_type) is None:
         log.warning("create_sbom: sbom_type=%s not found", payload.sbom_type)
         raise HTTPException(status_code=404, detail="SBOM type not found")
@@ -761,6 +769,8 @@ def create_sbom(
         data = payload.model_dump()
         data["sbom_data"] = raw_text or None
         data["created_by"] = data.get("created_by") or context.actor_label()
+        data["product_id"] = product.id if product else None
+        data["product_name"] = product.name if product else data.get("product_name")
         obj = SBOMSource(
             **data,
             created_on=now_iso(),
@@ -1203,27 +1213,42 @@ def update_sbom(
         sbom.created_by = actor
 
     old_project_id = sbom.projectid
+    old_product_id = sbom.product_id
     old_name = sbom.sbom_name
 
     data = payload.model_dump(exclude_unset=True)
 
-    if "project_id" in data:
-        new_proj_id = data["project_id"]
-        if new_proj_id is not None:
-            try:
-                p_id = int(new_proj_id)
-                if p_id <= 0:
-                    raise ValueError
-            except (ValueError, TypeError):
-                raise HTTPException(status_code=400, detail="Invalid project_id format")
+    if "project_id" in data or "product_id" in data:
+        project_present = "project_id" in data
+        product_present = "product_id" in data
+        raw_project_id = data["project_id"] if project_present else (None if product_present else sbom.projectid)
+        raw_product_id = data["product_id"] if product_present else None
+        try:
+            new_proj_id = int(raw_project_id) if raw_project_id is not None else None
+            if new_proj_id is not None and new_proj_id <= 0:
+                raise ValueError
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="Invalid project_id format")
+        try:
+            new_product_id = int(raw_product_id) if raw_product_id is not None else None
+            if new_product_id is not None and new_product_id <= 0:
+                raise ValueError
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="Invalid product_id format")
 
-            project = get_project_for_tenant(db, p_id, context.tenant_id)
-            if not project:
-                raise HTTPException(status_code=404, detail="Project not found")
-            new_proj_id = p_id
+        new_proj_id, product, used_default_product = resolve_product_assignment(
+            db,
+            tenant_id=context.tenant_id,
+            project_id=new_proj_id,
+            product_id=new_product_id,
+            actor=actor,
+            require_project=True,
+        )
 
-        # Update project_id in SBOMSource
         sbom.projectid = new_proj_id
+        sbom.product_id = product.id if product else None
+        if product:
+            sbom.product_name = product.name
 
         # Update project_id in related AnalysisRuns
         from sqlalchemy import update as sa_update
@@ -1231,8 +1256,22 @@ def update_sbom(
         db.execute(
             sa_update(AnalysisRun)
             .where(AnalysisRun.sbom_id == sbom.id, AnalysisRun.tenant_id == sbom.tenant_id)
-            .values(project_id=new_proj_id)
+            .values(project_id=new_proj_id, product_id=sbom.product_id)
         )
+        if old_product_id != sbom.product_id:
+            audit_service.write_audit_log(
+                db,
+                context,
+                "sbom.product_changed",
+                entity_type="sbom",
+                entity_id=sbom.id,
+                old_value={"project_id": old_project_id, "product_id": old_product_id},
+                new_value={
+                    "project_id": sbom.projectid,
+                    "product_id": sbom.product_id,
+                    "used_default_product": used_default_product,
+                },
+            )
 
     if "name" in data:
         sbom.sbom_name = data["name"]
@@ -1253,6 +1292,12 @@ def update_sbom(
         db.commit()
         db.refresh(sbom)
 
+        old_project_for_audit = old_project_id
+        if old_project_id is not None:
+            old_project = db.get(Projects, old_project_id)
+            if old_project and old_project.project_name == DEFAULT_UNASSIGNED_PROJECT_NAME:
+                old_project_for_audit = None
+
         # Log to generic audit trail
         audit_log.record(
             db,
@@ -1262,7 +1307,7 @@ def update_sbom(
             target_id=sbom.id,
             detail=f"SBOM updated. Reason: {payload.change_reason or 'No reason specified'}",
             metadata={
-                "old_project_id": old_project_id,
+                "old_project_id": old_project_for_audit,
                 "new_project_id": sbom.projectid,
                 "old_name": old_name,
                 "new_name": sbom.sbom_name,
@@ -1616,6 +1661,7 @@ async def analyze_sbom_stream(
         run = AnalysisRun(
             sbom_id=sbom_row.id,
             project_id=sbom_row.projectid,
+            product_id=sbom_row.product_id,
             run_status="PENDING",
             sbom_name=sbom_row.sbom_name,
             source=",".join(normalize_source_names(payload.sources, default=configured_default_sources())),

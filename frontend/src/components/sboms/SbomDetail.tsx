@@ -35,9 +35,9 @@ import {
   restoreSbomVersion,
   refreshSbomLifecycle,
   refreshComponentLifecycle,
-  getLifecycleProviderStatus,
-  overrideComponentLifecycle,
-  discoverSbomVexDocuments,
+	  getLifecycleProviderStatus,
+	  overrideComponentLifecycle,
+	  discoverSbomVexDocuments,
   exportSbomLifecycleReportCsv,
   exportSbomLifecycleReportPack,
   exportSbomVexReportCsv,
@@ -47,9 +47,10 @@ import {
   getVexOverrideHistory,
   getSbomVexStatements,
   overrideVexStatement,
-  uploadSbomVexDocument,
-  getProjects,
-  updateSbom,
+	  uploadSbomVexDocument,
+	  getProjects,
+	  getProducts,
+	  updateSbom,
   createWorkspaceForSbom,
   BASE_URL
 } from '@/lib/api';
@@ -292,13 +293,14 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
   
   // Assign Project Form State
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
+  const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
   const [assignChangeReason, setAssignChangeReason] = useState('');
   const [isSavingAssign, setIsSavingAssign] = useState(false);
   const [assignError, setAssignError] = useState('');
 
   // Edit Details Form State
   const [detailName, setDetailName] = useState('');
-  const [detailProductName, setDetailProductName] = useState('');
+  const [detailProductId, setDetailProductId] = useState<number | null>(null);
   const [detailProductVersion, setDetailProductVersion] = useState('');
   const [detailSbomVersion, setDetailSbomVersion] = useState('');
   const [detailDescription, setDetailDescription] = useState('');
@@ -320,10 +322,22 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
     queryFn: ({ signal }) => getProjects(signal),
   });
 
+  const selectedProductsQuery = useQuery({
+    queryKey: ['products', selectedProjectId],
+    queryFn: ({ signal }) => getProducts(selectedProjectId!, signal),
+    enabled: Boolean(selectedProjectId),
+  });
+
+  const detailProductsQuery = useQuery({
+    queryKey: ['products', detailProjectId],
+    queryFn: ({ signal }) => getProducts(detailProjectId!, signal),
+    enabled: Boolean(detailProjectId),
+  });
+
   const handleAssignProjectSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedProjectId) {
-      setAssignError('Please select a project.');
+    if (!selectedProjectId || !selectedProductId) {
+      setAssignError('Please select a project and product.');
       return;
     }
     setIsSavingAssign(true);
@@ -331,6 +345,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
     try {
       await updateSbom(sbom.id, {
         project_id: selectedProjectId,
+        product_id: selectedProductId,
         change_reason: assignChangeReason || undefined,
       });
 
@@ -359,7 +374,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
     try {
       const payload = {
         name: detailName.trim(),
-        product_name: detailProductName.trim() || null,
+        product_id: detailProductId || null,
         product_version: detailProductVersion.trim() || null,
         sbom_version: detailSbomVersion.trim() || null,
         description: detailDescription.trim() || null,
@@ -975,11 +990,11 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                   </Button>
                 ) : null}
                 <Button
-                  onClick={() => {
-                    setDetailName(sbom.sbom_name || '');
-                    setDetailProductName(sbom.product_name || '');
-                    setDetailProductVersion(sbom.product_version ?? sbom.productver ?? '');
-                    setDetailSbomVersion(sbom.sbom_version || '');
+	                  onClick={() => {
+	                    setDetailName(sbom.sbom_name || '');
+	                    setDetailProductId(sbom.product_id || null);
+	                    setDetailProductVersion(sbom.product_version ?? sbom.productver ?? '');
+	                    setDetailSbomVersion(sbom.sbom_version || '');
                     setDetailDescription(sbom.description || '');
                     setDetailProjectId(sbom.projectid || null);
                     setDetailChangeReason('');
@@ -1036,9 +1051,10 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                         <span>{sbom.project_name || (sbom.projectid ? `Project #${sbom.projectid}` : '—')}</span>
                         <button
                           type="button"
-                          onClick={() => {
-                            setSelectedProjectId(sbom.projectid || null);
-                            setAssignChangeReason('');
+	                          onClick={() => {
+	                            setSelectedProjectId(sbom.projectid || null);
+	                            setSelectedProductId(sbom.product_id || null);
+	                            setAssignChangeReason('');
                             setAssignError('');
                             setIsAssignModalOpen(true);
                           }}
@@ -2546,8 +2562,8 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
             <Button size="sm" variant="ghost" onClick={() => setIsAssignModalOpen(false)}>
               Cancel
             </Button>
-            <Button size="sm" onClick={handleAssignProjectSubmit} loading={isSavingAssign} disabled={!selectedProjectId}>
-              Save Assignment
+	            <Button size="sm" onClick={handleAssignProjectSubmit} loading={isSavingAssign} disabled={!selectedProjectId || !selectedProductId}>
+	              Save Assignment
             </Button>
           </div>
         }
@@ -2562,16 +2578,34 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
           <Select
             label="Project"
             placeholder="Select a project..."
-            required
-            value={selectedProjectId || ''}
-            onChange={(e) => setSelectedProjectId(e.target.value ? Number(e.target.value) : null)}
-          >
+	            required
+	            value={selectedProjectId || ''}
+	            onChange={(e) => {
+	              setSelectedProjectId(e.target.value ? Number(e.target.value) : null);
+	              setSelectedProductId(null);
+	            }}
+	          >
             {projects?.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.project_name}
               </option>
             ))}
-          </Select>
+	          </Select>
+
+	          <Select
+	            label="Product"
+	            placeholder="Select a product..."
+	            required
+	            value={selectedProductId || ''}
+	            disabled={!selectedProjectId || selectedProductsQuery.isLoading}
+	            onChange={(e) => setSelectedProductId(e.target.value ? Number(e.target.value) : null)}
+	          >
+	            {selectedProductsQuery.data?.items.map((p) => (
+	              <option key={p.id} value={p.id}>
+	                {p.name}
+	              </option>
+	            ))}
+	          </Select>
 
           <Input
             label="Change Reason"
@@ -2617,22 +2651,33 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
               label="Project"
               placeholder="Select project..."
               value={detailProjectId || ''}
-              onChange={(e) => setDetailProjectId(e.target.value ? Number(e.target.value) : null)}
-            >
+	              onChange={(e) => {
+	                setDetailProjectId(e.target.value ? Number(e.target.value) : null);
+	                setDetailProductId(null);
+	              }}
+	            >
               {projects?.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.project_name}
                 </option>
               ))}
-            </Select>
-          </div>
+	            </Select>
+	          </div>
 
-          <div className="grid grid-cols-3 gap-4">
-            <Input
-              label="Product Name"
-              value={detailProductName}
-              onChange={(e) => setDetailProductName(e.target.value)}
-            />
+	          <div className="grid grid-cols-3 gap-4">
+	            <Select
+	              label="Product"
+	              placeholder="Select product..."
+	              value={detailProductId || ''}
+	              disabled={!detailProjectId || detailProductsQuery.isLoading}
+	              onChange={(e) => setDetailProductId(e.target.value ? Number(e.target.value) : null)}
+	            >
+	              {detailProductsQuery.data?.items.map((p) => (
+	                <option key={p.id} value={p.id}>
+	                  {p.name}
+	                </option>
+	              ))}
+	            </Select>
             <Input
               label="Product Version"
               value={detailProductVersion}

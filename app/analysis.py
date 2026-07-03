@@ -389,6 +389,18 @@ def resolve_nvd_api_key(settings: AnalysisSettings | None = None) -> str | None:
 # adapters will import directly from `services.sources` instead.
 # ----------------------------------------------------------------------
 
+from .sources.applicability import (
+    NormalizedAdvisory as _NormalizedAdvisory,
+)
+from .sources.applicability import (
+    NormalizedComponent as _NormalizedComponent,
+)
+from .sources.applicability import (
+    evaluate_applicability as _evaluate_applicability,
+)
+from .sources.applicability import (
+    log_candidate_decision as _log_candidate_decision,
+)
 from .sources.cache_seam import (
     cached_fetch as _cached_fetch,
 )
@@ -410,20 +422,7 @@ from .sources.match_confidence import (
     score_match as _score_match,
 )
 from .sources.purl import parse_purl as _parse_purl
-from .sources.applicability import (
-    NormalizedAdvisory as _NormalizedAdvisory,
-)
-from .sources.applicability import (
-    NormalizedComponent as _NormalizedComponent,
-)
-from .sources.applicability import (
-    evaluate_applicability as _evaluate_applicability,
-)
-from .sources.applicability import (
-    log_candidate_decision as _log_candidate_decision,
-)
 from .sources.version_range import ApplicabilityStatus as _ApplicabilityStatus
-from .sources.version_range import cve_affects_component as _cve_affects_component
 from .sources.version_range import evaluate_nvd_configurations as _evaluate_nvd_configurations
 
 

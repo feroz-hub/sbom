@@ -107,6 +107,8 @@ class RunSummary(BaseModel):
     sbom_name: str | None = None
     project_id: int | None = None
     project_name: str | None = None
+    product_id: int | None = None
+    product_name: str | None = None
     run_status: str
     completed_on: str | None = None
     started_on: str | None = None

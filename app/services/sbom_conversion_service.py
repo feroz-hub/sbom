@@ -629,6 +629,7 @@ def convert_and_persist_spdx_to_cyclonedx(
         sbom_data=converted_json,
         sbom_type=source_sbom.sbom_type,
         projectid=source_sbom.projectid,
+        product_id=source_sbom.product_id,
         created_by=user_id or source_sbom.created_by,
         created_on=now,
         sbom_version="1.0.0",

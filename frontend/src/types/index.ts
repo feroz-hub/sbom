@@ -10,6 +10,34 @@ export interface Project {
   sbom_count?: number;
 }
 
+export interface Product {
+  id: number;
+  tenant_id?: number;
+  project_id: number;
+  name: string;
+  normalized_name?: string | null;
+  slug?: string | null;
+  description?: string | null;
+  product_key?: string | null;
+  vendor?: string | null;
+  category?: string | null;
+  status?: string | null;
+  latest_version?: string | null;
+  metadata_json?: Record<string, unknown> | null;
+  sbom_count?: number;
+  latest_sbom_id?: number | null;
+  latest_sbom_version?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  is_active?: boolean;
+  deleted_at?: string | null;
+}
+
+export interface ProductListResponse {
+  items: Product[];
+  total: number;
+}
+
 export type SbomValidationStatus = 'validated' | 'failed' | 'quarantined' | 'pending';
 export type ValidationStatus =
   | 'not_validated'
@@ -76,6 +104,8 @@ export interface SBOMSource {
   projectid: number | null;
   project_id?: number | null;
   project_name?: string | null;
+  product_id?: number | null;
+  product?: Product | null;
   component_count?: number;
   created_by: string | null;
   created_on: string | null;
@@ -817,6 +847,8 @@ export interface AnalysisRun {
   sbom_id: number | null;
   sbom_name?: string | null;
   project_id: number | null;
+  product_id?: number | null;
+  product_name?: string | null;
   // ADR-0001: OK / FINDINGS are canonical. PASS / FAIL accepted as legacy
   // aliases during the deprecation window — see docs/terminology.md.
   run_status:
@@ -1114,6 +1146,7 @@ export interface CreateSBOMPayload {
   sbom_type?: number;       // integer FK to SBOMType
   projectid?: number;
   project_id?: number;
+  product_id?: number;
   sbom_version?: string;
   created_by?: string;
   product_version?: string;
@@ -1130,6 +1163,8 @@ export interface UploadSBOMAcceptedResponse {
   sbom_version?: string | null;
   product_version?: string | null;
   project_id: number | null;
+  product_id?: number | null;
+  product_name?: string | null;
   project_name?: string | null;
   spec: string;
   spec_version: string;
@@ -1153,6 +1188,7 @@ export interface UploadSBOMAcceptedResponse {
 
 export interface UpdateSBOMPayload {
   project_id?: number | null;
+  product_id?: number | null;
   name?: string | null;
   product_name?: string | null;
   product_version?: string | null;

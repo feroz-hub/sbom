@@ -33,7 +33,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..models import AnalysisSchedule, Projects, SBOMSource
+from ..models import AnalysisSchedule, Product, Projects, SBOMSource
 from ..schemas import ScheduleOut, ScheduleResolved, ScheduleUpsert
 from ..services import audit_log
 from ..services.schedule_resolver import resolve_for_sbom
@@ -138,11 +138,19 @@ def _get_sbom_or_404(db: Session, sbom_id: int) -> SBOMSource:
     return sbom
 
 
+def _get_product_or_404(db: Session, product_id: int) -> Product:
+    product = db.get(Product, product_id)
+    if product is None:
+        raise HTTPException(status_code=404, detail="Product not found")
+    return product
+
+
 def _serialize(row: AnalysisSchedule) -> dict[str, Any]:
     return {
         "id": row.id,
         "scope": row.scope,
         "project_id": row.project_id,
+        "product_id": row.product_id,
         "sbom_id": row.sbom_id,
         "cadence": row.cadence,
         "cron_expression": row.cron_expression,
@@ -294,6 +302,122 @@ def delete_project_schedule(
 
 
 # ---------------------------------------------------------------------------
+# Product-scope endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/products/{product_id}/schedule",
+    response_model=ScheduleOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def upsert_product_schedule(
+    payload: ScheduleUpsert,
+    product_id: int = Path(..., ge=1),
+    db: Session = Depends(get_db),
+):
+    _get_product_or_404(db, product_id)
+    _validate_or_422(_spec_from_payload(payload))
+    existing = db.execute(
+        select(AnalysisSchedule).where(
+            AnalysisSchedule.scope == "PRODUCT",
+            AnalysisSchedule.product_id == product_id,
+        )
+    ).scalar_one_or_none()
+    if existing is None:
+        existing = AnalysisSchedule(
+            scope="PRODUCT",
+            project_id=None,
+            product_id=product_id,
+            sbom_id=None,
+            cadence=payload.cadence,
+            created_on=to_iso(_now()),
+            created_by=payload.modified_by,
+        )
+        db.add(existing)
+    _apply_payload(existing, payload, partial=False)
+    existing.modified_on = to_iso(_now())
+    _refresh_next_run_at(existing)
+    db.commit()
+    db.refresh(existing)
+    return _serialize(existing)
+
+
+@router.get("/products/{product_id}/schedule", response_model=ScheduleOut)
+def get_product_schedule(product_id: int = Path(..., ge=1), db: Session = Depends(get_db)):
+    _get_product_or_404(db, product_id)
+    row = db.execute(
+        select(AnalysisSchedule).where(
+            AnalysisSchedule.scope == "PRODUCT",
+            AnalysisSchedule.product_id == product_id,
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="No schedule configured for this product")
+    return _serialize(row)
+
+
+@router.patch("/products/{product_id}/schedule", response_model=ScheduleOut)
+def patch_product_schedule(
+    payload: ScheduleUpsert,
+    product_id: int = Path(..., ge=1),
+    db: Session = Depends(get_db),
+):
+    _get_product_or_404(db, product_id)
+    row = db.execute(
+        select(AnalysisSchedule).where(
+            AnalysisSchedule.scope == "PRODUCT",
+            AnalysisSchedule.product_id == product_id,
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="No schedule configured for this product")
+    _apply_payload(row, payload, partial=True)
+    _validate_or_422(_spec_from_row(row))
+    row.modified_on = to_iso(_now())
+    _refresh_next_run_at(row)
+    db.commit()
+    db.refresh(row)
+    return _serialize(row)
+
+
+@router.delete("/products/{product_id}/schedule", status_code=status.HTTP_200_OK)
+def delete_product_schedule(
+    product_id: int = Path(..., ge=1),
+    permanent: bool = Query(False),
+    user_id: str | None = Query(None),
+    db: Session = Depends(get_db),
+):
+    _get_product_or_404(db, product_id)
+    row = db.execute(
+        select(AnalysisSchedule).where(
+            AnalysisSchedule.scope == "PRODUCT",
+            AnalysisSchedule.product_id == product_id,
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        return {"status": "no_schedule"}
+    schedule_id = row.id
+    service = SoftDeleteService(db)
+    if permanent:
+        service.hard_delete(row)
+        action = "schedule.permanent_delete"
+    else:
+        service.soft_delete(row, user_id=user_id, cascade=False)
+        action = "schedule.soft_delete"
+    db.commit()
+    audit_log.record(
+        db,
+        user_id=user_id,
+        action=action,
+        target_kind="schedule",
+        target_id=schedule_id,
+        detail=f"scope=PRODUCT product_id={product_id}",
+    )
+    return {"status": "deleted", "permanent": permanent, "id": schedule_id}
+
+
+# ---------------------------------------------------------------------------
 # SBOM-scope endpoints
 # ---------------------------------------------------------------------------
 
@@ -351,7 +475,7 @@ def get_sbom_schedule(sbom_id: int = Path(..., ge=1), db: Session = Depends(get_
     if row is None:
         return {"inherited": False, "schedule": None}
     return {
-        "inherited": row.scope == "PROJECT",
+        "inherited": row.scope in {"PROJECT", "PRODUCT"},
         "schedule": _serialize(row),
     }
 

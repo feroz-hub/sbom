@@ -64,8 +64,8 @@ describe('SbomsTable analysis column', () => {
 
     const withBothRow = screen.getByText('with-both').closest('tr');
     const productOnlyRow = screen.getByText('product-only').closest('tr');
-    expect(withBothRow?.children[3]).toHaveTextContent('1.1.1');
-    expect(productOnlyRow?.children[3]).toHaveTextContent('—');
+    expect(withBothRow?.children[5]).toHaveTextContent('1.1.1');
+    expect(productOnlyRow?.children[5]).toHaveTextContent('—');
   });
 
   it('renders Not Run when no latest analysis exists', () => {

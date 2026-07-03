@@ -6,13 +6,13 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Upload, AlertCircle, AlertOctagon, ArrowRight } from 'lucide-react';
 import { Dialog, DialogBody, DialogFooter } from '@/components/ui/Dialog';
 import { Input, Textarea } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
-import { getProjects, getSbomTypes, HttpError } from '@/lib/api';
+import { createProduct, getProducts, getProjects, getSbomTypes, HttpError } from '@/lib/api';
 import { getRepairWorkspaceUrl, repairWorkspaceLabel } from '@/lib/repairWorkspace';
 import { detectSbomFormatFromText, formatFamily, formatSbomFormatLabel, type SbomFormatDetection } from '@/lib/sbomFormat';
 import { useToast } from '@/hooks/useToast';
@@ -75,6 +75,7 @@ const schema = z.object({
   sbom_data: z.string().optional().default(''),
   sbom_type_id: z.string().optional(),
   projectid: z.string().min(1, 'Project is required'),
+  productid: z.string().min(1, 'Product is required'),
   sbom_version: z.string().optional(),
   created_by: z.string().optional(),
   product_version: z.string().optional(),
@@ -115,6 +116,7 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
   const [uploadResult, setUploadResult] = useState<SBOMSource | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [duplicateNameError, setDuplicateNameError] = useState<string | null>(null);
+  const [newProductName, setNewProductName] = useState('');
   const [documentPreviewMeta, setDocumentPreviewMeta] = useState<{
     bytes: number;
     lines: number;
@@ -153,21 +155,49 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
     resolver: zodResolver(schema),
     defaultValues: {
       sbom_name: '', sbom_data: '', sbom_type_id: '',
-      projectid: '', sbom_version: '', created_by: '', product_version: '',
+      projectid: '', productid: '', sbom_version: '', created_by: '', product_version: '',
     },
   });
   const selectedProjectId = watch('projectid');
+  const selectedProductId = watch('productid');
   const sbomNameValue = watch('sbom_name');
   const sbomDataValue = watch('sbom_data');
   const selectedSbomTypeId = watch('sbom_type_id');
   const canSubmit = Boolean(
     selectedProjectId &&
+    selectedProductId &&
     sbomNameValue?.trim() &&
     (selectedFile || sbomDataValue?.trim()) &&
     !duplicateNameError,
   );
   const uploadRepairUrl = uploadResult ? getRepairWorkspaceUrl(uploadResult) : null;
   const validationFailureRepairUrl = validationFailure ? getRepairWorkspaceUrl(validationFailure) : null;
+  const selectedProjectNumber = selectedProjectId ? Number(selectedProjectId) : undefined;
+
+  const productsQuery = useQuery({
+    queryKey: ['products', selectedProjectNumber],
+    queryFn: ({ signal }) => getProducts(selectedProjectNumber!, signal),
+    enabled: open && Boolean(selectedProjectNumber),
+  });
+  const productItems = Array.isArray(productsQuery.data)
+    ? productsQuery.data
+    : productsQuery.data?.items ?? [];
+
+  const createProductMutation = useMutation({
+    mutationFn: (name: string) => createProduct(selectedProjectNumber!, { name }),
+    onSuccess: (product) => {
+      queryClient.invalidateQueries({ queryKey: ['products', selectedProjectNumber] });
+      setValue('productid', String(product.id), { shouldValidate: true });
+      setNewProductName('');
+      showToast('Product created', 'success');
+    },
+    onError: (err: Error) => showToast(`Create product failed: ${err.message}`, 'error'),
+  });
+
+  useEffect(() => {
+    setValue('productid', '', { shouldValidate: true });
+    setNewProductName('');
+  }, [selectedProjectId, setValue]);
 
   useEffect(() => {
     if (userManuallyOverrodeFormat || !formatDetection || !sbomTypes?.length) return;
@@ -236,6 +266,7 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
         sbom_type: values.sbom_type_id ? Number(values.sbom_type_id) : undefined,
         projectid: values.projectid ? Number(values.projectid) : undefined,
         project_id: values.projectid ? Number(values.projectid) : undefined,
+        product_id: values.productid ? Number(values.productid) : undefined,
         sbom_version: values.sbom_version || undefined,
         created_by: values.created_by || undefined,
         product_version: values.product_version || undefined,
@@ -339,6 +370,7 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
     setUploadResult(null);
     setSelectedFile(null);
     setDuplicateNameError(null);
+    setNewProductName('');
     setDocumentPreviewMeta(null);
     setFormatDetection(null);
     setUserManuallyOverrodeFormat(false);
@@ -566,6 +598,47 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
                 <option key={p.id} value={p.id}>{p.project_name}</option>
               ))}
             </Select>
+            <Select
+              label="Product"
+              placeholder="Select product..."
+              disabled={uploading || !selectedProjectId || productsQuery.isLoading}
+              required
+              error={errors.productid?.message}
+              hint={
+                selectedProjectId && productItems.length === 0
+                  ? 'No products found for this project.'
+                  : undefined
+              }
+              {...register('productid')}
+            >
+              {productItems.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </Select>
+          </div>
+
+          {selectedProjectId && productItems.length === 0 && (
+            <div className="flex items-end gap-2 rounded-lg border border-border bg-surface-muted p-3">
+              <Input
+                label="Create Product"
+                placeholder="e.g. Authorization Server"
+                value={newProductName}
+                onChange={(event) => setNewProductName(event.target.value)}
+                disabled={uploading || createProductMutation.isPending}
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                loading={createProductMutation.isPending}
+                disabled={!newProductName.trim() || createProductMutation.isPending}
+                onClick={() => createProductMutation.mutate(newProductName.trim())}
+              >
+                Create
+              </Button>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-4">
             <Select
               label="SBOM Type / Format"
               disabled={uploading}

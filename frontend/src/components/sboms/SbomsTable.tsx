@@ -35,7 +35,7 @@ import { canOpenRepairWorkspace, getRepairWorkspaceUrl } from '@/lib/repairWorks
 import type { AnalysisStatus } from '@/hooks/useBackgroundAnalysis';
 import type { SBOMSource, SbomValidationStatus } from '@/types';
 
-type SbomSortKey = 'id' | 'sbom_name' | 'project' | 'created_by' | 'created_on';
+type SbomSortKey = 'id' | 'sbom_name' | 'project' | 'product' | 'created_by' | 'created_on';
 
 interface SbomsTableProps {
   sboms: SBOMSource[] | undefined;
@@ -46,6 +46,12 @@ interface SbomsTableProps {
 function displayProject(sb: SBOMSource): string {
   if (sb.project_name?.trim()) return sb.project_name.trim();
   if (sb.projectid != null) return `Project #${sb.projectid}`;
+  return 'Unassigned';
+}
+
+function displayProduct(sb: SBOMSource): string {
+  if (sb.product_name?.trim()) return sb.product_name.trim();
+  if (sb.product_id != null) return `Product #${sb.product_id}`;
   return 'Unassigned';
 }
 
@@ -109,6 +115,7 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
   const [deleteTarget, setDeleteTarget] = useState<SBOMSource | null>(null);
   const [search, setSearch] = useState('');
   const [projectFilter, setProjectFilter] = useState('');
+  const [productFilter, setProductFilter] = useState('');
   const [analysisFilter, setAnalysisFilter] = useState('');
   const [validationFilter, setValidationFilter] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set());
@@ -156,6 +163,14 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [sboms]);
 
+  const productOptions = useMemo(() => {
+    const set = new Set<string>();
+    sboms
+      ?.filter((sb) => !projectFilter || displayProject(sb) === projectFilter)
+      .forEach((sb) => set.add(displayProduct(sb)));
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [sboms, projectFilter]);
+
   const filteredSboms = useMemo(() => {
     if (!sboms?.length) return [];
     let rows = sboms;
@@ -165,6 +180,7 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
           String(sb.id),
           sb.sbom_name,
           displayProject(sb),
+          displayProduct(sb),
           sb.sbom_version,
           sb.product_version,
           sb.productver,
@@ -176,6 +192,9 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
     }
     if (projectFilter) {
       rows = rows.filter((sb) => displayProject(sb) === projectFilter);
+    }
+    if (productFilter) {
+      rows = rows.filter((sb) => displayProduct(sb) === productFilter);
     }
     if (analysisFilter) {
       rows = rows.filter((sb) => normalizeAnalysis(sb) === analysisFilter);
@@ -194,14 +213,15 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
       });
     }
     return rows;
-  }, [sboms, search, projectFilter, analysisFilter, validationFilter]);
+  }, [sboms, search, projectFilter, productFilter, analysisFilter, validationFilter]);
 
   const filtersActive = Boolean(
-    search.trim() || projectFilter || analysisFilter || validationFilter,
+    search.trim() || projectFilter || productFilter || analysisFilter || validationFilter,
   );
   const clearFilters = () => {
     setSearch('');
     setProjectFilter('');
+    setProductFilter('');
     setAnalysisFilter('');
     setValidationFilter('');
   };
@@ -211,6 +231,7 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
       id: (sb: SBOMSource) => sb.id,
       sbom_name: (sb: SBOMSource) => (sb.sbom_name ?? '').toLowerCase(),
       project: (sb: SBOMSource) => displayProject(sb).toLowerCase(),
+      product: (sb: SBOMSource) => displayProduct(sb).toLowerCase(),
       created_by: (sb: SBOMSource) => (sb.created_by ?? '').toLowerCase(),
       created_on: (sb: SBOMSource) => sb.created_on ?? '',
     }),
@@ -266,7 +287,13 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
   useEffect(() => {
     pagination.resetPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, projectFilter, analysisFilter, validationFilter]);
+  }, [search, projectFilter, productFilter, analysisFilter, validationFilter]);
+
+  useEffect(() => {
+    if (productFilter && !productOptions.includes(productFilter)) {
+      setProductFilter('');
+    }
+  }, [productFilter, productOptions]);
 
   if (error) {
     return (
@@ -305,6 +332,21 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
               >
                 <option value="">All projects</option>
                 {projectOptions.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="w-full min-w-[10rem] sm:w-48">
+              <Select
+                label="Product"
+                value={productFilter}
+                onChange={(e) => setProductFilter(e.target.value)}
+                className="w-full"
+              >
+                <option value="">All products</option>
+                {productOptions.map((p) => (
                   <option key={p} value={p}>
                     {p}
                   </option>
@@ -393,6 +435,14 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
               >
                 Project
               </SortableTh>
+              <SortableTh
+                sortKey="product"
+                activeKey={sort.key}
+                direction={sort.direction}
+                onToggle={(k) => toggleSort(k as SbomSortKey)}
+              >
+                Product
+              </SortableTh>
               <Th>Version</Th>
               <Th>Format</Th>
               <Th>Upload</Th>
@@ -418,12 +468,12 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
           </TableHead>
           <TableBody>
             {isLoading ? (
-              Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} cols={11} />)
+              Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} cols={12} />)
             ) : !sboms?.length ? (
-              <EmptyRow cols={11} message="No SBOMs found. Upload your first SBOM!" />
+              <EmptyRow cols={12} message="No SBOMs found. Upload your first SBOM!" />
             ) : !filteredSboms.length ? (
               <EmptyRow
-                cols={11}
+                cols={12}
                 message="No SBOMs match your filters. Try adjusting search or clear filters."
               />
             ) : (
@@ -456,8 +506,9 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
                       />
                     </div>
                   </Td>
-                  <Td className="text-hcl-muted">{displayProject(sbom)}</Td>
-                  <Td className="text-hcl-muted">{sbom.sbom_version || '—'}</Td>
+	                  <Td className="text-hcl-muted">{displayProject(sbom)}</Td>
+	                  <Td className="text-hcl-muted">{displayProduct(sbom)}</Td>
+	                  <Td className="text-hcl-muted">{sbom.sbom_version || '—'}</Td>
                   <Td className="text-hcl-muted">{sbom.sbom_type || '—'}</Td>
                   <Td>
                     <button

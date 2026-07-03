@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..metrics import runs_aggregate
 from ..metrics._helpers import cves_for_finding
-from ..models import AnalysisFinding, AnalysisRun, EpssScore, SBOMSource
+from ..models import AnalysisFinding, AnalysisRun, EpssScore, Product, SBOMSource
 from ..schemas import AnalysisFindingOut, AnalysisRunOut, RunsAggregateOut
 from ..services.risk_score import (
     EPSS_AMPLIFIER,
@@ -64,6 +64,7 @@ def _coerce_optional_int(raw: str | None) -> int | None:
 def list_analysis_runs(
     sbom_id: str | None = Query(None),
     project_id: str | None = Query(None),
+    product_id: str | None = Query(None),
     run_status: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=500),
@@ -76,6 +77,7 @@ def list_analysis_runs(
 ):
     sbom_id = _coerce_optional_int(sbom_id)
     project_id = _coerce_optional_int(project_id)
+    product_id = _coerce_optional_int(product_id)
     page = 1 if page < 1 else page
     page_size = max(1, min(page_size, 500))
 
@@ -96,6 +98,10 @@ def list_analysis_runs(
     if project_id is not None:
         base = base.where(AnalysisRun.project_id == project_id)
         count = count.where(AnalysisRun.project_id == project_id)
+
+    if product_id is not None:
+        base = base.where(AnalysisRun.product_id == product_id)
+        count = count.where(AnalysisRun.product_id == product_id)
 
     if run_status:
         from ..services.analysis_service import normalize_run_status
@@ -198,10 +204,12 @@ def list_recent_runs(
 
     sbom_subq = db.query(SBOMSource.id.label("sbom_id"), SBOMSource.sbom_name.label("sbom_name")).subquery()
     proj_subq = db.query(Projects.id.label("project_id"), Projects.project_name.label("project_name")).subquery()
+    product_subq = db.query(Product.id.label("product_id"), Product.name.label("product_name")).subquery()
     stmt = (
-        select(AnalysisRun, sbom_subq.c.sbom_name, proj_subq.c.project_name)
+        select(AnalysisRun, sbom_subq.c.sbom_name, proj_subq.c.project_name, product_subq.c.product_name)
         .outerjoin(sbom_subq, AnalysisRun.sbom_id == sbom_subq.c.sbom_id)
         .outerjoin(proj_subq, AnalysisRun.project_id == proj_subq.c.project_id)
+        .outerjoin(product_subq, AnalysisRun.product_id == product_subq.c.product_id)
         .order_by(AnalysisRun.id.desc())
         .limit(limit)
     )
@@ -213,13 +221,15 @@ def list_recent_runs(
             sbom_name=sbom_name or run.sbom_name,
             project_id=run.project_id,
             project_name=project_name,
+            product_id=run.product_id,
+            product_name=product_name,
             run_status=(run.run_status or "").upper(),
             completed_on=run.completed_on,
             started_on=run.started_on,
             total_findings=int(run.total_findings or 0),
             total_components=int(run.total_components or 0),
         ).model_dump()
-        for run, sbom_name, project_name in rows
+        for run, sbom_name, project_name, product_name in rows
     ]
 
 
@@ -238,10 +248,12 @@ def search_runs(
     needle = (q or "").strip()
     sbom_subq = db.query(SBOMSource.id.label("sbom_id"), SBOMSource.sbom_name.label("sbom_name")).subquery()
     proj_subq = db.query(Projects.id.label("project_id"), Projects.project_name.label("project_name")).subquery()
+    product_subq = db.query(Product.id.label("product_id"), Product.name.label("product_name")).subquery()
     stmt = (
-        select(AnalysisRun, sbom_subq.c.sbom_name, proj_subq.c.project_name)
+        select(AnalysisRun, sbom_subq.c.sbom_name, proj_subq.c.project_name, product_subq.c.product_name)
         .outerjoin(sbom_subq, AnalysisRun.sbom_id == sbom_subq.c.sbom_id)
         .outerjoin(proj_subq, AnalysisRun.project_id == proj_subq.c.project_id)
+        .outerjoin(product_subq, AnalysisRun.product_id == product_subq.c.product_id)
     )
     if needle:
         like = f"%{needle}%"
@@ -255,6 +267,7 @@ def search_runs(
             or_(
                 sbom_subq.c.sbom_name.ilike(like),
                 proj_subq.c.project_name.ilike(like),
+                product_subq.c.product_name.ilike(like),
                 *run_id_clause,
             )
         )
@@ -267,13 +280,15 @@ def search_runs(
             sbom_name=sbom_name or run.sbom_name,
             project_id=run.project_id,
             project_name=project_name,
+            product_id=run.product_id,
+            product_name=product_name,
             run_status=(run.run_status or "").upper(),
             completed_on=run.completed_on,
             started_on=run.started_on,
             total_findings=int(run.total_findings or 0),
             total_components=int(run.total_components or 0),
         ).model_dump()
-        for run, sbom_name, project_name in rows
+        for run, sbom_name, project_name, product_name in rows
     ]
 
 

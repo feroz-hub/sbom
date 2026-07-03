@@ -41,6 +41,71 @@ class ProjectOut(ORMModel):
     sbom_count: int = 0
 
 
+class ProductCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    description: str | None = None
+    product_key: str | None = None
+    vendor: str | None = None
+    category: str | None = None
+    status: str | None = "active"
+    latest_version: str | None = None
+    metadata_json: dict[str, Any] | None = None
+
+
+class ProductUpdate(BaseModel):
+    name: str | None = Field(None, min_length=1, max_length=255)
+    description: str | None = None
+    product_key: str | None = None
+    vendor: str | None = None
+    category: str | None = None
+    status: str | None = None
+    latest_version: str | None = None
+    metadata_json: dict[str, Any] | None = None
+
+
+class ProductRead(ORMModel):
+    id: int
+    tenant_id: int
+    project_id: int
+    name: str
+    normalized_name: str | None = None
+    slug: str | None = None
+    description: str | None = None
+    product_key: str | None = None
+    vendor: str | None = None
+    category: str | None = None
+    status: str | None = None
+    latest_version: str | None = None
+    metadata_json: dict[str, Any] | None = None
+    created_by: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+    is_active: bool = True
+    deleted_at: str | None = None
+    sbom_count: int = 0
+    latest_sbom_id: int | None = None
+    latest_sbom_version: str | None = None
+
+
+class ProductSummary(BaseModel):
+    id: int
+    project_id: int
+    name: str
+    slug: str | None = None
+    description: str | None = None
+    vendor: str | None = None
+    category: str | None = None
+    status: str | None = None
+    sbom_count: int = 0
+    latest_sbom_id: int | None = None
+    latest_sbom_version: str | None = None
+
+
+class ProductListResponse(BaseModel):
+    items: list[ProductSummary]
+    total: int
+
+
 class SBOMTypeOut(ORMModel):
     id: int
     typename: str
@@ -56,6 +121,7 @@ class SBOMSourceCreate(BaseModel):
     sbom_data: str | None = None
     sbom_type: int | None = None
     projectid: int | None = None
+    product_id: int | None = None
     sbom_version: str | None = None
     created_by: str | None = None
     productver: str | None = None
@@ -96,6 +162,8 @@ class SBOMSourceOut(ORMModel):
     projectid: int | None = None
     project_id: int | None = None
     project_name: str | None = None
+    product_id: int | None = None
+    product_name: str | None = None
     component_count: int = 0
     created_on: str | None = None
     sbom_version: str | None = None
@@ -108,7 +176,6 @@ class SBOMSourceOut(ORMModel):
     modified_on: str | None = None
     modified_by: str | None = None
     name: str | None = None
-    product_name: str | None = None
     product_version: str | None = None
     format: str | None = None
     spec_version: str | None = None
@@ -342,6 +409,8 @@ class AnalysisRunOut(ORMModel):
     id: int
     sbom_id: int
     project_id: int | None = None
+    product_id: int | None = None
+    product_name: str | None = None
     run_status: str
     sbom_name: str | None = None
     source: str
@@ -437,6 +506,7 @@ class SBOMSourceUpdate(BaseModel):
     sbom_data: str | None = None
     sbom_type: int | None = None
     projectid: int | None = None
+    product_id: int | None = None
     sbom_version: str | None = None
     productver: str | None = None
     modified_by: str | None = None
@@ -455,6 +525,7 @@ class SBOMSourceUpdate(BaseModel):
 
 class SbomPatchRequest(BaseModel):
     project_id: int | None = None
+    product_id: int | None = None
     name: str | None = None
     product_name: str | None = None
     product_version: str | None = None
@@ -509,8 +580,9 @@ class ScheduleUpsert(BaseModel):
 
 class ScheduleOut(ORMModel):
     id: int
-    scope: str  # 'PROJECT' | 'SBOM'
+    scope: str  # 'PROJECT' | 'PRODUCT' | 'SBOM'
     project_id: int | None = None
+    product_id: int | None = None
     sbom_id: int | None = None
     cadence: str
     cron_expression: str | None = None
