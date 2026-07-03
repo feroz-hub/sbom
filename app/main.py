@@ -68,6 +68,7 @@ from .routers import (
     pdf,
     projects,
     remediation,
+    reports,
     runs,
     sbom_upload,
     sbom_validation_sessions,
@@ -846,6 +847,7 @@ app.include_router(sbom_validation_sessions.compat_router, dependencies=_protect
 app.include_router(sbom_validation_sessions.workspace_router, dependencies=_protected)
 app.include_router(runs.router, dependencies=_protected)
 app.include_router(projects.router, dependencies=_protected)
+app.include_router(reports.router, dependencies=_protected)
 app.include_router(analyze_endpoints.router, dependencies=_protected)
 app.include_router(pdf.router, dependencies=_protected)
 app.include_router(dashboard_main.router, dependencies=_protected)

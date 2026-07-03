@@ -65,6 +65,7 @@ import type {
   LifecycleVendorRecordPayload,
   LifecycleVendorRecordListResponse,
   LineRepairPatch,
+  Fda510kReportExportRequest,
 } from '@/types';
 
 // Direct calls to FastAPI — no Next.js proxy (proxy caused ECONNRESET on
@@ -1079,6 +1080,22 @@ export function exportSbomVulnerabilityExcel(sbomId: number, signal?: AbortSigna
   );
 }
 
+export function exportFda510kSbomReport(
+  projectId: number,
+  payload: Fda510kReportExportRequest,
+  signal?: AbortSignal,
+) {
+  return downloadBinary(
+    `/api/projects/${projectId}/reports/fda-510k-sbom/export`,
+    `project-${projectId}-FDA-510k-SBOM-Report.xlsx`,
+    signal,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
 /**
  * Re-run the 8-stage validator against the stored SBOM body and persist
  * the outcome on the row. Used by the "Run validation" affordance on
@@ -1544,8 +1561,14 @@ async function downloadBinary(
   path: string,
   fallbackName: string,
   signal?: AbortSignal,
+  options: RequestInit = {},
 ): Promise<{ blob: Blob; filename: string }> {
-  const res = await performRequest(path, { method: 'GET', signal }, 180_000);
+  const { signal: optionSignal, ...rest } = options;
+  const res = await performRequest(
+    path,
+    { method: 'GET', ...rest, signal: signal ?? optionSignal ?? undefined },
+    180_000,
+  );
   const cd = res.headers.get('Content-Disposition') || '';
   const match = /filename="?([^"]+)"?/.exec(cd);
   return { blob: await res.blob(), filename: match?.[1] || fallbackName };

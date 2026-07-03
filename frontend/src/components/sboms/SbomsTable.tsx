@@ -2,11 +2,12 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Eye, Wrench, Trash2 } from 'lucide-react';
+import { Eye, FileSpreadsheet, Wrench, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Alert } from '@/components/ui/Alert';
 import { Select } from '@/components/ui/Select';
+import { Button } from '@/components/ui/Button';
 import { Table, TableHead, TableBody, Th, SortableTh, Td, EmptyRow } from '@/components/ui/Table';
 import { TableFilterBar, TableSearchInput } from '@/components/ui/TableFilterBar';
 import { DeleteConfirmDialog } from '@/components/ui/DeleteConfirmDialog';
@@ -14,6 +15,8 @@ import { SkeletonRow } from '@/components/ui/Spinner';
 import { Pagination } from '@/components/ui/Pagination';
 import { SbomStatusBadge } from '@/components/sboms/SbomStatusBadge';
 import { PinButton } from '@/components/ui/PinButton';
+import { SelectionCheckbox } from '@/components/ui/SelectionCheckbox';
+import { Fda510kReportDialog } from '@/components/sboms/Fda510kReportDialog';
 import { deleteSbom, getSbomDeleteImpact, HttpError } from '@/lib/api';
 import { matchesMultiField } from '@/lib/tableFilters';
 import { formatDate } from '@/lib/utils';
@@ -108,6 +111,8 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
   const [projectFilter, setProjectFilter] = useState('');
   const [analysisFilter, setAnalysisFilter] = useState('');
   const [validationFilter, setValidationFilter] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set());
+  const [fdaDialogOpen, setFdaDialogOpen] = useState(false);
 
   const impactQuery = useQuery({
     queryKey: ['sbom-delete-impact', deleteTarget?.id],
@@ -218,6 +223,41 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
     { initialKey: 'id', initialDirection: 'desc' },
   );
 
+  const selectedSboms = useMemo(
+    () => (sboms ?? []).filter((sbom) => selectedIds.has(sbom.id)),
+    [sboms, selectedIds],
+  );
+
+  const selectedProjectIds = useMemo(
+    () => Array.from(new Set(selectedSboms.map((sbom) => sbom.projectid ?? sbom.project_id ?? null))),
+    [selectedSboms],
+  );
+  const selectionProjectValid = selectedSboms.length > 0 && selectedProjectIds.length === 1 && selectedProjectIds[0] !== null;
+
+  const allFilteredSelected = filteredSboms.length > 0 && filteredSboms.every((sbom) => selectedIds.has(sbom.id));
+  const someFilteredSelected = filteredSboms.some((sbom) => selectedIds.has(sbom.id));
+  const selectionState = allFilteredSelected ? 'all' : someFilteredSelected ? 'some' : 'none';
+
+  const toggleAllFiltered = (checked: boolean) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      for (const sbom of filteredSboms) {
+        if (checked) next.add(sbom.id);
+        else next.delete(sbom.id);
+      }
+      return next;
+    });
+  };
+
+  const toggleRowSelection = (sbomId: number, checked: boolean) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (checked) next.add(sbomId);
+      else next.delete(sbomId);
+      return next;
+    });
+  };
+
   const pagination = usePagination<SBOMSource>(sortedRows, {
     defaultPageSize: 25,
     storageKey: 'sboms',
@@ -299,12 +339,36 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
                 ))}
               </Select>
             </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setFdaDialogOpen(true)}
+              disabled={!selectionProjectValid}
+              title={
+                selectedSboms.length === 0
+                  ? 'Select one or more SBOMs'
+                  : !selectionProjectValid
+                    ? 'Select SBOMs from one assigned project'
+                    : 'Export FDA 510(k) SBOM workbook'
+              }
+            >
+              <FileSpreadsheet className="h-4 w-4" />
+              FDA report{selectedSboms.length ? ` (${selectedSboms.length})` : ''}
+            </Button>
           </TableFilterBar>
         ) : null}
 
         <Table striped ariaLabel="SBOM inventory table">
           <TableHead>
             <tr>
+              <Th className="w-10">
+                <SelectionCheckbox
+                  state={selectionState}
+                  onChange={toggleAllFiltered}
+                  label="Select all filtered SBOMs"
+                  disabled={filteredSboms.length === 0}
+                />
+              </Th>
               <SortableTh
                 sortKey="id"
                 activeKey={sort.key}
@@ -354,17 +418,24 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
           </TableHead>
           <TableBody>
             {isLoading ? (
-              Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} cols={10} />)
+              Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} cols={11} />)
             ) : !sboms?.length ? (
-              <EmptyRow cols={10} message="No SBOMs found. Upload your first SBOM!" />
+              <EmptyRow cols={11} message="No SBOMs found. Upload your first SBOM!" />
             ) : !filteredSboms.length ? (
               <EmptyRow
-                cols={10}
+                cols={11}
                 message="No SBOMs match your filters. Try adjusting search or clear filters."
               />
             ) : (
               pagination.pageItems.map((sbom) => (
                 <tr key={sbom.id} className="group">
+                  <Td>
+                    <SelectionCheckbox
+                      state={selectedIds.has(sbom.id) ? 'all' : 'none'}
+                      onChange={(checked) => toggleRowSelection(sbom.id, checked)}
+                      label={`Select ${sbom.sbom_name}`}
+                    />
+                  </Td>
                   <Td className="font-mono text-xs text-hcl-muted">#{sbom.id}</Td>
                   <Td className="max-w-[220px] font-medium text-hcl-navy">
                     <div className="flex items-center gap-1.5">
@@ -497,6 +568,13 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
             : []
         }
       />
+      {fdaDialogOpen ? (
+        <Fda510kReportDialog
+          open={fdaDialogOpen}
+          onClose={() => setFdaDialogOpen(false)}
+          sboms={selectedSboms}
+        />
+      ) : null}
     </>
   );
 }

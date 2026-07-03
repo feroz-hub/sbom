@@ -155,6 +155,50 @@ export interface SBOMSource {
   full_editor_allowed?: boolean;
 }
 
+export interface Fda510kReportSelection {
+  sbom_id: number;
+  findings_analysis_run_id?: number | null;
+  lifecycle_analysis_run_id?: number | null;
+}
+
+export interface Fda510kReportMetadata {
+  device_name: string;
+  device_model_catalog_number?: string | null;
+  manufacturer_sponsor: string;
+  submission_type?: string | null;
+  submission_number?: string | null;
+  product_code_regulation_number?: string | null;
+  device_software_version: string;
+  top_level_primary_component?: string | null;
+  author_of_sbom_data: string;
+  sbom_version?: string | null;
+  sbom_formats_for_submission?: string | null;
+  sbom_generation_tool_and_version?: string | null;
+  primary_data_source?: string | null;
+  prepared_by: string;
+  date_prepared?: string | null;
+  reviewed_approved_by?: string | null;
+  date_approved?: string | null;
+}
+
+export interface Fda510kReportExportRequest {
+  selections: Fda510kReportSelection[];
+  metadata: Fda510kReportMetadata;
+}
+
+export interface Fda510kReportBlocker {
+  sbom_id: number;
+  sbom_name: string;
+  analysis_type: 'findings' | 'lifecycle' | string;
+  status: string;
+}
+
+export interface Fda510kIncompleteAnalysisDetail {
+  code: 'fda_510k_report_incomplete_analysis';
+  message: string;
+  blockers: Fda510kReportBlocker[];
+}
+
 export interface ValidationErrorEntry {
   code: string;
   severity: 'error' | 'warning' | 'info';
