@@ -36,7 +36,12 @@ export function LifecycleProviderSettings() {
   const updateMutation = useMutation({
     mutationFn: ({ key, payload }: { key: string; payload: LifecycleProviderUpdatePayload }) =>
       updateLifecycleProvider(key, payload),
-    onSuccess: () => {
+    onSuccess: (updatedProvider) => {
+      queryClient.setQueryData<LifecycleProviderConfig[]>(['lifecycle-providers'], (current) =>
+        current?.map((provider) =>
+          provider.provider_key === updatedProvider.provider_key ? updatedProvider : provider,
+        ) ?? current,
+      );
       invalidate();
       showToast('Lifecycle provider saved', 'success');
     },
@@ -47,7 +52,7 @@ export function LifecycleProviderSettings() {
     mutationFn: (key: string) => testLifecycleProvider(key),
     onSuccess: (result, key) => {
       setTestResult((prev) => ({ ...prev, [key]: result }));
-      invalidate();
+      void invalidate();
       showToast(result.message, result.success ? 'success' : 'error');
     },
     onError: (error: Error) => showToast(error.message, 'error'),
@@ -56,7 +61,7 @@ export function LifecycleProviderSettings() {
   const syncMutation = useMutation({
     mutationFn: (key: string) => syncLifecycleProvider(key),
     onSuccess: (result) => {
-      invalidate();
+      void invalidate();
       showToast(result.message, 'success');
     },
     onError: (error: Error) => showToast(error.message, 'error'),
@@ -66,7 +71,7 @@ export function LifecycleProviderSettings() {
     mutationFn: ({ key, name, value }: { key: string; name: string; value: string }) =>
       setLifecycleProviderSecret(key, { secret_name: name, secret_value: value }),
     onSuccess: () => {
-      invalidate();
+      void invalidate();
       showToast('Secret saved', 'success');
     },
     onError: (error: Error) => showToast(error.message, 'error'),
@@ -75,7 +80,7 @@ export function LifecycleProviderSettings() {
   const deleteSecretMutation = useMutation({
     mutationFn: ({ key, name }: { key: string; name: string }) => deleteLifecycleProviderSecret(key, name),
     onSuccess: () => {
-      invalidate();
+      void invalidate();
       showToast('Secret deleted', 'success');
     },
     onError: (error: Error) => showToast(error.message, 'error'),

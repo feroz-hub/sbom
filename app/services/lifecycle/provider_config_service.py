@@ -6,7 +6,6 @@ import json
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
@@ -20,7 +19,8 @@ from ...models import LifecycleProviderConfig, LifecycleProviderSecret, Lifecycl
 from ...services.audit_service import write_audit_log
 from .secret_service import LifecycleProviderSecretService
 from .types import ALLOWED_CONFIDENCE_VALUES, ALLOWED_LIFECYCLE_STATUSES, canonical_confidence, canonical_status
-from .xeol_db_provider import clear_xeol_db_cache
+from .endoflife_date_provider import END_OF_LIFE_API_V1, END_OF_LIFE_LEGACY_API
+from .xeol_db_provider import clear_xeol_db_cache, validate_xeol_db_path
 
 DEFAULT_PROVIDER_CONFIGS: tuple[dict[str, Any], ...] = (
     {
@@ -182,6 +182,14 @@ def _json_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _effective_health_status(enabled: bool, health_status: str | None) -> str:
+    if not enabled:
+        return "disabled"
+    if health_status in {"healthy", "degraded", "unknown"}:
+        return str(health_status)
+    return "unknown"
+
+
 def _row_snapshot(row: LifecycleProviderConfig) -> ProviderConfigSnapshot:
     return ProviderConfigSnapshot(
         provider_key=row.provider_key,
@@ -202,7 +210,7 @@ def _row_snapshot(row: LifecycleProviderConfig) -> ProviderConfigSnapshot:
         last_success_at=row.last_success_at,
         last_failure_at=row.last_failure_at,
         last_failure_message=row.last_failure_message,
-        health_status=row.health_status or ("disabled" if not row.enabled else "unknown"),
+        health_status=_effective_health_status(bool(row.enabled), row.health_status),
     )
 
 
@@ -214,6 +222,15 @@ def _is_http_url(value: str) -> bool:
 def _validate_optional_url(value: str | None, field_name: str) -> None:
     if value and not _is_http_url(value):
         raise HTTPException(status_code=422, detail=f"{field_name} must be an http(s) URL")
+
+
+def _endoflife_probe_urls(base_url: str | None) -> tuple[str, ...]:
+    base = (base_url or END_OF_LIFE_LEGACY_API).rstrip("/")
+    if base == END_OF_LIFE_LEGACY_API.rstrip("/"):
+        return (f"{END_OF_LIFE_API_V1}/debian/", f"{base}/debian.json")
+    if base == END_OF_LIFE_API_V1.rstrip("/"):
+        return (f"{base}/debian/",)
+    return (f"{base}/debian.json",)
 
 
 class LifecycleProviderConfigService:
@@ -290,7 +307,20 @@ class LifecycleProviderConfigService:
     ) -> LifecycleProviderConfig:
         row = self.get_config(db, provider_key)
         old = self.safe_config_dict(db, row)
+        was_enabled = bool(row.enabled)
+        old_health_status = row.health_status
         self._validate_update(row, payload)
+        health_affecting_update = any(
+            key in payload
+            for key in (
+                "base_url",
+                "feed_urls_json",
+                "config_json",
+                "timeout_seconds",
+                "max_retries",
+                "circuit_breaker_enabled",
+            )
+        )
         editable = {
             "enabled",
             "priority",
@@ -308,7 +338,12 @@ class LifecycleProviderConfigService:
         for key, value in payload.items():
             if key in editable:
                 setattr(row, key, value)
-        row.health_status = "disabled" if not row.enabled else (row.health_status if row.health_status in HEALTH_VALUES else "unknown")
+        if not bool(row.enabled):
+            row.health_status = "disabled"
+        elif not was_enabled or old_health_status == "disabled" or health_affecting_update:
+            row.health_status = "unknown"
+        elif row.health_status not in HEALTH_VALUES:
+            row.health_status = "unknown"
         row.updated_at = now_iso()
         row.updated_by_user_id = context.user_id if context else None
         db.flush()
@@ -345,7 +380,7 @@ class LifecycleProviderConfigService:
                 "failure_minutes": row.cache_ttl_failure_minutes,
                 "deprecated_days": row.cache_ttl_deprecated_days,
             },
-            "health_status": row.health_status or ("disabled" if not row.enabled else "unknown"),
+            "health_status": _effective_health_status(bool(row.enabled), row.health_status),
             "last_success_at": row.last_success_at,
             "last_failure_at": row.last_failure_at,
             "last_failure_message": row.last_failure_message,
@@ -437,7 +472,9 @@ class LifecycleProviderConfigService:
         latency_ms = int((time.perf_counter() - started) * 1000)
         checked_at = now_iso()
         row.health_status = status_value
-        if success:
+        if status_value == "disabled":
+            pass
+        elif success:
             row.last_success_at = checked_at
             row.last_failure_message = None
         else:
@@ -474,16 +511,37 @@ class LifecycleProviderConfigService:
         request: Request | None = None,
     ) -> dict[str, Any]:
         row = self.get_config(db, provider_key)
+        result_status = "completed"
+        triggered_at = now_iso()
         if row.provider_type == "xeol_db":
             clear_xeol_db_cache()
-            message = "Local Xeol DB cache cleared; next lifecycle refresh will reload it."
+            if row.enabled:
+                success, probe_message, _sample = self._run_provider_probe(_row_snapshot(row))
+                row.health_status = "healthy" if success else "degraded"
+                if success:
+                    row.last_success_at = triggered_at
+                    row.last_failure_message = None
+                else:
+                    result_status = "failed"
+                    row.last_failure_at = triggered_at
+                    row.last_failure_message = probe_message[:1000]
+                row.updated_at = triggered_at
+                db.flush()
+                invalidate_provider_config_cache()
+                message = f"Local Xeol DB cache cleared. {probe_message}"
+            else:
+                row.health_status = "disabled"
+                row.updated_at = triggered_at
+                db.flush()
+                invalidate_provider_config_cache()
+                message = "Local Xeol DB cache cleared; provider is disabled."
         elif row.provider_type == "openeox":
             message = "OpenEoX feeds are loaded during lifecycle refresh/test with configured timeout."
         elif row.provider_type == "custom_vendor":
             message = "Custom vendor records are database-backed and available immediately."
         else:
             message = "Provider does not require a sync action."
-        result = {"job_id": None, "status": "completed", "message": message, "triggered_at": now_iso()}
+        result = {"job_id": None, "status": result_status, "message": message, "triggered_at": triggered_at}
         write_audit_log(
             db,
             context,
@@ -524,8 +582,9 @@ class LifecycleProviderConfigService:
             db_path = str(config.get("db_path") or "").strip()
             if not db_path:
                 raise HTTPException(status_code=422, detail="Xeol DB requires config.db_path when enabled")
-            if not Path(db_path).is_file():
-                raise HTTPException(status_code=422, detail="Xeol DB path does not exist")
+            valid, message, _sample = validate_xeol_db_path(db_path)
+            if not valid:
+                raise HTTPException(status_code=422, detail=message)
 
     def _run_provider_probe(self, snapshot: ProviderConfigSnapshot) -> tuple[bool, str, dict[str, Any] | None]:
         if snapshot.provider_type in {"official_vendor", "package_registry", "deps_dev", "osv", "repository_health", "custom_vendor"}:
@@ -534,9 +593,9 @@ class LifecycleProviderConfigService:
             }
         if snapshot.provider_type == "xeol_db":
             db_path = str(snapshot.config.get("db_path") or "")
-            if not db_path or not Path(db_path).is_file():
-                return False, "Configured Xeol DB path does not exist.", None
-            return True, "Local Xeol DB path is readable.", {"db_path": db_path}
+            return validate_xeol_db_path(db_path)
+        if snapshot.provider_type == "endoflife_date":
+            return self._probe_endoflife_date(snapshot)
         urls = snapshot.feed_urls if snapshot.provider_type == "openeox" else [snapshot.base_url] if snapshot.base_url else []
         if not urls:
             return False, "No URL configured for provider.", None
@@ -546,6 +605,27 @@ class LifecycleProviderConfigService:
             if response.status_code >= 400:
                 return False, f"HTTP {response.status_code} from provider.", {"url": url}
             return True, f"Provider responded with HTTP {response.status_code}.", {"url": url, "status_code": response.status_code}
+
+    def _probe_endoflife_date(self, snapshot: ProviderConfigSnapshot) -> tuple[bool, str, dict[str, Any] | None]:
+        urls = _endoflife_probe_urls(snapshot.base_url)
+        last_failure: tuple[bool, str, dict[str, Any] | None] | None = None
+        with httpx.Client(timeout=max(1, snapshot.timeout_seconds), follow_redirects=True) as client:
+            for url in urls:
+                try:
+                    response = client.get(url)
+                    if response.status_code == 404:
+                        last_failure = (False, "HTTP 404 from provider.", {"url": url})
+                        continue
+                    if response.status_code >= 400:
+                        return False, f"HTTP {response.status_code} from provider.", {"url": url}
+                    response.json()
+                    return True, f"Provider responded with HTTP {response.status_code}.", {
+                        "url": url,
+                        "status_code": response.status_code,
+                    }
+                except (httpx.HTTPError, ValueError, TypeError) as exc:
+                    last_failure = (False, str(exc)[:500], {"url": url})
+        return last_failure or (False, "Provider did not return a lifecycle payload.", None)
 
 
 class LifecycleVendorRecordService:

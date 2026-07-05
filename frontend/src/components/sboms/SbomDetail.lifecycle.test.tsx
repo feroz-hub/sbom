@@ -285,6 +285,98 @@ describe('SbomDetail lifecycle management', () => {
     expect(screen.getByText('Override Reason')).toBeInTheDocument();
   }, 15000);
 
+  it('keeps registry upgrade metadata separate from EOL and EOS status', async () => {
+    getSbomComponents.mockResolvedValueOnce({
+      items: [
+        {
+          ...COMPONENT,
+          id: 100,
+          name: 'alembic',
+          version: '1.18.4',
+          purl: 'pkg:pypi/alembic@1.18.4',
+          ecosystem: 'pypi',
+          lifecycle_status: 'Unknown',
+          eol_date: null,
+          eos_date: null,
+          eof_date: null,
+          eol_eos_date: null,
+          eol_eos_status: null,
+          eol_eos_status_label: null,
+          recommended_version: '1.18.5',
+          lifecycle_recommendation: null,
+          lifecycle_source: 'PyPI',
+          lifecycle_source_url: null,
+          lifecycle_confidence: 'Low',
+          lifecycle_is_stale: false,
+          lifecycle_manual_override: false,
+        },
+      ],
+      total_count: 1,
+      unique_count: 1,
+      duplicate_count: 0,
+      include_duplicates: false,
+      page: 1,
+      page_size: 100,
+    });
+
+    render(wrap(<SbomDetail sbom={SBOM} />));
+
+    fireEvent.click(screen.getByRole('button', { name: /Components List/i }));
+
+    expect(await screen.findByText('alembic')).toBeInTheDocument();
+    expect(screen.getAllByText('Unknown').length).toBeGreaterThan(0);
+    expect(screen.getByText('Unknown / Not Available')).toBeInTheDocument();
+    expect(screen.getByText(/PyPI · Low/)).toBeInTheDocument();
+    expect(screen.getByText('Upgrade 1.18.5')).toBeInTheDocument();
+    expect(screen.queryByText(/EOL\/EOS \d{4}-\d{2}-\d{2}/)).not.toBeInTheDocument();
+  }, 15000);
+
+  it('displays a valid Xeol EOL date even when EOS is null', async () => {
+    getSbomComponents.mockResolvedValueOnce({
+      items: [
+        {
+          ...COMPONENT,
+          id: 101,
+          name: 'django',
+          version: '3.2.25',
+          purl: 'pkg:pypi/django@3.2.25',
+          ecosystem: 'pypi',
+          lifecycle_status: 'EOL',
+          eol_date: '2024-04-01',
+          eos_date: null,
+          eof_date: null,
+          eol_eos_date: null,
+          eol_eos_status: null,
+          eol_eos_status_label: null,
+          recommended_version: null,
+          lifecycle_recommendation: null,
+          lifecycle_source: 'Xeol DB',
+          lifecycle_source_url: 'https://example.test/django',
+          lifecycle_confidence: 'Medium',
+          lifecycle_is_stale: false,
+          lifecycle_manual_override: false,
+        },
+      ],
+      total_count: 1,
+      unique_count: 1,
+      duplicate_count: 0,
+      include_duplicates: false,
+      page: 1,
+      page_size: 100,
+    });
+
+    render(wrap(<SbomDetail sbom={SBOM} />));
+
+    fireEvent.click(screen.getByRole('button', { name: /Components List/i }));
+
+    expect(await screen.findByText('django')).toBeInTheDocument();
+    expect(screen.getByText('EOL')).toBeInTheDocument();
+    expect(screen.getByText(/EOL 2024-04-01/)).toBeInTheDocument();
+    expect(screen.getByText('Expired')).toBeInTheDocument();
+    expect(screen.getByText(/EOL\/EOS 2024-/)).toBeInTheDocument();
+    expect(screen.getByText(/Xeol DB · Medium/)).toBeInTheDocument();
+  }, 15000);
+
   it('opens the manual VEX override form and validates required evidence', async () => {
     render(wrap(<SbomDetail sbom={SBOM} />));
 

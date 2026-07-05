@@ -32,17 +32,18 @@ def list_lifecycle_sources(db: Session = Depends(get_db)):
         return {
             "sources": [
                 {
-                    "name": row.display_name,
-                    "provider_key": row.provider_key,
-                    "provider_type": row.provider_type,
-                    "priority": row.priority,
-                    "enabled": bool(row.enabled),
-                    "status": row.health_status or "unknown",
-                    "last_success": row.last_success_at,
-                    "last_failure": row.last_failure_at,
-                    "last_error": row.last_failure_message,
+                    "name": safe["display_name"],
+                    "provider_key": safe["provider_key"],
+                    "provider_type": safe["provider_type"],
+                    "priority": safe["priority"],
+                    "enabled": safe["enabled"],
+                    "status": safe["health_status"],
+                    "last_success": safe["last_success_at"],
+                    "last_failure": safe["last_failure_at"],
+                    "last_error": safe["last_failure_message"],
                 }
                 for row in rows
+                for safe in [config_service.safe_config_dict(db, row)]
             ]
         }
     except Exception:
@@ -55,19 +56,21 @@ def list_lifecycle_sources(db: Session = Depends(get_db)):
 def lifecycle_provider_status(db: Session = Depends(get_db)):
     """Return aggregate provider health/degraded status."""
     try:
-        rows = LifecycleProviderConfigService().list_configs(db)
+        service = LifecycleProviderConfigService()
+        rows = service.list_configs(db)
         providers = [
             {
-                "name": row.display_name,
-                "provider_key": row.provider_key,
-                "priority": row.priority,
-                "enabled": bool(row.enabled),
-                "status": row.health_status or ("disabled" if not row.enabled else "unknown"),
-                "last_success": row.last_success_at,
-                "last_failure": row.last_failure_at,
-                "last_error": row.last_failure_message,
+                "name": safe["display_name"],
+                "provider_key": safe["provider_key"],
+                "priority": safe["priority"],
+                "enabled": safe["enabled"],
+                "status": safe["health_status"],
+                "last_success": safe["last_success_at"],
+                "last_failure": safe["last_failure_at"],
+                "last_error": safe["last_failure_message"],
             }
             for row in rows
+            for safe in [service.safe_config_dict(db, row)]
         ]
         degraded = [row for row in providers if row["status"] == "degraded"]
         return {

@@ -99,6 +99,26 @@ def test_normalization_prefers_purl_and_infers_ecosystem():
     assert normalized.normalized_version == "12.0.0"
 
 
+def test_pypi_normalization_uses_pep_503_name_rules():
+    assert normalize_component_name("boolean.py", "pypi") == "boolean-py"
+    assert normalize_component_name("annotated_types", "pypi") == "annotated-types"
+    assert normalize_component_name("A.B__C", "pypi") == "a-b-c"
+
+    component = SBOMComponent(
+        sbom_id=1,
+        name="boolean.py",
+        version="5.0",
+        purl="pkg:pypi/boolean.py@5.0",
+        component_type="library",
+    )
+
+    normalized = normalize_component(component)
+
+    assert normalized.ecosystem == "pypi"
+    assert normalized.normalized_name == "boolean-py"
+    assert normalized.normalized_version == "5.0"
+
+
 def test_public_normalizer_helpers_build_stable_identity():
     parsed = parse_purl("pkg:pypi/Django@4.2.0")
     assert parsed is not None
@@ -254,6 +274,32 @@ def test_endoflife_date_provider_returns_unknown_when_no_cycle_matches():
     result = provider.lookup(component)
 
     assert result.lifecycle_status == UNKNOWN
+
+
+def test_endoflife_date_unsupported_pypi_package_is_no_match_not_failure():
+    called_urls: list[str] = []
+
+    def get_json(url: str) -> list[dict[str, Any]]:
+        called_urls.append(url)
+        return []
+
+    provider = EndOfLifeDateProvider(http_get=get_json)
+    component = NormalizedComponent(
+        component_id=None,
+        name="boto3",
+        version="1.42.88",
+        normalized_name="boto3",
+        normalized_version="1.42.88",
+        ecosystem="pypi",
+        purl="pkg:pypi/boto3@1.42.88",
+    )
+
+    result = provider.lookup(component)
+
+    assert result.lifecycle_status == UNKNOWN
+    assert result.source_name == "endoflife.date"
+    assert "provider_error" not in result.evidence
+    assert called_urls == []
 
 
 def test_package_registry_provider_detects_npm_deprecation():

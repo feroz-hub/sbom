@@ -96,10 +96,98 @@ describe('LifecycleProviderSettings', () => {
     });
   });
 
+  it('renders checked enabled provider with unknown health, not disabled', async () => {
+    api.listLifecycleProviders.mockResolvedValue([
+      {
+        ...provider,
+        provider_key: 'xeol_db',
+        display_name: 'Local Xeol DB',
+        provider_type: 'xeol_db',
+        enabled: true,
+        health_status: 'unknown',
+      },
+    ]);
+
+    renderWithProviders(<LifecycleProviderSettings />);
+
+    expect(await screen.findByLabelText('Toggle Local Xeol DB')).toBeChecked();
+    expect(screen.getByText('Unknown')).toBeInTheDocument();
+    expect(screen.queryByText('Disabled')).not.toBeInTheDocument();
+  });
+
+  it('treats null health as unknown', async () => {
+    api.listLifecycleProviders.mockResolvedValue([
+      {
+        ...provider,
+        enabled: true,
+        health_status: null,
+      },
+    ]);
+
+    renderWithProviders(<LifecycleProviderSettings />);
+
+    expect(await screen.findByText('Unknown')).toBeInTheDocument();
+  });
+
+  it('failed provider update leaves checkbox on backend state', async () => {
+    api.updateLifecycleProvider.mockRejectedValue(new Error('Save failed'));
+
+    renderWithProviders(<LifecycleProviderSettings />);
+    const checkbox = await screen.findByLabelText('Toggle OpenEoX');
+    await userEvent.click(checkbox);
+
+    await waitFor(() => expect(api.updateLifecycleProvider).toHaveBeenCalled());
+    expect(checkbox).not.toBeChecked();
+    expect(await screen.findByText('Save failed')).toBeInTheDocument();
+  });
+
+  it('successful update applies returned provider row and refetches', async () => {
+    const updated = { ...provider, enabled: true, health_status: 'unknown' as const };
+    api.listLifecycleProviders.mockResolvedValueOnce([provider]).mockResolvedValue([updated]);
+    api.updateLifecycleProvider.mockResolvedValue(updated);
+
+    renderWithProviders(<LifecycleProviderSettings />);
+    await userEvent.click(await screen.findByLabelText('Toggle OpenEoX'));
+
+    expect(await screen.findByText('Unknown')).toBeInTheDocument();
+    await waitFor(() => expect(api.listLifecycleProviders).toHaveBeenCalledTimes(2));
+  });
+
   it('test action shows provider health result', async () => {
     renderWithProviders(<LifecycleProviderSettings />);
     await userEvent.click(await screen.findByRole('button', { name: /test/i }));
     expect((await screen.findAllByText('Provider responded')).length).toBeGreaterThan(0);
+  });
+
+  it('test action refreshes row health and timestamps', async () => {
+    const healthy = {
+      ...provider,
+      enabled: true,
+      health_status: 'healthy' as const,
+      last_success_at: '2026-06-27T00:00:01Z',
+    };
+    api.listLifecycleProviders.mockResolvedValueOnce([{ ...provider, enabled: true, health_status: 'unknown' }]).mockResolvedValue([
+      healthy,
+    ]);
+
+    renderWithProviders(<LifecycleProviderSettings />);
+    await userEvent.click(await screen.findByRole('button', { name: /test/i }));
+
+    expect((await screen.findAllByText('Healthy')).length).toBeGreaterThan(0);
+    await waitFor(() => expect(api.listLifecycleProviders).toHaveBeenCalledTimes(2));
+  });
+
+  it('sync action refreshes row health', async () => {
+    const healthy = { ...provider, enabled: true, health_status: 'healthy' as const };
+    api.listLifecycleProviders.mockResolvedValueOnce([{ ...provider, enabled: true, health_status: 'unknown' }]).mockResolvedValue([
+      healthy,
+    ]);
+
+    renderWithProviders(<LifecycleProviderSettings />);
+    await userEvent.click(await screen.findByRole('button', { name: /sync/i }));
+
+    expect(await screen.findByText('Healthy')).toBeInTheDocument();
+    await waitFor(() => expect(api.listLifecycleProviders).toHaveBeenCalledTimes(2));
   });
 });
 

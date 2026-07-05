@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sqlite3
+
 import pytest
 from app.db import Base, SessionLocal, engine
 from app.models import (
@@ -14,6 +16,7 @@ from app.services.lifecycle.provider_config_service import (
     invalidate_provider_config_cache,
 )
 from app.services.lifecycle.provider_registry import LifecycleProviderRegistry
+from app.services.lifecycle.xeol_db_provider import XeolDbProvider
 
 
 @pytest.fixture(autouse=True)
@@ -29,6 +32,49 @@ def db_session(app):
         yield db
     finally:
         db.close()
+
+
+def write_xeol_sqlite(path):
+    connection = sqlite3.connect(path)
+    try:
+        connection.executescript(
+            """
+            CREATE TABLE products (
+              id integer PRIMARY KEY AUTOINCREMENT,
+              name TEXT NOT NULL,
+              permalink TEXT NOT NULL
+            );
+            CREATE TABLE cycles (
+              id integer PRIMARY KEY AUTOINCREMENT,
+              lts boolean,
+              release_cycle TEXT NOT NULL,
+              eol date,
+              eol_bool boolean,
+              latest_release TEXT,
+              latest_release_date date,
+              release_date date,
+              support boolean,
+              product_id integer NOT NULL
+              CHECK (eol IS NOT NULL OR eol_bool IS NOT NULL)
+            );
+            CREATE TABLE purls (
+              id integer PRIMARY KEY AUTOINCREMENT,
+              purl TEXT NOT NULL,
+              product_id integer NOT NULL
+            );
+            CREATE TABLE id (
+              build_timestamp TEXT NOT NULL,
+              schema_version INTEGER NOT NULL
+            );
+            INSERT INTO id (build_timestamp, schema_version) VALUES ('2026-07-05T00:00:00Z', 1);
+            INSERT INTO products (id, name, permalink) VALUES (1, 'legacy-lib', 'https://example.test/legacy-lib');
+            INSERT INTO cycles (release_cycle, eol, eol_bool, product_id) VALUES ('2.0', '2023-06-01', NULL, 1);
+            INSERT INTO purls (purl, product_id) VALUES ('pkg:npm/legacy-lib', 1);
+            """
+        )
+        connection.commit()
+    finally:
+        connection.close()
 
 
 def test_default_provider_configs_are_bootstrapped(db_session):
@@ -59,6 +105,45 @@ def test_admin_can_enable_disable_and_change_priority(client):
     body = response.json()
     assert body["enabled"] is False
     assert body["priority"] == 90
+    assert body["health_status"] == "disabled"
+
+
+def test_reenabled_provider_returns_unknown_not_disabled(client):
+    disable = client.put("/api/admin/lifecycle-providers/repository_health", json={"enabled": False})
+    assert disable.status_code == 200, disable.text
+    assert disable.json()["health_status"] == "disabled"
+
+    enable = client.put("/api/admin/lifecycle-providers/repository_health", json={"enabled": True})
+    assert enable.status_code == 200, enable.text
+    body = enable.json()
+    assert body["enabled"] is True
+    assert body["health_status"] == "unknown"
+
+    list_response = client.get("/api/admin/lifecycle-providers")
+    row = next(item for item in list_response.json() if item["provider_key"] == "repository_health")
+    assert row["enabled"] is True
+    assert row["health_status"] == "unknown"
+
+
+def test_enabled_provider_with_stale_disabled_health_serializes_unknown(client, db_session):
+    service = LifecycleProviderConfigService()
+    service.bootstrap_defaults(db_session)
+    row = db_session.query(LifecycleProviderConfig).filter_by(provider_key="repository_health").one()
+    row.enabled = True
+    row.health_status = "disabled"
+    db_session.commit()
+    invalidate_provider_config_cache()
+
+    response = client.get("/api/admin/lifecycle-providers")
+    assert response.status_code == 200, response.text
+    body = next(item for item in response.json() if item["provider_key"] == "repository_health")
+    assert body["enabled"] is True
+    assert body["health_status"] == "unknown"
+
+    status_response = client.get("/api/lifecycle/provider-status")
+    provider_status = next(item for item in status_response.json()["providers"] if item["provider_key"] == "repository_health")
+    assert provider_status["enabled"] is True
+    assert provider_status["status"] == "unknown"
 
 
 def test_openeox_requires_feed_url_when_enabled(client):
@@ -81,6 +166,70 @@ def test_xeol_db_requires_existing_path(client):
         json={"enabled": True, "config": {"db_path": "/definitely/not/here.json"}},
     )
     assert response.status_code == 422
+
+
+def test_xeol_db_requires_supported_readable_file_when_enabled(client, tmp_path):
+    invalid = tmp_path / "xeol.db"
+    invalid.write_text("not a sqlite db or json export", encoding="utf-8")
+
+    response = client.put(
+        "/api/admin/lifecycle-providers/xeol_db",
+        json={"enabled": True, "config": {"db_path": str(invalid)}},
+    )
+
+    assert response.status_code == 422
+    assert "neither SQLite nor a valid Xeol JSON export" in response.text
+
+
+def test_xeol_db_valid_sqlite_can_be_enabled_and_tested(client, db_session, tmp_path):
+    db_path = tmp_path / "xeol.db"
+    write_xeol_sqlite(db_path)
+
+    update = client.put(
+        "/api/admin/lifecycle-providers/xeol_db",
+        json={"enabled": True, "config": {"db_path": str(db_path)}},
+    )
+    assert update.status_code == 200, update.text
+    assert update.json()["enabled"] is True
+    assert update.json()["health_status"] == "unknown"
+
+    test = client.post("/api/admin/lifecycle-providers/xeol_db/test")
+    assert test.status_code == 200, test.text
+    body = test.json()
+    assert body["success"] is True
+    assert body["status"] == "healthy"
+    assert body["message"] == "Local Xeol DB path is readable."
+
+    db_session.expire_all()
+    row = db_session.query(LifecycleProviderConfig).filter_by(provider_key="xeol_db").one()
+    assert row.enabled is True
+    assert row.health_status == "healthy"
+    assert row.last_success_at is not None
+    assert row.last_failure_at is None
+
+
+def test_xeol_db_test_failure_sets_failure_fields(client, db_session, tmp_path):
+    invalid = tmp_path / "xeol.db"
+    invalid.write_text("invalid", encoding="utf-8")
+    service = LifecycleProviderConfigService()
+    service.bootstrap_defaults(db_session)
+    row = db_session.query(LifecycleProviderConfig).filter_by(provider_key="xeol_db").one()
+    row.enabled = True
+    row.config_json = {"db_path": str(invalid)}
+    row.health_status = "unknown"
+    db_session.commit()
+    invalidate_provider_config_cache()
+
+    response = client.post("/api/admin/lifecycle-providers/xeol_db/test")
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["success"] is False
+    assert body["status"] == "degraded"
+    db_session.expire_all()
+    row = db_session.query(LifecycleProviderConfig).filter_by(provider_key="xeol_db").one()
+    assert row.last_failure_at is not None
+    assert row.last_failure_message
 
 
 def test_secret_is_encrypted_and_not_returned(client, db_session):
@@ -113,6 +262,24 @@ def test_provider_chain_uses_enabled_db_config_order(db_session):
     assert names.index("OSV") < names.index("endoflife.date")
 
 
+def test_provider_chain_uses_db_stored_xeol_config(db_session, tmp_path):
+    db_path = tmp_path / "xeol.db"
+    write_xeol_sqlite(db_path)
+    service = LifecycleProviderConfigService()
+    service.bootstrap_defaults(db_session)
+    row = db_session.query(LifecycleProviderConfig).filter_by(provider_key="xeol_db").one()
+    row.enabled = True
+    row.config_json = {"db_path": str(db_path)}
+    row.health_status = "unknown"
+    db_session.commit()
+    invalidate_provider_config_cache()
+
+    providers = LifecycleProviderRegistry().build_provider_chain(db_session)
+    xeol = next(provider for provider in providers if isinstance(provider, XeolDbProvider))
+
+    assert xeol.db_path == str(db_path)
+
+
 def test_provider_test_endpoint_returns_health_result(client):
     response = client.post("/api/admin/lifecycle-providers/package_registry/test")
     assert response.status_code == 200, response.text
@@ -123,6 +290,64 @@ def test_provider_sync_endpoint_returns_status(client):
     response = client.post("/api/admin/lifecycle-providers/xeol_db/sync")
     assert response.status_code == 200, response.text
     assert response.json()["status"] == "completed"
+
+
+def test_xeol_sync_clears_cache_and_retests(client, db_session, tmp_path, monkeypatch):
+    db_path = tmp_path / "xeol.db"
+    write_xeol_sqlite(db_path)
+    client.put(
+        "/api/admin/lifecycle-providers/xeol_db",
+        json={"enabled": True, "config": {"db_path": str(db_path)}},
+    )
+    called = False
+
+    def fake_clear_cache():
+        nonlocal called
+        called = True
+
+    monkeypatch.setattr("app.services.lifecycle.provider_config_service.clear_xeol_db_cache", fake_clear_cache)
+
+    response = client.post("/api/admin/lifecycle-providers/xeol_db/sync")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "completed"
+    assert called is True
+    db_session.expire_all()
+    row = db_session.query(LifecycleProviderConfig).filter_by(provider_key="xeol_db").one()
+    assert row.health_status == "healthy"
+    assert row.last_success_at is not None
+
+
+def test_endoflife_date_probe_uses_product_endpoint(client, monkeypatch):
+    requested_urls: list[str] = []
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return [{"cycle": "12", "eol": "2028-06-10"}]
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def get(self, url):
+            requested_urls.append(url)
+            return FakeResponse()
+
+    monkeypatch.setattr("app.services.lifecycle.provider_config_service.httpx.Client", FakeClient)
+
+    response = client.post("/api/admin/lifecycle-providers/endoflife_date/test")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "healthy"
+    assert requested_urls == ["https://endoflife.date/api/v1/products/debian/"]
 
 
 def test_custom_vendor_record_crud_and_lookup_participation(client, db_session):

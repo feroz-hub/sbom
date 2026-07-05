@@ -85,11 +85,13 @@ class EndOfLifeDateProvider(LifecycleProvider):
         self,
         *,
         http_get: Callable[[str], Any] | None = None,
+        base_url: str | None = None,
         timeout_seconds: float = 5.0,
         retries: int = 1,
         today: date | None = None,
     ) -> None:
         self._http_get = http_get
+        self._base_url = (base_url or END_OF_LIFE_LEGACY_API).rstrip("/")
         self._timeout_seconds = timeout_seconds
         self._retries = retries
         self._today = today
@@ -171,7 +173,7 @@ class EndOfLifeDateProvider(LifecycleProvider):
     def _fetch_product(self, slug: str) -> Any | None:
         if slug in self._product_cache:
             return self._product_cache[slug]
-        urls = (f"{END_OF_LIFE_API_V1}/{slug}/", f"{END_OF_LIFE_LEGACY_API}/{slug}.json")
+        urls = _product_urls(slug, self._base_url)
         for url in urls:
             payload = self._fetch_json_with_retries(url)
             if payload:
@@ -251,6 +253,15 @@ def slug_for_component(component: NormalizedComponent) -> str | None:
         if leaf in PRODUCT_SLUGS:
             return PRODUCT_SLUGS[leaf]
     return None
+
+
+def _product_urls(slug: str, base_url: str) -> tuple[str, ...]:
+    base = base_url.rstrip("/")
+    if base == END_OF_LIFE_LEGACY_API.rstrip("/"):
+        return (f"{END_OF_LIFE_API_V1}/{slug}/", f"{base}/{slug}.json")
+    if base == END_OF_LIFE_API_V1.rstrip("/"):
+        return (f"{base}/{slug}/",)
+    return (f"{base}/{slug}.json",)
 
 
 def _slug_key(value: str | None) -> str:

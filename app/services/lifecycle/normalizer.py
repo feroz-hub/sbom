@@ -156,6 +156,8 @@ def normalize_component_name(value: str | None, ecosystem: str | None = None) ->
         cleaned = "@" + cleaned[3:]
     if eco == "maven":
         cleaned = cleaned.replace(":", "/")
+    if eco == "pypi":
+        cleaned = re.sub(r"[-_.]+", "-", cleaned)
     return re.sub(r"\s+", "-", cleaned)
 
 

@@ -65,7 +65,8 @@ def lifecycle_cache_identity_key(
 
 def _cache_ttl_for_result(result: LifecycleResult) -> timedelta:
     settings = get_settings()
-    if result.evidence.get("provider_failure") if isinstance(result.evidence, dict) else False:
+    evidence = result.evidence if isinstance(result.evidence, dict) else {}
+    if evidence.get("provider_failure") or evidence.get("provider_error") or evidence.get("provider_errors"):
         minutes = int(getattr(settings, "lifecycle_cache_ttl_provider_failure_minutes", 30))
         return timedelta(minutes=minutes)
     if result.lifecycle_status == UNKNOWN:

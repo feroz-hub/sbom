@@ -133,7 +133,7 @@ class LifecycleProviderRegistry:
         if config.provider_key == "official_vendor_lifecycle":
             return OfficialVendorLifecycleProvider()
         if config.provider_key == "endoflife_date":
-            return EndOfLifeDateProvider(timeout_seconds=timeout)
+            return EndOfLifeDateProvider(base_url=config.base_url, timeout_seconds=timeout)
         if config.provider_key == "openeox":
             if not config.feed_urls:
                 return None

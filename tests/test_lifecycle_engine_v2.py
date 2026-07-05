@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -10,7 +11,7 @@ from unittest.mock import MagicMock
 import pytest
 from app.db import SessionLocal
 from app.models import ComponentLifecycleCache, SBOMComponent, SBOMSource
-from app.services.lifecycle import LifecycleEnrichmentService
+from app.services.lifecycle import LifecycleEnrichmentService, normalize_component
 from app.services.lifecycle.aliases import clear_alias_cache, resolve_lifecycle_alias
 from app.services.lifecycle.endoflife_date_provider import EndOfLifeDateProvider
 from app.services.lifecycle.lifecycle_cache_repository import (
@@ -31,6 +32,7 @@ from app.services.lifecycle.types import (
     MEDIUM,
     POSSIBLY_UNMAINTAINED,
     UNKNOWN,
+    UNSUPPORTED,
     LifecycleResult,
     NormalizedComponent,
     unknown_result,
@@ -152,6 +154,176 @@ def test_xeol_db_provider_matches_local_export(tmp_path: Path):
     assert result.lifecycle_status == EOL
 
 
+def test_xeol_db_provider_matches_sqlite_export(tmp_path: Path):
+    clear_xeol_db_cache()
+    db_file = tmp_path / "xeol.db"
+    connection = sqlite3.connect(db_file)
+    try:
+        connection.executescript(
+            """
+            CREATE TABLE products (
+              id integer PRIMARY KEY AUTOINCREMENT,
+              name TEXT NOT NULL,
+              permalink TEXT NOT NULL
+            );
+            CREATE TABLE cycles (
+              id integer PRIMARY KEY AUTOINCREMENT,
+              lts boolean,
+              release_cycle TEXT NOT NULL,
+              eol date,
+              eol_bool boolean,
+              latest_release TEXT,
+              latest_release_date date,
+              release_date date,
+              support boolean,
+              product_id integer NOT NULL
+              CHECK (eol IS NOT NULL OR eol_bool IS NOT NULL)
+            );
+            CREATE TABLE purls (
+              id integer PRIMARY KEY AUTOINCREMENT,
+              purl TEXT NOT NULL,
+              product_id integer NOT NULL
+            );
+            INSERT INTO products (id, name, permalink) VALUES (1, 'legacy-lib', 'https://example.test/legacy-lib');
+            INSERT INTO cycles (release_cycle, eol, eol_bool, product_id) VALUES ('2.0', '2023-06-01', NULL, 1);
+            INSERT INTO purls (purl, product_id) VALUES ('pkg:npm/legacy-lib', 1);
+            """
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    provider = XeolDbProvider(db_path=str(db_file), today=date(2024, 1, 1))
+    component = NormalizedComponent(
+        component_id=None,
+        name="legacy-lib",
+        version="2.0.1",
+        normalized_name="legacy-lib",
+        normalized_version="2.0.1",
+        ecosystem="npm",
+    )
+
+    result = provider.lookup(component)
+
+    assert result.lifecycle_status == EOL
+    assert result.source_name == "Xeol DB"
+
+
+def test_xeol_db_provider_matches_pypi_pep_503_normalized_name(tmp_path: Path):
+    clear_xeol_db_cache()
+    db_file = tmp_path / "xeol.db"
+    connection = sqlite3.connect(db_file)
+    try:
+        connection.executescript(
+            """
+            CREATE TABLE products (
+              id integer PRIMARY KEY AUTOINCREMENT,
+              name TEXT NOT NULL,
+              permalink TEXT NOT NULL
+            );
+            CREATE TABLE cycles (
+              id integer PRIMARY KEY AUTOINCREMENT,
+              lts boolean,
+              release_cycle TEXT NOT NULL,
+              eol date,
+              eol_bool boolean,
+              latest_release TEXT,
+              latest_release_date date,
+              release_date date,
+              support boolean,
+              product_id integer NOT NULL
+              CHECK (eol IS NOT NULL OR eol_bool IS NOT NULL)
+            );
+            CREATE TABLE purls (
+              id integer PRIMARY KEY AUTOINCREMENT,
+              purl TEXT NOT NULL,
+              product_id integer NOT NULL
+            );
+            INSERT INTO products (id, name, permalink) VALUES (1, 'boolean-py', 'https://example.test/boolean-py');
+            INSERT INTO cycles (release_cycle, eol, eol_bool, product_id) VALUES ('5', '2025-01-01', NULL, 1);
+            INSERT INTO purls (purl, product_id) VALUES ('pkg:pypi/boolean-py', 1);
+            """
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    provider = XeolDbProvider(db_path=str(db_file), today=date(2026, 1, 1))
+    component = normalize_component(
+        SBOMComponent(
+            sbom_id=1,
+            name="boolean.py",
+            version="5.0",
+            purl="pkg:pypi/boolean.py@5.0",
+            component_type="library",
+        )
+    )
+
+    result = provider.lookup(component)
+
+    assert component.normalized_name == "boolean-py"
+    assert result.lifecycle_status == EOL
+    assert result.source_name == "Xeol DB"
+    assert result.eol_date == "2025-01-01"
+
+
+def test_xeol_db_provider_returns_unknown_for_absent_pypi_package(tmp_path: Path):
+    clear_xeol_db_cache()
+    db_file = tmp_path / "xeol.db"
+    connection = sqlite3.connect(db_file)
+    try:
+        connection.executescript(
+            """
+            CREATE TABLE products (
+              id integer PRIMARY KEY AUTOINCREMENT,
+              name TEXT NOT NULL,
+              permalink TEXT NOT NULL
+            );
+            CREATE TABLE cycles (
+              id integer PRIMARY KEY AUTOINCREMENT,
+              lts boolean,
+              release_cycle TEXT NOT NULL,
+              eol date,
+              eol_bool boolean,
+              latest_release TEXT,
+              latest_release_date date,
+              release_date date,
+              support boolean,
+              product_id integer NOT NULL
+              CHECK (eol IS NOT NULL OR eol_bool IS NOT NULL)
+            );
+            CREATE TABLE purls (
+              id integer PRIMARY KEY AUTOINCREMENT,
+              purl TEXT NOT NULL,
+              product_id integer NOT NULL
+            );
+            INSERT INTO products (id, name, permalink) VALUES (1, 'django', 'https://example.test/django');
+            INSERT INTO cycles (release_cycle, eol, eol_bool, product_id) VALUES ('3.2', '2024-04-01', NULL, 1);
+            INSERT INTO purls (purl, product_id) VALUES ('pkg:pypi/django', 1);
+            """
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    provider = XeolDbProvider(db_path=str(db_file), today=date(2026, 1, 1))
+    component = normalize_component(
+        SBOMComponent(
+            sbom_id=1,
+            name="boto3",
+            version="1.42.88",
+            purl="pkg:pypi/boto3@1.42.88",
+            component_type="library",
+        )
+    )
+
+    result = provider.lookup(component)
+
+    assert result.lifecycle_status == UNKNOWN
+    assert result.source_name == "Xeol DB"
+    assert result.eol_date is None
+
+
 def test_provider_chain_stops_on_high_confidence_result():
     component = NormalizedComponent(
         component_id=None,
@@ -178,6 +350,111 @@ def test_provider_chain_stops_on_high_confidence_result():
     )
     assert result.lifecycle_status == EOL
     assert "Late Provider" not in called
+
+
+def test_unknown_result_does_not_stop_remaining_lifecycle_providers():
+    component = NormalizedComponent(
+        component_id=None,
+        name="pkg",
+        version="1.0.0",
+        normalized_name="pkg",
+        normalized_version="1.0.0",
+        ecosystem="generic",
+    )
+    called: list[str] = []
+
+    class EarlyUnknownProvider(LifecycleProvider):
+        name = "Early Unknown Provider"
+        priority = 10
+
+        def lookup(self, comp: NormalizedComponent) -> LifecycleResult:
+            called.append(self.name)
+            return unknown_result(comp, self.name)
+
+    class LateEolProvider(LifecycleProvider):
+        name = "Late EOL Provider"
+        priority = 20
+
+        def lookup(self, comp: NormalizedComponent) -> LifecycleResult:
+            called.append(self.name)
+            return LifecycleResult(
+                component_name=comp.normalized_name,
+                component_version=comp.normalized_version,
+                ecosystem=comp.ecosystem,
+                purl=comp.purl,
+                lifecycle_status=EOL,
+                eol_date="2020-01-01",
+                source_name=self.name,
+                confidence=HIGH,
+            )
+
+    result, _errors = lookup_provider_chain(
+        [EarlyUnknownProvider(), LateEolProvider()],
+        component,
+        timeout_seconds=1.0,
+    )
+
+    assert called == ["Early Unknown Provider", "Late EOL Provider"]
+    assert result.lifecycle_status == EOL
+    assert result.source_name == "Late EOL Provider"
+
+
+def test_registry_metadata_result_does_not_count_as_lifecycle_evidence():
+    component = NormalizedComponent(
+        component_id=None,
+        name="pkg",
+        version="1.0.0",
+        normalized_name="pkg",
+        normalized_version="1.0.0",
+        ecosystem="pypi",
+    )
+    called: list[str] = []
+
+    class RegistryMetadataProvider(LifecycleProvider):
+        name = "PyPI"
+        priority = 10
+
+        def lookup(self, comp: NormalizedComponent) -> LifecycleResult:
+            called.append(self.name)
+            return LifecycleResult(
+                component_name=comp.normalized_name,
+                component_version=comp.normalized_version,
+                ecosystem=comp.ecosystem,
+                purl=comp.purl,
+                lifecycle_status=UNKNOWN,
+                latest_version="2.0.0",
+                recommended_version="2.0.0",
+                source_name=self.name,
+                confidence=LOW,
+            )
+
+    class AuthoritativeLifecycleProvider(LifecycleProvider):
+        name = "Authoritative Lifecycle"
+        priority = 20
+
+        def lookup(self, comp: NormalizedComponent) -> LifecycleResult:
+            called.append(self.name)
+            return LifecycleResult(
+                component_name=comp.normalized_name,
+                component_version=comp.normalized_version,
+                ecosystem=comp.ecosystem,
+                purl=comp.purl,
+                lifecycle_status=EOL,
+                eol_date="2020-01-01",
+                source_name=self.name,
+                confidence=HIGH,
+            )
+
+    result, _errors = lookup_provider_chain(
+        [RegistryMetadataProvider(), AuthoritativeLifecycleProvider()],
+        component,
+        timeout_seconds=1.0,
+    )
+
+    assert called == ["PyPI", "Authoritative Lifecycle"]
+    assert result.lifecycle_status == EOL
+    assert result.source_name == "Authoritative Lifecycle"
+    assert result.recommended_version == "2.0.0"
 
 
 def test_provider_failure_continues_fallback():
@@ -352,6 +629,37 @@ def test_unknown_ttl_shorter_than_known_ttl():
     assert known_ttl > unknown_ttl
 
 
+def test_provider_failure_uses_failure_cache_ttl():
+    from app.services.lifecycle.lifecycle_cache_repository import _cache_ttl_for_result
+
+    timeout_ttl = _cache_ttl_for_result(
+        LifecycleResult(
+            component_name="pkg",
+            component_version="1.0.0",
+            ecosystem="generic",
+            purl=None,
+            lifecycle_status=UNKNOWN,
+            source_name="timeout provider",
+            confidence=LOW,
+            evidence={"provider_errors": ["timeout provider: timeout"]},
+        )
+    )
+    unknown_ttl = _cache_ttl_for_result(
+        LifecycleResult(
+            component_name="pkg",
+            component_version="1.0.0",
+            ecosystem="generic",
+            purl=None,
+            lifecycle_status=UNKNOWN,
+            source_name="no data provider",
+            confidence=LOW,
+        )
+    )
+
+    assert timeout_ttl < unknown_ttl
+    assert int(timeout_ttl.total_seconds()) == 30 * 60
+
+
 def test_lifecycle_sources_endpoint(client):
     get_provider_status_tracker().reset()
     response = client.get("/api/lifecycle/sources")
@@ -384,7 +692,7 @@ def test_lifecycle_refresh_returns_summary(client, db):
     assert "provider_errors" in body
 
 
-def test_github_archived_maps_possibly_unmaintained():
+def test_github_archived_maps_unsupported():
     provider = RepositoryHealthProvider(
         http_get=lambda _url: {
             "archived": True,
@@ -403,7 +711,7 @@ def test_github_archived_maps_possibly_unmaintained():
         repository_url="https://github.com/example/pkg",
     )
     result = provider.lookup(component)
-    assert result.lifecycle_status == POSSIBLY_UNMAINTAINED
+    assert result.lifecycle_status == UNSUPPORTED
     assert result.lifecycle_status != EOL
 
 
