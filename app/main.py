@@ -123,6 +123,26 @@ def _ensure_column(table_name: str, column_name: str, type_sql: str, default_sql
         conn.commit()
 
 
+def _sync_postgres_sequence(db, table_name: str, column_name: str) -> None:
+    """Keep PostgreSQL sequences aligned after startup seeds explicit ids."""
+    if engine.dialect.name != "postgresql":
+        return
+    if not table_name.replace("_", "").isalnum() or not column_name.replace("_", "").isalnum():
+        raise RuntimeError("Unsafe identifier while syncing PostgreSQL sequence")
+
+    sequence = db.execute(
+        text("SELECT pg_get_serial_sequence(:table_name, :column_name)"),
+        {"table_name": table_name, "column_name": column_name},
+    ).scalar()
+    if not sequence:
+        return
+    max_value = int(db.execute(text(f"SELECT COALESCE(MAX({column_name}), 0) FROM {table_name}")).scalar() or 0)
+    db.execute(
+        text("SELECT setval(CAST(:sequence AS regclass), :value, :called)"),
+        {"sequence": sequence, "value": max(max_value, 1), "called": max_value > 0},
+    )
+
+
 def _ensure_remediation_audit_table() -> None:
     """Create the remediation audit table for legacy SQLite databases."""
     if engine.dialect.name != "sqlite":
@@ -338,12 +358,8 @@ def _ensure_seed_data() -> None:
     # Migration 013 — reclassify legacy rows that predate the validator
     # wiring as 'pending' (validation_at IS NULL is the unambiguous tell).
     # Idempotent: the WHERE clause excludes already-reclassified rows.
-    if engine.dialect.name == "sqlite":
-        with engine.connect() as conn:
-            conn.execute(
-                text("UPDATE sbom_source SET status = 'pending' WHERE validated_at IS NULL AND status = 'validated'")
-            )
-            conn.commit()
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE sbom_source SET status = 'pending' WHERE validated_at IS NULL AND status = 'validated'"))
 
     # Migration 014 — soft-delete columns on the eight in-scope tables.
     # ``Base.metadata.create_all`` already added the columns to fresh
@@ -487,6 +503,8 @@ def _ensure_seed_data() -> None:
             user.email = user.email or "dev@local"
             user.display_name = user.display_name or "Dev User"
         db.flush()
+        _sync_postgres_sequence(db, "tenants", "id")
+        _sync_postgres_sequence(db, "iam_users", "id")
         membership = db.execute(
             select(TenantUser).where(TenantUser.tenant_id == 1, TenantUser.user_id == 1)
         ).scalar_one_or_none()

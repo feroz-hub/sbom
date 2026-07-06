@@ -35,14 +35,43 @@ def postgres_url() -> str:
 
 
 def _clear_application_tables(url: str) -> None:
-    engine = sa.create_engine(url)
+    engine = sa.create_engine(url, isolation_level="AUTOCOMMIT")
     try:
-        metadata = sa.MetaData()
-        metadata.reflect(engine)
-        with engine.begin() as connection:
-            for table in reversed(metadata.sorted_tables):
-                if table.name != "alembic_version":
-                    connection.execute(table.delete())
+        with engine.connect() as connection:
+            all_table_names = list(
+                connection.execute(
+                    sa.text(
+                        """
+                        SELECT format('%I.%I', schemaname, tablename)
+                        FROM pg_tables
+                        WHERE schemaname = 'public'
+                          AND tablename <> 'alembic_version'
+                        ORDER BY tablename
+                        """
+                    )
+                ).scalars()
+            )
+            table_names = [
+                table_name
+                for table_name in all_table_names
+                if connection.execute(sa.text(f"SELECT EXISTS (SELECT 1 FROM {table_name} LIMIT 1)")).scalar()
+            ]
+            if table_names:
+                connection.execute(sa.text(f"TRUNCATE TABLE {', '.join(table_names)} RESTART IDENTITY CASCADE"))
+            sequence_names = list(
+                connection.execute(
+                    sa.text(
+                        """
+                        SELECT format('%I.%I', sequence_schema, sequence_name)
+                        FROM information_schema.sequences
+                        WHERE sequence_schema = 'public'
+                        ORDER BY sequence_name
+                        """
+                    )
+                ).scalars()
+            )
+            for sequence_name in sequence_names:
+                connection.execute(sa.text(f"ALTER SEQUENCE {sequence_name} RESTART WITH 1"))
     finally:
         engine.dispose()
 

@@ -10,7 +10,7 @@ import {
   Tooltip,
   XAxis,
   YAxis,
-  type TooltipProps,
+  type TooltipContentProps,
 } from 'recharts';
 import { Surface, SurfaceContent, SurfaceHeader } from '@/components/ui/Surface';
 import { Spinner } from '@/components/ui/Spinner';
@@ -33,7 +33,7 @@ const SERIES = [
 
 type SeriesKey = (typeof SERIES)[number]['key'];
 
-function CustomTooltip({ active, payload, label }: TooltipProps<number, string>) {
+function CustomTooltip({ active, payload, label }: TooltipContentProps) {
   if (!active || !payload?.length) return null;
   const total = payload.reduce((s, p) => s + (typeof p.value === 'number' ? p.value : 0), 0);
   return (
@@ -207,7 +207,7 @@ export function TrendChart({ data, isLoading }: TrendChartProps) {
                 width={42}
               />
               <Tooltip
-                content={<CustomTooltip />}
+                content={CustomTooltip}
                 cursor={{ stroke: axisStroke, strokeDasharray: '3 3', strokeOpacity: 0.6 }}
               />
               <Legend

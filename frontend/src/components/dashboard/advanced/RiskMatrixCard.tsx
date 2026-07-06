@@ -12,7 +12,7 @@ import {
   XAxis,
   YAxis,
   ZAxis,
-  type TooltipProps,
+  type TooltipContentProps,
 } from 'recharts';
 import { Surface, SurfaceContent, SurfaceHeader } from '@/components/ui/Surface';
 import { Spinner } from '@/components/ui/Spinner';
@@ -41,9 +41,23 @@ const SEVERITY_COLOR: Record<string, string> = {
 const QUADRANT_X = 0.5;
 const QUADRANT_Y = 7;
 
-function MatrixTooltip({ active, payload }: TooltipProps<number, string>) {
+function isRiskMatrixPoint(value: unknown): value is RiskMatrixPoint {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.vuln_id === 'string'
+    && typeof candidate.severity === 'string'
+    && typeof candidate.component === 'string'
+    && typeof candidate.cvss === 'number'
+    && typeof candidate.epss === 'number'
+    && typeof candidate.kev === 'boolean'
+    && typeof candidate.has_fix === 'boolean'
+  );
+}
+
+function MatrixTooltip({ active, payload }: TooltipContentProps) {
   if (!active || !payload?.length) return null;
-  const p = payload[0]?.payload as RiskMatrixPoint | undefined;
+  const p = payload.map((entry) => entry.payload).find(isRiskMatrixPoint);
   if (!p) return null;
   return (
     <div className="max-w-[240px] rounded-lg border border-border-subtle bg-surface px-3 py-2 text-xs shadow-elev-3">
@@ -157,7 +171,7 @@ export function RiskMatrixCard({ riskMatrix, isLoading: propsIsLoading }: RiskMa
                     fill: '#C0392B',
                   }}
                 />
-                <Tooltip content={<MatrixTooltip />} cursor={{ strokeDasharray: '3 3' }} />
+                <Tooltip content={MatrixTooltip} cursor={{ strokeDasharray: '3 3' }} />
                 <Scatter data={otherPoints} isAnimationActive={false} fillOpacity={0.75}>
                   {otherPoints.map((p: any, i: number) => (
                     <Cell

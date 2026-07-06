@@ -8,7 +8,7 @@ import {
   CheckCircle2,
   Clock,
   Database,
-  Github,
+  GitBranch,
   KeyRound,
   Loader2,
   PauseCircle,
@@ -31,8 +31,8 @@ import type {
 const SOURCE_META: Record<string, { label: string; Icon: LucideIcon; tone: string }> = {
   NVD: { label: 'NVD', Icon: ShieldAlert, tone: 'text-indigo-600 dark:text-indigo-400' },
   OSV: { label: 'OSV', Icon: Database, tone: 'text-emerald-600 dark:text-emerald-400' },
-  GITHUB: { label: 'GHSA', Icon: Github, tone: 'text-purple-600 dark:text-purple-400' },
-  GHSA: { label: 'GHSA', Icon: Github, tone: 'text-purple-600 dark:text-purple-400' },
+  GITHUB: { label: 'GHSA', Icon: GitBranch, tone: 'text-purple-600 dark:text-purple-400' },
+  GHSA: { label: 'GHSA', Icon: GitBranch, tone: 'text-purple-600 dark:text-purple-400' },
   VULNDB: { label: 'VulDB', Icon: KeyRound, tone: 'text-cyan-700 dark:text-cyan-400' },
 };
 

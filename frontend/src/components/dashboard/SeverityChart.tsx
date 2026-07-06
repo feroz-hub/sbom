@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, type TooltipProps } from 'recharts';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, type TooltipContentProps } from 'recharts';
 import { Surface, SurfaceContent, SurfaceHeader } from '@/components/ui/Surface';
 import { Spinner } from '@/components/ui/Spinner';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -41,9 +41,19 @@ const SEVERITY_ORDER: Array<Pick<ChartDatum, 'name' | 'key' | 'color'>> = [
   { name: 'Unknown', key: 'unknown', color: '#5B7083' },
 ];
 
-function CustomTooltip({ active, payload }: TooltipProps<number, string>) {
+function isChartDatum(value: unknown): value is ChartDatum {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.name === 'string'
+    && typeof candidate.value === 'number'
+    && typeof candidate.color === 'string'
+  );
+}
+
+function CustomTooltip({ active, payload }: TooltipContentProps) {
   if (!active || !payload?.length) return null;
-  const datum = payload[0]?.payload as ChartDatum | undefined;
+  const datum = payload.map((entry) => entry.payload).find(isChartDatum);
   if (!datum) return null;
   return (
     <div className="rounded-lg border border-border-subtle bg-surface px-3 py-2 text-xs shadow-elev-3">
@@ -159,7 +169,7 @@ export function SeverityChart({
                       />
                     ))}
                   </Pie>
-                  <Tooltip content={<CustomTooltip />} />
+                  <Tooltip content={CustomTooltip} />
                 </PieChart>
               </ResponsiveContainer>
               {/* Center label inside donut */}

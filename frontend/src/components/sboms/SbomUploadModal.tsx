@@ -81,7 +81,8 @@ const schema = z.object({
   product_version: z.string().optional(),
 });
 
-type FormValues = z.infer<typeof schema>;
+type FormInput = z.input<typeof schema>;
+type FormValues = z.output<typeof schema>;
 
 function matchSbomTypeIdForFormat(format: string | null | undefined, types: { id: number; typename: string }[]): string {
   const family = formatFamily(format);
@@ -151,7 +152,7 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
     watch,
     reset,
     formState: { errors },
-  } = useForm<FormValues>({
+  } = useForm<FormInput, unknown, FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
       sbom_name: '', sbom_data: '', sbom_type_id: '',
