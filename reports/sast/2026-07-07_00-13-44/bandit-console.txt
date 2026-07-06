@@ -1,0 +1,441 @@
+Run started:2026-07-06 18:44:52.463232+00:00
+
+Test results:
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: /Users/ferozebasha/sbom/app/ai/batches.py:139:8
+138	            db.rollback()
+139	        except Exception:  # noqa: BLE001
+140	            pass
+141	
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: /Users/ferozebasha/sbom/app/ai/cache.py:280:8
+279	            db.rollback()
+280	        except Exception:
+281	            pass
+282	
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: /Users/ferozebasha/sbom/app/ai/cache.py:307:8
+306	            db.rollback()
+307	        except Exception:
+308	            pass
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b101_assert_used.html
+   Location: /Users/ferozebasha/sbom/app/ai/config_loader.py:202:16
+201	            if self._cache_is_fresh():
+202	                assert self._cache is not None
+203	                return self._cache.configs, self._cache.settings
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: /Users/ferozebasha/sbom/app/ai/cost.py:310:12
+309	                update_budget_remaining(remaining_usd=max(self._caps.per_day_org_usd - self._counter.get(), 0.0))
+310	            except Exception:  # noqa: BLE001 — telemetry failure must not break a successful call
+311	                pass
+312	
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: /Users/ferozebasha/sbom/app/ai/cost.py:403:8
+402	            db.rollback()
+403	        except Exception:
+404	            pass
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: /Users/ferozebasha/sbom/app/ai/credential_audit.py:75:8
+74	            db.rollback()
+75	        except Exception:
+76	            pass
+77	
+
+--------------------------------------------------
+>> Issue: [B112:try_except_continue] Try, Except, Continue detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b112_try_except_continue.html
+   Location: /Users/ferozebasha/sbom/app/ai/grounding.py:192:12
+191	                )
+192	            except Exception:
+193	                continue
+194	    return out
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: /Users/ferozebasha/sbom/app/ai/progress.py:385:12
+384	                self._client.zrem(self._run_batches_index(run_id), batch_id)
+385	            except Exception:  # noqa: BLE001
+386	                pass
+387	        except Exception:  # noqa: BLE001
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: /Users/ferozebasha/sbom/app/ai/progress.py:387:8
+386	                pass
+387	        except Exception:  # noqa: BLE001
+388	            pass
+389	
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: /Users/ferozebasha/sbom/app/db.py:61:4
+60	            return u
+61	    except Exception:
+62	        pass
+63	
+
+--------------------------------------------------
+>> Issue: [B608:hardcoded_sql_expressions] Possible SQL injection vector through string-based query construction.
+   Severity: Medium   Confidence: Low
+   CWE: CWE-89 (https://cwe.mitre.org/data/definitions/89.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html
+   Location: /Users/ferozebasha/sbom/app/main.py:139:38
+138	        return
+139	    max_value = int(db.execute(text(f"SELECT COALESCE(MAX({column_name}), 0) FROM {table_name}")).scalar() or 0)
+140	    db.execute(
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: /Users/ferozebasha/sbom/app/metrics/health.py:44:8
+43	            total += len(report.get("document_warnings") or [])
+44	        except Exception:
+45	            pass
+46	    return total
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: /Users/ferozebasha/sbom/app/models.py:314:8
+313	                    return "spdx"
+314	        except Exception:
+315	            pass
+316	        return "—"
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: /Users/ferozebasha/sbom/app/models.py:331:8
+330	                    return str(as_dict.get("spdxVersion") or "—")
+331	        except Exception:
+332	            pass
+333	        return "—"
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b101_assert_used.html
+   Location: /Users/ferozebasha/sbom/app/nvd_mirror/adapters/sync_run_repository.py:33:8
+32	        self._session.flush()
+33	        assert row.id is not None  # populated by autoincrement
+34	        return int(row.id)
+
+--------------------------------------------------
+>> Issue: [B405:blacklist] Using xml.etree.ElementTree to parse untrusted XML data is known to be vulnerable to XML attacks. Replace xml.etree.ElementTree with the equivalent defusedxml package, or make sure defusedxml.defuse_stdlib() is called.
+   Severity: Low   Confidence: High
+   CWE: CWE-20 (https://cwe.mitre.org/data/definitions/20.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_imports.html#b405-import-xml-etree
+   Location: /Users/ferozebasha/sbom/app/parsing/cyclonedx.py:194:4
+193	        return out
+194	    import xml.etree.ElementTree as ET
+195	
+
+--------------------------------------------------
+>> Issue: [B314:blacklist] Using xml.etree.ElementTree.fromstring to parse untrusted XML data is known to be vulnerable to XML attacks. Replace xml.etree.ElementTree.fromstring with its defusedxml equivalent function or make sure defusedxml.defuse_stdlib() is called
+   Severity: Medium   Confidence: High
+   CWE: CWE-20 (https://cwe.mitre.org/data/definitions/20.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b313-b320-xml-bad-elementtree
+   Location: /Users/ferozebasha/sbom/app/parsing/cyclonedx.py:198:15
+197	    try:
+198	        root = ET.fromstring(xml_string)
+199	    except ET.ParseError as e:
+
+--------------------------------------------------
+>> Issue: [B112:try_except_continue] Try, Except, Continue detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b112_try_except_continue.html
+   Location: /Users/ferozebasha/sbom/app/routers/ai_fixes.py:608:8
+607	            ctx = build_grounding_context(f, db=db)
+608	        except Exception:
+609	            continue
+610	        key = cache_mod.make_cache_key(
+
+--------------------------------------------------
+>> Issue: [B112:try_except_continue] Try, Except, Continue detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b112_try_except_continue.html
+   Location: /Users/ferozebasha/sbom/app/routers/ai_fixes.py:892:8
+891	            ctx = build_grounding_context(f, db=db)
+892	        except Exception:
+893	            continue
+894	        key = cache_mod.make_cache_key(
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: /Users/ferozebasha/sbom/app/routers/lifecycle.py:49:4
+48	        }
+49	    except Exception:
+50	        pass
+51	    tracker = get_provider_status_tracker()
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: /Users/ferozebasha/sbom/app/routers/sbom.py:247:12
+246	                    ecosystems.add(parsed["type"].lower())
+247	            except Exception:
+248	                pass
+249	        if c.get("cpe"):
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: /Users/ferozebasha/sbom/app/routers/sbom_upload.py:296:4
+295	                components_count = len(as_dict.get("packages") or [])
+296	    except Exception:
+297	        pass
+298	
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: /Users/ferozebasha/sbom/app/services/audit_log.py:90:8
+89	            db.rollback()
+90	        except Exception:
+91	            pass
+92	
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b101_assert_used.html
+   Location: /Users/ferozebasha/sbom/app/services/compare_service.py:421:12
+420	                continue
+421	            assert la is not None and lb is not None
+422	            if la.version != lb.version:
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b101_assert_used.html
+   Location: /Users/ferozebasha/sbom/app/services/compare_service.py:463:12
+462	                continue
+463	            assert la is not None and lb is not None
+464	            if la.severity != lb.severity:
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b101_assert_used.html
+   Location: /Users/ferozebasha/sbom/app/services/compare_service.py:850:4
+849	    src = b or a  # whichever side has the row
+850	    assert src is not None
+851	    purl = src.component_purl
+
+--------------------------------------------------
+>> Issue: [B608:hardcoded_sql_expressions] Possible SQL injection vector through string-based query construction.
+   Severity: Medium   Confidence: Low
+   CWE: CWE-89 (https://cwe.mitre.org/data/definitions/89.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html
+   Location: /Users/ferozebasha/sbom/app/services/dashboard_metrics.py:261:12
+260	    sql = text(
+261	        f"""
+262	        WITH ordered AS (
+263	            SELECT
+264	                id,
+265	                sbom_id,
+266	                started_on,
+267	                ROW_NUMBER() OVER (PARTITION BY sbom_id ORDER BY id) AS rn
+268	            FROM analysis_run
+269	            WHERE run_status IN ('OK','FINDINGS','PARTIAL')
+270	            {tenant_filter}
+271	        )
+272	        SELECT a.id AS run_a, b.id AS run_b, b.started_on AS run_b_started
+273	        FROM ordered a
+274	        JOIN ordered b
+275	          ON a.sbom_id = b.sbom_id AND b.rn = a.rn + 1
+276	        ORDER BY b.id
+277	        """
+278	    )
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: /Users/ferozebasha/sbom/app/services/lifecycle/secret_service.py:45:8
+44	                return SecretCipher(key)
+45	        except Exception:
+46	            pass
+47	        return SecretCipher(hashlib.sha256(raw.encode("utf-8")).digest())
+
+--------------------------------------------------
+>> Issue: [B107:hardcoded_password_default] Possible hardcoded password: 'api_key'
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b107_hardcoded_password_default.html
+   Location: /Users/ferozebasha/sbom/app/services/lifecycle/secret_service.py:74:4
+73	
+74	    def get_secret(self, db: Session, provider_key: str, secret_name: str = "api_key") -> str | None:
+75	        row = self.get_row(db, provider_key, secret_name)
+76	        if row is None:
+77	            return None
+78	        return self.cipher.decrypt(row.encrypted_value)
+79	
+
+--------------------------------------------------
+>> Issue: [B405:blacklist] Using xml.etree.ElementTree to parse untrusted XML data is known to be vulnerable to XML attacks. Replace xml.etree.ElementTree with the equivalent defusedxml package, or make sure defusedxml.defuse_stdlib() is called.
+   Severity: Low   Confidence: High
+   CWE: CWE-20 (https://cwe.mitre.org/data/definitions/20.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_imports.html#b405-import-xml-etree
+   Location: /Users/ferozebasha/sbom/app/services/sbom/format_detector.py:7:0
+6	import re
+7	import xml.etree.ElementTree as ET
+8	from dataclasses import dataclass, field
+
+--------------------------------------------------
+>> Issue: [B314:blacklist] Using xml.etree.ElementTree.fromstring to parse untrusted XML data is known to be vulnerable to XML attacks. Replace xml.etree.ElementTree.fromstring with its defusedxml equivalent function or make sure defusedxml.defuse_stdlib() is called
+   Severity: Medium   Confidence: High
+   CWE: CWE-20 (https://cwe.mitre.org/data/definitions/20.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b313-b320-xml-bad-elementtree
+   Location: /Users/ferozebasha/sbom/app/services/sbom/format_detector.py:146:15
+145	    try:
+146	        root = ET.fromstring(sample)
+147	    except ET.ParseError:
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b101_assert_used.html
+   Location: /Users/ferozebasha/sbom/app/services/scheduling.py:160:4
+159	    # CUSTOM
+160	    assert _croniter is not None  # validate_spec already enforced this
+161	    return _croniter(spec.cron_expression, now).get_next(datetime).astimezone(UTC)
+
+--------------------------------------------------
+>> Issue: [B105:hardcoded_password_string] Possible hardcoded password: '-'
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html
+   Location: /Users/ferozebasha/sbom/app/services/validation_patch_service.py:124:30
+123	def _list_index(token: str, values: list[Any], *, allow_end: bool = False) -> int:
+124	    if allow_end and token == "-":
+125	        return len(values)
+
+--------------------------------------------------
+>> Issue: [B104:hardcoded_bind_all_interfaces] Possible binding to all interfaces.
+   Severity: Medium   Confidence: Medium
+   CWE: CWE-605 (https://cwe.mitre.org/data/definitions/605.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b104_hardcoded_bind_all_interfaces.html
+   Location: /Users/ferozebasha/sbom/app/settings.py:71:30
+70	    # Server Configuration
+71	    host: str = Field(default="0.0.0.0", description="Server bind address")
+72	    port: int = Field(default=8000, description="Server port")
+
+--------------------------------------------------
+>> Issue: [B106:hardcoded_password_funcarg] Possible hardcoded password: '****'
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b106_hardcoded_password_funcarg.html
+   Location: /Users/ferozebasha/sbom/app/settings.py:763:23
+762	        if parsed.password:
+763	            return str(parsed.set(password="****"))
+764	        return str(parsed)
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b101_assert_used.html
+   Location: /Users/ferozebasha/sbom/app/sources/match_confidence.py:149:0
+148	# than a silently-skewed score.
+149	assert abs((NAME_WEIGHT + VERSION_WEIGHT + VENDOR_WEIGHT) - 1.0) < 1e-9, (
+150	    f"weights must sum to 1.0; got {NAME_WEIGHT} + {VERSION_WEIGHT} + {VENDOR_WEIGHT}"
+151	)
+152	
+
+--------------------------------------------------
+>> Issue: [B104:hardcoded_bind_all_interfaces] Possible binding to all interfaces.
+   Severity: Medium   Confidence: Medium
+   CWE: CWE-605 (https://cwe.mitre.org/data/definitions/605.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b104_hardcoded_bind_all_interfaces.html
+   Location: /Users/ferozebasha/sbom/run.py:30:29
+29	if __name__ == "__main__":
+30	    host = os.getenv("HOST", "0.0.0.0")
+31	    port = int(os.getenv("PORT", "8000"))
+
+--------------------------------------------------
+
+Code scanned:
+	Total lines of code: 54789
+	Total lines skipped (#nosec): 0
+	Total potential issues skipped due to specifically being disabled (e.g., #nosec BXXX): 0
+
+Run metrics:
+	Total issues (by severity):
+		Undefined: 0
+		Low: 32
+		Medium: 6
+		High: 0
+	Total issues (by confidence):
+		Undefined: 0
+		Low: 2
+		Medium: 5
+		High: 31
+Files skipped (0):
