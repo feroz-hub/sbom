@@ -80,9 +80,16 @@ class NvdSource:
             return SourceResult(findings=findings, errors=errors, warnings=warnings)
 
         from app.analysis import _finding_from_applicable_nvd_raw
+        from app.analysis import _nvd_finding_key
+        from app.analysis import _nvd_rejection_from_component
+        from app.analysis import NvdRejectionReason
+        from app.analysis import NvdRejectionTracker
         from app.db import SessionLocal
         from app.services.nvd_enrichment_service import NvdEnrichmentService, collect_nvd_identifiers
         from app.settings import get_settings
+
+        rejection_tracker = NvdRejectionTracker(settings=settings, components_checked=len(components))
+        seen_findings: set[tuple[str, str, str | None, str | None, str | None]] = set()
 
         mirror_findings: list[dict] = []
         remaining_components = list(components)
@@ -95,11 +102,38 @@ class NvdSource:
                     continue
                 mirror_hit_cpes.add(cpe)
                 for raw in records:
-                    finding = _finding_from_applicable_nvd_raw(raw, cpe, component, settings)
+                    rejection_tracker.record_candidate()
+                    if not isinstance(raw, dict):
+                        rejection_tracker.record_rejection(
+                            _nvd_rejection_from_component(
+                                reason=NvdRejectionReason.INVALID_NVD_RECORD,
+                                raw=None,
+                                component=component,
+                                identifier=cpe,
+                                detail="NVD mirror record was not an object",
+                            )
+                        )
+                        continue
+                    finding = _finding_from_applicable_nvd_raw(raw, cpe, component, settings, rejection_tracker)
                     if finding is None:
                         continue
                     finding["match_strategy"] = "cpe_name"
+                    finding_key = _nvd_finding_key(finding)
+                    if finding_key in seen_findings:
+                        rejection_tracker.record_rejection(
+                            _nvd_rejection_from_component(
+                                reason=NvdRejectionReason.DUPLICATE_FINDING,
+                                raw=raw,
+                                component=component,
+                                identifier=cpe,
+                                matched_cpe=finding.get("cpe"),
+                                detail="Duplicate NVD finding for component and CVE",
+                            )
+                        )
+                        continue
+                    seen_findings.add(finding_key)
                     mirror_findings.append(finding)
+                    rejection_tracker.record_acceptance()
             remaining_components = [
                 component for component in components if component.get("cpe") not in mirror_hit_cpes
             ]
@@ -116,16 +150,44 @@ class NvdSource:
 
         result = await asyncio.to_thread(_run)
         provider_status = result["provider_status"]
+        rejection_tracker.components_queried = int(provider_status.get("total_identifiers") or 0)
         findings: list[dict] = list(mirror_findings)
         for record in result["records"]:
+            rejection_tracker.record_candidate()
             raw = record["raw"]
             identifier = record["identifier"]
             component = record.get("component") or {}
-            finding = _finding_from_applicable_nvd_raw(raw, identifier, component, settings)
+            if not isinstance(raw, dict):
+                rejection_tracker.record_rejection(
+                    _nvd_rejection_from_component(
+                        reason=NvdRejectionReason.INVALID_NVD_RECORD,
+                        raw=None,
+                        component=component,
+                        identifier=identifier,
+                        detail="NVD provider record was missing a CVE object",
+                    )
+                )
+                continue
+            finding = _finding_from_applicable_nvd_raw(raw, identifier, component, settings, rejection_tracker)
             if finding is None:
                 continue
             finding["match_strategy"] = "cve_ids" if identifier.upper().startswith("CVE-") else "cpe_name"
+            finding_key = _nvd_finding_key(finding)
+            if finding_key in seen_findings:
+                rejection_tracker.record_rejection(
+                    _nvd_rejection_from_component(
+                        reason=NvdRejectionReason.DUPLICATE_FINDING,
+                        raw=raw,
+                        component=component,
+                        identifier=identifier,
+                        matched_cpe=finding.get("cpe"),
+                        detail="Duplicate NVD finding for component and CVE",
+                    )
+                )
+                continue
+            seen_findings.add(finding_key)
             findings.append(finding)
+            rejection_tracker.record_acceptance()
         if mirror_findings:
             provider_status["cache_hits"] += len(mirror_findings)
             provider_status["status"] = (
@@ -141,8 +203,13 @@ class NvdSource:
                     "provider_status": provider_status,
                 }
             )
+        rejection_summary = rejection_tracker.emit_summary()
+        provider_status["candidate_findings"] = rejection_summary["candidate_findings"]
+        provider_status["accepted_findings"] = rejection_summary["accepted_findings"]
+        provider_status["rejected_findings"] = rejection_summary["total_rejected"]
+        provider_status["rejections_by_reason"] = rejection_summary["by_reason"]
         return SourceResult(
             findings=findings,
             errors=errors,
-            warnings=[{"source": "NVD", "provider_status": provider_status}],
+            warnings=[{"source": "NVD", "provider_status": provider_status, "rejection_summary": rejection_summary}],
         )

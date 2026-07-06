@@ -180,7 +180,7 @@ def test_emit_metrics_for_each_observation_point(caplog: pytest.LogCaptureFixtur
     """Three observation points fire on the right paths:
 
     * ``nvd.findings_emitted_total``           — kept-finding test
-    * ``nvd.findings_rejected_total``          — dropped/unknown candidates
+    * ``nvd.findings_rejected_total``          — dropped/unknown candidates, emitted at DEBUG
     """
     raw = _load_cve("cve_log4j_window.json", cve_id="CVE-2021-44228")
     # Component A (maven): in range, kept.
@@ -210,7 +210,7 @@ def test_emit_metrics_for_each_observation_point(caplog: pytest.LogCaptureFixtur
             "ecosystem": "PyPI",
         },
     ]
-    with caplog.at_level(logging.INFO, logger="sbom.nvd.metrics"):
+    with caplog.at_level(logging.DEBUG, logger="sbom.nvd.metrics"):
         result = _run_query(components, raw_cves=[raw], range_filter_on=True)
 
     # A kept; B not affected and C unknown are rejected.
@@ -224,7 +224,7 @@ def test_emit_metrics_for_each_observation_point(caplog: pytest.LogCaptureFixtur
 
     assert len(emitted) == 1, f"expected one kept-finding event, got {len(emitted)}"
     assert len(rejected) == 2, f"expected two rejected candidates, got {len(rejected)}"
-    assert {r.labels["reason"] for r in rejected} == {"version_end_excluding", "installed_or_bound_version_invalid"}
+    assert {r.labels["reason"] for r in rejected} == {"version_not_affected", "invalid_version_range"}
 
 
 def test_metrics_still_emit_when_legacy_flag_off(caplog: pytest.LogCaptureFixture) -> None:

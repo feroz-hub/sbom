@@ -29,6 +29,8 @@ _COLOURS = {
 _RESET = "\033[0m"
 _BOLD = "\033[1m"
 
+_STANDARD_LOG_RECORD_KEYS = frozenset(logging.makeLogRecord({}).__dict__)
+
 
 def _supports_colour(stream) -> bool:
     return hasattr(stream, "isatty") and stream.isatty()
@@ -76,7 +78,10 @@ class JsonFormatter(logging.Formatter):
         }
         if record.exc_info:
             payload["exc"] = self.formatException(record.exc_info)
-        return json.dumps(payload, ensure_ascii=False)
+        for key, value in record.__dict__.items():
+            if key not in _STANDARD_LOG_RECORD_KEYS and key not in payload:
+                payload[key] = value
+        return json.dumps(payload, ensure_ascii=False, default=str)
 
 
 # ── Public setup function ──────────────────────────────────────────────────────
