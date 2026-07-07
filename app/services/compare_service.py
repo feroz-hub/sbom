@@ -418,7 +418,8 @@ class CompareService:
             if la is not None and lb is None:
                 out.append(_component_row(ComponentChangeKind.REMOVED, key, la, None))
                 continue
-            assert la is not None and lb is not None
+            if la is None or lb is None:
+                raise RuntimeError("Component diff invariant violated")
             if la.version != lb.version:
                 out.append(_component_row(ComponentChangeKind.VERSION_BUMPED, key, la, lb))
                 continue
@@ -460,7 +461,8 @@ class CompareService:
             if la is not None and lb is None:
                 out.append(_finding_row(FindingChangeKind.RESOLVED, la, None))
                 continue
-            assert la is not None and lb is not None
+            if la is None or lb is None:
+                raise RuntimeError("Finding diff invariant violated")
             if la.severity != lb.severity:
                 out.append(_finding_row(FindingChangeKind.SEVERITY_CHANGED, la, lb))
                 continue
@@ -847,7 +849,8 @@ def _finding_row(
     b: _LoadedFinding | None,
 ) -> FindingDiffRow:
     src = b or a  # whichever side has the row
-    assert src is not None
+    if src is None:
+        raise ValueError("Finding diff row requires at least one finding")
     purl = src.component_purl
     if purl is None and a is not None:
         purl = a.component_purl

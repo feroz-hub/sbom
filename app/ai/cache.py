@@ -17,6 +17,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from ..models import AiFixCache
@@ -277,8 +278,8 @@ def write_cache(
         log.warning("ai.cache.write_failed: key=%s err=%s", cache_key, exc)
         try:
             db.rollback()
-        except Exception:
-            pass
+        except SQLAlchemyError:
+            log.warning("ai.cache.rollback_failed: key=%s", cache_key, exc_info=True)
 
     return AiFixResult(
         finding_id=None,
@@ -304,5 +305,5 @@ def touch_last_accessed(db: Session, *, cache_key: str) -> None:
         log.debug("ai.cache.touch_failed: key=%s err=%s", cache_key, exc)
         try:
             db.rollback()
-        except Exception:
-            pass
+        except SQLAlchemyError:
+            log.warning("ai.cache.touch_rollback_failed: key=%s", cache_key, exc_info=True)

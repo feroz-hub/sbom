@@ -1,0 +1,1637 @@
+<?xml version="1.0"?>
+<OWASPZAPReport programName="ZAP" version="2.17.0" generated="Tue, 7 Jul 2026 11:46:10" created="2026-07-07T11:46:10.332930333Z">
+	
+		<site name="https://host.docker.internal:3000" host="host.docker.internal" port="3000" ssl="true">
+			<alerts>
+				
+			</alerts>
+		</site>
+	
+	
+		<site name="https://firefox-settings-attachments.cdn.mozilla.net" host="firefox-settings-attachments.cdn.mozilla.net" port="443" ssl="true">
+			<alerts>
+				
+					<alertitem>
+						<pluginid>10035</pluginid>
+						<alertRef>10035-1</alertRef>
+						<alert>Strict-Transport-Security Header Not Set</alert>
+						<name>Strict-Transport-Security Header Not Set</name>
+						<riskcode>1</riskcode>
+						<confidence>3</confidence>
+						<riskdesc>Low (High)</riskdesc>
+						<confidencedesc>High</confidencedesc>
+						<desc>&lt;p&gt;HTTP Strict Transport Security (HSTS) is a web security policy mechanism whereby a web server declares that complying user agents (such as a web browser) are to interact with it using only secure HTTPS connections (i.e. HTTP layered over TLS/SSL). HSTS is an IETF standards track protocol and is specified in RFC 6797.&lt;/p&gt;</desc>
+						<instances>
+							
+								<instance>
+									<uri>https://firefox-settings-attachments.cdn.mozilla.net/main-workspace/tracking-protection-lists/0f5d4b73-9f15-46e3-ac70-a15a25acc19c</uri>
+									<nodeName>https://firefox-settings-attachments.cdn.mozilla.net/main-workspace/tracking-protection-lists/0f5d4b73-9f15-46e3-ac70-a15a25acc19c</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence></evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>https://firefox-settings-attachments.cdn.mozilla.net/main-workspace/tracking-protection-lists/5654b845-5c86-4315-9c04-c38b6962fa88</uri>
+									<nodeName>https://firefox-settings-attachments.cdn.mozilla.net/main-workspace/tracking-protection-lists/5654b845-5c86-4315-9c04-c38b6962fa88</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence></evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>https://firefox-settings-attachments.cdn.mozilla.net/main-workspace/tracking-protection-lists/f9b21f6c-9074-4c80-b733-e59bfe1a338f</uri>
+									<nodeName>https://firefox-settings-attachments.cdn.mozilla.net/main-workspace/tracking-protection-lists/f9b21f6c-9074-4c80-b733-e59bfe1a338f</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence></evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+						</instances>
+						<count>3</count>
+						<systemic>false</systemic>
+						<solution>&lt;p&gt;Ensure that your web server, application server, load balancer, etc. is configured to enforce Strict-Transport-Security.&lt;/p&gt;</solution>
+						<otherinfo></otherinfo>
+						<reference>&lt;p&gt;https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Strict_Transport_Security_Cheat_Sheet.html&lt;/p&gt;&lt;p&gt;https://owasp.org/www-community/Security_Headers&lt;/p&gt;&lt;p&gt;https://en.wikipedia.org/wiki/HTTP_Strict_Transport_Security&lt;/p&gt;&lt;p&gt;https://caniuse.com/stricttransportsecurity&lt;/p&gt;&lt;p&gt;https://datatracker.ietf.org/doc/html/rfc6797&lt;/p&gt;</reference>
+						<cweid>319</cweid>
+						<wascid>15</wascid>
+						<sourceid>190</sourceid>
+					</alertitem>
+				
+				
+					<alertitem>
+						<pluginid>10015</pluginid>
+						<alertRef>10015</alertRef>
+						<alert>Re-examine Cache-control Directives</alert>
+						<name>Re-examine Cache-control Directives</name>
+						<riskcode>0</riskcode>
+						<confidence>1</confidence>
+						<riskdesc>Informational (Low)</riskdesc>
+						<confidencedesc>Low</confidencedesc>
+						<desc>&lt;p&gt;The cache-control header has not been set properly or is missing, allowing the browser and proxies to cache content. For static assets like css, js, or image files this might be intended, however, the resources should be reviewed to ensure that no sensitive content will be cached.&lt;/p&gt;</desc>
+						<instances>
+							
+								<instance>
+									<uri>https://firefox-settings-attachments.cdn.mozilla.net/main-workspace/tracking-protection-lists/0f5d4b73-9f15-46e3-ac70-a15a25acc19c</uri>
+									<nodeName>https://firefox-settings-attachments.cdn.mozilla.net/main-workspace/tracking-protection-lists/0f5d4b73-9f15-46e3-ac70-a15a25acc19c</nodeName>
+									<method>GET</method>
+									<param>cache-control</param>
+									<attack></attack>
+									<evidence>public, max-age=31536000, immutable</evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>https://firefox-settings-attachments.cdn.mozilla.net/main-workspace/tracking-protection-lists/5654b845-5c86-4315-9c04-c38b6962fa88</uri>
+									<nodeName>https://firefox-settings-attachments.cdn.mozilla.net/main-workspace/tracking-protection-lists/5654b845-5c86-4315-9c04-c38b6962fa88</nodeName>
+									<method>GET</method>
+									<param>cache-control</param>
+									<attack></attack>
+									<evidence>public, max-age=31536000, immutable</evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>https://firefox-settings-attachments.cdn.mozilla.net/main-workspace/tracking-protection-lists/f9b21f6c-9074-4c80-b733-e59bfe1a338f</uri>
+									<nodeName>https://firefox-settings-attachments.cdn.mozilla.net/main-workspace/tracking-protection-lists/f9b21f6c-9074-4c80-b733-e59bfe1a338f</nodeName>
+									<method>GET</method>
+									<param>cache-control</param>
+									<attack></attack>
+									<evidence>public, max-age=31536000, immutable</evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+						</instances>
+						<count>3</count>
+						<systemic>false</systemic>
+						<solution>&lt;p&gt;For secure content, ensure the cache-control HTTP header is set with &quot;no-cache, no-store, must-revalidate&quot;. If an asset should be cached consider setting the directives &quot;public, max-age, immutable&quot;.&lt;/p&gt;</solution>
+						<otherinfo></otherinfo>
+						<reference>&lt;p&gt;https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html#web-content-caching&lt;/p&gt;&lt;p&gt;https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control&lt;/p&gt;&lt;p&gt;https://grayduck.mn/2021/09/13/cache-control-recommendations/&lt;/p&gt;</reference>
+						<cweid>525</cweid>
+						<wascid>13</wascid>
+						<sourceid>190</sourceid>
+					</alertitem>
+				
+				
+					<alertitem>
+						<pluginid>10050</pluginid>
+						<alertRef>10050-1</alertRef>
+						<alert>Retrieved from Cache</alert>
+						<name>Retrieved from Cache</name>
+						<riskcode>0</riskcode>
+						<confidence>2</confidence>
+						<riskdesc>Informational (Medium)</riskdesc>
+						<confidencedesc>Medium</confidencedesc>
+						<desc>&lt;p&gt;The content was retrieved from a shared cache. If the response data is sensitive, personal or user-specific, this may result in sensitive information being leaked. In some cases, this may even result in a user gaining complete control of the session of another user, depending on the configuration of the caching components in use in their environment. This is primarily an issue where caching servers such as &quot;proxy&quot; caches are configured on the local network. This configuration is typically found in corporate or educational environments, for instance.&lt;/p&gt;</desc>
+						<instances>
+							
+								<instance>
+									<uri>https://firefox-settings-attachments.cdn.mozilla.net/main-workspace/tracking-protection-lists/0f5d4b73-9f15-46e3-ac70-a15a25acc19c</uri>
+									<nodeName>https://firefox-settings-attachments.cdn.mozilla.net/main-workspace/tracking-protection-lists/0f5d4b73-9f15-46e3-ac70-a15a25acc19c</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>HIT</evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>https://firefox-settings-attachments.cdn.mozilla.net/main-workspace/tracking-protection-lists/5654b845-5c86-4315-9c04-c38b6962fa88</uri>
+									<nodeName>https://firefox-settings-attachments.cdn.mozilla.net/main-workspace/tracking-protection-lists/5654b845-5c86-4315-9c04-c38b6962fa88</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>HIT</evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>https://firefox-settings-attachments.cdn.mozilla.net/main-workspace/tracking-protection-lists/f9b21f6c-9074-4c80-b733-e59bfe1a338f</uri>
+									<nodeName>https://firefox-settings-attachments.cdn.mozilla.net/main-workspace/tracking-protection-lists/f9b21f6c-9074-4c80-b733-e59bfe1a338f</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>HIT</evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+						</instances>
+						<count>3</count>
+						<systemic>false</systemic>
+						<solution>&lt;p&gt;Validate that the response does not contain sensitive, personal or user-specific information. If it does, consider the use of the following HTTP response headers, to limit, or prevent the content being stored and retrieved from the cache by another user:&lt;/p&gt;&lt;p&gt;Cache-Control: no-cache, no-store, must-revalidate, private&lt;/p&gt;&lt;p&gt;Pragma: no-cache&lt;/p&gt;&lt;p&gt;Expires: 0&lt;/p&gt;&lt;p&gt;This configuration directs both HTTP 1.0 and HTTP 1.1 compliant caching servers to not store the response, and to not retrieve the response (without validation) from the cache, in response to a similar request.&lt;/p&gt;</solution>
+						<otherinfo></otherinfo>
+						<reference>&lt;p&gt;https://datatracker.ietf.org/doc/html/rfc7234&lt;/p&gt;&lt;p&gt;https://datatracker.ietf.org/doc/html/rfc7231&lt;/p&gt;&lt;p&gt;https://www.rfc-editor.org/rfc/rfc9110.html&lt;/p&gt;</reference>
+						<cweid>525</cweid>
+						<wascid>-1</wascid>
+						<sourceid>190</sourceid>
+					</alertitem>
+				
+			</alerts>
+		</site>
+	
+	
+		<site name="http://host.docker.internal:3000" host="host.docker.internal" port="3000" ssl="false">
+			<alerts>
+				
+					<alertitem>
+						<pluginid>10038</pluginid>
+						<alertRef>10038-1</alertRef>
+						<alert>Content Security Policy (CSP) Header Not Set</alert>
+						<name>Content Security Policy (CSP) Header Not Set</name>
+						<riskcode>2</riskcode>
+						<confidence>3</confidence>
+						<riskdesc>Medium (High)</riskdesc>
+						<confidencedesc>High</confidencedesc>
+						<desc>&lt;p&gt;Content Security Policy (CSP) is an added layer of security that helps to detect and mitigate certain types of attacks, including Cross Site Scripting (XSS) and data injection attacks. These attacks are used for everything from data theft to site defacement or distribution of malware. CSP provides a set of standard HTTP headers that allow website owners to declare approved sources of content that browsers should be allowed to load on that page &#x2014; covered types are JavaScript, CSS, HTML frames, fonts, images and embeddable objects such as Java applets, ActiveX, audio and video files.&lt;/p&gt;</desc>
+						<instances>
+							
+								<instance>
+									<uri>http://host.docker.internal:3000</uri>
+									<nodeName>http://host.docker.internal:3000</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence></evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/</uri>
+									<nodeName>http://host.docker.internal:3000/</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence></evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/robots.txt</uri>
+									<nodeName>http://host.docker.internal:3000/robots.txt</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence></evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/sitemap.xml</uri>
+									<nodeName>http://host.docker.internal:3000/sitemap.xml</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence></evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+						</instances>
+						<count>4</count>
+						<systemic>false</systemic>
+						<solution>&lt;p&gt;Ensure that your web server, application server, load balancer, etc. is configured to set the Content-Security-Policy header.&lt;/p&gt;</solution>
+						<otherinfo></otherinfo>
+						<reference>&lt;p&gt;https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CSP&lt;/p&gt;&lt;p&gt;https://cheatsheetseries.owasp.org/cheatsheets/Content_Security_Policy_Cheat_Sheet.html&lt;/p&gt;&lt;p&gt;https://www.w3.org/TR/CSP/&lt;/p&gt;&lt;p&gt;https://w3c.github.io/webappsec-csp/&lt;/p&gt;&lt;p&gt;https://web.dev/articles/csp&lt;/p&gt;&lt;p&gt;https://caniuse.com/#feat=contentsecuritypolicy&lt;/p&gt;&lt;p&gt;https://content-security-policy.com/&lt;/p&gt;</reference>
+						<cweid>693</cweid>
+						<wascid>15</wascid>
+						<sourceid>9</sourceid>
+					</alertitem>
+				
+				
+					<alertitem>
+						<pluginid>10106</pluginid>
+						<alertRef>10106</alertRef>
+						<alert>HTTP Only Site</alert>
+						<name>HTTP Only Site</name>
+						<riskcode>2</riskcode>
+						<confidence>2</confidence>
+						<riskdesc>Medium (Medium)</riskdesc>
+						<confidencedesc>Medium</confidencedesc>
+						<desc>&lt;p&gt;The site is only served under HTTP and not HTTPS.&lt;/p&gt;</desc>
+						<instances>
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/</uri>
+									<nodeName>https://host.docker.internal:3000/</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence></evidence>
+									<otherinfo>Failed to connect.
+ZAP attempted to connect via: https://host.docker.internal:3000/</otherinfo>
+								</instance>
+							
+						</instances>
+						<count>1</count>
+						<systemic>false</systemic>
+						<solution>&lt;p&gt;Configure your web or application server to use SSL (https).&lt;/p&gt;</solution>
+						<otherinfo>&lt;p&gt;Failed to connect.&lt;/p&gt;&lt;p&gt;ZAP attempted to connect via: https://host.docker.internal:3000/&lt;/p&gt;</otherinfo>
+						<reference>&lt;p&gt;https://cheatsheetseries.owasp.org/cheatsheets/Transport_Layer_Protection_Cheat_Sheet.html&lt;/p&gt;&lt;p&gt;https://letsencrypt.org/&lt;/p&gt;</reference>
+						<cweid>311</cweid>
+						<wascid>4</wascid>
+						<sourceid>729</sourceid>
+					</alertitem>
+				
+				
+					<alertitem>
+						<pluginid>10020</pluginid>
+						<alertRef>10020-1</alertRef>
+						<alert>Missing Anti-clickjacking Header</alert>
+						<name>Missing Anti-clickjacking Header</name>
+						<riskcode>2</riskcode>
+						<confidence>2</confidence>
+						<riskdesc>Medium (Medium)</riskdesc>
+						<confidencedesc>Medium</confidencedesc>
+						<desc>&lt;p&gt;The response does not protect against &apos;ClickJacking&apos; attacks. It should include either Content-Security-Policy with &apos;frame-ancestors&apos; directive or X-Frame-Options.&lt;/p&gt;</desc>
+						<instances>
+							
+								<instance>
+									<uri>http://host.docker.internal:3000</uri>
+									<nodeName>http://host.docker.internal:3000</nodeName>
+									<method>GET</method>
+									<param>x-frame-options</param>
+									<attack></attack>
+									<evidence></evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/</uri>
+									<nodeName>http://host.docker.internal:3000/</nodeName>
+									<method>GET</method>
+									<param>x-frame-options</param>
+									<attack></attack>
+									<evidence></evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+						</instances>
+						<count>2</count>
+						<systemic>false</systemic>
+						<solution>&lt;p&gt;Modern Web browsers support the Content-Security-Policy and X-Frame-Options HTTP headers. Ensure one of them is set on all web pages returned by your site/app.&lt;/p&gt;&lt;p&gt;If you expect the page to be framed only by pages on your server (e.g. it&apos;s part of a FRAMESET) then you&apos;ll want to use SAMEORIGIN, otherwise if you never expect the page to be framed, you should use DENY. Alternatively consider implementing Content Security Policy&apos;s &quot;frame-ancestors&quot; directive.&lt;/p&gt;</solution>
+						<otherinfo></otherinfo>
+						<reference>&lt;p&gt;https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/X-Frame-Options&lt;/p&gt;</reference>
+						<cweid>1021</cweid>
+						<wascid>15</wascid>
+						<sourceid>9</sourceid>
+					</alertitem>
+				
+				
+					<alertitem>
+						<pluginid>90004</pluginid>
+						<alertRef>90004-2</alertRef>
+						<alert>Cross-Origin-Embedder-Policy Header Missing or Invalid</alert>
+						<name>Cross-Origin-Embedder-Policy Header Missing or Invalid</name>
+						<riskcode>1</riskcode>
+						<confidence>2</confidence>
+						<riskdesc>Low (Medium)</riskdesc>
+						<confidencedesc>Medium</confidencedesc>
+						<desc>&lt;p&gt;Cross-Origin-Embedder-Policy header is a response header that prevents a document from loading any cross-origin resources that don&apos;t explicitly grant the document permission (using CORP or CORS).&lt;/p&gt;</desc>
+						<instances>
+							
+								<instance>
+									<uri>http://host.docker.internal:3000</uri>
+									<nodeName>http://host.docker.internal:3000</nodeName>
+									<method>GET</method>
+									<param>Cross-Origin-Embedder-Policy</param>
+									<attack></attack>
+									<evidence></evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/</uri>
+									<nodeName>http://host.docker.internal:3000/</nodeName>
+									<method>GET</method>
+									<param>Cross-Origin-Embedder-Policy</param>
+									<attack></attack>
+									<evidence></evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+						</instances>
+						<count>2</count>
+						<systemic>false</systemic>
+						<solution>&lt;p&gt;Ensure that the application/web server sets the Cross-Origin-Embedder-Policy header appropriately, and that it sets the Cross-Origin-Embedder-Policy header to &apos;require-corp&apos; for documents.&lt;/p&gt;&lt;p&gt;If possible, ensure that the end user uses a standards-compliant and modern web browser that supports the Cross-Origin-Embedder-Policy header (https://caniuse.com/mdn-http_headers_cross-origin-embedder-policy).&lt;/p&gt;</solution>
+						<otherinfo></otherinfo>
+						<reference>&lt;p&gt;https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cross-Origin-Embedder-Policy&lt;/p&gt;</reference>
+						<cweid>693</cweid>
+						<wascid>14</wascid>
+						<sourceid>9</sourceid>
+					</alertitem>
+				
+				
+					<alertitem>
+						<pluginid>90004</pluginid>
+						<alertRef>90004-3</alertRef>
+						<alert>Cross-Origin-Opener-Policy Header Missing or Invalid</alert>
+						<name>Cross-Origin-Opener-Policy Header Missing or Invalid</name>
+						<riskcode>1</riskcode>
+						<confidence>2</confidence>
+						<riskdesc>Low (Medium)</riskdesc>
+						<confidencedesc>Medium</confidencedesc>
+						<desc>&lt;p&gt;Cross-Origin-Opener-Policy header is a response header that allows a site to control if others included documents share the same browsing context. Sharing the same browsing context with untrusted documents might lead to data leak.&lt;/p&gt;</desc>
+						<instances>
+							
+								<instance>
+									<uri>http://host.docker.internal:3000</uri>
+									<nodeName>http://host.docker.internal:3000</nodeName>
+									<method>GET</method>
+									<param>Cross-Origin-Opener-Policy</param>
+									<attack></attack>
+									<evidence></evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/</uri>
+									<nodeName>http://host.docker.internal:3000/</nodeName>
+									<method>GET</method>
+									<param>Cross-Origin-Opener-Policy</param>
+									<attack></attack>
+									<evidence></evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+						</instances>
+						<count>2</count>
+						<systemic>false</systemic>
+						<solution>&lt;p&gt;Ensure that the application/web server sets the Cross-Origin-Opener-Policy header appropriately, and that it sets the Cross-Origin-Opener-Policy header to &apos;same-origin&apos; for documents.&lt;/p&gt;&lt;p&gt;&apos;same-origin-allow-popups&apos; is considered as less secured and should be avoided.&lt;/p&gt;&lt;p&gt;If possible, ensure that the end user uses a standards-compliant and modern web browser that supports the Cross-Origin-Opener-Policy header (https://caniuse.com/mdn-http_headers_cross-origin-opener-policy).&lt;/p&gt;</solution>
+						<otherinfo></otherinfo>
+						<reference>&lt;p&gt;https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cross-Origin-Opener-Policy&lt;/p&gt;</reference>
+						<cweid>693</cweid>
+						<wascid>14</wascid>
+						<sourceid>9</sourceid>
+					</alertitem>
+				
+				
+					<alertitem>
+						<pluginid>90004</pluginid>
+						<alertRef>90004-1</alertRef>
+						<alert>Cross-Origin-Resource-Policy Header Missing or Invalid</alert>
+						<name>Cross-Origin-Resource-Policy Header Missing or Invalid</name>
+						<riskcode>1</riskcode>
+						<confidence>2</confidence>
+						<riskdesc>Low (Medium)</riskdesc>
+						<confidencedesc>Medium</confidencedesc>
+						<desc>&lt;p&gt;Cross-Origin-Resource-Policy header is an opt-in header designed to counter side-channels attacks like Spectre. Resource should be specifically set as shareable amongst different origins.&lt;/p&gt;</desc>
+						<instances>
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/</uri>
+									<nodeName>http://host.docker.internal:3000/</nodeName>
+									<method>GET</method>
+									<param>Cross-Origin-Resource-Policy</param>
+									<attack></attack>
+									<evidence></evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_1xx01vv._.js</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_1xx01vv._.js</nodeName>
+									<method>GET</method>
+									<param>Cross-Origin-Resource-Policy</param>
+									<attack></attack>
+									<evidence></evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/media/03fc1b4a8d284b5e-s.p.0wiir8udbzjvx.woff2</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/media/03fc1b4a8d284b5e-s.p.0wiir8udbzjvx.woff2</nodeName>
+									<method>GET</method>
+									<param>Cross-Origin-Resource-Policy</param>
+									<attack></attack>
+									<evidence></evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/media/23b7a97ae3b5c134-s.p.226pwps5o-gq_.woff2</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/media/23b7a97ae3b5c134-s.p.226pwps5o-gq_.woff2</nodeName>
+									<method>GET</method>
+									<param>Cross-Origin-Resource-Policy</param>
+									<attack></attack>
+									<evidence></evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/media/99e609270109b47d-s.p.40sczeszzbjw1.woff2</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/media/99e609270109b47d-s.p.40sczeszzbjw1.woff2</nodeName>
+									<method>GET</method>
+									<param>Cross-Origin-Resource-Policy</param>
+									<attack></attack>
+									<evidence></evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+						</instances>
+						<count>5</count>
+						<systemic>true</systemic>
+						<solution>&lt;p&gt;Ensure that the application/web server sets the Cross-Origin-Resource-Policy header appropriately, and that it sets the Cross-Origin-Resource-Policy header to &apos;same-origin&apos; for all web pages.&lt;/p&gt;&lt;p&gt;&apos;same-site&apos; is considered as less secured and should be avoided.&lt;/p&gt;&lt;p&gt;If resources must be shared, set the header to &apos;cross-origin&apos;.&lt;/p&gt;&lt;p&gt;If possible, ensure that the end user uses a standards-compliant and modern web browser that supports the Cross-Origin-Resource-Policy header (https://caniuse.com/mdn-http_headers_cross-origin-resource-policy).&lt;/p&gt;</solution>
+						<otherinfo></otherinfo>
+						<reference>&lt;p&gt;https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cross-Origin-Embedder-Policy&lt;/p&gt;</reference>
+						<cweid>693</cweid>
+						<wascid>14</wascid>
+						<sourceid>1</sourceid>
+					</alertitem>
+				
+				
+					<alertitem>
+						<pluginid>10110</pluginid>
+						<alertRef>10110</alertRef>
+						<alert>Dangerous JS Functions</alert>
+						<name>Dangerous JS Functions</name>
+						<riskcode>1</riskcode>
+						<confidence>1</confidence>
+						<riskdesc>Low (Low)</riskdesc>
+						<confidencedesc>Low</confidencedesc>
+						<desc>&lt;p&gt;A dangerous JS function seems to be in use that would leave the site vulnerable.&lt;/p&gt;</desc>
+						<instances>
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/chunks/node_modules_next_dist_compiled_react-server-dom-turbopack_164kp-6._.js</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/chunks/node_modules_next_dist_compiled_react-server-dom-turbopack_164kp-6._.js</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>eval(</evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/chunks/turbopack-_01_ro95._.js</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/chunks/turbopack-_01_ro95._.js</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>eval(</evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+						</instances>
+						<count>2</count>
+						<systemic>false</systemic>
+						<solution>&lt;p&gt;See the references for security advice on the use of these functions.&lt;/p&gt;</solution>
+						<otherinfo></otherinfo>
+						<reference>&lt;p&gt;https://v17.angular.io/guide/security&lt;/p&gt;</reference>
+						<cweid>749</cweid>
+						<wascid>-1</wascid>
+						<sourceid>44</sourceid>
+					</alertitem>
+				
+				
+					<alertitem>
+						<pluginid>10063</pluginid>
+						<alertRef>10063-1</alertRef>
+						<alert>Permissions Policy Header Not Set</alert>
+						<name>Permissions Policy Header Not Set</name>
+						<riskcode>1</riskcode>
+						<confidence>2</confidence>
+						<riskdesc>Low (Medium)</riskdesc>
+						<confidencedesc>Medium</confidencedesc>
+						<desc>&lt;p&gt;Permissions Policy Header is an added layer of security that helps to restrict from unauthorized access or usage of browser/client features by web resources. This policy ensures the user privacy by limiting or specifying the features of the browsers can be used by the web resources. Permissions Policy provides a set of standard HTTP headers that allow website owners to limit which features of browsers can be used by the page such as camera, microphone, location, full screen etc.&lt;/p&gt;</desc>
+						<instances>
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/</uri>
+									<nodeName>http://host.docker.internal:3000/</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence></evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_1xx01vv._.js</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_1xx01vv._.js</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence></evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/chunks/_1anvha4._.js</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/chunks/_1anvha4._.js</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence></evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/robots.txt</uri>
+									<nodeName>http://host.docker.internal:3000/robots.txt</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence></evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/sitemap.xml</uri>
+									<nodeName>http://host.docker.internal:3000/sitemap.xml</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence></evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+						</instances>
+						<count>5</count>
+						<systemic>true</systemic>
+						<solution>&lt;p&gt;Ensure that your web server, application server, load balancer, etc. is configured to set the Permissions-Policy header.&lt;/p&gt;</solution>
+						<otherinfo></otherinfo>
+						<reference>&lt;p&gt;https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Permissions-Policy&lt;/p&gt;&lt;p&gt;https://developer.chrome.com/blog/feature-policy/&lt;/p&gt;&lt;p&gt;https://scotthelme.co.uk/a-new-security-header-feature-policy/&lt;/p&gt;&lt;p&gt;https://w3c.github.io/webappsec-feature-policy/&lt;/p&gt;&lt;p&gt;https://www.smashingmagazine.com/2018/12/feature-policy/&lt;/p&gt;</reference>
+						<cweid>693</cweid>
+						<wascid>15</wascid>
+						<sourceid>1</sourceid>
+					</alertitem>
+				
+				
+					<alertitem>
+						<pluginid>10037</pluginid>
+						<alertRef>10037</alertRef>
+						<alert>Server Leaks Information via &quot;X-Powered-By&quot; HTTP Response Header Field(s)</alert>
+						<name>Server Leaks Information via &quot;X-Powered-By&quot; HTTP Response Header Field(s)</name>
+						<riskcode>1</riskcode>
+						<confidence>2</confidence>
+						<riskdesc>Low (Medium)</riskdesc>
+						<confidencedesc>Medium</confidencedesc>
+						<desc>&lt;p&gt;The web/application server is leaking information via one or more &quot;X-Powered-By&quot; HTTP response headers. Access to such information may facilitate attackers identifying other frameworks/components your web application is reliant upon and the vulnerabilities such components may be subject to.&lt;/p&gt;</desc>
+						<instances>
+							
+								<instance>
+									<uri>http://host.docker.internal:3000</uri>
+									<nodeName>http://host.docker.internal:3000</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>X-Powered-By: Next.js</evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/</uri>
+									<nodeName>http://host.docker.internal:3000/</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>X-Powered-By: Next.js</evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/robots.txt</uri>
+									<nodeName>http://host.docker.internal:3000/robots.txt</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>X-Powered-By: Next.js</evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/sitemap.xml</uri>
+									<nodeName>http://host.docker.internal:3000/sitemap.xml</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>X-Powered-By: Next.js</evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+						</instances>
+						<count>4</count>
+						<systemic>false</systemic>
+						<solution>&lt;p&gt;Ensure that your web server, application server, load balancer, etc. is configured to suppress &quot;X-Powered-By&quot; headers.&lt;/p&gt;</solution>
+						<otherinfo></otherinfo>
+						<reference>&lt;p&gt;https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/01-Information_Gathering/08-Fingerprint_Web_Application_Framework&lt;/p&gt;&lt;p&gt;https://www.troyhunt.com/shhh-dont-let-your-response-headers/&lt;/p&gt;</reference>
+						<cweid>497</cweid>
+						<wascid>13</wascid>
+						<sourceid>9</sourceid>
+					</alertitem>
+				
+				
+					<alertitem>
+						<pluginid>10096</pluginid>
+						<alertRef>10096</alertRef>
+						<alert>Timestamp Disclosure - Unix</alert>
+						<name>Timestamp Disclosure - Unix</name>
+						<riskcode>1</riskcode>
+						<confidence>1</confidence>
+						<riskdesc>Low (Low)</riskdesc>
+						<confidencedesc>Low</confidencedesc>
+						<desc>&lt;p&gt;A timestamp was disclosed by the application/web server. - Unix&lt;/p&gt;</desc>
+						<instances>
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/chunks/node_modules_next_dist_compiled_react-dom_096_9a-._.js</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/chunks/node_modules_next_dist_compiled_react-dom_096_9a-._.js</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>2080374784</evidence>
+									<otherinfo>2080374784, which evaluates to: 2035-12-04 09:53:04.</otherinfo>
+								</instance>
+							
+						</instances>
+						<count>1</count>
+						<systemic>false</systemic>
+						<solution>&lt;p&gt;Manually confirm that the timestamp data is not sensitive, and that the data cannot be aggregated to disclose exploitable patterns.&lt;/p&gt;</solution>
+						<otherinfo>&lt;p&gt;2080374784, which evaluates to: 2035-12-04 09:53:04.&lt;/p&gt;</otherinfo>
+						<reference>&lt;p&gt;https://cwe.mitre.org/data/definitions/200.html&lt;/p&gt;</reference>
+						<cweid>497</cweid>
+						<wascid>13</wascid>
+						<sourceid>82</sourceid>
+					</alertitem>
+				
+				
+					<alertitem>
+						<pluginid>10021</pluginid>
+						<alertRef>10021</alertRef>
+						<alert>X-Content-Type-Options Header Missing</alert>
+						<name>X-Content-Type-Options Header Missing</name>
+						<riskcode>1</riskcode>
+						<confidence>2</confidence>
+						<riskdesc>Low (Medium)</riskdesc>
+						<confidencedesc>Medium</confidencedesc>
+						<desc>&lt;p&gt;The Anti-MIME-Sniffing header X-Content-Type-Options was not set to &apos;nosniff&apos;. This allows older versions of Internet Explorer and Chrome to perform MIME-sniffing on the response body, potentially causing the response body to be interpreted and displayed as a content type other than the declared content type. Current (early 2014) and legacy versions of Firefox will use the declared content type (if one is set), rather than performing MIME-sniffing.&lt;/p&gt;</desc>
+						<instances>
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/</uri>
+									<nodeName>http://host.docker.internal:3000/</nodeName>
+									<method>GET</method>
+									<param>x-content-type-options</param>
+									<attack></attack>
+									<evidence></evidence>
+									<otherinfo>This issue still applies to error type pages (401, 403, 500, etc.) as those pages are often still affected by injection issues, in which case there is still concern for browsers sniffing pages away from their actual content type.
+At &quot;High&quot; threshold this scan rule will not alert on client or server error responses.</otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_1xx01vv._.js</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_1xx01vv._.js</nodeName>
+									<method>GET</method>
+									<param>x-content-type-options</param>
+									<attack></attack>
+									<evidence></evidence>
+									<otherinfo>This issue still applies to error type pages (401, 403, 500, etc.) as those pages are often still affected by injection issues, in which case there is still concern for browsers sniffing pages away from their actual content type.
+At &quot;High&quot; threshold this scan rule will not alert on client or server error responses.</otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/media/03fc1b4a8d284b5e-s.p.0wiir8udbzjvx.woff2</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/media/03fc1b4a8d284b5e-s.p.0wiir8udbzjvx.woff2</nodeName>
+									<method>GET</method>
+									<param>x-content-type-options</param>
+									<attack></attack>
+									<evidence></evidence>
+									<otherinfo>This issue still applies to error type pages (401, 403, 500, etc.) as those pages are often still affected by injection issues, in which case there is still concern for browsers sniffing pages away from their actual content type.
+At &quot;High&quot; threshold this scan rule will not alert on client or server error responses.</otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/media/23b7a97ae3b5c134-s.p.226pwps5o-gq_.woff2</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/media/23b7a97ae3b5c134-s.p.226pwps5o-gq_.woff2</nodeName>
+									<method>GET</method>
+									<param>x-content-type-options</param>
+									<attack></attack>
+									<evidence></evidence>
+									<otherinfo>This issue still applies to error type pages (401, 403, 500, etc.) as those pages are often still affected by injection issues, in which case there is still concern for browsers sniffing pages away from their actual content type.
+At &quot;High&quot; threshold this scan rule will not alert on client or server error responses.</otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/media/99e609270109b47d-s.p.40sczeszzbjw1.woff2</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/media/99e609270109b47d-s.p.40sczeszzbjw1.woff2</nodeName>
+									<method>GET</method>
+									<param>x-content-type-options</param>
+									<attack></attack>
+									<evidence></evidence>
+									<otherinfo>This issue still applies to error type pages (401, 403, 500, etc.) as those pages are often still affected by injection issues, in which case there is still concern for browsers sniffing pages away from their actual content type.
+At &quot;High&quot; threshold this scan rule will not alert on client or server error responses.</otherinfo>
+								</instance>
+							
+						</instances>
+						<count>5</count>
+						<systemic>true</systemic>
+						<solution>&lt;p&gt;Ensure that the application/web server sets the Content-Type header appropriately, and that it sets the X-Content-Type-Options header to &apos;nosniff&apos; for all web pages.&lt;/p&gt;&lt;p&gt;If possible, ensure that the end user uses a standards-compliant and modern web browser that does not perform MIME-sniffing at all, or that can be directed by the web application/web server to not perform MIME-sniffing.&lt;/p&gt;</solution>
+						<otherinfo>&lt;p&gt;This issue still applies to error type pages (401, 403, 500, etc.) as those pages are often still affected by injection issues, in which case there is still concern for browsers sniffing pages away from their actual content type.&lt;/p&gt;&lt;p&gt;At &quot;High&quot; threshold this scan rule will not alert on client or server error responses.&lt;/p&gt;</otherinfo>
+						<reference>&lt;p&gt;https://learn.microsoft.com/en-us/previous-versions/windows/internet-explorer/ie-developer/compatibility/gg622941(v=vs.85)&lt;/p&gt;&lt;p&gt;https://owasp.org/www-community/Security_Headers&lt;/p&gt;</reference>
+						<cweid>693</cweid>
+						<wascid>15</wascid>
+						<sourceid>1</sourceid>
+					</alertitem>
+				
+				
+					<alertitem>
+						<pluginid>10027</pluginid>
+						<alertRef>10027</alertRef>
+						<alert>Information Disclosure - Suspicious Comments</alert>
+						<name>Information Disclosure - Suspicious Comments</name>
+						<riskcode>0</riskcode>
+						<confidence>2</confidence>
+						<riskdesc>Informational (Medium)</riskdesc>
+						<confidencedesc>Medium</confidencedesc>
+						<desc>&lt;p&gt;The response appears to contain suspicious comments which may help an attacker.&lt;/p&gt;</desc>
+						<instances>
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence> find the pathname, query and hash and return</evidence>
+									<otherinfo>The following pattern was used: \bQUERY\b and was detected in likely comment: &quot;/**
+ * Given a path this function will find the pathname, query and hash and return
+ * them. This is useful to parse full paths &quot;, see evidence field for the suspicious comment/snippet.</otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence> with null captured later.</evidence>
+									<otherinfo>The following pattern was used: \bLATER\b and was detected in likely comment: &quot;// (e.g., in onRecoverableError) with null captured later.&quot;, see evidence field for the suspicious comment/snippet.</otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>// TODO: We should hoist th</evidence>
+									<otherinfo>The following pattern was used: \bTODO\b and was detected 16 times, the first in likely comment: &quot;// TODO: We should hoist the search params out of the FlightRouterState&quot;, see evidence field for the suspicious comment/snippet.</otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>// from user code generated by W</evidence>
+									<otherinfo>The following pattern was used: \bUSER\b and was detected 7 times, the first in likely comment: &quot;// from user code generated by Webpack. For more information see&quot;, see evidence field for the suspicious comment/snippet.</otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>// where rust does not have </evidence>
+									<otherinfo>The following pattern was used: \bWHERE\b and was detected 7 times, the first in likely comment: &quot;// where rust does not have easy way to repreesnt js&apos;s 53-bit float number type for the matching&quot;, see evidence field for the suspicious comment/snippet.</otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>ntime expose Object from vm, being that kind</evidence>
+									<otherinfo>The following pattern was used: \bFROM\b and was detected 32 times, the first in likely comment: &quot;/**
+   * this used to be previously:
+   *
+   * `return prototype === null || prototype === Object.prototype`
+   *
+   * but Edge &quot;, see evidence field for the suspicious comment/snippet.</otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>to report this as a bug in Next.js.</evidence>
+									<otherinfo>The following pattern was used: \bBUG\b and was detected 2 times, the first in likely comment: &quot;// user to report this as a bug in Next.js.&quot;, see evidence field for the suspicious comment/snippet.</otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/chunks/node_modules_next_dist_compiled_1amofcm._.js</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/chunks/node_modules_next_dist_compiled_1amofcm._.js</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>// TODO: rename these field</evidence>
+									<otherinfo>The following pattern was used: \bTODO\b and was detected 3 times, the first in likely comment: &quot;// TODO: rename these fields to something more meaningful.&quot;, see evidence field for the suspicious comment/snippet.</otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/chunks/node_modules_next_dist_compiled_1amofcm._.js</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/chunks/node_modules_next_dist_compiled_1amofcm._.js</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>ogic is copy-pasted from similar logic in th</evidence>
+									<otherinfo>The following pattern was used: \bFROM\b and was detected 4 times, the first in likely comment: &quot;// This logic is copy-pasted from similar logic in the DevTools backend.&quot;, see evidence field for the suspicious comment/snippet.</otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/chunks/node_modules_recharts_es6_component_0t5m2pp._.js</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/chunks/node_modules_recharts_es6_component_0t5m2pp._.js</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>// Magic number from d3</evidence>
+									<otherinfo>The following pattern was used: \bFROM\b and was detected 3 times, the first in likely comment: &quot;// Magic number from d3&quot;, see evidence field for the suspicious comment/snippet.</otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/chunks/node_modules_recharts_es6_component_0t5m2pp._.js</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/chunks/node_modules_recharts_es6_component_0t5m2pp._.js</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>// TODO: Generic Polar Hook</evidence>
+									<otherinfo>The following pattern was used: \bTODO\b and was detected in likely comment: &quot;// TODO: Generic Polar Hook&quot;, see evidence field for the suspicious comment/snippet.</otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/chunks/node_modules_recharts_es6_component_0t5m2pp._.js</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/chunks/node_modules_recharts_es6_component_0t5m2pp._.js</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>// where to trim.  This shou</evidence>
+									<otherinfo>The following pattern was used: \bWHERE\b and was detected in likely comment: &quot;// where to trim.  This should not happen :tm:&quot;, see evidence field for the suspicious comment/snippet.</otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/chunks/node_modules_recharts_es6_component_0t5m2pp._.js</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/chunks/node_modules_recharts_es6_component_0t5m2pp._.js</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>bers;
+     * if the user provides a zero or </evidence>
+									<otherinfo>The following pattern was used: \bUSER\b and was detected 3 times, the first in likely comment: &quot;/*
+     * If it just so happens that the combination of width, height, and aspect ratio
+     * results in fixed dimensions, then&quot;, see evidence field for the suspicious comment/snippet.</otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/chunks/src_0siywz6._.js</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/chunks/src_0siywz6._.js</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>// Fetch user profile from /api/a</evidence>
+									<otherinfo>The following pattern was used: \bUSER\b and was detected 15 times, the first in likely comment: &quot;// Fetch user profile from /api/auth/me&quot;, see evidence field for the suspicious comment/snippet.</otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/chunks/src_0siywz6._.js</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/chunks/src_0siywz6._.js</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>d so we can migrate later. Cross-component sy</evidence>
+									<otherinfo>The following pattern was used: \bLATER\b and was detected in likely comment: &quot;// other. Versioned so we can migrate later. Cross-component sync via a&quot;, see evidence field for the suspicious comment/snippet.</otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/chunks/src_0siywz6._.js</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/chunks/src_0siywz6._.js</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>o a toast triggered from inside a dialog (e.</evidence>
+									<otherinfo>The following pattern was used: \bFROM\b and was detected 7 times, the first in likely comment: &quot;// z-50) so a toast triggered from inside a dialog (e.g. &quot;Copied CVE id&quot;&quot;, see evidence field for the suspicious comment/snippet.</otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/chunks/src_0siywz6._.js</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/chunks/src_0siywz6._.js</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>ort signal so React Query cleanup still works</evidence>
+									<otherinfo>The following pattern was used: \bQUERY\b and was detected 7 times, the first in likely comment: &quot;// Forward caller&apos;s abort signal so React Query cleanup still works&quot;, see evidence field for the suspicious comment/snippet.</otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/chunks/src_0siywz6._.js</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/chunks/src_0siywz6._.js</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>rovides a synthetic admin context so the app
+</evidence>
+									<otherinfo>The following pattern was used: \bADMIN\b and was detected 5 times, the first in likely comment: &quot;/**
+ * Authentication context and provider for HCL IAM OIDC integration.
+ *
+ * Wraps the React tree with auth state: user identi&quot;, see evidence field for the suspicious comment/snippet.</otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/chunks/turbopack-_01_ro95._.js</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/chunks/turbopack-_01_ro95._.js</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence> a Refresh Boundary later.</evidence>
+									<otherinfo>The following pattern was used: \bLATER\b and was detected in likely comment: &quot;// still a Refresh Boundary later.&quot;, see evidence field for the suspicious comment/snippet.</otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/chunks/turbopack-_01_ro95._.js</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/chunks/turbopack-_01_ro95._.js</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>/ same URL: https://bugs.webkit.org/show_bug</evidence>
+									<otherinfo>The following pattern was used: \bBUGS\b and was detected in likely comment: &quot;// same URL: https://bugs.webkit.org/show_bug.cgi?id=187726&quot;, see evidence field for the suspicious comment/snippet.</otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/chunks/turbopack-_01_ro95._.js</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/chunks/turbopack-_01_ro95._.js</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>// TODO(alexkirsz) Do we ne</evidence>
+									<otherinfo>The following pattern was used: \bTODO\b and was detected 5 times, the first in likely comment: &quot;// TODO(alexkirsz) Do we need this check?&quot;, see evidence field for the suspicious comment/snippet.</otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/chunks/turbopack-_01_ro95._.js</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/chunks/turbopack-_01_ro95._.js</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>ative to the origin where a chunk can be fetc</evidence>
+									<otherinfo>The following pattern was used: \bWHERE\b and was detected 4 times, the first in likely comment: &quot;/**
+ * Returns the URL relative to the origin where a chunk can be fetched from.
+ */&quot;, see evidence field for the suspicious comment/snippet.</otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/chunks/turbopack-_01_ro95._.js</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/chunks/turbopack-_01_ro95._.js</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>ead of accessing it from the module object t</evidence>
+									<otherinfo>The following pattern was used: \bFROM\b and was detected 25 times, the first in likely comment: &quot;// We need to store this here instead of accessing it from the module object to:&quot;, see evidence field for the suspicious comment/snippet.</otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/chunks/turbopack-_01_ro95._.js</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/chunks/turbopack-_01_ro95._.js</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>emove fragments and query parameters since th</evidence>
+									<otherinfo>The following pattern was used: \bQUERY\b and was detected 6 times, the first in likely comment: &quot;/**
+ * Remove fragments and query parameters since they are never part of the context map keys
+ *
+ * This matches how we parse p&quot;, see evidence field for the suspicious comment/snippet.</otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/chunks/turbopack-_01_ro95._.js</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/chunks/turbopack-_01_ro95._.js</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>es the HMR API that user code calls (module.</evidence>
+									<otherinfo>The following pattern was used: \bUSER\b and was detected 2 times, the first in likely comment: &quot;/**
+ * Creates the module.hot API object and its internal state.
+ * This provides the HMR API that user code calls (module.hot.a&quot;, see evidence field for the suspicious comment/snippet.</otherinfo>
+								</instance>
+							
+						</instances>
+						<count>25</count>
+						<systemic>false</systemic>
+						<solution>&lt;p&gt;Remove all comments that return information that may help an attacker and fix any underlying problems they refer to.&lt;/p&gt;</solution>
+						<otherinfo>&lt;p&gt;The following pattern was used: \bQUERY\b and was detected in likely comment: &quot;/**&lt;/p&gt;&lt;p&gt; * Given a path this function will find the pathname, query and hash and return&lt;/p&gt;&lt;p&gt; * them. This is useful to parse full paths &quot;, see evidence field for the suspicious comment/snippet.&lt;/p&gt;</otherinfo>
+						<reference></reference>
+						<cweid>615</cweid>
+						<wascid>13</wascid>
+						<sourceid>47</sourceid>
+					</alertitem>
+				
+				
+					<alertitem>
+						<pluginid>10109</pluginid>
+						<alertRef>10109</alertRef>
+						<alert>Modern Web Application</alert>
+						<name>Modern Web Application</name>
+						<riskcode>0</riskcode>
+						<confidence>2</confidence>
+						<riskdesc>Informational (Medium)</riskdesc>
+						<confidencedesc>Medium</confidencedesc>
+						<desc>&lt;p&gt;The application appears to be a modern web application. If you need to explore it automatically then the Client Spider may well be more effective than the standard one.&lt;/p&gt;</desc>
+						<instances>
+							
+								<instance>
+									<uri>http://host.docker.internal:3000</uri>
+									<nodeName>http://host.docker.internal:3000</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>&lt;script src=&quot;/_next/static/chunks/node_modules_next_dist_compiled_next-devtools_index_090k2jm.js&quot; async=&quot;&quot;&gt;&lt;/script&gt;</evidence>
+									<otherinfo>No links have been found while there are scripts, which is an indication that this is a modern web application.</otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/</uri>
+									<nodeName>http://host.docker.internal:3000/</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>&lt;script src=&quot;/_next/static/chunks/node_modules_next_dist_compiled_next-devtools_index_090k2jm.js&quot; async=&quot;&quot;&gt;&lt;/script&gt;</evidence>
+									<otherinfo>No links have been found while there are scripts, which is an indication that this is a modern web application.</otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/robots.txt</uri>
+									<nodeName>http://host.docker.internal:3000/robots.txt</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>&lt;script src=&quot;/_next/static/chunks/node_modules_next_dist_compiled_next-devtools_index_090k2jm.js&quot; async=&quot;&quot;&gt;&lt;/script&gt;</evidence>
+									<otherinfo>No links have been found while there are scripts, which is an indication that this is a modern web application.</otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/sitemap.xml</uri>
+									<nodeName>http://host.docker.internal:3000/sitemap.xml</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>&lt;script src=&quot;/_next/static/chunks/node_modules_next_dist_compiled_next-devtools_index_090k2jm.js&quot; async=&quot;&quot;&gt;&lt;/script&gt;</evidence>
+									<otherinfo>No links have been found while there are scripts, which is an indication that this is a modern web application.</otherinfo>
+								</instance>
+							
+						</instances>
+						<count>4</count>
+						<systemic>false</systemic>
+						<solution>&lt;p&gt;This is an informational alert and so no changes are required.&lt;/p&gt;</solution>
+						<otherinfo>&lt;p&gt;No links have been found while there are scripts, which is an indication that this is a modern web application.&lt;/p&gt;</otherinfo>
+						<reference></reference>
+						<cweid>-1</cweid>
+						<wascid>-1</wascid>
+						<sourceid>9</sourceid>
+					</alertitem>
+				
+				
+					<alertitem>
+						<pluginid>10049</pluginid>
+						<alertRef>10049-3</alertRef>
+						<alert>Storable and Cacheable Content</alert>
+						<name>Storable and Cacheable Content</name>
+						<riskcode>0</riskcode>
+						<confidence>2</confidence>
+						<riskdesc>Informational (Medium)</riskdesc>
+						<confidencedesc>Medium</confidencedesc>
+						<desc>&lt;p&gt;The response contents are storable by caching components such as proxy servers, and may be retrieved directly from the cache, rather than from the origin server by the caching servers, in response to similar requests from other users. If the response data is sensitive, personal or user-specific, this may result in sensitive information being leaked. In some cases, this may even result in a user gaining complete control of the session of another user, depending on the configuration of the caching components in use in their environment. This is primarily an issue where &quot;shared&quot; caching servers such as &quot;proxy&quot; caches are configured on the local network. This configuration is typically found in corporate or educational environments, for instance.&lt;/p&gt;</desc>
+						<instances>
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/media/03fc1b4a8d284b5e-s.p.0wiir8udbzjvx.woff2</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/media/03fc1b4a8d284b5e-s.p.0wiir8udbzjvx.woff2</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>max-age=31536000</evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/media/23b7a97ae3b5c134-s.p.226pwps5o-gq_.woff2</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/media/23b7a97ae3b5c134-s.p.226pwps5o-gq_.woff2</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>max-age=31536000</evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/media/99e609270109b47d-s.p.40sczeszzbjw1.woff2</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/media/99e609270109b47d-s.p.40sczeszzbjw1.woff2</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>max-age=31536000</evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/media/effe91970fc4db64-s.p.0oace-s_gkfks.woff2</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/media/effe91970fc4db64-s.p.0oace-s_gkfks.woff2</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>max-age=31536000</evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+						</instances>
+						<count>4</count>
+						<systemic>false</systemic>
+						<solution>&lt;p&gt;Validate that the response does not contain sensitive, personal or user-specific information. If it does, consider the use of the following HTTP response headers, to limit, or prevent the content being stored and retrieved from the cache by another user:&lt;/p&gt;&lt;p&gt;Cache-Control: no-cache, no-store, must-revalidate, private&lt;/p&gt;&lt;p&gt;Pragma: no-cache&lt;/p&gt;&lt;p&gt;Expires: 0&lt;/p&gt;&lt;p&gt;This configuration directs both HTTP 1.0 and HTTP 1.1 compliant caching servers to not store the response, and to not retrieve the response (without validation) from the cache, in response to a similar request.&lt;/p&gt;</solution>
+						<otherinfo></otherinfo>
+						<reference>&lt;p&gt;https://datatracker.ietf.org/doc/html/rfc7234&lt;/p&gt;&lt;p&gt;https://datatracker.ietf.org/doc/html/rfc7231&lt;/p&gt;&lt;p&gt;https://www.w3.org/Protocols/rfc2616/rfc2616-sec13.html&lt;/p&gt;</reference>
+						<cweid>524</cweid>
+						<wascid>13</wascid>
+						<sourceid>35</sourceid>
+					</alertitem>
+				
+				
+					<alertitem>
+						<pluginid>10049</pluginid>
+						<alertRef>10049-2</alertRef>
+						<alert>Storable but Non-Cacheable Content</alert>
+						<name>Storable but Non-Cacheable Content</name>
+						<riskcode>0</riskcode>
+						<confidence>2</confidence>
+						<riskdesc>Informational (Medium)</riskdesc>
+						<confidencedesc>Medium</confidencedesc>
+						<desc>&lt;p&gt;The response contents are storable by caching components such as proxy servers, but will not be retrieved directly from the cache, without validating the request upstream, in response to similar requests from other users.&lt;/p&gt;</desc>
+						<instances>
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/</uri>
+									<nodeName>http://host.docker.internal:3000/</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>no-cache</evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_1xx01vv._.js</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_1xx01vv._.js</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>no-cache</evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static/chunks/_1anvha4._.js</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static/chunks/_1anvha4._.js</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>no-cache</evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/robots.txt</uri>
+									<nodeName>http://host.docker.internal:3000/robots.txt</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>no-cache</evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/sitemap.xml</uri>
+									<nodeName>http://host.docker.internal:3000/sitemap.xml</nodeName>
+									<method>GET</method>
+									<param></param>
+									<attack></attack>
+									<evidence>no-cache</evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+						</instances>
+						<count>5</count>
+						<systemic>true</systemic>
+						<solution></solution>
+						<otherinfo></otherinfo>
+						<reference>&lt;p&gt;https://datatracker.ietf.org/doc/html/rfc7234&lt;/p&gt;&lt;p&gt;https://datatracker.ietf.org/doc/html/rfc7231&lt;/p&gt;&lt;p&gt;https://www.w3.org/Protocols/rfc2616/rfc2616-sec13.html&lt;/p&gt;</reference>
+						<cweid>524</cweid>
+						<wascid>13</wascid>
+						<sourceid>1</sourceid>
+					</alertitem>
+				
+				
+					<alertitem>
+						<pluginid>10104</pluginid>
+						<alertRef>10104</alertRef>
+						<alert>User Agent Fuzzer</alert>
+						<name>User Agent Fuzzer</name>
+						<riskcode>0</riskcode>
+						<confidence>2</confidence>
+						<riskdesc>Informational (Medium)</riskdesc>
+						<confidencedesc>Medium</confidencedesc>
+						<desc>&lt;p&gt;Check for differences in response based on fuzzed User Agent (eg. mobile sites, access as a Search Engine Crawler). Compares the response statuscode and the hashcode of the response body with the original response.&lt;/p&gt;</desc>
+						<instances>
+							
+								<instance>
+									<uri>http://host.docker.internal:3000</uri>
+									<nodeName>http://host.docker.internal:3000</nodeName>
+									<method>GET</method>
+									<param>Header User-Agent</param>
+									<attack>Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 6.1)</attack>
+									<evidence></evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/</uri>
+									<nodeName>http://host.docker.internal:3000/</nodeName>
+									<method>GET</method>
+									<param>Header User-Agent</param>
+									<attack>Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 6.1)</attack>
+									<evidence></evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next</uri>
+									<nodeName>http://host.docker.internal:3000/_next</nodeName>
+									<method>GET</method>
+									<param>Header User-Agent</param>
+									<attack>Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 6.1)</attack>
+									<evidence></evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static</nodeName>
+									<method>GET</method>
+									<param>Header User-Agent</param>
+									<attack>Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.0)</attack>
+									<evidence></evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+							
+								<instance>
+									<uri>http://host.docker.internal:3000/_next/static</uri>
+									<nodeName>http://host.docker.internal:3000/_next/static</nodeName>
+									<method>GET</method>
+									<param>Header User-Agent</param>
+									<attack>Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 6.1)</attack>
+									<evidence></evidence>
+									<otherinfo></otherinfo>
+								</instance>
+							
+						</instances>
+						<count>5</count>
+						<systemic>true</systemic>
+						<solution></solution>
+						<otherinfo></otherinfo>
+						<reference>&lt;p&gt;https://owasp.org/wstg&lt;/p&gt;</reference>
+						<cweid>0</cweid>
+						<wascid>0</wascid>
+						<sourceid>851</sourceid>
+					</alertitem>
+				
+			</alerts>
+		</site>
+	
+	
+		<insights>
+			
+				<insight>
+					<level>Medium</level>
+					<reason>Exceeded Low</reason>
+					<site></site>
+					<key>insight.memory.usage</key>
+					<description>Percentage of memory used</description>
+					<statistic>87</statistic>
+				</insight>
+			
+			
+				<insight>
+					<level>Low</level>
+					<reason>Warning</reason>
+					<site></site>
+					<key>insight.log.warn</key>
+					<description>ZAP warnings logged - see the zap.log file for details</description>
+					<statistic>26</statistic>
+				</insight>
+			
+			
+				<insight>
+					<level>Low</level>
+					<reason>Exceeded High</reason>
+					<site>http://host.docker.internal:3000</site>
+					<key>insight.code.4xx</key>
+					<description>Percentage of responses with status code 4xx</description>
+					<statistic>71</statistic>
+				</insight>
+			
+			
+				<insight>
+					<level>Low</level>
+					<reason>Exceeded High</reason>
+					<site>http://host.docker.internal:3000</site>
+					<key>insight.response.slow</key>
+					<description>Percentage of slow responses</description>
+					<statistic>53</statistic>
+				</insight>
+			
+			
+				<insight>
+					<level>Info</level>
+					<reason>Informational</reason>
+					<site></site>
+					<key>insight.network.failure</key>
+					<description>Percentage of network failures</description>
+					<statistic>1</statistic>
+				</insight>
+			
+			
+				<insight>
+					<level>Info</level>
+					<reason>Informational</reason>
+					<site>http://host.docker.internal:3000</site>
+					<key>insight.code.2xx</key>
+					<description>Percentage of responses with status code 2xx</description>
+					<statistic>26</statistic>
+				</insight>
+			
+			
+				<insight>
+					<level>Info</level>
+					<reason>Informational</reason>
+					<site>http://host.docker.internal:3000</site>
+					<key>insight.code.3xx</key>
+					<description>Percentage of responses with status code 3xx</description>
+					<statistic>1</statistic>
+				</insight>
+			
+			
+				<insight>
+					<level>Info</level>
+					<reason>Informational</reason>
+					<site>http://host.docker.internal:3000</site>
+					<key>insight.code.5xx</key>
+					<description>Percentage of responses with status code 5xx</description>
+					<statistic>1</statistic>
+				</insight>
+			
+			
+				<insight>
+					<level>Info</level>
+					<reason>Informational</reason>
+					<site>http://host.docker.internal:3000</site>
+					<key>insight.endpoint.ctype.application/javascript</key>
+					<description>Percentage of endpoints with content type application/javascript</description>
+					<statistic>73</statistic>
+				</insight>
+			
+			
+				<insight>
+					<level>Info</level>
+					<reason>Informational</reason>
+					<site>http://host.docker.internal:3000</site>
+					<key>insight.endpoint.ctype.font/woff2</key>
+					<description>Percentage of endpoints with content type font/woff2</description>
+					<statistic>9</statistic>
+				</insight>
+			
+			
+				<insight>
+					<level>Info</level>
+					<reason>Informational</reason>
+					<site>http://host.docker.internal:3000</site>
+					<key>insight.endpoint.ctype.text/css</key>
+					<description>Percentage of endpoints with content type text/css</description>
+					<statistic>2</statistic>
+				</insight>
+			
+			
+				<insight>
+					<level>Info</level>
+					<reason>Informational</reason>
+					<site>http://host.docker.internal:3000</site>
+					<key>insight.endpoint.ctype.text/html</key>
+					<description>Percentage of endpoints with content type text/html</description>
+					<statistic>11</statistic>
+				</insight>
+			
+			
+				<insight>
+					<level>Info</level>
+					<reason>Informational</reason>
+					<site>http://host.docker.internal:3000</site>
+					<key>insight.endpoint.method.GET</key>
+					<description>Percentage of endpoints with method GET</description>
+					<statistic>100</statistic>
+				</insight>
+			
+			
+				<insight>
+					<level>Info</level>
+					<reason>Informational</reason>
+					<site>http://host.docker.internal:3000</site>
+					<key>insight.endpoint.total</key>
+					<description>Count of total endpoints</description>
+					<statistic>42</statistic>
+				</insight>
+			
+			
+				<insight>
+					<level>Info</level>
+					<reason>Informational</reason>
+					<site>https://firefox-settings-attachments.cdn.mozilla.net</site>
+					<key>insight.code.2xx</key>
+					<description>Percentage of responses with status code 2xx</description>
+					<statistic>100</statistic>
+				</insight>
+			
+			
+				<insight>
+					<level>Info</level>
+					<reason>Informational</reason>
+					<site>https://firefox-settings-attachments.cdn.mozilla.net</site>
+					<key>insight.endpoint.ctype.text/plain</key>
+					<description>Percentage of endpoints with content type text/plain</description>
+					<statistic>100</statistic>
+				</insight>
+			
+			
+				<insight>
+					<level>Info</level>
+					<reason>Informational</reason>
+					<site>https://firefox-settings-attachments.cdn.mozilla.net</site>
+					<key>insight.endpoint.method.GET</key>
+					<description>Percentage of endpoints with method GET</description>
+					<statistic>100</statistic>
+				</insight>
+			
+			
+				<insight>
+					<level>Info</level>
+					<reason>Informational</reason>
+					<site>https://firefox-settings-attachments.cdn.mozilla.net</site>
+					<key>insight.endpoint.total</key>
+					<description>Count of total endpoints</description>
+					<statistic>3</statistic>
+				</insight>
+			
+			
+				<insight>
+					<level>Info</level>
+					<reason>Informational</reason>
+					<site>https://firefox-settings-attachments.cdn.mozilla.net</site>
+					<key>insight.response.slow</key>
+					<description>Percentage of slow responses</description>
+					<statistic>100</statistic>
+				</insight>
+			
+			
+				<insight>
+					<level>Info</level>
+					<reason>Informational</reason>
+					<site>https://host.docker.internal:3000</site>
+					<key>insight.endpoint.method.GET</key>
+					<description>Percentage of endpoints with method GET</description>
+					<statistic>100</statistic>
+				</insight>
+			
+			
+				<insight>
+					<level>Info</level>
+					<reason>Informational</reason>
+					<site>https://host.docker.internal:3000</site>
+					<key>insight.endpoint.total</key>
+					<description>Count of total endpoints</description>
+					<statistic>1</statistic>
+				</insight>
+			
+		</insights>
+	
+	
+	
+</OWASPZAPReport>

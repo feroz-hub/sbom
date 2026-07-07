@@ -64,7 +64,7 @@ class LifecycleProviderUpdateRequest(BaseModel):
 class LifecycleProviderSecretRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    secret_name: str = Field(default="api_key", min_length=1, max_length=64)
+    secret_name: str = Field(default="api_key", min_length=1, max_length=64)  # nosec B107: secret field name, not a credential value
     secret_value: str = Field(..., min_length=1, max_length=4096)
 
 

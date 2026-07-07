@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import logging
 from pathlib import Path
 
 # Load .env file if present before any config resolution
@@ -58,8 +59,8 @@ def _resolve_database_url() -> str:
                 if isinstance(e, RuntimeError):
                     raise e
             return u
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger("sbom.db").warning("settings_database_url_unavailable: %s", exc)
 
     # If DATABASE_URL is missing, we only allow SQLite fallback if ALLOW_SQLITE is explicitly true.
     allow_sqlite = os.getenv("ALLOW_SQLITE", "false").lower() == "true"

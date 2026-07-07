@@ -28,6 +28,7 @@ from threading import Lock
 from typing import Any
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from .providers.base import BudgetExceededError
@@ -307,8 +308,8 @@ class BudgetGuard:
                 from .observability import update_budget_remaining
 
                 update_budget_remaining(remaining_usd=max(self._caps.per_day_org_usd - self._counter.get(), 0.0))
-            except Exception:  # noqa: BLE001 — telemetry failure must not break a successful call
-                pass
+            except Exception as exc:  # noqa: BLE001 — telemetry failure must not break a successful call
+                log.debug("ai.cost.telemetry_update_failed: %s", exc)
 
     def spent_today(self) -> float:
         return self._spent_today()
@@ -400,5 +401,5 @@ def write_usage_log_row(
         )
         try:
             db.rollback()
-        except Exception:
-            pass
+        except SQLAlchemyError:
+            log.warning("ai.cost.ledger_rollback_failed", exc_info=True)

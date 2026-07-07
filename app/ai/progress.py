@@ -382,10 +382,10 @@ class RedisProgressStore:
             )
             try:
                 self._client.zrem(self._run_batches_index(run_id), batch_id)
-            except Exception:  # noqa: BLE001
-                pass
-        except Exception:  # noqa: BLE001
-            pass
+            except Exception as exc:  # noqa: BLE001
+                log.warning("ai.progress.redis_index_clear_failed: run=%s batch=%s err=%s", run_id, batch_id, exc)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("ai.progress.redis_clear_failed: run=%s batch=%s err=%s", run_id, batch_id, exc)
 
     # Internals --------------------------------------------------------
 
@@ -404,7 +404,8 @@ class RedisProgressStore:
     def _safe_zrange_all(self, run_id: int) -> list[str]:
         try:
             members = self._client.zrange(self._run_batches_index(run_id), 0, -1)
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
+            log.warning("ai.progress.redis_zrange_failed: run=%s err=%s", run_id, exc)
             return []
         out: list[str] = []
         for m in members:

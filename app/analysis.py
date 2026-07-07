@@ -2356,7 +2356,7 @@ async def nvd_query_by_components_async(
     cpe_order = cpe_order[:10]
     total = len(cpe_order)
     LOGGER.info(
-        "NVD client: api_key=%s, sleep=%.2fs, sequential, cpe_targets=%d",
+        "NVD client configured: authenticated=%s, sleep_seconds=%.2f, sequential, cpe_targets=%d",
         bool(api_key),
         sleep_s,
         total,

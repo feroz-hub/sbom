@@ -21,7 +21,7 @@ import time
 from collections import defaultdict
 from datetime import UTC, date, datetime, timedelta
 
-from sqlalchemy import Date, String, cast, func, select, text
+from sqlalchemy import Date, String, cast, func, select
 from sqlalchemy.orm import Session
 
 from ..models import (
@@ -256,28 +256,28 @@ def _consecutive_successful_run_pairs(
         ctx = get_bound_context()
         tenant_id = ctx.tenant_id if ctx else None
 
-    tenant_filter = "AND tenant_id = :tenant_id" if tenant_id is not None else ""
-    sql = text(
-        f"""
-        WITH ordered AS (
-            SELECT
-                id,
-                sbom_id,
-                started_on,
-                ROW_NUMBER() OVER (PARTITION BY sbom_id ORDER BY id) AS rn
-            FROM analysis_run
-            WHERE run_status IN ('OK','FINDINGS','PARTIAL')
-            {tenant_filter}
+    ordered_stmt = select(
+        AnalysisRun.id.label("id"),
+        AnalysisRun.sbom_id.label("sbom_id"),
+        AnalysisRun.started_on.label("started_on"),
+        func.row_number()
+        .over(partition_by=AnalysisRun.sbom_id, order_by=AnalysisRun.id)
+        .label("rn"),
+    ).where(AnalysisRun.run_status.in_(SUCCESSFUL_RUN_STATUSES))
+    if tenant_id is not None:
+        ordered_stmt = ordered_stmt.where(AnalysisRun.tenant_id == tenant_id)
+    ordered = ordered_stmt.cte("ordered")
+    run_a = ordered.alias("run_a")
+    run_b = ordered.alias("run_b")
+    stmt = (
+        select(run_a.c.id, run_b.c.id, run_b.c.started_on)
+        .join(
+            run_b,
+            (run_a.c.sbom_id == run_b.c.sbom_id) & (run_b.c.rn == run_a.c.rn + 1),
         )
-        SELECT a.id AS run_a, b.id AS run_b, b.started_on AS run_b_started
-        FROM ordered a
-        JOIN ordered b
-          ON a.sbom_id = b.sbom_id AND b.rn = a.rn + 1
-        ORDER BY b.id
-        """
+        .order_by(run_b.c.id)
     )
-    params = {"tenant_id": tenant_id} if tenant_id is not None else {}
-    return [(row[0], row[1], row[2]) for row in db.execute(sql, params).all()]
+    return [(row[0], row[1], row[2]) for row in db.execute(stmt).all()]
 
 
 def _finding_keys_for_run(db: Session, run_id: int) -> set[tuple[str, str, str]]:

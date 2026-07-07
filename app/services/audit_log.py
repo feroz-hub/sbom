@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Literal
 
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from .audit_service import write_audit_log
@@ -87,8 +88,8 @@ def record(
         log.warning("audit.write_failed: action=%s target_id=%s err=%s", action, target_id, exc)
         try:
             db.rollback()
-        except Exception:
-            pass
+        except SQLAlchemyError:
+            log.warning("audit.rollback_failed: action=%s target_id=%s", action, target_id, exc_info=True)
 
 
 __all__ = ["AuditAction", "TargetKind", "record"]
