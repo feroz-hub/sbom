@@ -50,7 +50,7 @@ Legend — Consumer: **A**=API, **W**=Celery worker, **B**=Celery beat, **F**=Fr
 
 | Variable | Purpose | Type | Mand.? | Default | Consumer | Restart | Class | Missing |
 |---|---|---|---|---|---|---|---|---|
-| `HOST` / `PORT` / `RELOAD` | uvicorn bind (`run.py:30–32`, `app/settings.py:71–73`) | str/int/bool | No | `0.0.0.0` / 8000 / false | A | R | C/P | defaults |
+| `HOST` / `PORT` / `RELOAD` | uvicorn bind (`run.py:30–32`, `app/settings.py:71–73`) | str/int/bool | No | `127.0.0.1` / 8000 / false | A | R | C/P | local default; set `HOST=0.0.0.0` explicitly for containers or remote deployments |
 | `CORS_ORIGINS` | comma list of allowed origins (`app/settings.py:68`, validator L581) | str | No | `*` | A | R | C | `*` (dev-open) |
 | `LOG_LEVEL` / `LOG_FORMAT` / `LOG_FILE` / `LOG_MAX_MB` / `LOG_BACKUPS` | logging setup (`app/logger.py:107–111`; also Settings L550–554) | str/int | No | INFO / text / "" / 10 / 5 | A,W,B | R | C | console text INFO |
 | Upload limits | **not env** — constants `MAX_UPLOAD_BYTES=50 MiB`, `MAX_DECOMPRESSED_BYTES`, `MAX_DECOMPRESSION_RATIO`, `SBOM_SYNC_VALIDATION_BYTES` (`app/settings.py:677–693`) | — | — | — | A | code change | C | — |

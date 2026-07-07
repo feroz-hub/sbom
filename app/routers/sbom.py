@@ -229,7 +229,8 @@ def get_sbom_info(sbom_id: int, db: Session = Depends(get_db)):
         from ..analysis import _parse_purl, extract_components
 
         components = extract_components(sbom_dict)
-    except Exception:
+    except (TypeError, ValueError) as exc:
+        log.debug("sbom.info.component_preview_failed: sbom_id=%s err=%s", sbom_id, exc)
         components = []
 
     ecosystems = set()
@@ -244,8 +245,8 @@ def get_sbom_info(sbom_id: int, db: Session = Depends(get_db)):
                 parsed = _parse_purl(c["purl"])
                 if parsed.get("type"):
                     ecosystems.add(parsed["type"].lower())
-            except Exception:
-                pass
+            except (TypeError, ValueError) as exc:
+                log.debug("sbom.info.purl_parse_failed: sbom_id=%s err=%s", sbom_id, exc)
         if c.get("cpe"):
             has_cpes = True
 

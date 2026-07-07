@@ -46,8 +46,8 @@ def list_lifecycle_sources(db: Session = Depends(get_db)):
                 for safe in [config_service.safe_config_dict(db, row)]
             ]
         }
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001
+        log.warning("lifecycle.provider_status_db_failed: %s", exc)
     tracker = get_provider_status_tracker()
     return {"sources": tracker.list_sources()}
 

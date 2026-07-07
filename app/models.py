@@ -311,8 +311,8 @@ class SBOMSource(Base, SoftDeleteMixin, TenantOwnedMixin):
                     return "cyclonedx"
                 if "spdxVersion" in as_dict:
                     return "spdx"
-        except Exception:
-            pass
+        except (TypeError, json.JSONDecodeError):
+            return "—"
         return "—"
 
     @property
@@ -328,8 +328,8 @@ class SBOMSource(Base, SoftDeleteMixin, TenantOwnedMixin):
                     return str(as_dict.get("specVersion") or "—")
                 if "spdxVersion" in as_dict:
                     return str(as_dict.get("spdxVersion") or "—")
-        except Exception:
-            pass
+        except (TypeError, json.JSONDecodeError):
+            return "—"
         return "—"
 
 

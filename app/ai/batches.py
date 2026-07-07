@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from ..models import AiFixBatch
@@ -136,8 +137,8 @@ def update_batch_from_progress(
         log.warning("ai.batch.update.failed: batch=%s err=%s", batch_id, exc)
         try:
             db.rollback()
-        except Exception:  # noqa: BLE001
-            pass
+        except SQLAlchemyError:
+            log.warning("ai.batch.rollback_failed: batch=%s", batch_id, exc_info=True)
 
 
 def get_batch(db: Session, *, run_id: int, batch_id: str) -> AiFixBatch | None:

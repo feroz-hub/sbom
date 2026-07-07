@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import hashlib
 import os
 from datetime import UTC, datetime
@@ -42,7 +43,7 @@ def _cipher_from_environment() -> SecretCipher:
             key = base64.b64decode(raw.encode("ascii"), validate=True)
             if len(key) == 32:
                 return SecretCipher(key)
-        except Exception:
+        except (binascii.Error, ValueError):
             pass
         return SecretCipher(hashlib.sha256(raw.encode("utf-8")).digest())
     raise RuntimeError(
@@ -71,7 +72,7 @@ class LifecycleProviderSecretService:
             )
         ).scalar_one_or_none()
 
-    def get_secret(self, db: Session, provider_key: str, secret_name: str = "api_key") -> str | None:
+    def get_secret(self, db: Session, provider_key: str, secret_name: str = "api_key") -> str | None:  # nosec B107: secret field name, not a credential value
         row = self.get_row(db, provider_key, secret_name)
         if row is None:
             return None

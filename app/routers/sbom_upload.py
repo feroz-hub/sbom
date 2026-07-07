@@ -293,8 +293,8 @@ async def upload_sbom(
                 spec = "spdx"
                 spec_version = str(as_dict.get("spdxVersion") or "")
                 components_count = len(as_dict.get("packages") or [])
-    except Exception:
-        pass
+    except (TypeError, ValueError, json.JSONDecodeError) as exc:
+        log.debug("upload_sbom: metadata_preview_failed name=%s err=%s", sbom_name, exc)
 
     obj = SBOMSource(
         sbom_name=sbom_name.strip(),

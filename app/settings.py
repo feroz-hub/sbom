@@ -68,7 +68,7 @@ class Settings(BaseSettings):
     cors_origins: str = Field(default="*", description="Comma-separated list of allowed CORS origins")
 
     # Server Configuration
-    host: str = Field(default="0.0.0.0", description="Server bind address")
+    host: str = Field(default="127.0.0.1", description="Server bind address; set HOST=0.0.0.0 for containers")
     port: int = Field(default=8000, description="Server port")
     reload: bool = Field(default=False, description="Enable auto-reload on code changes")
 
@@ -760,7 +760,7 @@ def mask_database_url(url: str) -> str:
 
         parsed = make_url(url)
         if parsed.password:
-            return str(parsed.set(password="****"))
+            return str(parsed.set(password="****"))  # nosec B106: redaction placeholder, not a credential
         return str(parsed)
     except Exception:
         # Fallback: mask anything between ://user: and @

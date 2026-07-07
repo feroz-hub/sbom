@@ -146,9 +146,8 @@ _STOPLIST: Final[frozenset[str]] = frozenset(
 
 # Sanity: a typo in the weight constants is a load-time error rather
 # than a silently-skewed score.
-assert abs((NAME_WEIGHT + VERSION_WEIGHT + VENDOR_WEIGHT) - 1.0) < 1e-9, (
-    f"weights must sum to 1.0; got {NAME_WEIGHT} + {VERSION_WEIGHT} + {VENDOR_WEIGHT}"
-)
+if abs((NAME_WEIGHT + VERSION_WEIGHT + VENDOR_WEIGHT) - 1.0) >= 1e-9:
+    raise RuntimeError(f"weights must sum to 1.0; got {NAME_WEIGHT} + {VERSION_WEIGHT} + {VENDOR_WEIGHT}")
 
 
 @dataclass(frozen=True, slots=True)

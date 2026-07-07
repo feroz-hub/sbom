@@ -170,7 +170,7 @@ describe('mutation invalidation architectural invariant', () => {
     if (violations.length > 0) {
       // Emit the list above the assertion so CI logs are useful even when
       // the assertion's expected/actual diff truncates.
-      // eslint-disable-next-line no-console
+       
       console.error(
         '\nMutation invalidation violations:\n  ' + violations.join('\n  ') + '\n',
       );

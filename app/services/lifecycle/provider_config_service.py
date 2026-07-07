@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 
 import httpx
 from fastapi import HTTPException, Request
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from ...core.context import CurrentContext
@@ -642,7 +642,7 @@ class LifecycleVendorRecordService:
         offset: int = 0,
     ) -> tuple[list[LifecycleVendorRecord], int]:
         stmt = select(LifecycleVendorRecord)
-        count_stmt = select(LifecycleVendorRecord.id)
+        count_stmt = select(func.count(LifecycleVendorRecord.id))
         filters = []
         if search:
             needle = f"%{search.strip()}%"
@@ -655,7 +655,7 @@ class LifecycleVendorRecordService:
             stmt = stmt.where(item)
             count_stmt = count_stmt.where(item)
         rows = list(db.execute(stmt.order_by(LifecycleVendorRecord.vendor_name, LifecycleVendorRecord.product_name).offset(offset).limit(limit)).scalars())
-        total = len(db.execute(count_stmt).all())
+        total = int(db.execute(count_stmt).scalar_one())
         return rows, total
 
     def create_record(self, db: Session, payload: dict[str, Any], *, context: CurrentContext | None, request: Request | None = None) -> LifecycleVendorRecord:
