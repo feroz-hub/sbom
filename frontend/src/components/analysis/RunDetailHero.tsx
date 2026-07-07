@@ -22,7 +22,7 @@ import { useMemo } from 'react';
 import { Surface } from '@/components/ui/Surface';
 import { AnimatedSeverityBar } from '@/components/ui/AnimatedSeverityBar';
 import { cn, formatDate, formatDuration } from '@/lib/utils';
-import type { AnalysisRun, EnrichedFinding } from '@/types';
+import type { AnalysisRun, EnrichedFinding, SourceQuerySummary } from '@/types';
 
 type RunStatus = AnalysisRun['run_status'];
 
@@ -151,6 +151,21 @@ const BAND_CHIP: Record<ReturnType<typeof deriveBand>, string> = {
   CLEAR: 'bg-emerald-100 text-emerald-800 ring-emerald-300/60 dark:bg-emerald-950/60 dark:text-emerald-200 dark:ring-emerald-900/60',
 };
 
+function sourceSummaryFromRun(run: AnalysisRun): SourceQuerySummary[] {
+  if (Array.isArray(run.source_summary)) return run.source_summary;
+  if (!run.raw_report) return [];
+  try {
+    const parsed = JSON.parse(run.raw_report) as {
+      source_summary?: SourceQuerySummary[];
+      analysis_metadata?: { source_summary?: SourceQuerySummary[] };
+    };
+    const summary = parsed.source_summary ?? parsed.analysis_metadata?.source_summary;
+    return Array.isArray(summary) ? summary : [];
+  } catch {
+    return [];
+  }
+}
+
 export function RunDetailHero({ run, findings, rightSlot }: RunDetailHeroProps) {
   const status = STATUS_META[run.run_status] ?? STATUS_META.NO_DATA;
 
@@ -180,6 +195,15 @@ export function RunDetailHero({ run, findings, rightSlot }: RunDetailHeroProps) 
   };
   const totalFindings = run.metrics?.total_findings ?? run.total_findings ?? 0;
   const providerObservations = run.metrics?.raw_observation_count;
+  const sourceSummary = useMemo(() => sourceSummaryFromRun(run), [run]);
+  const sourceSummaryText = sourceSummary.length
+    ? sourceSummary
+        .map(
+          (s) =>
+            `${s.source}: ${s.queried} queried, ${s.matched} matched, ${s.no_match} no match, ${s.skipped} skipped, ${s.errors} errors${s.reason ? ` (${s.reason})` : ''}`,
+        )
+        .join('\n')
+    : undefined;
 
   return (
     <Surface
@@ -325,7 +349,10 @@ export function RunDetailHero({ run, findings, rightSlot }: RunDetailHeroProps) 
           )}
 
           {run.query_error_count != null && run.query_error_count > 0 && (
-            <p className="font-metric text-[11px] tabular-nums text-amber-700 dark:text-amber-300 lg:text-right">
+            <p
+              className="font-metric text-[11px] tabular-nums text-amber-700 dark:text-amber-300 lg:text-right"
+              title={sourceSummaryText}
+            >
               {run.query_error_count} source query error{run.query_error_count === 1 ? '' : 's'}
             </p>
           )}

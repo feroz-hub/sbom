@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from ..models import AnalysisRun, SBOMAnalysisReport, SBOMSource
 from ..settings import get_analysis_legacy_level
+from ..sources.routing import count_authoritative_cpes, normalize_query_errors
 from .finding_metrics import (
     apply_metrics_to_run,
     calculate_run_finding_metrics,
@@ -75,14 +76,14 @@ def normalize_details(details: dict | None, components: list[dict]) -> dict:
     query_errors = data.get("query_errors")
     if not isinstance(query_errors, list):
         query_errors = []
+    query_errors = normalize_query_errors(query_errors)
     data["query_errors"] = query_errors
 
     # Only set totals if the analyzer didn't already supply them
     if "total_components" not in data or not isinstance(data["total_components"], int):
         data["total_components"] = len(components)
 
-    if "components_with_cpe" not in data or not isinstance(data["components_with_cpe"], int):
-        data["components_with_cpe"] = len({c.get("cpe") for c in components if c.get("cpe")})
+    data["components_with_cpe"] = count_authoritative_cpes(components)
 
     if "total_findings" not in data or not isinstance(data["total_findings"], int):
         data["total_findings"] = len(findings)

@@ -79,11 +79,13 @@ class NvdSource:
             )
             return SourceResult(findings=findings, errors=errors, warnings=warnings)
 
-        from app.analysis import _finding_from_applicable_nvd_raw
-        from app.analysis import _nvd_finding_key
-        from app.analysis import _nvd_rejection_from_component
-        from app.analysis import NvdRejectionReason
-        from app.analysis import NvdRejectionTracker
+        from app.analysis import (
+            NvdRejectionReason,
+            NvdRejectionTracker,
+            _finding_from_applicable_nvd_raw,
+            _nvd_finding_key,
+            _nvd_rejection_from_component,
+        )
         from app.db import SessionLocal
         from app.services.nvd_enrichment_service import NvdEnrichmentService, collect_nvd_identifiers
         from app.settings import get_settings
@@ -138,13 +140,17 @@ class NvdSource:
                 component for component in components if component.get("cpe") not in mirror_hit_cpes
             ]
 
+        nvd_vulnerabilities = vulnerabilities
+        if not collect_nvd_identifiers(remaining_components, []).trusted_cpes:
+            nvd_vulnerabilities = []
+
         def _run() -> dict[str, Any]:
             db = SessionLocal()
             try:
                 cfg = get_settings()
                 if self.api_key is not None and self.api_key != cfg.nvd_api_key:
                     cfg = cfg.model_copy(update={"nvd_api_key": self.api_key})
-                return NvdEnrichmentService(db, cfg).enrich(remaining_components, vulnerabilities)
+                return NvdEnrichmentService(db, cfg).enrich(remaining_components, nvd_vulnerabilities)
             finally:
                 db.close()
 

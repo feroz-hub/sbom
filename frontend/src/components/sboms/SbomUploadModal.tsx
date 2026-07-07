@@ -105,11 +105,13 @@ function formatUploadError(err: unknown): string {
 interface SbomUploadModalProps {
   open: boolean;
   onClose: () => void;
+  initialProjectId?: number | null;
+  initialProductId?: number | null;
   /** Called after upload succeeds so parent views can refresh/optimistically insert. */
   onSuccess?: (sbom: SBOMSource) => void;
 }
 
-export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalProps) {
+export function SbomUploadModal({ open, onClose, initialProjectId, initialProductId, onSuccess }: SbomUploadModalProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const handledUploadResultRef = useRef(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -151,6 +153,7 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
     setValue,
     watch,
     reset,
+    clearErrors,
     formState: { errors },
   } = useForm<FormInput, unknown, FormValues>({
     resolver: zodResolver(schema),
@@ -196,9 +199,14 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
   });
 
   useEffect(() => {
-    setValue('productid', '', { shouldValidate: true });
-    setNewProductName('');
-  }, [selectedProjectId, setValue]);
+    if (!open) return;
+    if (initialProjectId) {
+      setValue('projectid', String(initialProjectId), { shouldValidate: true });
+    }
+    if (initialProductId) {
+      setValue('productid', String(initialProductId), { shouldValidate: true });
+    }
+  }, [initialProductId, initialProjectId, open, setValue]);
 
   useEffect(() => {
     if (userManuallyOverrodeFormat || !formatDetection || !sbomTypes?.length) return;
@@ -397,6 +405,8 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
       setUserManuallyOverrodeFormat(Boolean(value));
     },
   });
+  const projectRegistration = register('projectid');
+  const productRegistration = register('productid');
   const selectedTypeName = sbomTypes?.find((type) => String(type.id) === selectedSbomTypeId)?.typename;
 
   return (
@@ -593,7 +603,14 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
               required
               error={errors.projectid?.message}
               hint={!projects?.length ? 'Create a project before uploading an SBOM.' : undefined}
-              {...register('projectid')}
+              {...projectRegistration}
+              value={selectedProjectId || ''}
+              onChange={(event) => {
+                projectRegistration.onChange(event);
+                setValue('productid', '', { shouldValidate: false });
+                clearErrors('productid');
+                setNewProductName('');
+              }}
             >
               {projects?.map((p) => (
                 <option key={p.id} value={p.id}>{p.project_name}</option>
@@ -610,7 +627,12 @@ export function SbomUploadModal({ open, onClose, onSuccess }: SbomUploadModalPro
                   ? 'No products found for this project.'
                   : undefined
               }
-              {...register('productid')}
+              {...productRegistration}
+              value={selectedProductId || ''}
+              onChange={(event) => {
+                productRegistration.onChange(event);
+                clearErrors('productid');
+              }}
             >
               {productItems.map((p) => (
                 <option key={p.id} value={p.id}>{p.name}</option>

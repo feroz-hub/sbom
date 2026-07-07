@@ -103,6 +103,7 @@ from ..sources import (
     normalize_source_names,
     run_sources_concurrently,
 )
+from ..sources.routing import count_authoritative_cpes
 from ..validation import ErrorReport
 from ..validation import run as run_validation
 
@@ -341,6 +342,8 @@ def _serialize_sbom_out(
     latest_analysis: LatestAnalysisOut | None = None,
 ) -> SBOMSourceOut:
     out = SBOMSourceOut.model_validate(sbom, from_attributes=True)
+    if not out.product_name and sbom.product is not None:
+        out.product_name = sbom.product.name
     for key, value in _workspace_fields(sbom, session=workspace, db=db).items():
         setattr(out, key, value)
     out.latest_analysis = latest_analysis if latest_analysis is not None else (_latest_analysis_for_sbom(db, sbom) if db is not None else None)
@@ -519,7 +522,7 @@ async def create_auto_report(
 
     details: dict = {
         "total_components": len(components),
-        "components_with_cpe": sum(1 for c in components if c.get("cpe")),
+        "components_with_cpe": count_authoritative_cpes(components),
         "total_findings": len(final_findings),
         "critical": buckets["CRITICAL"],
         "high": buckets["HIGH"],
@@ -528,10 +531,20 @@ async def create_auto_report(
         "unknown": buckets["UNKNOWN"],
         "query_errors": all_errors,
         "query_warnings": all_warnings,
+        "source_summary": [
+            warning["source_summary"]
+            for warning in all_warnings
+            if isinstance(warning, dict) and isinstance(warning.get("source_summary"), dict)
+        ],
         "findings": final_findings,
         "analysis_metadata": {
             "sources": sources_used,
             "raw_observation_count": len(raw_findings),
+            "source_summary": [
+                warning["source_summary"]
+                for warning in all_warnings
+                if isinstance(warning, dict) and isinstance(warning.get("source_summary"), dict)
+            ],
             "provider_status": [
                 warning["provider_status"]
                 for warning in all_warnings
@@ -690,7 +703,7 @@ def download_sbom_original(
 def create_sbom(
     payload: SBOMSourceCreate,
     background_tasks: BackgroundTasks,
-    context: CurrentContext = Depends(get_current_tenant_context),
+    context: CurrentContext = Depends(require_permission("product:assign_sbom")),
     db: Session = Depends(get_db),
 ):
     log.info("Creating SBOM: name='%s' project_id=%s", payload.sbom_name, payload.projectid)
@@ -1202,7 +1215,7 @@ def get_sbom_normalization_report(
 def update_sbom(
     sbom_id: int,
     payload: SbomPatchRequest,
-    context: CurrentContext = Depends(get_current_tenant_context),
+    context: CurrentContext = Depends(require_permission("product:assign_sbom")),
     db: Session = Depends(get_db),
 ):
     sbom = get_sbom_for_tenant(db, sbom_id, context.tenant_id)
@@ -1830,7 +1843,7 @@ async def analyze_sbom_stream(
 
             details: dict = {
                 "total_components": len(components),
-                "components_with_cpe": sum(1 for c in components if c.get("cpe")),
+                "components_with_cpe": count_authoritative_cpes(components),
                 "total_findings": len(final_findings),
                 "critical": buckets["CRITICAL"],
                 "high": buckets["HIGH"],
@@ -1838,10 +1851,21 @@ async def analyze_sbom_stream(
                 "low": buckets["LOW"],
                 "unknown": buckets["UNKNOWN"],
                 "query_errors": all_errors,
+                "query_warnings": all_warnings,
+                "source_summary": [
+                    warning["source_summary"]
+                    for warning in all_warnings
+                    if isinstance(warning, dict) and isinstance(warning.get("source_summary"), dict)
+                ],
                 "findings": final_findings,
                 "analysis_metadata": {
                     "sources": sources,
                     "raw_observation_count": len(all_findings),
+                    "source_summary": [
+                        warning["source_summary"]
+                        for warning in all_warnings
+                        if isinstance(warning, dict) and isinstance(warning.get("source_summary"), dict)
+                    ],
                     "provider_status": [
                         warning["provider_status"]
                         for warning in all_warnings

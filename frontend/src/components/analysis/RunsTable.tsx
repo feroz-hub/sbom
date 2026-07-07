@@ -50,6 +50,22 @@ const STATUS_VALUES: AnalysisRun['run_status'][] = [
   'NO_DATA',
 ];
 
+function sourceErrorTitle(run: AnalysisRun): string | undefined {
+  if (!run.raw_report) return undefined;
+  try {
+    const parsed = JSON.parse(run.raw_report) as {
+      source_summary?: Array<{ source: string; errors: number; reason?: string | null }>;
+      analysis_metadata?: { source_summary?: Array<{ source: string; errors: number; reason?: string | null }> };
+    };
+    const summary = parsed.source_summary ?? parsed.analysis_metadata?.source_summary ?? [];
+    const errored = summary.filter((item) => item.errors > 0);
+    if (!errored.length) return undefined;
+    return errored.map((item) => `${item.source}: ${item.errors} error${item.errors === 1 ? '' : 's'}${item.reason ? ` (${item.reason})` : ''}`).join('\n');
+  } catch {
+    return undefined;
+  }
+}
+
 export function RunsTable({ runs, isLoading, error, selectedIds, onToggleSelect }: RunsTableProps) {
   const selectable = Boolean(onToggleSelect);
   const colCount = selectable ? 12 : 11;
@@ -385,7 +401,9 @@ export function RunsTable({ runs, isLoading, error, selectedIds, onToggleSelect 
                 </Td>
                 <Td className="text-foreground/90">
                   {run.query_error_count != null && run.query_error_count > 0 ? (
-                    <span className="text-xs font-medium text-orange-600">{run.query_error_count}</span>
+                    <span className="text-xs font-medium text-orange-600" title={sourceErrorTitle(run)}>
+                      {run.query_error_count}
+                    </span>
                   ) : (
                     <span className="text-hcl-muted">{run.query_error_count ?? '—'}</span>
                   )}
