@@ -31,28 +31,28 @@ jobs:
 - parameters:
     reportDescription: ''
     reportDir: /zap/wrk/
-    reportFile: sbom-frontend-baseline.html
+    reportFile: sbom-frontend-baseline-20260707_163313.html
     reportTitle: ZAP Scanning Report
     template: traditional-html
   type: report
 - parameters:
     reportDescription: ''
     reportDir: /zap/wrk/
-    reportFile: sbom-frontend-baseline.md
+    reportFile: sbom-frontend-baseline-20260707_163313.md
     reportTitle: ZAP Scanning Report
     template: traditional-md
   type: report
 - parameters:
     reportDescription: ''
     reportDir: /zap/wrk/
-    reportFile: sbom-frontend-baseline.xml
+    reportFile: sbom-frontend-baseline-20260707_163313.xml
     reportTitle: ZAP Scanning Report
     template: traditional-xml
   type: report
 - parameters:
     reportDescription: ''
     reportDir: /zap/wrk/
-    reportFile: sbom-frontend-baseline.json
+    reportFile: sbom-frontend-baseline-20260707_163313.json
     reportTitle: ZAP Scanning Report
     template: traditional-json
   type: report
