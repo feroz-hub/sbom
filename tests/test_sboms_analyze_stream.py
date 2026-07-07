@@ -22,9 +22,11 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import UTC, datetime, timedelta
 
 import pytest
-from app.models import AnalysisRun, SBOMSource
+from app.models import AnalysisRun, SBOMComponent, SBOMSource
+from sqlalchemy import text
 
 
 def _parse_sse_events(body: str) -> list[dict]:
@@ -128,6 +130,7 @@ def test_analyze_stream_uses_registry_emits_progress_and_persists_run(client, se
     assert persisted.run_status == "FINDINGS"
     assert persisted.started_on
     assert persisted.completed_on
+    assert persisted.total_components and persisted.total_components > 0
     assert persisted.total_findings == final["total"]
     assert persisted.critical_count == final["critical"]
     assert persisted.high_count == final["high"]
@@ -186,6 +189,99 @@ def test_analyze_stream_parse_failure_persists_failed_run(client, db):
     assert "SBOM parse failed" in detail["latest_analysis"]["error_message"]
 
 
+def test_analyze_stream_zero_persisted_components_marks_run_failed(client, seeded_sbom, db, monkeypatch):
+    from app.routers import sboms_crud as crud
+
+    sbom_id = seeded_sbom["id"]
+    db.query(SBOMComponent).filter(SBOMComponent.sbom_id == sbom_id).delete()
+    db.commit()
+
+    def fake_sync_components(_db, _sbom):
+        return []
+
+    monkeypatch.setattr(crud, "sync_sbom_components", fake_sync_components)
+
+    resp = client.post(
+        f"/api/sboms/{sbom_id}/analyze/stream",
+        json={"sources": ["NVD", "OSV", "GITHUB"]},
+    )
+
+    assert resp.status_code == 200, resp.text
+    events = _parse_sse_events(resp.text)
+    errors = [event for event in events if event["event"] == "error"]
+    assert errors
+    terminal = errors[-1]["data"]
+    assert terminal["status"] == "ERROR"
+    assert terminal["runId"]
+    assert "No components were available for analysis" in terminal["message"]
+
+    db.expire_all()
+    run = db.get(AnalysisRun, terminal["runId"])
+    assert run is not None
+    assert run.run_status == "ERROR"
+    assert run.total_components == 0
+    assert "zero_components_loaded" in (run.raw_report or "")
+
+
+def test_startup_reconciliation_interrupts_stale_running_run(db, seeded_sbom):
+    from app.services.analysis_service import reconcile_stale_analysis_runs
+
+    started = (datetime.now(UTC) - timedelta(minutes=10)).replace(microsecond=0).isoformat()
+    active = AnalysisRun(
+        sbom_id=seeded_sbom["id"],
+        run_status="RUNNING",
+        sbom_name=seeded_sbom["sbom_name"],
+        source="NVD,OSV,GITHUB",
+        trigger_source="manual",
+        started_on=started,
+        completed_on=started,
+        duration_ms=0,
+        total_components=0,
+    )
+    db.add(active)
+    db.commit()
+    db.refresh(active)
+
+    interrupted = reconcile_stale_analysis_runs(db, stale_after_seconds=60)
+    db.commit()
+
+    assert [run.id for run in interrupted] == [active.id]
+    db.expire_all()
+    run = db.get(AnalysisRun, active.id)
+    assert run.run_status == "INTERRUPTED"
+    assert "application or worker stopped unexpectedly" in (run.raw_report or "")
+
+
+def test_startup_reconciliation_preserves_recent_running_run(db, seeded_sbom):
+    from app.services.analysis_service import reconcile_stale_analysis_runs
+
+    started = datetime.now(UTC).replace(microsecond=0).isoformat()
+    active = AnalysisRun(
+        sbom_id=seeded_sbom["id"],
+        run_status="RUNNING",
+        sbom_name=seeded_sbom["sbom_name"],
+        source="NVD,OSV,GITHUB",
+        trigger_source="manual",
+        started_on=started,
+        completed_on=started,
+        duration_ms=0,
+        total_components=0,
+    )
+    db.add(active)
+    db.commit()
+    db.refresh(active)
+
+    interrupted = reconcile_stale_analysis_runs(db, stale_after_seconds=60)
+    db.commit()
+
+    assert interrupted == []
+    db.expire_all()
+    run = db.get(AnalysisRun, active.id)
+    assert run.run_status == "RUNNING"
+    db.query(AnalysisRun).filter(AnalysisRun.id == active.id).delete()
+    db.commit()
+
+
 def test_analyze_stream_returns_existing_active_run_without_duplicate(client, seeded_sbom, db):
     active = AnalysisRun(
         sbom_id=seeded_sbom["id"],
@@ -221,3 +317,114 @@ def test_analyze_stream_returns_existing_active_run_without_duplicate(client, se
     assert after_count == before_count
     db.query(AnalysisRun).filter(AnalysisRun.id == active.id).delete()
     db.commit()
+
+
+def test_analyze_stream_data_error_rolls_back_and_marks_failed_with_clean_session(
+    client, seeded_sbom, mock_external_sources, db, monkeypatch
+):
+    if db.bind.dialect.name != "postgresql":
+        pytest.skip("forced aborted transaction regression is PostgreSQL-specific")
+
+    from app.db import SessionLocal, get_db
+    from app.routers import sboms_crud as crud
+
+    rollback_calls: list[bool] = []
+
+    def override_get_db():
+        session = SessionLocal()
+        original_rollback = session.rollback
+
+        def rollback_spy():
+            rollback_calls.append(True)
+            return original_rollback()
+
+        session.rollback = rollback_spy
+        try:
+            yield session
+        finally:
+            session.close()
+
+    def fail_with_aborted_transaction(*, db, **kwargs):
+        db.execute(text("SELECT 1 / 0"))
+
+    client.app.dependency_overrides[get_db] = override_get_db
+    monkeypatch.setattr(crud, "persist_analysis_run", fail_with_aborted_transaction)
+    try:
+        resp = client.post(
+            f"/api/sboms/{seeded_sbom['id']}/analyze/stream",
+            json={"sources": ["NVD", "OSV", "GITHUB"]},
+            headers={"X-Correlation-ID": "forced-data-error"},
+        )
+    finally:
+        client.app.dependency_overrides.pop(get_db, None)
+
+    assert resp.status_code == 200, resp.text
+    events = _parse_sse_events(resp.text)
+    errors = [event for event in events if event["event"] == "error"]
+    assert len(errors) == 1
+    assert events[-1]["event"] == "error"
+    assert "PendingRollbackError" not in resp.text
+    assert rollback_calls
+
+    terminal = errors[0]["data"]
+    assert terminal["status"] == "ERROR"
+    assert terminal["code"] == 500
+    assert terminal["correlation_id"] == "forced-data-error"
+    assert "database rejected" in terminal["message"]
+    assert "SELECT 1 / 0" not in terminal["message"]
+
+    db.expire_all()
+    run = db.get(AnalysisRun, terminal["runId"])
+    assert run is not None
+    assert run.run_status == "ERROR"
+    assert "database rejected" in (run.raw_report or "")
+    assert "SELECT 1 / 0" not in (run.raw_report or "")
+
+
+def test_analyze_stream_still_ends_cleanly_when_failed_status_cannot_be_persisted(
+    client, seeded_sbom, mock_external_sources, db, monkeypatch, caplog
+):
+    if db.bind.dialect.name != "postgresql":
+        pytest.skip("forced aborted transaction regression is PostgreSQL-specific")
+
+    from app.routers import sboms_crud as crud
+
+    real_session_factory = crud.SessionLocal
+
+    class FailingCommitSession:
+        def __init__(self):
+            self._session = real_session_factory()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            self._session.close()
+
+        def __getattr__(self, name):
+            return getattr(self._session, name)
+
+        def commit(self):
+            raise RuntimeError("forced failed-status commit failure")
+
+    def fail_with_aborted_transaction(*, db, **kwargs):
+        db.execute(text("SELECT 1 / 0"))
+
+    caplog.set_level("ERROR", logger="app.routers.sboms_crud")
+    monkeypatch.setattr(crud, "persist_analysis_run", fail_with_aborted_transaction)
+    monkeypatch.setattr(crud, "SessionLocal", FailingCommitSession)
+
+    resp = client.post(
+        f"/api/sboms/{seeded_sbom['id']}/analyze/stream",
+        json={"sources": ["NVD", "OSV", "GITHUB"]},
+        headers={"X-Correlation-ID": "failed-mark-fails"},
+    )
+
+    assert resp.status_code == 200, resp.text
+    events = _parse_sse_events(resp.text)
+    errors = [event for event in events if event["event"] == "error"]
+    assert len(errors) == 1
+    assert events[-1]["event"] == "error"
+    assert errors[0]["data"]["status"] == "ERROR"
+    assert any(record.getMessage() == "SSE analysis persistence failed" for record in caplog.records)
+    assert any(record.getMessage() == "analysis.run_mark_failed.failed" for record in caplog.records)

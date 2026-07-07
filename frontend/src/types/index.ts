@@ -171,6 +171,7 @@ export interface SBOMSource {
     | 'FINDINGS'
     | 'PARTIAL'
     | 'ERROR'
+    | 'INTERRUPTED'
     | 'CANCELLED'
     | 'NOT_ANALYSED'
     | 'PASS' // legacy alias for OK
@@ -856,6 +857,7 @@ export interface AnalysisRun {
     | 'FINDINGS'
     | 'PARTIAL'
     | 'ERROR'
+    | 'INTERRUPTED'
     | 'RUNNING'
     | 'PENDING'
     | 'NO_DATA'

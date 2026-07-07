@@ -20,6 +20,7 @@ export type AnalysisStatus =
   | 'PARTIAL'
   | 'ERROR'
   | 'CANCELLED'
+  | 'INTERRUPTED'
   | 'NOT_ANALYSED'
   | 'PASS' // legacy alias for OK
   | 'FAIL'; // legacy alias for FINDINGS

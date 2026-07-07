@@ -82,7 +82,7 @@ from .routers import (
 from .routers import analysis as analysis_export_router
 from .routers import dashboard as dashboard_trend_router
 from .routers import sbom as sbom_features_router
-from .services.analysis_service import backfill_analytics_tables
+from .services.analysis_service import backfill_analytics_tables, reconcile_stale_analysis_runs
 from .services.sbom_service import now_iso  # re-exported for tests/back-compat
 from .settings import get_settings
 
@@ -676,6 +676,17 @@ def _reconcile_zombie_ai_fix_batches() -> None:
             log.info("ai.startup.reconciled_zombie_batches: count=%d", result.rowcount)
 
 
+def _reconcile_stale_analysis_runs() -> None:
+    """Mark old in-process analysis runs interrupted after an API restart."""
+    with SessionLocal() as db:
+        interrupted = reconcile_stale_analysis_runs(db)
+        if interrupted:
+            db.commit()
+            log.info("analysis.startup.reconciled_stale_runs: count=%d", len(interrupted))
+        else:
+            db.rollback()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Re-apply logging config AFTER uvicorn has fully initialised. Uvicorn
@@ -701,6 +712,7 @@ async def lifespan(app: FastAPI):
     _ensure_seed_data()
     _update_sbom_names()
     _reconcile_zombie_ai_fix_batches()
+    _reconcile_stale_analysis_runs()
     validate_auth_setup()
     log.info("Startup complete. API ready.")
     yield

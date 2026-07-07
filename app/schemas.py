@@ -485,6 +485,10 @@ class AnalysisFindingOut(ORMModel):
     attack_vector: str | None = None
     cvss_version: str | None = None
     aliases: str | None = None  # JSON string
+    match_reason: str | None = None
+    matched_range: str | None = None
+    match_strategy: str | None = None
+    match_confidence: float | None = None
     remediation: VulnerabilityRemediationOut | None = None
 
 

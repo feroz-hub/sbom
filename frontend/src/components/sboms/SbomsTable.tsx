@@ -63,6 +63,7 @@ function normalizeAnalysis(sb: SBOMSource): AnalysisStatus {
   const status = String(latest.status || '').toUpperCase();
   if (result === 'queued' || status === 'PENDING' || status === 'QUEUED') return 'QUEUED';
   if (result === 'running' || status === 'RUNNING' || status === 'ANALYSING') return 'RUNNING';
+  if (result === 'interrupted' || status === 'INTERRUPTED') return 'INTERRUPTED';
   if (result === 'cancelled' || result === 'canceled' || status === 'CANCELLED' || status === 'CANCELED') return 'CANCELLED';
   if (result === 'failed' || status === 'ERROR' || status === 'FAILED') return 'ERROR';
   return 'OK';
@@ -75,6 +76,7 @@ const ANALYSIS_OPTIONS: { value: string; label: string }[] = [
   { value: 'RUNNING', label: 'Running' },
   { value: 'OK', label: 'Completed' },
   { value: 'ERROR', label: 'Failed' },
+  { value: 'INTERRUPTED', label: 'Interrupted' },
   { value: 'CANCELLED', label: 'Cancelled' },
 ];
 

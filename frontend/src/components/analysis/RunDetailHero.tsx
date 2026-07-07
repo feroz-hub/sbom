@@ -64,6 +64,13 @@ const STATUS_META: Record<
     Icon: XCircle,
     ambient: 'bg-red-300/30 dark:bg-red-700/20',
   },
+  INTERRUPTED: {
+    label: 'Interrupted',
+    tone: 'text-slate-700 dark:text-slate-300',
+    chip: 'bg-slate-100 text-slate-800 ring-slate-300/60 dark:bg-slate-900/70 dark:text-slate-200 dark:ring-slate-700/60',
+    Icon: AlertOctagon,
+    ambient: 'bg-slate-300/30 dark:bg-slate-700/20',
+  },
   RUNNING: {
     label: 'Running',
     tone: 'text-sky-700 dark:text-sky-300',
@@ -196,6 +203,7 @@ export function RunDetailHero({ run, findings, rightSlot }: RunDetailHeroProps) 
   const totalFindings = run.metrics?.total_findings ?? run.total_findings ?? 0;
   const providerObservations = run.metrics?.raw_observation_count;
   const sourceSummary = useMemo(() => sourceSummaryFromRun(run), [run]);
+  const showRiskBand = ['OK', 'PASS', 'FINDINGS', 'FAIL', 'PARTIAL'].includes(run.run_status);
   const sourceSummaryText = sourceSummary.length
     ? sourceSummary
         .map(
@@ -228,14 +236,16 @@ export function RunDetailHero({ run, findings, rightSlot }: RunDetailHeroProps) 
               <status.Icon className="h-3.5 w-3.5" aria-hidden />
               {status.label}
             </span>
-            <span className={cn('inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ring-1', BAND_CHIP[band])}>
-              {band === 'CLEAR' ? (
-                <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
-              ) : (
-                <AlertOctagon className="h-3.5 w-3.5" aria-hidden />
-              )}
-              {band === 'CLEAR' ? 'All clear' : `${band} risk`}
-            </span>
+            {showRiskBand && (
+              <span className={cn('inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ring-1', BAND_CHIP[band])}>
+                {band === 'CLEAR' ? (
+                  <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
+                ) : (
+                  <AlertOctagon className="h-3.5 w-3.5" aria-hidden />
+                )}
+                {band === 'CLEAR' ? 'All clear' : `${band} risk`}
+              </span>
+            )}
             {kevCount > 0 && (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-3 py-1 text-xs font-semibold text-red-700 ring-1 ring-red-300/60 shadow-glow-critical dark:bg-red-950/60 dark:text-red-200 dark:ring-red-900/60">
                 <Flame className="h-3.5 w-3.5" aria-hidden />
