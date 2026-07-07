@@ -30,10 +30,11 @@ from sqlalchemy.orm import Session, sessionmaker
 from ..integrations.cve.aggregator import aggregate
 from ..integrations.cve.epss import EpssSource
 from ..integrations.cve.ghsa import GhsaClient
-from ..integrations.cve.identifiers import IdKind, classify
+from ..integrations.cve.identifiers import IdKind, classify, resolve
 from ..integrations.cve.kev import KevSource
 from ..integrations.cve.nvd import NvdClient
 from ..integrations.cve.osv import OsvClient
+from ..metrics._helpers import cves_for_finding
 from ..models import AnalysisFinding, AnalysisRun, CveCache, SBOMComponent
 from ..schemas_cve import (
     CveDetail,
@@ -134,10 +135,13 @@ class CveDetailService:
         """Fetch a single advisory — cache-read-through.
 
         ``cve_id`` accepts any supported identifier kind (CVE / GHSA /
-        PYSEC / RUSTSEC / GO). Raises :class:`UnrecognizedIdFormatError`
-        when the format isn't recognised; the API layer maps that to 400.
+        PYSEC / RUSTSEC / GO) as well as a source-specific alias that wraps a
+        CVE (e.g. ``DEBIAN-CVE-2011-3374`` → ``CVE-2011-3374``) — the latter
+        is resolved here as defense in depth so a direct request still lands.
+        Raises :class:`UnrecognizedIdFormatError` when the format isn't
+        recognised; the API layer maps that to 400.
         """
-        vid = classify(cve_id)
+        vid = resolve(cve_id)
         if vid.kind == IdKind.UNKNOWN:
             raise UnrecognizedIdFormatError(cve_id)
         cached = self._read_cache(vid.normalized)
@@ -158,7 +162,7 @@ class CveDetailService:
         """Fetch many advisories concurrently. Unrecognised IDs raise."""
         vids: dict[str, IdKind] = {}
         for raw in cve_ids:
-            v = classify(raw)
+            v = resolve(raw)
             if v.kind == IdKind.UNKNOWN:
                 raise UnrecognizedIdFormatError(raw)
             vids[v.normalized] = v.kind
@@ -204,6 +208,25 @@ class CveDetailService:
             .scalars()
             .first()
         )
+        if finding is None:
+            # A source-specific alias row (e.g. ``vuln_id='DEBIAN-CVE-2011-3374'``)
+            # carries the canonical CVE in its id/aliases but not as an exact
+            # ``vuln_id``. Match against every CVE the finding resolves to so the
+            # component context still renders for those rows. Narrow with a
+            # substring filter first so we don't scan the whole run.
+            candidates = (
+                self._db.execute(
+                    select(AnalysisFinding)
+                    .where(AnalysisFinding.analysis_run_id == scan_id)
+                    .where(AnalysisFinding.vuln_id.ilike(f"%{cve}%"))
+                )
+                .scalars()
+                .all()
+            )
+            finding = next(
+                (c for c in candidates if cve in cves_for_finding(c.vuln_id, c.aliases)),
+                None,
+            )
         if finding is None:
             # The scan exists but doesn't carry this CVE — return detail with empty context.
             return CveDetailWithContext(**detail.model_dump())

@@ -33,4 +33,12 @@ export type CveRowSeed = Pick<
   | 'component_name'
   | 'component_version'
   | 'source'
->;
+> & {
+  /**
+   * CVE aliases discovered on the row (`vuln_id` + parsed aliases). Lets the
+   * modal resolve a source-specific advisory id (e.g. `DEBIAN-CVE-2011-3374`)
+   * to its canonical CVE for lookup while the original id stays on screen.
+   * Optional so callers that don't have it (older seeds, tests) still type-check.
+   */
+  cve_aliases?: readonly string[] | null;
+};

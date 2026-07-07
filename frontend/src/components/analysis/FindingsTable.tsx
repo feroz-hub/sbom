@@ -180,6 +180,9 @@ function findingToSeed(f: EnrichedFinding): CveRowSeed {
     component_name: f.component_name,
     component_version: f.component_version,
     source: f.source,
+    // Carried so the modal can resolve a source-specific advisory id
+    // (e.g. DEBIAN-CVE-*) to its canonical CVE for the detail lookup.
+    cve_aliases: f.cve_aliases,
   };
 }
 

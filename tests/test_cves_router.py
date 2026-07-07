@@ -94,3 +94,50 @@ def test_get_scan_variant_200(client, monkeypatch):
     assert body["component"]["name"] == "left-pad"
     assert body["recommended_upgrade"] == "1.3.1"
     assert body["current_version_status"] == "vulnerable"
+
+
+def test_get_cve_detail_accepts_debian_alias(client, monkeypatch):
+    """Direct request with a Debian source alias (``DEBIAN-CVE-2011-3374``)
+    resolves to the canonical CVE — 200, not the 400 unrecognized envelope.
+
+    Patches the network fan-out + cache boundary so ``get()`` runs its real
+    resolution logic. The canonical CVE (not the alias) must drive the lookup.
+    """
+    seen: dict[str, str] = {}
+
+    async def _fake_aggregate(vid, sources):  # noqa: ARG001
+        seen["normalized"] = vid.normalized
+        seen["raw"] = vid.raw
+        return _stub_detail(vid.normalized)
+
+    monkeypatch.setattr("app.services.cve_service.aggregate", _fake_aggregate)
+    monkeypatch.setattr(
+        "app.services.cve_service.CveDetailService._read_cache", lambda self, key: None
+    )
+    monkeypatch.setattr(
+        "app.services.cve_service.CveDetailService._write_cache_with_db",
+        lambda self, db, detail: None,
+    )
+
+    resp = client.get("/api/v1/cves/DEBIAN-CVE-2011-3374")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["cve_id"] == "CVE-2011-3374"
+    # The canonical CVE — not the Debian alias — drove the upstream fan-out.
+    assert seen["normalized"] == "CVE-2011-3374"
+    assert seen["raw"] == "DEBIAN-CVE-2011-3374"
+
+
+def test_post_batch_accepts_debian_alias(client, monkeypatch):
+    """The batch validator resolves Debian aliases too (defense in depth)."""
+
+    async def _fake_get_many(self, ids):  # noqa: ARG001
+        return {cve: _stub_detail(cve) for cve in ids}
+
+    monkeypatch.setattr("app.services.cve_service.CveDetailService.get_many", _fake_get_many)
+
+    resp = client.post("/api/v1/cves/batch", json={"ids": ["DEBIAN-CVE-2011-3374"]})
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert "CVE-2011-3374" in body["items"]
+    assert body["not_found"] == []

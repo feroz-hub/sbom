@@ -80,6 +80,54 @@ describe('CveDetailDialog — Phase 3 regressions', () => {
     expect(screen.queryByText("Couldn't reach the CVE database")).not.toBeInTheDocument();
   });
 
+  it('Debian source alias: modal opens, fetches the canonical CVE, keeps the original id visible', async () => {
+    // Regression for DEBIAN-CVE-2011-3374 rendering the "unrecognized" banner.
+    getCveDetail.mockResolvedValue({ ...FULL_DETAIL, cve_id: 'CVE-2011-3374' });
+
+    function DebianHarness() {
+      const [active] = useState<{ id: string; seed: CveRowSeed } | null>({
+        id: 'DEBIAN-CVE-2011-3374',
+        // The row's cve_aliases already carry the canonical CVE (populated by
+        // the dedup/merge step) — the resolver reuses it.
+        seed: { ...SEED, vuln_id: 'DEBIAN-CVE-2011-3374', cve_aliases: ['CVE-2011-3374'] },
+      });
+      return (
+        <CveDetailDialog
+          cveId={active?.id ?? null}
+          seed={active?.seed ?? null}
+          scanId={null}
+          scanName={null}
+          open={active !== null}
+          onOpenChange={() => {}}
+        />
+      );
+    }
+
+    renderWithProviders(<DebianHarness />);
+    await screen.findByRole('dialog');
+
+    // Not the unrecognized banner — the modal actually opens.
+    expect(
+      screen.queryByText("We don't recognize this advisory format"),
+    ).not.toBeInTheDocument();
+
+    // The detail fetch keyed on the canonical CVE, not the Debian alias.
+    await waitFor(() => expect(getCveDetail).toHaveBeenCalledTimes(1));
+    expect(getCveDetail).toHaveBeenCalledWith(
+      expect.objectContaining({ cveId: 'CVE-2011-3374' }),
+    );
+
+    // The original Debian id stays visible in the title for provenance.
+    expect(
+      screen.getByRole('heading', { level: 2, name: 'DEBIAN-CVE-2011-3374' }),
+    ).toBeInTheDocument();
+
+    // Body renders — a fully-opened modal, not a banner-only state.
+    await waitFor(() =>
+      expect(screen.getByText(FULL_DETAIL.summary)).toBeInTheDocument(),
+    );
+  });
+
   it('alias chip click swaps the active CVE; query re-fires under the new key', async () => {
     // GHSA-keyed payload whose aliases include a CVE — that CVE shows up
     // as a clickable chip in the header. Two calls expected: the GHSA

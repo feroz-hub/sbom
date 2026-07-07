@@ -19,7 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..integrations.cve.identifiers import SUPPORTED_FORMATS, IdKind, classify
+from ..integrations.cve.identifiers import SUPPORTED_FORMATS, IdKind, resolve
 from ..rate_limit import limiter
 from ..schemas_cve import (
     CveBatchRequest,
@@ -96,7 +96,7 @@ async def batch_cve_detail(
     cleaned: list[str] = []
     rejected: list[str] = []
     for raw in body.ids:
-        v = classify(raw)
+        v = resolve(raw)
         if v.kind == IdKind.UNKNOWN:
             rejected.append(raw)
         else:
