@@ -16,7 +16,7 @@ interface AnalysisStatusBadgeProps {
 type BadgeTone = 'gray' | 'blue' | 'green' | 'yellow' | 'orange' | 'red';
 
 type AnalysisBadgeView = {
-  state: 'not_run' | 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+  state: 'not_run' | 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted';
   label: string;
   severitySummary?: string;
   tooltip: string;
@@ -48,6 +48,7 @@ function normalizeState(analysis: LatestAnalysisSummary): AnalysisBadgeView['sta
   const result = String(analysis.result || '').toLowerCase();
   if (status === 'queued' || status === 'pending' || result === 'queued') return 'queued';
   if (status === 'running' || status === 'analysing' || status === 'analyzing' || result === 'running') return 'running';
+  if (status === 'interrupted' || result === 'interrupted') return 'interrupted';
   if (status === 'failed' || status === 'error' || result === 'failed') return 'failed';
   if (status === 'cancelled' || status === 'canceled' || result === 'cancelled' || result === 'canceled') return 'cancelled';
   if (status === 'completed' || result === 'completed' || result === 'pass' || result === 'findings' || result === 'partial') return 'completed';
@@ -127,6 +128,17 @@ function viewFromAnalysis(analysis: LatestAnalysisSummary | null | undefined): A
       runId: analysis.run_id,
     };
   }
+  if (state === 'interrupted') {
+    return {
+      state,
+      label: 'Interrupted',
+      tooltip: analysis.error_message
+        ? `Status: Interrupted\nError: ${analysis.error_message}`
+        : 'Status: Interrupted',
+      tone: 'gray',
+      runId: analysis.run_id,
+    };
+  }
   if (state === 'cancelled') {
     return {
       state,
@@ -161,6 +173,9 @@ function viewFromOptimisticStatus(
   }
   if (status === 'ERROR') {
     return { state: 'failed', label: 'Failed', tooltip: 'Status: Failed', tone: 'red' };
+  }
+  if (status === 'INTERRUPTED') {
+    return { state: 'interrupted', label: 'Interrupted', tooltip: 'Status: Interrupted', tone: 'gray' };
   }
   if (status === 'NOT_ANALYSED') {
     return { state: 'not_run', label: 'Not Run', tooltip: 'Analysis has not been run for this SBOM.', tone: 'gray' };

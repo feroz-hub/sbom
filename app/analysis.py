@@ -798,8 +798,11 @@ from .sources.severity import (
 
 def _augment_components_with_cpe(components: list[dict]) -> tuple[list[dict], int]:
     """
-    Return a new list where missing CPEs are best-effort generated from PURLs.
-    Uses component version when PURL has no version. Returns (components_with_possible_cpe, count_generated).
+    Return a new list with authoritative CPE mappings plus heuristic candidates.
+
+    Trusted mappings are written to ``cpe`` and may route to NVD. Best-effort
+    PURL heuristics are stored separately as ``heuristic_cpe`` so they can be
+    displayed/debugged without becoming authoritative identifiers.
     """
     out = []
     generated = 0
@@ -825,9 +828,9 @@ def _augment_components_with_cpe(components: list[dict]) -> tuple[list[dict], in
                     continue
                 cpe = _cpe23_from_purl(p, version_override=comp_version)
                 if cpe:
-                    d["cpe"] = cpe
-                    d["cpe_source"] = "generated_fallback"
-                    d["cpe_mapping_confidence"] = "heuristic"
+                    d["heuristic_cpe"] = cpe
+                    d["heuristic_cpe_source"] = "generated_fallback"
+                    d["heuristic_cpe_confidence"] = "heuristic"
                     generated += 1
         out.append(d)
     return out, generated
@@ -1876,14 +1879,21 @@ async def github_query_by_components(
     # from request handlers under concurrency.
     token = settings.gh_token_override or os.getenv(settings.gh_token_env)
     if not token or not token.strip():
-        msg = (
-            f"GitHub token not configured. Set {settings.gh_token_env} in .env "
-            f"(or as an environment variable) and restart the server. "
-            f"GitHub Security Advisories are best-effort — drop GITHUB from "
-            f"ANALYSIS_SOURCES if you don't have a token."
-        )
+        msg = "GitHub token not configured; GHSA source skipped."
         LOGGER.warning("GitHub: %s", msg)
-        return [], [{"source": "GITHUB", "error": msg}], []
+        return [], [], [
+            {
+                "source": "GITHUB",
+                "provider_status": {
+                    "provider": "GITHUB",
+                    "status": "skipped",
+                    "reason": "missing_credentials",
+                    "queried": 0,
+                    "failures": 0,
+                    "error_message": None,
+                },
+            }
+        ]
 
     headers = {"Authorization": f"bearer {token.strip()}", "User-Agent": settings.http_user_agent}
     url = settings.gh_graphql_url
@@ -2249,7 +2259,13 @@ async def nvd_query_by_components_async(
             rejection_tracker.record_acceptance()
         errors = []
         if provider_status["status"] == "degraded":
-            errors.append({"source": "NVD", "provider_status": provider_status})
+            errors.append(
+                {
+                    "source": "NVD",
+                    "error": provider_status.get("error_message") or "NVD degraded",
+                    "provider_status": provider_status,
+                }
+            )
         rejection_summary = rejection_tracker.emit_summary()
         provider_status["candidate_findings"] = rejection_summary["candidate_findings"]
         provider_status["accepted_findings"] = rejection_summary["accepted_findings"]

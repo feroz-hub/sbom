@@ -44,6 +44,15 @@ _LOAD_FINDINGS = 1000
 _PER_CALL_DELAY_SECONDS = 0.001  # simulate fastest possible provider
 
 
+def _active_database_dialect() -> str:
+    db = SessionLocal()
+    try:
+        bind = db.get_bind()
+        return bind.dialect.name if bind is not None else "unknown"
+    finally:
+        db.close()
+
+
 class LoadProvider:
     """Returns a canned bundle for every call. Tracks call count atomically."""
 
@@ -172,10 +181,11 @@ async def test_batch_handles_1000_findings(client):
     assert summary.progress.failed == 0
     assert summary.progress.from_cache == 0
     # Wall-clock time on shared CI/dev machines is dominated by SQLite,
-    # Pydantic, and prior-test process pressure, so use direct provider
-    # in-flight observation for the concurrency regression guard.
+    # PostgreSQL, Pydantic, and prior-test process pressure, so use direct
+    # provider in-flight observation for the concurrency regression guard.
     assert provider.max_in_flight > 1, "provider calls were serialized; batch concurrency regressed"
-    assert elapsed < 90.0, f"1000-finding batch took {elapsed:.2f}s — runaway batch execution?"
+    threshold_seconds = 150.0 if _active_database_dialect() == "postgresql" else 90.0
+    assert elapsed < threshold_seconds, f"1000-finding batch took {elapsed:.2f}s — runaway batch execution?"
 
     # Cache check: every finding should now be cached.
     db = SessionLocal()

@@ -6,13 +6,16 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, inspect, select
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.sqltypes import String
 
 from ..models import AnalysisRun, SBOMAnalysisReport, SBOMSource
 from ..settings import get_analysis_legacy_level
+from ..sources.routing import count_authoritative_cpes, normalize_query_errors
 from .finding_metrics import (
     apply_metrics_to_run,
     calculate_run_finding_metrics,
@@ -34,6 +37,141 @@ from .sbom_service import (
 log = logging.getLogger(__name__)
 
 _APPLICABILITY_GATED_SOURCES = {"GITHUB", "NVD", "OSV"}
+_FINDING_PREVIEW_LIMIT = 96
+_ALLOWED_SEVERITIES = {"CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"}
+_ALLOWED_ATTACK_VECTORS = {"NETWORK", "ADJACENT", "ADJACENT_NETWORK", "LOCAL", "PHYSICAL", "N", "A", "L", "P"}
+
+
+class AnalysisFindingPersistenceValidationError(ValueError):
+    """Raised when a finding cannot be safely persisted as modeled."""
+
+    def __init__(self, violations: list[dict[str, Any]]):
+        self.violations = violations
+        first = violations[0] if violations else {}
+        field = first.get("field", "unknown")
+        actual = first.get("actual_length")
+        allowed = first.get("allowed_length")
+        detail = f"{field} length {actual} exceeds allowed length {allowed}" if actual else str(first)
+        super().__init__(f"analysis finding persistence validation failed: {detail}")
+
+
+def _preview(value: Any) -> str:
+    text = str(value).replace("\r", " ").replace("\n", " ")
+    if len(text) <= _FINDING_PREVIEW_LIMIT:
+        return text
+    return f"{text[:_FINDING_PREVIEW_LIMIT]}..."
+
+
+def _finding_identity(row: Any) -> dict[str, Any]:
+    return {
+        "vuln_id": getattr(row, "vuln_id", None),
+        "component": getattr(row, "component_name", None),
+    }
+
+
+def _validate_analysis_finding_rows(
+    db: Session,
+    rows: list[Any],
+    *,
+    run_id: int | None,
+    sbom_id: int | None,
+    correlation_id: str | None = None,
+) -> None:
+    """Validate pending AnalysisFinding rows before SQLAlchemy bulk flushes."""
+
+    from ..models import AnalysisFinding
+
+    violations: list[dict[str, Any]] = []
+    string_limits: dict[str, int] = {}
+    for column in inspect(AnalysisFinding).columns:
+        if isinstance(column.type, String) and getattr(column.type, "length", None):
+            string_limits[column.name] = int(column.type.length)
+
+    try:
+        for column in inspect(db.get_bind()).get_columns(AnalysisFinding.__tablename__):
+            length = getattr(column["type"], "length", None)
+            if not length:
+                continue
+            existing = string_limits.get(column["name"])
+            string_limits[column["name"]] = min(existing, int(length)) if existing else int(length)
+    except Exception:
+        log.debug(
+            "Unable to inspect live analysis_finding column lengths",
+            extra={"run_id": run_id, "sbom_id": sbom_id, "correlation_id": correlation_id},
+            exc_info=True,
+        )
+
+    for row in rows:
+        identity = _finding_identity(row)
+        for field_name, allowed in string_limits.items():
+            value = getattr(row, field_name, None)
+            if value is None:
+                continue
+            text = str(value)
+            actual = len(text)
+            if actual <= allowed:
+                continue
+            violation = {
+                "field": field_name,
+                "actual_length": actual,
+                "allowed_length": allowed,
+                "vuln_id": identity["vuln_id"],
+                "component": identity["component"],
+                "preview": _preview(text),
+                "run_id": run_id,
+                "sbom_id": sbom_id,
+                "correlation_id": correlation_id,
+            }
+            violations.append(violation)
+            log.warning("analysis.finding_column_overflow", extra=violation)
+
+        severity = getattr(row, "severity", None)
+        if severity and str(severity).upper() not in _ALLOWED_SEVERITIES:
+            violations.append(
+                {
+                    "field": "severity",
+                    "value": _preview(severity),
+                    "vuln_id": identity["vuln_id"],
+                    "component": identity["component"],
+                    "run_id": run_id,
+                    "sbom_id": sbom_id,
+                    "correlation_id": correlation_id,
+                }
+            )
+
+        attack_vector = getattr(row, "attack_vector", None)
+        if attack_vector:
+            normalized_attack_vector = str(attack_vector).strip().upper().replace(" ", "_")
+            if normalized_attack_vector not in _ALLOWED_ATTACK_VECTORS:
+                violations.append(
+                    {
+                        "field": "attack_vector",
+                        "value": _preview(attack_vector),
+                        "vuln_id": identity["vuln_id"],
+                        "component": identity["component"],
+                        "run_id": run_id,
+                        "sbom_id": sbom_id,
+                        "correlation_id": correlation_id,
+                    }
+                )
+
+    if violations:
+        first = violations[0]
+        log.warning(
+            "analysis.finding_validation_failed",
+            extra={
+                "run_id": run_id,
+                "sbom_id": sbom_id,
+                "finding_count": len(rows),
+                "field": first.get("field"),
+                "actual_length": first.get("actual_length"),
+                "permitted_length": first.get("allowed_length"),
+                "vuln_id": first.get("vuln_id"),
+                "component": first.get("component"),
+                "correlation_id": correlation_id,
+            },
+        )
+        raise AnalysisFindingPersistenceValidationError(violations)
 
 
 # ============================================================
@@ -75,14 +213,14 @@ def normalize_details(details: dict | None, components: list[dict]) -> dict:
     query_errors = data.get("query_errors")
     if not isinstance(query_errors, list):
         query_errors = []
+    query_errors = normalize_query_errors(query_errors)
     data["query_errors"] = query_errors
 
     # Only set totals if the analyzer didn't already supply them
     if "total_components" not in data or not isinstance(data["total_components"], int):
         data["total_components"] = len(components)
 
-    if "components_with_cpe" not in data or not isinstance(data["components_with_cpe"], int):
-        data["components_with_cpe"] = len({c.get("cpe") for c in components if c.get("cpe")})
+    data["components_with_cpe"] = count_authoritative_cpes(components)
 
     if "total_findings" not in data or not isinstance(data["total_findings"], int):
         data["total_findings"] = len(findings)
@@ -117,6 +255,7 @@ RUN_STATUS_PARTIAL = "PARTIAL"  # completed but some upstream feeds errored
 RUN_STATUS_ERROR = "ERROR"  # technical failure
 RUN_STATUS_RUNNING = "RUNNING"
 RUN_STATUS_PENDING = "PENDING"
+RUN_STATUS_INTERRUPTED = "INTERRUPTED"
 RUN_STATUS_NO_DATA = "NO_DATA"
 ACTIVE_ANALYSIS_RUN_STATUSES = ("PENDING", "QUEUED", "RUNNING", "ANALYSING", "ANALYZING")
 
@@ -136,6 +275,23 @@ def normalize_run_status(value: str | None) -> str | None:
     return _LEGACY_STATUS_ALIASES.get(upper, upper)
 
 
+def _parse_iso_timestamp(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = f"{text[:-1]}+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
 def compute_report_status(total_findings: int, query_errors: list[dict]) -> str:
     """Compute the overall run status from findings + upstream errors.
 
@@ -148,6 +304,172 @@ def compute_report_status(total_findings: int, query_errors: list[dict]) -> str:
     if query_errors:
         return RUN_STATUS_PARTIAL
     return RUN_STATUS_OK
+
+
+def mark_analysis_run_failed(
+    db: Session,
+    *,
+    run_id: int,
+    error_message: str,
+    completed_on: str,
+    duration_ms: int,
+    code: int = 500,
+    sources: list[str] | None = None,
+    correlation_id: str | None = None,
+    error_category: str | None = None,
+) -> AnalysisRun | None:
+    """Mark an analysis run failed using the caller-provided clean session."""
+
+    log.info(
+        "analysis.run_mark_failed.started",
+        extra={"run_id": run_id, "correlation_id": correlation_id},
+    )
+    run = db.get(AnalysisRun, run_id)
+    if run is None:
+        log.warning(
+            "analysis.run_mark_failed.failed",
+            extra={"run_id": run_id, "correlation_id": correlation_id, "reason": "run_not_found"},
+        )
+        return None
+
+    run.run_status = RUN_STATUS_ERROR
+    run.completed_on = completed_on
+    run.duration_ms = duration_ms
+    run.raw_report = json.dumps(
+        {
+            "error_message": error_message,
+            "status": "failed",
+            "code": code,
+            "sources": sources or [],
+            "correlation_id": correlation_id,
+            "error_category": error_category,
+        }
+    )
+    db.add(run)
+    log.info(
+        "analysis.run_mark_failed.completed",
+        extra={"run_id": run_id, "sbom_id": run.sbom_id, "correlation_id": correlation_id},
+    )
+    return run
+
+
+def mark_analysis_run_interrupted(
+    db: Session,
+    *,
+    run_id: int,
+    reason: str,
+    completed_on: str,
+    duration_ms: int = 0,
+    correlation_id: str | None = None,
+) -> AnalysisRun | None:
+    """Mark an orphaned active run as interrupted using a clean session."""
+
+    run = db.get(AnalysisRun, run_id)
+    if run is None:
+        log.warning(
+            "analysis.run_mark_interrupted.failed",
+            extra={"run_id": run_id, "correlation_id": correlation_id, "reason": "run_not_found"},
+        )
+        return None
+
+    old_status = run.run_status
+    run.run_status = RUN_STATUS_INTERRUPTED
+    run.completed_on = completed_on
+    run.duration_ms = duration_ms
+    run.raw_report = json.dumps(
+        {
+            "status": "interrupted",
+            "error_message": reason,
+            "message": reason,
+            "previous_status": old_status,
+            "correlation_id": correlation_id,
+        }
+    )
+    db.add(run)
+    log.info(
+        "analysis_status_transition",
+        extra={
+            "event": "analysis_status_transition",
+            "analysis_run_id": run.id,
+            "sbom_id": run.sbom_id,
+            "old_status": old_status,
+            "new_status": RUN_STATUS_INTERRUPTED,
+            "completed_at": completed_on,
+            "duration_ms": duration_ms,
+            "error_message": reason,
+            "correlation_id": correlation_id,
+        },
+    )
+    return run
+
+
+def reconcile_stale_analysis_runs(
+    db: Session,
+    *,
+    stale_after_seconds: int = 60,
+    now: datetime | None = None,
+) -> list[AnalysisRun]:
+    """Transition old active inline analysis runs to INTERRUPTED on startup.
+
+    The current production analysis flow runs inside the API/SSE process and
+    stores no task id, worker id, or heartbeat. A run older than the grace
+    period cannot be verified as active after process startup, so it is marked
+    terminal instead of blocking future analyses forever.
+    """
+
+    now_dt = now or datetime.now(UTC)
+    if now_dt.tzinfo is None:
+        now_dt = now_dt.replace(tzinfo=UTC)
+    cutoff = now_dt - timedelta(seconds=max(0, stale_after_seconds))
+    reason = "Analysis was interrupted because the application or worker stopped unexpectedly."
+    interrupted: list[AnalysisRun] = []
+    active_runs = (
+        db.execute(
+            select(AnalysisRun)
+            .where(AnalysisRun.run_status.in_(ACTIVE_ANALYSIS_RUN_STATUSES))
+            .order_by(AnalysisRun.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+
+    log.info(
+        "analysis.startup_reconciliation.executed",
+        extra={
+            "event": "analysis_startup_reconciliation",
+            "active_run_count": len(active_runs),
+            "stale_after_seconds": stale_after_seconds,
+        },
+    )
+
+    for run in active_runs:
+        last_seen = _parse_iso_timestamp(run.completed_on) or _parse_iso_timestamp(run.started_on)
+        if last_seen is not None and last_seen > cutoff:
+            continue
+        started = _parse_iso_timestamp(run.started_on)
+        duration_ms = 0
+        if started is not None:
+            duration_ms = max(0, int((now_dt - started).total_seconds() * 1000))
+        marked = mark_analysis_run_interrupted(
+            db,
+            run_id=int(run.id),
+            reason=reason,
+            completed_on=now_iso(),
+            duration_ms=duration_ms,
+        )
+        if marked is not None:
+            interrupted.append(marked)
+
+    if interrupted:
+        log.warning(
+            "analysis.startup_reconciliation.interrupted_stale_runs",
+            extra={
+                "event": "analysis_stale_runs_interrupted",
+                "run_ids": [run.id for run in interrupted],
+                "count": len(interrupted),
+            },
+        )
+    return interrupted
 
 
 def get_active_analysis_run(db: Session, sbom_id: int) -> AnalysisRun | None:
@@ -180,6 +502,7 @@ def persist_analysis_run(
     duration_ms: int,
     existing_run: AnalysisRun | None = None,
     trigger_source: str = "unknown",
+    correlation_id: str | None = None,
 ) -> AnalysisRun:
     """
     Persist an analysis run and its findings to the database.
@@ -247,6 +570,16 @@ def persist_analysis_run(
     # exist so duplicate guards and component resolution cannot leave stale
     # run-level counts behind.
     persisted_rows: list[AnalysisFinding] = []
+    finding_count = len([finding for finding in (details.get("findings") or []) if isinstance(finding, dict)])
+    log.info(
+        "analysis.finding_persistence.started",
+        extra={
+            "run_id": run.id,
+            "sbom_id": sbom_obj.id,
+            "finding_count": finding_count,
+            "correlation_id": correlation_id,
+        },
+    )
     for finding in details.get("findings") or []:
         if not isinstance(finding, dict):
             continue
@@ -342,7 +675,23 @@ def persist_analysis_run(
         db.add(row)
         persisted_rows.append(row)
 
+    _validate_analysis_finding_rows(
+        db,
+        persisted_rows,
+        run_id=run.id,
+        sbom_id=sbom_obj.id,
+        correlation_id=correlation_id,
+    )
     db.flush()
+    log.info(
+        "analysis.finding_persistence.completed",
+        extra={
+            "run_id": run.id,
+            "sbom_id": sbom_obj.id,
+            "finding_count": len(persisted_rows),
+            "correlation_id": correlation_id,
+        },
+    )
     metrics = calculate_run_finding_metrics(persisted_rows, run=run)
     apply_metrics_to_run(run, metrics)
     if normalized_status in {RUN_STATUS_OK, RUN_STATUS_FINDINGS, RUN_STATUS_PARTIAL, "PASS", "FAIL"}:

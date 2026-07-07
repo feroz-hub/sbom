@@ -37,6 +37,8 @@ interface AnalysisDetailPageProps {
   params: Promise<{ id: string }>;
 }
 
+const ACTIVE_RUN_STATUSES = new Set(['PENDING', 'QUEUED', 'RUNNING', 'ANALYSING', 'ANALYZING']);
+
 function AnalysisDetailContent({ params }: AnalysisDetailPageProps) {
   const { id: idParam } = use(params);
   const id = Number(idParam);
@@ -102,6 +104,11 @@ function AnalysisDetailContent({ params }: AnalysisDetailPageProps) {
     queryKey: ['run', id],
     queryFn: ({ signal }) => getRun(id, signal),
     enabled: !isNaN(id),
+    refetchInterval: (query) => {
+      const status = String(query.state.data?.run_status ?? '').toUpperCase();
+      return ACTIVE_RUN_STATUSES.has(status) ? 3000 : false;
+    },
+    refetchOnWindowFocus: true,
   });
 
   const { data: findingsData, isLoading: findingsLoading, error: findingsError } = useQuery({

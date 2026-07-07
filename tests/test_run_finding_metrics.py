@@ -268,7 +268,10 @@ def test_reconcile_script_updates_stale_cached_counts(client, db):
     db.commit()
 
     env = os.environ.copy()
-    env["DATABASE_URL"] = str(db.get_bind().url)
+    database_url = db.get_bind().url.render_as_string(hide_password=False)
+    env["DATABASE_URL"] = database_url
+    env["TEST_DATABASE_URL"] = database_url
+    env["TEST_POSTGRES_DATABASE_URL"] = database_url
     dry = subprocess.run(
         [sys.executable, "scripts/reconcile_analysis_run_finding_counts.py", "--run-id", str(run.id), "--dry-run"],
         cwd=os.getcwd(),

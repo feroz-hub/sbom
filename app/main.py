@@ -82,7 +82,7 @@ from .routers import (
 from .routers import analysis as analysis_export_router
 from .routers import dashboard as dashboard_trend_router
 from .routers import sbom as sbom_features_router
-from .services.analysis_service import backfill_analytics_tables
+from .services.analysis_service import backfill_analytics_tables, reconcile_stale_analysis_runs
 from .services.sbom_service import now_iso  # re-exported for tests/back-compat
 from .settings import get_settings
 
@@ -121,6 +121,26 @@ def _ensure_column(table_name: str, column_name: str, type_sql: str, default_sql
             ddl += f" DEFAULT {default_sql}"
         conn.execute(text(ddl))
         conn.commit()
+
+
+def _sync_postgres_sequence(db, table_name: str, column_name: str) -> None:
+    """Keep PostgreSQL sequences aligned after startup seeds explicit ids."""
+    if engine.dialect.name != "postgresql":
+        return
+    if not table_name.replace("_", "").isalnum() or not column_name.replace("_", "").isalnum():
+        raise RuntimeError("Unsafe identifier while syncing PostgreSQL sequence")
+
+    sequence = db.execute(
+        text("SELECT pg_get_serial_sequence(:table_name, :column_name)"),
+        {"table_name": table_name, "column_name": column_name},
+    ).scalar()
+    if not sequence:
+        return
+    max_value = int(db.execute(text(f"SELECT COALESCE(MAX({column_name}), 0) FROM {table_name}")).scalar() or 0)
+    db.execute(
+        text("SELECT setval(CAST(:sequence AS regclass), :value, :called)"),
+        {"sequence": sequence, "value": max(max_value, 1), "called": max_value > 0},
+    )
 
 
 def _ensure_remediation_audit_table() -> None:
@@ -338,12 +358,8 @@ def _ensure_seed_data() -> None:
     # Migration 013 — reclassify legacy rows that predate the validator
     # wiring as 'pending' (validation_at IS NULL is the unambiguous tell).
     # Idempotent: the WHERE clause excludes already-reclassified rows.
-    if engine.dialect.name == "sqlite":
-        with engine.connect() as conn:
-            conn.execute(
-                text("UPDATE sbom_source SET status = 'pending' WHERE validated_at IS NULL AND status = 'validated'")
-            )
-            conn.commit()
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE sbom_source SET status = 'pending' WHERE validated_at IS NULL AND status = 'validated'"))
 
     # Migration 014 — soft-delete columns on the eight in-scope tables.
     # ``Base.metadata.create_all`` already added the columns to fresh
@@ -487,6 +503,8 @@ def _ensure_seed_data() -> None:
             user.email = user.email or "dev@local"
             user.display_name = user.display_name or "Dev User"
         db.flush()
+        _sync_postgres_sequence(db, "tenants", "id")
+        _sync_postgres_sequence(db, "iam_users", "id")
         membership = db.execute(
             select(TenantUser).where(TenantUser.tenant_id == 1, TenantUser.user_id == 1)
         ).scalar_one_or_none()
@@ -658,6 +676,17 @@ def _reconcile_zombie_ai_fix_batches() -> None:
             log.info("ai.startup.reconciled_zombie_batches: count=%d", result.rowcount)
 
 
+def _reconcile_stale_analysis_runs() -> None:
+    """Mark old in-process analysis runs interrupted after an API restart."""
+    with SessionLocal() as db:
+        interrupted = reconcile_stale_analysis_runs(db)
+        if interrupted:
+            db.commit()
+            log.info("analysis.startup.reconciled_stale_runs: count=%d", len(interrupted))
+        else:
+            db.rollback()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Re-apply logging config AFTER uvicorn has fully initialised. Uvicorn
@@ -683,6 +712,7 @@ async def lifespan(app: FastAPI):
     _ensure_seed_data()
     _update_sbom_names()
     _reconcile_zombie_ai_fix_batches()
+    _reconcile_stale_analysis_runs()
     validate_auth_setup()
     log.info("Startup complete. API ready.")
     yield

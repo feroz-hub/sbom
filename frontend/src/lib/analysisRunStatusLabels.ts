@@ -27,6 +27,8 @@ export const runStatusShortLabel = (code: string | null | undefined): string => 
       return 'Source errors';
     case 'ERROR':
       return 'Run error';
+    case 'INTERRUPTED':
+      return 'Interrupted';
     case 'RUNNING':
       return 'Running';
     case 'PENDING':
@@ -52,6 +54,8 @@ export const runStatusDescription = (code: string | null | undefined): string =>
       return 'The scan finished but some vulnerability lookups failed (e.g. API errors). Fewer findings than expected may be shown.';
     case 'ERROR':
       return 'The analysis run failed with an error. Check the run details for a message.';
+    case 'INTERRUPTED':
+      return 'The analysis stopped because the application or worker restarted. Start a new analysis to continue.';
     case 'RUNNING':
       return 'Analysis is still in progress.';
     case 'PENDING':
@@ -83,6 +87,8 @@ export const sbomAnalysisShortLabel = (code: string | null | undefined): string 
       return 'Source errors';
     case 'ERROR':
       return 'Scan error';
+    case 'INTERRUPTED':
+      return 'Interrupted';
     case 'NOT_ANALYSED':
       return 'Not scanned';
     default:
@@ -96,6 +102,7 @@ export const sbomAnalysisDescription = (code: string | null | undefined): string
   if (k === 'PENDING' || k === 'QUEUED') return 'Analysis is queued and will start shortly.';
   if (k === 'NOT_ANALYSED') return 'This SBOM has not been analysed yet.';
   if (k === 'ERROR') return 'The scan ended with an error. Check notifications or run details.';
+  if (k === 'INTERRUPTED') return 'The scan stopped because the application or worker restarted.';
   return runStatusDescription(code);
 };
 

@@ -34,6 +34,7 @@ class NvdIdentifiers:
     trusted_cpes: list[tuple[str, dict[str, Any]]]
     skipped_generated_cpe: int = 0
     skipped_untrusted_cpe: int = 0
+    skipped_missing_cpe: int = 0
 
 
 class ScanCircuitBreaker:
@@ -94,9 +95,14 @@ def collect_nvd_identifiers(
     seen_cpes: set[str] = set()
     skipped_generated = 0
     skipped_untrusted = 0
+    skipped_missing = 0
     for component in components:
         cpe = str(component.get("cpe") or "").strip()
         if not cpe:
+            if component.get("heuristic_cpe"):
+                skipped_generated += 1
+            else:
+                skipped_missing += 1
             continue
         source = str(component.get("cpe_source") or "unknown").strip().lower()
         if source in {"generated_fallback", "inferred_from_purl", "test_fixture"}:
@@ -110,7 +116,7 @@ def collect_nvd_identifiers(
         if cpe not in seen_cpes:
             seen_cpes.add(cpe)
             cpes.append((cpe, component))
-    return NvdIdentifiers(cve_ids, cpes, skipped_generated, skipped_untrusted)
+    return NvdIdentifiers(cve_ids, cpes, skipped_generated, skipped_untrusted, skipped_missing)
 
 
 def _records(payload: dict[str, Any]) -> list[dict[str, Any]]:
@@ -149,6 +155,7 @@ class NvdEnrichmentService:
             "queried": 0,
             "skipped_generated_cpe": identifiers.skipped_generated_cpe,
             "skipped_untrusted_cpe": identifiers.skipped_untrusted_cpe,
+            "skipped_missing_cpe": identifiers.skipped_missing_cpe,
             "failures": 0,
             "circuit_breaker_open": False,
             "error_message": None,

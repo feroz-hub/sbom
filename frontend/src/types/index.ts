@@ -171,6 +171,7 @@ export interface SBOMSource {
     | 'FINDINGS'
     | 'PARTIAL'
     | 'ERROR'
+    | 'INTERRUPTED'
     | 'CANCELLED'
     | 'NOT_ANALYSED'
     | 'PASS' // legacy alias for OK
@@ -856,6 +857,7 @@ export interface AnalysisRun {
     | 'FINDINGS'
     | 'PARTIAL'
     | 'ERROR'
+    | 'INTERRUPTED'
     | 'RUNNING'
     | 'PENDING'
     | 'NO_DATA'
@@ -872,6 +874,8 @@ export interface AnalysisRun {
   low_count: number | null;
   unknown_count: number | null;
   query_error_count: number | null;
+  raw_report?: string | null;
+  source_summary?: SourceQuerySummary[] | null;
   duration_ms: number | null;       // milliseconds (backend field name)
   started_on: string | null;
   completed_on: string | null;
@@ -889,6 +893,17 @@ export interface AnalysisRun {
       unknown: number;
     };
   } | null;
+}
+
+export interface SourceQuerySummary {
+  source: string;
+  queried: number;
+  matched: number;
+  no_match: number;
+  skipped: number;
+  errors: number;
+  status?: string | null;
+  reason?: string | null;
 }
 
 /**

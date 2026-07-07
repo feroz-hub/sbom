@@ -1,0 +1,1011 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+
+<meta charset="UTF-8">
+
+<title>
+    Bandit Report
+</title>
+
+<style>
+
+html * {
+    font-family: "Arial", sans-serif;
+}
+
+pre {
+    font-family: "Monaco", monospace;
+}
+
+.bordered-box {
+    border: 1px solid black;
+    padding-top:.5em;
+    padding-bottom:.5em;
+    padding-left:1em;
+}
+
+.metrics-box {
+    font-size: 1.1em;
+    line-height: 130%;
+}
+
+.metrics-title {
+    font-size: 1.5em;
+    font-weight: 500;
+    margin-bottom: .25em;
+}
+
+.issue-description {
+    font-size: 1.3em;
+    font-weight: 500;
+}
+
+.candidate-issues {
+    margin-left: 2em;
+    border-left: solid 1px; LightGray;
+    padding-left: 5%;
+    margin-top: .2em;
+    margin-bottom: .2em;
+}
+
+.issue-block {
+    border: 1px solid LightGray;
+    padding-left: .5em;
+    padding-top: .5em;
+    padding-bottom: .5em;
+    margin-bottom: .5em;
+}
+
+.issue-sev-high {
+    background-color: Pink;
+}
+
+.issue-sev-medium {
+    background-color: NavajoWhite;
+}
+
+.issue-sev-low {
+    background-color: LightCyan;
+}
+
+</style>
+</head>
+
+<body>
+
+<div id="metrics">
+    <div class="metrics-box bordered-box">
+        <div class="metrics-title">
+            Metrics:<br>
+        </div>
+        Total lines of code: <span id="loc">54789</span><br>
+        Total lines skipped (#nosec): <span id="nosec">0</span>
+    </div>
+</div>
+
+
+
+
+<br>
+<div id="results">
+    
+<div id="issue-0">
+<div class="issue-block issue-sev-low">
+    <b>try_except_pass: </b> Try, Except, Pass detected.<br>
+    <b>Test ID:</b> B110<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/703.html" target="_blank">CWE-703</a><br>
+    <b>File: </b><a href="/Users/ferozebasha/sbom/app/ai/batches.py" target="_blank">/Users/ferozebasha/sbom/app/ai/batches.py</a><br>
+    <b>Line number: </b>139<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html</a><br>
+
+<div class="code">
+<pre>
+138	            db.rollback()
+139	        except Exception:  # noqa: BLE001
+140	            pass
+141	
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-1">
+<div class="issue-block issue-sev-low">
+    <b>try_except_pass: </b> Try, Except, Pass detected.<br>
+    <b>Test ID:</b> B110<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/703.html" target="_blank">CWE-703</a><br>
+    <b>File: </b><a href="/Users/ferozebasha/sbom/app/ai/cache.py" target="_blank">/Users/ferozebasha/sbom/app/ai/cache.py</a><br>
+    <b>Line number: </b>280<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html</a><br>
+
+<div class="code">
+<pre>
+279	            db.rollback()
+280	        except Exception:
+281	            pass
+282	
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-2">
+<div class="issue-block issue-sev-low">
+    <b>try_except_pass: </b> Try, Except, Pass detected.<br>
+    <b>Test ID:</b> B110<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/703.html" target="_blank">CWE-703</a><br>
+    <b>File: </b><a href="/Users/ferozebasha/sbom/app/ai/cache.py" target="_blank">/Users/ferozebasha/sbom/app/ai/cache.py</a><br>
+    <b>Line number: </b>307<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html</a><br>
+
+<div class="code">
+<pre>
+306	            db.rollback()
+307	        except Exception:
+308	            pass
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-3">
+<div class="issue-block issue-sev-low">
+    <b>assert_used: </b> Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.<br>
+    <b>Test ID:</b> B101<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/703.html" target="_blank">CWE-703</a><br>
+    <b>File: </b><a href="/Users/ferozebasha/sbom/app/ai/config_loader.py" target="_blank">/Users/ferozebasha/sbom/app/ai/config_loader.py</a><br>
+    <b>Line number: </b>202<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b101_assert_used.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b101_assert_used.html</a><br>
+
+<div class="code">
+<pre>
+201	            if self._cache_is_fresh():
+202	                assert self._cache is not None
+203	                return self._cache.configs, self._cache.settings
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-4">
+<div class="issue-block issue-sev-low">
+    <b>try_except_pass: </b> Try, Except, Pass detected.<br>
+    <b>Test ID:</b> B110<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/703.html" target="_blank">CWE-703</a><br>
+    <b>File: </b><a href="/Users/ferozebasha/sbom/app/ai/cost.py" target="_blank">/Users/ferozebasha/sbom/app/ai/cost.py</a><br>
+    <b>Line number: </b>310<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html</a><br>
+
+<div class="code">
+<pre>
+309	                update_budget_remaining(remaining_usd=max(self._caps.per_day_org_usd - self._counter.get(), 0.0))
+310	            except Exception:  # noqa: BLE001 — telemetry failure must not break a successful call
+311	                pass
+312	
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-5">
+<div class="issue-block issue-sev-low">
+    <b>try_except_pass: </b> Try, Except, Pass detected.<br>
+    <b>Test ID:</b> B110<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/703.html" target="_blank">CWE-703</a><br>
+    <b>File: </b><a href="/Users/ferozebasha/sbom/app/ai/cost.py" target="_blank">/Users/ferozebasha/sbom/app/ai/cost.py</a><br>
+    <b>Line number: </b>403<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html</a><br>
+
+<div class="code">
+<pre>
+402	            db.rollback()
+403	        except Exception:
+404	            pass
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-6">
+<div class="issue-block issue-sev-low">
+    <b>try_except_pass: </b> Try, Except, Pass detected.<br>
+    <b>Test ID:</b> B110<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/703.html" target="_blank">CWE-703</a><br>
+    <b>File: </b><a href="/Users/ferozebasha/sbom/app/ai/credential_audit.py" target="_blank">/Users/ferozebasha/sbom/app/ai/credential_audit.py</a><br>
+    <b>Line number: </b>75<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html</a><br>
+
+<div class="code">
+<pre>
+74	            db.rollback()
+75	        except Exception:
+76	            pass
+77	
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-7">
+<div class="issue-block issue-sev-low">
+    <b>try_except_continue: </b> Try, Except, Continue detected.<br>
+    <b>Test ID:</b> B112<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/703.html" target="_blank">CWE-703</a><br>
+    <b>File: </b><a href="/Users/ferozebasha/sbom/app/ai/grounding.py" target="_blank">/Users/ferozebasha/sbom/app/ai/grounding.py</a><br>
+    <b>Line number: </b>192<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b112_try_except_continue.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b112_try_except_continue.html</a><br>
+
+<div class="code">
+<pre>
+191	                )
+192	            except Exception:
+193	                continue
+194	    return out
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-8">
+<div class="issue-block issue-sev-low">
+    <b>try_except_pass: </b> Try, Except, Pass detected.<br>
+    <b>Test ID:</b> B110<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/703.html" target="_blank">CWE-703</a><br>
+    <b>File: </b><a href="/Users/ferozebasha/sbom/app/ai/progress.py" target="_blank">/Users/ferozebasha/sbom/app/ai/progress.py</a><br>
+    <b>Line number: </b>385<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html</a><br>
+
+<div class="code">
+<pre>
+384	                self._client.zrem(self._run_batches_index(run_id), batch_id)
+385	            except Exception:  # noqa: BLE001
+386	                pass
+387	        except Exception:  # noqa: BLE001
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-9">
+<div class="issue-block issue-sev-low">
+    <b>try_except_pass: </b> Try, Except, Pass detected.<br>
+    <b>Test ID:</b> B110<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/703.html" target="_blank">CWE-703</a><br>
+    <b>File: </b><a href="/Users/ferozebasha/sbom/app/ai/progress.py" target="_blank">/Users/ferozebasha/sbom/app/ai/progress.py</a><br>
+    <b>Line number: </b>387<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html</a><br>
+
+<div class="code">
+<pre>
+386	                pass
+387	        except Exception:  # noqa: BLE001
+388	            pass
+389	
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-10">
+<div class="issue-block issue-sev-low">
+    <b>try_except_pass: </b> Try, Except, Pass detected.<br>
+    <b>Test ID:</b> B110<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/703.html" target="_blank">CWE-703</a><br>
+    <b>File: </b><a href="/Users/ferozebasha/sbom/app/db.py" target="_blank">/Users/ferozebasha/sbom/app/db.py</a><br>
+    <b>Line number: </b>61<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html</a><br>
+
+<div class="code">
+<pre>
+60	            return u
+61	    except Exception:
+62	        pass
+63	
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-11">
+<div class="issue-block issue-sev-medium">
+    <b>hardcoded_sql_expressions: </b> Possible SQL injection vector through string-based query construction.<br>
+    <b>Test ID:</b> B608<br>
+    <b>Severity: </b>MEDIUM<br>
+    <b>Confidence: </b>LOW<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/89.html" target="_blank">CWE-89</a><br>
+    <b>File: </b><a href="/Users/ferozebasha/sbom/app/main.py" target="_blank">/Users/ferozebasha/sbom/app/main.py</a><br>
+    <b>Line number: </b>139<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html</a><br>
+
+<div class="code">
+<pre>
+138	        return
+139	    max_value = int(db.execute(text(f&quot;SELECT COALESCE(MAX({column_name}), 0) FROM {table_name}&quot;)).scalar() or 0)
+140	    db.execute(
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-12">
+<div class="issue-block issue-sev-low">
+    <b>try_except_pass: </b> Try, Except, Pass detected.<br>
+    <b>Test ID:</b> B110<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/703.html" target="_blank">CWE-703</a><br>
+    <b>File: </b><a href="/Users/ferozebasha/sbom/app/metrics/health.py" target="_blank">/Users/ferozebasha/sbom/app/metrics/health.py</a><br>
+    <b>Line number: </b>44<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html</a><br>
+
+<div class="code">
+<pre>
+43	            total += len(report.get(&quot;document_warnings&quot;) or [])
+44	        except Exception:
+45	            pass
+46	    return total
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-13">
+<div class="issue-block issue-sev-low">
+    <b>try_except_pass: </b> Try, Except, Pass detected.<br>
+    <b>Test ID:</b> B110<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/703.html" target="_blank">CWE-703</a><br>
+    <b>File: </b><a href="/Users/ferozebasha/sbom/app/models.py" target="_blank">/Users/ferozebasha/sbom/app/models.py</a><br>
+    <b>Line number: </b>314<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html</a><br>
+
+<div class="code">
+<pre>
+313	                    return &quot;spdx&quot;
+314	        except Exception:
+315	            pass
+316	        return &quot;—&quot;
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-14">
+<div class="issue-block issue-sev-low">
+    <b>try_except_pass: </b> Try, Except, Pass detected.<br>
+    <b>Test ID:</b> B110<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/703.html" target="_blank">CWE-703</a><br>
+    <b>File: </b><a href="/Users/ferozebasha/sbom/app/models.py" target="_blank">/Users/ferozebasha/sbom/app/models.py</a><br>
+    <b>Line number: </b>331<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html</a><br>
+
+<div class="code">
+<pre>
+330	                    return str(as_dict.get(&quot;spdxVersion&quot;) or &quot;—&quot;)
+331	        except Exception:
+332	            pass
+333	        return &quot;—&quot;
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-15">
+<div class="issue-block issue-sev-low">
+    <b>assert_used: </b> Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.<br>
+    <b>Test ID:</b> B101<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/703.html" target="_blank">CWE-703</a><br>
+    <b>File: </b><a href="/Users/ferozebasha/sbom/app/nvd_mirror/adapters/sync_run_repository.py" target="_blank">/Users/ferozebasha/sbom/app/nvd_mirror/adapters/sync_run_repository.py</a><br>
+    <b>Line number: </b>33<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b101_assert_used.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b101_assert_used.html</a><br>
+
+<div class="code">
+<pre>
+32	        self._session.flush()
+33	        assert row.id is not None  # populated by autoincrement
+34	        return int(row.id)
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-16">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Using xml.etree.ElementTree to parse untrusted XML data is known to be vulnerable to XML attacks. Replace xml.etree.ElementTree with the equivalent defusedxml package, or make sure defusedxml.defuse_stdlib() is called.<br>
+    <b>Test ID:</b> B405<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/20.html" target="_blank">CWE-20</a><br>
+    <b>File: </b><a href="/Users/ferozebasha/sbom/app/parsing/cyclonedx.py" target="_blank">/Users/ferozebasha/sbom/app/parsing/cyclonedx.py</a><br>
+    <b>Line number: </b>194<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_imports.html#b405-import-xml-etree" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_imports.html#b405-import-xml-etree</a><br>
+
+<div class="code">
+<pre>
+193	        return out
+194	    import xml.etree.ElementTree as ET
+195	
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-17">
+<div class="issue-block issue-sev-medium">
+    <b>blacklist: </b> Using xml.etree.ElementTree.fromstring to parse untrusted XML data is known to be vulnerable to XML attacks. Replace xml.etree.ElementTree.fromstring with its defusedxml equivalent function or make sure defusedxml.defuse_stdlib() is called<br>
+    <b>Test ID:</b> B314<br>
+    <b>Severity: </b>MEDIUM<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/20.html" target="_blank">CWE-20</a><br>
+    <b>File: </b><a href="/Users/ferozebasha/sbom/app/parsing/cyclonedx.py" target="_blank">/Users/ferozebasha/sbom/app/parsing/cyclonedx.py</a><br>
+    <b>Line number: </b>198<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b313-b320-xml-bad-elementtree" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b313-b320-xml-bad-elementtree</a><br>
+
+<div class="code">
+<pre>
+197	    try:
+198	        root = ET.fromstring(xml_string)
+199	    except ET.ParseError as e:
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-18">
+<div class="issue-block issue-sev-low">
+    <b>try_except_continue: </b> Try, Except, Continue detected.<br>
+    <b>Test ID:</b> B112<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/703.html" target="_blank">CWE-703</a><br>
+    <b>File: </b><a href="/Users/ferozebasha/sbom/app/routers/ai_fixes.py" target="_blank">/Users/ferozebasha/sbom/app/routers/ai_fixes.py</a><br>
+    <b>Line number: </b>608<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b112_try_except_continue.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b112_try_except_continue.html</a><br>
+
+<div class="code">
+<pre>
+607	            ctx = build_grounding_context(f, db=db)
+608	        except Exception:
+609	            continue
+610	        key = cache_mod.make_cache_key(
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-19">
+<div class="issue-block issue-sev-low">
+    <b>try_except_continue: </b> Try, Except, Continue detected.<br>
+    <b>Test ID:</b> B112<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/703.html" target="_blank">CWE-703</a><br>
+    <b>File: </b><a href="/Users/ferozebasha/sbom/app/routers/ai_fixes.py" target="_blank">/Users/ferozebasha/sbom/app/routers/ai_fixes.py</a><br>
+    <b>Line number: </b>892<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b112_try_except_continue.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b112_try_except_continue.html</a><br>
+
+<div class="code">
+<pre>
+891	            ctx = build_grounding_context(f, db=db)
+892	        except Exception:
+893	            continue
+894	        key = cache_mod.make_cache_key(
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-20">
+<div class="issue-block issue-sev-low">
+    <b>try_except_pass: </b> Try, Except, Pass detected.<br>
+    <b>Test ID:</b> B110<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/703.html" target="_blank">CWE-703</a><br>
+    <b>File: </b><a href="/Users/ferozebasha/sbom/app/routers/lifecycle.py" target="_blank">/Users/ferozebasha/sbom/app/routers/lifecycle.py</a><br>
+    <b>Line number: </b>49<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html</a><br>
+
+<div class="code">
+<pre>
+48	        }
+49	    except Exception:
+50	        pass
+51	    tracker = get_provider_status_tracker()
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-21">
+<div class="issue-block issue-sev-low">
+    <b>try_except_pass: </b> Try, Except, Pass detected.<br>
+    <b>Test ID:</b> B110<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/703.html" target="_blank">CWE-703</a><br>
+    <b>File: </b><a href="/Users/ferozebasha/sbom/app/routers/sbom.py" target="_blank">/Users/ferozebasha/sbom/app/routers/sbom.py</a><br>
+    <b>Line number: </b>247<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html</a><br>
+
+<div class="code">
+<pre>
+246	                    ecosystems.add(parsed[&quot;type&quot;].lower())
+247	            except Exception:
+248	                pass
+249	        if c.get(&quot;cpe&quot;):
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-22">
+<div class="issue-block issue-sev-low">
+    <b>try_except_pass: </b> Try, Except, Pass detected.<br>
+    <b>Test ID:</b> B110<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/703.html" target="_blank">CWE-703</a><br>
+    <b>File: </b><a href="/Users/ferozebasha/sbom/app/routers/sbom_upload.py" target="_blank">/Users/ferozebasha/sbom/app/routers/sbom_upload.py</a><br>
+    <b>Line number: </b>296<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html</a><br>
+
+<div class="code">
+<pre>
+295	                components_count = len(as_dict.get(&quot;packages&quot;) or [])
+296	    except Exception:
+297	        pass
+298	
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-23">
+<div class="issue-block issue-sev-low">
+    <b>try_except_pass: </b> Try, Except, Pass detected.<br>
+    <b>Test ID:</b> B110<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/703.html" target="_blank">CWE-703</a><br>
+    <b>File: </b><a href="/Users/ferozebasha/sbom/app/services/audit_log.py" target="_blank">/Users/ferozebasha/sbom/app/services/audit_log.py</a><br>
+    <b>Line number: </b>90<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html</a><br>
+
+<div class="code">
+<pre>
+89	            db.rollback()
+90	        except Exception:
+91	            pass
+92	
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-24">
+<div class="issue-block issue-sev-low">
+    <b>assert_used: </b> Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.<br>
+    <b>Test ID:</b> B101<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/703.html" target="_blank">CWE-703</a><br>
+    <b>File: </b><a href="/Users/ferozebasha/sbom/app/services/compare_service.py" target="_blank">/Users/ferozebasha/sbom/app/services/compare_service.py</a><br>
+    <b>Line number: </b>421<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b101_assert_used.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b101_assert_used.html</a><br>
+
+<div class="code">
+<pre>
+420	                continue
+421	            assert la is not None and lb is not None
+422	            if la.version != lb.version:
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-25">
+<div class="issue-block issue-sev-low">
+    <b>assert_used: </b> Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.<br>
+    <b>Test ID:</b> B101<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/703.html" target="_blank">CWE-703</a><br>
+    <b>File: </b><a href="/Users/ferozebasha/sbom/app/services/compare_service.py" target="_blank">/Users/ferozebasha/sbom/app/services/compare_service.py</a><br>
+    <b>Line number: </b>463<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b101_assert_used.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b101_assert_used.html</a><br>
+
+<div class="code">
+<pre>
+462	                continue
+463	            assert la is not None and lb is not None
+464	            if la.severity != lb.severity:
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-26">
+<div class="issue-block issue-sev-low">
+    <b>assert_used: </b> Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.<br>
+    <b>Test ID:</b> B101<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/703.html" target="_blank">CWE-703</a><br>
+    <b>File: </b><a href="/Users/ferozebasha/sbom/app/services/compare_service.py" target="_blank">/Users/ferozebasha/sbom/app/services/compare_service.py</a><br>
+    <b>Line number: </b>850<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b101_assert_used.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b101_assert_used.html</a><br>
+
+<div class="code">
+<pre>
+849	    src = b or a  # whichever side has the row
+850	    assert src is not None
+851	    purl = src.component_purl
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-27">
+<div class="issue-block issue-sev-medium">
+    <b>hardcoded_sql_expressions: </b> Possible SQL injection vector through string-based query construction.<br>
+    <b>Test ID:</b> B608<br>
+    <b>Severity: </b>MEDIUM<br>
+    <b>Confidence: </b>LOW<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/89.html" target="_blank">CWE-89</a><br>
+    <b>File: </b><a href="/Users/ferozebasha/sbom/app/services/dashboard_metrics.py" target="_blank">/Users/ferozebasha/sbom/app/services/dashboard_metrics.py</a><br>
+    <b>Line number: </b>261<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html</a><br>
+
+<div class="code">
+<pre>
+260	    sql = text(
+261	        f&quot;&quot;&quot;
+262	        WITH ordered AS (
+263	            SELECT
+264	                id,
+265	                sbom_id,
+266	                started_on,
+267	                ROW_NUMBER() OVER (PARTITION BY sbom_id ORDER BY id) AS rn
+268	            FROM analysis_run
+269	            WHERE run_status IN (&#x27;OK&#x27;,&#x27;FINDINGS&#x27;,&#x27;PARTIAL&#x27;)
+270	            {tenant_filter}
+271	        )
+272	        SELECT a.id AS run_a, b.id AS run_b, b.started_on AS run_b_started
+273	        FROM ordered a
+274	        JOIN ordered b
+275	          ON a.sbom_id = b.sbom_id AND b.rn = a.rn + 1
+276	        ORDER BY b.id
+277	        &quot;&quot;&quot;
+278	    )
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-28">
+<div class="issue-block issue-sev-low">
+    <b>try_except_pass: </b> Try, Except, Pass detected.<br>
+    <b>Test ID:</b> B110<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/703.html" target="_blank">CWE-703</a><br>
+    <b>File: </b><a href="/Users/ferozebasha/sbom/app/services/lifecycle/secret_service.py" target="_blank">/Users/ferozebasha/sbom/app/services/lifecycle/secret_service.py</a><br>
+    <b>Line number: </b>45<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html</a><br>
+
+<div class="code">
+<pre>
+44	                return SecretCipher(key)
+45	        except Exception:
+46	            pass
+47	        return SecretCipher(hashlib.sha256(raw.encode(&quot;utf-8&quot;)).digest())
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-29">
+<div class="issue-block issue-sev-low">
+    <b>hardcoded_password_default: </b> Possible hardcoded password: 'api_key'<br>
+    <b>Test ID:</b> B107<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>MEDIUM<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/259.html" target="_blank">CWE-259</a><br>
+    <b>File: </b><a href="/Users/ferozebasha/sbom/app/services/lifecycle/secret_service.py" target="_blank">/Users/ferozebasha/sbom/app/services/lifecycle/secret_service.py</a><br>
+    <b>Line number: </b>74<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b107_hardcoded_password_default.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b107_hardcoded_password_default.html</a><br>
+
+<div class="code">
+<pre>
+73	
+74	    def get_secret(self, db: Session, provider_key: str, secret_name: str = &quot;api_key&quot;) -&gt; str | None:
+75	        row = self.get_row(db, provider_key, secret_name)
+76	        if row is None:
+77	            return None
+78	        return self.cipher.decrypt(row.encrypted_value)
+79	
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-30">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Using xml.etree.ElementTree to parse untrusted XML data is known to be vulnerable to XML attacks. Replace xml.etree.ElementTree with the equivalent defusedxml package, or make sure defusedxml.defuse_stdlib() is called.<br>
+    <b>Test ID:</b> B405<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/20.html" target="_blank">CWE-20</a><br>
+    <b>File: </b><a href="/Users/ferozebasha/sbom/app/services/sbom/format_detector.py" target="_blank">/Users/ferozebasha/sbom/app/services/sbom/format_detector.py</a><br>
+    <b>Line number: </b>7<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_imports.html#b405-import-xml-etree" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_imports.html#b405-import-xml-etree</a><br>
+
+<div class="code">
+<pre>
+6	import re
+7	import xml.etree.ElementTree as ET
+8	from dataclasses import dataclass, field
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-31">
+<div class="issue-block issue-sev-medium">
+    <b>blacklist: </b> Using xml.etree.ElementTree.fromstring to parse untrusted XML data is known to be vulnerable to XML attacks. Replace xml.etree.ElementTree.fromstring with its defusedxml equivalent function or make sure defusedxml.defuse_stdlib() is called<br>
+    <b>Test ID:</b> B314<br>
+    <b>Severity: </b>MEDIUM<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/20.html" target="_blank">CWE-20</a><br>
+    <b>File: </b><a href="/Users/ferozebasha/sbom/app/services/sbom/format_detector.py" target="_blank">/Users/ferozebasha/sbom/app/services/sbom/format_detector.py</a><br>
+    <b>Line number: </b>146<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b313-b320-xml-bad-elementtree" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b313-b320-xml-bad-elementtree</a><br>
+
+<div class="code">
+<pre>
+145	    try:
+146	        root = ET.fromstring(sample)
+147	    except ET.ParseError:
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-32">
+<div class="issue-block issue-sev-low">
+    <b>assert_used: </b> Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.<br>
+    <b>Test ID:</b> B101<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/703.html" target="_blank">CWE-703</a><br>
+    <b>File: </b><a href="/Users/ferozebasha/sbom/app/services/scheduling.py" target="_blank">/Users/ferozebasha/sbom/app/services/scheduling.py</a><br>
+    <b>Line number: </b>160<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b101_assert_used.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b101_assert_used.html</a><br>
+
+<div class="code">
+<pre>
+159	    # CUSTOM
+160	    assert _croniter is not None  # validate_spec already enforced this
+161	    return _croniter(spec.cron_expression, now).get_next(datetime).astimezone(UTC)
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-33">
+<div class="issue-block issue-sev-low">
+    <b>hardcoded_password_string: </b> Possible hardcoded password: '-'<br>
+    <b>Test ID:</b> B105<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>MEDIUM<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/259.html" target="_blank">CWE-259</a><br>
+    <b>File: </b><a href="/Users/ferozebasha/sbom/app/services/validation_patch_service.py" target="_blank">/Users/ferozebasha/sbom/app/services/validation_patch_service.py</a><br>
+    <b>Line number: </b>124<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html</a><br>
+
+<div class="code">
+<pre>
+123	def _list_index(token: str, values: list[Any], *, allow_end: bool = False) -&gt; int:
+124	    if allow_end and token == &quot;-&quot;:
+125	        return len(values)
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-34">
+<div class="issue-block issue-sev-medium">
+    <b>hardcoded_bind_all_interfaces: </b> Possible binding to all interfaces.<br>
+    <b>Test ID:</b> B104<br>
+    <b>Severity: </b>MEDIUM<br>
+    <b>Confidence: </b>MEDIUM<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/605.html" target="_blank">CWE-605</a><br>
+    <b>File: </b><a href="/Users/ferozebasha/sbom/app/settings.py" target="_blank">/Users/ferozebasha/sbom/app/settings.py</a><br>
+    <b>Line number: </b>71<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b104_hardcoded_bind_all_interfaces.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b104_hardcoded_bind_all_interfaces.html</a><br>
+
+<div class="code">
+<pre>
+70	    # Server Configuration
+71	    host: str = Field(default=&quot;0.0.0.0&quot;, description=&quot;Server bind address&quot;)
+72	    port: int = Field(default=8000, description=&quot;Server port&quot;)
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-35">
+<div class="issue-block issue-sev-low">
+    <b>hardcoded_password_funcarg: </b> Possible hardcoded password: '****'<br>
+    <b>Test ID:</b> B106<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>MEDIUM<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/259.html" target="_blank">CWE-259</a><br>
+    <b>File: </b><a href="/Users/ferozebasha/sbom/app/settings.py" target="_blank">/Users/ferozebasha/sbom/app/settings.py</a><br>
+    <b>Line number: </b>763<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b106_hardcoded_password_funcarg.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b106_hardcoded_password_funcarg.html</a><br>
+
+<div class="code">
+<pre>
+762	        if parsed.password:
+763	            return str(parsed.set(password=&quot;****&quot;))
+764	        return str(parsed)
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-36">
+<div class="issue-block issue-sev-low">
+    <b>assert_used: </b> Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.<br>
+    <b>Test ID:</b> B101<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/703.html" target="_blank">CWE-703</a><br>
+    <b>File: </b><a href="/Users/ferozebasha/sbom/app/sources/match_confidence.py" target="_blank">/Users/ferozebasha/sbom/app/sources/match_confidence.py</a><br>
+    <b>Line number: </b>149<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b101_assert_used.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b101_assert_used.html</a><br>
+
+<div class="code">
+<pre>
+148	# than a silently-skewed score.
+149	assert abs((NAME_WEIGHT + VERSION_WEIGHT + VENDOR_WEIGHT) - 1.0) &lt; 1e-9, (
+150	    f&quot;weights must sum to 1.0; got {NAME_WEIGHT} + {VERSION_WEIGHT} + {VENDOR_WEIGHT}&quot;
+151	)
+152	
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-37">
+<div class="issue-block issue-sev-medium">
+    <b>hardcoded_bind_all_interfaces: </b> Possible binding to all interfaces.<br>
+    <b>Test ID:</b> B104<br>
+    <b>Severity: </b>MEDIUM<br>
+    <b>Confidence: </b>MEDIUM<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/605.html" target="_blank">CWE-605</a><br>
+    <b>File: </b><a href="/Users/ferozebasha/sbom/run.py" target="_blank">/Users/ferozebasha/sbom/run.py</a><br>
+    <b>Line number: </b>30<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b104_hardcoded_bind_all_interfaces.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b104_hardcoded_bind_all_interfaces.html</a><br>
+
+<div class="code">
+<pre>
+29	if __name__ == &quot;__main__&quot;:
+30	    host = os.getenv(&quot;HOST&quot;, &quot;0.0.0.0&quot;)
+31	    port = int(os.getenv(&quot;PORT&quot;, &quot;8000&quot;))
+</pre>
+</div>
+
+
+</div>
+</div>
+
+</div>
+
+</body>
+</html>

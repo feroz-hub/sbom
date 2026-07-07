@@ -37,7 +37,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..core.context import CurrentContext
-from ..core.security import get_current_tenant_context
+from ..core.security import require_permission
 from ..db import get_db
 from ..models import SBOMSource, SBOMType
 from ..services import audit_service
@@ -127,7 +127,7 @@ async def upload_sbom(
     product_version: str | None = Form(None),
     productver: str | None = Form(None),
     created_by: str | None = Form(None),
-    context: CurrentContext = Depends(get_current_tenant_context),
+    context: CurrentContext = Depends(require_permission("product:assign_sbom")),
     strict_ntia: bool = Query(False, description="Promote NTIA warnings to hard errors."),
     db: Session = Depends(get_db),
 ) -> SbomAcceptedResponse:

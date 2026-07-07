@@ -35,6 +35,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from .base import VulnSource
+from .routing import finding_sources, normalize_query_errors, queryable_components, summarize_source
 
 # ---- Progress event constants ---------------------------------------
 EVENT_RUNNING = "running"
@@ -74,18 +75,58 @@ async def run_sources_concurrently(
 
     async def _run_one(source: VulnSource) -> None:
         src_start = time.perf_counter()
+        filtered_components, skipped_outcomes = queryable_components(components)
+        skipped_count = len(skipped_outcomes)
         if progress_queue is not None:
             await progress_queue.put({"kind": EVENT_RUNNING, "source": source.name})
         try:
             query_with_vulnerabilities = getattr(source, "query_with_vulnerabilities", None)
             if query_with_vulnerabilities is not None:
-                result = await query_with_vulnerabilities(components, list(all_findings), settings)
+                result = await query_with_vulnerabilities(filtered_components, list(all_findings), settings)
             else:
-                result = await source.query(components, settings)
+                result = await source.query(filtered_components, settings)
             elapsed_ms = int((time.perf_counter() - src_start) * 1000)
             findings = list(result.get("findings", []))
-            errors = list(result.get("errors", []))
+            errors = normalize_query_errors(list(result.get("errors", [])))
             warnings = list(result.get("warnings", []))
+            provider_status = next(
+                (
+                    warning.get("provider_status")
+                    for warning in warnings
+                    if isinstance(warning, dict) and isinstance(warning.get("provider_status"), dict)
+                ),
+                None,
+            )
+            matched = sum(1 for finding in findings if source.name.upper() in finding_sources(finding))
+            queried = len(filtered_components)
+            status = None
+            reason = None
+            if provider_status:
+                if "total_identifiers" in provider_status:
+                    queried = int(provider_status.get("total_identifiers") or 0)
+                elif "queried" in provider_status:
+                    queried = int(provider_status.get("queried") or 0)
+                skipped_count += int(provider_status.get("skipped_generated_cpe") or 0)
+                skipped_count += int(provider_status.get("skipped_untrusted_cpe") or 0)
+                skipped_count += int(provider_status.get("skipped_missing_cpe") or 0)
+                status = str(provider_status.get("status") or "") or None
+                reason = provider_status.get("reason") or provider_status.get("error_message")
+            source_summary = summarize_source(
+                source.name,
+                queried=queried,
+                matched=matched,
+                skipped=skipped_count,
+                errors=len(errors),
+                status=status,
+                reason=reason,
+            )
+            warnings.append(
+                {
+                    "source": source.name,
+                    "source_summary": source_summary,
+                    "skipped_components": skipped_outcomes[:25],
+                }
+            )
             all_findings.extend(findings)
             all_errors.extend(errors)
             all_warnings.extend(warnings)
@@ -96,13 +137,30 @@ async def run_sources_concurrently(
                         "source": source.name,
                         "findings": len(findings),
                         "errors": len(errors),
+                        "summary": source_summary,
                         "source_ms": elapsed_ms,
                     }
                 )
         except Exception as exc:
             elapsed_ms = int((time.perf_counter() - src_start) * 1000)
             err_msg = str(exc)
-            all_errors.append({"source": source.name, "error": err_msg})
+            errors = normalize_query_errors([{"source": source.name, "error": err_msg}])
+            all_errors.extend(errors)
+            all_warnings.append(
+                {
+                    "source": source.name,
+                    "source_summary": summarize_source(
+                        source.name,
+                        queried=len(filtered_components),
+                        matched=0,
+                        skipped=skipped_count,
+                        errors=len(errors),
+                        status="error",
+                        reason=err_msg,
+                    ),
+                    "skipped_components": skipped_outcomes[:25],
+                }
+            )
             if progress_queue is not None:
                 await progress_queue.put(
                     {

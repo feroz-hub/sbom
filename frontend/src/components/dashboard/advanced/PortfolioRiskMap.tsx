@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { ResponsiveContainer, Tooltip, Treemap, type TooltipProps } from 'recharts';
+import { ResponsiveContainer, Tooltip, Treemap, type TooltipContentProps } from 'recharts';
 import { Surface, SurfaceContent, SurfaceHeader } from '@/components/ui/Surface';
 import { Spinner } from '@/components/ui/Spinner';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -29,6 +29,7 @@ const DOMINANT_COLOR: Record<string, string> = {
 
 interface TreemapDatum extends RiskMapItem {
   size: number;
+  [key: string]: unknown;
 }
 
 interface CellProps {
@@ -74,9 +75,23 @@ function MapCell(props: CellProps) {
   );
 }
 
-function MapTooltip({ active, payload }: TooltipProps<number, string>) {
+function isTreemapDatum(value: unknown): value is TreemapDatum {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.name === 'string'
+    && typeof candidate.findings_total === 'number'
+    && typeof candidate.critical === 'number'
+    && typeof candidate.high === 'number'
+    && typeof candidate.medium === 'number'
+    && typeof candidate.low === 'number'
+    && (candidate.project == null || typeof candidate.project === 'string')
+  );
+}
+
+function MapTooltip({ active, payload }: TooltipContentProps) {
   if (!active || !payload?.length) return null;
-  const d = payload[0]?.payload as TreemapDatum | undefined;
+  const d = payload.map((entry) => entry.payload).find(isTreemapDatum);
   if (!d) return null;
   return (
     <div className="rounded-lg border border-border-subtle bg-surface px-3 py-2 text-xs shadow-elev-3">
@@ -151,11 +166,10 @@ export function PortfolioRiskMap({ riskMap, isLoading: propsIsLoading }: Portfol
               isAnimationActive={false}
               content={<MapCell />}
               onClick={(node: unknown) => {
-                const d = node as Partial<TreemapDatum> | null;
-                if (d?.sbom_id != null) router.push(`/sboms/${d.sbom_id}`);
+                if (isTreemapDatum(node)) router.push(`/sboms/${node.sbom_id}`);
               }}
             >
-              <Tooltip content={<MapTooltip />} />
+              <Tooltip content={MapTooltip} />
             </Treemap>
           </ResponsiveContainer>
         )}

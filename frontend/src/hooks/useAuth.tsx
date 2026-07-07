@@ -136,7 +136,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [tenants, setTenants] = useState<TenantInfo[]>([]);
   const [activeTenantIdState, setActiveTenantIdState] = useState<string | null>(null);
-  const refreshTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isAuthenticated = user !== null;
 

@@ -7,7 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..core.context import CurrentContext
-from ..core.security import get_current_tenant_context
+from ..core.security import require_permission
 from ..db import get_db
 from ..models import Product, SBOMSource
 from ..schemas import ProductCreate, ProductListResponse, ProductRead, ProductSummary, ProductUpdate, SBOMSourceOut
@@ -107,7 +107,7 @@ def _read(db: Session, product: Product) -> ProductRead:
 def create_product(
     payload: ProductCreate,
     project_id: int = Path(..., ge=1),
-    context: CurrentContext = Depends(get_current_tenant_context),
+    context: CurrentContext = Depends(require_permission("product:create")),
     db: Session = Depends(get_db),
 ):
     if get_project_for_tenant(db, project_id, context.tenant_id) is None:
@@ -149,7 +149,7 @@ def create_product(
 @router.get("/projects/{project_id}/products", response_model=ProductListResponse)
 def list_project_products(
     project_id: int = Path(..., ge=1),
-    context: CurrentContext = Depends(get_current_tenant_context),
+    context: CurrentContext = Depends(require_permission("product:read")),
     db: Session = Depends(get_db),
 ):
     if get_project_for_tenant(db, project_id, context.tenant_id) is None:
@@ -170,7 +170,7 @@ def list_project_products(
 @router.get("/products/{product_id}", response_model=ProductRead)
 def get_product(
     product_id: int = Path(..., ge=1),
-    context: CurrentContext = Depends(get_current_tenant_context),
+    context: CurrentContext = Depends(require_permission("product:read")),
     db: Session = Depends(get_db),
 ):
     product = get_product_for_tenant(db, product_id, context.tenant_id)
@@ -183,7 +183,7 @@ def get_product(
 def update_product(
     payload: ProductUpdate,
     product_id: int = Path(..., ge=1),
-    context: CurrentContext = Depends(get_current_tenant_context),
+    context: CurrentContext = Depends(require_permission("product:update")),
     db: Session = Depends(get_db),
 ):
     product = get_product_for_tenant(db, product_id, context.tenant_id)
@@ -236,7 +236,7 @@ def update_product(
 @router.delete("/products/{product_id}", status_code=status.HTTP_200_OK)
 def delete_product(
     product_id: int = Path(..., ge=1),
-    context: CurrentContext = Depends(get_current_tenant_context),
+    context: CurrentContext = Depends(require_permission("product:delete")),
     db: Session = Depends(get_db),
 ):
     product = get_product_for_tenant(db, product_id, context.tenant_id)
@@ -271,7 +271,7 @@ def delete_product(
 @router.get("/products/{product_id}/sboms", response_model=list[SBOMSourceOut])
 def list_product_sboms(
     product_id: int = Path(..., ge=1),
-    context: CurrentContext = Depends(get_current_tenant_context),
+    context: CurrentContext = Depends(require_permission("product:read")),
     db: Session = Depends(get_db),
 ):
     product = get_product_for_tenant(db, product_id, context.tenant_id)

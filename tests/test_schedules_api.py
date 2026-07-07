@@ -41,6 +41,32 @@ def sbom_id(client, project_id: int, sample_sbom_dict) -> int:
     return resp.json()["id"]
 
 
+@pytest.fixture
+def product_id(client, project_id: int) -> int:
+    resp = client.post(
+        f"/api/projects/{project_id}/products",
+        json={"name": f"schedule-product-{uuid.uuid4().hex[:8]}"},
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()["id"]
+
+
+def _product_sbom(client, project_id: int, product_id: int, sample_sbom_dict) -> int:
+    name = f"schedule-product-sbom-{uuid.uuid4().hex[:8]}"
+    resp = client.post(
+        "/api/sboms",
+        json={
+            "sbom_name": name,
+            "sbom_data": json.dumps(sample_sbom_dict),
+            "projectid": project_id,
+            "product_id": product_id,
+            "created_by": "test",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()["id"]
+
+
 @pytest.fixture(autouse=True)
 def _stub_celery(monkeypatch):
     """Replace the per-SBOM Celery task with a recording stub so tests don't
@@ -167,6 +193,61 @@ def test_sbom_override_takes_precedence_over_project(client, project_id, sbom_id
     assert body["schedule"]["cadence"] == "DAILY"
 
 
+def test_product_schedule_applies_to_product_sboms(client, project_id, product_id, sample_sbom_dict):
+    sbom_id = _product_sbom(client, project_id, product_id, sample_sbom_dict)
+    product_schedule = client.post(
+        f"/api/products/{product_id}/schedule",
+        json={"cadence": "WEEKLY", "day_of_week": 2},
+    )
+    assert product_schedule.status_code == 201, product_schedule.text
+
+    resp = client.get(f"/api/sboms/{sbom_id}/schedule")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["inherited"] is True
+    assert body["schedule"]["id"] == product_schedule.json()["id"]
+    assert body["schedule"]["scope"] == "PRODUCT"
+
+
+def test_sbom_schedule_overrides_product_schedule(client, project_id, product_id, sample_sbom_dict):
+    sbom_id = _product_sbom(client, project_id, product_id, sample_sbom_dict)
+    product_schedule = client.post(
+        f"/api/products/{product_id}/schedule",
+        json={"cadence": "WEEKLY", "day_of_week": 2},
+    )
+    assert product_schedule.status_code == 201, product_schedule.text
+    sbom_schedule = client.post(f"/api/sboms/{sbom_id}/schedule", json={"cadence": "DAILY"})
+    assert sbom_schedule.status_code == 201, sbom_schedule.text
+
+    resp = client.get(f"/api/sboms/{sbom_id}/schedule")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["inherited"] is False
+    assert body["schedule"]["id"] == sbom_schedule.json()["id"]
+    assert body["schedule"]["scope"] == "SBOM"
+
+
+def test_product_schedule_overrides_project_schedule(client, project_id, product_id, sample_sbom_dict):
+    sbom_id = _product_sbom(client, project_id, product_id, sample_sbom_dict)
+    project_schedule = client.post(
+        f"/api/projects/{project_id}/schedule",
+        json={"cadence": "MONTHLY", "day_of_month": 5},
+    )
+    assert project_schedule.status_code == 201, project_schedule.text
+    product_schedule = client.post(
+        f"/api/products/{product_id}/schedule",
+        json={"cadence": "WEEKLY", "day_of_week": 2},
+    )
+    assert product_schedule.status_code == 201, product_schedule.text
+
+    resp = client.get(f"/api/sboms/{sbom_id}/schedule")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["inherited"] is True
+    assert body["schedule"]["id"] == product_schedule.json()["id"]
+    assert body["schedule"]["scope"] == "PRODUCT"
+
+
 def test_delete_sbom_override_falls_back_to_inherited(client, project_id, sbom_id):
     client.post(
         f"/api/projects/{project_id}/schedule",
@@ -255,6 +336,26 @@ def test_run_now_for_sbom_enqueues_only_that_sbom(client, sbom_id, _stub_celery)
     assert _stub_celery == [(sbom_id, sched_id)]
 
 
+def test_run_now_for_product_fans_out_to_product_sboms(
+    client,
+    project_id,
+    product_id,
+    sample_sbom_dict,
+    _stub_celery,
+):
+    sbom_id = _product_sbom(client, project_id, product_id, sample_sbom_dict)
+    create = client.post(
+        f"/api/products/{product_id}/schedule",
+        json={"cadence": "DAILY"},
+    )
+    sched_id = create.json()["id"]
+
+    resp = client.post(f"/api/schedules/{sched_id}/run-now")
+    assert resp.status_code == 202, resp.text
+    assert resp.json()["sbom_ids"] == [sbom_id]
+    assert _stub_celery == [(sbom_id, sched_id)]
+
+
 def test_run_now_returns_502_when_broker_drops_every_enqueue(client, sbom_id, monkeypatch):
     """Silent enqueue failure must surface — 202 with empty list lies to the user."""
     create = client.post(
@@ -291,5 +392,30 @@ def test_run_now_skips_overridden_sbom_in_project_fan_out(client, project_id, sb
     )
 
     resp = client.post(f"/api/schedules/{proj_id}/run-now")
+    assert resp.status_code == 202
+    assert sbom_id not in resp.json()["sbom_ids"]
+
+
+def test_run_now_skips_product_overrides_in_project_fan_out(
+    client,
+    project_id,
+    product_id,
+    sample_sbom_dict,
+    _stub_celery,
+):
+    sbom_id = _product_sbom(client, project_id, product_id, sample_sbom_dict)
+    proj = client.post(
+        f"/api/projects/{project_id}/schedule",
+        json={"cadence": "DAILY"},
+    )
+    assert proj.status_code == 201, proj.text
+    proj_schedule_id = proj.json()["id"]
+    product_schedule = client.post(
+        f"/api/products/{product_id}/schedule",
+        json={"cadence": "DAILY", "enabled": False},
+    )
+    assert product_schedule.status_code == 201, product_schedule.text
+
+    resp = client.post(f"/api/schedules/{proj_schedule_id}/run-now")
     assert resp.status_code == 202
     assert sbom_id not in resp.json()["sbom_ids"]

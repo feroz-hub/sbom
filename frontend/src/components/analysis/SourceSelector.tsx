@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, Database, Github, KeyRound, Layers, ShieldAlert } from 'lucide-react';
+import { Check, Database, GitBranch, KeyRound, Layers, ShieldAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { AnalysisConfig } from '@/lib/api';
 
@@ -37,7 +37,7 @@ const SOURCES: SourceMeta[] = [
     key: 'GITHUB',
     label: 'GHSA',
     hint: 'GitHub Security Advisories — needs GITHUB_TOKEN env var',
-    Icon: Github,
+    Icon: GitBranch,
     requiresCredential: true,
   },
   {

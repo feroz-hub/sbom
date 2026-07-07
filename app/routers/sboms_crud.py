@@ -31,12 +31,11 @@ from ..analysis import (
     _augment_components_with_cpe,
     deduplicate_findings,
     enrich_component_for_osv,
-    extract_components,
     get_analysis_settings_multi,
 )
 from ..core.context import CurrentContext
 from ..core.security import get_current_tenant_context, require_permission
-from ..db import get_db
+from ..db import SessionLocal, get_db
 from ..idempotency import (
     analysis_run_to_dict,
     get_cached,
@@ -48,6 +47,7 @@ from ..models import (
     AnalysisFinding,
     AnalysisRun,
     Projects,
+    SBOMComponent,
     SBOMSource,
     SBOMType,
     SBOMValidationSession,
@@ -65,9 +65,11 @@ from ..schemas import (
 )
 from ..services import audit_log, audit_service
 from ..services.analysis_service import (
+    AnalysisFindingPersistenceValidationError,
     compute_report_status,
     filter_unconfirmed_provider_findings,
     get_active_analysis_run,
+    mark_analysis_run_failed,
     persist_analysis_run,
 )
 from ..services.product_service import DEFAULT_UNASSIGNED_PROJECT_NAME, resolve_product_assignment
@@ -84,8 +86,12 @@ from ..services.sbom_document_service import (
 from ..services.sbom_enrichment_service import mark_enrichment_pending, run_post_upload_enrichment
 from ..services.sbom_service import (
     ComponentExtractionSkipped,
+    MISSING_SBOM_CONTENT_REASON,
+    UNPARSEABLE_SBOM_CONTENT_REASON,
+    UNSUPPORTED_SBOM_FORMAT_REASON,
     coerce_sbom_data,
     detect_supported_component_extraction_format,
+    sync_sbom_components,
 )
 from ..services.soft_delete import SoftDeleteService
 from ..services.tenant_access import get_sbom_for_tenant
@@ -103,6 +109,7 @@ from ..sources import (
     normalize_source_names,
     run_sources_concurrently,
 )
+from ..sources.routing import count_authoritative_cpes
 from ..validation import ErrorReport
 from ..validation import run as run_validation
 
@@ -115,6 +122,108 @@ router = APIRouter(prefix="/api", tags=["sboms"])
 
 def now_iso() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat()
+
+
+def _component_row_to_analysis_input(row: SBOMComponent) -> dict[str, Any]:
+    return {
+        "bom_ref": row.bom_ref,
+        "type": row.component_type,
+        "group": row.component_group,
+        "name": row.name,
+        "version": row.version,
+        "purl": row.normalized_purl or row.purl,
+        "cpe": row.primary_cpe or row.cpe,
+        "cpe_source": row.cpe_source,
+        "supplier": row.supplier,
+        "scope": row.scope,
+        "license": row.license,
+        "hashes": row.hashes,
+        "ecosystem": row.normalized_ecosystem or row.ecosystem,
+        "normalized_name": row.normalized_name,
+        "normalized_version": row.normalized_version,
+        "normalized_ecosystem": row.normalized_ecosystem,
+        "normalized_purl": row.normalized_purl,
+        "normalized_component_key": row.normalized_component_key,
+        "primary_cpe": row.primary_cpe,
+        "normalized_cpes": row.normalized_cpes,
+    }
+
+
+def _load_persisted_components_for_analysis(
+    db: Session,
+    sbom_obj: SBOMSource,
+    *,
+    run_id: int | None,
+    correlation_id: str | None = None,
+) -> list[dict[str, Any]]:
+    rows = (
+        db.execute(
+            select(SBOMComponent)
+            .where(
+                SBOMComponent.sbom_id == sbom_obj.id,
+                (SBOMComponent.is_duplicate.is_(False)) | (SBOMComponent.is_duplicate.is_(None)),
+            )
+            .order_by(SBOMComponent.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+    components = [_component_row_to_analysis_input(row) for row in rows]
+    if not components:
+        try:
+            components = sync_sbom_components(db, sbom_obj)
+            db.commit()
+            rows = (
+                db.execute(
+                    select(SBOMComponent)
+                    .where(
+                        SBOMComponent.sbom_id == sbom_obj.id,
+                        (SBOMComponent.is_duplicate.is_(False)) | (SBOMComponent.is_duplicate.is_(None)),
+                    )
+                    .order_by(SBOMComponent.id.asc())
+                )
+                .scalars()
+                .all()
+            )
+            components = [_component_row_to_analysis_input(row) for row in rows] or components
+        except ComponentExtractionSkipped as exc:
+            db.rollback()
+            if exc.reason in {
+                MISSING_SBOM_CONTENT_REASON,
+                UNPARSEABLE_SBOM_CONTENT_REASON,
+                UNSUPPORTED_SBOM_FORMAT_REASON,
+            }:
+                raise
+            components = []
+        except Exception:
+            db.rollback()
+            log.exception(
+                "analysis.component_query.sync_failed",
+                extra={"analysis_run_id": run_id, "sbom_id": sbom_obj.id, "correlation_id": correlation_id},
+            )
+            raise
+
+    components = [enrich_component_for_osv(component) for component in components]
+    components, _generated_cpe = _augment_components_with_cpe(components)
+    components_with_purl = len([c for c in components if c.get("purl") or c.get("normalized_purl")])
+    components_with_cpe = count_authoritative_cpes(components)
+    log.info(
+        "analysis.component_query.completed",
+        extra={
+            "event": "analysis_component_query_completed",
+            "analysis_run_id": run_id,
+            "sbom_id": sbom_obj.id,
+            "component_query_filters": {"sbom_id": sbom_obj.id, "canonical_only": True},
+            "raw_component_count": len(rows),
+            "deduplicated_component_count": len(components),
+            "components_loaded": len(components),
+            "components_with_purl": components_with_purl,
+            "components_with_cpe": components_with_cpe,
+            "components_selected_for_analysis": len(components),
+            "correlation_id": correlation_id,
+        },
+    )
+    return components
 
 
 def _workspace_fields(
@@ -172,6 +281,8 @@ def _analysis_result(status: str | None) -> str:
         return "queued"
     if normalized in {"RUNNING", "ANALYSING", "ANALYZING"}:
         return "running"
+    if normalized in {"INTERRUPTED", "STALE"}:
+        return "interrupted"
     if normalized in {"CANCELLED", "CANCELED"}:
         return "cancelled"
     if normalized in {"ERROR", "FAILED", "FAILURE"}:
@@ -189,6 +300,8 @@ def _analysis_outcome(status: str | None) -> str:
         return "findings"
     if normalized == "PARTIAL":
         return "partial"
+    if normalized in {"INTERRUPTED", "STALE"}:
+        return "interrupted"
     return _analysis_result(status)
 
 
@@ -212,7 +325,7 @@ def _risk_level(
 
 
 def _analysis_error_message(raw_report: str | None, status: str | None) -> str | None:
-    if _analysis_result(status) != "failed" or not raw_report:
+    if _analysis_result(status) not in {"failed", "interrupted"} or not raw_report:
         return None
     try:
         parsed = json.loads(raw_report)
@@ -341,6 +454,8 @@ def _serialize_sbom_out(
     latest_analysis: LatestAnalysisOut | None = None,
 ) -> SBOMSourceOut:
     out = SBOMSourceOut.model_validate(sbom, from_attributes=True)
+    if not out.product_name and sbom.product is not None:
+        out.product_name = sbom.product.name
     for key, value in _workspace_fields(sbom, session=workspace, db=db).items():
         setattr(out, key, value)
     out.latest_analysis = latest_analysis if latest_analysis is not None else (_latest_analysis_for_sbom(db, sbom) if db is not None else None)
@@ -457,35 +572,22 @@ async def create_auto_report(
     if existing:
         return existing
 
-    # Extract components up front so we can short-circuit empty SBOMs without
-    # paying for any outbound HTTP, and so we can pass the same component list
-    # into ``persist_analysis_run`` for component-row upserting.
     try:
-        components_raw = extract_components(sbom_obj.sbom_data)
-
-        # Deduplicate components before scanning
-        try:
-            sbom_dict = json.loads(sbom_obj.sbom_data) if isinstance(sbom_obj.sbom_data, str) else sbom_obj.sbom_data
-        except Exception:
-            sbom_dict = {}
-        dependencies = []
-        if isinstance(sbom_dict, dict):
-            if sbom_dict.get("bomFormat") == "CycloneDX":
-                dependencies = sbom_dict.get("dependencies") or []
-            elif sbom_dict.get("spdxVersion") or sbom_dict.get("SPDXID"):
-                dependencies = sbom_dict.get("relationships") or []
-
-        from ..services.component_deduplication_service import ComponentDeduplicationService
-
-        canonical_raw, _, _, _, _ = ComponentDeduplicationService.deduplicate_components(components_raw, dependencies)
-
-        components_raw = [enrich_component_for_osv(c) for c in canonical_raw]
-        components, _ = _augment_components_with_cpe(components_raw)
+        components = _load_persisted_components_for_analysis(
+            db,
+            sbom_obj,
+            run_id=None,
+            correlation_id=f"auto-report-{sbom_obj.id}",
+        )
     except Exception as exc:
-        log.warning("Component extraction failed for SBOM id=%d: %s", sbom_obj.id, exc)
+        log.warning("Component loading failed for SBOM id=%d: %s", sbom_obj.id, exc)
         return None
 
     if not components:
+        log.warning(
+            "analysis.component_query.zero_components",
+            extra={"event": "analysis_zero_components", "sbom_id": sbom_obj.id, "trigger_source": trigger_source},
+        )
         return None
 
     started_on = now_iso()
@@ -519,7 +621,7 @@ async def create_auto_report(
 
     details: dict = {
         "total_components": len(components),
-        "components_with_cpe": sum(1 for c in components if c.get("cpe")),
+        "components_with_cpe": count_authoritative_cpes(components),
         "total_findings": len(final_findings),
         "critical": buckets["CRITICAL"],
         "high": buckets["HIGH"],
@@ -528,10 +630,20 @@ async def create_auto_report(
         "unknown": buckets["UNKNOWN"],
         "query_errors": all_errors,
         "query_warnings": all_warnings,
+        "source_summary": [
+            warning["source_summary"]
+            for warning in all_warnings
+            if isinstance(warning, dict) and isinstance(warning.get("source_summary"), dict)
+        ],
         "findings": final_findings,
         "analysis_metadata": {
             "sources": sources_used,
             "raw_observation_count": len(raw_findings),
+            "source_summary": [
+                warning["source_summary"]
+                for warning in all_warnings
+                if isinstance(warning, dict) and isinstance(warning.get("source_summary"), dict)
+            ],
             "provider_status": [
                 warning["provider_status"]
                 for warning in all_warnings
@@ -690,7 +802,7 @@ def download_sbom_original(
 def create_sbom(
     payload: SBOMSourceCreate,
     background_tasks: BackgroundTasks,
-    context: CurrentContext = Depends(get_current_tenant_context),
+    context: CurrentContext = Depends(require_permission("product:assign_sbom")),
     db: Session = Depends(get_db),
 ):
     log.info("Creating SBOM: name='%s' project_id=%s", payload.sbom_name, payload.projectid)
@@ -1202,7 +1314,7 @@ def get_sbom_normalization_report(
 def update_sbom(
     sbom_id: int,
     payload: SbomPatchRequest,
-    context: CurrentContext = Depends(get_current_tenant_context),
+    context: CurrentContext = Depends(require_permission("product:assign_sbom")),
     db: Session = Depends(get_db),
 ):
     sbom = get_sbom_for_tenant(db, sbom_id, context.tenant_id)
@@ -1590,6 +1702,11 @@ async def analyze_sbom_stream(
       error     — fatal error (SBOM not found, parse failure, etc.)
     """
     idem = normalize_idempotency_key(idempotency_key)
+    correlation_id = (
+        request.headers.get("X-Correlation-ID")
+        or request.headers.get("X-Request-ID")
+        or f"analysis-stream-{sbom_id}-{int(time.time() * 1000)}"
+    )
     sbom_row = get_sbom_for_tenant(db, sbom_id, context.tenant_id)
 
     async def _stream_not_found():
@@ -1659,6 +1776,7 @@ async def analyze_sbom_stream(
     async def event_stream():
         started_at = time.perf_counter()
         run_started_on = now_iso()
+        run_id: int | None = None
         run = AnalysisRun(
             sbom_id=sbom_row.id,
             project_id=sbom_row.projectid,
@@ -1678,26 +1796,76 @@ async def analyze_sbom_stream(
         db.add(run)
         db.commit()
         db.refresh(run)
-        log.info("Analysis started trigger_source=manual sbom_id=%d run_id=%d", sbom_id, run.id)
+        run_id = run.id
+        log.info(
+            "Analysis started trigger_source=manual sbom_id=%d run_id=%d correlation_id=%s",
+            sbom_id,
+            run_id,
+            correlation_id,
+        )
 
         def elapsed() -> int:
             return int((time.perf_counter() - started_at) * 1000)
 
-        def mark_failed(message: str, *, code: int = 500) -> dict:
-            run.run_status = "ERROR"
-            run.completed_on = now_iso()
-            run.duration_ms = elapsed()
-            run.raw_report = json.dumps(
-                {
-                    "error_message": message,
-                    "status": "failed",
-                    "code": code,
-                    "sources": normalize_source_names(payload.sources, default=configured_default_sources()),
-                }
-            )
-            db.add(run)
-            db.commit()
-            return {"message": message, "code": code, "runId": run.id, "status": "ERROR"}
+        def _safe_failure_message(exc: Exception | None = None) -> tuple[str, str]:
+            if isinstance(exc, AnalysisFindingPersistenceValidationError):
+                return (
+                    "Analysis failed while saving vulnerability findings because a finding value "
+                    "exceeded the configured database field length.",
+                    "finding_persistence_validation",
+                )
+            if isinstance(exc, SQLAlchemyError):
+                return (
+                    "Analysis failed while saving vulnerability findings because the database rejected "
+                    "the persistence operation.",
+                    "finding_persistence_database",
+                )
+            return ("Analysis failed while processing the SBOM.", "analysis_stream_failure")
+
+        def mark_failed_clean(
+            message: str,
+            *,
+            code: int = 500,
+            error_category: str | None = None,
+            rollback_original: bool = True,
+        ) -> dict:
+            if rollback_original:
+                try:
+                    db.rollback()
+                except Exception:
+                    log.exception(
+                        "Unable to rollback failed analysis session",
+                        extra={"run_id": run_id, "sbom_id": sbom_id, "correlation_id": correlation_id},
+                    )
+
+            if run_id is not None:
+                try:
+                    with SessionLocal() as failure_db:
+                        mark_analysis_run_failed(
+                            failure_db,
+                            run_id=run_id,
+                            error_message=message,
+                            completed_on=now_iso(),
+                            duration_ms=elapsed(),
+                            code=code,
+                            sources=normalize_source_names(payload.sources, default=configured_default_sources()),
+                            correlation_id=correlation_id,
+                            error_category=error_category,
+                        )
+                        failure_db.commit()
+                except Exception:
+                    log.exception(
+                        "analysis.run_mark_failed.failed",
+                        extra={"run_id": run_id, "sbom_id": sbom_id, "correlation_id": correlation_id},
+                    )
+
+            return {
+                "message": message,
+                "code": code,
+                "runId": run_id,
+                "status": "ERROR",
+                "correlation_id": correlation_id,
+            }
 
         try:
             cfg = get_analysis_settings_multi()
@@ -1721,19 +1889,76 @@ async def analyze_sbom_stream(
             await asyncio.sleep(0)
 
             try:
-                sbom_data = sbom_row.sbom_data or ""
-                components_raw = extract_components(sbom_data)
-                components_raw = [enrich_component_for_osv(c) for c in components_raw]
-                components, _gen_cpe = _augment_components_with_cpe(components_raw)
+                components = _load_persisted_components_for_analysis(
+                    db,
+                    sbom_row,
+                    run_id=run_id,
+                    correlation_id=correlation_id,
+                )
             except Exception as exc:
-                yield _sse_event("error", mark_failed(f"SBOM parse failed: {exc}", code=400))
+                yield _sse_event(
+                    "error",
+                    mark_failed_clean(
+                        f"SBOM parse failed or component loading failed: {exc}",
+                        code=400,
+                        error_category="component_loading_failure",
+                    ),
+                )
                 return
+
+            if not components:
+                diagnostic = (
+                    f"No components were available for analysis for SBOM #{sbom_id}. "
+                    "The SBOM contains component data, but zero persisted components were loaded. "
+                    "Check parsing, transaction commit and SBOM/component association."
+                )
+                yield _sse_event(
+                    "error",
+                    mark_failed_clean(
+                        diagnostic,
+                        code=400,
+                        error_category="zero_components_loaded",
+                    ),
+                )
+                return
+
+            component_count = len(components)
+            components_with_purl = len([c for c in components if c.get("purl") or c.get("normalized_purl")])
+            components_with_cpe = count_authoritative_cpes(components)
+            run.total_components = component_count
+            run.components_with_cpe = components_with_cpe
+            run.raw_report = json.dumps(
+                {
+                    "status": "running",
+                    "sources": sources,
+                    "total_components": component_count,
+                    "components_with_cpe": components_with_cpe,
+                    "components_with_purl": components_with_purl,
+                }
+            )
+            db.add(run)
+            db.commit()
+            log.info(
+                "analysis.component_snapshot.persisted",
+                extra={
+                    "event": "analysis_component_snapshot_persisted",
+                    "analysis_run_id": run_id,
+                    "sbom_id": sbom_id,
+                    "raw_component_count": component_count,
+                    "deduplicated_component_count": component_count,
+                    "components_with_purl": components_with_purl,
+                    "components_with_cpe": components_with_cpe,
+                    "components_selected_for_analysis": component_count,
+                    "persisted_run_component_count": component_count,
+                    "correlation_id": correlation_id,
+                },
+            )
 
             yield _sse_event(
                 "progress",
                 {
                     "phase": "parsed",
-                    "components": len(components),
+                    "components": component_count,
                     "elapsed_ms": elapsed(),
                 },
             )
@@ -1830,7 +2055,7 @@ async def analyze_sbom_stream(
 
             details: dict = {
                 "total_components": len(components),
-                "components_with_cpe": sum(1 for c in components if c.get("cpe")),
+                "components_with_cpe": count_authoritative_cpes(components),
                 "total_findings": len(final_findings),
                 "critical": buckets["CRITICAL"],
                 "high": buckets["HIGH"],
@@ -1838,10 +2063,21 @@ async def analyze_sbom_stream(
                 "low": buckets["LOW"],
                 "unknown": buckets["UNKNOWN"],
                 "query_errors": all_errors,
+                "query_warnings": all_warnings,
+                "source_summary": [
+                    warning["source_summary"]
+                    for warning in all_warnings
+                    if isinstance(warning, dict) and isinstance(warning.get("source_summary"), dict)
+                ],
                 "findings": final_findings,
                 "analysis_metadata": {
                     "sources": sources,
                     "raw_observation_count": len(all_findings),
+                    "source_summary": [
+                        warning["source_summary"]
+                        for warning in all_warnings
+                        if isinstance(warning, dict) and isinstance(warning.get("source_summary"), dict)
+                    ],
                     "provider_status": [
                         warning["provider_status"]
                         for warning in all_warnings
@@ -1868,6 +2104,7 @@ async def analyze_sbom_stream(
                 duration_ms=duration_ms,
                 existing_run=run,
                 trigger_source="manual",
+                correlation_id=correlation_id,
             )
             db.commit()
 
@@ -1889,8 +2126,16 @@ async def analyze_sbom_stream(
             yield _sse_event("complete", complete_payload)
 
         except Exception as exc:
-            log.error("SSE stream unhandled error: %s", exc, exc_info=True)
-            yield _sse_event("error", mark_failed(str(exc), code=500))
+            log.exception(
+                "SSE analysis persistence failed",
+                extra={"run_id": run_id, "sbom_id": sbom_id, "correlation_id": correlation_id},
+            )
+            message, category = _safe_failure_message(exc)
+            yield _sse_event(
+                "error",
+                mark_failed_clean(message, code=500, error_category=category),
+            )
+            return
 
     return StreamingResponse(
         event_stream(),

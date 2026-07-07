@@ -81,6 +81,7 @@ describe('SbomsTable analysis column', () => {
     ['running', 'running', 'Running'],
     ['completed', 'completed', 'Completed · 5 findings'],
     ['failed', 'failed', 'Failed'],
+    ['interrupted', 'interrupted', 'Interrupted'],
   ])('renders %s latest analysis as %s', (result, status, label) => {
     render(
       wrap(
@@ -99,7 +100,7 @@ describe('SbomsTable analysis column', () => {
               risk_level: result === 'completed' ? 'critical' : null,
               started_at: '2026-06-01T00:00:00Z',
               completed_at: result === 'running' ? null : '2026-06-01T00:05:00Z',
-              error_message: result === 'failed' ? 'provider failed' : null,
+              error_message: result === 'failed' ? 'provider failed' : result === 'interrupted' ? 'worker restarted' : null,
             }),
           ]}
           isLoading={false}
@@ -121,6 +122,9 @@ describe('SbomsTable analysis column', () => {
     }
     if (result === 'failed') {
       expect(screen.getByRole('link', { name: /provider failed/i })).toBeInTheDocument();
+    }
+    if (result === 'interrupted') {
+      expect(screen.getByRole('link', { name: /worker restarted/i })).toBeInTheDocument();
     }
   });
 
