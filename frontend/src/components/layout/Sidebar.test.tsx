@@ -90,6 +90,13 @@ describe('Sidebar analysis navigation', () => {
     );
   });
 
+  it('shows the CISA KEV catalog navigation item', () => {
+    renderSidebar('/sboms');
+
+    const nav = screen.getByRole('navigation', { name: 'Main' });
+    expect(within(nav).getByRole('link', { name: 'CISA KEV' })).toHaveAttribute('href', '/kev');
+  });
+
   it('opens a collapsed flyout with Analysis child links', () => {
     renderSidebar('/sboms');
     collapseSidebar();

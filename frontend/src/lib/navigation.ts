@@ -4,6 +4,7 @@ import {
   FileText,
   FolderOpen,
   LayoutDashboard,
+  ShieldCheck,
   Settings as SettingsIcon,
   type LucideIcon,
 } from 'lucide-react';
@@ -36,6 +37,7 @@ export const navigationItems: NavItem[] = [
       { href: '/analysis/compare', label: 'Compare' },
     ],
   },
+  { href: '/kev', label: 'CISA KEV', icon: ShieldCheck },
   { href: '/schedules', label: 'Schedules', icon: CalendarClock },
   {
     href: '/settings',

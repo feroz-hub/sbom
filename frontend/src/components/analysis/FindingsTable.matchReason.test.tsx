@@ -83,6 +83,12 @@ afterEach(() => {
 });
 
 describe('FindingsTable — match-reason trust badge', () => {
+  it('renders the KEV badge when the enriched is_kev flag is true', () => {
+    renderTable([makeFinding(99, { is_kev: true, in_kev: false })]);
+
+    expect(screen.getByLabelText('Known exploited vulnerability')).toBeInTheDocument();
+  });
+
   it('renders "Version confirmed" with matched_range in the tooltip for matched findings', () => {
     renderTable([
       makeFinding(1, {

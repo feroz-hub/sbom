@@ -68,6 +68,8 @@ import type {
   LifecycleVendorRecordListResponse,
   LineRepairPatch,
   Fda510kReportExportRequest,
+  KevSyncResult,
+  KevVulnerability,
 } from '@/types';
 
 // Direct calls to FastAPI — no Next.js proxy (proxy caused ECONNRESET on
@@ -2148,6 +2150,38 @@ export function getCveDetail(
     return request<CveDetailWithContext>(`/api/v1/scans/${args.scanId}/cves/${id}`, { signal });
   }
   return request<CveDetail>(`/api/v1/cves/${id}`, { signal });
+}
+
+// ─── CISA KEV catalog ───────────────────────────────────────────────────────
+
+export function listKevVulnerabilities(
+  args: { q?: string; ransomware?: boolean; limit?: number; offset?: number } = {},
+  signal?: AbortSignal,
+): Promise<KevVulnerability[]> {
+  const params = new URLSearchParams();
+  if (args.q?.trim()) params.set('q', args.q.trim());
+  if (args.ransomware !== undefined) params.set('ransomware', String(args.ransomware));
+  params.set('limit', String(args.limit ?? 50));
+  params.set('offset', String(args.offset ?? 0));
+  return request<KevVulnerability[]>(`/api/v1/kev?${params.toString()}`, { signal });
+}
+
+export function getKevVulnerability(
+  cveId: string,
+  signal?: AbortSignal,
+): Promise<KevVulnerability> {
+  return request<KevVulnerability>(
+    `/api/v1/kev/${encodeURIComponent(cveId.trim().toUpperCase())}`,
+    { signal },
+  );
+}
+
+export function syncKevCatalog(signal?: AbortSignal): Promise<KevSyncResult> {
+  return request<KevSyncResult>(
+    '/api/v1/kev/sync',
+    { method: 'POST', body: JSON.stringify({}), signal },
+    120_000,
+  );
 }
 
 export function upsertRemediation(projectId: number, payload: any, signal?: AbortSignal) {

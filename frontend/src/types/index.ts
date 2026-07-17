@@ -999,6 +999,37 @@ export interface EnrichedFinding extends AnalysisFinding {
   cve_aliases: string[];
 }
 
+// CISA Known Exploited Vulnerabilities catalog
+export interface KevVulnerability {
+  cve_id: string;
+  vendor_project: string | null;
+  product: string | null;
+  vulnerability_name: string | null;
+  date_added: string | null;
+  short_description: string | null;
+  required_action: string | null;
+  due_date: string | null;
+  known_ransomware_campaign_use: string | null;
+  notes: string | null;
+  cwes: string[];
+  catalog_version: string | null;
+  catalog_date_released: string | null;
+  refreshed_at: string;
+  first_seen_at: string | null;
+  updated_at: string | null;
+}
+
+export interface KevSyncResult {
+  ok: boolean;
+  catalog_version: string | null;
+  catalog_date_released: string | null;
+  total_in_feed: number;
+  filtered_since: string | null;
+  matched_after_filter: number;
+  upserted: number;
+  duration_seconds: number;
+}
+
 export interface DashboardStats {
   // ADR-0001 / docs/terminology.md — canonical fields:
   total_active_projects: number;
