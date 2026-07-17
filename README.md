@@ -539,6 +539,11 @@ export AUTH_ENABLED=false
 
 python -m alembic upgrade head
 python run.py
+
+# Create backend env from example (macOS / Linux)
+```bash
+cp .env.example .env
+```
 ```
 
 Frontend:
@@ -571,6 +576,9 @@ pip install -r requirements.txt
 $env:DATABASE_URL="postgresql+psycopg://sbom:sbom@localhost:5432/sbom_analyser"
 $env:APP_SECRET_KEY="dev-secret-change-this"
 $env:AUTH_ENABLED="false"
+
+# Create backend env from example (PowerShell)
+Copy-Item .env.example .env
 
 python -m alembic upgrade head
 python run.py
@@ -691,6 +699,16 @@ If `DATABASE_URL` is missing, the app fails unless `ALLOW_SQLITE=true` is explic
 ## 20. Frontend Setup
 
 Create `frontend/.env.local` from `frontend/.env.local.example`.
+
+# Create frontend env from example (macOS / Linux)
+```bash
+cp frontend/.env.local.example frontend/.env.local
+```
+
+# Create frontend env from example (PowerShell)
+```powershell
+Copy-Item frontend\.env.local.example frontend\.env.local
+```
 
 Local dev:
 
