@@ -4,21 +4,11 @@
  * OIDC callback handler — /auth/callback page.
  *
  * After HCL IAM redirects back with an authorization code, this component:
- * 1. Validates the state parameter (CSRF protection)
- * 2. Exchanges the code for tokens via the PKCE flow
- * 3. Stores tokens in sessionStorage
- * 4. Redirects to the original URL (or home)
+ * The server route validates state/nonce/PKCE, exchanges the code, validates
+ * the ID token, and creates an HttpOnly session. No token reaches this component.
  */
 
 import { useEffect, useRef, useState } from 'react';
-import {
-  clearReturnUrl,
-  exchangeCodeForTokens,
-  getAuthState,
-  getReturnUrl,
-  resolveAuthConfig,
-  storeTokens,
-} from '@/lib/auth';
 
 type CallbackStatus = 'processing' | 'success' | 'error';
 
@@ -37,12 +27,11 @@ export function LoginCallback() {
         const code = url.searchParams.get('code');
         const state = url.searchParams.get('state');
         const error = url.searchParams.get('error');
-        const errorDescription = url.searchParams.get('error_description');
 
         // Handle IdP errors
         if (error) {
           setStatus('error');
-          setErrorMessage(errorDescription || error || 'Authentication failed.');
+          setErrorMessage('The identity provider could not complete authentication.');
           return;
         }
 
@@ -52,24 +41,23 @@ export function LoginCallback() {
           return;
         }
 
-        // Validate state (CSRF protection)
-        const savedState = getAuthState();
-        if (savedState && state !== savedState) {
+        if (!state) {
           setStatus('error');
           setErrorMessage('Invalid state parameter — possible CSRF attack. Please try again.');
           return;
         }
 
-        // Exchange code for tokens
-        const config = resolveAuthConfig();
-        const tokens = await exchangeCodeForTokens(config, code);
-        storeTokens(tokens);
+        const response = await fetch('/api/auth/callback', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code, state }),
+        });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error || 'Authentication could not be completed.');
 
         setStatus('success');
 
         // Redirect to return URL or home
-        const returnUrl = getReturnUrl() || '/';
-        clearReturnUrl();
+        const returnUrl = typeof body.returnTo === 'string' ? body.returnTo : '/';
 
         // Small delay so the success state is visible
         setTimeout(() => {
@@ -91,7 +79,7 @@ export function LoginCallback() {
           <div className="text-center">
             <div className="mb-4 h-10 w-10 animate-spin rounded-full border-4 border-hcl-blue border-t-transparent mx-auto" />
             <h2 className="text-lg font-semibold text-foreground mb-1">Completing sign in…</h2>
-            <p className="text-sm text-hcl-muted">Exchanging authorization code for session tokens.</p>
+            <p className="text-sm text-hcl-muted">Establishing your secure session.</p>
           </div>
         )}
 

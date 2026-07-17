@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 import os
+import json
+import logging
+import ssl
 import threading
 import time
+import urllib.request
+import urllib.parse
 from collections.abc import Callable, Iterator
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any
@@ -21,6 +26,7 @@ from .context import CurrentContext, bind_context, reset_context
 from .permissions import normalize_role
 
 AUTH_CHALLENGE = {"WWW-Authenticate": 'Bearer realm="sbom-analyzer"'}
+log = logging.getLogger("sbom.auth")
 
 
 def _unauthorized() -> HTTPException:
@@ -47,25 +53,65 @@ def _roles(value: Any) -> frozenset[str]:
         values = value
     else:
         values = []
-    return frozenset(normalize_role(str(item)) for item in values if str(item).strip())
+    normalized = [normalize_role(str(item)) for item in values if str(item).strip()]
+    try:
+        configured = json.loads(get_settings().hcl_iam_role_mapping)
+        mapping = {normalize_role(str(key)): normalize_role(str(result)) for key, result in configured.items()}
+    except (ValueError, TypeError, AttributeError):
+        mapping = {}
+    return frozenset(mapping.get(role, role) for role in normalized)
+
+
+def _ssl_context(ca_bundle: str) -> ssl.SSLContext:
+    return ssl.create_default_context(cafile=ca_bundle or None)
 
 
 @lru_cache(maxsize=8)
-def _cached_jwks_client(url: str, lifespan: int) -> PyJWKClient:
+def _discovery(issuer: str, discovery_url: str, timeout: float, ca_bundle: str) -> dict[str, Any]:
+    url = discovery_url or f"{issuer.rstrip('/')}/.well-known/openid-configuration"
+    request = urllib.request.Request(url, headers={"Accept": "application/json"})
+    with urllib.request.urlopen(request, timeout=timeout, context=_ssl_context(ca_bundle)) as response:
+        metadata = json.loads(response.read(1024 * 1024))
+    if metadata.get("issuer") != issuer:
+        raise RuntimeError("HCL IAM discovery issuer mismatch")
+    jwks_url = str(metadata.get("jwks_uri") or "")
+    issuer_url = urllib.parse.urlparse(issuer)
+    jwks = urllib.parse.urlparse(jwks_url)
+    if jwks.scheme != "https" or jwks.netloc != issuer_url.netloc:
+        raise RuntimeError("HCL IAM discovery returned an untrusted JWKS endpoint")
+    return metadata
+
+
+@lru_cache(maxsize=8)
+def _cached_jwks_client(url: str, lifespan: int, timeout: float, ca_bundle: str) -> PyJWKClient:
     return PyJWKClient(
         url,
         cache_keys=True,
         cache_jwk_set=True,
         lifespan=lifespan,
+        timeout=timeout,
+        ssl_context=_ssl_context(ca_bundle),
     )
 
 
 def get_jwks_client() -> PyJWKClient:
     settings = get_settings()
-    url = settings.hcl_iam_jwks_url.strip()
-    if not url:
-        raise RuntimeError("HCL_IAM_JWKS_URL is required when AUTH_ENABLED=true")
-    return _cached_jwks_client(url, settings.hcl_iam_jwks_cache_seconds)
+    metadata = _discovery(
+        settings.hcl_iam_issuer,
+        settings.hcl_iam_discovery_url.strip(),
+        settings.hcl_iam_http_timeout_seconds,
+        settings.hcl_iam_ca_bundle.strip(),
+    )
+    discovered_url = str(metadata["jwks_uri"])
+    configured_url = settings.hcl_iam_jwks_url.strip()
+    if configured_url and configured_url != discovered_url:
+        raise RuntimeError("HCL_IAM_JWKS_URL does not match discovery metadata")
+    return _cached_jwks_client(
+        discovered_url,
+        settings.hcl_iam_jwks_cache_seconds,
+        settings.hcl_iam_http_timeout_seconds,
+        settings.hcl_iam_ca_bundle.strip(),
+    )
 
 
 def validate_hcl_token(token: str) -> dict[str, Any]:
@@ -82,15 +128,20 @@ def validate_hcl_token(token: str) -> dict[str, Any]:
             issuer=settings.hcl_iam_issuer,
             audience=settings.hcl_iam_audience,
             options={
-                "require": ["exp", "sub"],
+                "require": ["iss", "sub", "aud", "exp"],
                 "verify_signature": True,
                 "verify_exp": True,
                 "verify_nbf": True,
                 "verify_iss": True,
                 "verify_aud": True,
+                "verify_iat": True,
             },
+            leeway=settings.hcl_iam_clock_skew_seconds,
         )
     except (InvalidTokenError, ValueError):
+        raise _unauthorized() from None
+    except Exception as exc:  # discovery/JWKS network and key-selection failures fail closed
+        log.warning("hcl_iam_validation_unavailable: %s", type(exc).__name__)
         raise _unauthorized() from None
     if not isinstance(claims.get("sub"), str) or not claims["sub"].strip():
         raise _unauthorized()
@@ -311,7 +362,7 @@ def permission_for_request(request: Request) -> str:
         return "sbom:update"
     if path.startswith("/api/runs") or path.startswith("/api/analysis"):
         return "analysis:read" if method == "GET" else "analysis:run"
-    if path == "/api/auth/me" or path == "/api/tenants":
+    if path in {"/api/auth/me", "/api/v1/auth/me", "/api/tenants"}:
         return "dashboard:read" if method == "GET" else "tenant:settings:update"
     if path.startswith("/api/tenants"):
         return "tenant:user:read" if method == "GET" else "tenant:user:update"
@@ -332,15 +383,25 @@ def enforce_request_access(
 def validate_hcl_auth_setup() -> None:
     settings = get_settings()
     if not settings.auth_enabled:
+        log.warning("AUTH_ENABLED=false: using explicit local development identity")
         return
     required = {
         "HCL_IAM_ISSUER": settings.hcl_iam_issuer,
         "HCL_IAM_AUDIENCE": settings.hcl_iam_audience,
-        "HCL_IAM_JWKS_URL": settings.hcl_iam_jwks_url,
         "HCL_IAM_CLIENT_ID": settings.hcl_iam_client_id,
     }
     missing = [name for name, value in required.items() if not value.strip()]
     if missing:
         raise RuntimeError(f"HCL IAM configuration missing: {', '.join(missing)}")
-    if not settings.hcl_iam_jwks_url.lower().startswith("https://") and not os.getenv("PYTEST_CURRENT_TEST"):
-        raise RuntimeError("HCL_IAM_JWKS_URL must use HTTPS")
+    if settings.dev_default_tenant:
+        raise RuntimeError("DEV_DEFAULT_TENANT must be false when AUTH_ENABLED=true")
+    for name, value in {
+        "HCL_IAM_ISSUER": settings.hcl_iam_issuer,
+        "HCL_IAM_DISCOVERY_URL": settings.hcl_iam_discovery_url,
+        "HCL_IAM_JWKS_URL": settings.hcl_iam_jwks_url,
+    }.items():
+        if value and not value.lower().startswith("https://") and not os.getenv("PYTEST_CURRENT_TEST"):
+            raise RuntimeError(f"{name} must use HTTPS")
+    algorithms = [item.strip().upper() for item in settings.hcl_iam_allowed_algorithms.split(",") if item.strip()]
+    if algorithms != ["RS256"]:
+        raise RuntimeError("HCL_IAM_ALLOWED_ALGORITHMS must be exactly RS256")

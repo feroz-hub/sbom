@@ -203,12 +203,26 @@ class Settings(BaseSettings):
     auth_enabled: bool = Field(default=False, description="Require HCL IAM authentication")
     hcl_iam_issuer: str = Field(default="", description="Expected HCL IAM token issuer")
     hcl_iam_audience: str = Field(default="", description="Expected API audience")
+    hcl_iam_discovery_url: str = Field(default="", description="OIDC discovery URL; derived from issuer when empty")
     hcl_iam_jwks_url: str = Field(default="", description="HCL IAM JWKS endpoint")
     hcl_iam_client_id: str = Field(default="", description="OIDC public client identifier")
     hcl_iam_allowed_algorithms: str = Field(default="RS256", description="Comma-separated JWT algorithms")
-    hcl_iam_role_claim: str = Field(default="roles", description="JWT claim containing IAM roles")
+    hcl_iam_role_claim: str = Field(default="role", description="JWT claim containing IAM roles")
     hcl_iam_tenant_claim: str = Field(default="tenant_id", description="JWT claim containing tenant identity")
     hcl_iam_jwks_cache_seconds: int = Field(default=300, ge=30, le=86400)
+    hcl_iam_http_timeout_seconds: float = Field(default=5.0, ge=0.5, le=30.0)
+    hcl_iam_clock_skew_seconds: int = Field(default=30, ge=0, le=300)
+    hcl_iam_ca_bundle: str = Field(default="", description="Optional CA bundle for private/local HCL.CS TLS")
+    hcl_iam_role_mapping: str = Field(
+        default=(
+            '{"PLATFORM_ADMIN":"PLATFORM_ADMIN","SBOM_PLATFORM_ADMIN":"PLATFORM_ADMIN",'
+            '"TENANT_ADMIN":"TENANT_ADMIN","SBOM_TENANT_ADMIN":"TENANT_ADMIN",'
+            '"SECURITY_ANALYST":"SECURITY_ANALYST","SBOM_SECURITY_ANALYST":"SECURITY_ANALYST",'
+            '"DEVELOPER":"DEVELOPER","SBOM_DEVELOPER":"DEVELOPER",'
+            '"VIEWER":"VIEWER","SBOM_VIEWER":"VIEWER"}'
+        ),
+        description="JSON mapping of HCL.CS role names to SBOM roles",
+    )
     auth_context_cache_seconds: int = Field(
         default=120,
         ge=30,

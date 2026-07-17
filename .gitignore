@@ -6,6 +6,7 @@
 .env
 .env.*
 !.env.example
+!.env.hcl-iam.example
 
 # ── Python ────────────────────────────────────────────────
 __pycache__/
@@ -78,3 +79,4 @@ htmlcov/
 Desktop.ini
 $RECYCLE.BIN/
 graphify-out/
+.certificates/

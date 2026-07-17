@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "cross-env NODE_NO_WARNINGS=1 next dev",
+    "dev:https": "cross-env NODE_NO_WARNINGS=1 HCL_IAM_CA_BUNDLE=../.certificates/hcl-cs-local.crt next dev --webpack --experimental-https --experimental-https-key certificates/localhost-key.pem --experimental-https-cert certificates/localhost.pem",
+    "setup:https": "bash scripts/setup-dev-https.sh",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
@@ -14,12 +16,14 @@
     "@hookform/resolvers": "^5.4.0",
     "@tanstack/react-query": "^5.101.2",
     "clsx": "^2.1.1",
+    "jose": "^6.2.3",
     "lucide-react": "^1.23.0",
     "next": "^16.2.10",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-hook-form": "^7.81.0",
     "recharts": "^3.9.2",
+    "undici": "^7.28.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

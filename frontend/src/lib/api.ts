@@ -87,9 +87,11 @@ import type {
 // Example: NEXT_PUBLIC_API_URL = "http://api.example.com"
 //          request("/api/sboms")  →  http://api.example.com/api/sboms
 import { resolveBaseUrl } from './env';
-import { getAccessToken, getActiveTenantId, clearTokens } from './auth';
+import { getActiveTenantId } from './auth';
 
-export const BASE_URL = resolveBaseUrl();
+export const BASE_URL = process.env.NEXT_PUBLIC_AUTH_ENABLED === 'true'
+  ? '/api/backend'
+  : resolveBaseUrl();
 
 // ─── Auth header injection ────────────────────────────────────────────────────
 // Reads token + active tenant from sessionStorage and returns the headers
@@ -99,10 +101,6 @@ export const BASE_URL = resolveBaseUrl();
 function getAuthHeaders(): Record<string, string> {
   const headers: Record<string, string> = {};
   try {
-    const token = getAccessToken();
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
     const tenantId = getActiveTenantId();
     if (tenantId) {
       headers['X-Tenant-ID'] = tenantId;
@@ -126,13 +124,13 @@ function handleAuthError(status: number): void {
     _auth401InFlight = true;
     const authEnabled = process.env.NEXT_PUBLIC_AUTH_ENABLED === 'true';
     if (authEnabled) {
-      clearTokens();
       // Avoid redirect loops: don't redirect if already on auth pages
       const path = window.location.pathname;
       if (!path.startsWith('/auth/')) {
         // Small delay to batch multiple concurrent 401s into one redirect
         setTimeout(() => {
-          window.location.href = '/';
+          const returnTo = `${window.location.pathname}${window.location.search}`;
+          window.location.href = `/api/auth/login?returnTo=${encodeURIComponent(returnTo)}`;
           _auth401InFlight = false;
         }, 100);
       } else {

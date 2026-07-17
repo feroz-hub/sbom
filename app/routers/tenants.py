@@ -46,6 +46,7 @@ def _tenant_dict(tenant: Tenant, role: str | None = None) -> dict:
 
 
 @router.get("/auth/me")
+@router.get("/v1/auth/me")
 def auth_me(context: CurrentContext = Depends(get_current_tenant_context)) -> dict:
     return {
         "user_id": context.user_id,
@@ -57,6 +58,8 @@ def auth_me(context: CurrentContext = Depends(get_current_tenant_context)) -> di
         "roles": sorted(context.roles),
         "permissions": sorted(context.permissions),
         "is_platform_admin": context.is_platform_admin,
+        "authenticated": True,
+        "role": sorted(context.roles)[0] if context.roles else None,
     }
 
 

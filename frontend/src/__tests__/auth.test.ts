@@ -1,60 +1,30 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import {
-  oidcEndpoints,
-  resolveOidcEndpoints,
-  resolveAuthConfig,
-  storeTokens,
-  getAccessToken,
-  setActiveTenantId,
-  getActiveTenantId,
-  clearTokens,
-} from '@/lib/auth';
+import { describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
+import { constantTimeEqual, createPkce, randomBase64Url, safeReturnPath } from '@/lib/auth/pkce';
 
-describe('oidc endpoints', () => {
-  it('derives Keycloak-style URLs from issuer', () => {
-    const eps = oidcEndpoints('https://iam.example.com/realms/sbom');
-    expect(eps.authorization).toContain('/protocol/openid-connect/auth');
-    expect(eps.token).toContain('/protocol/openid-connect/token');
+describe('authorization code with PKCE', () => {
+  it('creates independent state, nonce, verifier, and an S256 challenge', () => {
+    const state = randomBase64Url();
+    const nonce = randomBase64Url();
+    const { verifier, challenge } = createPkce();
+    expect(verifier.length).toBeGreaterThanOrEqual(43);
+    expect(challenge).toBe(createHash('sha256').update(verifier, 'ascii').digest('base64url'));
+    expect(state).not.toBe(nonce);
+    expect(state).not.toBe(verifier);
   });
 
-  it('prefers explicit env URLs over issuer derivation', () => {
-    vi.stubEnv('NEXT_PUBLIC_HCL_IAM_AUTHORIZATION_URL', 'https://custom/auth');
-    vi.stubEnv('NEXT_PUBLIC_HCL_IAM_TOKEN_URL', 'https://custom/token');
-    vi.stubEnv('NEXT_PUBLIC_HCL_IAM_LOGOUT_URL', 'https://custom/logout');
-    const config = resolveAuthConfig();
-    const eps = resolveOidcEndpoints(config);
-    expect(eps.authorization).toBe('https://custom/auth');
-    expect(eps.token).toBe('https://custom/token');
-    expect(eps.logout).toBe('https://custom/logout');
-    vi.unstubAllEnvs();
-  });
-});
-
-describe('token storage', () => {
-  beforeEach(() => {
-    const store: Record<string, string> = {};
-    vi.stubGlobal('sessionStorage', {
-      getItem: (k: string) => store[k] ?? null,
-      setItem: (k: string, v: string) => {
-        store[k] = v;
-      },
-      removeItem: (k: string) => {
-        delete store[k];
-      },
-      clear: () => {
-        Object.keys(store).forEach((k) => delete store[k]);
-      },
-    });
-    clearTokens();
+  it('compares OAuth state in constant-time and rejects open redirects', () => {
+    expect(constantTimeEqual('valid-state', 'valid-state')).toBe(true);
+    expect(constantTimeEqual('valid-state', 'wrong-state')).toBe(false);
+    expect(safeReturnPath('/projects?view=all')).toBe('/projects?view=all');
+    expect(safeReturnPath('https://evil.example')).toBe('/');
+    expect(safeReturnPath('//evil.example')).toBe('/');
   });
 
-  it('stores and retrieves access token', () => {
-    storeTokens({ access_token: 'test-token-123' });
-    expect(getAccessToken()).toBe('test-token-123');
-  });
-
-  it('stores active tenant id', () => {
-    setActiveTenantId('42');
-    expect(getActiveTenantId()).toBe('42');
+  it('has no browser token-storage API', async () => {
+    const browserAuth = await import('@/lib/auth');
+    expect('storeTokens' in browserAuth).toBe(false);
+    expect('getRefreshToken' in browserAuth).toBe(false);
+    expect('getAccessToken' in browserAuth).toBe(false);
   });
 });

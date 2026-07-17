@@ -1,393 +1,119 @@
 'use client';
 
-/**
- * Authentication context and provider for HCL IAM OIDC integration.
- *
- * Wraps the React tree with auth state: user identity, active tenant,
- * roles, permissions, and token management. When `NEXT_PUBLIC_AUTH_ENABLED`
- * is false (dev mode), provides a synthetic admin context so the app
- * works without an IAM instance.
- */
-
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
-  type AuthConfig,
-  buildAuthorizationUrl,
-  buildLogoutUrl,
-  clearActiveTenantId,
-  clearTokens,
-  getAccessToken,
-  getActiveTenantId,
-  isTokenExpired,
-  parseJwtClaims,
-  refreshAccessToken,
-  resolveAuthConfig,
+  type AuthConfig, clearActiveTenantId, getActiveTenantId, resolveAuthConfig,
   setActiveTenantId,
-  storeReturnUrl,
 } from '@/lib/auth';
 
-// ─── Types ───────────────────────────────────────────────────────────────────
-
 export interface AuthUser {
-  userId: number | null;
-  externalUserId: string;
-  email: string | null;
-  displayName: string | null;
-  tenantId: number | null;
-  externalTenantId: string | null;
-  roles: string[];
-  permissions: string[];
+  userId: number | null; externalUserId: string; email: string | null; displayName: string | null;
+  tenantId: number | null; externalTenantId: string | null; roles: string[]; permissions: string[];
   isPlatformAdmin: boolean;
 }
-
 export interface TenantInfo {
-  id: number;
-  name: string;
-  slug: string;
-  externalIamTenantId: string;
-  status: string;
-  role: string | null;
+  id: number; name: string; slug: string; externalIamTenantId: string; status: string; role: string | null;
 }
-
 interface AuthContextValue {
-  /** Whether the user is authenticated (has a valid token or dev mode). */
-  isAuthenticated: boolean;
-  /** Whether auth initialization is in progress. */
-  isLoading: boolean;
-  /** Current user profile (from /api/auth/me). */
-  user: AuthUser | null;
-  /** Currently active tenant ID (for X-Tenant-ID header). */
-  activeTenantId: string | null;
-  /** List of tenants the user belongs to. */
-  tenants: TenantInfo[];
-  /** Auth config (enabled, issuer, etc.). */
-  config: AuthConfig;
-  /** Redirect to HCL IAM login. */
-  login: () => Promise<void>;
-  /** Clear tokens and redirect to HCL IAM logout. */
-  logout: () => void;
-  /** Switch the active tenant. Clears all tenant-specific query caches. */
-  switchTenant: (tenantId: string) => void;
-  /** Check if the user has a specific permission. */
-  hasPermission: (permission: string) => boolean;
-  /** Check if the user has any of the specified roles. */
+  isAuthenticated: boolean; isLoading: boolean; user: AuthUser | null; activeTenantId: string | null;
+  tenants: TenantInfo[]; config: AuthConfig; login: () => Promise<void>; logout: () => void;
+  switchTenant: (tenantId: string) => void; hasPermission: (permission: string) => boolean;
   hasAnyRole: (...roles: string[]) => boolean;
 }
-
 const AuthContext = createContext<AuthContextValue | null>(null);
-
-// ─── Dev mode defaults ───────────────────────────────────────────────────────
-
 const DEV_USER: AuthUser = {
-  userId: 1,
-  externalUserId: 'dev-user',
-  email: 'dev@local',
-  displayName: 'Dev User',
-  tenantId: 1,
-  externalTenantId: 'default',
-  roles: ['TENANT_ADMIN'],
-  permissions: [
-    'sbom:read', 'sbom:upload', 'sbom:update', 'sbom:delete', 'sbom:export',
-    'project:read', 'project:create', 'project:update', 'project:delete',
-    'component:read', 'component:update',
-    'lifecycle:read', 'lifecycle:override',
-    'lifecycle:provider:read', 'lifecycle:provider:update', 'lifecycle:provider:test', 'lifecycle:provider:sync',
-    'lifecycle:vendor-record:read', 'lifecycle:vendor-record:write', 'lifecycle:vendor-record:delete',
-    'vex:read', 'vex:write',
-    'remediation:read', 'remediation:write', 'remediation:close',
-    'dashboard:read',
-    'tenant:user:read', 'tenant:user:invite', 'tenant:user:update',
-    'tenant:settings:update',
-    'schedule:read', 'schedule:write',
-    'analysis:read', 'analysis:run',
-    'platform:admin',
-  ],
-  isPlatformAdmin: true,
+  userId: 1, externalUserId: 'dev-user', email: 'dev@local', displayName: 'Dev User', tenantId: 1,
+  externalTenantId: 'local-default', roles: ['TENANT_ADMIN'], permissions: ['platform:admin'], isPlatformAdmin: true,
 };
-
-const DEV_TENANTS: TenantInfo[] = [
-  {
-    id: 1,
-    name: 'Default Tenant',
-    slug: 'default',
-    externalIamTenantId: 'default',
-    status: 'ACTIVE',
-    role: 'TENANT_ADMIN',
-  },
-];
-
-// ─── Provider ────────────────────────────────────────────────────────────────
+const DEV_TENANTS: TenantInfo[] = [{
+  id: 1, name: 'Default Tenant', slug: 'default', externalIamTenantId: 'local-default',
+  status: 'ACTIVE', role: 'TENANT_ADMIN',
+}];
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const config = useMemo(() => resolveAuthConfig(), []);
   const queryClient = useQueryClient();
-
   const [isLoading, setIsLoading] = useState(true);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [tenants, setTenants] = useState<TenantInfo[]>([]);
   const [activeTenantIdState, setActiveTenantIdState] = useState<string | null>(null);
-  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const isAuthenticated = user !== null;
-
-  // Fetch user profile from /api/auth/me
   const fetchUserProfile = useCallback(async (tenantOverride?: string): Promise<boolean> => {
     try {
       const { BASE_URL } = await import('@/lib/api');
       const headers: Record<string, string> = {};
-      const token = getAccessToken();
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-      const tid = tenantOverride || getActiveTenantId();
-      if (tid) {
-        headers['X-Tenant-ID'] = tid;
-      }
-
-      const meRes = await fetch(`${BASE_URL}/api/auth/me`, { headers });
-      if (!meRes.ok) {
-        if (meRes.status === 401 || meRes.status === 403) return false;
-        return false;
-      }
-
-      const me = await meRes.json();
+      const tenantId = tenantOverride || getActiveTenantId();
+      if (tenantId) headers['X-Tenant-ID'] = tenantId;
+      const meResponse = await fetch(`${BASE_URL}/api/auth/me`, { headers, cache: 'no-store' });
+      if (!meResponse.ok) return false;
+      const me = await meResponse.json();
       setUser({
-        userId: me.user_id,
-        externalUserId: me.external_user_id,
-        email: me.email,
-        displayName: me.display_name,
-        tenantId: me.tenant_id,
-        externalTenantId: me.external_tenant_id,
-        roles: me.roles || [],
-        permissions: me.permissions || [],
-        isPlatformAdmin: me.is_platform_admin || false,
+        userId: me.user_id, externalUserId: me.external_user_id, email: me.email,
+        displayName: me.display_name, tenantId: me.tenant_id, externalTenantId: me.external_tenant_id,
+        roles: me.roles || [], permissions: me.permissions || [], isPlatformAdmin: Boolean(me.is_platform_admin),
       });
-
-      // Fetch tenant list
-      const tenantsRes = await fetch(`${BASE_URL}/api/tenants`, { headers });
-      if (tenantsRes.ok) {
-        const tenantList = await tenantsRes.json();
-        setTenants(
-          tenantList.map((t: Record<string, unknown>) => ({
-            id: t.id,
-            name: t.name,
-            slug: t.slug,
-            externalIamTenantId: t.external_iam_tenant_id,
-            status: t.status,
-            role: t.role,
-          })),
-        );
+      const tenantsResponse = await fetch(`${BASE_URL}/api/tenants`, { headers, cache: 'no-store' });
+      if (tenantsResponse.ok) {
+        setTenants((await tenantsResponse.json()).map((tenant: Record<string, unknown>) => ({
+          id: tenant.id, name: tenant.name, slug: tenant.slug,
+          externalIamTenantId: tenant.external_iam_tenant_id, status: tenant.status, role: tenant.role,
+        })) as TenantInfo[]);
       }
-
-      // Store active tenant
-      if (me.tenant_id && !tenantOverride) {
-        const storedTid = getActiveTenantId();
-        if (!storedTid) {
-          setActiveTenantId(String(me.tenant_id));
-          setActiveTenantIdState(String(me.tenant_id));
-        } else {
-          setActiveTenantIdState(storedTid);
-        }
-      }
-
+      const selected = tenantOverride || getActiveTenantId() || (me.tenant_id ? String(me.tenant_id) : null);
+      if (selected) { setActiveTenantId(selected); setActiveTenantIdState(selected); }
       return true;
-    } catch {
-      return false;
-    }
+    } catch { return false; }
   }, []);
 
-  // Schedule token refresh
-  const scheduleRefresh = useCallback(() => {
-    if (refreshTimerRef.current) {
-      clearTimeout(refreshTimerRef.current);
-    }
-    if (!config.enabled) return;
-
-    const token = getAccessToken();
-    if (!token) return;
-
-    const claims = parseJwtClaims(token);
-    if (!claims || typeof claims.exp !== 'number') return;
-
-    // Refresh 60 seconds before expiry
-    const refreshAt = claims.exp * 1000 - Date.now() - 60_000;
-    if (refreshAt <= 0) {
-      // Token is already (nearly) expired, refresh now
-      refreshAccessToken(config).then((ok) => {
-        if (ok) scheduleRefresh();
-      });
-      return;
-    }
-
-    refreshTimerRef.current = setTimeout(async () => {
-      const ok = await refreshAccessToken(config);
-      if (ok) {
-        scheduleRefresh();
-      } else {
-        // Refresh failed — user needs to re-login
-        clearTokens();
-        setUser(null);
-      }
-    }, Math.min(refreshAt, 2_147_483_647)); // setTimeout max
-  }, [config]);
-
-  // Initialize auth state
   useEffect(() => {
-    async function init() {
+    void (async () => {
       if (!config.enabled) {
-        // Dev mode: use synthetic admin
-        setUser(DEV_USER);
-        setTenants(DEV_TENANTS);
-        setActiveTenantIdState('1');
-        setActiveTenantId('1');
-        setIsLoading(false);
-        return;
+        setUser(DEV_USER); setTenants(DEV_TENANTS); setActiveTenantId('1'); setActiveTenantIdState('1');
+        setIsLoading(false); return;
       }
-
-      const token = getAccessToken();
-      if (!token || isTokenExpired()) {
-        // Try refresh
-        if (getAccessToken()) {
-          const refreshed = await refreshAccessToken(config);
-          if (refreshed) {
-            const ok = await fetchUserProfile();
-            if (ok) {
-              scheduleRefresh();
-              setIsLoading(false);
-              return;
-            }
-          }
-        }
-        // No valid token
-        setIsLoading(false);
-        return;
-      }
-
-      // Valid token exists — load profile
-      const ok = await fetchUserProfile();
-      if (ok) {
-        scheduleRefresh();
-      }
+      const session = await fetch('/api/auth/session', { cache: 'no-store' }).then((r) => r.ok ? r.json() : null).catch(() => null);
+      if (session?.authenticated) await fetchUserProfile();
       setIsLoading(false);
-    }
+    })();
+  }, [config.enabled, fetchUserProfile]);
 
-    init();
-
-    return () => {
-      if (refreshTimerRef.current) {
-        clearTimeout(refreshTimerRef.current);
-      }
-    };
-  }, [config, fetchUserProfile, scheduleRefresh]);
-
-  // Login: redirect to HCL IAM
   const login = useCallback(async () => {
     if (!config.enabled) return;
-    // Store current URL for post-login redirect
-    if (typeof window !== 'undefined') {
-      storeReturnUrl(window.location.pathname + window.location.search);
-    }
-    const url = await buildAuthorizationUrl(config);
-    window.location.href = url;
-  }, [config]);
+    const returnTo = `${window.location.pathname}${window.location.search}`;
+    window.location.assign(`/api/auth/login?returnTo=${encodeURIComponent(returnTo)}`);
+  }, [config.enabled]);
 
-  // Logout: clear everything and redirect to HCL IAM
   const logout = useCallback(() => {
-    clearTokens();
-    clearActiveTenantId();
-    setUser(null);
-    setTenants([]);
-    setActiveTenantIdState(null);
-    queryClient.clear();
+    clearActiveTenantId(); setUser(null); setTenants([]); setActiveTenantIdState(null); queryClient.clear();
+    if (!config.enabled) return;
+    void fetch('/api/auth/logout', { method: 'POST' })
+      .then((response) => response.json())
+      .then((body) => window.location.assign(body.redirectUrl || '/'))
+      .catch(() => window.location.assign('/'));
+  }, [config.enabled, queryClient]);
 
-    if (config.enabled) {
-      const logoutUrl = buildLogoutUrl(config);
-      window.location.href = logoutUrl;
-    }
-  }, [config, queryClient]);
-
-  // Switch tenant
-  const switchTenant = useCallback(
-    (tenantId: string) => {
-      setActiveTenantId(tenantId);
-      setActiveTenantIdState(tenantId);
-
-      // Clear all tenant-specific caches
-      queryClient.clear();
-
-      // Re-fetch user profile with new tenant context
-      fetchUserProfile(tenantId);
-    },
-    [queryClient, fetchUserProfile],
-  );
-
-  // Permission check
+  const switchTenant = useCallback((tenantId: string) => {
+    setActiveTenantId(tenantId); setActiveTenantIdState(tenantId); queryClient.clear();
+    void fetchUserProfile(tenantId);
+  }, [fetchUserProfile, queryClient]);
   const hasPermission = useCallback(
-    (permission: string) => {
-      if (!user) return false;
-      return user.permissions.includes(permission);
-    },
+    (permission: string) => Boolean(user && (user.isPlatformAdmin || user.permissions.includes(permission))),
     [user],
   );
-
-  // Role check
-  const hasAnyRole = useCallback(
-    (...roles: string[]) => {
-      if (!user) return false;
-      const userRoles = new Set(user.roles.map((r) => r.toUpperCase()));
-      return roles.some((r) => userRoles.has(r.toUpperCase()));
-    },
-    [user],
-  );
-
-  const value = useMemo<AuthContextValue>(
-    () => ({
-      isAuthenticated,
-      isLoading,
-      user,
-      activeTenantId: activeTenantIdState,
-      tenants,
-      config,
-      login,
-      logout,
-      switchTenant,
-      hasPermission,
-      hasAnyRole,
-    }),
-    [
-      isAuthenticated,
-      isLoading,
-      user,
-      activeTenantIdState,
-      tenants,
-      config,
-      login,
-      logout,
-      switchTenant,
-      hasPermission,
-      hasAnyRole,
-    ],
-  );
-
+  const hasAnyRole = useCallback((...roles: string[]) => {
+    const current = new Set(user?.roles.map((role) => role.toUpperCase()) || []);
+    return roles.some((role) => current.has(role.toUpperCase()));
+  }, [user]);
+  const value = useMemo(() => ({
+    isAuthenticated: user !== null, isLoading, user, activeTenantId: activeTenantIdState, tenants, config,
+    login, logout, switchTenant, hasPermission, hasAnyRole,
+  }), [user, isLoading, activeTenantIdState, tenants, config, login, logout, switchTenant, hasPermission, hasAnyRole]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-// ─── Hook ────────────────────────────────────────────────────────────────────
-
 export function useAuth(): AuthContextValue {
-  const ctx = useContext(AuthContext);
-  if (!ctx) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return ctx;
+  const value = useContext(AuthContext);
+  if (!value) throw new Error('useAuth must be used within an AuthProvider');
+  return value;
 }

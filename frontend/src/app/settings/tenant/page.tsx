@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { usePermission } from '@/hooks/usePermission';
 import { BASE_URL, HttpError } from '@/lib/api';
-import { getAccessToken, getActiveTenantId } from '@/lib/auth';
+import { getActiveTenantId } from '@/lib/auth';
 
 interface TenantUserRow {
   membership_id: number;
@@ -18,8 +18,6 @@ interface TenantUserRow {
 
 async function fetchTenantUsers(tenantId: number): Promise<TenantUserRow[]> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  const token = getAccessToken();
-  if (token) headers.Authorization = `Bearer ${token}`;
   const activeTenant = getActiveTenantId();
   if (activeTenant) headers['X-Tenant-ID'] = activeTenant;
 
@@ -44,8 +42,6 @@ export default function TenantUsersPage() {
   const disableMutation = useMutation({
     mutationFn: async (membershipId: number) => {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      const token = getAccessToken();
-      if (token) headers.Authorization = `Bearer ${token}`;
       const activeTenant = getActiveTenantId();
       if (activeTenant) headers['X-Tenant-ID'] = activeTenant;
       const res = await fetch(`${BASE_URL}/api/tenants/${tenantId}/users/${membershipId}`, {
