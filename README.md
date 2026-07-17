@@ -1,5 +1,7 @@
 # SBOM Analyser
 
+Native Windows setup for HCL.CS and SBOM without Docker is documented in [docs/WINDOWS_NATIVE_SETUP.md](docs/WINDOWS_NATIVE_SETUP.md).
+
 SBOM Analyser is a FastAPI + Next.js platform for uploading, validating, converting, enriching, analysing, and managing SBOMs across their lifecycle.
 
 ## 1. Overview
