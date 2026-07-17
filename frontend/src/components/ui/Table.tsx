@@ -151,11 +151,20 @@ export function SortableTh({
   );
 }
 
-export function EmptyRow({ cols, message }: { cols: number; message: string }) {
+export function EmptyRow({
+  cols,
+  message,
+  action,
+}: {
+  cols: number;
+  message: string;
+  action?: ReactNode;
+}) {
   return (
     <tr>
       <td colSpan={cols} className="px-4 py-14 text-center">
         <p className="mx-auto max-w-sm text-sm leading-relaxed text-hcl-muted">{message}</p>
+        {action ? <div className="mt-3 flex justify-center">{action}</div> : null}
       </td>
     </tr>
   );

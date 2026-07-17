@@ -15,6 +15,7 @@ import {
   X,
 } from 'lucide-react';
 import { Alert } from '@/components/ui/Alert';
+import { Button } from '@/components/ui/Button';
 import {
   CveDetailDialog,
   useCveHoverPrefetch,
@@ -154,6 +155,8 @@ interface FindingsTableProps {
   aiFixesEnabled?: boolean;
   /** Provider name shown in the empty-state CTA copy. */
   aiProviderLabel?: string;
+  /** Canonical count for the whole run, before any server severity narrowing. */
+  totalFindingsCount?: number;
 }
 
 /**
@@ -196,6 +199,22 @@ function parseJsonStringList(raw: string | null | undefined): string[] {
   } catch {
     return [];
   }
+}
+
+function distinctFindingValues(
+  findings: EnrichedFinding[] | undefined,
+  read: (finding: EnrichedFinding) => string | null | undefined,
+): string[] {
+  const values = new Map<string, string>();
+  for (const finding of findings ?? []) {
+    const value = read(finding)?.trim();
+    if (value && !values.has(value.toLowerCase())) {
+      values.set(value.toLowerCase(), value);
+    }
+  }
+  return Array.from(values.values()).sort((a, b) =>
+    a.localeCompare(b, undefined, { sensitivity: 'base' }),
+  );
 }
 
 function loadDensity(): Density {
@@ -323,6 +342,7 @@ export function FindingsTable({
   cveModalEnabled = true,
   aiFixesEnabled = false,
   aiProviderLabel,
+  totalFindingsCount,
 }: FindingsTableProps) {
   const selectionEnabled = selectedIds !== undefined && onSelectionChange !== undefined;
   // Controlled mode: when ``filterProp`` is supplied, defer to the
@@ -356,6 +376,11 @@ export function FindingsTable({
   );
   const [density, setDensity] = useState<Density>('comfortable');
   const [expandedRows, setExpandedRows] = useState<Record<number, boolean>>({});
+
+  const clearFilters = useCallback(() => {
+    setFilter({ ...DEFAULT_FILTERS });
+    onSeverityChange?.('');
+  }, [onSeverityChange, setFilter]);
 
   // Remediation drawer state
   const [remediationFinding, setRemediationFinding] = useState<EnrichedFinding | null>(null);
@@ -447,6 +472,8 @@ export function FindingsTable({
     setFilter((prev) =>
       prev.severityFilter === severityFilter ? prev : { ...prev, severityFilter },
     );
+    // setFilter intentionally omitted: its controlled-mode identity follows filter state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [severityFilter]);
 
   const sourceOptions = useMemo(() => {
@@ -461,6 +488,22 @@ export function FindingsTable({
     });
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [findings]);
+
+  const vendorOptions = useMemo(
+    () => distinctFindingValues(findings, (finding) => finding.vendor_project),
+    [findings],
+  );
+
+  const productOptions = useMemo(() => {
+    const selectedVendor = filter.vendor.trim().toLowerCase();
+    const rows = selectedVendor
+      ? findings?.filter(
+          (finding) =>
+            (finding.vendor_project ?? '').trim().toLowerCase() === selectedVendor,
+        )
+      : findings;
+    return distinctFindingValues(rows, (finding) => finding.product);
+  }, [findings, filter.vendor]);
 
   // Roadmap #6 — distinct ``match_strategy`` values actually present
   // in the loaded findings. Dead strategies (keyword_search,
@@ -483,16 +526,17 @@ export function FindingsTable({
   }, [findings, filter]);
 
   const kevStats = useMemo(() => {
-    const rows = findings ?? [];
+    const rows = filteredFindings;
     const kev = rows.filter(isKevFinding).length;
     const ransomware = rows.filter(isKnownRansomwareFinding).length;
     return {
-      total: rows.length,
+      total: totalFindingsCount ?? findings?.length ?? 0,
+      matching: rows.length,
       kev,
       nonKev: Math.max(rows.length - kev, 0),
       ransomware,
     };
-  }, [findings]);
+  }, [filteredFindings, findings?.length, totalFindingsCount]);
 
   const sortAccessors = useMemo(
     () => ({
@@ -527,7 +571,7 @@ export function FindingsTable({
   useEffect(() => {
     pagination.resetPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter.search, filter.kevOnly, filter.ransomwareOnly, filter.hasFixOnly, filter.cvssMin, filter.cvssMax, filter.epssMinPct, filter.sources, filter.severityFilter]);
+  }, [filter]);
 
   if (error) {
     return (
@@ -552,7 +596,7 @@ export function FindingsTable({
   }, [aiFixListEnabled, aiFixList]);
   const showAiCol = aiFixListEnabled;
 
-  const total = findings?.length ?? 0;
+  const total = totalFindingsCount ?? findings?.length ?? 0;
   const shown = filteredFindings.length;
   const cellPadding = DENSITY_CLASS[density];
   // (select?) + chevron + vuln + severity + cvss + epss + risk + component + remediation + sources + (ai?) + fix
@@ -622,6 +666,8 @@ export function FindingsTable({
         onChange={setFilter}
         sourceOptions={sourceOptions}
         strategyOptions={strategyOptions}
+        vendorOptions={vendorOptions}
+        productOptions={productOptions}
         onSeverityServerChange={
           onSeverityChange
             ? (sev) => {
@@ -632,6 +678,7 @@ export function FindingsTable({
         }
         totalCount={total}
         filteredCount={shown}
+        onClear={clearFilters}
       />
 
       {selectionEnabled && selectedIds ? (
@@ -645,16 +692,19 @@ export function FindingsTable({
       <div className="flex flex-wrap items-center justify-between gap-2 px-1">
         <div className="grid grid-cols-2 gap-1.5 text-xs sm:flex sm:items-center">
           <span className="rounded-md border border-border bg-surface px-2 py-1 text-hcl-muted">
-            Total <span className="font-metric font-semibold tabular-nums text-hcl-navy">{kevStats.total.toLocaleString()}</span>
+            Total findings <span className="font-metric font-semibold tabular-nums text-hcl-navy">{kevStats.total.toLocaleString()}</span>
+          </span>
+          <span className="rounded-md border border-primary/25 bg-primary/5 px-2 py-1 text-primary">
+            Matching findings <span className="font-metric font-semibold tabular-nums">{kevStats.matching.toLocaleString()}</span>
           </span>
           <span className="rounded-md border border-red-200 bg-red-50 px-2 py-1 text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">
-            KEV <span className="font-metric font-semibold tabular-nums">{kevStats.kev.toLocaleString()}</span>
+            KEV in matching <span className="font-metric font-semibold tabular-nums">{kevStats.kev.toLocaleString()}</span>
           </span>
           <span className="rounded-md border border-border bg-surface px-2 py-1 text-hcl-muted">
-            Non-KEV <span className="font-metric font-semibold tabular-nums text-hcl-navy">{kevStats.nonKev.toLocaleString()}</span>
+            Non-KEV in matching <span className="font-metric font-semibold tabular-nums text-hcl-navy">{kevStats.nonKev.toLocaleString()}</span>
           </span>
           <span className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200">
-            Ransomware <span className="font-metric font-semibold tabular-nums">{kevStats.ransomware.toLocaleString()}</span>
+            Ransomware in matching <span className="font-metric font-semibold tabular-nums">{kevStats.ransomware.toLocaleString()}</span>
           </span>
         </div>
 
@@ -768,11 +818,19 @@ export function FindingsTable({
             {isLoading ? (
               Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} cols={COL_COUNT} />)
             ) : !findings?.length ? (
-              <EmptyRow cols={COL_COUNT} message="No findings found for this run." />
+              <EmptyRow
+                cols={COL_COUNT}
+                message="No findings were detected for this analysis."
+              />
             ) : !filteredFindings.length ? (
               <EmptyRow
                 cols={COL_COUNT}
-                message="No findings match the active filters. Clear them to see all rows."
+                message="No findings match the selected filters."
+                action={
+                  <Button variant="secondary" size="sm" onClick={clearFilters}>
+                    Clear filters
+                  </Button>
+                }
               />
             ) : (
               pagination.pageItems.flatMap((f) => {
@@ -1284,6 +1342,14 @@ function ExpandedDetail({ finding: f, aliases, cwes, fixedVersions, onAliasOpen,
                     Product
                   </span>
                   <span className="text-hcl-navy dark:text-red-50">{f.product}</span>
+                </div>
+              )}
+              {f.ransomware_status && (
+                <div>
+                  <span className="block font-semibold uppercase tracking-wider text-red-700/80 dark:text-red-200/80">
+                    Ransomware status
+                  </span>
+                  <span className="text-hcl-navy dark:text-red-50">{f.ransomware_status}</span>
                 </div>
               )}
             </div>

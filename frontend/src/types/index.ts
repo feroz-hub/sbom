@@ -988,6 +988,8 @@ export interface EnrichedFinding extends AnalysisFinding {
   vendor_project?: string | null;
   product?: string | null;
   ransomware_status?: string | null;
+  /** Compatibility alias used by some KEV payloads. */
+  known_ransomware_campaign_use?: string | null;
   notes?: string | null;
   /** EPSS probability of exploitation (0..1). 0 = not in EPSS catalog. */
   epss: number;
@@ -1017,6 +1019,54 @@ export interface KevVulnerability {
   refreshed_at: string;
   first_seen_at: string | null;
   updated_at: string | null;
+}
+
+export type KevRansomwareFilter = 'known' | 'not-known';
+
+export type KevSortField =
+  | 'cve_id'
+  | 'vendor_project'
+  | 'product'
+  | 'vulnerability_name'
+  | 'date_added'
+  | 'due_date'
+  | 'known_ransomware_campaign_use'
+  | 'catalog_version'
+  | 'updated_at';
+
+export type KevSortOrder = 'asc' | 'desc';
+
+export interface KevListParams {
+  q?: string;
+  vendor?: string;
+  product?: string;
+  ransomware?: KevRansomwareFilter;
+  date_added_from?: string;
+  date_added_to?: string;
+  due_date_from?: string;
+  due_date_to?: string;
+  catalog_version?: string;
+  cwe?: string;
+  sort_by?: KevSortField;
+  sort_order?: KevSortOrder;
+  limit?: number;
+  offset?: number;
+}
+
+export interface KevListResponse {
+  total: number;
+  limit: number;
+  offset: number;
+  items: KevVulnerability[];
+}
+
+export interface KevFilterOptions {
+  vendors: string[];
+  products: string[];
+  catalog_versions: string[];
+  cwes: string[];
+  date_added_min: string | null;
+  date_added_max: string | null;
 }
 
 export interface KevSyncResult {

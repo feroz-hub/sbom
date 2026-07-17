@@ -71,6 +71,7 @@ function AnalysisDetailContent({ params }: AnalysisDetailPageProps) {
     ...DEFAULT_FILTERS,
     severityFilter: severityFromUrl,
     kevOnly: kevOnlyFromUrl,
+    kevStatus: kevOnlyFromUrl ? 'kev' : 'all',
     hasFixOnly: hasFixOnlyFromUrl,
     epssMinPct: epssMinPctFromUrl,
     matchReasonFilter: needsReviewFromUrl ? 'not_verified' : 'all',
@@ -356,6 +357,7 @@ function AnalysisDetailContent({ params }: AnalysisDetailPageProps) {
                   cveModalEnabled={cveModalEnabled}
                   aiFixesEnabled={Boolean(analysisConfig?.ai_fixes_enabled)}
                   aiProviderLabel={analysisConfig?.ai_default_provider ?? undefined}
+                  totalFindingsCount={canonicalTotalFindings}
                 />
               )}
             </SurfaceContent>

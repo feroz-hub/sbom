@@ -5,8 +5,6 @@ import {
   Bookmark,
   ChevronDown,
   Filter,
-  Flame,
-  ShieldAlert,
   Search,
   Wrench,
   X,
@@ -14,14 +12,15 @@ import {
 import { Button } from '@/components/ui/Button';
 import {
   countActiveFilters,
-  DEFAULT_FILTERS,
   deletePreset,
   hasActiveFilters,
   loadPresets,
   savePreset,
   type FindingsFilterPreset,
   type FindingsFilterState,
+  type KevStatusFilter,
   type MatchReasonFilter,
+  type RansomwareStatusFilter,
 } from '@/lib/findingFilters';
 import type { MatchStrategy } from '@/types';
 import { cn } from '@/lib/utils';
@@ -39,12 +38,18 @@ interface FindingFilterPanelProps {
    * moment a tagged finding lands.
    */
   strategyOptions: MatchStrategy[];
+  /** Distinct KEV vendors derived from all findings loaded for this run. */
+  vendorOptions: string[];
+  /** Distinct products, optionally narrowed by the selected vendor. */
+  productOptions: string[];
   /** Server-side severity filter — passes through to the API. */
   onSeverityServerChange?: (severity: string) => void;
   /** Raw count of all findings loaded in memory. */
   totalCount: number;
   /** Filtered count after applying these filters. */
   filteredCount: number;
+  /** Canonical reset shared with the filtered empty state. */
+  onClear: () => void;
 }
 
 const MATCH_REASON_OPTIONS: ReadonlyArray<{ value: MatchReasonFilter; label: string }> = [
@@ -66,9 +71,12 @@ export function FindingFilterPanel({
   onChange,
   sourceOptions,
   strategyOptions,
+  vendorOptions,
+  productOptions,
   onSeverityServerChange,
   totalCount,
   filteredCount,
+  onClear,
 }: FindingFilterPanelProps) {
   const [expanded, setExpanded] = useState(false);
   const [presets, setPresets] = useState<FindingsFilterPreset[]>([]);
@@ -100,7 +108,17 @@ export function FindingFilterPanel({
     update('matchStrategies', next);
   };
 
-  const reset = () => onChange({ ...DEFAULT_FILTERS, severityFilter: filter.severityFilter });
+  const setKevStatus = (value: KevStatusFilter) => {
+    onChange({ ...filter, kevStatus: value, kevOnly: value === 'kev' });
+  };
+
+  const setRansomwareStatus = (value: RansomwareStatusFilter) => {
+    onChange({
+      ...filter,
+      ransomwareStatus: value,
+      ransomwareOnly: value === 'known',
+    });
+  };
 
   const handleSavePreset = () => {
     const name = presetName.trim();
@@ -111,7 +129,8 @@ export function FindingFilterPanel({
   };
 
   const handleApplyPreset = (preset: FindingsFilterPreset) => {
-    onChange({ ...preset.filter, severityFilter: filter.severityFilter });
+    onChange(preset.filter);
+    onSeverityServerChange?.(preset.filter.severityFilter);
     setShowPresets(false);
   };
 
@@ -131,45 +150,33 @@ export function FindingFilterPanel({
             type="search"
             value={filter.search}
             onChange={(e) => update('search', e.target.value)}
-            placeholder="Search CVE, component, title, CPE, CWE…"
+            placeholder="Search CVE, package, vendor, product..."
             aria-label="Search findings"
             className="h-10 w-full rounded-lg border border-border bg-surface pl-9 pr-3 text-sm text-hcl-navy placeholder:text-hcl-muted focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/30"
           />
         </div>
 
-        {/* KEV-only quick toggle */}
-        <button
-          type="button"
-          onClick={() => update('kevOnly', !filter.kevOnly)}
-          aria-pressed={filter.kevOnly}
-          className={cn(
-            'inline-flex h-10 items-center gap-1.5 rounded-lg border px-3 text-xs font-semibold transition-all duration-base ease-spring',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/30',
-            filter.kevOnly
-              ? 'border-red-300 bg-red-50 text-red-700 shadow-glow-critical dark:border-red-800 dark:bg-red-950/60 dark:text-red-200'
-              : 'border-border bg-surface text-hcl-navy hover:-translate-y-px hover:bg-surface-muted',
-          )}
+        <select
+          value={filter.kevStatus}
+          onChange={(e) => setKevStatus(e.target.value as KevStatusFilter)}
+          aria-label="KEV status"
+          className="h-10 rounded-lg border border-border bg-surface px-3 text-xs font-medium text-hcl-navy focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/30"
         >
-          <Flame className="h-3.5 w-3.5" aria-hidden />
-          KEV only
-        </button>
+          <option value="all">All findings</option>
+          <option value="kev">KEV only</option>
+          <option value="non-kev">Non-KEV only</option>
+        </select>
 
-        {/* Ransomware-only quick toggle */}
-        <button
-          type="button"
-          onClick={() => update('ransomwareOnly', !filter.ransomwareOnly)}
-          aria-pressed={filter.ransomwareOnly}
-          className={cn(
-            'inline-flex h-10 items-center gap-1.5 rounded-lg border px-3 text-xs font-semibold transition-all duration-base ease-spring',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/30',
-            filter.ransomwareOnly
-              ? 'border-rose-300 bg-rose-50 text-rose-700 shadow-glow-critical dark:border-rose-800 dark:bg-rose-950/60 dark:text-rose-200'
-              : 'border-border bg-surface text-hcl-navy hover:-translate-y-px hover:bg-surface-muted',
-          )}
+        <select
+          value={filter.ransomwareStatus}
+          onChange={(e) => setRansomwareStatus(e.target.value as RansomwareStatusFilter)}
+          aria-label="Ransomware status"
+          className="h-10 rounded-lg border border-border bg-surface px-3 text-xs font-medium text-hcl-navy focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/30"
         >
-          <ShieldAlert className="h-3.5 w-3.5" aria-hidden />
-          Ransomware
-        </button>
+          <option value="all">All findings</option>
+          <option value="known">Known ransomware use</option>
+          <option value="not-known">No known ransomware use</option>
+        </select>
 
         {/* Has-fix toggle */}
         <button
@@ -193,7 +200,7 @@ export function FindingFilterPanel({
           <select
             value={filter.severityFilter}
             onChange={(e) => onSeverityServerChange(e.target.value)}
-            aria-label="Server severity filter"
+            aria-label="Severity"
             className="h-10 rounded-lg border border-border bg-surface px-3 text-xs font-medium text-hcl-navy focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/30"
           >
             <option value="">All severities</option>
@@ -261,8 +268,8 @@ export function FindingFilterPanel({
         </span>
 
         {isActive && (
-          <Button variant="ghost" size="sm" onClick={reset}>
-            Clear
+          <Button variant="ghost" size="sm" onClick={onClear}>
+            Clear filters
           </Button>
         )}
       </div>
@@ -333,6 +340,40 @@ export function FindingFilterPanel({
       {/* Expanded filter body */}
       {expanded && (
         <div className="grid grid-cols-1 gap-5 px-4 py-4 motion-fade-in md:grid-cols-2 lg:grid-cols-3">
+          <label className="space-y-2">
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-hcl-muted">
+              Vendor
+            </span>
+            <select
+              value={filter.vendor}
+              onChange={(e) =>
+                onChange({ ...filter, vendor: e.target.value, product: '' })
+              }
+              className="h-9 w-full rounded-lg border border-border bg-surface px-3 text-sm text-hcl-navy focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/30"
+            >
+              <option value="">All vendors</option>
+              {vendorOptions.map((vendor) => (
+                <option key={vendor} value={vendor}>{vendor}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className="space-y-2">
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-hcl-muted">
+              Product
+            </span>
+            <select
+              value={filter.product}
+              onChange={(e) => update('product', e.target.value)}
+              className="h-9 w-full rounded-lg border border-border bg-surface px-3 text-sm text-hcl-navy focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/30"
+            >
+              <option value="">All products</option>
+              {productOptions.map((product) => (
+                <option key={product} value={product}>{product}</option>
+              ))}
+            </select>
+          </label>
+
           {/* CVSS range */}
           <fieldset className="space-y-2">
             <legend className="text-[11px] font-semibold uppercase tracking-wider text-hcl-muted">

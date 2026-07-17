@@ -68,6 +68,9 @@ import type {
   LifecycleVendorRecordListResponse,
   LineRepairPatch,
   Fda510kReportExportRequest,
+  KevFilterOptions,
+  KevListParams,
+  KevListResponse,
   KevSyncResult,
   KevVulnerability,
 } from '@/types';
@@ -2155,15 +2158,44 @@ export function getCveDetail(
 // ─── CISA KEV catalog ───────────────────────────────────────────────────────
 
 export function listKevVulnerabilities(
-  args: { q?: string; ransomware?: boolean; limit?: number; offset?: number } = {},
+  args: KevListParams = {},
   signal?: AbortSignal,
-): Promise<KevVulnerability[]> {
+): Promise<KevListResponse> {
   const params = new URLSearchParams();
-  if (args.q?.trim()) params.set('q', args.q.trim());
-  if (args.ransomware !== undefined) params.set('ransomware', String(args.ransomware));
+  const textParams: Array<[keyof KevListParams, string]> = [
+    ['q', 'q'],
+    ['vendor', 'vendor'],
+    ['product', 'product'],
+    ['ransomware', 'ransomware'],
+    ['date_added_from', 'date_added_from'],
+    ['date_added_to', 'date_added_to'],
+    ['due_date_from', 'due_date_from'],
+    ['due_date_to', 'due_date_to'],
+    ['catalog_version', 'catalog_version'],
+    ['cwe', 'cwe'],
+    ['sort_by', 'sort_by'],
+    ['sort_order', 'sort_order'],
+  ];
+  textParams.forEach(([key, queryKey]) => {
+    const value = args[key];
+    if (typeof value === 'string' && value.trim()) params.set(queryKey, value.trim());
+  });
   params.set('limit', String(args.limit ?? 50));
   params.set('offset', String(args.offset ?? 0));
-  return request<KevVulnerability[]>(`/api/v1/kev?${params.toString()}`, { signal });
+  return request<KevListResponse>(`/api/v1/kev?${params.toString()}`, { signal });
+}
+
+export function getKevFilterOptions(
+  args: { vendor?: string } = {},
+  signal?: AbortSignal,
+): Promise<KevFilterOptions> {
+  const params = new URLSearchParams();
+  if (args.vendor?.trim()) params.set('vendor', args.vendor.trim());
+  const query = params.toString();
+  return request<KevFilterOptions>(
+    `/api/v1/kev/filter-options${query ? `?${query}` : ''}`,
+    { signal },
+  );
 }
 
 export function getKevVulnerability(

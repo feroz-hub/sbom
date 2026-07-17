@@ -9,9 +9,11 @@ import type { EnrichedFinding, MatchStrategy } from '@/types';
  * non-``all`` value is set.
  */
 export type MatchReasonFilter = 'all' | 'verified' | 'not_verified';
+export type KevStatusFilter = 'all' | 'kev' | 'non-kev';
+export type RansomwareStatusFilter = 'all' | 'known' | 'not-known';
 
 export interface FindingsFilterState {
-  /** Free-text search across vuln_id, CVE aliases, title, description, component, CPE. */
+  /** Free-text search across finding identity, component, and KEV context. */
   search: string;
   /** Server-side severity filter — passed to the API. */
   severityFilter: string;
@@ -26,6 +28,14 @@ export interface FindingsFilterState {
   kevOnly: boolean;
   /** Show only KEV findings with known ransomware campaign use. */
   ransomwareOnly: boolean;
+  /** Three-state KEV membership filter. */
+  kevStatus: KevStatusFilter;
+  /** Three-state known-ransomware filter. */
+  ransomwareStatus: RansomwareStatusFilter;
+  /** Exact, case-insensitive vendor selection. Empty = all. */
+  vendor: string;
+  /** Exact, case-insensitive product selection. Empty = all. */
+  product: string;
   /** Show only findings with at least one fixed version. */
   hasFixOnly: boolean;
   /** Roadmap #1 — two-state trust filter mirroring MatchReasonBadge. */
@@ -54,6 +64,10 @@ export const DEFAULT_FILTERS: FindingsFilterState = {
   epssMinPct: 0,
   kevOnly: false,
   ransomwareOnly: false,
+  kevStatus: 'all',
+  ransomwareStatus: 'all',
+  vendor: '',
+  product: '',
   hasFixOnly: false,
   matchReasonFilter: 'all',
   matchConfidenceMin: 0,
@@ -77,14 +91,18 @@ const SEARCH_FIELDS: Array<keyof EnrichedFinding> = [
   'notes',
 ];
 
-function searchableHay(f: EnrichedFinding): string {
+function normalize(value: unknown): string {
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
+function searchableValues(f: EnrichedFinding): string[] {
   const parts: string[] = [];
   for (const k of SEARCH_FIELDS) {
     const v = f[k];
-    if (typeof v === 'string') parts.push(v);
+    if (typeof v === 'string') parts.push(normalize(v));
   }
-  parts.push(...f.cve_aliases);
-  return parts.join(' ').toLowerCase();
+  parts.push(...(f.cve_aliases ?? []).map(normalize));
+  return parts;
 }
 
 function fixedVersionsList(raw: string | null | undefined): string[] {
@@ -98,11 +116,28 @@ function fixedVersionsList(raw: string | null | undefined): string[] {
 }
 
 export function isKnownRansomwareFinding(f: EnrichedFinding): boolean {
-  return (f.ransomware_status ?? '').trim().toLowerCase() === 'known';
+  return [f.ransomware_status, f.known_ransomware_campaign_use]
+    .some((value) => normalize(value) === 'known');
 }
 
 export function isKevFinding(f: EnrichedFinding): boolean {
-  return f.in_kev || f.is_kev === true;
+  return f.in_kev === true || f.is_kev === true;
+}
+
+export function effectiveKevStatus(filter: FindingsFilterState): KevStatusFilter {
+  if (filter.kevStatus === 'kev' || filter.kevStatus === 'non-kev') {
+    return filter.kevStatus;
+  }
+  return filter.kevOnly ? 'kev' : 'all';
+}
+
+export function effectiveRansomwareStatus(
+  filter: FindingsFilterState,
+): RansomwareStatusFilter {
+  if (filter.ransomwareStatus === 'known' || filter.ransomwareStatus === 'not-known') {
+    return filter.ransomwareStatus;
+  }
+  return filter.ransomwareOnly ? 'known' : 'all';
 }
 
 /**
@@ -113,8 +148,21 @@ export function matchesFindingFilter(
   f: EnrichedFinding,
   filter: FindingsFilterState,
 ): boolean {
-  if (filter.kevOnly && !isKevFinding(f)) return false;
-  if (filter.ransomwareOnly && !isKnownRansomwareFinding(f)) return false;
+  const kevStatus = effectiveKevStatus(filter);
+  const ransomwareStatus = effectiveRansomwareStatus(filter);
+  const isKev = isKevFinding(f);
+  const isKnownRansomware = isKnownRansomwareFinding(f);
+
+  if (kevStatus === 'kev' && !isKev) return false;
+  if (kevStatus === 'non-kev' && isKev) return false;
+  if (ransomwareStatus === 'known' && !isKnownRansomware) return false;
+  if (ransomwareStatus === 'not-known' && isKnownRansomware) return false;
+  if (
+    filter.severityFilter &&
+    normalize(f.severity) !== normalize(filter.severityFilter)
+  ) return false;
+  if (filter.vendor && normalize(f.vendor_project) !== normalize(filter.vendor)) return false;
+  if (filter.product && normalize(f.product) !== normalize(filter.product)) return false;
   if (filter.hasFixOnly && fixedVersionsList(f.fixed_versions).length === 0) return false;
   if (filter.cvssMin > 0 && (f.score ?? 0) < filter.cvssMin) return false;
   if (filter.cvssMax < 10 && (f.score ?? 0) > filter.cvssMax) return false;
@@ -127,8 +175,8 @@ export function matchesFindingFilter(
     if (!filter.sources.some((s) => sources.includes(s.toUpperCase()))) return false;
   }
   if (filter.search.trim()) {
-    const term = filter.search.trim().toLowerCase();
-    if (!searchableHay(f).includes(term)) return false;
+    const term = normalize(filter.search);
+    if (!searchableValues(f).some((value) => value.includes(term))) return false;
   }
   // Roadmap #1 — two-state trust filter. ``all`` is the no-op default.
   // Null reasons (flag-off scans, non-NVD sources) match neither
@@ -158,16 +206,19 @@ export function matchesFindingFilter(
   return true;
 }
 
-/** True when the filter state contains any active narrowing (excluding server severity). */
+/** True when the filter state contains any active narrowing. */
 export function hasActiveFilters(filter: FindingsFilterState): boolean {
   return (
     filter.search.trim().length > 0 ||
+    filter.severityFilter.length > 0 ||
     filter.sources.length > 0 ||
     filter.cvssMin > 0 ||
     filter.cvssMax < 10 ||
     filter.epssMinPct > 0 ||
-    filter.kevOnly ||
-    filter.ransomwareOnly ||
+    effectiveKevStatus(filter) !== 'all' ||
+    effectiveRansomwareStatus(filter) !== 'all' ||
+    filter.vendor.length > 0 ||
+    filter.product.length > 0 ||
     filter.hasFixOnly ||
     filter.matchReasonFilter !== 'all' ||
     filter.matchConfidenceMin > 0 ||
@@ -179,11 +230,14 @@ export function hasActiveFilters(filter: FindingsFilterState): boolean {
 export function countActiveFilters(filter: FindingsFilterState): number {
   let n = 0;
   if (filter.search.trim()) n++;
+  if (filter.severityFilter) n++;
   if (filter.sources.length > 0) n++;
   if (filter.cvssMin > 0 || filter.cvssMax < 10) n++;
   if (filter.epssMinPct > 0) n++;
-  if (filter.kevOnly) n++;
-  if (filter.ransomwareOnly) n++;
+  if (effectiveKevStatus(filter) !== 'all') n++;
+  if (effectiveRansomwareStatus(filter) !== 'all') n++;
+  if (filter.vendor) n++;
+  if (filter.product) n++;
   if (filter.hasFixOnly) n++;
   if (filter.matchReasonFilter !== 'all') n++;
   if (filter.matchConfidenceMin > 0) n++;
@@ -209,6 +263,44 @@ interface PresetStorage {
   presets: FindingsFilterPreset[];
 }
 
+function isKevStatus(value: unknown): value is KevStatusFilter {
+  return value === 'all' || value === 'kev' || value === 'non-kev';
+}
+
+function isRansomwareStatus(value: unknown): value is RansomwareStatusFilter {
+  return value === 'all' || value === 'known' || value === 'not-known';
+}
+
+/** Merge persisted/legacy partial state into today's complete filter contract. */
+export function normalizeFindingsFilter(
+  raw: Partial<FindingsFilterState> | null | undefined,
+): FindingsFilterState {
+  const input = raw ?? {};
+  const kevStatus = isKevStatus(input.kevStatus)
+    ? input.kevStatus
+    : input.kevOnly
+      ? 'kev'
+      : 'all';
+  const ransomwareStatus = isRansomwareStatus(input.ransomwareStatus)
+    ? input.ransomwareStatus
+    : input.ransomwareOnly
+      ? 'known'
+      : 'all';
+
+  return {
+    ...DEFAULT_FILTERS,
+    ...input,
+    sources: Array.isArray(input.sources) ? input.sources : [],
+    matchStrategies: Array.isArray(input.matchStrategies) ? input.matchStrategies : [],
+    kevStatus,
+    ransomwareStatus,
+    kevOnly: kevStatus === 'kev',
+    ransomwareOnly: ransomwareStatus === 'known',
+    vendor: typeof input.vendor === 'string' ? input.vendor : '',
+    product: typeof input.product === 'string' ? input.product : '',
+  };
+}
+
 function readStorage(): FindingsFilterPreset[] {
   if (typeof window === 'undefined') return [];
   try {
@@ -224,7 +316,10 @@ function readStorage(): FindingsFilterPreset[] {
         typeof p.name === 'string' &&
         typeof p.filter === 'object' &&
         typeof p.createdAt === 'number',
-    );
+    ).map((preset) => ({
+      ...preset,
+      filter: normalizeFindingsFilter(preset.filter),
+    }));
   } catch {
     return [];
   }
@@ -250,7 +345,7 @@ export function savePreset(name: string, filter: FindingsFilterState): FindingsF
   const preset: FindingsFilterPreset = {
     id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
     name: trimmed.slice(0, 80),
-    filter: { ...filter },
+    filter: normalizeFindingsFilter(filter),
     createdAt: Date.now(),
   };
   // Replace by name if one already exists.

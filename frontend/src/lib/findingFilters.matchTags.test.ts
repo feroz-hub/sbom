@@ -11,6 +11,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  countActiveFilters,
   DEFAULT_FILTERS,
   matchesFindingFilter,
   type FindingsFilterState,
@@ -145,12 +146,117 @@ describe('matchesFindingFilter — KEV and ransomware filters', () => {
     expect(matchesFindingFilter(makeFinding({ in_kev: false, is_kev: false }), f)).toBe(false);
   });
 
+  it('supports canonical KEV-only and non-KEV-only status values', () => {
+    const kev = makeFinding({ is_kev: true, in_kev: false });
+    const nonKev = makeFinding({ is_kev: false, in_kev: false });
+
+    expect(matchesFindingFilter(kev, filterWith({ kevStatus: 'kev' }))).toBe(true);
+    expect(matchesFindingFilter(nonKev, filterWith({ kevStatus: 'kev' }))).toBe(false);
+    expect(matchesFindingFilter(kev, filterWith({ kevStatus: 'non-kev' }))).toBe(false);
+    expect(matchesFindingFilter(nonKev, filterWith({ kevStatus: 'non-kev' }))).toBe(true);
+  });
+
   it('ransomwareOnly keeps findings marked as known ransomware campaign use', () => {
     const f = filterWith({ ransomwareOnly: true });
     expect(matchesFindingFilter(makeFinding({ ransomware_status: 'Known' }), f)).toBe(true);
     expect(matchesFindingFilter(makeFinding({ ransomware_status: 'known' }), f)).toBe(true);
     expect(matchesFindingFilter(makeFinding({ ransomware_status: 'Unknown' }), f)).toBe(false);
     expect(matchesFindingFilter(makeFinding({ ransomware_status: null }), f)).toBe(false);
+  });
+
+  it('supports exact known and not-known ransomware statuses across both aliases', () => {
+    const primaryKnown = makeFinding({ ransomware_status: ' KNOWN ' });
+    const aliasKnown = makeFinding({
+      ransomware_status: null,
+      known_ransomware_campaign_use: 'known',
+    });
+    const unknown = makeFinding({ ransomware_status: 'Unknown' });
+    const notKnown = makeFinding({ ransomware_status: 'Not Known' });
+
+    for (const finding of [primaryKnown, aliasKnown]) {
+      expect(
+        matchesFindingFilter(finding, filterWith({ ransomwareStatus: 'known' })),
+      ).toBe(true);
+      expect(
+        matchesFindingFilter(finding, filterWith({ ransomwareStatus: 'not-known' })),
+      ).toBe(false);
+    }
+    for (const finding of [unknown, notKnown, makeFinding({ ransomware_status: null })]) {
+      expect(
+        matchesFindingFilter(finding, filterWith({ ransomwareStatus: 'known' })),
+      ).toBe(false);
+      expect(
+        matchesFindingFilter(finding, filterWith({ ransomwareStatus: 'not-known' })),
+      ).toBe(true);
+    }
+  });
+});
+
+describe('matchesFindingFilter — enriched search and dimensions', () => {
+  const enriched = makeFinding({
+    vuln_id: 'CVE-2021-44228',
+    component_name: 'log4j-core',
+    component_version: '2.14.1',
+    title: 'Remote Code Execution',
+    vendor_project: 'Apache',
+    product: 'Log4j2',
+    severity: 'CRITICAL',
+  });
+
+  it.each([
+    ['CVE', '  cve-2021-44228  '],
+    ['package', 'LOG4J-CORE'],
+    ['package version', '2.14.1'],
+    ['vendor', 'apache'],
+    ['product', 'log4j2'],
+    ['vulnerability title', 'remote code'],
+  ])('searches by %s case-insensitively', (_field, search) => {
+    expect(matchesFindingFilter(enriched, filterWith({ search }))).toBe(true);
+  });
+
+  it('uses OR across search fields rather than requiring every field to match', () => {
+    for (const search of ['CVE-2021', 'log4j-core', 'Apache', 'Log4j2']) {
+      expect(matchesFindingFilter(enriched, filterWith({ search }))).toBe(true);
+    }
+    expect(matchesFindingFilter(enriched, filterWith({ search: 'Microsoft' }))).toBe(false);
+  });
+
+  it('matches severity, vendor, and product exactly and case-insensitively', () => {
+    expect(
+      matchesFindingFilter(
+        enriched,
+        filterWith({ severityFilter: 'critical', vendor: 'apache', product: 'log4j2' }),
+      ),
+    ).toBe(true);
+    expect(matchesFindingFilter(enriched, filterWith({ severityFilter: 'high' }))).toBe(false);
+    expect(matchesFindingFilter(enriched, filterWith({ vendor: 'Apach' }))).toBe(false);
+    expect(matchesFindingFilter(enriched, filterWith({ product: 'Log4j' }))).toBe(false);
+  });
+
+  it('combines all selected dimensions with AND logic', () => {
+    const filters = filterWith({
+      search: 'log4j',
+      severityFilter: 'CRITICAL',
+      kevStatus: 'kev',
+      ransomwareStatus: 'known',
+      vendor: 'Apache',
+      product: 'Log4j2',
+    });
+    const matching = { ...enriched, is_kev: true, ransomware_status: 'Known' };
+    expect(matchesFindingFilter(matching, filters)).toBe(true);
+    expect(matchesFindingFilter({ ...matching, product: 'Tomcat' }, filters)).toBe(false);
+    expect(matchesFindingFilter({ ...matching, ransomware_status: 'Unknown' }, filters)).toBe(false);
+  });
+
+  it('counts search, severity, statuses, vendor, and product as active filters', () => {
+    expect(countActiveFilters(filterWith({
+      search: 'log4j',
+      severityFilter: 'CRITICAL',
+      kevStatus: 'kev',
+      ransomwareStatus: 'known',
+      vendor: 'Apache',
+      product: 'Log4j2',
+    }))).toBe(6);
   });
 });
 
