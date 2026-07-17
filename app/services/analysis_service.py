@@ -21,6 +21,7 @@ from .finding_metrics import (
     calculate_run_finding_metrics,
     deduplicate_finding_dicts,
 )
+from .kev_enrichment import enrich_findings_with_kev
 from .sbom_service import (
     COMPONENT_EXTRACTION_COMPLETED,
     COMPONENT_EXTRACTION_FAILED,
@@ -693,6 +694,14 @@ def persist_analysis_run(
         },
     )
     metrics = calculate_run_finding_metrics(persisted_rows, run=run)
+    kev_enrichments = enrich_findings_with_kev(db, persisted_rows)
+    kev_cves = sorted(
+        {
+            enrichment.matched_cve
+            for enrichment in kev_enrichments.values()
+            if enrichment.is_kev and enrichment.matched_cve
+        }
+    )
     apply_metrics_to_run(run, metrics)
     if normalized_status in {RUN_STATUS_OK, RUN_STATUS_FINDINGS, RUN_STATUS_PARTIAL, "PASS", "FAIL"}:
         run.run_status = compute_report_status(metrics.total_findings, details.get("query_errors") or [])
@@ -707,8 +716,13 @@ def persist_analysis_run(
         "total_findings": metrics.total_findings,
         "unique_vulnerabilities": metrics.unique_vulnerabilities,
         "ai_fix_eligible_findings": metrics.ai_fix_eligible_findings,
+        "kev_findings": sum(1 for enrichment in kev_enrichments.values() if enrichment.is_kev),
+        "kev_cves": kev_cves,
         "severity_counts": metrics.severity_counts,
     }
+    if isinstance(details.get("analysis_metadata"), dict):
+        details["analysis_metadata"]["kev_findings"] = details["metrics"]["kev_findings"]
+        details["analysis_metadata"]["kev_cves"] = kev_cves
     run.raw_report = json.dumps(details)
     db.add(run)
 

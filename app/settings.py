@@ -292,6 +292,32 @@ class Settings(BaseSettings):
         description="Min spacing between NVD calls with an API key (50 req / 30s).",
     )
 
+    # CISA KEV catalog mirror. Kept in the main settings object so the
+    # integrated service does not carry a second config module.
+    kev_feed_url: str = Field(
+        default="https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json",
+        description="Official CISA Known Exploited Vulnerabilities JSON feed.",
+    )
+    kev_ttl_seconds: int = Field(
+        default=24 * 60 * 60,
+        ge=60,
+        description="Refresh interval for the local KEV catalog mirror.",
+    )
+    kev_http_timeout: float = Field(
+        default=30.0,
+        ge=1.0,
+        description="HTTP timeout in seconds for downloading the CISA KEV feed.",
+    )
+    kev_failure_retry_seconds: float = Field(
+        default=5 * 60,
+        ge=1.0,
+        description="Minimum delay before retrying a failed KEV refresh.",
+    )
+    kev_since_date: str = Field(
+        default="",
+        description="Optional YYYY-MM-DD cutoff for manual KEV sync endpoints; empty syncs the full catalog.",
+    )
+
     # Roadmap #2 — per-(source, component) raw-response cache TTL.
     #
     # Cached entries skip re-hitting OSV / GHSA / VulDB (and possibly

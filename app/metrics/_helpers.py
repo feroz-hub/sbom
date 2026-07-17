@@ -7,16 +7,13 @@ Phase 5 grep for the shapes.
 
 from __future__ import annotations
 
-import json
-import re
 from collections.abc import Iterable
 
 from sqlalchemy import ScalarSelect, func, select
 
 from ..models import AnalysisRun
+from ..services.vulnerability_ids import cves_for_finding
 from .base import COMPLETED_RUN_STATUSES
-
-_CVE_RE = re.compile(r"CVE-\d{4}-\d{4,7}", re.IGNORECASE)
 
 
 def active_head_sbom_ids_subquery() -> ScalarSelect:
@@ -63,28 +60,6 @@ def latest_run_per_sbom_as_of_subquery(as_of_iso: str) -> ScalarSelect:
         .group_by(AnalysisRun.sbom_id)
         .scalar_subquery()
     )
-
-
-def cves_for_finding(vuln_id: str | None, aliases: str | None) -> list[str]:
-    """Every CVE id we can extract from a finding (vuln_id + aliases JSON).
-
-    Mirrors the run-detail enrichment helper at
-    ``app/routers/runs.py::_cve_aliases_for`` — Phase 4 collapses the two to
-    this one definition. Returns sorted, uppercased, deduplicated CVE ids.
-    """
-    ids: list[str] = []
-    if vuln_id:
-        ids.extend(_CVE_RE.findall(vuln_id))
-    if aliases:
-        try:
-            parsed = json.loads(aliases)
-            if isinstance(parsed, list):
-                for a in parsed:
-                    if isinstance(a, str):
-                        ids.extend(_CVE_RE.findall(a))
-        except (TypeError, ValueError):
-            ids.extend(_CVE_RE.findall(aliases))
-    return sorted({i.upper() for i in ids if i})
 
 
 def is_kev_listed(vuln_id: str | None, aliases: str | None, kev_set: set[str]) -> bool:

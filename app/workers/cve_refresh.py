@@ -3,9 +3,9 @@ CVE-cache maintenance Celery tasks.
 
 Two jobs:
 
-    refresh_kev_cache  — fired by Beat every 6 hours. Forces a refresh of
-        the local ``kev_entry`` mirror so KEV-listed status reflects CISA's
-        latest catalog without waiting for the next cold modal open.
+    refresh_kev_cache  — compatibility wrapper for the dedicated
+        ``kev.sync`` task. Beat now schedules ``kev.sync`` directly every
+        24 hours.
 
     purge_expired_cve_cache — fired daily. Deletes ``cve_cache`` rows whose
         ``expires_at`` has passed by more than 24 h. The service layer is
@@ -23,29 +23,19 @@ from datetime import UTC, datetime, timedelta
 
 from celery import shared_task
 from sqlalchemy import delete
-from sqlalchemy.orm import Session
 
 from ..models import CveCache
-from ..sources.kev import refresh_if_stale
 
 log = logging.getLogger(__name__)
 
 
 @shared_task(name="cve_refresh.refresh_kev_cache", bind=True, ignore_result=True)
 def refresh_kev_cache(self) -> dict:
-    """Force-refresh the KEV mirror. Safe to fail; KEV adapter falls back."""
-    from app.db import SessionLocal
+    """Compatibility task for callers still using the old task name."""
+    from app.workers.kev_sync import sync_kev_catalog
 
-    db: Session = SessionLocal()
-    try:
-        changed = refresh_if_stale(db, force=True)
-        log.info("cve_refresh_kev_done", extra={"refreshed": changed})
-        return {"refreshed": changed}
-    except Exception:
-        log.exception("cve_refresh_kev_failed")
-        return {"refreshed": False, "error": True}
-    finally:
-        db.close()
+    result = sync_kev_catalog(since=None, prune_stale=True)
+    return {"refreshed": bool(result.get("ok")), **result}
 
 
 @shared_task(name="cve_refresh.purge_expired", bind=True, ignore_result=True)

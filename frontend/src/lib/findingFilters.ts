@@ -24,6 +24,8 @@ export interface FindingsFilterState {
   epssMinPct: number;
   /** Show only findings on the CISA KEV catalog. */
   kevOnly: boolean;
+  /** Show only KEV findings with known ransomware campaign use. */
+  ransomwareOnly: boolean;
   /** Show only findings with at least one fixed version. */
   hasFixOnly: boolean;
   /** Roadmap #1 — two-state trust filter mirroring MatchReasonBadge. */
@@ -51,6 +53,7 @@ export const DEFAULT_FILTERS: FindingsFilterState = {
   cvssMax: 10,
   epssMinPct: 0,
   kevOnly: false,
+  ransomwareOnly: false,
   hasFixOnly: false,
   matchReasonFilter: 'all',
   matchConfidenceMin: 0,
@@ -67,6 +70,11 @@ const SEARCH_FIELDS: Array<keyof EnrichedFinding> = [
   'title',
   'description',
   'cwe',
+  'required_action',
+  'vendor_project',
+  'product',
+  'ransomware_status',
+  'notes',
 ];
 
 function searchableHay(f: EnrichedFinding): string {
@@ -76,7 +84,7 @@ function searchableHay(f: EnrichedFinding): string {
     if (typeof v === 'string') parts.push(v);
   }
   parts.push(...f.cve_aliases);
-  return parts.join('  ').toLowerCase();
+  return parts.join(' ').toLowerCase();
 }
 
 function fixedVersionsList(raw: string | null | undefined): string[] {
@@ -89,6 +97,14 @@ function fixedVersionsList(raw: string | null | undefined): string[] {
   }
 }
 
+export function isKnownRansomwareFinding(f: EnrichedFinding): boolean {
+  return (f.ransomware_status ?? '').trim().toLowerCase() === 'known';
+}
+
+export function isKevFinding(f: EnrichedFinding): boolean {
+  return f.in_kev || f.is_kev === true;
+}
+
 /**
  * Predicate that decides whether a finding satisfies the current filters.
  * Server-side severity is NOT applied here — that's pushed to the API.
@@ -97,7 +113,8 @@ export function matchesFindingFilter(
   f: EnrichedFinding,
   filter: FindingsFilterState,
 ): boolean {
-  if (filter.kevOnly && !f.in_kev) return false;
+  if (filter.kevOnly && !isKevFinding(f)) return false;
+  if (filter.ransomwareOnly && !isKnownRansomwareFinding(f)) return false;
   if (filter.hasFixOnly && fixedVersionsList(f.fixed_versions).length === 0) return false;
   if (filter.cvssMin > 0 && (f.score ?? 0) < filter.cvssMin) return false;
   if (filter.cvssMax < 10 && (f.score ?? 0) > filter.cvssMax) return false;
@@ -150,6 +167,7 @@ export function hasActiveFilters(filter: FindingsFilterState): boolean {
     filter.cvssMax < 10 ||
     filter.epssMinPct > 0 ||
     filter.kevOnly ||
+    filter.ransomwareOnly ||
     filter.hasFixOnly ||
     filter.matchReasonFilter !== 'all' ||
     filter.matchConfidenceMin > 0 ||
@@ -165,6 +183,7 @@ export function countActiveFilters(filter: FindingsFilterState): number {
   if (filter.cvssMin > 0 || filter.cvssMax < 10) n++;
   if (filter.epssMinPct > 0) n++;
   if (filter.kevOnly) n++;
+  if (filter.ransomwareOnly) n++;
   if (filter.hasFixOnly) n++;
   if (filter.matchReasonFilter !== 'all') n++;
   if (filter.matchConfidenceMin > 0) n++;

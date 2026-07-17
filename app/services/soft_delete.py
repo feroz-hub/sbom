@@ -59,7 +59,7 @@ CASCADE_EXCLUDED_TABLES: frozenset[str] = frozenset(
         "compare_cache",  # special-cased to hard-delete; see _post_run_hooks
         "cve_cache",
         "epss_score",
-        "kev_entry",
+        "kev_vulnerabilities",
         "run_cache",
         # Reference / settings / security
         "sbom_type",

@@ -4,12 +4,15 @@ Tasks live in:
   * ``app.nvd_mirror.tasks``           — NVD mirror (mirror_nvd)
   * ``app.workers.scheduled_analysis`` — periodic SBOM rescans
                                           (tick + per-SBOM worker)
+  * ``app.workers.kev_sync``           — daily CISA KEV catalog sync
 
 Beat schedule:
   * ``nvd-mirror-hourly`` — fires ``mirror_nvd`` at minute 15 every hour.
   * ``analysis-schedule-tick`` — fires every 15 minutes; reads the
     analysis_schedule table and enqueues per-SBOM analyze tasks for any
     rows whose next_run_at has passed.
+  * ``kev-sync-daily`` — refreshes the local ``kev_vulnerabilities`` table
+    every 24 hours.
 
 Beat must run as a SINGLE instance (deploy as its own process).
 """
@@ -44,6 +47,7 @@ celery_app = Celery(
         "app.workers.cve_refresh",
         "app.workers.ai_fix_tasks",
         "app.workers.source_cache",
+        "app.workers.kev_sync",
     ],
 )
 
@@ -68,13 +72,11 @@ celery_app.conf.beat_schedule = {
         # responsive but more idle DB scans; 15 min is the sweet spot.
         "schedule": crontab(minute="*/15"),
     },
-    # CVE detail modal cache hygiene
-    "cve-refresh-kev": {
-        # Every 6 hours — KEV catalog updates infrequently (a few entries
-        # a week) so 6h keeps "Actively exploited" badges current without
-        # spamming CISA's CDN.
-        "task": "cve_refresh.refresh_kev_cache",
-        "schedule": crontab(minute=10, hour="*/6"),
+    "kev-sync-daily": {
+        # Every 24 hours — CISA's KEV catalog changes at human cadence,
+        # and findings enrichment reads from the local table.
+        "task": "kev.sync",
+        "schedule": crontab(minute=10, hour=3),
     },
     "cve-cache-purge": {
         # Daily — drop rows whose expires_at is more than 24 h in the past.

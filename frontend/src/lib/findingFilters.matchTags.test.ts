@@ -137,6 +137,23 @@ describe('matchesFindingFilter — match_strategy multi-select', () => {
   });
 });
 
+describe('matchesFindingFilter — KEV and ransomware filters', () => {
+  it('kevOnly accepts either the legacy in_kev flag or the new is_kev flag', () => {
+    const f = filterWith({ kevOnly: true });
+    expect(matchesFindingFilter(makeFinding({ in_kev: true }), f)).toBe(true);
+    expect(matchesFindingFilter(makeFinding({ in_kev: false, is_kev: true }), f)).toBe(true);
+    expect(matchesFindingFilter(makeFinding({ in_kev: false, is_kev: false }), f)).toBe(false);
+  });
+
+  it('ransomwareOnly keeps findings marked as known ransomware campaign use', () => {
+    const f = filterWith({ ransomwareOnly: true });
+    expect(matchesFindingFilter(makeFinding({ ransomware_status: 'Known' }), f)).toBe(true);
+    expect(matchesFindingFilter(makeFinding({ ransomware_status: 'known' }), f)).toBe(true);
+    expect(matchesFindingFilter(makeFinding({ ransomware_status: 'Unknown' }), f)).toBe(false);
+    expect(matchesFindingFilter(makeFinding({ ransomware_status: null }), f)).toBe(false);
+  });
+});
+
 describe('matchesFindingFilter — composition', () => {
   it('three new filters AND with each other and with prior filters', () => {
     const f = filterWith({

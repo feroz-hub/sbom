@@ -18,7 +18,7 @@ from sqlalchemy import (
 from sqlalchemy import (
     text as sql_text,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, synonym
 from sqlalchemy.sql import expression
 
 from .db import Base
@@ -888,23 +888,34 @@ class KevEntry(Base):
     Cached row from the CISA Known Exploited Vulnerabilities catalog
     (https://www.cisa.gov/known-exploited-vulnerabilities-catalog).
 
-    We refresh once per 24h. Presence of a row implies the CVE is on the
-    KEV list — which is the single highest-signal exploitability indicator
-    in public vulnerability data.
+    ``KevEntry`` is kept as the Python class name for backwards-compatible
+    imports.  The canonical database table is ``kev_vulnerabilities``.
     """
 
-    __tablename__ = "kev_entry"
+    __tablename__ = "kev_vulnerabilities"
 
-    cve_id = Column(String, primary_key=True, index=True)
-    vendor_project = Column(String, nullable=True)
-    product = Column(String, nullable=True)
-    vulnerability_name = Column(String, nullable=True)
-    date_added = Column(String, nullable=True)
+    cve_id = Column(String(32), primary_key=True, index=True)
+    vendor_project = Column(String(255), nullable=True)
+    product = Column(String(255), nullable=True)
+    vulnerability_name = Column(Text, nullable=True)
+    date_added = Column(String(10), nullable=True)
     short_description = Column(Text, nullable=True)
     required_action = Column(Text, nullable=True)
-    due_date = Column(String, nullable=True)
-    known_ransomware_use = Column(String, nullable=True)  # "Known"/"Unknown"
+    due_date = Column(String(10), nullable=True)
+    known_ransomware_campaign_use = Column(String(32), nullable=True)  # "Known"/"Unknown"
+    known_ransomware_use = synonym("known_ransomware_campaign_use")
+    notes = Column(Text, nullable=True)
+    cwes = Column(JSON, nullable=True)
+    catalog_version = Column(String(32), nullable=True)
+    catalog_date_released = Column(String(64), nullable=True)
     refreshed_at = Column(String, nullable=False)  # ISO timestamp
+    first_seen_at = Column(String, nullable=True)
+    updated_at = Column(String, nullable=True)
+
+    __table_args__ = (
+        Index("ix_kev_vulnerabilities_date_added", "date_added"),
+        Index("ix_kev_vulnerabilities_ransomware", "known_ransomware_campaign_use"),
+    )
 
 
 class AnalysisSchedule(Base, SoftDeleteMixin, TenantOwnedMixin):

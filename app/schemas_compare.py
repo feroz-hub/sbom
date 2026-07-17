@@ -146,7 +146,7 @@ class FindingDiffRow(BaseModel):
     severity_a: CveSeverity | None = None
     severity_b: CveSeverity | None = None
 
-    #: Current KEV status from ``kev_entry`` lookup. NOT at-scan-time —
+    #: Current KEV status from ``kev_vulnerabilities`` lookup. NOT at-scan-time —
     #: see ADR-0008 §11 PB-3. Tooltip on the chip says so.
     kev_current: bool = False
 

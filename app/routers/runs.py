@@ -26,7 +26,7 @@ from ..services.risk_score import (
     KEV_MULTIPLIER,
     _resolve_cvss,
 )
-from ..sources.kev import lookup_kev_set_memoized
+from ..services.kev_enrichment import EMPTY_KEV_ENRICHMENT, enrich_findings_with_kev
 
 log = logging.getLogger(__name__)
 
@@ -419,7 +419,7 @@ def list_run_findings_enriched(
         all_cves.update(cves)
     cve_list = sorted(all_cves)
 
-    kev_set: set[str] = lookup_kev_set_memoized(db, cve_list) if cve_list else set()
+    kev_enrichments = enrich_findings_with_kev(db, findings)
     # Read percentile + epss directly so we get the full row (memoized helper
     # only returns probability, no percentile).
     epss_map: dict[str, dict[str, float | None]] = {}
@@ -455,7 +455,8 @@ def list_run_findings_enriched(
                 p = entry.get("percentile")
                 epss_percentile = float(p) if p is not None else None
 
-        in_kev = any(c in kev_set for c in cves)
+        kev = kev_enrichments.get(f.id, EMPTY_KEV_ENRICHMENT)
+        in_kev = kev.is_kev
         cvss = _resolve_cvss(f)
         exploit_factor = 1.0 + EPSS_AMPLIFIER * epss
         kev_multiplier = KEV_MULTIPLIER if in_kev else 1.0
@@ -509,7 +510,15 @@ def list_run_findings_enriched(
                 "cvss_version": f.cvss_version,
                 "aliases": f.aliases,
                 # Enriched fields
+                "is_kev": in_kev,
                 "in_kev": in_kev,
+                "kev_date_added": kev.kev_date_added,
+                "kev_due_date": kev.kev_due_date,
+                "required_action": kev.required_action,
+                "vendor_project": kev.vendor_project,
+                "product": kev.product,
+                "ransomware_status": kev.ransomware_status,
+                "notes": kev.notes,
                 "epss": round(epss, 4),
                 "epss_percentile": (round(epss_percentile, 4) if epss_percentile is not None else None),
                 "risk_score": risk_score,

@@ -1,7 +1,7 @@
 """
 KEV source adapter.
 
-Reads from the local ``kev_entry`` table only — *never* live. The KEV feed
+Reads from the local ``kev_vulnerabilities`` table only — *never* live. The KEV feed
 itself is refreshed by a Celery beat task (see ``app.workers.cve_refresh``).
 This adapter is async-by-signature to fit the ``CveSource`` Protocol; in
 practice the work is a single indexed SELECT, so we don't bother with a
@@ -46,8 +46,17 @@ class KevSource:
             return FetchResult(source=self.name, outcome=FetchOutcome.NOT_FOUND, latency_ms=latency_ms)
         data: dict[str, Any] = {
             "listed": True,
+            "date_added": row.date_added,
             "due_date": row.due_date,
+            "required_action": row.required_action,
+            "vendor_project": row.vendor_project,
+            "product": row.product,
             "vulnerability_name": row.vulnerability_name,
             "short_description": row.short_description,
+            "known_ransomware_campaign_use": row.known_ransomware_campaign_use,
+            "notes": row.notes,
+            "cwes": row.cwes or [],
+            "catalog_version": row.catalog_version,
+            "catalog_date_released": row.catalog_date_released,
         }
         return FetchResult(source=self.name, outcome=FetchOutcome.OK, data=data, latency_ms=latency_ms)

@@ -63,6 +63,7 @@ from .routers import (
     dashboard_advanced,
     dashboard_main,
     health,
+    kev,
     lifecycle,
     lifecycle_admin,
     pdf,
@@ -558,6 +559,7 @@ app.include_router(dashboard_advanced.router, dependencies=_protected)
 app.include_router(ai_copilot.router, dependencies=_protected)
 app.include_router(schedules.router, dependencies=_protected)
 app.include_router(cves.router, dependencies=_protected)
+app.include_router(kev.router, dependencies=_protected)
 app.include_router(compare.router, dependencies=_protected)
 app.include_router(ai_usage.router, dependencies=_protected)
 app.include_router(ai_fixes.router, dependencies=_protected)

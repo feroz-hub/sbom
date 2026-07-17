@@ -9,6 +9,7 @@ import {
   Layers,
   Rows3,
   Rows4,
+  ShieldAlert,
   Sparkles,
   Wrench,
   X,
@@ -25,7 +26,6 @@ import {
   Table,
   TableBody,
   TableHead,
-  Td,
   Th,
 } from '@/components/ui/Table';
 import {
@@ -43,6 +43,8 @@ import { FindingFilterPanel } from '@/components/analysis/FindingFilterPanel';
 import { SelectionToolbar } from '@/components/analysis/SelectionToolbar';
 import {
   DEFAULT_FILTERS,
+  isKevFinding,
+  isKnownRansomwareFinding,
   matchesFindingFilter,
   type FindingsFilterState,
 } from '@/lib/findingFilters';
@@ -174,7 +176,7 @@ function findingToSeed(f: EnrichedFinding): CveRowSeed {
     severity: f.severity,
     score: f.score,
     cvss_version: f.cvss_version,
-    in_kev: f.in_kev,
+    in_kev: isKevFinding(f),
     epss: f.epss,
     epss_percentile: f.epss_percentile,
     component_name: f.component_name,
@@ -287,6 +289,21 @@ function AliasChips({ aliases }: { aliases: string[] }) {
         </span>
       )}
     </div>
+  );
+}
+
+function RansomwareBadge({ compact = false }: { compact?: boolean }) {
+  return (
+    <span
+      title="Known ransomware campaign use"
+      className={cn(
+        'inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 font-semibold uppercase tracking-wide text-rose-700 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200',
+        compact ? 'px-1.5 py-0.5 text-[9px]' : 'px-2 py-0.5 text-[10px]',
+      )}
+    >
+      <ShieldAlert className={compact ? 'h-2.5 w-2.5' : 'h-3 w-3'} aria-hidden />
+      Ransomware
+    </span>
   );
 }
 
@@ -465,6 +482,18 @@ export function FindingsTable({
     return findings.filter((f) => matchesFindingFilter(f, filter));
   }, [findings, filter]);
 
+  const kevStats = useMemo(() => {
+    const rows = findings ?? [];
+    const kev = rows.filter(isKevFinding).length;
+    const ransomware = rows.filter(isKnownRansomwareFinding).length;
+    return {
+      total: rows.length,
+      kev,
+      nonKev: Math.max(rows.length - kev, 0),
+      ransomware,
+    };
+  }, [findings]);
+
   const sortAccessors = useMemo(
     () => ({
       vuln_id: (f: EnrichedFinding) => f.vuln_id ?? '',
@@ -498,7 +527,7 @@ export function FindingsTable({
   useEffect(() => {
     pagination.resetPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter.search, filter.kevOnly, filter.hasFixOnly, filter.cvssMin, filter.cvssMax, filter.epssMinPct, filter.sources, filter.severityFilter]);
+  }, [filter.search, filter.kevOnly, filter.ransomwareOnly, filter.hasFixOnly, filter.cvssMin, filter.cvssMax, filter.epssMinPct, filter.sources, filter.severityFilter]);
 
   if (error) {
     return (
@@ -613,8 +642,24 @@ export function FindingsTable({
         />
       ) : null}
 
-      {/* Density toggle */}
-      <div className="flex items-center justify-end gap-1.5 px-1">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+        <div className="grid grid-cols-2 gap-1.5 text-xs sm:flex sm:items-center">
+          <span className="rounded-md border border-border bg-surface px-2 py-1 text-hcl-muted">
+            Total <span className="font-metric font-semibold tabular-nums text-hcl-navy">{kevStats.total.toLocaleString()}</span>
+          </span>
+          <span className="rounded-md border border-red-200 bg-red-50 px-2 py-1 text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">
+            KEV <span className="font-metric font-semibold tabular-nums">{kevStats.kev.toLocaleString()}</span>
+          </span>
+          <span className="rounded-md border border-border bg-surface px-2 py-1 text-hcl-muted">
+            Non-KEV <span className="font-metric font-semibold tabular-nums text-hcl-navy">{kevStats.nonKev.toLocaleString()}</span>
+          </span>
+          <span className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200">
+            Ransomware <span className="font-metric font-semibold tabular-nums">{kevStats.ransomware.toLocaleString()}</span>
+          </span>
+        </div>
+
+        {/* Density toggle */}
+        <div className="flex items-center gap-1.5">
         <span className="text-[11px] font-medium uppercase tracking-wider text-hcl-muted">
           Density
         </span>
@@ -638,6 +683,7 @@ export function FindingsTable({
               <span className="hidden sm:inline">{label}</span>
             </button>
           ))}
+        </div>
         </div>
       </div>
 
@@ -741,7 +787,7 @@ export function FindingsTable({
                     key={f.id}
                     className={cn(
                       'group transition-colors hover:bg-hcl-light/40',
-                      f.in_kev && 'bg-red-50/30 dark:bg-red-950/10',
+                      isKevFinding(f) && 'bg-red-50/30 dark:bg-red-950/10',
                       isExpanded && 'bg-surface-muted/50',
                       isSelected && 'bg-primary/5 dark:bg-primary/10',
                     )}
@@ -811,7 +857,8 @@ export function FindingsTable({
                               —
                             </span>
                           )}
-                          {f.in_kev && <KevBadge compact={density === 'compact'} />}
+                          {isKevFinding(f) && <KevBadge compact={density === 'compact'} />}
+                          {isKnownRansomwareFinding(f) && <RansomwareBadge compact={density === 'compact'} />}
                         </div>
                         <AliasChips aliases={aliases} />
                       </div>
@@ -855,7 +902,7 @@ export function FindingsTable({
                           f.risk_score >= 50 && 'text-red-700 dark:text-red-400',
                           f.risk_score >= 20 && f.risk_score < 50 && 'text-orange-700 dark:text-orange-400',
                         )}
-                        title={`cvss ${(f.score ?? 0).toFixed(1)} × (1 + 5×${f.epss.toFixed(3)}) × (${f.in_kev ? '2 KEV' : '1'}) = ${f.risk_score.toFixed(2)}`}
+                        title={`cvss ${(f.score ?? 0).toFixed(1)} × (1 + 5×${f.epss.toFixed(3)}) × (${isKevFinding(f) ? '2 KEV' : '1'}) = ${f.risk_score.toFixed(2)}`}
                       >
                         {f.risk_score.toFixed(1)}
                       </span>
@@ -1193,6 +1240,71 @@ function ExpandedDetail({ finding: f, aliases, cwes, fixedVersions, onAliasOpen,
       </div>
 
       <div className="space-y-3">
+        {isKevFinding(f) && (
+          <div className="rounded-lg border border-red-200 bg-red-50/70 px-3 py-2.5 shadow-sm dark:border-red-900 dark:bg-red-950/20">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-red-800 dark:text-red-200">
+                CISA KEV
+              </p>
+              <KevBadge compact />
+              {isKnownRansomwareFinding(f) && <RansomwareBadge compact />}
+            </div>
+            <div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
+              {f.kev_date_added && (
+                <div>
+                  <span className="block font-semibold uppercase tracking-wider text-red-700/80 dark:text-red-200/80">
+                    Added
+                  </span>
+                  <span className="font-metric tabular-nums text-hcl-navy dark:text-red-50">
+                    {formatDateShort(f.kev_date_added)}
+                  </span>
+                </div>
+              )}
+              {f.kev_due_date && (
+                <div>
+                  <span className="block font-semibold uppercase tracking-wider text-red-700/80 dark:text-red-200/80">
+                    Due
+                  </span>
+                  <span className="font-metric tabular-nums text-hcl-navy dark:text-red-50">
+                    {formatDateShort(f.kev_due_date)}
+                  </span>
+                </div>
+              )}
+              {f.vendor_project && (
+                <div>
+                  <span className="block font-semibold uppercase tracking-wider text-red-700/80 dark:text-red-200/80">
+                    Vendor
+                  </span>
+                  <span className="text-hcl-navy dark:text-red-50">{f.vendor_project}</span>
+                </div>
+              )}
+              {f.product && (
+                <div>
+                  <span className="block font-semibold uppercase tracking-wider text-red-700/80 dark:text-red-200/80">
+                    Product
+                  </span>
+                  <span className="text-hcl-navy dark:text-red-50">{f.product}</span>
+                </div>
+              )}
+            </div>
+            {f.required_action && (
+              <div className="mt-2 border-t border-red-200/70 pt-2 dark:border-red-900">
+                <span className="block text-[10px] font-semibold uppercase tracking-wider text-red-700/80 dark:text-red-200/80">
+                  Required action
+                </span>
+                <p className="mt-0.5 text-[11px] leading-relaxed text-hcl-navy dark:text-red-50">
+                  {f.required_action}
+                </p>
+              </div>
+            )}
+            {f.notes && (
+              <p className="mt-2 border-t border-red-200/70 pt-2 text-[11px] leading-relaxed text-red-900/80 dark:border-red-900 dark:text-red-100/80">
+                {truncate(f.notes, 260)}
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Remediation Status Section */}
         <div className="rounded-lg border border-border-subtle bg-surface px-3 py-2.5 space-y-2 shadow-sm">
           <div className="flex justify-between items-center">
@@ -1250,7 +1362,7 @@ function ExpandedDetail({ finding: f, aliases, cwes, fixedVersions, onAliasOpen,
           </p>
           <p className="mt-1 font-mono text-[10px] leading-relaxed text-hcl-muted">
             {(f.score ?? 0).toFixed(1)} cvss × {(1 + 5 * f.epss).toFixed(2)} epss
-            {f.in_kev && ' × 2.0 KEV'}
+            {isKevFinding(f) && ' × 2.0 KEV'}
           </p>
         </div>
 

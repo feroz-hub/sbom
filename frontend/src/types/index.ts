@@ -980,7 +980,15 @@ export interface AnalysisFinding {
  * Returned by GET /api/runs/{id}/findings-enriched.
  */
 export interface EnrichedFinding extends AnalysisFinding {
+  is_kev?: boolean;
   in_kev: boolean;
+  kev_date_added?: string | null;
+  kev_due_date?: string | null;
+  required_action?: string | null;
+  vendor_project?: string | null;
+  product?: string | null;
+  ransomware_status?: string | null;
+  notes?: string | null;
   /** EPSS probability of exploitation (0..1). 0 = not in EPSS catalog. */
   epss: number;
   /** Percentile rank within EPSS catalog (0..1), null when uncached. */

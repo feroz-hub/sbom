@@ -5,7 +5,7 @@ Public feed:
     https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json
 
 We refresh the local mirror once per ``KEV_TTL_SECONDS`` (default 24h).
-Presence of a CVE in the local ``kev_entry`` table is the sole signal
+Presence of a CVE in the local ``kev_vulnerabilities`` table is the sole signal
 the risk scorer needs — KEV is a categorical "yes/no" indicator. Network
 failures never raise: the scorer falls back to whatever is already
 cached (which on first boot may be empty, in which case no KEV boost
@@ -22,29 +22,25 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import threading
 import time
 from datetime import UTC, datetime
 from typing import Any
 
-import httpx
 from sqlalchemy import select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from ..models import KevEntry
+from ..services import kev_service
+from ..settings import get_settings
 
 log = logging.getLogger("sbom.sources.kev")
 
-KEV_FEED_URL = os.getenv(
-    "KEV_FEED_URL",
-    "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json",
-)
-KEV_TTL_SECONDS = int(os.getenv("KEV_TTL_SECONDS", str(24 * 60 * 60)))
-KEV_HTTP_TIMEOUT = float(os.getenv("KEV_HTTP_TIMEOUT", "30"))
-KEV_FAILURE_RETRY_SECONDS = float(os.getenv("KEV_FAILURE_RETRY_SECONDS", str(5 * 60)))
+_settings = get_settings()
+KEV_FEED_URL = _settings.kev_feed_url
+KEV_TTL_SECONDS = _settings.kev_ttl_seconds
+KEV_HTTP_TIMEOUT = _settings.kev_http_timeout
+KEV_FAILURE_RETRY_SECONDS = _settings.kev_failure_retry_seconds
 
 # Public async lock for async refresh callers. The current FastAPI dashboard
 # handlers are sync/threadpool code, so the sync path below uses the companion
@@ -64,17 +60,21 @@ _UPSERT_UPDATE_COLUMNS = (
     "short_description",
     "required_action",
     "due_date",
-    "known_ransomware_use",
+    "known_ransomware_campaign_use",
+    "notes",
+    "cwes",
+    "catalog_version",
+    "catalog_date_released",
     "refreshed_at",
+    "updated_at",
 )
 
 
-class KevRefreshError(RuntimeError):
-    """Raised for expected refresh failures that should fall back to cache."""
+KevRefreshError = kev_service.KevRefreshError
 
 
 def _now_iso() -> str:
-    return datetime.now(UTC).replace(microsecond=0).isoformat()
+    return kev_service.now_iso()
 
 
 def _cache_age_seconds(db: Session) -> float | None:
@@ -91,18 +91,9 @@ def _cache_age_seconds(db: Session) -> float | None:
         return None
 
 
-def _fetch_feed() -> list[dict]:
-    """Pull the KEV JSON feed. Returns the ``vulnerabilities`` list."""
-    try:
-        resp = httpx.get(KEV_FEED_URL, timeout=KEV_HTTP_TIMEOUT, follow_redirects=True)
-        resp.raise_for_status()
-        payload = resp.json()
-    except (httpx.HTTPError, ValueError) as exc:
-        raise KevRefreshError("fetch_failed") from exc
-    vulns = payload.get("vulnerabilities")
-    if not isinstance(vulns, list):
-        raise KevRefreshError("invalid_payload")
-    return vulns
+def _fetch_feed() -> dict[str, Any]:
+    """Pull the KEV JSON feed. Kept as a monkeypatch seam for tests."""
+    return kev_service.download_feed(url=KEV_FEED_URL, timeout=KEV_HTTP_TIMEOUT)
 
 
 def _cache_has_rows(db: Session) -> bool:
@@ -146,70 +137,26 @@ def _note_refresh_failure(exc: Exception, *, has_cached_data: bool) -> None:
 
 
 def _row_from_feed_item(vulnerability: dict[str, Any], *, refreshed_at: str) -> dict[str, Any] | None:
-    cve_id = (vulnerability.get("cveID") or "").strip().upper()
-    if not cve_id:
-        return None
-    return {
-        "cve_id": cve_id,
-        "vendor_project": vulnerability.get("vendorProject"),
-        "product": vulnerability.get("product"),
-        "vulnerability_name": vulnerability.get("vulnerabilityName"),
-        "date_added": vulnerability.get("dateAdded"),
-        "short_description": vulnerability.get("shortDescription"),
-        "required_action": vulnerability.get("requiredAction"),
-        "due_date": vulnerability.get("dueDate"),
-        "known_ransomware_use": vulnerability.get("knownRansomwareCampaignUse"),
-        "refreshed_at": refreshed_at,
-    }
+    return kev_service.row_from_feed_item(vulnerability, refreshed_at=refreshed_at)
 
 
-def _rows_from_feed(vulnerabilities: list[dict], *, refreshed_at: str) -> list[dict[str, Any]]:
+def _rows_from_feed(vulnerabilities: dict[str, Any] | list[dict], *, refreshed_at: str) -> list[dict[str, Any]]:
     """Normalize and dedupe KEV feed rows by CVE id before touching the DB."""
-    by_cve: dict[str, dict[str, Any]] = {}
-    for vulnerability in vulnerabilities:
-        if not isinstance(vulnerability, dict):
-            continue
-        row = _row_from_feed_item(vulnerability, refreshed_at=refreshed_at)
-        if row is not None:
-            by_cve[row["cve_id"]] = row
-    return list(by_cve.values())
+    rows, _total = kev_service.rows_from_feed(vulnerabilities, refreshed_at=refreshed_at)
+    return rows
 
 
 def _build_upsert_statement(rows: list[dict[str, Any]], *, dialect: str):
-    table = KevEntry.__table__
-    if dialect == "postgresql":
-        insert_fn = pg_insert
-    elif dialect == "sqlite":
-        insert_fn = sqlite_insert
-    else:
-        raise NotImplementedError(f"kev cache upsert only supports postgresql/sqlite; got {dialect!r}")
-
-    stmt = insert_fn(table).values(rows)
-    excluded = stmt.excluded
-    return stmt.on_conflict_do_update(
-        index_elements=[table.c.cve_id],
-        set_={column: getattr(excluded, column) for column in _UPSERT_UPDATE_COLUMNS},
-    )
+    return kev_service.build_upsert_statement(rows, dialect=dialect)
 
 
 def _upsert_kev_rows(db: Session, rows: list[dict[str, Any]], *, dialect: str) -> None:
-    db.execute(_build_upsert_statement(rows, dialect=dialect))
+    kev_service.upsert_kev_rows(db, rows, dialect=dialect)
 
 
 def _upsert_kev_rows_select_merge(db: Session, rows: list[dict[str, Any]]) -> None:
     """Fallback for dialects without ``INSERT .. ON CONFLICT`` support."""
-    existing_rows = (
-        db.execute(select(KevEntry).where(KevEntry.cve_id.in_([row["cve_id"] for row in rows]))).scalars().all()
-    )
-    existing_by_cve = {row.cve_id: row for row in existing_rows}
-    for row in rows:
-        entry = existing_by_cve.get(row["cve_id"])
-        if entry is None:
-            entry = KevEntry(cve_id=row["cve_id"], refreshed_at=row["refreshed_at"])
-            db.add(entry)
-            existing_by_cve[row["cve_id"]] = entry
-        for column in _UPSERT_UPDATE_COLUMNS:
-            setattr(entry, column, row.get(column))
+    kev_service.upsert_kev_rows_select_merge(db, rows)
 
 
 def _write_rows(db: Session, rows: list[dict[str, Any]]) -> None:

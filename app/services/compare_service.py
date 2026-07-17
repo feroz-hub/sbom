@@ -297,7 +297,7 @@ class CompareService:
         finding_diff = self._diff_findings(finds_a, finds_b)
 
         # Enrich findings with current KEV / EPSS state. One batch lookup
-        # against kev_entry / cve_cache — never refetches.
+        # against kev_vulnerabilities / cve_cache — never refetches.
         kev_set = self._lookup_current_kev(finding_diff)
         epss_map = self._lookup_current_epss(finding_diff)
         for row in finding_diff:

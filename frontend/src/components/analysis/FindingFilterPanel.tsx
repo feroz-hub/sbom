@@ -6,6 +6,7 @@ import {
   ChevronDown,
   Filter,
   Flame,
+  ShieldAlert,
   Search,
   Wrench,
   X,
@@ -151,6 +152,23 @@ export function FindingFilterPanel({
         >
           <Flame className="h-3.5 w-3.5" aria-hidden />
           KEV only
+        </button>
+
+        {/* Ransomware-only quick toggle */}
+        <button
+          type="button"
+          onClick={() => update('ransomwareOnly', !filter.ransomwareOnly)}
+          aria-pressed={filter.ransomwareOnly}
+          className={cn(
+            'inline-flex h-10 items-center gap-1.5 rounded-lg border px-3 text-xs font-semibold transition-all duration-base ease-spring',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/30',
+            filter.ransomwareOnly
+              ? 'border-rose-300 bg-rose-50 text-rose-700 shadow-glow-critical dark:border-rose-800 dark:bg-rose-950/60 dark:text-rose-200'
+              : 'border-border bg-surface text-hcl-navy hover:-translate-y-px hover:bg-surface-muted',
+          )}
+        >
+          <ShieldAlert className="h-3.5 w-3.5" aria-hidden />
+          Ransomware
         </button>
 
         {/* Has-fix toggle */}
