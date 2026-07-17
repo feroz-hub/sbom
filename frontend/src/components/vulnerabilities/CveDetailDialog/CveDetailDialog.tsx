@@ -1,6 +1,7 @@
 'use client';
 
 import { useId, useMemo } from 'react';
+import { resolveVulnId } from '@/lib/vulnIds';
 import { Dialog } from '@/components/ui/Dialog';
 import { CveBanner } from './CveBanner';
 import CveDetailContent from './CveDetailContent';
@@ -125,20 +126,32 @@ export function CveDetailDialog({
   aiProviderLabel,
 }: CveDetailDialogProps) {
   const summaryId = useId();
-  const query = useCveDetail({ cveId, scanId, enabled: open });
+
+  // Resolve the clicked id to its canonical form for the fetch/cache key — a
+  // source-specific advisory alias (e.g. DEBIAN-CVE-2011-3374) resolves to its
+  // CVE (reusing the row's aliases where present) so NVD/OSV/EPSS/KEV all key
+  // on one id. The original id is preserved below for display / provenance.
+  const resolved = useMemo(
+    () => resolveVulnId(cveId, { aliases: seed?.cve_aliases ?? null }),
+    [cveId, seed?.cve_aliases],
+  );
+  const lookupId = resolved.supported ? resolved.canonical : null;
+
+  const query = useCveDetail({ cveId: lookupId, scanId, enabled: open });
 
   const detail = query.data as CveDetail | CveDetailWithContext | undefined;
 
-  // The user-supplied id stays as the primary surface (no silent rewrite
-  // to a CVE alias). Lowercase tail is preserved for GHSA per the
-  // canonical form.
+  // The user-supplied id stays as the primary surface (no silent rewrite to a
+  // canonical alias) — this preserves the source-specific Debian id the user
+  // clicked. Falls back to the server's canonical id, then a generic label.
   const dialogTitle = useMemo(
-    () => detail?.cve_id ?? cveId ?? 'CVE detail',
-    [detail?.cve_id, cveId],
+    () => cveId ?? detail?.cve_id ?? 'CVE detail',
+    [cveId, detail?.cve_id],
   );
 
   const dialogState = selectDialogState({
     rawId: cveId,
+    aliases: seed?.cve_aliases ?? null,
     query: { data: detail, error: query.error, isLoading: open && query.isLoading },
   });
 

@@ -29,7 +29,7 @@ import logging
 from datetime import date
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -189,7 +189,8 @@ def _fix_versions_from_cve_cache(
                         range=(entry.get("range") or None),
                     )
                 )
-            except Exception:
+            except (TypeError, ValueError, ValidationError) as exc:
+                log.debug("ai.grounding.invalid_fix_version_ref: err=%s", exc)
                 continue
     return out
 
@@ -263,7 +264,8 @@ def build_grounding_context(
             d = exp.get("cisa_kev_due_date")
             if isinstance(d, str) and d:
                 kev_due_date = date.fromisoformat(d[:10])
-        except Exception:
+        except ValueError as exc:
+            log.debug("ai.grounding.invalid_kev_due_date: cve=%s err=%s", finding.vuln_id, exc)
             kev_due_date = None
     if not kev_listed:
         kev_row = db.execute(select(KevEntry).where(KevEntry.cve_id == finding.vuln_id)).scalar_one_or_none()

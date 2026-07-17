@@ -30,7 +30,8 @@ class SqlAlchemySyncRunRepository:
         )
         self._session.add(row)
         self._session.flush()
-        assert row.id is not None  # populated by autoincrement
+        if row.id is None:
+            raise RuntimeError("Database did not generate a sync run ID")
         return int(row.id)
 
     def finish(

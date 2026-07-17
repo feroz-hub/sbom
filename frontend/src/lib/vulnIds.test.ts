@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyVulnId, SUPPORTED_VULN_FORMATS } from './vulnIds';
+import { classifyVulnId, resolveVulnId, SUPPORTED_VULN_FORMATS } from './vulnIds';
 
 describe('classifyVulnId — parity with backend identifier classifier', () => {
   // Mirrors the parametrize block in tests/test_cve_identifiers.py. When
@@ -42,5 +42,54 @@ describe('classifyVulnId — parity with backend identifier classifier', () => {
     expect(SUPPORTED_VULN_FORMATS.length).toBeGreaterThan(0);
     expect(SUPPORTED_VULN_FORMATS.some((f) => f.startsWith('CVE'))).toBe(true);
     expect(SUPPORTED_VULN_FORMATS.some((f) => f.startsWith('GHSA'))).toBe(true);
+  });
+});
+
+describe('resolveVulnId — canonical resolution (parity with backend resolve)', () => {
+  // Mirrors the resolve() parametrize block in tests/test_cve_identifiers.py.
+  it.each([
+    // Debian source-prefixed alias → embedded canonical CVE (the bug).
+    ['DEBIAN-CVE-2011-3374', 'CVE-2011-3374', 'cve'],
+    ['debian-cve-2011-3374', 'CVE-2011-3374', 'cve'], // lowercase
+    ['  DEBIAN-CVE-2011-3374  ', 'CVE-2011-3374', 'cve'], // whitespace
+    ['UBUNTU-CVE-2020-1234', 'CVE-2020-1234', 'cve'],
+    // Canonical ids preserved unchanged.
+    ['CVE-2011-3374', 'CVE-2011-3374', 'cve'],
+    ['GHSA-jfh8-c2jp-5v3q', 'GHSA-jfh8-c2jp-5v3q', 'ghsa'],
+    ['PYSEC-2024-1', 'PYSEC-2024-1', 'pysec'],
+    ['RUSTSEC-2023-0044', 'RUSTSEC-2023-0044', 'rustsec'],
+    ['GO-2023-1234', 'GO-2023-1234', 'go'],
+  ] as const)('resolve(%j) → canonical=%s, kind=%s', (raw, canonical, kind) => {
+    const r = resolveVulnId(raw);
+    expect(r.supported).toBe(true);
+    expect(r.canonical).toBe(canonical);
+    expect(r.kind).toBe(kind);
+    expect(r.raw).toBe(raw); // original preserved for display / provenance
+  });
+
+  it('reuses a CVE already present in aliases (not just prefix stripping)', () => {
+    const r = resolveVulnId('DLA-1234-1', { aliases: ['GHSA-xxxx-yyyy-zzzz', 'CVE-2011-3374'] });
+    expect(r.supported).toBe(true);
+    expect(r.canonical).toBe('CVE-2011-3374');
+    expect(r.kind).toBe('cve');
+    expect(r.raw).toBe('DLA-1234-1');
+  });
+
+  it('prefers an explicit canonicalId when supplied', () => {
+    const r = resolveVulnId('DEBIAN-CVE-2011-3374', { canonicalId: 'CVE-2011-3374' });
+    expect(r.canonical).toBe('CVE-2011-3374');
+  });
+
+  it.each([
+    ['FOOBAR-123'],
+    [''],
+    ['   '],
+    [null],
+    [undefined],
+  ] as const)('returns a controlled unsupported result for %j (never throws)', (raw) => {
+    const r = resolveVulnId(raw as string | null | undefined);
+    expect(r.supported).toBe(false);
+    expect(r.kind).toBe('unknown');
+    expect(r.canonical).toBe('');
   });
 });

@@ -17,6 +17,15 @@ def test_security_analyst_can_upload_sbom():
     assert has_permission(Role.SECURITY_ANALYST.value, "sbom:upload")
 
 
+def test_product_permissions_follow_role_matrix():
+    assert has_permission(Role.TENANT_ADMIN.value, "product:create")
+    assert has_permission(Role.SECURITY_ANALYST.value, "product:assign_sbom")
+    assert not has_permission(Role.SECURITY_ANALYST.value, "product:delete")
+    assert has_permission(Role.DEVELOPER.value, "product:create")
+    assert not has_permission(Role.VIEWER.value, "product:assign_sbom")
+    assert has_permission(Role.VIEWER.value, "product:read")
+
+
 def test_tenant_admin_can_manage_users():
     perms = get_permissions_for_role(Role.TENANT_ADMIN.value)
     assert "tenant:user:update" in perms

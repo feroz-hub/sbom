@@ -29,7 +29,7 @@ def _analyze_limit() -> str:
     return (os.getenv("API_RATE_LIMIT_ANALYZE") or "15/minute").strip() or "15/minute"
 
 
-def rate_limit_key(request: Request) -> str:
+def build_rate_limit_bucket_key(request: Request) -> str:
     """
     Key by first X-Forwarded-For hop (if present), else client host,
     plus a stable hash of the bearer token when Authorization is set
@@ -45,15 +45,17 @@ def rate_limit_key(request: Request) -> str:
         token = auth[7:].strip()
         if token:
             th = hashlib.sha256(token.encode("utf-8")).hexdigest()[:16]
-            return f"{host}|t:{th}"
+            return host + "|t:" + th
     return host
 
 
 limiter = Limiter(
-    key_func=rate_limit_key,
+    key_func=build_rate_limit_bucket_key,
     default_limits=[_default_limit()],
     enabled=_rate_limit_enabled(),
 )
+
+rate_limit_key = build_rate_limit_bucket_key
 
 
 # Stricter limit for analysis / SSE endpoints (env API_RATE_LIMIT_ANALYZE).

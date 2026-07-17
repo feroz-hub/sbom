@@ -32,6 +32,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import make_url
 
 # ---------------------------------------------------------------------------
 # Module-level: set DATABASE_URL BEFORE any test imports from ``app.db``.
@@ -50,13 +52,52 @@ import pytest
 _SESSION_DB_FD, _SESSION_DB_PATH = tempfile.mkstemp(prefix="sbom_test_session_", suffix=".db")
 os.close(_SESSION_DB_FD)
 Path(_SESSION_DB_PATH).unlink(missing_ok=True)
-# PostgreSQL integration tests opt in through a dedicated, disposable test
-# database. The ordinary suite remains isolated on temporary SQLite.
-_TEST_POSTGRES_DATABASE_URL = (os.getenv("TEST_POSTGRES_DATABASE_URL") or "").strip()
-os.environ.setdefault(
-    "DATABASE_URL",
-    _TEST_POSTGRES_DATABASE_URL or f"sqlite:///{_SESSION_DB_PATH}",
-)
+_DEFAULT_TEST_POSTGRES_DATABASE_URL = "postgresql+psycopg://sbom:sbom@127.0.0.1:55439/sbom_analyser_test"
+
+
+def _is_postgres_url(database_url: str) -> bool:
+    try:
+        return make_url(database_url).get_backend_name().startswith("postgresql")
+    except Exception:
+        return False
+
+
+def _assert_safe_test_database(database_url: str) -> None:
+    """Refuse destructive test operations against non-test PostgreSQL DBs."""
+    parsed = make_url(database_url)
+    if not parsed.get_backend_name().startswith("postgresql"):
+        return
+    database_name = (parsed.database or "").lower()
+    if "_test" not in database_name and "test" not in database_name:
+        pytest.fail(
+            "PostgreSQL tests require a disposable test database; "
+            f"configured database is {parsed.database!r}"
+        )
+
+
+def _resolve_test_database_url() -> str:
+    explicit_test_url = (os.getenv("TEST_POSTGRES_DATABASE_URL") or os.getenv("TEST_DATABASE_URL") or "").strip()
+    if explicit_test_url:
+        _assert_safe_test_database(explicit_test_url)
+        return explicit_test_url
+
+    configured_url = (os.getenv("DATABASE_URL") or "").strip()
+    if configured_url and _is_postgres_url(configured_url):
+        parsed = make_url(configured_url)
+        database_name = (parsed.database or "").lower()
+        if "_test" in database_name or "test" in database_name:
+            return configured_url
+
+    return _DEFAULT_TEST_POSTGRES_DATABASE_URL
+
+
+_TEST_DATABASE_URL = _resolve_test_database_url()
+_TEST_POSTGRES_DATABASE_URL = _TEST_DATABASE_URL if _is_postgres_url(_TEST_DATABASE_URL) else ""
+_assert_safe_test_database(_TEST_DATABASE_URL)
+os.environ["DATABASE_URL"] = _TEST_DATABASE_URL
+os.environ["TEST_DATABASE_URL"] = _TEST_DATABASE_URL
+if _TEST_POSTGRES_DATABASE_URL:
+    os.environ["TEST_POSTGRES_DATABASE_URL"] = _TEST_POSTGRES_DATABASE_URL
 os.environ["ANALYSIS_SOURCES"] = "NVD,OSV,GITHUB"
 os.environ["API_AUTH_MODE"] = "none"
 os.environ["API_RATE_LIMIT_ENABLED"] = "false"
@@ -65,6 +106,65 @@ os.environ.pop("API_AUTH_TOKENS", None)
 os.environ.pop("GITHUB_TOKEN", None)
 os.environ.pop("NVD_API_KEY", None)
 os.environ.pop("VULNDB_API_KEY", None)
+
+
+def _truncate_postgres_application_tables(database_url: str) -> None:
+    _assert_safe_test_database(database_url)
+    engine = create_engine(database_url, isolation_level="AUTOCOMMIT")
+    try:
+        with engine.connect() as connection:
+            all_table_names = list(
+                connection.execute(
+                    text(
+                        """
+                        SELECT format('%I.%I', schemaname, tablename)
+                        FROM pg_tables
+                        WHERE schemaname = 'public'
+                          AND tablename <> 'alembic_version'
+                        ORDER BY tablename
+                        """
+                    )
+                ).scalars()
+            )
+            table_names = [
+                table_name
+                for table_name in all_table_names
+                if connection.execute(text(f"SELECT EXISTS (SELECT 1 FROM {table_name} LIMIT 1)")).scalar()
+            ]
+            if table_names:
+                connection.execute(text(f"TRUNCATE TABLE {', '.join(table_names)} RESTART IDENTITY CASCADE"))
+            sequence_names = list(
+                connection.execute(
+                    text(
+                        """
+                        SELECT format('%I.%I', sequence_schema, sequence_name)
+                        FROM information_schema.sequences
+                        WHERE sequence_schema = 'public'
+                        ORDER BY sequence_name
+                        """
+                    )
+                ).scalars()
+            )
+            for sequence_name in sequence_names:
+                connection.execute(text(f"ALTER SEQUENCE {sequence_name} RESTART WITH 1"))
+    finally:
+        engine.dispose()
+
+
+def pytest_sessionstart(session: pytest.Session) -> None:
+    if not _TEST_POSTGRES_DATABASE_URL:
+        return
+    env = os.environ.copy()
+    env["DATABASE_URL"] = _TEST_POSTGRES_DATABASE_URL
+    env["TEST_DATABASE_URL"] = _TEST_POSTGRES_DATABASE_URL
+    env["TEST_POSTGRES_DATABASE_URL"] = _TEST_POSTGRES_DATABASE_URL
+    subprocess.run(
+        [sys.executable, "-m", "alembic", "upgrade", "head"],
+        cwd=Path(__file__).resolve().parent.parent,
+        env=env,
+        check=True,
+    )
+    _truncate_postgres_application_tables(_TEST_POSTGRES_DATABASE_URL)
 
 
 # ---------------------------------------------------------------------------
@@ -85,20 +185,10 @@ def _tmp_database_path() -> Iterator[str]:
 @pytest.fixture(scope="session")
 def app(_tmp_database_path: str):
     """Import the FastAPI app *after* DATABASE_URL is pointed at the temp DB."""
-    postgres_url = (os.getenv("TEST_POSTGRES_DATABASE_URL") or "").strip()
+    postgres_url = _TEST_POSTGRES_DATABASE_URL
     if postgres_url:
-        from sqlalchemy.engine import make_url
-
-        database_name = make_url(postgres_url).database or ""
-        if "test" not in database_name.lower():
-            pytest.fail("TEST_POSTGRES_DATABASE_URL must name a disposable database containing 'test'")
+        _assert_safe_test_database(postgres_url)
         os.environ["DATABASE_URL"] = postgres_url
-        subprocess.run(
-            [sys.executable, "-m", "alembic", "upgrade", "head"],
-            cwd=Path(__file__).resolve().parent.parent,
-            env=os.environ.copy(),
-            check=True,
-        )
     else:
         os.environ["DATABASE_URL"] = f"sqlite:///{_tmp_database_path}"
     # Avoid CORS noise + force deterministic settings.
@@ -129,6 +219,13 @@ def app(_tmp_database_path: str):
     from app.main import app as fastapi_app
 
     return fastapi_app
+
+
+@pytest.fixture(autouse=True)
+def _reset_postgres_database_before_test():
+    if _TEST_POSTGRES_DATABASE_URL:
+        _truncate_postgres_application_tables(_TEST_POSTGRES_DATABASE_URL)
+    yield
 
 
 @pytest.fixture()
@@ -184,7 +281,7 @@ def sample_sbom_dict() -> dict[str, Any]:
     return json.loads(_SAMPLE_PATH.read_text())
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture()
 def seeded_sbom(app, sample_sbom_dict) -> dict[str, Any]:
     """
     Upload the fixture SBOM exactly once per test session and return the row.

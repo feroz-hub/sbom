@@ -20,6 +20,7 @@ export type AnalysisStatus =
   | 'PARTIAL'
   | 'ERROR'
   | 'CANCELLED'
+  | 'INTERRUPTED'
   | 'NOT_ANALYSED'
   | 'PASS' // legacy alias for OK
   | 'FAIL'; // legacy alias for FINDINGS
@@ -37,7 +38,7 @@ export function useBackgroundAnalysis() {
   const router = useRouter();
   const queryClient = useQueryClient();
 
-  const triggerRef = useRef<(sbomId: number, sbomName: string) => void>();
+  const triggerRef = useRef<((sbomId: number, sbomName: string) => void) | null>(null);
 
   const triggerBackgroundAnalysis = useCallback(
     (sbomId: number, sbomName: string) => {

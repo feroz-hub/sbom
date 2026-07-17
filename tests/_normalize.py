@@ -25,6 +25,8 @@ _VOLATILE_KEYS = {
     "run_id",
     "id",  # AnalysisRunOut.id is auto-increment
     "sbom_id",  # depends on test seed order
+    "project_id",  # default project seed depends on test order
+    "product_id",  # default product seed depends on test order
     "lastModified",
     # Raw analysis details JSON — embeds non-deterministic timestamps and
     # full per-finding payloads. Persistence is asserted by the dedicated

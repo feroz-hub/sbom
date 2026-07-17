@@ -58,6 +58,7 @@ from ..sources import (
     build_source_adapters,
     run_sources_concurrently,
 )
+from ..sources.routing import count_authoritative_cpes
 
 DEFAULT_RESULTS_PER_PAGE = get_settings().DEFAULT_RESULTS_PER_PAGE
 
@@ -248,7 +249,7 @@ async def _run_legacy_analysis(
 
     details = {
         "total_components": len(components),
-        "components_with_cpe": sum(1 for c in components if c.get("cpe")),
+        "components_with_cpe": count_authoritative_cpes(components),
         "total_findings": len(final_findings),
         "critical": buckets["CRITICAL"],
         "high": buckets["HIGH"],
@@ -256,10 +257,21 @@ async def _run_legacy_analysis(
         "low": buckets["LOW"],
         "unknown": buckets["UNKNOWN"],
         "query_errors": query_errors,
+        "query_warnings": query_warnings,
+        "source_summary": [
+            warning["source_summary"]
+            for warning in query_warnings
+            if isinstance(warning, dict) and isinstance(warning.get("source_summary"), dict)
+        ],
         "findings": final_findings,
         "analysis_metadata": {
             "sources": sources_list,
             "raw_observation_count": len(raw_findings),
+            "source_summary": [
+                warning["source_summary"]
+                for warning in query_warnings
+                if isinstance(warning, dict) and isinstance(warning.get("source_summary"), dict)
+            ],
             "provider_status": [
                 warning["provider_status"]
                 for warning in query_warnings

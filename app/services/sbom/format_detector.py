@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import json
 import re
-import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from typing import Literal
+
+from defusedxml import ElementTree as ET
+from defusedxml.common import DefusedXmlException
 
 SbomDetectedFormat = Literal[
     "cyclonedx_json",
@@ -144,6 +146,8 @@ def _detect_xml(text: str) -> SbomFormatDetection | None:
     sample = text[:65536]
     try:
         root = ET.fromstring(sample)
+    except DefusedXmlException:
+        return SbomFormatDetection("unknown", confidence=0.0, warnings=["xml security violation"])
     except ET.ParseError:
         lowered = sample.lower()
         if "<bom" in lowered and "cyclonedx" in lowered:

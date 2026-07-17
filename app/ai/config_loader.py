@@ -199,7 +199,8 @@ class AiConfigLoader:
         """
         with self._lock:
             if self._cache_is_fresh():
-                assert self._cache is not None
+                if self._cache is None:
+                    raise RuntimeError("Provider configuration cache was unexpectedly empty")
                 return self._cache.configs, self._cache.settings
 
         configs, settings = self._resolve_uncached()

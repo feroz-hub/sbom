@@ -1,13 +1,16 @@
 'use client';
 
 import Link from 'next/link';
-import { use } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { use, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Upload } from 'lucide-react';
 import { TopBar } from '@/components/layout/TopBar';
 import { Alert } from '@/components/ui/Alert';
+import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { PageSpinner } from '@/components/ui/Spinner';
 import { Table, TableBody, TableHead, Td, Th, EmptyRow } from '@/components/ui/Table';
+import { SbomUploadModal } from '@/components/sboms/SbomUploadModal';
 import { getProduct, getProductSboms } from '@/lib/api';
 import { formatDate } from '@/lib/utils';
 
@@ -18,6 +21,8 @@ interface ProductDetailPageProps {
 export default function ProductDetailPage({ params }: ProductDetailPageProps) {
   const { id: idParam } = use(params);
   const id = Number(idParam);
+  const queryClient = useQueryClient();
+  const [showUpload, setShowUpload] = useState(false);
 
   const productQuery = useQuery({
     queryKey: ['product', id],
@@ -60,7 +65,16 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
 
   return (
     <div className="flex flex-col flex-1">
-      <TopBar title={product.name} breadcrumbs={[{ label: 'Projects', href: '/projects' }]} />
+      <TopBar
+        title={product.name}
+        breadcrumbs={[{ label: 'Projects', href: '/projects' }]}
+        action={
+          <Button onClick={() => setShowUpload(true)}>
+            <Upload className="h-4 w-4" />
+            Upload SBOM
+          </Button>
+        }
+      />
       <div className="space-y-6 p-6">
         <Card>
           <CardHeader>
@@ -103,15 +117,16 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
                   <Th>ID</Th>
                   <Th>Name</Th>
                   <Th>Version</Th>
+                  <Th>Analysis</Th>
                   <Th>Created By</Th>
                   <Th>Created On</Th>
                 </tr>
               </TableHead>
               <TableBody>
                 {sbomsQuery.isLoading ? (
-                  <EmptyRow cols={5} message="Loading SBOMs..." />
+                  <EmptyRow cols={6} message="Loading SBOMs..." />
                 ) : sboms.length === 0 ? (
-                  <EmptyRow cols={5} message="No SBOMs are linked to this product yet." />
+                  <EmptyRow cols={6} message="No SBOMs are linked to this product yet." />
                 ) : (
                   sboms.map((sbom) => (
                     <tr key={sbom.id}>
@@ -122,6 +137,7 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
                         </Link>
                       </Td>
                       <Td className="text-hcl-muted">{sbom.sbom_version || sbom.productver || '—'}</Td>
+                      <Td className="text-hcl-muted">{sbom.latest_analysis?.status || 'not_run'}</Td>
                       <Td className="text-hcl-muted">{sbom.created_by || '—'}</Td>
                       <Td className="text-hcl-muted">{formatDate(sbom.created_on)}</Td>
                     </tr>
@@ -132,6 +148,16 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
           </CardContent>
         </Card>
       </div>
+      <SbomUploadModal
+        open={showUpload}
+        onClose={() => setShowUpload(false)}
+        initialProjectId={product.project_id}
+        initialProductId={product.id}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['product', id] });
+          queryClient.invalidateQueries({ queryKey: ['product-sboms', id] });
+        }}
+      />
     </div>
   );
 }

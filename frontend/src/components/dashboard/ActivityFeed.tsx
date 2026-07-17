@@ -67,6 +67,7 @@ const statusGlyph: Record<
   FAIL: _FINDINGS_GLYPH, // legacy alias
   PARTIAL: { Icon: CircleDashed, tone: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-950/40', label: 'Partial' },
   ERROR: { Icon: XCircle, tone: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-950/40', label: 'Errored' },
+  INTERRUPTED: { Icon: CircleDashed, tone: 'text-slate-600 dark:text-slate-400', bg: 'bg-slate-50 dark:bg-slate-900/60', label: 'Interrupted' },
   RUNNING: { Icon: ScanSearch, tone: 'text-sky-600 dark:text-sky-400', bg: 'bg-sky-50 dark:bg-sky-950/40', label: 'Running' },
   PENDING: { Icon: Clock, tone: 'text-hcl-muted', bg: 'bg-surface-muted', label: 'Pending' },
   NO_DATA: { Icon: CircleDashed, tone: 'text-hcl-muted', bg: 'bg-surface-muted', label: 'No data' },

@@ -12,7 +12,7 @@ import {
   Tooltip,
   XAxis,
   YAxis,
-  type TooltipProps,
+  type TooltipContentProps,
 } from 'recharts';
 import { Surface, SurfaceContent, SurfaceHeader } from '@/components/ui/Surface';
 import { Spinner } from '@/components/ui/Spinner';
@@ -46,7 +46,7 @@ const ANNOTATION_VISUAL: Record<TrendAnnotationKind, { color: string; label: str
   kev_first_seen: { color: '#C0392B', label: 'New KEV-listed CVE' },
 };
 
-function CustomTooltip({ active, payload, label }: TooltipProps<number, string>) {
+function CustomTooltip({ active, payload, label }: TooltipContentProps) {
   if (!active || !payload?.length) return null;
   const total = payload.reduce(
     (s, p) => s + (typeof p.value === 'number' ? p.value : 0),
@@ -284,7 +284,7 @@ export function FindingsTrendChart({ data, isLoading }: FindingsTrendChartProps)
                 width={42}
               />
               <Tooltip
-                content={<CustomTooltip />}
+                content={CustomTooltip}
                 cursor={{
                   stroke: axisStroke,
                   strokeDasharray: '3 3',
@@ -350,7 +350,7 @@ export function FindingsTrendChart({ data, isLoading }: FindingsTrendChartProps)
                     fill={visual.color}
                     stroke={isDark ? '#15202F' : '#FFFFFF'}
                     strokeWidth={1.5}
-                    isFront
+                    zIndex={700}
                     label={{
                       value: '▼',
                       fill: visual.color,

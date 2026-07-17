@@ -4,6 +4,9 @@ import asyncio
 import concurrent.futures
 import logging
 import os
+import re
+import time
+from collections import Counter
 from dataclasses import asdict, dataclass, field, replace
 from functools import lru_cache
 from typing import Any, Literal
@@ -51,14 +54,254 @@ LOGGER = logging.getLogger(__name__)
 # Prometheus-style triple losslessly. Tests assert against this logger
 # via stdlib ``caplog``.
 _NVD_METRICS_LOG = logging.getLogger("sbom.nvd.metrics")
+_NVD_REJECTION_LOG = logging.getLogger("sbom.nvd")
 
 
 def _emit_nvd_metric(name: str, value: int = 1, **labels: str) -> None:
     """Emit one NVD metric event as a structured log line."""
-    _NVD_METRICS_LOG.info(
+    level = logging.DEBUG if name == "nvd.findings_rejected_total" else logging.INFO
+    _NVD_METRICS_LOG.log(
+        level,
         name,
         extra={"metric": name, "labels": labels, "value": value},
     )
+
+
+class NvdRejectionReason:
+    VERSION_NOT_AFFECTED = "version_not_affected"
+    CPE_MISMATCH = "cpe_mismatch"
+    CONFIGURATION_NOT_APPLICABLE = "configuration_not_applicable"
+    DUPLICATE_FINDING = "duplicate_finding"
+    WITHDRAWN_OR_REJECTED_CVE = "withdrawn_or_rejected_cve"
+    MISSING_COMPONENT_VERSION = "missing_component_version"
+    MISSING_COMPONENT_IDENTITY = "missing_component_identity"
+    MISSING_CPE = "missing_cpe"
+    LOW_CONFIDENCE = "low_confidence"
+    INVALID_NVD_RECORD = "invalid_nvd_record"
+    INVALID_VERSION_RANGE = "invalid_version_range"
+    UNSUPPORTED_CONFIGURATION = "unsupported_configuration"
+    PROVIDER_RECORD_INCOMPLETE = "provider_record_incomplete"
+    UNKNOWN = "unknown"
+
+
+@dataclass(frozen=True)
+class NvdFindingRejection:
+    reason: str
+    cve_id: str | None
+    component_name: str | None
+    component_version: str | None
+    component_purl: str | None
+    component_cpe: str | None
+    matched_cpe: str | None
+    detail: str | None = None
+
+
+_NVD_WARNING_REJECTION_REASONS = frozenset(
+    {
+        NvdRejectionReason.INVALID_NVD_RECORD,
+        NvdRejectionReason.PROVIDER_RECORD_INCOMPLETE,
+    }
+)
+_TRUSTED_NVD_CPE_SOURCES = frozenset({"sbom_provided", "official_nvd_cpe", "manual_verified", "trusted_mapping"})
+_BLOCKED_NVD_CPE_TOKENS = frozenset(
+    {"valid-lifecycle", "test", "sample", "example", "generic", "internal", "unknown", "placeholder"}
+)
+
+_SENSITIVE_TEXT_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"(?i)(authorization\s*:\s*bearer\s+)[^\s,;]+"), r"\1[REDACTED]"),
+    (re.compile(r"(?i)(api[-_ ]?key\s*[=:]\s*)[^\s,;]+"), r"\1[REDACTED]"),
+    (re.compile(r"(?i)(token\s*[=:]\s*)[^\s,;]+"), r"\1[REDACTED]"),
+)
+
+
+def _redact_sensitive_text(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value)
+    for pattern, replacement in _SENSITIVE_TEXT_PATTERNS:
+        text = pattern.sub(replacement, text)
+    return text
+
+
+def _nvd_rejection_detail_logging_enabled(settings: AnalysisSettings | None = None) -> bool:
+    configured = getattr(settings, "nvd_rejection_detail_logging", None)
+    if configured is not None:
+        return bool(configured)
+    return _env_bool_top("NVD_REJECTION_DETAIL_LOGGING", False)
+
+
+def record_nvd_rejection(
+    rejection: NvdFindingRejection,
+    counts: Counter[str],
+    *,
+    settings: AnalysisSettings | None = None,
+) -> None:
+    reason = rejection.reason or NvdRejectionReason.UNKNOWN
+    counts[reason] += 1
+    _emit_nvd_metric("nvd.findings_rejected_total", reason=reason)
+
+    safe_detail = _redact_sensitive_text(rejection.detail)
+    fields = {
+        "reason": reason,
+        "cve_id": rejection.cve_id,
+        "component_name": rejection.component_name,
+        "component_version": rejection.component_version,
+        "component_purl": rejection.component_purl,
+        "component_cpe": rejection.component_cpe,
+        "matched_cpe": rejection.matched_cpe,
+        "detail": safe_detail,
+    }
+    if _nvd_rejection_detail_logging_enabled(settings):
+        _NVD_REJECTION_LOG.debug("nvd.finding_rejected", extra=fields)
+    if reason in _NVD_WARNING_REJECTION_REASONS:
+        _NVD_REJECTION_LOG.warning("nvd.finding_rejected", extra=fields)
+
+
+@dataclass
+class NvdRejectionTracker:
+    settings: AnalysisSettings | None = None
+    provider: str = "NVD"
+    run_id: str | int | None = None
+    sbom_id: str | int | None = None
+    tenant_id: str | int | None = None
+    components_checked: int = 0
+    components_queried: int = 0
+    started_at: float = field(default_factory=time.perf_counter)
+    rejection_counts: Counter[str] = field(default_factory=Counter)
+    candidate_findings: int = 0
+    accepted_findings: int = 0
+
+    def record_candidate(self) -> None:
+        self.candidate_findings += 1
+
+    def record_acceptance(self) -> None:
+        self.accepted_findings += 1
+        _emit_nvd_metric("nvd.findings_emitted_total")
+
+    def record_rejection(self, rejection: NvdFindingRejection) -> None:
+        record_nvd_rejection(rejection, self.rejection_counts, settings=self.settings)
+
+    def summary(self) -> dict[str, Any]:
+        by_reason = dict(sorted(self.rejection_counts.items()))
+        total_rejected = sum(by_reason.values())
+        return {
+            "run_id": self.run_id,
+            "sbom_id": self.sbom_id,
+            "tenant_id": self.tenant_id,
+            "provider": self.provider,
+            "components_checked": self.components_checked,
+            "components_queried": self.components_queried,
+            "candidate_findings": self.candidate_findings,
+            "accepted_findings": self.accepted_findings,
+            "total_rejected": total_rejected,
+            "by_reason": by_reason,
+            "duration_ms": int((time.perf_counter() - self.started_at) * 1000),
+        }
+
+    def emit_summary(self) -> dict[str, Any]:
+        summary = self.summary()
+        _NVD_REJECTION_LOG.info("nvd.findings_rejection_summary", extra=summary)
+        return summary
+
+
+def _component_field(component: dict[str, Any], *keys: str) -> str | None:
+    for key in keys:
+        value = component.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _nvd_cve_id(raw: dict[str, Any] | None) -> str | None:
+    if not isinstance(raw, dict):
+        return None
+    value = raw.get("id") or raw.get("cve_id") or raw.get("cve")
+    return str(value).strip() if value else None
+
+
+def _nvd_rejection_from_component(
+    *,
+    reason: str,
+    raw: dict[str, Any] | None,
+    component: dict[str, Any],
+    identifier: str | None,
+    matched_cpe: str | None = None,
+    detail: Any = None,
+) -> NvdFindingRejection:
+    component_cpe = _component_field(component, "cpe", "primary_cpe")
+    return NvdFindingRejection(
+        reason=reason,
+        cve_id=_nvd_cve_id(raw),
+        component_name=_component_field(component, "component_name", "name", "normalized_name"),
+        component_version=_component_field(component, "component_version", "version", "normalized_version"),
+        component_purl=_component_field(component, "purl", "normalized_purl", "original_purl"),
+        component_cpe=component_cpe,
+        matched_cpe=matched_cpe or (identifier if _classify_nvd_lookup_identifier(identifier) == "cpe" else None),
+        detail=_redact_sensitive_text(detail),
+    )
+
+
+def _is_rejected_nvd_cve(raw: dict[str, Any]) -> bool:
+    status = str(raw.get("vulnStatus") or "").strip().lower()
+    if status in {"rejected", "withdrawn"}:
+        return True
+    tags = raw.get("cveTags") or []
+    if isinstance(tags, list):
+        return any(str(tag).strip().lower() in {"rejected", "withdrawn"} for tag in tags)
+    return False
+
+
+def _nvd_reason_from_applicability(reason: str | None) -> str:
+    reason_text = (reason or "").strip()
+    if reason_text in {
+        "version_start_including",
+        "version_start_excluding",
+        "version_end_including",
+        "version_end_excluding",
+        "exact_version_mismatch",
+        "negated_version_in_range",
+    }:
+        return NvdRejectionReason.VERSION_NOT_AFFECTED
+    if reason_text == "installed_version_missing":
+        return NvdRejectionReason.MISSING_COMPONENT_VERSION
+    if reason_text == "component_cpe_identity_unknown":
+        return NvdRejectionReason.MISSING_COMPONENT_IDENTITY
+    if reason_text in {"cpe_product_mismatch", "cpe_part_mismatch"}:
+        return NvdRejectionReason.CPE_MISMATCH
+    if reason_text in {
+        "cpe_match_not_vulnerable",
+        "no_applicable_configurations",
+        "empty_configuration_node",
+        "no_or_match",
+    }:
+        return NvdRejectionReason.CONFIGURATION_NOT_APPLICABLE
+    if reason_text in {"cpe_criteria_missing", "wildcard_version_without_range", "no_configurations"}:
+        return NvdRejectionReason.PROVIDER_RECORD_INCOMPLETE
+    if reason_text in {"cpe_criteria_invalid"}:
+        return NvdRejectionReason.INVALID_NVD_RECORD
+    if reason_text in {"installed_or_bound_version_invalid"}:
+        return NvdRejectionReason.INVALID_VERSION_RANGE
+    if reason_text in {"ecosystem_unsupported", "environmental_cpe_unsupported"} or reason_text.startswith("negated_"):
+        return NvdRejectionReason.UNSUPPORTED_CONFIGURATION
+    return NvdRejectionReason.UNKNOWN
+
+
+def _nvd_finding_key(finding: dict[str, Any]) -> tuple[str, str, str | None, str | None, str | None]:
+    vuln_id = str(finding.get("vuln_id") or "").upper()
+    component_name = str(finding.get("component_name") or "").lower()
+    component_version = finding.get("component_version")
+    purl = finding.get("purl")
+    cpe = finding.get("cpe")
+    return (vuln_id, component_name, component_version, purl, cpe)
+
+
+def _is_trusted_nvd_cpe(cpe: str | None, source: str | None) -> bool:
+    if _classify_nvd_lookup_identifier(cpe) != "cpe":
+        return False
+    if (source or "").strip().lower() not in _TRUSTED_NVD_CPE_SOURCES:
+        return False
+    lowered = str(cpe or "").lower()
+    return not any(token in lowered for token in _BLOCKED_NVD_CPE_TOKENS)
 
 
 # ============================================================
@@ -296,6 +539,9 @@ class AnalysisSettings:
     # PR-C version_range distro-version handling). All-or-nothing
     # under ONE flag. Mirrors the Pydantic-side field.
     distro_cpe_enabled: bool = False
+    # Safe detail diagnostics for rejected NVD candidates. When disabled,
+    # only the per-provider INFO summary is emitted.
+    nvd_rejection_detail_logging: bool = False
 
 
 def _env_str(name: str, default: str) -> str:
@@ -366,6 +612,7 @@ def get_analysis_settings() -> AnalysisSettings:
         source_cache_enabled=_env_bool_top("SOURCE_CACHE_ENABLED", False),
         source_cache_ttl_seconds=_env_int("SOURCE_CACHE_TTL_SECONDS", 4 * 60 * 60, minimum=1),
         distro_cpe_enabled=_env_bool_top("DISTRO_CPE_ENABLED", False),
+        nvd_rejection_detail_logging=_env_bool_top("NVD_REJECTION_DETAIL_LOGGING", False),
     )
 
 
@@ -551,8 +798,11 @@ from .sources.severity import (
 
 def _augment_components_with_cpe(components: list[dict]) -> tuple[list[dict], int]:
     """
-    Return a new list where missing CPEs are best-effort generated from PURLs.
-    Uses component version when PURL has no version. Returns (components_with_possible_cpe, count_generated).
+    Return a new list with authoritative CPE mappings plus heuristic candidates.
+
+    Trusted mappings are written to ``cpe`` and may route to NVD. Best-effort
+    PURL heuristics are stored separately as ``heuristic_cpe`` so they can be
+    displayed/debugged without becoming authoritative identifiers.
     """
     out = []
     generated = 0
@@ -578,9 +828,9 @@ def _augment_components_with_cpe(components: list[dict]) -> tuple[list[dict], in
                     continue
                 cpe = _cpe23_from_purl(p, version_override=comp_version)
                 if cpe:
-                    d["cpe"] = cpe
-                    d["cpe_source"] = "generated_fallback"
-                    d["cpe_mapping_confidence"] = "heuristic"
+                    d["heuristic_cpe"] = cpe
+                    d["heuristic_cpe_source"] = "generated_fallback"
+                    d["heuristic_cpe_confidence"] = "heuristic"
                     generated += 1
         out.append(d)
     return out, generated
@@ -840,13 +1090,12 @@ def _nvd_applicability_for_raw(
     identifier: str | None,
     component: dict[str, Any],
 ) -> Any:
-    from .services.nvd_enrichment_service import is_trusted_cpe
     from .sources.cpe import ecosystem_from_component as _ecosystem_from_component
 
     target_cpe = None
     if _classify_nvd_lookup_identifier(identifier) == "cpe":
         target_cpe = identifier
-    elif component.get("cpe") and is_trusted_cpe(str(component.get("cpe")), component.get("cpe_source")):
+    elif component.get("cpe") and _is_trusted_nvd_cpe(str(component.get("cpe")), component.get("cpe_source")):
         target_cpe = str(component.get("cpe"))
 
     comp = dict(component or {})
@@ -863,13 +1112,46 @@ def _finding_from_applicable_nvd_raw(
     identifier: str | None,
     component: dict[str, Any],
     settings: AnalysisSettings,
+    rejection_tracker: NvdRejectionTracker | None = None,
 ) -> dict[str, Any] | None:
+    if not isinstance(raw, dict):
+        if rejection_tracker is not None:
+            rejection_tracker.record_rejection(
+                _nvd_rejection_from_component(
+                    reason=NvdRejectionReason.INVALID_NVD_RECORD,
+                    raw=None,
+                    component=component,
+                    identifier=identifier,
+                    detail="NVD candidate was not an object",
+                )
+            )
+        return None
+    if _is_rejected_nvd_cve(raw):
+        if rejection_tracker is not None:
+            rejection_tracker.record_rejection(
+                _nvd_rejection_from_component(
+                    reason=NvdRejectionReason.WITHDRAWN_OR_REJECTED_CVE,
+                    raw=raw,
+                    component=component,
+                    identifier=identifier,
+                    detail="NVD CVE status is rejected or withdrawn",
+                )
+            )
+        return None
+
     applicability = _nvd_applicability_for_raw(raw, identifier, component)
     if applicability.status is not _ApplicabilityStatus.AFFECTED:
-        _emit_nvd_metric(
-            "nvd.findings_rejected_total",
-            reason=applicability.reason,
-        )
+        if rejection_tracker is not None:
+            rejection_tracker.record_rejection(
+                _nvd_rejection_from_component(
+                    reason=_nvd_reason_from_applicability(applicability.reason),
+                    raw=raw,
+                    component=component,
+                    identifier=identifier,
+                    matched_cpe=applicability.matched_criteria,
+                    detail=applicability.reason,
+                )
+            )
         return None
 
     finding = _finding_from_raw(
@@ -898,7 +1180,6 @@ def _finding_from_applicable_nvd_raw(
             finding[key] = component.get(key)
     if not finding.get("package_type") and finding.get("purl"):
         finding["package_type"] = _parse_purl(finding["purl"]).get("type")
-    _emit_nvd_metric("nvd.findings_emitted_total")
     return finding
 
 
@@ -1598,14 +1879,21 @@ async def github_query_by_components(
     # from request handlers under concurrency.
     token = settings.gh_token_override or os.getenv(settings.gh_token_env)
     if not token or not token.strip():
-        msg = (
-            f"GitHub token not configured. Set {settings.gh_token_env} in .env "
-            f"(or as an environment variable) and restart the server. "
-            f"GitHub Security Advisories are best-effort — drop GITHUB from "
-            f"ANALYSIS_SOURCES if you don't have a token."
-        )
+        msg = "GitHub token not configured; GHSA source skipped."
         LOGGER.warning("GitHub: %s", msg)
-        return [], [{"source": "GITHUB", "error": msg}], []
+        return [], [], [
+            {
+                "source": "GITHUB",
+                "provider_status": {
+                    "provider": "GITHUB",
+                    "status": "skipped",
+                    "reason": "missing_credentials",
+                    "queried": 0,
+                    "failures": 0,
+                    "error_message": None,
+                },
+            }
+        ]
 
     headers = {"Authorization": f"bearer {token.strip()}", "User-Agent": settings.http_user_agent}
     url = settings.gh_graphql_url
@@ -1907,6 +2195,10 @@ async def nvd_query_by_components_async(
 
     Returns ``(findings, errors, warnings)`` — same shape as osv/github.
     """
+    rejection_tracker = NvdRejectionTracker(
+        settings=settings,
+        components_checked=len(components),
+    )
     if lookup_service is None:
         # Canonical production-safe path. The legacy body below is retained
         # only for an explicitly injected local-mirror/test lookup seam.
@@ -1926,24 +2218,66 @@ async def nvd_query_by_components_async(
 
         result = await asyncio.to_thread(_run_enrichment)
         provider_status = result["provider_status"]
+        rejection_tracker.components_queried = int(provider_status.get("total_identifiers") or 0)
         findings = []
+        seen_findings: set[tuple[str, str, str | None, str | None, str | None]] = set()
         for record in result["records"]:
+            rejection_tracker.record_candidate()
             component = record.get("component") or {}
             identifier = record["identifier"]
-            finding = _finding_from_applicable_nvd_raw(record["raw"], identifier, component, settings)
+            raw = record.get("raw")
+            if not isinstance(raw, dict):
+                rejection_tracker.record_rejection(
+                    _nvd_rejection_from_component(
+                        reason=NvdRejectionReason.INVALID_NVD_RECORD,
+                        raw=None,
+                        component=component,
+                        identifier=identifier,
+                        detail="NVD provider record was missing a CVE object",
+                    )
+                )
+                continue
+            finding = _finding_from_applicable_nvd_raw(raw, identifier, component, settings, rejection_tracker)
             if finding is None:
                 continue
             finding["match_strategy"] = "cve_ids" if identifier.upper().startswith("CVE-") else "cpe_name"
+            finding_key = _nvd_finding_key(finding)
+            if finding_key in seen_findings:
+                rejection_tracker.record_rejection(
+                    _nvd_rejection_from_component(
+                        reason=NvdRejectionReason.DUPLICATE_FINDING,
+                        raw=raw,
+                        component=component,
+                        identifier=identifier,
+                        matched_cpe=finding.get("cpe"),
+                        detail="Duplicate NVD finding for component and CVE",
+                    )
+                )
+                continue
+            seen_findings.add(finding_key)
             findings.append(finding)
+            rejection_tracker.record_acceptance()
         errors = []
         if provider_status["status"] == "degraded":
-            errors.append({"source": "NVD", "provider_status": provider_status})
-        return findings, errors, [{"source": "NVD", "provider_status": provider_status}]
+            errors.append(
+                {
+                    "source": "NVD",
+                    "error": provider_status.get("error_message") or "NVD degraded",
+                    "provider_status": provider_status,
+                }
+            )
+        rejection_summary = rejection_tracker.emit_summary()
+        provider_status["candidate_findings"] = rejection_summary["candidate_findings"]
+        provider_status["accepted_findings"] = rejection_summary["accepted_findings"]
+        provider_status["rejected_findings"] = rejection_summary["total_rejected"]
+        provider_status["rejections_by_reason"] = rejection_summary["by_reason"]
+        return findings, errors, [
+            {"source": "NVD", "provider_status": provider_status, "rejection_summary": rejection_summary}
+        ]
 
     # Explicit local-mirror compatibility seam. Never derive CPEs here.
     normalized_components = [dict(component or {}) for component in components]
     generated_cpe_count = 0
-    from .services.nvd_enrichment_service import is_trusted_cpe
 
     # CPE inventory + skipped count (preserve insertion order so progress
     # logs map 1:1 to the SBOM input ordering in logs/sbom.log).
@@ -1963,7 +2297,7 @@ async def nvd_query_by_components_async(
     for comp in normalized_components:
         cpe = comp.get("cpe")
         if cpe:
-            if not is_trusted_cpe(cpe, comp.get("cpe_source") or "manual_verified"):
+            if not _is_trusted_nvd_cpe(cpe, comp.get("cpe_source") or "manual_verified"):
                 skipped += 1
                 continue
             kind = _classify_nvd_lookup_identifier(cpe)
@@ -2000,8 +2334,10 @@ async def nvd_query_by_components_async(
         generated_cpe_count,
     )
 
+    rejection_tracker.components_queried = len(cpe_order)
     if not cpe_order:
-        return [], [], []
+        rejection_summary = rejection_tracker.emit_summary()
+        return [], [], [{"source": "NVD", "rejection_summary": rejection_summary}]
 
     api_key = nvd_api_key or resolve_nvd_api_key(settings)
 
@@ -2020,7 +2356,7 @@ async def nvd_query_by_components_async(
     cpe_order = cpe_order[:10]
     total = len(cpe_order)
     LOGGER.info(
-        "NVD client: api_key=%s, sleep=%.2fs, sequential, cpe_targets=%d",
+        "NVD client configured: authenticated=%s, sleep_seconds=%.2f, sequential, cpe_targets=%d",
         bool(api_key),
         sleep_s,
         total,
@@ -2028,6 +2364,7 @@ async def nvd_query_by_components_async(
 
     findings: list[dict] = []
     errors: list[dict] = []
+    seen_findings: set[tuple[str, str, str | None, str | None, str | None]] = set()
     succeeded = 0
     nvd_provider_failed = False
 
@@ -2046,16 +2383,17 @@ async def nvd_query_by_components_async(
             # do not block the event loop, but serialize the submissions.
             raw_list = await loop.run_in_executor(_executor, query_callable, identifier, api_key, cfg)
         except Exception as exc:
+            safe_error = _redact_sensitive_text(f"{type(exc).__name__}: {exc}") or type(exc).__name__
             LOGGER.warning(
                 "NVD query failed — identifier=%r error=%s: %s",
                 identifier,
                 type(exc).__name__,
-                exc,
+                _redact_sensitive_text(exc),
             )
             err_entry: dict[str, Any] = {
                 "source": "NVD",
                 "identifier": identifier,
-                "error": f"{type(exc).__name__}: {exc}",
+                "error": safe_error,
             }
             if _is_nvd_ssl_error(exc):
                 err_entry["provider_failed"] = True
@@ -2072,7 +2410,23 @@ async def nvd_query_by_components_async(
             cpe_vendor = _vendor_from_cpe(identifier) if id_kind == "cpe" else None
             match_strategy = "cve_id" if id_kind == "cve" else "cpe_name"
             for raw in raw_list:
+                rejection_tracker.record_candidate()
                 if not isinstance(raw, dict):
+                    rejection_tracker.record_rejection(
+                        _nvd_rejection_from_component(
+                            reason=NvdRejectionReason.INVALID_NVD_RECORD,
+                            raw=None,
+                            component={
+                                "name": comp_name,
+                                "version": comp_ver,
+                                "ecosystem": ecosystem,
+                                "cpe": identifier if id_kind == "cpe" else None,
+                                "cpe_source": "manual_verified" if id_kind == "cpe" else None,
+                            },
+                            identifier=identifier,
+                            detail="NVD candidate was not an object",
+                        )
+                    )
                     continue
                 component = {
                     "name": comp_name,
@@ -2081,7 +2435,7 @@ async def nvd_query_by_components_async(
                     "cpe": identifier if id_kind == "cpe" else None,
                     "cpe_source": "manual_verified" if id_kind == "cpe" else None,
                 }
-                finding = _finding_from_applicable_nvd_raw(raw, identifier, component, settings)
+                finding = _finding_from_applicable_nvd_raw(raw, identifier, component, settings, rejection_tracker)
                 if finding is None:
                     continue
                 finding["match_strategy"] = match_strategy
@@ -2090,7 +2444,22 @@ async def nvd_query_by_components_async(
                     cve_text=_nvd_cve_text(raw, finding.get("description")),
                     component_vendor=cpe_vendor,
                 )
+                finding_key = _nvd_finding_key(finding)
+                if finding_key in seen_findings:
+                    rejection_tracker.record_rejection(
+                        _nvd_rejection_from_component(
+                            reason=NvdRejectionReason.DUPLICATE_FINDING,
+                            raw=raw,
+                            component=component,
+                            identifier=identifier,
+                            matched_cpe=finding.get("cpe"),
+                            detail="Duplicate NVD finding for component and CVE",
+                        )
+                    )
+                    continue
+                seen_findings.add(finding_key)
                 findings.append(finding)
+                rejection_tracker.record_acceptance()
 
         # Inter-request sleep (only between components, not after the last).
         if idx < total and sleep_s > 0:
@@ -2104,7 +2473,9 @@ async def nvd_query_by_components_async(
         len(errors),
         skipped,
     )
-    return findings, errors, []
+    rejection_tracker.components_queried = total
+    rejection_summary = rejection_tracker.emit_summary()
+    return findings, errors, [{"source": "NVD", "rejection_summary": rejection_summary}]
 
 
 nvd_query_by_components_async._production_safe = True  # type: ignore[attr-defined]

@@ -5,12 +5,15 @@ Health metrics — SBOM completeness, missing metadata, and outdated components.
 from __future__ import annotations
 
 import json
+import logging
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..models import SBOMComponent, SBOMSource
 from ._helpers import active_head_sbom_ids_subquery
+
+log = logging.getLogger("sbom.metrics.health")
 
 
 def health_completeness_average(db: Session) -> float:
@@ -41,8 +44,8 @@ def health_missing_metadata_count(db: Session) -> int:
                 for item in report.get("missing_fields") or report.get("components") or []
             )
             total += len(report.get("document_warnings") or [])
-        except Exception:
-            pass
+        except (AttributeError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            log.debug("health.invalid_completeness_report: err=%s", exc)
     return total
 
 

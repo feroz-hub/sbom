@@ -17,6 +17,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Literal
 
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from ..models import AiCredentialAuditLog
@@ -72,8 +73,8 @@ def record(
         log.warning("ai.audit.write_failed: action=%s err=%s", action, exc)
         try:
             db.rollback()
-        except Exception:
-            pass
+        except SQLAlchemyError:
+            log.warning("ai.audit.rollback_failed: action=%s", action, exc_info=True)
 
 
 # ---------------------------------------------------------------------------

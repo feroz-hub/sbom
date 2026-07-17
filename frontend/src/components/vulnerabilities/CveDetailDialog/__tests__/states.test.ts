@@ -74,6 +74,26 @@ describe('selectDialogState — dialog state mapper', () => {
     expect(s.kind).toBe('unreachable');
   });
 
+  it('does NOT reject a Debian source alias — it resolves via aliases (no unrecognized banner)', () => {
+    const s = selectDialogState({
+      rawId: 'DEBIAN-CVE-2011-3374',
+      aliases: ['CVE-2011-3374'],
+      query: baseQuery,
+    });
+    // Resolvable → not the unrecognized short-circuit. With no data/error yet
+    // and not loading, the mapper falls through to the idle "loading" state.
+    expect(s.kind).not.toBe('unrecognized');
+    expect(s.kind).toBe('loading');
+  });
+
+  it('resolves a Debian alias even without row aliases (prefix strip) and maps data to ok', () => {
+    const s = selectDialogState({
+      rawId: 'DEBIAN-CVE-2011-3374',
+      query: { data: FULL_DETAIL, error: null, isLoading: false },
+    });
+    expect(s.kind).toBe('ok');
+  });
+
   it('treats a 400 with CVE_VAL_E001_UNRECOGNIZED_ID as "unrecognized" (server is the canary)', () => {
     const err = Object.assign(new Error('not recognized'), {
       status: 400,

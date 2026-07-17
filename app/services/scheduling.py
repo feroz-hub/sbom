@@ -157,7 +157,8 @@ def compute_next_run_at(spec: ScheduleSpec, now: datetime) -> datetime:
         return candidate
 
     # CUSTOM
-    assert _croniter is not None  # validate_spec already enforced this
+    if _croniter is None:
+        raise RuntimeError("croniter is required for custom schedules")
     return _croniter(spec.cron_expression, now).get_next(datetime).astimezone(UTC)
 
 

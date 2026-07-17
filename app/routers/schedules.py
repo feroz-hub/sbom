@@ -32,6 +32,8 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response, st
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..core.context import CurrentContext
+from ..core.security import require_permission
 from ..db import get_db
 from ..models import AnalysisSchedule, Product, Projects, SBOMSource
 from ..schemas import ScheduleOut, ScheduleResolved, ScheduleUpsert
@@ -45,6 +47,7 @@ from ..services.scheduling import (
     validate_spec,
 )
 from ..services.soft_delete import SoftDeleteService
+from ..services.tenant_access import get_product_for_tenant, get_project_for_tenant, get_sbom_for_tenant
 
 log = logging.getLogger(__name__)
 
@@ -124,22 +127,22 @@ def _refresh_next_run_at(row: AnalysisSchedule) -> None:
     row.next_run_at = to_iso(nxt)
 
 
-def _get_project_or_404(db: Session, project_id: int) -> Projects:
-    proj = db.get(Projects, project_id)
+def _get_project_or_404(db: Session, project_id: int, tenant_id: int | None = None) -> Projects:
+    proj = get_project_for_tenant(db, project_id, tenant_id) if tenant_id is not None else db.get(Projects, project_id)
     if proj is None:
         raise HTTPException(status_code=404, detail="Project not found")
     return proj
 
 
-def _get_sbom_or_404(db: Session, sbom_id: int) -> SBOMSource:
-    sbom = db.get(SBOMSource, sbom_id)
+def _get_sbom_or_404(db: Session, sbom_id: int, tenant_id: int | None = None) -> SBOMSource:
+    sbom = get_sbom_for_tenant(db, sbom_id, tenant_id) if tenant_id is not None else db.get(SBOMSource, sbom_id)
     if sbom is None:
         raise HTTPException(status_code=404, detail="SBOM not found")
     return sbom
 
 
-def _get_product_or_404(db: Session, product_id: int) -> Product:
-    product = db.get(Product, product_id)
+def _get_product_or_404(db: Session, product_id: int, tenant_id: int | None = None) -> Product:
+    product = get_product_for_tenant(db, product_id, tenant_id) if tenant_id is not None else db.get(Product, product_id)
     if product is None:
         raise HTTPException(status_code=404, detail="Product not found")
     return product
@@ -185,13 +188,15 @@ def _serialize(row: AnalysisSchedule) -> dict[str, Any]:
 def upsert_project_schedule(
     payload: ScheduleUpsert,
     project_id: int = Path(..., ge=1),
+    context: CurrentContext = Depends(require_permission("product:manage_schedule")),
     db: Session = Depends(get_db),
 ):
-    _get_project_or_404(db, project_id)
+    _get_project_or_404(db, project_id, context.tenant_id)
     _validate_or_422(_spec_from_payload(payload))
 
     existing = db.execute(
         select(AnalysisSchedule).where(
+            AnalysisSchedule.tenant_id == context.tenant_id,
             AnalysisSchedule.scope == "PROJECT",
             AnalysisSchedule.project_id == project_id,
         )
@@ -199,6 +204,7 @@ def upsert_project_schedule(
 
     if existing is None:
         existing = AnalysisSchedule(
+            tenant_id=context.tenant_id,
             scope="PROJECT",
             project_id=project_id,
             sbom_id=None,
@@ -218,10 +224,15 @@ def upsert_project_schedule(
 
 
 @router.get("/projects/{project_id}/schedule", response_model=ScheduleOut)
-def get_project_schedule(project_id: int = Path(..., ge=1), db: Session = Depends(get_db)):
-    _get_project_or_404(db, project_id)
+def get_project_schedule(
+    project_id: int = Path(..., ge=1),
+    context: CurrentContext = Depends(require_permission("product:read")),
+    db: Session = Depends(get_db),
+):
+    _get_project_or_404(db, project_id, context.tenant_id)
     row = db.execute(
         select(AnalysisSchedule).where(
+            AnalysisSchedule.tenant_id == context.tenant_id,
             AnalysisSchedule.scope == "PROJECT",
             AnalysisSchedule.project_id == project_id,
         )
@@ -235,11 +246,13 @@ def get_project_schedule(project_id: int = Path(..., ge=1), db: Session = Depend
 def patch_project_schedule(
     payload: ScheduleUpsert,
     project_id: int = Path(..., ge=1),
+    context: CurrentContext = Depends(require_permission("product:manage_schedule")),
     db: Session = Depends(get_db),
 ):
-    _get_project_or_404(db, project_id)
+    _get_project_or_404(db, project_id, context.tenant_id)
     row = db.execute(
         select(AnalysisSchedule).where(
+            AnalysisSchedule.tenant_id == context.tenant_id,
             AnalysisSchedule.scope == "PROJECT",
             AnalysisSchedule.project_id == project_id,
         )
@@ -269,11 +282,13 @@ def delete_project_schedule(
         ),
     ),
     user_id: str | None = Query(None),
+    context: CurrentContext = Depends(require_permission("product:manage_schedule")),
     db: Session = Depends(get_db),
 ):
-    _get_project_or_404(db, project_id)
+    _get_project_or_404(db, project_id, context.tenant_id)
     row = db.execute(
         select(AnalysisSchedule).where(
+            AnalysisSchedule.tenant_id == context.tenant_id,
             AnalysisSchedule.scope == "PROJECT",
             AnalysisSchedule.project_id == project_id,
         )
@@ -314,18 +329,21 @@ def delete_project_schedule(
 def upsert_product_schedule(
     payload: ScheduleUpsert,
     product_id: int = Path(..., ge=1),
+    context: CurrentContext = Depends(require_permission("product:manage_schedule")),
     db: Session = Depends(get_db),
 ):
-    _get_product_or_404(db, product_id)
+    _get_product_or_404(db, product_id, context.tenant_id)
     _validate_or_422(_spec_from_payload(payload))
     existing = db.execute(
         select(AnalysisSchedule).where(
+            AnalysisSchedule.tenant_id == context.tenant_id,
             AnalysisSchedule.scope == "PRODUCT",
             AnalysisSchedule.product_id == product_id,
         )
     ).scalar_one_or_none()
     if existing is None:
         existing = AnalysisSchedule(
+            tenant_id=context.tenant_id,
             scope="PRODUCT",
             project_id=None,
             product_id=product_id,
@@ -344,10 +362,15 @@ def upsert_product_schedule(
 
 
 @router.get("/products/{product_id}/schedule", response_model=ScheduleOut)
-def get_product_schedule(product_id: int = Path(..., ge=1), db: Session = Depends(get_db)):
-    _get_product_or_404(db, product_id)
+def get_product_schedule(
+    product_id: int = Path(..., ge=1),
+    context: CurrentContext = Depends(require_permission("product:read")),
+    db: Session = Depends(get_db),
+):
+    _get_product_or_404(db, product_id, context.tenant_id)
     row = db.execute(
         select(AnalysisSchedule).where(
+            AnalysisSchedule.tenant_id == context.tenant_id,
             AnalysisSchedule.scope == "PRODUCT",
             AnalysisSchedule.product_id == product_id,
         )
@@ -361,11 +384,13 @@ def get_product_schedule(product_id: int = Path(..., ge=1), db: Session = Depend
 def patch_product_schedule(
     payload: ScheduleUpsert,
     product_id: int = Path(..., ge=1),
+    context: CurrentContext = Depends(require_permission("product:manage_schedule")),
     db: Session = Depends(get_db),
 ):
-    _get_product_or_404(db, product_id)
+    _get_product_or_404(db, product_id, context.tenant_id)
     row = db.execute(
         select(AnalysisSchedule).where(
+            AnalysisSchedule.tenant_id == context.tenant_id,
             AnalysisSchedule.scope == "PRODUCT",
             AnalysisSchedule.product_id == product_id,
         )
@@ -386,11 +411,13 @@ def delete_product_schedule(
     product_id: int = Path(..., ge=1),
     permanent: bool = Query(False),
     user_id: str | None = Query(None),
+    context: CurrentContext = Depends(require_permission("product:manage_schedule")),
     db: Session = Depends(get_db),
 ):
-    _get_product_or_404(db, product_id)
+    _get_product_or_404(db, product_id, context.tenant_id)
     row = db.execute(
         select(AnalysisSchedule).where(
+            AnalysisSchedule.tenant_id == context.tenant_id,
             AnalysisSchedule.scope == "PRODUCT",
             AnalysisSchedule.product_id == product_id,
         )
@@ -430,13 +457,15 @@ def delete_product_schedule(
 def upsert_sbom_schedule(
     payload: ScheduleUpsert,
     sbom_id: int = Path(..., ge=1),
+    context: CurrentContext = Depends(require_permission("product:manage_schedule")),
     db: Session = Depends(get_db),
 ):
-    _get_sbom_or_404(db, sbom_id)
+    _get_sbom_or_404(db, sbom_id, context.tenant_id)
     _validate_or_422(_spec_from_payload(payload))
 
     existing = db.execute(
         select(AnalysisSchedule).where(
+            AnalysisSchedule.tenant_id == context.tenant_id,
             AnalysisSchedule.scope == "SBOM",
             AnalysisSchedule.sbom_id == sbom_id,
         )
@@ -444,6 +473,7 @@ def upsert_sbom_schedule(
 
     if existing is None:
         existing = AnalysisSchedule(
+            tenant_id=context.tenant_id,
             scope="SBOM",
             project_id=None,
             sbom_id=sbom_id,
@@ -463,14 +493,18 @@ def upsert_sbom_schedule(
 
 
 @router.get("/sboms/{sbom_id}/schedule", response_model=ScheduleResolved)
-def get_sbom_schedule(sbom_id: int = Path(..., ge=1), db: Session = Depends(get_db)):
+def get_sbom_schedule(
+    sbom_id: int = Path(..., ge=1),
+    context: CurrentContext = Depends(require_permission("product:read")),
+    db: Session = Depends(get_db),
+):
     """
     Return the effective schedule for an SBOM.
 
     UI uses ``inherited=true`` to render an "Inherits from project" badge
     and offer an "Override" button.
     """
-    _get_sbom_or_404(db, sbom_id)
+    _get_sbom_or_404(db, sbom_id, context.tenant_id)
     row = resolve_for_sbom(db, sbom_id)
     if row is None:
         return {"inherited": False, "schedule": None}
@@ -484,11 +518,13 @@ def get_sbom_schedule(sbom_id: int = Path(..., ge=1), db: Session = Depends(get_
 def patch_sbom_schedule(
     payload: ScheduleUpsert,
     sbom_id: int = Path(..., ge=1),
+    context: CurrentContext = Depends(require_permission("product:manage_schedule")),
     db: Session = Depends(get_db),
 ):
-    _get_sbom_or_404(db, sbom_id)
+    _get_sbom_or_404(db, sbom_id, context.tenant_id)
     row = db.execute(
         select(AnalysisSchedule).where(
+            AnalysisSchedule.tenant_id == context.tenant_id,
             AnalysisSchedule.scope == "SBOM",
             AnalysisSchedule.sbom_id == sbom_id,
         )
@@ -514,11 +550,13 @@ def delete_sbom_schedule(
     sbom_id: int = Path(..., ge=1),
     permanent: bool = Query(False),
     user_id: str | None = Query(None),
+    context: CurrentContext = Depends(require_permission("product:manage_schedule")),
     db: Session = Depends(get_db),
 ):
-    _get_sbom_or_404(db, sbom_id)
+    _get_sbom_or_404(db, sbom_id, context.tenant_id)
     row = db.execute(
         select(AnalysisSchedule).where(
+            AnalysisSchedule.tenant_id == context.tenant_id,
             AnalysisSchedule.scope == "SBOM",
             AnalysisSchedule.sbom_id == sbom_id,
         )
@@ -553,24 +591,28 @@ def delete_sbom_schedule(
 
 @router.get("/schedules", response_model=list[ScheduleOut])
 def list_schedules(
-    scope: str | None = Query(None, description="PROJECT|SBOM"),
+    scope: str | None = Query(None, description="PROJECT|PRODUCT|SBOM"),
     enabled: bool | None = Query(None),
     project_id: int | None = Query(None, ge=1),
+    product_id: int | None = Query(None, ge=1),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=500),
     response: Response = None,
+    context: CurrentContext = Depends(require_permission("product:read")),
     db: Session = Depends(get_db),
 ):
-    base = select(AnalysisSchedule)
+    base = select(AnalysisSchedule).where(AnalysisSchedule.tenant_id == context.tenant_id)
     if scope:
         norm = scope.strip().upper()
-        if norm not in {"PROJECT", "SBOM"}:
-            raise HTTPException(status_code=422, detail="scope must be PROJECT or SBOM")
+        if norm not in {"PROJECT", "PRODUCT", "SBOM"}:
+            raise HTTPException(status_code=422, detail="scope must be PROJECT, PRODUCT, or SBOM")
         base = base.where(AnalysisSchedule.scope == norm)
     if enabled is not None:
         base = base.where(AnalysisSchedule.enabled.is_(enabled))
     if project_id is not None:
         base = base.where(AnalysisSchedule.project_id == project_id)
+    if product_id is not None:
+        base = base.where(AnalysisSchedule.product_id == product_id)
 
     total_rows = db.execute(base).scalars().all()  # small table, count-by-fetch is fine
     if response is not None:
@@ -580,16 +622,28 @@ def list_schedules(
     return [_serialize(r) for r in total_rows[offset : offset + page_size]]
 
 
-def _get_schedule_or_404(db: Session, schedule_id: int) -> AnalysisSchedule:
-    row = db.get(AnalysisSchedule, schedule_id)
+def _get_schedule_or_404(db: Session, schedule_id: int, tenant_id: int | None = None) -> AnalysisSchedule:
+    if tenant_id is None:
+        row = db.get(AnalysisSchedule, schedule_id)
+    else:
+        row = db.execute(
+            select(AnalysisSchedule).where(
+                AnalysisSchedule.id == schedule_id,
+                AnalysisSchedule.tenant_id == tenant_id,
+            )
+        ).scalar_one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail="Schedule not found")
     return row
 
 
 @router.post("/schedules/{schedule_id}/pause", response_model=ScheduleOut)
-def pause_schedule(schedule_id: int = Path(..., ge=1), db: Session = Depends(get_db)):
-    row = _get_schedule_or_404(db, schedule_id)
+def pause_schedule(
+    schedule_id: int = Path(..., ge=1),
+    context: CurrentContext = Depends(require_permission("product:manage_schedule")),
+    db: Session = Depends(get_db),
+):
+    row = _get_schedule_or_404(db, schedule_id, context.tenant_id)
     row.enabled = False
     row.next_run_at = None  # paused → no cursor
     row.modified_on = to_iso(_now())
@@ -599,8 +653,12 @@ def pause_schedule(schedule_id: int = Path(..., ge=1), db: Session = Depends(get
 
 
 @router.post("/schedules/{schedule_id}/resume", response_model=ScheduleOut)
-def resume_schedule(schedule_id: int = Path(..., ge=1), db: Session = Depends(get_db)):
-    row = _get_schedule_or_404(db, schedule_id)
+def resume_schedule(
+    schedule_id: int = Path(..., ge=1),
+    context: CurrentContext = Depends(require_permission("product:manage_schedule")),
+    db: Session = Depends(get_db),
+):
+    row = _get_schedule_or_404(db, schedule_id, context.tenant_id)
     row.enabled = True
     _refresh_next_run_at(row)
     row.modified_on = to_iso(_now())
@@ -610,7 +668,11 @@ def resume_schedule(schedule_id: int = Path(..., ge=1), db: Session = Depends(ge
 
 
 @router.post("/schedules/{schedule_id}/run-now", status_code=status.HTTP_202_ACCEPTED)
-def run_schedule_now(schedule_id: int = Path(..., ge=1), db: Session = Depends(get_db)):
+def run_schedule_now(
+    schedule_id: int = Path(..., ge=1),
+    context: CurrentContext = Depends(require_permission("product:manage_schedule")),
+    db: Session = Depends(get_db),
+):
     """
     Trigger the schedule's analysis fan-out immediately.
 
@@ -619,20 +681,24 @@ def run_schedule_now(schedule_id: int = Path(..., ge=1), db: Session = Depends(g
     """
     from ..workers.scheduled_analysis import analyze_sbom_async
 
-    row = _get_schedule_or_404(db, schedule_id)
+    row = _get_schedule_or_404(db, schedule_id, context.tenant_id)
 
     if row.scope == "SBOM" and row.sbom_id is not None:
         target_sbom_ids = [row.sbom_id]
-    elif row.scope == "PROJECT" and row.project_id is not None:
+    elif row.scope == "PRODUCT" and row.product_id is not None:
         target_sbom_ids = [
             sid
-            for sid in db.execute(select(SBOMSource.id).where(SBOMSource.projectid == row.project_id)).scalars().all()
+            for sid in db.execute(
+                select(SBOMSource.id).where(
+                    SBOMSource.tenant_id == context.tenant_id,
+                    SBOMSource.product_id == row.product_id,
+                )
+            ).scalars().all()
         ]
-        # Honour SBOM-level overrides during manual fan-out too — same
-        # rule as the tick: an explicit SBOM row (even paused) opts out.
         overridden = set(
             db.execute(
                 select(AnalysisSchedule.sbom_id).where(
+                    AnalysisSchedule.tenant_id == context.tenant_id,
                     AnalysisSchedule.scope == "SBOM",
                     AnalysisSchedule.sbom_id.isnot(None),
                 )
@@ -641,6 +707,50 @@ def run_schedule_now(schedule_id: int = Path(..., ge=1), db: Session = Depends(g
             .all()
         )
         target_sbom_ids = [sid for sid in target_sbom_ids if sid not in overridden]
+    elif row.scope == "PROJECT" and row.project_id is not None:
+        target_sbom_ids = [
+            sid
+            for sid in db.execute(
+                select(SBOMSource.id).where(
+                    SBOMSource.tenant_id == context.tenant_id,
+                    SBOMSource.projectid == row.project_id,
+                )
+            ).scalars().all()
+        ]
+        # Honour SBOM-level overrides during manual fan-out too — same
+        # rule as the tick: an explicit SBOM row (even paused) opts out.
+        overridden = set(
+            db.execute(
+                select(AnalysisSchedule.sbom_id).where(
+                    AnalysisSchedule.tenant_id == context.tenant_id,
+                    AnalysisSchedule.scope == "SBOM",
+                    AnalysisSchedule.sbom_id.isnot(None),
+                )
+            )
+            .scalars()
+            .all()
+        )
+        target_sbom_ids = [sid for sid in target_sbom_ids if sid not in overridden]
+        overridden_products = set(
+            db.execute(
+                select(AnalysisSchedule.product_id).where(
+                    AnalysisSchedule.tenant_id == context.tenant_id,
+                    AnalysisSchedule.scope == "PRODUCT",
+                    AnalysisSchedule.product_id.isnot(None),
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if overridden_products:
+            product_rows = db.execute(
+                select(SBOMSource.id, SBOMSource.product_id).where(
+                    SBOMSource.tenant_id == context.tenant_id,
+                    SBOMSource.projectid == row.project_id,
+                    SBOMSource.id.in_(target_sbom_ids),
+                )
+            ).all()
+            target_sbom_ids = [sid for sid, product_id in product_rows if product_id not in overridden_products]
     else:
         raise HTTPException(status_code=409, detail="Schedule is missing a target")
 

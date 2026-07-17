@@ -605,7 +605,8 @@ def _legacy_estimate(db: Session, *, run_id: int) -> BatchDurationEstimateRespon
     for f in findings:
         try:
             ctx = build_grounding_context(f, db=db)
-        except Exception:
+        except Exception as exc:  # noqa: BLE001
+            log.warning("ai.estimate.grounding_failed: finding=%s err=%s", getattr(f, "id", None), exc)
             continue
         key = cache_mod.make_cache_key(
             vuln_id=ctx.cve_id,
@@ -889,7 +890,8 @@ def list_run_fixes(run_id: int, db: Session = Depends(get_db)) -> FindingFixList
     for f in findings:
         try:
             ctx = build_grounding_context(f, db=db)
-        except Exception:
+        except Exception as exc:  # noqa: BLE001
+            log.warning("ai.cache_status.grounding_failed: finding=%s err=%s", getattr(f, "id", None), exc)
             continue
         key = cache_mod.make_cache_key(
             vuln_id=ctx.cve_id,

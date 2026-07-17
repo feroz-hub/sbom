@@ -336,6 +336,65 @@ async def test_get_with_scan_context_recommends_upgrade(db):
 
 
 @pytest.mark.asyncio
+async def test_get_with_scan_context_matches_debian_alias_finding(db):
+    """Scan-aware lookup of the canonical CVE still finds a finding stored under
+    a source-specific alias (``vuln_id='DEBIAN-CVE-2011-3374'``), so component
+    context renders for Debian rows instead of coming back empty."""
+    proj = Projects(id=1, project_name="p", project_status=1)
+    sbom = SBOMSource(id=1, sbom_name="s", projectid=1)
+    component = SBOMComponent(id=1, sbom_id=1, name="dpkg", version="1.16.0", purl="pkg:deb/debian/dpkg@1.16.0")
+    run = AnalysisRun(
+        id=1,
+        sbom_id=1,
+        project_id=1,
+        run_status="OK",
+        source="OSV",
+        started_on="2024-01-01",
+        completed_on="2024-01-01",
+    )
+    # Finding carries the Debian alias as its id; the canonical CVE is only
+    # reachable via ``cves_for_finding`` (substring / aliases).
+    finding = AnalysisFinding(
+        id=1,
+        analysis_run_id=1,
+        component_id=1,
+        vuln_id="DEBIAN-CVE-2011-3374",
+        severity="LOW",
+        component_name="dpkg",
+        component_version="1.16.0",
+    )
+    db.add_all([proj, sbom, component, run, finding])
+    db.commit()
+
+    osv = _FakeSource(
+        "osv",
+        FetchResult(
+            source="osv",
+            outcome=FetchOutcome.OK,
+            data={
+                "summary": "dpkg directory traversal",
+                "fix_versions": [
+                    {
+                        "ecosystem": "Debian",
+                        "package": "dpkg",
+                        "fixed_in": "1.16.2",
+                        "introduced_in": "0",
+                        "range": None,
+                    }
+                ],
+                "references": [],
+            },
+        ),
+    )
+    svc = _service(db, osv=osv)
+    # Client sends the canonical CVE (what the resolved modal fetch uses).
+    out = await svc.get_with_scan_context("CVE-2011-3374", scan_id=1)
+    assert out.cve_id == "CVE-2011-3374"
+    assert out.component is not None
+    assert out.component.name == "dpkg"
+
+
+@pytest.mark.asyncio
 async def test_get_with_scan_context_status_fixed_when_already_above(db):
     proj = Projects(id=1, project_name="p", project_status=1)
     sbom = SBOMSource(id=1, sbom_name="s", projectid=1)

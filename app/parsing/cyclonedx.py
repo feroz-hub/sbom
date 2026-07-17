@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from defusedxml import ElementTree as ET
+from defusedxml.common import DefusedXmlException
+
 from .common import norm
 from .xml_support import XMLTODICT_AVAILABLE
 
@@ -103,9 +106,17 @@ def parse_cyclonedx_dict(doc: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def parse_cyclonedx_xml(xml_string: str) -> list[dict[str, Any]]:
-    """Parse CycloneDX XML SBOM using xmltodict or xml.etree fallback."""
+    """Parse CycloneDX XML SBOM using hardened XML parsing."""
+    try:
+        root = ET.fromstring(xml_string)
+    except (ET.ParseError, DefusedXmlException) as e:
+        raise ValueError("Invalid XML SBOM") from e
+
     if XMLTODICT_AVAILABLE:
-        doc = xmltodict.parse(xml_string)
+        try:
+            doc = xmltodict.parse(xml_string, disable_entities=True)
+        except Exception as e:
+            raise ValueError("Invalid XML SBOM") from e
         bom = doc.get("bom") or doc
         components_raw = bom.get("components") or {}
         component_list = components_raw.get("component", [])
@@ -191,13 +202,7 @@ def parse_cyclonedx_xml(xml_string: str) -> list[dict[str, Any]]:
                 }
             )
         return out
-    import xml.etree.ElementTree as ET
-
     ns = {"cdx": "http://cyclonedx.org/schema/bom/1"}
-    try:
-        root = ET.fromstring(xml_string)
-    except ET.ParseError as e:
-        raise ValueError(f"Invalid XML SBOM: {e}") from e
     if root.tag.startswith("{"):
         ns_uri = root.tag.split("}")[0][1:]
         ns = {"cdx": ns_uri}

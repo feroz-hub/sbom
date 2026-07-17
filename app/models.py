@@ -311,8 +311,8 @@ class SBOMSource(Base, SoftDeleteMixin, TenantOwnedMixin):
                     return "cyclonedx"
                 if "spdxVersion" in as_dict:
                     return "spdx"
-        except Exception:
-            pass
+        except (TypeError, json.JSONDecodeError):
+            return "—"
         return "—"
 
     @property
@@ -328,8 +328,8 @@ class SBOMSource(Base, SoftDeleteMixin, TenantOwnedMixin):
                     return str(as_dict.get("specVersion") or "—")
                 if "spdxVersion" in as_dict:
                     return str(as_dict.get("spdxVersion") or "—")
-        except Exception:
-            pass
+        except (TypeError, json.JSONDecodeError):
+            return "—"
         return "—"
 
 
@@ -816,34 +816,31 @@ class AnalysisFinding(Base, SoftDeleteMixin, TenantOwnedMixin):
     analysis_run_id = Column(Integer, ForeignKey("analysis_run.id"), nullable=False, index=True)
     component_id = Column(Integer, ForeignKey("sbom_component.id"), nullable=True, index=True)
 
-    vuln_id = Column(String, nullable=False, index=True)
-    source = Column(String, nullable=True)
+    vuln_id = Column(String(255), nullable=False, index=True)
+    source = Column(String(128), nullable=True)
     title = Column(String, nullable=True)
     description = Column(Text, nullable=True)
-    severity = Column(String, nullable=True, index=True)
+    severity = Column(String(16), nullable=True, index=True)
     score = Column(Float, nullable=True)
-    vector = Column(String, nullable=True)
+    vector = Column(Text, nullable=True)
     published_on = Column(String, nullable=True)
-    reference_url = Column(String, nullable=True)
+    reference_url = Column(Text, nullable=True)
     cwe = Column(Text, nullable=True)
 
     cpe = Column(String, nullable=True, index=True)
-    component_name = Column(String, nullable=True)
-    component_version = Column(String, nullable=True)
+    component_name = Column(Text, nullable=True)
+    component_version = Column(Text, nullable=True)
 
     fixed_versions = Column(Text, nullable=True)  # JSON array stored as string
-    attack_vector = Column(String, nullable=True)
-    cvss_version = Column(String, nullable=True)
+    attack_vector = Column(String(64), nullable=True)
+    cvss_version = Column(String(16), nullable=True)
     aliases = Column(Text, nullable=True)  # JSON array as string
 
-    # Version-range match verdict from app.sources.version_range. NULL
-    # for rows written before migration 016; PR3 populates these going
-    # forward. Width VARCHAR(32) accommodates the longest MatchReason
-    # literal (`exact_version_mismatch`, 22 chars) with headroom for
-    # roadmap #6 additions. No CHECK constraint — the Literal is
-    # enforced in Python, not at the DB layer.
-    match_reason = Column(String(32), nullable=True, index=True)
-    matched_range = Column(String(128), nullable=True)
+    # Version-range match verdict from app.sources.version_range. NULL for
+    # rows written before migration 016. Some providers add source-specific
+    # reason labels, so keep enough headroom while validating pre-flush.
+    match_reason = Column(String(255), nullable=True, index=True)
+    matched_range = Column(Text, nullable=True)
 
     # Roadmap #3 — name/version/vendor token-overlap score in [0.0, 1.0].
     # NULL on pre-migration-017 rows and on sources not yet wired into
@@ -855,11 +852,11 @@ class AnalysisFinding(Base, SoftDeleteMixin, TenantOwnedMixin):
     # Roadmap #6 — which search strategy produced this finding.
     # Values (enforced in Python, not the DB): cpe_name,
     # virtual_match_string, keyword_search (NVD); purl_direct (OSV);
-    # ghsa_alias (GHSA). Width VARCHAR(32) fits the longest token
-    # (``virtual_match_string`` = 21 chars) with headroom for future
-    # source-strategy additions. Indexed so triage queries
+    # ghsa_alias (GHSA). Width VARCHAR(64) leaves headroom for future
+    # source-strategy additions while remaining a bounded provenance tag.
+    # Indexed so triage queries
     # ("show everything produced by keyword_search") don't table-scan.
-    match_strategy = Column(String(32), nullable=True, index=True)
+    match_strategy = Column(String(64), nullable=True, index=True)
 
     analysis_run = relationship("AnalysisRun", back_populates="findings")
     component = relationship("SBOMComponent", back_populates="findings")

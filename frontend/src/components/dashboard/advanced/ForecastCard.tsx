@@ -9,7 +9,7 @@ import {
   Tooltip,
   XAxis,
   YAxis,
-  type TooltipProps,
+  type TooltipContentProps,
 } from 'recharts';
 import { AlertTriangle, TrendingDown, TrendingUp } from 'lucide-react';
 import { Surface, SurfaceContent, SurfaceHeader } from '@/components/ui/Surface';
@@ -42,9 +42,21 @@ function shortDate(d: string): string {
   return d.length >= 10 ? d.slice(5) : d;
 }
 
-function ForecastTooltip({ active, payload, label }: TooltipProps<number, string>) {
+function isChartRow(value: unknown): value is ChartRow {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.date === 'string'
+    && (candidate.actual == null || typeof candidate.actual === 'number')
+    && (candidate.projected == null || typeof candidate.projected === 'number')
+    && (candidate.bandLo == null || typeof candidate.bandLo === 'number')
+    && (candidate.bandSpan == null || typeof candidate.bandSpan === 'number')
+  );
+}
+
+function ForecastTooltip({ active, payload, label }: TooltipContentProps) {
   if (!active || !payload?.length) return null;
-  const row = payload[0]?.payload as ChartRow | undefined;
+  const row = payload.map((entry) => entry.payload).find(isChartRow);
   if (!row) return null;
   return (
     <div className="rounded-lg border border-border-subtle bg-surface px-3 py-2 text-xs shadow-elev-3">
@@ -204,7 +216,7 @@ export function ForecastCard({ forecast, isLoading: propsIsLoading }: ForecastCa
                   dot={false}
                   isAnimationActive={false}
                 />
-                <Tooltip content={<ForecastTooltip />} />
+                <Tooltip content={ForecastTooltip} />
               </ComposedChart>
             </ResponsiveContainer>
             <dl className="mt-3 grid grid-cols-3 gap-3 border-t border-border-subtle pt-3 text-center">

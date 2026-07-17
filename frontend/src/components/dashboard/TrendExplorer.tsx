@@ -12,7 +12,7 @@ import {
   Tooltip,
   XAxis,
   YAxis,
-  type TooltipProps,
+  type TooltipContentProps,
 } from 'recharts';
 import { ChevronDown } from 'lucide-react';
 import { Surface, SurfaceContent, SurfaceHeader } from '@/components/ui/Surface';
@@ -41,7 +41,7 @@ function formatAxis(input: string, granularity: TrendGranularity): string {
   return dt.toLocaleString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
 
-function TrendTooltip({ active, payload, label }: TooltipProps<number, string>) {
+function TrendTooltip({ active, payload, label }: TooltipContentProps) {
   if (!active || !payload?.length) return null;
   return (
     <div className="min-w-[180px] rounded-lg border border-border-subtle bg-surface px-3 py-2 text-xs shadow-elev-3">
@@ -195,7 +195,7 @@ export function TrendExplorer() {
                 axisLine={{ stroke: gridStroke }}
                 width={42}
               />
-              <Tooltip content={<TrendTooltip />} />
+              <Tooltip content={TrendTooltip} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               {SEVERITY_SERIES.map((s) => (
                 <Area

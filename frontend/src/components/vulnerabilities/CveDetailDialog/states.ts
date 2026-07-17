@@ -10,7 +10,7 @@ import type {
   CveUnrecognizedIdEnvelope,
 } from '@/types';
 
-import { SUPPORTED_VULN_FORMATS, classifyVulnId } from '@/lib/vulnIds';
+import { SUPPORTED_VULN_FORMATS, resolveVulnId } from '@/lib/vulnIds';
 
 export type DialogState =
   | { kind: 'loading' }
@@ -34,6 +34,12 @@ export interface QueryView {
 
 interface MapperInput {
   rawId: string | null;
+  /**
+   * CVE aliases from the row seed. Lets the mapper resolve a source-specific
+   * advisory id (e.g. `DEBIAN-CVE-*`) to its canonical CVE before deciding
+   * `unrecognized` — the same resolution the fetch uses, so they can't drift.
+   */
+  aliases?: readonly string[] | null;
   query: QueryView;
 }
 
@@ -45,20 +51,23 @@ const ERR_UNRECOGNIZED = 'CVE_VAL_E001_UNRECOGNIZED_ID';
  * Precedence:
  *   1. ``rawId`` is missing → ``loading`` (the dialog is closed; this is
  *      the harmless "no active CVE" path).
- *   2. Frontend classifier rejects ``rawId`` → short-circuit
- *      ``unrecognized`` (no fetch is even attempted).
+ *   2. Frontend resolver can't map ``rawId`` to a supported canonical id →
+ *      short-circuit ``unrecognized`` (no fetch is even attempted).
  *   3. Backend returned a 400 with the unrecognized envelope → same.
  *   4. Query in flight → ``loading``.
  *   5. Query returned data → branch on ``data.status``.
  *   6. Network error / unparseable → ``unreachable`` if the row data
  *      gives us *something* to fall back on, ``fatal`` otherwise.
  */
-export function selectDialogState({ rawId, query }: MapperInput): DialogState {
+export function selectDialogState({ rawId, aliases, query }: MapperInput): DialogState {
   if (!rawId) return { kind: 'loading' };
 
-  const classified = classifyVulnId(rawId);
-  if (classified.kind === 'unknown') {
-    return { kind: 'unrecognized', rawId, supported: SUPPORTED_VULN_FORMATS };
+  // Resolve source-specific aliases (DEBIAN-CVE-* → CVE-*) before rejecting.
+  // Only a genuinely unsupported id short-circuits to the banner; the raw id
+  // the user clicked is echoed so the banner keeps its provenance.
+  const resolved = resolveVulnId(rawId, { aliases: aliases ?? null });
+  if (!resolved.supported) {
+    return { kind: 'unrecognized', rawId: resolved.raw, supported: SUPPORTED_VULN_FORMATS };
   }
 
   const envelope = unrecognizedEnvelopeOf(query.error);

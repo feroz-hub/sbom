@@ -121,7 +121,7 @@ def _decode_pointer_token(token: str) -> str:
 
 
 def _list_index(token: str, values: list[Any], *, allow_end: bool = False) -> int:
-    if allow_end and token == "-":
+    if allow_end and token == "-":  # nosec B105: RFC 6901 list append marker, not a credential
         return len(values)
     try:
         idx = int(token)

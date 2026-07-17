@@ -105,6 +105,19 @@ describe('SbomUploadModal validation repair handoff', () => {
     expect(screen.getByRole('option', { name: 'Auto-detect' })).toBeInTheDocument();
   });
 
+  it('keeps the selected product in sync with form validation', async () => {
+    render(wrap(<SbomUploadModal open onClose={vi.fn()} initialProjectId={42} initialProductId={77} />));
+
+    await screen.findByRole('option', { name: 'Payments API' });
+    const projectSelect = screen.getByRole('combobox', { name: /Project/i });
+    const productSelect = screen.getByRole('combobox', { name: /^Product/i });
+    await waitFor(() => expect(projectSelect).toHaveValue('42'));
+    await waitFor(() => expect(productSelect).toHaveValue('77'));
+
+    fireEvent.change(productSelect, { target: { value: '77' } });
+    expect(screen.queryByText('Product is required')).not.toBeInTheDocument();
+  });
+
   it('detects SPDX JSON content and selects the matching SPDX type', async () => {
     getSbomTypes.mockResolvedValue([
       { id: 1, typename: 'CycloneDX JSON' },
