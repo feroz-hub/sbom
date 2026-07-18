@@ -1,111 +1,171 @@
 'use client';
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { FormEvent, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { usePermission } from '@/hooks/usePermission';
-import { BASE_URL, HttpError } from '@/lib/api';
-import { getActiveTenantId } from '@/lib/auth';
+import {
+  HttpError,
+  type TenantRole,
+  activateTenantMember,
+  addTenantMember,
+  deactivateTenantMember,
+  getAssignableTenantRoles,
+  getTenantMembers,
+  removeTenantMember,
+  updateTenantMemberRole,
+} from '@/lib/api';
 
-interface TenantUserRow {
-  membership_id: number;
-  user_id: number;
-  external_iam_user_id: string;
-  email: string | null;
-  display_name: string | null;
-  role: string;
-  status: string;
-}
-
-async function fetchTenantUsers(tenantId: number): Promise<TenantUserRow[]> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  const activeTenant = getActiveTenantId();
-  if (activeTenant) headers['X-Tenant-ID'] = activeTenant;
-
-  const res = await fetch(`${BASE_URL}/api/tenants/${tenantId}/users`, { headers });
-  if (!res.ok) throw new HttpError('Failed to load tenant users', res.status);
-  return res.json();
+function errorMessage(error: unknown): string {
+  if (!(error instanceof HttpError)) return 'The operation could not be completed.';
+  if (error.status === 401) return 'Your session expired. A safe sign-in flow has been started.';
+  if (error.status === 403) return 'You are authenticated but do not have permission for this action.';
+  if (error.status === 404) return 'This membership is not available in the current tenant.';
+  if (error.status === 409) return error.message;
+  if (error.status === 422) return `Invalid member data: ${error.message}`;
+  return error.message;
 }
 
 export default function TenantUsersPage() {
   const { user } = useAuth();
   const canRead = usePermission('tenant:user:read');
-  const canManage = usePermission('tenant:user:update') || usePermission('tenant:user:invite');
-  const tenantId = user?.tenantId ?? 1;
+  const canInvite = usePermission('tenant:user:invite');
+  const canUpdate = usePermission('tenant:user:update');
+  const tenantId = user?.tenantId ?? 0;
   const qc = useQueryClient();
+  const [externalUserId, setExternalUserId] = useState('');
+  const [initialRole, setInitialRole] = useState<TenantRole>('VIEWER');
+  const [notice, setNotice] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
 
-  const { data, isLoading, error } = useQuery({
+  const members = useQuery({
     queryKey: ['tenant-users', tenantId],
-    queryFn: () => fetchTenantUsers(tenantId),
+    queryFn: () => getTenantMembers(tenantId),
     enabled: canRead && tenantId > 0,
   });
-
-  const disableMutation = useMutation({
-    mutationFn: async (membershipId: number) => {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      const activeTenant = getActiveTenantId();
-      if (activeTenant) headers['X-Tenant-ID'] = activeTenant;
-      const res = await fetch(`${BASE_URL}/api/tenants/${tenantId}/users/${membershipId}`, {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify({ status: 'DISABLED' }),
-      });
-      if (!res.ok) throw new HttpError('Failed to update user', res.status);
-      return res.json();
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['tenant-users', tenantId] }),
+  const roles = useQuery({
+    queryKey: ['tenant-roles'],
+    queryFn: getAssignableTenantRoles,
+    enabled: canRead,
   });
 
+  const action = useMutation({
+    mutationFn: async (operation: () => Promise<unknown>) => operation(),
+    onSuccess: async () => {
+      setNotice({ kind: 'success', message: 'Tenant membership updated.' });
+      await qc.invalidateQueries({ queryKey: ['tenant-users', tenantId] });
+    },
+    onError: (error) => setNotice({ kind: 'error', message: errorMessage(error) }),
+  });
+
+  const submitMember = (event: FormEvent) => {
+    event.preventDefault();
+    const subject = externalUserId.trim();
+    if (!subject) return;
+    action.mutate(async () => {
+      await addTenantMember(tenantId, { external_user_id: subject, role: initialRole });
+      setExternalUserId('');
+    });
+  };
+
+  const confirmAction = (message: string, operation: () => Promise<unknown>) => {
+    if (window.confirm(message)) action.mutate(operation);
+  };
+
   if (!canRead) {
-    return (
-      <div className="p-8 text-center text-hcl-muted">
-        You do not have permission to view tenant users.
-      </div>
-    );
+    return <div className="p-8 text-center text-hcl-muted">You do not have permission to view tenant users.</div>;
   }
 
   return (
-    <div className="mx-auto max-w-4xl p-6 space-y-6">
+    <div className="mx-auto max-w-5xl space-y-6 p-6">
       <div>
         <h1 className="text-2xl font-semibold text-foreground">Tenant users</h1>
-        <p className="text-sm text-hcl-muted mt-1">
-          Manage local membership and roles. Identity lifecycle is owned by HCL IAM.
+        <p className="mt-1 text-sm text-hcl-muted">
+          HCL.CS owns identity. This page manages SBOM onboarding, membership, and tenant roles.
         </p>
       </div>
 
-      {isLoading && <p className="text-sm text-hcl-muted">Loading…</p>}
-      {error && <p className="text-sm text-red-500">{(error as Error).message}</p>}
+      {notice && (
+        <div role="status" className={`rounded-lg border p-3 text-sm ${notice.kind === 'error' ? 'border-red-300 text-red-700' : 'border-emerald-300 text-emerald-700'}`}>
+          {notice.message}
+        </div>
+      )}
 
-      {data && (
-        <div className="overflow-hidden rounded-lg border border-border">
+      {canInvite && (
+        <form onSubmit={submitMember} className="grid gap-3 rounded-lg border border-border p-4 md:grid-cols-[1fr_220px_auto]">
+          <label className="text-sm font-medium">
+            HCL.CS subject
+            <input
+              aria-label="HCL.CS subject"
+              value={externalUserId}
+              onChange={(event) => setExternalUserId(event.target.value)}
+              placeholder="Exact JWT sub"
+              className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2"
+              required
+            />
+          </label>
+          <label className="text-sm font-medium">
+            Initial role
+            <select
+              aria-label="Initial role"
+              value={initialRole}
+              onChange={(event) => setInitialRole(event.target.value as TenantRole)}
+              className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2"
+            >
+              {(roles.data?.roles ?? ['VIEWER']).map((role) => <option key={role} value={role}>{role}</option>)}
+            </select>
+          </label>
+          <button type="submit" disabled={action.isPending} className="self-end rounded-md bg-hcl-blue px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
+            Add member
+          </button>
+        </form>
+      )}
+
+      {members.isLoading && <p className="text-sm text-hcl-muted">Loading tenant members…</p>}
+      {members.error && <p role="alert" className="text-sm text-red-600">{errorMessage(members.error)}</p>}
+      {members.data?.length === 0 && <div className="rounded-lg border border-dashed border-border p-8 text-center text-hcl-muted">No tenant memberships.</div>}
+
+      {members.data && members.data.length > 0 && (
+        <div className="overflow-x-auto rounded-lg border border-border">
           <table className="min-w-full text-sm">
             <thead className="bg-surface-elevated">
               <tr>
                 <th className="px-4 py-2 text-left font-medium">User</th>
                 <th className="px-4 py-2 text-left font-medium">Role</th>
                 <th className="px-4 py-2 text-left font-medium">Status</th>
-                {canManage && <th className="px-4 py-2 text-right font-medium">Actions</th>}
+                {canUpdate && <th className="px-4 py-2 text-right font-medium">Actions</th>}
               </tr>
             </thead>
             <tbody>
-              {data.map((row) => (
-                <tr key={row.membership_id} className="border-t border-border">
-                  <td className="px-4 py-2">
-                    <div className="font-medium">{row.display_name || row.external_iam_user_id}</div>
-                    <div className="text-xs text-hcl-muted">{row.email}</div>
+              {members.data.map((member) => (
+                <tr key={member.membership_id} className="border-t border-border">
+                  <td className="px-4 py-3">
+                    <div className="font-medium">{member.display_name || member.external_iam_user_id}</div>
+                    <div className="text-xs text-hcl-muted">{member.email || 'No email supplied by HCL.CS'}</div>
                   </td>
-                  <td className="px-4 py-2">{row.role}</td>
-                  <td className="px-4 py-2">{row.status}</td>
-                  {canManage && (
-                    <td className="px-4 py-2 text-right">
-                      {row.status === 'ACTIVE' && (
-                        <button
-                          type="button"
-                          className="text-xs text-red-600 hover:underline"
-                          onClick={() => disableMutation.mutate(row.membership_id)}
-                        >
-                          Disable
-                        </button>
+                  <td className="px-4 py-3">
+                    {canUpdate ? (
+                      <select
+                        aria-label={`Role for ${member.display_name || member.external_iam_user_id}`}
+                        value={member.role}
+                        onChange={(event) => {
+                          const nextRole = event.target.value as TenantRole;
+                          confirmAction(`Change this member's role to ${nextRole}?`, () => updateTenantMemberRole(tenantId, member.membership_id, nextRole));
+                        }}
+                        className="rounded-md border border-border bg-background px-2 py-1"
+                      >
+                        {(roles.data?.roles ?? [member.role]).map((role) => <option key={role} value={role}>{role}</option>)}
+                      </select>
+                    ) : member.role}
+                  </td>
+                  <td className="px-4 py-3">{member.status}</td>
+                  {canUpdate && (
+                    <td className="space-x-3 px-4 py-3 text-right">
+                      {member.status === 'ACTIVE' ? (
+                        <button type="button" className="text-amber-700 hover:underline" onClick={() => confirmAction('Deactivate this membership immediately?', () => deactivateTenantMember(tenantId, member.membership_id))}>Deactivate</button>
+                      ) : (
+                        <button type="button" className="text-emerald-700 hover:underline" onClick={() => confirmAction('Activate this membership?', () => activateTenantMember(tenantId, member.membership_id))}>Activate</button>
                       )}
+                      <button type="button" className="text-red-700 hover:underline" onClick={() => confirmAction('Remove this membership permanently?', () => removeTenantMember(tenantId, member.membership_id))}>Remove</button>
                     </td>
                   )}
                 </tr>

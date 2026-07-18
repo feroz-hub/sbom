@@ -3,8 +3,8 @@
 
 from __future__ import annotations
 
-import os
 import logging
+import os
 from pathlib import Path
 
 # Load .env file if present before any config resolution
@@ -195,7 +195,7 @@ def _filter_soft_deleted(execute_state) -> None:
         )
     )
     context = get_bound_context()
-    if context is not None:
+    if context is not None and context.tenant_id is not None:
         tenant_id = context.tenant_id
         execute_state.statement = execute_state.statement.options(
             with_loader_criteria(
@@ -213,7 +213,7 @@ def _enforce_tenant_on_writes(session, _flush_context, _instances) -> None:
     from .models_mixins import TenantOwnedMixin
 
     context = get_bound_context()
-    if context is not None:
+    if context is not None and context.tenant_id is not None:
         tenant_id = context.tenant_id
     else:
         from .settings import get_settings
@@ -234,7 +234,7 @@ def _enforce_tenant_on_writes(session, _flush_context, _instances) -> None:
         elif tenant_id is not None and current != tenant_id:
             raise RuntimeError("Cross-tenant insert blocked")
 
-    if context is None:
+    if context is None or context.tenant_id is None:
         return
     for instance in session.dirty | session.deleted:
         if isinstance(instance, TenantOwnedMixin) and instance.tenant_id != context.tenant_id:

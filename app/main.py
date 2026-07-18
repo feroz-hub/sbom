@@ -67,6 +67,7 @@ from .routers import (
     lifecycle,
     lifecycle_admin,
     pdf,
+    platform,
     products,
     projects,
     remediation,
@@ -142,54 +143,66 @@ def _ensure_seed_data() -> None:
             .where(SBOMSource.validated_at.is_(None), SBOMSource.status == "validated")
             .values(status="pending")
         )
-        tenant = db.get(Tenant, 1)
-        if tenant is None:
-            tenant = Tenant(
-                id=1,
-                name="Default Tenant",
-                slug="default",
-                external_iam_tenant_id="local-default",
-                status="ACTIVE",
-                created_at=now,
-                updated_at=now,
-            )
-            db.add(tenant)
-        user = db.get(IAMUser, 1)
-        if user is None:
-            user = IAMUser(
-                id=1,
-                external_iam_user_id="dev-user",
-                email="dev@local",
-                display_name="Dev User",
-                status="ACTIVE",
-                created_at=now,
-                updated_at=now,
-                last_login_at=now,
-            )
-            db.add(user)
-        elif user.external_iam_user_id == "local-dev-admin":
-            user.external_iam_user_id = "dev-user"
-            user.email = user.email or "dev@local"
-            user.display_name = user.display_name or "Dev User"
-        db.flush()
-        _sync_postgres_sequence(db, "tenants", "id")
-        _sync_postgres_sequence(db, "iam_users", "id")
-        membership = db.execute(
-            select(TenantUser).where(TenantUser.tenant_id == 1, TenantUser.user_id == 1)
-        ).scalar_one_or_none()
-        if membership is None:
-            db.add(
-                TenantUser(
-                    tenant_id=1,
-                    user_id=1,
-                    role="TENANT_ADMIN",
+        if not get_settings().auth_enabled:
+            tenant = db.get(Tenant, 1)
+            if tenant is None:
+                tenant = Tenant(
+                    id=1,
+                    name="Default Tenant",
+                    slug="default",
+                    external_iam_tenant_id="local-default",
                     status="ACTIVE",
                     created_at=now,
                     updated_at=now,
                 )
-            )
-        elif membership.role == "PLATFORM_ADMIN" and not get_settings().auth_enabled:
-            membership.role = "TENANT_ADMIN"
+                db.add(tenant)
+            else:
+                tenant.status = "ACTIVE"
+            user = db.get(IAMUser, 1)
+            if user is None:
+                user = IAMUser(
+                    id=1,
+                    external_iam_user_id="dev-user",
+                    email="dev@local",
+                    display_name="Dev User",
+                    status="ACTIVE",
+                    created_at=now,
+                    updated_at=now,
+                    last_login_at=now,
+                )
+                db.add(user)
+            else:
+                if user.external_iam_user_id == "local-dev-admin":
+                    user.external_iam_user_id = "dev-user"
+                    user.email = user.email or "dev@local"
+                    user.display_name = user.display_name or "Dev User"
+                user.status = "ACTIVE"
+            db.flush()
+            _sync_postgres_sequence(db, "tenants", "id")
+            _sync_postgres_sequence(db, "iam_users", "id")
+            membership = db.execute(
+                select(TenantUser).where(TenantUser.tenant_id == 1, TenantUser.user_id == 1)
+            ).scalar_one_or_none()
+            if membership is None:
+                db.add(
+                    TenantUser(
+                        tenant_id=1,
+                        user_id=1,
+                        role="TENANT_ADMIN",
+                        status="ACTIVE",
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
+            else:
+                membership.role = "TENANT_ADMIN"
+                membership.status = "ACTIVE"
+        else:
+            bootstrap = db.execute(
+                select(IAMUser).where(IAMUser.external_iam_user_id.in_(("local-dev-admin", "dev-user")))
+            ).scalars().all()
+            if any(user.status == "ACTIVE" for user in bootstrap):
+                log.warning("Authenticated deployment contains an active local bootstrap identity; disable it")
         db.commit()
 
         # Seed default SBOM types
@@ -569,6 +582,7 @@ app.include_router(lifecycle_admin.router, dependencies=_protected)
 app.include_router(vex.router, dependencies=_protected)
 app.include_router(remediation.router, dependencies=_protected)
 app.include_router(tenants.router, dependencies=_protected)
+app.include_router(platform.router, dependencies=_protected)
 
 
 # Feature routers (kept from earlier refactor) — additive paths.

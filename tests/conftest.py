@@ -100,6 +100,10 @@ if _TEST_POSTGRES_DATABASE_URL:
     os.environ["TEST_POSTGRES_DATABASE_URL"] = _TEST_POSTGRES_DATABASE_URL
 os.environ["ANALYSIS_SOURCES"] = "NVD,OSV,GITHUB"
 os.environ["API_AUTH_MODE"] = "none"
+os.environ["AUTH_ENABLED"] = "false"
+os.environ["DEV_DEFAULT_TENANT"] = "true"
+os.environ["HCL_IAM_ROLE_CLAIM"] = "role"
+os.environ["HCL_IAM_TENANT_CLAIM"] = "tenant_id"
 os.environ["API_RATE_LIMIT_ENABLED"] = "false"
 os.environ["NVD_ENABLED"] = "false"
 os.environ.pop("API_AUTH_TOKENS", None)
@@ -147,6 +151,38 @@ def _truncate_postgres_application_tables(database_url: str) -> None:
             )
             for sequence_name in sequence_names:
                 connection.execute(text(f"ALTER SEQUENCE {sequence_name} RESTART WITH 1"))
+    finally:
+        engine.dispose()
+
+
+def _seed_postgres_test_tenant(database_url: str) -> None:
+    """Restore the deterministic tenant assumed by tenant-owned model defaults.
+
+    Direct service/model tests do not start the FastAPI lifespan, so they
+    cannot rely on the development bootstrap to create tenant id 1.
+    """
+    _assert_safe_test_database(database_url)
+    engine = create_engine(database_url, isolation_level="AUTOCOMMIT")
+    try:
+        with engine.connect() as connection:
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO tenants
+                        (id, name, slug, external_iam_tenant_id, status, created_at, updated_at)
+                    VALUES
+                        (1, 'Default Test Tenant', 'default', 'local-default', 'ACTIVE',
+                         CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    ON CONFLICT (id) DO NOTHING
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    "SELECT setval(pg_get_serial_sequence('tenants', 'id'), "
+                    "GREATEST((SELECT COALESCE(MAX(id), 1) FROM tenants), 1), true)"
+                )
+            )
     finally:
         engine.dispose()
 
@@ -225,6 +261,7 @@ def app(_tmp_database_path: str):
 def _reset_postgres_database_before_test():
     if _TEST_POSTGRES_DATABASE_URL:
         _truncate_postgres_application_tables(_TEST_POSTGRES_DATABASE_URL)
+        _seed_postgres_test_tenant(_TEST_POSTGRES_DATABASE_URL)
     yield
 
 
@@ -240,6 +277,8 @@ def client(app):
 def _reset_settings_and_base_env_after_test():
     os.environ["ANALYSIS_SOURCES"] = "NVD,OSV,GITHUB"
     os.environ["API_AUTH_MODE"] = "none"
+    os.environ["AUTH_ENABLED"] = "false"
+    os.environ["DEV_DEFAULT_TENANT"] = "true"
     os.environ["API_RATE_LIMIT_ENABLED"] = "false"
     os.environ["NVD_ENABLED"] = "false"
     os.environ.pop("API_AUTH_TOKENS", None)
@@ -247,14 +286,18 @@ def _reset_settings_and_base_env_after_test():
     os.environ.pop("NVD_API_KEY", None)
     os.environ.pop("VULNDB_API_KEY", None)
     try:
+        from app.core.security import clear_authorization_cache
         from app.settings import reset_settings
 
+        clear_authorization_cache()
         reset_settings()
     except Exception:
         pass
     yield
     os.environ["ANALYSIS_SOURCES"] = "NVD,OSV,GITHUB"
     os.environ["API_AUTH_MODE"] = "none"
+    os.environ["AUTH_ENABLED"] = "false"
+    os.environ["DEV_DEFAULT_TENANT"] = "true"
     os.environ["API_RATE_LIMIT_ENABLED"] = "false"
     os.environ["NVD_ENABLED"] = "false"
     os.environ.pop("API_AUTH_TOKENS", None)
@@ -262,8 +305,10 @@ def _reset_settings_and_base_env_after_test():
     os.environ.pop("NVD_API_KEY", None)
     os.environ.pop("VULNDB_API_KEY", None)
     try:
+        from app.core.security import clear_authorization_cache
         from app.settings import reset_settings
 
+        clear_authorization_cache()
         reset_settings()
     except Exception:
         pass

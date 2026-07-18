@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-import os
 import json
 import logging
+import os
 import ssl
 import threading
 import time
-import urllib.request
 import urllib.parse
+import urllib.request
 from collections.abc import Callable, Iterator
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any
@@ -215,6 +215,20 @@ def _set_cached_context(claims: dict[str, Any], x_tenant_id: str | None, context
         _CONTEXT_CACHE[key] = (expires_at, context)
 
 
+def clear_authorization_cache() -> None:
+    """Compatibility invalidator; authorization decisions no longer use this cache."""
+    with _CACHE_LOCK:
+        _CONTEXT_CACHE.clear()
+
+
+def invalidate_user_contexts(user_id: int) -> None:
+    """Remove any legacy cached contexts for one local IAM user."""
+    with _CACHE_LOCK:
+        keys = [key for key, (_expires, context) in _CONTEXT_CACHE.items() if context.user_id == user_id]
+        for key in keys:
+            _CONTEXT_CACHE.pop(key, None)
+
+
 def _upsert_user(db: Session, claims: dict[str, Any]) -> tuple[IAMUser, bool]:
     from ..services import tenant_service
 
@@ -225,12 +239,47 @@ def _resolve_context(
     db: Session,
     claims: dict[str, Any],
     selected_tenant: str | None,
+    *,
+    allow_platform_context: bool = False,
+    request: Request | None = None,
 ) -> CurrentContext:
-    from ..services import tenant_service
+    from ..services import audit_service, platform_service, tenant_service
 
     settings = get_settings()
     user, needs_commit = _upsert_user(db, claims)
-    token_roles = _roles(_claim(claims, settings.hcl_iam_role_claim))
+    identity_roles = _roles(_claim(claims, settings.hcl_iam_role_claim))
+    if user.status != "ACTIVE":
+        if needs_commit and user.status == "PENDING":
+            audit_service.write_authorization_audit(
+                db,
+                action="iam.user.discovered",
+                outcome="SUCCESS",
+                target_user_id=user.id,
+                request=request,
+                new_value={"external_identity_linked": True},
+            )
+            audit_service.write_authorization_audit(
+                db,
+                action="iam.user.created_pending",
+                outcome="SUCCESS",
+                target_user_id=user.id,
+                request=request,
+                new_value={"status": "PENDING"},
+            )
+        audit_service.write_authorization_audit(
+            db,
+            action="authorization.denied.inactive_user",
+            outcome="DENIED",
+            target_user_id=user.id,
+            request=request,
+            detail="SBOM IAM user is not active",
+        )
+        db.commit()
+        message = "SBOM access is pending administrator approval" if user.status == "PENDING" else "Access denied"
+        raise HTTPException(status_code=403, detail=message)
+
+    platform_grant = platform_service.get_active_platform_grant(db, user.id)
+    is_platform_admin = platform_grant is not None
     memberships = tenant_service.get_user_memberships(db, user.id)
     tenant_claim = _claim(claims, settings.hcl_iam_tenant_claim)
 
@@ -240,9 +289,23 @@ def _resolve_context(
         memberships,
         selected_tenant=selected_tenant,
         tenant_claim=tenant_claim,
-        token_roles=token_roles,
+        is_platform_admin=is_platform_admin,
         auth_enabled=settings.auth_enabled,
+        allow_platform_context=allow_platform_context,
     )
+
+    if is_platform_admin and membership is None and selected is not None:
+        audit_service.write_authorization_audit(
+            db,
+            action="platform.cross_tenant_access",
+            outcome="SUCCESS",
+            actor_user_id=user.id,
+            target_user_id=user.id,
+            tenant_id=selected.id,
+            request=request,
+            detail="Explicit platform administrator selected a tenant without local membership",
+        )
+        needs_commit = True
 
     if needs_commit:
         db.commit()
@@ -251,11 +314,12 @@ def _resolve_context(
         external_user_id=user.external_iam_user_id,
         email=user.email,
         display_name=user.display_name,
-        tenant_id=selected.id,
-        external_tenant_id=selected.external_iam_tenant_id,
+        tenant_id=selected.id if selected is not None else None,
+        external_tenant_id=selected.external_iam_tenant_id if selected is not None else None,
         roles=roles,
         permissions=permissions,
         is_platform_admin=is_platform_admin,
+        identity_roles=identity_roles,
     )
 
 
@@ -265,18 +329,22 @@ def get_current_tenant_context(
     x_tenant_id: str | None = Header(default=None, alias="X-Tenant-ID"),
     db: Session = Depends(get_db),
 ) -> Iterator[CurrentContext]:
-    cached = _get_cached_context(claims, x_tenant_id)
-    if cached is not None:
-        db.close()
-        token = bind_context(cached)
-        try:
-            yield cached
-        finally:
-            reset_context(token)
-        return
-
-    context = _resolve_context(db, claims, x_tenant_id)
-    _set_cached_context(claims, x_tenant_id, context)
+    path = request.url.path if request is not None else ""
+    method = request.method.upper() if request is not None else "GET"
+    allow_platform_context = (
+        path.startswith("/api/platform/")
+        or path in {"/api/auth/me", "/api/v1/auth/me", "/api/tenants"}
+        or (path == "/api/tenants" and method == "POST")
+    )
+    # Authorization is deliberately resolved from the database on every
+    # request so revocations take effect immediately across all instances.
+    context = _resolve_context(
+        db,
+        claims,
+        x_tenant_id,
+        allow_platform_context=allow_platform_context,
+        request=request,
+    )
 
     if request is not None and "/stream" in request.url.path:
         db.close()
@@ -314,6 +382,14 @@ def require_role(*roles: str) -> Callable:
 def permission_for_request(request: Request) -> str:
     path = request.url.path
     method = request.method.upper()
+    if path.startswith("/api/platform/administrators"):
+        return "platform:user:read" if method == "GET" else "platform:user:write"
+    if path.startswith("/api/platform/users"):
+        return "platform:user:write"
+    if path.startswith("/api/platform/tenants"):
+        return "platform:admin"
+    if path == "/api/tenants" and method == "POST":
+        return "platform:tenant:create"
     if path.startswith("/api/nvd-mirror"):
         return "platform:admin"
     if path.startswith("/dashboard"):
@@ -334,6 +410,16 @@ def permission_for_request(request: Request) -> str:
             "PUT": "project:update",
             "DELETE": "project:delete",
         }.get(method, "project:read")
+    if path.startswith("/api/products"):
+        return {
+            "GET": "product:read",
+            "POST": "product:create",
+            "PATCH": "product:update",
+            "PUT": "product:update",
+            "DELETE": "product:delete",
+        }.get(method, "product:read")
+    if path.startswith("/api/components"):
+        return "component:read" if method == "GET" else "component:update"
     if (
         path.startswith("/api/sbom-validation-sessions")
         or path.startswith("/api/validation-sessions")

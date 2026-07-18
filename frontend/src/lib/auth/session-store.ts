@@ -64,7 +64,12 @@ export function consumeTransaction(value: string): LoginTransaction | null {
   try {
     const parts = value.split('.');
     if (parts.length !== 3) return null;
-    const [iv, ciphertext, tag] = parts.map((part) => Buffer.from(part, 'base64url'));
+    const decodedParts = parts.map((part) => Buffer.from(part, 'base64url'));
+    // Reject alternate/non-canonical base64url spellings. Without this,
+    // changing unused trailing bits can leave the decoded authenticated
+    // bytes unchanged and make a visibly modified cookie appear valid.
+    if (decodedParts.some((part, index) => part.toString('base64url') !== parts[index])) return null;
+    const [iv, ciphertext, tag] = decodedParts;
     const decipher = createDecipheriv('aes-256-gcm', transactionKey(), iv);
     decipher.setAuthTag(tag);
     const decoded = JSON.parse(

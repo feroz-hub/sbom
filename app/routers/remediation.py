@@ -7,8 +7,11 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..core.context import CurrentContext
+from ..core.security import get_current_tenant_context
 from ..db import get_db
 from ..models import AnalysisFinding, AnalysisRun, VulnerabilityRemediation
 from ..schemas import VulnerabilityRemediationAuditOut, VulnerabilityRemediationOut, VulnerabilityRemediationUpsert
@@ -18,6 +21,7 @@ from ..services.remediation_service import (
     list_remediation_history,
     list_remediations_for_project,
 )
+from ..services.tenant_access import get_project_for_tenant
 
 log = logging.getLogger(__name__)
 
@@ -25,19 +29,39 @@ router = APIRouter(prefix="/api/remediation", tags=["remediation"])
 
 
 @router.get("/project/{project_id}", response_model=list[VulnerabilityRemediationOut])
-def get_project_remediations(project_id: int, db: Session = Depends(get_db)):
+def get_project_remediations(
+    project_id: int,
+    context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
+):
     """Fetch all remediation records for a project."""
+    if get_project_for_tenant(db, project_id, context.tenant_id) is None:
+        raise HTTPException(status_code=404, detail="Project not found")
     return list_remediations_for_project(db, project_id)
 
 
 @router.get("/finding/{finding_id}", response_model=VulnerabilityRemediationOut)
-def get_finding_remediation(finding_id: int, db: Session = Depends(get_db)):
+def get_finding_remediation(
+    finding_id: int,
+    context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
+):
     """Fetch the remediation record associated with a specific finding."""
-    finding = db.get(AnalysisFinding, finding_id)
+    finding = db.execute(
+        select(AnalysisFinding).where(
+            AnalysisFinding.id == finding_id,
+            AnalysisFinding.tenant_id == context.tenant_id,
+        )
+    ).scalar_one_or_none()
     if not finding:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Finding with ID {finding_id} not found.")
 
-    run = db.get(AnalysisRun, finding.analysis_run_id)
+    run = db.execute(
+        select(AnalysisRun).where(
+            AnalysisRun.id == finding.analysis_run_id,
+            AnalysisRun.tenant_id == context.tenant_id,
+        )
+    ).scalar_one_or_none()
     if not run or not run.project_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Finding is not associated with a project.")
 
@@ -52,8 +76,20 @@ def get_finding_remediation(finding_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{remediation_id}/history", response_model=list[VulnerabilityRemediationAuditOut])
-def get_remediation_history(remediation_id: int, db: Session = Depends(get_db)):
+def get_remediation_history(
+    remediation_id: int,
+    context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
+):
     """Fetch append-only remediation change history."""
+    remediation = db.execute(
+        select(VulnerabilityRemediation).where(
+            VulnerabilityRemediation.id == remediation_id,
+            VulnerabilityRemediation.tenant_id == context.tenant_id,
+        )
+    ).scalar_one_or_none()
+    if remediation is None:
+        raise HTTPException(status_code=404, detail=f"Remediation record with ID {remediation_id} not found.")
     history = list_remediation_history(db, remediation_id)
     if not history:
         if not db.get(VulnerabilityRemediation, remediation_id):
@@ -69,10 +105,13 @@ def upsert_remediation(
     payload: VulnerabilityRemediationUpsert,
     project_id: int,  # pass via query param or header
     user_id: str | None = Query(None),
+    context: CurrentContext = Depends(get_current_tenant_context),
     db: Session = Depends(get_db),
 ):
     """Create or update a remediation tracking record for a vulnerability."""
     try:
+        if get_project_for_tenant(db, project_id, context.tenant_id) is None:
+            raise HTTPException(status_code=404, detail="Project not found")
         record = create_or_update_remediation(
             db,
             project_id,

@@ -24,7 +24,9 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 const DEV_USER: AuthUser = {
   userId: 1, externalUserId: 'dev-user', email: 'dev@local', displayName: 'Dev User', tenantId: 1,
-  externalTenantId: 'local-default', roles: ['TENANT_ADMIN'], permissions: ['platform:admin'], isPlatformAdmin: true,
+  externalTenantId: 'local-default', roles: ['TENANT_ADMIN'],
+  permissions: ['dashboard:read', 'tenant:user:read', 'tenant:user:invite', 'tenant:user:update'],
+  isPlatformAdmin: false,
 };
 const DEV_TENANTS: TenantInfo[] = [{
   id: 1, name: 'Default Tenant', slug: 'default', externalIamTenantId: 'local-default',

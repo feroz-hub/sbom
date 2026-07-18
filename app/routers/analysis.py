@@ -11,6 +11,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..core.context import CurrentContext
+from ..core.security import get_current_tenant_context
 from ..db import get_db
 from ..metrics._helpers import cves_for_finding
 from ..models import AnalysisFinding, AnalysisRun, SBOMComponent
@@ -174,9 +176,15 @@ def compare_analysis_runs(
 
 
 @router.get("/{run_id}/export/sarif", status_code=200)
-def export_sarif(run_id: int, db: Session = Depends(get_db)):
+def export_sarif(
+    run_id: int,
+    context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
+):
     """Export findings as SARIF 2.1.0 for GitHub Code Scanning, VS Code, Azure DevOps."""
-    run = db.get(AnalysisRun, run_id)
+    run = db.execute(
+        select(AnalysisRun).where(AnalysisRun.id == run_id, AnalysisRun.tenant_id == context.tenant_id)
+    ).scalar_one_or_none()
     if not run:
         raise HTTPException(status_code=404, detail="Analysis run not found")
 
@@ -282,9 +290,15 @@ def export_sarif(run_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{run_id}/export/csv", status_code=200)
-def export_csv(run_id: int, db: Session = Depends(get_db)):
+def export_csv(
+    run_id: int,
+    context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
+):
     """Export all findings from an AnalysisRun as CSV."""
-    run = db.get(AnalysisRun, run_id)
+    run = db.execute(
+        select(AnalysisRun).where(AnalysisRun.id == run_id, AnalysisRun.tenant_id == context.tenant_id)
+    ).scalar_one_or_none()
     if not run:
         raise HTTPException(status_code=404, detail="Analysis run not found")
 

@@ -13,9 +13,15 @@ from fastapi import Request
 from sqlalchemy.orm import Session
 
 from ..core.context import CurrentContext
-from ..models import AuditLog
+from ..models import AuditLog, AuthorizationAuditLog
 
 log = logging.getLogger("sbom.audit")
+
+
+def _correlation_id(request: Request | None) -> str | None:
+    if request is None:
+        return None
+    return (request.headers.get("x-request-id") or request.headers.get("x-correlation-id") or "")[:128] or None
 
 
 def _client_ip(request: Request | None) -> str | None:
@@ -77,3 +83,37 @@ def write_audit_log(
         )
     except Exception as exc:  # noqa: BLE001
         log.warning("audit.write_failed: action=%s err=%s", action, exc)
+
+
+def write_authorization_audit(
+    db: Session,
+    *,
+    action: str,
+    outcome: str = "SUCCESS",
+    context: CurrentContext | None = None,
+    actor_user_id: int | None = None,
+    target_user_id: int | None = None,
+    target_membership_id: int | None = None,
+    tenant_id: int | None = None,
+    old_value: dict[str, Any] | None = None,
+    new_value: dict[str, Any] | None = None,
+    request: Request | None = None,
+    correlation_id: str | None = None,
+    detail: str | None = None,
+) -> None:
+    """Write structured authorization metadata without credentials or token claims."""
+    db.add(
+        AuthorizationAuditLog(
+            actor_user_id=actor_user_id if actor_user_id is not None else (context.user_id if context else None),
+            target_user_id=target_user_id,
+            target_membership_id=target_membership_id,
+            tenant_id=tenant_id if tenant_id is not None else (context.tenant_id if context else None),
+            action=action,
+            outcome=outcome,
+            old_value=old_value,
+            new_value=new_value,
+            correlation_id=(correlation_id or _correlation_id(request) or "")[:128] or None,
+            detail=(detail or "")[:240] or None,
+            created_at=datetime.now(UTC),
+        )
+    )

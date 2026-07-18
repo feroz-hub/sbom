@@ -19,7 +19,6 @@ from unittest.mock import MagicMock, patch
 
 import jwt as pyjwt
 import pytest
-from jwt import InvalidTokenError
 from app.core.security import (
     _claim,
     _resolve_context,
@@ -30,6 +29,7 @@ from app.core.security import (
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import HTTPException
+from jwt import InvalidTokenError
 
 # ─── RSA key fixture (session-scoped) ─────────────────────────────────────────
 
@@ -377,8 +377,8 @@ class TestPrincipalTenantResolution:
         monkeypatch.setenv("DEV_DEFAULT_TENANT", "false")
         monkeypatch.setenv("HCL_IAM_ROLE_CLAIM", "role")
         monkeypatch.setenv("HCL_IAM_TENANT_CLAIM", "tenant_id")
-        from app.settings import reset_settings
         from app.db import SessionLocal
+        from app.settings import reset_settings
 
         reset_settings()
         with SessionLocal() as db:
@@ -394,6 +394,7 @@ class TestPrincipalTenantResolution:
     def test_active_membership_role_is_authoritative(self, monkeypatch):
         from datetime import UTC, datetime
         from uuid import uuid4
+
         from app.db import SessionLocal
         from app.models import IAMUser, Tenant, TenantUser
         from app.settings import reset_settings
@@ -409,12 +410,111 @@ class TestPrincipalTenantResolution:
             tenant = Tenant(name="Auth Tenant", slug=f"auth-{suffix}", external_iam_tenant_id=f"ext-{suffix}",
                             status="ACTIVE", created_at=now, updated_at=now)
             user = IAMUser(external_iam_user_id=f"subject-{suffix}", status="ACTIVE", created_at=now, updated_at=now)
-            db.add_all([tenant, user]); db.flush()
+            db.add_all([tenant, user])
+            db.flush()
             db.add(TenantUser(tenant_id=tenant.id, user_id=user.id, role="VIEWER", status="ACTIVE",
-                              created_at=now, updated_at=now)); db.commit()
+                              created_at=now, updated_at=now))
+            db.commit()
             context = _resolve_context(db, {
                 "sub": user.external_iam_user_id, "tenant_id": tenant.external_iam_tenant_id,
                 "role": ["SECURITY_ANALYST"],
             }, None)
             assert context.roles == frozenset({"VIEWER"})
             assert not context.has_permission("sbom:upload")
+
+    def test_token_platform_admin_cannot_override_viewer_membership(self, monkeypatch):
+        from datetime import UTC, datetime
+        from uuid import uuid4
+
+        from app.db import SessionLocal
+        from app.models import IAMUser, Tenant, TenantUser
+        from app.settings import reset_settings
+
+        monkeypatch.setenv("AUTH_ENABLED", "true")
+        monkeypatch.setenv("DEV_DEFAULT_TENANT", "false")
+        monkeypatch.setenv("HCL_IAM_ROLE_CLAIM", "role")
+        reset_settings()
+        suffix = uuid4().hex
+        now = datetime.now(UTC)
+        with SessionLocal() as db:
+            tenant = Tenant(name="Token Role Tenant", slug=f"token-{suffix}", external_iam_tenant_id=f"token-ext-{suffix}", status="ACTIVE", created_at=now, updated_at=now)
+            user = IAMUser(external_iam_user_id=f"token-subject-{suffix}", status="ACTIVE", created_at=now, updated_at=now)
+            db.add_all([tenant, user])
+            db.flush()
+            db.add(TenantUser(tenant_id=tenant.id, user_id=user.id, role="VIEWER", status="ACTIVE", created_at=now, updated_at=now))
+            db.commit()
+            context = _resolve_context(db, {"sub": user.external_iam_user_id, "tenant_id": tenant.external_iam_tenant_id, "role": ["PLATFORM_ADMIN"]}, None)
+            assert context.roles == frozenset({"VIEWER"})
+            assert not context.is_platform_admin
+            assert not context.has_permission("platform:admin")
+            assert context.identity_roles == frozenset({"PLATFORM_ADMIN"})
+
+    def test_token_platform_admin_cannot_bypass_missing_membership(self, monkeypatch):
+        from datetime import UTC, datetime
+        from uuid import uuid4
+
+        from app.db import SessionLocal
+        from app.models import IAMUser, Tenant
+        from app.settings import reset_settings
+
+        monkeypatch.setenv("AUTH_ENABLED", "true")
+        monkeypatch.setenv("DEV_DEFAULT_TENANT", "false")
+        monkeypatch.setenv("HCL_IAM_ROLE_CLAIM", "role")
+        reset_settings()
+        suffix = uuid4().hex
+        now = datetime.now(UTC)
+        with SessionLocal() as db:
+            tenant = Tenant(name="No Membership", slug=f"none-{suffix}", external_iam_tenant_id=f"none-ext-{suffix}", status="ACTIVE", created_at=now, updated_at=now)
+            user = IAMUser(external_iam_user_id=f"known-{suffix}", status="ACTIVE", created_at=now, updated_at=now)
+            db.add_all([tenant, user])
+            db.commit()
+            with pytest.raises(HTTPException) as exc_info:
+                _resolve_context(db, {"sub": user.external_iam_user_id, "tenant_id": tenant.external_iam_tenant_id, "role": ["PLATFORM_ADMIN"]}, None)
+            assert exc_info.value.status_code == 403
+
+    def test_unknown_platform_token_creates_pending_without_privilege(self, monkeypatch):
+        from uuid import uuid4
+
+        from app.db import SessionLocal
+        from app.models import IAMUser, PlatformUserRole, TenantUser
+        from app.settings import reset_settings
+        from sqlalchemy import select
+
+        monkeypatch.setenv("AUTH_ENABLED", "true")
+        monkeypatch.setenv("DEV_DEFAULT_TENANT", "false")
+        monkeypatch.setenv("HCL_IAM_ROLE_CLAIM", "role")
+        reset_settings()
+        subject = f"unknown-platform-{uuid4().hex}"
+        with SessionLocal() as db:
+            with pytest.raises(HTTPException) as exc_info:
+                _resolve_context(db, {"sub": subject, "tenant_id": "local-default", "role": ["PLATFORM_ADMIN"]}, None)
+            assert exc_info.value.status_code == 403
+            user = db.execute(select(IAMUser).where(IAMUser.external_iam_user_id == subject)).scalar_one()
+            assert user.status == "PENDING"
+            assert db.execute(select(TenantUser).where(TenantUser.user_id == user.id)).scalars().all() == []
+            assert db.execute(select(PlatformUserRole).where(PlatformUserRole.user_id == user.id)).scalars().all() == []
+
+    def test_active_database_platform_grant_allows_tenant_selection(self, monkeypatch):
+        from datetime import UTC, datetime
+        from uuid import uuid4
+
+        from app.db import SessionLocal
+        from app.models import IAMUser, PlatformUserRole, Tenant
+        from app.settings import reset_settings
+
+        monkeypatch.setenv("AUTH_ENABLED", "true")
+        monkeypatch.setenv("DEV_DEFAULT_TENANT", "false")
+        reset_settings()
+        suffix = uuid4().hex
+        now = datetime.now(UTC)
+        with SessionLocal() as db:
+            tenant = Tenant(name="Platform Target", slug=f"platform-{suffix}", external_iam_tenant_id=f"platform-ext-{suffix}", status="ACTIVE", created_at=now, updated_at=now)
+            user = IAMUser(external_iam_user_id=f"platform-user-{suffix}", status="ACTIVE", created_at=now, updated_at=now)
+            db.add_all([tenant, user])
+            db.flush()
+            db.add(PlatformUserRole(user_id=user.id, role="PLATFORM_ADMIN", status="ACTIVE", created_at=now, updated_at=now))
+            db.commit()
+            context = _resolve_context(db, {"sub": user.external_iam_user_id, "tenant_id": tenant.external_iam_tenant_id, "role": ["VIEWER"]}, None)
+            assert context.is_platform_admin
+            assert context.tenant_id == tenant.id
+            assert context.has_permission("platform:admin")

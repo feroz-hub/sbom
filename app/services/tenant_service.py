@@ -9,7 +9,12 @@ from fastapi import HTTPException
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from ..core.permissions import normalize_role, permissions_for_roles
+from ..core.permissions import (
+    MEMBERSHIP_STATUSES,
+    TENANT_ROLES,
+    normalize_role,
+    permissions_for_roles,
+)
 from ..models import IAMUser, Tenant, TenantUser
 from ..settings import get_settings
 
@@ -22,7 +27,7 @@ def _tenant_identity_filter(tenant_model, value: str):
 
 
 def get_or_create_user_from_claims(db: Session, claims: dict[str, Any]) -> tuple[IAMUser, bool]:
-    """Upsert IAM user from JWT claims. Returns (user, needs_commit)."""
+    """Discover an HCL.CS subject locally; new identities are PENDING and unauthorized."""
     external_id = str(claims["sub"])
     now = datetime.now(UTC)
     user = db.execute(select(IAMUser).where(IAMUser.external_iam_user_id == external_id)).scalar_one_or_none()
@@ -33,7 +38,7 @@ def get_or_create_user_from_claims(db: Session, claims: dict[str, Any]) -> tuple
             external_iam_user_id=external_id,
             email=claims.get("email"),
             display_name=claims.get("name") or claims.get("preferred_username"),
-            status="ACTIVE",
+            status="PENDING",
             created_at=now,
             updated_at=now,
             last_login_at=now,
@@ -72,9 +77,21 @@ def get_or_create_user_from_claims(db: Session, claims: dict[str, Any]) -> tuple
             db.flush()
             needs_commit = True
 
-    if user.status != "ACTIVE":
-        raise HTTPException(status_code=403, detail="Access denied")
     return user, needs_commit
+
+
+def validate_tenant_role(role: str) -> str:
+    normalized = normalize_role(role)
+    if normalized not in TENANT_ROLES:
+        raise HTTPException(status_code=422, detail="Invalid tenant role")
+    return normalized
+
+
+def validate_membership_status(status_value: str) -> str:
+    normalized = status_value.strip().upper()
+    if normalized not in MEMBERSHIP_STATUSES:
+        raise HTTPException(status_code=422, detail="Invalid membership status")
+    return normalized
 
 
 def get_user_memberships(db: Session, user_id: int) -> list[tuple[TenantUser, Tenant]]:
@@ -98,12 +115,12 @@ def resolve_active_tenant(
     *,
     selected_tenant: str | None,
     tenant_claim: Any,
-    token_roles: frozenset[str],
+    is_platform_admin: bool,
     auth_enabled: bool,
-) -> tuple[Tenant, TenantUser | None, frozenset[str], frozenset[str], bool]:
+    allow_platform_context: bool = False,
+) -> tuple[Tenant | None, TenantUser | None, frozenset[str], frozenset[str], bool]:
     """Resolve tenant, membership, roles, permissions. Raises HTTPException on denial."""
     settings = get_settings()
-    is_platform_admin = "PLATFORM_ADMIN" in token_roles
     requested = (selected_tenant or "").strip()
     selected: Tenant | None = None
     membership: TenantUser | None = None
@@ -125,16 +142,26 @@ def resolve_active_tenant(
                 break
         if selected is None and is_platform_admin:
             selected = db.execute(
-                select(Tenant).where(Tenant.external_iam_tenant_id == claim_value)
+                select(Tenant).where(Tenant.status == "ACTIVE", Tenant.external_iam_tenant_id == claim_value)
             ).scalar_one_or_none()
     elif len(memberships) == 1:
         membership, selected = memberships[0]
     elif not auth_enabled and settings.dev_default_tenant:
-        selected = db.execute(select(Tenant).where(Tenant.slug == settings.default_tenant_slug)).scalar_one_or_none()
+        selected = db.execute(
+            select(Tenant).where(Tenant.slug == settings.default_tenant_slug, Tenant.status == "ACTIVE")
+        ).scalar_one_or_none()
         if selected:
             membership = db.execute(
-                select(TenantUser).where(TenantUser.tenant_id == selected.id, TenantUser.user_id == user.id)
+                select(TenantUser).where(
+                    TenantUser.tenant_id == selected.id,
+                    TenantUser.user_id == user.id,
+                    TenantUser.status == "ACTIVE",
+                )
             ).scalar_one_or_none()
+
+    if selected is None and is_platform_admin and allow_platform_context:
+        roles = frozenset({"PLATFORM_ADMIN"})
+        return None, None, roles, permissions_for_roles(roles), True
 
     if selected is None or (membership is None and not is_platform_admin):
         raise HTTPException(status_code=403, detail="Tenant access denied")
@@ -194,24 +221,22 @@ def add_user_to_tenant(
     tenant_id: int,
     *,
     external_iam_user_id: str,
-    email: str | None,
-    display_name: str | None,
     role: str,
     status: str = "ACTIVE",
 ) -> tuple[TenantUser, IAMUser]:
     now = datetime.now(UTC)
+    role = validate_tenant_role(role)
+    status = validate_membership_status(status)
     user = db.execute(select(IAMUser).where(IAMUser.external_iam_user_id == external_iam_user_id)).scalar_one_or_none()
     if user is None:
-        user = IAMUser(
-            external_iam_user_id=external_iam_user_id,
-            email=email,
-            display_name=display_name,
-            status="ACTIVE",
-            created_at=now,
-            updated_at=now,
-        )
-        db.add(user)
-        db.flush()
+        raise HTTPException(status_code=404, detail="IAM user not found; the user must sign in once before onboarding")
+    if user.status == "DISABLED":
+        raise HTTPException(status_code=422, detail="Disabled IAM user cannot receive an active membership")
+    if status == "ACTIVE" and user.status == "PENDING":
+        # Adding an active membership is the tenant administrator's explicit
+        # onboarding approval for this discovered identity.
+        user.status = "ACTIVE"
+        user.updated_at = now
     membership = db.execute(
         select(TenantUser).where(TenantUser.tenant_id == tenant_id, TenantUser.user_id == user.id)
     ).scalar_one_or_none()
@@ -220,14 +245,14 @@ def add_user_to_tenant(
             tenant_id=tenant_id,
             user_id=user.id,
             role=role,
-            status=status.upper(),
+            status=status,
             created_at=now,
             updated_at=now,
         )
         db.add(membership)
     else:
         membership.role = role
-        membership.status = status.upper()
+        membership.status = status
         membership.updated_at = now
     db.flush()
     return membership, user
@@ -248,9 +273,9 @@ def update_user_role(
         raise HTTPException(status_code=404, detail="Membership not found")
     old = {"role": membership.role, "status": membership.status}
     if role is not None:
-        membership.role = role
+        membership.role = validate_tenant_role(role)
     if status is not None:
-        membership.status = status.upper()
+        membership.status = validate_membership_status(status)
     membership.updated_at = datetime.now(UTC)
     new = {"role": membership.role, "status": membership.status}
     db.flush()
@@ -265,5 +290,60 @@ def disable_user_membership(db: Session, tenant_id: int, membership_id: int) -> 
         raise HTTPException(status_code=404, detail="Membership not found")
     membership.status = "DISABLED"
     membership.updated_at = datetime.now(UTC)
+    db.flush()
+    return membership
+
+
+def get_tenant_membership(db: Session, tenant_id: int, membership_id: int) -> tuple[TenantUser, IAMUser]:
+    row = db.execute(
+        select(TenantUser, IAMUser)
+        .join(IAMUser, IAMUser.id == TenantUser.user_id)
+        .where(TenantUser.id == membership_id, TenantUser.tenant_id == tenant_id)
+    ).one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Membership not found")
+    return row
+
+
+def _active_tenant_admin_count(db: Session, tenant_id: int, *, excluding: int | None = None) -> int:
+    statement = select(TenantUser.id).where(
+        TenantUser.tenant_id == tenant_id,
+        TenantUser.role == "TENANT_ADMIN",
+        TenantUser.status == "ACTIVE",
+    )
+    if excluding is not None:
+        statement = statement.where(TenantUser.id != excluding)
+    return len(db.execute(statement).scalars().all())
+
+
+def ensure_not_last_active_tenant_admin(
+    db: Session,
+    membership: TenantUser,
+    *,
+    next_role: str | None = None,
+    next_status: str | None = None,
+    deleting: bool = False,
+    platform_override: bool = False,
+) -> None:
+    removes_admin = deleting or (next_role is not None and next_role != "TENANT_ADMIN") or (
+        next_status is not None and next_status != "ACTIVE"
+    )
+    if (
+        not platform_override
+        and membership.role == "TENANT_ADMIN"
+        and membership.status == "ACTIVE"
+        and removes_admin
+        and _active_tenant_admin_count(db, membership.tenant_id, excluding=membership.id) == 0
+    ):
+        raise HTTPException(status_code=409, detail="Cannot remove or disable the last active tenant administrator")
+
+
+def set_membership_status(db: Session, tenant_id: int, membership_id: int, status_value: str) -> tuple[TenantUser, dict, dict]:
+    return update_user_role(db, tenant_id, membership_id, status=validate_membership_status(status_value))
+
+
+def remove_membership(db: Session, tenant_id: int, membership_id: int) -> TenantUser:
+    membership, _user = get_tenant_membership(db, tenant_id, membership_id)
+    db.delete(membership)
     db.flush()
     return membership

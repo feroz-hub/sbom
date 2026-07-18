@@ -36,11 +36,11 @@ curl -k https://localhost:5180/.well-known/openid-configuration/jwks
 
 `-k` is local troubleshooting only. Configure trust in normal use. HCL.CS advertises `/security/authorize`, `/security/token`, `/security/revocation`, `/security/endsession`, and its JWKS path through discovery.
 
-## Claims, role and tenant mapping
+## Claims, identity context, and authorization ownership
 
 Access tokens require `iss`, `sub`, `aud`, `exp`; HCL.CS also emits `iat`, `nbf`, `jti`, requested standard identity claims, `role`, and `tenant_id` when assigned. `sub` is the immutable external user key; email is display/contact data only.
 
-Default configurable role mapping:
+Token roles can be normalized through the configurable mapping below for diagnostics and onboarding displays:
 
 | HCL.CS role | SBOM role |
 | --- | --- |
@@ -50,7 +50,9 @@ Default configurable role mapping:
 | `DEVELOPER`, `SBOM_DEVELOPER` | `DEVELOPER` |
 | `VIEWER`, `SBOM_VIEWER` | `VIEWER` |
 
-Override with `HCL_IAM_ROLE_MAPPING` JSON. A token role does not grant a tenant role: tenant authorization comes from the active `tenant_users` membership. The only token-level special case is explicit `PLATFORM_ADMIN`, whose cross-tenant selection is deliberate. Normal resolution is:
+Override with `HCL_IAM_ROLE_MAPPING` JSON. **HCL.CS token roles do not independently grant SBOM authorization.** This includes `PLATFORM_ADMIN`. Tenant authorization comes only from an active `tenant_users` record; platform authorization comes only from an active `platform_user_roles` record.
+
+Normal tenant resolution is:
 
 ```text
 JWT sub -> iam_users.external_iam_user_id
@@ -58,7 +60,53 @@ JWT tenant_id -> tenants.external_iam_tenant_id
 iam_users.id + tenants.id -> tenant_users -> local SBOM role/permissions
 ```
 
-An unknown validated subject is recorded as an active but unassigned IAM user for audit/JIT identity correlation. No tenant or membership is created from an arbitrary claim, so access remains `403` until an administrator assigns membership. Inactive users, inactive tenants, inactive memberships and unknown tenants are `403`. Resource IDs are additionally protected by tenant-bound SQLAlchemy filters and write guards.
+Platform resolution is:
+
+```text
+validated JWT sub
+-> known ACTIVE iam_users row
+-> ACTIVE platform_user_roles row with PLATFORM_ADMIN
+-> explicit platform permissions
+```
+
+An unknown validated subject is recorded as `PENDING`, with safe email/display-name data and an authorization audit event. It receives no tenant, membership, role, or permission and receives `403` until an administrator explicitly onboards it. Adding its first ACTIVE membership is the tenant administrator's explicit approval and changes the user to ACTIVE. Disabled identities cannot be onboarded through the membership endpoint.
+
+Inactive users, inactive tenants, inactive memberships and unknown tenants are `403`. Resource IDs are additionally protected by tenant-bound SQLAlchemy filters and write guards. Authorization is resolved from PostgreSQL on every request, so deactivation and revocation are immediate across application instances; authorization is not served from a TTL cache.
+
+## SBOM roles and permissions
+
+| Role | Scope | Key capabilities |
+| --- | --- | --- |
+| `PLATFORM_ADMIN` | Platform, only with explicit database grant | Tenant creation, platform administrator management, deliberate cross-tenant selection, all tenant workflows |
+| `TENANT_ADMIN` | Current tenant only | Memberships, tenant settings, SBOM/project/product workflows, analysis, reports |
+| `SECURITY_ANALYST` | Current tenant only | Upload, analysis, findings, VEX, remediation, reports |
+| `DEVELOPER` | Current tenant only | Read tenant data and findings; update permitted remediation records |
+| `VIEWER` | Current tenant only | Read-only tenant data |
+
+`TENANT_ADMIN` does not contain `platform:admin`, cannot create tenants, and cannot grant platform authority. The only assignable tenant roles are `TENANT_ADMIN`, `SECURITY_ANALYST`, `DEVELOPER`, and `VIEWER`.
+
+## Membership and platform administration APIs
+
+| Method | Route | Permission |
+| --- | --- | --- |
+| GET | `/api/tenants/{tenant_id}/users` | `tenant:user:read` |
+| GET | `/api/tenants/{tenant_id}/users/{membership_id}` | `tenant:user:read` |
+| POST | `/api/tenants/{tenant_id}/users` | `tenant:user:invite` |
+| PATCH | `/api/tenants/{tenant_id}/users/{membership_id}` | `tenant:user:update` |
+| POST | `/api/tenants/{tenant_id}/users/{membership_id}/activate` | `tenant:user:update` |
+| POST | `/api/tenants/{tenant_id}/users/{membership_id}/deactivate` | `tenant:user:update` |
+| DELETE | `/api/tenants/{tenant_id}/users/{membership_id}` | `tenant:user:update` |
+| GET | `/api/tenant-roles` | `tenant:user:read` |
+| GET/POST | `/api/platform/administrators` | `platform:user:read` / `platform:user:write` |
+| DELETE | `/api/platform/administrators/{grant_id}` | `platform:user:write` |
+| PATCH | `/api/platform/users/{user_id}` | `platform:user:write` |
+| PATCH | `/api/platform/tenants/{tenant_id}` | `platform:admin` |
+
+Membership identifiers are checked against the current tenant. Removing, disabling, or demoting the last active tenant administrator returns `409` unless an explicit platform administrator performs the recovery operation. The last active platform administrator grant also cannot be revoked through the API.
+
+The tenant user-management UI is at `/settings/tenant`. Platform grants are intentionally separate at `/settings/platform`.
+
+Authorization audit events are stored in `authorization_audit_log` and include actor/target user, target membership, tenant, action, outcome, old/new values, timestamp, and request correlation ID when present. Tokens, cookies, authorization codes, PKCE verifiers, and passwords are never audit fields.
 
 ## Environment
 
@@ -121,6 +169,27 @@ python scripts/seed_hcl_iam_membership.py \
 
 The helper is idempotent and refuses to seed `PLATFORM_ADMIN`.
 
+For unauthenticated local development only, the first platform grant may be created explicitly:
+
+```bash
+python scripts/grant_local_platform_admin.py \
+  --subject '<existing-local-sub>' \
+  --confirm GRANT_LOCAL_PLATFORM_ADMIN
+```
+
+This command refuses to run when `AUTH_ENABLED=true` or in staging/production-like environments.
+
+For the first authenticated platform administrator only, an approved database operator may run the audited bootstrap command. The subject must already exist as an active SBOM IAM user, a change reference is mandatory, and the command refuses to run once any active platform administrator exists:
+
+```bash
+AUTH_ENABLED=true python scripts/bootstrap_platform_admin.py \
+  --subject '<exact-HCL.CS-sub>' \
+  --change-reference 'CHG-1234' \
+  --confirm BOOTSTRAP_PLATFORM_ADMIN
+```
+
+Subsequent grants and revocations must use the authenticated platform API/UI. Platform authority is never inferred from token claims or seeded by migrations.
+
 ## Start both products
 
 ```bash
@@ -177,7 +246,9 @@ FastAPI caches discovery/JWKS clients, bounds network calls, and PyJWKClient ref
 - `certificate verify failed`: export/trust the HCL.CS certificate and set `HCL_IAM_CA_BUNDLE`; do not disable TLS validation.
 - `redirect_uri`: the URI must exactly be `https://localhost:3000/auth/callback`.
 - `401`: inspect issuer/audience/time and discovery reachability; do not log the token.
-- `403 Tenant access denied`: check the token `tenant_id`, local `external_iam_tenant_id`, active user/tenant/membership, and local role.
+- `403`: the token is valid but the SBOM user, tenant, membership, platform grant, or permission is not active/authorized. Pending users require explicit onboarding.
+- `404`: the resource or membership does not exist in the resolved tenant, including concealed cross-tenant identifiers.
+- `422`: a role, status, or request value is outside the finite allowed set.
 - callback state/nonce error: restart sign-in; the prior transaction is intentionally unusable.
 - session disappears after a Next.js restart: expected for the local in-memory store; deploy a shared production store.
 
@@ -185,4 +256,6 @@ FastAPI caches discovery/JWKS clients, bounds network calls, and PyJWKClient ref
 
 Stop the authenticated processes, set the backend to `AUTH_ENABLED=false` and `DEV_DEFAULT_TENANT=true`, set frontend `NEXT_PUBLIC_AUTH_ENABLED=false` and `NEXT_PUBLIC_API_URL=http://localhost:8000`, then start FastAPI and `npm run dev`. FastAPI emits a startup warning. The bypass cannot activate when auth is enabled, and startup rejects `AUTH_ENABLED=true` together with `DEV_DEFAULT_TENANT=true`.
 
-Code rollback consists of reverting the application changes and deleting the seeded HCL.CS rows for client/resource name `sbom-analyser-web`/`sbom-analyser-api` only. Do not remove signing keys, users, or unrelated clients. No SBOM schema migration was added, so there is no Alembic downgrade for this integration.
+Migration `045_secure_authorization_model` adds explicit platform grants, authorization audits, and finite role/status constraints. Its downgrade removes those schema objects but cannot reconstruct unsafe legacy role strings that the upgrade normalized. Test downgrade and re-upgrade only on a backup or disposable database. Do not remove signing keys, HCL.CS users, or unrelated clients.
+
+To revoke access immediately, deactivate/remove the membership, disable the IAM user or tenant through the platform API, or revoke the explicit platform grant. The next request re-reads database authorization and is denied; no TTL wait is required.

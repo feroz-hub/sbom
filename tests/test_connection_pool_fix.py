@@ -87,18 +87,19 @@ def test_upsert_user_no_dirty_commits(app):
         db.close()
 
 
-def test_auth_context_caching(app):
+def test_auth_context_is_re_resolved_for_immediate_revocation(app):
     from datetime import UTC, datetime
 
     from app.core.security import _resolve_context, _upsert_user, get_current_tenant_context
     from app.db import Base, SessionLocal, engine
     from app.models import Tenant, TenantUser
+    from fastapi import HTTPException
     from sqlalchemy import select
 
     # Ensure tables are created in the test database
     Base.metadata.create_all(bind=engine)
 
-    # Verify context caching and direct early DB close
+    # Authorization must be re-read from the database on every request.
     claims = {
         "sub": "test-user-cache-1",
         "email": "test-cache-1@example.com",
@@ -125,6 +126,7 @@ def test_auth_context_caching(app):
             db.flush()
 
         user, _ = _upsert_user(db, claims)
+        user.status = "ACTIVE"
         membership = db.execute(
             select(TenantUser).where(TenantUser.tenant_id == tenant.id, TenantUser.user_id == user.id)
         ).scalar_one_or_none()
@@ -132,7 +134,7 @@ def test_auth_context_caching(app):
             membership = TenantUser(
                 tenant_id=tenant.id,
                 user_id=user.id,
-                role="PLATFORM_ADMIN",
+                role="TENANT_ADMIN",
                 status="ACTIVE",
                 created_at=now,
                 updated_at=now,
@@ -141,30 +143,18 @@ def test_auth_context_caching(app):
             db.flush()
         db.commit()
 
-        # Resolve once to set cache
+        # Resolve once, then revoke the membership in the database.
         context = _resolve_context(db, claims, None)
-
-        # Verify get_current_tenant_context retrieves from cache
-
-        # 1. First iteration (cache miss, resolves and caches)
         generator = get_current_tenant_context(request=None, claims=claims, x_tenant_id=None, db=db)
         resolved_context = next(generator)
         assert resolved_context.user_id == context.user_id
+        generator.close()
 
-        # 2. Second iteration (cache hit, closes db and yields cached context)
-        class MockSession:
-            def __init__(self):
-                self.is_active = True
-
-            def close(self):
-                self.is_active = False
-
-        mock_db = MockSession()
-        generator_cached = get_current_tenant_context(request=None, claims=claims, x_tenant_id=None, db=mock_db)  # type: ignore
-        cached_context = next(generator_cached)
-
-        assert cached_context.user_id == context.user_id
-        assert mock_db.is_active is False
+        membership.status = "DISABLED"
+        db.commit()
+        with pytest.raises(HTTPException) as exc_info:
+            next(get_current_tenant_context(request=None, claims=claims, x_tenant_id=None, db=db))
+        assert getattr(exc_info.value, "status_code", None) == 403
     finally:
         db.close()
 

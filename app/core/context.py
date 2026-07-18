@@ -12,11 +12,12 @@ class CurrentContext:
     external_user_id: str
     email: str | None
     display_name: str | None
-    tenant_id: int
-    external_tenant_id: str
+    tenant_id: int | None
+    external_tenant_id: str | None
     roles: frozenset[str]
     permissions: frozenset[str]
     is_platform_admin: bool = False
+    identity_roles: frozenset[str] = frozenset()
 
     def has_permission(self, permission: str) -> bool:
         return permission in self.permissions

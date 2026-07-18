@@ -101,14 +101,15 @@ class SBOMDeleteService:
         "sbom_sources",
     ]
 
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, tenant_id: int | None = None):
         self.db = db
-        self._tenant_id: int | None = None
+        self._tenant_id: int | None = tenant_id
 
     def get_sbom(self, sbom_id: int) -> SBOMSource | None:
-        row = self.db.execute(
-            select(SBOMSource).where(SBOMSource.id == sbom_id).execution_options(include_deleted=True)
-        ).scalar_one_or_none()
+        query = select(SBOMSource).where(SBOMSource.id == sbom_id)
+        if self._tenant_id is not None:
+            query = query.where(SBOMSource.tenant_id == self._tenant_id)
+        row = self.db.execute(query.execution_options(include_deleted=True)).scalar_one_or_none()
         if row is not None:
             self._tenant_id = row.tenant_id
         return row

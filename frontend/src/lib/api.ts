@@ -117,7 +117,7 @@ function getAuthHeaders(): Record<string, string> {
 // Redirect to the access-denied page instead of showing a raw error.
 let _auth401InFlight = false;
 
-function handleAuthError(status: number): void {
+function handleAuthError(status: number, redirectForbidden = true): void {
   if (typeof window === 'undefined') return;
 
   if (status === 401 && !_auth401InFlight) {
@@ -141,7 +141,7 @@ function handleAuthError(status: number): void {
     }
   }
 
-  if (status === 403) {
+  if (status === 403 && redirectForbidden) {
     const path = window.location.pathname;
     if (!path.startsWith('/access-denied') && !path.startsWith('/auth/')) {
       window.location.href = '/access-denied';
@@ -168,6 +168,31 @@ export class HttpError extends Error {
     this.code = code;
     this.detail = detail;
   }
+}
+
+export type TenantRole = 'TENANT_ADMIN' | 'SECURITY_ANALYST' | 'DEVELOPER' | 'VIEWER';
+export type MembershipStatus = 'ACTIVE' | 'PENDING' | 'DISABLED';
+
+export interface TenantMember {
+  membership_id: number;
+  user_id: number;
+  external_iam_user_id: string;
+  email: string | null;
+  display_name: string | null;
+  user_status: string;
+  role: TenantRole;
+  status: MembershipStatus;
+}
+
+export interface PlatformAdministrator {
+  grant_id: number;
+  user_id: number;
+  external_iam_user_id: string;
+  email: string | null;
+  display_name: string | null;
+  user_status: string;
+  role: 'PLATFORM_ADMIN';
+  status: 'ACTIVE' | 'DISABLED';
 }
 
 // ─── Fetch with timeout + caller-signal support ───────────────────────────────
@@ -205,30 +230,33 @@ async function fetchWithTimeout(
 }
 
 // ─── Core HTTP helper (parses errors, throws HttpError) ──────────────────────
+type ApiRequestOptions = RequestInit & { signal?: AbortSignal; authErrorMode?: 'redirect' | 'throw' };
+
 async function performRequest(
   path: string,
-  options: RequestInit & { signal?: AbortSignal } = {},
+  options: ApiRequestOptions = {},
   timeoutMs = 30_000,
 ): Promise<Response> {
   const url = `${BASE_URL}${path}`;
-  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+  const { authErrorMode = 'redirect', ...fetchOptions } = options;
+  const isFormData = typeof FormData !== 'undefined' && fetchOptions.body instanceof FormData;
   const authHeaders = getAuthHeaders();
   const res = await fetchWithTimeout(
     url,
     {
+      ...fetchOptions,
       headers: {
         ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
         ...authHeaders,
-        ...options.headers,
+        ...fetchOptions.headers,
       },
-      ...options,
     },
     timeoutMs,
   );
 
   if (!res.ok) {
     // Handle auth errors before parsing the body
-    handleAuthError(res.status);
+    handleAuthError(res.status, authErrorMode !== 'throw');
 
     let message = `HTTP ${res.status}: ${res.statusText}`;
     let code: string | undefined;
@@ -262,9 +290,9 @@ async function performRequest(
 }
 
 // JSON-returning request — for endpoints that return a typed body.
-async function request<T>(
+export async function request<T>(
   path: string,
-  options: RequestInit & { signal?: AbortSignal } = {},
+  options: ApiRequestOptions = {},
   timeoutMs = 30_000,
 ): Promise<T> {
   const res = await performRequest(path, options, timeoutMs);
@@ -293,9 +321,9 @@ async function requestOrNull<T>(
 }
 
 // Void request — for endpoints that return no body (DELETE, etc.). No casts.
-async function requestVoid(
+export async function requestVoid(
   path: string,
-  options: RequestInit & { signal?: AbortSignal } = {},
+  options: ApiRequestOptions = {},
   timeoutMs = 30_000,
 ): Promise<void> {
   const res = await performRequest(path, options, timeoutMs);
@@ -307,6 +335,79 @@ async function requestVoid(
       /* ignore */
     }
   }
+}
+
+const adminRequestOptions = { authErrorMode: 'throw' as const };
+
+export function getTenantMembers(tenantId: number): Promise<TenantMember[]> {
+  return request<TenantMember[]>(`/api/tenants/${tenantId}/users`, adminRequestOptions);
+}
+
+export function getAssignableTenantRoles(): Promise<{ roles: TenantRole[] }> {
+  return request<{ roles: TenantRole[] }>('/api/tenant-roles', adminRequestOptions);
+}
+
+export function addTenantMember(
+  tenantId: number,
+  payload: { external_user_id: string; role: TenantRole },
+): Promise<TenantMember> {
+  return request<TenantMember>(`/api/tenants/${tenantId}/users`, {
+    ...adminRequestOptions,
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateTenantMemberRole(
+  tenantId: number,
+  membershipId: number,
+  role: TenantRole,
+): Promise<TenantMember> {
+  return request<TenantMember>(`/api/tenants/${tenantId}/users/${membershipId}`, {
+    ...adminRequestOptions,
+    method: 'PATCH',
+    body: JSON.stringify({ role }),
+  });
+}
+
+export function activateTenantMember(tenantId: number, membershipId: number): Promise<TenantMember> {
+  return request<TenantMember>(`/api/tenants/${tenantId}/users/${membershipId}/activate`, {
+    ...adminRequestOptions,
+    method: 'POST',
+  });
+}
+
+export function deactivateTenantMember(tenantId: number, membershipId: number): Promise<TenantMember> {
+  return request<TenantMember>(`/api/tenants/${tenantId}/users/${membershipId}/deactivate`, {
+    ...adminRequestOptions,
+    method: 'POST',
+  });
+}
+
+export function removeTenantMember(tenantId: number, membershipId: number): Promise<void> {
+  return requestVoid(`/api/tenants/${tenantId}/users/${membershipId}`, {
+    ...adminRequestOptions,
+    method: 'DELETE',
+  });
+}
+
+export function getPlatformAdministrators(): Promise<PlatformAdministrator[]> {
+  return request<PlatformAdministrator[]>('/api/platform/administrators', adminRequestOptions);
+}
+
+export function grantPlatformAdministrator(externalUserId: string): Promise<PlatformAdministrator> {
+  return request<PlatformAdministrator>('/api/platform/administrators', {
+    ...adminRequestOptions,
+    method: 'POST',
+    body: JSON.stringify({ external_user_id: externalUserId }),
+  });
+}
+
+export function revokePlatformAdministrator(grantId: number): Promise<void> {
+  return requestVoid(`/api/platform/administrators/${grantId}`, {
+    ...adminRequestOptions,
+    method: 'DELETE',
+  });
 }
 
 // ─── Analysis config ──────────────────────────────────────────────────────────

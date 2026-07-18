@@ -85,10 +85,10 @@ from ..services.sbom_document_service import (
 )
 from ..services.sbom_enrichment_service import mark_enrichment_pending, run_post_upload_enrichment
 from ..services.sbom_service import (
-    ComponentExtractionSkipped,
     MISSING_SBOM_CONTENT_REASON,
     UNPARSEABLE_SBOM_CONTENT_REASON,
     UNSUPPORTED_SBOM_FORMAT_REASON,
+    ComponentExtractionSkipped,
     coerce_sbom_data,
     detect_supported_component_extraction_format,
     sync_sbom_components,
@@ -1442,11 +1442,12 @@ def update_sbom(
 @router.get("/sboms/{sbom_id}/delete-impact", status_code=status.HTTP_200_OK)
 def sbom_delete_impact(
     sbom_id: int = Path(..., ge=1),
+    context: CurrentContext = Depends(get_current_tenant_context),
     db: Session = Depends(get_db),
 ):
     """Return the complete permanent-delete impact, including descendants."""
     try:
-        return SBOMDeleteService(db).get_delete_impact(sbom_id)
+        return SBOMDeleteService(db, context.tenant_id).get_delete_impact(sbom_id)
     except LookupError:
         raise HTTPException(status_code=404, detail="SBOM not found")
 
@@ -1471,7 +1472,7 @@ def delete_sbom(
         raise HTTPException(status_code=400, detail="Invalid sbom_id. It must be a positive integer.")
 
     user_id = context.actor_label()
-    service = SBOMDeleteService(db)
+    service = SBOMDeleteService(db, context.tenant_id)
     sbom = service.get_sbom(sbom_id)
     if not sbom:
         raise HTTPException(status_code=404, detail="SBOM not found")
@@ -1529,7 +1530,9 @@ def restore_sbom(
     """Restore a soft-deleted SBOM. Does not cascade — children must be
     restored individually. Phase 3.4 admin recovery surface."""
     sbom = db.execute(
-        select(SBOMSource).where(SBOMSource.id == sbom_id).execution_options(include_deleted=True)
+        select(SBOMSource)
+        .where(SBOMSource.id == sbom_id, SBOMSource.tenant_id == context.tenant_id)
+        .execution_options(include_deleted=True)
     ).scalar_one_or_none()
     if sbom is None:
         raise HTTPException(status_code=404, detail="SBOM not found")

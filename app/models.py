@@ -39,6 +39,7 @@ class Tenant(Base):
     __table_args__ = (
         UniqueConstraint("slug", name="uq_tenants_slug"),
         UniqueConstraint("external_iam_tenant_id", name="uq_tenants_external_iam_tenant_id"),
+        CheckConstraint("status IN ('ACTIVE','PENDING','DISABLED')", name="tenant_status"),
     )
 
 
@@ -54,7 +55,10 @@ class IAMUser(Base):
     created_at = Column(DateTime(timezone=True), nullable=False)
     updated_at = Column(DateTime(timezone=True), nullable=False)
 
-    __table_args__ = (UniqueConstraint("external_iam_user_id", name="uq_iam_users_external_iam_user_id"),)
+    __table_args__ = (
+        UniqueConstraint("external_iam_user_id", name="uq_iam_users_external_iam_user_id"),
+        CheckConstraint("status IN ('ACTIVE','PENDING','DISABLED')", name="iam_user_status"),
+    )
 
 
 class TenantUser(Base):
@@ -74,6 +78,33 @@ class TenantUser(Base):
     __table_args__ = (
         UniqueConstraint("tenant_id", "user_id", name="uq_tenant_users_tenant_user"),
         Index("ix_tenant_users_tenant_status", "tenant_id", "status"),
+        CheckConstraint(
+            "role IN ('TENANT_ADMIN','SECURITY_ANALYST','DEVELOPER','VIEWER')",
+            name="tenant_user_role",
+        ),
+        CheckConstraint("status IN ('ACTIVE','PENDING','DISABLED')", name="tenant_user_status"),
+    )
+
+
+class PlatformUserRole(Base):
+    """Explicit database authority for platform-wide SBOM administration."""
+
+    __tablename__ = "platform_user_roles"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    role = Column(String(64), nullable=False, default="PLATFORM_ADMIN")
+    status = Column(String(32), nullable=False, default="ACTIVE", index=True)
+    created_by_user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    updated_at = Column(DateTime(timezone=True), nullable=False)
+
+    user = relationship("IAMUser", foreign_keys=[user_id])
+    created_by = relationship("IAMUser", foreign_keys=[created_by_user_id])
+
+    __table_args__ = (
+        CheckConstraint("role = 'PLATFORM_ADMIN'", name="platform_user_role"),
+        CheckConstraint("status IN ('ACTIVE','DISABLED')", name="platform_user_role_status"),
     )
 
 
@@ -1379,6 +1410,34 @@ class AuditLog(Base, TenantOwnedMixin):
     ip_address = Column(String(64), nullable=True)
     user_agent = Column(Text, nullable=True)
     created_at = Column(String, nullable=False, index=True)
+
+
+class AuthorizationAuditLog(Base):
+    """Security audit stream for identity and platform events that may have no tenant."""
+
+    __tablename__ = "authorization_audit_log"
+
+    id = Column(Integer, primary_key=True)
+    actor_user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="SET NULL"), nullable=True, index=True)
+    target_user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="SET NULL"), nullable=True, index=True)
+    target_membership_id = Column(
+        Integer,
+        ForeignKey("tenant_users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="SET NULL"), nullable=True, index=True)
+    action = Column(String(128), nullable=False, index=True)
+    outcome = Column(String(16), nullable=False, default="SUCCESS", index=True)
+    old_value = Column(JSON, nullable=True)
+    new_value = Column(JSON, nullable=True)
+    correlation_id = Column(String(128), nullable=True, index=True)
+    detail = Column(String(240), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, index=True)
+
+    __table_args__ = (
+        CheckConstraint("outcome IN ('SUCCESS','DENIED','FAILED')", name="authorization_audit_outcome"),
+    )
 
 
 class VulnerabilityRemediation(Base, TenantOwnedMixin):

@@ -14,6 +14,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from ..core.context import CurrentContext
+from ..core.security import get_current_tenant_context
 from ..db import get_db
 from ..metrics import runs_aggregate
 from ..metrics._helpers import cves_for_finding
@@ -21,12 +23,12 @@ from ..metrics.findings import canonical_finding_metrics_for_run, canonical_find
 from ..models import AnalysisFinding, AnalysisRun, EpssScore, Product, SBOMSource
 from ..schemas import AnalysisFindingOut, AnalysisRunOut, RunsAggregateOut
 from ..services.finding_metrics import canonicalize_finding_rows, metrics_to_dict, normalize_severity
+from ..services.kev_enrichment import EMPTY_KEV_ENRICHMENT, enrich_findings_with_kev
 from ..services.risk_score import (
     EPSS_AMPLIFIER,
     KEV_MULTIPLIER,
     _resolve_cvss,
 )
-from ..services.kev_enrichment import EMPTY_KEV_ENRICHMENT, enrich_findings_with_kev
 
 log = logging.getLogger(__name__)
 
@@ -295,8 +297,14 @@ def search_runs(
 
 
 @router.get("/runs/{run_id}", response_model=AnalysisRunOut)
-def get_analysis_run(run_id: int, db: Session = Depends(get_db)):
-    run = db.get(AnalysisRun, run_id)
+def get_analysis_run(
+    run_id: int,
+    context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
+):
+    run = db.execute(
+        select(AnalysisRun).where(AnalysisRun.id == run_id, AnalysisRun.tenant_id == context.tenant_id)
+    ).scalar_one_or_none()
     if not run:
         raise HTTPException(status_code=404, detail="Analysis run not found")
     metrics = canonical_finding_metrics_for_run(db, run=run)
@@ -312,9 +320,12 @@ def list_run_findings(
     page: int = Query(1, ge=1),
     page_size: int = Query(100, ge=1, le=1000),
     response: Response = None,
+    context: CurrentContext = Depends(get_current_tenant_context),
     db: Session = Depends(get_db),
 ):
-    run = db.get(AnalysisRun, run_id)
+    run = db.execute(
+        select(AnalysisRun).where(AnalysisRun.id == run_id, AnalysisRun.tenant_id == context.tenant_id)
+    ).scalar_one_or_none()
     if not run:
         raise HTTPException(status_code=404, detail="Analysis run not found")
 
@@ -383,6 +394,7 @@ def list_run_findings_enriched(
     page: int = Query(1, ge=1),
     page_size: int = Query(100, ge=1, le=1000),
     response: Response = None,
+    context: CurrentContext = Depends(get_current_tenant_context),
     db: Session = Depends(get_db),
 ):
     """
@@ -394,7 +406,9 @@ def list_run_findings_enriched(
     inline. KEV / EPSS lookups are cached (24h DB cache + 60s in-process memo)
     so the hot path is cheap on warm caches.
     """
-    run = db.get(AnalysisRun, run_id)
+    run = db.execute(
+        select(AnalysisRun).where(AnalysisRun.id == run_id, AnalysisRun.tenant_id == context.tenant_id)
+    ).scalar_one_or_none()
     if not run:
         raise HTTPException(status_code=404, detail="Analysis run not found")
 

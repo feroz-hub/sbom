@@ -139,7 +139,7 @@ def update_project(
         raise HTTPException(status_code=422, detail="No updatable fields provided in payload.")
 
     try:
-        project = db.get(Projects, project_id)
+        project = get_project_for_tenant(db, project_id, context.tenant_id)
         if not project:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
 
@@ -162,6 +162,7 @@ def update_project(
 @router.get("/projects/{project_id}/delete-impact", status_code=status.HTTP_200_OK)
 def project_delete_impact(
     project_id: int = Path(..., ge=1),
+    context: CurrentContext = Depends(get_current_tenant_context),
     db: Session = Depends(get_db),
 ):
     """Pre-flight cascade preview for the delete confirmation modal.
@@ -171,7 +172,7 @@ def project_delete_impact(
     currently-active rows are counted, so a re-run after a partial
     cascade reflects what's still left to remove.
     """
-    project = db.get(Projects, project_id)
+    project = get_project_for_tenant(db, project_id, context.tenant_id)
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
 
@@ -226,7 +227,7 @@ def delete_project(
     context: CurrentContext = Depends(get_current_tenant_context),
     db: Session = Depends(get_db),
 ):
-    project = db.get(Projects, project_id)
+    project = get_project_for_tenant(db, project_id, context.tenant_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 

@@ -72,6 +72,9 @@ def delete_db() -> Iterator[Session]:
 
 @pytest.fixture()
 def delete_client(delete_db: Session) -> Iterator[TestClient]:
+    from app.core.context import minimal_background_context
+    from app.core.security import get_current_tenant_context
+
     factory = sessionmaker(bind=delete_db.get_bind())
     api = FastAPI()
     api.include_router(sboms_crud.router)
@@ -84,6 +87,7 @@ def delete_client(delete_db: Session) -> Iterator[TestClient]:
             session.close()
 
     api.dependency_overrides[get_db] = _override_db
+    api.dependency_overrides[get_current_tenant_context] = lambda: minimal_background_context(1, "default")
     with TestClient(api) as client:
         yield client
 

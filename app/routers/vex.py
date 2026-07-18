@@ -7,7 +7,7 @@ import zipfile
 from io import BytesIO
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
@@ -23,8 +23,14 @@ from ..services.lifecycle.vex_provider import (
     vex_report,
     vex_report_csv,
 )
+from ..services.tenant_access import get_component_for_tenant, get_sbom_for_tenant
 
 router = APIRouter(tags=["vex"])
+
+
+def _require_sbom(db: Session, sbom_id: int, tenant_id: int) -> None:
+    if get_sbom_for_tenant(db, sbom_id, tenant_id) is None:
+        raise HTTPException(status_code=404, detail="SBOM not found")
 
 
 @router.post("/api/sboms/{sbom_id}/vex")
@@ -35,6 +41,7 @@ def upload_vex_document(
     db: Session = Depends(get_db),
 ):
     """Upload/import CycloneDX/OpenVEX-style exploitability statements."""
+    _require_sbom(db, sbom_id, context.tenant_id)
     document = payload.get("document") if isinstance(payload.get("document"), dict) else payload
     return import_vex_document(
         db,
@@ -49,8 +56,13 @@ def upload_vex_document(
 
 
 @router.get("/api/sboms/{sbom_id}/vex")
-def get_vex_statements(sbom_id: int, db: Session = Depends(get_db)):
+def get_vex_statements(
+    sbom_id: int,
+    context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
+):
     """List VEX statements for an SBOM."""
+    _require_sbom(db, sbom_id, context.tenant_id)
     return list_vex_statements(db, sbom_id)
 
 
@@ -61,10 +73,12 @@ def get_vex_report(
     report_type: str | None = Query(
         None, description="affected, not_affected, fixed, under_investigation, unknown, remediation_action"
     ),
+    context: CurrentContext = Depends(get_current_tenant_context),
     db: Session = Depends(get_db),
 ):
     """Return detailed VEX statement evidence for export/UI reports."""
 
+    _require_sbom(db, sbom_id, context.tenant_id)
     status_filter = _report_status_filter(report_type)
     if format == "csv":
         content = vex_report_csv(db, sbom_id, status_filter=status_filter)
@@ -80,10 +94,12 @@ def get_vex_report(
 @router.get("/api/sboms/{sbom_id}/reports/vex-pack")
 def get_vex_report_pack(
     sbom_id: int,
+    context: CurrentContext = Depends(get_current_tenant_context),
     db: Session = Depends(get_db),
 ):
     """Download a ZIP pack of VEX JSON and focused CSV reports."""
 
+    _require_sbom(db, sbom_id, context.tenant_id)
     buffer = BytesIO()
     with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("vex.json", json.dumps(vex_report(db, sbom_id), indent=2))
@@ -101,10 +117,12 @@ def get_vex_report_pack(
 def discover_vex_documents(
     sbom_id: int,
     force: bool = Query(False),
+    context: CurrentContext = Depends(get_current_tenant_context),
     db: Session = Depends(get_db),
 ):
     """Discover and import vendor-hosted VEX documents without blocking upload."""
 
+    _require_sbom(db, sbom_id, context.tenant_id)
     return discover_and_import_vex_documents(db, sbom_id, force=force)
 
 
@@ -117,6 +135,8 @@ def patch_vex_override(
     db: Session = Depends(get_db),
 ):
     """Apply an audited manual VEX override."""
+    if get_component_for_tenant(db, component_id, context.tenant_id) is None:
+        raise HTTPException(status_code=404, detail="Component not found")
     statement = apply_vex_override(
         db,
         component_id,
@@ -145,8 +165,11 @@ def patch_vex_override(
 def get_vex_override_history(
     component_id: int,
     vulnerability_id: str,
+    context: CurrentContext = Depends(get_current_tenant_context),
     db: Session = Depends(get_db),
 ):
+    if get_component_for_tenant(db, component_id, context.tenant_id) is None:
+        raise HTTPException(status_code=404, detail="Component not found")
     rows = (
         db.query(VexOverrideAudit)
         .filter(VexOverrideAudit.component_id == component_id)
