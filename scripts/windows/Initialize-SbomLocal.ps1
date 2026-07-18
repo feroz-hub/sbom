@@ -57,8 +57,12 @@ $adminPassword = Get-PlainText (Read-Host "PostgreSQL password for $PostgresAdmi
 $databasePassword = Get-PlainText (Read-Host "Choose a local password for database role $DatabaseUser" -AsSecureString)
 try {
     $env:PGPASSWORD = $adminPassword
-    $roleExists = (& $psql -X -tA -h $PostgresHost -p $PostgresPort -U $PostgresAdminUser -d postgres `
-        -c "SELECT 1 FROM pg_roles WHERE rolname='$($DatabaseUser.Replace("'", "''"))'").Trim()
+    $roleLookup = & $psql -X -tA -h $PostgresHost -p $PostgresPort -U $PostgresAdminUser -d postgres `
+        -c "SELECT 1 FROM pg_roles WHERE rolname='$($DatabaseUser.Replace("'", "''"))'"
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to query PostgreSQL roles. Verify that PostgreSQL is running and that the $PostgresAdminUser password is correct."
+    }
+    $roleExists = ([string]$roleLookup).Trim()
     if ($roleExists -ne "1") {
         Invoke-Psql $psql $PostgresAdminUser postgres `
             "CREATE ROLE `"$DatabaseUser`" LOGIN PASSWORD '$($databasePassword.Replace("'", "''"))';"
@@ -66,8 +70,12 @@ try {
         Invoke-Psql $psql $PostgresAdminUser postgres `
             "ALTER ROLE `"$DatabaseUser`" WITH LOGIN PASSWORD '$($databasePassword.Replace("'", "''"))';"
     }
-    $dbExists = (& $psql -X -tA -h $PostgresHost -p $PostgresPort -U $PostgresAdminUser -d postgres `
-        -c "SELECT 1 FROM pg_database WHERE datname='$($DatabaseName.Replace("'", "''"))'").Trim()
+    $databaseLookup = & $psql -X -tA -h $PostgresHost -p $PostgresPort -U $PostgresAdminUser -d postgres `
+        -c "SELECT 1 FROM pg_database WHERE datname='$($DatabaseName.Replace("'", "''"))'"
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to query PostgreSQL databases. Verify that PostgreSQL is running and that the $PostgresAdminUser password is correct."
+    }
+    $dbExists = ([string]$databaseLookup).Trim()
     if ($dbExists -ne "1") {
         Invoke-Psql $psql $PostgresAdminUser postgres `
             "CREATE DATABASE `"$DatabaseName`" OWNER `"$DatabaseUser`";"
