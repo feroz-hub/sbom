@@ -161,7 +161,10 @@ def test_preflush_diagnostic_identifies_all_overflowing_bounded_columns(client, 
                     vuln_id="CVE-2026-9000",
                     sources=["SOURCE-" + "X" * 130],
                     component_name="diagnostic-component",
-                    match_reason="reason-" + "Y" * 70,
+                    # Migration 043 widened match_reason to VARCHAR(255).
+                    # Keep this fixture beyond the current database bound so
+                    # the diagnostic continues to exercise every field.
+                    match_reason="reason-" + "Y" * 260,
                     match_strategy="strategy-" + "Z" * 70,
                 )
             ],

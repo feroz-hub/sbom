@@ -1,6 +1,6 @@
 {
   "completed_on": "<volatile>",
-  "components_with_cpe": 2,
+  "components_with_cpe": 0,
   "critical_count": 0,
   "duration_ms": "<volatile>",
   "high_count": 1,
@@ -39,7 +39,7 @@
       },
       "total": 1
     },
-    "withCPE": 2
+    "withCPE": 0
   },
   "total_components": 2,
   "total_findings": 1,
