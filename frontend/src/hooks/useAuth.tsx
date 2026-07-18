@@ -53,17 +53,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         displayName: me.display_name, tenantId: me.tenant_id, externalTenantId: me.external_tenant_id,
         roles: me.roles || [], permissions: me.permissions || [], isPlatformAdmin: Boolean(me.is_platform_admin),
       });
-      const tenantsResponse = await fetch(`${BASE_URL}/api/tenants`, { headers, cache: 'no-store' });
-      if (tenantsResponse.ok) {
-        setTenants((await tenantsResponse.json()).map((tenant: Record<string, unknown>) => ({
-          id: tenant.id, name: tenant.name, slug: tenant.slug,
-          externalIamTenantId: tenant.external_iam_tenant_id, status: tenant.status, role: tenant.role,
-        })) as TenantInfo[]);
+      try {
+        const tenantsResponse = await fetch(`${BASE_URL}/api/tenants`, { headers, cache: 'no-store' });
+        if (tenantsResponse.ok) {
+          setTenants((await tenantsResponse.json()).map((tenant: Record<string, unknown>) => ({
+            id: tenant.id, name: tenant.name, slug: tenant.slug,
+            externalIamTenantId: tenant.external_iam_tenant_id, status: tenant.status, role: tenant.role,
+          })) as TenantInfo[]);
+        }
+      } catch {
+        // The profile is authoritative for authentication. Keep the valid
+        // session if the optional tenant switcher cannot be populated.
+        setTenants([]);
       }
       const selected = tenantOverride || getActiveTenantId() || (me.tenant_id ? String(me.tenant_id) : null);
       if (selected) { setActiveTenantId(selected); setActiveTenantIdState(selected); }
       return true;
-    } catch { return false; }
+    } catch {
+      return false;
+    }
   }, []);
 
   useEffect(() => {

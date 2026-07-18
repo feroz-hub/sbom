@@ -48,10 +48,25 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
       upstream = await send();
     }
   }
+  if (!upstream.ok) {
+    // Do not log query strings, headers, cookies, or token-bearing bodies.
+    console.warn(`[api/backend] ${request.method} /${path.join('/')} -> ${upstream.status}`);
+  }
   const responseHeaders = new Headers(upstream.headers);
   responseHeaders.delete('set-cookie');
   responseHeaders.delete('www-authenticate');
-  return new NextResponse(upstream.body, { status: upstream.status, headers: responseHeaders });
+  // Node fetch transparently decodes compressed upstream bodies. Forwarding
+  // the original encoding/length makes the browser try to decode them again,
+  // which surfaces as a successful status with an unreadable response body.
+  responseHeaders.delete('content-encoding');
+  responseHeaders.delete('content-length');
+  responseHeaders.delete('transfer-encoding');
+  // Next.js development route handlers can close a proxied JSON stream before
+  // the browser finishes reading it. Buffer structured API responses here;
+  // binary downloads remain streamed to avoid loading large files into memory.
+  const contentType = responseHeaders.get('content-type') || '';
+  const responseBody = contentType.includes('json') ? await upstream.arrayBuffer() : upstream.body;
+  return new NextResponse(responseBody, { status: upstream.status, headers: responseHeaders });
 }
 
 export const GET = proxy;

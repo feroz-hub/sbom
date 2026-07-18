@@ -30,7 +30,14 @@ export async function POST(request: NextRequest) {
       httpOnly: true, secure: true, sameSite: 'lax', path: '/', maxAge: 24 * 60 * 60,
     });
     return clearLogin(response);
-  } catch {
+  } catch (error) {
+    // Keep diagnostics useful without logging the authorization code, tokens,
+    // request body, or callback URL.
+    const cause = error instanceof Error && error.cause instanceof Error
+      ? ` (${error.cause.name}: ${error.cause.message})`
+      : '';
+    const reason = error instanceof Error ? `${error.name}: ${error.message}${cause}` : 'Unknown error';
+    console.error(`[auth/callback] ${reason}`);
     return clearLogin(NextResponse.json({ error: 'Authentication could not be completed.' }, { status: 400 }));
   }
 }

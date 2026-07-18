@@ -91,15 +91,15 @@ Frontend placeholders are in `frontend/.env.local.example`. `SBOM_API_URL` is se
 Create the frontend certificate:
 
 ```bash
-cd /home/kali/sbom/frontend
+cd /Users/ferozebasha/sbom/frontend
 npm run setup:https
 ```
 
 `mkcert` is preferred and installs a trusted local CA. The fallback creates a self-signed certificate which must be imported into the workstation trust store. Export the current HCL.CS public development certificate for Node/FastAPI trust:
 
 ```bash
-mkdir -p /home/kali/sbom/.certificates
-docker cp hcl-cs-identity:/app/https/hcl-cs-devcert.crt /home/kali/sbom/.certificates/hcl-cs-local.crt
+mkdir -p /Users/ferozebasha/sbom/.certificates
+docker cp hcl-cs-identity:/app/https/hcl-cs-devcert.crt /Users/ferozebasha/sbom/.certificates/hcl-cs-local.crt
 ```
 
 Trust that certificate in the browser/OS. `frontend/certificates/` and `.certificates/` are ignored and must never be committed.
@@ -109,7 +109,7 @@ Trust that certificate in the browser/OS. `frontend/certificates/` and `.certifi
 Create the HCL.CS test identity through the installer/admin UI, assign its `tenant_id` user claim (for example `hcl-cs-local`), and note its immutable user ID/`sub`. Never put its password in a seed file. Then run:
 
 ```bash
-cd /home/kali/sbom
+cd /Users/ferozebasha/sbom
 source .venv/bin/activate
 python scripts/seed_hcl_iam_membership.py \
   --subject '<HCL.CS-user-id>' \
@@ -124,10 +124,10 @@ The helper is idempotent and refuses to seed `PLATFORM_ADMIN`.
 ## Start both products
 
 ```bash
-cd /home/kali/SF
+cd /Users/ferozebasha/SF
 docker compose -f docker/docker-compose.yml up -d --build
 
-cd /home/kali/sbom
+cd /Users/ferozebasha/sbom
 docker compose up -d postgres
 source .venv/bin/activate
 alembic upgrade head
@@ -135,10 +135,10 @@ AUTH_ENABLED=true DEV_DEFAULT_TENANT=false \
 HCL_IAM_ISSUER=https://localhost:5180 \
 HCL_IAM_AUDIENCE=sbom-analyser-api HCL_IAM_CLIENT_ID=sbom-analyser-web \
 HCL_IAM_ROLE_CLAIM=role HCL_IAM_TENANT_CLAIM=tenant_id \
-HCL_IAM_CA_BUNDLE=/home/kali/sbom/.certificates/hcl-cs-local.crt \
+HCL_IAM_CA_BUNDLE=/Users/ferozebasha/sbom/.certificates/hcl-cs-local.crt \
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
-cd /home/kali/sbom/frontend
+cd /Users/ferozebasha/sbom/frontend
 npm install
 npm run setup:https
 npm run dev:https

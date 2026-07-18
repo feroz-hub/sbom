@@ -126,12 +126,21 @@ export async function exchangeCode(
   config: ServerAuthConfig,
   discovery: Discovery,
 ): Promise<TokenSession> {
-  const tokens = await tokenRequest(discovery.token_endpoint, new URLSearchParams({
-    grant_type: 'authorization_code', client_id: config.clientId, code,
-    redirect_uri: config.redirectUri, code_verifier: verifier,
-  }), config);
+  let tokens: Record<string, unknown>;
+  try {
+    tokens = await tokenRequest(discovery.token_endpoint, new URLSearchParams({
+      grant_type: 'authorization_code', client_id: config.clientId, code,
+      redirect_uri: config.redirectUri, code_verifier: verifier,
+    }), config);
+  } catch (error) {
+    throw new Error('OIDC authorization-code exchange failed', { cause: error });
+  }
   if (typeof tokens.id_token !== 'string') throw new Error('OIDC ID token missing');
-  await validateIdToken(tokens.id_token, nonce, config, discovery);
+  try {
+    await validateIdToken(tokens.id_token, nonce, config, discovery);
+  } catch (error) {
+    throw new Error('OIDC ID token validation failed', { cause: error });
+  }
   return toSession(tokens);
 }
 
