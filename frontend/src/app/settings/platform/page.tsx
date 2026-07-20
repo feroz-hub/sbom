@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
+import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { usePermission } from '@/hooks/usePermission';
 import {
@@ -50,6 +51,10 @@ export default function PlatformAdministratorsPage() {
         <h1 className="text-2xl font-semibold">Platform administrators</h1>
         <p className="mt-1 text-sm text-hcl-muted">Explicit SBOM database grants. HCL.CS token roles cannot grant this authority.</p>
       </div>
+      <nav aria-label="Platform administration" className="flex gap-2 border-b border-border pb-3 text-sm">
+        <Link href="/settings/platform" aria-current="page" className="rounded-md bg-hcl-blue px-3 py-2 font-medium text-white">Administrators</Link>
+        <Link href="/settings/platform/tenants" className="rounded-md px-3 py-2 font-medium text-hcl-blue hover:bg-surface-elevated">Tenants</Link>
+      </nav>
       {notice && <div role="status" className="rounded-lg border border-border p-3 text-sm">{notice}</div>}
       {canWrite && (
         <form onSubmit={submit} className="flex gap-3 rounded-lg border border-border p-4">

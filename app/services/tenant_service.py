@@ -174,11 +174,21 @@ def resolve_active_tenant(
 
 
 def create_tenant(db: Session, *, name: str, slug: str, external_iam_tenant_id: str) -> Tenant:
+    normalized_name = name.strip()
+    normalized_slug = slug.strip()
+    normalized_external_id = external_iam_tenant_id.strip()
+    if db.execute(select(Tenant.id).where(Tenant.slug == normalized_slug)).scalar_one_or_none() is not None:
+        raise HTTPException(status_code=409, detail="A tenant with this slug already exists.")
+    if (
+        db.execute(select(Tenant.id).where(Tenant.external_iam_tenant_id == normalized_external_id)).scalar_one_or_none()
+        is not None
+    ):
+        raise HTTPException(status_code=409, detail="A tenant with this external IAM tenant ID already exists.")
     now = datetime.now(UTC)
     tenant = Tenant(
-        name=name.strip(),
-        slug=slug,
-        external_iam_tenant_id=external_iam_tenant_id,
+        name=normalized_name,
+        slug=normalized_slug,
+        external_iam_tenant_id=normalized_external_id,
         status="ACTIVE",
         created_at=now,
         updated_at=now,

@@ -195,6 +195,22 @@ export interface PlatformAdministrator {
   status: 'ACTIVE' | 'DISABLED';
 }
 
+export interface TenantSummary {
+  id: number | string;
+  name: string;
+  slug: string;
+  external_iam_tenant_id: string;
+  status: 'ACTIVE' | 'PENDING' | 'DISABLED';
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CreateTenantRequest {
+  name: string;
+  slug: string;
+  external_iam_tenant_id: string;
+}
+
 // ─── Fetch with timeout + caller-signal support ───────────────────────────────
 async function fetchWithTimeout(
   url: string,
@@ -407,6 +423,29 @@ export function revokePlatformAdministrator(grantId: number): Promise<void> {
   return requestVoid(`/api/platform/administrators/${grantId}`, {
     ...adminRequestOptions,
     method: 'DELETE',
+  });
+}
+
+export function listPlatformTenants(): Promise<TenantSummary[]> {
+  return request<TenantSummary[]>('/api/platform/tenants', adminRequestOptions);
+}
+
+export function createPlatformTenant(payload: CreateTenantRequest): Promise<TenantSummary> {
+  return request<TenantSummary>('/api/tenants', {
+    ...adminRequestOptions,
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updatePlatformTenantStatus(
+  tenantId: number | string,
+  status: 'ACTIVE' | 'DISABLED',
+): Promise<{ tenant_id: number; status: string }> {
+  return request<{ tenant_id: number; status: string }>(`/api/platform/tenants/${tenantId}`, {
+    ...adminRequestOptions,
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
   });
 }
 

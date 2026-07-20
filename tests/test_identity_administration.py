@@ -142,6 +142,113 @@ def test_tenant_admin_cannot_use_platform_routes_or_create_tenant(client):
     ).status_code == 403
 
 
+def test_platform_admin_can_list_create_and_audit_tenants(client):
+    from app.db import SessionLocal
+
+    with SessionLocal() as db:
+        dev_user = db.execute(select(IAMUser).where(IAMUser.external_iam_user_id == "dev-user")).scalar_one()
+        now = _now()
+        db.add(
+            PlatformUserRole(
+                user_id=dev_user.id,
+                role="PLATFORM_ADMIN",
+                status="ACTIVE",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        dev_user_id = dev_user.id
+        db.commit()
+
+    suffix = uuid4().hex[:10]
+    payload = {
+        "name": "  Acme Security  ",
+        "slug": f"acme-{suffix}",
+        "external_iam_tenant_id": f"acme-external-{suffix}",
+    }
+    created = client.post("/api/tenants", json=payload, headers={"X-Correlation-ID": "tenant-create-test"})
+    assert created.status_code == 201, created.text
+    body = created.json()
+    assert body["name"] == "Acme Security"
+    assert body["slug"] == payload["slug"]
+    assert body["external_iam_tenant_id"] == payload["external_iam_tenant_id"]
+    assert body["status"] == "ACTIVE"
+    assert body["created_at"]
+
+    listed = client.get("/api/platform/tenants")
+    assert listed.status_code == 200
+    assert any(tenant["id"] == body["id"] for tenant in listed.json())
+
+    with SessionLocal() as db:
+        assert db.execute(select(Tenant).where(Tenant.slug == payload["slug"])).scalar_one().id == body["id"]
+        audit = db.execute(
+            select(AuthorizationAuditLog).where(
+                AuthorizationAuditLog.action == "tenant.created",
+                AuthorizationAuditLog.tenant_id == body["id"],
+            )
+        ).scalar_one()
+        assert audit.actor_user_id == dev_user_id
+        assert audit.outcome == "SUCCESS"
+        assert audit.correlation_id == "tenant-create-test"
+        assert audit.new_value == {
+            "name": "Acme Security",
+            "slug": payload["slug"],
+            "external_iam_tenant_id": payload["external_iam_tenant_id"],
+            "status": "ACTIVE",
+        }
+
+
+def test_tenant_creation_validation_and_duplicate_conflicts(client):
+    from app.db import SessionLocal
+
+    with SessionLocal() as db:
+        dev_user = db.execute(select(IAMUser).where(IAMUser.external_iam_user_id == "dev-user")).scalar_one()
+        now = _now()
+        db.add(PlatformUserRole(user_id=dev_user.id, role="PLATFORM_ADMIN", status="ACTIVE", created_at=now, updated_at=now))
+        db.commit()
+
+    suffix = uuid4().hex[:10]
+    payload = {"name": "Conflict Tenant", "slug": f"conflict-{suffix}", "external_iam_tenant_id": f"external-{suffix}"}
+    assert client.post("/api/tenants", json=payload).status_code == 201
+
+    duplicate_slug = client.post(
+        "/api/tenants",
+        json={"name": "Other Name", "slug": payload["slug"], "external_iam_tenant_id": f"other-{suffix}"},
+    )
+    assert duplicate_slug.status_code == 409
+    assert duplicate_slug.json()["detail"] == "A tenant with this slug already exists."
+
+    duplicate_external = client.post(
+        "/api/tenants",
+        json={"name": "Other Name", "slug": f"other-{suffix}", "external_iam_tenant_id": payload["external_iam_tenant_id"]},
+    )
+    assert duplicate_external.status_code == 409
+    assert duplicate_external.json()["detail"] == "A tenant with this external IAM tenant ID already exists."
+
+    for invalid in (
+        {"name": "   ", "slug": f"blank-{suffix}", "external_iam_tenant_id": f"blank-{suffix}"},
+        {"name": "Invalid Slug", "slug": "Invalid slug", "external_iam_tenant_id": f"invalid-{suffix}"},
+        {"name": "Double Hyphen", "slug": "double--hyphen", "external_iam_tenant_id": f"double-{suffix}"},
+    ):
+        assert client.post("/api/tenants", json=invalid).status_code == 422
+
+
+@pytest.mark.parametrize("role", ["TENANT_ADMIN", "SECURITY_ANALYST", "DEVELOPER", "VIEWER"])
+def test_tenant_roles_cannot_create_or_list_platform_tenants(client, role):
+    from app.db import SessionLocal
+
+    with SessionLocal() as db:
+        membership = db.execute(select(TenantUser).where(TenantUser.user_id == 1, TenantUser.tenant_id == 1)).scalar_one()
+        membership.role = role
+        db.commit()
+    suffix = uuid4().hex[:10]
+    assert client.get("/api/platform/tenants").status_code == 403
+    assert client.post(
+        "/api/tenants",
+        json={"name": "Forbidden", "slug": f"forbidden-{suffix}", "external_iam_tenant_id": f"forbidden-{suffix}"},
+    ).status_code == 403
+
+
 def test_platform_grant_lifecycle_and_immediate_revocation(client, monkeypatch):
     from app.db import SessionLocal
     from app.settings import reset_settings

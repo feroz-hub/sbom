@@ -32,6 +32,11 @@ def list_platform_administrators(db: Session) -> list[tuple[PlatformUserRole, IA
     )
 
 
+def list_platform_tenants(db: Session) -> list[Tenant]:
+    """Return every tenant, including disabled tenants, for platform administration."""
+    return list(db.execute(select(Tenant).order_by(Tenant.name, Tenant.id)).scalars())
+
+
 def grant_platform_administrator(
     db: Session,
     *,

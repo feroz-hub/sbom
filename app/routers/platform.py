@@ -41,6 +41,26 @@ def _grant_dict(grant, user) -> dict:
     }
 
 
+def _tenant_dict(tenant) -> dict:
+    return {
+        "id": tenant.id,
+        "name": tenant.name,
+        "slug": tenant.slug,
+        "external_iam_tenant_id": tenant.external_iam_tenant_id,
+        "status": tenant.status,
+        "created_at": tenant.created_at,
+        "updated_at": tenant.updated_at,
+    }
+
+
+@router.get("/tenants")
+def list_platform_tenants(
+    _context: CurrentContext = Depends(require_permission("platform:tenant:create")),
+    db: Session = Depends(get_db),
+) -> list[dict]:
+    return [_tenant_dict(tenant) for tenant in platform_service.list_platform_tenants(db)]
+
+
 @router.get("/administrators")
 def list_platform_administrators(
     _context: CurrentContext = Depends(require_permission("platform:user:read")),

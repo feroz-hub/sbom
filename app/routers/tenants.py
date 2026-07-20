@@ -3,7 +3,8 @@ from __future__ import annotations
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import AliasChoices, BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field, field_validator
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..core.context import CurrentContext
@@ -22,8 +23,16 @@ MembershipStatus = Literal["ACTIVE", "PENDING", "DISABLED"]
 
 class TenantCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
-    slug: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{1,126}[a-z0-9]$")
+    slug: str = Field(min_length=3, max_length=128, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
     external_iam_tenant_id: str = Field(min_length=1, max_length=255)
+
+    @field_validator("name", "external_iam_tenant_id")
+    @classmethod
+    def strip_required_text(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("Field must not be blank")
+        return stripped
 
 
 class MembershipUpsert(BaseModel):
@@ -49,6 +58,8 @@ def _tenant_dict(tenant: Tenant, role: str | None = None) -> dict:
         "external_iam_tenant_id": tenant.external_iam_tenant_id,
         "status": tenant.status,
         "role": role,
+        "created_at": tenant.created_at,
+        "updated_at": tenant.updated_at,
     }
 
 
@@ -105,19 +116,40 @@ def create_tenant(
     context: CurrentContext = Depends(require_permission("platform:tenant:create")),
     db: Session = Depends(get_db),
 ) -> dict:
-    tenant = ts.create_tenant(
-        db,
-        name=payload.name,
-        slug=payload.slug,
-        external_iam_tenant_id=payload.external_iam_tenant_id,
-    )
+    try:
+        tenant = ts.create_tenant(
+            db,
+            name=payload.name,
+            slug=payload.slug,
+            external_iam_tenant_id=payload.external_iam_tenant_id,
+        )
+    except (HTTPException, IntegrityError) as exc:
+        if isinstance(exc, IntegrityError):
+            db.rollback()
+            exc = HTTPException(status_code=409, detail="A tenant with this slug or external IAM tenant ID already exists.")
+        audit_service.write_authorization_audit(
+            db,
+            action="tenant.create_denied",
+            outcome="DENIED",
+            context=context,
+            request=request,
+            new_value={"name": payload.name, "slug": payload.slug, "external_iam_tenant_id": payload.external_iam_tenant_id},
+            detail=str(exc.detail),
+        )
+        db.commit()
+        raise
     audit_service.write_authorization_audit(
         db,
         action="tenant.created",
         context=context,
         tenant_id=tenant.id,
         request=request,
-        new_value={"status": tenant.status, "slug": tenant.slug},
+        new_value={
+            "name": tenant.name,
+            "slug": tenant.slug,
+            "external_iam_tenant_id": tenant.external_iam_tenant_id,
+            "status": tenant.status,
+        },
     )
     db.commit()
     db.refresh(tenant)
