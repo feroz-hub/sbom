@@ -11,6 +11,12 @@ export interface ServerAuthConfig {
   caBundle: string;
 }
 
+export function resolveFrontendPath(value: string): string {
+  const configured = value.trim();
+  if (!configured || configured.startsWith('/')) return configured;
+  return `${process.cwd()}/${configured}`;
+}
+
 export function serverAuthConfig(): ServerAuthConfig {
   const config = {
     enabled: process.env.NEXT_PUBLIC_AUTH_ENABLED === 'true',
@@ -23,7 +29,7 @@ export function serverAuthConfig(): ServerAuthConfig {
       'https://localhost:3000',
     scopes: process.env.NEXT_PUBLIC_HCL_IAM_SCOPES || 'openid profile email offline_access sbom-analyser-api',
     apiUrl: (process.env.SBOM_API_URL || 'http://localhost:8000').replace(/\/$/, ''),
-    caBundle: process.env.HCL_IAM_CA_BUNDLE || '',
+    caBundle: resolveFrontendPath(process.env.HCL_IAM_CA_BUNDLE || ''),
   };
   if (config.enabled) {
     for (const [name, value] of Object.entries({ issuer: config.issuer, clientId: config.clientId })) {

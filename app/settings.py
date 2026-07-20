@@ -7,9 +7,13 @@ Provides a single source of truth for application configuration.
 Supports both pydantic v2 with pydantic-settings and standalone pydantic v2.
 """
 
+from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
+
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 # Detect and import BaseSettings
 try:
@@ -625,6 +629,16 @@ class Settings(BaseSettings):
         if not isinstance(v, str):
             return str(v)
         return v.strip() if v else "*"
+
+    @field_validator("hcl_iam_ca_bundle", mode="after")
+    @classmethod
+    def resolve_hcl_iam_ca_bundle(cls, v: str) -> str:
+        """Resolve a portable relative CA path from the SBOM repository root."""
+        value = v.strip()
+        if not value:
+            return ""
+        path = Path(value).expanduser()
+        return str(path if path.is_absolute() else (PROJECT_ROOT / path).resolve())
 
     @field_validator("reload", mode="before")
     @classmethod
