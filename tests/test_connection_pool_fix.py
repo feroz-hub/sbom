@@ -88,6 +88,7 @@ def test_upsert_user_no_dirty_commits(app):
 
 
 def test_auth_context_is_re_resolved_for_immediate_revocation(app):
+    import asyncio
     from datetime import UTC, datetime
 
     from app.core.security import _resolve_context, _upsert_user, get_current_tenant_context
@@ -145,15 +146,20 @@ def test_auth_context_is_re_resolved_for_immediate_revocation(app):
 
         # Resolve once, then revoke the membership in the database.
         context = _resolve_context(db, claims, None)
-        generator = get_current_tenant_context(request=None, claims=claims, x_tenant_id=None, db=db)
-        resolved_context = next(generator)
+        async def resolve_context():
+            generator = get_current_tenant_context(request=None, claims=claims, x_tenant_id=None, db=db)
+            try:
+                return await anext(generator)
+            finally:
+                await generator.aclose()
+
+        resolved_context = asyncio.run(resolve_context())
         assert resolved_context.user_id == context.user_id
-        generator.close()
 
         membership.status = "DISABLED"
         db.commit()
         with pytest.raises(HTTPException) as exc_info:
-            next(get_current_tenant_context(request=None, claims=claims, x_tenant_id=None, db=db))
+            asyncio.run(resolve_context())
         assert getattr(exc_info.value, "status_code", None) == 403
     finally:
         db.close()

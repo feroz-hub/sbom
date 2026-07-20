@@ -8,7 +8,7 @@ import threading
 import time
 import urllib.parse
 import urllib.request
-from collections.abc import Callable, Iterator
+from collections.abc import AsyncIterator, Callable
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 
@@ -323,12 +323,12 @@ def _resolve_context(
     )
 
 
-def get_current_tenant_context(
+async def get_current_tenant_context(
     request: Request = None,
     claims: dict[str, Any] = Depends(get_current_user),
     x_tenant_id: str | None = Header(default=None, alias="X-Tenant-ID"),
     db: Session = Depends(get_db),
-) -> Iterator[CurrentContext]:
+) -> AsyncIterator[CurrentContext]:
     path = request.url.path if request is not None else ""
     method = request.method.upper() if request is not None else "GET"
     allow_platform_context = (
