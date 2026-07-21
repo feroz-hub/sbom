@@ -12,6 +12,7 @@ import type {
   AiTier,
 } from '@/types/ai';
 import { TestResultDisplay } from './TestResultDisplay';
+import { getApiErrorMessage } from '@/lib/notifications';
 
 interface AddProviderDialogProps {
   open: boolean;
@@ -119,7 +120,7 @@ export function AddProviderDialog({ open, onClose }: AddProviderDialogProps) {
       },
       {
         onSuccess: () => onClose(),
-        onError: (err) => setSubmitError(err.message ?? 'Save failed'),
+        onError: (error) => setSubmitError(getApiErrorMessage(error, 'Provider configuration could not be saved.')),
       },
     );
   };

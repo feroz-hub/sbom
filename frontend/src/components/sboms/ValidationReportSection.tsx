@@ -7,6 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/hooks/useToast';
 import { useRevalidateSbom } from '@/hooks/useSbomMutations';
+import { getApiErrorMessage } from '@/lib/notifications';
 import { cn } from '@/lib/utils';
 import {
   groupEntriesByStage,
@@ -167,9 +168,9 @@ export function ValidationReportSection({ report, onReupload }: ValidationReport
   const handleRevalidate = () => {
     revalidateMutation.mutate(undefined, {
       onError: (err) => {
-        const message = err instanceof Error ? err.message : 'Validation failed to run.';
-        showToast(`Could not re-run validation: ${message}`, 'error');
+        showToast(getApiErrorMessage(err, 'SBOM validation failed to run.'), 'error');
       },
+      onSuccess: () => showToast('SBOM validation completed successfully.', 'success'),
     });
   };
 

@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/Input';
 import { exportFda510kSbomReport, HttpError } from '@/lib/api';
 import { downloadBlob } from '@/lib/utils';
 import { useToast } from '@/hooks/useToast';
+import { getApiErrorMessage } from '@/lib/notifications';
 import type {
   Fda510kIncompleteAnalysisDetail,
   Fda510kReportMetadata,
@@ -108,10 +109,10 @@ export function Fda510kReportDialog({ open, onClose, sboms }: Fda510kReportDialo
           setBlockers(detail);
           setError(null);
         } else {
-          setError(err.message);
+          setError(getApiErrorMessage(err, 'Report generation failed.'));
         }
       } else {
-        setError(err instanceof Error ? err.message : 'Report export failed.');
+        setError(getApiErrorMessage(err, 'Report export failed.'));
       }
     } finally {
       setSubmitting(false);

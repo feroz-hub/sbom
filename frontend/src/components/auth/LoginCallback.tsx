@@ -9,6 +9,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { useNotifications } from '@/hooks/useNotifications';
 
 type CallbackStatus = 'processing' | 'success' | 'error';
 
@@ -16,6 +17,7 @@ export function LoginCallback() {
   const [status, setStatus] = useState<CallbackStatus>('processing');
   const [errorMessage, setErrorMessage] = useState('');
   const processedRef = useRef(false);
+  const { showError } = useNotifications();
 
   useEffect(() => {
     if (processedRef.current) return;
@@ -31,19 +33,22 @@ export function LoginCallback() {
         // Handle IdP errors
         if (error) {
           setStatus('error');
-          setErrorMessage('The identity provider could not complete authentication.');
+          setErrorMessage('Sign-in could not be completed. Please try again.');
+          showError('Sign-in could not be completed. Please try again.');
           return;
         }
 
         if (!code) {
           setStatus('error');
-          setErrorMessage('No authorization code received from the identity provider.');
+          setErrorMessage('Sign-in could not be completed. Please try again.');
+          showError('Sign-in could not be completed. Please try again.');
           return;
         }
 
         if (!state) {
           setStatus('error');
-          setErrorMessage('Invalid state parameter — possible CSRF attack. Please try again.');
+          setErrorMessage('Sign-in could not be completed. Please try again.');
+          showError('Sign-in could not be completed. Please try again.');
           return;
         }
 
@@ -52,7 +57,7 @@ export function LoginCallback() {
           body: JSON.stringify({ code, state }),
         });
         const body = await response.json();
-        if (!response.ok) throw new Error(body.error || 'Authentication could not be completed.');
+        if (!response.ok) throw new Error('Authentication could not be completed.');
 
         setStatus('success');
 
@@ -63,14 +68,15 @@ export function LoginCallback() {
         setTimeout(() => {
           window.location.href = returnUrl;
         }, 300);
-      } catch (err) {
+      } catch {
         setStatus('error');
-        setErrorMessage(err instanceof Error ? err.message : 'An unexpected error occurred.');
+        setErrorMessage('Sign-in could not be completed. Please try again.');
+        showError('Sign-in could not be completed. Please try again.');
       }
     }
 
     handleCallback();
-  }, []);
+  }, [showError]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background">

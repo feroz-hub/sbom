@@ -6,6 +6,7 @@ import { Download, Pencil, Plus, Trash2, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { useToast } from '@/hooks/useToast';
+import { getApiErrorMessage } from '@/lib/notifications';
 import {
   createLifecycleVendorRecord,
   deleteLifecycleVendorRecord,
@@ -51,7 +52,7 @@ export function LifecycleVendorRecordsPage() {
       setCreating(false);
       showToast('Vendor record created', 'success');
     },
-    onError: (error: Error) => showToast(error.message, 'error'),
+    onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Vendor record creation failed.'), 'error'),
   });
 
   const updateMutation = useMutation({
@@ -62,7 +63,7 @@ export function LifecycleVendorRecordsPage() {
       setEditing(null);
       showToast('Vendor record saved', 'success');
     },
-    onError: (error: Error) => showToast(error.message, 'error'),
+    onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Vendor record update failed.'), 'error'),
   });
 
   const deleteMutation = useMutation({
@@ -71,7 +72,7 @@ export function LifecycleVendorRecordsPage() {
       invalidate();
       showToast('Vendor record disabled', 'success');
     },
-    onError: (error: Error) => showToast(error.message, 'error'),
+    onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Vendor record deletion failed.'), 'error'),
   });
 
   const importMutation = useMutation({
@@ -81,7 +82,7 @@ export function LifecycleVendorRecordsPage() {
       setImportText('');
       showToast(`Imported ${result.created} records`, result.errors.length ? 'info' : 'success');
     },
-    onError: (error: Error) => showToast(error.message, 'error'),
+    onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Vendor record import failed.'), 'error'),
   });
 
   // @no-invalidation-needed export downloads current records without mutating server state.
@@ -96,7 +97,7 @@ export function LifecycleVendorRecordsPage() {
       anchor.click();
       URL.revokeObjectURL(url);
     },
-    onError: (error: Error) => showToast(error.message, 'error'),
+    onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Vendor record export failed.'), 'error'),
   });
 
   const records = recordsQuery.data?.items ?? [];

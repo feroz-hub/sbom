@@ -6,6 +6,7 @@ import {
   useAiCredentialSettings,
   useUpdateAiCredentialSettings,
 } from '@/hooks/useAiCredentials';
+import { getApiErrorMessage } from '@/lib/notifications';
 
 interface BudgetCapsFormProps {
   className?: string;
@@ -69,7 +70,7 @@ export function BudgetCapsForm({ className }: BudgetCapsFormProps) {
       },
       {
         onSuccess: () => setSaved(true),
-        onError: (err) => setError(err.message ?? 'Save failed'),
+        onError: (error) => setError(getApiErrorMessage(error, 'AI budget settings could not be saved.')),
       },
     );
   };

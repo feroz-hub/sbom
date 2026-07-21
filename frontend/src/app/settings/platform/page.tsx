@@ -5,32 +5,34 @@ import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { usePermission } from '@/hooks/usePermission';
 import {
-  HttpError,
   getPlatformAdministrators,
   grantPlatformAdministrator,
   revokePlatformAdministrator,
 } from '@/lib/api';
-
-const messageFor = (error: unknown) => error instanceof HttpError ? error.message : 'Platform administration failed.';
+import { useNotifications } from '@/hooks/useNotifications';
+import { getApiErrorMessage } from '@/lib/notifications';
+import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog';
 
 export default function PlatformAdministratorsPage() {
   const canRead = usePermission('platform:user:read');
   const canWrite = usePermission('platform:user:write');
   const queryClient = useQueryClient();
   const [subject, setSubject] = useState('');
-  const [notice, setNotice] = useState<string | null>(null);
+  const [revokeTarget, setRevokeTarget] = useState<{ id: number; name: string } | null>(null);
+  const { showSuccess, showError } = useNotifications();
   const administrators = useQuery({
     queryKey: ['platform-administrators'],
     queryFn: getPlatformAdministrators,
     enabled: canRead,
   });
   const mutation = useMutation({
-    mutationFn: (operation: () => Promise<unknown>) => operation(),
-    onSuccess: async () => {
-      setNotice('Platform administrator authority updated.');
+    mutationFn: ({ operation }: { operation: () => Promise<unknown>; success: string }) => operation(),
+    onSuccess: async (_result, variables) => {
+      showSuccess(variables.success);
+      setRevokeTarget(null);
       await queryClient.invalidateQueries({ queryKey: ['platform-administrators'] });
     },
-    onError: (error) => setNotice(messageFor(error)),
+    onError: (error) => showError(getApiErrorMessage(error, 'Platform administration failed. Please try again.')),
   });
 
   if (!canRead) return <div className="p-8 text-center text-hcl-muted">Platform administrator permission is required.</div>;
@@ -39,9 +41,9 @@ export default function PlatformAdministratorsPage() {
     event.preventDefault();
     const value = subject.trim();
     if (!value) return;
-    mutation.mutate(async () => {
-      await grantPlatformAdministrator(value);
-      setSubject('');
+    mutation.mutate({
+      operation: async () => { await grantPlatformAdministrator(value); setSubject(''); },
+      success: 'Platform administrator access was granted successfully.',
     });
   };
 
@@ -55,7 +57,6 @@ export default function PlatformAdministratorsPage() {
         <Link href="/settings/platform" aria-current="page" className="rounded-md bg-hcl-blue px-3 py-2 font-medium text-white">Administrators</Link>
         <Link href="/settings/platform/tenants" className="rounded-md px-3 py-2 font-medium text-hcl-blue hover:bg-surface-elevated">Tenants</Link>
       </nav>
-      {notice && <div role="status" className="rounded-lg border border-border p-3 text-sm">{notice}</div>}
       {canWrite && (
         <form onSubmit={submit} className="flex gap-3 rounded-lg border border-border p-4">
           <input aria-label="HCL.CS subject" value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Exact existing HCL.CS sub" className="flex-1 rounded-md border border-border bg-background px-3 py-2" required />
@@ -63,7 +64,7 @@ export default function PlatformAdministratorsPage() {
         </form>
       )}
       {administrators.isLoading && <p>Loading platform administrators…</p>}
-      {administrators.error && <p role="alert" className="text-red-600">{messageFor(administrators.error)}</p>}
+      {administrators.error && <p role="alert" className="text-red-600">{getApiErrorMessage(administrators.error, 'Platform administrators could not be loaded.')}</p>}
       <div className="space-y-2">
         {administrators.data?.map((administrator) => (
           <div key={administrator.grant_id} className="flex items-center justify-between rounded-lg border border-border p-4">
@@ -72,15 +73,25 @@ export default function PlatformAdministratorsPage() {
               <div className="text-sm text-hcl-muted">{administrator.email || 'No email'} · {administrator.status}</div>
             </div>
             {canWrite && administrator.status === 'ACTIVE' && (
-              <button type="button" className="text-red-700 hover:underline" onClick={() => {
-                if (window.confirm('Revoke this platform administrator grant immediately?')) {
-                  mutation.mutate(() => revokePlatformAdministrator(administrator.grant_id));
-                }
-              }}>Revoke</button>
+              <button type="button" disabled={mutation.isPending} className="text-red-700 hover:underline disabled:opacity-50" onClick={() =>
+                setRevokeTarget({ id: administrator.grant_id, name: administrator.display_name || administrator.external_iam_user_id })
+              }>Revoke</button>
             )}
           </div>
         ))}
       </div>
+      <ConfirmationDialog
+        open={revokeTarget !== null}
+        title={`Revoke platform administrator “${revokeTarget?.name ?? ''}”?`}
+        description="This immediately removes platform-wide administrative access."
+        confirmLabel="Revoke access"
+        loading={mutation.isPending}
+        onClose={() => !mutation.isPending && setRevokeTarget(null)}
+        onConfirm={() => revokeTarget && mutation.mutate({
+          operation: () => revokePlatformAdministrator(revokeTarget.id),
+          success: 'Platform administrator access was revoked successfully.',
+        })}
+      />
     </div>
   );
 }

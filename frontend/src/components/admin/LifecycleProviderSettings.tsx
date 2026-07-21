@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/Badge';
 import { ProviderHealthBadge } from './ProviderHealthBadge';
 import { LifecycleProviderForm } from './LifecycleProviderForm';
 import { useToast } from '@/hooks/useToast';
+import { getApiErrorMessage, normalizeNotificationMessage } from '@/lib/notifications';
 import {
   deleteLifecycleProviderSecret,
   listLifecycleProviders,
@@ -45,7 +46,7 @@ export function LifecycleProviderSettings() {
       invalidate();
       showToast('Lifecycle provider saved', 'success');
     },
-    onError: (error: Error) => showToast(error.message, 'error'),
+    onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Provider configuration update failed.'), 'error'),
   });
 
   const testMutation = useMutation({
@@ -53,18 +54,18 @@ export function LifecycleProviderSettings() {
     onSuccess: (result, key) => {
       setTestResult((prev) => ({ ...prev, [key]: result }));
       void invalidate();
-      showToast(result.message, result.success ? 'success' : 'error');
+      showToast(normalizeNotificationMessage(result.message, result.success ? 'Provider connection succeeded.' : 'Provider connection failed.'), result.success ? 'success' : 'error');
     },
-    onError: (error: Error) => showToast(error.message, 'error'),
+    onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Provider connection test failed.'), 'error'),
   });
 
   const syncMutation = useMutation({
     mutationFn: (key: string) => syncLifecycleProvider(key),
     onSuccess: (result) => {
       void invalidate();
-      showToast(result.message, 'success');
+      showToast(normalizeNotificationMessage(result.message, 'Provider synchronization was queued successfully.'), 'success');
     },
-    onError: (error: Error) => showToast(error.message, 'error'),
+    onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Provider synchronization failed.'), 'error'),
   });
 
   const secretMutation = useMutation({
@@ -74,7 +75,7 @@ export function LifecycleProviderSettings() {
       void invalidate();
       showToast('Secret saved', 'success');
     },
-    onError: (error: Error) => showToast(error.message, 'error'),
+    onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Provider secret could not be saved.'), 'error'),
   });
 
   const deleteSecretMutation = useMutation({
@@ -83,7 +84,7 @@ export function LifecycleProviderSettings() {
       void invalidate();
       showToast('Secret deleted', 'success');
     },
-    onError: (error: Error) => showToast(error.message, 'error'),
+    onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Provider secret could not be deleted.'), 'error'),
   });
 
   const providers = providersQuery.data ?? [];

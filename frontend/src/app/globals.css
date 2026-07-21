@@ -427,16 +427,6 @@
     animation: scaleFadeIn var(--duration-base) var(--ease-out);
   }
 
-  /* Dim ambient surfaces (toast container, future right-rail) while any
-     dialog is open. The ``[data-dialog-open]`` attribute is set on
-     ``<body>`` by ``components/ui/Dialog.tsx``. Using a CSS rule rather
-     than a context provider keeps this primitive-free — every existing
-     toast call site picks it up automatically. */
-  body[data-dialog-open] [data-toast-container] {
-    opacity: 0.4;
-    pointer-events: none;
-  }
-
   .shimmer {
     position: relative;
     overflow: hidden;

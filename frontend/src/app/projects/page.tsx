@@ -15,7 +15,9 @@ import { Select } from '@/components/ui/Select';
 import { Table, TableBody, TableHead, Td, Th, EmptyRow } from '@/components/ui/Table';
 import { SbomUploadModal } from '@/components/sboms/SbomUploadModal';
 import { createProduct, deleteProduct, getProducts, getProjects, updateProduct } from '@/lib/api';
-import { useToast } from '@/hooks/useToast';
+import { useNotifications } from '@/hooks/useNotifications';
+import { getApiErrorMessage } from '@/lib/notifications';
+import { DeleteConfirmDialog } from '@/components/ui/DeleteConfirmDialog';
 import type { Product, Project, SBOMSource } from '@/types';
 
 type ProductFormState = {
@@ -46,7 +48,7 @@ function ProductFormDialog({
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
-  const { showToast } = useToast();
+  const { showSuccess, showError } = useNotifications();
   const [form, setForm] = useState<ProductFormState>(emptyProductForm);
 
   const mutation = useMutation({
@@ -61,12 +63,12 @@ function ProductFormDialog({
       };
       return product ? updateProduct(product.id, payload) : createProduct(project.id, payload);
     },
-    onSuccess: () => {
+    onSuccess: (_result, _variables) => {
       if (project) queryClient.invalidateQueries({ queryKey: ['products', project.id] });
-      showToast(product ? 'Product updated' : 'Product created', 'success');
+      showSuccess(`Product “${form.name.trim()}” was ${product ? 'updated' : 'created'} successfully.`);
       onClose();
     },
-    onError: (err: Error) => showToast(`Product save failed: ${err.message}`, 'error'),
+    onError: (error: unknown) => showError(getApiErrorMessage(error, 'Product save failed. Please try again.')),
   });
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -156,10 +158,11 @@ function ProductFormDialog({
 
 function ProjectProducts({ project }: { project: Project }) {
   const queryClient = useQueryClient();
-  const { showToast } = useToast();
+  const { showSuccess, showError } = useNotifications();
   const [formOpen, setFormOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [uploadProduct, setUploadProduct] = useState<Product | null>(null);
+  const [deleteProductTarget, setDeleteProductTarget] = useState<Product | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['products', project.id],
@@ -169,11 +172,12 @@ function ProjectProducts({ project }: { project: Project }) {
 
   const deleteMutation = useMutation({
     mutationFn: (product: Product) => deleteProduct(product.id),
-    onSuccess: () => {
+    onSuccess: (_data, deletedProduct) => {
       queryClient.invalidateQueries({ queryKey: ['products', project.id] });
-      showToast('Product deleted', 'success');
+      showSuccess(`Product “${deletedProduct.name}” was deleted successfully.`);
+      setDeleteProductTarget(null);
     },
-    onError: (err: Error) => showToast(`Delete failed: ${err.message}`, 'error'),
+    onError: (error: unknown) => showError(getApiErrorMessage(error, 'Product deletion failed. Please try again.')),
   });
 
   const handleUploadSuccess = (_sbom: SBOMSource) => {
@@ -247,7 +251,7 @@ function ProjectProducts({ project }: { project: Project }) {
                         size="icon"
                         variant="ghost"
                         title="Delete product"
-                        onClick={() => deleteMutation.mutate(product)}
+                        onClick={() => setDeleteProductTarget(product)}
                         disabled={deleteMutation.isPending}
                       >
                         <Trash2 className="h-4 w-4" />
@@ -276,6 +280,16 @@ function ProjectProducts({ project }: { project: Project }) {
         initialProjectId={project.id}
         initialProductId={uploadProduct?.id}
         onSuccess={handleUploadSuccess}
+      />
+      <DeleteConfirmDialog
+        open={deleteProductTarget !== null}
+        onClose={() => !deleteMutation.isPending && setDeleteProductTarget(null)}
+        onConfirm={() => deleteProductTarget && deleteMutation.mutate(deleteProductTarget)}
+        loading={deleteMutation.isPending}
+        recordName={deleteProductTarget?.name ?? ''}
+        recordKind="product"
+        allowPermanent={false}
+        title={`Delete product “${deleteProductTarget?.name ?? ''}”?`}
       />
     </Card>
   );

@@ -17,6 +17,7 @@ import {
   runScheduleNow,
 } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
+import { getApiErrorMessage } from '@/lib/notifications';
 import { formatRelative } from '@/lib/utils';
 import { HttpError } from '@/lib/api';
 import {
@@ -103,7 +104,7 @@ export function ScheduleCard({ scope, targetId }: ScheduleCardProps) {
       showToast('Schedule paused', 'success');
       invalidate();
     },
-    onError: (err: Error) => showToast(`Pause failed: ${err.message}`, 'error'),
+    onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Schedule pause failed.'), 'error'),
   });
 
   const resumeMutation = useMutation({
@@ -112,7 +113,7 @@ export function ScheduleCard({ scope, targetId }: ScheduleCardProps) {
       showToast('Schedule resumed', 'success');
       invalidate();
     },
-    onError: (err: Error) => showToast(`Resume failed: ${err.message}`, 'error'),
+    onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Schedule resume failed.'), 'error'),
   });
 
   const runNowMutation = useMutation({
@@ -126,7 +127,7 @@ export function ScheduleCard({ scope, targetId }: ScheduleCardProps) {
       invalidateSbomLists(queryClient);
       invalidateDashboardTiles(queryClient);
     },
-    onError: (err: Error) => showToast(`Run-now failed: ${err.message}`, 'error'),
+    onError: (error: unknown) => showToast(getApiErrorMessage(error, 'The scheduled analysis could not be queued.'), 'error'),
   });
 
   const deleteMutation = useMutation({
@@ -143,7 +144,7 @@ export function ScheduleCard({ scope, targetId }: ScheduleCardProps) {
       setConfirmDelete(false);
       invalidate();
     },
-    onError: (err: Error) => showToast(`Remove failed: ${err.message}`, 'error'),
+    onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Schedule deletion failed.'), 'error'),
   });
 
   // Empty state — no project schedule, or no SBOM override AND no parent cascade.

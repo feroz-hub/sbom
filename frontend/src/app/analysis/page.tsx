@@ -31,6 +31,7 @@ import {
 } from '@/lib/api';
 import { runStatusShortLabel } from '@/lib/analysisRunStatusLabels';
 import { useToast } from '@/hooks/useToast';
+import { getApiErrorMessage } from '@/lib/notifications';
 import { useAnalysisUrlState } from '@/hooks/useAnalysisUrlState';
 import { useSbomsList } from '@/hooks/useSbomsList';
 
@@ -124,7 +125,7 @@ function AnalysisPageInner() {
 
   const handleAnalysisComplete = useCallback(
     (runId: number) => {
-      showToast(`Run #${runId} complete`, 'success');
+      showToast(`Analysis run #${runId} completed successfully.`, 'success');
       refetch();
     },
     [showToast, refetch],
@@ -137,9 +138,9 @@ function AnalysisPageInner() {
         sbom_id: sbomFilter ? Number(sbomFilter) : undefined,
         run_status: statusFilter || undefined,
       });
-      showToast('Exported as JSON', 'success');
-    } catch (err) {
-      showToast(`Export failed: ${(err as Error).message}`, 'error');
+      showToast('Analysis runs were exported successfully.', 'success');
+    } catch (error) {
+      showToast(getApiErrorMessage(error, 'Analysis export failed. Please try again.'), 'error');
     }
   };
 

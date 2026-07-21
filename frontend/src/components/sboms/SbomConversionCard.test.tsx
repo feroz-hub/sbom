@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ToastProvider } from '@/hooks/useToast';
 
 import { SbomConversionCard } from '@/components/sboms/SbomConversionCard';
 import type { SBOMSource } from '@/types';
@@ -31,7 +32,7 @@ vi.mock('@/lib/api', async () => {
 
 function wrapper(children: ReactNode) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
+  return <QueryClientProvider client={qc}><ToastProvider>{children}</ToastProvider></QueryClientProvider>;
 }
 
 const spdxSbom: SBOMSource = {
@@ -169,7 +170,7 @@ describe('SbomConversionCard', () => {
     fireEvent.click(screen.getByRole('button', { name: /Convert to CycloneDX/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/Conversion failed: invalid SPDX/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/SBOM conversion failed\. Please try again\./i).length).toBeGreaterThan(0);
     });
   });
 

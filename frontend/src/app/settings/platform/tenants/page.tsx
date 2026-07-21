@@ -6,11 +6,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import {
   type CreateTenantRequest,
-  HttpError,
+  ApiError,
   createPlatformTenant,
   listPlatformTenants,
   updatePlatformTenantStatus,
 } from '@/lib/api';
+import { useNotifications } from '@/hooks/useNotifications';
+import { getApiErrorMessage } from '@/lib/notifications';
+import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog';
 
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const EMPTY_FORM: CreateTenantRequest = { name: '', slug: '', external_iam_tenant_id: '' };
@@ -39,7 +42,7 @@ export function validateTenantForm(values: CreateTenantRequest): Partial<Record<
 }
 
 function safeErrorMessage(error: unknown): string {
-  if (!(error instanceof HttpError)) {
+  if (!(error instanceof ApiError)) {
     return 'The tenant could not be created. Please try again or contact the platform administrator.';
   }
   if (error.status === 401) return 'Your session has expired. Please sign in again.';
@@ -54,7 +57,15 @@ function safeErrorMessage(error: unknown): string {
 }
 
 function validationErrorsFromResponse(error: unknown): Partial<Record<keyof CreateTenantRequest, string>> {
-  if (!(error instanceof HttpError) || error.status !== 422 || !Array.isArray(error.detail)) return {};
+  if (!(error instanceof ApiError) || error.status !== 422) return {};
+  if (error.fieldErrors) {
+    const mapped: Partial<Record<keyof CreateTenantRequest, string>> = {};
+    for (const field of ['name', 'slug', 'external_iam_tenant_id'] as const) {
+      if (error.fieldErrors[field]?.[0]) mapped[field] = error.fieldErrors[field][0];
+    }
+    return mapped;
+  }
+  if (!Array.isArray(error.detail)) return {};
   const errors: Partial<Record<keyof CreateTenantRequest, string>> = {};
   for (const issue of error.detail as Array<{ loc?: Array<string | number>; msg?: string }>) {
     const field = issue.loc?.at(-1);
@@ -79,7 +90,8 @@ export default function PlatformTenantsPage() {
   const [form, setForm] = useState<CreateTenantRequest>(EMPTY_FORM);
   const [slugEdited, setSlugEdited] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof CreateTenantRequest, string>>>({});
-  const [notice, setNotice] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
+  const { showSuccess, showError, showInfo } = useNotifications();
+  const [disableTarget, setDisableTarget] = useState<{ id: number | string; name: string } | null>(null);
   const [highlightedTenantId, setHighlightedTenantId] = useState<number | string | null>(null);
 
   const tenants = useQuery({
@@ -93,7 +105,7 @@ export default function PlatformTenantsPage() {
     mutationFn: createPlatformTenant,
     onSuccess: async (tenant) => {
       setHighlightedTenantId(tenant.id);
-      setNotice({ kind: 'success', message: `Tenant “${tenant.name}” was created successfully.` });
+      showSuccess(`Tenant “${tenant.name}” was created successfully.`);
       setForm(EMPTY_FORM);
       setSlugEdited(false);
       setFieldErrors({});
@@ -102,18 +114,19 @@ export default function PlatformTenantsPage() {
     },
     onError: (error) => {
       setFieldErrors(validationErrorsFromResponse(error));
-      setNotice({ kind: 'error', message: safeErrorMessage(error) });
+      showError(safeErrorMessage(error));
     },
   });
 
   const changeStatus = useMutation({
-    mutationFn: ({ id, status }: { id: number | string; status: 'ACTIVE' | 'DISABLED' }) =>
+    mutationFn: ({ id, status }: { id: number | string; name: string; status: 'ACTIVE' | 'DISABLED' }) =>
       updatePlatformTenantStatus(id, status),
     onSuccess: async (_result, variables) => {
-      setNotice({ kind: 'success', message: `Tenant was ${variables.status === 'ACTIVE' ? 'activated' : 'disabled'} successfully.` });
+      showSuccess(`Tenant “${variables.name}” was ${variables.status === 'ACTIVE' ? 'activated' : 'disabled'} successfully.`);
+      setDisableTarget(null);
       await queryClient.invalidateQueries({ queryKey: ['platform-tenants'] });
     },
-    onError: (error) => setNotice({ kind: 'error', message: safeErrorMessage(error) }),
+    onError: (error) => showError(getApiErrorMessage(error, 'The tenant status could not be changed.')),
   });
 
   const submit = (event: FormEvent) => {
@@ -125,7 +138,6 @@ export default function PlatformTenantsPage() {
     };
     const errors = validateTenantForm(normalized);
     setFieldErrors(errors);
-    setNotice(null);
     if (Object.keys(errors).length > 0) return;
     createTenant.mutate(normalized);
   };
@@ -153,7 +165,7 @@ export default function PlatformTenantsPage() {
         </div>
         <button
           type="button"
-          onClick={() => { setFormOpen(true); setNotice(null); }}
+          onClick={() => setFormOpen(true)}
           className="rounded-md bg-hcl-blue px-4 py-2 text-sm font-medium text-white"
         >
           Create Tenant
@@ -164,12 +176,6 @@ export default function PlatformTenantsPage() {
         <Link href="/settings/platform" className="rounded-md px-3 py-2 font-medium text-hcl-blue hover:bg-surface-elevated">Administrators</Link>
         <Link href="/settings/platform/tenants" aria-current="page" className="rounded-md bg-hcl-blue px-3 py-2 font-medium text-white">Tenants</Link>
       </nav>
-
-      {notice && (
-        <div role="status" className={`rounded-lg border p-3 text-sm ${notice.kind === 'error' ? 'border-red-300 text-red-700' : 'border-emerald-300 text-emerald-700'}`}>
-          {notice.message}
-        </div>
-      )}
 
       {formOpen && (
         <section aria-labelledby="create-tenant-heading" className="rounded-xl border border-border bg-surface p-5 shadow-elev-1">
@@ -237,7 +243,10 @@ export default function PlatformTenantsPage() {
       <section aria-labelledby="tenant-list-heading" className="space-y-3">
         <div className="flex items-center justify-between gap-3">
           <h2 id="tenant-list-heading" className="text-lg font-semibold">Existing tenants</h2>
-          <button type="button" onClick={() => void tenants.refetch()} disabled={tenants.isFetching} className="rounded-md border border-border px-3 py-1.5 text-sm disabled:opacity-50">
+          <button type="button" onClick={() => void tenants.refetch().then((result) => {
+            if (result.error) showError(getApiErrorMessage(result.error, 'Tenant refresh failed.'));
+            else showInfo('Tenant list refreshed.');
+          })} disabled={tenants.isFetching} className="rounded-md border border-border px-3 py-1.5 text-sm disabled:opacity-50">
             {tenants.isFetching ? 'Refreshing…' : 'Refresh'}
           </button>
         </div>
@@ -271,13 +280,11 @@ export default function PlatformTenantsPage() {
                           type="button"
                           className="text-red-700 hover:underline"
                           onClick={() => {
-                            if (window.confirm('Disable this tenant? All normal members will lose access on their next request.')) {
-                              changeStatus.mutate({ id: tenant.id, status: 'DISABLED' });
-                            }
+                            setDisableTarget({ id: tenant.id, name: tenant.name });
                           }}
                         >Disable</button>
                       ) : (
-                        <button type="button" className="text-emerald-700 hover:underline" onClick={() => changeStatus.mutate({ id: tenant.id, status: 'ACTIVE' })}>Activate</button>
+                        <button type="button" disabled={changeStatus.isPending} className="text-emerald-700 hover:underline disabled:opacity-50" onClick={() => changeStatus.mutate({ id: tenant.id, name: tenant.name, status: 'ACTIVE' })}>Activate</button>
                       )}
                     </td>
                   </tr>
@@ -293,6 +300,15 @@ export default function PlatformTenantsPage() {
           Create or configure the corresponding HCL.CS tenant_id claim, then add users through Tenant Settings.
         </div>
       )}
+      <ConfirmationDialog
+        open={disableTarget !== null}
+        title={`Disable tenant “${disableTarget?.name ?? ''}”?`}
+        description="Normal members will lose access on their next request. Existing data is retained."
+        confirmLabel="Disable tenant"
+        loading={changeStatus.isPending}
+        onClose={() => !changeStatus.isPending && setDisableTarget(null)}
+        onConfirm={() => disableTarget && changeStatus.mutate({ ...disableTarget, status: 'DISABLED' })}
+      />
     </div>
   );
 }

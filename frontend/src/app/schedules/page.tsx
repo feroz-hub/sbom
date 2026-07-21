@@ -40,6 +40,7 @@ import {
   runScheduleNow,
 } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
+import { getApiErrorMessage } from '@/lib/notifications';
 import { formatRelative } from '@/lib/utils';
 import { matchesMultiField } from '@/lib/tableFilters';
 import { canonicalRunStatus } from '@/lib/analysisRunStatusLabels';
@@ -155,7 +156,7 @@ export default function SchedulesPage() {
       showToast('Paused', 'success');
       invalidate();
     },
-    onError: (err: Error) => showToast(`Pause failed: ${err.message}`, 'error'),
+    onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Schedule pause failed.'), 'error'),
   });
   const resumeM = useMutation({
     mutationFn: (id: number) => resumeSchedule(id),
@@ -163,7 +164,7 @@ export default function SchedulesPage() {
       showToast('Resumed', 'success');
       invalidate();
     },
-    onError: (err: Error) => showToast(`Resume failed: ${err.message}`, 'error'),
+    onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Schedule resume failed.'), 'error'),
   });
   const runNowM = useMutation({
     mutationFn: (id: number) => runScheduleNow(id),
@@ -179,7 +180,7 @@ export default function SchedulesPage() {
       invalidateSbomLists(queryClient);
       invalidateDashboardTiles(queryClient);
     },
-    onError: (err: Error) => showToast(`Run-now failed: ${err.message}`, 'error'),
+    onError: (error: unknown) => showToast(getApiErrorMessage(error, 'The scheduled analysis could not be queued.'), 'error'),
   });
   const deleteM = useMutation({
     mutationFn: ({
@@ -202,7 +203,7 @@ export default function SchedulesPage() {
       setConfirmDelete(null);
       invalidate();
     },
-    onError: (err: Error) => showToast(`Remove failed: ${err.message}`, 'error'),
+    onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Schedule deletion failed.'), 'error'),
   });
 
   const filtersActive = scope !== 'all' || enabled !== 'all' || search.trim() !== '';

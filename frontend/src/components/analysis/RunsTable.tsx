@@ -16,6 +16,7 @@ import { canonicalRunStatus, runStatusShortLabel } from '@/lib/analysisRunStatus
 import { matchesMultiField } from '@/lib/tableFilters';
 import { formatDate, formatDuration, downloadBlob } from '@/lib/utils';
 import { useToast } from '@/hooks/useToast';
+import { getApiErrorMessage } from '@/lib/notifications';
 import { useTableSort } from '@/hooks/useTableSort';
 import { usePagination } from '@/hooks/usePagination';
 import type { AnalysisRun } from '@/types';
@@ -85,9 +86,9 @@ export function RunsTable({ runs, isLoading, error, selectedIds, onToggleSelect 
         filename: `sbom-analysis-run-${run.id}.pdf`,
       });
       downloadBlob(blob, `sbom-analysis-run-${run.id}.pdf`);
-      showToast('PDF report downloaded', 'success');
-    } catch (err) {
-      showToast(`Failed to download PDF: ${(err as Error).message}`, 'error');
+      showToast('The report is ready for download.', 'success');
+    } catch (error) {
+      showToast(getApiErrorMessage(error, 'Report generation failed. Please try again.'), 'error');
     } finally {
       setDownloadingId(null);
     }

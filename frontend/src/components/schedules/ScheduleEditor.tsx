@@ -11,6 +11,7 @@ import {
   upsertSbomSchedule,
 } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
+import { getApiErrorMessage } from '@/lib/notifications';
 import type {
   AnalysisSchedule,
   ScheduleCadence,
@@ -119,8 +120,8 @@ export function ScheduleEditor({
       showToast(existing ? 'Schedule updated' : 'Schedule created', 'success');
       onClose();
     },
-    onError: (err: Error) => {
-      showToast(`Save failed: ${err.message}`, 'error');
+    onError: (error: unknown) => {
+      showToast(getApiErrorMessage(error, 'Schedule save failed. Please try again.'), 'error');
     },
   });
 

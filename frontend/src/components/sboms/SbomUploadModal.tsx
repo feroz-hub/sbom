@@ -16,6 +16,7 @@ import { createProduct, getProducts, getProjects, getSbomTypes, HttpError } from
 import { getRepairWorkspaceUrl, repairWorkspaceLabel } from '@/lib/repairWorkspace';
 import { detectSbomFormatFromText, formatFamily, formatSbomFormatLabel, type SbomFormatDetection } from '@/lib/sbomFormat';
 import { useToast } from '@/hooks/useToast';
+import { getApiErrorMessage } from '@/lib/notifications';
 import { useSbomsList } from '@/hooks/useSbomsList';
 import { useUploadSbom } from '@/hooks/useSbomMutations';
 import { invalidateUploadSurfaces } from '@/lib/queryInvalidation';
@@ -195,7 +196,7 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
       setNewProductName('');
       showToast('Product created', 'success');
     },
-    onError: (err: Error) => showToast(`Create product failed: ${err.message}`, 'error'),
+    onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Product creation failed. Please try again.'), 'error'),
   });
 
   useEffect(() => {
@@ -366,6 +367,7 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
             // Generic upload failure (network, 409 duplicate, 413 too-large) —
             // fall back to the existing one-line error banner.
             setUploadError(formatUploadError(err));
+            showToast(getApiErrorMessage(err, 'SBOM upload failed. Please try again.'), 'error');
           }
         },
       },

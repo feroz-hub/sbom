@@ -79,7 +79,10 @@ def create_project(
         existing_project = db.query(Projects).filter(Projects.project_name == payload.project_name).first()
 
         if existing_project:
-            raise HTTPException(status_code=400, detail="Project with this name already exists")
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"code": "PROJECT_ALREADY_EXISTS", "message": "A project with this name already exists."},
+            )
 
         data = payload.model_dump()
         data["created_by"] = data.get("created_by") or context.actor_label()
@@ -90,9 +93,15 @@ def create_project(
 
         return obj
 
+    except HTTPException:
+        db.rollback()
+        raise
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=400, detail="Duplicate project name not allowed")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "PROJECT_ALREADY_EXISTS", "message": "A project with this name already exists."},
+        )
 
     except Exception:
         db.rollback()

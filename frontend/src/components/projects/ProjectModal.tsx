@@ -10,7 +10,8 @@ import { Input, Textarea } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
 import { createProject, updateProject } from '@/lib/api';
-import { useToast } from '@/hooks/useToast';
+import { useNotifications } from '@/hooks/useNotifications';
+import { toUserFacingApiError } from '@/lib/notifications';
 import {
   invalidateProjectLists,
   invalidateSbomLists,
@@ -37,13 +38,14 @@ interface ProjectModalProps {
 
 export function ProjectModal({ open, onClose, project }: ProjectModalProps) {
   const queryClient = useQueryClient();
-  const { showToast } = useToast();
+  const { showSuccess, showApiError } = useNotifications();
   const isEdit = !!project;
 
   const {
     register,
     handleSubmit,
     reset,
+    setError,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -84,16 +86,25 @@ export function ProjectModal({ open, onClose, project }: ProjectModalProps) {
         created_by: values.created_by,
       });
     },
-    onSuccess: () => {
+    onSuccess: (_result, values) => {
       invalidateProjectLists(queryClient);
       // SBOM rows render project_name; a rename leaves them stale until
       // staleTime expires. Bust the SBOM list surfaces too.
       invalidateSbomLists(queryClient);
-      showToast(isEdit ? 'Project updated' : 'Project created', 'success');
+      showSuccess(
+        `Project “${values.project_name.trim()}” was ${isEdit ? 'updated' : 'created'} successfully.`,
+      );
       onClose();
     },
-    onError: (err: Error) => {
-      showToast(`Error: ${err.message}`, 'error');
+    onError: (error: unknown) => {
+      const normalized = toUserFacingApiError(
+        error,
+        isEdit ? 'Project update failed. Please try again.' : 'Project creation failed. Please try again.',
+      );
+      for (const [field, messages] of Object.entries(normalized.fieldErrors)) {
+        if (field in schema.shape) setError(field as keyof FormValues, { message: messages[0] });
+      }
+      showApiError(error, normalized.message);
     },
   });
 

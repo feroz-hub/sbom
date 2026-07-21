@@ -13,6 +13,7 @@ import type {
   AiTier,
 } from '@/types/ai';
 import { TestResultDisplay } from '../AddProviderDialog/TestResultDisplay';
+import { getApiErrorMessage } from '@/lib/notifications';
 
 interface EditProviderDialogProps {
   credential: AiCredential | null;
@@ -90,7 +91,7 @@ export function EditProviderDialog({ credential, onClose }: EditProviderDialogPr
       { id: credential.id, body },
       {
         onSuccess: () => onClose(),
-        onError: (err) => setSubmitError(err.message ?? 'Update failed'),
+        onError: (error) => setSubmitError(getApiErrorMessage(error, 'Provider update failed.')),
       },
     );
   };

@@ -17,7 +17,8 @@ import { SbomStatusBadge } from '@/components/sboms/SbomStatusBadge';
 import { PinButton } from '@/components/ui/PinButton';
 import { SelectionCheckbox } from '@/components/ui/SelectionCheckbox';
 import { Fda510kReportDialog } from '@/components/sboms/Fda510kReportDialog';
-import { deleteSbom, getSbomDeleteImpact, HttpError } from '@/lib/api';
+import { deleteSbom, getSbomDeleteImpact } from '@/lib/api';
+import { getApiErrorMessage } from '@/lib/notifications';
 import { matchesMultiField } from '@/lib/tableFilters';
 import { formatDate } from '@/lib/utils';
 import { useToast } from '@/hooks/useToast';
@@ -145,17 +146,11 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
       invalidateRunLists(queryClient);
       invalidateScheduleLists(queryClient);
       invalidateDashboardTiles(queryClient);
-      showToast(
-        permanent ? 'SBOM permanently deleted' : 'SBOM soft deleted',
-        'success',
-      );
+      showToast(`SBOM “${sbom.sbom_name}” was ${permanent ? 'deleted' : 'archived'} successfully.`, 'success');
       setDeleteTarget(null);
     },
-    onError: (err: Error) => {
-      const prefix = err instanceof HttpError && err.status === 409
-        ? 'Cannot delete SBOM'
-        : 'Delete failed';
-      showToast(`${prefix}: ${err.message}`, 'error');
+    onError: (error: unknown) => {
+      showToast(getApiErrorMessage(error, 'SBOM deletion failed. Please try again.'), 'error');
     },
   });
 

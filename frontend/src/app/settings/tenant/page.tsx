@@ -5,7 +5,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { usePermission } from '@/hooks/usePermission';
 import {
-  HttpError,
   type TenantRole,
   activateTenantMember,
   addTenantMember,
@@ -15,15 +14,13 @@ import {
   removeTenantMember,
   updateTenantMemberRole,
 } from '@/lib/api';
+import { useNotifications } from '@/hooks/useNotifications';
+import { getApiErrorMessage } from '@/lib/notifications';
+import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog';
 
-function errorMessage(error: unknown): string {
-  if (!(error instanceof HttpError)) return 'The operation could not be completed.';
-  if (error.status === 401) return 'Your session expired. A safe sign-in flow has been started.';
-  if (error.status === 403) return 'You are authenticated but do not have permission for this action.';
-  if (error.status === 404) return 'This membership is not available in the current tenant.';
-  if (error.status === 409) return error.message;
-  if (error.status === 422) return `Invalid member data: ${error.message}`;
-  return error.message;
+interface MemberAction {
+  operation: () => Promise<unknown>;
+  success: string;
 }
 
 export default function TenantUsersPage() {
@@ -35,7 +32,8 @@ export default function TenantUsersPage() {
   const qc = useQueryClient();
   const [externalUserId, setExternalUserId] = useState('');
   const [initialRole, setInitialRole] = useState<TenantRole>('VIEWER');
-  const [notice, setNotice] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
+  const { showSuccess, showError } = useNotifications();
+  const [confirmation, setConfirmation] = useState<(MemberAction & { title: string; description: string; confirmLabel: string }) | null>(null);
 
   const members = useQuery({
     queryKey: ['tenant-users', tenantId],
@@ -49,27 +47,26 @@ export default function TenantUsersPage() {
   });
 
   const action = useMutation({
-    mutationFn: async (operation: () => Promise<unknown>) => operation(),
-    onSuccess: async () => {
-      setNotice({ kind: 'success', message: 'Tenant membership updated.' });
+    mutationFn: async ({ operation }: MemberAction) => operation(),
+    onSuccess: async (_result, variables) => {
+      showSuccess(variables.success);
+      setConfirmation(null);
       await qc.invalidateQueries({ queryKey: ['tenant-users', tenantId] });
     },
-    onError: (error) => setNotice({ kind: 'error', message: errorMessage(error) }),
+    onError: (error) => showError(getApiErrorMessage(error, 'The tenant membership could not be updated.')),
   });
 
   const submitMember = (event: FormEvent) => {
     event.preventDefault();
     const subject = externalUserId.trim();
     if (!subject) return;
-    action.mutate(async () => {
-      await addTenantMember(tenantId, { external_user_id: subject, role: initialRole });
-      setExternalUserId('');
+    action.mutate({
+      operation: async () => { await addTenantMember(tenantId, { external_user_id: subject, role: initialRole }); setExternalUserId(''); },
+      success: 'The user was added to the tenant successfully.',
     });
   };
 
-  const confirmAction = (message: string, operation: () => Promise<unknown>) => {
-    if (window.confirm(message)) action.mutate(operation);
-  };
+  const confirmAction = (value: NonNullable<typeof confirmation>) => setConfirmation(value);
 
   if (!canRead) {
     return <div className="p-8 text-center text-hcl-muted">You do not have permission to view tenant users.</div>;
@@ -83,12 +80,6 @@ export default function TenantUsersPage() {
           HCL.CS owns identity. This page manages SBOM onboarding, membership, and tenant roles.
         </p>
       </div>
-
-      {notice && (
-        <div role="status" className={`rounded-lg border p-3 text-sm ${notice.kind === 'error' ? 'border-red-300 text-red-700' : 'border-emerald-300 text-emerald-700'}`}>
-          {notice.message}
-        </div>
-      )}
 
       {canInvite && (
         <form onSubmit={submitMember} className="grid gap-3 rounded-lg border border-border p-4 md:grid-cols-[1fr_220px_auto]">
@@ -115,13 +106,13 @@ export default function TenantUsersPage() {
             </select>
           </label>
           <button type="submit" disabled={action.isPending} className="self-end rounded-md bg-hcl-blue px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
-            Add member
+            {action.isPending ? 'Adding…' : 'Add member'}
           </button>
         </form>
       )}
 
       {members.isLoading && <p className="text-sm text-hcl-muted">Loading tenant members…</p>}
-      {members.error && <p role="alert" className="text-sm text-red-600">{errorMessage(members.error)}</p>}
+      {members.error && <p role="alert" className="text-sm text-red-600">{getApiErrorMessage(members.error, 'Tenant members could not be loaded.')}</p>}
       {members.data?.length === 0 && <div className="rounded-lg border border-dashed border-border p-8 text-center text-hcl-muted">No tenant memberships.</div>}
 
       {members.data && members.data.length > 0 && (
@@ -149,7 +140,13 @@ export default function TenantUsersPage() {
                         value={member.role}
                         onChange={(event) => {
                           const nextRole = event.target.value as TenantRole;
-                          confirmAction(`Change this member's role to ${nextRole}?`, () => updateTenantMemberRole(tenantId, member.membership_id, nextRole));
+                          confirmAction({
+                            title: `Change role for “${member.display_name || member.external_iam_user_id}”?`,
+                            description: `This changes the tenant role to ${nextRole} and takes effect immediately.`,
+                            confirmLabel: 'Change role',
+                            operation: () => updateTenantMemberRole(tenantId, member.membership_id, nextRole),
+                            success: `The user’s role was changed to ${nextRole}.`,
+                          });
                         }}
                         className="rounded-md border border-border bg-background px-2 py-1"
                       >
@@ -161,11 +158,11 @@ export default function TenantUsersPage() {
                   {canUpdate && (
                     <td className="space-x-3 px-4 py-3 text-right">
                       {member.status === 'ACTIVE' ? (
-                        <button type="button" className="text-amber-700 hover:underline" onClick={() => confirmAction('Deactivate this membership immediately?', () => deactivateTenantMember(tenantId, member.membership_id))}>Deactivate</button>
+                        <button type="button" className="text-amber-700 hover:underline" onClick={() => confirmAction({ title: `Deactivate “${member.display_name || member.external_iam_user_id}”?`, description: 'The user will lose tenant access immediately.', confirmLabel: 'Deactivate', operation: () => deactivateTenantMember(tenantId, member.membership_id), success: 'The tenant membership was deactivated.' })}>Deactivate</button>
                       ) : (
-                        <button type="button" className="text-emerald-700 hover:underline" onClick={() => confirmAction('Activate this membership?', () => activateTenantMember(tenantId, member.membership_id))}>Activate</button>
+                        <button type="button" className="text-emerald-700 hover:underline" onClick={() => action.mutate({ operation: () => activateTenantMember(tenantId, member.membership_id), success: 'The tenant membership was activated.' })}>Activate</button>
                       )}
-                      <button type="button" className="text-red-700 hover:underline" onClick={() => confirmAction('Remove this membership permanently?', () => removeTenantMember(tenantId, member.membership_id))}>Remove</button>
+                      <button type="button" className="text-red-700 hover:underline" onClick={() => confirmAction({ title: `Remove “${member.display_name || member.external_iam_user_id}” from the tenant?`, description: 'The user will lose tenant access and this membership will be permanently removed.', confirmLabel: 'Remove member', operation: () => removeTenantMember(tenantId, member.membership_id), success: 'The user was removed from the tenant.' })}>Remove</button>
                     </td>
                   )}
                 </tr>
@@ -174,6 +171,15 @@ export default function TenantUsersPage() {
           </table>
         </div>
       )}
+      <ConfirmationDialog
+        open={confirmation !== null}
+        title={confirmation?.title ?? ''}
+        description={confirmation?.description ?? ''}
+        confirmLabel={confirmation?.confirmLabel ?? 'Confirm'}
+        loading={action.isPending}
+        onClose={() => !action.isPending && setConfirmation(null)}
+        onConfirm={() => confirmation && action.mutate(confirmation)}
+      />
     </div>
   );
 }

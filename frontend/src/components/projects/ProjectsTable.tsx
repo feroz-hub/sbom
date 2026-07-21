@@ -16,7 +16,8 @@ import { ProjectScheduleDialog } from '@/components/schedules/ProjectScheduleDia
 import { deleteProject, getProjectDeleteImpact } from '@/lib/api';
 import { matchesMultiField } from '@/lib/tableFilters';
 import { formatDate } from '@/lib/utils';
-import { useToast } from '@/hooks/useToast';
+import { useNotifications } from '@/hooks/useNotifications';
+import { getApiErrorMessage } from '@/lib/notifications';
 import { useTableSort } from '@/hooks/useTableSort';
 import { usePagination } from '@/hooks/usePagination';
 import {
@@ -38,7 +39,7 @@ interface ProjectsTableProps {
 
 export function ProjectsTable({ projects, isLoading, error }: ProjectsTableProps) {
   const queryClient = useQueryClient();
-  const { showToast } = useToast();
+  const { showSuccess, showError } = useNotifications();
   const [editProject, setEditProject] = useState<Project | null>(null);
   const [scheduleProject, setScheduleProject] = useState<Project | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
@@ -64,14 +65,14 @@ export function ProjectsTable({ projects, isLoading, error }: ProjectsTableProps
       invalidateRunLists(queryClient);
       invalidateScheduleLists(queryClient);
       invalidateDashboardTiles(queryClient);
-      showToast(
-        permanent ? 'Project permanently deleted' : 'Project moved to deleted',
-        'success',
-      );
+      const name = deleteTarget?.project_name ?? 'Project';
+      showSuccess(permanent
+        ? `Project “${name}” was deleted successfully.`
+        : `Project “${name}” was archived successfully.`);
       setDeleteTarget(null);
     },
-    onError: (err: Error) => {
-      showToast(`Delete failed: ${err.message}`, 'error');
+    onError: (error: unknown) => {
+      showError(getApiErrorMessage(error, 'Project deletion failed. Please try again.'));
     },
   });
 
@@ -131,7 +132,7 @@ export function ProjectsTable({ projects, isLoading, error }: ProjectsTableProps
   if (error) {
     return (
       <Alert variant="error" title="Could not load projects">
-        {error.message}
+        {getApiErrorMessage(error, 'Projects could not be loaded. Please try again.')}
       </Alert>
     );
   }

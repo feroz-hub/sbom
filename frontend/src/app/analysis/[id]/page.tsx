@@ -32,6 +32,7 @@ import {
 import { runStatusDescription } from '@/lib/analysisRunStatusLabels';
 import { downloadBlob } from '@/lib/utils';
 import { useToast } from '@/hooks/useToast';
+import { getApiErrorMessage } from '@/lib/notifications';
 
 interface AnalysisDetailPageProps {
   params: Promise<{ id: string }>;
@@ -145,7 +146,7 @@ function AnalysisDetailContent({ params }: AnalysisDetailPageProps) {
       downloadBlob(blob, `sbom-analysis-run-${run.id}.pdf`);
       showToast('PDF report downloaded', 'success');
     } catch (err) {
-      showToast(`PDF export failed: ${(err as Error).message}`, 'error');
+      showToast(getApiErrorMessage(err, 'PDF report generation failed.'), 'error');
     } finally {
       setPdfDownloading(false);
     }
@@ -159,7 +160,7 @@ function AnalysisDetailContent({ params }: AnalysisDetailPageProps) {
       downloadBlob(blob, filename);
       showToast('CSV exported', 'success');
     } catch (err) {
-      showToast(`CSV export failed: ${(err as Error).message}`, 'error');
+      showToast(getApiErrorMessage(err, 'CSV export failed.'), 'error');
     } finally {
       setCsvDownloading(false);
     }
@@ -173,7 +174,7 @@ function AnalysisDetailContent({ params }: AnalysisDetailPageProps) {
       downloadBlob(blob, filename);
       showToast('SARIF exported', 'success');
     } catch (err) {
-      showToast(`SARIF export failed: ${(err as Error).message}`, 'error');
+      showToast(getApiErrorMessage(err, 'SARIF export failed.'), 'error');
     } finally {
       setSarifDownloading(false);
     }

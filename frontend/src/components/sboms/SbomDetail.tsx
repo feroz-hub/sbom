@@ -12,6 +12,7 @@ import { StatusBadge } from '@/components/ui/Badge';
 import { Input, Textarea } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { useToast } from '@/hooks/useToast';
+import { getApiErrorMessage } from '@/lib/notifications';
 import { Table, TableHead, TableBody, Th, SortableTh, Td, EmptyRow } from '@/components/ui/Table';
 import { TableFilterBar, TableSearchInput } from '@/components/ui/TableFilterBar';
 import { SkeletonRow } from '@/components/ui/Spinner';
@@ -629,7 +630,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
       showToast('Repair Workspace ready.', 'success');
       router.push(url);
     } catch (err: any) {
-      showToast(err?.message || 'Failed to create Repair Workspace.', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to create Repair Workspace.'), 'error');
     } finally {
       setIsOpeningWorkspace(false);
     }

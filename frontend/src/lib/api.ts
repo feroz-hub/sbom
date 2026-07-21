@@ -112,12 +112,12 @@ function getAuthHeaders(): Record<string, string> {
 }
 
 // ─── 401/403 response handling ────────────────────────────────────────────────
-// On 401: token has expired or been revoked. Clear local tokens and
-// redirect to login if auth is enabled. On 403: user lacks permission.
-// Redirect to the access-denied page instead of showing a raw error.
+// On 401: start the existing sign-in flow once. A 403 is an authorization
+// decision, not an authentication failure: callers stay on the current page
+// so form state is preserved and can show an action-specific message.
 let _auth401InFlight = false;
 
-function handleAuthError(status: number, redirectForbidden = true): void {
+function handleAuthError(status: number): void {
   if (typeof window === 'undefined') return;
 
   if (status === 401 && !_auth401InFlight) {
@@ -126,12 +126,13 @@ function handleAuthError(status: number, redirectForbidden = true): void {
     if (authEnabled) {
       // Avoid redirect loops: don't redirect if already on auth pages
       const path = window.location.pathname;
-      if (!path.startsWith('/auth/')) {
+      const recoveryStarted = window.sessionStorage.getItem('sbom-auth-recovery-started') === '1';
+      if (!path.startsWith('/auth/') && !recoveryStarted) {
+        window.sessionStorage.setItem('sbom-auth-recovery-started', '1');
         // Small delay to batch multiple concurrent 401s into one redirect
         setTimeout(() => {
           const returnTo = `${window.location.pathname}${window.location.search}`;
           window.location.href = `/api/auth/login?returnTo=${encodeURIComponent(returnTo)}`;
-          _auth401InFlight = false;
         }, 100);
       } else {
         _auth401InFlight = false;
@@ -141,18 +142,14 @@ function handleAuthError(status: number, redirectForbidden = true): void {
     }
   }
 
-  if (status === 403 && redirectForbidden) {
-    const path = window.location.pathname;
-    if (!path.startsWith('/access-denied') && !path.startsWith('/auth/')) {
-      window.location.href = '/access-denied';
-    }
-  }
 }
 
 // ─── Typed HTTP error ─────────────────────────────────────────────────────────
-export class HttpError extends Error {
+export class ApiError extends Error {
   status: number;
   code?: string;
+  fieldErrors?: Record<string, string[]>;
+  requestId?: string;
   /**
    * Structured server-side detail payload, when present. The 4xx envelope
    * for sbom validation failures lives here verbatim — see
@@ -161,14 +158,26 @@ export class HttpError extends Error {
    * (stage / error count / "View full report" link) without re-fetching.
    */
   detail?: unknown;
-  constructor(message: string, status: number, code?: string, detail?: unknown) {
+  constructor(
+    message: string,
+    status: number,
+    code?: string,
+    detail?: unknown,
+    fieldErrors?: Record<string, string[]>,
+    requestId?: string,
+  ) {
     super(message);
-    this.name = 'HttpError';
+    this.name = 'ApiError';
     this.status = status;
     this.code = code;
     this.detail = detail;
+    this.fieldErrors = fieldErrors;
+    this.requestId = requestId;
   }
 }
+
+// Backwards-compatible name for existing specialized structured-error callers.
+export { ApiError as HttpError };
 
 export type TenantRole = 'TENANT_ADMIN' | 'SECURITY_ANALYST' | 'DEVELOPER' | 'VIEWER';
 export type MembershipStatus = 'ACTIVE' | 'PENDING' | 'DISABLED';
@@ -272,13 +281,18 @@ async function performRequest(
 
   if (!res.ok) {
     // Handle auth errors before parsing the body
-    handleAuthError(res.status, authErrorMode !== 'throw');
+    if (authErrorMode !== 'throw') handleAuthError(res.status);
 
-    let message = `HTTP ${res.status}: ${res.statusText}`;
+    let message = 'The request could not be completed.';
     let code: string | undefined;
     let rawDetail: unknown;
+    let fieldErrors: Record<string, string[]> | undefined;
+    let requestId = res.headers.get('x-request-id') ?? undefined;
     try {
       const body = await res.json();
+      code = typeof body?.code === 'string' ? body.code : undefined;
+      requestId = typeof body?.request_id === 'string' ? body.request_id : requestId;
+      if (typeof body?.message === 'string') message = body.message;
       if (body?.detail) {
         rawDetail = body.detail;
         if (typeof body.detail === 'string') {
@@ -289,17 +303,19 @@ async function performRequest(
           // `error_code`. Read both so the discriminator survives.
           code = body.detail.error_code ?? body.detail.code;
         } else if (Array.isArray(body.detail)) {
-          message = body.detail
-            .map((e: { msg?: string; loc?: string[] }) => `${e.loc?.slice(1).join('.')} — ${e.msg}`)
-            .join('; ');
-        } else {
-          message = JSON.stringify(body.detail);
+          fieldErrors = {};
+          for (const entry of body.detail as Array<{ msg?: string; loc?: Array<string | number> }>) {
+            const field = entry.loc?.filter((part) => part !== 'body').join('.') || 'form';
+            const value = typeof entry.msg === 'string' ? entry.msg : 'Invalid value';
+            (fieldErrors[field] ??= []).push(value);
+          }
+          message = 'Please correct the highlighted fields.';
         }
       }
     } catch {
       // ignore JSON parse errors
     }
-    throw new HttpError(message, res.status, code, rawDetail);
+    throw new ApiError(message, res.status, code, rawDetail, fieldErrors, requestId);
   }
 
   return res;
@@ -315,7 +331,7 @@ export async function request<T>(
   // Some endpoints (rare) may legitimately return 204 from a typed function;
   // call sites that expect a body must not call this with a 204-returning route.
   if (res.status === 204) {
-    throw new HttpError(
+    throw new ApiError(
       `Unexpected empty response from ${path} — use requestVoid for endpoints that return 204 No Content.`,
       204,
     );
@@ -1162,7 +1178,7 @@ export async function exportRunsJson(
   }
 
   if (all.length === 0) {
-    throw new HttpError('No analysis runs match the current filters.', 404);
+    throw new ApiError('No analysis runs match the current filters.', 404);
   }
 
   const payload = {
@@ -1968,7 +1984,7 @@ export async function getFindingAiFix(
       { signal },
     );
   } catch (err) {
-    if (err instanceof HttpError && err.status === 404) {
+    if (err instanceof ApiError && err.status === 404) {
       return null;
     }
     throw err;

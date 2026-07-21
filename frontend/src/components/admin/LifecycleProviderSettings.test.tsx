@@ -138,7 +138,7 @@ describe('LifecycleProviderSettings', () => {
 
     await waitFor(() => expect(api.updateLifecycleProvider).toHaveBeenCalled());
     expect(checkbox).not.toBeChecked();
-    expect(await screen.findByText('Save failed')).toBeInTheDocument();
+    expect(await screen.findByText('Provider configuration update failed.')).toBeInTheDocument();
   });
 
   it('successful update applies returned provider row and refetches', async () => {

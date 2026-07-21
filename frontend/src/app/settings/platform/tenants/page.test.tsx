@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ToastProvider } from '@/hooks/useToast';
 
 const auth = vi.hoisted(() => ({ allowed: true, loading: false }));
 const api = vi.hoisted(() => ({
@@ -37,7 +38,7 @@ const tenant = {
 
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  return render(<QueryClientProvider client={client}><PlatformTenantsPage /></QueryClientProvider>);
+  return render(<QueryClientProvider client={client}><ToastProvider><PlatformTenantsPage /></ToastProvider></QueryClientProvider>);
 }
 
 async function openAndFillForm() {
@@ -156,7 +157,9 @@ describe('PlatformTenantsPage', () => {
     const user = userEvent.setup();
     renderPage();
     await user.click(await screen.findByRole('button', { name: 'Disable' }));
-    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('lose access'));
+    expect(screen.getByRole('dialog')).toHaveTextContent('Normal members will lose access');
+    await user.click(screen.getByRole('button', { name: 'Disable tenant' }));
+    expect(window.confirm).not.toHaveBeenCalled();
     await waitFor(() => expect(api.updatePlatformTenantStatus).toHaveBeenCalledWith(7, 'DISABLED'));
   });
 });

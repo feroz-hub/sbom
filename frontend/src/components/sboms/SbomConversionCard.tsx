@@ -14,6 +14,8 @@ import {
   getSbomConversionReport,
 } from '@/lib/api';
 import { invalidateSbomConversionSurfaces } from '@/lib/queryInvalidation';
+import { useNotifications } from '@/hooks/useNotifications';
+import { getApiErrorMessage } from '@/lib/notifications';
 import type { SBOMSource, SbomConversionReport } from '@/types';
 
 function triggerDownload(blob: Blob, filename: string) {
@@ -36,6 +38,7 @@ interface SbomConversionCardProps {
 
 export function SbomConversionCard({ sbom, formatLabel }: SbomConversionCardProps) {
   const qc = useQueryClient();
+  const { showSuccess, showError } = useNotifications();
   const [message, setMessage] = useState<string | null>(null);
   const [showReport, setShowReport] = useState(false);
   const [convertedId, setConvertedId] = useState<number | null>(sbom.converted_sbom_id ?? null);
@@ -99,6 +102,7 @@ export function SbomConversionCard({ sbom, formatLabel }: SbomConversionCardProp
         result.message ||
           'Converted to CycloneDX. Lifecycle enrichment is running in background.',
       );
+      showSuccess('SBOM was converted to CycloneDX successfully.');
     },
     onError: (err: Error) => {
       if (isTimeoutError(err)) {
@@ -107,7 +111,9 @@ export function SbomConversionCard({ sbom, formatLabel }: SbomConversionCardProp
         );
         return;
       }
-      setMessage(err.message || 'Conversion failed.');
+      const safeMessage = getApiErrorMessage(err, 'SBOM conversion failed. Please try again.');
+      setMessage(safeMessage);
+      showError(safeMessage);
     },
   });
 

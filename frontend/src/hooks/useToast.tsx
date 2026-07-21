@@ -4,13 +4,14 @@ import React, {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useState,
-  useRef,
   type ReactNode,
 } from 'react';
-import { X, CheckCircle, AlertCircle, Info, Loader2 } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { X, CheckCircle, AlertCircle, Info, Loader2, TriangleAlert } from 'lucide-react';
 
-export type ToastVariant = 'success' | 'error' | 'info' | 'loading';
+export type ToastVariant = 'success' | 'error' | 'warning' | 'info' | 'loading';
 
 export interface ToastAction {
   label: string;
@@ -48,48 +49,45 @@ const ToastContext = createContext<ToastContextValue | null>(null);
 const DEFAULT_DURATION: Record<ToastVariant, number> = {
   success: 4000,
   error:   6000,
+  warning: 6000,
   info:    4000,
   loading: 0,     // loading toasts never auto-dismiss
 };
 
+function notificationId(message: string, variant: ToastVariant): string {
+  let hash = 0;
+  const value = `${variant}:${message}`;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = ((hash << 5) - hash + value.charCodeAt(index)) | 0;
+  }
+  return `toast-${Math.abs(hash)}`;
+}
+
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
-  // Track auto-dismiss timers so we can clear them on update/dismiss
-  const timers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   const dismiss = useCallback((id: string) => {
-    const t = timers.current.get(id);
-    if (t) { clearTimeout(t); timers.current.delete(id); }
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
   }, []);
 
-  const scheduleAutoDismiss = useCallback((id: string, duration: number) => {
-    // Clear existing timer for this id
-    const existing = timers.current.get(id);
-    if (existing) clearTimeout(existing);
-    if (duration <= 0) return;
-    const t = setTimeout(() => dismiss(id), duration);
-    timers.current.set(id, t);
-  }, [dismiss]);
-
   const showToast = useCallback(
     (message: string, variant: ToastVariant = 'info', options?: ToastOptions): string => {
-      const id = options?.id ?? Math.random().toString(36).slice(2);
+      const resolvedId = options?.id ?? notificationId(message, variant);
       const duration = options?.duration ?? DEFAULT_DURATION[variant];
 
-      const item: ToastItem = { id, message, variant, duration, action: options?.action };
-
       setToasts((prev) => {
+        // Identical notifications from polling/SSE/mutation callbacks collapse
+        // into the existing item instead of announcing the same result twice.
+        const item: ToastItem = { id: resolvedId, message, variant, duration, action: options?.action };
         // Replace if id already exists (treat as update)
-        const exists = prev.some((t) => t.id === id);
+        const exists = prev.some((t) => t.id === resolvedId);
         return exists
-          ? prev.map((t) => (t.id === id ? item : t))
+          ? prev.map((t) => (t.id === resolvedId ? item : t))
           : [...prev, item];
       });
-      scheduleAutoDismiss(id, duration);
-      return id;
+      return resolvedId;
     },
-    [scheduleAutoDismiss],
+    [],
   );
 
   const updateToast = useCallback(
@@ -100,9 +98,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           t.id === id ? { ...t, message, variant, duration, action: options?.action } : t,
         ),
       );
-      scheduleAutoDismiss(id, duration);
     },
-    [scheduleAutoDismiss],
+    [],
   );
 
   return (
@@ -122,21 +119,23 @@ export function useToast() {
 // ─── Container ───────────────────────────────────────────────────────────────
 
 function ToastContainer({ toasts, dismiss }: { toasts: ToastItem[]; dismiss: (id: string) => void }) {
-  if (toasts.length === 0) return null;
-  // ``z-60`` sits above any open dialog (dialog overlay + content live at
-  // z-50) so a toast triggered from inside a dialog (e.g. "Copied CVE id"
-  // confirmation) stays on top. While a dialog is open we dim the
-  // container so it doesn't compete with the modal — the
-  // ``body[data-dialog-open]`` selector is set by the Dialog primitive.
-  return (
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => setMounted(true), []);
+
+  if (!mounted || toasts.length === 0) return null;
+  // Portal directly to body so transformed/animated application shells and
+  // dialog stacking contexts can never clip or cover notifications.
+  return createPortal(
     <div
       data-toast-container
-      className="fixed top-4 right-4 z-[60] flex w-80 max-h-[calc(100dvh-2rem)] flex-col gap-2 overflow-y-auto transition-opacity"
+      className="fixed top-4 right-4 z-[9999] flex w-80 max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-2rem)] flex-col gap-2 overflow-y-auto"
     >
       {toasts.map((t) => (
         <ToastItemView key={t.id} toast={t} dismiss={dismiss} />
       ))}
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -152,6 +151,10 @@ const variantStyles: Record<ToastVariant, { container: string; icon: ReactNode }
     container: 'bg-surface border border-red-200 shadow-lg dark:border-red-800 dark:bg-surface-muted',
     icon: <AlertCircle className="h-5 w-5 shrink-0 text-red-500 dark:text-red-400" />,
   },
+  warning: {
+    container: 'bg-surface border border-amber-300 shadow-lg dark:border-amber-700 dark:bg-surface-muted',
+    icon: <TriangleAlert className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />,
+  },
   info: {
     container:
       'bg-surface border border-primary/25 shadow-lg dark:border-primary/40 dark:bg-surface-muted',
@@ -165,10 +168,22 @@ const variantStyles: Record<ToastVariant, { container: string; icon: ReactNode }
 
 function ToastItemView({ toast, dismiss }: { toast: ToastItem; dismiss: (id: string) => void }) {
   const { container, icon } = variantStyles[toast.variant];
+
+  // Start the lifetime only after this toast has actually committed to the
+  // browser DOM. Starting the timer in showToast can expire a notification
+  // before its first paint when a mutation also triggers a costly route/query
+  // refresh.
+  useEffect(() => {
+    if (toast.duration <= 0) return undefined;
+    const timer = window.setTimeout(() => dismiss(toast.id), toast.duration);
+    return () => window.clearTimeout(timer);
+  }, [toast.id, toast.message, toast.variant, toast.duration, dismiss]);
+
   return (
     <div
       className={`flex items-start gap-3 p-4 rounded-lg ${container} animate-in slide-in-from-right duration-200`}
-      role="alert"
+      role={toast.variant === 'error' || toast.variant === 'warning' ? 'alert' : 'status'}
+      aria-live={toast.variant === 'error' || toast.variant === 'warning' ? 'assertive' : 'polite'}
     >
       {icon}
       <div className="flex-1 min-w-0">

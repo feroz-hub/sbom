@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ToastProvider } from '@/hooks/useToast';
 
 const api = vi.hoisted(() => ({
   getTenantMembers: vi.fn(),
@@ -39,7 +40,7 @@ const member = {
 
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  return render(<QueryClientProvider client={client}><TenantUsersPage /></QueryClientProvider>);
+  return render(<QueryClientProvider client={client}><ToastProvider><TenantUsersPage /></ToastProvider></QueryClientProvider>);
 }
 
 describe('TenantUsersPage', () => {
@@ -79,19 +80,22 @@ describe('TenantUsersPage', () => {
     renderPage();
     const roleSelect = await screen.findByLabelText('Role for Example User');
     await user.selectOptions(roleSelect, 'DEVELOPER');
+    await user.click(screen.getByRole('button', { name: 'Change role' }));
     await waitFor(() => expect(api.updateTenantMemberRole).toHaveBeenCalledWith(1, 9, 'DEVELOPER'));
     await user.click(screen.getByRole('button', { name: 'Deactivate' }));
+    await user.click(screen.getByRole('dialog').querySelector('button.bg-red-600')!);
     await waitFor(() => expect(api.deactivateTenantMember).toHaveBeenCalledWith(1, 9));
     await user.click(screen.getByRole('button', { name: 'Remove' }));
+    await user.click(screen.getByRole('button', { name: 'Remove member' }));
     await waitFor(() => expect(api.removeTenantMember).toHaveBeenCalledWith(1, 9));
-    expect(window.confirm).toHaveBeenCalled();
+    expect(window.confirm).not.toHaveBeenCalled();
   });
 
   it('renders an explicit 403 message without initiating login', async () => {
     const { HttpError } = await import('@/lib/api');
     api.getTenantMembers.mockRejectedValue(new HttpError('Insufficient permission', 403));
     renderPage();
-    expect(await screen.findByRole('alert')).toHaveTextContent('authenticated but do not have permission');
+    expect(await screen.findByRole('alert')).toHaveTextContent('You do not have permission to perform this action.');
   });
 
   it('activates a disabled membership after confirmation', async () => {
@@ -100,13 +104,13 @@ describe('TenantUsersPage', () => {
     renderPage();
     await user.click(await screen.findByRole('button', { name: 'Activate' }));
     await waitFor(() => expect(api.activateTenantMember).toHaveBeenCalledWith(1, 9));
-    expect(window.confirm).toHaveBeenCalled();
+    expect(window.confirm).not.toHaveBeenCalled();
   });
 
   it('distinguishes an expired 401 session from authorization denial', async () => {
     const { HttpError } = await import('@/lib/api');
     api.getTenantMembers.mockRejectedValue(new HttpError('Session expired', 401));
     renderPage();
-    expect(await screen.findByRole('alert')).toHaveTextContent('session expired');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Your session has expired. Please sign in again.');
   });
 });
