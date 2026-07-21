@@ -232,7 +232,9 @@ def _ensure_seed_data() -> None:
             db.add_all(seeds)
             db.commit()
 
-        backfill_analytics_tables(db)
+        # Tenant-owned analytics backfill runs separately through
+        # _backfill_analytics_per_tenant(), where each tenant receives an
+        # explicit context, session and transaction.
         from .services.lifecycle.provider_config_service import LifecycleProviderConfigService
 
         LifecycleProviderConfigService().bootstrap_defaults(db)
@@ -304,18 +306,80 @@ def _verify_schema_is_current() -> None:
                 raise RuntimeError("Database schema is not up to date. Run alembic upgrade head.")
 
 
+def _load_active_tenant_ids() -> list[int]:
+    """Return sorted active tenant IDs using a short-lived lookup session."""
+    from .models import Tenant
+
+    with SessionLocal() as lookup_db:
+        return list(
+            lookup_db.execute(
+                select(Tenant.id)
+                .where(Tenant.status == "ACTIVE")
+                .order_by(Tenant.id.asc())
+            ).scalars()
+        )
+
+
+def _backfill_analytics_per_tenant() -> None:
+    """Run analytics backfill once per active tenant with proper isolation.
+
+    Each tenant gets:
+    - its own ``CurrentContext`` via ``minimal_background_context``
+    - its own ``SessionLocal`` session
+    - its own transaction (commit on success, rollback on failure)
+    - automatic context cleanup via ``tenant_scope``
+    """
+    from .core.context import minimal_background_context, tenant_scope
+
+    tenant_ids = _load_active_tenant_ids()
+    log.info(
+        "analysis.startup_backfill.tenants_loaded",
+        extra={"tenant_count": len(tenant_ids)},
+    )
+
+    for tenant_id in tenant_ids:
+        ctx = minimal_background_context(tenant_id=tenant_id)
+        with tenant_scope(ctx):
+            with SessionLocal() as tenant_db:
+                try:
+                    log.info(
+                        "analysis.startup_backfill.started",
+                        extra={"tenant_id": tenant_id},
+                    )
+                    backfill_analytics_tables(tenant_db, tenant_id=tenant_id)
+                    tenant_db.commit()
+                    log.info(
+                        "analysis.startup_backfill.completed",
+                        extra={"tenant_id": tenant_id},
+                    )
+                except Exception:
+                    tenant_db.rollback()
+                    log.exception(
+                        "analysis.startup_backfill.tenant_failed",
+                        extra={"tenant_id": tenant_id},
+                    )
+                    raise
+
+
 def _update_sbom_names() -> None:
     """Backfill analysis_run.sbom_name from sbom_source for legacy rows."""
+    from .core.context import minimal_background_context, tenant_scope
     from .models import AnalysisRun, SBOMSource
 
-    sbom_name = select(SBOMSource.sbom_name).where(SBOMSource.id == AnalysisRun.sbom_id).scalar_subquery()
-    with SessionLocal() as db:
-        db.execute(
-            update(AnalysisRun)
-            .where(AnalysisRun.sbom_name.is_(None))
-            .values(sbom_name=sbom_name)
-        )
-        db.commit()
+    for tenant_id in _load_active_tenant_ids():
+        ctx = minimal_background_context(tenant_id=tenant_id)
+        with tenant_scope(ctx):
+            sbom_name = select(SBOMSource.sbom_name).where(SBOMSource.id == AnalysisRun.sbom_id).scalar_subquery()
+            with SessionLocal() as db:
+                db.execute(
+                    update(AnalysisRun)
+                    .where(
+                        AnalysisRun.tenant_id == tenant_id,
+                        AnalysisRun.sbom_name.is_(None),
+                    )
+                    .values(sbom_name=sbom_name)
+                )
+                db.commit()
 
 
 def _reconcile_zombie_ai_fix_batches() -> None:
@@ -335,38 +399,53 @@ def _reconcile_zombie_ai_fix_batches() -> None:
     """
     from datetime import datetime, timedelta
 
+    from .core.context import minimal_background_context, tenant_scope
+
     now = datetime.now(tz=UTC)
     threshold = (now - timedelta(minutes=5)).isoformat()
     from .models import AiFixBatch
 
-    with SessionLocal() as db:
-        result = db.execute(
-            update(AiFixBatch)
-            .where(
-                AiFixBatch.status.in_(("queued", "pending", "in_progress", "paused_budget")),
-                AiFixBatch.created_at < threshold,
-                AiFixBatch.completed_at.is_(None),
-            )
-            .values(
-                status="failed",
-                completed_at=now.isoformat(),
-                last_error="interrupted - the server restarted before this batch finished; re-run to retry",
-            )
-        )
-        db.commit()
-        if result.rowcount:
-            log.info("ai.startup.reconciled_zombie_batches: count=%d", result.rowcount)
+    for tenant_id in _load_active_tenant_ids():
+        ctx = minimal_background_context(tenant_id=tenant_id)
+        with tenant_scope(ctx):
+            with SessionLocal() as db:
+                result = db.execute(
+                    update(AiFixBatch)
+                    .where(
+                        AiFixBatch.tenant_id == tenant_id,
+                        AiFixBatch.status.in_(("queued", "pending", "in_progress", "paused_budget")),
+                        AiFixBatch.created_at < threshold,
+                        AiFixBatch.completed_at.is_(None),
+                    )
+                    .values(
+                        status="failed",
+                        completed_at=now.isoformat(),
+                        last_error="interrupted - the server restarted before this batch finished; re-run to retry",
+                    )
+                )
+                db.commit()
+                if result.rowcount:
+                    log.info("ai.startup.reconciled_zombie_batches: tenant=%d count=%d", tenant_id, result.rowcount)
 
 
 def _reconcile_stale_analysis_runs() -> None:
     """Mark old in-process analysis runs interrupted after an API restart."""
-    with SessionLocal() as db:
-        interrupted = reconcile_stale_analysis_runs(db)
-        if interrupted:
-            db.commit()
-            log.info("analysis.startup.reconciled_stale_runs: count=%d", len(interrupted))
-        else:
-            db.rollback()
+    from .core.context import minimal_background_context, tenant_scope
+
+    for tenant_id in _load_active_tenant_ids():
+        ctx = minimal_background_context(tenant_id=tenant_id)
+        with tenant_scope(ctx):
+            with SessionLocal() as db:
+                interrupted = reconcile_stale_analysis_runs(db)
+                if interrupted:
+                    db.commit()
+                    log.info(
+                        "analysis.startup.reconciled_stale_runs: tenant=%d count=%d",
+                        tenant_id,
+                        len(interrupted),
+                    )
+                else:
+                    db.rollback()
 
 
 @asynccontextmanager
@@ -392,6 +471,7 @@ async def lifespan(app: FastAPI):
         log.error("Failed to parse database URL for logging: %s", e)
 
     _ensure_seed_data()
+    _backfill_analytics_per_tenant()
     _update_sbom_names()
     _reconcile_zombie_ai_fix_batches()
     _reconcile_stale_analysis_runs()

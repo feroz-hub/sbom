@@ -846,7 +846,11 @@ def _startup_skip_reason(sbom: SBOMSource) -> str | None:
     return reason
 
 
-def backfill_analytics_tables(db: Session) -> None:
+def backfill_analytics_tables(
+    db: Session,
+    *,
+    tenant_id: int,
+) -> None:
     """
     Backfill the AnalysisRun table from existing SBOMSource and SBOMAnalysisReport records.
 
@@ -855,10 +859,28 @@ def backfill_analytics_tables(db: Session) -> None:
 
     Args:
         db: Database session
+        tenant_id: The tenant whose SBOMs should be backfilled.  Must be a
+            positive integer.  Each tenant is processed in its own session
+            under an explicit tenant context established by the caller.
     """
-    sboms = db.execute(select(SBOMSource).order_by(SBOMSource.id.asc())).scalars().all()
+    if not isinstance(tenant_id, int) or tenant_id <= 0:
+        raise ValueError("A valid tenant_id is required for analytics backfill")
+
+    sboms = (
+        db.execute(
+            select(SBOMSource)
+            .where(SBOMSource.tenant_id == tenant_id)
+            .order_by(SBOMSource.id.asc())
+        )
+        .scalars()
+        .all()
+    )
 
     for sbom in sboms:
+        if int(sbom.tenant_id) != tenant_id:
+            raise RuntimeError(
+                "Analytics startup backfill selected an SBOM outside the active tenant"
+            )
         components = []
 
         if _startup_component_extraction_needed(sbom):
@@ -887,16 +909,24 @@ def backfill_analytics_tables(db: Session) -> None:
         elif sbom.component_extraction_status == COMPONENT_EXTRACTION_SKIPPED:
             log.debug("Component extraction already skipped for SBOM id=%d: %s", sbom.id, sbom.component_extraction_error)
 
-        # Check if analysis run already exists
-        has_run = db.execute(select(AnalysisRun.id).where(AnalysisRun.sbom_id == sbom.id).limit(1)).scalar_one_or_none()
+        # Check if analysis run already exists (tenant-scoped)
+        has_run = db.execute(
+            select(AnalysisRun.id).where(
+                AnalysisRun.tenant_id == tenant_id,
+                AnalysisRun.sbom_id == sbom.id,
+            ).limit(1)
+        ).scalar_one_or_none()
         if has_run is not None:
             continue
 
-        # Look for legacy report to backfill from
+        # Look for legacy report to backfill from (tenant-scoped)
         latest_legacy = (
             db.execute(
                 select(SBOMAnalysisReport)
-                .where(SBOMAnalysisReport.sbom_ref_id == sbom.id)
+                .where(
+                    SBOMAnalysisReport.tenant_id == tenant_id,
+                    SBOMAnalysisReport.sbom_ref_id == sbom.id,
+                )
                 .order_by(SBOMAnalysisReport.id.desc())
             )
             .scalars()
@@ -936,4 +966,4 @@ def backfill_analytics_tables(db: Session) -> None:
             duration_ms=0,
         )
 
-    db.commit()
+    db.flush()

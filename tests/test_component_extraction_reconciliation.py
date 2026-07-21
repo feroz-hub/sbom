@@ -81,7 +81,7 @@ def _component_count(sbom_id: int) -> int:
 def _run_backfill() -> None:
     db = SessionLocal()
     try:
-        backfill_analytics_tables(db)
+        backfill_analytics_tables(db, tenant_id=1)
         db.commit()
     finally:
         db.close()
