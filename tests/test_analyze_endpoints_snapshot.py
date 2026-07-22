@@ -31,6 +31,12 @@ def _load_or_write(name: str, actual: dict) -> dict:
     return json.loads(path.read_text())
 
 
+def _assert_deprecated(resp, sbom_id: int) -> None:
+    assert resp.headers["Deprecation"] == "true"
+    assert resp.headers["Sunset"] == "Sun, 31 Jan 2027 23:59:59 GMT"
+    assert resp.headers["Link"] == f'</api/sboms/{sbom_id}/analyze>; rel="successor-version"'
+
+
 @pytest.mark.snapshot
 def test_analyze_sbom_nvd(client, seeded_sbom, mock_external_sources):
     resp = client.post(
@@ -38,6 +44,7 @@ def test_analyze_sbom_nvd(client, seeded_sbom, mock_external_sources):
         json={"sbom_id": seeded_sbom["id"]},
     )
     assert resp.status_code == 200, resp.text
+    _assert_deprecated(resp, seeded_sbom["id"])
     actual = normalize(resp.json())
     expected = _load_or_write("analyze_sbom_nvd", actual)
     assert actual == expected
@@ -50,6 +57,7 @@ def test_analyze_sbom_github(client, seeded_sbom, mock_external_sources):
         json={"sbom_id": seeded_sbom["id"]},
     )
     assert resp.status_code == 200, resp.text
+    _assert_deprecated(resp, seeded_sbom["id"])
     actual = normalize(resp.json())
     expected = _load_or_write("analyze_sbom_github", actual)
     assert actual == expected
@@ -62,6 +70,7 @@ def test_analyze_sbom_osv(client, seeded_sbom, mock_external_sources):
         json={"sbom_id": seeded_sbom["id"], "hydrate": True},
     )
     assert resp.status_code == 200, resp.text
+    _assert_deprecated(resp, seeded_sbom["id"])
     actual = normalize(resp.json())
     expected = _load_or_write("analyze_sbom_osv", actual)
     assert actual == expected
@@ -77,6 +86,7 @@ def test_analyze_sbom_consolidated(client, seeded_sbom, mock_external_sources):
         },
     )
     assert resp.status_code == 200, resp.text
+    _assert_deprecated(resp, seeded_sbom["id"])
     actual = normalize(resp.json())
     expected = _load_or_write("analyze_sbom_consolidated", actual)
     assert actual == expected
@@ -111,6 +121,7 @@ def test_legacy_consolidated_returns_existing_active_run(client, seeded_sbom):
     )
 
     assert resp.status_code == 200, resp.text
+    _assert_deprecated(resp, seeded_sbom["id"])
     body = resp.json()
     assert body["status"] == "already_running"
     assert body["run_id"] == active_id

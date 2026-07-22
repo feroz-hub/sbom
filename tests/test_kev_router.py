@@ -4,15 +4,14 @@ from datetime import UTC, datetime
 from typing import Any
 
 import pytest
+from app.db import Base, get_db
+from app.models import KevEntry
+from app.routers.kev import router as kev_router
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
-
-from app.db import Base, get_db
-from app.models import KevEntry
-from app.routers.kev import router as kev_router
 
 
 def _now_iso() -> str:

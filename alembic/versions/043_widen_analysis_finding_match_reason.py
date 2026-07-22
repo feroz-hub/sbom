@@ -31,13 +31,22 @@ def upgrade() -> None:
     if not _table_exists(bind):
         return
 
-    op.alter_column(
-        TABLE,
-        "match_reason",
-        existing_type=sa.String(length=64),
-        type_=sa.String(length=255),
-        existing_nullable=True,
-    )
+    if bind.dialect.name == "sqlite":
+        with op.batch_alter_table(TABLE) as batch:
+            batch.alter_column(
+                "match_reason",
+                existing_type=sa.String(length=64),
+                type_=sa.String(length=255),
+                existing_nullable=True,
+            )
+    else:
+        op.alter_column(
+            TABLE,
+            "match_reason",
+            existing_type=sa.String(length=64),
+            type_=sa.String(length=255),
+            existing_nullable=True,
+        )
 
 
 def downgrade() -> None:
@@ -47,10 +56,19 @@ def downgrade() -> None:
     if not _table_exists(bind):
         return
 
-    op.alter_column(
-        TABLE,
-        "match_reason",
-        existing_type=sa.String(length=255),
-        type_=sa.String(length=64),
-        existing_nullable=True,
-    )
+    if bind.dialect.name == "sqlite":
+        with op.batch_alter_table(TABLE) as batch:
+            batch.alter_column(
+                "match_reason",
+                existing_type=sa.String(length=255),
+                type_=sa.String(length=64),
+                existing_nullable=True,
+            )
+    else:
+        op.alter_column(
+            TABLE,
+            "match_reason",
+            existing_type=sa.String(length=255),
+            type_=sa.String(length=64),
+            existing_nullable=True,
+        )

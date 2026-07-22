@@ -86,6 +86,28 @@ def _create_kev_table() -> None:
     )
 
 
+def _merge_legacy_table(bind: sa.engine.Connection) -> None:
+    """Merge a bootstrap-created legacy table into the canonical table."""
+    legacy = sa.Table(OLD_TABLE, sa.MetaData(), autoload_with=bind)
+    canonical = sa.Table(TABLE, sa.MetaData(), autoload_with=bind)
+    existing = set(bind.execute(sa.select(canonical.c.cve_id)).scalars())
+    rows = []
+    for legacy_row in bind.execute(sa.select(legacy)).mappings():
+        if legacy_row["cve_id"] in existing:
+            continue
+        row = {
+            column.name: legacy_row[column.name]
+            for column in canonical.columns
+            if column.name in legacy_row
+        }
+        if "known_ransomware_campaign_use" not in row:
+            row["known_ransomware_campaign_use"] = legacy_row.get("known_ransomware_use")
+        rows.append(row)
+    if rows:
+        bind.execute(canonical.insert(), rows)
+    op.drop_table(OLD_TABLE)
+
+
 def _ensure_indexes(bind: sa.engine.Connection) -> None:
     if not _index_exists(bind, TABLE, "ix_kev_vulnerabilities_date_added"):
         op.create_index("ix_kev_vulnerabilities_date_added", TABLE, ["date_added"])
@@ -100,8 +122,11 @@ def _ensure_indexes(bind: sa.engine.Connection) -> None:
 def upgrade() -> None:
     bind = op.get_bind()
 
-    if _table_exists(bind, OLD_TABLE) and not _table_exists(bind, TABLE):
-        op.rename_table(OLD_TABLE, TABLE)
+    if _table_exists(bind, OLD_TABLE):
+        if _table_exists(bind, TABLE):
+            _merge_legacy_table(bind)
+        else:
+            op.rename_table(OLD_TABLE, TABLE)
     elif not _table_exists(bind, TABLE):
         _create_kev_table()
 

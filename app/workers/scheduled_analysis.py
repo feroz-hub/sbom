@@ -162,7 +162,7 @@ def analyze_sbom_async(
     scans defaults to using the cache.
     """
     from app.db import SessionLocal
-    from app.routers.sboms_crud import create_auto_report
+    from app.services.analysis_orchestrator import AnalysisOrchestrator
 
     db: Session = SessionLocal()
     try:
@@ -190,7 +190,15 @@ def analyze_sbom_async(
             return {"status": "SKIPPED", "reason": "recent_run_within_gap"}
 
         try:
-            run = asyncio.run(create_auto_report(db, sbom, force_refresh=force_refresh, trigger_source="schedule"))
+            outcome = asyncio.run(
+                AnalysisOrchestrator(db).run(
+                    sbom,
+                    force_refresh=force_refresh,
+                    trigger_source="schedule",
+                    correlation_id=f"schedule-{schedule_id}-sbom-{sbom_id}",
+                )
+            )
+            run = outcome[0] if outcome is not None else None
         except Exception as exc:
             log.exception(
                 "scheduled_analysis_run_failed",

@@ -33,6 +33,24 @@ def canonical_findings_for_run(db: Session, *, run_id: int) -> list[AnalysisFind
     )
 
 
+def finding_and_run_for_tenant(
+    db: Session,
+    *,
+    finding_id: int,
+    tenant_id: int,
+) -> tuple[AnalysisFinding, AnalysisRun] | None:
+    """Load a finding and its run while enforcing their shared tenant boundary."""
+    return db.execute(
+        select(AnalysisFinding, AnalysisRun)
+        .join(AnalysisRun, AnalysisRun.id == AnalysisFinding.analysis_run_id)
+        .where(
+            AnalysisFinding.id == finding_id,
+            AnalysisFinding.tenant_id == tenant_id,
+            AnalysisRun.tenant_id == tenant_id,
+        )
+    ).one_or_none()
+
+
 def canonical_finding_metrics_for_run(db: Session, *, run: AnalysisRun):
     """Canonical component-vulnerability metrics for one analysis run."""
     return calculate_run_finding_metrics(canonical_findings_for_run(db, run_id=int(run.id)), run=run)

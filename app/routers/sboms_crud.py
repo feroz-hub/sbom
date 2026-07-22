@@ -29,13 +29,12 @@ from sqlalchemy.orm import Session
 
 from ..analysis import (
     _augment_components_with_cpe,
-    deduplicate_findings,
     enrich_component_for_osv,
-    get_analysis_settings_multi,
 )
 from ..core.context import CurrentContext
 from ..core.security import get_current_tenant_context, require_permission
 from ..db import SessionLocal, get_db
+from ..deprecation import LEGACY_JSON_SBOM_SUNSET, mark_deprecated
 from ..idempotency import (
     analysis_run_to_dict,
     get_cached,
@@ -64,13 +63,11 @@ from ..schemas import (
     SBOMSourceOut,
 )
 from ..services import audit_log, audit_service
+from ..services.analysis_orchestrator import AnalysisOrchestrator
 from ..services.analysis_service import (
     AnalysisFindingPersistenceValidationError,
-    compute_report_status,
-    filter_unconfirmed_provider_findings,
     get_active_analysis_run,
     mark_analysis_run_failed,
-    persist_analysis_run,
 )
 from ..services.product_service import DEFAULT_UNASSIGNED_PROJECT_NAME, resolve_product_assignment
 from ..services.repair.workspace_backfill_service import WorkspaceBackfillService
@@ -91,7 +88,6 @@ from ..services.sbom_service import (
     ComponentExtractionSkipped,
     coerce_sbom_data,
     detect_supported_component_extraction_format,
-    sync_sbom_components,
 )
 from ..services.soft_delete import SoftDeleteService
 from ..services.tenant_access import get_sbom_for_tenant
@@ -104,10 +100,8 @@ from ..sources import (
     EVENT_DONE,
     EVENT_ERROR,
     EVENT_RUNNING,
-    build_source_adapters,
     configured_default_sources,
     normalize_source_names,
-    run_sources_concurrently,
 )
 from ..sources.routing import count_authoritative_cpes
 from ..validation import ErrorReport
@@ -568,110 +562,13 @@ async def create_auto_report(
     """
     if not sbom_obj.sbom_data:
         return None
-    existing = get_active_analysis_run(db, int(sbom_obj.id))
-    if existing:
-        return existing
-
-    try:
-        components = _load_persisted_components_for_analysis(
-            db,
-            sbom_obj,
-            run_id=None,
-            correlation_id=f"auto-report-{sbom_obj.id}",
-        )
-    except Exception as exc:
-        log.warning("Component loading failed for SBOM id=%d: %s", sbom_obj.id, exc)
-        return None
-
-    if not components:
-        log.warning(
-            "analysis.component_query.zero_components",
-            extra={"event": "analysis_zero_components", "sbom_id": sbom_obj.id, "trigger_source": trigger_source},
-        )
-        return None
-
-    started_on = now_iso()
-    started_at = time.perf_counter()
-
-    cfg = get_analysis_settings_multi()
-    if force_refresh:
-        # Per-run override via ``dataclasses.replace`` — never mutate
-        # the cached singleton, which is shared across requests.
-        from dataclasses import replace as _dc_replace
-
-        cfg = _dc_replace(cfg, source_cache_force_refresh=True)
-    sources_used = configured_default_sources()
-    try:
-        raw_findings, all_errors, all_warnings = await run_sources_concurrently(
-            sources=build_source_adapters(sources_used),
-            components=components,
-            settings=cfg,
-        )
-    except Exception as exc:
-        log.error("Auto-analysis failed for SBOM id=%d: %s", sbom_obj.id, exc, exc_info=True)
-        return None
-
-    final_findings: list[dict] = deduplicate_findings(raw_findings)
-    final_findings = filter_unconfirmed_provider_findings({"findings": final_findings}, components)["findings"]
-
-    buckets = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "UNKNOWN": 0}
-    for f in final_findings:
-        sev = str((f or {}).get("severity", "UNKNOWN")).upper()
-        buckets[sev if sev in buckets else "UNKNOWN"] += 1
-
-    details: dict = {
-        "total_components": len(components),
-        "components_with_cpe": count_authoritative_cpes(components),
-        "total_findings": len(final_findings),
-        "critical": buckets["CRITICAL"],
-        "high": buckets["HIGH"],
-        "medium": buckets["MEDIUM"],
-        "low": buckets["LOW"],
-        "unknown": buckets["UNKNOWN"],
-        "query_errors": all_errors,
-        "query_warnings": all_warnings,
-        "source_summary": [
-            warning["source_summary"]
-            for warning in all_warnings
-            if isinstance(warning, dict) and isinstance(warning.get("source_summary"), dict)
-        ],
-        "findings": final_findings,
-        "analysis_metadata": {
-            "sources": sources_used,
-            "raw_observation_count": len(raw_findings),
-            "source_summary": [
-                warning["source_summary"]
-                for warning in all_warnings
-                if isinstance(warning, dict) and isinstance(warning.get("source_summary"), dict)
-            ],
-            "provider_status": [
-                warning["provider_status"]
-                for warning in all_warnings
-                if isinstance(warning, dict) and isinstance(warning.get("provider_status"), dict)
-            ],
-        },
-    }
-
-    run_status = compute_report_status(len(final_findings), all_errors)
-    source_label = ",".join(sources_used)
-    if all_errors:
-        source_label += " (partial)"
-
-    duration_ms = int((time.perf_counter() - started_at) * 1000)
-    run = persist_analysis_run(
-        db=db,
-        sbom_obj=sbom_obj,
-        details=details,
-        components=components,
-        run_status=run_status,
-        source=source_label,
-        started_on=started_on,
-        completed_on=now_iso(),
-        duration_ms=duration_ms,
+    result = await AnalysisOrchestrator(db).run(
+        sbom_obj,
         trigger_source=trigger_source,
+        force_refresh=force_refresh,
+        correlation_id=f"auto-report-{sbom_obj.id}",
     )
-    db.commit()
-    return run
+    return result[0] if result is not None else None
 
 
 def _sse_event(event_type: str, data: dict) -> str:
@@ -798,13 +695,20 @@ def download_sbom_original(
     )
 
 
-@router.post("/sboms", response_model=SBOMSourceOut, status_code=status.HTTP_201_CREATED)
+@router.post("/sboms", response_model=SBOMSourceOut, status_code=status.HTTP_201_CREATED, deprecated=True)
 def create_sbom(
     payload: SBOMSourceCreate,
     background_tasks: BackgroundTasks,
+    response: Response,
     context: CurrentContext = Depends(require_permission("product:assign_sbom")),
     db: Session = Depends(get_db),
 ):
+    mark_deprecated(
+        response,
+        endpoint="POST /api/sboms",
+        successor="/api/sboms/upload",
+        sunset=LEGACY_JSON_SBOM_SUNSET,
+    )
     log.info("Creating SBOM: name='%s' project_id=%s", payload.sbom_name, payload.projectid)
     # --- Foreign key checks ---
     resolved_project_id, product, _used_default_product = resolve_product_assignment(
@@ -1711,6 +1615,7 @@ async def analyze_sbom_stream(
         or f"analysis-stream-{sbom_id}-{int(time.time() * 1000)}"
     )
     sbom_row = get_sbom_for_tenant(db, sbom_id, context.tenant_id)
+    analysis_orchestrator = AnalysisOrchestrator(db)
 
     async def _stream_not_found():
         yield _sse_event("error", {"message": f"SBOM {sbom_id} not found", "code": 404})
@@ -1780,25 +1685,14 @@ async def analyze_sbom_stream(
         started_at = time.perf_counter()
         run_started_on = now_iso()
         run_id: int | None = None
-        run = AnalysisRun(
-            sbom_id=sbom_row.id,
-            project_id=sbom_row.projectid,
-            product_id=sbom_row.product_id,
-            run_status="PENDING",
-            sbom_name=sbom_row.sbom_name,
-            source=",".join(normalize_source_names(payload.sources, default=configured_default_sources())),
+        selected_sources = normalize_source_names(payload.sources, default=configured_default_sources())
+        run = analysis_orchestrator.create_pending_run(
+            sbom_row,
+            sources=selected_sources,
             trigger_source="manual",
             started_on=run_started_on,
-            completed_on=run_started_on,
-            duration_ms=0,
-            total_components=0,
-            components_with_cpe=0,
-            total_findings=0,
-            raw_report=json.dumps({"status": "queued", "message": "Analysis queued."}),
+            sbom_name=sbom_row.sbom_name,
         )
-        db.add(run)
-        db.commit()
-        db.refresh(run)
         run_id = run.id
         log.info(
             "Analysis started trigger_source=manual sbom_id=%d run_id=%d correlation_id=%s",
@@ -1871,14 +1765,8 @@ async def analyze_sbom_stream(
             }
 
         try:
-            cfg = get_analysis_settings_multi()
-
-            sources = normalize_source_names(payload.sources, default=configured_default_sources())
-            run.source = ",".join(sources)
-            run.run_status = "RUNNING"
-            run.raw_report = json.dumps({"status": "running", "sources": sources})
-            db.add(run)
-            db.commit()
+            sources = selected_sources
+            analysis_orchestrator.mark_running(run, sources=sources)
 
             yield _sse_event(
                 "progress",
@@ -1892,8 +1780,7 @@ async def analyze_sbom_stream(
             await asyncio.sleep(0)
 
             try:
-                components = _load_persisted_components_for_analysis(
-                    db,
+                components = analysis_orchestrator.load_components(
                     sbom_row,
                     run_id=run_id,
                     correlation_id=correlation_id,
@@ -1970,28 +1857,27 @@ async def analyze_sbom_stream(
             # Build per-request VulnSource adapter instances. Credentials are
             # bound at construction time so the request handler never mutates
             # process-global environment.
-            active_adapters = build_source_adapters(sources)
-
             # Fan out concurrently via the shared runner. SSE progress events
             # are forwarded as soon as the runner emits them, preserving the
             # streaming contract while killing the inline source-dispatch loop.
             all_findings: list[dict] = []
             all_errors: list[dict] = []
             all_warnings: list[dict] = []
+            execution_results = []
             event_queue: asyncio.Queue = asyncio.Queue()
 
             async def _drive_runner() -> None:
-                f, e, _w = await run_sources_concurrently(
-                    sources=active_adapters,
+                execution_result = await analysis_orchestrator.execute_providers(
                     components=components,
-                    settings=cfg,
+                    sources=sources,
                     progress_queue=event_queue,
                 )
+                execution_results.append(execution_result)
                 # Stash final aggregates on the queue itself so the consumer
                 # loop below can pick them up after EVENT_DONE.
-                all_findings.extend(f)
-                all_errors.extend(e)
-                all_warnings.extend(_w)
+                all_findings.extend(execution_result.findings)
+                all_errors.extend(execution_result.errors)
+                all_warnings.extend(execution_result.warnings)
 
             orchestrator = asyncio.create_task(_drive_runner())
 
@@ -2048,68 +1934,22 @@ async def analyze_sbom_stream(
                 # Surface any unhandled exception from inside _drive_runner.
                 orchestrator.result()
 
-            final_findings = deduplicate_findings(all_findings)
-            final_findings = filter_unconfirmed_provider_findings({"findings": final_findings}, components)["findings"]
-
-            buckets = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "UNKNOWN": 0}
-            for f in final_findings:
-                sev = str((f or {}).get("severity", "UNKNOWN")).upper()
-                buckets[sev if sev in buckets else "UNKNOWN"] += 1
-
-            details: dict = {
-                "total_components": len(components),
-                "components_with_cpe": count_authoritative_cpes(components),
-                "total_findings": len(final_findings),
-                "critical": buckets["CRITICAL"],
-                "high": buckets["HIGH"],
-                "medium": buckets["MEDIUM"],
-                "low": buckets["LOW"],
-                "unknown": buckets["UNKNOWN"],
-                "query_errors": all_errors,
-                "query_warnings": all_warnings,
-                "source_summary": [
-                    warning["source_summary"]
-                    for warning in all_warnings
-                    if isinstance(warning, dict) and isinstance(warning.get("source_summary"), dict)
-                ],
-                "findings": final_findings,
-                "analysis_metadata": {
-                    "sources": sources,
-                    "raw_observation_count": len(all_findings),
-                    "source_summary": [
-                        warning["source_summary"]
-                        for warning in all_warnings
-                        if isinstance(warning, dict) and isinstance(warning.get("source_summary"), dict)
-                    ],
-                    "provider_status": [
-                        warning["provider_status"]
-                        for warning in all_warnings
-                        if isinstance(warning, dict) and isinstance(warning.get("provider_status"), dict)
-                    ],
-                },
-            }
-
-            run_status = compute_report_status(len(final_findings), all_errors)
-            source_label = ",".join(sources)
-            if all_errors:
-                source_label += " (partial)"
+            execution = execution_results[0]
+            final_findings = execution.findings
+            buckets = execution.buckets
+            details = execution.details
+            run_status = execution.run_status
 
             duration_ms = elapsed()
-            run = persist_analysis_run(
-                db=db,
-                sbom_obj=sbom_row,
-                details=details,
-                components=components,
-                run_status=run_status,
-                source=source_label,
+            run = analysis_orchestrator.persist(
+                sbom=sbom_row,
+                execution=execution,
                 started_on=run_started_on,
-                completed_on=now_iso(),
                 duration_ms=duration_ms,
-                existing_run=run,
                 trigger_source="manual",
+                existing_run=run,
                 correlation_id=correlation_id,
             )
-            db.commit()
 
             complete_payload = {
                 "runId": run.id,

@@ -17,9 +17,9 @@ from sqlalchemy.orm import Session
 from ...core.context import CurrentContext
 from ...models import LifecycleProviderConfig, LifecycleProviderSecret, LifecycleVendorRecord
 from ...services.audit_service import write_audit_log
+from .endoflife_date_provider import END_OF_LIFE_API_V1, END_OF_LIFE_LEGACY_API
 from .secret_service import LifecycleProviderSecretService
 from .types import ALLOWED_CONFIDENCE_VALUES, ALLOWED_LIFECYCLE_STATUSES, canonical_confidence, canonical_status
-from .endoflife_date_provider import END_OF_LIFE_API_V1, END_OF_LIFE_LEGACY_API
 from .xeol_db_provider import clear_xeol_db_cache, validate_xeol_db_path
 
 DEFAULT_PROVIDER_CONFIGS: tuple[dict[str, Any], ...] = (

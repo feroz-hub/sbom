@@ -13,7 +13,8 @@ from sqlalchemy.orm import Session
 from ..core.context import CurrentContext
 from ..core.security import get_current_tenant_context
 from ..db import get_db
-from ..models import AnalysisFinding, AnalysisRun, VulnerabilityRemediation
+from ..metrics.findings import finding_and_run_for_tenant
+from ..models import VulnerabilityRemediation
 from ..schemas import VulnerabilityRemediationAuditOut, VulnerabilityRemediationOut, VulnerabilityRemediationUpsert
 from ..services.remediation_service import (
     create_or_update_remediation,
@@ -47,22 +48,15 @@ def get_finding_remediation(
     db: Session = Depends(get_db),
 ):
     """Fetch the remediation record associated with a specific finding."""
-    finding = db.execute(
-        select(AnalysisFinding).where(
-            AnalysisFinding.id == finding_id,
-            AnalysisFinding.tenant_id == context.tenant_id,
-        )
-    ).scalar_one_or_none()
-    if not finding:
+    finding_with_run = finding_and_run_for_tenant(
+        db,
+        finding_id=finding_id,
+        tenant_id=context.tenant_id,
+    )
+    if finding_with_run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Finding with ID {finding_id} not found.")
-
-    run = db.execute(
-        select(AnalysisRun).where(
-            AnalysisRun.id == finding.analysis_run_id,
-            AnalysisRun.tenant_id == context.tenant_id,
-        )
-    ).scalar_one_or_none()
-    if not run or not run.project_id:
+    finding, run = finding_with_run
+    if not run.project_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Finding is not associated with a project.")
 
     rem = get_remediation_for_finding(

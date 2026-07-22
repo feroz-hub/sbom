@@ -12,7 +12,6 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
-
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 # Detect and import BaseSettings

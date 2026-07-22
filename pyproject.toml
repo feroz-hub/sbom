@@ -85,6 +85,7 @@ explicit_package_bases = true
 
 [tool.importlinter]
 root_package = "app"
+include_external_packages = true
 
 [[tool.importlinter.contracts]]
 name = "Parsing does not depend on HTTP or routers"
@@ -123,7 +124,7 @@ source_modules = [
 forbidden_modules = [
     "requests",
     "httpx",
-    "urllib.request",
+    "urllib",
 ]
 
 [tool.setuptools.packages.find]

@@ -130,7 +130,7 @@ def _seed_default_identity(bind) -> None:
     bind.execute(
         sa.text(
             "INSERT INTO tenant_users (tenant_id,user_id,role,status,created_at,updated_at) "
-            "SELECT 1,1,'PLATFORM_ADMIN','ACTIVE',:now,:now "
+            "SELECT 1,1,'TENANT_ADMIN','ACTIVE',:now,:now "
             "WHERE NOT EXISTS (SELECT 1 FROM tenant_users WHERE tenant_id=1 AND user_id=1)"
         ),
         {"now": now},

@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -125,8 +126,9 @@ def test_migration_script_copies_rows_and_resets_sequences(
     clean_postgres,
     tmp_path: Path,
 ) -> None:
+    import app.nvd_mirror.db.models  # noqa: F401 -- register mirror tables on Base.metadata
     from app.db import Base
-    from app.models import Projects, SBOMComponent, SBOMSource, SBOMType
+    from app.models import Projects, SBOMComponent, SBOMSource, SBOMType, Tenant
     from scripts.migrate_sqlite_to_postgres import main
 
     source_path = tmp_path / "source.db"
@@ -138,6 +140,16 @@ def test_migration_script_copies_rows_and_resets_sequences(
         connection.execute(sa.text("INSERT INTO alembic_version(version_num) VALUES ('032_postgres_compat')"))
     session_factory = sa.orm.sessionmaker(bind=source_engine)
     with session_factory() as session:
+        now = datetime.now(UTC)
+        tenant = Tenant(
+            id=1,
+            name="Default Tenant",
+            slug="default",
+            external_iam_tenant_id="local-default",
+            status="ACTIVE",
+            created_at=now,
+            updated_at=now,
+        )
         project = Projects(id=10, project_name="migration-project", project_status=1)
         sbom_type = SBOMType(id=4, typename="CycloneDX")
         parent = SBOMSource(
@@ -165,7 +177,7 @@ def test_migration_script_copies_rows_and_resets_sequences(
             lifecycle_evidence_json={"source": "test"},
             unsupported=False,
         )
-        session.add_all([project, sbom_type, parent, child, component])
+        session.add_all([tenant, project, sbom_type, parent, child, component])
         session.commit()
     source_engine.dispose()
 
@@ -203,8 +215,8 @@ def test_migration_script_copies_rows_and_resets_sequences(
         assert connection.scalar(sa.text("SELECT parent_id FROM sbom_source WHERE id = 21")) == 20
         next_project_id = connection.scalar(
             sa.text(
-                "INSERT INTO projects(project_name, project_status, is_active) "
-                "VALUES ('sequence-check', 1, true) RETURNING id"
+                "INSERT INTO projects(project_name, project_status, is_active, tenant_id) "
+                "VALUES ('sequence-check', 1, true, 1) RETURNING id"
             )
         )
         assert next_project_id == 11

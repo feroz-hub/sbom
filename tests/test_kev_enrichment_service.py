@@ -3,14 +3,14 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
-
+from app.core.context import minimal_background_context
 from app.db import Base
 from app.models import AnalysisFinding, AnalysisRun, KevEntry, SBOMSource, Tenant
 from app.routers.runs import list_run_findings_enriched
 from app.services.analysis_service import persist_analysis_run
 from app.services.kev_enrichment import enrich_findings_with_kev
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
 
 
 def _now_iso() -> str:
@@ -200,7 +200,14 @@ def test_enriched_findings_api_response_includes_kev_fields():
     db.add_all([sbom, run, finding, kev])
     db.commit()
 
-    rows = list_run_findings_enriched(run_id=1, severity=None, page=1, page_size=50, db=db)
+    rows = list_run_findings_enriched(
+        run_id=1,
+        severity=None,
+        page=1,
+        page_size=50,
+        context=minimal_background_context(1),
+        db=db,
+    )
 
     assert len(rows) == 1
     row = rows[0]

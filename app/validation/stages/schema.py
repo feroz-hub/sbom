@@ -18,7 +18,9 @@ from __future__ import annotations
 
 import json
 import logging
-from importlib import resources  # nosemgrep: python.lang.compatibility.python37.python37-compatibility-importlib2 - project requires Python >=3.11 in pyproject.toml
+from importlib import (
+    resources,  # nosemgrep: python.lang.compatibility.python37.python37-compatibility-importlib2 - project requires Python >=3.11 in pyproject.toml
+)
 from typing import Any
 
 from .. import errors as E

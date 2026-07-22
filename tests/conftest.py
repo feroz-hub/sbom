@@ -266,8 +266,30 @@ def _reset_postgres_database_before_test():
 
 
 @pytest.fixture()
-def client(app):
+def client(app, monkeypatch):
     from fastapi.testclient import TestClient
+
+    # Starlette executes BackgroundTasks before TestClient returns. Production
+    # upload requests intentionally schedule slow lifecycle/NVD enrichment,
+    # but general API tests must not fan out to live providers (a large-SBOM
+    # fixture otherwise performs hundreds of network calls). Dedicated
+    # enrichment tests exercise the service directly with provider fakes, and
+    # scheduling tests can override these router-bound callables locally.
+    def _skip_post_upload_enrichment(sbom_id: int, tenant_id: int | None = None) -> None:
+        return None
+
+    monkeypatch.setattr(
+        "app.routers.sbom_upload.run_post_upload_enrichment",
+        _skip_post_upload_enrichment,
+    )
+    monkeypatch.setattr(
+        "app.routers.sboms_crud.run_post_upload_enrichment",
+        _skip_post_upload_enrichment,
+    )
+    monkeypatch.setattr(
+        "app.routers.sbom_validation_sessions.run_post_upload_enrichment",
+        _skip_post_upload_enrichment,
+    )
 
     with TestClient(app) as c:
         yield c

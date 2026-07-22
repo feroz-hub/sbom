@@ -190,8 +190,6 @@ def test_analyze_stream_parse_failure_persists_failed_run(client, db):
 
 
 def test_analyze_stream_zero_persisted_components_marks_run_failed(client, seeded_sbom, db, monkeypatch):
-    from app.routers import sboms_crud as crud
-
     sbom_id = seeded_sbom["id"]
     db.query(SBOMComponent).filter(SBOMComponent.sbom_id == sbom_id).delete()
     db.commit()
@@ -199,7 +197,7 @@ def test_analyze_stream_zero_persisted_components_marks_run_failed(client, seede
     def fake_sync_components(_db, _sbom):
         return []
 
-    monkeypatch.setattr(crud, "sync_sbom_components", fake_sync_components)
+    monkeypatch.setattr("app.services.analysis_orchestrator.sync_sbom_components", fake_sync_components)
 
     resp = client.post(
         f"/api/sboms/{sbom_id}/analyze/stream",
@@ -326,7 +324,6 @@ def test_analyze_stream_data_error_rolls_back_and_marks_failed_with_clean_sessio
         pytest.skip("forced aborted transaction regression is PostgreSQL-specific")
 
     from app.db import SessionLocal, get_db
-    from app.routers import sboms_crud as crud
 
     rollback_calls: list[bool] = []
 
@@ -348,7 +345,7 @@ def test_analyze_stream_data_error_rolls_back_and_marks_failed_with_clean_sessio
         db.execute(text("SELECT 1 / 0"))
 
     client.app.dependency_overrides[get_db] = override_get_db
-    monkeypatch.setattr(crud, "persist_analysis_run", fail_with_aborted_transaction)
+    monkeypatch.setattr("app.services.analysis_orchestrator.persist_analysis_run", fail_with_aborted_transaction)
     try:
         resp = client.post(
             f"/api/sboms/{seeded_sbom['id']}/analyze/stream",
@@ -411,7 +408,7 @@ def test_analyze_stream_still_ends_cleanly_when_failed_status_cannot_be_persiste
         db.execute(text("SELECT 1 / 0"))
 
     caplog.set_level("ERROR", logger="app.routers.sboms_crud")
-    monkeypatch.setattr(crud, "persist_analysis_run", fail_with_aborted_transaction)
+    monkeypatch.setattr("app.services.analysis_orchestrator.persist_analysis_run", fail_with_aborted_transaction)
     monkeypatch.setattr(crud, "SessionLocal", FailingCommitSession)
 
     resp = client.post(

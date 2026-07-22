@@ -23,6 +23,7 @@ from datetime import UTC, datetime, timedelta
 
 from celery import shared_task
 from sqlalchemy import delete
+from sqlalchemy.orm import Session
 
 from ..models import CveCache
 

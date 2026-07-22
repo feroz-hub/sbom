@@ -7,9 +7,7 @@ from typing import Any
 
 import pytest
 import requests
-
 from app.analysis import get_analysis_settings_multi, nvd_query_by_components_async
-
 
 LOG4J_CPE = "cpe:2.3:a:apache:log4j:3.0.0:*:*:*:*:*:*:*"
 LOG4J_CRITERIA = "cpe:2.3:a:apache:log4j:*:*:*:*:*:*:*:*"

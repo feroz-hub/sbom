@@ -14,8 +14,8 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import Text, cast, exists, func, or_, select, true
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from ..db import get_db
 from ..models import KevEntry

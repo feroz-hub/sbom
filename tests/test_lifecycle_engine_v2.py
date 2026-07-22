@@ -30,7 +30,6 @@ from app.services.lifecycle.types import (
     HIGH,
     LOW,
     MEDIUM,
-    POSSIBLY_UNMAINTAINED,
     UNKNOWN,
     UNSUPPORTED,
     LifecycleResult,

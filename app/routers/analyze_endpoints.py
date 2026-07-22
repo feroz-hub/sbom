@@ -27,38 +27,19 @@ All four endpoints are thin wrappers around a single shared helper
      ``frontend/src/hooks/useBackgroundAnalysis.ts:65`` keeps working.
 """
 
-import json
 import logging
-import time
 
-from fastapi import APIRouter, Body, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Request, Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ..analysis import (
-    _augment_components_with_cpe,
-    deduplicate_findings,
-    enrich_component_for_osv,
-    get_analysis_settings_multi,
-)
 from ..db import get_db
+from ..deprecation import LEGACY_ANALYSIS_SUNSET, mark_deprecated
 from ..idempotency import normalize_idempotency_key, run_idempotent
 from ..models import AnalysisRun
 from ..rate_limit import analyze_route_limit
-from ..services.analysis_service import (
-    compute_report_status,
-    filter_unconfirmed_provider_findings,
-    get_active_analysis_run,
-    persist_analysis_run,
-)
-from ..services.sbom_service import load_sbom_from_ref as _load_sbom_from_ref
-from ..services.sbom_service import now_iso
+from ..services.analysis_orchestrator import AnalysisOrchestrator
 from ..settings import get_settings
-from ..sources import (
-    build_source_adapters,
-    run_sources_concurrently,
-)
-from ..sources.routing import count_authoritative_cpes
 
 DEFAULT_RESULTS_PER_PAGE = get_settings().DEFAULT_RESULTS_PER_PAGE
 
@@ -150,209 +131,53 @@ async def _run_legacy_analysis(
     ``AnalysisRunOut`` consumers AND the legacy
     ``summary.findings.bySeverity`` defensive readers.
     """
-    # 1. Load + parse the SBOM
+    orchestrator = AnalysisOrchestrator(db)
     try:
-        sbom_row, _, sbom_format, spec_version, raw_components = _load_sbom_from_ref(
-            db, sbom_id=sbom_id, sbom_name=sbom_name
+        sbom_row, sbom_format, spec_version = orchestrator.resolve_sbom(
+            sbom_id=sbom_id,
+            sbom_name=sbom_name,
         )
     except ValueError as exc:
-        # _load_sbom_from_ref raises ValueError for missing / invalid SBOMs.
-        raise HTTPException(status_code=404, detail=str(exc))
-
-    if not raw_components:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    outcome = await orchestrator.run(sbom_row, sources=sources_list, trigger_source="api")
+    if outcome is None:
         raise HTTPException(status_code=400, detail="No components detected in SBOM.")
-
-    existing = get_active_analysis_run(db, int(sbom_row.id))
-    if existing:
-        log.info(
-            "Legacy analysis already running trigger_source=%s sbom_id=%d run_id=%d",
-            existing.trigger_source,
-            int(sbom_row.id),
-            int(existing.id),
-        )
-        return _already_running_response(existing)
-
-    # 2. CPE augmentation + OSV enrichment so the adapters get the same
-    #    component shape that the production multi-source path uses.
-    from ..services.component_deduplication_service import ComponentDeduplicationService
-
-    canonical_components, _duplicates, _mapping, _report, _warnings = ComponentDeduplicationService.deduplicate_components(
-        raw_components,
-        [],
-    )
-    enriched = [enrich_component_for_osv(c) for c in canonical_components]
-    components, _generated_cpe = _augment_components_with_cpe(enriched)
-
-    # 3. Build per-request adapters. Credentials are bound at construction
-    #    time so the request handler never has to mutate os.environ.
-    adapters = build_source_adapters(sources_list)
-    if not adapters:
-        raise HTTPException(
-            status_code=400,
-            detail=f"No supported sources requested. Got {sources_list!r}.",
-        )
-
-    # 4. Fan out concurrently via the registry runner.
-    started_on = now_iso()
-    started_at = time.perf_counter()
-    source_label = ",".join(sources_list)
-    run = AnalysisRun(
-        sbom_id=sbom_row.id,
-        project_id=sbom_row.projectid,
-        product_id=sbom_row.product_id,
-        run_status="PENDING",
-        sbom_name=sbom_row.sbom_name,
-        source=source_label,
-        trigger_source="api",
-        started_on=started_on,
-        completed_on=started_on,
-        duration_ms=0,
-        total_components=0,
-        components_with_cpe=0,
-        total_findings=0,
-        raw_report=json.dumps({"status": "queued", "message": "Analysis queued.", "sources": sources_list}),
-    )
-    db.add(run)
-    db.commit()
-    db.refresh(run)
-    log.info("Analysis started trigger_source=api sbom_id=%d run_id=%d", int(sbom_row.id), int(run.id))
-
-    cfg = get_analysis_settings_multi()
-    try:
-        run.run_status = "RUNNING"
-        run.raw_report = json.dumps({"status": "running", "sources": sources_list})
-        db.add(run)
-        db.commit()
-        raw_findings, query_errors, query_warnings = await run_sources_concurrently(
-            sources=adapters,
-            components=components,
-            settings=cfg,
-        )
-    except Exception:
-        db.rollback()
-        run.run_status = "ERROR"
-        run.completed_on = now_iso()
-        run.duration_ms = int((time.perf_counter() - started_at) * 1000)
-        run.raw_report = json.dumps({"status": "failed", "message": "Legacy analysis failed."})
-        db.add(run)
-        db.commit()
-        raise
-
-    # 5. Two-pass CVE↔GHSA dedupe (same pass production uses).
-    final_findings = deduplicate_findings(raw_findings)
-    final_findings = filter_unconfirmed_provider_findings({"findings": final_findings}, components)["findings"]
-
-    buckets = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "UNKNOWN": 0}
-    for f in final_findings:
-        sev = str((f or {}).get("severity", "UNKNOWN")).upper()
-        buckets[sev if sev in buckets else "UNKNOWN"] += 1
-
-    details = {
-        "total_components": len(components),
-        "components_with_cpe": count_authoritative_cpes(components),
-        "total_findings": len(final_findings),
-        "critical": buckets["CRITICAL"],
-        "high": buckets["HIGH"],
-        "medium": buckets["MEDIUM"],
-        "low": buckets["LOW"],
-        "unknown": buckets["UNKNOWN"],
-        "query_errors": query_errors,
-        "query_warnings": query_warnings,
-        "source_summary": [
-            warning["source_summary"]
-            for warning in query_warnings
-            if isinstance(warning, dict) and isinstance(warning.get("source_summary"), dict)
-        ],
-        "findings": final_findings,
-        "analysis_metadata": {
-            "sources": sources_list,
-            "raw_observation_count": len(raw_findings),
-            "source_summary": [
-                warning["source_summary"]
-                for warning in query_warnings
-                if isinstance(warning, dict) and isinstance(warning.get("source_summary"), dict)
-            ],
-            "provider_status": [
-                warning["provider_status"]
-                for warning in query_warnings
-                if isinstance(warning, dict) and isinstance(warning.get("provider_status"), dict)
-            ],
-        },
-    }
-
-    run_status = compute_report_status(len(final_findings), query_errors)
-    if query_errors:
-        source_label += " (partial)"
-
-    duration_ms = int((time.perf_counter() - started_at) * 1000)
-    completed_on = now_iso()
-
-    # 6. Persist into AnalysisRun + AnalysisFinding (the same path the
-    #    production endpoint uses). The PDF endpoint already falls back
-    #    from RunCache to AnalysisRun via `rebuild_run_from_db`, so PDF
-    #    generation continues to work.
-    run = persist_analysis_run(
-        db=db,
-        sbom_obj=sbom_row,
-        details=details,
-        components=components,
-        run_status=run_status,
-        source=source_label,
-        started_on=started_on,
-        completed_on=completed_on,
-        duration_ms=duration_ms,
-        existing_run=run,
-        trigger_source="api",
-    )
-    db.commit()
-
-    log.info(
-        "Legacy analysis complete: sources=%s sbom='%s' components=%d findings=%d "
-        "errors=%d status=%s duration=%dms run_id=%d",
-        sources_list,
-        sbom_row.sbom_name,
-        len(components),
-        len(final_findings),
-        len(query_errors),
-        run_status,
-        duration_ms,
-        run.id,
-    )
-
-    # 7. Build the response shape — flat AnalysisRunOut fields PLUS the
-    #    legacy ``sbom``/``summary`` blocks the frontend's defensive reader
-    #    falls back to.
+    run, execution = outcome
+    if execution is None:
+        return _already_running_response(run)
+    details = execution.details
+    buckets = execution.buckets
+    completed_on = run.completed_on
+    duration_ms = int(run.duration_ms or 0)
     return {
-        # Flat fields — primary contract for ConsolidatedAnalysisResult
         "id": run.id,
-        "runId": run.id,  # legacy alias
+        "runId": run.id,
         "sbom_id": sbom_row.id,
         "sbom_name": sbom_row.sbom_name,
         "project_id": sbom_row.projectid,
         "product_id": sbom_row.product_id,
         "product_name": sbom_row.product_name,
-        "run_status": run_status,
-        "status": run_status,  # legacy alias
-        "source": source_label,
+        "run_status": run.run_status,
+        "status": run.run_status,
+        "source": run.source,
         "trigger_source": "api",
-        "started_on": started_on,
+        "started_on": run.started_on,
         "completed_on": completed_on,
         "duration_ms": duration_ms,
-        "total_components": details["total_components"],
-        "components_with_cpe": details["components_with_cpe"],
-        "total_findings": details["total_findings"],
-        "critical_count": buckets["CRITICAL"],
-        "high_count": buckets["HIGH"],
-        "medium_count": buckets["MEDIUM"],
-        "low_count": buckets["LOW"],
-        "unknown_count": buckets["UNKNOWN"],
-        "query_error_count": len(query_errors),
+        "total_components": run.total_components,
+        "components_with_cpe": run.components_with_cpe,
+        "total_findings": run.total_findings,
+        "critical_count": run.critical_count,
+        "high_count": run.high_count,
+        "medium_count": run.medium_count,
+        "low_count": run.low_count,
+        "unknown_count": run.unknown_count,
+        "query_error_count": run.query_error_count,
         **(
             {"provider_status": details["analysis_metadata"]["provider_status"]}
             if details["analysis_metadata"]["provider_status"]
             else {}
         ),
-        # Legacy compatibility blocks (read by useBackgroundAnalysis.ts:65)
         "sbom": {
             "id": sbom_row.id,
             "name": sbom_row.sbom_name,
@@ -360,13 +185,10 @@ async def _run_legacy_analysis(
             "specVersion": spec_version,
         },
         "summary": {
-            "components": details["total_components"],
-            "withCPE": details["components_with_cpe"],
-            "findings": {
-                "total": details["total_findings"],
-                "bySeverity": buckets,
-            },
-            "errors": len(query_errors),
+            "components": run.total_components,
+            "withCPE": run.components_with_cpe,
+            "findings": {"total": run.total_findings, "bySeverity": buckets},
+            "errors": run.query_error_count,
             "durationMs": duration_ms,
             "completedOn": completed_on,
         },
@@ -376,10 +198,11 @@ async def _run_legacy_analysis(
 # ---- NVD ------------------------------------------------------------------
 
 
-@router.post("/analyze-sbom-nvd")
+@router.post("/analyze-sbom-nvd", deprecated=True)
 @analyze_route_limit
 async def analyze_sbom_nvd(
     request: Request,
+    response: Response,
     payload: AnalysisByRefNVD = Body(...),
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     db: Session = Depends(get_db),
@@ -390,12 +213,20 @@ async def analyze_sbom_nvd(
     log.info("NVD analysis started: sbom_id=%s sbom_name=%s", payload.sbom_id, payload.sbom_name)
 
     async def _inner() -> dict:
-        return await _run_legacy_analysis(
+        result = await _run_legacy_analysis(
             db,
             sbom_id=payload.sbom_id,
             sbom_name=payload.sbom_name,
             sources_list=["NVD"],
         )
+        successor = f"/api/sboms/{result['sbom_id']}/analyze"
+        mark_deprecated(
+            response,
+            endpoint="POST /analyze-sbom-nvd",
+            successor=successor,
+            sunset=LEGACY_ANALYSIS_SUNSET,
+        )
+        return result
 
     key = normalize_idempotency_key(idempotency_key)
     scope = f"legacy_nvd:{payload.sbom_id}:{payload.sbom_name or ''}"
@@ -407,10 +238,11 @@ async def analyze_sbom_nvd(
 # ---- GitHub Advisories ----------------------------------------------------
 
 
-@router.post("/analyze-sbom-github")
+@router.post("/analyze-sbom-github", deprecated=True)
 @analyze_route_limit
 async def analyze_sbom_github(
     request: Request,
+    response: Response,
     payload: AnalysisByRefGitHub = Body(...),
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     db: Session = Depends(get_db),
@@ -421,12 +253,19 @@ async def analyze_sbom_github(
     log.info("GHSA analysis started: sbom_id=%s sbom_name=%s", payload.sbom_id, payload.sbom_name)
 
     async def _inner() -> dict:
-        return await _run_legacy_analysis(
+        result = await _run_legacy_analysis(
             db,
             sbom_id=payload.sbom_id,
             sbom_name=payload.sbom_name,
             sources_list=["GITHUB"],
         )
+        mark_deprecated(
+            response,
+            endpoint="POST /analyze-sbom-github",
+            successor=f"/api/sboms/{result['sbom_id']}/analyze",
+            sunset=LEGACY_ANALYSIS_SUNSET,
+        )
+        return result
 
     key = normalize_idempotency_key(idempotency_key)
     scope = f"legacy_github:{payload.sbom_id}:{payload.sbom_name or ''}"
@@ -438,10 +277,11 @@ async def analyze_sbom_github(
 # ---- OSV ------------------------------------------------------------------
 
 
-@router.post("/analyze-sbom-osv")
+@router.post("/analyze-sbom-osv", deprecated=True)
 @analyze_route_limit
 async def analyze_sbom_osv(
     request: Request,
+    response: Response,
     payload: AnalysisByRefOSV = Body(...),
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     db: Session = Depends(get_db),
@@ -452,12 +292,19 @@ async def analyze_sbom_osv(
     log.info("OSV analysis started: sbom_id=%s sbom_name=%s", payload.sbom_id, payload.sbom_name)
 
     async def _inner() -> dict:
-        return await _run_legacy_analysis(
+        result = await _run_legacy_analysis(
             db,
             sbom_id=payload.sbom_id,
             sbom_name=payload.sbom_name,
             sources_list=["OSV"],
         )
+        mark_deprecated(
+            response,
+            endpoint="POST /analyze-sbom-osv",
+            successor=f"/api/sboms/{result['sbom_id']}/analyze",
+            sunset=LEGACY_ANALYSIS_SUNSET,
+        )
+        return result
 
     key = normalize_idempotency_key(idempotency_key)
     scope = f"legacy_osv:{payload.sbom_id}:{payload.sbom_name or ''}"
@@ -469,10 +316,11 @@ async def analyze_sbom_osv(
 # ---- VulDB / VulnDB --------------------------------------------------------
 
 
-@router.post("/analyze-sbom-vulndb")
+@router.post("/analyze-sbom-vulndb", deprecated=True)
 @analyze_route_limit
 async def analyze_sbom_vulndb(
     request: Request,
+    response: Response,
     payload: AnalysisByRefVulnDb = Body(...),
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     db: Session = Depends(get_db),
@@ -485,12 +333,19 @@ async def analyze_sbom_vulndb(
     log.info("VulDB analysis started: sbom_id=%s sbom_name=%s", payload.sbom_id, payload.sbom_name)
 
     async def _inner() -> dict:
-        return await _run_legacy_analysis(
+        result = await _run_legacy_analysis(
             db,
             sbom_id=payload.sbom_id,
             sbom_name=payload.sbom_name,
             sources_list=["VULNDB"],
         )
+        mark_deprecated(
+            response,
+            endpoint="POST /analyze-sbom-vulndb",
+            successor=f"/api/sboms/{result['sbom_id']}/analyze",
+            sunset=LEGACY_ANALYSIS_SUNSET,
+        )
+        return result
 
     key = normalize_idempotency_key(idempotency_key)
     scope = f"legacy_vulndb:{payload.sbom_id}:{payload.sbom_name or ''}"
@@ -502,10 +357,11 @@ async def analyze_sbom_vulndb(
 # ---- Consolidated (NVD + GHSA + OSV + VulDB) -------------------------------
 
 
-@router.post("/analyze-sbom-consolidated")
+@router.post("/analyze-sbom-consolidated", deprecated=True)
 @analyze_route_limit
 async def analyze_sbom_consolidated(
     request: Request,
+    response: Response,
     payload: AnalysisByRefConsolidated = Body(...),
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     db: Session = Depends(get_db),
@@ -520,12 +376,19 @@ async def analyze_sbom_consolidated(
     )
 
     async def _inner() -> dict:
-        return await _run_legacy_analysis(
+        result = await _run_legacy_analysis(
             db,
             sbom_id=payload.sbom_id,
             sbom_name=payload.sbom_name,
             sources_list=["NVD", "OSV", "GITHUB", "VULNDB"],
         )
+        mark_deprecated(
+            response,
+            endpoint="POST /analyze-sbom-consolidated",
+            successor=f"/api/sboms/{result['sbom_id']}/analyze",
+            sunset=LEGACY_ANALYSIS_SUNSET,
+        )
+        return result
 
     key = normalize_idempotency_key(idempotency_key)
     scope = f"legacy_consolidated:{payload.sbom_id}:{payload.sbom_name or ''}"
