@@ -167,14 +167,18 @@ def _cwe_condition(db: Session, cwe: str) -> ColumnElement[bool]:
     )
 
 
-def _distinct_nonblank(db: Session, column, *conditions: ColumnElement[bool]) -> list[str]:
-    stmt = (
-        select(column)
+def _distinct_nonblank(db: Session, column: Any, *conditions: ColumnElement[bool]) -> list[str]:
+    distinct_values = (
+        select(column.label("value"))
         .where(column.isnot(None), func.trim(column) != "", *conditions)
         .distinct()
-        .order_by(func.lower(column), column)
+        .subquery()
     )
-    return [str(value) for value in db.execute(stmt).scalars() if value]
+    stmt = select(distinct_values.c.value).order_by(
+        func.lower(distinct_values.c.value),
+        distinct_values.c.value,
+    )
+    return [str(value) for value in db.execute(stmt).scalars() if value is not None]
 
 
 def _distinct_cwes(db: Session) -> list[str]:
@@ -184,15 +188,19 @@ def _distinct_cwes(db: Session) -> list[str]:
     else:
         elements = func.json_each(KevEntry.cwes).table_valued("key", "value").alias("kev_cwe")
     value = elements.c.value
-    stmt = (
-        select(value)
+    distinct_values = (
+        select(value.label("value"))
         .select_from(KevEntry)
         .join(elements, true())
         .where(KevEntry.cwes.isnot(None), func.trim(value) != "")
         .distinct()
-        .order_by(func.upper(value), value)
+        .subquery()
     )
-    return [str(cwe) for cwe in db.execute(stmt).scalars() if cwe]
+    stmt = select(distinct_values.c.value).order_by(
+        func.upper(distinct_values.c.value),
+        distinct_values.c.value,
+    )
+    return [str(cwe) for cwe in db.execute(stmt).scalars() if cwe is not None]
 
 
 def _serialize(row: KevEntry) -> dict[str, Any]:

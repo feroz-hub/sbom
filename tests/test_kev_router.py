@@ -51,14 +51,14 @@ def kev_client(db_session: Session):
 def _entry(
     cve_id: str,
     *,
-    vendor: str,
-    product: str,
+    vendor: str | None,
+    product: str | None,
     name: str,
     date_added: str,
     due_date: str,
     ransomware: str | None,
-    cwes: list[str],
-    catalog_version: str,
+    cwes: list[str] | None,
+    catalog_version: str | None,
     description: str = "CISA short description",
     action: str = "Apply vendor patch",
     notes: str = "CISA notes",
@@ -324,14 +324,106 @@ def test_filtered_count_and_pagination_apply_after_filters(kev_client, db_sessio
 
 def test_filter_options_are_distinct_sorted_and_vendor_aware(kev_client, db_session: Session) -> None:
     _seed_catalog(db_session)
+    db_session.add_all(
+        [
+            _entry(
+                "CVE-2030-0001",
+                vendor="Microsoft",
+                product="Windows",
+                name="Duplicate filter values",
+                date_added="2030-01-01",
+                due_date="2030-01-02",
+                ransomware=None,
+                cwes=["CWE-787"],
+                catalog_version="2026.07.17",
+            ),
+            _entry(
+                "CVE-2030-0002",
+                vendor="apple",
+                product="",
+                name="Lowercase filter value",
+                date_added="2030-01-02",
+                due_date="2030-01-03",
+                ransomware=None,
+                cwes=[""],
+                catalog_version="",
+            ),
+            _entry(
+                "CVE-2030-0003",
+                vendor="Apple",
+                product="   ",
+                name="Case-sensitive duplicate filter value",
+                date_added="2030-01-03",
+                due_date="2030-01-04",
+                ransomware=None,
+                cwes=["   "],
+                catalog_version="   ",
+            ),
+            _entry(
+                "CVE-2030-0004",
+                vendor="  Google",
+                product="Search",
+                name="Surrounding whitespace is preserved",
+                date_added="2030-01-04",
+                due_date="2030-01-05",
+                ransomware=None,
+                cwes=None,
+                catalog_version=None,
+            ),
+            _entry(
+                "CVE-2030-0005",
+                vendor="",
+                product=None,
+                name="Empty filter value",
+                date_added="2030-01-05",
+                due_date="2030-01-06",
+                ransomware=None,
+                cwes=None,
+                catalog_version=None,
+            ),
+            _entry(
+                "CVE-2030-0006",
+                vendor="   ",
+                product=None,
+                name="Whitespace-only filter value",
+                date_added="2030-01-06",
+                due_date="2030-01-07",
+                ransomware=None,
+                cwes=None,
+                catalog_version=None,
+            ),
+            _entry(
+                "CVE-2030-0007",
+                vendor=None,
+                product=None,
+                name="Null filter value",
+                date_added="2030-01-07",
+                due_date="2030-01-08",
+                ransomware=None,
+                cwes=None,
+                catalog_version=None,
+            ),
+        ]
+    )
+    db_session.commit()
+
     response = kev_client.get("/api/v1/kev/filter-options")
     assert response.status_code == 200, response.text
     payload = response.json()
-    assert payload["vendors"] == ["Apache", "Apple", "Cisco", "Microsoft"]
+    assert set(payload) == {
+        "vendors",
+        "products",
+        "catalog_versions",
+        "cwes",
+        "date_added_min",
+        "date_added_max",
+    }
+    assert payload["vendors"] == ["  Google", "Apache", "Apple", "apple", "Cisco", "Microsoft"]
+    assert payload["products"] == ["IOS XE", "Log4j2", "Search", "Tomcat", "WebKit", "Windows"]
     assert payload["catalog_versions"] == ["2026.07.15", "2026.07.16", "2026.07.17"]
     assert payload["cwes"] == ["CWE-20", "CWE-269", "CWE-444", "CWE-502", "CWE-78", "CWE-787"]
     assert payload["date_added_min"] == "2021-12-10"
-    assert payload["date_added_max"] == "2025-05-05"
+    assert payload["date_added_max"] == "2030-01-07"
 
     apache = kev_client.get("/api/v1/kev/filter-options", params={"vendor": "apache"}).json()
     assert apache["products"] == ["Log4j2", "Tomcat"]
