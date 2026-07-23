@@ -25,7 +25,8 @@ vi.mock('@/lib/api', async (importOriginal) => ({
 }));
 
 import { HttpError } from '@/lib/api';
-import PlatformTenantsPage, { slugFromName } from './page';
+import { slugFromName } from '@/lib/tenantForm';
+import PlatformTenantsPage from './page';
 
 const tenant = {
   id: 7,

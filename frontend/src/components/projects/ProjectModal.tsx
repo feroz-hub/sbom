@@ -91,9 +91,7 @@ export function ProjectModal({ open, onClose, project }: ProjectModalProps) {
       // SBOM rows render project_name; a rename leaves them stale until
       // staleTime expires. Bust the SBOM list surfaces too.
       invalidateSbomLists(queryClient);
-      showSuccess(
-        `Project “${values.project_name.trim()}” was ${isEdit ? 'updated' : 'created'} successfully.`,
-      );
+      showSuccess(isEdit ? 'Project updated successfully.' : 'Project created successfully.');
       onClose();
     },
     onError: (error: unknown) => {

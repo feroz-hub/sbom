@@ -3,9 +3,11 @@ import type { Config } from 'tailwindcss';
 const config: Config = {
   darkMode: 'class',
   content: [
-    './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
-    './src/components/**/*.{js,ts,jsx,tsx,mdx}',
-    './src/app/**/*.{js,ts,jsx,tsx,mdx}',
+    // UI can live in hooks as well as pages/components (the custom toast
+    // viewport is implemented in src/hooks/useToast.tsx).  Restricting the
+    // scanner to app/components silently omitted its positioning utilities
+    // from production CSS even though the portal existed in document.body.
+    './src/**/*.{js,ts,jsx,tsx,mdx}',
   ],
   theme: {
     extend: {

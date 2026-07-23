@@ -34,7 +34,7 @@ describe('ProjectModal notifications', () => {
     const { onClose, queryClient, unmount } = renderModal();
     await user.type(screen.getByRole('textbox', { name: 'Project Name' }), 'Visible Toast');
     await user.click(screen.getByRole('button', { name: 'Create Project' }));
-    expect(await screen.findByRole('status')).toHaveTextContent('Project “Visible Toast” was created successfully.');
+    expect(await screen.findByRole('status')).toHaveTextContent('Project created successfully.');
     expect(onClose).toHaveBeenCalledTimes(1);
     unmount();
     queryClient.clear();
@@ -60,7 +60,7 @@ describe('ProjectModal notifications', () => {
   });
 
   it('disables submission while the request is pending', async () => {
-    let resolveRequest: (value: unknown) => void = () => undefined;
+    let resolveRequest: (value: Awaited<ReturnType<typeof createProject>>) => void = () => undefined;
     vi.mocked(createProject).mockReturnValue(
       new Promise((resolve) => { resolveRequest = resolve; }) as ReturnType<typeof createProject>,
     );
@@ -70,7 +70,7 @@ describe('ProjectModal notifications', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Create Project' }));
     await waitFor(() => expect(screen.getByRole('button', { name: /Create Project/ })).toBeDisabled());
-    resolveRequest({ id: 10, project_name: 'Pending' });
+    resolveRequest({ id: 10, project_name: 'Pending' } as Awaited<ReturnType<typeof createProject>>);
     unmount();
     queryClient.clear();
   });

@@ -43,6 +43,13 @@ function NavigatingHarness() {
 }
 
 describe('ToastProvider', () => {
+  it('renders the first direct success notification visibly', () => {
+    render(<ToastProvider><Harness /></ToastProvider>);
+    fireEvent.click(screen.getByText('success'));
+    expect(screen.getByRole('status')).toBeVisible();
+    expect(screen.getByRole('status')).toHaveTextContent('Saved once.');
+  });
+
   it('suppresses duplicate identical notifications', () => {
     render(<ToastProvider><Harness /></ToastProvider>);
     fireEvent.click(screen.getByText('success'));
@@ -61,11 +68,16 @@ describe('ToastProvider', () => {
 
   it('auto-dismisses success notifications', () => {
     vi.useFakeTimers();
-    render(<ToastProvider><Harness /></ToastProvider>);
-    fireEvent.click(screen.getByText('success'));
-    act(() => vi.advanceTimersByTime(4000));
-    expect(screen.queryByText('Saved once.')).not.toBeInTheDocument();
-    vi.useRealTimers();
+    try {
+      render(<ToastProvider><Harness /></ToastProvider>);
+      fireEvent.click(screen.getByText('success'));
+      act(() => vi.advanceTimersByTime(3999));
+      expect(screen.getByText('Saved once.')).toBeVisible();
+      act(() => vi.advanceTimersByTime(1));
+      expect(screen.queryByText('Saved once.')).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('renders over an open confirmation dialog', () => {
