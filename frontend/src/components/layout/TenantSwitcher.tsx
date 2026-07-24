@@ -14,7 +14,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
 
 export function TenantSwitcher() {
-  const { tenants, activeTenantId, switchTenant, user } = useAuth();
+  const { tenants, activeTenantId, switchTenant } = useAuth();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -47,7 +47,7 @@ export function TenantSwitcher() {
     const single = tenants[0];
     if (!single) return null;
     return (
-      <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-hcl-muted">
+      <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-white">
         <Building2 className="h-4 w-4 shrink-0" />
         <span className="truncate font-medium">{single.name}</span>
       </div>
@@ -67,12 +67,12 @@ export function TenantSwitcher() {
         aria-label="Switch tenant"
         className={cn(
           'flex w-full items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm transition-colors',
-          'hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/50',
-          open && 'bg-surface-muted border-hcl-blue/50',
+          'hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50',
+          open && 'border-white/70 bg-white/10',
         )}
       >
         <Building2 className="h-4 w-4 shrink-0 text-hcl-muted" />
-        <span className="flex-1 truncate text-left font-medium text-foreground">
+        <span className="flex-1 truncate text-left font-medium text-white">
           {activeTenant?.name || 'Select Tenant'}
         </span>
         <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-hcl-muted" />
