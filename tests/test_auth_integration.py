@@ -76,16 +76,18 @@ def test_authenticated_tenant_write_preserves_context(client, app, monkeypatch):
         )
         db.add(user)
         db.flush()
-        db.add(
-            TenantUser(
-                tenant_id=tenant.id,
-                user_id=user.id,
-                role="TENANT_ADMIN",
-                status="ACTIVE",
-                created_at=now,
-                updated_at=now,
-            )
+        membership = TenantUser(
+            tenant_id=tenant.id,
+            user_id=user.id,
+            role="TENANT_ADMIN",
+            status="ACTIVE",
+            created_at=now,
+            updated_at=now,
         )
+        db.add(membership)
+        db.flush()
+        from app.services.tenant_role_assignment_service import create_initial_assignment
+        create_initial_assignment(db, membership, role_code="TENANT_ADMIN", source="TENANT_ADMIN", actor_user_id=user.id)
         db.commit()
         tenant_id = tenant.id
 

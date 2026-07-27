@@ -196,7 +196,8 @@ def test_conflicting_legacy_identity_is_rejected_and_audited():
         lambda claims: claims.update(employee_id="00123\u007f"),
     ],
 )
-def test_invalid_identity_claims_never_create_a_user(mutator):
+def test_invalid_identity_claims_never_create_a_user(mutator, monkeypatch):
+    monkeypatch.setenv("HCL_IAM_REQUIRE_EMPLOYEE_ID", "true")
     from app.db import SessionLocal
 
     claims = _claims(uuid4().hex)

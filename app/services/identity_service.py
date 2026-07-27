@@ -231,7 +231,8 @@ def validate_external_identity_claims(
             raise ValueError("required identity claim is missing")
         if require_employee_id and employee_id is None:
             raise ValueError("employee ID is required")
-    except (TypeError, ValueError):
+    except (TypeError, ValueError) as err:
+        audit_service.log.warning("validate_external_identity_claims failed: %s keys: %s", err, list(claims.keys()))
         raise identity_http_error(
             IdentityErrorCode.REQUIRED_CLAIM_MISSING,
             "The access token does not contain a valid required identity profile.",

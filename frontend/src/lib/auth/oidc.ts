@@ -103,8 +103,35 @@ async function tokenRequest(
     signal: AbortSignal.timeout(10_000),
     cache: 'no-store',
   });
-  if (!response.ok) throw new Error('OIDC token request failed');
-  return (await response.json()) as Record<string, unknown>;
+
+  const responseText = await response.text();
+
+  if (!response.ok) {
+    let safeErrorBody: unknown = responseText.slice(0, 500);
+    try {
+      const parsed = JSON.parse(responseText);
+      safeErrorBody = {
+        error: parsed?.error,
+        error_description: parsed?.error_description,
+      };
+    } catch { /* not JSON — use truncated text */ }
+
+    console.error('[auth/oidc] Token endpoint rejected request', {
+      status: response.status,
+      statusText: response.statusText,
+      endpoint,
+      clientId: body.get('client_id'),
+      redirectUri: body.get('redirect_uri'),
+      grantType: body.get('grant_type'),
+      error: safeErrorBody,
+    });
+
+    throw new Error(
+      `OIDC token request failed with status ${response.status}`,
+    );
+  }
+
+  return JSON.parse(responseText) as Record<string, unknown>;
 }
 
 function toSession(tokens: Record<string, unknown>, previous?: TokenSession): TokenSession {
