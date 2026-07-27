@@ -58,7 +58,13 @@ ALL_PERMISSIONS = frozenset(
         "platform:admin",
         "platform:user:read",
         "platform:user:write",
+        "platform:user:manage_status",
+        "platform:administrator:read",
+        "platform:administrator:grant",
+        "platform:administrator:revoke",
         "platform:tenant:create",
+        "platform:authorization:read",
+        "platform:authorization:manage",
     }
 )
 
@@ -180,6 +186,43 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             "dashboard:read",
             "schedule:read",
             "analysis:read",
+        }
+    ),
+}
+
+ROLE_SCOPES = {
+    "PLATFORM_ADMIN": "PLATFORM",
+    "TENANT_ADMIN": "TENANT",
+    "SECURITY_ANALYST": "TENANT",
+    "DEVELOPER": "TENANT",
+    "VIEWER": "TENANT",
+}
+
+PERMISSION_SCOPES = {
+    permission: ("PLATFORM" if permission.startswith("platform:") else "TENANT")
+    for permission in ALL_PERMISSIONS
+}
+
+PROTECTED_ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
+    "PLATFORM_ADMIN": frozenset(
+        {
+            "platform:admin",
+            "platform:user:read",
+            "platform:user:manage_status",
+            "platform:administrator:read",
+            "platform:administrator:grant",
+            "platform:administrator:revoke",
+            "platform:tenant:create",
+            "platform:authorization:read",
+            "platform:authorization:manage",
+        }
+    ),
+    "TENANT_ADMIN": frozenset(
+        {
+            "tenant:user:read",
+            "tenant:user:invite",
+            "tenant:user:update",
+            "tenant:settings:update",
         }
     ),
 }

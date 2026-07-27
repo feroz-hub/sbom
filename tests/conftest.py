@@ -22,6 +22,7 @@ Why we don't use respx / requests-mock:
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import subprocess
@@ -32,7 +33,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import make_url
 
 # ---------------------------------------------------------------------------
@@ -104,6 +105,7 @@ os.environ["AUTH_ENABLED"] = "false"
 os.environ["DEV_DEFAULT_TENANT"] = "true"
 os.environ["HCL_IAM_ROLE_CLAIM"] = "role"
 os.environ["HCL_IAM_TENANT_CLAIM"] = "tenant_id"
+os.environ.setdefault("SBOM_IDENTITY_BACKFILL_ISSUER", "https://hcl-cs.test")
 os.environ["API_RATE_LIMIT_ENABLED"] = "false"
 os.environ["NVD_ENABLED"] = "false"
 os.environ.pop("API_AUTH_TOKENS", None)
@@ -125,6 +127,11 @@ def _truncate_postgres_application_tables(database_url: str) -> None:
                         FROM pg_tables
                         WHERE schemaname = 'public'
                           AND tablename <> 'alembic_version'
+                          AND tablename NOT IN (
+                              'authorization_roles',
+                              'authorization_permissions',
+                              'authorization_role_permissions'
+                          )
                         ORDER BY tablename
                         """
                     )
@@ -187,6 +194,34 @@ def _seed_postgres_test_tenant(database_url: str) -> None:
         engine.dispose()
 
 
+def _reset_authorization_catalog(database_url: str) -> None:
+    """Restore the immutable Phase 8 catalogue after test table truncation."""
+    _assert_safe_test_database(database_url)
+    engine = create_engine(database_url)
+    migration_path = (
+        Path(__file__).resolve().parent.parent
+        / "alembic"
+        / "versions"
+        / "048_authorization_catalog.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "_phase8_authorization_catalog_migration",
+        migration_path,
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError("Unable to load Phase 8 authorization seed")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    try:
+        with engine.begin() as connection:
+            connection.execute(text("DELETE FROM authorization_role_permissions"))
+            connection.execute(text("DELETE FROM authorization_roles"))
+            connection.execute(text("DELETE FROM authorization_permissions"))
+            module._seed(connection)
+    finally:
+        engine.dispose()
+
+
 def pytest_sessionstart(session: pytest.Session) -> None:
     if not _TEST_POSTGRES_DATABASE_URL:
         return
@@ -194,12 +229,34 @@ def pytest_sessionstart(session: pytest.Session) -> None:
     env["DATABASE_URL"] = _TEST_POSTGRES_DATABASE_URL
     env["TEST_DATABASE_URL"] = _TEST_POSTGRES_DATABASE_URL
     env["TEST_POSTGRES_DATABASE_URL"] = _TEST_POSTGRES_DATABASE_URL
-    subprocess.run(
-        [sys.executable, "-m", "alembic", "upgrade", "head"],
-        cwd=Path(__file__).resolve().parent.parent,
-        env=env,
-        check=True,
-    )
+    parsed = make_url(_TEST_POSTGRES_DATABASE_URL)
+    probe = create_engine(_TEST_POSTGRES_DATABASE_URL)
+    try:
+        with probe.connect() as connection:
+            is_empty = not inspect(connection).get_table_names(schema="public")
+    finally:
+        probe.dispose()
+    if is_empty:
+        subprocess.run(
+            [
+                sys.executable,
+                "scripts/bootstrap_fresh_database.py",
+                "--database-url",
+                _TEST_POSTGRES_DATABASE_URL,
+                "--confirm-empty-database",
+                parsed.database or "",
+            ],
+            cwd=Path(__file__).resolve().parent.parent,
+            env=env,
+            check=True,
+        )
+    else:
+        subprocess.run(
+            [sys.executable, "-m", "alembic", "upgrade", "head"],
+            cwd=Path(__file__).resolve().parent.parent,
+            env=env,
+            check=True,
+        )
     _truncate_postgres_application_tables(_TEST_POSTGRES_DATABASE_URL)
 
 
@@ -261,6 +318,7 @@ def app(_tmp_database_path: str):
 def _reset_postgres_database_before_test():
     if _TEST_POSTGRES_DATABASE_URL:
         _truncate_postgres_application_tables(_TEST_POSTGRES_DATABASE_URL)
+        _reset_authorization_catalog(_TEST_POSTGRES_DATABASE_URL)
         _seed_postgres_test_tenant(_TEST_POSTGRES_DATABASE_URL)
     yield
 

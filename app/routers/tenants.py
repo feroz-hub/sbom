@@ -2,37 +2,49 @@ from __future__ import annotations
 
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import AliasChoices, BaseModel, Field, field_validator
-from sqlalchemy.exc import IntegrityError
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request
+from pydantic import AliasChoices, BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..core.context import CurrentContext
-from ..core.permissions import TENANT_ROLES
-from ..core.security import get_current_tenant_context, invalidate_user_contexts, require_permission
+from ..core.identity_states import (
+    IdentityAuditEvent,
+    IdentityErrorCode,
+    identity_http_error,
+)
+from ..core.security import (
+    _claim,
+    _roles,
+    get_current_tenant_context,
+    get_current_user,
+    invalidate_user_contexts,
+    require_permission,
+    require_platform_permission,
+)
 from ..db import get_db
-from ..models import IAMUser, Tenant, TenantUser
+from ..models import AuthorizationRole, IAMUser, Tenant, TenantUser
+from ..schemas_identity import AuthContextResponse
+from ..schemas_tenants import (
+    CreatedTenantResponse,
+    InitialTenantAdministratorResponse,
+    TenantCreateRequest,
+    TenantCreationResponse,
+)
 from ..services import audit_service
+from ..services import tenant_role_assignment_service as tras
 from ..services import tenant_service as ts
+from ..services.auth_context_service import (
+    build_auth_context_response,
+    resolve_authorization_state,
+)
+from ..services.email_verification_service import ensure_initial_verification_delivery
+from ..services.identity_service import provision_local_identity
+from ..settings import get_settings
 
 router = APIRouter(prefix="/api", tags=["identity"])
 
 TenantRole = Literal["TENANT_ADMIN", "SECURITY_ANALYST", "DEVELOPER", "VIEWER"]
 MembershipStatus = Literal["ACTIVE", "PENDING", "DISABLED"]
-
-
-class TenantCreate(BaseModel):
-    name: str = Field(min_length=1, max_length=255)
-    slug: str = Field(min_length=3, max_length=128, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
-    external_iam_tenant_id: str = Field(min_length=1, max_length=255)
-
-    @field_validator("name", "external_iam_tenant_id")
-    @classmethod
-    def strip_required_text(cls, value: str) -> str:
-        stripped = value.strip()
-        if not stripped:
-            raise ValueError("Field must not be blank")
-        return stripped
 
 
 class MembershipUpsert(BaseModel):
@@ -41,13 +53,34 @@ class MembershipUpsert(BaseModel):
         max_length=255,
         validation_alias=AliasChoices("external_user_id", "external_iam_user_id"),
     )
-    role: TenantRole
+    role: str = Field(min_length=1, max_length=64)
     status: MembershipStatus = "ACTIVE"
 
 
 class MembershipUpdate(BaseModel):
-    role: TenantRole | None = None
+    role: str | None = Field(default=None, min_length=1, max_length=64)
     status: MembershipStatus | None = None
+    replace_all_roles: bool = False
+
+
+class TenantRoleGrantRequest(BaseModel):
+    role_code: str = Field(min_length=1, max_length=64)
+    expected_version: int = Field(ge=1)
+    make_primary: bool = False
+    reason: str | None = Field(default=None, max_length=512)
+
+
+class TenantRoleSetRequest(BaseModel):
+    role_codes: list[str]
+    primary_role_code: str | None = Field(default=None, max_length=64)
+    expected_version: int = Field(ge=1)
+    reason: str | None = Field(default=None, max_length=512)
+
+
+class TenantRoleRevokeRequest(BaseModel):
+    expected_version: int = Field(ge=1)
+    replacement_primary_role_code: str | None = Field(default=None, max_length=64)
+    reason: str | None = Field(default=None, max_length=512)
 
 
 def _tenant_dict(tenant: Tenant, role: str | None = None) -> dict:
@@ -63,7 +96,7 @@ def _tenant_dict(tenant: Tenant, role: str | None = None) -> dict:
     }
 
 
-def _membership_dict(membership, user) -> dict:
+def _membership_dict(membership, user, roles: list[str] | None = None) -> dict:
     return {
         "membership_id": membership.id,
         "user_id": user.id,
@@ -72,7 +105,74 @@ def _membership_dict(membership, user) -> dict:
         "display_name": user.display_name,
         "user_status": user.status,
         "role": membership.role,
+        "roles": roles or [membership.role],
+        "role_assignment_version": membership.role_assignment_version,
         "status": membership.status,
+    }
+
+
+def _assignment_http_error(exc: tras.AssignmentProblem) -> HTTPException:
+    detail = {"code": str(exc.code), "message": exc.message}
+    if exc.current_version is not None:
+        detail["current_version"] = exc.current_version
+    return HTTPException(status_code=exc.status_code, detail=detail)
+
+
+def _audit_assignment_rejection(
+    db: Session,
+    *,
+    exc: tras.AssignmentProblem,
+    context: CurrentContext,
+    tenant_id: int,
+    user_id: int,
+    request: Request,
+) -> None:
+    audit_service.write_authorization_audit(
+        db,
+        action=str(IdentityAuditEvent.TENANT_ROLE_ASSIGNMENT_REJECTED),
+        outcome="DENIED",
+        context=context,
+        target_user_id=user_id,
+        tenant_id=tenant_id,
+        request=request,
+        new_value={
+            "reason_code": str(exc.code),
+            "current_version": exc.current_version,
+        },
+        detail=str(exc.code),
+    )
+    db.commit()
+
+
+def _role_state(db: Session, tenant_id: int, user_id: int) -> dict:
+    membership, rows = tras.list_assignments(db, tenant_id, user_id)
+    roles = [
+        {
+            "assignment_id": assignment.id,
+            "role_id": role.id,
+            "role_code": role.code,
+            "role_name": role.name,
+            "role_status": role.status,
+            "assignment_status": assignment.status,
+            "is_primary": assignment.is_primary,
+            "assignment_source": assignment.assignment_source,
+            "assigned_at": assignment.assigned_at,
+            "assigned_by_user_id": assignment.assigned_by_user_id,
+            "revoked_at": assignment.revoked_at,
+            "version": assignment.version,
+        }
+        for assignment, role in rows
+    ]
+    return {
+        "membership_id": membership.id,
+        "user_id": membership.user_id,
+        "membership_status": membership.status,
+        "role_assignment_version": membership.role_assignment_version,
+        "primary_role": membership.role,
+        "roles": roles,
+        "effective_permissions": sorted(
+            tras.effective_permissions(db, membership, actor_user_id=membership.user_id)
+        ),
     }
 
 
@@ -83,21 +183,102 @@ def _require_current_tenant(tenant_id: int, context: CurrentContext) -> None:
 
 @router.get("/auth/me")
 @router.get("/v1/auth/me")
-def auth_me(context: CurrentContext = Depends(get_current_tenant_context)) -> dict:
-    return {
-        "user_id": context.user_id,
-        "external_user_id": context.external_user_id,
-        "email": context.email,
-        "display_name": context.display_name,
-        "tenant_id": context.tenant_id,
-        "external_tenant_id": context.external_tenant_id,
-        "roles": sorted(context.roles),
-        "identity_roles": sorted(context.identity_roles),
-        "permissions": sorted(context.permissions),
-        "is_platform_admin": context.is_platform_admin,
+def auth_me(
+    request: Request,
+    claims: dict = Depends(get_current_user),
+    x_tenant_id: str | None = Header(default=None, alias="X-Tenant-ID"),
+    db: Session = Depends(get_db),
+) -> dict:
+    try:
+        provisioned = provision_local_identity(db, claims, request=request)
+        db.commit()
+        ensure_initial_verification_delivery(db, provisioned.user, request=request)
+        db.refresh(provisioned.user)
+        state = resolve_authorization_state(
+            db,
+            provisioned.user,
+            selected_tenant=x_tenant_id,
+            allow_platform_context=True,
+            request=request,
+            audit_resolution=True,
+        )
+    except HTTPException:
+        db.commit()
+        raise
+    auth_context = build_auth_context_response(state, db=db)
+    membership = state.active_membership
+    roles = (
+        set(
+            tras.effective_role_codes(
+                db,
+                membership,
+                actor_user_id=provisioned.user.id,
+                request=request,
+            )
+        )
+        if membership
+        else set()
+    )
+    if state.is_platform_admin:
+        roles.add("PLATFORM_ADMIN")
+    permissions = (
+        auth_context.tenant_context.active_tenant.effective_permissions
+        if auth_context.tenant_context.active_tenant
+        else auth_context.platform.permissions
+    )
+    response = {
+        "user_id": provisioned.user.id,
+        "external_user_id": provisioned.user.external_iam_user_id,
+        "email": provisioned.user.email,
+        "display_name": provisioned.user.display_name,
+        "tenant_id": state.active_tenant.id if state.active_tenant else None,
+        "external_tenant_id": (
+            state.active_tenant.external_iam_tenant_id if state.active_tenant else None
+        ),
+        "roles": sorted(roles),
+        "identity_roles": sorted(_roles(_claim(claims, get_settings().hcl_iam_role_claim))),
+        "permissions": permissions,
+        "is_platform_admin": state.is_platform_admin,
         "authenticated": True,
-        "role": sorted(context.roles)[0] if context.roles else None,
+        "role": (
+            membership.role
+            if membership is not None
+            else "PLATFORM_ADMIN"
+            if state.is_platform_admin
+            else None
+        ),
+        "auth_context": auth_context.model_dump(mode="json"),
     }
+    db.commit()
+    return response
+
+
+@router.get("/auth/context", response_model=AuthContextResponse)
+def auth_context(
+    request: Request,
+    claims: dict = Depends(get_current_user),
+    x_tenant_id: str | None = Header(default=None, alias="X-Tenant-ID"),
+    db: Session = Depends(get_db),
+) -> AuthContextResponse:
+    try:
+        provisioned = provision_local_identity(db, claims, request=request)
+        db.commit()
+        ensure_initial_verification_delivery(db, provisioned.user, request=request)
+        db.refresh(provisioned.user)
+        state = resolve_authorization_state(
+            db,
+            provisioned.user,
+            selected_tenant=x_tenant_id,
+            allow_platform_context=True,
+            request=request,
+            audit_resolution=True,
+        )
+        response = build_auth_context_response(state, db=db)
+    except HTTPException:
+        db.commit()
+        raise
+    db.commit()
+    return response
 
 
 @router.get("/tenants")
@@ -109,58 +290,285 @@ def list_my_tenants(
     return [_tenant_dict(tenant, role) for tenant, role in rows]
 
 
-@router.post("/tenants", status_code=201)
+@router.post("/tenants", status_code=201, response_model=TenantCreationResponse)
 def create_tenant(
-    payload: TenantCreate,
+    payload: TenantCreateRequest,
     request: Request,
-    context: CurrentContext = Depends(require_permission("platform:tenant:create")),
+    context: CurrentContext = Depends(
+        require_platform_permission("platform:tenant:create")
+    ),
     db: Session = Depends(get_db),
-) -> dict:
+) -> TenantCreationResponse:
+    if (
+        payload.initial_admin_user_id is None
+        or payload.initial_admin_user_id < 1
+    ):
+        failure_value = {
+            "name": payload.name[:255],
+            "slug": payload.slug[:128],
+            "reason_code": str(
+                IdentityErrorCode.INITIAL_TENANT_ADMIN_REQUIRED
+            ),
+        }
+        for action in (
+            IdentityAuditEvent.PLATFORM_TENANT_CREATE_FAILED,
+            IdentityAuditEvent.TENANT_CREATION_ROLLED_BACK,
+        ):
+            audit_service.write_authorization_audit(
+                db,
+                action=str(action),
+                outcome="FAILED",
+                actor_user_id=context.user_id,
+                tenant_id=None,
+                request=request,
+                new_value=failure_value,
+                detail=str(IdentityErrorCode.INITIAL_TENANT_ADMIN_REQUIRED),
+            )
+        db.commit()
+        raise identity_http_error(
+            IdentityErrorCode.INITIAL_TENANT_ADMIN_REQUIRED,
+            "An initial Tenant Administrator is required.",
+            status_code=422,
+        )
     try:
-        tenant = ts.create_tenant(
+        result = ts.create_tenant_with_initial_admin(
             db,
+            actor_user_id=context.user_id,
             name=payload.name,
             slug=payload.slug,
             external_iam_tenant_id=payload.external_iam_tenant_id,
-        )
-    except (HTTPException, IntegrityError) as exc:
-        if isinstance(exc, IntegrityError):
-            db.rollback()
-            exc = HTTPException(status_code=409, detail="A tenant with this slug or external IAM tenant ID already exists.")
-        audit_service.write_authorization_audit(
-            db,
-            action="tenant.create_denied",
-            outcome="DENIED",
-            context=context,
+            initial_admin_user_id=payload.initial_admin_user_id,
             request=request,
-            new_value={"name": payload.name, "slug": payload.slug, "external_iam_tenant_id": payload.external_iam_tenant_id},
-            detail=str(exc.detail),
         )
-        db.commit()
-        raise
-    audit_service.write_authorization_audit(
-        db,
-        action="tenant.created",
-        context=context,
-        tenant_id=tenant.id,
-        request=request,
-        new_value={
-            "name": tenant.name,
-            "slug": tenant.slug,
-            "external_iam_tenant_id": tenant.external_iam_tenant_id,
-            "status": tenant.status,
-        },
+    except ts.TenantCreationError as exc:
+        raise identity_http_error(
+            exc.code,
+            exc.message,
+            status_code=exc.status_code,
+        ) from exc
+    return TenantCreationResponse(
+        tenant=CreatedTenantResponse.model_validate(
+            {
+                "id": result.tenant.id,
+                "name": result.tenant.name,
+                "slug": result.tenant.slug,
+                "external_iam_tenant_id": result.tenant.external_iam_tenant_id,
+                "status": result.tenant.status,
+                "created_at": result.tenant.created_at,
+                "updated_at": result.tenant.updated_at,
+            }
+        ),
+        initial_administrator=InitialTenantAdministratorResponse(
+            user_id=result.initial_admin.id,
+            email=result.initial_admin.email,
+            display_name=result.initial_admin.display_name,
+            membership_status=result.membership.status,
+            role=result.membership.role,
+        ),
     )
-    db.commit()
-    db.refresh(tenant)
-    return _tenant_dict(tenant)
 
 
 @router.get("/tenant-roles")
 def list_assignable_tenant_roles(
     _context: CurrentContext = Depends(require_permission("tenant:user:read")),
+    db: Session = Depends(get_db),
 ) -> dict:
-    return {"roles": sorted(TENANT_ROLES)}
+    roles = db.query(AuthorizationRole).filter(
+        AuthorizationRole.scope == "TENANT",
+        AuthorizationRole.status == "ACTIVE",
+        AuthorizationRole.is_assignable.is_(True),
+    ).order_by(AuthorizationRole.code).all()
+    return {
+        "roles": [
+            {"id": role.id, "code": role.code, "name": role.name}
+            for role in roles
+        ]
+    }
+
+
+@router.get("/tenants/{tenant_id}/users/{user_id}/roles")
+def list_tenant_user_roles(
+    tenant_id: int,
+    user_id: int,
+    context: CurrentContext = Depends(require_permission("tenant:user:read")),
+    db: Session = Depends(get_db),
+) -> dict:
+    _require_current_tenant(tenant_id, context)
+    try:
+        return _role_state(db, tenant_id, user_id)
+    except tras.AssignmentProblem as exc:
+        raise _assignment_http_error(exc) from exc
+
+
+@router.post("/tenants/{tenant_id}/users/{user_id}/roles")
+def grant_tenant_user_role(
+    tenant_id: int,
+    user_id: int,
+    payload: TenantRoleGrantRequest,
+    request: Request,
+    context: CurrentContext = Depends(require_permission("tenant:user:update")),
+    db: Session = Depends(get_db),
+) -> dict:
+    _require_current_tenant(tenant_id, context)
+    try:
+        tras.grant_role(
+            db,
+            tenant_id,
+            user_id,
+            role_code=payload.role_code,
+            expected_version=payload.expected_version,
+            make_primary=payload.make_primary,
+            reason=payload.reason,
+            actor_user_id=context.user_id,
+            is_platform_admin=context.is_platform_admin,
+            request=request,
+        )
+        result = _role_state(db, tenant_id, user_id)
+    except tras.AssignmentProblem as exc:
+        _audit_assignment_rejection(
+            db,
+            exc=exc,
+            context=context,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            request=request,
+        )
+        raise _assignment_http_error(exc) from exc
+    invalidate_user_contexts(user_id)
+    return result
+
+
+@router.put("/tenants/{tenant_id}/users/{user_id}/roles")
+def replace_tenant_user_roles(
+    tenant_id: int,
+    user_id: int,
+    payload: TenantRoleSetRequest,
+    request: Request,
+    context: CurrentContext = Depends(require_permission("tenant:user:update")),
+    db: Session = Depends(get_db),
+) -> dict:
+    _require_current_tenant(tenant_id, context)
+    try:
+        tras.replace_roles(
+            db,
+            tenant_id,
+            user_id,
+            role_codes=payload.role_codes,
+            primary_role_code=payload.primary_role_code,
+            expected_version=payload.expected_version,
+            reason=payload.reason,
+            actor_user_id=context.user_id,
+            is_platform_admin=context.is_platform_admin,
+            request=request,
+        )
+        result = _role_state(db, tenant_id, user_id)
+    except tras.AssignmentProblem as exc:
+        _audit_assignment_rejection(
+            db,
+            exc=exc,
+            context=context,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            request=request,
+        )
+        raise _assignment_http_error(exc) from exc
+    invalidate_user_contexts(user_id)
+    return result
+
+
+@router.delete("/tenants/{tenant_id}/users/{user_id}/roles/{role_code}")
+def revoke_tenant_user_role(
+    tenant_id: int,
+    user_id: int,
+    role_code: str,
+    request: Request,
+    payload: TenantRoleRevokeRequest = Body(...),
+    context: CurrentContext = Depends(require_permission("tenant:user:update")),
+    db: Session = Depends(get_db),
+) -> dict:
+    _require_current_tenant(tenant_id, context)
+    try:
+        tras.revoke_role(
+            db,
+            tenant_id,
+            user_id,
+            role_code=role_code,
+            expected_version=payload.expected_version,
+            replacement_primary_role_code=payload.replacement_primary_role_code,
+            reason=payload.reason,
+            actor_user_id=context.user_id,
+            is_platform_admin=context.is_platform_admin,
+            request=request,
+        )
+        result = _role_state(db, tenant_id, user_id)
+    except tras.AssignmentProblem as exc:
+        _audit_assignment_rejection(
+            db,
+            exc=exc,
+            context=context,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            request=request,
+        )
+        raise _assignment_http_error(exc) from exc
+    invalidate_user_contexts(user_id)
+    return result
+
+
+@router.get("/tenants/{tenant_id}/users/{user_id}/roles/history")
+def tenant_user_role_history(
+    tenant_id: int,
+    user_id: int,
+    request: Request,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=200),
+    context: CurrentContext = Depends(require_permission("tenant:user:read")),
+    db: Session = Depends(get_db),
+) -> dict:
+    _require_current_tenant(tenant_id, context)
+    try:
+        membership, rows = tras.get_history(
+            db, tenant_id, user_id, offset=offset, limit=limit
+        )
+    except tras.AssignmentProblem as exc:
+        raise _assignment_http_error(exc) from exc
+    audit_service.write_authorization_audit(
+        db,
+        action=str(IdentityAuditEvent.TENANT_ROLE_HISTORY_VIEWED),
+        context=context,
+        target_user_id=user_id,
+        target_membership_id=membership.id,
+        tenant_id=tenant_id,
+        request=request,
+        new_value={"offset": offset, "limit": limit},
+    )
+    db.commit()
+    return {
+        "membership_id": membership.id,
+        "role_assignment_version": membership.role_assignment_version,
+        "history": [
+            {
+                "id": row.id,
+                "assignment_id": row.assignment_id,
+                "role_id": row.role_id,
+                "role_code": row.role_code_snapshot,
+                "event_type": row.event_type,
+                "previous_status": row.previous_status,
+                "new_status": row.new_status,
+                "previous_primary": row.previous_primary,
+                "new_primary": row.new_primary,
+                "actor_user_id": row.actor_user_id,
+                "assignment_source": row.assignment_source,
+                "reason": row.reason,
+                "before_membership_version": row.before_membership_version,
+                "after_membership_version": row.after_membership_version,
+                "correlation_id": row.correlation_id,
+                "occurred_at": row.occurred_at,
+                "metadata": row.metadata_json,
+            }
+            for row in rows
+        ],
+    }
 
 
 @router.get("/tenants/{tenant_id}/users")
@@ -209,6 +617,11 @@ def add_tenant_user(
         external_iam_user_id=payload.external_user_id,
         role=payload.role,
         status=payload.status,
+        actor_user_id=context.user_id,
+        assignment_source=(
+            "PLATFORM_ADMIN" if context.is_platform_admin else "TENANT_ADMIN"
+        ),
+        request=request,
     )
     action = "membership.updated" if existing else "membership.created"
     audit_service.write_authorization_audit(
@@ -248,11 +661,49 @@ def update_tenant_user(
 ) -> dict:
     _require_current_tenant(tenant_id, context)
     membership, user = ts.get_tenant_membership(db, tenant_id, membership_id)
+    compatibility_old = {"role": membership.role, "status": membership.status}
+    compatibility_role_changed = False
+    if payload.role is not None:
+        active_assignments = tras.active_assignment_count(db, membership.id)
+        if active_assignments > 1 and not payload.replace_all_roles:
+            raise identity_http_error(
+                IdentityErrorCode.MULTI_ROLE_COMPATIBILITY_CONFLICT,
+                "This membership has multiple roles; confirm complete replacement.",
+                status_code=409,
+            )
+        try:
+            tras.replace_roles(
+                db,
+                tenant_id,
+                user.id,
+                role_codes=[payload.role],
+                primary_role_code=payload.role,
+                expected_version=membership.role_assignment_version,
+                reason="Legacy membership role update",
+                actor_user_id=context.user_id,
+                is_platform_admin=context.is_platform_admin,
+                request=request,
+            )
+        except tras.AssignmentProblem as exc:
+            audit_service.write_authorization_audit(
+                db,
+                action="membership.update_denied",
+                outcome="DENIED",
+                context=context,
+                target_user_id=user.id,
+                target_membership_id=membership.id,
+                tenant_id=tenant_id,
+                request=request,
+                detail=str(exc.code),
+            )
+            db.commit()
+            raise _assignment_http_error(exc) from exc
+        membership, user = ts.get_tenant_membership(db, tenant_id, membership_id)
+        compatibility_role_changed = membership.role != compatibility_old["role"]
     try:
         ts.ensure_not_last_active_tenant_admin(
             db,
             membership,
-            next_role=payload.role,
             next_status=payload.status,
             platform_override=context.is_platform_admin,
         )
@@ -274,10 +725,16 @@ def update_tenant_user(
         db,
         tenant_id,
         membership_id,
-        role=payload.role,
         status=payload.status,
     )
-    action = "membership.role_changed" if old["role"] != new["role"] else "membership.status_changed"
+    if compatibility_role_changed:
+        old = compatibility_old
+        new = {"role": membership.role, "status": membership.status}
+    action = (
+        "membership.role_changed"
+        if compatibility_role_changed or old["role"] != new["role"]
+        else "membership.status_changed"
+    )
     audit_service.write_authorization_audit(
         db,
         action=action,
@@ -304,6 +761,15 @@ def _set_membership_status(
 ) -> dict:
     _require_current_tenant(tenant_id, context)
     membership, user = ts.get_tenant_membership(db, tenant_id, membership_id)
+    if (
+        status_value == "ACTIVE"
+        and tras.active_assignment_count(db, membership.id) == 0
+    ):
+        raise identity_http_error(
+            IdentityErrorCode.TENANT_ROLE_ASSIGNMENT_DATA_INCOMPLETE,
+            "The membership has no active tenant role assignment.",
+            status_code=409,
+        )
     try:
         ts.ensure_not_last_active_tenant_admin(
             db,

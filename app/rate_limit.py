@@ -29,6 +29,16 @@ def _analyze_limit() -> str:
     return (os.getenv("API_RATE_LIMIT_ANALYZE") or "15/minute").strip() or "15/minute"
 
 
+def _verification_confirm_limit() -> str:
+    # Resolve through the validated application settings so values supplied by
+    # the configured dotenv source and direct environment variables behave
+    # identically.
+    from .settings import get_settings
+
+    attempts = get_settings().email_verification_confirmation_max_attempts_per_minute
+    return f"{attempts}/minute"
+
+
 def build_rate_limit_bucket_key(request: Request) -> str:
     """
     Key by first X-Forwarded-For hop (if present), else client host,
@@ -60,3 +70,4 @@ rate_limit_key = build_rate_limit_bucket_key
 
 # Stricter limit for analysis / SSE endpoints (env API_RATE_LIMIT_ANALYZE).
 analyze_route_limit = limiter.limit(_analyze_limit())
+verification_confirm_route_limit = limiter.limit(_verification_confirm_limit())

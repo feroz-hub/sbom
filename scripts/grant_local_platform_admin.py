@@ -25,7 +25,7 @@ def main() -> None:
     if get_settings().auth_enabled or os.getenv("APP_ENV", "development").lower() in {"prod", "production", "staging"}:
         raise SystemExit("Local platform bootstrap is disabled in authenticated or production-like environments")
     with SessionLocal() as db:
-        grant, user, old = platform_service.grant_platform_administrator(
+        mutation = platform_service.grant_platform_administrator(
             db,
             external_iam_user_id=args.subject,
             created_by_user_id=None,
@@ -33,9 +33,13 @@ def main() -> None:
         audit_service.write_authorization_audit(
             db,
             action="platform_admin.local_bootstrap",
-            target_user_id=user.id,
-            old_value=old,
-            new_value={"role": grant.role, "status": grant.status},
+            target_user_id=mutation.user.id,
+            old_value=mutation.old_state,
+            new_value={
+                "role": mutation.grant.role,
+                "status": mutation.grant.status,
+                "bootstrap_action": mutation.action,
+            },
             detail="Explicit development-only platform administrator bootstrap",
         )
         db.commit()

@@ -23,6 +23,12 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..settings import get_settings
 from .context import CurrentContext, bind_context, reset_context
+from .identity_states import (
+    AuthorizationState,
+    IdentityAuditEvent,
+    IdentityErrorCode,
+    identity_http_error,
+)
 from .permissions import normalize_role
 
 AUTH_CHALLENGE = {"WWW-Authenticate": 'Bearer realm="sbom-analyzer"'}
@@ -48,9 +54,9 @@ def _claim(claims: dict[str, Any], path: str) -> Any:
 
 def _roles(value: Any) -> frozenset[str]:
     if isinstance(value, str):
-        values = value.replace(";", ",").split(",")
+        values: list[Any] = value.replace(";", ",").split(",")
     elif isinstance(value, (list, tuple, set)):
-        values = value
+        values = list(value)
     else:
         values = []
     normalized = [normalize_role(str(item)) for item in values if str(item).strip()]
@@ -148,6 +154,9 @@ def validate_hcl_token(token: str) -> dict[str, Any]:
     for optional in ("email", "name"):
         if claims.get(optional) is not None and not isinstance(claims[optional], str):
             raise _unauthorized()
+    from ..services.identity_service import validate_external_identity_claims
+
+    validate_external_identity_claims(claims)
     return claims
 
 
@@ -157,9 +166,12 @@ def get_current_claims(
     settings = get_settings()
     if not settings.auth_enabled:
         return {
+            "iss": "https://local-dev.invalid",
             "sub": "dev-user",
             "email": "dev@local",
             "name": "Dev User",
+            "preferred_username": "dev@local",
+            "employee_id": "LOCAL-DEV",
             settings.hcl_iam_role_claim: ["TENANT_ADMIN"],
             settings.hcl_iam_tenant_claim: "default",
         }
@@ -174,7 +186,7 @@ def get_current_claims(
 get_current_user = get_current_claims
 
 
-_CONTEXT_CACHE = {}
+_CONTEXT_CACHE: dict[tuple[Any, str | None, Any], tuple[float, CurrentContext]] = {}
 _CACHE_LOCK = threading.Lock()
 
 
@@ -229,10 +241,60 @@ def invalidate_user_contexts(user_id: int) -> None:
             _CONTEXT_CACHE.pop(key, None)
 
 
-def _upsert_user(db: Session, claims: dict[str, Any]) -> tuple[IAMUser, bool]:
-    from ..services import tenant_service
+def _block_user_access(
+    db: Session,
+    user: IAMUser,
+    *,
+    state: AuthorizationState,
+    request: Request | None,
+) -> None:
+    from ..services import audit_service
 
-    return tenant_service.get_or_create_user_from_claims(db, claims)
+    if state == AuthorizationState.ACCOUNT_DISABLED:
+        event = IdentityAuditEvent.ACCESS_BLOCKED_DISABLED
+        code = IdentityErrorCode.ACCOUNT_DISABLED
+        message = "This SBOM Analyzer account is disabled. Contact support."
+    elif state == AuthorizationState.ACCOUNT_PENDING_APPROVAL:
+        event = IdentityAuditEvent.ACCESS_BLOCKED_PENDING
+        code = IdentityErrorCode.ACCOUNT_PENDING_APPROVAL
+        message = "This SBOM Analyzer account is awaiting administrator approval."
+    else:
+        event = IdentityAuditEvent.ACCESS_BLOCKED_UNVERIFIED
+        code = IdentityErrorCode.EMAIL_VERIFICATION_REQUIRED
+        message = "Email verification is required before accessing SBOM Analyzer."
+    audit_service.write_authorization_audit(
+        db,
+        action=str(event),
+        outcome="DENIED",
+        actor_user_id=user.id,
+        target_user_id=user.id,
+        tenant_id=None,
+        request=request,
+        new_value={"reason_code": str(code), "authorization_state": str(state)},
+        detail=str(code),
+    )
+    db.commit()
+    raise identity_http_error(code, message)
+
+
+def require_verified_user(user: IAMUser) -> IAMUser:
+    """Enforce local enablement and SBOM email verification."""
+    if user.status == "DISABLED":
+        raise identity_http_error(
+            IdentityErrorCode.ACCOUNT_DISABLED,
+            "This SBOM Analyzer account is disabled. Contact support.",
+        )
+    if user.status == "PENDING":
+        raise identity_http_error(
+            IdentityErrorCode.ACCOUNT_PENDING_APPROVAL,
+            "This SBOM Analyzer account is awaiting administrator approval.",
+        )
+    if not user.email_verified or user.verification_required:
+        raise identity_http_error(
+            IdentityErrorCode.EMAIL_VERIFICATION_REQUIRED,
+            "Email verification is required before accessing SBOM Analyzer.",
+        )
+    return user
 
 
 def _resolve_context(
@@ -243,82 +305,112 @@ def _resolve_context(
     allow_platform_context: bool = False,
     request: Request | None = None,
 ) -> CurrentContext:
-    from ..services import audit_service, platform_service, tenant_service
+    from ..services import audit_service
+    from ..services.auth_context_service import resolve_authorization_state
+    from ..services.email_verification_service import (
+        ensure_initial_verification_delivery,
+    )
+    from ..services.identity_service import provision_local_identity
 
     settings = get_settings()
-    user, needs_commit = _upsert_user(db, claims)
+    provisioned = provision_local_identity(db, claims, request=request)
+    user = provisioned.user
+    db.commit()
+    ensure_initial_verification_delivery(db, user, request=request)
+    db.refresh(user)
     identity_roles = _roles(_claim(claims, settings.hcl_iam_role_claim))
-    if user.status != "ACTIVE":
-        if needs_commit and user.status == "PENDING":
-            audit_service.write_authorization_audit(
-                db,
-                action="iam.user.discovered",
-                outcome="SUCCESS",
-                target_user_id=user.id,
-                request=request,
-                new_value={"external_identity_linked": True},
-            )
-            audit_service.write_authorization_audit(
-                db,
-                action="iam.user.created_pending",
-                outcome="SUCCESS",
-                target_user_id=user.id,
-                request=request,
-                new_value={"status": "PENDING"},
-            )
-        audit_service.write_authorization_audit(
-            db,
-            action="authorization.denied.inactive_user",
-            outcome="DENIED",
-            target_user_id=user.id,
-            request=request,
-            detail="SBOM IAM user is not active",
-        )
-        db.commit()
-        message = "SBOM access is pending administrator approval" if user.status == "PENDING" else "Access denied"
-        raise HTTPException(status_code=403, detail=message)
-
-    platform_grant = platform_service.get_active_platform_grant(db, user.id)
-    is_platform_admin = platform_grant is not None
-    memberships = tenant_service.get_user_memberships(db, user.id)
-    tenant_claim = _claim(claims, settings.hcl_iam_tenant_claim)
-
-    selected, membership, roles, permissions, is_platform_admin = tenant_service.resolve_active_tenant(
+    state = resolve_authorization_state(
         db,
         user,
-        memberships,
         selected_tenant=selected_tenant,
-        tenant_claim=tenant_claim,
-        is_platform_admin=is_platform_admin,
-        auth_enabled=settings.auth_enabled,
+        selector_hint=_claim(claims, settings.hcl_iam_tenant_claim),
         allow_platform_context=allow_platform_context,
+        request=request,
     )
+    if state.status in {
+        AuthorizationState.ACCOUNT_DISABLED,
+        AuthorizationState.ACCOUNT_PENDING_APPROVAL,
+        AuthorizationState.VERIFICATION_REQUIRED,
+    }:
+        _block_user_access(db, user, state=state.status, request=request)
+    if state.status == AuthorizationState.NO_TENANT:
+        db.commit()
+        raise identity_http_error(
+            IdentityErrorCode.NO_TENANT,
+            "No active tenant membership is available. Contact an administrator.",
+        )
+    if state.status == AuthorizationState.TENANT_SELECTION_REQUIRED:
+        db.commit()
+        raise identity_http_error(
+            IdentityErrorCode.TENANT_SELECTION_REQUIRED,
+            "Select an authorized tenant before accessing SBOM Analyzer.",
+        )
 
-    if is_platform_admin and membership is None and selected is not None:
+    if state.is_platform_admin and state.active_membership is None and state.active_tenant is not None:
         audit_service.write_authorization_audit(
             db,
             action="platform.cross_tenant_access",
             outcome="SUCCESS",
             actor_user_id=user.id,
             target_user_id=user.id,
-            tenant_id=selected.id,
+            tenant_id=state.active_tenant.id,
             request=request,
             detail="Explicit platform administrator selected a tenant without local membership",
         )
-        needs_commit = True
+    from ..services import tenant_role_assignment_service
 
-    if needs_commit:
-        db.commit()
+    roles = (
+        set(
+            tenant_role_assignment_service.effective_role_codes(
+                db,
+                state.active_membership,
+                actor_user_id=user.id,
+                request=request,
+            )
+        )
+        if state.active_membership
+        else set()
+    )
+    permissions = (
+        set(
+            tenant_role_assignment_service.effective_permissions(
+                db,
+                state.active_membership,
+                actor_user_id=user.id,
+                request=request,
+            )
+        )
+        if state.active_membership
+        else set()
+    )
+    if state.is_platform_admin:
+        roles.add("PLATFORM_ADMIN")
+    from ..services.authorization_catalog_service import resolve_permissions_for_roles
+
+    if state.is_platform_admin:
+        permissions.update(
+            resolve_permissions_for_roles(
+                db,
+                frozenset({"PLATFORM_ADMIN"}),
+                actor_user_id=user.id,
+                request=request,
+            )
+        )
+    db.commit()
     return CurrentContext(
         user_id=user.id,
         external_user_id=user.external_iam_user_id,
         email=user.email,
         display_name=user.display_name,
-        tenant_id=selected.id if selected is not None else None,
-        external_tenant_id=selected.external_iam_tenant_id if selected is not None else None,
-        roles=roles,
-        permissions=permissions,
-        is_platform_admin=is_platform_admin,
+        tenant_id=state.active_tenant.id if state.active_tenant is not None else None,
+        external_tenant_id=(
+            state.active_tenant.external_iam_tenant_id
+            if state.active_tenant is not None
+            else None
+        ),
+        roles=frozenset(roles),
+        permissions=frozenset(permissions),
+        is_platform_admin=state.is_platform_admin,
         identity_roles=identity_roles,
     )
 
@@ -366,6 +458,38 @@ def require_permission(permission: str) -> Callable:
     return dependency
 
 
+def require_platform_permission(permission: str) -> Callable:
+    """Require current-request database platform authority and audit denials."""
+
+    def dependency(
+        request: Request,
+        context: CurrentContext = Depends(get_current_tenant_context),
+        db: Session = Depends(get_db),
+    ) -> CurrentContext:
+        if context.is_platform_admin and context.has_permission(permission):
+            return context
+        from ..services import audit_service
+
+        audit_service.write_authorization_audit(
+            db,
+            action="PLATFORM_PERMISSION_DENIED",
+            outcome="DENIED",
+            actor_user_id=context.user_id,
+            target_user_id=context.user_id,
+            tenant_id=None,
+            request=request,
+            new_value={"permission": permission},
+            detail=str(IdentityErrorCode.PLATFORM_PERMISSION_DENIED),
+        )
+        db.commit()
+        raise identity_http_error(
+            IdentityErrorCode.PLATFORM_PERMISSION_DENIED,
+            "Platform permission is required for this action.",
+        )
+
+    return dependency
+
+
 def require_role(*roles: str) -> Callable:
     expected = {normalize_role(role) for role in roles}
 
@@ -382,10 +506,24 @@ def require_role(*roles: str) -> Callable:
 def permission_for_request(request: Request) -> str:
     path = request.url.path
     method = request.method.upper()
+    if path.startswith("/api/platform/authorization"):
+        return (
+            "platform:authorization:read"
+            if method == "GET"
+            else "platform:authorization:manage"
+        )
     if path.startswith("/api/platform/administrators"):
-        return "platform:user:read" if method == "GET" else "platform:user:write"
+        if method == "GET":
+            return "platform:administrator:read"
+        if method == "POST":
+            return "platform:administrator:grant"
+        return "platform:administrator:revoke"
     if path.startswith("/api/platform/users"):
-        return "platform:user:write"
+        return (
+            "platform:user:read"
+            if method == "GET"
+            else "platform:user:manage_status"
+        )
     if path.startswith("/api/platform/tenants"):
         return "platform:admin"
     if path == "/api/tenants" and method == "POST":
@@ -458,9 +596,29 @@ def permission_for_request(request: Request) -> str:
 def enforce_request_access(
     request: Request,
     context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
 ) -> CurrentContext:
     permission = permission_for_request(request)
     if not context.has_permission(permission):
+        if permission.startswith("platform:"):
+            from ..services import audit_service
+
+            audit_service.write_authorization_audit(
+                db,
+                action="PLATFORM_PERMISSION_DENIED",
+                outcome="DENIED",
+                actor_user_id=context.user_id,
+                target_user_id=context.user_id,
+                tenant_id=None,
+                request=request,
+                new_value={"permission": permission},
+                detail=str(IdentityErrorCode.PLATFORM_PERMISSION_DENIED),
+            )
+            db.commit()
+            raise identity_http_error(
+                IdentityErrorCode.PLATFORM_PERMISSION_DENIED,
+                "Platform permission is required for this action.",
+            )
         raise HTTPException(status_code=403, detail="Insufficient permission")
     request.state.current_context = context
     return context

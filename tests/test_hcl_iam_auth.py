@@ -84,6 +84,8 @@ def _make_token(
         "sub": sub,
         "email": email,
         "name": name,
+        "preferred_username": email,
+        "employee_id": f"employee-{sub}",
         "iss": issuer,
         "aud": audience,
         "iat": now,
@@ -98,6 +100,24 @@ def _make_token(
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
+
+
+def _identity_claims(
+    subject: str,
+    *,
+    tenant: str = "local-default",
+    roles: list[str] | None = None,
+) -> dict:
+    return {
+        "iss": "https://iam.hcl.example.com/realms/sbom",
+        "sub": subject,
+        "email": f"{subject}@example.test",
+        "name": "Identity Test User",
+        "preferred_username": f"{subject}@example.test",
+        "employee_id": f"employee-{subject}",
+        "tenant_id": tenant,
+        "role": roles or ["SECURITY_ANALYST"],
+    }
 
 
 class TestClaimExtraction:
@@ -383,11 +403,11 @@ class TestPrincipalTenantResolution:
         reset_settings()
         with SessionLocal() as db:
             with pytest.raises(HTTPException) as exc_info:
-                _resolve_context(db, {
-                    "sub": f"unassigned-{time.time_ns()}",
-                    "tenant_id": "unknown-tenant",
-                    "role": ["SECURITY_ANALYST"],
-                }, None)
+                _resolve_context(
+                    db,
+                    _identity_claims(f"unassigned-{time.time_ns()}", tenant="unknown-tenant"),
+                    None,
+                )
             assert exc_info.value.status_code == 403
             db.rollback()
 
@@ -397,6 +417,9 @@ class TestPrincipalTenantResolution:
 
         from app.db import SessionLocal
         from app.models import IAMUser, Tenant, TenantUser
+        from app.services.tenant_role_assignment_service import (
+            create_initial_assignment,
+        )
         from app.settings import reset_settings
 
         monkeypatch.setenv("AUTH_ENABLED", "true")
@@ -409,16 +432,46 @@ class TestPrincipalTenantResolution:
         with SessionLocal() as db:
             tenant = Tenant(name="Auth Tenant", slug=f"auth-{suffix}", external_iam_tenant_id=f"ext-{suffix}",
                             status="ACTIVE", created_at=now, updated_at=now)
-            user = IAMUser(external_iam_user_id=f"subject-{suffix}", status="ACTIVE", created_at=now, updated_at=now)
+            user = IAMUser(
+                external_iam_user_id=f"subject-{suffix}",
+                email=f"subject-{suffix}@example.test",
+                display_name="Identity Test User",
+                status="ACTIVE",
+                email_verified=True,
+                email_verified_at=now,
+                verification_required=False,
+                created_at=now,
+                updated_at=now,
+            )
             db.add_all([tenant, user])
             db.flush()
-            db.add(TenantUser(tenant_id=tenant.id, user_id=user.id, role="VIEWER", status="ACTIVE",
-                              created_at=now, updated_at=now))
+            membership = TenantUser(
+                tenant_id=tenant.id,
+                user_id=user.id,
+                role="VIEWER",
+                status="ACTIVE",
+                created_at=now,
+                updated_at=now,
+            )
+            db.add(membership)
+            db.flush()
+            create_initial_assignment(
+                db,
+                membership,
+                role_code="VIEWER",
+                actor_user_id=user.id,
+                source="SYSTEM",
+            )
             db.commit()
-            context = _resolve_context(db, {
-                "sub": user.external_iam_user_id, "tenant_id": tenant.external_iam_tenant_id,
-                "role": ["SECURITY_ANALYST"],
-            }, None)
+            context = _resolve_context(
+                db,
+                _identity_claims(
+                    user.external_iam_user_id,
+                    tenant=tenant.external_iam_tenant_id,
+                    roles=["SECURITY_ANALYST"],
+                ),
+                None,
+            )
             assert context.roles == frozenset({"VIEWER"})
             assert not context.has_permission("sbom:upload")
 
@@ -428,6 +481,9 @@ class TestPrincipalTenantResolution:
 
         from app.db import SessionLocal
         from app.models import IAMUser, Tenant, TenantUser
+        from app.services.tenant_role_assignment_service import (
+            create_initial_assignment,
+        )
         from app.settings import reset_settings
 
         monkeypatch.setenv("AUTH_ENABLED", "true")
@@ -438,12 +494,46 @@ class TestPrincipalTenantResolution:
         now = datetime.now(UTC)
         with SessionLocal() as db:
             tenant = Tenant(name="Token Role Tenant", slug=f"token-{suffix}", external_iam_tenant_id=f"token-ext-{suffix}", status="ACTIVE", created_at=now, updated_at=now)
-            user = IAMUser(external_iam_user_id=f"token-subject-{suffix}", status="ACTIVE", created_at=now, updated_at=now)
+            user = IAMUser(
+                external_iam_user_id=f"token-subject-{suffix}",
+                email=f"token-subject-{suffix}@example.test",
+                display_name="Identity Test User",
+                status="ACTIVE",
+                email_verified=True,
+                email_verified_at=now,
+                verification_required=False,
+                created_at=now,
+                updated_at=now,
+            )
             db.add_all([tenant, user])
             db.flush()
-            db.add(TenantUser(tenant_id=tenant.id, user_id=user.id, role="VIEWER", status="ACTIVE", created_at=now, updated_at=now))
+            membership = TenantUser(
+                tenant_id=tenant.id,
+                user_id=user.id,
+                role="VIEWER",
+                status="ACTIVE",
+                created_at=now,
+                updated_at=now,
+            )
+            db.add(membership)
+            db.flush()
+            create_initial_assignment(
+                db,
+                membership,
+                role_code="VIEWER",
+                actor_user_id=user.id,
+                source="SYSTEM",
+            )
             db.commit()
-            context = _resolve_context(db, {"sub": user.external_iam_user_id, "tenant_id": tenant.external_iam_tenant_id, "role": ["PLATFORM_ADMIN"]}, None)
+            context = _resolve_context(
+                db,
+                _identity_claims(
+                    user.external_iam_user_id,
+                    tenant=tenant.external_iam_tenant_id,
+                    roles=["PLATFORM_ADMIN"],
+                ),
+                None,
+            )
             assert context.roles == frozenset({"VIEWER"})
             assert not context.is_platform_admin
             assert not context.has_permission("platform:admin")
@@ -465,14 +555,32 @@ class TestPrincipalTenantResolution:
         now = datetime.now(UTC)
         with SessionLocal() as db:
             tenant = Tenant(name="No Membership", slug=f"none-{suffix}", external_iam_tenant_id=f"none-ext-{suffix}", status="ACTIVE", created_at=now, updated_at=now)
-            user = IAMUser(external_iam_user_id=f"known-{suffix}", status="ACTIVE", created_at=now, updated_at=now)
+            user = IAMUser(
+                external_iam_user_id=f"known-{suffix}",
+                email=f"known-{suffix}@example.test",
+                display_name="Identity Test User",
+                status="ACTIVE",
+                email_verified=True,
+                email_verified_at=now,
+                verification_required=False,
+                created_at=now,
+                updated_at=now,
+            )
             db.add_all([tenant, user])
             db.commit()
             with pytest.raises(HTTPException) as exc_info:
-                _resolve_context(db, {"sub": user.external_iam_user_id, "tenant_id": tenant.external_iam_tenant_id, "role": ["PLATFORM_ADMIN"]}, None)
+                _resolve_context(
+                    db,
+                    _identity_claims(
+                        user.external_iam_user_id,
+                        tenant=tenant.external_iam_tenant_id,
+                        roles=["PLATFORM_ADMIN"],
+                    ),
+                    None,
+                )
             assert exc_info.value.status_code == 403
 
-    def test_unknown_platform_token_creates_pending_without_privilege(self, monkeypatch):
+    def test_unknown_platform_token_creates_unverified_user_without_privilege(self, monkeypatch):
         from uuid import uuid4
 
         from app.db import SessionLocal
@@ -487,10 +595,15 @@ class TestPrincipalTenantResolution:
         subject = f"unknown-platform-{uuid4().hex}"
         with SessionLocal() as db:
             with pytest.raises(HTTPException) as exc_info:
-                _resolve_context(db, {"sub": subject, "tenant_id": "local-default", "role": ["PLATFORM_ADMIN"]}, None)
+                _resolve_context(
+                    db,
+                    _identity_claims(subject, roles=["PLATFORM_ADMIN"]),
+                    None,
+                )
             assert exc_info.value.status_code == 403
             user = db.execute(select(IAMUser).where(IAMUser.external_iam_user_id == subject)).scalar_one()
-            assert user.status == "PENDING"
+            assert user.status == "ACTIVE"
+            assert user.email_verified is False
             assert db.execute(select(TenantUser).where(TenantUser.user_id == user.id)).scalars().all() == []
             assert db.execute(select(PlatformUserRole).where(PlatformUserRole.user_id == user.id)).scalars().all() == []
 
@@ -509,12 +622,30 @@ class TestPrincipalTenantResolution:
         now = datetime.now(UTC)
         with SessionLocal() as db:
             tenant = Tenant(name="Platform Target", slug=f"platform-{suffix}", external_iam_tenant_id=f"platform-ext-{suffix}", status="ACTIVE", created_at=now, updated_at=now)
-            user = IAMUser(external_iam_user_id=f"platform-user-{suffix}", status="ACTIVE", created_at=now, updated_at=now)
+            user = IAMUser(
+                external_iam_user_id=f"platform-user-{suffix}",
+                email=f"platform-user-{suffix}@example.test",
+                display_name="Identity Test User",
+                status="ACTIVE",
+                email_verified=True,
+                email_verified_at=now,
+                verification_required=False,
+                created_at=now,
+                updated_at=now,
+            )
             db.add_all([tenant, user])
             db.flush()
             db.add(PlatformUserRole(user_id=user.id, role="PLATFORM_ADMIN", status="ACTIVE", created_at=now, updated_at=now))
             db.commit()
-            context = _resolve_context(db, {"sub": user.external_iam_user_id, "tenant_id": tenant.external_iam_tenant_id, "role": ["VIEWER"]}, None)
+            context = _resolve_context(
+                db,
+                _identity_claims(
+                    user.external_iam_user_id,
+                    tenant=tenant.external_iam_tenant_id,
+                    roles=["VIEWER"],
+                ),
+                None,
+            )
             assert context.is_platform_admin
             assert context.tenant_id == tenant.id
             assert context.has_permission("platform:admin")

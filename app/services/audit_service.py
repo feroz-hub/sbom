@@ -100,6 +100,7 @@ def write_authorization_audit(
     request: Request | None = None,
     correlation_id: str | None = None,
     detail: str | None = None,
+    platform_global: bool = False,
 ) -> None:
     """Write structured authorization metadata without credentials or token claims."""
     db.add(
@@ -107,7 +108,13 @@ def write_authorization_audit(
             actor_user_id=actor_user_id if actor_user_id is not None else (context.user_id if context else None),
             target_user_id=target_user_id,
             target_membership_id=target_membership_id,
-            tenant_id=tenant_id if tenant_id is not None else (context.tenant_id if context else None),
+            tenant_id=(
+                None
+                if platform_global
+                else tenant_id
+                if tenant_id is not None
+                else (context.tenant_id if context else None)
+            ),
             action=action,
             outcome=outcome,
             old_value=old_value,

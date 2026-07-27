@@ -8,6 +8,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     LargeBinary,
@@ -47,17 +48,103 @@ class IAMUser(Base):
     __tablename__ = "iam_users"
 
     id = Column(Integer, primary_key=True)
+    # Deprecated compatibility identifier.  New HCL.CS identities are keyed
+    # by (external_issuer, external_subject), but this column remains available
+    # until every caller and deployment has completed the transition.
     external_iam_user_id = Column(String(255), nullable=False, index=True)
+    external_issuer = Column(String(512), nullable=True)
+    external_subject = Column(String(255), nullable=True)
+    employee_id = Column(String(128), nullable=True, index=True)
+    user_principal_name = Column(String(320), nullable=True, index=True)
+    department = Column(String(255), nullable=True)
     email = Column(String(320), nullable=True, index=True)
     display_name = Column(String(255), nullable=True)
     status = Column(String(32), nullable=False, default="ACTIVE")
+    email_verified = Column(Boolean, nullable=False, default=False, server_default=expression.false())
+    email_verified_at = Column(DateTime(timezone=True), nullable=True)
+    verification_required = Column(Boolean, nullable=False, default=True, server_default=expression.true())
+    last_claim_sync_at = Column(DateTime(timezone=True), nullable=True)
     last_login_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False)
     updated_at = Column(DateTime(timezone=True), nullable=False)
 
     __table_args__ = (
         UniqueConstraint("external_iam_user_id", name="uq_iam_users_external_iam_user_id"),
+        UniqueConstraint("external_issuer", "external_subject", name="uq_iam_users_external_identity"),
+        Index("ix_iam_users_verification_status", "verification_required", "status"),
         CheckConstraint("status IN ('ACTIVE','PENDING','DISABLED')", name="iam_user_status"),
+        CheckConstraint(
+            "external_issuer IS NULL OR length(trim(external_issuer)) > 0",
+            name="external_issuer_not_blank",
+        ),
+        CheckConstraint(
+            "external_subject IS NULL OR length(trim(external_subject)) > 0",
+            name="external_subject_not_blank",
+        ),
+        CheckConstraint(
+            "email_verified = false OR email_verified_at IS NOT NULL",
+            name="email_verification_timestamp",
+        ),
+    )
+
+    @property
+    def effective_external_subject(self) -> str:
+        """Return the composite subject, falling back during legacy transition."""
+        return self.external_subject or self.external_iam_user_id
+
+
+class EmailVerificationToken(Base):
+    """Single-use, hashed credential for verifying one email snapshot."""
+
+    __tablename__ = "email_verification_tokens"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(
+        Integer,
+        ForeignKey("iam_users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    token_hash = Column(String(64), nullable=False)
+    email_snapshot = Column(String(320), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    consumed_at = Column(DateTime(timezone=True), nullable=True)
+    invalidated_at = Column(DateTime(timezone=True), nullable=True)
+    invalidation_reason = Column(String(64), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    created_by_ip_hash = Column(String(64), nullable=True)
+    consumed_by_ip_hash = Column(String(64), nullable=True)
+    correlation_id = Column(String(128), nullable=True)
+    delivery_status = Column(String(16), nullable=False, default="PENDING")
+    delivery_attempted_at = Column(DateTime(timezone=True), nullable=True)
+    delivery_error_code = Column(String(64), nullable=True)
+
+    user = relationship("IAMUser")
+
+    __table_args__ = (
+        UniqueConstraint("token_hash", name="uq_email_verification_tokens_token_hash"),
+        Index("ix_email_verification_tokens_user_created", "user_id", "created_at"),
+        Index("ix_email_verification_tokens_user_consumed", "user_id", "consumed_at"),
+        Index(
+            "uq_email_verification_tokens_active_user",
+            "user_id",
+            unique=True,
+            postgresql_where=sql_text("consumed_at IS NULL AND invalidated_at IS NULL"),
+            sqlite_where=sql_text("consumed_at IS NULL AND invalidated_at IS NULL"),
+        ),
+        CheckConstraint("expires_at > created_at", name="email_verification_expiry"),
+        CheckConstraint(
+            "consumed_at IS NULL OR consumed_at >= created_at",
+            name="email_verification_consumed_time",
+        ),
+        CheckConstraint(
+            "invalidated_at IS NULL OR invalidated_at >= created_at",
+            name="email_verification_invalidated_time",
+        ),
+        CheckConstraint(
+            "delivery_status IN ('PENDING','SENT','FAILED','SKIPPED')",
+            name="email_verification_delivery_status",
+        ),
     )
 
 
@@ -68,6 +155,12 @@ class TenantUser(Base):
     tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="CASCADE"), nullable=False, index=True)
     role = Column(String(64), nullable=False)
+    role_assignment_version = Column(
+        Integer,
+        nullable=False,
+        default=1,
+        server_default="1",
+    )
     status = Column(String(32), nullable=False, default="ACTIVE")
     created_at = Column(DateTime(timezone=True), nullable=False)
     updated_at = Column(DateTime(timezone=True), nullable=False)
@@ -77,10 +170,15 @@ class TenantUser(Base):
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "user_id", name="uq_tenant_users_tenant_user"),
+        UniqueConstraint("id", "tenant_id", name="uq_tenant_users_id_tenant"),
         Index("ix_tenant_users_tenant_status", "tenant_id", "status"),
         CheckConstraint(
-            "role IN ('TENANT_ADMIN','SECURITY_ANALYST','DEVELOPER','VIEWER')",
-            name="tenant_user_role",
+            "length(trim(role)) > 0 AND role = upper(role)",
+            name="tenant_user_role_normalized",
+        ),
+        CheckConstraint(
+            "role_assignment_version >= 1",
+            name="tenant_user_role_assignment_version",
         ),
         CheckConstraint("status IN ('ACTIVE','PENDING','DISABLED')", name="tenant_user_status"),
     )
@@ -105,6 +203,259 @@ class PlatformUserRole(Base):
     __table_args__ = (
         CheckConstraint("role = 'PLATFORM_ADMIN'", name="platform_user_role"),
         CheckConstraint("status IN ('ACTIVE','DISABLED')", name="platform_user_role_status"),
+    )
+
+
+class AuthorizationRole(Base):
+    """Global, database-backed role catalogue entry."""
+
+    __tablename__ = "authorization_roles"
+
+    id = Column(Integer, primary_key=True)
+    code = Column(String(64), nullable=False)
+    name = Column(String(128), nullable=False)
+    description = Column(Text, nullable=True)
+    scope = Column(String(16), nullable=False, index=True)
+    status = Column(String(16), nullable=False, default="ACTIVE", server_default="ACTIVE", index=True)
+    is_system = Column(Boolean, nullable=False, default=True, server_default=expression.true())
+    is_assignable = Column(Boolean, nullable=False, default=True, server_default=expression.true())
+    version = Column(Integer, nullable=False, default=1, server_default="1")
+    created_by_user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="SET NULL"), nullable=True)
+    updated_by_user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    updated_at = Column(DateTime(timezone=True), nullable=False)
+
+    permissions = relationship(
+        "AuthorizationRolePermission",
+        back_populates="role",
+        cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        UniqueConstraint("scope", "code", name="uq_authorization_roles_scope_code"),
+        CheckConstraint("scope IN ('PLATFORM','TENANT')", name="authorization_role_scope"),
+        CheckConstraint(
+            "status IN ('ACTIVE','DISABLED','DRAFT')",
+            name="authorization_role_status",
+        ),
+        CheckConstraint("version >= 1", name="authorization_role_version"),
+        CheckConstraint("length(trim(code)) > 0", name="authorization_role_code_not_blank"),
+        CheckConstraint("length(trim(name)) > 0", name="authorization_role_name_not_blank"),
+        CheckConstraint("code = upper(code)", name="authorization_role_code_normalized"),
+    )
+
+
+class AuthorizationPermission(Base):
+    """Global permission catalogue entry."""
+
+    __tablename__ = "authorization_permissions"
+
+    id = Column(Integer, primary_key=True)
+    code = Column(String(128), nullable=False, unique=True, index=True)
+    name = Column(String(128), nullable=False)
+    description = Column(Text, nullable=True)
+    scope = Column(String(16), nullable=False, index=True)
+    resource = Column(String(128), nullable=False, index=True)
+    action = Column(String(64), nullable=False, index=True)
+    status = Column(String(16), nullable=False, default="ACTIVE", server_default="ACTIVE", index=True)
+    is_system = Column(Boolean, nullable=False, default=True, server_default=expression.true())
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    updated_at = Column(DateTime(timezone=True), nullable=False)
+
+    roles = relationship(
+        "AuthorizationRolePermission",
+        back_populates="permission",
+        cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        CheckConstraint("scope IN ('PLATFORM','TENANT')", name="authorization_permission_scope"),
+        CheckConstraint("status IN ('ACTIVE','DISABLED')", name="authorization_permission_status"),
+        CheckConstraint("length(trim(code)) > 0", name="authorization_permission_code_not_blank"),
+        CheckConstraint(
+            "length(trim(name)) > 0",
+            name="authorization_permission_name_not_blank",
+        ),
+        CheckConstraint(
+            "code = lower(code) AND code NOT LIKE '% %'",
+            name="authorization_permission_code_normalized",
+        ),
+    )
+
+
+class AuthorizationRolePermission(Base):
+    """Many-to-many role-to-permission catalogue mapping."""
+
+    __tablename__ = "authorization_role_permissions"
+
+    id = Column(Integer, primary_key=True)
+    role_id = Column(
+        Integer,
+        ForeignKey("authorization_roles.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    permission_id = Column(
+        Integer,
+        ForeignKey("authorization_permissions.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    is_protected = Column(Boolean, nullable=False, default=False, server_default=expression.false())
+    created_by_user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    updated_at = Column(DateTime(timezone=True), nullable=False)
+
+    role = relationship("AuthorizationRole", back_populates="permissions")
+    permission = relationship("AuthorizationPermission", back_populates="roles")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "role_id",
+            "permission_id",
+            name="uq_authorization_role_permissions_role_permission",
+        ),
+    )
+
+
+class TenantUserRoleAssignment(Base, TenantOwnedMixin):
+    """Current tenant-scoped role assignment state for one membership."""
+
+    __tablename__ = "tenant_user_role_assignments"
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(
+        Integer,
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    tenant_user_id = Column(Integer, nullable=False, index=True)
+    role_id = Column(
+        Integer,
+        ForeignKey("authorization_roles.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    status = Column(String(16), nullable=False, default="ACTIVE", server_default="ACTIVE")
+    is_primary = Column(Boolean, nullable=False, default=False, server_default=expression.false())
+    assignment_source = Column(String(32), nullable=False)
+    assigned_by_user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="SET NULL"), nullable=True)
+    assigned_at = Column(DateTime(timezone=True), nullable=False)
+    revoked_by_user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="SET NULL"), nullable=True)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+    revocation_reason = Column(String(512), nullable=True)
+    version = Column(Integer, nullable=False, default=1, server_default="1")
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    updated_at = Column(DateTime(timezone=True), nullable=False)
+
+    membership = relationship("TenantUser")
+    role = relationship("AuthorizationRole")
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["tenant_user_id", "tenant_id"],
+            ["tenant_users.id", "tenant_users.tenant_id"],
+            name="fk_tenant_role_assignment_membership_tenant",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint(
+            "tenant_user_id",
+            "role_id",
+            name="uq_tenant_user_role_assignments_membership_role",
+        ),
+        Index(
+            "uq_tenant_user_role_assignments_active_primary",
+            "tenant_user_id",
+            unique=True,
+            postgresql_where=sql_text("status = 'ACTIVE' AND is_primary"),
+            sqlite_where=sql_text("status = 'ACTIVE' AND is_primary = 1"),
+        ),
+        Index(
+            "ix_tenant_user_role_assignments_tenant_status",
+            "tenant_id",
+            "status",
+        ),
+        CheckConstraint(
+            "status IN ('ACTIVE','REVOKED')",
+            name="tenant_role_assignment_status",
+        ),
+        CheckConstraint(
+            "assignment_source IN ('MIGRATION','TENANT_CREATION','TENANT_ADMIN','PLATFORM_ADMIN','SYSTEM','API')",
+            name="tenant_role_assignment_source",
+        ),
+        CheckConstraint("version >= 1", name="tenant_role_assignment_version"),
+        CheckConstraint(
+            "(status = 'ACTIVE' AND revoked_at IS NULL AND revoked_by_user_id IS NULL) "
+            "OR (status = 'REVOKED' AND revoked_at IS NOT NULL AND is_primary = false)",
+            name="tenant_role_assignment_revocation_state",
+        ),
+    )
+
+
+class TenantUserRoleAssignmentHistory(Base, TenantOwnedMixin):
+    """Append-only role-assignment lifecycle record."""
+
+    __tablename__ = "tenant_user_role_assignment_history"
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(
+        Integer,
+        ForeignKey("tenants.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    tenant_user_id = Column(
+        Integer,
+        ForeignKey("tenant_users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    assignment_id = Column(
+        Integer,
+        ForeignKey("tenant_user_role_assignments.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    role_id = Column(
+        Integer,
+        ForeignKey("authorization_roles.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    role_code_snapshot = Column(String(64), nullable=False)
+    event_type = Column(String(32), nullable=False)
+    previous_status = Column(String(16), nullable=True)
+    new_status = Column(String(16), nullable=True)
+    previous_primary = Column(Boolean, nullable=True)
+    new_primary = Column(Boolean, nullable=True)
+    actor_user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="SET NULL"), nullable=True)
+    assignment_source = Column(String(32), nullable=False)
+    reason = Column(String(512), nullable=True)
+    before_membership_version = Column(Integer, nullable=False)
+    after_membership_version = Column(Integer, nullable=False)
+    correlation_id = Column(String(128), nullable=True)
+    occurred_at = Column(DateTime(timezone=True), nullable=False)
+    metadata_json = Column(JSON, nullable=True)
+
+    __table_args__ = (
+        Index(
+            "ix_tenant_role_assignment_history_membership_time",
+            "tenant_id",
+            "tenant_user_id",
+            "occurred_at",
+        ),
+        CheckConstraint(
+            "event_type IN ('MIGRATED','GRANTED','REACTIVATED','REVOKED','PRIMARY_SELECTED','PRIMARY_CHANGED','ROLE_SET_REPLACED','ASSIGNMENT_REJECTED')",
+            name="tenant_role_assignment_history_event",
+        ),
+        CheckConstraint(
+            "assignment_source IN ('MIGRATION','TENANT_CREATION','TENANT_ADMIN','PLATFORM_ADMIN','SYSTEM','API')",
+            name="tenant_role_assignment_history_source",
+        ),
+        CheckConstraint(
+            "before_membership_version >= 1 AND after_membership_version >= before_membership_version",
+            name="tenant_role_assignment_history_versions",
+        ),
     )
 
 

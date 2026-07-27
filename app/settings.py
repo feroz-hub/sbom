@@ -10,7 +10,7 @@ Supports both pydantic v2 with pydantic-settings and standalone pydantic v2.
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -85,6 +85,22 @@ class Settings(BaseSettings):
     database_pool_timeout: int = Field(default=30, ge=1, description="PostgreSQL pool checkout timeout in seconds")
     database_pool_recycle: int = Field(
         default=1800, ge=0, description="PostgreSQL connection recycle interval in seconds"
+    )
+    authorization_catalog_mode: str = Field(
+        default="DATABASE",
+        description="Role-permission resolver mode: LEGACY, COMPARE, or DATABASE.",
+    )
+    authorization_catalog_fail_closed: bool = Field(
+        default=True,
+        description="Return no permissions when the database catalogue cannot be resolved.",
+    )
+    tenant_role_assignment_mode: str = Field(
+        default="DATABASE",
+        description="Tenant-role resolver mode: LEGACY, COMPARE, or DATABASE.",
+    )
+    tenant_role_assignment_fail_closed: bool = Field(
+        default=True,
+        description="Deny tenant permissions when assignment data cannot be resolved.",
     )
 
     db_pool_size: int = Field(default=20, ge=1, description="Environment-based PostgreSQL connection-pool size")
@@ -216,6 +232,43 @@ class Settings(BaseSettings):
     hcl_iam_http_timeout_seconds: float = Field(default=5.0, ge=0.5, le=30.0)
     hcl_iam_clock_skew_seconds: int = Field(default=30, ge=0, le=300)
     hcl_iam_ca_bundle: str = Field(default="", description="Optional CA bundle for private/local HCL.CS TLS")
+    hcl_iam_require_employee_id: bool = Field(
+        default=True,
+        description="Require employee_id in trusted HCL.CS identity claims",
+    )
+    identity_claim_sync_interval_seconds: int = Field(
+        default=300,
+        ge=30,
+        le=86400,
+        description="Maximum interval between persisted trusted-claim synchronization timestamps",
+    )
+    platform_admin_contact_email: str = Field(
+        default="",
+        description="Informational support contact shown during identity onboarding",
+    )
+    email_delivery_enabled: bool = False
+    email_provider: str = Field(default="smtp", pattern=r"^smtp$")
+    email_from_address: str = ""
+    email_from_name: str = Field(default="SBOM Analyzer", min_length=1, max_length=128)
+    smtp_host: str = ""
+    smtp_port: int = Field(default=587, ge=1, le=65535)
+    smtp_username: str = ""
+    smtp_password: SecretStr = SecretStr("")
+    smtp_use_tls: bool = False
+    smtp_use_starttls: bool = True
+    smtp_connect_timeout_seconds: float = Field(default=10.0, ge=1.0, le=60.0)
+    smtp_send_timeout_seconds: float = Field(default=15.0, ge=1.0, le=120.0)
+    email_verification_frontend_url: str = "https://localhost:3000/verify-email"
+    email_verification_token_expiry_seconds: int = Field(default=86400, ge=300, le=604800)
+    email_verification_resend_cooldown_seconds: int = Field(default=60, ge=30, le=3600)
+    email_verification_max_sends_per_hour: int = Field(default=5, ge=1, le=100)
+    email_verification_max_sends_per_day: int = Field(default=20, ge=1, le=500)
+    email_verification_confirmation_max_attempts_per_minute: int = Field(
+        default=20,
+        ge=1,
+        le=300,
+    )
+    email_verification_token_retention_days: int = Field(default=90, ge=1, le=3650)
     hcl_iam_role_mapping: str = Field(
         default=(
             '{"PLATFORM_ADMIN":"PLATFORM_ADMIN","SBOM_PLATFORM_ADMIN":"PLATFORM_ADMIN",'
@@ -638,6 +691,80 @@ class Settings(BaseSettings):
             return ""
         path = Path(value).expanduser()
         return str(path if path.is_absolute() else (PROJECT_ROOT / path).resolve())
+
+    @field_validator("platform_admin_contact_email", "email_from_address", mode="after")
+    @classmethod
+    def validate_platform_admin_contact_email(cls, v: str) -> str:
+        value = v.strip().lower()
+        if not value:
+            return ""
+        local, separator, domain = value.rpartition("@")
+        if (
+            not separator
+            or value.count("@") != 1
+            or not local
+            or not domain
+            or any(character.isspace() for character in value)
+            or any(ord(character) < 32 or ord(character) == 127 for character in value)
+        ):
+            raise ValueError("Configured email address is invalid")
+        if len(value) > 320:
+            raise ValueError("Configured email address exceeds 320 characters")
+        return value
+
+    @field_validator("email_from_name", mode="after")
+    @classmethod
+    def validate_email_from_name(cls, value: str) -> str:
+        normalized = value.strip()
+        if any(ord(character) < 32 or ord(character) == 127 for character in normalized):
+            raise ValueError("EMAIL_FROM_NAME contains invalid control characters")
+        return normalized
+
+    @field_validator(
+        "authorization_catalog_mode",
+        "tenant_role_assignment_mode",
+        mode="before",
+    )
+    @classmethod
+    def validate_authorization_mode(cls, value: Any) -> str:
+        normalized = str(value or "DATABASE").strip().upper()
+        if normalized not in {"LEGACY", "COMPARE", "DATABASE"}:
+            raise ValueError(
+                "authorization mode must be LEGACY, COMPARE, or DATABASE"
+            )
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_email_delivery_configuration(self):
+        from urllib.parse import urlsplit
+
+        if self.smtp_use_tls and self.smtp_use_starttls:
+            raise ValueError("SMTP_USE_TLS and SMTP_USE_STARTTLS cannot both be enabled")
+        parsed = urlsplit(self.email_verification_frontend_url.strip())
+        local_hosts = {"localhost", "127.0.0.1", "::1"}
+        if (
+            not parsed.scheme
+            or not parsed.hostname
+            or parsed.username
+            or parsed.password
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError("EMAIL_VERIFICATION_FRONTEND_URL must be an absolute URL without query or fragment")
+        if parsed.scheme != "https" and not (
+            parsed.scheme == "http" and parsed.hostname in local_hosts
+        ):
+            raise ValueError("EMAIL_VERIFICATION_FRONTEND_URL must use HTTPS outside local development")
+        if self.email_delivery_enabled:
+            if not self.email_from_address:
+                raise ValueError("EMAIL_FROM_ADDRESS is required when email delivery is enabled")
+            if not self.smtp_host.strip():
+                raise ValueError("SMTP_HOST is required when email delivery is enabled")
+            if self.smtp_username and not self.smtp_password.get_secret_value():
+                raise ValueError("SMTP_PASSWORD is required when SMTP_USERNAME is configured")
+            if self.smtp_username and not (self.smtp_use_tls or self.smtp_use_starttls):
+                raise ValueError("Remote SMTP authentication requires TLS or StartTLS")
+        return self
 
     @field_validator("reload", mode="before")
     @classmethod

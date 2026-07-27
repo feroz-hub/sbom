@@ -58,6 +58,7 @@ from .routers import (
     ai_fixes,
     ai_usage,
     analyze_endpoints,
+    authorization_catalog,
     compare,
     cves,
     dashboard_advanced,
@@ -79,6 +80,7 @@ from .routers import (
     sboms_crud,
     schedules,
     tenants,
+    verification,
     vex,
 )
 from .routers import analysis as analysis_export_router
@@ -135,7 +137,16 @@ def _ensure_seed_data() -> None:
     try:
         # Seed the local development identity. Production HCL IAM users are
         # mapped from validated claims and explicit tenant memberships.
-        from .models import IAMUser, SBOMSource, Tenant, TenantUser
+        from .models import (
+            IAMUser,
+            SBOMSource,
+            Tenant,
+            TenantUser,
+            TenantUserRoleAssignment,
+        )
+        from .services.tenant_role_assignment_service import (
+            create_initial_assignment,
+        )
 
         now = datetime.now(UTC)
         db.execute(
@@ -163,9 +174,17 @@ def _ensure_seed_data() -> None:
                 user = IAMUser(
                     id=1,
                     external_iam_user_id="dev-user",
+                    external_issuer="https://local-dev.invalid",
+                    external_subject="dev-user",
                     email="dev@local",
                     display_name="Dev User",
+                    user_principal_name="dev@local",
+                    employee_id="LOCAL-DEV",
                     status="ACTIVE",
+                    email_verified=True,
+                    email_verified_at=now,
+                    verification_required=False,
+                    last_claim_sync_at=now,
                     created_at=now,
                     updated_at=now,
                     last_login_at=now,
@@ -177,6 +196,13 @@ def _ensure_seed_data() -> None:
                     user.email = user.email or "dev@local"
                     user.display_name = user.display_name or "Dev User"
                 user.status = "ACTIVE"
+                user.external_issuer = user.external_issuer or "https://local-dev.invalid"
+                user.external_subject = user.external_subject or "dev-user"
+                user.user_principal_name = user.user_principal_name or "dev@local"
+                user.employee_id = user.employee_id or "LOCAL-DEV"
+                user.email_verified = True
+                user.email_verified_at = user.email_verified_at or now
+                user.verification_required = False
             db.flush()
             _sync_postgres_sequence(db, "tenants", "id")
             _sync_postgres_sequence(db, "iam_users", "id")
@@ -184,19 +210,33 @@ def _ensure_seed_data() -> None:
                 select(TenantUser).where(TenantUser.tenant_id == 1, TenantUser.user_id == 1)
             ).scalar_one_or_none()
             if membership is None:
-                db.add(
-                    TenantUser(
-                        tenant_id=1,
-                        user_id=1,
-                        role="TENANT_ADMIN",
-                        status="ACTIVE",
-                        created_at=now,
-                        updated_at=now,
-                    )
+                membership = TenantUser(
+                    tenant_id=1,
+                    user_id=1,
+                    role="TENANT_ADMIN",
+                    status="ACTIVE",
+                    created_at=now,
+                    updated_at=now,
                 )
+                db.add(membership)
+                db.flush()
             else:
                 membership.role = "TENANT_ADMIN"
                 membership.status = "ACTIVE"
+            assignment_exists = db.scalar(
+                select(TenantUserRoleAssignment.id).where(
+                    TenantUserRoleAssignment.tenant_user_id == membership.id,
+                    TenantUserRoleAssignment.status == "ACTIVE",
+                )
+            )
+            if assignment_exists is None:
+                create_initial_assignment(
+                    db,
+                    membership,
+                    role_code="TENANT_ADMIN",
+                    actor_user_id=user.id,
+                    source="SYSTEM",
+                )
         else:
             bootstrap = db.execute(
                 select(IAMUser).where(IAMUser.external_iam_user_id.in_(("local-dev-admin", "dev-user")))
@@ -661,8 +701,13 @@ app.include_router(lifecycle.router, dependencies=_protected)
 app.include_router(lifecycle_admin.router, dependencies=_protected)
 app.include_router(vex.router, dependencies=_protected)
 app.include_router(remediation.router, dependencies=_protected)
-app.include_router(tenants.router, dependencies=_protected)
+# Identity onboarding routes in this router perform JWT validation and local
+# state resolution themselves; its application routes retain explicit
+# tenant/permission dependencies at the route level.
+app.include_router(tenants.router)
+app.include_router(verification.router)
 app.include_router(platform.router, dependencies=_protected)
+app.include_router(authorization_catalog.router, dependencies=_protected)
 
 
 # Feature routers (kept from earlier refactor) — additive paths.

@@ -48,9 +48,12 @@ def test_authenticated_tenant_write_preserves_context(client, app, monkeypatch):
 
     reset_settings()
     claims = {
+        "iss": "https://iam.example.test",
         "sub": "authenticated-context-user",
         "email": "context-user@example.test",
         "name": "Context User",
+        "preferred_username": "context-user@example.test",
+        "employee_id": "000101",
         "tenant_id": "local-default",
     }
     now = datetime.now(UTC)
@@ -58,9 +61,16 @@ def test_authenticated_tenant_write_preserves_context(client, app, monkeypatch):
         tenant = db.execute(select(Tenant).where(Tenant.external_iam_tenant_id == "local-default")).scalar_one()
         user = IAMUser(
             external_iam_user_id=claims["sub"],
+            external_issuer=claims["iss"],
+            external_subject=claims["sub"],
             email=claims["email"],
             display_name=claims["name"],
+            user_principal_name=claims["preferred_username"],
+            employee_id=claims["employee_id"],
             status="ACTIVE",
+            email_verified=True,
+            email_verified_at=now,
+            verification_required=False,
             created_at=now,
             updated_at=now,
         )
