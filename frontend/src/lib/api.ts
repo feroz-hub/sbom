@@ -119,29 +119,46 @@ let _auth401InFlight = false;
 
 function handleAuthError(status: number): void {
   if (typeof window === 'undefined') return;
+  const path = window.location.pathname;
+
+  if (path.startsWith('/auth/callback') || path.startsWith('/verification-required') || path.startsWith('/access-denied')) {
+    return;
+  }
 
   if (status === 401 && !_auth401InFlight) {
     _auth401InFlight = true;
     const authEnabled = process.env.NEXT_PUBLIC_AUTH_ENABLED === 'true';
     if (authEnabled) {
-      // Avoid redirect loops: don't redirect if already on auth pages
-      const path = window.location.pathname;
       const recoveryStarted = window.sessionStorage.getItem('sbom-auth-recovery-started') === '1';
-      if (!path.startsWith('/auth/') && !recoveryStarted) {
-        window.sessionStorage.setItem('sbom-auth-recovery-started', '1');
-        // Small delay to batch multiple concurrent 401s into one redirect
-        setTimeout(() => {
-          const returnTo = `${window.location.pathname}${window.location.search}`;
-          window.location.href = `/api/auth/login?returnTo=${encodeURIComponent(returnTo)}`;
-        }, 100);
+      if (!recoveryStarted) {
+        // Verify if session actually expired before starting OIDC redirect
+        void fetch('/api/auth/session', { cache: 'no-store' })
+          .then((r) => r.ok ? r.json() : null)
+          .then((session) => {
+            if (session?.authenticated === true) {
+              // Session exists! 401 is a backend token validation or service issue, not missing session.
+              window.sessionStorage.removeItem('sbom-auth-recovery-started');
+              _auth401InFlight = false;
+            } else {
+              window.sessionStorage.setItem('sbom-auth-recovery-started', '1');
+              setTimeout(() => {
+                const returnTo = `${window.location.pathname}${window.location.search}`;
+                window.location.href = `/api/auth/login?returnTo=${encodeURIComponent(returnTo)}`;
+              }, 100);
+            }
+          })
+          .catch(() => {
+            _auth401InFlight = false;
+          });
       } else {
         _auth401InFlight = false;
       }
     } else {
       _auth401InFlight = false;
     }
+  } else if (status === 403) {
+    // 403 errors are handled inline by components or AuthGuard
   }
-
 }
 
 // ─── Typed HTTP error ─────────────────────────────────────────────────────────

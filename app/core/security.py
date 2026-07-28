@@ -69,7 +69,10 @@ def _roles(value: Any) -> frozenset[str]:
 
 
 def _ssl_context(ca_bundle: str) -> ssl.SSLContext:
-    return ssl.create_default_context(cafile=ca_bundle or None)
+    ctx = ssl.create_default_context(cafile=ca_bundle or None)
+    if hasattr(ssl, "VERIFY_X509_STRICT"):
+        ctx.verify_flags &= ~ssl.VERIFY_X509_STRICT
+    return ctx
 
 
 @lru_cache(maxsize=8)
