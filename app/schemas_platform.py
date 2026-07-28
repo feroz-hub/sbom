@@ -22,7 +22,28 @@ class PlatformUserSummary(BaseModel):
     platform_grant_status: str | None
     active_tenant_count: int
     created_at: datetime
-    last_login_at: datetime | None
+class TenantMembershipBrief(BaseModel):
+    tenant_id: int
+    status: str
+    role: str
+
+
+class UserSearchResult(BaseModel):
+    id: int
+    email: str | None
+    display_name: str | None
+    username: str | None = None
+    status: str
+    email_verified: bool
+    verification_required: bool
+    external_issuer: str | None = None
+    external_subject: str | None = None
+    is_platform_admin: bool = False
+    tenant_membership: TenantMembershipBrief | None = None
+
+
+class UserSearchResponse(BaseModel):
+    items: list[UserSearchResult]
 
 
 class PlatformTenantMembershipSummary(BaseModel):

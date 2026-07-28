@@ -10,5 +10,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!api|auth/callback|access-denied|verification-required|_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!api|auth/callback|access-denied|verification-required|access-pending|_next/static|_next/image|favicon.ico).*)'],
 };

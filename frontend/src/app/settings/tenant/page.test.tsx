@@ -14,10 +14,17 @@ const api = vi.hoisted(() => ({
   activateTenantMember: vi.fn(),
   deactivateTenantMember: vi.fn(),
   removeTenantMember: vi.fn(),
+  searchTenantUserCandidates: vi.fn(),
+  searchPlatformUsers: vi.fn(),
 }));
 
 vi.mock('@/hooks/useAuth', () => ({
-  useAuth: () => ({ user: { tenantId: 1 } }),
+  useAuth: () => ({
+    user: { tenantId: 1, externalUserId: 'subject-1' },
+    tenants: [{ id: 1, name: 'Default Tenant', slug: 'default', externalIamTenantId: 'local-default', status: 'ACTIVE', role: 'TENANT_ADMIN' }],
+    hasPermission: () => true,
+    isLoading: false,
+  }),
 }));
 vi.mock('@/hooks/usePermission', () => ({ usePermission: () => true }));
 vi.mock('@/lib/api', async (importOriginal) => ({
@@ -65,11 +72,25 @@ describe('TenantUsersPage', () => {
 
   it('adds a member with an initial tenant role', async () => {
     const user = userEvent.setup();
+    api.searchTenantUserCandidates.mockResolvedValue([
+      {
+        id: 99,
+        email: 'new.user@hcltech.com',
+        display_name: 'New User',
+        status: 'ACTIVE',
+        email_verified: true,
+        verification_required: false,
+        external_subject: 'new-hcl-sub',
+      },
+    ]);
     renderPage();
     await screen.findByText('Example User');
-    await user.type(screen.getByLabelText('HCL.CS subject'), 'new-hcl-sub');
+    const input = screen.getByPlaceholderText(/Search existing SBOM users/i);
+    await user.type(input, 'New');
+    const foundUser = await screen.findByText('New User');
+    await user.click(foundUser);
     await user.selectOptions(screen.getByLabelText('Initial role'), 'SECURITY_ANALYST');
-    await user.click(screen.getByRole('button', { name: 'Add member' }));
+    await user.click(screen.getByRole('button', { name: 'Add Member' }));
     await waitFor(() => expect(api.addTenantMember).toHaveBeenCalledWith(1, {
       external_user_id: 'new-hcl-sub', role: 'SECURITY_ANALYST',
     }));

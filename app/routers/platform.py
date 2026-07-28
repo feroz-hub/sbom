@@ -13,6 +13,8 @@ from ..core.context import CurrentContext
 from ..core.identity_states import IdentityAuditEvent, IdentityErrorCode
 from ..core.security import invalidate_user_contexts, require_platform_permission
 from ..db import get_db
+from sqlalchemy import or_
+from ..models import IAMUser, TenantUser
 from ..schemas_platform import (
     PlatformAdministratorGrantRequest,
     PlatformAdministratorGrantResponse,
@@ -24,6 +26,9 @@ from ..schemas_platform import (
     PlatformUserStatusResponse,
     PlatformUserStatusUpdate,
     PlatformUserSummary,
+    TenantMembershipBrief,
+    UserSearchResponse,
+    UserSearchResult,
 )
 from ..services import audit_service, platform_service
 from ..services.email_verification_service import ensure_initial_verification_delivery
@@ -116,6 +121,65 @@ def _tenant_dict(tenant) -> dict:
         "created_at": tenant.created_at,
         "updated_at": tenant.updated_at,
     }
+
+
+@router.get("/users/search", response_model=UserSearchResponse)
+def search_platform_users(
+    q: str = Query(..., min_length=1, max_length=200),
+    tenant_id: int | None = Query(default=None, ge=1),
+    context: CurrentContext = Depends(
+        require_platform_permission("platform:user:read")
+    ),
+    db: Session = Depends(get_db),
+) -> UserSearchResponse:
+    pattern = f"%{platform_service._escape_search(q.strip())}%"
+    users = (
+        db.query(IAMUser)
+        .filter(
+            or_(
+                IAMUser.email.ilike(pattern, escape="\\"),
+                IAMUser.display_name.ilike(pattern, escape="\\"),
+                IAMUser.user_principal_name.ilike(pattern, escape="\\"),
+            )
+        )
+        .order_by(IAMUser.display_name.asc(), IAMUser.email.asc())
+        .limit(20)
+        .all()
+    )
+
+    items = []
+    for user in users:
+        grant = platform_service.get_platform_user_grant(db, user.id)
+        is_admin = platform_service.is_effective_platform_administrator(user, grant)
+        brief = None
+        if tenant_id:
+            membership = (
+                db.query(TenantUser)
+                .filter(TenantUser.tenant_id == tenant_id, TenantUser.user_id == user.id)
+                .first()
+            )
+            if membership:
+                brief = TenantMembershipBrief(
+                    tenant_id=tenant_id,
+                    status=membership.status,
+                    role=membership.role,
+                )
+        items.append(
+            UserSearchResult(
+                id=user.id,
+                email=user.email,
+                display_name=user.display_name,
+                username=user.user_principal_name,
+                status=user.status,
+                email_verified=bool(user.email_verified),
+                verification_required=bool(user.verification_required),
+                external_issuer=user.external_iam_issuer,
+                external_subject=user.external_iam_user_id,
+                is_platform_admin=is_admin,
+                tenant_membership=brief,
+            )
+        )
+    return UserSearchResponse(items=items)
 
 
 @router.get("/users", response_model=PlatformUserPage)

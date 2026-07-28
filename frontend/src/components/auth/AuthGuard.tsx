@@ -14,7 +14,7 @@ import { useEffect, type ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 
-const PUBLIC_PATHS = ['/auth/callback', '/access-denied', '/verification-required'];
+const PUBLIC_PATHS = ['/auth/callback', '/access-denied', '/verification-required', '/access-pending'];
 
 interface AuthGuardProps {
   children: ReactNode;
@@ -48,6 +48,14 @@ export function AuthGuard({ children, requiredPermission, requiredRoles }: AuthG
       pathname !== '/verification-required'
     ) {
       router.replace('/verification-required');
+      return;
+    }
+
+    if (
+      authStatus === 'access-pending' &&
+      pathname !== '/access-pending'
+    ) {
+      router.replace('/access-pending');
       return;
     }
 

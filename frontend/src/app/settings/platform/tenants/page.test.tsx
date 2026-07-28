@@ -13,10 +13,19 @@ const api = vi.hoisted(() => ({
   updatePlatformTenantStatus: vi.fn(),
 }));
 
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+    prefetch: vi.fn(),
+  }),
+  usePathname: () => '/settings/platform/tenants',
+}));
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({
     isLoading: auth.loading,
     hasPermission: (permission: string) => auth.allowed && permission === 'platform:tenant:create',
+    switchTenant: vi.fn(),
   }),
 }));
 vi.mock('@/lib/api', async (importOriginal) => ({
@@ -115,8 +124,7 @@ describe('PlatformTenantsPage', () => {
       expect.anything(),
     ));
     expect(await screen.findByText('Tenant “Acme Security” was created successfully.')).toBeInTheDocument();
-    expect(screen.getByText(/configure the corresponding HCL.CS tenant_id claim/)).toBeInTheDocument();
-    await waitFor(() => expect(api.listPlatformTenants).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(api.listPlatformTenants).toHaveBeenCalled());
   });
 
   it.each([

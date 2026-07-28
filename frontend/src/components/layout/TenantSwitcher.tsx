@@ -13,6 +13,8 @@ import { Building2, Check, ChevronsUpDown } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
 
+import { getRoleLabel } from '@/lib/roles';
+
 export function TenantSwitcher() {
   const { tenants, activeTenantId, switchTenant } = useAuth();
   const [open, setOpen] = useState(false);
@@ -127,7 +129,7 @@ export function TenantSwitcher() {
                     </p>
                     {tenant.role && (
                       <p className="text-xs text-hcl-muted">
-                        {tenant.role.replace(/_/g, ' ')}
+                        {getRoleLabel(tenant.role).replace(/_/g, ' ')}
                       </p>
                     )}
                   </div>

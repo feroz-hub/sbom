@@ -21,7 +21,13 @@ from ..core.security import (
     require_permission,
     require_platform_permission,
 )
+from sqlalchemy import or_
 from ..db import get_db
+from ..schemas_platform import (
+    TenantMembershipBrief,
+    UserSearchResponse,
+    UserSearchResult,
+)
 from ..models import AuthorizationRole, IAMUser, Tenant, TenantUser
 from ..schemas_identity import AuthContextResponse
 from ..schemas_tenants import (
@@ -48,7 +54,9 @@ MembershipStatus = Literal["ACTIVE", "PENDING", "DISABLED"]
 
 
 class MembershipUpsert(BaseModel):
-    external_user_id: str = Field(
+    user_id: int | None = Field(default=None, ge=1)
+    external_user_id: str | None = Field(
+        default=None,
         min_length=1,
         max_length=255,
         validation_alias=AliasChoices("external_user_id", "external_iam_user_id"),
@@ -571,6 +579,62 @@ def tenant_user_role_history(
     }
 
 
+@router.get("/tenants/{tenant_id}/user-candidates", response_model=UserSearchResponse)
+def search_tenant_user_candidates(
+    tenant_id: int,
+    q: str = Query(..., min_length=1, max_length=200),
+    context: CurrentContext = Depends(require_permission("tenant:user:read")),
+    db: Session = Depends(get_db),
+) -> UserSearchResponse:
+    _require_current_tenant(tenant_id, context)
+    from ..services.platform_service import _escape_search
+    pattern = f"%{_escape_search(q.strip())}%"
+    users = (
+        db.query(IAMUser)
+        .filter(
+            IAMUser.status != "DISABLED",
+            or_(
+                IAMUser.email.ilike(pattern, escape="\\"),
+                IAMUser.display_name.ilike(pattern, escape="\\"),
+                IAMUser.user_principal_name.ilike(pattern, escape="\\"),
+            ),
+        )
+        .order_by(IAMUser.display_name.asc(), IAMUser.email.asc())
+        .limit(20)
+        .all()
+    )
+
+    items = []
+    for user in users:
+        membership = (
+            db.query(TenantUser)
+            .filter(TenantUser.tenant_id == tenant_id, TenantUser.user_id == user.id)
+            .first()
+        )
+        brief = None
+        if membership:
+            brief = TenantMembershipBrief(
+                tenant_id=tenant_id,
+                status=membership.status,
+                role=membership.role,
+            )
+        items.append(
+            UserSearchResult(
+                id=user.id,
+                email=user.email,
+                display_name=user.display_name,
+                username=user.user_principal_name,
+                status=user.status,
+                email_verified=bool(user.email_verified),
+                verification_required=bool(user.verification_required),
+                external_issuer=user.external_iam_issuer,
+                external_subject=user.external_iam_user_id,
+                tenant_membership=brief,
+            )
+        )
+    return UserSearchResponse(items=items)
+
+
 @router.get("/tenants/{tenant_id}/users")
 def list_tenant_users(
     tenant_id: int,
@@ -602,9 +666,17 @@ def add_tenant_user(
     db: Session = Depends(get_db),
 ) -> dict:
     _require_current_tenant(tenant_id, context)
+    ext_user_id = payload.external_user_id
+    if ext_user_id is None and payload.user_id is not None:
+        user_row = db.query(IAMUser).filter(IAMUser.id == payload.user_id).one_or_none()
+        if user_row:
+            ext_user_id = user_row.external_iam_user_id
+    if not ext_user_id:
+        raise HTTPException(status_code=422, detail="Provide user_id or external_user_id")
+
     existing = None
     previous_user_status = None
-    user_id = db.query(IAMUser.id).filter(IAMUser.external_iam_user_id == payload.external_user_id).scalar()
+    user_id = db.query(IAMUser.id).filter(IAMUser.external_iam_user_id == ext_user_id).scalar()
     if user_id is not None:
         previous_user_status = db.query(IAMUser.status).filter(IAMUser.id == user_id).scalar()
         existing = db.query(TenantUser).filter(
@@ -614,7 +686,7 @@ def add_tenant_user(
     membership, user = ts.add_user_to_tenant(
         db,
         tenant_id,
-        external_iam_user_id=payload.external_user_id,
+        external_iam_user_id=ext_user_id,
         role=payload.role,
         status=payload.status,
         actor_user_id=context.user_id,

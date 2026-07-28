@@ -21,6 +21,7 @@ export type AuthStatus =
   | 'unauthenticated'
   | 'authenticated'
   | 'verification-required'
+  | 'access-pending'
   | 'access-denied'
   | 'service-unavailable';
 
@@ -36,6 +37,7 @@ interface AuthContextValue {
   login: () => Promise<void>;
   logout: () => void;
   reloadAuth: () => void;
+  refreshSession: () => Promise<void>;
   switchTenant: (tenantId: string) => void;
   hasPermission: (permission: string) => boolean;
   hasAnyRole: (...roles: string[]) => boolean;
@@ -164,6 +166,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setAuthStatus('access-denied');
           return;
         }
+        if (code === 'IAM_NO_ACTIVE_MEMBERSHIP' || code === 'NO_TENANT_MEMBERSHIP' || code === 'ACCESS_PENDING' || body?.email || body?.display_name) {
+          setUser({
+            userId: body?.user_id ?? body?.userId ?? null,
+            externalUserId: body?.external_user_id ?? body?.externalUserId ?? '',
+            email: body?.email ?? null,
+            displayName: body?.display_name ?? body?.displayName ?? null,
+            tenantId: body?.tenant_id ?? body?.tenantId ?? null,
+            externalTenantId: body?.external_tenant_id ?? body?.externalTenantId ?? null,
+            roles: body?.roles || [], permissions: body?.permissions || [], isPlatformAdmin: Boolean(body?.is_platform_admin),
+          });
+          setAuthStatus('access-pending');
+          return;
+        }
       }
 
       if (meResponse.status === 401) {
@@ -230,10 +245,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     login,
     logout,
     reloadAuth,
+    refreshSession: checkAuth,
     switchTenant,
     hasPermission,
     hasAnyRole,
-  }), [sessionAuthenticated, authStatus, user, activeTenantIdState, tenants, config, login, logout, reloadAuth, switchTenant, hasPermission, hasAnyRole]);
+  }), [sessionAuthenticated, authStatus, user, activeTenantIdState, tenants, config, login, logout, reloadAuth, checkAuth, switchTenant, hasPermission, hasAnyRole]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

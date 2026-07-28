@@ -1,10 +1,11 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
 import Link from 'next/link';
+import { FormEvent, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { usePermission } from '@/hooks/usePermission';
+import { useAuth } from '@/hooks/useAuth';
 import {
+  type UserSearchResult,
   getPlatformAdministrators,
   grantPlatformAdministrator,
   revokePlatformAdministrator,
@@ -12,85 +13,177 @@ import {
 import { useNotifications } from '@/hooks/useNotifications';
 import { getApiErrorMessage } from '@/lib/notifications';
 import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog';
+import { UserSearchCombobox } from '@/components/admin/UserSearchCombobox';
+import { VerificationBadge, UserStatusBadge, RoleBadge } from '@/components/admin/StatusBadges';
+import { getRoleLabel } from '@/lib/roles';
 
 export default function PlatformAdministratorsPage() {
-  const canRead = usePermission('platform:user:read');
-  const canWrite = usePermission('platform:user:write');
-  const queryClient = useQueryClient();
-  const [subject, setSubject] = useState('');
-  const [revokeTarget, setRevokeTarget] = useState<{ id: number; name: string } | null>(null);
+  const { hasPermission, isLoading: authLoading } = useAuth();
+  const canRead = hasPermission('platform:administrator:read');
+  const canGrant = hasPermission('platform:administrator:grant');
+  const canRevoke = hasPermission('platform:administrator:revoke');
+  const qc = useQueryClient();
   const { showSuccess, showError } = useNotifications();
+
+  const [selectedUser, setSelectedUser] = useState<UserSearchResult | null>(null);
+  const [revokeTarget, setRevokeTarget] = useState<{ id: number; name: string } | null>(null);
+
   const administrators = useQuery({
     queryKey: ['platform-administrators'],
     queryFn: getPlatformAdministrators,
-    enabled: canRead,
+    enabled: !authLoading && canRead,
   });
-  const mutation = useMutation({
-    mutationFn: ({ operation }: { operation: () => Promise<unknown>; success: string }) => operation(),
-    onSuccess: async (_result, variables) => {
-      showSuccess(variables.success);
-      setRevokeTarget(null);
-      await queryClient.invalidateQueries({ queryKey: ['platform-administrators'] });
+
+  const grantAdmin = useMutation({
+    mutationFn: (externalUserId: string) => grantPlatformAdministrator(externalUserId),
+    onSuccess: async (_res) => {
+      showSuccess(`Platform Administrator authority granted to “${selectedUser?.display_name || selectedUser?.email}”.`);
+      setSelectedUser(null);
+      await qc.invalidateQueries({ queryKey: ['platform-administrators'] });
     },
-    onError: (error) => showError(getApiErrorMessage(error, 'Platform administration failed. Please try again.')),
+    onError: (error) => showError(getApiErrorMessage(error, 'Could not grant Platform Administrator.')),
   });
 
-  if (!canRead) return <div className="p-8 text-center text-hcl-muted">Platform administrator permission is required.</div>;
+  const revokeAdmin = useMutation({
+    mutationFn: (grantId: number) => revokePlatformAdministrator(grantId),
+    onSuccess: async () => {
+      showSuccess(`Platform Administrator authority revoked.`);
+      setRevokeTarget(null);
+      await qc.invalidateQueries({ queryKey: ['platform-administrators'] });
+    },
+    onError: (error) => showError(getApiErrorMessage(error, 'Could not revoke Platform Administrator authority.')),
+  });
 
-  const submit = (event: FormEvent) => {
+  const submitGrant = (event: FormEvent) => {
     event.preventDefault();
-    const value = subject.trim();
-    if (!value) return;
-    mutation.mutate({
-      operation: async () => { await grantPlatformAdministrator(value); setSubject(''); },
-      success: 'Platform administrator access was granted successfully.',
-    });
+    if (!selectedUser) return;
+    const identifier = selectedUser.external_subject || String(selectedUser.id);
+    grantAdmin.mutate(identifier);
   };
 
+  if (authLoading) {
+    return <div className="p-8 text-center text-hcl-muted">Verifying platform permissions…</div>;
+  }
+
+  if (!canRead) {
+    return <div role="alert" className="p-8 text-center text-red-700">You do not have permission to view platform administrators.</div>;
+  }
+
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-6">
+    <div className="mx-auto max-w-6xl space-y-6 p-6">
       <div>
-        <h1 className="text-2xl font-semibold">Platform administrators</h1>
-        <p className="mt-1 text-sm text-hcl-muted">Explicit SBOM database grants. HCL.CS token roles cannot grant this authority.</p>
+        <h1 className="text-2xl font-semibold">Platform Administrators</h1>
+        <p className="mt-1 max-w-3xl text-sm text-hcl-muted">
+          Platform administrators can manage tenants and platform-level access. HCL.CS roles alone do not grant this authority.
+        </p>
       </div>
+
       <nav aria-label="Platform administration" className="flex gap-2 border-b border-border pb-3 text-sm">
         <Link href="/settings/platform" aria-current="page" className="rounded-md bg-hcl-blue px-3 py-2 font-medium text-white">Administrators</Link>
         <Link href="/settings/platform/tenants" className="rounded-md px-3 py-2 font-medium text-hcl-blue hover:bg-surface-elevated">Tenants</Link>
       </nav>
-      {canWrite && (
-        <form onSubmit={submit} className="flex gap-3 rounded-lg border border-border p-4">
-          <input aria-label="HCL.CS subject" value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Exact existing HCL.CS sub" className="flex-1 rounded-md border border-border bg-background px-3 py-2" required />
-          <button type="submit" disabled={mutation.isPending} className="rounded-md bg-hcl-blue px-4 py-2 text-white disabled:opacity-50">Grant</button>
-        </form>
-      )}
-      {administrators.isLoading && <p>Loading platform administrators…</p>}
-      {administrators.error && <p role="alert" className="text-red-600">{getApiErrorMessage(administrators.error, 'Platform administrators could not be loaded.')}</p>}
-      <div className="space-y-2">
-        {administrators.data?.map((administrator) => (
-          <div key={administrator.grant_id} className="flex items-center justify-between rounded-lg border border-border p-4">
-            <div>
-              <div className="font-medium">{administrator.display_name || administrator.external_iam_user_id}</div>
-              <div className="text-sm text-hcl-muted">{administrator.email || 'No email'} · {administrator.status}</div>
-            </div>
-            {canWrite && administrator.status === 'ACTIVE' && (
-              <button type="button" disabled={mutation.isPending} className="text-red-700 hover:underline disabled:opacity-50" onClick={() =>
-                setRevokeTarget({ id: administrator.grant_id, name: administrator.display_name || administrator.external_iam_user_id })
-              }>Revoke</button>
-            )}
+
+      {canGrant && (
+        <section aria-labelledby="grant-heading" className="rounded-xl border border-border bg-surface p-5 shadow-elev-1 space-y-4">
+          <div>
+            <h2 id="grant-heading" className="text-lg font-semibold text-foreground">Grant Platform Administrator</h2>
+            <p className="mt-1 text-xs text-hcl-muted">Search existing authenticated SBOM users to grant platform administration authority.</p>
           </div>
-        ))}
-      </div>
+
+          <form onSubmit={submitGrant} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Select User</label>
+              <UserSearchCombobox
+                onSelect={(u) => setSelectedUser(u)}
+                selectedUser={selectedUser}
+                placeholder="Search existing SBOM users by email or name…"
+              />
+            </div>
+
+            {selectedUser && (
+              <div className="pt-2 flex justify-end">
+                <button
+                  type="submit"
+                  disabled={grantAdmin.isPending}
+                  className="rounded-md bg-hcl-blue px-4 py-2 text-sm font-medium text-white hover:bg-hcl-blue/90 disabled:opacity-50 transition-colors"
+                >
+                  {grantAdmin.isPending ? 'Granting…' : 'Grant Platform Administrator'}
+                </button>
+              </div>
+            )}
+          </form>
+        </section>
+      )}
+
+      <section aria-labelledby="admins-heading" className="space-y-3">
+        <h2 id="admins-heading" className="text-lg font-semibold text-foreground">Active Platform Administrators</h2>
+
+        {administrators.isLoading && <p className="text-sm text-hcl-muted">Loading platform administrators…</p>}
+        {administrators.error && <p role="alert" className="text-sm text-red-600">{getApiErrorMessage(administrators.error, 'Could not load administrators.')}</p>}
+        {administrators.data?.length === 0 && (
+          <div className="rounded-lg border border-dashed border-border p-8 text-center text-hcl-muted">
+            No platform administrators found.
+          </div>
+        )}
+
+        {administrators.data && administrators.data.length > 0 && (
+          <div className="overflow-x-auto rounded-lg border border-border">
+            <table className="min-w-full text-sm">
+              <thead className="bg-surface-elevated">
+                <tr>
+                  <th className="px-4 py-2 text-left font-medium">User</th>
+                  <th className="px-4 py-2 text-left font-medium">Verification</th>
+                  <th className="px-4 py-2 text-left font-medium">Role</th>
+                  <th className="px-4 py-2 text-left font-medium">Grant Status</th>
+                  <th className="px-4 py-2 text-left font-medium">User Status</th>
+                  {canRevoke && <th className="px-4 py-2 text-right font-medium">Actions</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {administrators.data.map((administrator) => (
+                  <tr key={administrator.grant_id} className="border-t border-border">
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-foreground">{administrator.display_name || administrator.external_iam_user_id}</div>
+                      <div className="text-xs text-hcl-muted">{administrator.email || 'No email'}</div>
+                    </td>
+                    <td className="px-4 py-3"><VerificationBadge verified={administrator.user_status === 'ACTIVE'} /></td>
+                    <td className="px-4 py-3"><RoleBadge role={administrator.role} /></td>
+                    <td className="px-4 py-3">
+                      <span className="inline-flex items-center rounded-full bg-hcl-blue/10 px-2 py-0.5 text-xs font-medium text-hcl-blue">
+                        {administrator.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3"><UserStatusBadge status={administrator.user_status} /></td>
+                    {canRevoke && (
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          type="button"
+                          className="text-red-700 hover:underline"
+                          onClick={() => setRevokeTarget({
+                            id: administrator.grant_id,
+                            name: administrator.display_name || administrator.email || administrator.external_iam_user_id,
+                          })}
+                        >
+                          Revoke
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
       <ConfirmationDialog
         open={revokeTarget !== null}
-        title={`Revoke platform administrator “${revokeTarget?.name ?? ''}”?`}
-        description="This immediately removes platform-wide administrative access."
-        confirmLabel="Revoke access"
-        loading={mutation.isPending}
-        onClose={() => !mutation.isPending && setRevokeTarget(null)}
-        onConfirm={() => revokeTarget && mutation.mutate({
-          operation: () => revokePlatformAdministrator(revokeTarget.id),
-          success: 'Platform administrator access was revoked successfully.',
-        })}
+        title={`Revoke Platform Administrator for “${revokeTarget?.name ?? ''}”?`}
+        description="The user will immediately lose platform administration privileges."
+        confirmLabel="Revoke authority"
+        loading={revokeAdmin.isPending}
+        onClose={() => !revokeAdmin.isPending && setRevokeTarget(null)}
+        onConfirm={() => revokeTarget && revokeAdmin.mutate(revokeTarget.id)}
       />
     </div>
   );

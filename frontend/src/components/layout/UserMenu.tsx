@@ -10,6 +10,8 @@ import { LogOut, Shield, User } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
 
+import { getRoleLabel } from '@/lib/roles';
+
 export function UserMenu() {
   const { user, logout, config } = useAuth();
   const [open, setOpen] = useState(false);
@@ -47,7 +49,7 @@ export function UserMenu() {
     .map((w) => w[0]?.toUpperCase() || '')
     .join('');
 
-  const primaryRole = user.roles[0] || 'USER';
+  const primaryRole = getRoleLabel(user.roles[0]) || 'USER';
 
   return (
     <div ref={menuRef} className="relative">
