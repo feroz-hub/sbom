@@ -23,6 +23,7 @@ Design principles applied here:
 from __future__ import annotations
 
 import logging
+import secrets
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -574,6 +575,12 @@ _access_log = get_logger("access")
 async def log_requests(request: Request, call_next):
     """Log every incoming request and its response status + duration."""
     t0 = time.perf_counter()
+    correlation_id = (
+        request.headers.get("x-request-id")
+        or request.headers.get("x-correlation-id")
+        or secrets.token_hex(12)
+    )[:128]
+    request.state.correlation_id = correlation_id
     _access_log.info(
         "→ %s %s  client=%s",
         request.method,
@@ -593,6 +600,7 @@ async def log_requests(request: Request, call_next):
         )
         raise
     duration_ms = int((time.perf_counter() - t0) * 1000)
+    response.headers.setdefault("X-Correlation-ID", correlation_id)
     # Every completed request is logged at INFO; 4xx/5xx escalate to WARNING
     # so they remain visible even if operators run at WARNING-only in prod.
     level = logging.WARNING if response.status_code >= 400 else logging.INFO

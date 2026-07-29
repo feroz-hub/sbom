@@ -139,6 +139,8 @@ def test_wellysis_creation_omits_external_mapping_and_preserves_local_default(cl
         },
     )
     assert response.status_code == 201, response.text
+    correlation_id = response.headers["x-correlation-id"]
+    assert len(correlation_id) >= 12
     assert response.json()["tenant"]["external_iam_tenant_id"] is None
     with SessionLocal() as db:
         tenant = db.get(Tenant, response.json()["tenant"]["id"])
@@ -152,6 +154,21 @@ def test_wellysis_creation_omits_external_mapping_and_preserves_local_default(cl
             == local_default_before
             == "local-default"
         )
+        creation_audits = db.scalars(
+            select(AuthorizationAuditLog).where(
+                AuthorizationAuditLog.tenant_id == tenant.id,
+                AuthorizationAuditLog.action.in_(
+                    [
+                        str(IdentityAuditEvent.PLATFORM_TENANT_CREATED),
+                        str(IdentityAuditEvent.TENANT_INITIAL_ADMIN_ASSIGNED),
+                    ]
+                ),
+            )
+        ).all()
+        assert len(creation_audits) == 2
+        assert {
+            audit.correlation_id for audit in creation_audits
+        } == {correlation_id}
 
 
 def test_local_default_cannot_be_reused_for_another_tenant(client):
