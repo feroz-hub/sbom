@@ -14,13 +14,15 @@ import {
   getTenantMembers,
   listPlatformTenants,
   removeTenantMember,
-  updateTenantMemberRole,
+  replaceTenantMemberRoles,
+  updatePlatformTenantStatus,
 } from '@/lib/api';
 import { useNotifications } from '@/hooks/useNotifications';
 import { getApiErrorMessage } from '@/lib/notifications';
 import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog';
 import { TenantContextHeader } from '@/components/admin/TenantContextHeader';
 import { UserSearchCombobox } from '@/components/admin/UserSearchCombobox';
+import { TenantAuditHistory } from '@/components/admin/TenantAuditHistory';
 import { VerificationBadge, UserStatusBadge, MembershipStatusBadge } from '@/components/admin/StatusBadges';
 import { getRoleCode, getRoleLabel } from '@/lib/roles';
 
@@ -42,7 +44,7 @@ export default function PlatformTenantDetailPage({
   const { showSuccess, showError } = useNotifications();
 
   const [selectedUser, setSelectedUser] = useState<UserSearchResult | null>(null);
-  const [initialRole, setInitialRole] = useState<TenantRole>('VIEWER');
+  const [initialRoles, setInitialRoles] = useState<TenantRole[]>(['VIEWER']);
   const [confirmation, setConfirmation] = useState<(MemberAction & { title: string; description: string; confirmLabel: string }) | null>(null);
 
   const tenantsQuery = useQuery({
@@ -60,8 +62,8 @@ export default function PlatformTenantDetailPage({
   });
 
   const roles = useQuery({
-    queryKey: ['tenant-roles'],
-    queryFn: getAssignableTenantRoles,
+    queryKey: ['tenant-roles', numericTenantId],
+    queryFn: () => getAssignableTenantRoles(numericTenantId),
     enabled: !authLoading && canManage,
   });
 
@@ -76,14 +78,24 @@ export default function PlatformTenantDetailPage({
     onError: (error) => showError(getApiErrorMessage(error, 'The tenant membership could not be updated.')),
   });
 
+  const tenantStatus = useMutation({
+    mutationFn: (status: 'ACTIVE' | 'DISABLED') =>
+      updatePlatformTenantStatus(numericTenantId, status),
+    onSuccess: async (_result, status) => {
+      showSuccess(`Tenant ${status === 'ACTIVE' ? 'enabled' : 'disabled'} successfully.`);
+      await qc.invalidateQueries({ queryKey: ['platform-tenants'] });
+    },
+    onError: (error) => showError(getApiErrorMessage(error, 'The tenant status could not be changed.')),
+  });
+
   const submitMember = (event: FormEvent) => {
     event.preventDefault();
     if (!selectedUser) return;
     action.mutate({
       operation: async () => {
         await addTenantMember(numericTenantId, {
-          external_user_id: selectedUser.external_subject || String(selectedUser.id),
-          role: initialRole,
+          user_id: selectedUser.id,
+          roles: initialRoles,
         });
       },
       success: `User “${selectedUser.display_name || selectedUser.email}” was added to ${tenant?.name || 'the tenant'}.`,
@@ -114,13 +126,29 @@ export default function PlatformTenantDetailPage({
           slug={tenant.slug}
           externalIamTenantId={tenant.external_iam_tenant_id}
           status={tenant.status}
-          memberCount={members.data?.length}
+          memberCount={tenant.member_count ?? members.data?.length}
+          initialAdministrator={
+            tenant.initial_administrator
+              ? `${tenant.initial_administrator.display_name || 'Unnamed user'} (${tenant.initial_administrator.email || 'no email'})`
+              : undefined
+          }
+          currentAdministrators={(tenant.current_administrators ?? []).map(
+            (administrator) => administrator.display_name || administrator.email || `User #${administrator.user_id}`,
+          )}
         />
       ) : (
         <div className="rounded-xl border border-border bg-surface p-5 text-center text-hcl-muted">
           Loading tenant details…
         </div>
       )}
+
+      <section aria-labelledby="overview-heading" className="rounded-xl border border-border bg-surface p-5">
+        <h2 id="overview-heading" className="text-lg font-semibold">Overview</h2>
+        <p className="mt-1 text-sm text-hcl-muted">
+          You are managing {tenant?.name || `tenant #${tenantIdStr}`} in explicit platform context.
+          SBOM validates this target using the Platform Administrator grant; HCL.CS tenant claims are not authorization.
+        </p>
+      </section>
 
       {/* Add Member Section */}
       <section aria-labelledby="add-member-heading" className="rounded-xl border border-border bg-surface p-5 shadow-elev-1 space-y-4">
@@ -143,11 +171,18 @@ export default function PlatformTenantDetailPage({
           {selectedUser && (
             <div className="grid gap-3 sm:grid-cols-[1fr_auto] items-end pt-2">
               <label className="text-sm font-medium">
-                Tenant Role
-                <select
-                  aria-label="Initial role"
-                  value={getRoleCode(initialRole)}
-                  onChange={(event) => setInitialRole(event.target.value as TenantRole)}
+                  Tenant Roles
+                  <select
+                  aria-label="Initial roles"
+                  multiple
+                  value={initialRoles.map(getRoleCode)}
+                  onChange={(event) => {
+                    const selected = Array.from(
+                      event.target.selectedOptions,
+                      (option) => option.value as TenantRole,
+                    );
+                    if (selected.length > 0) setInitialRoles(selected);
+                  }}
                   className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2"
                 >
                   {(roles.data?.roles ?? ['VIEWER']).map((role) => {
@@ -193,7 +228,7 @@ export default function PlatformTenantDetailPage({
                 <tr>
                   <th className="px-4 py-2 text-left font-medium">User</th>
                   <th className="px-4 py-2 text-left font-medium">Verification</th>
-                  <th className="px-4 py-2 text-left font-medium">Role</th>
+                  <th className="px-4 py-2 text-left font-medium">Roles</th>
                   <th className="px-4 py-2 text-left font-medium">Membership Status</th>
                   <th className="px-4 py-2 text-left font-medium">User Status</th>
                   <th className="px-4 py-2 text-right font-medium">Actions</th>
@@ -203,29 +238,39 @@ export default function PlatformTenantDetailPage({
                 {members.data.map((member) => (
                   <tr key={member.membership_id} className="border-t border-border">
                     <td className="px-4 py-3">
-                      <div className="font-medium text-foreground">{member.display_name || member.external_iam_user_id}</div>
+                      <div className="font-medium text-foreground">{member.display_name || member.email || `User #${member.user_id}`}</div>
                       <div className="text-xs text-hcl-muted">{member.email || 'No email'}</div>
                     </td>
                     <td className="px-4 py-3">
-                      <VerificationBadge verified={member.user_status === 'ACTIVE'} />
+                      <VerificationBadge verified={member.email_verified && !member.verification_required} />
                     </td>
                     <td className="px-4 py-3">
                       <select
-                        aria-label={`Role for ${member.display_name || member.external_iam_user_id}`}
-                        value={getRoleCode(member.role)}
+                        aria-label={`Roles for ${member.display_name || member.email || `User #${member.user_id}`}`}
+                        multiple
+                        value={(member.roles ?? [member.role]).map(getRoleCode)}
                         onChange={(event) => {
-                          const nextRole = event.target.value as TenantRole;
+                          const nextRoles = Array.from(
+                            event.target.selectedOptions,
+                            (option) => option.value as TenantRole,
+                          );
+                          if (nextRoles.length === 0) return;
                           confirmAction({
-                            title: `Change role for “${member.display_name || member.external_iam_user_id}”?`,
-                            description: `This changes the tenant role to ${getRoleLabel(nextRole)} immediately.`,
-                            confirmLabel: 'Change role',
-                            operation: () => updateTenantMemberRole(numericTenantId, member.membership_id, nextRole),
-                            success: `Role updated to ${getRoleLabel(nextRole)}.`,
+                            title: `Change roles for “${member.display_name || member.email || `User #${member.user_id}`}”?`,
+                            description: `This replaces the complete tenant role set with ${nextRoles.map(getRoleLabel).join(', ')} immediately.`,
+                            confirmLabel: 'Replace roles',
+                            operation: () => replaceTenantMemberRoles(
+                              numericTenantId,
+                              member.user_id,
+                              nextRoles,
+                              member.role_assignment_version,
+                            ),
+                            success: `Roles updated to ${nextRoles.map(getRoleLabel).join(', ')}.`,
                           });
                         }}
                         className="rounded-md border border-border bg-background px-2 py-1"
                       >
-                        {(roles.data?.roles ?? [member.role]).map((role) => {
+                        {(roles.data?.roles ?? member.roles ?? [member.role]).map((role) => {
                           const code = getRoleCode(role);
                           const label = getRoleLabel(role);
                           const key = code || (role && typeof role === 'object' ? String(role.id ?? '') : String(role));
@@ -245,7 +290,7 @@ export default function PlatformTenantDetailPage({
                           type="button"
                           className="text-amber-700 hover:underline"
                           onClick={() => confirmAction({
-                            title: `Deactivate “${member.display_name || member.external_iam_user_id}”?`,
+                            title: `Deactivate “${member.display_name || member.email || `User #${member.user_id}`}”?`,
                             description: 'The user will lose tenant access immediately.',
                             confirmLabel: 'Deactivate',
                             operation: () => deactivateTenantMember(numericTenantId, member.membership_id),
@@ -270,7 +315,7 @@ export default function PlatformTenantDetailPage({
                         type="button"
                         className="text-red-700 hover:underline"
                         onClick={() => confirmAction({
-                          title: `Remove “${member.display_name || member.external_iam_user_id}”?`,
+                          title: `Remove “${member.display_name || member.email || `User #${member.user_id}`}”?`,
                           description: 'The membership will be permanently removed.',
                           confirmLabel: 'Remove member',
                           operation: () => removeTenantMember(numericTenantId, member.membership_id),
@@ -288,6 +333,27 @@ export default function PlatformTenantDetailPage({
         )}
       </section>
 
+      <section aria-labelledby="tenant-settings-heading" className="rounded-xl border border-border bg-surface p-5">
+        <h2 id="tenant-settings-heading" className="text-lg font-semibold">Tenant Settings</h2>
+        <p className="mt-1 text-sm text-hcl-muted">
+          Current status: <strong>{tenant?.status || 'Loading'}</strong>
+        </p>
+        {tenant && (
+          <button
+            type="button"
+            disabled={tenantStatus.isPending}
+            onClick={() => tenantStatus.mutate(tenant.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE')}
+            className="mt-3 rounded-md border border-border px-3 py-2 text-sm font-medium disabled:opacity-50"
+          >
+            {tenantStatus.isPending
+              ? 'Updating…'
+              : tenant.status === 'ACTIVE'
+                ? 'Disable Tenant'
+                : 'Enable Tenant'}
+          </button>
+        )}
+      </section>
+
       <ConfirmationDialog
         open={confirmation !== null}
         title={confirmation?.title ?? ''}
@@ -297,6 +363,8 @@ export default function PlatformTenantDetailPage({
         onClose={() => !action.isPending && setConfirmation(null)}
         onConfirm={() => confirmation && action.mutate(confirmation)}
       />
+
+      <TenantAuditHistory tenantId={numericTenantId} />
     </div>
   );
 }

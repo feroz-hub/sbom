@@ -24,7 +24,7 @@ class CreatedTenantResponse(BaseModel):
     id: int
     name: str
     slug: str
-    external_iam_tenant_id: str
+    external_iam_tenant_id: str | None
     status: str
     created_at: datetime
     updated_at: datetime

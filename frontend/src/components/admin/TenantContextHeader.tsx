@@ -6,9 +6,11 @@ import { MembershipStatusBadge } from './StatusBadges';
 interface TenantContextHeaderProps {
   name: string;
   slug: string;
-  externalIamTenantId: string;
+  externalIamTenantId: string | null;
   status: string;
   memberCount?: number;
+  initialAdministrator?: string;
+  currentAdministrators?: string[];
 }
 
 export function TenantContextHeader({
@@ -17,6 +19,8 @@ export function TenantContextHeader({
   externalIamTenantId,
   status,
   memberCount,
+  initialAdministrator,
+  currentAdministrators,
 }: TenantContextHeaderProps) {
   return (
     <div className="rounded-xl border border-border bg-surface p-5 shadow-elev-1">
@@ -33,11 +37,27 @@ export function TenantContextHeader({
             <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-hcl-muted">
               <span>Slug: <code className="font-mono">{slug}</code></span>
               <span>•</span>
-              <span>External IAM Tenant ID: <code className="font-mono">{externalIamTenantId}</code></span>
+              <span>
+                External identity mapping:{' '}
+                <code className="font-mono">{externalIamTenantId || 'Not configured'}</code>
+                {' '}(legacy metadata)
+              </span>
               {typeof memberCount === 'number' && (
                 <>
                   <span>•</span>
                   <span>{memberCount} member{memberCount === 1 ? '' : 's'}</span>
+                </>
+              )}
+              {initialAdministrator && (
+                <>
+                  <span>•</span>
+                  <span>Initial Tenant Administrator: {initialAdministrator}</span>
+                </>
+              )}
+              {currentAdministrators && currentAdministrators.length > 0 && (
+                <>
+                  <span>•</span>
+                  <span>Current Tenant Administrators: {currentAdministrators.join(', ')}</span>
                 </>
               )}
             </div>

@@ -208,19 +208,26 @@ export interface TenantMember {
   email: string | null;
   display_name: string | null;
   user_status: string;
+  email_verified: boolean;
+  verification_required: boolean;
   role: RoleValue;
+  roles: RoleValue[];
+  role_assignment_version: number;
   status: MembershipStatus;
 }
 
 export interface PlatformAdministrator {
   grant_id: number;
   user_id: number;
-  external_iam_user_id: string;
   email: string | null;
   display_name: string | null;
-  user_status: string;
+  local_status: string;
+  email_verified: boolean;
+  verification_required: boolean;
   role: RoleValue;
-  status: 'ACTIVE' | 'DISABLED';
+  grant_status: 'ACTIVE' | 'DISABLED' | 'REVOKED';
+  is_effective: boolean;
+  created_at: string;
 }
 
 export interface UserSearchResult {
@@ -236,25 +243,45 @@ export interface UserSearchResult {
   is_platform_admin?: boolean;
   tenant_membership?: {
     tenant_id: number;
+    tenant_name?: string | null;
     status: string;
     role: string;
+    roles?: string[];
   } | null;
+  tenant_memberships?: Array<{
+    tenant_id: number;
+    tenant_name?: string | null;
+    status: string;
+    role: string;
+    roles?: string[];
+  }>;
 }
 
 export interface TenantSummary {
   id: number | string;
   name: string;
   slug: string;
-  external_iam_tenant_id: string;
+  external_iam_tenant_id: string | null;
   status: 'ACTIVE' | 'PENDING' | 'DISABLED';
   created_at?: string;
   updated_at?: string;
+  member_count?: number;
+  initial_administrator?: {
+    user_id: number;
+    display_name: string | null;
+    email: string | null;
+  } | null;
+  current_administrators?: Array<{
+    user_id: number;
+    display_name: string | null;
+    email: string | null;
+  }>;
 }
 
 export interface CreateTenantRequest {
   name: string;
   slug: string;
-  external_iam_tenant_id: string;
+  initial_admin_user_id: number;
 }
 
 // ─── Fetch with timeout + caller-signal support ───────────────────────────────
@@ -407,27 +434,96 @@ export async function requestVoid(
 }
 
 const adminRequestOptions = { authErrorMode: 'throw' as const };
+const tenantRequestOptions = (tenantId: number) => ({
+  ...adminRequestOptions,
+  headers: { 'X-Tenant-ID': String(tenantId) },
+});
 
 export async function getTenantMembers(tenantId: number): Promise<TenantMember[]> {
-  const res = await request<TenantMember[] | { items: TenantMember[] }>(`/api/tenants/${tenantId}/users`, adminRequestOptions);
+  const res = await request<TenantMember[] | { items: TenantMember[] }>(
+    `/api/tenants/${tenantId}/users`,
+    tenantRequestOptions(tenantId),
+  );
   return Array.isArray(res) ? res : res?.items ?? [];
 }
 
-export async function getAssignableTenantRoles(): Promise<{ roles: RoleValue[] }> {
-  const res = await request<{ roles: RoleValue[] } | RoleValue[]>('/api/tenant-roles', adminRequestOptions);
+export async function getAssignableTenantRoles(tenantId?: number): Promise<{ roles: RoleValue[] }> {
+  const res = await request<{ roles: RoleValue[] } | RoleValue[]>(
+    '/api/tenant-roles',
+    tenantId ? tenantRequestOptions(tenantId) : adminRequestOptions,
+  );
   if (Array.isArray(res)) return { roles: res };
   return { roles: res?.roles ?? [] };
 }
 
 export function addTenantMember(
   tenantId: number,
-  payload: { external_user_id: string; role: TenantRole },
+  payload: { user_id: number; roles: TenantRole[]; status?: MembershipStatus },
 ): Promise<TenantMember> {
-  const roleCode = getRoleCode(payload.role);
+  const roleCodes = payload.roles.map(getRoleCode);
   return request<TenantMember>(`/api/tenants/${tenantId}/users`, {
-    ...adminRequestOptions,
+    ...tenantRequestOptions(tenantId),
     method: 'POST',
-    body: JSON.stringify({ ...payload, role: roleCode }),
+    body: JSON.stringify({ ...payload, roles: roleCodes }),
+  });
+}
+
+export interface TenantRoleState {
+  membership_id: number;
+  user_id: number;
+  membership_status: MembershipStatus;
+  role_assignment_version: number;
+  primary_role: string;
+  roles: Array<{
+    assignment_id: number;
+    role_id: number;
+    role_code: string;
+    role_name: string;
+    is_primary: boolean;
+  }>;
+  effective_permissions: string[];
+}
+
+export interface TenantAuditEvent {
+  id: number;
+  action: string;
+  outcome: string;
+  actor_user_id: number | null;
+  actor_email: string | null;
+  target_user_id: number | null;
+  target_email: string | null;
+  old_state: Record<string, unknown> | null;
+  new_state: Record<string, unknown> | null;
+  correlation_id: string | null;
+  timestamp: string;
+}
+
+export async function getTenantAuditHistory(
+  tenantId: number,
+): Promise<TenantAuditEvent[]> {
+  const response = await request<{ items: TenantAuditEvent[] }>(
+    `/api/tenants/${tenantId}/audit-history`,
+    tenantRequestOptions(tenantId),
+  );
+  return response.items ?? [];
+}
+
+export function replaceTenantMemberRoles(
+  tenantId: number,
+  userId: number,
+  roles: TenantRole[],
+  expectedVersion: number,
+): Promise<TenantRoleState> {
+  const roleCodes = roles.map(getRoleCode);
+  return request<TenantRoleState>(`/api/tenants/${tenantId}/users/${userId}/roles`, {
+    ...tenantRequestOptions(tenantId),
+    method: 'PUT',
+    body: JSON.stringify({
+      role_codes: roleCodes,
+      primary_role_code: roleCodes[0],
+      expected_version: expectedVersion,
+      reason: 'Tenant administration role update',
+    }),
   });
 }
 
@@ -438,7 +534,7 @@ export function updateTenantMemberRole(
 ): Promise<TenantMember> {
   const roleCode = getRoleCode(role);
   return request<TenantMember>(`/api/tenants/${tenantId}/users/${membershipId}`, {
-    ...adminRequestOptions,
+    ...tenantRequestOptions(tenantId),
     method: 'PATCH',
     body: JSON.stringify({ role: roleCode }),
   });
@@ -446,21 +542,21 @@ export function updateTenantMemberRole(
 
 export function activateTenantMember(tenantId: number, membershipId: number): Promise<TenantMember> {
   return request<TenantMember>(`/api/tenants/${tenantId}/users/${membershipId}/activate`, {
-    ...adminRequestOptions,
+    ...tenantRequestOptions(tenantId),
     method: 'POST',
   });
 }
 
 export function deactivateTenantMember(tenantId: number, membershipId: number): Promise<TenantMember> {
   return request<TenantMember>(`/api/tenants/${tenantId}/users/${membershipId}/deactivate`, {
-    ...adminRequestOptions,
+    ...tenantRequestOptions(tenantId),
     method: 'POST',
   });
 }
 
 export function removeTenantMember(tenantId: number, membershipId: number): Promise<void> {
   return requestVoid(`/api/tenants/${tenantId}/users/${membershipId}`, {
-    ...adminRequestOptions,
+    ...tenantRequestOptions(tenantId),
     method: 'DELETE',
   });
 }
@@ -480,7 +576,7 @@ export async function searchTenantUserCandidates(tenantId: number, query: string
   if (!query.trim() || !tenantId) return [];
   const res = await request<UserSearchResult[] | { items: UserSearchResult[] }>(
     `/api/tenants/${tenantId}/user-candidates?q=${encodeURIComponent(query.trim())}`,
-    adminRequestOptions,
+    tenantRequestOptions(tenantId),
   );
   return Array.isArray(res) ? res : res?.items ?? [];
 }
@@ -490,11 +586,11 @@ export async function getPlatformAdministrators(): Promise<PlatformAdministrator
   return Array.isArray(res) ? res : res?.items ?? [];
 }
 
-export function grantPlatformAdministrator(externalUserId: string): Promise<PlatformAdministrator> {
+export function grantPlatformAdministrator(userId: number): Promise<PlatformAdministrator> {
   return request<PlatformAdministrator>('/api/platform/administrators', {
     ...adminRequestOptions,
     method: 'POST',
-    body: JSON.stringify({ external_user_id: externalUserId }),
+    body: JSON.stringify({ user_id: userId }),
   });
 }
 
@@ -510,12 +606,13 @@ export async function listPlatformTenants(): Promise<TenantSummary[]> {
   return Array.isArray(res) ? res : res?.items ?? [];
 }
 
-export function createPlatformTenant(payload: CreateTenantRequest): Promise<TenantSummary> {
-  return request<TenantSummary>('/api/tenants', {
+export async function createPlatformTenant(payload: CreateTenantRequest): Promise<TenantSummary> {
+  const response = await request<TenantSummary | { tenant: TenantSummary }>('/api/tenants', {
     ...adminRequestOptions,
     method: 'POST',
     body: JSON.stringify(payload),
   });
+  return 'tenant' in response ? response.tenant : response;
 }
 
 export function updatePlatformTenantStatus(

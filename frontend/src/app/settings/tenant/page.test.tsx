@@ -10,12 +10,13 @@ const api = vi.hoisted(() => ({
   getTenantMembers: vi.fn(),
   getAssignableTenantRoles: vi.fn(),
   addTenantMember: vi.fn(),
-  updateTenantMemberRole: vi.fn(),
+  replaceTenantMemberRoles: vi.fn(),
   activateTenantMember: vi.fn(),
   deactivateTenantMember: vi.fn(),
   removeTenantMember: vi.fn(),
   searchTenantUserCandidates: vi.fn(),
   searchPlatformUsers: vi.fn(),
+  getTenantAuditHistory: vi.fn(),
 }));
 
 vi.mock('@/hooks/useAuth', () => ({
@@ -41,7 +42,11 @@ const member = {
   email: 'user@example.test',
   display_name: 'Example User',
   user_status: 'ACTIVE',
+  email_verified: true,
+  verification_required: false,
   role: 'VIEWER' as const,
+  roles: ['VIEWER'] as const,
+  role_assignment_version: 1,
   status: 'ACTIVE' as const,
 };
 
@@ -56,10 +61,19 @@ describe('TenantUsersPage', () => {
     api.getTenantMembers.mockResolvedValue([member]);
     api.getAssignableTenantRoles.mockResolvedValue({ roles: ['TENANT_ADMIN', 'SECURITY_ANALYST', 'DEVELOPER', 'VIEWER'] });
     api.addTenantMember.mockResolvedValue(member);
-    api.updateTenantMemberRole.mockResolvedValue({ ...member, role: 'DEVELOPER' });
+    api.replaceTenantMemberRoles.mockResolvedValue({
+      membership_id: 9,
+      user_id: 12,
+      membership_status: 'ACTIVE',
+      role_assignment_version: 2,
+      primary_role: 'DEVELOPER',
+      roles: [],
+      effective_permissions: [],
+    });
     api.activateTenantMember.mockResolvedValue(member);
     api.deactivateTenantMember.mockResolvedValue({ ...member, status: 'DISABLED' });
     api.removeTenantMember.mockResolvedValue(undefined);
+    api.getTenantAuditHistory.mockResolvedValue([]);
     vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
 
@@ -89,20 +103,26 @@ describe('TenantUsersPage', () => {
     await user.type(input, 'New');
     const foundUser = await screen.findByText('New User');
     await user.click(foundUser);
-    await user.selectOptions(screen.getByLabelText('Initial role'), 'SECURITY_ANALYST');
+    await user.selectOptions(screen.getByLabelText('Initial roles'), 'SECURITY_ANALYST');
     await user.click(screen.getByRole('button', { name: 'Add Member' }));
     await waitFor(() => expect(api.addTenantMember).toHaveBeenCalledWith(1, {
-      external_user_id: 'new-hcl-sub', role: 'SECURITY_ANALYST',
+      user_id: 99, roles: ['SECURITY_ANALYST', 'VIEWER'],
     }));
   });
 
   it('changes role, deactivates, and removes with confirmation', async () => {
     const user = userEvent.setup();
     renderPage();
-    const roleSelect = await screen.findByLabelText('Role for Example User');
+    const roleSelect = await screen.findByLabelText('Roles for Example User');
+    await user.deselectOptions(roleSelect, 'VIEWER');
     await user.selectOptions(roleSelect, 'DEVELOPER');
-    await user.click(screen.getByRole('button', { name: 'Change role' }));
-    await waitFor(() => expect(api.updateTenantMemberRole).toHaveBeenCalledWith(1, 9, 'DEVELOPER'));
+    await user.click(screen.getByRole('button', { name: 'Replace roles' }));
+    await waitFor(() => expect(api.replaceTenantMemberRoles).toHaveBeenCalledWith(
+      1,
+      12,
+      ['DEVELOPER', 'VIEWER'],
+      1,
+    ));
     await user.click(screen.getByRole('button', { name: 'Deactivate' }));
     await user.click(screen.getByRole('dialog').querySelector('button.bg-red-600')!);
     await waitFor(() => expect(api.deactivateTenantMember).toHaveBeenCalledWith(1, 9));

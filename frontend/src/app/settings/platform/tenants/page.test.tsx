@@ -7,15 +7,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from '@/hooks/useToast';
 
 const auth = vi.hoisted(() => ({ allowed: true, loading: false }));
+const routerPush = vi.hoisted(() => vi.fn());
 const api = vi.hoisted(() => ({
   listPlatformTenants: vi.fn(),
   createPlatformTenant: vi.fn(),
   updatePlatformTenantStatus: vi.fn(),
+  searchPlatformUsers: vi.fn(),
 }));
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({
-    push: vi.fn(),
+    push: routerPush,
     replace: vi.fn(),
     prefetch: vi.fn(),
   }),
@@ -57,7 +59,10 @@ async function openAndFillForm() {
   const form = screen.getByRole('heading', { name: 'Create tenant' }).closest('section');
   if (!form) throw new Error('Create form did not open');
   await user.type(within(form).getByLabelText('Name'), 'Acme Security');
-  await user.type(within(form).getByLabelText('External IAM Tenant ID'), 'acme-security');
+  const userSearch = within(form).getByPlaceholderText(/Search existing SBOM users/);
+  await user.type(userSearch, 'Feroze');
+  const option = await screen.findByRole('button', { name: /Feroze Basha/ });
+  await user.click(option);
   return { user, form };
 }
 
@@ -72,9 +77,18 @@ describe('PlatformTenantsPage', () => {
       id: 8,
       name: 'Acme Security',
       slug: 'acme-security',
-      external_iam_tenant_id: 'acme-security',
+      external_iam_tenant_id: null,
     });
     api.updatePlatformTenantStatus.mockResolvedValue({ tenant_id: 7, status: 'DISABLED' });
+    api.searchPlatformUsers.mockResolvedValue([{
+      id: 3,
+      display_name: 'Feroze Basha',
+      email: 'ferozebasha.s@hcltech.com',
+      username: 'ferozebasha',
+      status: 'ACTIVE',
+      email_verified: true,
+      verification_required: false,
+    }]);
     vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
 
@@ -109,8 +123,7 @@ describe('PlatformTenantsPage', () => {
     const { user, form } = await openAndFillForm();
     await user.clear(within(form).getByLabelText('Slug'));
     await user.type(within(form).getByLabelText('Slug'), 'Bad slug');
-    await user.click(within(form).getByRole('button', { name: 'Create Tenant' }));
-    expect(await within(form).findByText(/lowercase letters, numbers/)).toBeInTheDocument();
+    expect(within(form).getByRole('button', { name: 'Create Tenant' })).toBeDisabled();
     expect(api.createPlatformTenant).not.toHaveBeenCalled();
   });
 
@@ -120,11 +133,44 @@ describe('PlatformTenantsPage', () => {
     const opened = await openAndFillForm();
     await user.click(within(opened.form).getByRole('button', { name: 'Create Tenant' }));
     await waitFor(() => expect(api.createPlatformTenant).toHaveBeenCalledWith(
-      { name: 'Acme Security', slug: 'acme-security', external_iam_tenant_id: 'acme-security' },
+      {
+        name: 'Acme Security',
+        slug: 'acme-security',
+        initial_admin_user_id: 3,
+      },
       expect.anything(),
     ));
     expect(await screen.findByText('Tenant “Acme Security” was created successfully.')).toBeInTheDocument();
     await waitFor(() => expect(api.listPlatformTenants).toHaveBeenCalled());
+    expect(routerPush).toHaveBeenCalledWith('/settings/platform/tenants/8');
+  });
+
+  it('shows only the normal local tenant fields and no external IAM requirement', async () => {
+    renderPage();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Create Tenant' }));
+    const form = screen.getByRole('heading', { name: 'Create tenant' }).closest('section');
+    if (!form) throw new Error('Create form did not open');
+    expect(within(form).getByLabelText('Name')).toBeRequired();
+    expect(within(form).getByLabelText('Slug')).toBeRequired();
+    expect(within(form).getAllByText('Initial Tenant Administrator').length).toBeGreaterThan(0);
+    expect(within(form).queryByLabelText(/External IAM Tenant ID/i)).not.toBeInTheDocument();
+    expect(form).not.toHaveTextContent(/HCL\.CS.*tenant_id|externally managed identity prerequisite/i);
+  });
+
+  it('prevents duplicate tenant creation submissions while pending', async () => {
+    let resolveCreate: (value: typeof tenant) => void = () => {};
+    api.createPlatformTenant.mockImplementation(
+      () => new Promise((resolve) => { resolveCreate = resolve; }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    const opened = await openAndFillForm();
+    const submit = within(opened.form).getByRole('button', { name: 'Create Tenant' });
+    await user.dblClick(submit);
+    expect(api.createPlatformTenant).toHaveBeenCalledTimes(1);
+    expect(within(opened.form).getByRole('button', { name: 'Creating…' })).toBeDisabled();
+    resolveCreate({ ...tenant, id: 8, name: 'Acme Security' });
   });
 
   it.each([

@@ -194,29 +194,16 @@ Open:
 https://localhost:3000
 ```
 
-## 7. Provision the local HCL.CS tenant claim and SBOM membership
+## 7. Provision local SBOM access
 
-In HCL.CS Admin, assign the test identity a `tenant_id` user claim such as:
+Create the HCL.CS identity through the installer/admin UI and sign in to SBOM
+once. SBOM resolves the local identity from the validated issuer and immutable
+subject. No HCL.CS tenant or `tenant_id` claim is required.
 
-```text
-tenant_id = local-default
-```
-
-Copy the immutable HCL.CS user ID (`sub`), then map it to the SBOM database:
-
-```powershell
-cd C:\Projects\sbom
-. .\.windows\sbom.env.ps1
-
-.\.venv\Scripts\python.exe .\scripts\seed_hcl_iam_membership.py `
-  --subject '<HCL.CS-user-id>' `
-  --external-tenant local-default `
-  --email test-user@example.local `
-  --display-name 'Test User' `
-  --role SECURITY_ANALYST
-```
-
-This operation is idempotent and cannot seed `PLATFORM_ADMIN`.
+Use the authenticated SBOM Platform/Tenant administration UI to search for the
+local user and grant an SBOM tenant membership and role assignment. The
+selected tenant is always validated against those local records; a token claim
+cannot grant or select tenant access.
 
 ## 8. URLs and health checks
 

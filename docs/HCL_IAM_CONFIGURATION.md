@@ -4,7 +4,7 @@
 
 The browser uses OAuth 2.0 Authorization Code with PKCE against HCL.CS. Next.js is a backend-for-frontend (BFF): it generates state, nonce and the PKCE verifier, performs the code exchange, validates the ID token through discovery/JWKS, and stores tokens only in a server-side session. The browser receives an opaque `__Host-sbom-session` cookie (`HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`). Browser API calls go to `/api/backend/*`; that server route attaches the access token only to `SBOM_API_URL`.
 
-FastAPI independently validates every bearer JWT, resolves `sub` and `tenant_id` to local identity/membership tables, applies the local SBOM role, and tenant-scopes ORM reads and writes. HCL.CS owns authentication, tokens, central identity claims and revocation. SBOM owns tenants, memberships, application roles, permissions, inventory and tenant isolation. Frontend visibility rules are never an authorization boundary.
+FastAPI independently validates every bearer JWT, resolves the stable `(iss, sub)` identity to local user, membership, and role-assignment tables, applies local SBOM permissions, and tenant-scopes ORM reads and writes. HCL.CS owns authentication, tokens, central identity claims and revocation. SBOM owns tenants, memberships, application roles, permissions, inventory and tenant isolation. Frontend visibility rules are never an authorization boundary.
 
 The local in-memory BFF session store is appropriate for one Next.js development process. Production and multi-instance deployment must replace it with an encrypted shared server-side store (for example Redis) while retaining the opaque cookie contract.
 
@@ -55,10 +55,16 @@ Override with `HCL_IAM_ROLE_MAPPING` JSON. **HCL.CS token roles do not independe
 Normal tenant resolution is:
 
 ```text
-JWT sub -> iam_users.external_iam_user_id
-JWT tenant_id -> tenants.external_iam_tenant_id
-iam_users.id + tenants.id -> tenant_users -> local SBOM role/permissions
+JWT issuer + subject -> iam_users
+iam_users.id -> active tenant_users
+tenant_users.id -> active tenant_user_role_assignments
+selected authorized membership -> local SBOM role/permissions
 ```
+
+The optional JWT `tenant_id` claim is diagnostic metadata only. It does not
+grant, deny, or select SBOM access. `tenants.external_iam_tenant_id` is optional
+legacy metadata, is not populated for normal new tenants, and is not an
+authorization source.
 
 Platform resolution is:
 
@@ -152,22 +158,16 @@ docker cp hcl-cs-identity:/app/https/hcl-cs-devcert.crt /Users/ferozebasha/sbom/
 
 Trust that certificate in the browser/OS. `frontend/certificates/` and `.certificates/` are ignored and must never be committed.
 
-## Seed a local mapping
+## Seed a local membership
 
-Create the HCL.CS test identity through the installer/admin UI, assign its `tenant_id` user claim (for example `hcl-cs-local`), and note its immutable user ID/`sub`. Never put its password in a seed file. Then run:
+Create the HCL.CS test identity through the installer/admin UI, sign in once so
+SBOM records its issuer and immutable subject, then assign membership through
+the authenticated SBOM administration UI/API. HCL.CS does not need an SBOM
+tenant or `tenant_id` claim.
 
-```bash
-cd /Users/ferozebasha/sbom
-source .venv/bin/activate
-python scripts/seed_hcl_iam_membership.py \
-  --subject '<HCL.CS-user-id>' \
-  --external-tenant hcl-cs-local \
-  --email test-user@example.local \
-  --display-name 'Test User' \
-  --role SECURITY_ANALYST
-```
-
-The helper is idempotent and refuses to seed `PLATFORM_ADMIN`.
+Normal onboarding uses the searchable existing-user selector and a local
+numeric `iam_users.id`. Direct database seeding is not the administration
+workflow and must not be used to infer access from token claims.
 
 For unauthenticated local development only, the first platform grant may be created explicitly:
 

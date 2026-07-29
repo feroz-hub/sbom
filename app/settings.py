@@ -227,7 +227,10 @@ class Settings(BaseSettings):
     hcl_iam_client_id: str = Field(default="", description="OIDC public client identifier")
     hcl_iam_allowed_algorithms: str = Field(default="RS256", description="Comma-separated JWT algorithms")
     hcl_iam_role_claim: str = Field(default="role", description="JWT claim containing IAM roles")
-    hcl_iam_tenant_claim: str = Field(default="tenant_id", description="JWT claim containing tenant identity")
+    hcl_iam_tenant_claim: str = Field(
+        default="tenant_id",
+        description="Optional diagnostic JWT tenant hint; never SBOM authorization authority",
+    )
     hcl_iam_jwks_cache_seconds: int = Field(default=300, ge=30, le=86400)
     hcl_iam_http_timeout_seconds: float = Field(default=5.0, ge=0.5, le=30.0)
     hcl_iam_clock_skew_seconds: int = Field(default=30, ge=0, le=300)

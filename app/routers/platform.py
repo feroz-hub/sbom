@@ -7,14 +7,18 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..core.context import CurrentContext
-from ..core.identity_states import IdentityAuditEvent, IdentityErrorCode
+from ..core.identity_states import (
+    IdentityAuditEvent,
+    IdentityErrorCode,
+)
 from ..core.security import invalidate_user_contexts, require_platform_permission
 from ..db import get_db
 from sqlalchemy import or_
-from ..models import IAMUser, TenantUser
+from ..models import AuthorizationAuditLog, IAMUser, Tenant, TenantUser
 from ..schemas_platform import (
     PlatformAdministratorGrantRequest,
     PlatformAdministratorGrantResponse,
@@ -31,13 +35,14 @@ from ..schemas_platform import (
     UserSearchResult,
 )
 from ..services import audit_service, platform_service
+from ..services import tenant_role_assignment_service as tras
 from ..services.email_verification_service import ensure_initial_verification_delivery
 
 router = APIRouter(prefix="/api/platform", tags=["platform-identity"])
 
 
 class TenantStatusUpdate(BaseModel):
-    status: Literal["ACTIVE", "PENDING", "DISABLED"]
+    status: Literal["ACTIVE", "DISABLED"]
 
 
 def _error_code(exc: HTTPException) -> str:
@@ -123,6 +128,66 @@ def _tenant_dict(tenant) -> dict:
     }
 
 
+def _platform_tenant_dict(db: Session, tenant: Tenant) -> dict:
+    item = _tenant_dict(tenant)
+    item["member_count"] = int(
+        db.query(func.count(TenantUser.id))
+        .filter(TenantUser.tenant_id == tenant.id)
+        .scalar()
+        or 0
+    )
+    assignment_audit = (
+        db.query(AuthorizationAuditLog)
+        .filter(
+            AuthorizationAuditLog.tenant_id == tenant.id,
+            AuthorizationAuditLog.action
+            == str(IdentityAuditEvent.TENANT_INITIAL_ADMIN_ASSIGNED),
+            AuthorizationAuditLog.outcome == "SUCCESS",
+        )
+        .order_by(AuthorizationAuditLog.id)
+        .first()
+    )
+    initial_admin = (
+        db.get(IAMUser, assignment_audit.target_user_id)
+        if assignment_audit and assignment_audit.target_user_id
+        else None
+    )
+    item["initial_administrator"] = (
+        {
+            "user_id": initial_admin.id,
+            "display_name": initial_admin.display_name,
+            "email": initial_admin.email,
+        }
+        if initial_admin is not None
+        else None
+    )
+    current_administrators = []
+    membership_rows = (
+        db.query(TenantUser, IAMUser)
+        .join(IAMUser, IAMUser.id == TenantUser.user_id)
+        .filter(
+            TenantUser.tenant_id == tenant.id,
+            TenantUser.status == "ACTIVE",
+            IAMUser.status == "ACTIVE",
+            IAMUser.email_verified.is_(True),
+            IAMUser.verification_required.is_(False),
+        )
+        .order_by(IAMUser.display_name, IAMUser.email)
+        .all()
+    )
+    for membership, user in membership_rows:
+        if "TENANT_ADMIN" in tras.effective_role_codes(db, membership):
+            current_administrators.append(
+                {
+                    "user_id": user.id,
+                    "display_name": user.display_name,
+                    "email": user.email,
+                }
+            )
+    item["current_administrators"] = current_administrators
+    return item
+
+
 @router.get("/users/search", response_model=UserSearchResponse)
 def search_platform_users(
     q: str = Query(..., min_length=1, max_length=200),
@@ -149,9 +214,28 @@ def search_platform_users(
 
     items = []
     for user in users:
-        grant = platform_service.get_platform_user_grant(db, user.id)
+        grant = platform_service.get_active_platform_grant(db, user.id)
         is_admin = platform_service.is_effective_platform_administrator(user, grant)
         brief = None
+        membership_rows = (
+            db.query(TenantUser, Tenant)
+            .join(Tenant, Tenant.id == TenantUser.tenant_id)
+            .filter(TenantUser.user_id == user.id)
+            .order_by(Tenant.name)
+            .all()
+        )
+        membership_briefs = [
+            TenantMembershipBrief(
+                tenant_id=membership.tenant_id,
+                tenant_name=tenant.name,
+                status=membership.status,
+                role=membership.role,
+                roles=sorted(
+                    tras.effective_role_codes(db, membership)
+                ),
+            )
+            for membership, tenant in membership_rows
+        ]
         if tenant_id:
             membership = (
                 db.query(TenantUser)
@@ -161,8 +245,19 @@ def search_platform_users(
             if membership:
                 brief = TenantMembershipBrief(
                     tenant_id=tenant_id,
+                    tenant_name=next(
+                        (
+                            tenant.name
+                            for row, tenant in membership_rows
+                            if row.id == membership.id
+                        ),
+                        None,
+                    ),
                     status=membership.status,
                     role=membership.role,
+                    roles=sorted(
+                        tras.effective_role_codes(db, membership)
+                    ),
                 )
         items.append(
             UserSearchResult(
@@ -173,10 +268,11 @@ def search_platform_users(
                 status=user.status,
                 email_verified=bool(user.email_verified),
                 verification_required=bool(user.verification_required),
-                external_issuer=user.external_iam_issuer,
-                external_subject=user.external_iam_user_id,
+                external_issuer=user.external_issuer,
+                external_subject=user.effective_external_subject,
                 is_platform_admin=is_admin,
                 tenant_membership=brief,
+                tenant_memberships=membership_briefs,
             )
         )
     return UserSearchResponse(items=items)
@@ -562,7 +658,7 @@ def list_platform_tenants(
     db: Session = Depends(get_db),
 ) -> list[dict]:
     return [
-        _tenant_dict(tenant)
+        _platform_tenant_dict(db, tenant)
         for tenant in platform_service.list_platform_tenants(db)
     ]
 
@@ -583,6 +679,19 @@ def update_tenant_status(
     audit_service.write_authorization_audit(
         db,
         action="tenant.status_changed",
+        context=context,
+        tenant_id=tenant.id,
+        request=request,
+        old_value={"status": old_status},
+        new_value={"status": tenant.status},
+    )
+    audit_service.write_authorization_audit(
+        db,
+        action=str(
+            IdentityAuditEvent.TENANT_ENABLED
+            if tenant.status == "ACTIVE"
+            else IdentityAuditEvent.TENANT_DISABLED
+        ),
         context=context,
         tenant_id=tenant.id,
         request=request,

@@ -62,7 +62,8 @@ export function Sidebar() {
     .map((item) => ({
       ...item,
       children: item.children?.filter((child) => !child.permission || hasPermission(child.permission)),
-    }));
+    }))
+    .filter((item) => !item.children || item.children.length > 0);
 
   // Auto-close drawer on navigation (mobile only).
   useEffect(() => {

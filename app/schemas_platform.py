@@ -24,8 +24,10 @@ class PlatformUserSummary(BaseModel):
     created_at: datetime
 class TenantMembershipBrief(BaseModel):
     tenant_id: int
+    tenant_name: str | None = None
     status: str
     role: str
+    roles: list[str] = Field(default_factory=list)
 
 
 class UserSearchResult(BaseModel):
@@ -40,6 +42,7 @@ class UserSearchResult(BaseModel):
     external_subject: str | None = None
     is_platform_admin: bool = False
     tenant_membership: TenantMembershipBrief | None = None
+    tenant_memberships: list[TenantMembershipBrief] = Field(default_factory=list)
 
 
 class UserSearchResponse(BaseModel):

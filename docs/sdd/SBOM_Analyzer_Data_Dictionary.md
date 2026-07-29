@@ -58,7 +58,7 @@ Legend: PK = primary key; FK→x = foreign key; "idx" in Key = single-column ind
 | id | Integer | NO | — | PK | |
 | name | String(255) | NO | — | — | Display name |
 | slug | String(128) | NO | — | idx | URL-safe id |
-| external_iam_tenant_id | String(255) | NO | — | idx | HCL IAM tenant mapping |
+| external_iam_tenant_id | String(255) | YES | — | idx | Optional legacy/external metadata; not authorization authority |
 | status | String(32) | NO | `ACTIVE` (py) | — | |
 | created_at / updated_at | DateTime(timezone=True) | NO | — | — | tz-aware |
 

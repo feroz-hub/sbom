@@ -15,7 +15,6 @@ import { getApiErrorMessage } from '@/lib/notifications';
 import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog';
 import { UserSearchCombobox } from '@/components/admin/UserSearchCombobox';
 import { VerificationBadge, UserStatusBadge, RoleBadge } from '@/components/admin/StatusBadges';
-import { getRoleLabel } from '@/lib/roles';
 
 export default function PlatformAdministratorsPage() {
   const { hasPermission, isLoading: authLoading } = useAuth();
@@ -35,7 +34,7 @@ export default function PlatformAdministratorsPage() {
   });
 
   const grantAdmin = useMutation({
-    mutationFn: (externalUserId: string) => grantPlatformAdministrator(externalUserId),
+    mutationFn: (userId: number) => grantPlatformAdministrator(userId),
     onSuccess: async (_res) => {
       showSuccess(`Platform Administrator authority granted to “${selectedUser?.display_name || selectedUser?.email}”.`);
       setSelectedUser(null);
@@ -57,8 +56,7 @@ export default function PlatformAdministratorsPage() {
   const submitGrant = (event: FormEvent) => {
     event.preventDefault();
     if (!selectedUser) return;
-    const identifier = selectedUser.external_subject || String(selectedUser.id);
-    grantAdmin.mutate(identifier);
+    grantAdmin.mutate(selectedUser.id);
   };
 
   if (authLoading) {
@@ -97,6 +95,7 @@ export default function PlatformAdministratorsPage() {
                 onSelect={(u) => setSelectedUser(u)}
                 selectedUser={selectedUser}
                 placeholder="Search existing SBOM users by email or name…"
+                requireEligible
               />
             </div>
 
@@ -135,7 +134,9 @@ export default function PlatformAdministratorsPage() {
                   <th className="px-4 py-2 text-left font-medium">Verification</th>
                   <th className="px-4 py-2 text-left font-medium">Role</th>
                   <th className="px-4 py-2 text-left font-medium">Grant Status</th>
+                  <th className="px-4 py-2 text-left font-medium">Effective</th>
                   <th className="px-4 py-2 text-left font-medium">User Status</th>
+                  <th className="px-4 py-2 text-left font-medium">Created</th>
                   {canRevoke && <th className="px-4 py-2 text-right font-medium">Actions</th>}
                 </tr>
               </thead>
@@ -143,17 +144,23 @@ export default function PlatformAdministratorsPage() {
                 {administrators.data.map((administrator) => (
                   <tr key={administrator.grant_id} className="border-t border-border">
                     <td className="px-4 py-3">
-                      <div className="font-medium text-foreground">{administrator.display_name || administrator.external_iam_user_id}</div>
+                      <div className="font-medium text-foreground">{administrator.display_name || administrator.email || 'Unnamed user'}</div>
                       <div className="text-xs text-hcl-muted">{administrator.email || 'No email'}</div>
                     </td>
-                    <td className="px-4 py-3"><VerificationBadge verified={administrator.user_status === 'ACTIVE'} /></td>
+                    <td className="px-4 py-3"><VerificationBadge verified={administrator.email_verified} /></td>
                     <td className="px-4 py-3"><RoleBadge role={administrator.role} /></td>
                     <td className="px-4 py-3">
                       <span className="inline-flex items-center rounded-full bg-hcl-blue/10 px-2 py-0.5 text-xs font-medium text-hcl-blue">
-                        {administrator.status}
+                        {administrator.grant_status}
                       </span>
                     </td>
-                    <td className="px-4 py-3"><UserStatusBadge status={administrator.user_status} /></td>
+                    <td className="px-4 py-3">
+                      {administrator.is_effective ? 'Effective' : 'Not effective'}
+                    </td>
+                    <td className="px-4 py-3"><UserStatusBadge status={administrator.local_status} /></td>
+                    <td className="px-4 py-3 text-xs text-hcl-muted">
+                      {new Date(administrator.created_at).toLocaleDateString()}
+                    </td>
                     {canRevoke && (
                       <td className="px-4 py-3 text-right">
                         <button
@@ -161,7 +168,7 @@ export default function PlatformAdministratorsPage() {
                           className="text-red-700 hover:underline"
                           onClick={() => setRevokeTarget({
                             id: administrator.grant_id,
-                            name: administrator.display_name || administrator.email || administrator.external_iam_user_id,
+                            name: administrator.display_name || administrator.email || 'Unnamed user',
                           })}
                         >
                           Revoke

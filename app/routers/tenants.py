@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Literal
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request
-from pydantic import AliasChoices, BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field, model_validator
 from sqlalchemy.orm import Session
 
 from ..core.context import CurrentContext
@@ -28,7 +28,13 @@ from ..schemas_platform import (
     UserSearchResponse,
     UserSearchResult,
 )
-from ..models import AuthorizationRole, IAMUser, Tenant, TenantUser
+from ..models import (
+    AuthorizationAuditLog,
+    AuthorizationRole,
+    IAMUser,
+    Tenant,
+    TenantUser,
+)
 from ..schemas_identity import AuthContextResponse
 from ..schemas_tenants import (
     CreatedTenantResponse,
@@ -61,8 +67,23 @@ class MembershipUpsert(BaseModel):
         max_length=255,
         validation_alias=AliasChoices("external_user_id", "external_iam_user_id"),
     )
-    role: str = Field(min_length=1, max_length=64)
+    role: str | None = Field(default=None, min_length=1, max_length=64)
+    roles: list[str] | None = None
     status: MembershipStatus = "ACTIVE"
+
+    @model_validator(mode="after")
+    def validate_roles(self):
+        role_codes = self.roles if self.roles is not None else [self.role]
+        normalized = [str(role).strip() for role in role_codes if role]
+        if not normalized:
+            raise ValueError("Assign at least one tenant role")
+        if len(normalized) != len(set(normalized)):
+            raise ValueError("Tenant roles must be unique")
+        if any(len(role) > 64 for role in normalized):
+            raise ValueError("Tenant role code is too long")
+        self.roles = normalized
+        self.role = normalized[0]
+        return self
 
 
 class MembershipUpdate(BaseModel):
@@ -112,6 +133,8 @@ def _membership_dict(membership, user, roles: list[str] | None = None) -> dict:
         "email": user.email,
         "display_name": user.display_name,
         "user_status": user.status,
+        "email_verified": bool(user.email_verified),
+        "verification_required": bool(user.verification_required),
         "role": membership.role,
         "roles": roles or [membership.role],
         "role_assignment_version": membership.role_assignment_version,
@@ -295,7 +318,28 @@ def list_my_tenants(
     db: Session = Depends(get_db),
 ) -> list[dict]:
     rows = ts.get_available_tenants_for_user(db, context.user_id, context.is_platform_admin)
-    return [_tenant_dict(tenant, role) for tenant, role in rows]
+    result = []
+    for tenant, role in rows:
+        item = _tenant_dict(tenant, role)
+        membership = (
+            db.query(TenantUser)
+            .filter(
+                TenantUser.tenant_id == tenant.id,
+                TenantUser.user_id == context.user_id,
+            )
+            .one_or_none()
+        )
+        item["membership_status"] = (
+            membership.status if membership is not None else None
+        )
+        item["roles"] = (
+            sorted(tras.effective_role_codes(db, membership))
+            if membership is not None
+            else []
+        )
+        item["platform_context_available"] = bool(context.is_platform_admin)
+        result.append(item)
+    return result
 
 
 @router.post("/tenants", status_code=201, response_model=TenantCreationResponse)
@@ -642,7 +686,70 @@ def list_tenant_users(
     db: Session = Depends(get_db),
 ) -> list[dict]:
     _require_current_tenant(tenant_id, context)
-    return [_membership_dict(membership, user) for membership, user in ts.list_tenant_users(db, tenant_id)]
+    return [
+        _membership_dict(
+            membership,
+            user,
+            roles=sorted(tras.effective_role_codes(db, membership)),
+        )
+        for membership, user in ts.list_tenant_users(db, tenant_id)
+    ]
+
+
+@router.get("/tenants/{tenant_id}/audit-history")
+def tenant_audit_history(
+    tenant_id: int,
+    limit: int = Query(default=100, ge=1, le=500),
+    context: CurrentContext = Depends(require_permission("tenant:user:read")),
+    db: Session = Depends(get_db),
+) -> dict:
+    _require_current_tenant(tenant_id, context)
+    rows = (
+        db.query(AuthorizationAuditLog)
+        .filter(AuthorizationAuditLog.tenant_id == tenant_id)
+        .order_by(
+            AuthorizationAuditLog.created_at.desc(),
+            AuthorizationAuditLog.id.desc(),
+        )
+        .limit(limit)
+        .all()
+    )
+    user_ids = {
+        user_id
+        for row in rows
+        for user_id in (row.actor_user_id, row.target_user_id)
+        if user_id is not None
+    }
+    users = {
+        user.id: user
+        for user in db.query(IAMUser).filter(IAMUser.id.in_(user_ids)).all()
+    } if user_ids else {}
+    return {
+        "items": [
+            {
+                "id": row.id,
+                "action": row.action,
+                "outcome": row.outcome,
+                "actor_user_id": row.actor_user_id,
+                "actor_email": (
+                    users[row.actor_user_id].email
+                    if row.actor_user_id in users
+                    else None
+                ),
+                "target_user_id": row.target_user_id,
+                "target_email": (
+                    users[row.target_user_id].email
+                    if row.target_user_id in users
+                    else None
+                ),
+                "old_state": row.old_value,
+                "new_state": row.new_value,
+                "correlation_id": row.correlation_id,
+                "timestamp": row.created_at,
+            }
+            for row in rows
+        ]
+    }
 
 
 @router.get("/tenants/{tenant_id}/users/{membership_id}")
@@ -654,7 +761,11 @@ def get_tenant_user(
 ) -> dict:
     _require_current_tenant(tenant_id, context)
     membership, user = ts.get_tenant_membership(db, tenant_id, membership_id)
-    return _membership_dict(membership, user)
+    return _membership_dict(
+        membership,
+        user,
+        roles=sorted(tras.effective_role_codes(db, membership)),
+    )
 
 
 @router.post("/tenants/{tenant_id}/users", status_code=201)
@@ -683,18 +794,35 @@ def add_tenant_user(
             TenantUser.tenant_id == tenant_id,
             TenantUser.user_id == user_id,
         ).one_or_none()
-    membership, user = ts.add_user_to_tenant(
-        db,
-        tenant_id,
-        external_iam_user_id=ext_user_id,
-        role=payload.role,
-        status=payload.status,
-        actor_user_id=context.user_id,
-        assignment_source=(
-            "PLATFORM_ADMIN" if context.is_platform_admin else "TENANT_ADMIN"
-        ),
-        request=request,
-    )
+    try:
+        membership, user = ts.add_user_to_tenant(
+            db,
+            tenant_id,
+            external_iam_user_id=ext_user_id,
+            role=payload.role,
+            role_codes=payload.roles,
+            status=payload.status,
+            actor_user_id=context.user_id,
+            assignment_source=(
+                "PLATFORM_ADMIN" if context.is_platform_admin else "TENANT_ADMIN"
+            ),
+            request=request,
+        )
+    except tras.AssignmentProblem as exc:
+        db.rollback()
+        audit_service.write_authorization_audit(
+            db,
+            action=str(IdentityAuditEvent.TENANT_ROLE_ASSIGNMENT_REJECTED),
+            outcome="DENIED",
+            context=context,
+            target_user_id=payload.user_id,
+            tenant_id=tenant_id,
+            request=request,
+            new_value={"roles": payload.roles},
+            detail=str(exc.code),
+        )
+        db.commit()
+        raise _assignment_http_error(exc) from exc
     action = "membership.updated" if existing else "membership.created"
     audit_service.write_authorization_audit(
         db,
@@ -704,8 +832,26 @@ def add_tenant_user(
         target_membership_id=membership.id,
         tenant_id=tenant_id,
         request=request,
-        new_value={"role": membership.role, "status": membership.status},
+        new_value={
+            "roles": sorted(tras.effective_role_codes(db, membership)),
+            "primary_role": membership.role,
+            "status": membership.status,
+        },
     )
+    if existing is None:
+        audit_service.write_authorization_audit(
+            db,
+            action=str(IdentityAuditEvent.TENANT_MEMBER_ADDED),
+            context=context,
+            target_user_id=user.id,
+            target_membership_id=membership.id,
+            tenant_id=tenant_id,
+            request=request,
+            new_value={
+                "roles": sorted(tras.effective_role_codes(db, membership)),
+                "status": membership.status,
+            },
+        )
     if previous_user_status is not None and previous_user_status != user.status:
         audit_service.write_authorization_audit(
             db,
@@ -719,7 +865,11 @@ def add_tenant_user(
         )
     db.commit()
     invalidate_user_contexts(user.id)
-    return _membership_dict(membership, user)
+    return _membership_dict(
+        membership,
+        user,
+        roles=sorted(tras.effective_role_codes(db, membership)),
+    )
 
 
 @router.patch("/tenants/{tenant_id}/users/{membership_id}")
@@ -818,9 +968,29 @@ def update_tenant_user(
         old_value=old,
         new_value=new,
     )
+    if payload.status is not None:
+        audit_service.write_authorization_audit(
+            db,
+            action=str(
+                IdentityAuditEvent.TENANT_MEMBER_ACTIVATED
+                if payload.status == "ACTIVE"
+                else IdentityAuditEvent.TENANT_MEMBER_DEACTIVATED
+            ),
+            context=context,
+            target_user_id=user.id,
+            target_membership_id=membership.id,
+            tenant_id=tenant_id,
+            request=request,
+            old_value=old,
+            new_value=new,
+        )
     db.commit()
     invalidate_user_contexts(user.id)
-    return _membership_dict(membership, user)
+    return _membership_dict(
+        membership,
+        user,
+        roles=sorted(tras.effective_role_codes(db, membership)),
+    )
 
 
 def _set_membership_status(
@@ -876,9 +1046,28 @@ def _set_membership_status(
         old_value=old,
         new_value=new,
     )
+    audit_service.write_authorization_audit(
+        db,
+        action=str(
+            IdentityAuditEvent.TENANT_MEMBER_ACTIVATED
+            if status_value == "ACTIVE"
+            else IdentityAuditEvent.TENANT_MEMBER_DEACTIVATED
+        ),
+        context=context,
+        target_user_id=user.id,
+        target_membership_id=membership.id,
+        tenant_id=tenant_id,
+        request=request,
+        old_value=old,
+        new_value=new,
+    )
     db.commit()
     invalidate_user_contexts(user.id)
-    return _membership_dict(membership, user)
+    return _membership_dict(
+        membership,
+        user,
+        roles=sorted(tras.effective_role_codes(db, membership)),
+    )
 
 
 @router.post("/tenants/{tenant_id}/users/{membership_id}/activate")
@@ -939,6 +1128,15 @@ def delete_tenant_user(
     audit_service.write_authorization_audit(
         db,
         action="membership.removed",
+        context=context,
+        target_user_id=user.id,
+        tenant_id=tenant_id,
+        request=request,
+        old_value=old,
+    )
+    audit_service.write_authorization_audit(
+        db,
+        action=str(IdentityAuditEvent.TENANT_MEMBER_REMOVED),
         context=context,
         target_user_id=user.id,
         tenant_id=tenant_id,

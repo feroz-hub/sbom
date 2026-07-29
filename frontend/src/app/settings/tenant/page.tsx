@@ -12,13 +12,14 @@ import {
   getAssignableTenantRoles,
   getTenantMembers,
   removeTenantMember,
-  updateTenantMemberRole,
+  replaceTenantMemberRoles,
 } from '@/lib/api';
 import { useNotifications } from '@/hooks/useNotifications';
 import { getApiErrorMessage } from '@/lib/notifications';
 import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog';
 import { TenantContextHeader } from '@/components/admin/TenantContextHeader';
 import { UserSearchCombobox } from '@/components/admin/UserSearchCombobox';
+import { TenantAuditHistory } from '@/components/admin/TenantAuditHistory';
 import { VerificationBadge, UserStatusBadge, MembershipStatusBadge } from '@/components/admin/StatusBadges';
 import { getRoleCode, getRoleLabel } from '@/lib/roles';
 
@@ -39,7 +40,7 @@ export default function TenantUsersPage() {
   const { showSuccess, showError } = useNotifications();
 
   const [selectedUser, setSelectedUser] = useState<UserSearchResult | null>(null);
-  const [initialRole, setInitialRole] = useState<TenantRole>('VIEWER');
+  const [initialRoles, setInitialRoles] = useState<TenantRole[]>(['VIEWER']);
   const [confirmation, setConfirmation] = useState<(MemberAction & { title: string; description: string; confirmLabel: string }) | null>(null);
 
   const members = useQuery({
@@ -49,8 +50,8 @@ export default function TenantUsersPage() {
   });
 
   const roles = useQuery({
-    queryKey: ['tenant-roles'],
-    queryFn: getAssignableTenantRoles,
+    queryKey: ['tenant-roles', currentTenantId],
+    queryFn: () => getAssignableTenantRoles(currentTenantId ?? undefined),
     enabled: !authLoading && canRead,
   });
 
@@ -71,8 +72,8 @@ export default function TenantUsersPage() {
     action.mutate({
       operation: async () => {
         await addTenantMember(currentTenantId, {
-          external_user_id: selectedUser.external_subject || String(selectedUser.id),
-          role: initialRole,
+          user_id: selectedUser.id,
+          roles: initialRoles,
         });
       },
       success: `User “${selectedUser.display_name || selectedUser.email}” was added to the tenant.`,
@@ -104,8 +105,8 @@ export default function TenantUsersPage() {
     <div className="mx-auto max-w-6xl space-y-6 p-6">
       <TenantContextHeader
         name={activeTenant?.name || `Tenant #${currentTenantId}`}
-        slug={activeTenant?.slug || 'default'}
-        externalIamTenantId={activeTenant?.externalIamTenantId || `tenant-${currentTenantId}`}
+        slug={activeTenant?.slug || 'Unavailable'}
+        externalIamTenantId={activeTenant?.externalIamTenantId || 'Unavailable'}
         status={activeTenant?.status || 'ACTIVE'}
         memberCount={members.data?.length}
       />
@@ -131,11 +132,18 @@ export default function TenantUsersPage() {
             {selectedUser && (
               <div className="grid gap-3 sm:grid-cols-[1fr_auto] items-end pt-2">
                 <label className="text-sm font-medium">
-                  Tenant Role
+                  Tenant Roles
                   <select
-                    aria-label="Initial role"
-                    value={getRoleCode(initialRole)}
-                    onChange={(event) => setInitialRole(event.target.value as TenantRole)}
+                    aria-label="Initial roles"
+                    multiple
+                    value={initialRoles.map(getRoleCode)}
+                    onChange={(event) => {
+                      const selected = Array.from(
+                        event.target.selectedOptions,
+                        (option) => option.value as TenantRole,
+                      );
+                      if (selected.length > 0) setInitialRoles(selected);
+                    }}
                     className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2"
                   >
                     {(roles.data?.roles ?? ['VIEWER']).map((role) => {
@@ -182,7 +190,7 @@ export default function TenantUsersPage() {
                 <tr>
                   <th className="px-4 py-2 text-left font-medium">User</th>
                   <th className="px-4 py-2 text-left font-medium">Verification</th>
-                  <th className="px-4 py-2 text-left font-medium">Role</th>
+                  <th className="px-4 py-2 text-left font-medium">Roles</th>
                   <th className="px-4 py-2 text-left font-medium">Membership Status</th>
                   <th className="px-4 py-2 text-left font-medium">User Status</th>
                   {canUpdate && <th className="px-4 py-2 text-right font-medium">Actions</th>}
@@ -192,30 +200,40 @@ export default function TenantUsersPage() {
                 {members.data.map((member) => (
                   <tr key={member.membership_id} className="border-t border-border">
                     <td className="px-4 py-3">
-                      <div className="font-medium text-foreground">{member.display_name || member.external_iam_user_id}</div>
+                      <div className="font-medium text-foreground">{member.display_name || member.email || `User #${member.user_id}`}</div>
                       <div className="text-xs text-hcl-muted">{member.email || 'No email'}</div>
                     </td>
                     <td className="px-4 py-3">
-                      <VerificationBadge verified={member.user_status === 'ACTIVE'} />
+                      <VerificationBadge verified={member.email_verified && !member.verification_required} />
                     </td>
                     <td className="px-4 py-3">
                       {canUpdate ? (
                         <select
-                          aria-label={`Role for ${member.display_name || member.external_iam_user_id}`}
-                          value={getRoleCode(member.role)}
+                          aria-label={`Roles for ${member.display_name || member.email || `User #${member.user_id}`}`}
+                          multiple
+                          value={(member.roles ?? [member.role]).map(getRoleCode)}
                           onChange={(event) => {
-                            const nextRole = event.target.value as TenantRole;
+                            const nextRoles = Array.from(
+                              event.target.selectedOptions,
+                              (option) => option.value as TenantRole,
+                            );
+                            if (nextRoles.length === 0) return;
                             confirmAction({
-                              title: `Change role for “${member.display_name || member.external_iam_user_id}”?`,
-                              description: `This changes the tenant role to ${getRoleLabel(nextRole)} immediately.`,
-                              confirmLabel: 'Change role',
-                              operation: () => updateTenantMemberRole(currentTenantId, member.membership_id, nextRole),
-                              success: `Role updated to ${getRoleLabel(nextRole)}.`,
+                              title: `Change roles for “${member.display_name || member.email || `User #${member.user_id}`}”?`,
+                              description: `This replaces the complete tenant role set with ${nextRoles.map(getRoleLabel).join(', ')} immediately.`,
+                              confirmLabel: 'Replace roles',
+                              operation: () => replaceTenantMemberRoles(
+                                currentTenantId,
+                                member.user_id,
+                                nextRoles,
+                                member.role_assignment_version,
+                              ),
+                              success: `Roles updated to ${nextRoles.map(getRoleLabel).join(', ')}.`,
                             });
                           }}
                           className="rounded-md border border-border bg-background px-2 py-1"
                         >
-                          {(roles.data?.roles ?? [member.role]).map((role) => {
+                          {(roles.data?.roles ?? member.roles ?? [member.role]).map((role) => {
                             const code = getRoleCode(role);
                             const label = getRoleLabel(role);
                             const key = code || (role && typeof role === 'object' ? String(role.id ?? '') : String(role));
@@ -227,7 +245,7 @@ export default function TenantUsersPage() {
                           })}
                         </select>
                       ) : (
-                        getRoleLabel(member.role)
+                        (member.roles ?? [member.role]).map(getRoleLabel).join(', ')
                       )}
                     </td>
                     <td className="px-4 py-3"><MembershipStatusBadge status={member.status} /></td>
@@ -239,7 +257,7 @@ export default function TenantUsersPage() {
                             type="button"
                             className="text-amber-700 hover:underline"
                             onClick={() => confirmAction({
-                              title: `Deactivate “${member.display_name || member.external_iam_user_id}”?`,
+                              title: `Deactivate “${member.display_name || member.email || `User #${member.user_id}`}”?`,
                               description: 'The user will lose tenant access immediately.',
                               confirmLabel: 'Deactivate',
                               operation: () => deactivateTenantMember(currentTenantId, member.membership_id),
@@ -264,7 +282,7 @@ export default function TenantUsersPage() {
                           type="button"
                           className="text-red-700 hover:underline"
                           onClick={() => confirmAction({
-                            title: `Remove “${member.display_name || member.external_iam_user_id}”?`,
+                            title: `Remove “${member.display_name || member.email || `User #${member.user_id}`}”?`,
                             description: 'The membership will be permanently removed.',
                             confirmLabel: 'Remove member',
                             operation: () => removeTenantMember(currentTenantId, member.membership_id),
@@ -283,6 +301,18 @@ export default function TenantUsersPage() {
         )}
       </section>
 
+      <section aria-labelledby="tenant-settings-heading" className="rounded-xl border border-border bg-surface p-5">
+        <h2 id="tenant-settings-heading" className="text-lg font-semibold">Tenant Settings</h2>
+        <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-[12rem_1fr]">
+          <dt className="text-hcl-muted">Tenant</dt>
+          <dd>{activeTenant?.name || `Tenant #${currentTenantId}`}</dd>
+          <dt className="text-hcl-muted">Status</dt>
+          <dd>{activeTenant?.status || 'Unavailable'}</dd>
+          <dt className="text-hcl-muted">External identity mapping</dt>
+          <dd><code>{activeTenant?.externalIamTenantId || 'Not configured'}</code> <span className="text-hcl-muted">(legacy metadata)</span></dd>
+        </dl>
+      </section>
+
       <ConfirmationDialog
         open={confirmation !== null}
         title={confirmation?.title ?? ''}
@@ -292,6 +322,8 @@ export default function TenantUsersPage() {
         onClose={() => !action.isPending && setConfirmation(null)}
         onConfirm={() => confirmation && action.mutate(confirmation)}
       />
+
+      <TenantAuditHistory tenantId={currentTenantId} />
     </div>
   );
 }

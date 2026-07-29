@@ -2677,8 +2677,8 @@ All **Protected**. Multi-tenancy: identity comes from the IAM-mapped context; `X
 | Field | Details |
 | --- | --- |
 | Function Signature | POST /api/tenants → `def create_tenant(payload, context, db)` in `app/routers/tenants.py` |
-| Description | Creates a tenant. Requires `platform:admin` permission. |
-| Input Parameters | Body `TenantCreate {name: str 1..255, slug: str (regex ^[a-z0-9][a-z0-9-]{1,126}[a-z0-9]$), external_iam_tenant_id: str 1..255}` |
+| Description | Creates a tenant atomically. Requires `platform:tenant:create` and an active Platform Administrator grant. |
+| Input Parameters | Body `TenantCreate {name: str 1..255, slug: str (regex ^[a-z0-9][a-z0-9-]{1,126}[a-z0-9]$), initial_admin_user_id: int}`; `external_iam_tenant_id` is optional legacy metadata |
 | Return Values | Tenant dict `{id, name, slug, external_iam_tenant_id, status, role: null}`; **201 Created** |
 | Validation and Error Messages | 403 `"Insufficient permission"`; 422 auto for slug regex/lengths |
 
@@ -2698,8 +2698,8 @@ All **Protected**. Multi-tenancy: identity comes from the IAM-mapped context; `X
 | --- | --- |
 | Function Signature | POST /api/tenants/{tenant_id}/users → `def add_tenant_user(tenant_id, payload, context, db)` in `app/routers/tenants.py` |
 | Description | Adds/updates a user membership in the tenant. Permission `tenant:user:invite`; role must be a known non-platform role. Audit-logged (`tenant.user.upsert`). |
-| Input Parameters | Path `tenant_id: int`; body `MembershipUpsert {external_iam_user_id: str (required), email?, display_name?, role: str (required), status: str="ACTIVE"}` |
-| Return Values | `{membership_id, user_id, role, status}`; **201 Created** |
+| Input Parameters | Path `tenant_id: int`; body `MembershipUpsert {user_id: int (preferred local identity) or external_user_id: str, roles: list[str] or role: str, status: str="ACTIVE"}` |
+| Return Values | `{membership_id, user_id, role, roles, status}`; **201 Created** |
 | Validation and Error Messages | 403 `"Tenant access denied"`; 422 `"Invalid tenant role"` (unknown role or PLATFORM_ADMIN); 403 permission |
 
 #### PATCH /api/tenants/{tenant_id}/users/{membership_id}

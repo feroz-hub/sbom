@@ -251,48 +251,94 @@ def create_initial_assignment(
     request: Request | None = None,
 ) -> TenantUserRoleAssignment:
     """Create the first assignment inside an existing caller-owned transaction."""
+    return create_initial_assignments(
+        db,
+        membership,
+        role_codes=[role_code],
+        primary_role_code=role_code,
+        actor_user_id=actor_user_id,
+        source=source,
+        request=request,
+    )[0]
+
+
+def create_initial_assignments(
+    db: Session,
+    membership: TenantUser,
+    *,
+    role_codes: Iterable[str],
+    primary_role_code: str,
+    actor_user_id: int | None,
+    source: str,
+    request: Request | None = None,
+) -> list[TenantUserRoleAssignment]:
+    """Create a membership's initial role set in the caller-owned transaction."""
+    normalized = [normalize_role(code) for code in role_codes if code]
+    if not normalized:
+        raise _problem(
+            IdentityErrorCode.TENANT_ROLE_SET_EMPTY,
+            "Assign at least one tenant role.",
+            422,
+        )
+    if len(normalized) != len(set(normalized)):
+        raise _problem(
+            IdentityErrorCode.TENANT_ROLE_ALREADY_ASSIGNED,
+            "Tenant roles must be unique.",
+            409,
+        )
+    primary = normalize_role(primary_role_code)
+    if primary not in normalized:
+        raise _problem(
+            IdentityErrorCode.PRIMARY_TENANT_ROLE_REQUIRED,
+            "The primary tenant role must be included in the role set.",
+            422,
+        )
     token = bind_context(minimal_background_context(membership.tenant_id))
     try:
-        role = _catalog_roles(db, [role_code])[normalize_role(role_code)]
+        catalog = _catalog_roles(db, normalized)
         now = datetime.now(UTC)
-        assignment = TenantUserRoleAssignment(
-            tenant_id=membership.tenant_id,
-            tenant_user_id=membership.id,
-            role_id=role.id,
-            status="ACTIVE",
-            is_primary=True,
-            assignment_source=source,
-            assigned_by_user_id=actor_user_id,
-            assigned_at=now,
-            version=1,
-            created_at=now,
-            updated_at=now,
-        )
-        membership.role = role.code
+        assignments: list[TenantUserRoleAssignment] = []
+        membership.role = primary
         membership.role_assignment_version = max(
             membership.role_assignment_version or 1, 1
         )
-        db.add(assignment)
+        for code in normalized:
+            role = catalog[code]
+            assignment = TenantUserRoleAssignment(
+                tenant_id=membership.tenant_id,
+                tenant_user_id=membership.id,
+                role_id=role.id,
+                status="ACTIVE",
+                is_primary=code == primary,
+                assignment_source=source,
+                assigned_by_user_id=actor_user_id,
+                assigned_at=now,
+                version=1,
+                created_at=now,
+                updated_at=now,
+            )
+            db.add(assignment)
+            db.flush()
+            assignments.append(assignment)
+            _history(
+                db,
+                membership=membership,
+                assignment=assignment,
+                role=role,
+                role_code=role.code,
+                event_type="GRANTED",
+                source=source,
+                actor_user_id=actor_user_id,
+                before_version=membership.role_assignment_version,
+                after_version=membership.role_assignment_version,
+                request=request,
+                previous_status=None,
+                new_status="ACTIVE",
+                previous_primary=None,
+                new_primary=assignment.is_primary,
+            )
         db.flush()
-        _history(
-            db,
-            membership=membership,
-            assignment=assignment,
-            role=role,
-            role_code=role.code,
-            event_type="GRANTED",
-            source=source,
-            actor_user_id=actor_user_id,
-            before_version=membership.role_assignment_version,
-            after_version=membership.role_assignment_version,
-            request=request,
-            previous_status=None,
-            new_status="ACTIVE",
-            previous_primary=None,
-            new_primary=True,
-        )
-        db.flush()
-        return assignment
+        return assignments
     finally:
         reset_context(token)
 
@@ -738,7 +784,14 @@ def replace_roles(
 ) -> TenantUser:
     _require_database_mutation_mode()
     reason = _bounded_reason(reason)
-    codes = sorted({normalize_role(code) for code in role_codes if code})
+    requested_codes = [normalize_role(code) for code in role_codes if code]
+    if len(requested_codes) != len(set(requested_codes)):
+        raise _problem(
+            IdentityErrorCode.TENANT_ROLE_ALREADY_ASSIGNED,
+            "Tenant roles must be unique.",
+            409,
+        )
+    codes = sorted(requested_codes)
     if db.in_transaction():
         db.rollback()
     with db.begin():

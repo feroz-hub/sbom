@@ -49,9 +49,17 @@ export function TenantSwitcher() {
     const single = tenants[0];
     if (!single) return null;
     return (
-      <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-white">
+      <div className="flex items-start gap-2 rounded-lg px-3 py-2 text-sm text-white">
         <Building2 className="h-4 w-4 shrink-0" />
-        <span className="truncate font-medium">{single.name}</span>
+        <span className="min-w-0">
+          <span className="block truncate font-medium">{single.name}</span>
+          <span className="block truncate text-xs text-hcl-muted">
+            {(single.roles ?? (single.role ? [single.role] : [])).length > 0
+              ? (single.roles ?? (single.role ? [single.role] : [])).map(getRoleLabel).join(', ')
+              : 'Platform management context'}
+            {single.membershipStatus ? ` · ${single.membershipStatus}` : ''}
+          </span>
+        </span>
       </div>
     );
   }
@@ -127,9 +135,12 @@ export function TenantSwitcher() {
                     >
                       {tenant.name}
                     </p>
-                    {tenant.role && (
+                    {((tenant.roles ?? (tenant.role ? [tenant.role] : [])).length > 0 || tenant.platformContextAvailable) && (
                       <p className="text-xs text-hcl-muted">
-                        {getRoleLabel(tenant.role).replace(/_/g, ' ')}
+                        {(tenant.roles ?? (tenant.role ? [tenant.role] : [])).length > 0
+                          ? (tenant.roles ?? (tenant.role ? [tenant.role] : [])).map(getRoleLabel).join(', ')
+                          : 'Platform management context'}
+                        {tenant.membershipStatus ? ` · ${tenant.membershipStatus}` : ''}
                       </p>
                     )}
                   </div>

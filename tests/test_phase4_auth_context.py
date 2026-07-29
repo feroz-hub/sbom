@@ -125,6 +125,41 @@ def test_single_and_multiple_tenant_resolution():
         assert selected.selection_source == "HEADER"
 
 
+def test_token_tenant_hint_is_diagnostic_and_cannot_override_membership(caplog):
+    from app.db import SessionLocal
+
+    suffix = uuid4().hex[:8]
+    claims = _claims(suffix)
+    now = datetime.now(UTC)
+    with SessionLocal() as db:
+        user = _seed_user(db, claims)
+        tenant = _seed_tenant(db, f"membership-{suffix}")
+        db.add(
+            TenantUser(
+                tenant_id=tenant.id,
+                user_id=user.id,
+                role="VIEWER",
+                status="ACTIVE",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        db.commit()
+
+        with caplog.at_level("INFO", logger="app.services.auth_context_service"):
+            result = resolve_authorization_state(
+                db,
+                user,
+                selector_hint="local-default",
+            )
+
+        assert result.status == AuthorizationState.READY
+        assert result.active_tenant.id == tenant.id
+        assert result.selection_source == "AUTO_SINGLE"
+        assert "identity.tenant_hint_mismatch" in caplog.text
+        assert f"selected_tenant_id={tenant.id}" in caplog.text
+
+
 def test_platform_administrator_without_tenant_opens_platform():
     from app.db import SessionLocal
 
@@ -147,6 +182,47 @@ def test_platform_administrator_without_tenant_opens_platform():
         assert result.next_action == NextAction.OPEN_PLATFORM_ADMIN
         assert result.active_tenant is None
         assert result.is_platform_admin is True
+
+
+def test_platform_administrator_with_memberships_opens_platform_context_when_allowed():
+    from app.db import SessionLocal
+
+    claims = _claims(uuid4().hex)
+    now = datetime.now(UTC)
+    with SessionLocal() as db:
+        user = _seed_user(db, claims)
+        tenant = _seed_tenant(db, f"platform-member-{uuid4().hex[:8]}")
+        db.add_all(
+            [
+                PlatformUserRole(
+                    user_id=user.id,
+                    role="PLATFORM_ADMIN",
+                    status="ACTIVE",
+                    created_at=now,
+                    updated_at=now,
+                ),
+                TenantUser(
+                    tenant_id=tenant.id,
+                    user_id=user.id,
+                    role="TENANT_ADMIN",
+                    status="ACTIVE",
+                    created_at=now,
+                    updated_at=now,
+                ),
+            ]
+        )
+        db.commit()
+
+        result = resolve_authorization_state(
+            db,
+            user,
+            allow_platform_context=True,
+        )
+
+        assert result.status == AuthorizationState.READY
+        assert result.next_action == NextAction.OPEN_PLATFORM_ADMIN
+        assert result.active_tenant is None
+        assert result.memberships[0][1].id == tenant.id
 
 
 @pytest.mark.parametrize(

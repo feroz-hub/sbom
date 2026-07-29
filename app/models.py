@@ -32,7 +32,9 @@ class Tenant(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String(255), nullable=False)
     slug = Column(String(128), nullable=False, index=True)
-    external_iam_tenant_id = Column(String(255), nullable=False, index=True)
+    # Optional legacy/external metadata. Tenant authority is local membership,
+    # never a token claim matched to this value.
+    external_iam_tenant_id = Column(String(255), nullable=True, index=True)
     status = Column(String(32), nullable=False, default="ACTIVE")
     created_at = Column(DateTime(timezone=True), nullable=False)
     updated_at = Column(DateTime(timezone=True), nullable=False)

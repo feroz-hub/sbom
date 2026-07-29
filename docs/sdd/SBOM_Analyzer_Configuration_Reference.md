@@ -62,7 +62,7 @@ Legend — Consumer: **A**=API, **W**=Celery worker, **B**=Celery beat, **F**=Fr
 |---|---|---|---|---|---|---|---|---|
 | `AUTH_ENABLED` | require HCL IAM OIDC (`app/settings.py:203`) | bool | No | `false` | A | R | C | dev mode: synthetic admin context |
 | `HCL_IAM_ISSUER` / `HCL_IAM_AUDIENCE` / `HCL_IAM_JWKS_URL` / `HCL_IAM_CLIENT_ID` | OIDC validation (`app/settings.py:204–207`) | str | **Yes when AUTH_ENABLED=true** | `""` | A | R | C | `.env.example`: "server refuses to start if missing"; JWKS URL must be https (`app/core/security.py:345`) |
-| `HCL_IAM_ALLOWED_ALGORITHMS` / `HCL_IAM_ROLE_CLAIM` / `HCL_IAM_TENANT_CLAIM` | JWT algs & claims (L208–210) | str | No | RS256 / roles / tenant_id | A | R | C | defaults |
+| `HCL_IAM_ALLOWED_ALGORITHMS` / `HCL_IAM_ROLE_CLAIM` / `HCL_IAM_TENANT_CLAIM` | JWT algorithms, identity-role metadata, and optional diagnostic tenant hint (never SBOM authority) | str | No | RS256 / roles / tenant_id | A | R | C | defaults |
 | `HCL_IAM_JWKS_CACHE_SECONDS` / `AUTH_CONTEXT_CACHE_SECONDS` | JWKS & auth-context cache TTLs (L211–217) | int | No | 300 / 120 | A | R | C | defaults |
 | `DEV_DEFAULT_TENANT` / `DEFAULT_TENANT_SLUG` | dev tenant auto-select (L218–222) | bool/str | No | true / `default` | A | R | C | defaults |
 | `API_AUTH_MODE` | legacy gate: none\|bearer\|jwt (`app/auth.py:28`) | str | No | `none` | A | **req** | C | none; unknown value → HTTP error (`app/auth.py:99`) |

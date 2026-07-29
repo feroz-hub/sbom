@@ -4,14 +4,16 @@ import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 
 export default function AccessPendingPage() {
-  const { user, refreshSession, logout, authStatus } = useAuth();
+  const { user, refreshSession, logout } = useAuth();
   const router = useRouter();
 
   const handleRetry = async () => {
     await refreshSession();
-    if (authStatus === 'authenticated') {
-      router.push('/');
-    }
+    // Re-enter the application through its normal authorization guard. The
+    // existing OIDC session is reused; only a genuinely missing/expired
+    // session may initiate login.
+    router.push('/');
+    router.refresh();
   };
 
   return (

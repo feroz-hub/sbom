@@ -13,7 +13,8 @@ export interface AuthUser {
   isPlatformAdmin: boolean;
 }
 export interface TenantInfo {
-  id: number; name: string; slug: string; externalIamTenantId: string; status: string; role: string | null;
+  id: number; name: string; slug: string; externalIamTenantId: string | null; status: string; role: string | null;
+  roles: string[]; membershipStatus: string | null; platformContextAvailable: boolean;
 }
 
 export type AuthStatus =
@@ -53,8 +54,30 @@ const DEV_USER: AuthUser = {
 };
 const DEV_TENANTS: TenantInfo[] = [{
   id: 1, name: 'Default Tenant', slug: 'default', externalIamTenantId: 'local-default',
-  status: 'ACTIVE', role: 'TENANT_ADMIN',
+  status: 'ACTIVE', role: 'TENANT_ADMIN', roles: ['TENANT_ADMIN'],
+  membershipStatus: 'ACTIVE', platformContextAvailable: false,
 }];
+
+function tenantInfoFromContext(tenant: Record<string, unknown>): TenantInfo {
+  const roles = Array.isArray(tenant.roles)
+    ? tenant.roles.map(String)
+    : tenant.current_role
+      ? [String(tenant.current_role)]
+      : [];
+  return {
+    id: Number(tenant.id),
+    name: String(tenant.name ?? ''),
+    slug: String(tenant.slug ?? ''),
+    externalIamTenantId: null,
+    status: 'ACTIVE',
+    role: tenant.current_role ? String(tenant.current_role) : null,
+    roles,
+    membershipStatus: tenant.membership_status
+      ? String(tenant.membership_status)
+      : null,
+    platformContextAvailable: false,
+  };
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const config = useMemo(() => resolveAuthConfig(), []);
@@ -91,11 +114,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const tenantId = tenantOverride || getActiveTenantId();
       if (tenantId) headers['X-Tenant-ID'] = tenantId;
 
-      const meResponse = await fetch(`${BASE_URL}/api/auth/me`, { credentials: 'include', headers, cache: 'no-store' });
-      const body = await meResponse.json().catch(() => null);
+      let meResponse = await fetch(`${BASE_URL}/api/auth/me`, { credentials: 'include', headers, cache: 'no-store' });
+      let body = await meResponse.json().catch(() => null);
+      const initialErrorCode = body?.code ?? body?.detail?.code ?? body?.error?.code;
+      if (meResponse.status === 403 && initialErrorCode === 'IAM_UNAUTHORIZED_TENANT' && headers['X-Tenant-ID']) {
+        clearActiveTenantId();
+        setActiveTenantIdState(null);
+        delete headers['X-Tenant-ID'];
+        meResponse = await fetch(`${BASE_URL}/api/auth/me`, { credentials: 'include', headers, cache: 'no-store' });
+        body = await meResponse.json().catch(() => null);
+      }
 
       if (meResponse.ok && body) {
         const status = body?.auth_context?.status ?? body?.status ?? null;
+        const contextUser = body?.auth_context?.user ?? body?.user ?? {};
+        const contextTenants = Array.isArray(
+          body?.auth_context?.tenant_context?.available_tenants,
+        )
+          ? body.auth_context.tenant_context.available_tenants.map(
+              (tenant: Record<string, unknown>) => tenantInfoFromContext(tenant),
+            )
+          : [];
 
         if (status === 'VERIFICATION_REQUIRED' || body?.verification_required === true) {
           setUser({
@@ -125,6 +164,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
 
+        if (status === 'NO_TENANT' || status === 'ACCESS_PENDING') {
+          setUser({
+            userId: body.user_id ?? body.userId ?? contextUser.id ?? null,
+            externalUserId: body.external_user_id ?? body.externalUserId ?? '',
+            email: body.email ?? contextUser.email ?? null,
+            displayName: body.display_name ?? body.displayName ?? contextUser.display_name ?? null,
+            tenantId: null,
+            externalTenantId: null,
+            roles: body.roles || [],
+            permissions: body.permissions || [],
+            isPlatformAdmin: Boolean(body.is_platform_admin),
+          });
+          setTenants([]);
+          setActiveTenantIdState(null);
+          setAuthStatus('access-pending');
+          return;
+        }
+
+        if (status === 'TENANT_SELECTION_REQUIRED') {
+          setUser({
+            userId: body.user_id ?? body.userId ?? contextUser.id ?? null,
+            externalUserId: body.external_user_id ?? body.externalUserId ?? '',
+            email: body.email ?? contextUser.email ?? null,
+            displayName: body.display_name ?? body.displayName ?? contextUser.display_name ?? null,
+            tenantId: null,
+            externalTenantId: null,
+            roles: body.roles || [],
+            permissions: body.permissions || [],
+            isPlatformAdmin: Boolean(body.is_platform_admin),
+          });
+          setTenants(contextTenants);
+          clearActiveTenantId();
+          setActiveTenantIdState(null);
+          setAuthStatus('authenticated');
+          return;
+        }
+
         if (body?.authenticated === true) {
           setUser({
             userId: body.user_id ?? body.userId ?? null,
@@ -136,17 +212,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             roles: body.roles || [], permissions: body.permissions || [], isPlatformAdmin: Boolean(body.is_platform_admin),
           });
           setAuthStatus('authenticated');
+          if (contextTenants.length > 0) {
+            setTenants(contextTenants);
+          }
 
-          try {
-            const tenantsResponse = await fetch(`${BASE_URL}/api/tenants`, { credentials: 'include', headers, cache: 'no-store' });
-            if (tenantsResponse.ok) {
-              setTenants((await tenantsResponse.json()).map((tenant: Record<string, unknown>) => ({
-                id: tenant.id, name: tenant.name, slug: tenant.slug,
-                externalIamTenantId: tenant.external_iam_tenant_id, status: tenant.status, role: tenant.role,
-              })) as TenantInfo[]);
+          if (contextTenants.length === 0) {
+            try {
+              const tenantsResponse = await fetch(`${BASE_URL}/api/tenants`, { credentials: 'include', headers, cache: 'no-store' });
+              if (tenantsResponse.ok) {
+                setTenants((await tenantsResponse.json()).map((tenant: Record<string, unknown>) => ({
+                  id: tenant.id, name: tenant.name, slug: tenant.slug,
+                  externalIamTenantId: tenant.external_iam_tenant_id, status: tenant.status, role: tenant.role,
+                  roles: Array.isArray(tenant.roles) ? tenant.roles : (tenant.role ? [tenant.role] : []),
+                  membershipStatus: tenant.membership_status ?? null,
+                  platformContextAvailable: Boolean(tenant.platform_context_available),
+                })) as TenantInfo[]);
+              }
+            } catch {
+              if (!body.is_platform_admin) setTenants([]);
             }
-          } catch {
-            setTenants([]);
           }
 
           const selected = tenantOverride || getActiveTenantId() || (body.tenant_id ? String(body.tenant_id) : null);
