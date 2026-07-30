@@ -3,19 +3,19 @@
 import { useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 
-export default function AccessDeniedPage() {
+export default function VerificationRequiredPage() {
   const { logout, reloadAuth } = useAuth();
 
   useEffect(() => {
-    document.title = 'Access Denied — SBOM Analyzer';
+    document.title = 'Verification Required — SBOM Analyzer';
   }, []);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="w-full max-w-md rounded-xl border border-border bg-surface p-8 shadow-elev-2 text-center">
-        <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/20">
+        <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/20">
           <svg
-            className="h-10 w-10 text-red-500"
+            className="h-10 w-10 text-amber-500"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -24,14 +24,14 @@ export default function AccessDeniedPage() {
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
-              d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
+              d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"
             />
           </svg>
         </div>
 
-        <h1 className="text-2xl font-bold text-foreground mb-2">Access Denied</h1>
+        <h1 className="text-2xl font-bold text-foreground mb-2">Email Verification Required</h1>
         <p className="text-sm text-hcl-muted mb-6">
-          You are authenticated, but your account does not currently have access to this application.
+          Your HCL.CS authentication succeeded, but your SBOM account requires email verification before application access can be granted.
         </p>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">

@@ -17,7 +17,7 @@ from tests.phase6_helpers import (
 )
 
 
-def test_grant_is_eligible_idempotent_audited_and_immediate(client, monkeypatch):
+def test_grant_is_eligible_duplicate_rejected_audited_and_immediate(client, monkeypatch):
     from app.settings import reset_settings
 
     with SessionLocal() as db:
@@ -41,8 +41,11 @@ def test_grant_is_eligible_idempotent_audited_and_immediate(client, monkeypatch)
         "/api/platform/administrators",
         json={"user_id": target_id},
     )
-    assert repeated.status_code == 201
-    assert repeated.json()["action"] == "EXISTING"
+    assert repeated.status_code == 409
+    assert (
+        repeated.json()["detail"]["code"]
+        == "IAM_PLATFORM_ADMIN_ALREADY_GRANTED"
+    )
 
     monkeypatch.setenv("AUTH_ENABLED", "true")
     monkeypatch.setenv("DEV_DEFAULT_TENANT", "false")

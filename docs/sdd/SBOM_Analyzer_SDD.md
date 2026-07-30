@@ -2696,7 +2696,7 @@ All **Protected**. Multi-tenancy: identity comes from the IAM-mapped context; `X
 | --- | --- |
 | Function Signature | POST /api/tenants → `def create_tenant(payload, context, db)` in `app/routers/tenants.py` |
 | Description | Creates a tenant. Requires `platform:admin` permission. |
-| Input Parameters | Body `TenantCreate {name: str 1..255, slug: str (regex ^[a-z0-9][a-z0-9-]{1,126}[a-z0-9]$), external_iam_tenant_id: str 1..255}` |
+| Input Parameters | Body `TenantCreate {name: str 1..255, slug: str (regex ^[a-z0-9][a-z0-9-]{1,126}[a-z0-9]$), initial_admin_user_id: int}`; `external_iam_tenant_id` is optional legacy metadata |
 | Return Values | Tenant dict `{id, name, slug, external_iam_tenant_id, status, role: null}`; **201 Created** |
 | Validation and Error Messages | 403 `"Insufficient permission"`; 422 auto for slug regex/lengths |
 

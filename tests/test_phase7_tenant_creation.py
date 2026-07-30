@@ -3,11 +3,13 @@ from __future__ import annotations
 import pytest
 from app.core.identity_states import IdentityAuditEvent
 from app.models import (
+    AuthorizationRole,
     AuthorizationAuditLog,
     EmailVerificationToken,
     PlatformUserRole,
     Tenant,
     TenantUser,
+    TenantUserRoleAssignment,
 )
 from sqlalchemy import func, select
 
@@ -25,7 +27,7 @@ def test_atomic_api_creation_returns_safe_nested_contract(client):
             initial_admin.id,
             name="  Engineering Security  ",
             slug="  ENGINEERING-SECURITY  ",
-            external_iam_tenant_id=None,
+            external_iam_tenant_id="  engineering-security  ",
         )
 
     response = client.post(
@@ -37,7 +39,7 @@ def test_atomic_api_creation_returns_safe_nested_contract(client):
     body = response.json()
     assert body["tenant"]["name"] == "Engineering Security"
     assert body["tenant"]["slug"] == "engineering-security"
-    assert body["tenant"]["external_iam_tenant_id"] == "sbom-engineering-security"
+    assert body["tenant"]["external_iam_tenant_id"] == "engineering-security"
     assert body["tenant"]["status"] == "ACTIVE"
     assert body["initial_administrator"] == {
         "user_id": initial_admin.id,
@@ -62,6 +64,18 @@ def test_atomic_api_creation_returns_safe_nested_contract(client):
         assert memberships[0].user_id == initial_admin.id
         assert memberships[0].role == "TENANT_ADMIN"
         assert memberships[0].status == "ACTIVE"
+        assignment_role = db.scalar(
+            select(AuthorizationRole.code)
+            .join(
+                TenantUserRoleAssignment,
+                TenantUserRoleAssignment.role_id == AuthorizationRole.id,
+            )
+            .where(
+                TenantUserRoleAssignment.tenant_user_id == memberships[0].id,
+                TenantUserRoleAssignment.status == "ACTIVE",
+            )
+        )
+        assert assignment_role == "TENANT_ADMIN"
         assert db.scalar(
             select(func.count(PlatformUserRole.id)).where(
                 PlatformUserRole.user_id == initial_admin.id
@@ -103,6 +117,77 @@ def test_missing_initial_admin_is_stable_422_and_creates_no_tenant(client):
     assert response.json()["detail"]["code"] == "IAM_INITIAL_TENANT_ADMIN_REQUIRED"
     with SessionLocal() as db:
         assert db.scalar(select(func.count(Tenant.id))) == before
+
+
+def test_wellysis_creation_omits_external_mapping_and_preserves_local_default(client):
+    from app.db import SessionLocal
+
+    with SessionLocal() as db:
+        seed_requester(db)
+        initial_admin = seed_eligible_admin(db)
+        initial_admin_id = initial_admin.id
+        local_default_before = db.scalar(
+            select(Tenant.external_iam_tenant_id).where(Tenant.slug == "default")
+        )
+
+    response = client.post(
+        "/api/tenants",
+        json={
+            "name": "Wellysis",
+            "slug": f"wellysis-{initial_admin_id}",
+            "initial_admin_user_id": initial_admin_id,
+        },
+    )
+    assert response.status_code == 201, response.text
+    correlation_id = response.headers["x-correlation-id"]
+    assert len(correlation_id) >= 12
+    assert response.json()["tenant"]["external_iam_tenant_id"] is None
+    with SessionLocal() as db:
+        tenant = db.get(Tenant, response.json()["tenant"]["id"])
+        assert tenant.external_iam_tenant_id is None
+        assert (
+            db.scalar(
+                select(Tenant.external_iam_tenant_id).where(
+                    Tenant.slug == "default"
+                )
+            )
+            == local_default_before
+            == "local-default"
+        )
+        creation_audits = db.scalars(
+            select(AuthorizationAuditLog).where(
+                AuthorizationAuditLog.tenant_id == tenant.id,
+                AuthorizationAuditLog.action.in_(
+                    [
+                        str(IdentityAuditEvent.PLATFORM_TENANT_CREATED),
+                        str(IdentityAuditEvent.TENANT_INITIAL_ADMIN_ASSIGNED),
+                    ]
+                ),
+            )
+        ).all()
+        assert len(creation_audits) == 2
+        assert {
+            audit.correlation_id for audit in creation_audits
+        } == {correlation_id}
+
+
+def test_local_default_cannot_be_reused_for_another_tenant(client):
+    from app.db import SessionLocal
+
+    with SessionLocal() as db:
+        seed_requester(db)
+        initial_admin = seed_eligible_admin(db)
+        initial_admin_id = initial_admin.id
+
+    response = client.post(
+        "/api/tenants",
+        json=tenant_payload(
+            initial_admin_id,
+            external_iam_tenant_id="local-default",
+        ),
+    )
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "IAM_TENANT_EXTERNAL_ID_CONFLICT"
 
 
 def test_duplicate_slug_and_external_id_have_specific_safe_conflicts(client):

@@ -119,29 +119,46 @@ let _auth401InFlight = false;
 
 function handleAuthError(status: number): void {
   if (typeof window === 'undefined') return;
+  const path = window.location.pathname;
+
+  if (path.startsWith('/auth/callback') || path.startsWith('/verification-required') || path.startsWith('/access-denied')) {
+    return;
+  }
 
   if (status === 401 && !_auth401InFlight) {
     _auth401InFlight = true;
     const authEnabled = process.env.NEXT_PUBLIC_AUTH_ENABLED === 'true';
     if (authEnabled) {
-      // Avoid redirect loops: don't redirect if already on auth pages
-      const path = window.location.pathname;
       const recoveryStarted = window.sessionStorage.getItem('sbom-auth-recovery-started') === '1';
-      if (!path.startsWith('/auth/') && !recoveryStarted) {
-        window.sessionStorage.setItem('sbom-auth-recovery-started', '1');
-        // Small delay to batch multiple concurrent 401s into one redirect
-        setTimeout(() => {
-          const returnTo = `${window.location.pathname}${window.location.search}`;
-          window.location.href = `/api/auth/login?returnTo=${encodeURIComponent(returnTo)}`;
-        }, 100);
+      if (!recoveryStarted) {
+        // Verify if session actually expired before starting OIDC redirect
+        void fetch('/api/auth/session', { cache: 'no-store' })
+          .then((r) => r.ok ? r.json() : null)
+          .then((session) => {
+            if (session?.authenticated === true) {
+              // Session exists! 401 is a backend token validation or service issue, not missing session.
+              window.sessionStorage.removeItem('sbom-auth-recovery-started');
+              _auth401InFlight = false;
+            } else {
+              window.sessionStorage.setItem('sbom-auth-recovery-started', '1');
+              setTimeout(() => {
+                const returnTo = `${window.location.pathname}${window.location.search}`;
+                window.location.href = `/api/auth/login?returnTo=${encodeURIComponent(returnTo)}`;
+              }, 100);
+            }
+          })
+          .catch(() => {
+            _auth401InFlight = false;
+          });
       } else {
         _auth401InFlight = false;
       }
     } else {
       _auth401InFlight = false;
     }
+  } else if (status === 403) {
+    // 403 errors are handled inline by components or AuthGuard
   }
-
 }
 
 // ─── Typed HTTP error ─────────────────────────────────────────────────────────
@@ -179,7 +196,9 @@ export class ApiError extends Error {
 // Backwards-compatible name for existing specialized structured-error callers.
 export { ApiError as HttpError };
 
-export type TenantRole = 'TENANT_ADMIN' | 'SECURITY_ANALYST' | 'DEVELOPER' | 'VIEWER';
+import { type RoleValue, getRoleCode, getRoleLabel } from './roles';
+
+export type TenantRole = 'TENANT_ADMIN' | 'SECURITY_ANALYST' | 'DEVELOPER' | 'VIEWER' | RoleValue;
 export type MembershipStatus = 'ACTIVE' | 'PENDING' | 'DISABLED';
 
 export interface TenantMember {
@@ -189,35 +208,80 @@ export interface TenantMember {
   email: string | null;
   display_name: string | null;
   user_status: string;
-  role: TenantRole;
+  email_verified: boolean;
+  verification_required: boolean;
+  role: RoleValue;
+  roles: RoleValue[];
+  role_assignment_version: number;
   status: MembershipStatus;
 }
 
 export interface PlatformAdministrator {
   grant_id: number;
   user_id: number;
-  external_iam_user_id: string;
   email: string | null;
   display_name: string | null;
-  user_status: string;
-  role: 'PLATFORM_ADMIN';
-  status: 'ACTIVE' | 'DISABLED';
+  local_status: string;
+  email_verified: boolean;
+  verification_required: boolean;
+  role: RoleValue;
+  grant_status: 'ACTIVE' | 'DISABLED' | 'REVOKED';
+  is_effective: boolean;
+  created_at: string;
+}
+
+export interface UserSearchResult {
+  id: number;
+  email: string | null;
+  display_name: string | null;
+  username?: string | null;
+  status: string;
+  email_verified: boolean;
+  verification_required: boolean;
+  external_issuer?: string | null;
+  external_subject?: string | null;
+  is_platform_admin?: boolean;
+  tenant_membership?: {
+    tenant_id: number;
+    tenant_name?: string | null;
+    status: string;
+    role: string;
+    roles?: string[];
+  } | null;
+  tenant_memberships?: Array<{
+    tenant_id: number;
+    tenant_name?: string | null;
+    status: string;
+    role: string;
+    roles?: string[];
+  }>;
 }
 
 export interface TenantSummary {
   id: number | string;
   name: string;
   slug: string;
-  external_iam_tenant_id: string;
+  external_iam_tenant_id: string | null;
   status: 'ACTIVE' | 'PENDING' | 'DISABLED';
   created_at?: string;
   updated_at?: string;
+  member_count?: number;
+  initial_administrator?: {
+    user_id: number;
+    display_name: string | null;
+    email: string | null;
+  } | null;
+  current_administrators?: Array<{
+    user_id: number;
+    display_name: string | null;
+    email: string | null;
+  }>;
 }
 
 export interface CreateTenantRequest {
   name: string;
   slug: string;
-  external_iam_tenant_id: string;
+  initial_admin_user_id: number;
 }
 
 // ─── Fetch with timeout + caller-signal support ───────────────────────────────
@@ -370,23 +434,96 @@ export async function requestVoid(
 }
 
 const adminRequestOptions = { authErrorMode: 'throw' as const };
+const tenantRequestOptions = (tenantId: number) => ({
+  ...adminRequestOptions,
+  headers: { 'X-Tenant-ID': String(tenantId) },
+});
 
-export function getTenantMembers(tenantId: number): Promise<TenantMember[]> {
-  return request<TenantMember[]>(`/api/tenants/${tenantId}/users`, adminRequestOptions);
+export async function getTenantMembers(tenantId: number): Promise<TenantMember[]> {
+  const res = await request<TenantMember[] | { items: TenantMember[] }>(
+    `/api/tenants/${tenantId}/users`,
+    tenantRequestOptions(tenantId),
+  );
+  return Array.isArray(res) ? res : res?.items ?? [];
 }
 
-export function getAssignableTenantRoles(): Promise<{ roles: TenantRole[] }> {
-  return request<{ roles: TenantRole[] }>('/api/tenant-roles', adminRequestOptions);
+export async function getAssignableTenantRoles(tenantId?: number): Promise<{ roles: RoleValue[] }> {
+  const res = await request<{ roles: RoleValue[] } | RoleValue[]>(
+    '/api/tenant-roles',
+    tenantId ? tenantRequestOptions(tenantId) : adminRequestOptions,
+  );
+  if (Array.isArray(res)) return { roles: res };
+  return { roles: res?.roles ?? [] };
 }
 
 export function addTenantMember(
   tenantId: number,
-  payload: { external_user_id: string; role: TenantRole },
+  payload: { user_id: number; roles: TenantRole[]; status?: MembershipStatus },
 ): Promise<TenantMember> {
+  const roleCodes = payload.roles.map(getRoleCode);
   return request<TenantMember>(`/api/tenants/${tenantId}/users`, {
-    ...adminRequestOptions,
+    ...tenantRequestOptions(tenantId),
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ ...payload, roles: roleCodes }),
+  });
+}
+
+export interface TenantRoleState {
+  membership_id: number;
+  user_id: number;
+  membership_status: MembershipStatus;
+  role_assignment_version: number;
+  primary_role: string;
+  roles: Array<{
+    assignment_id: number;
+    role_id: number;
+    role_code: string;
+    role_name: string;
+    is_primary: boolean;
+  }>;
+  effective_permissions: string[];
+}
+
+export interface TenantAuditEvent {
+  id: number;
+  action: string;
+  outcome: string;
+  actor_user_id: number | null;
+  actor_email: string | null;
+  target_user_id: number | null;
+  target_email: string | null;
+  old_state: Record<string, unknown> | null;
+  new_state: Record<string, unknown> | null;
+  correlation_id: string | null;
+  timestamp: string;
+}
+
+export async function getTenantAuditHistory(
+  tenantId: number,
+): Promise<TenantAuditEvent[]> {
+  const response = await request<{ items: TenantAuditEvent[] }>(
+    `/api/tenants/${tenantId}/audit-history`,
+    tenantRequestOptions(tenantId),
+  );
+  return response.items ?? [];
+}
+
+export function replaceTenantMemberRoles(
+  tenantId: number,
+  userId: number,
+  roles: TenantRole[],
+  expectedVersion: number,
+): Promise<TenantRoleState> {
+  const roleCodes = roles.map(getRoleCode);
+  return request<TenantRoleState>(`/api/tenants/${tenantId}/users/${userId}/roles`, {
+    ...tenantRequestOptions(tenantId),
+    method: 'PUT',
+    body: JSON.stringify({
+      role_codes: roleCodes,
+      primary_role_code: roleCodes[0],
+      expected_version: expectedVersion,
+      reason: 'Tenant administration role update',
+    }),
   });
 }
 
@@ -395,43 +532,65 @@ export function updateTenantMemberRole(
   membershipId: number,
   role: TenantRole,
 ): Promise<TenantMember> {
+  const roleCode = getRoleCode(role);
   return request<TenantMember>(`/api/tenants/${tenantId}/users/${membershipId}`, {
-    ...adminRequestOptions,
+    ...tenantRequestOptions(tenantId),
     method: 'PATCH',
-    body: JSON.stringify({ role }),
+    body: JSON.stringify({ role: roleCode }),
   });
 }
 
 export function activateTenantMember(tenantId: number, membershipId: number): Promise<TenantMember> {
   return request<TenantMember>(`/api/tenants/${tenantId}/users/${membershipId}/activate`, {
-    ...adminRequestOptions,
+    ...tenantRequestOptions(tenantId),
     method: 'POST',
   });
 }
 
 export function deactivateTenantMember(tenantId: number, membershipId: number): Promise<TenantMember> {
   return request<TenantMember>(`/api/tenants/${tenantId}/users/${membershipId}/deactivate`, {
-    ...adminRequestOptions,
+    ...tenantRequestOptions(tenantId),
     method: 'POST',
   });
 }
 
 export function removeTenantMember(tenantId: number, membershipId: number): Promise<void> {
   return requestVoid(`/api/tenants/${tenantId}/users/${membershipId}`, {
-    ...adminRequestOptions,
+    ...tenantRequestOptions(tenantId),
     method: 'DELETE',
   });
 }
 
-export function getPlatformAdministrators(): Promise<PlatformAdministrator[]> {
-  return request<PlatformAdministrator[]>('/api/platform/administrators', adminRequestOptions);
+export async function searchPlatformUsers(query: string, tenantId?: number): Promise<UserSearchResult[]> {
+  if (!query.trim()) return [];
+  const params = new URLSearchParams({ q: query.trim() });
+  if (tenantId) params.set('tenant_id', String(tenantId));
+  const res = await request<UserSearchResult[] | { items: UserSearchResult[] }>(
+    `/api/platform/users/search?${params.toString()}`,
+    adminRequestOptions,
+  );
+  return Array.isArray(res) ? res : res?.items ?? [];
 }
 
-export function grantPlatformAdministrator(externalUserId: string): Promise<PlatformAdministrator> {
+export async function searchTenantUserCandidates(tenantId: number, query: string): Promise<UserSearchResult[]> {
+  if (!query.trim() || !tenantId) return [];
+  const res = await request<UserSearchResult[] | { items: UserSearchResult[] }>(
+    `/api/tenants/${tenantId}/user-candidates?q=${encodeURIComponent(query.trim())}`,
+    tenantRequestOptions(tenantId),
+  );
+  return Array.isArray(res) ? res : res?.items ?? [];
+}
+
+export async function getPlatformAdministrators(): Promise<PlatformAdministrator[]> {
+  const res = await request<PlatformAdministrator[] | { items: PlatformAdministrator[] }>('/api/platform/administrators', adminRequestOptions);
+  return Array.isArray(res) ? res : res?.items ?? [];
+}
+
+export function grantPlatformAdministrator(userId: number): Promise<PlatformAdministrator> {
   return request<PlatformAdministrator>('/api/platform/administrators', {
     ...adminRequestOptions,
     method: 'POST',
-    body: JSON.stringify({ external_user_id: externalUserId }),
+    body: JSON.stringify({ user_id: userId }),
   });
 }
 
@@ -442,16 +601,18 @@ export function revokePlatformAdministrator(grantId: number): Promise<void> {
   });
 }
 
-export function listPlatformTenants(): Promise<TenantSummary[]> {
-  return request<TenantSummary[]>('/api/platform/tenants', adminRequestOptions);
+export async function listPlatformTenants(): Promise<TenantSummary[]> {
+  const res = await request<TenantSummary[] | { items: TenantSummary[] }>('/api/platform/tenants', adminRequestOptions);
+  return Array.isArray(res) ? res : res?.items ?? [];
 }
 
-export function createPlatformTenant(payload: CreateTenantRequest): Promise<TenantSummary> {
-  return request<TenantSummary>('/api/tenants', {
+export async function createPlatformTenant(payload: CreateTenantRequest): Promise<TenantSummary> {
+  const response = await request<TenantSummary | { tenant: TenantSummary }>('/api/tenants', {
     ...adminRequestOptions,
     method: 'POST',
     body: JSON.stringify(payload),
   });
+  return 'tenant' in response ? response.tenant : response;
 }
 
 export function updatePlatformTenantStatus(

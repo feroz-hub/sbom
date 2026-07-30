@@ -332,7 +332,11 @@ def grant_platform_administrator(
     )
     now = datetime.now(UTC)
     if grant is not None and grant.status == "ACTIVE":
-        return GrantMutation(grant, user, "EXISTING", None)
+        raise _error(
+            IdentityErrorCode.PLATFORM_ADMIN_ALREADY_GRANTED,
+            "The user already has an active Platform Administrator grant.",
+            status_code=409,
+        )
     if grant is None:
         grant = PlatformUserRole(
             user_id=user.id,

@@ -5,7 +5,15 @@ from uuid import uuid4
 
 import pytest
 from app.core.security import _resolve_context
-from app.models import AuthorizationAuditLog, IAMUser, PlatformUserRole, Tenant, TenantUser
+from app.models import (
+    AuthorizationAuditLog,
+    AuthorizationRole,
+    IAMUser,
+    PlatformUserRole,
+    Tenant,
+    TenantUser,
+    TenantUserRoleAssignment,
+)
 from app.services.tenant_role_assignment_service import create_initial_assignment
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -95,6 +103,46 @@ def test_membership_lifecycle_validation_and_audit(client):
             "membership.activated",
             "membership.removed",
         } <= actions
+
+
+def test_membership_creation_writes_multiple_migration_049_role_assignments(client):
+    from app.db import SessionLocal
+
+    with SessionLocal() as db:
+        user = _seed_user(db, status="ACTIVE")
+        user_id = user.id
+
+    created = client.post(
+        "/api/tenants/1/users",
+        json={
+            "user_id": user_id,
+            "roles": ["VIEWER", "SECURITY_ANALYST"],
+        },
+    )
+    assert created.status_code == 201, created.text
+    assert set(created.json()["roles"]) == {"VIEWER", "SECURITY_ANALYST"}
+    assert created.json()["role"] == "VIEWER"
+
+    with SessionLocal() as db:
+        role_codes = set(
+            db.execute(
+                select(AuthorizationRole.code)
+                .join(
+                    TenantUserRoleAssignment,
+                    TenantUserRoleAssignment.role_id == AuthorizationRole.id,
+                )
+                .join(
+                    TenantUser,
+                    TenantUser.id == TenantUserRoleAssignment.tenant_user_id,
+                )
+                .where(
+                    TenantUser.tenant_id == 1,
+                    TenantUser.user_id == user_id,
+                    TenantUserRoleAssignment.status == "ACTIVE",
+                )
+            ).scalars()
+        )
+    assert role_codes == {"VIEWER", "SECURITY_ANALYST"}
 
 
 def test_membership_identifier_is_tenant_scoped(client):

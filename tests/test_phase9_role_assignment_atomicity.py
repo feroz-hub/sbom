@@ -42,3 +42,21 @@ def test_invalid_complete_replacement_rolls_back_assignments_and_history():
                 TenantUserRoleAssignmentHistory.tenant_user_id == membership.id
             )
         ) == before_history
+
+
+def test_duplicate_complete_replacement_is_rejected():
+    with SessionLocal() as db:
+        user, _membership, _ = seed_role_membership(db)
+        with pytest.raises(service.AssignmentProblem) as exc:
+            service.replace_roles(
+                db,
+                1,
+                user.id,
+                role_codes=["viewer", "VIEWER"],
+                primary_role_code="VIEWER",
+                expected_version=1,
+                reason=None,
+                actor_user_id=user.id,
+                is_platform_admin=False,
+            )
+        assert exc.value.code.value == "IAM_TENANT_ROLE_ALREADY_ASSIGNED"

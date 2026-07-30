@@ -21,7 +21,12 @@ log = logging.getLogger("sbom.audit")
 def _correlation_id(request: Request | None) -> str | None:
     if request is None:
         return None
-    return (request.headers.get("x-request-id") or request.headers.get("x-correlation-id") or "")[:128] or None
+    return (
+        request.headers.get("x-request-id")
+        or request.headers.get("x-correlation-id")
+        or getattr(request.state, "correlation_id", None)
+        or ""
+    )[:128] or None
 
 
 def _client_ip(request: Request | None) -> str | None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 
 from fastapi import Request
 from sqlalchemy import or_, select
@@ -32,6 +33,8 @@ from . import (
     tenant_role_assignment_service,
     tenant_service,
 )
+
+log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,7 +99,7 @@ def resolve_authorization_state(
 ) -> ResolvedAuthorizationState:
     """Resolve authorization state in the required security precedence."""
     requested = (selected_tenant or "").strip()
-    hinted = (selector_hint or "").strip() if not requested else ""
+    hinted = (selector_hint or "").strip()
 
     if user.status == "DISABLED":
         result = ResolvedAuthorizationState(
@@ -140,14 +143,13 @@ def resolve_authorization_state(
             else frozenset()
         )
         memberships = tuple(tenant_service.get_user_memberships(db, user.id))
-        selector = requested or hinted
         selected: Tenant | None = None
         membership: TenantUser | None = None
         selection_source: str | None = None
 
-        if selector:
+        if requested:
             for member, tenant in memberships:
-                if _tenant_matches(tenant, selector):
+                if _tenant_matches(tenant, requested):
                     selected, membership = tenant, member
                     break
             if selected is None and is_platform_admin:
@@ -155,13 +157,13 @@ def resolve_authorization_state(
                     select(Tenant).where(
                         Tenant.status == "ACTIVE",
                         or_(
-                            Tenant.slug == selector,
-                            Tenant.external_iam_tenant_id == selector,
-                            Tenant.id == int(selector) if selector.isdigit() else False,
+                            Tenant.slug == requested,
+                            Tenant.external_iam_tenant_id == requested,
+                            Tenant.id == int(requested) if requested.isdigit() else False,
                         ),
                     )
                 ).scalar_one_or_none()
-            if selected is None and requested:
+            if selected is None:
                 _audit_state(
                     db,
                     event=IdentityAuditEvent.UNAUTHORIZED_TENANT_SELECTION,
@@ -174,7 +176,7 @@ def resolve_authorization_state(
                     IdentityErrorCode.UNAUTHORIZED_TENANT,
                     "The requested tenant is not available to this account.",
                 )
-            selection_source = "HEADER" if requested else "TOKEN_HINT"
+            selection_source = "HEADER"
         if selected is not None:
             roles = {membership.role} if membership else set()
             if is_platform_admin:
@@ -190,7 +192,7 @@ def resolve_authorization_state(
                 membership,
                 selection_source,
             )
-        elif is_platform_admin and not memberships and allow_platform_context:
+        elif is_platform_admin and allow_platform_context:
             result = ResolvedAuthorizationState(
                 AuthorizationState.READY,
                 NextAction.OPEN_PLATFORM_ADMIN,
@@ -245,6 +247,17 @@ def resolve_authorization_state(
                 request=request,
                 reason_code=str(IdentityErrorCode.TENANT_SELECTION_REQUIRED),
                 status=result.status,
+            )
+
+        if (
+            hinted
+            and result.active_tenant
+            and not _tenant_matches(result.active_tenant, hinted)
+        ):
+            log.info(
+                "identity.tenant_hint_mismatch user_id=%s selected_tenant_id=%s",
+                user.id,
+                result.active_tenant.id,
             )
 
     if audit_resolution:

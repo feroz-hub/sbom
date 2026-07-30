@@ -10,6 +10,7 @@ import { SidebarProvider } from './SidebarContext';
 const navigationState = vi.hoisted(() => ({
   pathname: '/sboms',
   search: '',
+  permissions: new Set<string>(['*']),
 }));
 
 vi.mock('next/navigation', () => ({
@@ -32,7 +33,10 @@ vi.mock('@/hooks/useAuth', () => ({
     ],
     activeTenantId: '1',
     switchTenant: vi.fn(),
-    hasPermission: () => true,
+    hasPermission: (permission: string) => (
+      navigationState.permissions.has('*')
+      || navigationState.permissions.has(permission)
+    ),
   }),
 }));
 
@@ -70,6 +74,7 @@ describe('Sidebar analysis navigation', () => {
   beforeEach(() => {
     navigationState.pathname = '/sboms';
     navigationState.search = '';
+    navigationState.permissions = new Set(['*']);
   });
 
   it('shows Analysis children in expanded mode and exposes Runs navigation', () => {
@@ -177,5 +182,33 @@ describe('Sidebar analysis navigation', () => {
     expect(within(flyout).getByRole('menuitem', { name: 'Runs' })).toHaveClass(
       'dark:hover:text-foreground',
     );
+  });
+
+  it('shows platform administration only with platform permissions', () => {
+    renderSidebar('/settings');
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    expect(screen.getByRole('link', { name: 'Platform tenants' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Platform administrators' })).toBeInTheDocument();
+  });
+
+  it('shows tenant administration without platform administration for a Tenant Administrator', () => {
+    navigationState.permissions = new Set([
+      'tenant:user:read',
+      'tenant:settings:update',
+    ]);
+    renderSidebar('/settings/tenant');
+    const nav = screen.getByRole('navigation', { name: 'Main' });
+    expect(within(nav).getByRole('link', { name: 'Tenant users' })).toBeInTheDocument();
+    expect(within(nav).queryByRole('link', { name: 'Platform tenants' })).not.toBeInTheDocument();
+    expect(within(nav).queryByRole('link', { name: 'Platform administrators' })).not.toBeInTheDocument();
+  });
+
+  it('does not show administration pages for Security Analyst or Viewer permissions', () => {
+    navigationState.permissions = new Set(['analysis:run', 'sbom:read']);
+    renderSidebar('/sboms');
+    const nav = screen.getByRole('navigation', { name: 'Main' });
+    expect(within(nav).queryByRole('link', { name: 'Tenant users' })).not.toBeInTheDocument();
+    expect(within(nav).queryByRole('link', { name: 'Platform tenants' })).not.toBeInTheDocument();
+    expect(within(nav).queryByRole('link', { name: 'Platform administrators' })).not.toBeInTheDocument();
   });
 });

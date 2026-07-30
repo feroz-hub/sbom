@@ -15,7 +15,7 @@ def test_tenant_creation_atomically_creates_initial_primary_assignment():
             actor_user_id=requester.id,
             name="Phase Nine Tenant",
             slug="phase-nine-tenant",
-            external_iam_tenant_id=None,
+            external_iam_tenant_id="phase-nine-tenant",
             initial_admin_user_id=admin.id,
         )
         assignment = db.scalar(

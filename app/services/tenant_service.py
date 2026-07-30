@@ -101,16 +101,14 @@ def _normalize_tenant_slug(value: str) -> str:
     return normalized
 
 
-def _normalize_external_tenant_id(value: str | None, slug: str) -> str:
+def _normalize_external_tenant_id(value: str | None, slug: str) -> str | None:
     normalized = (value or "").strip()
     if not normalized:
-        # The legacy database column remains non-null. This deterministic,
-        # SBOM-owned compatibility identifier is not derived from any JWT.
-        return f"sbom-{slug}"
+        return None
     if len(normalized) > 255 or _CONTROL_CHAR_PATTERN.search(normalized):
         raise TenantCreationError(
-            IdentityErrorCode.TENANT_CREATION_FAILED,
-            "External tenant identifier is invalid.",
+            IdentityErrorCode.INVALID_EXTERNAL_IAM_TENANT_ID,
+            "External IAM Tenant ID must not contain control characters and may not exceed 255 characters.",
             status_code=422,
         )
     return normalized
@@ -344,7 +342,7 @@ def create_tenant_with_initial_admin(
                     status_code=409,
                     audit_event=IdentityAuditEvent.TENANT_SLUG_CONFLICT,
                 )
-            if db.scalar(
+            if normalized_external_id is not None and db.scalar(
                 select(Tenant.id).where(
                     Tenant.external_iam_tenant_id == normalized_external_id
                 )
@@ -522,6 +520,9 @@ def resolve_active_tenant(
     allow_platform_context: bool = False,
 ) -> tuple[Tenant | None, TenantUser | None, frozenset[str], frozenset[str], bool]:
     """Resolve tenant, membership, roles, permissions. Raises HTTPException on denial."""
+    # Retained in the compatibility signature only. JWT tenant hints are
+    # diagnostic metadata and never select or authorize an SBOM tenant.
+    del tenant_claim
     settings = get_settings()
     requested = (selected_tenant or "").strip()
     selected: Tenant | None = None
@@ -535,16 +536,6 @@ def resolve_active_tenant(
         if selected is None and is_platform_admin:
             selected = db.execute(
                 select(Tenant).where(Tenant.status == "ACTIVE", _tenant_identity_filter(Tenant, requested))
-            ).scalar_one_or_none()
-    elif tenant_claim is not None:
-        claim_value = str(tenant_claim)
-        for member, tenant in memberships:
-            if claim_value in {str(tenant.id), tenant.slug, tenant.external_iam_tenant_id}:
-                membership, selected = member, tenant
-                break
-        if selected is None and is_platform_admin:
-            selected = db.execute(
-                select(Tenant).where(Tenant.status == "ACTIVE", Tenant.external_iam_tenant_id == claim_value)
             ).scalar_one_or_none()
     elif len(memberships) == 1:
         membership, selected = memberships[0]
@@ -646,6 +637,7 @@ def add_user_to_tenant(
     *,
     external_iam_user_id: str,
     role: str,
+    role_codes: list[str] | None = None,
     status: str = "ACTIVE",
     actor_user_id: int | None = None,
     assignment_source: str = "API",
@@ -653,6 +645,9 @@ def add_user_to_tenant(
 ) -> tuple[TenantUser, IAMUser]:
     now = datetime.now(UTC)
     role = normalize_role(role)
+    normalized_role_codes = [
+        normalize_role(code) for code in (role_codes or [role])
+    ]
     status = validate_membership_status(status)
     user = db.execute(select(IAMUser).where(IAMUser.external_iam_user_id == external_iam_user_id)).scalar_one_or_none()
     if user is None:
@@ -678,10 +673,11 @@ def add_user_to_tenant(
         )
         db.add(membership)
         db.flush()
-        tenant_role_assignment_service.create_initial_assignment(
+        tenant_role_assignment_service.create_initial_assignments(
             db,
             membership,
-            role_code=role,
+            role_codes=normalized_role_codes,
+            primary_role_code=role,
             actor_user_id=actor_user_id,
             source=assignment_source,
             request=request,
@@ -693,10 +689,11 @@ def add_user_to_tenant(
             db, membership.id
         )
         if active_count == 0:
-            tenant_role_assignment_service.create_initial_assignment(
+            tenant_role_assignment_service.create_initial_assignments(
                 db,
                 membership,
-                role_code=role,
+                role_codes=normalized_role_codes,
+                primary_role_code=role,
                 actor_user_id=actor_user_id,
                 source=assignment_source,
                 request=request,

@@ -18,11 +18,12 @@ export function validateTenantForm(
   const errors: Partial<Record<keyof CreateTenantRequest, string>> = {};
   const name = values.name.trim();
   const slug = values.slug.trim();
-  const externalId = values.external_iam_tenant_id.trim();
   if (!name || name.length > 255) errors.name = 'Enter a valid tenant name.';
   if (slug.length < 3 || slug.length > 128 || !SLUG_PATTERN.test(slug)) {
     errors.slug = 'Slug may contain lowercase letters, numbers, and single hyphens only.';
   }
-  if (!externalId || externalId.length > 255) errors.external_iam_tenant_id = 'External IAM tenant ID is required.';
+  if (!Number.isInteger(values.initial_admin_user_id) || values.initial_admin_user_id < 1) {
+    errors.initial_admin_user_id = 'Select an initial Tenant Administrator.';
+  }
   return errors;
 }

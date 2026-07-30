@@ -607,7 +607,7 @@ class TestPrincipalTenantResolution:
             assert db.execute(select(TenantUser).where(TenantUser.user_id == user.id)).scalars().all() == []
             assert db.execute(select(PlatformUserRole).where(PlatformUserRole.user_id == user.id)).scalars().all() == []
 
-    def test_active_database_platform_grant_allows_tenant_selection(self, monkeypatch):
+    def test_active_database_platform_grant_allows_explicit_tenant_selection(self, monkeypatch):
         from datetime import UTC, datetime
         from uuid import uuid4
 
@@ -644,7 +644,7 @@ class TestPrincipalTenantResolution:
                     tenant=tenant.external_iam_tenant_id,
                     roles=["VIEWER"],
                 ),
-                None,
+                str(tenant.id),
             )
             assert context.is_platform_admin
             assert context.tenant_id == tenant.id
