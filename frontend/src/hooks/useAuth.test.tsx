@@ -164,4 +164,99 @@ describe('AuthProvider membership-based tenant context', () => {
     expect(screen.getByTestId('active-tenant')).toHaveTextContent('');
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it('auto-selects the single active tenant membership for a platform admin when no header was set', async () => {
+    const tenant = {
+      id: 7,
+      name: 'Wellysis',
+      slug: 'wellysis',
+      status: 'ACTIVE',
+      membership_status: 'ACTIVE',
+      current_role: 'TENANT_ADMIN',
+      roles: ['TENANT_ADMIN'],
+    };
+    const platformAdminMeBody = {
+      authenticated: true,
+      user_id: 3,
+      email: identity.email,
+      display_name: identity.display_name,
+      tenant_id: null,
+      roles: ['PLATFORM_ADMIN'],
+      permissions: ['platform:admin'],
+      is_platform_admin: true,
+      auth_context: {
+        status: 'READY',
+        user: identity,
+        tenant_context: {
+          active_tenant: null,
+          available_tenants: [tenant],
+        },
+      },
+    };
+    const tenantScopedMeBody = {
+      ...platformAdminMeBody,
+      tenant_id: 7,
+      roles: ['PLATFORM_ADMIN', 'TENANT_ADMIN'],
+      permissions: ['platform:admin', 'tenant:user:read'],
+    };
+
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ authenticated: true }))
+      .mockResolvedValueOnce(jsonResponse(platformAdminMeBody))
+      .mockResolvedValueOnce(jsonResponse(tenantScopedMeBody));
+
+    render(wrap(<Probe />));
+
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('authenticated'));
+    expect(screen.getByTestId('active-tenant')).toHaveTextContent('7');
+    expect(sessionStorage.getItem('sbom_active_tenant_id')).toBe('7');
+  });
+
+  it('restores a valid persisted tenant on initial load', async () => {
+    sessionStorage.setItem('sbom_active_tenant_id', '7');
+    const tenant = {
+      id: 7,
+      name: 'Wellysis',
+      slug: 'wellysis',
+      status: 'ACTIVE',
+      membership_status: 'ACTIVE',
+      current_role: 'TENANT_ADMIN',
+      roles: ['TENANT_ADMIN'],
+    };
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ authenticated: true }))
+      .mockResolvedValueOnce(jsonResponse(meBody('READY', [tenant], 7)));
+
+    render(wrap(<Probe />));
+
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('authenticated'));
+    expect(screen.getByTestId('active-tenant')).toHaveTextContent('7');
+  });
+
+  it('clears invalid persisted tenant and auto-selects valid single membership', async () => {
+    sessionStorage.setItem('sbom_active_tenant_id', '999');
+    const tenant = {
+      id: 7,
+      name: 'Wellysis',
+      slug: 'wellysis',
+      status: 'ACTIVE',
+      membership_status: 'ACTIVE',
+      current_role: 'TENANT_ADMIN',
+      roles: ['TENANT_ADMIN'],
+    };
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ authenticated: true }))
+      .mockResolvedValueOnce(jsonResponse({ detail: { code: 'IAM_UNAUTHORIZED_TENANT' } }, 403))
+      .mockResolvedValueOnce(jsonResponse(meBody('READY', [tenant], null)))
+      .mockResolvedValueOnce(jsonResponse(meBody('READY', [tenant], 7)));
+
+    render(wrap(<Probe />));
+
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('authenticated'));
+    expect(screen.getByTestId('active-tenant')).toHaveTextContent('7');
+    expect(sessionStorage.getItem('sbom_active_tenant_id')).toBe('7');
+  });
 });

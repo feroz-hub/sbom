@@ -87,7 +87,7 @@ function formatDate(value?: string): string {
 
 export default function PlatformTenantsPage() {
   const router = useRouter();
-  const { hasPermission, isLoading: authLoading, switchTenant } = useAuth();
+  const { hasPermission, isLoading: authLoading, selectTenant, switchTenant } = useAuth();
   const canManage = hasPermission('platform:tenant:create');
   const queryClient = useQueryClient();
   const [formOpen, setFormOpen] = useState(false);
@@ -311,8 +311,12 @@ export default function PlatformTenantsPage() {
                     <td className="px-4 py-3 text-right space-x-3">
                       <button
                         type="button"
-                        onClick={() => {
-                          switchTenant(String(tenant.id));
+                        onClick={async () => {
+                          if (selectTenant) {
+                            await selectTenant(String(tenant.id));
+                          } else {
+                            switchTenant(String(tenant.id));
+                          }
                           router.push('/');
                         }}
                         className="font-medium text-hcl-blue hover:underline"
