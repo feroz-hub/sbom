@@ -25,6 +25,7 @@ class CreatedTenantResponse(BaseModel):
     name: str
     slug: str
     external_iam_tenant_id: str | None
+    identity_mapping: dict | None = None
     status: str
     created_at: datetime
     updated_at: datetime

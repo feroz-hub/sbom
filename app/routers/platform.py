@@ -116,12 +116,19 @@ def _user_summary(user, grant, active_tenant_count: int) -> PlatformUserSummary:
     )
 
 
+from ..services.identity_mapping_service import build_identity_mapping
+
+
 def _tenant_dict(tenant) -> dict:
     return {
         "id": tenant.id,
         "name": tenant.name,
         "slug": tenant.slug,
         "external_iam_tenant_id": tenant.external_iam_tenant_id,
+        "identity_mapping": build_identity_mapping(
+            tenant.external_iam_tenant_id,
+            is_legacy=getattr(tenant, "is_legacy", False),
+        ),
         "status": tenant.status,
         "created_at": tenant.created_at,
         "updated_at": tenant.updated_at,

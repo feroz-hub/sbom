@@ -309,10 +309,17 @@ def _available_tenant(
                 actor_user_id=membership.user_id if membership else None,
             )
         )
+    from .identity_mapping_service import build_identity_mapping
+
     return AvailableTenant(
         id=tenant.id,
         name=tenant.name,
         slug=tenant.slug,
+        external_iam_tenant_id=tenant.external_iam_tenant_id,
+        identity_mapping=build_identity_mapping(
+            tenant.external_iam_tenant_id,
+            is_legacy=getattr(tenant, "is_legacy", False),
+        ),
         membership_status=membership.status if membership else None,
         current_role=membership.role if membership else "PLATFORM_ADMIN",
         primary_role=membership.role if membership else "PLATFORM_ADMIN",

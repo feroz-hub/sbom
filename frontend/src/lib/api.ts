@@ -257,11 +257,14 @@ export interface UserSearchResult {
   }>;
 }
 
+import type { IdentityMappingInfo } from './identityMapping';
+
 export interface TenantSummary {
   id: number | string;
   name: string;
   slug: string;
   external_iam_tenant_id: string | null;
+  identity_mapping?: IdentityMappingInfo | Record<string, unknown> | null;
   status: 'ACTIVE' | 'PENDING' | 'DISABLED';
   created_at?: string;
   updated_at?: string;
