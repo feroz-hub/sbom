@@ -22,6 +22,16 @@ export function isEligibleAdministrator(user: UserSearchResult): boolean {
   );
 }
 
+function getSearchErrorMessage(err: unknown): string {
+  if (err && typeof err === 'object' && 'status' in err) {
+    const status = (err as { status: number }).status;
+    if (status === 401) return 'Your session has expired. Sign in again.';
+    if (status === 403) return 'You do not have permission to add members to this tenant.';
+    if (status === 404) return 'The selected tenant could not be found.';
+  }
+  return 'User search could not be completed. Try again.';
+}
+
 export function UserSearchCombobox({
   tenantId,
   onSelect,
@@ -36,6 +46,7 @@ export function UserSearchCombobox({
   const [searchError, setSearchError] = useState<string | null>(null);
   const [showTechDetails, setShowTechDetails] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const requestIdRef = useRef(0);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -58,6 +69,8 @@ export function UserSearchCombobox({
       return;
     }
 
+    const currentRequestId = ++requestIdRef.current;
+
     const timer = setTimeout(async () => {
       setLoading(true);
       setSearchError(null);
@@ -65,14 +78,20 @@ export function UserSearchCombobox({
         const data = tenantId
           ? await searchTenantUserCandidates(tenantId, query)
           : await searchPlatformUsers(query);
-        setResults(data);
-        setOpen(true);
-      } catch {
-        setResults([]);
-        setSearchError('User search could not be completed. Try again.');
-        setOpen(true);
+        if (currentRequestId === requestIdRef.current) {
+          setResults(data);
+          setOpen(true);
+        }
+      } catch (err: unknown) {
+        if (currentRequestId === requestIdRef.current) {
+          setResults([]);
+          setSearchError(getSearchErrorMessage(err));
+          setOpen(true);
+        }
       } finally {
-        setLoading(false);
+        if (currentRequestId === requestIdRef.current) {
+          setLoading(false);
+        }
       }
     }, 250);
 
@@ -188,7 +207,9 @@ export function UserSearchCombobox({
             <div className="p-4 text-center text-xs text-hcl-muted">
               {searchError
                 ? <span role="alert" className="text-red-700">{searchError}</span>
-                : 'No matching existing SBOM users found. Users must sign in to SBOM Analyser at least once to be discoverable.'}
+                : tenantId
+                  ? 'No eligible users found for this tenant.'
+                  : 'No matching existing SBOM users found. Users must sign in to SBOM Analyser at least once to be discoverable.'}
             </div>
           )}
           {results.map((user) => {

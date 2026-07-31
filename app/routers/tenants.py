@@ -634,56 +634,69 @@ def tenant_user_role_history(
 def search_tenant_user_candidates(
     tenant_id: int,
     q: str = Query(..., min_length=1, max_length=200),
-    context: CurrentContext = Depends(require_permission("tenant:user:read")),
+    context: CurrentContext = Depends(require_permission("tenant:user:invite")),
     db: Session = Depends(get_db),
 ) -> UserSearchResponse:
-    _require_current_tenant(tenant_id, context)
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).one_or_none()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+
+    if context.tenant_id is None or context.tenant_id != tenant_id:
+        raise HTTPException(status_code=403, detail="Cross-tenant request unauthorized")
+
+    q_clean = q.strip()
+    if not q_clean:
+        raise HTTPException(status_code=422, detail="Query string cannot be empty or whitespace only")
+
+    from sqlalchemy import not_, exists, or_
     from ..services.platform_service import _escape_search
-    pattern = f"%{_escape_search(q.strip())}%"
+
+    pattern = f"%{_escape_search(q_clean)}%"
+
+    existing_membership = exists().where(
+        TenantUser.tenant_id == tenant_id,
+        TenantUser.user_id == IAMUser.id,
+    )
+
     users = (
         db.query(IAMUser)
         .filter(
-            IAMUser.status != "DISABLED",
+            IAMUser.status == "ACTIVE",
+            IAMUser.email_verified.is_(True),
+            IAMUser.verification_required.is_(False),
+            not_(existing_membership),
             or_(
                 IAMUser.email.ilike(pattern, escape="\\"),
                 IAMUser.display_name.ilike(pattern, escape="\\"),
                 IAMUser.user_principal_name.ilike(pattern, escape="\\"),
             ),
         )
-        .order_by(IAMUser.display_name.asc(), IAMUser.email.asc())
+        .order_by(
+            IAMUser.display_name.asc(),
+            IAMUser.email.asc(),
+            IAMUser.id.asc(),
+        )
         .limit(20)
         .all()
     )
 
-    items = []
-    for user in users:
-        membership = (
-            db.query(TenantUser)
-            .filter(TenantUser.tenant_id == tenant_id, TenantUser.user_id == user.id)
-            .first()
+    items = [
+        UserSearchResult(
+            id=user.id,
+            email=user.email,
+            display_name=user.display_name,
+            username=user.user_principal_name,
+            status=user.status,
+            email_verified=bool(user.email_verified),
+            verification_required=bool(user.verification_required),
+            external_issuer=user.external_iam_issuer,
+            external_subject=user.external_iam_user_id,
+            tenant_membership=None,
         )
-        brief = None
-        if membership:
-            brief = TenantMembershipBrief(
-                tenant_id=tenant_id,
-                status=membership.status,
-                role=membership.role,
-            )
-        items.append(
-            UserSearchResult(
-                id=user.id,
-                email=user.email,
-                display_name=user.display_name,
-                username=user.user_principal_name,
-                status=user.status,
-                email_verified=bool(user.email_verified),
-                verification_required=bool(user.verification_required),
-                external_issuer=user.external_iam_issuer,
-                external_subject=user.external_iam_user_id,
-                tenant_membership=brief,
-            )
-        )
+        for user in users
+    ]
     return UserSearchResponse(items=items)
+
 
 
 @router.get("/tenants/{tenant_id}/users")
