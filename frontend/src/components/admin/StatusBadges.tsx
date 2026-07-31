@@ -1,7 +1,14 @@
 'use client';
 
-import { type RoleValue, getRoleLabel } from '@/lib/roles';
+import { type RoleValue, getRoleLabel, getRoleCode } from '@/lib/roles';
 import { cn } from '@/lib/utils';
+
+export const ROLE_DESCRIPTIONS: Record<string, string> = {
+  TENANT_ADMIN: 'Can manage tenant users, roles and tenant configuration.',
+  SECURITY_ANALYST: 'Can review security findings, vulnerabilities, VEX and remediation information.',
+  DEVELOPER: 'Can perform the project and SBOM operations allowed by the backend role policy.',
+  VIEWER: 'Has read-only tenant access according to backend authorization policy.',
+};
 
 export function VerificationBadge({ verified }: { verified: boolean }) {
   if (verified) {
@@ -64,24 +71,37 @@ export function MembershipStatusBadge({ status }: { status: string }) {
 
 export function RoleBadge({ role, active = true }: { role: RoleValue; active?: boolean }) {
   const label = getRoleLabel(role);
+  const code = getRoleCode(role);
+  const description = code ? ROLE_DESCRIPTIONS[code] : undefined;
+
   return (
     <span
       className={cn(
-        'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold transition-colors',
+        'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold transition-colors cursor-help',
         active
           ? 'bg-hcl-blue/10 text-hcl-blue border border-hcl-blue/20 dark:bg-hcl-blue/20 dark:text-blue-300'
           : 'bg-zinc-100 text-zinc-400 border border-zinc-200 line-through opacity-60 dark:bg-zinc-800/40 dark:text-zinc-500 dark:border-zinc-700',
       )}
-      aria-label={`${label} role (${active ? 'effective' : 'disabled'})`}
+      title={description || label}
+      aria-label={`${label} role (${active ? 'effective' : 'disabled'})${description ? `: ${description}` : ''}`}
     >
       {label}
     </span>
   );
 }
 
-export function RoleBadges({ roles }: { roles?: RoleValue[] | null }) {
+export function RoleBadges({
+  roles,
+  membershipActive = true,
+}: {
+  roles?: RoleValue[] | null;
+  membershipActive?: boolean;
+}) {
+  if (!membershipActive) {
+    return <span className="text-xs text-hcl-muted font-medium">No effective roles</span>;
+  }
   if (!roles || roles.length === 0) {
-    return <span className="text-xs text-hcl-muted font-normal">No assigned roles</span>;
+    return <span className="text-xs text-hcl-muted font-medium">No effective roles</span>;
   }
   return (
     <div className="flex flex-wrap items-center gap-1.5" aria-label="Tenant roles">

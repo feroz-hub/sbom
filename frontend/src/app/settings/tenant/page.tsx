@@ -2,6 +2,7 @@
 
 import { useState, FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import {
   type TenantRole,
@@ -16,21 +17,21 @@ import {
 } from '@/lib/api';
 import { useNotifications } from '@/hooks/useNotifications';
 import { getApiErrorMessage } from '@/lib/notifications';
-import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog';
 import { TenantContextHeader } from '@/components/admin/TenantContextHeader';
 import { UserSearchCombobox } from '@/components/admin/UserSearchCombobox';
 import { TenantAuditHistory } from '@/components/admin/TenantAuditHistory';
 import { VerificationBadge, UserStatusBadge, MembershipStatusBadge, RoleBadges } from '@/components/admin/StatusBadges';
 import { getRoleCode, getRoleLabel } from '@/lib/roles';
 import { resolveExternalTenantMapping } from '@/lib/identityMapping';
+import { MemberActionMenu } from '@/components/admin/MemberActionMenu';
+import { ManageRolesModal } from '@/components/admin/ManageRolesModal';
+import { DisableMembershipDialog, EnableMembershipDialog, RemoveMemberDialog } from '@/components/admin/MembershipConfirmDialogs';
 
-interface MemberAction {
-  operation: () => Promise<unknown>;
-  success: string;
-}
+type MemberItem = Awaited<ReturnType<typeof getTenantMembers>>[number];
 
 export default function TenantUsersPage() {
-  const { user, tenants, activeTenant, activeTenantId, isTenantContextLoading, isLoading: authLoading, hasPermission } = useAuth();
+  const { user, tenants, activeTenant, activeTenantId, isTenantContextLoading, isLoading: authLoading, hasPermission, refreshSession } = useAuth();
+  const router = useRouter();
   const currentTenantId = activeTenantId ? Number(activeTenantId) : (user?.tenantId ? Number(user.tenantId) : null);
   const tenantsList = Array.isArray(tenants) ? tenants : [];
   const activeTenantObj = activeTenant ?? tenantsList.find((t) => t.id === currentTenantId);
@@ -42,7 +43,14 @@ export default function TenantUsersPage() {
 
   const [selectedUser, setSelectedUser] = useState<UserSearchResult | null>(null);
   const [initialRoles, setInitialRoles] = useState<TenantRole[]>(['VIEWER']);
-  const [confirmation, setConfirmation] = useState<(MemberAction & { title: string; description: string; confirmLabel: string }) | null>(null);
+
+  // Modal states
+  const [rolesModalMember, setRolesModalMember] = useState<MemberItem | null>(null);
+  const [disableModalMember, setDisableModalMember] = useState<MemberItem | null>(null);
+  const [enableModalMember, setEnableModalMember] = useState<MemberItem | null>(null);
+  const [removeModalMember, setRemoveModalMember] = useState<MemberItem | null>(null);
+
+  const [actionLoading, setActionLoading] = useState(false);
 
   const members = useQuery({
     queryKey: ['tenant-users', currentTenantId],
@@ -56,34 +64,117 @@ export default function TenantUsersPage() {
     enabled: !(authLoading || isTenantContextLoading) && canRead,
   });
 
-  const action = useMutation({
-    mutationFn: async ({ operation }: MemberAction) => operation(),
-    onSuccess: async (_result, variables) => {
-      showSuccess(variables.success);
-      setConfirmation(null);
+  const addMemberMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedUser || !currentTenantId) return;
+      await addTenantMember(currentTenantId, {
+        user_id: selectedUser.id,
+        roles: initialRoles,
+      });
+    },
+    onSuccess: async () => {
+      showSuccess(`User “${selectedUser?.display_name || selectedUser?.email}” was added to the tenant.`);
       setSelectedUser(null);
       await qc.invalidateQueries({ queryKey: ['tenant-users', currentTenantId] });
       await qc.invalidateQueries({ queryKey: ['tenant-audit-history', currentTenantId] });
     },
-    onError: (error) => showError(getApiErrorMessage(error, 'The tenant membership action failed.')),
+    onError: (error) => showError(getApiErrorMessage(error, 'Failed to add member to tenant.')),
   });
 
   const submitMember = (event: FormEvent) => {
     event.preventDefault();
     if (!selectedUser || !currentTenantId) return;
-    action.mutate({
-      operation: async () => {
-        await addTenantMember(currentTenantId, {
-          user_id: selectedUser.id,
-          roles: initialRoles,
-        });
-      },
-      success: `User “${selectedUser.display_name || selectedUser.email}” was added to the tenant.`,
-    });
+    addMemberMutation.mutate();
   };
 
+  const handleSaveRoles = async (selectedRoles: TenantRole[]) => {
+    if (!rolesModalMember || !currentTenantId) return;
+    setActionLoading(true);
+    try {
+      await replaceTenantMemberRoles(
+        currentTenantId,
+        rolesModalMember.user_id,
+        selectedRoles,
+        rolesModalMember.role_assignment_version,
+      );
+      showSuccess('Roles updated successfully.');
+      await qc.invalidateQueries({ queryKey: ['tenant-users', currentTenantId] });
+      await qc.invalidateQueries({ queryKey: ['tenant-audit-history', currentTenantId] });
 
-  const confirmAction = (value: NonNullable<typeof confirmation>) => setConfirmation(value);
+      if (user?.userId === rolesModalMember.user_id) {
+        await refreshSession();
+      }
+      setRolesModalMember(null);
+    } catch (err: unknown) {
+      showError(getApiErrorMessage(err, 'Failed to update roles.'));
+      throw err;
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleConfirmDisable = async () => {
+    if (!disableModalMember || !currentTenantId) return;
+    setActionLoading(true);
+    try {
+      await deactivateTenantMember(currentTenantId, disableModalMember.membership_id);
+      showSuccess('Membership disabled.');
+      await qc.invalidateQueries({ queryKey: ['tenant-users', currentTenantId] });
+      await qc.invalidateQueries({ queryKey: ['tenant-audit-history', currentTenantId] });
+
+      if (user?.userId === disableModalMember.user_id) {
+        await refreshSession();
+        router.push('/access-pending');
+        return;
+      }
+      setDisableModalMember(null);
+    } catch (err: unknown) {
+      showError(getApiErrorMessage(err, 'Failed to disable membership.'));
+      throw err;
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleConfirmEnable = async () => {
+    if (!enableModalMember || !currentTenantId) return;
+    setActionLoading(true);
+    try {
+      await activateTenantMember(currentTenantId, enableModalMember.membership_id);
+      showSuccess('Membership enabled.');
+      await qc.invalidateQueries({ queryKey: ['tenant-users', currentTenantId] });
+      await qc.invalidateQueries({ queryKey: ['tenant-audit-history', currentTenantId] });
+      setEnableModalMember(null);
+    } catch (err: unknown) {
+      showError(getApiErrorMessage(err, 'Failed to enable membership.'));
+      throw err;
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleConfirmRemove = async () => {
+    if (!removeModalMember || !currentTenantId) return;
+    setActionLoading(true);
+    try {
+      await removeTenantMember(currentTenantId, removeModalMember.membership_id);
+      showSuccess('User removed from tenant.');
+      await qc.invalidateQueries({ queryKey: ['tenant-users', currentTenantId] });
+      await qc.invalidateQueries({ queryKey: ['tenant-audit-history', currentTenantId] });
+
+      if (user?.userId === removeModalMember.user_id) {
+        await refreshSession();
+        router.push('/access-pending');
+        return;
+      }
+      setRemoveModalMember(null);
+    } catch (err: unknown) {
+      showError(getApiErrorMessage(err, 'Failed to remove member.'));
+      throw err;
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   if (isTenantContextLoading) {
     return <div className="p-8 text-center text-hcl-muted">Verifying tenant permission…</div>;
@@ -124,10 +215,12 @@ export default function TenantUsersPage() {
     );
   }
 
+  const tenantName = activeTenantObj?.name || `Tenant #${currentTenantId}`;
+
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-6">
       <TenantContextHeader
-        name={activeTenantObj?.name || `Tenant #${currentTenantId}`}
+        name={tenantName}
         slug={activeTenantObj?.slug || 'Unavailable'}
         externalIamTenantId={activeTenantObj?.externalIamTenantId}
         identityMapping={activeTenantObj?.identity_mapping ?? activeTenantObj?.identityMapping}
@@ -185,10 +278,10 @@ export default function TenantUsersPage() {
                 </label>
                 <button
                   type="submit"
-                  disabled={action.isPending}
+                  disabled={addMemberMutation.isPending}
                   className="rounded-md bg-hcl-blue px-4 py-2 text-sm font-medium text-white hover:bg-hcl-blue/90 disabled:opacity-50 transition-colors"
                 >
-                  {action.isPending ? 'Adding…' : 'Add Member'}
+                  {addMemberMutation.isPending ? 'Adding…' : 'Add Member'}
                 </button>
               </div>
             )}
@@ -196,7 +289,7 @@ export default function TenantUsersPage() {
         </section>
       )}
 
-      {/* Members Table */}
+      {/* Members Section */}
       <section aria-labelledby="members-heading" className="space-y-3">
         <h2 id="members-heading" className="text-lg font-semibold text-foreground">Members</h2>
 
@@ -209,120 +302,124 @@ export default function TenantUsersPage() {
         )}
 
         {members.data && members.data.length > 0 && (
-          <div className="overflow-x-auto rounded-lg border border-border">
-            <table className="min-w-full text-sm">
-              <thead className="bg-surface-elevated">
-                <tr>
-                  <th className="px-4 py-2 text-left font-medium">User</th>
-                  <th className="px-4 py-2 text-left font-medium">Verification</th>
-                  <th className="px-4 py-2 text-left font-medium">Roles</th>
-                  <th className="px-4 py-2 text-left font-medium">Membership Status</th>
-                  <th className="px-4 py-2 text-left font-medium">User Status</th>
-                  {canUpdate && <th className="px-4 py-2 text-right font-medium">Actions</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {members.data.map((member) => (
-                  <tr key={member.membership_id} className="border-t border-border">
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-foreground">{member.display_name || member.email || `User #${member.user_id}`}</div>
-                      <div className="text-xs text-hcl-muted">{member.email || 'No email'}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <VerificationBadge verified={member.email_verified && !member.verification_required} />
-                    </td>
-                    <td className="px-4 py-3">
-                      {canUpdate ? (
-                        <select
-                          aria-label={`Roles for ${member.display_name || member.email || `User #${member.user_id}`}`}
-                          multiple
-                          value={(member.roles ?? [member.role]).map(getRoleCode)}
-                          onChange={(event) => {
-                            const nextRoles = Array.from(
-                              event.target.selectedOptions,
-                              (option) => option.value as TenantRole,
-                            );
-                            if (nextRoles.length === 0) return;
-                            confirmAction({
-                              title: `Change roles for “${member.display_name || member.email || `User #${member.user_id}`}”?`,
-                              description: `This replaces the complete tenant role set with ${nextRoles.map(getRoleLabel).join(', ')} immediately.`,
-                              confirmLabel: 'Replace roles',
-                              operation: () => replaceTenantMemberRoles(
-                                currentTenantId,
-                                member.user_id,
-                                nextRoles,
-                                member.role_assignment_version,
-                              ),
-                              success: `Roles updated to ${nextRoles.map(getRoleLabel).join(', ')}.`,
-                            });
-                          }}
-                          className="rounded-md border border-border bg-background px-2 py-1"
-                        >
-                          {(roles.data?.roles ?? member.roles ?? [member.role]).map((role) => {
-                            const code = getRoleCode(role);
-                            const label = getRoleLabel(role);
-                            const key = code || (role && typeof role === 'object' ? String(role.id ?? '') : String(role));
-                            return (
-                              <option key={key} value={code}>
-                                {label}
-                              </option>
-                            );
-                          })}
-                        </select>
-                      ) : (
-                        <RoleBadges roles={member.roles ?? [member.role]} />
-                      )}
-                    </td>
-                    <td className="px-4 py-3"><MembershipStatusBadge status={member.status} /></td>
-                    <td className="px-4 py-3"><UserStatusBadge status={member.user_status} /></td>
-                    {canUpdate && (
-                      <td className="space-x-3 px-4 py-3 text-right">
-                        {member.status === 'ACTIVE' ? (
-                          <button
-                            type="button"
-                            className="text-amber-700 hover:underline"
-                            onClick={() => confirmAction({
-                              title: `Disable membership for “${member.display_name || member.email || `User #${member.user_id}`}”?`,
-                              description: 'The user will lose access to this tenant immediately.',
-                              confirmLabel: 'Disable membership',
-                              operation: () => deactivateTenantMember(currentTenantId, member.membership_id),
-                              success: 'Membership disabled.',
-                            })}
-                          >
-                            Disable membership
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            className="text-emerald-700 hover:underline"
-                            onClick={() => action.mutate({
-                              operation: () => activateTenantMember(currentTenantId, member.membership_id),
-                              success: 'Membership enabled.',
-                            })}
-                          >
-                            Enable membership
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          className="text-red-700 hover:underline"
-                          onClick={() => confirmAction({
-                            title: `Remove “${member.display_name || member.email || `User #${member.user_id}`}” from tenant?`,
-                            description: 'The tenant membership will be permanently removed.',
-                            confirmLabel: 'Remove from tenant',
-                            operation: () => removeTenantMember(currentTenantId, member.membership_id),
-                            success: 'Member removed from tenant.',
-                          })}
-                        >
-                          Remove from tenant
-                        </button>
-                      </td>
-                    )}
+          <>
+            {/* Desktop Table */}
+            <div className="hidden md:block overflow-x-auto rounded-lg border border-border">
+              <table className="min-w-full text-sm">
+                <thead className="bg-surface-elevated">
+                  <tr>
+                    <th className="px-4 py-2 text-left font-medium">User</th>
+                    <th className="px-4 py-2 text-left font-medium">Verification</th>
+                    <th className="px-4 py-2 text-left font-medium">Effective roles</th>
+                    <th className="px-4 py-2 text-left font-medium">Membership</th>
+                    <th className="px-4 py-2 text-left font-medium">User account</th>
+                    {canUpdate && <th className="px-4 py-2 text-right font-medium">Actions</th>}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {members.data.map((member) => {
+                    const isMemberActive = member.status === 'ACTIVE';
+                    const assignedRolesText = (member.roles ?? [member.role]).map(getRoleLabel).join(', ');
+                    const displayName = member.display_name || member.email || `User #${member.user_id}`;
+
+                    return (
+                      <tr key={member.membership_id} className="border-t border-border">
+                        <td className="px-4 py-3">
+                          <div className="font-medium text-foreground">{displayName}</div>
+                          <div className="text-xs text-hcl-muted">{member.email || 'No email'}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <VerificationBadge verified={member.email_verified && !member.verification_required} />
+                        </td>
+                        <td className="px-4 py-3">
+                          {isMemberActive ? (
+                            <RoleBadges roles={member.roles ?? [member.role]} membershipActive={true} />
+                          ) : (
+                            <div className="space-y-1">
+                              <RoleBadges membershipActive={false} />
+                              <div className="text-xs text-hcl-muted">
+                                <span className="font-medium">Assigned roles:</span> {assignedRolesText}
+                                <br />
+                                <span className="italic text-zinc-500">Effective access: None — membership disabled</span>
+                              </div>
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3"><MembershipStatusBadge status={member.status} /></td>
+                        <td className="px-4 py-3"><UserStatusBadge status={member.user_status} /></td>
+                        {canUpdate && (
+                          <td className="px-4 py-3 text-right">
+                            <MemberActionMenu
+                              displayName={displayName}
+                              membershipStatus={member.status}
+                              canUpdate={canUpdate}
+                              onManageRoles={() => setRolesModalMember(member)}
+                              onDisableMembership={() => setDisableModalMember(member)}
+                              onEnableMembership={() => setEnableModalMember(member)}
+                              onRemoveFromTenant={() => setRemoveModalMember(member)}
+                            />
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Cards View */}
+            <div className="md:hidden space-y-3">
+              {members.data.map((member) => {
+                const isMemberActive = member.status === 'ACTIVE';
+                const assignedRolesText = (member.roles ?? [member.role]).map(getRoleLabel).join(', ');
+                const displayName = member.display_name || member.email || `User #${member.user_id}`;
+
+                return (
+                  <div key={member.membership_id} className="rounded-xl border border-border bg-surface p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="font-semibold text-foreground text-base">{displayName}</div>
+                        <div className="text-xs text-hcl-muted">{member.email || 'No email'}</div>
+                      </div>
+                      {canUpdate && (
+                        <MemberActionMenu
+                          displayName={displayName}
+                          membershipStatus={member.status}
+                          canUpdate={canUpdate}
+                          onManageRoles={() => setRolesModalMember(member)}
+                          onDisableMembership={() => setDisableModalMember(member)}
+                          onEnableMembership={() => setEnableModalMember(member)}
+                          onRemoveFromTenant={() => setRemoveModalMember(member)}
+                        />
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      <VerificationBadge verified={member.email_verified && !member.verification_required} />
+                      <MembershipStatusBadge status={member.status} />
+                      <UserStatusBadge status={member.user_status} />
+                    </div>
+
+                    <div className="pt-2 border-t border-border">
+                      <span className="text-xs text-hcl-muted font-medium block mb-1">Effective roles:</span>
+                      {isMemberActive ? (
+                        <RoleBadges roles={member.roles ?? [member.role]} membershipActive={true} />
+                      ) : (
+                        <div className="space-y-1">
+                          <RoleBadges membershipActive={false} />
+                          <div className="text-xs text-hcl-muted">
+                            <span className="font-medium">Assigned roles:</span> {assignedRolesText}
+                            <br />
+                            <span className="italic text-zinc-500">Effective access: None — membership disabled</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
         )}
       </section>
 
@@ -330,7 +427,7 @@ export default function TenantUsersPage() {
         <h2 id="tenant-settings-heading" className="text-lg font-semibold">Tenant Settings</h2>
         <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-[14rem_1fr]">
           <dt className="text-hcl-muted">Tenant</dt>
-          <dd>{activeTenantObj?.name || `Tenant #${currentTenantId}`}</dd>
+          <dd>{tenantName}</dd>
           <dt className="text-hcl-muted">Status</dt>
           <dd>{activeTenantObj?.status || 'ACTIVE'}</dd>
           <dt className="text-hcl-muted">Authentication</dt>
@@ -347,15 +444,56 @@ export default function TenantUsersPage() {
         </dl>
       </section>
 
-      <ConfirmationDialog
-        open={confirmation !== null}
-        title={confirmation?.title ?? ''}
-        description={confirmation?.description ?? ''}
-        confirmLabel={confirmation?.confirmLabel ?? 'Confirm'}
-        loading={action.isPending}
-        onClose={() => !action.isPending && setConfirmation(null)}
-        onConfirm={() => confirmation && action.mutate(confirmation)}
-      />
+      {/* Modals & Dialogs */}
+      {rolesModalMember && (
+        <ManageRolesModal
+          open={rolesModalMember !== null}
+          onClose={() => !actionLoading && setRolesModalMember(null)}
+          displayName={rolesModalMember.display_name || rolesModalMember.email || `User #${rolesModalMember.user_id}`}
+          tenantName={tenantName}
+          currentRoles={rolesModalMember.roles ?? [rolesModalMember.role]}
+          membershipVersion={rolesModalMember.role_assignment_version}
+          isMembershipActive={rolesModalMember.status === 'ACTIVE'}
+          loading={actionLoading}
+          onSave={handleSaveRoles}
+        />
+      )}
+
+      {disableModalMember && (
+        <DisableMembershipDialog
+          open={disableModalMember !== null}
+          onClose={() => !actionLoading && setDisableModalMember(null)}
+          displayName={disableModalMember.display_name || disableModalMember.email || `User #${disableModalMember.user_id}`}
+          tenantName={tenantName}
+          isSelf={user?.userId === disableModalMember.user_id}
+          loading={actionLoading}
+          onConfirm={handleConfirmDisable}
+        />
+      )}
+
+      {enableModalMember && (
+        <EnableMembershipDialog
+          open={enableModalMember !== null}
+          onClose={() => !actionLoading && setEnableModalMember(null)}
+          displayName={enableModalMember.display_name || enableModalMember.email || `User #${enableModalMember.user_id}`}
+          tenantName={tenantName}
+          isSelf={user?.userId === enableModalMember.user_id}
+          loading={actionLoading}
+          onConfirm={handleConfirmEnable}
+        />
+      )}
+
+      {removeModalMember && (
+        <RemoveMemberDialog
+          open={removeModalMember !== null}
+          onClose={() => !actionLoading && setRemoveModalMember(null)}
+          displayName={removeModalMember.display_name || removeModalMember.email || `User #${removeModalMember.user_id}`}
+          tenantName={tenantName}
+          isSelf={user?.userId === removeModalMember.user_id}
+          loading={actionLoading}
+          onConfirm={handleConfirmRemove}
+        />
+      )}
 
       <TenantAuditHistory tenantId={currentTenantId} />
     </div>

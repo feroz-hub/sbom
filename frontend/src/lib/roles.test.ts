@@ -10,9 +10,9 @@ describe('roles utility', () => {
     expect(getRoleLabel(role2)).toBe('Analyst');
   });
 
-  it('falls back to role code if name is missing', () => {
+  it('formats known role codes with user-friendly labels when name is missing', () => {
     const role = { id: 3, code: 'SECURITY_ANALYST' };
-    expect(getRoleLabel(role)).toBe('SECURITY_ANALYST');
+    expect(getRoleLabel(role)).toBe('Security Analyst');
   });
 
   it('falls back to string id if name and code are missing', () => {
@@ -20,9 +20,10 @@ describe('roles utility', () => {
     expect(getRoleLabel(role)).toBe('4');
   });
 
-  it('handles string compatibility', () => {
-    expect(getRoleLabel('VIEWER')).toBe('VIEWER');
-    expect(getRoleLabel('TENANT_ADMIN')).toBe('TENANT_ADMIN');
+  it('handles string compatibility with user-friendly formatting for known roles', () => {
+    expect(getRoleLabel('VIEWER')).toBe('Viewer');
+    expect(getRoleLabel('TENANT_ADMIN')).toBe('Tenant Admin');
+    expect(getRoleLabel('CUSTOM_ROLE')).toBe('CUSTOM_ROLE');
   });
 
   it('handles empty or undefined values safely', () => {
