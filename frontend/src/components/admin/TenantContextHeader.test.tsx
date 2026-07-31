@@ -5,8 +5,8 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { TenantContextHeader } from './TenantContextHeader';
 
-describe('TenantContextHeader identity mapping UX', () => {
-  it('displays "HCL.CS connected" when external mapping exists', () => {
+describe('TenantContextHeader identity & access model UX', () => {
+  it('displays "Connected to HCL.CS tenant" when external tenant mapping exists', () => {
     render(
       <TenantContextHeader
         name="Wellysis"
@@ -18,12 +18,17 @@ describe('TenantContextHeader identity mapping UX', () => {
     );
 
     expect(screen.getByText('Wellysis')).toBeInTheDocument();
-    expect(screen.getByText('HCL.CS connected')).toBeInTheDocument();
+    expect(screen.getByText('Authentication:')).toBeInTheDocument();
+    expect(screen.getByText('HCL.CS')).toBeInTheDocument();
+    expect(screen.getByText('Tenant access:')).toBeInTheDocument();
+    expect(screen.getByText('Managed in SBOM')).toBeInTheDocument();
+    expect(screen.getByText('External tenant mapping:')).toBeInTheDocument();
+    expect(screen.getByText('Connected to HCL.CS tenant')).toBeInTheDocument();
     expect(screen.queryByText(/legacy metadata/i)).not.toBeInTheDocument();
     expect(screen.queryByText('wellysis-iam-99')).not.toBeInTheDocument();
   });
 
-  it('displays "Local authorization" when external mapping is absent', () => {
+  it('displays "Not configured" for an unmapped tenant without claiming local auth', () => {
     render(
       <TenantContextHeader
         name="Medtronics"
@@ -35,9 +40,16 @@ describe('TenantContextHeader identity mapping UX', () => {
     );
 
     expect(screen.getByText('Medtronics')).toBeInTheDocument();
-    expect(screen.getByText('Local authorization')).toBeInTheDocument();
+    expect(screen.getByText('Authentication:')).toBeInTheDocument();
+    expect(screen.getByText('HCL.CS')).toBeInTheDocument();
+    expect(screen.getByText('Tenant access:')).toBeInTheDocument();
+    expect(screen.getByText('Managed in SBOM')).toBeInTheDocument();
+    expect(screen.getByText('External tenant mapping:')).toBeInTheDocument();
+    expect(screen.getByText('Not configured')).toBeInTheDocument();
+
+    expect(screen.queryByText(/Local authentication/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Local authorization/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/legacy metadata/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Not configured/i)).not.toBeInTheDocument();
   });
 
   it('does not classify an omitted mapping value as legacy', () => {
@@ -50,11 +62,11 @@ describe('TenantContextHeader identity mapping UX', () => {
       />,
     );
 
-    expect(screen.getByText('Local authorization')).toBeInTheDocument();
+    expect(screen.getByText('Not configured')).toBeInTheDocument();
     expect(screen.queryByText(/legacy/i)).not.toBeInTheDocument();
   });
 
-  it('displays "Identity mapping unavailable" with retry action on API error', async () => {
+  it('displays "Mapping status unavailable" with retry action on API error', async () => {
     const user = userEvent.setup();
     const mockRetry = vi.fn();
 
@@ -68,7 +80,7 @@ describe('TenantContextHeader identity mapping UX', () => {
       />,
     );
 
-    expect(screen.getByText('Identity mapping unavailable')).toBeInTheDocument();
+    expect(screen.getByText('Mapping status unavailable')).toBeInTheDocument();
     const retryBtn = screen.getByRole('button', { name: /retry/i });
     expect(retryBtn).toBeInTheDocument();
 
@@ -82,7 +94,7 @@ describe('TenantContextHeader identity mapping UX', () => {
         name="Legacy Tenant"
         slug="legacy"
         externalIamTenantId="old-id"
-        identityMapping={{ mode: 'LEGACY', is_legacy: true, display_status: 'Legacy record' }}
+        identityMapping={{ state: 'LEGACY', mode: 'LEGACY', is_legacy: true, display_status: 'Legacy record' }}
         isPlatformAdmin={true}
         status="ACTIVE"
       />,
@@ -104,7 +116,7 @@ describe('TenantContextHeader identity mapping UX', () => {
       />,
     );
 
-    expect(screen.getByText('HCL.CS connected')).toBeInTheDocument();
+    expect(screen.getByText('Connected to HCL.CS tenant')).toBeInTheDocument();
     expect(screen.queryByText('secret-iam-claim-123')).not.toBeInTheDocument();
     expect(screen.queryByText('Technical identity details')).not.toBeInTheDocument();
   });

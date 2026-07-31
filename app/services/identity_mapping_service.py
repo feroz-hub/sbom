@@ -15,21 +15,22 @@ def build_identity_mapping(
     ext_id = (external_iam_tenant_id or "").strip() or None
 
     if is_legacy:
-        mode = "LEGACY"
+        state = "LEGACY"
         display_status = "Legacy record"
     elif ext_id:
         if verified:
-            mode = "CONNECTED"
-            display_status = "HCL.CS connected"
+            state = "CONNECTED"
+            display_status = "Connected to HCL.CS tenant"
         else:
-            mode = "UNVERIFIED"
+            state = "UNVERIFIED"
             display_status = "Mapping not verified"
     else:
-        mode = "LOCAL_ONLY"
-        display_status = "Local authorization"
+        state = "NOT_CONFIGURED"
+        display_status = "Not configured"
 
     return {
-        "mode": mode,
+        "state": state,
+        "mode": state,
         "provider": "HCL.CS" if ext_id else None,
         "display_status": display_status,
         "external_tenant_id": ext_id,

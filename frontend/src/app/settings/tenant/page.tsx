@@ -20,9 +20,9 @@ import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog';
 import { TenantContextHeader } from '@/components/admin/TenantContextHeader';
 import { UserSearchCombobox } from '@/components/admin/UserSearchCombobox';
 import { TenantAuditHistory } from '@/components/admin/TenantAuditHistory';
-import { VerificationBadge, UserStatusBadge, MembershipStatusBadge } from '@/components/admin/StatusBadges';
+import { VerificationBadge, UserStatusBadge, MembershipStatusBadge, RoleBadges } from '@/components/admin/StatusBadges';
 import { getRoleCode, getRoleLabel } from '@/lib/roles';
-import { resolveIdentityMapping } from '@/lib/identityMapping';
+import { resolveExternalTenantMapping } from '@/lib/identityMapping';
 
 interface MemberAction {
   operation: () => Promise<unknown>;
@@ -63,6 +63,7 @@ export default function TenantUsersPage() {
       setConfirmation(null);
       setSelectedUser(null);
       await qc.invalidateQueries({ queryKey: ['tenant-users', currentTenantId] });
+      await qc.invalidateQueries({ queryKey: ['tenant-audit-history', currentTenantId] });
     },
     onError: (error) => showError(getApiErrorMessage(error, 'The tenant membership action failed.')),
   });
@@ -81,9 +82,10 @@ export default function TenantUsersPage() {
     });
   };
 
+
   const confirmAction = (value: NonNullable<typeof confirmation>) => setConfirmation(value);
 
-  if (authLoading || isTenantContextLoading) {
+  if (isTenantContextLoading) {
     return <div className="p-8 text-center text-hcl-muted">Verifying tenant permission…</div>;
   }
 
@@ -115,8 +117,8 @@ export default function TenantUsersPage() {
     return (
       <div className="mx-auto max-w-4xl p-6 text-center space-y-3">
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300">
-          <h2 className="text-lg font-bold">No tenant selected</h2>
-          <p className="mt-1 text-sm">Choose an active tenant from the tenant switcher before managing members.</p>
+          <h2 className="text-lg font-bold">Select a tenant</h2>
+          <p className="mt-1 text-sm">Choose an active tenant to view tenant-specific projects, SBOMs, findings and administration.</p>
         </div>
       </div>
     );
@@ -268,7 +270,7 @@ export default function TenantUsersPage() {
                           })}
                         </select>
                       ) : (
-                        (member.roles ?? [member.role]).map(getRoleLabel).join(', ')
+                        <RoleBadges roles={member.roles ?? [member.role]} />
                       )}
                     </td>
                     <td className="px-4 py-3"><MembershipStatusBadge status={member.status} /></td>
@@ -280,14 +282,14 @@ export default function TenantUsersPage() {
                             type="button"
                             className="text-amber-700 hover:underline"
                             onClick={() => confirmAction({
-                              title: `Deactivate “${member.display_name || member.email || `User #${member.user_id}`}”?`,
-                              description: 'The user will lose tenant access immediately.',
-                              confirmLabel: 'Deactivate',
+                              title: `Disable membership for “${member.display_name || member.email || `User #${member.user_id}`}”?`,
+                              description: 'The user will lose access to this tenant immediately.',
+                              confirmLabel: 'Disable membership',
                               operation: () => deactivateTenantMember(currentTenantId, member.membership_id),
-                              success: 'Membership deactivated.',
+                              success: 'Membership disabled.',
                             })}
                           >
-                            Deactivate
+                            Disable membership
                           </button>
                         ) : (
                           <button
@@ -295,24 +297,24 @@ export default function TenantUsersPage() {
                             className="text-emerald-700 hover:underline"
                             onClick={() => action.mutate({
                               operation: () => activateTenantMember(currentTenantId, member.membership_id),
-                              success: 'Membership activated.',
+                              success: 'Membership enabled.',
                             })}
                           >
-                            Activate
+                            Enable membership
                           </button>
                         )}
                         <button
                           type="button"
                           className="text-red-700 hover:underline"
                           onClick={() => confirmAction({
-                            title: `Remove “${member.display_name || member.email || `User #${member.user_id}`}”?`,
-                            description: 'The membership will be permanently removed.',
-                            confirmLabel: 'Remove member',
+                            title: `Remove “${member.display_name || member.email || `User #${member.user_id}`}” from tenant?`,
+                            description: 'The tenant membership will be permanently removed.',
+                            confirmLabel: 'Remove from tenant',
                             operation: () => removeTenantMember(currentTenantId, member.membership_id),
-                            success: 'Member removed.',
+                            success: 'Member removed from tenant.',
                           })}
                         >
-                          Remove
+                          Remove from tenant
                         </button>
                       </td>
                     )}
@@ -326,14 +328,18 @@ export default function TenantUsersPage() {
 
       <section aria-labelledby="tenant-settings-heading" className="rounded-xl border border-border bg-surface p-5">
         <h2 id="tenant-settings-heading" className="text-lg font-semibold">Tenant Settings</h2>
-        <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-[12rem_1fr]">
+        <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-[14rem_1fr]">
           <dt className="text-hcl-muted">Tenant</dt>
           <dd>{activeTenantObj?.name || `Tenant #${currentTenantId}`}</dd>
           <dt className="text-hcl-muted">Status</dt>
           <dd>{activeTenantObj?.status || 'ACTIVE'}</dd>
-          <dt className="text-hcl-muted">Identity mode</dt>
+          <dt className="text-hcl-muted">Authentication</dt>
+          <dd>HCL.CS</dd>
+          <dt className="text-hcl-muted">Tenant access</dt>
+          <dd>Managed in SBOM</dd>
+          <dt className="text-hcl-muted">External tenant mapping</dt>
           <dd>
-            {resolveIdentityMapping(
+            {resolveExternalTenantMapping(
               activeTenantObj?.identity_mapping ?? activeTenantObj?.identityMapping,
               activeTenantObj?.externalIamTenantId,
             ).displayStatus}

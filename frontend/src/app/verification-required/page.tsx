@@ -29,9 +29,9 @@ export default function VerificationRequiredPage() {
           </svg>
         </div>
 
-        <h1 className="text-2xl font-bold text-foreground mb-2">Email Verification Required</h1>
+        <h1 className="text-2xl font-bold text-foreground mb-2">Verify your email</h1>
         <p className="text-sm text-hcl-muted mb-6">
-          Your HCL.CS authentication succeeded, but your SBOM account requires email verification before application access can be granted.
+          You signed in successfully through HCL.CS. Verify your email address before requesting access to SBOM tenants.
         </p>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">

@@ -4,11 +4,17 @@ import { useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 
 export default function AccessDeniedPage() {
-  const { logout, reloadAuth } = useAuth();
+  const { activeTenant, logout, reloadAuth } = useAuth();
+
+  const isMembershipDisabled = activeTenant?.membershipStatus === 'DISABLED';
+  const title = isMembershipDisabled ? 'Tenant access disabled' : 'SBOM account disabled';
+  const description = isMembershipDisabled
+    ? 'Your HCL.CS sign-in is valid, but your membership in this tenant is currently disabled.'
+    : 'Your HCL.CS identity is valid, but your SBOM account has been disabled.';
 
   useEffect(() => {
-    document.title = 'Access Denied — SBOM Analyzer';
-  }, []);
+    document.title = `${title} — SBOM Analyzer`;
+  }, [title]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -29,9 +35,9 @@ export default function AccessDeniedPage() {
           </svg>
         </div>
 
-        <h1 className="text-2xl font-bold text-foreground mb-2">Access Denied</h1>
+        <h1 className="text-2xl font-bold text-foreground mb-2">{title}</h1>
         <p className="text-sm text-hcl-muted mb-6">
-          You are authenticated, but your account does not currently have access to this application.
+          {description}
         </p>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">

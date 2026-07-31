@@ -123,11 +123,11 @@ describe('TenantUsersPage', () => {
       ['DEVELOPER', 'VIEWER'],
       1,
     ));
-    await user.click(screen.getByRole('button', { name: 'Deactivate' }));
+    await user.click(screen.getByRole('button', { name: 'Disable membership' }));
     await user.click(screen.getByRole('dialog').querySelector('button.bg-red-600')!);
     await waitFor(() => expect(api.deactivateTenantMember).toHaveBeenCalledWith(1, 9));
-    await user.click(screen.getByRole('button', { name: 'Remove' }));
-    await user.click(screen.getByRole('button', { name: 'Remove member' }));
+    await user.click(screen.getByRole('button', { name: 'Remove from tenant' }));
+    await user.click(screen.getByRole('dialog').querySelector('button.bg-red-600')!);
     await waitFor(() => expect(api.removeTenantMember).toHaveBeenCalledWith(1, 9));
     expect(window.confirm).not.toHaveBeenCalled();
   });
@@ -143,10 +143,11 @@ describe('TenantUsersPage', () => {
     const user = userEvent.setup();
     api.getTenantMembers.mockResolvedValue([{ ...member, status: 'DISABLED' }]);
     renderPage();
-    await user.click(await screen.findByRole('button', { name: 'Activate' }));
+    await user.click(await screen.findByRole('button', { name: 'Enable membership' }));
     await waitFor(() => expect(api.activateTenantMember).toHaveBeenCalledWith(1, 9));
     expect(window.confirm).not.toHaveBeenCalled();
   });
+
 
   it('distinguishes an expired 401 session from authorization denial', async () => {
     const { HttpError } = await import('@/lib/api');
