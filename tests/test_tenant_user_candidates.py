@@ -49,6 +49,51 @@ def test_tenant_admin_can_search_eligible_users_in_active_tenant(app, client):
     assert len(data) == 1
     assert data[0]["id"] == candidate_id
     assert data[0]["email"] == "eligible.candidate@hcltech.com"
+    assert data[0]["external_issuer"] == "https://hcl-cs.test"
+
+
+def test_external_issuer_serialization_and_subject_regression(app, client):
+    with SessionLocal() as db:
+        wellysis = _seed_tenant(db, name="Wellysis", slug="wellysis-serialization")
+        tenant_admin = seed_user(db, email="wadmin_ser@wellysis.test", display_name="Wellysis Admin Ser")
+        seed_membership(db, tenant_admin, tenant_id=wellysis.id, role="TENANT_ADMIN")
+
+        aswini = seed_user(
+            db,
+            email="aswini.v@hcltech.com",
+            display_name="Aswini Venkatesh",
+            verified=True,
+            status="ACTIVE",
+        )
+        aswini.external_issuer = "https://localhost:5180"
+        aswini.external_subject = "aswini-subject-5180"
+        aswini_id = aswini.id
+
+        claims = identity_claims(tenant_admin)
+        db.commit()
+
+    _override_user(app, claims)
+    try:
+        res = client.get(
+            f"/api/tenants/{wellysis.id}/user-candidates",
+            params={"q": "aswini"},
+            headers={"X-Tenant-ID": str(wellysis.id)},
+        )
+    finally:
+        _clear_override(app)
+
+    assert res.status_code == 200, res.text
+    items = res.json()["items"]
+    assert len(items) == 1
+    item = items[0]
+    assert item["id"] == aswini_id
+    assert item["email"] == "aswini.v@hcltech.com"
+    assert item["display_name"] == "Aswini Venkatesh"
+    assert item["external_issuer"] == "https://localhost:5180"
+    assert item["external_subject"] == "aswini-subject-5180"
+    assert "token" not in item
+    assert "password" not in item
+    assert "secret" not in item
 
 
 def test_user_in_another_tenant_is_returned(app, client):
