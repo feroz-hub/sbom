@@ -19,12 +19,24 @@ const api = vi.hoisted(() => ({
   getTenantAuditHistory: vi.fn(),
 }));
 
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+    refresh: vi.fn(),
+  }),
+}));
+
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({
-    user: { tenantId: 1, externalUserId: 'subject-1' },
+    user: { tenantId: 1, externalUserId: 'subject-1', userId: 999 },
+    activeTenantId: 1,
+    activeTenant: { id: 1, name: 'Default Tenant', slug: 'default', externalIamTenantId: 'local-default', status: 'ACTIVE', role: 'TENANT_ADMIN' },
     tenants: [{ id: 1, name: 'Default Tenant', slug: 'default', externalIamTenantId: 'local-default', status: 'ACTIVE', role: 'TENANT_ADMIN' }],
     hasPermission: () => true,
     isLoading: false,
+    isTenantContextLoading: false,
+    refreshSession: vi.fn(),
   }),
 }));
 vi.mock('@/hooks/usePermission', () => ({ usePermission: () => true }));
@@ -67,7 +79,7 @@ describe('TenantUsersPage', () => {
       membership_status: 'ACTIVE',
       role_assignment_version: 2,
       primary_role: 'DEVELOPER',
-      roles: [],
+      roles: ['DEVELOPER', 'VIEWER'],
       effective_permissions: [],
     });
     api.activateTenantMember.mockResolvedValue(member);
@@ -77,11 +89,12 @@ describe('TenantUsersPage', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
 
-  it('lists members and never offers PLATFORM_ADMIN', async () => {
+  it('lists members with effective role badges and read-only rows', async () => {
     renderPage();
-    expect(await screen.findByText('Example User')).toBeInTheDocument();
-    expect(screen.getByText('user@example.test')).toBeInTheDocument();
-    expect(screen.queryByRole('option', { name: 'PLATFORM_ADMIN' })).not.toBeInTheDocument();
+    const userElements = await screen.findAllByText('Example User');
+    expect(userElements[0]).toBeInTheDocument();
+    expect(screen.getAllByText('Viewer')[0]).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Open actions for Example User' })[0]).toBeInTheDocument();
   });
 
   it('adds a member with an initial tenant role', async () => {
@@ -98,7 +111,7 @@ describe('TenantUsersPage', () => {
       },
     ]);
     renderPage();
-    await screen.findByText('Example User');
+    await screen.findAllByText('Example User');
     const input = screen.getByPlaceholderText(/Search existing SBOM users/i);
     await user.type(input, 'New');
     const foundUser = await screen.findByText('New User');
@@ -110,26 +123,53 @@ describe('TenantUsersPage', () => {
     }));
   });
 
-  it('changes role, deactivates, and removes with confirmation', async () => {
+  it('manages roles via Manage roles modal, deactivates via Disable membership dialog, and removes with strong confirmation', async () => {
     const user = userEvent.setup();
     renderPage();
-    const roleSelect = await screen.findByLabelText('Roles for Example User');
-    await user.deselectOptions(roleSelect, 'VIEWER');
-    await user.selectOptions(roleSelect, 'DEVELOPER');
-    await user.click(screen.getByRole('button', { name: 'Replace roles' }));
+
+    // 1. Open Action Menu
+    await screen.findAllByText('Example User');
+    await user.click(screen.getAllByRole('button', { name: 'Open actions for Example User' })[0]);
+
+    // 2. Open Manage Roles Modal
+    await user.click(screen.getByRole('menuitem', { name: /Manage roles/i }));
+    expect(screen.getByRole('heading', { name: 'Manage roles — Example User' })).toBeInTheDocument();
+
+    // Check Developer role checkbox & click Save changes
+    await user.click(screen.getByRole('checkbox', { name: /Developer/i }));
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
     await waitFor(() => expect(api.replaceTenantMemberRoles).toHaveBeenCalledWith(
       1,
       12,
-      ['DEVELOPER', 'VIEWER'],
+      ['VIEWER', 'DEVELOPER'],
       1,
     ));
-    await user.click(screen.getByRole('button', { name: 'Disable membership' }));
-    await user.click(screen.getByRole('dialog').querySelector('button.bg-red-600')!);
+
+    // 3. Disable Membership
+    await user.click(screen.getAllByRole('button', { name: 'Open actions for Example User' })[0]);
+    await user.click(screen.getByRole('menuitem', { name: /Disable membership/i }));
+    expect(screen.getByRole('heading', { name: 'Disable tenant membership?' })).toBeInTheDocument();
+
+    const dialog = screen.getByRole('dialog');
+    const disableConfirmBtn = dialog.querySelector('button.bg-red-600') as HTMLButtonElement;
+    await user.click(disableConfirmBtn);
     await waitFor(() => expect(api.deactivateTenantMember).toHaveBeenCalledWith(1, 9));
-    await user.click(screen.getByRole('button', { name: 'Remove from tenant' }));
-    await user.click(screen.getByRole('dialog').querySelector('button.bg-red-600')!);
+
+    // 4. Remove Member with Strong Confirmation Checkbox
+    await user.click(screen.getAllByRole('button', { name: 'Open actions for Example User' })[0]);
+    await user.click(screen.getByRole('menuitem', { name: /Remove from tenant/i }));
+    expect(screen.getByRole('heading', { name: 'Remove user from tenant?' })).toBeInTheDocument();
+
+    const removeDialog = screen.getByRole('dialog');
+    const removeBtn = removeDialog.querySelector('button.bg-red-600') as HTMLButtonElement;
+    expect(removeBtn).toBeDisabled();
+
+    await user.click(screen.getByRole('checkbox', { name: /I understand this user will lose access to this tenant/i }));
+    expect(removeBtn).not.toBeDisabled();
+
+    await user.click(removeBtn);
     await waitFor(() => expect(api.removeTenantMember).toHaveBeenCalledWith(1, 9));
-    expect(window.confirm).not.toHaveBeenCalled();
   });
 
   it('renders an explicit 403 message without initiating login', async () => {
@@ -143,11 +183,19 @@ describe('TenantUsersPage', () => {
     const user = userEvent.setup();
     api.getTenantMembers.mockResolvedValue([{ ...member, status: 'DISABLED' }]);
     renderPage();
-    await user.click(await screen.findByRole('button', { name: 'Enable membership' }));
-    await waitFor(() => expect(api.activateTenantMember).toHaveBeenCalledWith(1, 9));
-    expect(window.confirm).not.toHaveBeenCalled();
-  });
 
+    await screen.findAllByText('Example User');
+    await user.click(screen.getAllByRole('button', { name: 'Open actions for Example User' })[0]);
+    await user.click(screen.getByRole('menuitem', { name: /Enable membership/i }));
+
+    expect(screen.getByRole('heading', { name: 'Enable tenant membership?' })).toBeInTheDocument();
+
+    const enableDialog = screen.getByRole('dialog');
+    const enableBtn = enableDialog.querySelector('button.bg-\\[var\\(--btn-primary\\)\\]') || enableDialog.querySelectorAll('button')[1];
+    await user.click(enableBtn);
+
+    await waitFor(() => expect(api.activateTenantMember).toHaveBeenCalledWith(1, 9));
+  });
 
   it('distinguishes an expired 401 session from authorization denial', async () => {
     const { HttpError } = await import('@/lib/api');

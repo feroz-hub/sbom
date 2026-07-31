@@ -29,13 +29,15 @@ export function getRoleLabel(role: RoleValue): string {
     return trimmed;
   }
 
-  const code = role.code ?? role.name ?? String(role.id ?? '');
-  if (code && KNOWN_ROLE_LABELS[code]) {
-    return KNOWN_ROLE_LABELS[code];
+  if (role.name) {
+    return role.name;
+  }
+
+  if (role.code && KNOWN_ROLE_LABELS[role.code]) {
+    return KNOWN_ROLE_LABELS[role.code];
   }
 
   return (
-    role.name ??
     role.code ??
     String(role.id ?? 'Unknown role')
   );
