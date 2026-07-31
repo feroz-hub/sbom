@@ -23,6 +23,7 @@ class AuthContextPlatform(BaseModel):
 
 
 class IdentityMappingInfo(BaseModel):
+    state: str | None = None
     mode: str
     provider: str | None = None
     display_status: str

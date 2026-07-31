@@ -8,13 +8,30 @@ export type RoleValue =
   | null
   | undefined;
 
+const KNOWN_ROLE_LABELS: Record<string, string> = {
+  TENANT_ADMIN: 'Tenant Admin',
+  SECURITY_ANALYST: 'Security Analyst',
+  DEVELOPER: 'Developer',
+  VIEWER: 'Viewer',
+  PLATFORM_ADMIN: 'Platform Admin',
+};
+
 export function getRoleLabel(role: RoleValue): string {
   if (!role) {
     return 'No role';
   }
 
   if (typeof role === 'string') {
-    return role;
+    const trimmed = role.trim();
+    if (KNOWN_ROLE_LABELS[trimmed]) {
+      return KNOWN_ROLE_LABELS[trimmed];
+    }
+    return trimmed;
+  }
+
+  const code = role.code ?? role.name ?? String(role.id ?? '');
+  if (code && KNOWN_ROLE_LABELS[code]) {
+    return KNOWN_ROLE_LABELS[code];
   }
 
   return (

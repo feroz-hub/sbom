@@ -19,7 +19,7 @@ import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog';
 import { slugFromName, validateTenantForm } from '@/lib/tenantForm';
 import { MembershipStatusBadge } from '@/components/admin/StatusBadges';
 import { UserSearchCombobox } from '@/components/admin/UserSearchCombobox';
-import { resolveIdentityMapping } from '@/lib/identityMapping';
+import { resolveExternalTenantMapping } from '@/lib/identityMapping';
 
 const EMPTY_FORM: CreateTenantRequest = {
   name: '',
@@ -291,7 +291,7 @@ export default function PlatformTenantsPage() {
                 <tr>
                   <th className="px-4 py-2 text-left font-medium">Name</th>
                   <th className="px-4 py-2 text-left font-medium">Slug</th>
-                  <th className="px-4 py-2 text-left font-medium">Identity mode</th>
+                  <th className="px-4 py-2 text-left font-medium">External tenant mapping</th>
                   <th className="px-4 py-2 text-left font-medium">Status</th>
                   <th className="px-4 py-2 text-left font-medium">Members</th>
                   <th className="px-4 py-2 text-left font-medium">Created</th>
@@ -304,7 +304,7 @@ export default function PlatformTenantsPage() {
                     <td className="px-4 py-3 font-semibold">{tenant.name}</td>
                     <td className="px-4 py-3 font-mono text-xs text-hcl-muted">{tenant.slug}</td>
                     <td className="px-4 py-3 text-xs font-medium text-foreground">
-                      {resolveIdentityMapping(tenant.identity_mapping, tenant.external_iam_tenant_id).displayStatus}
+                      {resolveExternalTenantMapping(tenant.identity_mapping, tenant.external_iam_tenant_id).displayStatus}
                     </td>
                     <td className="px-4 py-3"><MembershipStatusBadge status={tenant.status} /></td>
                     <td className="px-4 py-3">{tenant.member_count ?? '—'}</td>

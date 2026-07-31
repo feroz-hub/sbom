@@ -26,9 +26,9 @@ export default function AccessPendingPage() {
         </div>
 
         <div className="space-y-2">
-          <h1 className="text-xl font-bold text-foreground">Access Pending</h1>
+          <h1 className="text-xl font-bold text-foreground">Access assignment required</h1>
           <p className="text-sm text-hcl-muted">
-            Your identity is verified, but you have not yet been assigned access to an SBOM tenant.
+            Your HCL.CS identity is verified, but you have not been assigned a platform role or active tenant membership.
           </p>
           <p className="text-xs text-hcl-muted">
             Contact a Platform Administrator or Tenant Administrator to grant you membership.
