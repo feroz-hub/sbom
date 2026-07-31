@@ -689,8 +689,8 @@ def search_tenant_user_candidates(
             status=user.status,
             email_verified=bool(user.email_verified),
             verification_required=bool(user.verification_required),
-            external_issuer=user.external_iam_issuer,
-            external_subject=user.external_iam_user_id,
+            external_issuer=user.external_issuer,
+            external_subject=user.effective_external_subject,
             tenant_membership=None,
         )
         for user in users
