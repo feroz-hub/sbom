@@ -29,10 +29,10 @@ vi.mock('next/navigation', () => ({
 
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({
-    user: { tenantId: 1, externalUserId: 'subject-1', userId: 999 },
+    user: { tenantId: 1, externalUserId: 'subject-1', userId: 999, isPlatformAdmin: true },
     activeTenantId: 1,
-    activeTenant: { id: 1, name: 'Default Tenant', slug: 'default', externalIamTenantId: 'local-default', status: 'ACTIVE', role: 'TENANT_ADMIN' },
-    tenants: [{ id: 1, name: 'Default Tenant', slug: 'default', externalIamTenantId: 'local-default', status: 'ACTIVE', role: 'TENANT_ADMIN' }],
+    activeTenant: { id: 1, name: 'Default Tenant', slug: 'default', externalIamTenantId: 'local-default', status: 'ACTIVE', role: 'TENANT_ADMIN', membershipStatus: 'ACTIVE' },
+    tenants: [{ id: 1, name: 'Default Tenant', slug: 'default', externalIamTenantId: 'local-default', status: 'ACTIVE', role: 'TENANT_ADMIN', membershipStatus: 'ACTIVE' }],
     hasPermission: () => true,
     isLoading: false,
     isTenantContextLoading: false,
@@ -89,12 +89,17 @@ describe('TenantUsersPage', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
 
-  it('lists members with effective role badges and read-only rows', async () => {
+  it('lists members with effective role badges, clean header, and read-only rows', async () => {
     renderPage();
     const userElements = await screen.findAllByText('Example User');
     expect(userElements[0]).toBeInTheDocument();
     expect(screen.getAllByText('Viewer')[0]).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: 'Open actions for Example User' })[0]).toBeInTheDocument();
+
+    expect(screen.getAllByText('HCL.CS')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('Managed in SBOM')[0]).toBeInTheDocument();
+    expect(screen.queryByText(/External tenant mapping/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Technical identity details/i)).not.toBeInTheDocument();
   });
 
   it('adds a member with an initial tenant role', async () => {

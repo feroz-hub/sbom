@@ -100,7 +100,7 @@ describe('Status Badges & Role Presentation', () => {
     );
 
     expect(screen.getByText('Verification: Verified')).toBeInTheDocument();
-    expect(screen.getByText('Membership: Active')).toBeInTheDocument();
+    expect(screen.getByText('Current membership: Active')).toBeInTheDocument();
     expect(screen.getByText('User account: Active')).toBeInTheDocument();
 
     rerender(
@@ -112,7 +112,7 @@ describe('Status Badges & Role Presentation', () => {
     );
 
     expect(screen.getByText('Verification: Verification required')).toBeInTheDocument();
-    expect(screen.getByText('Membership: Disabled')).toBeInTheDocument();
+    expect(screen.getByText('Current membership: Disabled')).toBeInTheDocument();
     expect(screen.getByText('User account: Disabled')).toBeInTheDocument();
   });
 });
