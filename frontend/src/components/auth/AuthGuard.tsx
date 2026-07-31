@@ -1,15 +1,5 @@
 'use client';
 
-/**
- * AuthGuard — wraps protected pages with authentication check.
- *
- * When auth is enabled and user is not authenticated, redirects to HCL IAM
- * login. Shows a loading state during token validation. When auth is disabled
- * (dev mode), renders children immediately.
- *
- * Switches strictly on authStatus from useAuth to prevent redirect loops.
- */
-
 import { useEffect, type ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
@@ -27,24 +17,29 @@ interface AuthGuardProps {
 export function AuthGuard({ children, requiredPermission, requiredRoles }: AuthGuardProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { authStatus, config, login, reloadAuth, hasPermission, hasAnyRole } = useAuth();
+  const { authStatus, bootstrapState, config, login, reloadAuth, hasPermission, hasAnyRole } = useAuth();
 
   const isPublicPath = PUBLIC_PATHS.some((p) => pathname?.startsWith(p));
 
   useEffect(() => {
     if (isPublicPath) return;
 
-    if (authStatus === 'loading') {
+    if (
+      bootstrapState === 'checking-session' ||
+      bootstrapState === 'processing-callback' ||
+      bootstrapState === 'loading-auth-context' ||
+      bootstrapState === 'loading-tenant-context'
+    ) {
       return;
     }
 
-    if (config.enabled && authStatus === 'unauthenticated') {
-      login();
+    if (config.enabled && (bootstrapState === 'unauthenticated' || authStatus === 'unauthenticated')) {
+      void login();
       return;
     }
 
     if (
-      authStatus === 'verification-required' &&
+      (bootstrapState === 'verification-required' || authStatus === 'verification-required') &&
       pathname !== '/verification-required'
     ) {
       router.replace('/verification-required');
@@ -52,7 +47,7 @@ export function AuthGuard({ children, requiredPermission, requiredRoles }: AuthG
     }
 
     if (
-      authStatus === 'access-pending' &&
+      (bootstrapState === 'access-pending' || authStatus === 'access-pending') &&
       pathname !== '/access-pending'
     ) {
       router.replace('/access-pending');
@@ -60,28 +55,26 @@ export function AuthGuard({ children, requiredPermission, requiredRoles }: AuthG
     }
 
     if (
-      authStatus === 'access-denied' &&
-      pathname !== '/access-denied'
-    ) {
-      router.replace('/access-denied');
-      return;
-    }
-
-    if (
-      authStatus === 'authenticated' &&
+      (bootstrapState === 'ready' || authStatus === 'authenticated') &&
       (pathname === '/verification-required' || pathname === '/access-denied')
     ) {
       router.replace('/');
       return;
     }
-  }, [authStatus, config.enabled, isPublicPath, login, pathname, router]);
+  }, [authStatus, bootstrapState, config.enabled, isPublicPath, login, pathname, router]);
 
   if (isPublicPath) {
     return <>{children}</>;
   }
 
   // Loading state
-  if (authStatus === 'loading') {
+  if (
+    bootstrapState === 'checking-session' ||
+    bootstrapState === 'processing-callback' ||
+    bootstrapState === 'loading-auth-context' ||
+    bootstrapState === 'loading-tenant-context' ||
+    authStatus === 'loading'
+  ) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <div className="text-center">
@@ -93,19 +86,19 @@ export function AuthGuard({ children, requiredPermission, requiredRoles }: AuthG
   }
 
   // Unauthenticated (auth enabled)
-  if (config.enabled && authStatus === 'unauthenticated') {
+  if (config.enabled && (bootstrapState === 'unauthenticated' || authStatus === 'unauthenticated')) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <div className="text-center">
           <div className="mb-4 h-10 w-10 animate-spin rounded-full border-4 border-hcl-blue border-t-transparent mx-auto" />
-          <p className="text-sm text-hcl-muted">Redirecting to login…</p>
+          <p className="text-sm text-hcl-muted">Redirecting to sign in…</p>
         </div>
       </div>
     );
   }
 
   // Service unavailable state — show message with Retry button
-  if (authStatus === 'service-unavailable') {
+  if (bootstrapState === 'error' || authStatus === 'service-unavailable') {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background px-4">
         <div className="w-full max-w-md rounded-xl border border-border bg-surface p-8 shadow-elev-2 text-center">
@@ -125,18 +118,6 @@ export function AuthGuard({ children, requiredPermission, requiredRoles }: AuthG
           >
             Retry Status
           </button>
-        </div>
-      </div>
-    );
-  }
-
-  // Intermediate routing state (verification-required or access-denied)
-  if (authStatus === 'verification-required' || authStatus === 'access-denied') {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="text-center">
-          <div className="mb-4 h-10 w-10 animate-spin rounded-full border-4 border-hcl-blue border-t-transparent mx-auto" />
-          <p className="text-sm text-hcl-muted">Redirecting…</p>
         </div>
       </div>
     );

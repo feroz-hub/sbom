@@ -1,18 +1,18 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   type AuthConfig, clearActiveTenantId, getActiveTenantId, resolveAuthConfig,
   setActiveTenantId,
 } from '@/lib/auth';
+import type { IdentityMappingInfo } from '@/lib/identityMapping';
 
 export interface AuthUser {
   userId: number | null; externalUserId: string; email: string | null; displayName: string | null;
   tenantId: number | null; externalTenantId: string | null; roles: string[]; permissions: string[];
   isPlatformAdmin: boolean;
 }
-import type { IdentityMappingInfo } from '@/lib/identityMapping';
 
 export interface TenantInfo {
   id: number; name: string; slug: string; externalIamTenantId: string | null;
@@ -31,12 +31,25 @@ export type AuthStatus =
   | 'access-denied'
   | 'service-unavailable';
 
+export type BootstrapState =
+  | 'checking-session'
+  | 'processing-callback'
+  | 'loading-auth-context'
+  | 'loading-tenant-context'
+  | 'ready'
+  | 'verification-required'
+  | 'access-pending'
+  | 'unauthenticated'
+  | 'error';
+
 interface AuthContextValue {
   sessionAuthenticated: boolean;
   isAuthenticated: boolean;
   isLoading: boolean;
   isTenantContextLoading: boolean;
   authStatus: AuthStatus;
+  bootstrapState: BootstrapState;
+  bootstrapError: string | null;
   user: AuthUser | null;
   activeTenant: TenantInfo | null;
   activeTenantId: string | null;
@@ -46,7 +59,9 @@ interface AuthContextValue {
   login: () => Promise<void>;
   logout: () => void;
   reloadAuth: () => void;
+  retryBootstrap: () => void;
   refreshSession: () => Promise<void>;
+  setBootstrapState: (state: BootstrapState, error?: string | null) => void;
   selectTenant: (tenantId: string) => Promise<void>;
   clearTenantSelection: () => void;
   switchTenant: (tenantId: string) => void;
@@ -90,23 +105,54 @@ function tenantInfoFromContext(tenant: Record<string, unknown>): TenantInfo {
   };
 }
 
+const BOOTSTRAP_TIMEOUT_MS = 15000;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const config = useMemo(() => resolveAuthConfig(), []);
   const queryClient = useQueryClient();
   const [sessionAuthenticated, setSessionAuthenticated] = useState(false);
   const [authStatus, setAuthStatus] = useState<AuthStatus>('loading');
+  const [bootstrapState, setBootstrapStateInternal] = useState<BootstrapState>('checking-session');
+  const [bootstrapError, setBootstrapError] = useState<string | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [tenants, setTenants] = useState<TenantInfo[]>([]);
   const [activeTenantIdState, setActiveTenantIdState] = useState<string | null>(null);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const setBootstrapState = useCallback((state: BootstrapState, error: string | null = null) => {
+    setBootstrapStateInternal(state);
+    setBootstrapError(error);
+
+    // Map bootstrapState to legacy authStatus for backward compatibility
+    if (
+      state === 'checking-session' ||
+      state === 'processing-callback' ||
+      state === 'loading-auth-context' ||
+      state === 'loading-tenant-context'
+    ) {
+      setAuthStatus('loading');
+    } else if (state === 'ready') {
+      setAuthStatus('authenticated');
+    } else if (state === 'verification-required') {
+      setAuthStatus('verification-required');
+    } else if (state === 'access-pending') {
+      setAuthStatus('access-pending');
+    } else if (state === 'unauthenticated') {
+      setAuthStatus('unauthenticated');
+    } else if (state === 'error') {
+      setAuthStatus('service-unavailable');
+    }
+  }, []);
 
   const checkAuth = useCallback(async (tenantOverride?: string) => {
     if (!config.enabled) {
       setUser(DEV_USER); setTenants(DEV_TENANTS); setActiveTenantId('1'); setActiveTenantIdState('1');
       setSessionAuthenticated(true);
-      setAuthStatus('authenticated');
+      setBootstrapState('ready');
       return;
     }
+
+    setBootstrapState('checking-session');
 
     try {
       const sessionResponse = await fetch('/api/auth/session', { credentials: 'include', cache: 'no-store' });
@@ -118,11 +164,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
         setTenants([]);
         setActiveTenantIdState(null);
-        setAuthStatus('unauthenticated');
+        setBootstrapState('unauthenticated');
         return;
       }
 
       setSessionAuthenticated(true);
+      setBootstrapState('loading-auth-context');
 
       const { BASE_URL } = await import('@/lib/api');
       const headers: Record<string, string> = {};
@@ -142,6 +189,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (meResponse.ok && body) {
+        setBootstrapState('loading-tenant-context');
         const status = body?.auth_context?.status ?? body?.status ?? null;
         const contextUser = body?.auth_context?.user ?? body?.user ?? {};
         let contextTenants: TenantInfo[] = Array.isArray(
@@ -162,7 +210,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             externalTenantId: body.external_tenant_id ?? body.externalTenantId ?? null,
             roles: body.roles || [], permissions: body.permissions || [], isPlatformAdmin: Boolean(body.is_platform_admin),
           });
-          setAuthStatus('verification-required');
+          setBootstrapState('verification-required');
           return;
         }
 
@@ -176,7 +224,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             externalTenantId: body.external_tenant_id ?? body.externalTenantId ?? null,
             roles: body.roles || [], permissions: body.permissions || [], isPlatformAdmin: Boolean(body.is_platform_admin),
           });
-          setAuthStatus('access-denied');
+          setBootstrapState('error', 'Your SBOM account has been disabled.');
           return;
         }
 
@@ -195,7 +243,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setTenants([]);
           clearActiveTenantId();
           setActiveTenantIdState(null);
-          setAuthStatus('access-pending');
+          setBootstrapState('access-pending');
           return;
         }
 
@@ -228,8 +276,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           (t) => t.status === 'ACTIVE' && (t.membershipStatus === 'ACTIVE' || t.membershipStatus === null || t.platformContextAvailable),
         );
 
-        // Resolution order (a -> f):
-        // a, b, c: Check if persisted tenant is valid
         const candidateId = tenantOverride || getActiveTenantId() || (body.tenant_id ? String(body.tenant_id) : null);
         const validPersisted = candidateId ? activeTenants.find((t) => String(t.id) === String(candidateId)) : null;
 
@@ -261,11 +307,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             permissions: body.permissions || [],
             isPlatformAdmin: Boolean(body.is_platform_admin),
           });
-          setAuthStatus('authenticated');
+          setBootstrapState('ready');
           return;
         }
 
-        // d: No valid persisted tenant, user has exactly ONE active tenant membership -> auto-select
         if (activeTenants.length === 1) {
           const autoSelectedIdStr = String(activeTenants[0].id);
           setActiveTenantId(autoSelectedIdStr);
@@ -293,11 +338,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             permissions: body.permissions || [],
             isPlatformAdmin: Boolean(body.is_platform_admin),
           });
-          setAuthStatus('authenticated');
+          setBootstrapState('ready');
           return;
         }
 
-        // e: Multiple active tenant memberships and no valid persisted selection -> do not arbitrarily choose
         if (activeTenants.length > 1) {
           clearActiveTenantId();
           setActiveTenantIdState(null);
@@ -312,11 +356,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             permissions: body.permissions || [],
             isPlatformAdmin: Boolean(body.is_platform_admin),
           });
-          setAuthStatus('authenticated');
+          setBootstrapState('ready');
           return;
         }
 
-        // f: Zero active tenant memberships
         clearActiveTenantId();
         setActiveTenantIdState(null);
         setUser({
@@ -330,18 +373,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           permissions: body.permissions || [],
           isPlatformAdmin: Boolean(body.is_platform_admin),
         });
-        setAuthStatus(body.is_platform_admin ? 'authenticated' : 'access-pending');
+        setBootstrapState(body.is_platform_admin ? 'ready' : 'access-pending');
         return;
       }
 
       if (meResponse.status === 403) {
         const code = body?.code ?? body?.detail?.code ?? body?.error?.code;
         if (code === 'IAM_EMAIL_VERIFICATION_REQUIRED' || code === 'VERIFICATION_REQUIRED') {
-          setAuthStatus('verification-required');
+          setBootstrapState('verification-required');
           return;
         }
         if (code === 'IAM_ACCOUNT_DISABLED' || code === 'ACCOUNT_DISABLED' || code === 'ACCESS_DENIED') {
-          setAuthStatus('access-denied');
+          setBootstrapState('error', 'Your SBOM account has been disabled.');
           return;
         }
         if (code === 'IAM_NO_ACTIVE_MEMBERSHIP' || code === 'NO_TENANT_MEMBERSHIP' || code === 'ACCESS_PENDING' || body?.email || body?.display_name) {
@@ -354,21 +397,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             externalTenantId: body?.external_tenant_id ?? body?.externalTenantId ?? null,
             roles: body?.roles || [], permissions: body?.permissions || [], isPlatformAdmin: Boolean(body?.is_platform_admin),
           });
-          setAuthStatus('access-pending');
+          setBootstrapState('access-pending');
           return;
         }
       }
 
-      if (meResponse.status === 401) {
-        setAuthStatus('service-unavailable');
-        return;
-      }
-
-      setAuthStatus('service-unavailable');
+      setBootstrapState('error', 'Authentication service or identity validation is currently unreachable.');
     } catch {
-      setAuthStatus('service-unavailable');
+      setBootstrapState('error', 'Authentication service or identity validation is currently unreachable.');
     }
-  }, [config.enabled]);
+  }, [config.enabled, setBootstrapState]);
+
+  // Handle bootstrap timeout
+  useEffect(() => {
+    const isLoadingState =
+      bootstrapState === 'checking-session' ||
+      bootstrapState === 'processing-callback' ||
+      bootstrapState === 'loading-auth-context' ||
+      bootstrapState === 'loading-tenant-context';
+
+    if (isLoadingState) {
+      timeoutRef.current = setTimeout(() => {
+        setBootstrapState('error', 'Sign-in is taking longer than expected.');
+      }, BOOTSTRAP_TIMEOUT_MS);
+    } else {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    }
+
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    };
+  }, [bootstrapState, setBootstrapState]);
 
   useEffect(() => {
     void checkAuth();
@@ -383,16 +448,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     clearActiveTenantId(); setUser(null); setTenants([]); setActiveTenantIdState(null); queryClient.clear();
     setSessionAuthenticated(false);
-    setAuthStatus('unauthenticated');
+    setBootstrapState('unauthenticated');
     if (!config.enabled) return;
     void fetch('/api/auth/logout', { method: 'POST' })
       .then((response) => response.json())
       .then((body) => window.location.assign(body.redirectUrl || '/'))
       .catch(() => window.location.assign('/'));
-  }, [config.enabled, queryClient]);
+  }, [config.enabled, queryClient, setBootstrapState]);
 
   const reloadAuth = useCallback(() => {
-    setAuthStatus('loading');
+    void checkAuth();
+  }, [checkAuth]);
+
+  const retryBootstrap = useCallback(() => {
     void checkAuth();
   }, [checkAuth]);
 
@@ -431,10 +499,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo(() => ({
     sessionAuthenticated,
-    isAuthenticated: authStatus === 'authenticated',
-    isLoading: authStatus === 'loading',
-    isTenantContextLoading: authStatus === 'loading',
+    isAuthenticated: bootstrapState === 'ready',
+    isLoading:
+      bootstrapState === 'checking-session' ||
+      bootstrapState === 'processing-callback' ||
+      bootstrapState === 'loading-auth-context' ||
+      bootstrapState === 'loading-tenant-context',
+    isTenantContextLoading: bootstrapState === 'loading-tenant-context',
     authStatus,
+    bootstrapState,
+    bootstrapError,
     user,
     activeTenant,
     activeTenantId: activeTenantIdState,
@@ -444,7 +518,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     login,
     logout,
     reloadAuth,
+    retryBootstrap,
     refreshSession: checkAuth,
+    setBootstrapState,
     selectTenant,
     clearTenantSelection,
     switchTenant,
@@ -452,6 +528,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     hasAnyRole,
   }), [
     sessionAuthenticated,
+    bootstrapState,
+    bootstrapError,
     authStatus,
     user,
     activeTenant,
@@ -461,7 +539,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     login,
     logout,
     reloadAuth,
+    retryBootstrap,
     checkAuth,
+    setBootstrapState,
     selectTenant,
     clearTenantSelection,
     switchTenant,
