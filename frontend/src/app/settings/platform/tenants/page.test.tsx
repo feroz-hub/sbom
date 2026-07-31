@@ -92,10 +92,13 @@ describe('PlatformTenantsPage', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
 
-  it('renders the tenant list and platform navigation', async () => {
+  it('renders the tenant list and platform navigation without external mapping column', async () => {
     renderPage();
     expect(await screen.findByText('Default Tenant')).toBeInTheDocument();
-    expect(screen.getByText('Connected to HCL.CS tenant')).toBeInTheDocument();
+    expect(screen.getByText('default')).toBeInTheDocument();
+    expect(screen.getByText('Tenant status: Active')).toBeInTheDocument();
+    expect(screen.queryByText(/External tenant mapping/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Connected to HCL.CS tenant/i)).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Administrators' })).toHaveAttribute('href', '/settings/platform');
   });
 

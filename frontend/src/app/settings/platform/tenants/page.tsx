@@ -17,9 +17,8 @@ import { useNotifications } from '@/hooks/useNotifications';
 import { getApiErrorMessage } from '@/lib/notifications';
 import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog';
 import { slugFromName, validateTenantForm } from '@/lib/tenantForm';
-import { MembershipStatusBadge } from '@/components/admin/StatusBadges';
+import { TenantStatusBadge } from '@/components/admin/StatusBadges';
 import { UserSearchCombobox } from '@/components/admin/UserSearchCombobox';
-import { resolveExternalTenantMapping } from '@/lib/identityMapping';
 
 const EMPTY_FORM: CreateTenantRequest = {
   name: '',
@@ -287,26 +286,22 @@ export default function PlatformTenantsPage() {
         {tenants.data && tenants.data.length > 0 && (
           <div className="overflow-x-auto rounded-lg border border-border">
             <table className="min-w-full text-sm">
-              <thead className="bg-surface-elevated">
+              <thead className="bg-surface-elevated border-b border-border">
                 <tr>
-                  <th className="px-4 py-2 text-left font-medium">Name</th>
-                  <th className="px-4 py-2 text-left font-medium">Slug</th>
-                  <th className="px-4 py-2 text-left font-medium">External tenant mapping</th>
-                  <th className="px-4 py-2 text-left font-medium">Status</th>
-                  <th className="px-4 py-2 text-left font-medium">Members</th>
-                  <th className="px-4 py-2 text-left font-medium">Created</th>
-                  <th className="px-4 py-2 text-right font-medium">Actions</th>
+                  <th className="px-4 py-3 text-left font-semibold">Name</th>
+                  <th className="px-4 py-3 text-left font-semibold">Slug</th>
+                  <th className="px-4 py-3 text-left font-semibold">Status</th>
+                  <th className="px-4 py-3 text-left font-semibold">Members</th>
+                  <th className="px-4 py-3 text-left font-semibold">Created</th>
+                  <th className="px-4 py-3 text-right font-semibold">Actions</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-border">
                 {tenants.data.map((tenant) => (
-                  <tr key={tenant.id} className="border-t border-border">
+                  <tr key={tenant.id} className="hover:bg-surface-elevated/50 transition-colors">
                     <td className="px-4 py-3 font-semibold">{tenant.name}</td>
                     <td className="px-4 py-3 font-mono text-xs text-hcl-muted">{tenant.slug}</td>
-                    <td className="px-4 py-3 text-xs font-medium text-foreground">
-                      {resolveExternalTenantMapping(tenant.identity_mapping, tenant.external_iam_tenant_id).displayStatus}
-                    </td>
-                    <td className="px-4 py-3"><MembershipStatusBadge status={tenant.status} /></td>
+                    <td className="px-4 py-3"><TenantStatusBadge status={tenant.status} /></td>
                     <td className="px-4 py-3">{tenant.member_count ?? '—'}</td>
                     <td className="px-4 py-3 text-xs text-hcl-muted">{formatDate(tenant.created_at)}</td>
                     <td className="px-4 py-3 text-right space-x-3">

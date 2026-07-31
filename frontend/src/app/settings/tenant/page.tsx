@@ -20,9 +20,8 @@ import { getApiErrorMessage } from '@/lib/notifications';
 import { TenantContextHeader } from '@/components/admin/TenantContextHeader';
 import { UserSearchCombobox } from '@/components/admin/UserSearchCombobox';
 import { TenantAuditHistory } from '@/components/admin/TenantAuditHistory';
-import { VerificationBadge, UserStatusBadge, MembershipStatusBadge, RoleBadges } from '@/components/admin/StatusBadges';
+import { VerificationBadge, UserStatusBadge, RoleBadges } from '@/components/admin/StatusBadges';
 import { getRoleCode, getRoleLabel } from '@/lib/roles';
-import { resolveExternalTenantMapping } from '@/lib/identityMapping';
 import { MemberActionMenu } from '@/components/admin/MemberActionMenu';
 import { ManageRolesModal } from '@/components/admin/ManageRolesModal';
 import { DisableMembershipDialog, EnableMembershipDialog, RemoveMemberDialog } from '@/components/admin/MembershipConfirmDialogs';
@@ -222,10 +221,8 @@ export default function TenantUsersPage() {
       <TenantContextHeader
         name={tenantName}
         slug={activeTenantObj?.slug || 'Unavailable'}
-        externalIamTenantId={activeTenantObj?.externalIamTenantId}
-        identityMapping={activeTenantObj?.identity_mapping ?? activeTenantObj?.identityMapping}
-        isPlatformAdmin={user?.isPlatformAdmin}
-        status={activeTenantObj?.status || 'ACTIVE'}
+        tenantStatus={activeTenantObj?.status || 'ACTIVE'}
+        membershipStatus={activeTenantObj?.membershipStatus || 'ACTIVE'}
         memberCount={members.data?.length}
       />
 
@@ -250,7 +247,7 @@ export default function TenantUsersPage() {
             {selectedUser && (
               <div className="grid gap-3 sm:grid-cols-[1fr_auto] items-end pt-2">
                 <label className="text-sm font-medium">
-                  Tenant Roles
+                  Initial Roles
                   <select
                     aria-label="Initial roles"
                     multiple
@@ -276,10 +273,11 @@ export default function TenantUsersPage() {
                     })}
                   </select>
                 </label>
+
                 <button
                   type="submit"
                   disabled={addMemberMutation.isPending}
-                  className="rounded-md bg-hcl-blue px-4 py-2 text-sm font-medium text-white hover:bg-hcl-blue/90 disabled:opacity-50 transition-colors"
+                  className="rounded-lg bg-[var(--btn-primary)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--btn-primary-hover)] disabled:opacity-50 transition-colors"
                 >
                   {addMemberMutation.isPending ? 'Adding…' : 'Add Member'}
                 </button>
@@ -289,77 +287,83 @@ export default function TenantUsersPage() {
         </section>
       )}
 
-      {/* Members Section */}
+      {/* Read-Only Table & Responsive Card View */}
       <section aria-labelledby="members-heading" className="space-y-3">
-        <h2 id="members-heading" className="text-lg font-semibold text-foreground">Members</h2>
+        <h2 id="members-heading" className="text-lg font-semibold text-foreground">Tenant Members</h2>
 
         {members.isLoading && <p className="text-sm text-hcl-muted">Loading members…</p>}
         {members.error && <p role="alert" className="text-sm text-red-600">{getApiErrorMessage(members.error, 'Could not load members.')}</p>}
         {members.data?.length === 0 && (
           <div className="rounded-lg border border-dashed border-border p-8 text-center text-hcl-muted">
-            No tenant members found.
+            No tenant memberships currently exist. Use the search form above to add a member.
           </div>
         )}
 
         {members.data && members.data.length > 0 && (
           <>
-            {/* Desktop Table */}
-            <div className="hidden md:block overflow-x-auto rounded-lg border border-border">
+            {/* Desktop Read-Only Table */}
+            <div className="hidden md:block overflow-x-auto rounded-xl border border-border bg-surface shadow-elev-1">
               <table className="min-w-full text-sm">
-                <thead className="bg-surface-elevated">
+                <thead className="bg-surface-elevated border-b border-border">
                   <tr>
-                    <th className="px-4 py-2 text-left font-medium">User</th>
-                    <th className="px-4 py-2 text-left font-medium">Verification</th>
-                    <th className="px-4 py-2 text-left font-medium">Effective roles</th>
-                    <th className="px-4 py-2 text-left font-medium">Membership</th>
-                    <th className="px-4 py-2 text-left font-medium">User account</th>
-                    {canUpdate && <th className="px-4 py-2 text-right font-medium">Actions</th>}
+                    <th className="px-4 py-3 text-left font-semibold text-foreground">User</th>
+                    <th className="px-4 py-3 text-left font-semibold text-foreground">Verification</th>
+                    <th className="px-4 py-3 text-left font-semibold text-foreground">Effective roles</th>
+                    <th className="px-4 py-3 text-left font-semibold text-foreground">Membership</th>
+                    <th className="px-4 py-3 text-left font-semibold text-foreground">User account</th>
+                    <th className="px-4 py-3 text-right font-semibold text-foreground">Actions</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-border">
                   {members.data.map((member) => {
                     const isMemberActive = member.status === 'ACTIVE';
-                    const assignedRolesText = (member.roles ?? [member.role]).map(getRoleLabel).join(', ');
+                    const activeRoles = member.roles ?? [member.role];
                     const displayName = member.display_name || member.email || `User #${member.user_id}`;
 
                     return (
-                      <tr key={member.membership_id} className="border-t border-border">
-                        <td className="px-4 py-3">
+                      <tr key={member.membership_id} className="hover:bg-surface-elevated/50 transition-colors">
+                        <td className="px-4 py-3.5">
                           <div className="font-medium text-foreground">{displayName}</div>
                           <div className="text-xs text-hcl-muted">{member.email || 'No email'}</div>
                         </td>
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3.5">
                           <VerificationBadge verified={member.email_verified && !member.verification_required} />
                         </td>
-                        <td className="px-4 py-3">
-                          {isMemberActive ? (
-                            <RoleBadges roles={member.roles ?? [member.role]} membershipActive={true} />
-                          ) : (
-                            <div className="space-y-1">
-                              <RoleBadges membershipActive={false} />
-                              <div className="text-xs text-hcl-muted">
-                                <span className="font-medium">Assigned roles:</span> {assignedRolesText}
-                                <br />
-                                <span className="italic text-zinc-500">Effective access: None — membership disabled</span>
-                              </div>
-                            </div>
-                          )}
+                        <td className="px-4 py-3.5">
+                          <div className="space-y-1">
+                            <RoleBadges roles={activeRoles} membershipActive={isMemberActive} />
+                            {!isMemberActive && activeRoles.length > 0 && (
+                              <p className="text-[11px] text-hcl-muted">
+                                Assigned roles: {activeRoles.map(getRoleLabel).join(', ')} | Effective access: None — membership disabled
+                              </p>
+                            )}
+                          </div>
                         </td>
-                        <td className="px-4 py-3"><MembershipStatusBadge status={member.status} /></td>
-                        <td className="px-4 py-3"><UserStatusBadge status={member.user_status} /></td>
-                        {canUpdate && (
-                          <td className="px-4 py-3 text-right">
-                            <MemberActionMenu
-                              displayName={displayName}
-                              membershipStatus={member.status}
-                              canUpdate={canUpdate}
-                              onManageRoles={() => setRolesModalMember(member)}
-                              onDisableMembership={() => setDisableModalMember(member)}
-                              onEnableMembership={() => setEnableModalMember(member)}
-                              onRemoveFromTenant={() => setRemoveModalMember(member)}
-                            />
-                          </td>
-                        )}
+                        <td className="px-4 py-3.5">
+                          <span
+                            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border ${
+                              isMemberActive
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400 border-emerald-800/50'
+                                : 'bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 border-zinc-700'
+                            }`}
+                          >
+                            {isMemberActive ? 'Active' : 'Disabled'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <UserStatusBadge status={member.user_status} />
+                        </td>
+                        <td className="px-4 py-3.5 text-right">
+                          <MemberActionMenu
+                            displayName={displayName}
+                            membershipStatus={member.status}
+                            canUpdate={canUpdate}
+                            onManageRoles={() => setRolesModalMember(member)}
+                            onDisableMembership={() => setDisableModalMember(member)}
+                            onEnableMembership={() => setEnableModalMember(member)}
+                            onRemoveFromTenant={() => setRemoveModalMember(member)}
+                          />
+                        </td>
                       </tr>
                     );
                   })}
@@ -367,53 +371,55 @@ export default function TenantUsersPage() {
               </table>
             </div>
 
-            {/* Mobile Cards View */}
-            <div className="md:hidden space-y-3">
+            {/* Mobile Cards Layout */}
+            <div className="grid gap-3 md:hidden">
               {members.data.map((member) => {
                 const isMemberActive = member.status === 'ACTIVE';
-                const assignedRolesText = (member.roles ?? [member.role]).map(getRoleLabel).join(', ');
+                const activeRoles = member.roles ?? [member.role];
                 const displayName = member.display_name || member.email || `User #${member.user_id}`;
 
                 return (
-                  <div key={member.membership_id} className="rounded-xl border border-border bg-surface p-4 space-y-3">
+                  <div key={member.membership_id} className="rounded-xl border border-border bg-surface p-4 space-y-3 shadow-elev-1">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <div className="font-semibold text-foreground text-base">{displayName}</div>
+                        <div className="font-semibold text-foreground">{displayName}</div>
                         <div className="text-xs text-hcl-muted">{member.email || 'No email'}</div>
                       </div>
-                      {canUpdate && (
-                        <MemberActionMenu
-                          displayName={displayName}
-                          membershipStatus={member.status}
-                          canUpdate={canUpdate}
-                          onManageRoles={() => setRolesModalMember(member)}
-                          onDisableMembership={() => setDisableModalMember(member)}
-                          onEnableMembership={() => setEnableModalMember(member)}
-                          onRemoveFromTenant={() => setRemoveModalMember(member)}
-                        />
-                      )}
+                      <MemberActionMenu
+                        displayName={displayName}
+                        membershipStatus={member.status}
+                        canUpdate={canUpdate}
+                        onManageRoles={() => setRolesModalMember(member)}
+                        onDisableMembership={() => setDisableModalMember(member)}
+                        onEnableMembership={() => setEnableModalMember(member)}
+                        onRemoveFromTenant={() => setRemoveModalMember(member)}
+                      />
                     </div>
 
-                    <div className="flex flex-wrap gap-2 pt-1">
-                      <VerificationBadge verified={member.email_verified && !member.verification_required} />
-                      <MembershipStatusBadge status={member.status} />
-                      <UserStatusBadge status={member.user_status} />
-                    </div>
+                    <div className="space-y-2 pt-1 text-xs">
+                      <div>
+                        <span className="text-hcl-muted font-medium block mb-1">Effective roles:</span>
+                        <RoleBadges roles={activeRoles} membershipActive={isMemberActive} />
+                        {!isMemberActive && activeRoles.length > 0 && (
+                          <p className="mt-1 text-[11px] text-hcl-muted">
+                            Assigned roles: {activeRoles.map(getRoleLabel).join(', ')} | Effective access: None — membership disabled
+                          </p>
+                        )}
+                      </div>
 
-                    <div className="pt-2 border-t border-border">
-                      <span className="text-xs text-hcl-muted font-medium block mb-1">Effective roles:</span>
-                      {isMemberActive ? (
-                        <RoleBadges roles={member.roles ?? [member.role]} membershipActive={true} />
-                      ) : (
-                        <div className="space-y-1">
-                          <RoleBadges membershipActive={false} />
-                          <div className="text-xs text-hcl-muted">
-                            <span className="font-medium">Assigned roles:</span> {assignedRolesText}
-                            <br />
-                            <span className="italic text-zinc-500">Effective access: None — membership disabled</span>
-                          </div>
-                        </div>
-                      )}
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        <VerificationBadge verified={member.email_verified && !member.verification_required} />
+                        <span
+                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border ${
+                            isMemberActive
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400 border-emerald-800/50'
+                              : 'bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 border-zinc-700'
+                          }`}
+                        >
+                          Membership: {isMemberActive ? 'Active' : 'Disabled'}
+                        </span>
+                        <UserStatusBadge status={member.user_status} />
+                      </div>
                     </div>
                   </div>
                 );
@@ -428,19 +434,14 @@ export default function TenantUsersPage() {
         <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-[14rem_1fr]">
           <dt className="text-hcl-muted">Tenant</dt>
           <dd>{tenantName}</dd>
-          <dt className="text-hcl-muted">Status</dt>
+          <dt className="text-hcl-muted">Tenant status</dt>
           <dd>{activeTenantObj?.status || 'ACTIVE'}</dd>
+          <dt className="text-hcl-muted">Current membership</dt>
+          <dd>{activeTenantObj?.membershipStatus || 'ACTIVE'}</dd>
           <dt className="text-hcl-muted">Authentication</dt>
           <dd>HCL.CS</dd>
           <dt className="text-hcl-muted">Tenant access</dt>
           <dd>Managed in SBOM</dd>
-          <dt className="text-hcl-muted">External tenant mapping</dt>
-          <dd>
-            {resolveExternalTenantMapping(
-              activeTenantObj?.identity_mapping ?? activeTenantObj?.identityMapping,
-              activeTenantObj?.externalIamTenantId,
-            ).displayStatus}
-          </dd>
         </dl>
       </section>
 

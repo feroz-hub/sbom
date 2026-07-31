@@ -47,24 +47,41 @@ export function UserStatusBadge({ status }: { status: string }) {
   );
 }
 
+export function TenantStatusBadge({ status }: { status: string }) {
+  const isActive = status?.toUpperCase() === 'ACTIVE';
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border',
+        isActive
+          ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-800/50'
+          : 'bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700',
+      )}
+    >
+      Tenant status: {isActive ? 'Active' : 'Disabled'}
+    </span>
+  );
+}
+
 export function MembershipStatusBadge({ status }: { status: string }) {
-  if (status === 'ACTIVE') {
+  const statusUpper = status?.toUpperCase();
+  if (statusUpper === 'ACTIVE') {
     return (
       <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50">
-        Membership: Active
+        Current membership: Active
       </span>
     );
   }
-  if (status === 'PENDING') {
+  if (statusUpper === 'PENDING') {
     return (
       <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-950/20 dark:text-amber-400 border border-amber-200 dark:border-amber-800/50">
-        Membership: Pending
+        Current membership: Pending
       </span>
     );
   }
   return (
     <span className="inline-flex items-center rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">
-      Membership: Disabled
+      Current membership: Disabled
     </span>
   );
 }

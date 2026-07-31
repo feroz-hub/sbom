@@ -124,10 +124,8 @@ export default function PlatformTenantDetailPage({
         <TenantContextHeader
           name={tenant.name}
           slug={tenant.slug}
-          externalIamTenantId={tenant.external_iam_tenant_id}
-          identityMapping={tenant.identity_mapping}
-          isPlatformAdmin={true}
-          status={tenant.status}
+          tenantStatus={tenant.status}
+          membershipStatus="ACTIVE"
           memberCount={tenant.member_count ?? members.data?.length}
           initialAdministrator={
             tenant.initial_administrator
@@ -148,7 +146,7 @@ export default function PlatformTenantDetailPage({
         <h2 id="overview-heading" className="text-lg font-semibold">Overview</h2>
         <p className="mt-1 text-sm text-hcl-muted">
           You are managing {tenant?.name || `tenant #${tenantIdStr}`} in explicit platform context.
-          SBOM validates this target using the Platform Administrator grant; HCL.CS tenant claims are not authorization.
+          Access is controlled by SBOM tenant memberships and assigned roles.
         </p>
       </section>
 
@@ -173,8 +171,8 @@ export default function PlatformTenantDetailPage({
           {selectedUser && (
             <div className="grid gap-3 sm:grid-cols-[1fr_auto] items-end pt-2">
               <label className="text-sm font-medium">
-                  Tenant Roles
-                  <select
+                Tenant Roles
+                <select
                   aria-label="Initial roles"
                   multiple
                   value={initialRoles.map(getRoleCode)}
