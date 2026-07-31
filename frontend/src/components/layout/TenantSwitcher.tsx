@@ -16,7 +16,7 @@ import { cn } from '@/lib/utils';
 import { getRoleLabel } from '@/lib/roles';
 
 export function TenantSwitcher() {
-  const { tenants, activeTenantId, switchTenant } = useAuth();
+  const { tenants, activeTenantId, selectTenant, switchTenant } = useAuth();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -44,24 +44,8 @@ export function TenantSwitcher() {
     }
   }, [open]);
 
-  // Don't show if only one tenant
-  if (tenants.length <= 1) {
-    const single = tenants[0];
-    if (!single) return null;
-    return (
-      <div className="flex items-start gap-2 rounded-lg px-3 py-2 text-sm text-white">
-        <Building2 className="h-4 w-4 shrink-0" />
-        <span className="min-w-0">
-          <span className="block truncate font-medium">{single.name}</span>
-          <span className="block truncate text-xs text-hcl-muted">
-            {(single.roles ?? (single.role ? [single.role] : [])).length > 0
-              ? (single.roles ?? (single.role ? [single.role] : [])).map(getRoleLabel).join(', ')
-              : 'Platform management context'}
-            {single.membershipStatus ? ` · ${single.membershipStatus}` : ''}
-          </span>
-        </span>
-      </div>
-    );
+  if (tenants.length === 0) {
+    return null;
   }
 
   const activeTenant = tenants.find((t) => String(t.id) === activeTenantId);
@@ -110,7 +94,11 @@ export function TenantSwitcher() {
                   aria-selected={isActive}
                   onClick={() => {
                     if (!isActive) {
-                      switchTenant(String(tenant.id));
+                      if (selectTenant) {
+                        void selectTenant(String(tenant.id));
+                      } else {
+                        switchTenant(String(tenant.id));
+                      }
                     }
                     setOpen(false);
                   }}

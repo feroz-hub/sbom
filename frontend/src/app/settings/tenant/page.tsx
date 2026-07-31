@@ -29,10 +29,10 @@ interface MemberAction {
 }
 
 export default function TenantUsersPage() {
-  const { user, tenants, hasPermission, isLoading: authLoading } = useAuth();
-  const currentTenantId = user?.tenantId ? Number(user.tenantId) : null;
+  const { user, tenants, activeTenant, activeTenantId, isTenantContextLoading, isLoading: authLoading, hasPermission } = useAuth();
+  const currentTenantId = activeTenantId ? Number(activeTenantId) : (user?.tenantId ? Number(user.tenantId) : null);
   const tenantsList = Array.isArray(tenants) ? tenants : [];
-  const activeTenant = tenantsList.find((t) => t.id === currentTenantId);
+  const activeTenantObj = activeTenant ?? tenantsList.find((t) => t.id === currentTenantId);
   const canRead = hasPermission('tenant:user:read');
   const canUpdate = hasPermission('tenant:user:update');
   const canInvite = hasPermission('tenant:user:invite');
@@ -46,13 +46,13 @@ export default function TenantUsersPage() {
   const members = useQuery({
     queryKey: ['tenant-users', currentTenantId],
     queryFn: () => (currentTenantId ? getTenantMembers(currentTenantId) : Promise.resolve([])),
-    enabled: !authLoading && canRead && currentTenantId !== null,
+    enabled: !(authLoading || isTenantContextLoading) && canRead && currentTenantId !== null,
   });
 
   const roles = useQuery({
     queryKey: ['tenant-roles', currentTenantId],
     queryFn: () => getAssignableTenantRoles(currentTenantId ?? undefined),
-    enabled: !authLoading && canRead,
+    enabled: !(authLoading || isTenantContextLoading) && canRead,
   });
 
   const action = useMutation({
@@ -82,7 +82,7 @@ export default function TenantUsersPage() {
 
   const confirmAction = (value: NonNullable<typeof confirmation>) => setConfirmation(value);
 
-  if (authLoading) {
+  if (authLoading || isTenantContextLoading) {
     return <div className="p-8 text-center text-hcl-muted">Verifying tenant permission…</div>;
   }
 
@@ -91,6 +91,26 @@ export default function TenantUsersPage() {
   }
 
   if (!currentTenantId) {
+    if (tenantsList.length === 0) {
+      return (
+        <div className="mx-auto max-w-4xl p-6 text-center space-y-3">
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300">
+            <h2 className="text-lg font-bold">No active tenant memberships</h2>
+            <p className="mt-1 text-sm">Your account does not currently have access to any active tenant.</p>
+          </div>
+        </div>
+      );
+    }
+    if (tenantsList.length > 1) {
+      return (
+        <div className="mx-auto max-w-4xl p-6 text-center space-y-3">
+          <div className="rounded-xl border border-blue-200 bg-blue-50 p-6 text-blue-800 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-300">
+            <h2 className="text-lg font-bold">Multiple tenants available</h2>
+            <p className="mt-1 text-sm">Please select an active tenant from the tenant switcher before managing members.</p>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="mx-auto max-w-4xl p-6 text-center space-y-3">
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300">
@@ -104,10 +124,10 @@ export default function TenantUsersPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-6">
       <TenantContextHeader
-        name={activeTenant?.name || `Tenant #${currentTenantId}`}
-        slug={activeTenant?.slug || 'Unavailable'}
-        externalIamTenantId={activeTenant?.externalIamTenantId || 'Unavailable'}
-        status={activeTenant?.status || 'ACTIVE'}
+        name={activeTenantObj?.name || `Tenant #${currentTenantId}`}
+        slug={activeTenantObj?.slug || 'Unavailable'}
+        externalIamTenantId={activeTenantObj?.externalIamTenantId || 'Unavailable'}
+        status={activeTenantObj?.status || 'ACTIVE'}
         memberCount={members.data?.length}
       />
 
