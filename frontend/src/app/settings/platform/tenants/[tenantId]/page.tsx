@@ -125,6 +125,8 @@ export default function PlatformTenantDetailPage({
           name={tenant.name}
           slug={tenant.slug}
           externalIamTenantId={tenant.external_iam_tenant_id}
+          identityMapping={tenant.identity_mapping}
+          isPlatformAdmin={true}
           status={tenant.status}
           memberCount={tenant.member_count ?? members.data?.length}
           initialAdministrator={

@@ -22,10 +22,21 @@ class AuthContextPlatform(BaseModel):
     permissions: list[str]
 
 
+class IdentityMappingInfo(BaseModel):
+    mode: str
+    provider: str | None = None
+    display_status: str
+    external_tenant_id: str | None = None
+    verified: bool = False
+    is_legacy: bool = False
+
+
 class AvailableTenant(BaseModel):
     id: int
     name: str
     slug: str
+    external_iam_tenant_id: str | None = None
+    identity_mapping: IdentityMappingInfo | None = None
     membership_status: str | None
     current_role: str | None
     primary_role: str | None = None

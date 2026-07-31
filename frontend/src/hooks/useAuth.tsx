@@ -12,8 +12,13 @@ export interface AuthUser {
   tenantId: number | null; externalTenantId: string | null; roles: string[]; permissions: string[];
   isPlatformAdmin: boolean;
 }
+import type { IdentityMappingInfo } from '@/lib/identityMapping';
+
 export interface TenantInfo {
-  id: number; name: string; slug: string; externalIamTenantId: string | null; status: string; role: string | null;
+  id: number; name: string; slug: string; externalIamTenantId: string | null;
+  identity_mapping?: Record<string, unknown> | null;
+  identityMapping?: IdentityMappingInfo | null;
+  status: string; role: string | null;
   roles: string[]; membershipStatus: string | null; platformContextAvailable: boolean;
 }
 
@@ -74,6 +79,7 @@ function tenantInfoFromContext(tenant: Record<string, unknown>): TenantInfo {
     name: String(tenant.name ?? ''),
     slug: String(tenant.slug ?? ''),
     externalIamTenantId: (tenant.external_iam_tenant_id as string) ?? null,
+    identity_mapping: (tenant.identity_mapping as Record<string, unknown>) ?? null,
     status: (tenant.status as string) ?? 'ACTIVE',
     role: tenant.current_role ? String(tenant.current_role) : null,
     roles,
@@ -83,6 +89,7 @@ function tenantInfoFromContext(tenant: Record<string, unknown>): TenantInfo {
     platformContextAvailable: Boolean(tenant.platform_context_available),
   };
 }
+
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const config = useMemo(() => resolveAuthConfig(), []);

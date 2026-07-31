@@ -112,12 +112,19 @@ class TenantRoleRevokeRequest(BaseModel):
     reason: str | None = Field(default=None, max_length=512)
 
 
+from ..services.identity_mapping_service import build_identity_mapping
+
+
 def _tenant_dict(tenant: Tenant, role: str | None = None) -> dict:
     return {
         "id": tenant.id,
         "name": tenant.name,
         "slug": tenant.slug,
         "external_iam_tenant_id": tenant.external_iam_tenant_id,
+        "identity_mapping": build_identity_mapping(
+            tenant.external_iam_tenant_id,
+            is_legacy=getattr(tenant, "is_legacy", False),
+        ),
         "status": tenant.status,
         "role": role,
         "created_at": tenant.created_at,

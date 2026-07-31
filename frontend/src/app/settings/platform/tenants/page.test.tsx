@@ -95,7 +95,7 @@ describe('PlatformTenantsPage', () => {
   it('renders the tenant list and platform navigation', async () => {
     renderPage();
     expect(await screen.findByText('Default Tenant')).toBeInTheDocument();
-    expect(screen.getByText('local-default')).toBeInTheDocument();
+    expect(screen.getByText('HCL.CS connected')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Administrators' })).toHaveAttribute('href', '/settings/platform');
   });
 

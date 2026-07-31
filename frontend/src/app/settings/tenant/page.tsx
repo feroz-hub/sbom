@@ -22,6 +22,7 @@ import { UserSearchCombobox } from '@/components/admin/UserSearchCombobox';
 import { TenantAuditHistory } from '@/components/admin/TenantAuditHistory';
 import { VerificationBadge, UserStatusBadge, MembershipStatusBadge } from '@/components/admin/StatusBadges';
 import { getRoleCode, getRoleLabel } from '@/lib/roles';
+import { resolveIdentityMapping } from '@/lib/identityMapping';
 
 interface MemberAction {
   operation: () => Promise<unknown>;
@@ -126,7 +127,9 @@ export default function TenantUsersPage() {
       <TenantContextHeader
         name={activeTenantObj?.name || `Tenant #${currentTenantId}`}
         slug={activeTenantObj?.slug || 'Unavailable'}
-        externalIamTenantId={activeTenantObj?.externalIamTenantId || 'Unavailable'}
+        externalIamTenantId={activeTenantObj?.externalIamTenantId}
+        identityMapping={activeTenantObj?.identity_mapping ?? activeTenantObj?.identityMapping}
+        isPlatformAdmin={user?.isPlatformAdmin}
         status={activeTenantObj?.status || 'ACTIVE'}
         memberCount={members.data?.length}
       />
@@ -325,11 +328,16 @@ export default function TenantUsersPage() {
         <h2 id="tenant-settings-heading" className="text-lg font-semibold">Tenant Settings</h2>
         <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-[12rem_1fr]">
           <dt className="text-hcl-muted">Tenant</dt>
-          <dd>{activeTenant?.name || `Tenant #${currentTenantId}`}</dd>
+          <dd>{activeTenantObj?.name || `Tenant #${currentTenantId}`}</dd>
           <dt className="text-hcl-muted">Status</dt>
-          <dd>{activeTenant?.status || 'Unavailable'}</dd>
-          <dt className="text-hcl-muted">External identity mapping</dt>
-          <dd><code>{activeTenant?.externalIamTenantId || 'Not configured'}</code> <span className="text-hcl-muted">(legacy metadata)</span></dd>
+          <dd>{activeTenantObj?.status || 'ACTIVE'}</dd>
+          <dt className="text-hcl-muted">Identity mode</dt>
+          <dd>
+            {resolveIdentityMapping(
+              activeTenantObj?.identity_mapping ?? activeTenantObj?.identityMapping,
+              activeTenantObj?.externalIamTenantId,
+            ).displayStatus}
+          </dd>
         </dl>
       </section>
 
