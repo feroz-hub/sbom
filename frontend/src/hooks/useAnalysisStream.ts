@@ -4,6 +4,7 @@ import { useState, useRef, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { BASE_URL } from '@/lib/api';
 import { invalidateAnalysisCompletion } from '@/lib/queryInvalidation';
+import { getActiveTenantId } from '@/lib/auth';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -129,11 +130,13 @@ export function useAnalysisStream(sbomId: number) {
 
       let response: Response;
       try {
+        const tenantId = getActiveTenantId();
         response = await fetch(url, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Idempotency-Key': `analysis-sbom-${sbomId}-${randomId}`,
+            ...(tenantId ? { 'X-Tenant-ID': tenantId } : {}),
           },
           body: JSON.stringify({
             sources: initialSources,
