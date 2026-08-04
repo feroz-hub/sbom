@@ -26,6 +26,7 @@ export type AuthStatus =
   | 'loading'
   | 'unauthenticated'
   | 'authenticated'
+  | 'tenant-selection-required'
   | 'verification-required'
   | 'access-pending'
   | 'access-denied'
@@ -38,6 +39,7 @@ export type BootstrapState =
   | 'loading-tenant-context'
   | 'ready'
   | 'verification-required'
+  | 'tenant-selection-required'
   | 'access-pending'
   | 'unauthenticated'
   | 'error';
@@ -105,6 +107,20 @@ function tenantInfoFromContext(tenant: Record<string, unknown>): TenantInfo {
   };
 }
 
+/**
+ * A tenant the user may actively work in. Shared by the bootstrap tenant
+ * resolution below and by the AuthGuard tenant-selection screen so both
+ * agree on what counts as a selectable membership.
+ */
+export function isSelectableTenant(tenant: TenantInfo): boolean {
+  return (
+    tenant.status === 'ACTIVE' &&
+    (tenant.membershipStatus === 'ACTIVE' ||
+      tenant.membershipStatus === null ||
+      tenant.platformContextAvailable)
+  );
+}
+
 const BOOTSTRAP_TIMEOUT_MS = 15000;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -135,6 +151,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAuthStatus('authenticated');
     } else if (state === 'verification-required') {
       setAuthStatus('verification-required');
+    } else if (state === 'tenant-selection-required') {
+      setAuthStatus('tenant-selection-required');
     } else if (state === 'access-pending') {
       setAuthStatus('access-pending');
     } else if (state === 'unauthenticated') {
@@ -272,9 +290,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setTenants(contextTenants);
 
         // Filter active tenant memberships
-        const activeTenants = contextTenants.filter(
-          (t) => t.status === 'ACTIVE' && (t.membershipStatus === 'ACTIVE' || t.membershipStatus === null || t.platformContextAvailable),
-        );
+        const activeTenants = contextTenants.filter(isSelectableTenant);
 
         const candidateId = tenantOverride || getActiveTenantId() || (body.tenant_id ? String(body.tenant_id) : null);
         const validPersisted = candidateId ? activeTenants.find((t) => String(t.id) === String(candidateId)) : null;
@@ -342,6 +358,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
 
+        // Multiple active memberships and nothing valid persisted: the user
+        // has to pick one before any tenant-scoped page mounts. Staying out
+        // of ``ready`` is what stops requests going out without an
+        // X-Tenant-ID header (which the backend rejects with 403).
         if (activeTenants.length > 1) {
           clearActiveTenantId();
           setActiveTenantIdState(null);
@@ -352,11 +372,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             displayName: body.display_name ?? body.displayName ?? contextUser.display_name ?? null,
             tenantId: null,
             externalTenantId: null,
-            roles: body.roles || [],
-            permissions: body.permissions || [],
+            roles: [],
+            permissions: [],
             isPlatformAdmin: Boolean(body.is_platform_admin),
           });
-          setBootstrapState('ready');
+          setBootstrapState('tenant-selection-required');
           return;
         }
 
@@ -464,6 +484,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void checkAuth();
   }, [checkAuth]);
 
+  // Persist first so every request issued after this point carries the new
+  // tenant, drop cached data belonging to the previous tenant, then re-resolve
+  // the auth context with X-Tenant-ID. ``checkAuth`` is the only thing that
+  // moves bootstrapState to ``ready``, so the app stays gated until the new
+  // tenant context actually resolves.
   const selectTenant = useCallback(async (tenantId: string) => {
     setActiveTenantId(tenantId);
     setActiveTenantIdState(tenantId);

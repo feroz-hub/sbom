@@ -2,7 +2,8 @@
 
 import { useEffect, type ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { useAuth } from '@/hooks/useAuth';
+import { isSelectableTenant, useAuth } from '@/hooks/useAuth';
+import { getRoleLabel } from '@/lib/roles';
 
 const PUBLIC_PATHS = ['/auth/callback', '/access-denied', '/verification-required', '/access-pending'];
 
@@ -17,7 +18,7 @@ interface AuthGuardProps {
 export function AuthGuard({ children, requiredPermission, requiredRoles }: AuthGuardProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { authStatus, bootstrapState, config, login, reloadAuth, hasPermission, hasAnyRole } = useAuth();
+  const { authStatus, bootstrapState, config, login, reloadAuth, hasPermission, hasAnyRole, tenants, selectTenant } = useAuth();
 
   const isPublicPath = PUBLIC_PATHS.some((p) => pathname?.startsWith(p));
 
@@ -35,6 +36,13 @@ export function AuthGuard({ children, requiredPermission, requiredRoles }: AuthG
 
     if (config.enabled && (bootstrapState === 'unauthenticated' || authStatus === 'unauthenticated')) {
       void login();
+      return;
+    }
+
+    // Tenant selection is a normal step of a healthy multi-tenant sign-in, not
+    // a denial: it renders in place below and must never be redirected to
+    // /access-denied or /access-pending.
+    if (bootstrapState === 'tenant-selection-required' || authStatus === 'tenant-selection-required') {
       return;
     }
 
@@ -80,6 +88,38 @@ export function AuthGuard({ children, requiredPermission, requiredRoles }: AuthG
         <div className="text-center">
           <div className="mb-4 h-10 w-10 animate-spin rounded-full border-4 border-hcl-blue border-t-transparent mx-auto" />
           <p className="text-sm text-hcl-muted">Verifying authentication…</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Tenant selection required — protected children stay unmounted so no
+  // tenant-scoped page can fire a request without an X-Tenant-ID header.
+  if (bootstrapState === 'tenant-selection-required' || authStatus === 'tenant-selection-required') {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4">
+        <div className="w-full max-w-md rounded-xl border border-border bg-surface p-8 shadow-elev-2">
+          <h2 className="mb-2 text-lg font-semibold text-foreground">Select tenant</h2>
+          <p className="mb-6 text-sm text-hcl-muted">
+            Your account belongs to multiple tenants. Select the tenant you want to work with.
+          </p>
+          <div className="space-y-3">
+            {tenants.filter(isSelectableTenant).map((tenant) => (
+              <button
+                key={tenant.id}
+                type="button"
+                onClick={() => void selectTenant(String(tenant.id))}
+                className="w-full rounded-lg border border-border px-4 py-3 text-left transition-colors hover:bg-surface-muted"
+              >
+                <div className="font-medium text-foreground">{tenant.name}</div>
+                {(tenant.roles ?? []).length > 0 && (
+                  <div className="mt-1 text-xs text-hcl-muted">
+                    {tenant.roles.map(getRoleLabel).join(', ')}
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     );

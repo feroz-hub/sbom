@@ -95,6 +95,20 @@ export function useAnalysisStream(sbomId: number) {
   const startAnalysis = useCallback(
     async (options: StartAnalysisOptions = {}) => {
       if (!sbomId || runningAnalysisRef.current.has(sbomId)) return;
+
+      // Analysis is tenant-scoped on the backend. Without an active tenant the
+      // request would go out unscoped and come back 403, so fail inline before
+      // anything is sent, started, or timed.
+      const tenantId = getActiveTenantId();
+      if (!tenantId) {
+        setState({
+          ...INITIAL_STATE,
+          phase: 'error',
+          error: 'Select a tenant before running analysis.',
+        });
+        return;
+      }
+
       runningAnalysisRef.current.add(sbomId);
       const clearPending = () => {
         runningAnalysisRef.current.delete(sbomId);
@@ -130,13 +144,12 @@ export function useAnalysisStream(sbomId: number) {
 
       let response: Response;
       try {
-        const tenantId = getActiveTenantId();
         response = await fetch(url, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Idempotency-Key': `analysis-sbom-${sbomId}-${randomId}`,
-            ...(tenantId ? { 'X-Tenant-ID': tenantId } : {}),
+            'X-Tenant-ID': tenantId,
           },
           body: JSON.stringify({
             sources: initialSources,

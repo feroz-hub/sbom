@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import { act, render, screen, waitFor } from '@testing-library/react';
+import { useEffect, type ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
@@ -29,8 +29,15 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+let latestAuth: ReturnType<typeof useAuth> | null = null;
+
 function Probe() {
   const auth = useAuth();
+  // Published after commit (not during render) so tests can drive
+  // selectTenant/logout directly.
+  useEffect(() => {
+    latestAuth = auth;
+  }, [auth]);
   return (
     <div>
       <span data-testid="status">{auth.authStatus}</span>
@@ -43,10 +50,11 @@ function Probe() {
   );
 }
 
-function wrap(children: ReactNode) {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
+function makeQueryClient() {
+  return new QueryClient({ defaultOptions: { queries: { retry: false } } });
+}
+
+function wrap(children: ReactNode, queryClient: QueryClient = makeQueryClient()) {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>{children}</AuthProvider>
@@ -87,9 +95,38 @@ function meBody(
   };
 }
 
+const wellysis = {
+  id: 7,
+  name: 'Wellysis',
+  slug: 'wellysis',
+  status: 'ACTIVE',
+  membership_status: 'ACTIVE',
+  current_role: 'TENANT_ADMIN',
+  roles: ['TENANT_ADMIN'],
+};
+const defaultTenant = {
+  id: 1,
+  name: 'Default Tenant',
+  slug: 'default',
+  status: 'ACTIVE',
+  membership_status: 'ACTIVE',
+  current_role: 'VIEWER',
+  roles: ['VIEWER'],
+};
+
+/** Headers passed to the last ``/api/auth/me`` call, or null when none were. */
+function lastMeTenantHeader(fetchMock: { mock: { calls: unknown[][] } }): string | null {
+  const meCalls = fetchMock.mock.calls.filter(([url]) => String(url).includes('/api/auth/me'));
+  const last = meCalls.at(-1);
+  if (!last) return null;
+  const init = last[1] as { headers?: Record<string, string> } | undefined;
+  return init?.headers?.['X-Tenant-ID'] ?? null;
+}
+
 describe('AuthProvider membership-based tenant context', () => {
   beforeEach(() => {
     sessionStorage.clear();
+    latestAuth = null;
     vi.restoreAllMocks();
   });
 
@@ -133,25 +170,8 @@ describe('AuthProvider membership-based tenant context', () => {
     expect(fetchMock.mock.calls.every(([url]) => !String(url).includes('/api/auth/login'))).toBe(true);
   });
 
-  it('populates the switcher from multiple active SBOM memberships and requires local selection', async () => {
-    const tenants = [
-      {
-        id: 7,
-        name: 'Wellysis',
-        slug: 'wellysis',
-        membership_status: 'ACTIVE',
-        current_role: 'TENANT_ADMIN',
-        roles: ['TENANT_ADMIN'],
-      },
-      {
-        id: 1,
-        name: 'Default Tenant',
-        slug: 'default',
-        membership_status: 'ACTIVE',
-        current_role: 'VIEWER',
-        roles: ['VIEWER'],
-      },
-    ];
+  it('requires tenant selection for multiple active memberships with nothing persisted', async () => {
+    const tenants = [wellysis, defaultTenant];
     const fetchMock = vi.spyOn(globalThis, 'fetch');
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ authenticated: true }))
@@ -159,10 +179,111 @@ describe('AuthProvider membership-based tenant context', () => {
 
     render(wrap(<Probe />));
 
-    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('authenticated'));
+    await waitFor(() =>
+      expect(screen.getByTestId('status')).toHaveTextContent('tenant-selection-required'),
+    );
+    // Populated switcher, but nothing selected and the app is not yet "ready" —
+    // this is what keeps tenant-scoped pages from mounting unscoped.
     expect(screen.getByTestId('tenant-names')).toHaveTextContent('Wellysis|Default Tenant');
     expect(screen.getByTestId('active-tenant')).toHaveTextContent('');
+    expect(screen.getByTestId('authenticated')).toHaveTextContent('false');
+    expect(sessionStorage.getItem('sbom_active_tenant_id')).toBeNull();
+    // No tenant-scoped roles or permissions are exposed before selection.
+    expect(latestAuth?.user?.roles).toEqual([]);
+    expect(latestAuth?.user?.permissions).toEqual([]);
+    expect(latestAuth?.hasPermission('tenant:user:read')).toBe(false);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('clears an invalid persisted tenant and requires selection when several memberships exist', async () => {
+    sessionStorage.setItem('sbom_active_tenant_id', '999');
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ authenticated: true }))
+      .mockResolvedValueOnce(jsonResponse({ detail: { code: 'IAM_UNAUTHORIZED_TENANT' } }, 403))
+      .mockResolvedValueOnce(jsonResponse(meBody('READY', [wellysis, defaultTenant], null)));
+
+    render(wrap(<Probe />));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('status')).toHaveTextContent('tenant-selection-required'),
+    );
+    expect(sessionStorage.getItem('sbom_active_tenant_id')).toBeNull();
+    expect(screen.getByTestId('active-tenant')).toHaveTextContent('');
+  });
+
+  it('persists the choice, clears cached data, and becomes ready once selectTenant resolves', async () => {
+    const queryClient = makeQueryClient();
+    queryClient.setQueryData(['sboms'], [{ id: 1 }]);
+
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ authenticated: true }))
+      .mockResolvedValueOnce(jsonResponse(meBody('TENANT_SELECTION_REQUIRED', [wellysis, defaultTenant])))
+      // selectTenant re-runs the whole auth context with the chosen tenant.
+      .mockResolvedValueOnce(jsonResponse({ authenticated: true }))
+      .mockResolvedValueOnce(jsonResponse(meBody('READY', [wellysis, defaultTenant], 7)));
+
+    render(wrap(<Probe />, queryClient));
+    await waitFor(() =>
+      expect(screen.getByTestId('status')).toHaveTextContent('tenant-selection-required'),
+    );
+
+    await act(async () => {
+      await latestAuth!.selectTenant('7');
+    });
+
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('authenticated'));
+    expect(sessionStorage.getItem('sbom_active_tenant_id')).toBe('7');
+    expect(screen.getByTestId('active-tenant')).toHaveTextContent('7');
+    expect(queryClient.getQueryData(['sboms'])).toBeUndefined();
+    // The re-resolved context was fetched with the selected tenant's header.
+    expect(lastMeTenantHeader(fetchMock)).toBe('7');
+  });
+
+  it('sends the newly selected tenant on subsequent auth-context requests when switching', async () => {
+    sessionStorage.setItem('sbom_active_tenant_id', '7');
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ authenticated: true }))
+      .mockResolvedValueOnce(jsonResponse(meBody('READY', [wellysis, defaultTenant], 7)))
+      .mockResolvedValueOnce(jsonResponse({ authenticated: true }))
+      .mockResolvedValueOnce(jsonResponse(meBody('READY', [wellysis, defaultTenant], 1)));
+
+    render(wrap(<Probe />));
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('authenticated'));
+    expect(lastMeTenantHeader(fetchMock)).toBe('7');
+
+    await act(async () => {
+      await latestAuth!.selectTenant('1');
+    });
+
+    await waitFor(() => expect(screen.getByTestId('active-tenant')).toHaveTextContent('1'));
+    expect(lastMeTenantHeader(fetchMock)).toBe('1');
+    expect(sessionStorage.getItem('sbom_active_tenant_id')).toBe('1');
+  });
+
+  it('clears the active tenant on logout', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ authenticated: true }))
+      .mockResolvedValueOnce(jsonResponse(meBody('READY', [wellysis], 7)));
+
+    render(wrap(<Probe />));
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('authenticated'));
+    expect(sessionStorage.getItem('sbom_active_tenant_id')).toBe('7');
+
+    // Never-settling logout call: keeps the jsdom navigation that follows it
+    // out of the test while the synchronous teardown still runs.
+    fetchMock.mockImplementation(() => new Promise<Response>(() => {}));
+
+    act(() => {
+      latestAuth!.logout();
+    });
+
+    expect(sessionStorage.getItem('sbom_active_tenant_id')).toBeNull();
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('unauthenticated'));
+    expect(screen.getByTestId('active-tenant')).toHaveTextContent('');
   });
 
   it('auto-selects the single active tenant membership for a platform admin when no header was set', async () => {
