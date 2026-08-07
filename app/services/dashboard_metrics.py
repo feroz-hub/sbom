@@ -81,6 +81,30 @@ def compute_headline_state(
 
 
 # ---------------------------------------------------------------------------
+# Source coverage for the posture envelope
+# ---------------------------------------------------------------------------
+
+
+def compute_posture_coverage(db: Session) -> tuple[str, list[str]]:
+    """Return ``(coverage_status, coverage_gap_sources)`` for the posture payload.
+
+    Additive to the posture envelope: it answers "did the configured sources
+    actually assess these components?", which the severity counts cannot. A
+    zero-finding dashboard is only "All clear" when this says ``complete`` —
+    with OSV and NVD skipping every component, zero findings is an absence of
+    evidence, not a clean result.
+
+    The verdict comes from ``metrics.runs_latest_per_sbom_coverage``, which
+    reuses the one coverage predicate in ``app/sources/routing.py``. Severity
+    and finding calculations are untouched by this call.
+    """
+    from .. import metrics
+
+    assessment = metrics.runs_latest_per_sbom_coverage(db)
+    return assessment.status, list(assessment.gap_sources)
+
+
+# ---------------------------------------------------------------------------
 # Trend — zero-filled date series and annotations
 # ---------------------------------------------------------------------------
 

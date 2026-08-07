@@ -436,7 +436,7 @@ class RunsAggregateBuckets(BaseModel):
 
     no_issues: int  # OK
     with_findings: int  # FINDINGS
-    source_errors: int  # PARTIAL
+    source_errors: int  # PARTIAL — incomplete coverage (error OR unassessed components)
     failed: int  # ERROR
     other: int  # RUNNING / PENDING / NO_DATA / future codes
 

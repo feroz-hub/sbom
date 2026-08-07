@@ -21,7 +21,7 @@ from ..sources import (
     normalize_source_names,
     run_sources_concurrently,
 )
-from ..sources.routing import count_authoritative_cpes
+from ..sources.routing import count_authoritative_cpes, has_incomplete_source_coverage
 from .analysis_service import (
     compute_report_status,
     filter_unconfirmed_provider_findings,
@@ -281,7 +281,11 @@ class AnalysisOrchestrator:
                 "provider_status": provider_status,
             },
         }
-        source_label = ",".join(source_names) + (" (partial)" if errors else "")
+        # One coverage rule, read twice: the run status and the "(partial)"
+        # source label must never disagree about whether the selected sources
+        # actually covered the SBOM.
+        coverage_incomplete = bool(errors) or has_incomplete_source_coverage(source_summary)
+        source_label = ",".join(source_names) + (" (partial)" if coverage_incomplete else "")
         return AnalysisExecution(
             sources=source_names,
             components=components,
@@ -290,7 +294,7 @@ class AnalysisOrchestrator:
             warnings=warnings,
             details=details,
             buckets=buckets,
-            run_status=compute_report_status(len(findings), errors),
+            run_status=compute_report_status(len(findings), errors, source_summary),
             source_label=source_label,
         )
 

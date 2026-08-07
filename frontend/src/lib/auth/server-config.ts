@@ -1,5 +1,5 @@
 import 'server-only';
-
+import path from 'node:path';
 export interface ServerAuthConfig {
   enabled: boolean;
   issuer: string;
@@ -11,10 +11,13 @@ export interface ServerAuthConfig {
   caBundle: string;
 }
 
-export function resolveFrontendPath(value: string): string {
+export function resolveFrontendPath(value: string): string 
+{
   const configured = value.trim();
-  if (!configured || configured.startsWith('/')) return configured;
-  return `${process.cwd()}/${configured}`;
+  if (!configured) return '';
+
+  if (path.isAbsolute(configured) || path.win32.isAbsolute(configured) || path.posix.isAbsolute(configured)) return configured;
+  return path.resolve(process.cwd(), configured);
 }
 
 export function serverAuthConfig(): ServerAuthConfig {

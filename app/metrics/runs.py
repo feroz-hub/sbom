@@ -2,15 +2,27 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import json
+import logging
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from typing import Literal
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..models import AnalysisRun
-from ..services.analysis_service import normalize_run_status
+from ..services.analysis_service import (
+    RUN_STATUS_FINDINGS,
+    RUN_STATUS_PARTIAL,
+    normalize_run_status,
+    source_summary_from_details,
+)
+from ..sources.routing import coverage_gap_sources, has_incomplete_source_coverage
+from ._helpers import latest_run_per_sbom_subquery
 from .base import COMPLETED_RUN_STATUSES
+
+log = logging.getLogger("sbom.metrics.runs")
 
 
 def runs_total_lifetime(db: Session) -> int:
@@ -110,7 +122,10 @@ def runs_aggregate(
     Outcome buckets (sum to ``total_runs``):
       * ``no_issues``       — ``run_status='OK'``       (completed clean)
       * ``with_findings``   — ``run_status='FINDINGS'`` (completed, vulns)
-      * ``source_errors``   — ``run_status='PARTIAL'``  (some feed errored)
+      * ``source_errors``   — ``run_status='PARTIAL'``  (incomplete coverage:
+        a source errored, or could not assess some/all components). Wire
+        name kept for API compatibility; the UI labels it "incomplete
+        coverage".
       * ``failed``          — ``run_status='ERROR'``    (technical failure)
       * ``other``           — ``RUNNING``/``PENDING``/``NO_DATA`` and any
         future status. Keeps the sum-equals-total invariant unconditional.
@@ -160,6 +175,147 @@ def runs_aggregate(
     )
 
 
+# ---------------------------------------------------------------------------
+# Source coverage over the dashboard scope (latest successful run per SBOM).
+#
+# Zero findings means two different things depending on coverage, and the
+# dashboard headline must not conflate them: "every selected source assessed
+# the components and found nothing" is a clean result; "OSV and NVD assessed
+# 0 of 69 components" is an absence of evidence. The predicate itself is NOT
+# redefined here — ``app.sources.routing.has_incomplete_source_coverage`` is
+# the one definition and this module feeds it the per-run summary.
+# ---------------------------------------------------------------------------
+
+
+CoverageStatus = Literal["complete", "incomplete", "unknown"]
+
+# How many runs' ``raw_report`` payloads this metric will parse per call.
+# ``raw_report`` holds the entire details blob (findings included), so reading
+# it for every SBOM on every dashboard load is not affordable. The cheap
+# columns below already settle the verdict for anything written by the current
+# writer; the parse is a cross-check for legacy rows and the source of the
+# human-readable gap names. Truncation is logged, never silent.
+COVERAGE_SUMMARY_INSPECTION_LIMIT = 50
+
+
+@dataclass(frozen=True, slots=True)
+class CoverageAssessment:
+    """Aggregate source-coverage verdict for the dashboard scope.
+
+    ``status``:
+      * ``complete``   — every run in scope was fully assessed.
+      * ``incomplete`` — at least one run had a source that errored or
+        assessed none/only some of its components.
+      * ``unknown``    — nothing in scope to judge (no runs at all).
+
+    ``gap_sources`` names the sources responsible, best-effort, for UI copy
+    like "Coverage gaps: OSV, NVD". It can be empty on an ``incomplete``
+    verdict when the run predates per-source summaries.
+    """
+
+    status: CoverageStatus
+    gap_sources: list[str] = field(default_factory=list)
+
+
+def _run_details_by_id(db: Session, run_ids: list[int]) -> list[tuple[int, dict]]:
+    """Parse ``raw_report`` for the given runs. Unparseable rows are skipped."""
+    if not run_ids:
+        return []
+    rows = db.execute(
+        select(AnalysisRun.id, AnalysisRun.raw_report).where(AnalysisRun.id.in_(run_ids))
+    ).all()
+    out: list[tuple[int, dict]] = []
+    for run_id, raw_report in rows:
+        if not raw_report:
+            continue
+        try:
+            details = json.loads(raw_report)
+        except (TypeError, ValueError):
+            continue
+        if isinstance(details, dict):
+            out.append((int(run_id), details))
+    return out
+
+
+def runs_latest_per_sbom_coverage(db: Session) -> CoverageAssessment:
+    """Source-coverage verdict over the latest successful run per SBOM.
+
+    Same scope as every other posture metric (``latest_run_per_sbom_subquery``),
+    so the coverage claim and the severity counts describe the same runs.
+
+    Two passes, cheapest first:
+
+    1. **Columns.** ``run_status == PARTIAL`` already means "errored or left
+       coverage gaps" (see ``compute_report_status``), ``query_error_count > 0``
+       means a source failed, and the persisted ``source`` label carries the
+       ``(partial)`` marker the orchestrator derives from
+       ``has_incomplete_source_coverage``. Any of the three ⇒ incomplete, with
+       no JSON read at all. ``OK`` conversely *is* the verdict "no errors and
+       no coverage gaps", so it needs no confirmation.
+    2. **Summaries.** For up to :data:`COVERAGE_SUMMARY_INSPECTION_LIMIT` runs
+       the stored per-source summary is read and handed to the shared
+       predicate. This catches ``FINDINGS`` runs whose status says nothing
+       about coverage, and collects the gap-source names.
+    """
+    rows = db.execute(
+        select(
+            AnalysisRun.id,
+            AnalysisRun.run_status,
+            AnalysisRun.query_error_count,
+            AnalysisRun.source,
+        ).where(AnalysisRun.id.in_(latest_run_per_sbom_subquery()))
+    ).all()
+    if not rows:
+        return CoverageAssessment("unknown", [])
+
+    incomplete = False
+    # Runs whose columns already answered "incomplete" — parsed only to name
+    # the sources. Undecided runs are parsed first because their summary is
+    # what settles the verdict.
+    decided_ids: list[int] = []
+    undecided_ids: list[int] = []
+    for run_id, run_status, query_error_count, source_label in rows:
+        normalized = normalize_run_status(run_status)
+        label = str(source_label or "").lower()
+        if (
+            normalized == RUN_STATUS_PARTIAL
+            or int(query_error_count or 0) > 0
+            or "(partial)" in label
+        ):
+            incomplete = True
+            decided_ids.append(int(run_id))
+        elif normalized == RUN_STATUS_FINDINGS:
+            # Findings outrank coverage in the run status, so FINDINGS alone
+            # does not tell us whether every source ran.
+            undecided_ids.append(int(run_id))
+
+    inspect_order = undecided_ids + decided_ids
+    inspect_ids = inspect_order[:COVERAGE_SUMMARY_INSPECTION_LIMIT]
+    if len(inspect_order) > len(inspect_ids):
+        log.info(
+            "coverage.summary_inspection_truncated",
+            extra={
+                "event": "coverage_summary_inspection_truncated",
+                "inspected": len(inspect_ids),
+                "candidates": len(inspect_order),
+                "limit": COVERAGE_SUMMARY_INSPECTION_LIMIT,
+            },
+        )
+
+    gap_sources: list[str] = []
+    for _run_id, details in _run_details_by_id(db, inspect_ids):
+        summary = source_summary_from_details(details)
+        if not summary:
+            continue
+        if has_incomplete_source_coverage(summary):
+            incomplete = True
+        for name in coverage_gap_sources(summary):
+            if name not in gap_sources:
+                gap_sources.append(name)
+
+    return CoverageAssessment("incomplete" if incomplete else "complete", gap_sources)
+
+
 __all__ = [
     "runs_total_lifetime",
     "runs_completed_lifetime",
@@ -167,5 +323,9 @@ __all__ = [
     "runs_distinct_dates_with_data",
     "runs_first_completed_at",
     "runs_aggregate",
+    "runs_latest_per_sbom_coverage",
+    "COVERAGE_SUMMARY_INSPECTION_LIMIT",
+    "CoverageAssessment",
+    "CoverageStatus",
     "RunsAggregate",
 ]

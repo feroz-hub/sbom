@@ -633,7 +633,6 @@ export function updatePlatformTenantStatus(
 export interface AnalysisConfig {
   github_configured: boolean;
   nvd_key_configured: boolean;
-  vulndb_configured: boolean;
   max_concurrency: number;
   /**
    * Feature flag for the in-app CVE detail modal. When false, the findings
@@ -1167,6 +1166,7 @@ export interface RunsAggregate {
   by_outcome: {
     no_issues: number;
     with_findings: number;
+    /** PARTIAL — incomplete coverage. Wire name predates the rename; UI copy says "incomplete coverage". */
     source_errors: number;
     failed: number;
     other: number;
@@ -1972,13 +1972,13 @@ export function analyzeSbomOsv(payload: AnalyzeSBOMPayload, signal?: AbortSignal
   }, 180_000);
 }
 
-export function analyzeSbomVulnDb(payload: AnalyzeSBOMPayload, signal?: AbortSignal) {
-  return request<ConsolidatedAnalysisResult>('/analyze-sbom-vulndb', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-    signal,
-  }, 180_000);
-}
+// export function analyzeSbomVulnDb(payload: AnalyzeSBOMPayload, signal?: AbortSignal) {
+//   return request<ConsolidatedAnalysisResult>('/analyze-sbom-vulndb', {
+//     method: 'POST',
+//     body: JSON.stringify(payload),
+//     signal,
+//   }, 180_000);
+// }
 
 // ─── Periodic analysis schedules ─────────────────────────────────────────────
 // See app/routers/schedules.py for the server contract.

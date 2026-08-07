@@ -45,12 +45,15 @@ from .remediation import DEFAULT_SLA_DAYS, remediation_summary, sla_state
 from .remediation_extra import remediation_aging_count, remediation_status_counts
 from .riskmap import portfolio_risk_map, portfolio_risk_matrix
 from .runs import (
+    CoverageAssessment,
+    CoverageStatus,
     RunsAggregate,
     runs_aggregate,
     runs_completed_lifetime,
     runs_completed_this_week,
     runs_distinct_dates_with_data,
     runs_first_completed_at,
+    runs_latest_per_sbom_coverage,
     runs_total_lifetime,
 )
 from .sboms import (
@@ -106,6 +109,9 @@ __all__ = [
     "runs_distinct_dates_with_data",
     "runs_first_completed_at",
     "runs_aggregate",
+    "runs_latest_per_sbom_coverage",
+    "CoverageAssessment",
+    "CoverageStatus",
     "RunsAggregate",
     # trend / windows
     "findings_trend",

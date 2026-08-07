@@ -4,7 +4,7 @@ import { Check, Database, GitBranch, KeyRound, Layers, ShieldAlert } from 'lucid
 import { cn } from '@/lib/utils';
 import type { AnalysisConfig } from '@/lib/api';
 
-export type SourceKey = 'NVD' | 'OSV' | 'GITHUB' | 'VULNDB';
+export type SourceKey = 'NVD' | 'OSV' | 'GITHUB';
 
 interface SourceMeta {
   key: SourceKey;
@@ -39,14 +39,7 @@ const SOURCES: SourceMeta[] = [
     hint: 'GitHub Security Advisories — needs GITHUB_TOKEN env var',
     Icon: GitBranch,
     requiresCredential: true,
-  },
-  {
-    key: 'VULNDB',
-    label: 'VulDB',
-    hint: 'VulDB — needs VULNDB_API_KEY env var',
-    Icon: KeyRound,
-    requiresCredential: true,
-  },
+  }
 ];
 
 interface SourceSelectorProps {
@@ -60,7 +53,6 @@ interface SourceSelectorProps {
 function isCredentialed(key: SourceKey, config: AnalysisConfig | undefined): boolean {
   if (!config) return true; // optimistic when config not yet loaded
   if (key === 'GITHUB') return !!config.github_configured;
-  if (key === 'VULNDB') return !!config.vulndb_configured;
   // NVD works without an API key; OSV is keyless.
   return true;
 }

@@ -35,7 +35,7 @@ import { getApiErrorMessage } from '@/lib/notifications';
 import { useAnalysisUrlState } from '@/hooks/useAnalysisUrlState';
 import { useSbomsList } from '@/hooks/useSbomsList';
 
-const DEFAULT_SOURCES: SourceKey[] = ['NVD', 'OSV', 'GITHUB', 'VULNDB'];
+const DEFAULT_SOURCES: SourceKey[] = ['NVD', 'OSV', 'GITHUB'];
 
 function AnalysisPageInner() {
   const { showToast } = useToast();
@@ -227,8 +227,8 @@ function AnalysisPageInner() {
                     border: 'border-l-red-500',
                   },
                   {
-                    label: 'Runs — source errors',
-                    hint: 'Runs with lookup/API issues; findings may be incomplete (PARTIAL).',
+                    label: 'Runs — incomplete coverage',
+                    hint: 'Runs where a source errored or could not assess some/all components; findings may be incomplete (PARTIAL).',
                     value: aggregate.by_outcome.source_errors,
                     icon: ActivityIcon,
                     color: 'text-amber-600 bg-amber-50',

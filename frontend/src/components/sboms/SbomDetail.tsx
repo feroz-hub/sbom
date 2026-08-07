@@ -585,7 +585,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
   }, [runs?.length]);
 
   const handleRunAnalysis = () => {
-    startAnalysis({ sources: ['NVD', 'OSV', 'GITHUB', 'VULNDB'] });
+    startAnalysis({ sources: ['NVD', 'OSV', 'GITHUB'] });
   };
 
   const handleReset = () => {

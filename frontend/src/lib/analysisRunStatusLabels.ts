@@ -11,6 +11,12 @@
  *
  * The display tone for FINDINGS is amber, not red, to break the visual
  * conflation with ERROR (which is the only "real" failure).
+ *
+ * PARTIAL means INCOMPLETE COVERAGE, not just "source errors": a selected
+ * source either failed, or could not assess some/all components (e.g. OSV
+ * with no supported package identity, NVD with no authoritative CPE). Zero
+ * findings on a PARTIAL run says nothing about whether the SBOM is
+ * vulnerability-free, so copy for it must never imply "clean".
  */
 
 /** Short label shown in badges and dropdowns */
@@ -24,7 +30,7 @@ export const runStatusShortLabel = (code: string | null | undefined): string => 
     case 'FAIL':
       return 'Vulnerabilities found';
     case 'PARTIAL':
-      return 'Source errors';
+      return 'Incomplete coverage';
     case 'ERROR':
       return 'Run error';
     case 'INTERRUPTED':
@@ -51,7 +57,7 @@ export const runStatusDescription = (code: string | null | undefined): string =>
     case 'FAIL':
       return 'The scan finished successfully and reported one or more vulnerabilities. This is not a system or pipeline failure.';
     case 'PARTIAL':
-      return 'The scan finished but some vulnerability lookups failed (e.g. API errors). Fewer findings than expected may be shown.';
+      return 'The scan completed, but one or more vulnerability sources could not assess some or all components. Findings may be incomplete.';
     case 'ERROR':
       return 'The analysis run failed with an error. Check the run details for a message.';
     case 'INTERRUPTED':
@@ -84,7 +90,7 @@ export const sbomAnalysisShortLabel = (code: string | null | undefined): string 
     case 'FAIL':
       return 'Vulnerabilities found';
     case 'PARTIAL':
-      return 'Source errors';
+      return 'Incomplete coverage';
     case 'ERROR':
       return 'Scan error';
     case 'INTERRUPTED':

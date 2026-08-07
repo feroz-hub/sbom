@@ -106,6 +106,10 @@ async def run_sources_concurrently(
                     queried = int(provider_status.get("total_identifiers") or 0)
                 elif "queried" in provider_status:
                     queried = int(provider_status.get("queried") or 0)
+                # Provider-reported skips are disjoint from the runner's own
+                # ``queryable_components`` skips above: the provider only ever
+                # counts components it was handed and then could not use.
+                skipped_count += int(provider_status.get("skipped") or 0)
                 skipped_count += int(provider_status.get("skipped_generated_cpe") or 0)
                 skipped_count += int(provider_status.get("skipped_untrusted_cpe") or 0)
                 skipped_count += int(provider_status.get("skipped_missing_cpe") or 0)
