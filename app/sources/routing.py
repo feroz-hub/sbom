@@ -171,3 +171,64 @@ def summarize_source(
         "status": status or ("error" if errors else "complete"),
         **({"reason": reason} if reason else {}),
     }
+
+
+# ---------------------------------------------------------------------------
+# Coverage gaps
+#
+# A source can finish without failing and still have assessed nothing — OSV
+# skips components with no supported package identity, NVD skips components
+# with no authoritative CPE. Zero findings then means "nobody looked", which
+# is NOT the same claim as "nothing was found". These two predicates are the
+# ONE definition of that distinction; ``compute_report_status`` (run status),
+# the ``(partial)`` source label and the UI all read it from here.
+# ---------------------------------------------------------------------------
+
+# Statuses that mean the source never assessed the components it was given.
+_NON_ASSESSING_STATUSES = frozenset({"skipped", "disabled"})
+
+
+def source_has_coverage_gap(summary: Any) -> bool:
+    """True when this source left part of the SBOM unassessed.
+
+    A gap is a *coverage* fact, never an error verdict: a source that skipped
+    every component because the SBOM carries no PURLs and no authoritative
+    CPEs did exactly what it should, and the run must still not be reported
+    as clean. Errors are counted as gaps too — a failed lookup is coverage
+    the run did not get.
+    """
+    if not isinstance(summary, dict):
+        return False
+    status = str(summary.get("status") or "").strip().lower()
+    if status in _NON_ASSESSING_STATUSES:
+        return True
+
+    def _count(key: str) -> int:
+        try:
+            return int(summary.get(key) or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    if _count("errors") > 0:
+        return True
+    # Nothing queried while components were withheld: the source was
+    # selected, handed components, and assessed none of them.
+    return _count("queried") == 0 and _count("skipped") > 0
+
+
+def coverage_gap_sources(source_summary: Any) -> list[str]:
+    """Names of the selected sources that left coverage gaps, in order."""
+    if not isinstance(source_summary, list):
+        return []
+    gapped: list[str] = []
+    for summary in source_summary:
+        if source_has_coverage_gap(summary):
+            name = str((summary or {}).get("source") or "").strip().upper()
+            if name and name not in gapped:
+                gapped.append(name)
+    return gapped
+
+
+def has_incomplete_source_coverage(source_summary: Any) -> bool:
+    """True when any selected source left part of the SBOM unassessed."""
+    return bool(coverage_gap_sources(source_summary))

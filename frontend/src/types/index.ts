@@ -1183,8 +1183,27 @@ export interface DashboardPosture {
   net_7day_resolved?: number;
   headline_state?: HeadlineState;
   primary_action?: PrimaryAction;
+
+  /**
+   * Did the configured vulnerability sources actually assess the components in
+   * scope? Severity counts cannot answer this — a source that skipped every
+   * component reports zero findings exactly like one that found none.
+   *
+   * `complete` → zero findings is a clean result.
+   * `incomplete` → zero findings means "nothing reported", not "nothing there".
+   * `unknown` → no usable analysis information in scope.
+   *
+   * Optional: absent on API versions that predate the field. The FE never
+   * derives coverage on its own — when the backend supplies it, it is obeyed.
+   */
+  coverage_status?: CoverageStatus;
+  /** Sources responsible for the gap, e.g. `['OSV', 'NVD']`. Best-effort. */
+  coverage_gap_sources?: string[];
   schema_version?: number;
 }
+
+/** Mirrors `CoverageStatus` in `app/schemas_dashboard.py`. */
+export type CoverageStatus = 'complete' | 'incomplete' | 'unknown';
 
 /**
  * Cumulative "Your Analyzer, So Far" panel. Numbers only go up — by design.
@@ -1323,7 +1342,6 @@ export interface AnalyzeSBOMPayload {
   sbom_name: string;
   nvd_api_key?: string;
   github_token?: string;
-  vulndb_api_key?: string;
   osv_hydrate?: boolean;
 }
 

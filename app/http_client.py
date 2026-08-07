@@ -20,9 +20,15 @@ def tls_ssl_context() -> ssl.SSLContext:
     """Mozilla CA bundle via certifi (avoids missing system certs in slim images)."""
     global _tls_context
     if _tls_context is None:
-        _tls_context = ssl.create_default_context(cafile=certifi.where())
+        _tls_context = ssl.create_default_context(cafile=get_ca_bundle())
     return _tls_context
 
+def get_ca_bundle() -> str:
+    return (
+        os.getenv("SSL_CERT_FILE")
+        or os.getenv("REQUESTS_CA_BUNDLE")
+        or certifi.where()
+    )
 
 def get_async_http_client() -> httpx.AsyncClient:
     if _async_client is None:

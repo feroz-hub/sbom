@@ -70,7 +70,7 @@ export function ConsolidatedAnalysisPanel({
               Consolidated multi-source analysis
             </h2>
             <p className="mt-0.5 text-xs text-hcl-muted">
-              Live-streamed scan across NVD · OSV · GHSA · VulDB with per-source progress.
+              Live-streamed scan across NVD · OSV · GHSA  with per-source progress.
             </p>
           </div>
           {isRunning && (

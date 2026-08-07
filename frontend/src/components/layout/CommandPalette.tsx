@@ -188,7 +188,7 @@ function useCommands(query: string, isOpen: boolean, onClose: () => void): Comma
         subtitle: 'Live multi-source scan with per-source progress',
         Icon: Sparkles,
         iconTone: 'text-hcl-cyan',
-        keywords: 'analyze nvd osv ghsa vulndb live stream',
+        keywords: 'analyze nvd osv ghsa live stream',
         run: () => goto('/analysis?tab=consolidated'),
       },
       // Actions

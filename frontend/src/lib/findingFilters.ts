@@ -17,7 +17,7 @@ export interface FindingsFilterState {
   search: string;
   /** Server-side severity filter — passed to the API. */
   severityFilter: string;
-  /** Multi-select source filter (NVD, OSV, GITHUB, VULNDB). Empty = all. */
+  /** Multi-select source filter (NVD, OSV, GITHUB). Empty = all. */
   sources: string[];
   /** Inclusive CVSS range. */
   cvssMin: number;

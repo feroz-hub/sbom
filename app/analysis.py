@@ -668,6 +668,15 @@ from .sources.match_confidence import (
 from .sources.match_confidence import (
     score_match as _score_match,
 )
+from .sources.osv_eligibility import (
+    SKIP_REASON_NO_IDENTITY as _OSV_SKIP_REASON_NO_IDENTITY,
+)
+from .sources.osv_eligibility import (
+    osv_query_for_component as _osv_query_for_component,
+)
+from .sources.osv_eligibility import (
+    partition_osv_eligible as _partition_osv_eligible,
+)
 from .sources.purl import parse_purl as _parse_purl
 from .sources.version_range import ApplicabilityStatus as _ApplicabilityStatus
 from .sources.version_range import evaluate_nvd_configurations as _evaluate_nvd_configurations
@@ -1388,6 +1397,33 @@ def _best_score_and_vector_from_osv(v: dict) -> tuple[float | None, str | None, 
     return score, vector, severity_txt
 
 
+def _osv_eligibility_warning(skipped_outcomes: list[dict], *, queried: int) -> dict:
+    """Provider-status warning carrying OSV's queried/skipped accounting.
+
+    ``run_sources_concurrently`` folds this into the OSV ``source_summary``
+    so ineligible components are reported as *skipped*, not as no-match
+    and not as errors. When nothing was queryable the status is an
+    explicit ``skipped`` with the aggregate reason — a scan that could not
+    ask OSV anything must never read as an OSV failure.
+    """
+    provider_status: dict[str, Any] = {
+        "provider": "OSV",
+        "queried": queried,
+        "skipped": len(skipped_outcomes),
+        "failures": 0,
+    }
+    if queried == 0:
+        provider_status["status"] = "skipped"
+        provider_status["reason"] = _OSV_SKIP_REASON_NO_IDENTITY
+        provider_status["matched"] = 0
+        provider_status["errors"] = 0
+    return {
+        "source": "OSV",
+        "provider_status": provider_status,
+        "skipped_components": skipped_outcomes[:25],
+    }
+
+
 async def osv_query_by_components(
     components: list[dict], settings: _MultiSettings
 ) -> tuple[list[dict], list[dict], list[dict]]:
@@ -1401,9 +1437,31 @@ async def osv_query_by_components(
     query_errors: list[dict] = []
     query_warnings: list[dict] = []
 
+    # ===================================================================
+    # Eligibility gate (see app/sources/osv_eligibility.py).
+    #
+    # OSV rejects an entire /v1/querybatch request with HTTP 400 when any
+    # one query is malformed, so components without a real package
+    # identity (no parseable PURL and no recognised OSV ecosystem — e.g.
+    # the CycloneDX classification ``library`` landing in ``ecosystem``)
+    # are dropped BEFORE the cache partition. That keeps them off the
+    # network on both OSV paths (querybatch and the /v1/query fallback)
+    # and out of the response cache, so their skip count is stable across
+    # re-scans.
+    # ===================================================================
+    eligible_components, skipped_outcomes = _partition_osv_eligible(components)
+    if not eligible_components:
+        LOGGER.info(
+            "OSV: no component carries a supported package identity; skipping OSV (%d skipped)",
+            len(skipped_outcomes),
+        )
+        return [], [], [_osv_eligibility_warning(skipped_outcomes, queried=0)]
+    if skipped_outcomes:
+        query_warnings.append(_osv_eligibility_warning(skipped_outcomes, queried=len(eligible_components)))
+
     # Build name-to-version lookup for comp_ver resolution (Bug A3)
-    name_to_ver: dict[str, str | None] = {(c.get("name") or "").lower(): c.get("version") for c in components}
-    component_by_name: dict[str, dict] = {(c.get("name") or "").lower(): c for c in components}
+    name_to_ver: dict[str, str | None] = {(c.get("name") or "").lower(): c.get("version") for c in eligible_components}
+    component_by_name: dict[str, dict] = {(c.get("name") or "").lower(): c for c in eligible_components}
 
     # Parallel lookup of name → PURL namespace for the confidence
     # scorer's vendor input (roadmap #3, PR-D). ``parse_purl`` returns
@@ -1419,7 +1477,7 @@ async def osv_query_by_components(
         return None
 
     name_to_vendor: dict[str, str | None] = {
-        (c.get("name") or "").lower(): _vendor_from_purl(c.get("purl")) for c in components
+        (c.get("name") or "").lower(): _vendor_from_purl(c.get("purl")) for c in eligible_components
     }
 
     # ===================================================================
@@ -1436,7 +1494,7 @@ async def osv_query_by_components(
     # opening a session or emitting metrics — byte-identical
     # pass-through.
     # ===================================================================
-    keyed_components: list[tuple[str | None, dict]] = [(_component_cache_key(c), c) for c in components]
+    keyed_components: list[tuple[str | None, dict]] = [(_component_cache_key(c), c) for c in eligible_components]
     comp_by_key: dict[str, dict] = {}
     for key, c in keyed_components:
         if key is not None:
@@ -1452,42 +1510,17 @@ async def osv_query_by_components(
     # Build /v1/querybatch queries for miss components only. Track
     # parallel ``miss_query_purl_keys`` so result[i] traces back to the
     # source component's cache key.
+    #
+    # The query object comes from the same eligibility function that
+    # partitioned the batch above, so only queries OSV accepts are ever
+    # assembled — one unusable component can no longer 400 the batch.
     # ===================================================================
     miss_queries: list[dict] = []
     miss_query_purl_keys: list[str | None] = []
     for comp in miss_comps:
-        purl = comp.get("purl")
-        name = comp.get("name") or ""
-        version = comp.get("version")
-        q: dict = {}
-
-        if purl:
-            parsed = _parse_purl(purl)
-            if parsed:
-                if parsed.get("version"):
-                    q = {"package": {"purl": purl}}
-                elif version:
-                    q = {"package": {"purl": purl}, "version": version}
-                else:
-                    q = {"package": {"purl": purl}}
-
-        if not q and name:
-            eco = (comp.get("ecosystem") or "").strip()
-            if not eco:
-                grp = (comp.get("group") or "").strip()
-                if grp and ("." in grp or grp.lower().startswith(("org.", "com.", "net.", "io."))):
-                    eco = "Maven"
-                elif name.startswith("@") and "/" in name:
-                    eco = "npm"
-            pkg = {"name": name}
-            if eco:
-                pkg["ecosystem"] = eco
-            q = {"package": pkg}
-            if version:
-                q["version"] = version
-
-        if q:
-            miss_queries.append(q)
+        decision = _osv_query_for_component(comp)
+        if decision.query:
+            miss_queries.append(decision.query)
             miss_query_purl_keys.append(_component_cache_key(comp))
 
     # ===================================================================

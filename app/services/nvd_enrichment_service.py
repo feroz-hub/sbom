@@ -162,9 +162,14 @@ class NvdEnrichmentService:
         }
         if not self.settings.nvd_enabled:
             summary["status"] = "disabled"
+            summary["reason"] = "disabled"
             return {"records": [], "provider_status": summary}
         if not summary["total_identifiers"]:
             summary["status"] = "skipped"
+            # Name the coverage gap instead of leaving the UI to guess: NVD
+            # only queries CVE ids and authoritative CPEs, so "no
+            # identifiers" always means the components carried neither.
+            summary["reason"] = "missing_authoritative_cpe"
             return {"records": [], "provider_status": summary}
 
         output: list[dict[str, Any]] = []

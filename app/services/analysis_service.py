@@ -15,7 +15,11 @@ from sqlalchemy.sql.sqltypes import String
 
 from ..models import AnalysisRun, SBOMAnalysisReport, SBOMSource
 from ..settings import get_analysis_legacy_level
-from ..sources.routing import count_authoritative_cpes, normalize_query_errors
+from ..sources.routing import (
+    count_authoritative_cpes,
+    has_incomplete_source_coverage,
+    normalize_query_errors,
+)
 from .finding_metrics import (
     apply_metrics_to_run,
     calculate_run_finding_metrics,
@@ -293,18 +297,57 @@ def _parse_iso_timestamp(value: str | None) -> datetime | None:
     return parsed.astimezone(UTC)
 
 
-def compute_report_status(total_findings: int, query_errors: list[dict]) -> str:
-    """Compute the overall run status from findings + upstream errors.
+def compute_report_status(
+    total_findings: int,
+    query_errors: list[dict],
+    source_summary: list[dict] | None = None,
+) -> str:
+    """Compute the overall run status from findings, errors and coverage.
 
-    Returns one of: ``OK`` (clean), ``FINDINGS`` (vulns detected — *successful*
-    scan), ``PARTIAL`` (some upstream feed errored). See ADR-0001 for the
-    rename history (``FAIL`` → ``FINDINGS``, ``PASS`` → ``OK``).
+    Returns one of: ``OK`` (clean *and* fully covered), ``FINDINGS`` (vulns
+    detected — a *successful* scan), ``PARTIAL`` (incomplete coverage). See
+    ADR-0001 for the rename history (``FAIL`` → ``FINDINGS``, ``PASS`` →
+    ``OK``).
+
+    ``PARTIAL`` covers two ways coverage can be incomplete, because the
+    consequence for the reader is identical — findings may be missing:
+
+      * a source errored (``query_errors``); or
+      * a selected source assessed none/only some of the components (e.g.
+        OSV skipping everything for ``missing_supported_package_identity``,
+        NVD skipping everything for a missing authoritative CPE).
+
+    ``OK`` therefore means "every selected source assessed the SBOM and
+    found nothing" — the only state that justifies clean/all-clear copy.
+    An intentional skip is NEVER ``ERROR``: nothing technically failed,
+    the SBOM simply lacks the identifiers those sources need.
     """
     if total_findings > 0:
         return RUN_STATUS_FINDINGS
     if query_errors:
         return RUN_STATUS_PARTIAL
+    if has_incomplete_source_coverage(source_summary):
+        return RUN_STATUS_PARTIAL
     return RUN_STATUS_OK
+
+
+def source_summary_from_details(details: dict | None) -> list[dict]:
+    """Pull the per-source summary list out of a run's details payload.
+
+    Written by the orchestrator at both ``details["source_summary"]`` and
+    ``details["analysis_metadata"]["source_summary"]``; older payloads may
+    carry only one. Returns ``[]`` when neither is present so status
+    computation degrades to the findings/errors rules.
+    """
+    if not isinstance(details, dict):
+        return []
+    summary = details.get("source_summary")
+    if not isinstance(summary, list):
+        metadata = details.get("analysis_metadata")
+        summary = metadata.get("source_summary") if isinstance(metadata, dict) else None
+    if not isinstance(summary, list):
+        return []
+    return [item for item in summary if isinstance(item, dict)]
 
 
 def mark_analysis_run_failed(
@@ -542,8 +585,9 @@ def persist_analysis_run(
     run.project_id = sbom_obj.projectid
     run.product_id = sbom_obj.product_id
     normalized_status = normalize_run_status(run_status) or RUN_STATUS_ERROR
+    run_source_summary = source_summary_from_details(details)
     if normalized_status == RUN_STATUS_FINDINGS and safe_int(details.get("total_findings")) == 0:
-        normalized_status = compute_report_status(0, details.get("query_errors") or [])
+        normalized_status = compute_report_status(0, details.get("query_errors") or [], run_source_summary)
     run.run_status = normalized_status
     run.source = source
     run.trigger_source = trigger_source
@@ -704,7 +748,14 @@ def persist_analysis_run(
     )
     apply_metrics_to_run(run, metrics)
     if normalized_status in {RUN_STATUS_OK, RUN_STATUS_FINDINGS, RUN_STATUS_PARTIAL, "PASS", "FAIL"}:
-        run.run_status = compute_report_status(metrics.total_findings, details.get("query_errors") or [])
+        # Coverage is part of the verdict, so the recompute needs the same
+        # source summary the orchestrator decided on — otherwise a PARTIAL
+        # run computed upstream would be silently downgraded to OK here.
+        run.run_status = compute_report_status(
+            metrics.total_findings,
+            details.get("query_errors") or [],
+            run_source_summary,
+        )
     details["total_findings"] = metrics.total_findings
     details["critical"] = metrics.severity_counts["critical"]
     details["high"] = metrics.severity_counts["high"]
@@ -941,7 +992,9 @@ def backfill_analytics_tables(
 
             details = normalize_details(details, components)
             run_status = normalize_run_status(latest_legacy.sbom_result) or compute_report_status(
-                safe_int(details.get("total_findings")), details.get("query_errors") or []
+                safe_int(details.get("total_findings")),
+                details.get("query_errors") or [],
+                source_summary_from_details(details),
             )
             used = (details.get("analysis_metadata") or {}).get("sources") or []
             source = ",".join(used) if used else "BACKFILL"

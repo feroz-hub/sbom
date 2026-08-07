@@ -12,8 +12,9 @@
  * `"1 finding"` / `"2 findings"` so we never read "1 findings" anywhere.
  */
 
+import { COVERAGE_INCOMPLETE_NOTE, COVERAGE_UNKNOWN_NOTE, coverageGapLabel } from './dashboardPosture';
 import { pluralize } from './pluralize';
-import type { HeadlineState } from '@/types';
+import type { CoverageStatus, HeadlineState } from '@/types';
 
 /**
  * Tone is the sole input the visual layer needs from a headline rule.
@@ -41,6 +42,15 @@ export interface HeadlineInputs {
   critical?: number;
   high?: number;
   kev_count?: number;
+  /**
+   * Did the configured sources assess the components? The server's
+   * ``headline_state`` is derived from finding counts alone, so ``clean``
+   * cannot distinguish "nothing found" from "nobody looked" — this field
+   * does. Absent ⇒ treated as ``complete`` (behaviour before the field
+   * existed); the FE never infers coverage on its own.
+   */
+  coverage_status?: CoverageStatus;
+  coverage_gap_sources?: string[];
 }
 
 /**
@@ -60,6 +70,7 @@ export function computeHeadlineCopy(
   const critical = data.critical ?? 0;
   const high = data.high ?? 0;
   const kev = data.kev_count ?? 0;
+  const coverage: CoverageStatus = data.coverage_status ?? 'complete';
 
   switch (state) {
     case 'no_data':
@@ -70,13 +81,33 @@ export function computeHeadlineCopy(
         tone: 'neutral',
       };
 
-    case 'clean':
+    case 'clean': {
+      // "All clear" is a claim about the whole scope, so it requires that the
+      // whole scope was actually assessed. With OSV and NVD skipping every
+      // component, zero findings is an absence of evidence — amber, and the
+      // sub-line says so without ever asserting there are no vulnerabilities.
+      const gaps = coverageGapLabel(data.coverage_gap_sources);
+      if (coverage === 'incomplete') {
+        return {
+          headline: `Incomplete coverage across ${pluralize(sbomCount, 'SBOM', 'SBOMs')}.`,
+          subline: gaps ? `${COVERAGE_INCOMPLETE_NOTE} ${gaps}.` : COVERAGE_INCOMPLETE_NOTE,
+          tone: 'warning',
+        };
+      }
+      if (coverage === 'unknown') {
+        return {
+          headline: `Coverage not fully assessed across ${pluralize(sbomCount, 'SBOM', 'SBOMs')}.`,
+          subline: gaps ? `${COVERAGE_UNKNOWN_NOTE} ${gaps}.` : COVERAGE_UNKNOWN_NOTE,
+          tone: 'warning',
+        };
+      }
       return {
         headline: `All clear across ${pluralize(sbomCount, 'SBOM', 'SBOMs')}.`,
         subline:
           'No critical or high-severity findings in your portfolio right now.',
         tone: 'success',
       };
+    }
 
     case 'kev_present': {
       // KEV always wins over critical/high — actively-exploited vulns are a

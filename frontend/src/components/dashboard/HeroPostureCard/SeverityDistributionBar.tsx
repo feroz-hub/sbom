@@ -22,6 +22,12 @@ interface SeverityDistributionBarProps {
    * segment to be clickable.
    */
   interactiveSeverities?: ReadonlySet<SeverityKey>;
+  /**
+   * True when a configured source could not assess every component. Only
+   * affects the zero-findings bar: "no findings in scope" is a safety claim
+   * the green treatment shouldn't make when nothing was assessed.
+   */
+  coverageShortfall?: boolean;
 }
 
 const SEGMENTS: Array<{
@@ -48,6 +54,7 @@ export function SeverityDistributionBar({
   className,
   onSegmentClick,
   interactiveSeverities,
+  coverageShortfall = false,
 }: SeverityDistributionBarProps) {
   const isInteractive = (key: SeverityKey) =>
     onSegmentClick != null && (interactiveSeverities?.has(key) ?? false);
@@ -69,9 +76,23 @@ export function SeverityDistributionBar({
   if (totalSev === 0) {
     return (
       <div className={cn('space-y-2', className)}>
-        <div className="flex h-7 w-full items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-950/60">
-          <span className="text-[11px] font-medium uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
-            No findings in scope
+        <div
+          className={cn(
+            'flex h-7 w-full items-center justify-center rounded-full',
+            coverageShortfall
+              ? 'bg-amber-100 dark:bg-amber-950/60'
+              : 'bg-emerald-100 dark:bg-emerald-950/60',
+          )}
+        >
+          <span
+            className={cn(
+              'text-[11px] font-medium uppercase tracking-wider',
+              coverageShortfall
+                ? 'text-amber-700 dark:text-amber-300'
+                : 'text-emerald-700 dark:text-emerald-300',
+            )}
+          >
+            {coverageShortfall ? 'No findings reported · coverage incomplete' : 'No findings in scope'}
           </span>
         </div>
         {unknownCount > 0 && <UnknownPill count={unknownCount} />}

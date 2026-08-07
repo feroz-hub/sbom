@@ -30,6 +30,8 @@ import {
   exportRunSarif,
 } from '@/lib/api';
 import { runStatusDescription } from '@/lib/analysisRunStatusLabels';
+import { runCoverageOutcome } from '@/lib/sourceCoverage';
+import { sourceSummaryFromRun } from '@/lib/runSourceSummary';
 import { downloadBlob } from '@/lib/utils';
 import { useToast } from '@/hooks/useToast';
 import { getApiErrorMessage } from '@/lib/notifications';
@@ -272,9 +274,19 @@ function AnalysisDetailContent({ params }: AnalysisDetailPageProps) {
           </Alert>
         )}
 
-        {/* Outcome footnote */}
+        {/* Outcome footnote. On PARTIAL runs this names the sources that
+            could not assess the components — "no findings" from a source
+            that never ran is not evidence of anything. */}
         <p className="text-xs leading-relaxed text-hcl-muted">
-          Outcome: <span className="text-foreground">{runStatusDescription(run.run_status)}</span>
+          Outcome:{' '}
+          <span className="text-foreground">
+            {runCoverageOutcome(
+              run.run_status,
+              sourceSummaryFromRun(run),
+              runStatusDescription(run.run_status),
+              canonicalTotalFindings,
+            )}
+          </span>
         </p>
 
         {/* AI remediation banner — only when the feature flag is enabled.

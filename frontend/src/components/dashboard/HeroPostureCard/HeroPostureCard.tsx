@@ -1,8 +1,14 @@
 'use client';
 
+import { ShieldQuestion } from 'lucide-react';
 import { Surface } from '@/components/ui/Surface';
 import { Skeleton } from '@/components/ui/Spinner';
 import { cn } from '@/lib/utils';
+import {
+  COVERAGE_INCOMPLETE_NOTE,
+  COVERAGE_UNKNOWN_NOTE,
+  coverageGapLabel,
+} from '@/lib/dashboardPosture';
 import {
   computeHeadlineCopy,
   toneToAmbientClass,
@@ -49,8 +55,33 @@ export function HeroPostureCard({
   onFixClick,
 }: HeroPostureCardProps) {
   const state: HeadlineState = posture?.headline_state ?? 'no_data';
-  const tone = computeHeadlineCopy(state, {}).tone;
+  // Coverage is part of the headline decision, so the tone (and the ambient
+  // glow it drives) has to be computed with it — otherwise an unassessed
+  // scope still glows green.
+  const headlineData = {
+    total_sboms: posture?.total_sboms,
+    total_findings: posture?.total_findings,
+    critical: posture?.severity?.critical,
+    high: posture?.severity?.high,
+    kev_count: posture?.kev_count,
+    coverage_status: posture?.coverage_status,
+    coverage_gap_sources: posture?.coverage_gap_sources,
+  };
+  const tone = computeHeadlineCopy(state, headlineData).tone;
   const ambientClass = toneToAmbientClass(tone);
+  const coverageStatus = posture?.coverage_status ?? 'complete';
+  const coverageShortfall = coverageStatus !== 'complete';
+  const hasFindings = (posture?.total_findings ?? 0) > 0;
+  // With findings present the vulnerability posture stays the headline; the
+  // coverage caveat rides alongside so the count reads as a floor, not a total.
+  const coverageNote = coverageShortfall
+    ? [
+        coverageStatus === 'incomplete' ? COVERAGE_INCOMPLETE_NOTE : COVERAGE_UNKNOWN_NOTE,
+        coverageGapLabel(posture?.coverage_gap_sources),
+      ]
+        .filter(Boolean)
+        .join(' ')
+    : null;
 
   if (isLoading) {
     return (
@@ -87,17 +118,18 @@ export function HeroPostureCard({
 
       <div className="relative space-y-5">
         <div className="space-y-2">
-          <AdaptiveHeadline
-            state={state}
-            data={{
-              total_sboms: posture?.total_sboms,
-              total_findings: posture?.total_findings,
-              critical: posture?.severity?.critical,
-              high: posture?.severity?.high,
-              kev_count: posture?.kev_count,
-            }}
-          />
+          <AdaptiveHeadline state={state} data={headlineData} />
           <LatestRunIndicator isoTimestamp={posture?.last_successful_run_at} />
+          {/* Findings present + coverage short: keep both facts visible. */}
+          {coverageNote && hasFindings && (
+            <p
+              data-testid="hero-coverage-warning"
+              className="flex max-w-2xl items-start gap-1.5 rounded-lg bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800 ring-1 ring-amber-200/70 dark:bg-amber-950/40 dark:text-amber-200 dark:ring-amber-900/60"
+            >
+              <ShieldQuestion className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+              <span>{coverageNote}</span>
+            </p>
+          )}
         </div>
 
         {/* Key signals — the decision-relevant few, exploitability first. */}
@@ -121,6 +153,7 @@ export function HeroPostureCard({
             severity={posture?.severity}
             onSegmentClick={onSegmentClick}
             interactiveSeverities={interactiveSeverities}
+            coverageShortfall={coverageShortfall}
           />
         </div>
       </div>

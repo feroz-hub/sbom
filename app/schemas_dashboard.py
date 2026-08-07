@@ -149,6 +149,14 @@ HeadlineState = Literal[
     "low_volume",
 ]
 
+# Did the configured vulnerability sources actually assess the components in
+# scope? Severity counts cannot answer this: a source that skipped every
+# component reports zero findings exactly like a source that found none.
+#   complete   — every source assessed the components it was given
+#   incomplete — a source errored, or assessed none/only some of them
+#   unknown    — no usable analysis information in scope
+CoverageStatus = Literal["complete", "incomplete", "unknown"]
+
 PrimaryAction = Literal[
     "upload",
     "review_kev",
@@ -246,4 +254,12 @@ class DashboardPostureResponse(BaseModel):
     net_7day_resolved: int = 0
     headline_state: HeadlineState = "no_data"
     primary_action: PrimaryAction = "upload"
+
+    # Additive coverage signal — no existing field changes meaning. The FE
+    # gates its "All clear" headline on this: zero findings only reads as
+    # clean when coverage is ``complete``. ``coverage_gap_sources`` names the
+    # sources responsible (best-effort; may be empty on legacy runs).
+    coverage_status: CoverageStatus = "unknown"
+    coverage_gap_sources: list[str] = Field(default_factory=list)
+
     schema_version: int = 1

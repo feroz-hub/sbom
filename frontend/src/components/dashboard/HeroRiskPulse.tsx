@@ -55,6 +55,22 @@ const bandToTone: Record<
     pillDot: 'bg-emerald-500',
     pillTone: 'text-emerald-700 dark:text-emerald-300',
   },
+  // Zero findings with a coverage shortfall — amber, never the green
+  // "everything is fine" treatment.
+  incomplete_coverage: {
+    ring: 'ring-amber-400/40',
+    chip: 'bg-amber-100 text-amber-800 ring-amber-300/60 dark:bg-amber-950/60 dark:text-amber-200 dark:ring-amber-900/60',
+    ambient: 'bg-amber-300/30',
+    pillDot: 'bg-amber-500',
+    pillTone: 'text-amber-700 dark:text-amber-300',
+  },
+  coverage_unknown: {
+    ring: 'ring-amber-400/40',
+    chip: 'bg-amber-100 text-amber-800 ring-amber-300/60 dark:bg-amber-950/60 dark:text-amber-200 dark:ring-amber-900/60',
+    ambient: 'bg-amber-300/30',
+    pillDot: 'bg-amber-500',
+    pillTone: 'text-amber-700 dark:text-amber-300',
+  },
   stable: {
     ring: 'ring-sky-400/40',
     chip: 'bg-sky-100 text-sky-800 ring-sky-300/60 dark:bg-sky-950/60 dark:text-sky-200 dark:ring-sky-900/60',
@@ -136,6 +152,7 @@ export function HeroRiskPulse({
   );
   const tone = bandToTone[result.band];
   const copy = POSTURE_COPY[result.band];
+  const coverageShortfall = result.coverageStatus !== 'complete';
 
   const severity = posture?.severity;
   const totalFindings = stats?.total_findings ?? stats?.total_vulnerabilities ?? 0;
@@ -206,6 +223,15 @@ export function HeroRiskPulse({
     }
     if (result.band === 'clean') {
       return <>No findings across {scopePhrase}.</>;
+    }
+    // Zero findings, incomplete coverage: say what was and was not
+    // established. Never "no vulnerabilities", never "clear".
+    if (result.band === 'incomplete_coverage' || result.band === 'coverage_unknown') {
+      return (
+        <>
+          {result.reason} Reviewed across {scopePhrase}.
+        </>
+      );
     }
     // urgent / action_needed / stable — name the actionable count.
     const exploitableSentence =
@@ -288,7 +314,9 @@ export function HeroRiskPulse({
             >
               {result.band === 'clean' ? (
                 <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
-              ) : result.band === 'degraded' ? (
+              ) : result.band === 'degraded' ||
+                result.band === 'incomplete_coverage' ||
+                result.band === 'coverage_unknown' ? (
                 <ShieldQuestion className="h-3.5 w-3.5" aria-hidden />
               ) : result.band === 'urgent' ? (
                 <ShieldAlert className="h-3.5 w-3.5" aria-hidden />
@@ -300,6 +328,22 @@ export function HeroRiskPulse({
           </div>
 
           <p className="max-w-2xl text-sm leading-relaxed text-hcl-muted">{subtext}</p>
+
+          {/* Coverage caveat kept beside the severity bands too: when a source
+              could not assess every component, the finding count is a floor,
+              not a total. Suppressed on the coverage bands themselves, where
+              the same sentence is already the subtext. */}
+          {result.coverageWarning &&
+            result.band !== 'incomplete_coverage' &&
+            result.band !== 'coverage_unknown' && (
+              <p
+                data-testid="posture-coverage-warning"
+                className="flex max-w-2xl items-start gap-1.5 rounded-lg bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800 ring-1 ring-amber-200/70 dark:bg-amber-950/40 dark:text-amber-200 dark:ring-amber-900/60"
+              >
+                <ShieldQuestion className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                <span>{result.coverageWarning}</span>
+              </p>
+            )}
 
           {/* Severity bar — proportional segments. Unknown rendered separately below. */}
           {segments.length > 0 ? (
@@ -346,10 +390,26 @@ export function HeroRiskPulse({
               </div>
             </div>
           ) : (
+            /* No severity segments. Green only when coverage is complete —
+               an unassessed scope must not paint the "safe" colour. */
             <div className="pt-2">
-              <div className="flex h-2.5 w-full items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-950/60">
-                <span className="text-[10px] font-medium uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
-                  No findings
+              <div
+                className={cn(
+                  'flex h-2.5 w-full items-center justify-center rounded-full',
+                  coverageShortfall
+                    ? 'bg-amber-100 dark:bg-amber-950/60'
+                    : 'bg-emerald-100 dark:bg-emerald-950/60',
+                )}
+              >
+                <span
+                  className={cn(
+                    'text-[10px] font-medium uppercase tracking-wider',
+                    coverageShortfall
+                      ? 'text-amber-700 dark:text-amber-300'
+                      : 'text-emerald-700 dark:text-emerald-300',
+                  )}
+                >
+                  {coverageShortfall ? 'No findings reported · coverage incomplete' : 'No findings'}
                 </span>
               </div>
             </div>

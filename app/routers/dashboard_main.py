@@ -47,6 +47,7 @@ _AGE_PERIOD_DAYS = {"day": 1, "week": 7, "month": 30, "year": 365}
 from ..services.dashboard_metrics import (
     compute_headline_state,
     compute_lifetime_metrics,
+    compute_posture_coverage,
 )
 
 log = logging.getLogger(__name__)
@@ -171,6 +172,7 @@ def dashboard_posture(request: Request, response: Response, db: Session = Depend
         high=severity["high"],
         kev_count=int(kev_count),
     )
+    coverage_status, coverage_gap_sources = compute_posture_coverage(db)
 
     payload = {
         "severity": severity,
@@ -192,6 +194,8 @@ def dashboard_posture(request: Request, response: Response, db: Session = Depend
         "net_7day_resolved": net.resolved,
         "headline_state": headline_state,
         "primary_action": primary_action,
+        "coverage_status": coverage_status,
+        "coverage_gap_sources": coverage_gap_sources,
         "schema_version": 1,
     }
     nm = maybe_not_modified(request, response, payload)
@@ -386,6 +390,8 @@ def get_dashboard_summary(
         kev_count=int(kev_count),
     )
 
+    coverage_status, coverage_gap_sources = compute_posture_coverage(db)
+
     posture_payload = {
         "severity": severity,
         "kev_count": kev_count,
@@ -404,6 +410,8 @@ def get_dashboard_summary(
         "net_7day_resolved": net.resolved,
         "headline_state": headline_state,
         "primary_action": primary_action,
+        "coverage_status": coverage_status,
+        "coverage_gap_sources": coverage_gap_sources,
         "schema_version": 1,
     }
 

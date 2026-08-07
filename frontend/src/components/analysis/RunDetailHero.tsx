@@ -21,8 +21,17 @@ import Link from 'next/link';
 import { useMemo } from 'react';
 import { Surface } from '@/components/ui/Surface';
 import { AnimatedSeverityBar } from '@/components/ui/AnimatedSeverityBar';
+import { canonicalRunStatus } from '@/lib/analysisRunStatusLabels';
+import { sourceSummaryFromRun } from '@/lib/runSourceSummary';
+import {
+  SOURCE_COVERAGE_LABEL,
+  sourceCoverageDetail,
+  sourceCoverageReason,
+  sourceCoverageState,
+  type SourceCoverageState,
+} from '@/lib/sourceCoverage';
 import { cn, formatDate, formatDuration } from '@/lib/utils';
-import type { AnalysisRun, EnrichedFinding, SourceQuerySummary } from '@/types';
+import type { AnalysisRun, EnrichedFinding } from '@/types';
 
 type RunStatus = AnalysisRun['run_status'];
 
@@ -50,8 +59,11 @@ const STATUS_META: Record<
   PASS: _OK_META, // legacy alias
   FINDINGS: _FINDINGS_META,
   FAIL: _FINDINGS_META, // legacy alias
+  // PARTIAL = incomplete coverage (a source errored, or could not assess
+  // some/all components). Amber, never green: zero findings here is not a
+  // clean bill of health.
   PARTIAL: {
-    label: 'Partial',
+    label: 'Incomplete coverage',
     tone: 'text-amber-700 dark:text-amber-300',
     chip: 'bg-amber-100 text-amber-800 ring-amber-300/60 dark:bg-amber-950/60 dark:text-amber-200 dark:ring-amber-900/60',
     Icon: AlertOctagon,
@@ -118,13 +130,7 @@ const SOURCE_META: Record<string, { label: string; Icon: LucideIcon; tone: strin
     Icon: GitBranch,
     tone: 'text-purple-600 dark:text-purple-400',
     ring: 'ring-purple-200/60 dark:ring-purple-900/60',
-  },
-  VULNDB: {
-    label: 'VulDB',
-    Icon: KeyRound,
-    tone: 'text-cyan-700 dark:text-cyan-400',
-    ring: 'ring-cyan-200/60 dark:ring-cyan-900/60',
-  },
+  }
 };
 
 interface RunDetailHeroProps {
@@ -158,20 +164,19 @@ const BAND_CHIP: Record<ReturnType<typeof deriveBand>, string> = {
   CLEAR: 'bg-emerald-100 text-emerald-800 ring-emerald-300/60 dark:bg-emerald-950/60 dark:text-emerald-200 dark:ring-emerald-900/60',
 };
 
-function sourceSummaryFromRun(run: AnalysisRun): SourceQuerySummary[] {
-  if (Array.isArray(run.source_summary)) return run.source_summary;
-  if (!run.raw_report) return [];
-  try {
-    const parsed = JSON.parse(run.raw_report) as {
-      source_summary?: SourceQuerySummary[];
-      analysis_metadata?: { source_summary?: SourceQuerySummary[] };
-    };
-    const summary = parsed.source_summary ?? parsed.analysis_metadata?.source_summary;
-    return Array.isArray(summary) ? summary : [];
-  } catch {
-    return [];
-  }
-}
+const COVERAGE_CHIP: Record<SourceCoverageState, string> = {
+  complete: 'bg-emerald-100 text-emerald-800 ring-emerald-300/60 dark:bg-emerald-950/60 dark:text-emerald-200 dark:ring-emerald-900/60',
+  partial: 'bg-amber-100 text-amber-800 ring-amber-300/60 dark:bg-amber-950/60 dark:text-amber-200 dark:ring-amber-900/60',
+  skipped: 'bg-amber-100 text-amber-800 ring-amber-300/60 dark:bg-amber-950/60 dark:text-amber-200 dark:ring-amber-900/60',
+  error: 'bg-red-100 text-red-800 ring-red-300/60 dark:bg-red-950/60 dark:text-red-200 dark:ring-red-900/60',
+};
+
+const COVERAGE_ROW_RING: Record<SourceCoverageState, string> = {
+  complete: 'ring-border-subtle',
+  partial: 'ring-amber-300/60 dark:ring-amber-900/60',
+  skipped: 'ring-amber-300/60 dark:ring-amber-900/60',
+  error: 'ring-red-300/60 dark:ring-red-900/60',
+};
 
 export function RunDetailHero({ run, findings, rightSlot }: RunDetailHeroProps) {
   const status = STATUS_META[run.run_status] ?? STATUS_META.NO_DATA;
@@ -203,7 +208,13 @@ export function RunDetailHero({ run, findings, rightSlot }: RunDetailHeroProps) 
   const totalFindings = run.metrics?.total_findings ?? run.total_findings ?? 0;
   const providerObservations = run.metrics?.raw_observation_count;
   const sourceSummary = useMemo(() => sourceSummaryFromRun(run), [run]);
-  const showRiskBand = ['OK', 'PASS', 'FINDINGS', 'FAIL', 'PARTIAL'].includes(run.run_status);
+  const canonicalStatus = canonicalRunStatus(run.run_status);
+  const coverageIncomplete = canonicalStatus === 'PARTIAL';
+  // A PARTIAL run never renders the CLEAR band: "All clear" on findings that
+  // no source was able to look for is the exact claim this status exists to
+  // avoid. Real risk from the sources that DID run is still worth showing.
+  const showRiskBand =
+    ['OK', 'FINDINGS'].includes(canonicalStatus) || (coverageIncomplete && band !== 'CLEAR');
   const sourceSummaryText = sourceSummary.length
     ? sourceSummary
         .map(
@@ -295,9 +306,13 @@ export function RunDetailHero({ run, findings, rightSlot }: RunDetailHeroProps) 
                   ? `${providerObservations.toLocaleString()} provider observations`
                   : worstRisk > 0
                   ? `Worst risk score ${worstRisk.toFixed(1)}`
+                  : coverageIncomplete
+                  ? 'Coverage incomplete'
                   : undefined
               }
-              tone={totalFindings > 0 ? 'warn' : 'pass'}
+              // Zero findings under incomplete coverage must not paint green —
+              // that reads as "safe" when no source assessed the components.
+              tone={totalFindings > 0 || coverageIncomplete ? 'warn' : 'pass'}
             />
             <MetaTile
               Icon={Layers}
@@ -327,34 +342,82 @@ export function RunDetailHero({ run, findings, rightSlot }: RunDetailHeroProps) 
 
         {/* Right: source chips + actions */}
         <div className="flex shrink-0 flex-col items-stretch gap-3 lg:items-end lg:min-w-[220px]">
-          {sources.length > 0 && (
-            <div>
+          {/* Source coverage — "selected" is not "queried". A source can be
+              selected, handed every component and still assess none of them,
+              so each row states its coverage state, its counts and, when it
+              fell short, why. */}
+          {(sourceSummary.length > 0 || sources.length > 0) && (
+            <div className="w-full">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-hcl-muted lg:text-right">
-                Sources queried
+                Source coverage
               </p>
-              <ul className="mt-2 flex flex-wrap gap-1.5 lg:justify-end">
-                {sources.map((s) => {
-                  const meta = SOURCE_META[s] ?? {
-                    label: s,
-                    Icon: Database,
-                    tone: 'text-hcl-muted',
-                    ring: 'ring-border-subtle',
-                  };
-                  return (
-                    <li key={s}>
-                      <span
+              {sourceSummary.length > 0 ? (
+                <ul className="mt-2 space-y-1.5" data-testid="source-coverage">
+                  {sourceSummary.map((summary) => {
+                    const name = (summary.source ?? '').toUpperCase();
+                    const meta = SOURCE_META[name] ?? {
+                      label: name || '—',
+                      Icon: Database,
+                      tone: 'text-hcl-muted',
+                      ring: 'ring-border-subtle',
+                    };
+                    const state = sourceCoverageState(summary);
+                    const reason = sourceCoverageReason(summary);
+                    return (
+                      <li
+                        key={name || meta.label}
                         className={cn(
-                          'inline-flex items-center gap-1.5 rounded-full bg-surface px-2.5 py-1 text-[11px] font-semibold ring-1',
-                          meta.ring,
+                          'rounded-lg bg-surface px-2.5 py-1.5 text-[11px] ring-1',
+                          COVERAGE_ROW_RING[state],
                         )}
                       >
-                        <meta.Icon className={cn('h-3 w-3', meta.tone)} aria-hidden />
-                        <span className="text-hcl-navy">{meta.label}</span>
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="inline-flex min-w-0 items-center gap-1.5 font-semibold">
+                            <meta.Icon className={cn('h-3 w-3 shrink-0', meta.tone)} aria-hidden />
+                            <span className="truncate text-hcl-navy">{meta.label}</span>
+                          </span>
+                          <span
+                            className={cn(
+                              'shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1',
+                              COVERAGE_CHIP[state],
+                            )}
+                          >
+                            {SOURCE_COVERAGE_LABEL[state]}
+                          </span>
+                        </div>
+                        <p className="font-metric mt-0.5 tabular-nums text-hcl-muted">
+                          {sourceCoverageDetail(summary)}
+                        </p>
+                        {reason && <p className="mt-0.5 text-hcl-muted">{reason}</p>}
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <ul className="mt-2 flex flex-wrap gap-1.5 lg:justify-end">
+                  {sources.map((s) => {
+                    const meta = SOURCE_META[s] ?? {
+                      label: s,
+                      Icon: Database,
+                      tone: 'text-hcl-muted',
+                      ring: 'ring-border-subtle',
+                    };
+                    return (
+                      <li key={s}>
+                        <span
+                          className={cn(
+                            'inline-flex items-center gap-1.5 rounded-full bg-surface px-2.5 py-1 text-[11px] font-semibold ring-1',
+                            meta.ring,
+                          )}
+                        >
+                          <meta.Icon className={cn('h-3 w-3', meta.tone)} aria-hidden />
+                          <span className="text-hcl-navy">{meta.label}</span>
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </div>
           )}
 
