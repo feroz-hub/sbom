@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import {
+  type TenantMember,
   type TenantRole,
   type UserSearchResult,
   activateTenantMember,
@@ -19,18 +20,26 @@ import {
 } from '@/lib/api';
 import { useNotifications } from '@/hooks/useNotifications';
 import { getApiErrorMessage } from '@/lib/notifications';
-import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog';
 import { TenantContextHeader } from '@/components/admin/TenantContextHeader';
 import { UserSearchCombobox } from '@/components/admin/UserSearchCombobox';
 import { TenantAuditHistory } from '@/components/admin/TenantAuditHistory';
-import { VerificationBadge, UserStatusBadge, MembershipStatusBadge } from '@/components/admin/StatusBadges';
+import { TenantMembersTable, memberDisplayName } from '@/components/admin/TenantMembersTable';
+import { ManageRolesModal } from '@/components/admin/ManageRolesModal';
+import { DisableMembershipDialog, EnableMembershipDialog, RemoveMemberDialog } from '@/components/admin/MembershipConfirmDialogs';
 import { getRoleCode, getRoleLabel } from '@/lib/roles';
 
-interface MemberAction {
-  operation: () => Promise<unknown>;
-  success: string;
-}
-
+/**
+ * Platform → Tenants → Manage.
+ *
+ * Member and role management is the SAME UX as `/settings/tenant`: the shared
+ * {@link TenantMembersTable} (role badges + per-row action menu), the
+ * {@link ManageRolesModal} and the membership confirm dialogs. What differs is
+ * the context, and only the context: every operation targets
+ * `numericTenantId` from the route, so a
+ * platform admin manages a tenant WITHOUT switching their active tenant, and
+ * the platform-only affordances (breadcrumb, tenant overview, tenant
+ * enable/disable) stay on this page.
+ */
 export default function PlatformTenantDetailPage({
   params,
 }: {
@@ -38,14 +47,21 @@ export default function PlatformTenantDetailPage({
 }) {
   const { tenantId: tenantIdStr } = use(params);
   const numericTenantId = Number.parseInt(tenantIdStr, 10);
-  const { hasPermission, isLoading: authLoading } = useAuth();
+  const { user, hasPermission, isLoading: authLoading, refreshSession } = useAuth();
   const canManage = hasPermission('platform:tenant:create');
   const qc = useQueryClient();
   const { showSuccess, showError } = useNotifications();
 
   const [selectedUser, setSelectedUser] = useState<UserSearchResult | null>(null);
   const [initialRoles, setInitialRoles] = useState<TenantRole[]>(['VIEWER']);
-  const [confirmation, setConfirmation] = useState<(MemberAction & { title: string; description: string; confirmLabel: string }) | null>(null);
+
+  // Modal states — same set the tenant page drives.
+  const [rolesModalMember, setRolesModalMember] = useState<TenantMember | null>(null);
+  const [disableModalMember, setDisableModalMember] = useState<TenantMember | null>(null);
+  const [enableModalMember, setEnableModalMember] = useState<TenantMember | null>(null);
+  const [removeModalMember, setRemoveModalMember] = useState<TenantMember | null>(null);
+
+  const [actionLoading, setActionLoading] = useState(false);
 
   const tenantsQuery = useQuery({
     queryKey: ['platform-tenants'],
@@ -67,15 +83,32 @@ export default function PlatformTenantDetailPage({
     enabled: !authLoading && canManage,
   });
 
-  const action = useMutation({
-    mutationFn: async ({ operation }: MemberAction) => operation(),
-    onSuccess: async (_result, variables) => {
-      showSuccess(variables.success);
-      setConfirmation(null);
-      setSelectedUser(null);
-      await qc.invalidateQueries({ queryKey: ['tenant-users', numericTenantId] });
+  const tenantName = tenant?.name || `Tenant #${tenantIdStr}`;
+
+  /**
+   * Membership changes alter this tenant's member list, its audit trail and
+   * the member counts the platform tenant list renders.
+   */
+  const invalidateMembershipCaches = async () => {
+    await qc.invalidateQueries({ queryKey: ['tenant-users', numericTenantId] });
+    await qc.invalidateQueries({ queryKey: ['tenant-audit-history', numericTenantId] });
+    await qc.invalidateQueries({ queryKey: ['platform-tenants'] });
+  };
+
+  const addMemberMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedUser) return;
+      await addTenantMember(numericTenantId, {
+        user_id: selectedUser.id,
+        roles: initialRoles,
+      });
     },
-    onError: (error) => showError(getApiErrorMessage(error, 'The tenant membership could not be updated.')),
+    onSuccess: async () => {
+      showSuccess(`User “${selectedUser?.display_name || selectedUser?.email}” was added to ${tenantName}.`);
+      setSelectedUser(null);
+      await invalidateMembershipCaches();
+    },
+    onError: (error) => showError(getApiErrorMessage(error, 'Failed to add member to tenant.')),
   });
 
   const tenantStatus = useMutation({
@@ -91,18 +124,90 @@ export default function PlatformTenantDetailPage({
   const submitMember = (event: FormEvent) => {
     event.preventDefault();
     if (!selectedUser) return;
-    action.mutate({
-      operation: async () => {
-        await addTenantMember(numericTenantId, {
-          user_id: selectedUser.id,
-          roles: initialRoles,
-        });
-      },
-      success: `User “${selectedUser.display_name || selectedUser.email}” was added to ${tenant?.name || 'the tenant'}.`,
-    });
+    addMemberMutation.mutate();
   };
 
-  const confirmAction = (value: NonNullable<typeof confirmation>) => setConfirmation(value);
+  /** A platform admin may be editing their own membership in this tenant —
+   *  refresh the session so their permissions stay accurate. No redirect:
+   *  platform context does not depend on membership in the managed tenant. */
+  const refreshSessionIfSelf = async (member: TenantMember) => {
+    if (user?.userId === member.user_id) {
+      await refreshSession();
+    }
+  };
+
+  const handleSaveRoles = async (selectedRoles: TenantRole[]) => {
+    if (!rolesModalMember) return;
+    setActionLoading(true);
+    try {
+      await replaceTenantMemberRoles(
+        numericTenantId,
+        rolesModalMember.user_id,
+        selectedRoles,
+        rolesModalMember.role_assignment_version,
+      );
+      showSuccess('Roles updated successfully.');
+      await invalidateMembershipCaches();
+      await refreshSessionIfSelf(rolesModalMember);
+      setRolesModalMember(null);
+    } catch (err: unknown) {
+      showError(getApiErrorMessage(err, 'Failed to update roles.'));
+      throw err;
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleConfirmDisable = async () => {
+    if (!disableModalMember) return;
+    setActionLoading(true);
+    try {
+      await deactivateTenantMember(numericTenantId, disableModalMember.membership_id);
+      showSuccess('Membership disabled.');
+      await invalidateMembershipCaches();
+      await refreshSessionIfSelf(disableModalMember);
+      setDisableModalMember(null);
+    } catch (err: unknown) {
+      showError(getApiErrorMessage(err, 'Failed to disable membership.'));
+      throw err;
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleConfirmEnable = async () => {
+    if (!enableModalMember) return;
+    setActionLoading(true);
+    try {
+      await activateTenantMember(numericTenantId, enableModalMember.membership_id);
+      showSuccess('Membership enabled.');
+      await invalidateMembershipCaches();
+      await refreshSessionIfSelf(enableModalMember);
+      setEnableModalMember(null);
+    } catch (err: unknown) {
+      showError(getApiErrorMessage(err, 'Failed to enable membership.'));
+      throw err;
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleConfirmRemove = async () => {
+    if (!removeModalMember) return;
+    setActionLoading(true);
+    try {
+      await removeTenantMember(numericTenantId, removeModalMember.membership_id);
+      showSuccess('User removed from tenant.');
+      await invalidateMembershipCaches();
+      await refreshSessionIfSelf(removeModalMember);
+      setRemoveModalMember(null);
+    } catch (err: unknown) {
+      showError(getApiErrorMessage(err, 'Failed to remove member.'));
+      throw err;
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   if (authLoading) {
     return <div className="p-8 text-center text-hcl-muted">Verifying platform permission…</div>;
@@ -117,7 +222,7 @@ export default function PlatformTenantDetailPage({
       <nav aria-label="Breadcrumb" className="text-sm text-hcl-muted">
         <Link href="/settings/platform/tenants" className="hover:underline text-hcl-blue">Platform Tenants</Link>
         <span className="mx-2">/</span>
-        <span className="text-foreground font-medium">{tenant?.name || `Tenant #${tenantIdStr}`}</span>
+        <span className="text-foreground font-medium">{tenantName}</span>
       </nav>
 
       {tenant ? (
@@ -162,7 +267,7 @@ export default function PlatformTenantDetailPage({
             <label className="block text-sm font-medium mb-1">Select User</label>
             <UserSearchCombobox
               tenantId={numericTenantId}
-              onSelect={(user) => setSelectedUser(user)}
+              onSelect={(candidate) => setSelectedUser(candidate)}
               selectedUser={selectedUser}
               placeholder="Search existing SBOM users by email or name…"
             />
@@ -171,7 +276,7 @@ export default function PlatformTenantDetailPage({
           {selectedUser && (
             <div className="grid gap-3 sm:grid-cols-[1fr_auto] items-end pt-2">
               <label className="text-sm font-medium">
-                Tenant Roles
+                Initial Roles
                 <select
                   aria-label="Initial roles"
                   multiple
@@ -199,139 +304,27 @@ export default function PlatformTenantDetailPage({
               </label>
               <button
                 type="submit"
-                disabled={action.isPending}
-                className="rounded-md bg-hcl-blue px-4 py-2 text-sm font-medium text-white hover:bg-hcl-blue/90 disabled:opacity-50 transition-colors"
+                disabled={addMemberMutation.isPending}
+                className="rounded-lg bg-[var(--btn-primary)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--btn-primary-hover)] disabled:opacity-50 transition-colors"
               >
-                {action.isPending ? 'Adding…' : 'Add Member'}
+                {addMemberMutation.isPending ? 'Adding…' : 'Add Member'}
               </button>
             </div>
           )}
         </form>
       </section>
 
-      {/* Members Table */}
-      <section aria-labelledby="members-heading" className="space-y-3">
-        <h2 id="members-heading" className="text-lg font-semibold text-foreground">Tenant Members</h2>
-
-        {members.isLoading && <p className="text-sm text-hcl-muted">Loading members…</p>}
-        {members.error && <p role="alert" className="text-sm text-red-600">{getApiErrorMessage(members.error, 'Could not load members.')}</p>}
-        {members.data?.length === 0 && (
-          <div className="rounded-lg border border-dashed border-border p-8 text-center text-hcl-muted">
-            No tenant memberships currently exist. Use the search form above to add a member.
-          </div>
-        )}
-
-        {members.data && members.data.length > 0 && (
-          <div className="overflow-x-auto rounded-lg border border-border">
-            <table className="min-w-full text-sm">
-              <thead className="bg-surface-elevated">
-                <tr>
-                  <th className="px-4 py-2 text-left font-medium">User</th>
-                  <th className="px-4 py-2 text-left font-medium">Verification</th>
-                  <th className="px-4 py-2 text-left font-medium">Roles</th>
-                  <th className="px-4 py-2 text-left font-medium">Membership Status</th>
-                  <th className="px-4 py-2 text-left font-medium">User Status</th>
-                  <th className="px-4 py-2 text-right font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {members.data.map((member) => (
-                  <tr key={member.membership_id} className="border-t border-border">
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-foreground">{member.display_name || member.email || `User #${member.user_id}`}</div>
-                      <div className="text-xs text-hcl-muted">{member.email || 'No email'}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <VerificationBadge verified={member.email_verified && !member.verification_required} />
-                    </td>
-                    <td className="px-4 py-3">
-                      <select
-                        aria-label={`Roles for ${member.display_name || member.email || `User #${member.user_id}`}`}
-                        multiple
-                        value={(member.roles ?? [member.role]).map(getRoleCode)}
-                        onChange={(event) => {
-                          const nextRoles = Array.from(
-                            event.target.selectedOptions,
-                            (option) => option.value as TenantRole,
-                          );
-                          if (nextRoles.length === 0) return;
-                          confirmAction({
-                            title: `Change roles for “${member.display_name || member.email || `User #${member.user_id}`}”?`,
-                            description: `This replaces the complete tenant role set with ${nextRoles.map(getRoleLabel).join(', ')} immediately.`,
-                            confirmLabel: 'Replace roles',
-                            operation: () => replaceTenantMemberRoles(
-                              numericTenantId,
-                              member.user_id,
-                              nextRoles,
-                              member.role_assignment_version,
-                            ),
-                            success: `Roles updated to ${nextRoles.map(getRoleLabel).join(', ')}.`,
-                          });
-                        }}
-                        className="rounded-md border border-border bg-background px-2 py-1"
-                      >
-                        {(roles.data?.roles ?? member.roles ?? [member.role]).map((role) => {
-                          const code = getRoleCode(role);
-                          const label = getRoleLabel(role);
-                          const key = code || (role && typeof role === 'object' ? String(role.id ?? '') : String(role));
-                          return (
-                            <option key={key} value={code}>
-                              {label}
-                            </option>
-                          );
-                        })}
-                      </select>
-                    </td>
-                    <td className="px-4 py-3"><MembershipStatusBadge status={member.status} /></td>
-                    <td className="px-4 py-3"><UserStatusBadge status={member.user_status} /></td>
-                    <td className="space-x-3 px-4 py-3 text-right">
-                      {member.status === 'ACTIVE' ? (
-                        <button
-                          type="button"
-                          className="text-amber-700 hover:underline"
-                          onClick={() => confirmAction({
-                            title: `Deactivate “${member.display_name || member.email || `User #${member.user_id}`}”?`,
-                            description: 'The user will lose tenant access immediately.',
-                            confirmLabel: 'Deactivate',
-                            operation: () => deactivateTenantMember(numericTenantId, member.membership_id),
-                            success: 'Membership deactivated.',
-                          })}
-                        >
-                          Deactivate
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          className="text-emerald-700 hover:underline"
-                          onClick={() => action.mutate({
-                            operation: () => activateTenantMember(numericTenantId, member.membership_id),
-                            success: 'Membership activated.',
-                          })}
-                        >
-                          Activate
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        className="text-red-700 hover:underline"
-                        onClick={() => confirmAction({
-                          title: `Remove “${member.display_name || member.email || `User #${member.user_id}`}”?`,
-                          description: 'The membership will be permanently removed.',
-                          confirmLabel: 'Remove member',
-                          operation: () => removeTenantMember(numericTenantId, member.membership_id),
-                          success: 'Member removed.',
-                        })}
-                      >
-                        Remove
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+      {/* Members — identical to /settings/tenant, scoped to the route tenant. */}
+      <TenantMembersTable
+        members={members.data}
+        isLoading={members.isLoading}
+        error={members.error}
+        canUpdate={canManage}
+        onManageRoles={setRolesModalMember}
+        onDisableMembership={setDisableModalMember}
+        onEnableMembership={setEnableModalMember}
+        onRemoveFromTenant={setRemoveModalMember}
+      />
 
       <section aria-labelledby="tenant-settings-heading" className="rounded-xl border border-border bg-surface p-5">
         <h2 id="tenant-settings-heading" className="text-lg font-semibold">Tenant Settings</h2>
@@ -354,15 +347,56 @@ export default function PlatformTenantDetailPage({
         )}
       </section>
 
-      <ConfirmationDialog
-        open={confirmation !== null}
-        title={confirmation?.title ?? ''}
-        description={confirmation?.description ?? ''}
-        confirmLabel={confirmation?.confirmLabel ?? 'Confirm'}
-        loading={action.isPending}
-        onClose={() => !action.isPending && setConfirmation(null)}
-        onConfirm={() => confirmation && action.mutate(confirmation)}
-      />
+      {/* Modals & Dialogs */}
+      {rolesModalMember && (
+        <ManageRolesModal
+          open={rolesModalMember !== null}
+          onClose={() => !actionLoading && setRolesModalMember(null)}
+          displayName={memberDisplayName(rolesModalMember)}
+          tenantName={tenantName}
+          currentRoles={rolesModalMember.roles ?? [rolesModalMember.role]}
+          membershipVersion={rolesModalMember.role_assignment_version}
+          isMembershipActive={rolesModalMember.status === 'ACTIVE'}
+          loading={actionLoading}
+          onSave={handleSaveRoles}
+        />
+      )}
+
+      {disableModalMember && (
+        <DisableMembershipDialog
+          open={disableModalMember !== null}
+          onClose={() => !actionLoading && setDisableModalMember(null)}
+          displayName={memberDisplayName(disableModalMember)}
+          tenantName={tenantName}
+          isSelf={user?.userId === disableModalMember.user_id}
+          loading={actionLoading}
+          onConfirm={handleConfirmDisable}
+        />
+      )}
+
+      {enableModalMember && (
+        <EnableMembershipDialog
+          open={enableModalMember !== null}
+          onClose={() => !actionLoading && setEnableModalMember(null)}
+          displayName={memberDisplayName(enableModalMember)}
+          tenantName={tenantName}
+          isSelf={user?.userId === enableModalMember.user_id}
+          loading={actionLoading}
+          onConfirm={handleConfirmEnable}
+        />
+      )}
+
+      {removeModalMember && (
+        <RemoveMemberDialog
+          open={removeModalMember !== null}
+          onClose={() => !actionLoading && setRemoveModalMember(null)}
+          displayName={memberDisplayName(removeModalMember)}
+          tenantName={tenantName}
+          isSelf={user?.userId === removeModalMember.user_id}
+          loading={actionLoading}
+          onConfirm={handleConfirmRemove}
+        />
+      )}
 
       <TenantAuditHistory tenantId={numericTenantId} />
     </div>
