@@ -55,6 +55,8 @@ interface AuthContextValue {
   user: AuthUser | null;
   activeTenant: TenantInfo | null;
   activeTenantId: string | null;
+  /** Platform administrator working outside any tenant (no X-Tenant-ID). */
+  isPlatformContext: boolean;
   tenants: TenantInfo[];
   availableTenants: TenantInfo[];
   config: AuthConfig;
@@ -108,17 +110,18 @@ function tenantInfoFromContext(tenant: Record<string, unknown>): TenantInfo {
 }
 
 /**
- * A tenant the user may actively work in. Shared by the bootstrap tenant
- * resolution below and by the AuthGuard tenant-selection screen so both
- * agree on what counts as a selectable membership.
+ * An *actual* active tenant membership — the only thing bootstrap may select
+ * from, and the only thing the AuthGuard offers on its selection screen.
+ *
+ * Platform-wide tenant accessibility is deliberately NOT a membership.
+ * ``platformContextAvailable`` (and a null ``membershipStatus``) means "a
+ * platform administrator can reach this tenant", which is true of every tenant
+ * in the deployment; counting those as memberships turned platform-admin
+ * sign-in into a mandatory pick-one-of-N screen that does not scale past a
+ * handful of tenants.
  */
-export function isSelectableTenant(tenant: TenantInfo): boolean {
-  return (
-    tenant.status === 'ACTIVE' &&
-    (tenant.membershipStatus === 'ACTIVE' ||
-      tenant.membershipStatus === null ||
-      tenant.platformContextAvailable)
-  );
+export function isActiveMembership(tenant: TenantInfo): boolean {
+  return tenant.status === 'ACTIVE' && tenant.membershipStatus === 'ACTIVE';
 }
 
 const BOOTSTRAP_TIMEOUT_MS = 15000;
@@ -265,7 +268,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        if (contextTenants.length === 0) {
+        // Compatibility fallback for deployments whose ``/api/auth/me`` answers
+        // without an embedded tenant context. Platform administrators are
+        // excluded on purpose: for them ``/api/tenants`` answers with every
+        // platform-accessible tenant (100+ in production), which is platform
+        // reach rather than membership and must never drive bootstrap.
+        if (contextTenants.length === 0 && !body.is_platform_admin) {
           try {
             const tenantsResponse = await fetch(`${BASE_URL}/api/tenants`, { credentials: 'include', headers, cache: 'no-store' });
             if (tenantsResponse.ok) {
@@ -283,20 +291,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               }
             }
           } catch {
-            if (!body.is_platform_admin) contextTenants = [];
+            contextTenants = [];
           }
+        }
+
+        const isPlatformAdmin = Boolean(body.is_platform_admin);
+
+        // A platform administrator can open a tenant they hold no membership
+        // in. Keep that tenant in the list so the switcher can name the
+        // current context, without it ever counting as a membership.
+        const activeFromContext = body?.auth_context?.tenant_context?.active_tenant
+          ? tenantInfoFromContext(body.auth_context.tenant_context.active_tenant)
+          : null;
+        if (activeFromContext && !contextTenants.some((t) => t.id === activeFromContext.id)) {
+          contextTenants = [...contextTenants, activeFromContext];
         }
 
         setTenants(contextTenants);
 
-        // Filter active tenant memberships
-        const activeTenants = contextTenants.filter(isSelectableTenant);
+        // Actual active memberships — platform-wide accessibility excluded.
+        const memberships = contextTenants.filter(isActiveMembership);
 
-        const candidateId = tenantOverride || getActiveTenantId() || (body.tenant_id ? String(body.tenant_id) : null);
-        const validPersisted = candidateId ? activeTenants.find((t) => String(t.id) === String(candidateId)) : null;
+        const backendTenantId =
+          body.tenant_id !== null && body.tenant_id !== undefined ? String(body.tenant_id) : null;
+        const candidateId = tenantOverride || getActiveTenantId() || backendTenantId;
+        // The backend only echoes ``tenant_id`` for a tenant it authorized for
+        // this request, so an echo of the requested id is what makes a
+        // platform administrator's explicit tenant selection valid — they do
+        // not need (and must not be given) a membership for it.
+        const selectedTenant = candidateId
+          ? memberships.find((t) => String(t.id) === candidateId)
+            ?? (backendTenantId === candidateId
+              ? contextTenants.find((t) => String(t.id) === candidateId) ?? null
+              : null)
+          : null;
 
-        if (validPersisted) {
-          const selectedIdStr = String(validPersisted.id);
+        if (selectedTenant) {
+          const selectedIdStr = String(selectedTenant.id);
           setActiveTenantId(selectedIdStr);
           setActiveTenantIdState(selectedIdStr);
 
@@ -318,7 +349,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             email: body.email ?? contextUser.email ?? null,
             displayName: body.display_name ?? body.displayName ?? contextUser.display_name ?? null,
             tenantId: body.tenant_id ?? Number(selectedIdStr),
-            externalTenantId: body.external_tenant_id ?? validPersisted.externalIamTenantId ?? null,
+            externalTenantId: body.external_tenant_id ?? selectedTenant.externalIamTenantId ?? null,
             roles: body.roles || [],
             permissions: body.permissions || [],
             isPlatformAdmin: Boolean(body.is_platform_admin),
@@ -327,8 +358,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        if (activeTenants.length === 1) {
-          const autoSelectedIdStr = String(activeTenants[0].id);
+        // Platform administrators sign in to PLATFORM context: no active
+        // tenant, full platform identity, and no selection screen no matter
+        // how many tenants exist. Tenant context is entered explicitly by
+        // opening or switching to one (handled by the branch above).
+        if (isPlatformAdmin) {
+          clearActiveTenantId();
+          setActiveTenantIdState(null);
+          setUser({
+            userId: body.user_id ?? body.userId ?? contextUser.id ?? null,
+            externalUserId: body.external_user_id ?? body.externalUserId ?? '',
+            email: body.email ?? contextUser.email ?? null,
+            displayName: body.display_name ?? body.displayName ?? contextUser.display_name ?? null,
+            tenantId: null,
+            externalTenantId: null,
+            roles: body.roles || [],
+            permissions: body.permissions || [],
+            isPlatformAdmin: true,
+          });
+          setBootstrapState('ready');
+          return;
+        }
+
+        if (memberships.length === 1) {
+          const autoSelectedIdStr = String(memberships[0].id);
           setActiveTenantId(autoSelectedIdStr);
           setActiveTenantIdState(autoSelectedIdStr);
 
@@ -349,7 +402,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             email: body.email ?? contextUser.email ?? null,
             displayName: body.display_name ?? body.displayName ?? contextUser.display_name ?? null,
             tenantId: body.tenant_id ?? Number(autoSelectedIdStr),
-            externalTenantId: body.external_tenant_id ?? activeTenants[0].externalIamTenantId ?? null,
+            externalTenantId: body.external_tenant_id ?? memberships[0].externalIamTenantId ?? null,
             roles: body.roles || [],
             permissions: body.permissions || [],
             isPlatformAdmin: Boolean(body.is_platform_admin),
@@ -362,7 +415,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // has to pick one before any tenant-scoped page mounts. Staying out
         // of ``ready`` is what stops requests going out without an
         // X-Tenant-ID header (which the backend rejects with 403).
-        if (activeTenants.length > 1) {
+        if (memberships.length > 1) {
           clearActiveTenantId();
           setActiveTenantIdState(null);
           setUser({
@@ -391,9 +444,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           externalTenantId: null,
           roles: body.roles || [],
           permissions: body.permissions || [],
-          isPlatformAdmin: Boolean(body.is_platform_admin),
+          isPlatformAdmin: false,
         });
-        setBootstrapState(body.is_platform_admin ? 'ready' : 'access-pending');
+        setBootstrapState('access-pending');
         return;
       }
 
@@ -537,6 +590,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user,
     activeTenant,
     activeTenantId: activeTenantIdState,
+    isPlatformContext: Boolean(user?.isPlatformAdmin) && activeTenantIdState === null,
     tenants,
     availableTenants: tenants,
     config,

@@ -44,6 +44,7 @@ function Probe() {
       <span data-testid="session-authenticated">{String(auth.sessionAuthenticated)}</span>
       <span data-testid="authenticated">{String(auth.isAuthenticated)}</span>
       <span data-testid="active-tenant">{auth.activeTenantId ?? ''}</span>
+      <span data-testid="platform-context">{String(auth.isPlatformContext)}</span>
       <span data-testid="tenant-names">{auth.tenants.map((tenant) => tenant.name).join('|')}</span>
       <span data-testid="email">{auth.user?.email ?? ''}</span>
     </div>
@@ -92,6 +93,48 @@ function meBody(
         available_tenants: availableTenants,
       },
     },
+  };
+}
+
+/**
+ * ``/api/auth/me`` for a platform administrator: READY with no active tenant
+ * unless one was explicitly requested, and ``available_tenants`` holding only
+ * real memberships.
+ */
+function platformAdminMeBody({
+  available = [] as Array<Record<string, unknown>>,
+  active = null as Record<string, unknown> | null,
+} = {}) {
+  return {
+    authenticated: true,
+    user_id: 3,
+    email: identity.email,
+    display_name: identity.display_name,
+    tenant_id: active ? active.id : null,
+    roles: active ? ['PLATFORM_ADMIN', 'TENANT_ADMIN'] : ['PLATFORM_ADMIN'],
+    permissions: active
+      ? ['platform:admin', 'platform:tenant:create', 'tenant:user:read']
+      : ['platform:admin', 'platform:tenant:create'],
+    is_platform_admin: true,
+    auth_context: {
+      status: 'READY',
+      user: identity,
+      tenant_context: { active_tenant: active, available_tenants: available },
+    },
+  };
+}
+
+/** A tenant a platform admin reaches by authority, not by membership. */
+function platformReachableTenant(id: number) {
+  return {
+    id,
+    name: `Tenant ${id}`,
+    slug: `tenant-${id}`,
+    status: 'ACTIVE',
+    membership_status: null,
+    current_role: 'PLATFORM_ADMIN',
+    roles: ['PLATFORM_ADMIN'],
+    platform_context_available: true,
   };
 }
 
@@ -286,54 +329,6 @@ describe('AuthProvider membership-based tenant context', () => {
     expect(screen.getByTestId('active-tenant')).toHaveTextContent('');
   });
 
-  it('auto-selects the single active tenant membership for a platform admin when no header was set', async () => {
-    const tenant = {
-      id: 7,
-      name: 'Wellysis',
-      slug: 'wellysis',
-      status: 'ACTIVE',
-      membership_status: 'ACTIVE',
-      current_role: 'TENANT_ADMIN',
-      roles: ['TENANT_ADMIN'],
-    };
-    const platformAdminMeBody = {
-      authenticated: true,
-      user_id: 3,
-      email: identity.email,
-      display_name: identity.display_name,
-      tenant_id: null,
-      roles: ['PLATFORM_ADMIN'],
-      permissions: ['platform:admin'],
-      is_platform_admin: true,
-      auth_context: {
-        status: 'READY',
-        user: identity,
-        tenant_context: {
-          active_tenant: null,
-          available_tenants: [tenant],
-        },
-      },
-    };
-    const tenantScopedMeBody = {
-      ...platformAdminMeBody,
-      tenant_id: 7,
-      roles: ['PLATFORM_ADMIN', 'TENANT_ADMIN'],
-      permissions: ['platform:admin', 'tenant:user:read'],
-    };
-
-    const fetchMock = vi.spyOn(globalThis, 'fetch');
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse({ authenticated: true }))
-      .mockResolvedValueOnce(jsonResponse(platformAdminMeBody))
-      .mockResolvedValueOnce(jsonResponse(tenantScopedMeBody));
-
-    render(wrap(<Probe />));
-
-    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('authenticated'));
-    expect(screen.getByTestId('active-tenant')).toHaveTextContent('7');
-    expect(sessionStorage.getItem('sbom_active_tenant_id')).toBe('7');
-  });
-
   it('restores a valid persisted tenant on initial load', async () => {
     sessionStorage.setItem('sbom_active_tenant_id', '7');
     const tenant = {
@@ -379,5 +374,137 @@ describe('AuthProvider membership-based tenant context', () => {
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('authenticated'));
     expect(screen.getByTestId('active-tenant')).toHaveTextContent('7');
     expect(sessionStorage.getItem('sbom_active_tenant_id')).toBe('7');
+  });
+});
+
+describe('AuthProvider platform administrator context', () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+    latestAuth = null;
+    vi.restoreAllMocks();
+  });
+
+  it('signs a platform admin with no memberships into platform context', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ authenticated: true }))
+      .mockResolvedValueOnce(jsonResponse(platformAdminMeBody()))
+      // Would be the legacy tenant-list fallback — a platform admin must not
+      // pull every tenant in the deployment at sign-in.
+      .mockResolvedValueOnce(jsonResponse([platformReachableTenant(1)]));
+
+    render(wrap(<Probe />));
+
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('authenticated'));
+    expect(screen.getByTestId('authenticated')).toHaveTextContent('true');
+    expect(screen.getByTestId('active-tenant')).toHaveTextContent('');
+    expect(screen.getByTestId('platform-context')).toHaveTextContent('true');
+    expect(sessionStorage.getItem('sbom_active_tenant_id')).toBeNull();
+    // Platform identity and permissions survive into platform context.
+    expect(latestAuth?.user?.isPlatformAdmin).toBe(true);
+    expect(latestAuth?.user?.roles).toContain('PLATFORM_ADMIN');
+    expect(latestAuth?.hasPermission('platform:tenant:create')).toBe(true);
+    expect(fetchMock.mock.calls.every(([url]) => !String(url).endsWith('/api/tenants'))).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('stays in platform context for a platform admin holding a single membership', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ authenticated: true }))
+      .mockResolvedValueOnce(jsonResponse(platformAdminMeBody({ available: [wellysis] })));
+
+    render(wrap(<Probe />));
+
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('authenticated'));
+    expect(screen.getByTestId('active-tenant')).toHaveTextContent('');
+    expect(screen.getByTestId('platform-context')).toHaveTextContent('true');
+    expect(sessionStorage.getItem('sbom_active_tenant_id')).toBeNull();
+    // The membership is still offered by the switcher, just not auto-entered.
+    expect(screen.getByTestId('tenant-names')).toHaveTextContent('Wellysis');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('never requires tenant selection for a platform admin with a hundred reachable tenants', async () => {
+    const reachable = Array.from({ length: 100 }, (_, index) => platformReachableTenant(index + 1));
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ authenticated: true }))
+      .mockResolvedValueOnce(jsonResponse(platformAdminMeBody({ available: reachable })));
+
+    render(wrap(<Probe />));
+
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('authenticated'));
+    expect(screen.getByTestId('status')).not.toHaveTextContent('tenant-selection-required');
+    expect(screen.getByTestId('active-tenant')).toHaveTextContent('');
+    expect(screen.getByTestId('platform-context')).toHaveTextContent('true');
+    expect(latestAuth?.bootstrapState).toBe('ready');
+  });
+
+  it('enters tenant context when a platform admin explicitly selects a tenant', async () => {
+    const nova = {
+      id: 42,
+      name: 'Nova',
+      slug: 'nova',
+      status: 'ACTIVE',
+      membership_status: null,
+      current_role: 'PLATFORM_ADMIN',
+      roles: ['PLATFORM_ADMIN'],
+    };
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ authenticated: true }))
+      .mockResolvedValueOnce(jsonResponse(platformAdminMeBody()))
+      .mockResolvedValueOnce(jsonResponse({ authenticated: true }))
+      .mockResolvedValueOnce(jsonResponse(platformAdminMeBody({ active: nova })));
+
+    render(wrap(<Probe />));
+    await waitFor(() => expect(screen.getByTestId('platform-context')).toHaveTextContent('true'));
+
+    await act(async () => {
+      await latestAuth!.selectTenant('42');
+    });
+
+    await waitFor(() => expect(screen.getByTestId('active-tenant')).toHaveTextContent('42'));
+    expect(screen.getByTestId('status')).toHaveTextContent('authenticated');
+    expect(screen.getByTestId('platform-context')).toHaveTextContent('false');
+    expect(sessionStorage.getItem('sbom_active_tenant_id')).toBe('42');
+    expect(lastMeTenantHeader(fetchMock)).toBe('42');
+    // A tenant reached by platform authority is named in the switcher without
+    // becoming a membership.
+    expect(screen.getByTestId('tenant-names')).toHaveTextContent('Nova');
+    expect(latestAuth?.activeTenant?.membershipStatus).toBeNull();
+  });
+
+  it('clears the active tenant when a platform admin switches back to Platform', async () => {
+    sessionStorage.setItem('sbom_active_tenant_id', '42');
+    const nova = {
+      id: 42,
+      name: 'Nova',
+      slug: 'nova',
+      status: 'ACTIVE',
+      membership_status: null,
+      current_role: 'PLATFORM_ADMIN',
+      roles: ['PLATFORM_ADMIN'],
+    };
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ authenticated: true }))
+      .mockResolvedValueOnce(jsonResponse(platformAdminMeBody({ active: nova })))
+      .mockResolvedValueOnce(jsonResponse({ authenticated: true }))
+      .mockResolvedValueOnce(jsonResponse(platformAdminMeBody()));
+
+    render(wrap(<Probe />));
+    await waitFor(() => expect(screen.getByTestId('active-tenant')).toHaveTextContent('42'));
+
+    act(() => {
+      latestAuth!.clearTenantSelection();
+    });
+
+    await waitFor(() => expect(screen.getByTestId('platform-context')).toHaveTextContent('true'));
+    expect(screen.getByTestId('status')).toHaveTextContent('authenticated');
+    expect(screen.getByTestId('active-tenant')).toHaveTextContent('');
+    expect(sessionStorage.getItem('sbom_active_tenant_id')).toBeNull();
+    expect(lastMeTenantHeader(fetchMock)).toBeNull();
   });
 });
