@@ -2,10 +2,13 @@
 
 import { useEffect, type ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { isSelectableTenant, useAuth } from '@/hooks/useAuth';
+import { isActiveMembership, useAuth } from '@/hooks/useAuth';
 import { getRoleLabel } from '@/lib/roles';
 
 const PUBLIC_PATHS = ['/auth/callback', '/access-denied', '/verification-required', '/access-pending'];
+
+/** Where a platform administrator lands when signing in to platform context. */
+const PLATFORM_HOME = '/settings/platform/tenants';
 
 interface AuthGuardProps {
   children: ReactNode;
@@ -18,7 +21,10 @@ interface AuthGuardProps {
 export function AuthGuard({ children, requiredPermission, requiredRoles }: AuthGuardProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { authStatus, bootstrapState, config, login, reloadAuth, hasPermission, hasAnyRole, tenants, selectTenant } = useAuth();
+  const {
+    authStatus, bootstrapState, config, login, reloadAuth, hasPermission, hasAnyRole,
+    tenants, selectTenant, isPlatformContext,
+  } = useAuth();
 
   const isPublicPath = PUBLIC_PATHS.some((p) => pathname?.startsWith(p));
 
@@ -66,10 +72,18 @@ export function AuthGuard({ children, requiredPermission, requiredRoles }: AuthG
       (bootstrapState === 'ready' || authStatus === 'authenticated') &&
       (pathname === '/verification-required' || pathname === '/access-denied')
     ) {
-      router.replace('/');
+      router.replace(isPlatformContext ? PLATFORM_HOME : '/');
       return;
     }
-  }, [authStatus, bootstrapState, config.enabled, isPublicPath, login, pathname, router]);
+
+    // Platform context has no active tenant, so the tenant-scoped dashboard at
+    // "/" has nothing to show. Land on the platform workspace instead —
+    // opening a tenant from there is what enters tenant context.
+    if (bootstrapState === 'ready' && isPlatformContext && pathname === '/') {
+      router.replace(PLATFORM_HOME);
+      return;
+    }
+  }, [authStatus, bootstrapState, config.enabled, isPlatformContext, isPublicPath, login, pathname, router]);
 
   if (isPublicPath) {
     return <>{children}</>;
@@ -104,7 +118,7 @@ export function AuthGuard({ children, requiredPermission, requiredRoles }: AuthG
             Your account belongs to multiple tenants. Select the tenant you want to work with.
           </p>
           <div className="space-y-3">
-            {tenants.filter(isSelectableTenant).map((tenant) => (
+            {tenants.filter(isActiveMembership).map((tenant) => (
               <button
                 key={tenant.id}
                 type="button"
