@@ -1,0 +1,525 @@
+{
+  "spdxVersion": "SPDX-2.3",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "name": "notebook-app-container-2.1.0",
+  "documentNamespace": "https://fbt.io/spdxdocs/notebook-app-container-2.1.0-20260511",
+  "creationInfo": {
+    "created": "2026-05-11T06:35:00Z",
+    "creators": [
+      "Organization: Future Beyond Technology",
+      "Tool: FBT-SBOM-Sample-Generator-1.0.0"
+    ]
+  },
+  "documentDescribes": [
+    "SPDXRef-Container-NotebookApp"
+  ],
+  "packages": [
+    {
+      "SPDXID": "SPDXRef-Container-NotebookApp",
+      "name": "notebook-app-container",
+      "versionInfo": "2.1.0",
+      "supplier": "Organization: Future Beyond Technology",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "Apache-2.0",
+      "licenseConcluded": "Apache-2.0",
+      "primaryPackagePurpose": "CONTAINER",
+      "description": "FBT sample test container: Debian 12 + Python 3.12 + Django 5 application",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:oci/notebook-app@2.1.0?repository_url=registry.fbt.io%2Fnotebook-app"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Pkg-libc6",
+      "name": "libc6",
+      "versionInfo": "2.36-9+deb12u7",
+      "supplier": "Organization: Debian",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "LGPL-2.1-or-later",
+      "licenseConcluded": "LGPL-2.1-or-later",
+      "primaryPackagePurpose": "LIBRARY",
+      "description": "GNU C Library: Shared libraries",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:deb/debian/libc6@2.36-9%2Bdeb12u7?arch=amd64"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Pkg-libssl3",
+      "name": "libssl3",
+      "versionInfo": "3.0.14-1~deb12u2",
+      "supplier": "Organization: Debian",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "Apache-2.0",
+      "licenseConcluded": "Apache-2.0",
+      "primaryPackagePurpose": "LIBRARY",
+      "description": "OpenSSL shared libraries",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:deb/debian/libssl3@3.0.14-1~deb12u2?arch=amd64"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Pkg-zlib1g",
+      "name": "zlib1g",
+      "versionInfo": "1.2.13.dfsg-1",
+      "supplier": "Organization: Debian",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "Zlib",
+      "licenseConcluded": "Zlib",
+      "primaryPackagePurpose": "LIBRARY",
+      "description": "Compression library \u2014 runtime",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:deb/debian/zlib1g@1.2.13.dfsg-1?arch=amd64"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Pkg-libpq5",
+      "name": "libpq5",
+      "versionInfo": "15.8-0+deb12u1",
+      "supplier": "Organization: Debian",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "PostgreSQL",
+      "licenseConcluded": "PostgreSQL",
+      "primaryPackagePurpose": "LIBRARY",
+      "description": "PostgreSQL C client library",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:deb/debian/libpq5@15.8-0%2Bdeb12u1?arch=amd64"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Pkg-ca-certificates",
+      "name": "ca-certificates",
+      "versionInfo": "20230311",
+      "supplier": "Organization: Debian",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "MPL-2.0",
+      "licenseConcluded": "MPL-2.0",
+      "primaryPackagePurpose": "LIBRARY",
+      "description": "Common CA certificates",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:deb/debian/ca-certificates@20230311"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Pkg-tzdata",
+      "name": "tzdata",
+      "versionInfo": "2024a-0+deb12u1",
+      "supplier": "Organization: Debian",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "NOASSERTION",
+      "licenseConcluded": "NOASSERTION",
+      "primaryPackagePurpose": "LIBRARY",
+      "description": "Time zone and daylight-saving time data",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:deb/debian/tzdata@2024a-0%2Bdeb12u1"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Pkg-openssl",
+      "name": "openssl",
+      "versionInfo": "3.0.14-1~deb12u2",
+      "supplier": "Organization: Debian",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "Apache-2.0",
+      "licenseConcluded": "Apache-2.0",
+      "primaryPackagePurpose": "LIBRARY",
+      "description": "Secure Sockets Layer toolkit \u2014 cryptographic utility",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:deb/debian/openssl@3.0.14-1~deb12u2?arch=amd64"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Pkg-libsqlite3-0",
+      "name": "libsqlite3-0",
+      "versionInfo": "3.40.1-2+deb12u1",
+      "supplier": "Organization: Debian",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "blessing",
+      "licenseConcluded": "blessing",
+      "primaryPackagePurpose": "LIBRARY",
+      "description": "SQLite 3 shared library",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:deb/debian/libsqlite3-0@3.40.1-2%2Bdeb12u1?arch=amd64"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Pkg-libffi8",
+      "name": "libffi8",
+      "versionInfo": "3.4.4-1",
+      "supplier": "Organization: Debian",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "MIT",
+      "licenseConcluded": "MIT",
+      "primaryPackagePurpose": "LIBRARY",
+      "description": "Foreign Function Interface library \u2014 runtime",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:deb/debian/libffi8@3.4.4-1?arch=amd64"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Pkg-libgcc-s1",
+      "name": "libgcc-s1",
+      "versionInfo": "12.2.0-14",
+      "supplier": "Organization: Debian",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "GPL-3.0-or-later WITH GCC-exception-3.1",
+      "licenseConcluded": "GPL-3.0-or-later WITH GCC-exception-3.1",
+      "primaryPackagePurpose": "LIBRARY",
+      "description": "GCC support library",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:deb/debian/libgcc-s1@12.2.0-14?arch=amd64"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Pkg-django",
+      "name": "django",
+      "versionInfo": "5.1.3",
+      "supplier": "Django Software Foundation",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "BSD-3-Clause",
+      "licenseConcluded": "BSD-3-Clause",
+      "primaryPackagePurpose": "LIBRARY",
+      "description": "High-level Python web framework",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:pypi/django@5.1.3"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Pkg-djangorestframework",
+      "name": "djangorestframework",
+      "versionInfo": "3.15.2",
+      "supplier": "Encode OSS Ltd.",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "BSD-3-Clause",
+      "licenseConcluded": "BSD-3-Clause",
+      "primaryPackagePurpose": "LIBRARY",
+      "description": "Web APIs for Django, made easy",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:pypi/djangorestframework@3.15.2"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Pkg-gunicorn",
+      "name": "gunicorn",
+      "versionInfo": "23.0.0",
+      "supplier": "Benoit Chesneau",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "MIT",
+      "licenseConcluded": "MIT",
+      "primaryPackagePurpose": "LIBRARY",
+      "description": "WSGI HTTP server for UNIX",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:pypi/gunicorn@23.0.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Pkg-psycopg",
+      "name": "psycopg",
+      "versionInfo": "3.2.3",
+      "supplier": "The Psycopg Team",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "LGPL-3.0-or-later",
+      "licenseConcluded": "LGPL-3.0-or-later",
+      "primaryPackagePurpose": "LIBRARY",
+      "description": "PostgreSQL database adapter for Python",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:pypi/psycopg@3.2.3"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Pkg-whitenoise",
+      "name": "whitenoise",
+      "versionInfo": "6.7.0",
+      "supplier": "David Evans",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "MIT",
+      "licenseConcluded": "MIT",
+      "primaryPackagePurpose": "LIBRARY",
+      "description": "Static file serving for WSGI applications",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:pypi/whitenoise@6.7.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Pkg-django-cors-headers",
+      "name": "django-cors-headers",
+      "versionInfo": "4.5.0",
+      "supplier": "Adam Johnson",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "MIT",
+      "licenseConcluded": "MIT",
+      "primaryPackagePurpose": "LIBRARY",
+      "description": "Django app for CORS handling",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:pypi/django-cors-headers@4.5.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Pkg-python-decouple",
+      "name": "python-decouple",
+      "versionInfo": "3.8",
+      "supplier": "Henrique Bastos",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "MIT",
+      "licenseConcluded": "MIT",
+      "primaryPackagePurpose": "LIBRARY",
+      "description": "Strict separation of settings from code",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:pypi/python-decouple@3.8"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Pkg-pillow",
+      "name": "pillow",
+      "versionInfo": "11.0.0",
+      "supplier": "Pillow contributors",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "HPND",
+      "licenseConcluded": "HPND",
+      "primaryPackagePurpose": "LIBRARY",
+      "description": "Python Imaging Library fork",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:pypi/pillow@11.0.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Pkg-boto3",
+      "name": "boto3",
+      "versionInfo": "1.35.50",
+      "supplier": "Amazon Web Services, Inc.",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "Apache-2.0",
+      "licenseConcluded": "Apache-2.0",
+      "primaryPackagePurpose": "LIBRARY",
+      "description": "AWS SDK for Python",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:pypi/boto3@1.35.50"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Pkg-sentry-sdk",
+      "name": "sentry-sdk",
+      "versionInfo": "2.18.0",
+      "supplier": "Sentry, Inc.",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "MIT",
+      "licenseConcluded": "MIT",
+      "primaryPackagePurpose": "LIBRARY",
+      "description": "Python client for Sentry error tracking",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:pypi/sentry-sdk@2.18.0"
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-Container-NotebookApp"
+    },
+    {
+      "spdxElementId": "SPDXRef-Container-NotebookApp",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-libc6"
+    },
+    {
+      "spdxElementId": "SPDXRef-Container-NotebookApp",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-libssl3"
+    },
+    {
+      "spdxElementId": "SPDXRef-Container-NotebookApp",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-zlib1g"
+    },
+    {
+      "spdxElementId": "SPDXRef-Container-NotebookApp",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-libpq5"
+    },
+    {
+      "spdxElementId": "SPDXRef-Container-NotebookApp",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-ca-certificates"
+    },
+    {
+      "spdxElementId": "SPDXRef-Container-NotebookApp",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-tzdata"
+    },
+    {
+      "spdxElementId": "SPDXRef-Container-NotebookApp",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-openssl"
+    },
+    {
+      "spdxElementId": "SPDXRef-Container-NotebookApp",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-libsqlite3-0"
+    },
+    {
+      "spdxElementId": "SPDXRef-Container-NotebookApp",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-libffi8"
+    },
+    {
+      "spdxElementId": "SPDXRef-Container-NotebookApp",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-libgcc-s1"
+    },
+    {
+      "spdxElementId": "SPDXRef-Container-NotebookApp",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-django"
+    },
+    {
+      "spdxElementId": "SPDXRef-Container-NotebookApp",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-djangorestframework"
+    },
+    {
+      "spdxElementId": "SPDXRef-Container-NotebookApp",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-gunicorn"
+    },
+    {
+      "spdxElementId": "SPDXRef-Container-NotebookApp",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-psycopg"
+    },
+    {
+      "spdxElementId": "SPDXRef-Container-NotebookApp",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-whitenoise"
+    },
+    {
+      "spdxElementId": "SPDXRef-Container-NotebookApp",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-django-cors-headers"
+    },
+    {
+      "spdxElementId": "SPDXRef-Container-NotebookApp",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-python-decouple"
+    },
+    {
+      "spdxElementId": "SPDXRef-Container-NotebookApp",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-pillow"
+    },
+    {
+      "spdxElementId": "SPDXRef-Container-NotebookApp",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-boto3"
+    },
+    {
+      "spdxElementId": "SPDXRef-Container-NotebookApp",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-sentry-sdk"
+    }
+  ]
+}

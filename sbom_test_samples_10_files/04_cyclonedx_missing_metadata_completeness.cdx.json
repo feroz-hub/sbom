@@ -1,0 +1,95 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "serialNumber": "urn:uuid:a668789b-67da-4f64-95ac-07c8888db216",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-06-12T00:00:00Z",
+    "tools": {
+      "components": [
+        {
+          "type": "application",
+          "name": "SBOM Analyzer Test Generator",
+          "version": "1.0.0"
+        }
+      ]
+    },
+    "component": {
+      "type": "application",
+      "bom-ref": "completeness-demo-app",
+      "name": "completeness-demo-app",
+      "version": "1.0.0"
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "missing-license",
+      "name": "component-without-license",
+      "version": "1.0.0",
+      "purl": "pkg:npm/component-without-license@1.0.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "missing-supplier",
+      "name": "component-without-supplier",
+      "version": "2.0.0",
+      "purl": "pkg:pypi/component-without-supplier@2.0.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "missing-hash",
+      "name": "component-without-hash",
+      "version": "3.0.0",
+      "purl": "pkg:npm/component-without-hash@3.0.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "complete-one",
+      "name": "safe-component",
+      "version": "1.2.3",
+      "purl": "pkg:npm/safe-component@1.2.3",
+      "supplier": {
+        "name": "Example Supplier"
+      },
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd"
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "completeness-demo-app",
+      "dependsOn": [
+        "missing-license",
+        "missing-supplier",
+        "missing-hash",
+        "complete-one"
+      ]
+    }
+  ]
+}

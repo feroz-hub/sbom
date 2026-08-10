@@ -1,0 +1,54 @@
+{
+  "resultsPerPage": 2000,
+  "startIndex": 0,
+  "totalResults": 1,
+  "format": "NVD_CVE",
+  "version": "2.0",
+  "timestamp": "2024-04-16T01:23:45.000",
+  "vulnerabilities": [
+    {
+      "cve": {
+        "id": "CVE-2024-AND-NODE",
+        "sourceIdentifier": "nvd@nist.gov",
+        "published": "2024-01-10T00:00:00.000",
+        "lastModified": "2024-04-16T01:23:45.000",
+        "vulnStatus": "Analyzed",
+        "descriptions": [
+          {"lang": "en", "value": "Synthetic CVE exercising an AND-node configuration: application running under a specific platform."}
+        ],
+        "metrics": {},
+        "weaknesses": [],
+        "configurations": [
+          {
+            "operator": "AND",
+            "nodes": [
+              {
+                "operator": "AND",
+                "negate": false,
+                "cpeMatch": [
+                  {
+                    "vulnerable": true,
+                    "criteria": "cpe:2.3:a:examplecorp:webapp:*:*:*:*:*:*:*:*",
+                    "versionStartIncluding": "2.0.0",
+                    "versionEndExcluding": "2.5.0"
+                  }
+                ]
+              },
+              {
+                "operator": "OR",
+                "negate": false,
+                "cpeMatch": [
+                  {
+                    "vulnerable": false,
+                    "criteria": "cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "references": []
+      }
+    }
+  ]
+}

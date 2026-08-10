@@ -1,0 +1,59 @@
+SBOM Analyser SAST Report
+=========================
+
+Generated: Tue Jul  7 00:15:23 IST 2026
+Project: /Users/ferozebasha/sbom
+
+Source code scanned
+-------------------
+Backend:
+- app/
+- run.py
+
+Frontend:
+- /Users/ferozebasha/sbom/frontend/src
+
+Excluded
+--------
+- .venv/
+- node_modules/
+- frontend/node_modules/
+- reports/
+- data/
+- samples/
+- tests/
+- database files
+- generated frontend build files
+
+Reports
+-------
+Semgrep:
+- semgrep-sast.json
+- semgrep-sast.sarif
+- semgrep-console.txt
+
+Bandit:
+- bandit-backend.html
+- bandit-backend.json
+- bandit-backend.sarif
+- bandit-console.txt
+
+ESLint:
+- eslint-frontend.html
+- eslint-frontend.json
+- eslint-console.txt
+
+Interpretation
+--------------
+Semgrep:
+Primary SAST report covering Python and JavaScript/TypeScript.
+
+Bandit:
+Python-specific security findings.
+
+ESLint:
+Supplementary frontend code-quality and configured security-rule findings.
+
+Note:
+Dependency vulnerabilities from npm audit, pip-audit or Snyk should be
+reported separately as Software Composition Analysis, not SAST.

@@ -1,0 +1,149 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.4",
+  "serialNumber": "urn:uuid:03dbe647-0419-4def-9efd-530ea6a84310",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-06-12T00:00:00Z",
+    "tools": [
+      {
+        "vendor": "HCLTech",
+        "name": "SBOM Analyzer Test Generator",
+        "version": "1.0.0"
+      }
+    ],
+    "authors": [
+      {
+        "name": "SBOM Analyzer Test Team",
+        "email": "sbom-test@example.com"
+      }
+    ],
+    "supplier": {
+      "name": "HCLTech Security"
+    },
+    "component": {
+      "type": "application",
+      "bom-ref": "app-osv",
+      "supplier": {
+        "name": "HCLTech Security"
+      },
+      "name": "valid-vulnerable-components-osv",
+      "version": "1.0.0",
+      "purl": "pkg:generic/valid-vulnerable-components-osv@1.0.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ]
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "maven-log4j-core",
+      "supplier": {
+        "name": "Apache"
+      },
+      "name": "log4j-core",
+      "version": "2.14.1",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "1bcbd62e3bdb90333734f314ee17e57f4d020772214fc0aac6455c45392f6990"
+        }
+      ],
+      "group": "org.apache.logging.log4j",
+      "purl": "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1"
+    },
+    {
+      "type": "library",
+      "bom-ref": "maven-spring-core",
+      "supplier": {
+        "name": "VMware"
+      },
+      "name": "spring-core",
+      "version": "5.3.17",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "3bce39a8a0574b0fa24902db1e4fd174b7f42c3112d4a56b284d3c7258916356"
+        }
+      ],
+      "group": "org.springframework",
+      "purl": "pkg:maven/org.springframework/spring-core@5.3.17"
+    },
+    {
+      "type": "library",
+      "bom-ref": "npm-minimist",
+      "supplier": {
+        "name": "npm"
+      },
+      "name": "minimist",
+      "version": "0.0.8",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "fe3c1462af9aabf80c0ac9e8d2f36fc66568b7dc0b5ada5b681f7957b51de6d0"
+        }
+      ],
+      "purl": "pkg:npm/minimist@0.0.8"
+    },
+    {
+      "type": "library",
+      "bom-ref": "npm-lodash-vuln",
+      "supplier": {
+        "name": "npm"
+      },
+      "name": "lodash",
+      "version": "4.17.15",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "4dce5f3378809be1ffb2d4013e85e38ac4575f8e4f20161ab12682c6e8017d20"
+        }
+      ],
+      "purl": "pkg:npm/lodash@4.17.15"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "app-osv",
+      "dependsOn": [
+        "maven-log4j-core",
+        "maven-spring-core",
+        "npm-minimist",
+        "npm-lodash-vuln"
+      ]
+    }
+  ]
+}

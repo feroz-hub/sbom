@@ -1,0 +1,257 @@
+# Changelog
+
+All notable changes to the SBOM Analyzer are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added
+
+- **Validation Repair Workspace for failed SBOM uploads.**
+  Failed validation no longer creates trusted `sbom_source` rows. Safe
+  failures create quarantined `sbom_validation_sessions` with append-only
+  history, manual editing, revalidation, review-only AI patch suggestions,
+  safe patch application, and import gated on a clean run through the same
+  validation pipeline. Unsafe ingress/security payloads remain blocked with
+  no editable session. New APIs:
+  `GET/PATCH /api/sbom-validation-sessions/{id}`,
+  `POST /api/sbom-validation-sessions/{id}/validate`,
+  `POST /api/sbom-validation-sessions/{id}/import`,
+  `POST /api/sbom-validation-sessions/{id}/ai/suggest-fixes`,
+  `POST /api/sbom-validation-sessions/{id}/apply-patch`, and
+  `GET /api/sbom-validation-sessions/{id}/history`. See
+  [docs/sbom-validation-repair-workspace.md](docs/sbom-validation-repair-workspace.md).
+
+- **Provider-based Component Lifecycle Enrichment.**
+  Replaces static lifecycle catalog behavior with normalized provider
+  enrichment, cache, manual overrides, refreshed dashboard metrics, and SBOM
+  export/report support. Providers now include endoflife.date lifecycle date
+  matching, package-registry deprecation/latest-version signals, OSV
+  fixed-version recommendations, conservative GitHub repository-health
+  signals, stronger PURL/CPE-aware cache identities, explicit unsupported and
+  latest-version fields, and audited manual overrides. New APIs:
+  `POST /api/sboms/{id}/lifecycle/refresh`,
+  `POST /api/components/{id}/lifecycle/refresh`,
+  `PATCH /api/components/{id}/lifecycle-override`,
+  `GET /api/sboms/{id}/lifecycle/report`, and expanded
+  `GET /dashboard/lifecycle`. See
+  [docs/lifecycle-enrichment.md](docs/lifecycle-enrichment.md).
+
+- **Evidence-based lifecycle decisioning and VEX enrichment.**
+  Adds explicit lifecycle decision priority, deps.dev package metadata,
+  optional-PURL fallback parsing, CPE/vulnerability lookup helpers, a
+  `Possibly Unmaintained` lifecycle governance category, dedicated lifecycle
+  override audit rows, VEX document/statement storage, embedded CycloneDX VEX
+  import after trusted SBOM creation, manual VEX overrides, `/dashboard/vex`,
+  VEX report/list APIs, and frontend dashboard/SBOM detail VEX surfaces. See
+  [docs/vex-integration.md](docs/vex-integration.md) and
+  [docs/component-lifecycle-sources.md](docs/component-lifecycle-sources.md).
+
+- **Production VEX/lifecycle hardening.**
+  Adds CSAF/VEX import with product-to-component matching and unmatched
+  low-confidence statement retention, vendor-hosted VEX discovery with cached
+  safe HTTP providers, CSV/ZIP lifecycle and VEX report exports, full SBOM
+  detail VEX override UI with validation and audit history, evidence modals for
+  lifecycle/VEX decisions, GitLab/Bitbucket/generic repository health signals,
+  and role checks for sensitive override/refresh/export actions.
+
+- **Component Deduplication (Stage 9 validation & persistence layer)**
+  - Resolves component duplication inside uploaded SBOMs. Groups components using PURL, CPE, or fallback identity characteristics, chooses canonical records, merges attributes (licenses, hashes, external refs, properties, and supplier info), and remaps the dependency graph (with self-dependency filtering and duplicate target removal).
+  - Flags duplicate database records using `is_duplicate` and `duplicate_of_component_id` columns, supporting `include_duplicates=true` queries in the API.
+  - Implements warning code `SBOM_VAL_W120_DUPLICATE_COMPONENT_DETECTED` that can be promoted to an error in strict NTIA mode.
+  - Adds two export modes on `GET /api/sboms/{id}/export`: `export_mode=original` (default) preserves the uploaded raw file, and `export_mode=normalized` exports the cleaned, merged, and remapped document.
+  - Enriches the frontend SBOM detail view with a deduplication summary banner, badge indicators, a toggle to show/hide duplicate component rows, and a detailed Deduplication Report modal.
+
+- **Dashboard v4 — advanced analytics layer (additive; v3 untouched).**
+  Four new capability clusters on the home dashboard, every number routed
+  through `app/metrics/` per the canonical-metrics rule:
+  - **Predictive risk engine** — `GET /dashboard/forecast`: OLS-projected
+    distinct-active trajectory over the locked daily series with ±1.96σ
+    band, honest `insufficient_history` gating (≥7 data days), optional
+    `days_to_zero`, and a day-over-day velocity anomaly (z ≥ 2 with a
+    flat-baseline fallback). New `app/metrics/forecast.py`; math helpers
+    are pure and unit-tested.
+  - **Exploitation outlook** — `GET /dashboard/exploitation`: portfolio
+    P(≥1 in-scope CVE exploited in 30d) composed from the local EPSS
+    mirror (1 − Π(1 − pᵢ), independence stated on the card), EPSS
+    coverage caveat, KEV count surfaced separately as observed
+    exploitation, top-driver CVEs KEV-first. New `app/metrics/exploitation.py`.
+  - **Remediation & SLA analytics** — `GET /dashboard/remediation`:
+    finding lifecycles derived from per-SBOM run timelines (ADR-0001
+    monotonic ids) → MTTR by severity vs CISA-BOD-19-02-flavoured budgets
+    (7/30/90/180d), overdue / due-soon / on-track countdown counts, worst
+    offenders with days-over-budget, reopened count, and 30-day
+    inflow-vs-resolved fix velocity. New `app/metrics/remediation.py`.
+  - **Interactive risk geometry** — `GET /dashboard/risk-map` (treemap:
+    cell size = latest-run finding count, colour = worst severity present;
+    no composite score, per the retired-Risk-Index decision) and
+    `GET /dashboard/risk-matrix` (impact × exploitability scatter: CVSS ×
+    EPSS with KEV diamonds and a patch-first quadrant; KEV/EPSS-first cap
+    at 300 points). New `app/metrics/riskmap.py`.
+  - **AI Security Copilot** — `GET /api/ai/copilot/briefing` (markdown
+    executive briefing, in-process cached per metrics invalidation tuple,
+    ≤6h TTL) and `POST /api/ai/copilot/ask` (one-shot grounded Q&A).
+    Grounded EXCLUSIVELY in the compact metrics snapshot (~2 KB — no SBOM
+    contents, no component dumps); same rollout gate, BudgetGuard, and
+    `ai_usage_log` ledger as AI fixes (purposes `copilot_briefing` /
+    `copilot_ask`). New `app/ai/copilot.py` + `app/routers/ai_copilot.py`.
+  - **Frontend** — six new dashboard sections appended to the v3 page
+    (`CopilotPanel`, `ForecastCard`, `ExploitationOutlookCard`,
+    `PortfolioRiskMap`, `RiskMatrixCard`, `RemediationPanel` under
+    `components/dashboard/advanced/`), typed API client methods, and the
+    new query keys folded into `invalidateDashboardTiles` so analysis
+    completion busts the whole v4 surface. The Copilot panel hides itself
+    when the AI rollout gate is closed.
+  - **Tests** — `tests/test_dashboard_v4_metrics.py` (pure-math + seeded
+    lifecycle/scope semantics + endpoint smoke, 13 tests) under the
+    `metric_consistency` marker; new routers pass the F9 direct-query
+    architectural lock; Copilot mutations satisfy the FE
+    mutation-invalidation lock.
+
+- **AI provider configuration via UI + free-tier provider additions (Phases 1-4 of the AI-config feature).**
+  Three new providers (Google Gemini, xAI Grok, Custom OpenAI-compatible)
+  joined the registry. AES-256-GCM at-rest credential encryption + a
+  DB-first config loader with env fallback now back the runtime. The
+  editable Settings → AI surface (`/settings/ai`) ships behind the
+  `AI_FIXES_UI_CONFIG_ENABLED` rollout flag (default `false`).
+  - **New providers:** Gemini Flash 2.5 (free tier — 15 req/min,
+    1M tokens/day), Grok 2 Mini (free tier — 60 req/min, 25k
+    tokens/day), Custom OpenAI-compatible (escape hatch for LM Studio,
+    LocalAI, LiteLLM proxies, etc.). Each implements the existing
+    `LlmProvider` protocol — no special-casing in the orchestrator.
+  - **Free-tier-aware UX:** Settings cards show "free (15 req/min)"
+    badges with tooltips. The new `/runs/{id}/ai-fixes/estimate`
+    endpoint projects batch wall-clock + cost so the frontend can
+    warn before kicking off a multi-hour Gemini-free batch.
+  - **`test_connection` on every provider:** typed `error_kind` enum
+    (auth / network / rate_limit / model_not_found / invalid_response /
+    unknown). The Settings UI's Save button is gated on a successful
+    test.
+  - **Encryption:** API keys are AES-256-GCM-encrypted with a master
+    key sourced from `AI_CONFIG_ENCRYPTION_KEY`. Generation script:
+    `python scripts/generate_encryption_key.py`. Rotation procedure
+    in [docs/runbook-ai-credentials.md §1](docs/runbook-ai-credentials.md).
+  - **No raw-key leaks.** Read endpoints expose `api_key_preview`
+    (first 6 + last 4 with ellipsis) and `api_key_present` only.
+    Sentinel-key sweep tests across log capture + DB rows verify
+    the property
+    (`tests/ai/test_credentials_router.py::test_no_raw_key_leaks_into_log_records`).
+  - **Audit trail.** Every mutation writes one row to
+    `ai_credential_audit_log` with detail passed through a regex
+    redactor (`sk-` / `AIzaSy` / `xai-` / long base64 → `[REDACTED]`).
+  - **Migration playbook:** `scripts/migrate_env_to_db.py` is
+    idempotent. Env-fallback ensures zero downtime — the DB path is
+    opt-in via `AI_FIXES_UI_CONFIG_ENABLED=true`. See
+    [docs/rollout-ai-fixes.md §7](docs/rollout-ai-fixes.md) for the
+    phased rollout playbook.
+
+  Documentation:
+  - User-facing: [docs/features/ai-configuration.md](docs/features/ai-configuration.md)
+  - Operator runbook: [docs/runbook-ai-credentials.md](docs/runbook-ai-credentials.md)
+  - Per-provider quick-starts: [docs/quickstart/](docs/quickstart/)
+    (Gemini free / Anthropic Claude / Ollama local / Custom OpenAI-compatible)
+  - Updated provider list: [docs/ai-providers.md](docs/ai-providers.md)
+
+### Fixed
+
+- **Dashboard data consistency: KEV count, trend totals, lifetime metrics now reconcile across all surfaces.**
+  Six P0/P1 contradictions where the same database returned different numbers
+  on the dashboard, run-detail page, and lifetime panel. Root cause was the
+  absence of a canonical metric layer — every endpoint reinvented its
+  aggregation. Fixed by introducing [app/metrics/](app/metrics/) as the single
+  source of truth, with a shared KEV-membership predicate, a shared
+  latest-run-per-SBOM CTE, and the `findings.daily_distinct_active` query for
+  the trend chart (replacing the broken raw-row sum).
+  - **Bug 1 (P0):** dashboard "KEV exposed" silently returned `0` while the
+    run-detail badge showed `6 KEV`. The dashboard query joined only on
+    `vuln_id`, missing findings whose `aliases` contained the KEV-listed CVE.
+    Now both surfaces use [`findings.kev_in_scope`](app/metrics/kev.py),
+    locked by spec invariant I3.
+  - **Bug 2 (P1):** trend empty-state copy reported "1 run so far" with 4
+    same-day runs, because the FE counted distinct calendar dates as runs.
+    Server now ships canonical `runs_total` on `/dashboard/trend`.
+  - **Bug 3 (P0):** trend legend totaled 1,259 findings when lifetime distinct
+    was 513 — mathematically impossible. Old query summed raw finding-rows
+    across runs in the window. New query snapshots distinct findings as-of
+    end-of-day per SBOM. Locked by invariant I4.
+  - **Bug 4 (P1):** lifetime "Findings surfaced" included findings from
+    ERROR runs, conflating ad-hoc partial output with cumulative truth. Now
+    filtered to successful runs only.
+  - **Bug 5 (P1):** "Net 7-day change" rendered `+513 / −0` on a first scan,
+    treating the absent prior period as zero. The metric now returns an
+    explicit `is_first_period` flag and the FE renders "first scan this week"
+    copy with an em-dash.
+  - **Bug 6 (P2):** trend empty state fired even with 4 runs because the
+    condition tested distinct calendar dates < 7. Now uses
+    `runs_distinct_dates` from the server.
+
+### Added
+
+- **Canonical metrics layer** under [app/metrics/](app/metrics/). Eight modules,
+  one function per metric, every function references its catalog entry in
+  [docs/dashboard-metrics-spec.md](docs/dashboard-metrics-spec.md). All
+  dashboard, run-detail, and lifetime numbers route through this layer; inline
+  metric SQL in router files is now forbidden (spec §8 deny list).
+- **Cross-surface consistency tests** at
+  [tests/test_metric_consistency.py](tests/test_metric_consistency.py),
+  covering twelve invariants from spec §4 (one per Bug 1–6 plus six structural
+  reconciliations). Marked `metric_consistency` for the CI gate.
+- **`net_7day` envelope** on `/dashboard/posture` carrying `is_first_period`
+  and `window_days`. Flat aliases (`net_7day_added`, `net_7day_resolved`)
+  preserved for one release of FE back-compat.
+- **`runs_total` and `runs_distinct_dates`** on `/dashboard/trend`; new
+  `runs_completed_total` and `runs_distinct_dates` on `/dashboard/lifetime`.
+- **Audit, spec, and runbook docs:**
+  [docs/dashboard-metrics-audit.md](docs/dashboard-metrics-audit.md) (Phase 1
+  diagnosis), [docs/dashboard-metrics-spec.md](docs/dashboard-metrics-spec.md)
+  (canonical catalog), [docs/runbook-metric-debugging.md](docs/runbook-metric-debugging.md)
+  (triage decision tree).
+- **Eight-stage SBOM validation pipeline** ([ADR-0007](docs/adr/0007-sbom-validation-architecture.md)).
+  Closes the eight P0 / 27 P1 gaps documented in [docs/validation-audit.md](docs/validation-audit.md).
+  The pipeline is implemented under [app/validation/](app/validation/) and consists of
+  ingress · format-detection · structural-schema · semantic · cross-reference-integrity
+  · security · NTIA · signature stages. Every error / warning / info entry uses the
+  structured shape `{code, severity, stage, path, message, remediation, spec_reference}`
+  documented in [docs/validation-error-codes.md](docs/validation-error-codes.md).
+- **`POST /api/sboms/upload`** — new multipart endpoint that runs the full validation
+  pipeline before any DB write. Rejected SBOMs never get a row.
+- **Vendored SBOM schemas** under [app/validation/schemas/](app/validation/schemas/)
+  for SPDX 2.2 / 2.3 (JSON) and CycloneDX 1.4 / 1.5 / 1.6 (JSON + XSD). Provenance
+  recorded in `SOURCE.md` per directory; never fetched at runtime.
+- **Settings:** `MAX_DECOMPRESSED_BYTES` (200 MB), `MAX_DECOMPRESSION_RATIO` (100),
+  `SBOM_SYNC_VALIDATION_BYTES` (5 MB), `SBOM_SIGNATURE_VERIFICATION` (default `false`).
+- **Import-linter contracts** forbidding `app.validation` from depending on routers /
+  services / DB / models, and forbidding any runtime HTTP fetch from inside the
+  validator.
+
+### Changed
+
+- **`MAX_UPLOAD_BYTES` raised from 20 MB to 50 MB** to match ADR-0007 §4.1. The
+  ASGI middleware enforces the cap before any body bytes reach a handler.
+
+### Migration notes
+
+- The legacy `POST /api/sboms` endpoint (JSON-string `sbom_data` field) keeps working
+  unchanged for one release. New integrations should use the multipart upload.
+- Existing SBOMs in the database are **not** retroactively rejected. The next analyse
+  on each row re-validates; on failure, the analyse returns 422 with the structured
+  report and the row stays in place. A follow-up CLI (`python -m app.validation.audit_existing`)
+  will iterate every row and emit a triage queue.
+- New runtime dependencies: `jsonschema`, `lxml`, `defusedxml`, `ruamel.yaml`,
+  `packageurl-python`, `license-expression`, `spdx-tools`, `cyclonedx-python-lib`.
+  `lxml` carries native libxml2 bindings — operators running custom Docker images
+  must ensure `libxml2-dev` (or equivalent) is installed at build time.
+
+### Security
+
+- **Removed unsafe `xml.etree.ElementTree` fallback** in the CycloneDX XML parser
+  (was at `app/parsing/cyclonedx.py:79`, XXE-vulnerable). All XML now flows through
+  `defusedxml.lxml` with DTDs, external entities, and entity expansion forbidden.
+- **JSON depth / array-length / string-length caps** (64 / 1,000,000 / 65,536 bytes)
+  enforced via a custom `json.JSONDecoder` in stage 6. Prior code path was uncapped
+  and vulnerable to nesting bombs.
+- **Decompression-bomb defence** (200 MB absolute cap, 100:1 ratio cap) for `gzip`
+  and `deflate` `Content-Encoding`. Streamed bombs are rejected mid-decode.
+- **Prototype-pollution keys** (`__proto__`, `constructor`, `prototype`) rejected.

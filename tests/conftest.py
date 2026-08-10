@@ -1,0 +1,532 @@
+"""
+Snapshot test infrastructure.
+
+Goals:
+  * Spin the FastAPI app against an isolated temp SQLite database (no
+    global state pollution from `sbom_api.db` checked into the repo).
+  * Provide a TestClient fixture that runs the startup hook (table
+    creation, seed types, ad-hoc migrations).
+  * Provide a `mock_external_sources` fixture that monkeypatches the
+    `app.analysis.*_query_by_components*` coroutines with deterministic
+    fakes. Every analyze endpoint — production and ad-hoc — now goes
+    through the `app.sources` adapter registry, and every adapter
+    delegates lazily into those coroutines, so a single set of patches
+    covers the whole surface.
+
+Why we don't use respx / requests-mock:
+  The codebase has zero existing test infra and no lockfile. Adding
+  network-mock libraries would expand the dependency surface for what is,
+  in practice, a small set of well-typed Python boundaries. Module-level
+  monkeypatching at the import sites is sufficient and dependency-free.
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import json
+import os
+import subprocess
+import sys
+import tempfile
+from collections.abc import Iterator
+from pathlib import Path
+from typing import Any
+
+import pytest
+from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.engine import make_url
+
+# ---------------------------------------------------------------------------
+# Module-level: set DATABASE_URL BEFORE any test imports from ``app.db``.
+#
+# Why: ``app.db`` creates its engine at module-import time using whatever
+# DATABASE_URL is in the environment. If the env var is unset, it falls
+# back to ``./sbom_api.db`` (a path inside the repo). Tests that imported
+# ``app.db`` before the session-scoped ``app`` fixture set DATABASE_URL
+# would lock the engine onto that real on-disk file, polluting it with
+# test rows that survived across pytest runs.
+#
+# The set runs at conftest module-import — pytest imports conftest BEFORE
+# collecting any test modules, so this DATABASE_URL is present when any
+# subsequent ``from app.db import ...`` happens.
+# ---------------------------------------------------------------------------
+_SESSION_DB_FD, _SESSION_DB_PATH = tempfile.mkstemp(prefix="sbom_test_session_", suffix=".db")
+os.close(_SESSION_DB_FD)
+Path(_SESSION_DB_PATH).unlink(missing_ok=True)
+_DEFAULT_TEST_POSTGRES_DATABASE_URL = "postgresql+psycopg://sbom:sbom@127.0.0.1:55439/sbom_analyser_test"
+
+
+def _is_postgres_url(database_url: str) -> bool:
+    try:
+        return make_url(database_url).get_backend_name().startswith("postgresql")
+    except Exception:
+        return False
+
+
+def _assert_safe_test_database(database_url: str) -> None:
+    """Refuse destructive test operations against non-test PostgreSQL DBs."""
+    parsed = make_url(database_url)
+    if not parsed.get_backend_name().startswith("postgresql"):
+        return
+    database_name = (parsed.database or "").lower()
+    if "_test" not in database_name and "test" not in database_name:
+        pytest.fail(
+            "PostgreSQL tests require a disposable test database; "
+            f"configured database is {parsed.database!r}"
+        )
+
+
+def _resolve_test_database_url() -> str:
+    explicit_test_url = (os.getenv("TEST_POSTGRES_DATABASE_URL") or os.getenv("TEST_DATABASE_URL") or "").strip()
+    if explicit_test_url:
+        _assert_safe_test_database(explicit_test_url)
+        return explicit_test_url
+
+    configured_url = (os.getenv("DATABASE_URL") or "").strip()
+    if configured_url and _is_postgres_url(configured_url):
+        parsed = make_url(configured_url)
+        database_name = (parsed.database or "").lower()
+        if "_test" in database_name or "test" in database_name:
+            return configured_url
+
+    return _DEFAULT_TEST_POSTGRES_DATABASE_URL
+
+
+_TEST_DATABASE_URL = _resolve_test_database_url()
+_TEST_POSTGRES_DATABASE_URL = _TEST_DATABASE_URL if _is_postgres_url(_TEST_DATABASE_URL) else ""
+_assert_safe_test_database(_TEST_DATABASE_URL)
+os.environ["DATABASE_URL"] = _TEST_DATABASE_URL
+os.environ["TEST_DATABASE_URL"] = _TEST_DATABASE_URL
+if _TEST_POSTGRES_DATABASE_URL:
+    os.environ["TEST_POSTGRES_DATABASE_URL"] = _TEST_POSTGRES_DATABASE_URL
+os.environ["ANALYSIS_SOURCES"] = "NVD,OSV,GITHUB"
+os.environ["API_AUTH_MODE"] = "none"
+os.environ["AUTH_ENABLED"] = "false"
+os.environ["DEV_DEFAULT_TENANT"] = "true"
+os.environ["HCL_IAM_ROLE_CLAIM"] = "role"
+os.environ["HCL_IAM_TENANT_CLAIM"] = "tenant_id"
+os.environ.setdefault("SBOM_IDENTITY_BACKFILL_ISSUER", "https://hcl-cs.test")
+os.environ["API_RATE_LIMIT_ENABLED"] = "false"
+os.environ["NVD_ENABLED"] = "false"
+os.environ.pop("API_AUTH_TOKENS", None)
+os.environ.pop("GITHUB_TOKEN", None)
+os.environ.pop("NVD_API_KEY", None)
+os.environ.pop("VULNDB_API_KEY", None)
+
+
+def _truncate_postgres_application_tables(database_url: str) -> None:
+    _assert_safe_test_database(database_url)
+    engine = create_engine(database_url, isolation_level="AUTOCOMMIT")
+    try:
+        with engine.connect() as connection:
+            all_table_names = list(
+                connection.execute(
+                    text(
+                        """
+                        SELECT format('%I.%I', schemaname, tablename)
+                        FROM pg_tables
+                        WHERE schemaname = 'public'
+                          AND tablename <> 'alembic_version'
+                          AND tablename NOT IN (
+                              'authorization_roles',
+                              'authorization_permissions',
+                              'authorization_role_permissions'
+                          )
+                        ORDER BY tablename
+                        """
+                    )
+                ).scalars()
+            )
+            table_names = [
+                table_name
+                for table_name in all_table_names
+                if connection.execute(text(f"SELECT EXISTS (SELECT 1 FROM {table_name} LIMIT 1)")).scalar()
+            ]
+            if table_names:
+                connection.execute(text(f"TRUNCATE TABLE {', '.join(table_names)} RESTART IDENTITY CASCADE"))
+            sequence_names = list(
+                connection.execute(
+                    text(
+                        """
+                        SELECT format('%I.%I', sequence_schema, sequence_name)
+                        FROM information_schema.sequences
+                        WHERE sequence_schema = 'public'
+                        ORDER BY sequence_name
+                        """
+                    )
+                ).scalars()
+            )
+            for sequence_name in sequence_names:
+                connection.execute(text(f"ALTER SEQUENCE {sequence_name} RESTART WITH 1"))
+    finally:
+        engine.dispose()
+
+
+def _seed_postgres_test_tenant(database_url: str) -> None:
+    """Restore the deterministic tenant assumed by tenant-owned model defaults.
+
+    Direct service/model tests do not start the FastAPI lifespan, so they
+    cannot rely on the development bootstrap to create tenant id 1.
+    """
+    _assert_safe_test_database(database_url)
+    engine = create_engine(database_url, isolation_level="AUTOCOMMIT")
+    try:
+        with engine.connect() as connection:
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO tenants
+                        (id, name, slug, external_iam_tenant_id, status, created_at, updated_at)
+                    VALUES
+                        (1, 'Default Test Tenant', 'default', 'local-default', 'ACTIVE',
+                         CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    ON CONFLICT (id) DO NOTHING
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    "SELECT setval(pg_get_serial_sequence('tenants', 'id'), "
+                    "GREATEST((SELECT COALESCE(MAX(id), 1) FROM tenants), 1), true)"
+                )
+            )
+    finally:
+        engine.dispose()
+
+
+def _reset_authorization_catalog(database_url: str) -> None:
+    """Restore the immutable Phase 8 catalogue after test table truncation."""
+    _assert_safe_test_database(database_url)
+    engine = create_engine(database_url)
+    migration_path = (
+        Path(__file__).resolve().parent.parent
+        / "alembic"
+        / "versions"
+        / "048_authorization_catalog.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "_phase8_authorization_catalog_migration",
+        migration_path,
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError("Unable to load Phase 8 authorization seed")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    try:
+        with engine.begin() as connection:
+            connection.execute(text("DELETE FROM authorization_role_permissions"))
+            connection.execute(text("DELETE FROM authorization_roles"))
+            connection.execute(text("DELETE FROM authorization_permissions"))
+            module._seed(connection)
+    finally:
+        engine.dispose()
+
+
+def pytest_sessionstart(session: pytest.Session) -> None:
+    if not _TEST_POSTGRES_DATABASE_URL:
+        return
+    env = os.environ.copy()
+    env["DATABASE_URL"] = _TEST_POSTGRES_DATABASE_URL
+    env["TEST_DATABASE_URL"] = _TEST_POSTGRES_DATABASE_URL
+    env["TEST_POSTGRES_DATABASE_URL"] = _TEST_POSTGRES_DATABASE_URL
+    parsed = make_url(_TEST_POSTGRES_DATABASE_URL)
+    probe = create_engine(_TEST_POSTGRES_DATABASE_URL)
+    try:
+        with probe.connect() as connection:
+            is_empty = not inspect(connection).get_table_names(schema="public")
+    finally:
+        probe.dispose()
+    if is_empty:
+        subprocess.run(
+            [
+                sys.executable,
+                "scripts/bootstrap_fresh_database.py",
+                "--database-url",
+                _TEST_POSTGRES_DATABASE_URL,
+                "--confirm-empty-database",
+                parsed.database or "",
+            ],
+            cwd=Path(__file__).resolve().parent.parent,
+            env=env,
+            check=True,
+        )
+    else:
+        subprocess.run(
+            [sys.executable, "-m", "alembic", "upgrade", "head"],
+            cwd=Path(__file__).resolve().parent.parent,
+            env=env,
+            check=True,
+        )
+    _truncate_postgres_application_tables(_TEST_POSTGRES_DATABASE_URL)
+
+
+# ---------------------------------------------------------------------------
+# Database isolation — must run BEFORE any `app.*` import.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="session")
+def _tmp_database_path() -> Iterator[str]:
+    fd, path = tempfile.mkstemp(prefix="sbom_test_", suffix=".db")
+    os.close(fd)
+    # Empty file so SQLite creates a fresh schema on connect.
+    Path(path).unlink(missing_ok=True)
+    yield path
+    Path(path).unlink(missing_ok=True)
+
+
+@pytest.fixture(scope="session")
+def app(_tmp_database_path: str):
+    """Import the FastAPI app *after* DATABASE_URL is pointed at the temp DB."""
+    postgres_url = _TEST_POSTGRES_DATABASE_URL
+    if postgres_url:
+        _assert_safe_test_database(postgres_url)
+        os.environ["DATABASE_URL"] = postgres_url
+    else:
+        os.environ["DATABASE_URL"] = f"sqlite:///{_tmp_database_path}"
+    # Avoid CORS noise + force deterministic settings.
+    os.environ.setdefault("CORS_ORIGINS", "http://testserver")
+    os.environ["ANALYSIS_SOURCES"] = "NVD,OSV,GITHUB"
+    # Finding A: lock the existing snapshot suite to mode=none so the
+    # bearer-auth dependency is a no-op for these tests. The dedicated
+    # auth tests in test_auth.py override this per-test via monkeypatch.
+    os.environ["API_AUTH_MODE"] = "none"
+    os.environ.pop("API_AUTH_TOKENS", None)
+    os.environ["API_RATE_LIMIT_ENABLED"] = "false"
+    # Don't let a real GitHub token in the dev shell leak into tests.
+    os.environ.pop("GITHUB_TOKEN", None)
+    os.environ.pop("NVD_API_KEY", None)
+    # TestClient executes BackgroundTasks before returning; provider-specific
+    # tests opt in explicitly so general upload tests never call public NVD.
+    os.environ["NVD_ENABLED"] = "false"
+    os.environ.pop("VULNDB_API_KEY", None)
+
+    # Reset cached settings singleton if it exists.
+    try:
+        from app.settings import reset_settings
+
+        reset_settings()
+    except Exception:
+        pass
+
+    from app.main import app as fastapi_app
+
+    return fastapi_app
+
+
+@pytest.fixture(autouse=True)
+def _reset_postgres_database_before_test():
+    if _TEST_POSTGRES_DATABASE_URL:
+        _truncate_postgres_application_tables(_TEST_POSTGRES_DATABASE_URL)
+        _reset_authorization_catalog(_TEST_POSTGRES_DATABASE_URL)
+        _seed_postgres_test_tenant(_TEST_POSTGRES_DATABASE_URL)
+    yield
+
+
+@pytest.fixture()
+def client(app, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    # Starlette executes BackgroundTasks before TestClient returns. Production
+    # upload requests intentionally schedule slow lifecycle/NVD enrichment,
+    # but general API tests must not fan out to live providers (a large-SBOM
+    # fixture otherwise performs hundreds of network calls). Dedicated
+    # enrichment tests exercise the service directly with provider fakes, and
+    # scheduling tests can override these router-bound callables locally.
+    def _skip_post_upload_enrichment(sbom_id: int, tenant_id: int | None = None) -> None:
+        return None
+
+    monkeypatch.setattr(
+        "app.routers.sbom_upload.run_post_upload_enrichment",
+        _skip_post_upload_enrichment,
+    )
+    monkeypatch.setattr(
+        "app.routers.sboms_crud.run_post_upload_enrichment",
+        _skip_post_upload_enrichment,
+    )
+    monkeypatch.setattr(
+        "app.routers.sbom_validation_sessions.run_post_upload_enrichment",
+        _skip_post_upload_enrichment,
+    )
+
+    with TestClient(app) as c:
+        yield c
+
+
+@pytest.fixture(autouse=True)
+def _reset_settings_and_base_env_after_test():
+    os.environ["ANALYSIS_SOURCES"] = "NVD,OSV,GITHUB"
+    os.environ["API_AUTH_MODE"] = "none"
+    os.environ["AUTH_ENABLED"] = "false"
+    os.environ["DEV_DEFAULT_TENANT"] = "true"
+    os.environ["API_RATE_LIMIT_ENABLED"] = "false"
+    os.environ["NVD_ENABLED"] = "false"
+    os.environ.pop("API_AUTH_TOKENS", None)
+    os.environ.pop("GITHUB_TOKEN", None)
+    os.environ.pop("NVD_API_KEY", None)
+    os.environ.pop("VULNDB_API_KEY", None)
+    try:
+        from app.core.security import clear_authorization_cache
+        from app.settings import reset_settings
+
+        clear_authorization_cache()
+        reset_settings()
+    except Exception:
+        pass
+    yield
+    os.environ["ANALYSIS_SOURCES"] = "NVD,OSV,GITHUB"
+    os.environ["API_AUTH_MODE"] = "none"
+    os.environ["AUTH_ENABLED"] = "false"
+    os.environ["DEV_DEFAULT_TENANT"] = "true"
+    os.environ["API_RATE_LIMIT_ENABLED"] = "false"
+    os.environ["NVD_ENABLED"] = "false"
+    os.environ.pop("API_AUTH_TOKENS", None)
+    os.environ.pop("GITHUB_TOKEN", None)
+    os.environ.pop("NVD_API_KEY", None)
+    os.environ.pop("VULNDB_API_KEY", None)
+    try:
+        from app.core.security import clear_authorization_cache
+        from app.settings import reset_settings
+
+        clear_authorization_cache()
+        reset_settings()
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Sample SBOM seeding
+# ---------------------------------------------------------------------------
+
+_SAMPLE_PATH = Path(__file__).parent / "fixtures" / "sample_sbom.json"
+
+
+@pytest.fixture(scope="session")
+def sample_sbom_dict() -> dict[str, Any]:
+    return json.loads(_SAMPLE_PATH.read_text())
+
+
+@pytest.fixture()
+def seeded_sbom(app, sample_sbom_dict) -> dict[str, Any]:
+    """
+    Upload the fixture SBOM exactly once per test session and return the row.
+
+    Session scope + deterministic name = stable `sbom_id` and `sbom_name` in
+    every snapshot, so the snapshot diff doesn't trip on the upload echo.
+    """
+    from fastapi.testclient import TestClient
+
+    name = "snapshot-fixture"
+    payload = {
+        "sbom_name": name,
+        "sbom_data": json.dumps(sample_sbom_dict),
+        "created_by": "snapshot-test",
+    }
+    with TestClient(app) as c:
+        resp = c.post("/api/sboms", json=payload)
+        assert resp.status_code == 201, resp.text
+        return resp.json()
+
+
+# ---------------------------------------------------------------------------
+# Source-fetcher mocks
+# ---------------------------------------------------------------------------
+
+from .fixtures import canned_responses as canned  # noqa: E402
+
+# ---- Async source-fetcher fakes for app.analysis.* ----
+# Every analyze endpoint (production + ad-hoc) routes through the
+# `app.sources` adapter registry, and every adapter delegates lazily into
+# the coroutines below. Patching here covers the entire surface in one
+# place.
+
+
+async def _fake_nvd_query_by_components_async(components, settings, nvd_api_key=None, lookup_service=None):
+    # `lookup_service` is the R6 mirror-facade hook. The fake intentionally
+    # ignores it: snapshot tests assert on the orchestrator-level shape,
+    # not on whether the mirror branch was taken — that's covered by the
+    # dedicated tests in test_nvd_source_uses_lookup_service.py and
+    # tests/nvd_mirror/test_facade_integration.py.
+    findings: list[dict[str, Any]] = []
+    for c in components:
+        if "log4j" in (c.get("name") or "").lower():
+            findings.append(dict(canned.ASYNC_NVD_FINDING))
+    return findings, [], []
+
+
+async def _fake_osv_query_by_components(components, settings):
+    findings: list[dict[str, Any]] = []
+    for c in components:
+        if "requests" in (c.get("name") or "").lower():
+            findings.append(dict(canned.ASYNC_OSV_FINDING_REQUESTS))
+    return findings, [], []
+
+
+async def _fake_github_query_by_components(components, settings):
+    findings: list[dict[str, Any]] = []
+    for c in components:
+        if "log4j" in (c.get("name") or "").lower():
+            findings.append(dict(canned.ASYNC_GHSA_FINDING))
+    return findings, [], []
+
+
+def _fake_nvd_query_by_identifier(identifier, api_key, settings=None):
+    """``nvd_query_by_components_async`` calls this per identifier (or the
+    mirror facade does, then falls back here on cache miss). Return a
+    minimal raw NVD record so ``_finding_from_raw`` produces a
+    deterministic finding."""
+    if identifier and "log4j" in identifier.lower():
+        return [canned.NVD_LOG4J_RESPONSE["vulnerabilities"][0]["cve"]]
+    return []
+
+
+@pytest.fixture()
+def mock_external_sources(monkeypatch):
+    """
+    Patch the underlying source-fetch coroutines with deterministic fakes.
+
+    Every analyze endpoint goes through the same registry-driven path:
+
+        endpoint → NvdSource/OsvSource/GhsaSource → app.analysis.*_query_by_*
+
+    Patching at the `app.analysis` module level catches all four
+    `/analyze-sbom-*` ad-hoc endpoints, the production
+    `POST /api/sboms/{id}/analyze`, and the streaming
+    `POST /api/sboms/{id}/analyze/stream` in one shot.
+    """
+    # ---- Production multi-source path (now ALSO used by /analyze-sbom-*
+    # after the Phase 4 cut-over — both routes go through the registry
+    # adapters, which delegate lazily into app.analysis.* coroutines) ----
+    import app.analysis as analysis_mod
+
+    monkeypatch.setattr(analysis_mod, "osv_query_by_components", _fake_osv_query_by_components)
+    monkeypatch.setattr(analysis_mod, "github_query_by_components", _fake_github_query_by_components)
+    monkeypatch.setattr(analysis_mod, "nvd_query_by_cpe", _fake_nvd_query_by_identifier)
+    monkeypatch.setattr(analysis_mod, "nvd_query_by_identifier", _fake_nvd_query_by_identifier)
+
+    # Phase 3 (Finding B): the SSE stream + manual analyze paths now consume
+    # the source registry. Patch the underlying analysis.* coroutines that
+    # the adapters delegate to so the streaming endpoint sees the same
+    # canned data as the snapshot tests above.
+    import app.analysis as analysis_mod_for_adapters
+
+    monkeypatch.setattr(
+        analysis_mod_for_adapters,
+        "nvd_query_by_components_async",
+        _fake_nvd_query_by_components_async,
+    )
+    from app.sources.base import SourceResult
+    from app.sources.nvd import NvdSource
+
+    async def _fake_batched_nvd(self, components, vulnerabilities, settings):
+        findings, errors, warnings = await _fake_nvd_query_by_components_async(
+            components, settings, nvd_api_key=self.api_key
+        )
+        return SourceResult(findings=findings, errors=errors, warnings=warnings)
+
+    monkeypatch.setattr(NvdSource, "query_with_vulnerabilities", _fake_batched_nvd)
+    # osv_query_by_components / github_query_by_components are already
+    # patched on `app.analysis` above; the adapters import them lazily from
+    # the same module attribute, so the patch propagates.
+
+    yield

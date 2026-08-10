@@ -1,0 +1,125 @@
+/**
+ * Display copy for analysis run / SBOM scan outcomes.
+ *
+ * ADR-0001 renamed the run-status enum:
+ *   PASS -> OK
+ *   FAIL -> FINDINGS  (a successful scan that produced security findings —
+ *                       NOT a pipeline failure; should NOT paint red).
+ *
+ * Both legacy values (PASS / FAIL) are still accepted here for one
+ * deprecation cycle so any cached payloads or stale frontends still render.
+ *
+ * The display tone for FINDINGS is amber, not red, to break the visual
+ * conflation with ERROR (which is the only "real" failure).
+ *
+ * PARTIAL means INCOMPLETE COVERAGE, not just "source errors": a selected
+ * source either failed, or could not assess some/all components (e.g. OSV
+ * with no supported package identity, NVD with no authoritative CPE). Zero
+ * findings on a PARTIAL run says nothing about whether the SBOM is
+ * vulnerability-free, so copy for it must never imply "clean".
+ */
+
+/** Short label shown in badges and dropdowns */
+export const runStatusShortLabel = (code: string | null | undefined): string => {
+  const k = (code ?? '').toUpperCase();
+  switch (k) {
+    case 'OK':
+    case 'PASS':
+      return 'No issues';
+    case 'FINDINGS':
+    case 'FAIL':
+      return 'Vulnerabilities found';
+    case 'PARTIAL':
+      return 'Incomplete coverage';
+    case 'ERROR':
+      return 'Run error';
+    case 'INTERRUPTED':
+      return 'Interrupted';
+    case 'RUNNING':
+      return 'Running';
+    case 'PENDING':
+      return 'Pending';
+    case 'NO_DATA':
+      return 'No SBOM data';
+    default:
+      return code || 'Unknown';
+  }
+};
+
+/** Explains what the status means (tooltips, aria-label, help text) */
+export const runStatusDescription = (code: string | null | undefined): string => {
+  const k = (code ?? '').toUpperCase();
+  switch (k) {
+    case 'OK':
+    case 'PASS':
+      return 'The scan finished successfully and reported no vulnerabilities.';
+    case 'FINDINGS':
+    case 'FAIL':
+      return 'The scan finished successfully and reported one or more vulnerabilities. This is not a system or pipeline failure.';
+    case 'PARTIAL':
+      return 'The scan completed, but one or more vulnerability sources could not assess some or all components. Findings may be incomplete.';
+    case 'ERROR':
+      return 'The analysis run failed with an error. Check the run details for a message.';
+    case 'INTERRUPTED':
+      return 'The analysis stopped because the application or worker restarted. Start a new analysis to continue.';
+    case 'RUNNING':
+      return 'Analysis is still in progress.';
+    case 'PENDING':
+      return 'The run is queued or not started yet.';
+    case 'NO_DATA':
+      return 'There was no SBOM content to analyze.';
+    default:
+      return `Status code: ${code || 'unknown'}`;
+  }
+};
+
+/** SBOM list "analysis" column (same codes as runs, plus workflow states) */
+export const sbomAnalysisShortLabel = (code: string | null | undefined): string => {
+  const k = (code ?? '').toUpperCase();
+  switch (k) {
+    case 'ANALYSING':
+    case 'RUNNING':
+      return 'Running';
+    case 'PENDING':
+    case 'QUEUED':
+      return 'Queued';
+    case 'OK':
+    case 'PASS':
+      return 'No issues';
+    case 'FINDINGS':
+    case 'FAIL':
+      return 'Vulnerabilities found';
+    case 'PARTIAL':
+      return 'Incomplete coverage';
+    case 'ERROR':
+      return 'Scan error';
+    case 'INTERRUPTED':
+      return 'Interrupted';
+    case 'NOT_ANALYSED':
+      return 'Not scanned';
+    default:
+      return runStatusShortLabel(code);
+  }
+};
+
+export const sbomAnalysisDescription = (code: string | null | undefined): string => {
+  const k = (code ?? '').toUpperCase();
+  if (k === 'ANALYSING' || k === 'RUNNING') return 'Vulnerability scan is in progress.';
+  if (k === 'PENDING' || k === 'QUEUED') return 'Analysis is queued and will start shortly.';
+  if (k === 'NOT_ANALYSED') return 'This SBOM has not been analysed yet.';
+  if (k === 'ERROR') return 'The scan ended with an error. Check notifications or run details.';
+  if (k === 'INTERRUPTED') return 'The scan stopped because the application or worker restarted.';
+  return runStatusDescription(code);
+};
+
+/**
+ * Map a status code to its canonical-name equivalent. PASS → OK, FAIL →
+ * FINDINGS; anything else (including unknown codes) is returned uppercase.
+ * Use this when comparing or filtering — never hard-code 'FAIL' / 'PASS'.
+ */
+export function canonicalRunStatus(code: string | null | undefined): string {
+  const k = (code ?? '').toUpperCase();
+  if (k === 'PASS') return 'OK';
+  if (k === 'FAIL') return 'FINDINGS';
+  return k;
+}

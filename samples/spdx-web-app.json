@@ -1,0 +1,250 @@
+{
+  "spdxVersion": "SPDX-2.3",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "name": "web-application-sbom",
+  "documentNamespace": "https://example.com/sbom/web-app-v1",
+  "creationInfo": {
+    "created": "2026-04-06T10:00:00Z",
+    "creators": ["Tool: SBOM-Platform-2.0"],
+    "licenseListVersion": "3.19"
+  },
+  "packages": [
+    {
+      "SPDXID": "SPDXRef-log4j-core",
+      "name": "log4j-core",
+      "versionInfo": "2.14.1",
+      "supplier": "Organization: Apache Software Foundation",
+      "downloadLocation": "https://repo1.maven.org/maven2/org/apache/logging/log4j/log4j-core/2.14.1/",
+      "filesAnalyzed": false,
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-jackson-databind",
+      "name": "jackson-databind",
+      "versionInfo": "2.9.10.8",
+      "supplier": "Organization: FasterXML",
+      "downloadLocation": "https://repo1.maven.org/maven2/com/fasterxml/jackson/core/jackson-databind/2.9.10.8/",
+      "filesAnalyzed": false,
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.9.10.8"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-spring-core",
+      "name": "spring-core",
+      "versionInfo": "5.2.0.RELEASE",
+      "supplier": "Organization: VMware",
+      "downloadLocation": "https://repo1.maven.org/maven2/org/springframework/spring-core/5.2.0.RELEASE/",
+      "filesAnalyzed": false,
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:maven/org.springframework/spring-core@5.2.0.RELEASE"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-django",
+      "name": "django",
+      "versionInfo": "3.1.0",
+      "supplier": "Organization: Django Software Foundation",
+      "downloadLocation": "https://pypi.org/project/Django/3.1/",
+      "filesAnalyzed": false,
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:pypi/django@3.1.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-requests",
+      "name": "requests",
+      "versionInfo": "2.25.0",
+      "downloadLocation": "https://pypi.org/project/requests/2.25.0/",
+      "filesAnalyzed": false,
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:pypi/requests@2.25.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-urllib3",
+      "name": "urllib3",
+      "versionInfo": "1.26.4",
+      "downloadLocation": "https://pypi.org/project/urllib3/1.26.4/",
+      "filesAnalyzed": false,
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:pypi/urllib3@1.26.4"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-lodash",
+      "name": "lodash",
+      "versionInfo": "4.17.20",
+      "downloadLocation": "https://www.npmjs.com/package/lodash/v/4.17.20",
+      "filesAnalyzed": false,
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/lodash@4.17.20"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-express",
+      "name": "express",
+      "versionInfo": "4.17.1",
+      "downloadLocation": "https://www.npmjs.com/package/express/v/4.17.1",
+      "filesAnalyzed": false,
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/express@4.17.1"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-axios",
+      "name": "axios",
+      "versionInfo": "0.21.1",
+      "downloadLocation": "https://www.npmjs.com/package/axios/v/0.21.1",
+      "filesAnalyzed": false,
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/axios@0.21.1"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-pillow",
+      "name": "pillow",
+      "versionInfo": "8.2.0",
+      "downloadLocation": "https://pypi.org/project/Pillow/8.2.0/",
+      "filesAnalyzed": false,
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:pypi/pillow@8.2.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-cryptography",
+      "name": "cryptography",
+      "versionInfo": "3.4.6",
+      "downloadLocation": "https://pypi.org/project/cryptography/3.4.6/",
+      "filesAnalyzed": false,
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:pypi/cryptography@3.4.6"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-golang-text",
+      "name": "text",
+      "versionInfo": "0.3.6",
+      "downloadLocation": "https://pkg.go.dev/golang.org/x/text@v0.3.6",
+      "filesAnalyzed": false,
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/golang.org/x/text@0.3.6"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-golang-net",
+      "name": "net",
+      "versionInfo": "0.0.0-20210928044308",
+      "downloadLocation": "https://pkg.go.dev/golang.org/x/net",
+      "filesAnalyzed": false,
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/golang.org/x/net@0.0.0-20210928044308"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-nokogiri",
+      "name": "nokogiri",
+      "versionInfo": "1.11.7",
+      "downloadLocation": "https://rubygems.org/gems/nokogiri/versions/1.11.7",
+      "filesAnalyzed": false,
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:gem/nokogiri@1.11.7"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-newtonsoft-json",
+      "name": "Newtonsoft.Json",
+      "versionInfo": "12.0.3",
+      "downloadLocation": "https://www.nuget.org/packages/Newtonsoft.Json/12.0.3",
+      "filesAnalyzed": false,
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:nuget/Newtonsoft.Json@12.0.3"
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relatedSpdxElement": "SPDXRef-log4j-core",
+      "relationshipType": "DESCRIBES"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relatedSpdxElement": "SPDXRef-jackson-databind",
+      "relationshipType": "DESCRIBES"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relatedSpdxElement": "SPDXRef-django",
+      "relationshipType": "DESCRIBES"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relatedSpdxElement": "SPDXRef-express",
+      "relationshipType": "DESCRIBES"
+    }
+  ]
+}

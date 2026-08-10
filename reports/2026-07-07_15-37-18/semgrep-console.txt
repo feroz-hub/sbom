@@ -1,0 +1,38 @@
+               
+               
+┌─────────────┐
+│ Scan Status │
+└─────────────┘
+  Scanning 651 files tracked by git with 1074 Code rules:
+                                                                                                                        
+  Language      Rules   Files          Origin      Rules                                                                
+ ─────────────────────────────        ───────────────────                                                               
+  <multilang>      47     651          Community    1074                                                                
+  ts              163     331                                                                                           
+  python          243     296                                                                                           
+  json              4       8                                                                                           
+  yaml             35       1                                                                                           
+                                                                                                                        
+Warning: 1 timeout error(s) in /Users/ferozebasha/sbom/app/routers/sbom_versions.py when running the following rules:
+[python.flask.security.injection.raw-html-concat.raw-html-format]
+Warning: 1 timeout error(s) in /Users/ferozebasha/sbom/frontend/src/components/sboms/SbomDetail.tsx when running the
+following rules: [javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag]
+                
+                
+┌──────────────┐
+│ Scan Summary │
+└──────────────┘
+✅ Scan completed successfully.
+ • Findings: 0 (0 blocking)
+ • Rules run: 489
+ • Targets scanned: 651
+ • Parsed lines: ~99.9%
+ • Scan skipped: 
+   ◦ Matching --exclude patterns: 1
+ • Scan was limited to files tracked by git
+ • For a detailed list of skipped files and lines, run semgrep with the --verbose flag
+Ran 489 rules on 651 files: 0 findings.
+(need more rules? `semgrep login` for additional free Semgrep Registry rules)
+
+If Semgrep missed a finding, please send us feedback to let us know!
+See https://semgrep.dev/docs/reporting-false-negatives/

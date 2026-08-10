@@ -1,0 +1,104 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "serialNumber": "urn:uuid:7f3b2c1a-9d4e-4a5b-8c6f-1e2d3a4b5c6d",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-06-09T00:00:00Z",
+    "tools": [
+      {
+        "vendor": "FBT",
+        "name": "scan-to-sbom",
+        "version": "1.0"
+      }
+    ],
+    "authors": [
+      {
+        "name": "FBT SBOM Analyzer"
+      }
+    ],
+    "component": {
+      "type": "application",
+      "bom-ref": "pkg:generic/scanned-app@1.0.0",
+      "name": "scanned-app",
+      "version": "1.0.0",
+      "description": "SBOM derived from a Snyk dependency-scan result (app-sbom.json). Only the packages named in that scan's findings are enumerated here; the scan reported 10052 total dependencies but listed components only for the vulnerable ones.",
+      "purl": "pkg:generic/scanned-app@1.0.0",
+      "supplier": {
+        "name": "Future Beyond Technology"
+      }
+    }
+  },
+  "components": [
+    {
+      "type": "application",
+      "bom-ref": "pkg:generic/scanned-app@1.0.0",
+      "name": "scanned-app",
+      "version": "1.0.0",
+      "description": "SBOM derived from a Snyk dependency-scan result (app-sbom.json).",
+      "purl": "pkg:generic/scanned-app@1.0.0",
+      "supplier": {
+        "name": "Future Beyond Technology"
+      },
+      "scope": "required"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/brace-expansion@2.0.1",
+      "name": "brace-expansion",
+      "version": "2.0.1",
+      "description": "npm brace-expansion 2.0.1 - CVE-2025-5889 Regular Expression Denial of Service (ReDoS).",
+      "purl": "pkg:npm/brace-expansion@2.0.1",
+      "scope": "required",
+      "supplier": {
+        "name": "Julian Gruber"
+      }
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/pip@23.0.1",
+      "name": "pip",
+      "version": "23.0.1",
+      "description": "PyPI pip 23.0.1 - CVE-2023-5752 Arbitrary Command Injection.",
+      "purl": "pkg:pypi/pip@23.0.1",
+      "scope": "required",
+      "supplier": {
+        "name": "Python Packaging Authority"
+      }
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/starlette@0.47.1",
+      "name": "starlette",
+      "version": "0.47.1",
+      "description": "PyPI starlette 0.47.1 - CVE-2025-54121 Allocation of Resources Without Limits or Throttling.",
+      "purl": "pkg:pypi/starlette@0.47.1",
+      "scope": "required",
+      "supplier": {
+        "name": "Encode OSS Ltd"
+      }
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "pkg:generic/scanned-app@1.0.0",
+      "dependsOn": [
+        "pkg:npm/brace-expansion@2.0.1",
+        "pkg:pypi/pip@23.0.1",
+        "pkg:pypi/starlette@0.47.1"
+      ]
+    },
+    {
+      "ref": "pkg:npm/brace-expansion@2.0.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/pip@23.0.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/starlette@0.47.1",
+      "dependsOn": []
+    }
+  ]
+}

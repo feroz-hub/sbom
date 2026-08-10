@@ -1,0 +1,18 @@
+Grounded vulnerability context (use ONLY this data; never invent
+versions, citations, or exploitation claims):
+
+{grounding_json}
+
+Schema for your JSON response:
+
+{schema_json}
+
+Constraints once more, summarised:
+
+- "actively_exploited" requires kev_listed=true.
+- target_version MUST appear in the fix_versions array, OR be "n/a"
+  when fix_versions is empty.
+- tested_against_data is true only when target_version is in fix_versions.
+- citations MUST be a subset of {allowed_sources}.
+
+Respond with JSON only. No prose, no code fences, no comments.

@@ -1,0 +1,148 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.4",
+  "serialNumber": "urn:uuid:8b2ff96a-6a72-4307-b720-11c6797558f5",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-06-12T00:00:00Z",
+    "tools": [
+      {
+        "vendor": "HCLTech",
+        "name": "SBOM Analyzer Test Generator",
+        "version": "1.0.0"
+      }
+    ],
+    "authors": [
+      {
+        "name": "SBOM Analyzer Test Team",
+        "email": "sbom-test@example.com"
+      }
+    ],
+    "supplier": {
+      "name": "HCLTech Security"
+    },
+    "component": {
+      "type": "application",
+      "bom-ref": "app-completeness",
+      "supplier": {
+        "name": "HCLTech Security"
+      },
+      "name": "valid-completeness-metadata",
+      "version": "1.0.0",
+      "purl": "pkg:generic/valid-completeness-metadata@1.0.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ]
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "complete-axios",
+      "supplier": {
+        "name": "npm"
+      },
+      "name": "axios",
+      "version": "0.21.1",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "c15b8504c0aa747b0f990d8be6d63f1bb773b9009d90687d8a97d3a49795b0dd"
+        }
+      ],
+      "purl": "pkg:npm/axios@0.21.1"
+    },
+    {
+      "type": "library",
+      "bom-ref": "complete-flask",
+      "supplier": {
+        "name": "Pallets"
+      },
+      "name": "Flask",
+      "version": "1.1.4",
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "e4fa79ef8692c7dbaedb3992900736d2122b97d7628d20f12eda7cc1d00bbb5f"
+        }
+      ],
+      "purl": "pkg:pypi/flask@1.1.4"
+    },
+    {
+      "type": "library",
+      "bom-ref": "complete-guava",
+      "supplier": {
+        "name": "Google"
+      },
+      "name": "guava",
+      "version": "30.0-jre",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "ee4bdb24476205fa95ddfc280ae68bf44b5371f1c5b9ffbef64b78a2557caa1d"
+        }
+      ],
+      "group": "com.google.guava",
+      "purl": "pkg:maven/com.google.guava/guava@30.0-jre"
+    },
+    {
+      "type": "library",
+      "bom-ref": "complete-newtonsoft",
+      "supplier": {
+        "name": "Newtonsoft"
+      },
+      "name": "Newtonsoft.Json",
+      "version": "12.0.3",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "a2c591a5a6614b6e68a0ef7b74247289fdc1463536ebd6ed42525ef95f50e8ce"
+        }
+      ],
+      "purl": "pkg:nuget/Newtonsoft.Json@12.0.3"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "app-completeness",
+      "dependsOn": [
+        "complete-axios",
+        "complete-flask",
+        "complete-guava",
+        "complete-newtonsoft"
+      ]
+    }
+  ]
+}

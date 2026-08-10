@@ -1,0 +1,179 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.4",
+  "serialNumber": "urn:uuid:d2dc979a-c789-4037-8968-7256594631ff",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-06-12T00:00:00Z",
+    "tools": [
+      {
+        "vendor": "HCLTech",
+        "name": "SBOM Analyzer Test Generator",
+        "version": "2.0.0"
+      }
+    ],
+    "authors": [
+      {
+        "name": "SBOM Analyzer Test Team",
+        "email": "sbom-test@example.com"
+      }
+    ],
+    "supplier": {
+      "name": "HCLTech Security"
+    },
+    "component": {
+      "type": "application",
+      "bom-ref": "app-remediation",
+      "supplier": {
+        "name": "HCLTech Security"
+      },
+      "name": "valid-remediation-tracking",
+      "version": "1.0.0",
+      "purl": "pkg:generic/valid-remediation-tracking@1.0.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "b3bc59314cb65b95eb67a7adf00503e2f4deb7829445d7158ef205d57747871b"
+        }
+      ]
+    }
+  },
+  "components": [
+    {
+      "type": "application",
+      "bom-ref": "app-remediation",
+      "supplier": {
+        "name": "HCLTech Security"
+      },
+      "name": "valid-remediation-tracking",
+      "version": "1.0.0",
+      "purl": "pkg:generic/valid-remediation-tracking@1.0.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "b3bc59314cb65b95eb67a7adf00503e2f4deb7829445d7158ef205d57747871b"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "remediate-struts",
+      "supplier": {
+        "name": "Apache"
+      },
+      "name": "struts2-core",
+      "version": "2.5.30",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "39b107e56c31009626ce18bb09ab421fb30db0160d834be4fe04f5de92eda627"
+        }
+      ],
+      "group": "org.apache.struts",
+      "purl": "pkg:maven/org.apache.struts/struts2-core@2.5.30"
+    },
+    {
+      "type": "library",
+      "bom-ref": "remediate-tomcat",
+      "supplier": {
+        "name": "Apache"
+      },
+      "name": "tomcat-catalina",
+      "version": "9.0.65",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "9e25164f55f0f9264a7b45cc6c31ec6f4b1d9460e48dd207922d88162f400703"
+        }
+      ],
+      "group": "org.apache.tomcat",
+      "purl": "pkg:maven/org.apache.tomcat/tomcat-catalina@9.0.65"
+    },
+    {
+      "type": "library",
+      "bom-ref": "remediate-netty",
+      "supplier": {
+        "name": "Netty"
+      },
+      "name": "netty-codec-http",
+      "version": "4.1.68.Final",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "d4df52e4f6168e75d2b893c83a7b62d8b4e72dbfe8457dccfba21bea5cfdb96e"
+        }
+      ],
+      "group": "io.netty",
+      "purl": "pkg:maven/io.netty/netty-codec-http@4.1.68.Final"
+    },
+    {
+      "type": "library",
+      "bom-ref": "remediate-jquery",
+      "supplier": {
+        "name": "OpenJS Foundation"
+      },
+      "name": "jquery",
+      "version": "3.4.1",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "875fb2bdc8d80e3bfe929dcfa883c2838b43568e6ce03c1d0c51fd47acc65198"
+        }
+      ],
+      "purl": "pkg:npm/jquery@3.4.1"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "app-remediation",
+      "dependsOn": [
+        "remediate-struts",
+        "remediate-tomcat",
+        "remediate-netty",
+        "remediate-jquery"
+      ]
+    }
+  ]
+}

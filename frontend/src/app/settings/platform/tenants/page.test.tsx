@@ -1,0 +1,223 @@
+// @vitest-environment jsdom
+
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ToastProvider } from '@/hooks/useToast';
+
+const auth = vi.hoisted(() => ({ allowed: true, loading: false }));
+const routerPush = vi.hoisted(() => vi.fn());
+const api = vi.hoisted(() => ({
+  listPlatformTenants: vi.fn(),
+  createPlatformTenant: vi.fn(),
+  updatePlatformTenantStatus: vi.fn(),
+  searchPlatformUsers: vi.fn(),
+}));
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({
+    push: routerPush,
+    replace: vi.fn(),
+    prefetch: vi.fn(),
+  }),
+  usePathname: () => '/settings/platform/tenants',
+}));
+vi.mock('@/hooks/useAuth', () => ({
+  useAuth: () => ({
+    isLoading: auth.loading,
+    hasPermission: (permission: string) => auth.allowed && permission === 'platform:tenant:create',
+    switchTenant: vi.fn(),
+  }),
+}));
+vi.mock('@/lib/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/api')>()),
+  ...api,
+}));
+
+import { HttpError } from '@/lib/api';
+import { slugFromName } from '@/lib/tenantForm';
+import PlatformTenantsPage from './page';
+
+const tenant = {
+  id: 7,
+  name: 'Default Tenant',
+  slug: 'default',
+  external_iam_tenant_id: 'local-default',
+  status: 'ACTIVE' as const,
+  created_at: '2026-07-18T00:00:00Z',
+};
+
+function renderPage() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  return render(<QueryClientProvider client={client}><ToastProvider><PlatformTenantsPage /></ToastProvider></QueryClientProvider>);
+}
+
+async function openAndFillForm() {
+  const user = userEvent.setup();
+  await user.click(screen.getByRole('button', { name: 'Create Tenant' }));
+  const form = screen.getByRole('heading', { name: 'Create tenant' }).closest('section');
+  if (!form) throw new Error('Create form did not open');
+  await user.type(within(form).getByLabelText('Name'), 'Acme Security');
+  const userSearch = within(form).getByPlaceholderText(/Search existing SBOM users/);
+  await user.type(userSearch, 'Feroze');
+  const option = await screen.findByRole('button', { name: /Feroze Basha/ });
+  await user.click(option);
+  return { user, form };
+}
+
+describe('PlatformTenantsPage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    auth.allowed = true;
+    auth.loading = false;
+    api.listPlatformTenants.mockResolvedValue([tenant]);
+    api.createPlatformTenant.mockResolvedValue({
+      ...tenant,
+      id: 8,
+      name: 'Acme Security',
+      slug: 'acme-security',
+      external_iam_tenant_id: null,
+    });
+    api.updatePlatformTenantStatus.mockResolvedValue({ tenant_id: 7, status: 'DISABLED' });
+    api.searchPlatformUsers.mockResolvedValue([{
+      id: 3,
+      display_name: 'Feroze Basha',
+      email: 'ferozebasha.s@hcltech.com',
+      username: 'ferozebasha',
+      status: 'ACTIVE',
+      email_verified: true,
+      verification_required: false,
+    }]);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+  });
+
+  it('renders the tenant list and platform navigation without external mapping column', async () => {
+    renderPage();
+    expect(await screen.findByText('Default Tenant')).toBeInTheDocument();
+    expect(screen.getByText('default')).toBeInTheDocument();
+    expect(screen.getByText('Tenant status: Active')).toBeInTheDocument();
+    expect(screen.queryByText(/External tenant mapping/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Connected to HCL.CS tenant/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Administrators' })).toHaveAttribute('href', '/settings/platform');
+  });
+
+  it('renders an empty state and refresh action', async () => {
+    api.listPlatformTenants.mockResolvedValue([]);
+    const user = userEvent.setup();
+    renderPage();
+    expect(await screen.findByText('No tenants have been created.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Refresh' }));
+    await waitFor(() => expect(api.listPlatformTenants).toHaveBeenCalledTimes(2));
+  });
+
+  it('generates an editable valid slug from the tenant name', async () => {
+    renderPage();
+    const { user, form } = await openAndFillForm();
+    expect(within(form).getByLabelText('Slug')).toHaveValue('acme-security');
+    await user.clear(within(form).getByLabelText('Slug'));
+    await user.type(within(form).getByLabelText('Slug'), 'custom-tenant');
+    expect(within(form).getByText('Preview: /tenants/custom-tenant')).toBeInTheDocument();
+    expect(slugFromName('  Medical Devices & Security  ')).toBe('medical-devices-security');
+  });
+
+  it('validates an invalid slug before making a request', async () => {
+    renderPage();
+    const { user, form } = await openAndFillForm();
+    await user.clear(within(form).getByLabelText('Slug'));
+    await user.type(within(form).getByLabelText('Slug'), 'Bad slug');
+    expect(within(form).getByRole('button', { name: 'Create Tenant' })).toBeDisabled();
+    expect(api.createPlatformTenant).not.toHaveBeenCalled();
+  });
+
+  it('creates a tenant, refreshes the list, and shows the next step', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const opened = await openAndFillForm();
+    await user.click(within(opened.form).getByRole('button', { name: 'Create Tenant' }));
+    await waitFor(() => expect(api.createPlatformTenant).toHaveBeenCalledWith(
+      {
+        name: 'Acme Security',
+        slug: 'acme-security',
+        initial_admin_user_id: 3,
+      },
+      expect.anything(),
+    ));
+    expect(await screen.findByText('Tenant “Acme Security” was created successfully.')).toBeInTheDocument();
+    await waitFor(() => expect(api.listPlatformTenants).toHaveBeenCalled());
+    expect(routerPush).toHaveBeenCalledWith('/settings/platform/tenants/8');
+  });
+
+  it('shows only the normal local tenant fields and no external IAM requirement', async () => {
+    renderPage();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Create Tenant' }));
+    const form = screen.getByRole('heading', { name: 'Create tenant' }).closest('section');
+    if (!form) throw new Error('Create form did not open');
+    expect(within(form).getByLabelText('Name')).toBeRequired();
+    expect(within(form).getByLabelText('Slug')).toBeRequired();
+    expect(within(form).getAllByText('Initial Tenant Administrator').length).toBeGreaterThan(0);
+    expect(within(form).queryByLabelText(/External IAM Tenant ID/i)).not.toBeInTheDocument();
+    expect(form).not.toHaveTextContent(/HCL\.CS.*tenant_id|externally managed identity prerequisite/i);
+  });
+
+  it('prevents duplicate tenant creation submissions while pending', async () => {
+    let resolveCreate: (value: typeof tenant) => void = () => {};
+    api.createPlatformTenant.mockImplementation(
+      () => new Promise((resolve) => { resolveCreate = resolve; }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    const opened = await openAndFillForm();
+    const submit = within(opened.form).getByRole('button', { name: 'Create Tenant' });
+    await user.dblClick(submit);
+    expect(api.createPlatformTenant).toHaveBeenCalledTimes(1);
+    expect(within(opened.form).getByRole('button', { name: 'Creating…' })).toBeDisabled();
+    resolveCreate({ ...tenant, id: 8, name: 'Acme Security' });
+  });
+
+  it.each([
+    [new HttpError('A tenant with this slug already exists.', 409), 'A tenant with this slug already exists.'],
+    [new HttpError('A tenant with this external IAM tenant ID already exists.', 409), 'A tenant with this external IAM tenant ID already exists.'],
+    [new HttpError('Session expired', 401), 'Your session has expired. Please sign in again.'],
+    [new HttpError('Forbidden', 403), 'You do not have permission to create or manage tenants.'],
+    [new Error('network details'), 'The tenant could not be created. Please try again or contact the platform administrator.'],
+  ])('shows a safe create error for %s', async (error, expected) => {
+    api.createPlatformTenant.mockRejectedValue(error);
+    const user = userEvent.setup();
+    renderPage();
+    const opened = await openAndFillForm();
+    await user.click(within(opened.form).getByRole('button', { name: 'Create Tenant' }));
+    expect(await screen.findByText(expected)).toBeInTheDocument();
+  });
+
+  it('maps backend 422 validation to a field-level error', async () => {
+    api.createPlatformTenant.mockRejectedValue(new HttpError('Invalid', 422, undefined, [
+      { loc: ['body', 'slug'], msg: 'invalid' },
+    ]));
+    const user = userEvent.setup();
+    renderPage();
+    const opened = await openAndFillForm();
+    await user.click(within(opened.form).getByRole('button', { name: 'Create Tenant' }));
+    expect(await within(opened.form).findByText(/lowercase letters, numbers/)).toBeInTheDocument();
+  });
+
+  it('blocks a non-platform user without calling the API or rendering tokens', () => {
+    auth.allowed = false;
+    const { container } = renderPage();
+    expect(screen.getByRole('alert')).toHaveTextContent('do not have permission');
+    expect(screen.queryByRole('button', { name: 'Create Tenant' })).not.toBeInTheDocument();
+    expect(api.listPlatformTenants).not.toHaveBeenCalled();
+    expect(container.textContent).not.toMatch(/access[_ -]?token|refresh[_ -]?token|jwt|session cookie/i);
+  });
+
+  it('confirms before disabling a tenant and calls the audited status API', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'Disable' }));
+    expect(screen.getByRole('dialog')).toHaveTextContent('Normal members will lose access');
+    await user.click(screen.getByRole('button', { name: 'Disable tenant' }));
+    expect(window.confirm).not.toHaveBeenCalled();
+    await waitFor(() => expect(api.updatePlatformTenantStatus).toHaveBeenCalledWith(7, 'DISABLED'));
+  });
+});

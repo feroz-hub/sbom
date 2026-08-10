@@ -1,0 +1,195 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.4",
+  "serialNumber": "urn:uuid:d85c52bd-7954-4f24-82e1-696b5ab69275",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-06-12T00:00:00Z",
+    "tools": [
+      {
+        "vendor": "HCLTech",
+        "name": "SBOM Analyzer Test Generator",
+        "version": "2.0.0"
+      }
+    ],
+    "authors": [
+      {
+        "name": "SBOM Analyzer Test Team",
+        "email": "sbom-test@example.com"
+      }
+    ],
+    "supplier": {
+      "name": "HCLTech Security"
+    },
+    "component": {
+      "type": "application",
+      "bom-ref": "app-vex",
+      "supplier": {
+        "name": "HCLTech Security"
+      },
+      "name": "valid-with-vex-analysis",
+      "version": "1.0.0",
+      "purl": "pkg:generic/valid-with-vex-analysis@1.0.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "69aadbb4315731357cfe633697ed2a8c96970d86f1e40430e129d987dcfc2f40"
+        }
+      ]
+    }
+  },
+  "components": [
+    {
+      "type": "application",
+      "bom-ref": "app-vex",
+      "supplier": {
+        "name": "HCLTech Security"
+      },
+      "name": "valid-with-vex-analysis",
+      "version": "1.0.0",
+      "purl": "pkg:generic/valid-with-vex-analysis@1.0.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "69aadbb4315731357cfe633697ed2a8c96970d86f1e40430e129d987dcfc2f40"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "vex-log4j-core",
+      "supplier": {
+        "name": "Apache"
+      },
+      "name": "log4j-core",
+      "version": "2.14.1",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "1d0593717c0da6ee299475dab8b9dc6223193de791b866b0e2b0daa9d2718fac"
+        }
+      ],
+      "group": "org.apache.logging.log4j",
+      "purl": "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1"
+    },
+    {
+      "type": "library",
+      "bom-ref": "vex-jackson-databind",
+      "supplier": {
+        "name": "FasterXML"
+      },
+      "name": "jackson-databind",
+      "version": "2.12.6",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "16ecc904045458acf4bf77bb03d2d4746f22f47f4cc529c221a6422a706f8989"
+        }
+      ],
+      "group": "com.fasterxml.jackson.core",
+      "purl": "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.12.6"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "app-vex",
+      "dependsOn": [
+        "vex-log4j-core",
+        "vex-jackson-databind"
+      ]
+    }
+  ],
+  "vulnerabilities": [
+    {
+      "bom-ref": "vuln-cve-2021-44228",
+      "id": "CVE-2021-44228",
+      "source": {
+        "name": "NVD",
+        "url": "https://nvd.nist.gov/vuln/detail/CVE-2021-44228"
+      },
+      "ratings": [
+        {
+          "source": {
+            "name": "NVD"
+          },
+          "score": 10.0,
+          "severity": "critical",
+          "method": "CVSSv3"
+        }
+      ],
+      "affects": [
+        {
+          "ref": "vex-log4j-core"
+        }
+      ],
+      "analysis": {
+        "state": "not_affected",
+        "justification": "code_not_present",
+        "detail": "The vulnerable code path is not present in this product context.",
+        "response": [
+          "will_not_fix"
+        ]
+      },
+      "recommendation": "Keep VEX evidence attached."
+    },
+    {
+      "bom-ref": "vuln-cve-2020-36518",
+      "id": "CVE-2020-36518",
+      "source": {
+        "name": "NVD",
+        "url": "https://nvd.nist.gov/vuln/detail/CVE-2020-36518"
+      },
+      "ratings": [
+        {
+          "source": {
+            "name": "NVD"
+          },
+          "score": 7.5,
+          "severity": "high",
+          "method": "CVSSv3"
+        }
+      ],
+      "affects": [
+        {
+          "ref": "vex-jackson-databind"
+        }
+      ],
+      "analysis": {
+        "state": "resolved",
+        "detail": "Resolved in the patched product build.",
+        "response": [
+          "update"
+        ]
+      },
+      "recommendation": "Upgrade jackson-databind to a fixed supported version."
+    }
+  ]
+}

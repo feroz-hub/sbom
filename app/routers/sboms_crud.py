@@ -1,0 +1,2016 @@
+"""
+SBOM CRUD and analysis trigger router.
+
+Routes:
+  GET /api/sboms/{sbom_id}             get single SBOM
+  POST /api/sboms                       create SBOM (with component sync, NO auto-analysis)
+  GET /api/sboms                        list SBOMs with filtering
+  PATCH /api/sboms/{sbom_id}            update SBOM
+  DELETE /api/sboms/{sbom_id}           delete SBOM with cascade
+  GET /api/sboms/{sbom_id}/components   list components
+  POST /api/sboms/{sbom_id}/analyze     trigger manual analysis
+  POST /api/sboms/{sbom_id}/analyze/stream   streaming analysis with SSE
+"""
+
+import asyncio
+import json
+import logging
+import re
+import time
+from datetime import UTC, datetime
+from typing import Any
+
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Path, Query, Request, Response, status
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.orm import Session
+
+from ..analysis import (
+    _augment_components_with_cpe,
+    enrich_component_for_osv,
+)
+from ..core.context import CurrentContext
+from ..core.security import get_current_tenant_context, require_permission
+from ..db import SessionLocal, get_db
+from ..deprecation import LEGACY_JSON_SBOM_SUNSET, mark_deprecated
+from ..idempotency import (
+    analysis_run_to_dict,
+    get_cached,
+    normalize_idempotency_key,
+    put_cached,
+    run_idempotent,
+)
+from ..models import (
+    AnalysisFinding,
+    AnalysisRun,
+    Projects,
+    SBOMComponent,
+    SBOMSource,
+    SBOMType,
+    SBOMValidationSession,
+)
+from ..rate_limit import analyze_route_limit
+from ..schemas import (
+    AnalysisRunOut,
+    LatestAnalysisOut,
+    SBOMComponentListResponse,
+    SbomDocumentStatsResponse,
+    SbomPatchRequest,
+    SbomRawChunkResponse,
+    SBOMSourceCreate,
+    SBOMSourceOut,
+)
+from ..services import audit_log, audit_service
+from ..services.analysis_orchestrator import AnalysisOrchestrator
+from ..services.analysis_service import (
+    AnalysisFindingPersistenceValidationError,
+    get_active_analysis_run,
+    mark_analysis_run_failed,
+)
+from ..services.product_service import DEFAULT_UNASSIGNED_PROJECT_NAME, resolve_product_assignment
+from ..services.repair.workspace_backfill_service import WorkspaceBackfillService
+from ..services.sbom_delete_service import SBOMDeleteConflict, SBOMDeleteService
+from ..services.sbom_document_service import (
+    DEFAULT_RAW_CHUNK_LIMIT,
+    MAX_RAW_CHUNK_LIMIT,
+    compute_document_stats,
+    detect_format,
+    parse_sbom_dict,
+    read_raw_chunk,
+)
+from ..services.sbom_enrichment_service import mark_enrichment_pending, run_post_upload_enrichment
+from ..services.sbom_service import (
+    MISSING_SBOM_CONTENT_REASON,
+    UNPARSEABLE_SBOM_CONTENT_REASON,
+    UNSUPPORTED_SBOM_FORMAT_REASON,
+    ComponentExtractionSkipped,
+    coerce_sbom_data,
+    detect_supported_component_extraction_format,
+)
+from ..services.soft_delete import SoftDeleteService
+from ..services.tenant_access import get_sbom_for_tenant
+from ..services.validation_repair_service import (
+    ValidationRepairService,
+    build_validation_failed_detail,
+)
+from ..sources import (
+    EVENT_COMPLETE,
+    EVENT_DONE,
+    EVENT_ERROR,
+    EVENT_RUNNING,
+    configured_default_sources,
+    normalize_source_names,
+)
+from ..sources.routing import count_authoritative_cpes
+from ..validation import ErrorReport
+from ..validation import run as run_validation
+
+log = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/api", tags=["sboms"])
+
+# ---- Helper Functions ----
+
+
+def now_iso() -> str:
+    return datetime.now(UTC).replace(microsecond=0).isoformat()
+
+
+def _component_row_to_analysis_input(row: SBOMComponent) -> dict[str, Any]:
+    return {
+        "bom_ref": row.bom_ref,
+        "type": row.component_type,
+        "group": row.component_group,
+        "name": row.name,
+        "version": row.version,
+        "purl": row.normalized_purl or row.purl,
+        "cpe": row.primary_cpe or row.cpe,
+        "cpe_source": row.cpe_source,
+        "supplier": row.supplier,
+        "scope": row.scope,
+        "license": row.license,
+        "hashes": row.hashes,
+        "ecosystem": row.normalized_ecosystem or row.ecosystem,
+        "normalized_name": row.normalized_name,
+        "normalized_version": row.normalized_version,
+        "normalized_ecosystem": row.normalized_ecosystem,
+        "normalized_purl": row.normalized_purl,
+        "normalized_component_key": row.normalized_component_key,
+        "primary_cpe": row.primary_cpe,
+        "normalized_cpes": row.normalized_cpes,
+    }
+
+
+def _load_persisted_components_for_analysis(
+    db: Session,
+    sbom_obj: SBOMSource,
+    *,
+    run_id: int | None,
+    correlation_id: str | None = None,
+) -> list[dict[str, Any]]:
+    rows = (
+        db.execute(
+            select(SBOMComponent)
+            .where(
+                SBOMComponent.sbom_id == sbom_obj.id,
+                (SBOMComponent.is_duplicate.is_(False)) | (SBOMComponent.is_duplicate.is_(None)),
+            )
+            .order_by(SBOMComponent.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+    components = [_component_row_to_analysis_input(row) for row in rows]
+    if not components:
+        try:
+            components = sync_sbom_components(db, sbom_obj)
+            db.commit()
+            rows = (
+                db.execute(
+                    select(SBOMComponent)
+                    .where(
+                        SBOMComponent.sbom_id == sbom_obj.id,
+                        (SBOMComponent.is_duplicate.is_(False)) | (SBOMComponent.is_duplicate.is_(None)),
+                    )
+                    .order_by(SBOMComponent.id.asc())
+                )
+                .scalars()
+                .all()
+            )
+            components = [_component_row_to_analysis_input(row) for row in rows] or components
+        except ComponentExtractionSkipped as exc:
+            db.rollback()
+            if exc.reason in {
+                MISSING_SBOM_CONTENT_REASON,
+                UNPARSEABLE_SBOM_CONTENT_REASON,
+                UNSUPPORTED_SBOM_FORMAT_REASON,
+            }:
+                raise
+            components = []
+        except Exception:
+            db.rollback()
+            log.exception(
+                "analysis.component_query.sync_failed",
+                extra={"analysis_run_id": run_id, "sbom_id": sbom_obj.id, "correlation_id": correlation_id},
+            )
+            raise
+
+    components = [enrich_component_for_osv(component) for component in components]
+    components, _generated_cpe = _augment_components_with_cpe(components)
+    components_with_purl = len([c for c in components if c.get("purl") or c.get("normalized_purl")])
+    components_with_cpe = count_authoritative_cpes(components)
+    log.info(
+        "analysis.component_query.completed",
+        extra={
+            "event": "analysis_component_query_completed",
+            "analysis_run_id": run_id,
+            "sbom_id": sbom_obj.id,
+            "component_query_filters": {"sbom_id": sbom_obj.id, "canonical_only": True},
+            "raw_component_count": len(rows),
+            "deduplicated_component_count": len(components),
+            "components_loaded": len(components),
+            "components_with_purl": components_with_purl,
+            "components_with_cpe": components_with_cpe,
+            "components_selected_for_analysis": len(components),
+            "correlation_id": correlation_id,
+        },
+    )
+    return components
+
+
+def _workspace_fields(
+    sbom: SBOMSource,
+    *,
+    session: SBOMValidationSession | None,
+    db: Session | None = None,
+) -> dict[str, int | str | bool | None]:
+    if not session:
+        if db is not None:
+            return WorkspaceBackfillService(db, tenant_id=sbom.tenant_id).availability_for_sbom(sbom).as_dict()
+        return WorkspaceBackfillService.locate_original_content(sbom) and {
+            "workspace_id": None,
+            "validation_session_id": None,
+            "repair_workspace_url": None,
+            "workspace_available": True,
+            "workspace_source": "backfillable",
+            "workspace_unavailable_reason": None,
+            "validation_status": sbom.status,
+            "detected_format": None,
+            "detected_spec_version": None,
+            "original_size_bytes": None,
+            "original_sha256": None,
+        } or {
+            "workspace_id": None,
+            "validation_session_id": None,
+            "repair_workspace_url": None,
+            "workspace_available": False,
+            "workspace_source": "unavailable",
+            "workspace_unavailable_reason": "Original SBOM content is not available for this legacy record.",
+            "validation_status": sbom.status,
+            "detected_format": None,
+            "detected_spec_version": None,
+            "original_size_bytes": None,
+            "original_sha256": None,
+        }
+    return {
+        "workspace_id": session.id,
+        "validation_session_id": session.id,
+        "repair_workspace_url": f"/repair/{session.id}",
+        "workspace_available": True,
+        "workspace_source": "existing_workspace",
+        "workspace_unavailable_reason": None,
+        "validation_status": session.validation_status,
+        "detected_format": session.detected_format,
+        "detected_spec_version": session.detected_version,
+        "original_size_bytes": session.original_size_bytes or session.file_size_bytes,
+        "original_sha256": session.original_sha256 or session.sha256,
+    }
+
+
+def _analysis_result(status: str | None) -> str:
+    normalized = (status or "").strip().upper()
+    if normalized in {"PENDING", "QUEUED"}:
+        return "queued"
+    if normalized in {"RUNNING", "ANALYSING", "ANALYZING"}:
+        return "running"
+    if normalized in {"INTERRUPTED", "STALE"}:
+        return "interrupted"
+    if normalized in {"CANCELLED", "CANCELED"}:
+        return "cancelled"
+    if normalized in {"ERROR", "FAILED", "FAILURE"}:
+        return "failed"
+    if normalized:
+        return "completed"
+    return "not_run"
+
+
+def _analysis_outcome(status: str | None) -> str:
+    normalized = (status or "").strip().upper()
+    if normalized in {"OK", "PASS"}:
+        return "pass"
+    if normalized in {"FINDINGS", "FAIL"}:
+        return "findings"
+    if normalized == "PARTIAL":
+        return "partial"
+    if normalized in {"INTERRUPTED", "STALE"}:
+        return "interrupted"
+    return _analysis_result(status)
+
+
+def _risk_level(
+    *,
+    critical_count: int,
+    high_count: int,
+    medium_count: int,
+    low_count: int,
+    risk_score: float | None,
+) -> str:
+    if critical_count > 0:
+        return "critical"
+    if high_count > 0:
+        return "high"
+    if medium_count > 0:
+        return "medium"
+    if low_count > 0 or (risk_score is not None and risk_score > 0):
+        return "low"
+    return "none"
+
+
+def _analysis_error_message(raw_report: str | None, status: str | None) -> str | None:
+    if _analysis_result(status) not in {"failed", "interrupted"} or not raw_report:
+        return None
+    try:
+        parsed = json.loads(raw_report)
+    except (TypeError, json.JSONDecodeError):
+        return raw_report[:240]
+    if not isinstance(parsed, dict):
+        return None
+    for key in ("error_message", "error", "message"):
+        value = parsed.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()[:240]
+    errors = parsed.get("query_errors")
+    if isinstance(errors, list) and errors:
+        first = errors[0]
+        if isinstance(first, str):
+            return first[:240]
+        if isinstance(first, dict):
+            for key in ("error", "message", "detail"):
+                value = first.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()[:240]
+    return None
+
+
+def _serialize_latest_analysis(
+    run: AnalysisRun | None,
+    *,
+    risk_score: float | None = None,
+) -> LatestAnalysisOut | None:
+    if not run:
+        return None
+    critical_count = int(run.critical_count or 0)
+    high_count = int(run.high_count or 0)
+    medium_count = int(run.medium_count or 0)
+    low_count = int(run.low_count or 0)
+    return LatestAnalysisOut(
+        run_id=int(run.id),
+        status=_analysis_result(run.run_status),
+        result=_analysis_outcome(run.run_status),
+        finding_count=int(run.total_findings or 0),
+        critical_count=critical_count,
+        high_count=high_count,
+        medium_count=medium_count,
+        low_count=low_count,
+        risk_score=risk_score,
+        risk_level=_risk_level(
+            critical_count=critical_count,
+            high_count=high_count,
+            medium_count=medium_count,
+            low_count=low_count,
+            risk_score=risk_score,
+        ),
+        started_at=run.started_on,
+        completed_at=run.completed_on,
+        error_message=_analysis_error_message(run.raw_report, run.run_status),
+    )
+
+
+def _latest_analysis_for_sbom(db: Session, sbom: SBOMSource) -> LatestAnalysisOut | None:
+    run = (
+        db.execute(
+            select(AnalysisRun)
+            .where(
+                AnalysisRun.sbom_id == sbom.id,
+                AnalysisRun.tenant_id == sbom.tenant_id,
+            )
+            .order_by(AnalysisRun.id.desc())
+        )
+        .scalars()
+        .first()
+    )
+    if not run:
+        return None
+    risk_score = db.execute(
+        select(func.coalesce(func.sum(AnalysisFinding.score), 0.0)).where(
+            AnalysisFinding.analysis_run_id == run.id,
+            AnalysisFinding.tenant_id == sbom.tenant_id,
+        )
+    ).scalar_one()
+    return _serialize_latest_analysis(run, risk_score=float(risk_score or 0.0))
+
+
+def _latest_analysis_by_sbom_id(
+    db: Session,
+    *,
+    sbom_ids: list[int],
+    tenant_id: int,
+) -> dict[int, LatestAnalysisOut]:
+    if not sbom_ids:
+        return {}
+
+    latest_run_ids = (
+        select(func.max(AnalysisRun.id).label("run_id"))
+        .where(AnalysisRun.tenant_id == tenant_id, AnalysisRun.sbom_id.in_(sbom_ids))
+        .group_by(AnalysisRun.sbom_id)
+        .subquery()
+    )
+    risk_by_run = (
+        select(
+            AnalysisFinding.analysis_run_id.label("run_id"),
+            func.coalesce(func.sum(AnalysisFinding.score), 0.0).label("risk_score"),
+        )
+        .where(AnalysisFinding.tenant_id == tenant_id)
+        .where(AnalysisFinding.analysis_run_id.in_(select(latest_run_ids.c.run_id)))
+        .group_by(AnalysisFinding.analysis_run_id)
+        .subquery()
+    )
+    rows = db.execute(
+        select(AnalysisRun, risk_by_run.c.risk_score)
+        .join(latest_run_ids, latest_run_ids.c.run_id == AnalysisRun.id)
+        .outerjoin(risk_by_run, risk_by_run.c.run_id == AnalysisRun.id)
+        .where(AnalysisRun.tenant_id == tenant_id)
+    ).all()
+    return {
+        int(run.sbom_id): _serialize_latest_analysis(run, risk_score=float(risk_score or 0.0))
+        for run, risk_score in rows
+    }
+
+
+def _serialize_sbom_out(
+    sbom: SBOMSource,
+    *,
+    include_raw: bool = False,
+    workspace: SBOMValidationSession | None = None,
+    db: Session | None = None,
+    latest_analysis: LatestAnalysisOut | None = None,
+) -> SBOMSourceOut:
+    out = SBOMSourceOut.model_validate(sbom, from_attributes=True)
+    if not out.product_name and sbom.product is not None:
+        out.product_name = sbom.product.name
+    for key, value in _workspace_fields(sbom, session=workspace, db=db).items():
+        setattr(out, key, value)
+    out.latest_analysis = latest_analysis if latest_analysis is not None else (_latest_analysis_for_sbom(db, sbom) if db is not None else None)
+    if not include_raw:
+        out.sbom_data = None
+    return out
+
+
+def _latest_workspace_for_sbom(db: Session, sbom: SBOMSource) -> SBOMValidationSession | None:
+    return (
+        db.execute(
+            select(SBOMValidationSession)
+            .where(SBOMValidationSession.imported_sbom_id == sbom.id, SBOMValidationSession.tenant_id == sbom.tenant_id)
+            .order_by(SBOMValidationSession.created_at.desc())
+        )
+        .scalars()
+        .first()
+    )
+
+
+def _coerce_sbom_data(value: Any) -> str | None:
+    return coerce_sbom_data(value)
+
+
+def _classify_status(report: ErrorReport) -> str:
+    """Map an ErrorReport to one of the canonical sbom_source.status values.
+
+    ``quarantined`` is reserved for security-stage errors (XXE, depth bombs,
+    prototype-pollution keys) — they require admin attention rather than
+    a re-upload. Everything else with errors is ``failed``; clean reports
+    (errors-free, regardless of warnings) are ``validated``.
+    """
+    if not report.has_errors():
+        return "validated"
+    for entry in report.errors:
+        if entry.stage == "security":
+            return "quarantined"
+    return "failed"
+
+
+def _validation_failure_response(sbom_id: int, report: ErrorReport, sbom_name: str) -> HTTPException:
+    """Build the structured 4xx response for a rejected upload.
+
+    The ``detail`` shape mirrors ``ErrorReport.to_dict()`` plus the bits
+    the frontend needs to navigate to the persisted row: ``sbom_id``,
+    ``status``, ``failed_stage``, and the count summary.
+    """
+    return HTTPException(
+        status_code=report.http_status,
+        detail={
+            "code": "sbom_validation_failed",
+            "message": (
+                f"SBOM '{sbom_name}' did not pass validation; "
+                f"{report.error_count} error(s) at stage '{report.first_error_stage}'."
+            ),
+            "sbom_id": sbom_id,
+            "status": _classify_status(report),
+            "failed_stage": report.first_error_stage,
+            "error_count": report.error_count,
+            "warning_count": report.warning_count,
+            "entries": [e.model_dump() for e in report.entries],
+            "truncated": report.truncated,
+        },
+    )
+
+
+def normalized_key(value: str | None) -> str:
+    return (value or "").strip().lower()
+
+
+def upsert_components(db: Session, sbom_obj: SBOMSource, components: list[dict]) -> dict:
+    from ..services.sbom_service import _upsert_components
+
+    return _upsert_components(db, sbom_obj, components)
+
+
+def sync_sbom_components(db: Session, sbom_obj: SBOMSource) -> list[dict]:
+    from ..services.sbom_service import sync_sbom_components as service_sync_sbom_components
+
+    return service_sync_sbom_components(db, sbom_obj)
+
+
+def safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+async def create_auto_report(
+    db: Session,
+    sbom_obj: SBOMSource,
+    *,
+    force_refresh: bool = False,
+    trigger_source: str = "manual",
+) -> AnalysisRun | None:
+    """
+    Trigger default multi-source analysis for an SBOM and persist the run.
+
+    Uses the shared ``app.sources`` adapter runner so configured sources
+    (NVD, OSV, GitHub, VulDB, etc.) are fanned out consistently with the
+    streaming and ad-hoc analysis endpoints.
+
+    ``force_refresh`` (roadmap #2 PR-E): when True AND the source-response
+    cache is enabled, every external-source fetch IGNORES cached hits and
+    re-queries upstream — then writes the fresh result, overwriting the
+    stale entry. Scheduled scans pass ``False`` (default) so they reuse
+    cached responses; only an operator-triggered "scan fresh" should
+    pass ``True``. No-op when ``source_cache_enabled`` is False.
+    """
+    if not sbom_obj.sbom_data:
+        return None
+    result = await AnalysisOrchestrator(db).run(
+        sbom_obj,
+        trigger_source=trigger_source,
+        force_refresh=force_refresh,
+        correlation_id=f"auto-report-{sbom_obj.id}",
+    )
+    return result[0] if result is not None else None
+
+
+def _sse_event(event_type: str, data: dict) -> str:
+    """Format a single Server-Sent Event string."""
+    return f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
+
+
+class AnalyzeStreamPayload(BaseModel):
+    sources: list[str] | None = None
+
+
+# ---- Validation Helper ----
+
+_USER_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
+
+
+def _validate_user_id(raw: str | None) -> str | None:
+    if raw is None:
+        return None
+    user_id = raw.strip()
+    if not user_id:
+        raise HTTPException(status_code=422, detail="Query parameter 'user_id' must not be empty or whitespace.")
+    if not _USER_ID_PATTERN.fullmatch(user_id):
+        raise HTTPException(
+            status_code=422,
+            detail=("Invalid 'user_id'. Allowed: letters, digits, '_', '-', '.'; length 1–64 characters."),
+        )
+    return user_id
+
+
+def _validate_positive_int(value: int, param_name: str = "id") -> int:
+    if not isinstance(value, int):
+        raise HTTPException(status_code=422, detail=f"'{param_name}' must be an integer.")
+    if value < 1:
+        raise HTTPException(status_code=422, detail=f"'{param_name}' must be a positive integer (>= 1).")
+    return value
+
+
+# ---- Routes ----
+
+
+@router.get("/sboms/{sbom_id}", response_model=SBOMSourceOut)
+def get_sbom(
+    sbom_id: int,
+    include_raw: bool = Query(False, description="Include full raw SBOM document content in the response"),
+    context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
+):
+    sbom = get_sbom_for_tenant(db, sbom_id, context.tenant_id)
+    if not sbom:
+        raise HTTPException(status_code=404, detail="SBOM not found")
+    return _serialize_sbom_out(sbom, include_raw=include_raw, workspace=_latest_workspace_for_sbom(db, sbom), db=db)
+
+
+@router.post("/sboms/{sbom_id}/workspace")
+def create_sbom_workspace(
+    sbom_id: int,
+    context: CurrentContext = Depends(require_permission("sbom:repair:update")),
+    db: Session = Depends(get_db),
+):
+    sbom = get_sbom_for_tenant(db, sbom_id, context.tenant_id)
+    if not sbom:
+        raise HTTPException(status_code=404, detail="SBOM not found")
+    service = WorkspaceBackfillService(db, tenant_id=context.tenant_id)
+    session, created = service.get_or_create_workspace_for_sbom(sbom, context=context)
+    return service.create_response(session, created=created)
+
+
+@router.get("/sboms/{sbom_id}/stats", response_model=SbomDocumentStatsResponse)
+def get_sbom_document_stats(
+    sbom_id: int,
+    context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
+):
+    sbom = get_sbom_for_tenant(db, sbom_id, context.tenant_id)
+    if not sbom:
+        raise HTTPException(status_code=404, detail="SBOM not found")
+    return compute_document_stats(db, sbom)
+
+
+@router.get("/sboms/{sbom_id}/raw", response_model=SbomRawChunkResponse)
+def get_sbom_raw_chunk(
+    sbom_id: int,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(DEFAULT_RAW_CHUNK_LIMIT, ge=1, le=MAX_RAW_CHUNK_LIMIT),
+    context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
+):
+    sbom = get_sbom_for_tenant(db, sbom_id, context.tenant_id)
+    if not sbom:
+        raise HTTPException(status_code=404, detail="SBOM not found")
+    if not sbom.sbom_data:
+        raise HTTPException(status_code=404, detail="SBOM has no stored document content")
+    chunk = read_raw_chunk(sbom.sbom_data, offset=offset, limit=limit)
+    return SbomRawChunkResponse(sbom_id=sbom.id, **chunk)
+
+
+@router.get("/sboms/{sbom_id}/download")
+def download_sbom_original(
+    sbom_id: int,
+    context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
+):
+    sbom = get_sbom_for_tenant(db, sbom_id, context.tenant_id)
+    if not sbom or not sbom.sbom_data:
+        raise HTTPException(status_code=404, detail="SBOM not found")
+    fmt, _spec = detect_format(parse_sbom_dict(sbom.sbom_data))
+    extension = "xml" if sbom.sbom_data.lstrip().startswith("<") else "json"
+    media_type = "application/xml" if extension == "xml" else "application/json"
+    filename = f"{sbom.sbom_name or f'sbom_{sbom_id}'}.{extension}"
+    audit_service.write_audit_log(
+        db,
+        context,
+        "sbom.download",
+        entity_type="sbom",
+        entity_id=sbom.id,
+        new_value={"sbom_name": sbom.sbom_name, "bytes": len(sbom.sbom_data.encode('utf-8'))},
+    )
+    db.commit()
+    return StreamingResponse(
+        iter([sbom.sbom_data.encode("utf-8")]),
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post("/sboms", response_model=SBOMSourceOut, status_code=status.HTTP_201_CREATED, deprecated=True)
+def create_sbom(
+    payload: SBOMSourceCreate,
+    background_tasks: BackgroundTasks,
+    response: Response,
+    context: CurrentContext = Depends(require_permission("product:assign_sbom")),
+    db: Session = Depends(get_db),
+):
+    mark_deprecated(
+        response,
+        endpoint="POST /api/sboms",
+        successor="/api/sboms/upload",
+        sunset=LEGACY_JSON_SBOM_SUNSET,
+    )
+    log.info("Creating SBOM: name='%s' project_id=%s", payload.sbom_name, payload.projectid)
+    # --- Foreign key checks ---
+    resolved_project_id, product, _used_default_product = resolve_product_assignment(
+        db,
+        tenant_id=context.tenant_id,
+        project_id=payload.projectid,
+        product_id=payload.product_id,
+        actor=payload.created_by or context.actor_label(),
+        require_project=True,
+    )
+    payload.projectid = resolved_project_id
+    if payload.sbom_type is not None and db.get(SBOMType, payload.sbom_type) is None:
+        log.warning("create_sbom: sbom_type=%s not found", payload.sbom_type)
+        raise HTTPException(status_code=404, detail="SBOM type not found")
+
+    # --- Preflight duplicate check on name (global uniqueness) ---
+    if payload.sbom_name:
+        exists = db.execute(select(SBOMSource.id).where(SBOMSource.sbom_name == payload.sbom_name.strip())).first()
+        if exists:
+            log.warning("create_sbom: duplicate name '%s'", payload.sbom_name)
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "duplicate_name",
+                    "message": f"An SBOM with name '{payload.sbom_name}' already exists.",
+                },
+            )
+
+    # --- Run the 8-stage validator BEFORE the insert. Failed uploads are
+    # staged in sbom_validation_sessions when safe; they are never inserted
+    # into sbom_source as trusted records. ---
+    raw_text = _coerce_sbom_data(payload.sbom_data) or ""
+    raw_bytes = raw_text.encode("utf-8")
+    report = run_validation(raw_bytes)
+    if report.has_errors():
+        session, blocked_reason = ValidationRepairService(db).create_failed_upload_session(
+            raw_text=raw_text,
+            raw_bytes=raw_bytes,
+            content_type="application/json" if raw_text.lstrip().startswith(("{", "[")) else "text/plain",
+            report=report,
+            sbom_name=payload.sbom_name,
+            original_filename=payload.sbom_name,
+            project_id=payload.projectid,
+            sbom_type=payload.sbom_type,
+            user_id=payload.created_by or context.actor_label(),
+        )
+        if session is not None:
+            audit_service.write_audit_log(
+                db,
+                context,
+                "sbom.validation_session.created",
+                entity_type="sbom_validation_session",
+                entity_id=session.id,
+                new_value={
+                    "sbom_name": payload.sbom_name,
+                    "project_id": payload.projectid,
+                    "file_size_bytes": session.file_size_bytes,
+                    "sha256": session.sha256,
+                    "error_count": report.error_count,
+                },
+            )
+            db.commit()
+        raise HTTPException(
+            status_code=report.http_status,
+            detail=build_validation_failed_detail(
+                report=report,
+                sbom_name=payload.sbom_name,
+                session=session,
+                blocked_reason=blocked_reason,
+            ),
+        )
+    serialized_entries = [e.model_dump(mode="json") for e in report.entries] if report.entries else None
+
+    try:
+        data = payload.model_dump()
+        data["sbom_data"] = raw_text or None
+        data["created_by"] = data.get("created_by") or context.actor_label()
+        data["product_id"] = product.id if product else None
+        data["product_name"] = product.name if product else data.get("product_name")
+        obj = SBOMSource(
+            **data,
+            created_on=now_iso(),
+            status="validated",
+            failed_stage=None,
+            validation_errors=serialized_entries,
+            error_count=report.error_count,
+            warning_count=report.warning_count,
+            validated_at=now_iso(),
+        )
+        mark_enrichment_pending(obj)
+        db.add(obj)
+        db.flush()
+        db.commit()
+        db.refresh(obj)
+        log.info(
+            "SBOM created: id=%d name='%s' status=%s errors=%d warnings=%d",
+            obj.id,
+            obj.sbom_name,
+            obj.status,
+            report.error_count,
+            report.warning_count,
+        )
+
+        # Clean SBOM (or warnings only) — sync components for the UI.
+        try:
+            components = sync_sbom_components(db, obj)
+            db.commit()
+            log.info("SBOM components synced: sbom id=%d components=%d", obj.id, len(components))
+        except Exception as exc:
+            db.rollback()
+            log.warning("Component sync failed for SBOM id=%d: %s", obj.id, exc)
+
+        background_tasks.add_task(run_post_upload_enrichment, obj.id, context.tenant_id)
+        return obj
+
+    except IntegrityError as exc:
+        db.rollback()
+        msg = str(getattr(exc, "orig", exc))
+        log.error("create_sbom IntegrityError: %s", msg)
+        if "UNIQUE" in msg.upper() and "sbom_name" in msg:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "duplicate_name",
+                    "message": f"An SBOM with name '{payload.sbom_name}' already exists.",
+                },
+            ) from exc
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "integrity_error", "message": "Integrity constraint violated while creating SBOM."},
+        ) from exc
+    except SQLAlchemyError as exc:
+        db.rollback()
+        log.error("create_sbom DB error: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=500, detail={"code": "db_error", "message": "Internal database error while creating SBOM."}
+        ) from exc
+    except HTTPException:
+        # Validation-failure responses fall through here without rollback —
+        # the row was already committed and is the navigation target the
+        # frontend report links to.
+        raise
+    except Exception:
+        db.rollback()
+        log.exception("create_sbom unexpected error: name=%s", payload.sbom_name)
+        raise HTTPException(
+            status_code=500, detail={"code": "unexpected", "message": "Unexpected error while creating SBOM."}
+        )
+
+
+_ALLOWED_STATUSES = {"validated", "failed", "quarantined", "pending"}
+_ALLOWED_STAGES = {
+    "ingress",
+    "detect",
+    "schema",
+    "semantic",
+    "integrity",
+    "security",
+    "ntia",
+    "signature",
+}
+
+
+@router.get("/sboms", response_model=list[SBOMSourceOut])
+def get_sbom_details(
+    user_id: str | None = Query(None, description="Filter by CreatedBy (letters/digits/_/./-, 1–64 chars)"),
+    status_filter: str | None = Query(
+        None,
+        alias="status",
+        description="Filter by validation status: validated | failed | quarantined | pending.",
+    ),
+    stage: str | None = Query(
+        None,
+        description="Filter by failed_stage (ingress | detect | schema | semantic | integrity | security | ntia | signature).",
+    ),
+    page: int = Query(1, ge=1, description="Page number (offset mode; ignored when cursor is set)"),
+    page_size: int = Query(50, ge=1, le=500, description="Items per page (1..500)"),
+    cursor: int | None = Query(
+        None,
+        description="Keyset pagination: return SBOMs with id strictly less than this value (desc by id). When set, page offset is ignored.",
+    ),
+    response: Response = None,
+    context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
+):
+    user_id = _validate_user_id(user_id)
+    page = 1 if page < 1 else page
+    page_size = max(1, min(page_size, 500))
+
+    if status_filter is not None and status_filter not in _ALLOWED_STATUSES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"status must be one of {sorted(_ALLOWED_STATUSES)}",
+        )
+    if stage is not None and stage not in _ALLOWED_STAGES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"stage must be one of {sorted(_ALLOWED_STAGES)}",
+        )
+
+    try:
+        stmt = select(SBOMSource).where(SBOMSource.tenant_id == context.tenant_id)
+        count_stmt = select(func.count(SBOMSource.id)).where(SBOMSource.tenant_id == context.tenant_id)
+        if user_id is not None:
+            stmt = stmt.where(SBOMSource.created_by == user_id)
+            count_stmt = count_stmt.where(SBOMSource.created_by == user_id)
+        if status_filter is not None:
+            stmt = stmt.where(SBOMSource.status == status_filter)
+            count_stmt = count_stmt.where(SBOMSource.status == status_filter)
+        if stage is not None:
+            stmt = stmt.where(SBOMSource.failed_stage == stage)
+            count_stmt = count_stmt.where(SBOMSource.failed_stage == stage)
+
+        total = db.execute(count_stmt).scalar_one()
+
+        if cursor is not None:
+            if cursor < 1:
+                raise HTTPException(status_code=422, detail="cursor must be >= 1")
+            stmt = stmt.where(SBOMSource.id < cursor)
+            stmt = stmt.order_by(SBOMSource.id.desc()).limit(page_size)
+        else:
+            offset = (page - 1) * page_size
+            stmt = stmt.order_by(SBOMSource.id.desc()).limit(page_size).offset(offset)
+
+        items = db.execute(stmt).scalars().all()
+        item_ids = [int(item.id) for item in items]
+        workspace_by_sbom_id: dict[int, SBOMValidationSession] = {}
+        if items:
+            workspace_rows = (
+                db.execute(
+                    select(SBOMValidationSession)
+                    .where(
+                        SBOMValidationSession.imported_sbom_id.in_([item.id for item in items]),
+                        SBOMValidationSession.tenant_id == context.tenant_id,
+                    )
+                    .order_by(SBOMValidationSession.imported_sbom_id, SBOMValidationSession.created_at.desc())
+                )
+                .scalars()
+                .all()
+            )
+            for workspace in workspace_rows:
+                if workspace.imported_sbom_id is not None:
+                    workspace_by_sbom_id.setdefault(int(workspace.imported_sbom_id), workspace)
+        latest_analysis_by_sbom_id = _latest_analysis_by_sbom_id(
+            db,
+            sbom_ids=item_ids,
+            tenant_id=context.tenant_id,
+        )
+
+        if response is not None:
+            response.headers["X-Total-Count"] = str(total)
+            if items and len(items) == page_size:
+                response.headers["X-Next-Cursor"] = str(items[-1].id)
+
+        return [
+            _serialize_sbom_out(
+                item,
+                workspace=workspace_by_sbom_id.get(item.id),
+                db=db,
+                latest_analysis=latest_analysis_by_sbom_id.get(int(item.id)),
+            )
+            for item in items
+        ]
+    except SQLAlchemyError as exc:
+        raise HTTPException(status_code=500, detail="Internal database error while fetching SBOMs.") from exc
+
+
+@router.get("/sboms/{sbom_id}/components", response_model=SBOMComponentListResponse)
+def get_sbom_components(
+    sbom_id: int = Path(..., description="SBOM ID (positive integer)"),
+    include_duplicates: bool = Query(False, description="Whether to include duplicate components in the response"),
+    duplicate_only: bool = Query(False, description="Return only duplicate component rows"),
+    dedupe_group_id: str | None = Query(None, description="Filter by Stage 9 dedupe group id"),
+    normalized_name: str | None = Query(None, description="Filter by normalized component name"),
+    normalized_purl: str | None = Query(None, description="Filter by normalized PURL"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(100, ge=1, le=1000),
+    search: str | None = Query(None, description="Case-insensitive search across component fields"),
+    sort_by: str = Query("name", description="Sort field: name, version, component_type, license, lifecycle_status"),
+    sort_order: str = Query("asc", description="Sort direction: asc or desc"),
+    context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
+):
+    sbom_id = _validate_positive_int(sbom_id, param_name="sbom_id")
+    if sort_by not in {"name", "version", "component_type", "license", "lifecycle_status"}:
+        raise HTTPException(status_code=400, detail=f"Unsupported sort_by value: {sort_by}")
+    if sort_order.lower() not in {"asc", "desc"}:
+        raise HTTPException(status_code=400, detail=f"Unsupported sort_order value: {sort_order}")
+
+    try:
+        sbom = get_sbom_for_tenant(db, sbom_id, context.tenant_id)
+        if not sbom:
+            raise HTTPException(status_code=404, detail="SBOM not found")
+
+        from ..services.sbom_service import list_sbom_components
+
+        return list_sbom_components(
+            db,
+            sbom_id,
+            include_duplicates=include_duplicates,
+            duplicate_only=duplicate_only,
+            dedupe_group_id=dedupe_group_id,
+            normalized_name=normalized_name,
+            normalized_purl=normalized_purl,
+            page=page,
+            page_size=page_size,
+            search=search,
+            sort_by=sort_by,
+            sort_order=sort_order,
+        )
+    except HTTPException:
+        raise
+    except SQLAlchemyError as exc:
+        raise HTTPException(status_code=500, detail="Internal database error while fetching SBOM components.") from exc
+
+
+@router.post("/sboms/{sbom_id}/components/reprocess", status_code=status.HTTP_200_OK)
+def reprocess_sbom_components(
+    sbom_id: int = Path(..., description="SBOM ID (positive integer)"),
+    context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
+):
+    sbom_id = _validate_positive_int(sbom_id, param_name="sbom_id")
+    sbom = get_sbom_for_tenant(db, sbom_id, context.tenant_id)
+    if not sbom:
+        raise HTTPException(status_code=404, detail="SBOM not found")
+    if not sbom.sbom_data:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "sbom_data_missing",
+                "message": "Cannot reprocess components because this SBOM has no stored document content.",
+            },
+        )
+
+    raw = sbom.sbom_data.encode("utf-8") if isinstance(sbom.sbom_data, str) else bytes(sbom.sbom_data)
+    report = run_validation(raw)
+    sbom.status = _classify_status(report)
+    sbom.failed_stage = report.first_error_stage
+    sbom.validation_errors = [e.model_dump(mode="json") for e in report.entries] if report.entries else None
+    sbom.error_count = report.error_count
+    sbom.warning_count = report.warning_count
+    sbom.validated_at = now_iso()
+
+    if report.has_errors():
+        sbom.component_extraction_status = "skipped"
+        sbom.component_extraction_error = (
+            "SBOM validation failed; repair or re-upload the SBOM before extracting components."
+        )
+        sbom.component_extraction_attempted_at = now_iso()
+        sbom.component_extraction_completed_at = None
+        db.add(sbom)
+        db.commit()
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "sbom_validation_failed",
+                "message": "Cannot reprocess components until SBOM validation passes.",
+                "status": sbom.status,
+                "failed_stage": sbom.failed_stage,
+                "entries": [e.model_dump(mode="json") for e in report.entries],
+            },
+        )
+
+    fmt, spec_version, skip_reason = detect_supported_component_extraction_format(sbom.sbom_data)
+    if skip_reason is not None:
+        sbom.component_extraction_status = "skipped"
+        sbom.component_extraction_error = skip_reason
+        sbom.component_extraction_attempted_at = now_iso()
+        sbom.component_extraction_completed_at = None
+        db.add(sbom)
+        db.commit()
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "unsupported_sbom_format", "message": skip_reason},
+        )
+
+    sbom.original_format = sbom.original_format or fmt
+    sbom.current_format = fmt or sbom.current_format
+
+    try:
+        components = sync_sbom_components(db, sbom)
+        audit_service.write_audit_log(
+            db,
+            context,
+            "sbom.components.reprocess",
+            entity_type="sbom",
+            entity_id=sbom.id,
+            new_value={"component_count": len(components), "format": fmt, "spec_version": spec_version},
+        )
+        db.commit()
+        db.refresh(sbom)
+    except ComponentExtractionSkipped as exc:
+        db.commit()
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "unsupported_sbom_format", "message": exc.reason},
+        ) from exc
+    except SQLAlchemyError as exc:
+        db.rollback()
+        log.error("component reprocess DB error sbom_id=%d: %s", sbom_id, exc, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "db_error", "message": "Failed to reprocess SBOM components."},
+        ) from exc
+    except Exception as exc:
+        db.rollback()
+        log.warning("Component reprocess failed for SBOM id=%d: %s", sbom_id, exc)
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "component_extraction_failed", "message": "Component extraction failed."},
+        ) from exc
+
+    return {
+        "sbom_id": sbom.id,
+        "component_extraction_status": sbom.component_extraction_status,
+        "component_extraction_error": sbom.component_extraction_error,
+        "component_count": len(components),
+        "format": fmt,
+        "spec_version": spec_version,
+    }
+
+
+@router.post("/sboms/{sbom_id}/normalize-deduplicate", status_code=status.HTTP_200_OK)
+def normalize_deduplicate_sbom(
+    sbom_id: int = Path(..., description="SBOM ID (positive integer)"),
+    force: bool = Query(False, description="Re-run Stage 9 even if prior normalized fields exist"),
+    context: CurrentContext = Depends(require_permission("sbom:update")),
+    db: Session = Depends(get_db),
+):
+    sbom_id = _validate_positive_int(sbom_id, param_name="sbom_id")
+    sbom = get_sbom_for_tenant(db, sbom_id, context.tenant_id)
+    if not sbom:
+        raise HTTPException(status_code=404, detail="SBOM not found")
+    if not sbom.sbom_data:
+        raise HTTPException(status_code=400, detail={"code": "sbom_data_missing", "message": "SBOM has no stored content."})
+    if not force and sbom.dedupe_report_json:
+        return {
+            "sbom_id": sbom.id,
+            "status": "unchanged",
+            "report": sbom.dedupe_report_json,
+        }
+    try:
+        components = sync_sbom_components(db, sbom)
+        audit_service.write_audit_log(
+            db,
+            context,
+            "sbom.normalization_dedup.reprocess",
+            entity_type="sbom",
+            entity_id=sbom.id,
+            new_value={"component_count": len(components), "force": force},
+        )
+        db.commit()
+        db.refresh(sbom)
+    except ComponentExtractionSkipped as exc:
+        db.commit()
+        raise HTTPException(status_code=422, detail={"code": "unsupported_sbom_format", "message": exc.reason}) from exc
+    except Exception as exc:
+        db.rollback()
+        log.warning("Normalization reprocess failed for SBOM id=%d: %s", sbom_id, exc)
+        raise HTTPException(status_code=500, detail={"code": "normalization_failed", "message": "Normalization failed."}) from exc
+    return {
+        "sbom_id": sbom.id,
+        "status": "completed",
+        "component_count": len(components),
+        "report": sbom.dedupe_report_json,
+    }
+
+
+@router.get("/sboms/{sbom_id}/dedupe-report")
+def get_sbom_dedupe_report(
+    sbom_id: int = Path(..., description="SBOM ID (positive integer)"),
+    context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
+):
+    sbom_id = _validate_positive_int(sbom_id, param_name="sbom_id")
+    try:
+        sbom = get_sbom_for_tenant(db, sbom_id, context.tenant_id)
+        if not sbom:
+            raise HTTPException(status_code=404, detail="SBOM not found")
+        report = sbom.dedupe_report_json
+        if not report:
+            report = {
+                "duplicates_found": 0,
+                "duplicates_merged": 0,
+                "conflicts": [],
+                "ref_mapping": {},
+                "remapped_dependencies": {},
+            }
+        return report
+    except HTTPException:
+        raise
+    except SQLAlchemyError as exc:
+        raise HTTPException(status_code=500, detail="Internal database error while fetching dedupe report.") from exc
+
+
+@router.get("/sboms/{sbom_id}/normalization-report")
+def get_sbom_normalization_report(
+    sbom_id: int = Path(..., description="SBOM ID (positive integer)"),
+    context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
+):
+    return get_sbom_dedupe_report(sbom_id=sbom_id, context=context, db=db)
+
+
+@router.patch("/sboms/{sbom_id}", response_model=SBOMSourceOut)
+def update_sbom(
+    sbom_id: int,
+    payload: SbomPatchRequest,
+    context: CurrentContext = Depends(require_permission("product:assign_sbom")),
+    db: Session = Depends(get_db),
+):
+    sbom = get_sbom_for_tenant(db, sbom_id, context.tenant_id)
+    if not sbom:
+        raise HTTPException(status_code=404, detail="SBOM not found")
+
+    actor = context.actor_label()
+    if not sbom.created_by:
+        sbom.created_by = actor
+
+    old_project_id = sbom.projectid
+    old_product_id = sbom.product_id
+    old_name = sbom.sbom_name
+
+    data = payload.model_dump(exclude_unset=True)
+
+    if "project_id" in data or "product_id" in data:
+        project_present = "project_id" in data
+        product_present = "product_id" in data
+        raw_project_id = data["project_id"] if project_present else (None if product_present else sbom.projectid)
+        raw_product_id = data["product_id"] if product_present else None
+        try:
+            new_proj_id = int(raw_project_id) if raw_project_id is not None else None
+            if new_proj_id is not None and new_proj_id <= 0:
+                raise ValueError
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="Invalid project_id format")
+        try:
+            new_product_id = int(raw_product_id) if raw_product_id is not None else None
+            if new_product_id is not None and new_product_id <= 0:
+                raise ValueError
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="Invalid product_id format")
+
+        new_proj_id, product, used_default_product = resolve_product_assignment(
+            db,
+            tenant_id=context.tenant_id,
+            project_id=new_proj_id,
+            product_id=new_product_id,
+            actor=actor,
+            require_project=True,
+        )
+
+        sbom.projectid = new_proj_id
+        sbom.product_id = product.id if product else None
+        if product:
+            sbom.product_name = product.name
+
+        # Update project_id in related AnalysisRuns
+        from sqlalchemy import update as sa_update
+
+        db.execute(
+            sa_update(AnalysisRun)
+            .where(AnalysisRun.sbom_id == sbom.id, AnalysisRun.tenant_id == sbom.tenant_id)
+            .values(project_id=new_proj_id, product_id=sbom.product_id)
+        )
+        if old_product_id != sbom.product_id:
+            audit_service.write_audit_log(
+                db,
+                context,
+                "sbom.product_changed",
+                entity_type="sbom",
+                entity_id=sbom.id,
+                old_value={"project_id": old_project_id, "product_id": old_product_id},
+                new_value={
+                    "project_id": sbom.projectid,
+                    "product_id": sbom.product_id,
+                    "used_default_product": used_default_product,
+                },
+            )
+
+    if "name" in data:
+        sbom.sbom_name = data["name"]
+    if "product_name" in data:
+        sbom.product_name = data["product_name"]
+    if "product_version" in data:
+        sbom.productver = data["product_version"]
+    if "sbom_version" in data:
+        sbom.sbom_version = data["sbom_version"]
+    if "description" in data:
+        sbom.description = data["description"]
+
+    sbom.modified_on = now_iso()
+    sbom.modified_by = actor
+
+    try:
+        db.add(sbom)
+        db.commit()
+        db.refresh(sbom)
+
+        old_project_for_audit = old_project_id
+        if old_project_id is not None:
+            old_project = db.get(Projects, old_project_id)
+            if old_project and old_project.project_name == DEFAULT_UNASSIGNED_PROJECT_NAME:
+                old_project_for_audit = None
+
+        # Log to generic audit trail
+        audit_log.record(
+            db,
+            user_id=actor,
+            action="sbom.update",
+            target_kind="sbom",
+            target_id=sbom.id,
+            detail=f"SBOM updated. Reason: {payload.change_reason or 'No reason specified'}",
+            metadata={
+                "old_project_id": old_project_for_audit,
+                "new_project_id": sbom.projectid,
+                "old_name": old_name,
+                "new_name": sbom.sbom_name,
+                "changed_by": actor,
+                "changed_at": now_iso(),
+                "change_reason": payload.change_reason,
+            },
+        )
+        return sbom
+    except Exception:
+        db.rollback()
+        log.exception("update_sbom failed: sbom_id=%s user=%s", sbom_id, actor)
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "internal_error", "message": "Internal server error."},
+        )
+
+
+@router.get("/sboms/{sbom_id}/delete-impact", status_code=status.HTTP_200_OK)
+def sbom_delete_impact(
+    sbom_id: int = Path(..., ge=1),
+    context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
+):
+    """Return the complete permanent-delete impact, including descendants."""
+    try:
+        return SBOMDeleteService(db, context.tenant_id).get_delete_impact(sbom_id)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="SBOM not found")
+
+
+@router.delete("/sboms/{sbom_id}", status_code=status.HTTP_200_OK)
+def delete_sbom(
+    sbom_id: int,
+    confirm: str = Query("no", description="Set to 'yes' to confirm deletion"),
+    permanent: bool = Query(
+        False,
+        description=(
+            "If true, permanently delete the SBOM and every dependent row. "
+            "If false (default), soft-delete: mark the SBOM and its runs / "
+            "components / findings as inactive, leaving rows in place for "
+            "recovery."
+        ),
+    ),
+    context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
+):
+    if sbom_id is None or not isinstance(sbom_id, int) or sbom_id <= 0:
+        raise HTTPException(status_code=400, detail="Invalid sbom_id. It must be a positive integer.")
+
+    user_id = context.actor_label()
+    service = SBOMDeleteService(db, context.tenant_id)
+    sbom = service.get_sbom(sbom_id)
+    if not sbom:
+        raise HTTPException(status_code=404, detail="SBOM not found")
+
+    def _norm(s: str | None) -> str:
+        return (s or "").strip().lower()
+
+    confirmed = _norm(confirm) in {"yes", "y"}
+    if not confirmed and not permanent:
+        return {
+            "status": "pending_confirmation",
+            "message": (
+                "This operation will delete the SBOM and all related analysis data. "
+                "To proceed, resend the request with confirm=yes "
+                "(and add permanent=true to bypass soft delete)."
+            ),
+            "example": f"/api/sboms/{sbom_id}?confirm=yes",
+        }
+
+    if permanent:
+        try:
+            return service.permanently_delete_sbom(sbom_id, user_id, confirmed)
+        except SBOMDeleteConflict as exc:
+            detail: dict[str, Any] = {
+                "code": "sbom_delete_conflict",
+                "message": exc.message,
+                "blocking_dependencies": exc.blocking_dependencies,
+            }
+            if exc.impact is not None:
+                detail["delete_impact"] = exc.impact
+            raise HTTPException(status_code=409, detail=detail)
+        except Exception:
+            log.exception("permanent delete_sbom failed: sbom_id=%s user=%s", sbom_id, user_id)
+            raise HTTPException(
+                status_code=500,
+                detail={"code": "internal_error", "message": "Internal server error."},
+            )
+
+    try:
+        return service.soft_delete_sbom(sbom_id, user_id)
+    except Exception:
+        log.exception("soft delete_sbom failed: sbom_id=%s user=%s", sbom_id, user_id)
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "internal_error", "message": "Internal server error."},
+        )
+
+
+@router.post("/sboms/{sbom_id}/restore", status_code=status.HTTP_200_OK)
+def restore_sbom(
+    sbom_id: int = Path(..., ge=1),
+    context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
+):
+    """Restore a soft-deleted SBOM. Does not cascade — children must be
+    restored individually. Phase 3.4 admin recovery surface."""
+    sbom = db.execute(
+        select(SBOMSource)
+        .where(SBOMSource.id == sbom_id, SBOMSource.tenant_id == context.tenant_id)
+        .execution_options(include_deleted=True)
+    ).scalar_one_or_none()
+    if sbom is None:
+        raise HTTPException(status_code=404, detail="SBOM not found")
+    if sbom.is_active:
+        return {"status": "already_active", "id": sbom_id}
+
+    SoftDeleteService(db).restore(sbom)
+    db.commit()
+    audit_log.record(
+        db,
+        user_id=context.actor_label(),
+        action="sbom.restore",
+        target_kind="sbom",
+        target_id=sbom_id,
+    )
+    return {"status": "restored", "id": sbom_id}
+
+
+@router.post("/sboms/{sbom_id}/revalidate", response_model=SBOMSourceOut)
+def revalidate_sbom(
+    sbom_id: int = Path(..., description="SBOM ID (positive integer)"),
+    db: Session = Depends(get_db),
+):
+    """Re-run the 8-stage validator against the stored ``sbom_data``.
+
+    Brings legacy rows (uploaded before validation was wired into
+    ``create_sbom``) onto the same status convention as freshly-uploaded
+    rows. The endpoint is also a generic idempotent revalidation hook —
+    re-running is safe and produces the same result for any given body.
+
+    Response shape mirrors :func:`create_sbom`: 200 with
+    :class:`SBOMSourceOut` on a clean report, or 4xx with the structured
+    ``detail`` (sbom_id, status, failed_stage, entries, …) when the
+    report carries any error-severity entry. NTIA-only warnings keep
+    ``status='validated'`` and return 200 with ``warning_count > 0``.
+    """
+    sbom_id = _validate_positive_int(sbom_id, param_name="sbom_id")
+    sbom = db.get(SBOMSource, sbom_id)
+    if not sbom:
+        raise HTTPException(status_code=404, detail="SBOM not found")
+
+    body = sbom.sbom_data
+    if not body:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "sbom_data_missing",
+                "message": (
+                    "Cannot revalidate this SBOM — no document body is stored "
+                    "on the row. Re-upload the SBOM to populate it."
+                ),
+            },
+        )
+
+    raw = body.encode("utf-8") if isinstance(body, str) else bytes(body)
+    report = run_validation(raw)
+    sbom_status = _classify_status(report)
+    serialized_entries = [e.model_dump() for e in report.entries] if report.entries else None
+
+    sbom.status = sbom_status
+    sbom.failed_stage = report.first_error_stage
+    sbom.validation_errors = serialized_entries
+    sbom.error_count = report.error_count
+    sbom.warning_count = report.warning_count
+    sbom.validated_at = now_iso()
+
+    try:
+        db.add(sbom)
+        db.commit()
+        db.refresh(sbom)
+    except SQLAlchemyError as exc:
+        db.rollback()
+        log.error("revalidate_sbom DB error sbom_id=%d: %s", sbom_id, exc, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "db_error", "message": "Failed to persist revalidation."},
+        ) from exc
+
+    log.info(
+        "SBOM revalidated: id=%d name='%s' status=%s errors=%d warnings=%d",
+        sbom_id,
+        sbom.sbom_name,
+        sbom_status,
+        report.error_count,
+        report.warning_count,
+    )
+
+    if report.has_errors():
+        raise _validation_failure_response(int(sbom.id), report, str(sbom.sbom_name))
+
+    return sbom
+
+
+@router.post("/sboms/{sbom_id}/analyze", response_model=AnalysisRunOut, status_code=status.HTTP_201_CREATED)
+@analyze_route_limit
+async def run_analysis_for_sbom(
+    request: Request,
+    response: Response,
+    sbom_id: int,
+    force_refresh: bool = Query(
+        False,
+        description=(
+            "Roadmap #2 PR-E — scan fresh. When True AND the source-response "
+            "cache is enabled, external-source fetches IGNORE cached hits "
+            "(query upstream live) but still write the fresh result, "
+            "refreshing the cache for next time. Scheduled scans default "
+            "False; only operator-driven 're-scan now' flows should pass "
+            "True. No-op when the cache flag is off."
+        ),
+    ),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
+    db: Session = Depends(get_db),
+):
+    async def _execute() -> dict:
+        log.info(
+            "Manual analysis triggered for SBOM id=%d (force_refresh=%s)",
+            sbom_id,
+            force_refresh,
+        )
+        sbom = db.get(SBOMSource, sbom_id)
+        if not sbom:
+            log.warning("Analysis requested for unknown SBOM id=%d", sbom_id)
+            raise HTTPException(status_code=404, detail="SBOM not found")
+        existing = get_active_analysis_run(db, sbom_id)
+        if existing:
+            response.status_code = status.HTTP_200_OK
+            log.info(
+                "Analysis already running trigger_source=%s sbom_id=%d run_id=%d",
+                existing.trigger_source,
+                sbom_id,
+                existing.id,
+            )
+            return analysis_run_to_dict(existing)
+        try:
+            report = await create_auto_report(db, sbom, force_refresh=force_refresh, trigger_source="manual")
+        except Exception as exc:
+            db.rollback()
+            log.error("Analysis run failed for SBOM id=%d: %s", sbom_id, exc, exc_info=True)
+            raise HTTPException(status_code=500, detail="Unable to generate analysis report") from exc
+        if not report:
+            log.error("Analysis report generation failed for SBOM id=%d", sbom_id)
+            raise HTTPException(status_code=500, detail="Unable to generate analysis report")
+        log.info("Analysis started trigger_source=manual sbom_id=%d run_id=%d", sbom_id, report.id)
+        return analysis_run_to_dict(report)
+
+    key = normalize_idempotency_key(idempotency_key)
+    if key:
+        data = await run_idempotent(f"post_analyze:{sbom_id}", key, _execute)
+    else:
+        data = await _execute()
+    return AnalysisRunOut.model_validate(data)
+
+
+@router.post("/sboms/{sbom_id}/analyze/stream")
+@analyze_route_limit
+async def analyze_sbom_stream(
+    request: Request,
+    sbom_id: int,
+    payload: AnalyzeStreamPayload,
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
+    context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
+):
+    """
+    Run multi-source SBOM analysis and stream per-source progress via SSE.
+
+    SSE event types:
+      progress  — phase/source status updates (started, parsed, running, complete, error)
+      complete  — final result with runId + severity counts
+      error     — fatal error (SBOM not found, parse failure, etc.)
+    """
+    idem = normalize_idempotency_key(idempotency_key)
+    correlation_id = (
+        request.headers.get("X-Correlation-ID")
+        or request.headers.get("X-Request-ID")
+        or f"analysis-stream-{sbom_id}-{int(time.time() * 1000)}"
+    )
+    sbom_row = get_sbom_for_tenant(db, sbom_id, context.tenant_id)
+    analysis_orchestrator = AnalysisOrchestrator(db)
+
+    async def _stream_not_found():
+        yield _sse_event("error", {"message": f"SBOM {sbom_id} not found", "code": 404})
+
+    if not sbom_row:
+        return StreamingResponse(
+            _stream_not_found(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
+    existing = get_active_analysis_run(db, sbom_id)
+    if existing:
+
+        async def _already_running():
+            yield _sse_event(
+                "complete",
+                {
+                    "status": "already_running",
+                    "runId": existing.id,
+                    "message": "Analysis is already running for this SBOM.",
+                    "total": existing.total_findings,
+                    "critical": existing.critical_count,
+                    "high": existing.high_count,
+                    "medium": existing.medium_count,
+                    "low": existing.low_count,
+                    "unknown": existing.unknown_count,
+                    "duration_ms": existing.duration_ms,
+                    "already_running": True,
+                },
+            )
+
+        log.info(
+            "Analysis already running trigger_source=%s sbom_id=%d run_id=%d",
+            existing.trigger_source,
+            sbom_id,
+            existing.id,
+        )
+        return StreamingResponse(
+            _already_running(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+                "Connection": "keep-alive",
+            },
+        )
+
+    if idem:
+        cached_complete = await get_cached(f"analyze_stream:{sbom_id}", idem)
+        if cached_complete:
+
+            async def _replay_cached():
+                yield _sse_event("complete", cached_complete)
+
+            return StreamingResponse(
+                _replay_cached(),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "X-Accel-Buffering": "no",
+                    "Connection": "keep-alive",
+                },
+            )
+
+    async def event_stream():
+        started_at = time.perf_counter()
+        run_started_on = now_iso()
+        run_id: int | None = None
+        selected_sources = normalize_source_names(payload.sources, default=configured_default_sources())
+        run = analysis_orchestrator.create_pending_run(
+            sbom_row,
+            sources=selected_sources,
+            trigger_source="manual",
+            started_on=run_started_on,
+            sbom_name=sbom_row.sbom_name,
+        )
+        run_id = run.id
+        log.info(
+            "Analysis started trigger_source=manual sbom_id=%d run_id=%d correlation_id=%s",
+            sbom_id,
+            run_id,
+            correlation_id,
+        )
+
+        def elapsed() -> int:
+            return int((time.perf_counter() - started_at) * 1000)
+
+        def _safe_failure_message(exc: Exception | None = None) -> tuple[str, str]:
+            if isinstance(exc, AnalysisFindingPersistenceValidationError):
+                return (
+                    "Analysis failed while saving vulnerability findings because a finding value "
+                    "exceeded the configured database field length.",
+                    "finding_persistence_validation",
+                )
+            if isinstance(exc, SQLAlchemyError):
+                return (
+                    "Analysis failed while saving vulnerability findings because the database rejected "
+                    "the persistence operation.",
+                    "finding_persistence_database",
+                )
+            return ("Analysis failed while processing the SBOM.", "analysis_stream_failure")
+
+        def mark_failed_clean(
+            message: str,
+            *,
+            code: int = 500,
+            error_category: str | None = None,
+            rollback_original: bool = True,
+        ) -> dict:
+            if rollback_original:
+                try:
+                    db.rollback()
+                except Exception:
+                    log.exception(
+                        "Unable to rollback failed analysis session",
+                        extra={"run_id": run_id, "sbom_id": sbom_id, "correlation_id": correlation_id},
+                    )
+
+            if run_id is not None:
+                try:
+                    with SessionLocal() as failure_db:
+                        mark_analysis_run_failed(
+                            failure_db,
+                            run_id=run_id,
+                            error_message=message,
+                            completed_on=now_iso(),
+                            duration_ms=elapsed(),
+                            code=code,
+                            sources=normalize_source_names(payload.sources, default=configured_default_sources()),
+                            correlation_id=correlation_id,
+                            error_category=error_category,
+                        )
+                        failure_db.commit()
+                except Exception:
+                    log.exception(
+                        "analysis.run_mark_failed.failed",
+                        extra={"run_id": run_id, "sbom_id": sbom_id, "correlation_id": correlation_id},
+                    )
+
+            return {
+                "message": message,
+                "code": code,
+                "runId": run_id,
+                "status": "ERROR",
+                "correlation_id": correlation_id,
+            }
+
+        try:
+            sources = selected_sources
+            analysis_orchestrator.mark_running(run, sources=sources)
+
+            yield _sse_event(
+                "progress",
+                {
+                    "phase": "started",
+                    "runId": run.id,
+                    "sources": sources,
+                    "elapsed_ms": elapsed(),
+                },
+            )
+            await asyncio.sleep(0)
+
+            try:
+                components = analysis_orchestrator.load_components(
+                    sbom_row,
+                    run_id=run_id,
+                    correlation_id=correlation_id,
+                )
+            except Exception as exc:
+                yield _sse_event(
+                    "error",
+                    mark_failed_clean(
+                        f"SBOM parse failed or component loading failed: {exc}",
+                        code=400,
+                        error_category="component_loading_failure",
+                    ),
+                )
+                return
+
+            if not components:
+                diagnostic = (
+                    f"No components were available for analysis for SBOM #{sbom_id}. "
+                    "The SBOM contains component data, but zero persisted components were loaded. "
+                    "Check parsing, transaction commit and SBOM/component association."
+                )
+                yield _sse_event(
+                    "error",
+                    mark_failed_clean(
+                        diagnostic,
+                        code=400,
+                        error_category="zero_components_loaded",
+                    ),
+                )
+                return
+
+            component_count = len(components)
+            components_with_purl = len([c for c in components if c.get("purl") or c.get("normalized_purl")])
+            components_with_cpe = count_authoritative_cpes(components)
+            run.total_components = component_count
+            run.components_with_cpe = components_with_cpe
+            run.raw_report = json.dumps(
+                {
+                    "status": "running",
+                    "sources": sources,
+                    "total_components": component_count,
+                    "components_with_cpe": components_with_cpe,
+                    "components_with_purl": components_with_purl,
+                }
+            )
+            db.add(run)
+            db.commit()
+            log.info(
+                "analysis.component_snapshot.persisted",
+                extra={
+                    "event": "analysis_component_snapshot_persisted",
+                    "analysis_run_id": run_id,
+                    "sbom_id": sbom_id,
+                    "raw_component_count": component_count,
+                    "deduplicated_component_count": component_count,
+                    "components_with_purl": components_with_purl,
+                    "components_with_cpe": components_with_cpe,
+                    "components_selected_for_analysis": component_count,
+                    "persisted_run_component_count": component_count,
+                    "correlation_id": correlation_id,
+                },
+            )
+
+            yield _sse_event(
+                "progress",
+                {
+                    "phase": "parsed",
+                    "components": component_count,
+                    "elapsed_ms": elapsed(),
+                },
+            )
+            await asyncio.sleep(0)
+
+            # Build per-request VulnSource adapter instances. Credentials are
+            # bound at construction time so the request handler never mutates
+            # process-global environment.
+            # Fan out concurrently via the shared runner. SSE progress events
+            # are forwarded as soon as the runner emits them, preserving the
+            # streaming contract while killing the inline source-dispatch loop.
+            all_findings: list[dict] = []
+            all_errors: list[dict] = []
+            all_warnings: list[dict] = []
+            execution_results = []
+            event_queue: asyncio.Queue = asyncio.Queue()
+
+            async def _drive_runner() -> None:
+                execution_result = await analysis_orchestrator.execute_providers(
+                    components=components,
+                    sources=sources,
+                    progress_queue=event_queue,
+                )
+                execution_results.append(execution_result)
+                # Stash final aggregates on the queue itself so the consumer
+                # loop below can pick them up after EVENT_DONE.
+                all_findings.extend(execution_result.findings)
+                all_errors.extend(execution_result.errors)
+                all_warnings.extend(execution_result.warnings)
+
+            orchestrator = asyncio.create_task(_drive_runner())
+
+            try:
+                while True:
+                    msg = await event_queue.get()
+                    kind = msg.get("kind")
+                    if kind == EVENT_DONE:
+                        break
+                    if kind == EVENT_RUNNING:
+                        yield _sse_event(
+                            "progress",
+                            {
+                                "source": msg["source"],
+                                "status": "running",
+                                "elapsed_ms": elapsed(),
+                            },
+                        )
+                    elif kind == EVENT_COMPLETE:
+                        yield _sse_event(
+                            "progress",
+                            {
+                                "source": msg["source"],
+                                "status": "complete",
+                                "findings": msg["findings"],
+                                "errors": msg["errors"],
+                                "source_ms": msg["source_ms"],
+                                "elapsed_ms": elapsed(),
+                            },
+                        )
+                    elif kind == EVENT_ERROR:
+                        yield _sse_event(
+                            "progress",
+                            {
+                                "source": msg["source"],
+                                "status": "error",
+                                "error": msg["error"],
+                                "source_ms": msg["source_ms"],
+                                "elapsed_ms": elapsed(),
+                            },
+                        )
+                    await asyncio.sleep(0)
+            finally:
+                if not orchestrator.done():
+                    orchestrator.cancel()
+                    try:
+                        await orchestrator
+                    except (asyncio.CancelledError, Exception):
+                        pass
+
+            # Make sure the orchestrator task finished cleanly so its
+            # `all_findings`/`all_errors` mutations are visible.
+            if orchestrator.done() and not orchestrator.cancelled():
+                # Surface any unhandled exception from inside _drive_runner.
+                orchestrator.result()
+
+            execution = execution_results[0]
+            final_findings = execution.findings
+            buckets = execution.buckets
+            details = execution.details
+            run_status = execution.run_status
+
+            duration_ms = elapsed()
+            run = analysis_orchestrator.persist(
+                sbom=sbom_row,
+                execution=execution,
+                started_on=run_started_on,
+                duration_ms=duration_ms,
+                trigger_source="manual",
+                existing_run=run,
+                correlation_id=correlation_id,
+            )
+
+            complete_payload = {
+                "runId": run.id,
+                "status": run_status,
+                "total": len(final_findings),
+                "critical": buckets["CRITICAL"],
+                "high": buckets["HIGH"],
+                "medium": buckets["MEDIUM"],
+                "low": buckets["LOW"],
+                "unknown": buckets["UNKNOWN"],
+                "errors": len(all_errors),
+                "duration_ms": duration_ms,
+                "provider_status": details["analysis_metadata"]["provider_status"],
+            }
+            if idem:
+                put_cached(f"analyze_stream:{sbom_id}", idem, complete_payload)
+            yield _sse_event("complete", complete_payload)
+
+        except Exception as exc:
+            log.exception(
+                "SSE analysis persistence failed",
+                extra={"run_id": run_id, "sbom_id": sbom_id, "correlation_id": correlation_id},
+            )
+            message, category = _safe_failure_message(exc)
+            yield _sse_event(
+                "error",
+                mark_failed_clean(message, code=500, error_category=category),
+            )
+            return
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
+
+@router.get("/sboms/{sbom_id}/analysis-runs", response_model=list[AnalysisRunOut])
+def list_sbom_analysis_runs(
+    sbom_id: int,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=500),
+    context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
+):
+    sbom = get_sbom_for_tenant(db, sbom_id, context.tenant_id)
+    if not sbom:
+        raise HTTPException(status_code=404, detail="SBOM not found")
+    offset = (page - 1) * page_size
+    return (
+        db.execute(
+            select(AnalysisRun)
+            .where(AnalysisRun.sbom_id == sbom.id, AnalysisRun.tenant_id == context.tenant_id)
+            .order_by(AnalysisRun.id.desc())
+            .limit(page_size)
+            .offset(offset)
+        )
+        .scalars()
+        .all()
+    )

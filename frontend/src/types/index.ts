@@ -1,0 +1,1666 @@
+export interface Project {
+  id: number;
+  project_name: string;
+  project_details: string | null;
+  project_status: number;   // 1 = Active, 0 = Inactive
+  created_by: string | null;
+  created_on: string | null;
+  modified_by: string | null;
+  modified_on: string | null;
+  sbom_count?: number;
+}
+
+export interface Product {
+  id: number;
+  tenant_id?: number;
+  project_id: number;
+  name: string;
+  normalized_name?: string | null;
+  slug?: string | null;
+  description?: string | null;
+  product_key?: string | null;
+  vendor?: string | null;
+  category?: string | null;
+  status?: string | null;
+  latest_version?: string | null;
+  metadata_json?: Record<string, unknown> | null;
+  sbom_count?: number;
+  latest_sbom_id?: number | null;
+  latest_sbom_version?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  is_active?: boolean;
+  deleted_at?: string | null;
+}
+
+export interface ProductListResponse {
+  items: Product[];
+  total: number;
+}
+
+export type SbomValidationStatus = 'validated' | 'failed' | 'quarantined' | 'pending';
+export type ValidationStatus =
+  | 'not_validated'
+  | 'valid'
+  | 'validated'
+  | 'valid_with_warnings'
+  | 'warning'
+  | 'failed'
+  | 'unsupported'
+  | 'unsupported_format'
+  | 'repair_draft'
+  | 'repaired'
+  | 'repaired_valid'
+  | 'imported';
+export type ValidationRepairStatus =
+  | 'failed'
+  | 'edited'
+  | 'repair_draft'
+  | 'passed'
+  | 'valid'
+  | 'validated'
+  | 'valid_with_warnings'
+  | 'repaired_valid'
+  | 'unsupported_format'
+  | 'security_blocked'
+  | 'imported'
+  | 'abandoned';
+
+export type AnalysisStatus =
+  | 'not_run'
+  | 'queued'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
+
+export interface LatestAnalysisSummary {
+  run_id?: number | string;
+  status: AnalysisStatus | string;
+  result?: string | null;
+  finding_count?: number | null;
+  critical_count?: number | null;
+  high_count?: number | null;
+  medium_count?: number | null;
+  low_count?: number | null;
+  risk_score?: number | null;
+  risk_level?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  error_message?: string | null;
+}
+
+export type LatestAnalysis = LatestAnalysisSummary;
+
+export interface SBOMSource {
+  id: number;
+  sbom_name: string;
+  sbom_type: number | null;       // FK integer to SBOMType
+  sbom_version: string | null;
+  parent_id?: number | null;
+  change_summary?: string | null;
+  completeness_score?: number | null;
+  completeness_report?: Record<string, unknown> | null;
+  projectid: number | null;
+  project_id?: number | null;
+  project_name?: string | null;
+  product_id?: number | null;
+  product?: Product | null;
+  component_count?: number;
+  created_by: string | null;
+  created_on: string | null;
+  modified_by: string | null;
+  modified_on: string | null;
+  productver: string | null;
+  sbom_data?: string | null;
+  product_name?: string | null;
+  description?: string | null;
+  name?: string | null;
+  product_version?: string | null;
+  format?: string | null;
+  spec_version?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  // 8-stage validation outcome — populated by POST /api/sboms.
+  status?: SbomValidationStatus;
+  failed_stage?: string | null;
+  validation_errors?: ValidationErrorEntry[] | null;
+  error_count?: number;
+  warning_count?: number;
+  validated_at?: string | null;
+  workspace_id?: string | null;
+  validation_session_id?: string | null;
+  repair_workspace_url?: string | null;
+  workspace_available?: boolean;
+  workspace_source?: 'existing_workspace' | 'backfillable' | 'unavailable' | 'reconstructed_export' | 'original_upload' | string | null;
+  workspace_unavailable_reason?: string | null;
+  validation_status?: ValidationStatus | string | null;
+  detected_format?: string | null;
+  detected_spec_version?: string | null;
+  original_size_bytes?: number | null;
+  original_sha256?: string | null;
+  // SPDX → CycloneDX conversion tracking
+  original_format?: string | null;
+  current_format?: string | null;
+  converted_from_format?: string | null;
+  source_sbom_id?: number | null;
+  converted_sbom_id?: number | null;
+  conversion_status?: string | null;
+  conversion_warnings_json?: Array<{ message?: string }> | null;
+  conversion_report_json?: Record<string, unknown> | null;
+  converted_at?: string | null;
+  converted_by?: string | null;
+  enrichment_status?: string | null;
+  conversion_started_at?: string | null;
+  conversion_completed_at?: string | null;
+  enrichment_started_at?: string | null;
+  enrichment_completed_at?: string | null;
+  last_enriched_at?: string | null;
+  conversion_error?: string | null;
+  enrichment_error?: string | null;
+  latest_analysis?: LatestAnalysis | null;
+  // Client-side only — not from API. Set during optimistic updates.
+  // ADR-0001: OK / FINDINGS are the canonical names. PASS / FAIL accepted as
+  // legacy aliases during the deprecation window.
+  _analysisStatus?:
+    | 'ANALYSING'
+    | 'PENDING'
+    | 'QUEUED'
+    | 'RUNNING'
+    | 'OK'
+    | 'FINDINGS'
+    | 'PARTIAL'
+    | 'ERROR'
+    | 'INTERRUPTED'
+    | 'CANCELLED'
+    | 'NOT_ANALYSED'
+    | 'PASS' // legacy alias for OK
+    | 'FAIL'; // legacy alias for FINDINGS
+  _findingsCount?: number;
+  upload_status?: string;
+  detection_confidence?: number | null;
+  file_size_bytes?: number;
+  total_lines?: number;
+  sha256?: string;
+  is_large_file?: boolean;
+  full_editor_allowed?: boolean;
+}
+
+export interface Fda510kReportSelection {
+  sbom_id: number;
+  findings_analysis_run_id?: number | null;
+  lifecycle_analysis_run_id?: number | null;
+}
+
+export interface Fda510kReportMetadata {
+  device_name: string;
+  device_model_catalog_number?: string | null;
+  manufacturer_sponsor: string;
+  submission_type?: string | null;
+  submission_number?: string | null;
+  product_code_regulation_number?: string | null;
+  device_software_version: string;
+  top_level_primary_component?: string | null;
+  author_of_sbom_data: string;
+  sbom_version?: string | null;
+  sbom_formats_for_submission?: string | null;
+  sbom_generation_tool_and_version?: string | null;
+  primary_data_source?: string | null;
+  prepared_by: string;
+  date_prepared?: string | null;
+  reviewed_approved_by?: string | null;
+  date_approved?: string | null;
+}
+
+export interface Fda510kReportExportRequest {
+  selections: Fda510kReportSelection[];
+  metadata: Fda510kReportMetadata;
+}
+
+export interface Fda510kReportBlocker {
+  sbom_id: number;
+  sbom_name: string;
+  analysis_type: 'findings' | 'lifecycle' | string;
+  status: string;
+}
+
+export interface Fda510kIncompleteAnalysisDetail {
+  code: 'fda_510k_report_incomplete_analysis';
+  message: string;
+  blockers: Fda510kReportBlocker[];
+}
+
+export interface ValidationErrorEntry {
+  code: string;
+  severity: 'error' | 'warning' | 'info';
+  stage: string;
+  stage_number?: number;
+  path?: string | null;
+  json_pointer?: string | null;
+  xpath?: string | null;
+  line?: number | null;
+  column?: number | null;
+  message: string;
+  remediation?: string | null;
+  spec_reference: string | null;
+  can_ai_fix?: boolean;
+}
+
+export interface ValidationReport {
+  sbom_id: number;
+  filename: string;
+  status: SbomValidationStatus;
+  failed_stage: string | null;
+  error_count: number;
+  warning_count: number;
+  info_count: number;
+  entries: ValidationErrorEntry[];
+  validated_at: string | null;
+  spec_detected: string | null;
+  spec_version_detected: string | null;
+  severity_summary: Record<string, number>;
+  stage_summary: Record<string, number>;
+  truncated: boolean;
+  session_id?: string | null;
+  workspace_id?: string | null;
+  validation_session_id?: string | null;
+  repair_workspace_url?: string | null;
+  validation_status?: ValidationStatus | string | null;
+  can_edit?: boolean;
+}
+
+/** Body of a 4xx response from POST /api/sboms when validation fails. */
+export interface SbomValidationFailureDetail {
+  code: 'sbom_validation_failed';
+  status?: 'validation_failed' | SbomValidationStatus;
+  message: string;
+  sbom_id: number | null;
+  workspace_id?: string | null;
+  session_id?: string | null;
+  validation_session_id?: string | null;
+  repair_workspace_url?: string | null;
+  file_size_bytes?: number | null;
+  sha256?: string | null;
+  can_edit?: boolean;
+  can_ai_fix?: boolean;
+  reason?: string | null;
+  failed_stage: string | null;
+  error_count: number;
+  warning_count: number;
+  entries: ValidationErrorEntry[];
+  truncated: boolean;
+  error_report?: ValidationRepairReport;
+}
+
+export interface ValidationRepairReport {
+  entries: ValidationErrorEntry[];
+  truncated: boolean;
+  failed_stage: string | null;
+  error_count: number;
+  warning_count: number;
+  info_count: number;
+  http_status?: number;
+  status: 'failed' | 'passed';
+}
+
+export interface ValidationRepairSession {
+  id: string;
+  workspace_id?: string;
+  validation_session_id?: string;
+  project_id: number | null;
+  user_id: string | null;
+  original_filename: string | null;
+  sbom_name: string | null;
+  sbom_type: number | null;
+  detected_format: string | null;
+  detected_version: string | null;
+  detected_spec_version?: string | null;
+  detection_confidence?: number | null;
+  detection_evidence?: { evidence?: string[]; warnings?: string[] } | string[] | null;
+  storage_backend?: string | null;
+  content_type?: string | null;
+  file_size_bytes?: number | null;
+  sha256?: string | null;
+  original_size_bytes?: number | null;
+  original_sha256?: string | null;
+  stored_size_bytes?: number | null;
+  stored_sha256?: string | null;
+  total_lines?: number | null;
+  is_large_file?: boolean;
+  full_editor_allowed?: boolean;
+  current_content: string;
+  content_inline_truncated?: boolean;
+  validation_status: ValidationRepairStatus;
+  latest_error_report: ValidationRepairReport;
+  validation_errors?: ValidationErrorEntry[];
+  validation_warnings?: ValidationErrorEntry[];
+  stage_results?: ValidationRepairReport;
+  can_edit: boolean;
+  can_ai_fix: boolean;
+  security_blocked_reason: string | null;
+  created_at: string;
+  updated_at: string;
+  expires_at: string;
+  imported_sbom_id: number | null;
+  repair_workspace_url?: string;
+}
+
+export interface ValidationRepairPatch {
+  target: string;
+  operation: 'add' | 'replace' | 'remove';
+  before?: unknown;
+  after?: unknown;
+  reason: string;
+  validation_error_codes: string[];
+}
+
+export interface AiRepairSuggestion {
+  summary: string;
+  risk: 'low' | 'medium' | 'high';
+  patches: ValidationRepairPatch[];
+  requires_user_review: boolean;
+}
+
+export interface ValidationRepairEvent {
+  id: number;
+  session_id: string;
+  event_type: 'created' | 'manual_edit' | 'ai_suggestion_generated' | 'patch_applied' | 'validation_run' | 'imported' | string;
+  actor_user_id: string | null;
+  timestamp: string;
+  summary: string | null;
+  before_hash: string | null;
+  after_hash: string | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface ValidationSessionContentChunk {
+  offset: number;
+  limit: number;
+  total_size: number;
+  content: string;
+  eof: boolean;
+  sha256: string;
+}
+
+export interface ValidationSessionContentLines {
+  start_line: number;
+  line_count: number;
+  total_lines: number;
+  lines: string[];
+  eof: boolean;
+}
+
+export interface ValidationSessionSearchResponse {
+  query: string;
+  source: 'original' | 'repair_draft' | 'repair';
+  limit: number;
+  matches: Array<{ line_number: number; column: number; preview: string }>;
+  truncated: boolean;
+}
+
+export interface LineRepairPatch {
+  operation: 'replace_lines' | 'insert_before_line' | 'delete_lines';
+  start_line: number;
+  end_line?: number;
+  replacement_text?: string;
+}
+
+export type ValidationSession = ValidationRepairSession;
+export type ValidationSessionEvent = ValidationRepairEvent;
+export type ValidationErrorReport = ValidationRepairReport;
+export type AiPatch = ValidationRepairPatch;
+export type AiFixSuggestion = AiRepairSuggestion;
+
+export interface AiFixSuggestionRequest {
+  user_instruction?: string | null;
+}
+
+export interface ApplyPatchRequest {
+  patches: AiPatch[];
+}
+
+export type ApplyPatchResponse = ValidationSession;
+export type ValidationSessionImportResponse = SBOMSource;
+
+export interface SBOMComponent {
+  id: number;
+  sbom_id: number;
+  bom_ref?: string | null;
+  name: string;
+  version: string | null;
+  cpe: string | null;
+  purl: string | null;
+  component_type: string | null;
+  component_group?: string | null;
+  supplier?: string | null;
+  scope: string | null;
+  ecosystem?: string | null;
+  license?: string | null;
+  hashes?: string | null;
+  lifecycle_status?: string | null;
+  eos_date?: string | null;
+  eol_date?: string | null;
+  eof_date?: string | null;
+  eol_eos_date?: string | null;
+  eol_eos_status?: 'expired' | 'less_than_3_months' | 'more_than_6_months' | 'unknown' | string | null;
+  eol_eos_status_label?: string | null;
+  is_deprecated?: boolean | null;
+  deprecated?: boolean | null;
+  unsupported?: boolean | null;
+  maintenance_status?: string | null;
+  latest_version?: string | null;
+  latest_supported_version?: string | null;
+  recommended_version?: string | null;
+  lifecycle_recommendation?: string | null;
+  lifecycle_source?: string | null;
+  lifecycle_provider?: string | null;
+  lifecycle_source_url?: string | null;
+  lifecycle_confidence?: string | null;
+  lifecycle_checked_at?: string | null;
+  lifecycle_evidence_json?: Record<string, unknown> | null;
+  lifecycle_is_stale?: boolean | null;
+  lifecycle_manual_override?: boolean | null;
+  original_name?: string | null;
+  normalized_name?: string | null;
+  original_version?: string | null;
+  normalized_version?: string | null;
+  normalized_ecosystem?: string | null;
+  original_purl?: string | null;
+  normalized_purl?: string | null;
+  primary_cpe?: string | null;
+  normalized_cpes?: string[] | null;
+  normalized_supplier?: string | null;
+  normalized_package_key?: string | null;
+  canonical_identity_confidence?: string | null;
+  normalized_component_key?: string | null;
+  dedupe_canonical_id?: string | null;
+  dedupe_group_id?: string | null;
+  is_duplicate?: boolean | null;
+  duplicate_of_component_id?: number | null;
+  dedupe_reason?: string | null;
+  dedupe_confidence?: string | null;
+  normalization_notes_json?: string[] | null;
+  dedupe_evidence_json?: Record<string, unknown> | null;
+  canonical_component_name?: string | null;
+  canonical_component_version?: string | null;
+  duplicate_reason?: string | null;
+  created_on: string | null;
+}
+
+export interface SbomComponentListResponse {
+  items: SBOMComponent[];
+  total_count: number;
+  unique_count: number;
+  duplicate_count: number;
+  include_duplicates: boolean;
+  page: number;
+  page_size: number;
+}
+
+export interface GetSbomComponentsOptions {
+  includeDuplicates?: boolean;
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  sortBy?: 'name' | 'version' | 'component_type' | 'license' | 'lifecycle_status';
+  sortOrder?: 'asc' | 'desc';
+  signal?: AbortSignal;
+}
+
+export type LifecycleStatus =
+  | 'Supported'
+  | 'EOL'
+  | 'EOS'
+  | 'EOF'
+  | 'Deprecated'
+  | 'Unsupported'
+  | 'EOL Soon'
+  | 'Possibly Unmaintained'
+  | 'Unknown';
+
+export interface LifecycleSummaryComponent {
+  id: number;
+  name: string;
+  version: string | null;
+  ecosystem?: string | null;
+  lifecycle_status: LifecycleStatus | string;
+  eos_date?: string | null;
+  eol_date?: string | null;
+  eof_date?: string | null;
+  source_name?: string | null;
+  source_url?: string | null;
+  confidence?: string | null;
+  latest_version?: string | null;
+  recommended_version?: string | null;
+  recommendation?: string | null;
+  is_stale?: boolean;
+  manual_override?: boolean;
+}
+
+export interface DashboardLifecycle {
+  total_components: number;
+  supported_count: number;
+  eol_count: number;
+  eos_count: number;
+  eof_count: number;
+  deprecated_count: number;
+  unsupported_count: number;
+  unknown_count: number;
+  eol_soon_count: number;
+  possibly_unmaintained_count?: number;
+  stale_lifecycle_count: number;
+  stale_count?: number;
+  top_risky_components: LifecycleSummaryComponent[];
+  recommended_upgrades: LifecycleSummaryComponent[];
+  eol_components: number;
+  eos_upcoming: number;
+  unsupported: number;
+}
+
+export interface LifecycleProviderConfig {
+  provider_key: string;
+  display_name: string;
+  provider_type: string;
+  enabled: boolean;
+  priority: number;
+  base_url: string | null;
+  feed_urls: string[];
+  config: Record<string, unknown>;
+  timeout_seconds: number;
+  max_retries: number;
+  circuit_breaker_enabled: boolean;
+  cache_ttl: {
+    known_days: number | null;
+    unknown_hours: number | null;
+    failure_minutes: number | null;
+    deprecated_days: number | null;
+  };
+  health_status: 'healthy' | 'degraded' | 'disabled' | 'unknown';
+  last_success_at: string | null;
+  last_failure_at: string | null;
+  last_failure_message: string | null;
+  has_secret: boolean;
+  secret_preview: string | null;
+  updated_at: string;
+}
+
+export interface LifecycleProviderUpdatePayload {
+  enabled?: boolean;
+  priority?: number;
+  base_url?: string | null;
+  feed_urls?: string[];
+  config?: Record<string, unknown>;
+  timeout_seconds?: number;
+  max_retries?: number;
+  circuit_breaker_enabled?: boolean;
+  cache_ttl_known_days?: number | null;
+  cache_ttl_unknown_hours?: number | null;
+  cache_ttl_failure_minutes?: number | null;
+  cache_ttl_deprecated_days?: number | null;
+}
+
+export interface LifecycleProviderTestResult {
+  success: boolean;
+  status: string;
+  latency_ms: number;
+  message: string;
+  sample_result?: Record<string, unknown> | null;
+  checked_at: string;
+}
+
+export interface LifecycleProviderSyncResult {
+  job_id: string | null;
+  status: string;
+  message: string;
+  triggered_at: string;
+}
+
+export interface LifecycleProviderSecretResult {
+  provider_key: string;
+  secret_name: string;
+  value_preview: string | null;
+  updated_at: string;
+}
+
+export interface LifecycleVendorRecord {
+  id: number;
+  vendor_name: string;
+  product_name: string;
+  product_aliases: string[];
+  ecosystem: string | null;
+  version_pattern: string | null;
+  version_start: string | null;
+  version_end: string | null;
+  lifecycle_status: LifecycleStatus | string;
+  maintenance_status: string | null;
+  eol_date: string | null;
+  eos_date: string | null;
+  eof_date: string | null;
+  deprecated: boolean;
+  unsupported: boolean;
+  latest_supported_version: string | null;
+  recommended_version: string | null;
+  evidence_url: string | null;
+  evidence: Record<string, unknown>;
+  confidence: string;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LifecycleVendorRecordPayload {
+  vendor_name?: string;
+  product_name?: string;
+  product_aliases?: string[];
+  ecosystem?: string | null;
+  version_pattern?: string | null;
+  version_start?: string | null;
+  version_end?: string | null;
+  lifecycle_status?: string;
+  maintenance_status?: string | null;
+  eol_date?: string | null;
+  eos_date?: string | null;
+  eof_date?: string | null;
+  deprecated?: boolean;
+  unsupported?: boolean;
+  latest_supported_version?: string | null;
+  recommended_version?: string | null;
+  evidence_url?: string | null;
+  evidence?: Record<string, unknown>;
+  confidence?: string;
+  enabled?: boolean;
+}
+
+export interface LifecycleVendorRecordListResponse {
+  items: LifecycleVendorRecord[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export type VexStatus = 'affected' | 'not_affected' | 'fixed' | 'under_investigation' | 'unknown';
+
+export interface VexStatement {
+  id: number;
+  vex_document_id?: number | null;
+  sbom_id: number;
+  component_id?: number | null;
+  component_name?: string | null;
+  component_version?: string | null;
+  vulnerability_id: string;
+  cve_id?: string | null;
+  status: VexStatus | string;
+  justification?: string | null;
+  impact_statement?: string | null;
+  action_statement?: string | null;
+  fixed_version?: string | null;
+  mitigation?: string | null;
+  source_name?: string | null;
+  source_url?: string | null;
+  confidence?: string | null;
+  evidence_json?: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface VexListResponse {
+  sbom_id: number;
+  statements: VexStatement[];
+}
+
+export interface VexImportResponse {
+  document_id: number;
+  sbom_id: number;
+  statements_imported: number;
+  matched_statements?: number;
+  unmatched_statements?: number;
+  format?: string | null;
+  validation_status: string;
+}
+
+export interface VexOverridePayload {
+  status: VexStatus | string;
+  justification?: string | null;
+  impact_statement?: string | null;
+  action_statement?: string | null;
+  fixed_version?: string | null;
+  mitigation?: string | null;
+  evidence_url?: string | null;
+  reason: string;
+  updated_by?: string | null;
+}
+
+export interface VexOverrideAuditEntry {
+  id: number;
+  old_value: Record<string, unknown> | null;
+  new_value: Record<string, unknown> | null;
+  reason: string;
+  evidence_url?: string | null;
+  changed_by?: string | null;
+  changed_at: string;
+}
+
+export interface VexOverrideHistoryResponse {
+  component_id: number;
+  vulnerability_id: string;
+  history: VexOverrideAuditEntry[];
+}
+
+export interface VexDiscoveryResponse {
+  sbom_id: number;
+  discovered_documents: number;
+  statements_imported: number;
+  matched_statements: number;
+  unmatched_statements: number;
+  errors: Array<{ provider?: string; url?: string; error: string }>;
+}
+
+export interface DashboardVex {
+  affected_count: number;
+  not_affected_count: number;
+  fixed_count: number;
+  under_investigation_count: number;
+  unknown_count: number;
+  vulnerabilities_reduced_by_vex: number;
+  vulnerabilities_requiring_action: number;
+  top_affected_components: VexStatement[];
+}
+
+export interface LifecycleReport {
+  sbom_id: number;
+  sbom_name: string;
+  generated_at: string;
+  summary: DashboardLifecycle;
+  components: LifecycleSummaryComponent[];
+}
+
+export interface LifecycleRefreshSummary {
+  sbom_id: number;
+  total_components: number;
+  unique_identities: number;
+  cache_hits: number;
+  provider_lookups: number;
+  updated_components: number;
+  unknown_count: number;
+  eol_count: number;
+  eos_count: number;
+  deprecated_count: number;
+  provider_errors: string[];
+  components_enriched: number;
+  stale_components: number;
+}
+
+export interface LifecycleProviderSource {
+  name: string;
+  priority: number;
+  enabled: boolean;
+  status: 'healthy' | 'degraded';
+  last_success?: string | null;
+  last_failure?: string | null;
+  consecutive_failures: number;
+  circuit_open: boolean;
+  last_error?: string | null;
+}
+
+export interface LifecycleProviderStatus {
+  overall_status: 'healthy' | 'degraded';
+  degraded_count: number;
+  providers: LifecycleProviderSource[];
+}
+
+export interface LifecycleOverridePayload {
+  lifecycle_status: LifecycleStatus | string;
+  eos_date?: string | null;
+  eol_date?: string | null;
+  eof_date?: string | null;
+  deprecated?: boolean | null;
+  is_deprecated?: boolean | null;
+  unsupported?: boolean | null;
+  maintenance_status?: string | null;
+  latest_version?: string | null;
+  latest_supported_version?: string | null;
+  recommended_version?: string | null;
+  recommendation?: string | null;
+  evidence_url?: string | null;
+  reason?: string | null;
+  updated_by?: string | null;
+}
+
+export type RemediationStatus = 'Open' | 'In Progress' | 'Fixed' | 'Accepted Risk' | 'Closed';
+
+export interface VulnerabilityRemediation {
+  id: number;
+  project_id: number;
+  vuln_id: string;
+  component_name: string | null;
+  component_version: string | null;
+  fixed_version: string | null;
+  status: RemediationStatus | string;
+  owner: string | null;
+  due_date: string | null;
+  resolution_date: string | null;
+  fix_notes: string | null;
+  created_on: string | null;
+  updated_on: string | null;
+}
+
+export interface AnalysisRun {
+  id: number;
+  sbom_id: number | null;
+  sbom_name?: string | null;
+  project_id: number | null;
+  product_id?: number | null;
+  product_name?: string | null;
+  // ADR-0001: OK / FINDINGS are canonical. PASS / FAIL accepted as legacy
+  // aliases during the deprecation window — see docs/terminology.md.
+  run_status:
+    | 'OK'
+    | 'FINDINGS'
+    | 'PARTIAL'
+    | 'ERROR'
+    | 'INTERRUPTED'
+    | 'RUNNING'
+    | 'PENDING'
+    | 'NO_DATA'
+    | 'PASS' // legacy alias for OK
+    | 'FAIL'; // legacy alias for FINDINGS
+  source: string | null;
+  trigger_source?: 'manual' | 'upload_auto' | 'schedule' | 'api' | 'unknown' | string | null;
+  total_components: number | null;
+  components_with_cpe: number | null;
+  total_findings: number | null;
+  critical_count: number | null;
+  high_count: number | null;
+  medium_count: number | null;
+  low_count: number | null;
+  unknown_count: number | null;
+  query_error_count: number | null;
+  raw_report?: string | null;
+  source_summary?: SourceQuerySummary[] | null;
+  duration_ms: number | null;       // milliseconds (backend field name)
+  started_on: string | null;
+  completed_on: string | null;
+  error_message: string | null;
+  metrics?: {
+    raw_observation_count: number;
+    total_findings: number;
+    unique_vulnerabilities: number;
+    ai_fix_eligible_findings: number;
+    severity_counts: {
+      critical: number;
+      high: number;
+      medium: number;
+      low: number;
+      unknown: number;
+    };
+  } | null;
+}
+
+export interface SourceQuerySummary {
+  source: string;
+  queried: number;
+  matched: number;
+  no_match: number;
+  skipped: number;
+  errors: number;
+  status?: string | null;
+  reason?: string | null;
+}
+
+/**
+ * NVD version-range match verdict (roadmap #1). Populated when the
+ * backend flag NVD_VERSION_RANGE_FILTER_ENABLED is on; null on every
+ * pre-filter row and every row produced by a flag-off scan. Only the
+ * five values that survive the filter's drop step ever reach the UI —
+ * `out_of_range` / `exact_version_mismatch` drop the finding entirely.
+ *
+ * Closed literal after PR-C resolved the audit's column-name collision:
+ * roadmap #6's source-attribution values landed on the separate
+ * ``match_strategy`` column, not here. PR-E tightens the type
+ * accordingly — adding a sixth UI-visible reason now requires a
+ * deliberate type edit, which the filter UI and the badge mapping
+ * (see Badge.tsx::MATCH_REASON_DETAIL) need to follow.
+ */
+export type MatchReason =
+  | 'matched'
+  | 'version_unparseable'
+  | 'and_node_ambiguous'
+  | 'ecosystem_unsupported'
+  | 'no_configurations';
+
+/**
+ * Search strategy that produced a finding (roadmap #6). Five spec
+ * values; ``cpe_name`` / ``purl_direct`` / ``ghsa_alias`` are the only
+ * three reachable from a live emit path today, but the type carries
+ * all five so re-enabling the keyword/virtualMatch paths needs no
+ * type churn. The strategy filter in FindingFilterPanel renders only
+ * values actually present in the loaded findings (see PR-E note).
+ */
+export type MatchStrategy =
+  | 'cpe_name'
+  | 'virtual_match_string'
+  | 'keyword_search'
+  | 'purl_direct'
+  | 'ghsa_alias';
+
+export interface AnalysisFinding {
+  id: number;
+  analysis_run_id: number;          // backend field name
+  component_id?: number | null;
+  vuln_id: string | null;
+  source: string | null;            // e.g. "NVD", "OSV", "NVD,OSV"
+  title: string | null;
+  description: string | null;
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'UNKNOWN' | null;
+  score: number | null;             // backend field name (not cvss_score)
+  vector: string | null;
+  cpe: string | null;
+  component_name: string | null;
+  component_version: string | null;
+  published_on: string | null;
+  reference_url: string | null;
+  aliases: string | null;           // JSON string e.g. '["CVE-2022-31090"]'
+  attack_vector: string | null;     // e.g. "NETWORK", "LOCAL"
+  fixed_versions: string | null;    // JSON string e.g. '["1.2.3"]'
+  cwe?: string | null;              // comma-separated, e.g. "CWE-79,CWE-89"
+  cvss_version?: string | null;     // e.g. "3.1", "4.0"
+  /** Roadmap #1 — see MatchReason. Optional; null on pre-filter rows. */
+  match_reason?: MatchReason | null;
+  /** Roadmap #1 — human-readable affected range, e.g. ">= 2.0.0, < 2.17.0". */
+  matched_range?: string | null;
+  /** Roadmap #6 — which search strategy produced this finding. */
+  match_strategy?: MatchStrategy | null;
+  /** Roadmap #3 — token-overlap confidence post strategy-floor, [0.0, 1.0]. */
+  match_confidence?: number | null;
+  /** Lifecycle-management remediation record, when one has been saved. */
+  remediation?: VulnerabilityRemediation | null;
+}
+
+/**
+ * Findings enriched with per-CVE KEV, EPSS, and composite risk score.
+ * Returned by GET /api/runs/{id}/findings-enriched.
+ */
+export interface EnrichedFinding extends AnalysisFinding {
+  is_kev?: boolean;
+  in_kev: boolean;
+  kev_date_added?: string | null;
+  kev_due_date?: string | null;
+  required_action?: string | null;
+  vendor_project?: string | null;
+  product?: string | null;
+  ransomware_status?: string | null;
+  /** Compatibility alias used by some KEV payloads. */
+  known_ransomware_campaign_use?: string | null;
+  notes?: string | null;
+  /** EPSS probability of exploitation (0..1). 0 = not in EPSS catalog. */
+  epss: number;
+  /** Percentile rank within EPSS catalog (0..1), null when uncached. */
+  epss_percentile: number | null;
+  /** Composite finding score: cvss * (1 + 5*epss) * (kev ? 2 : 1). 0..120. */
+  risk_score: number;
+  /** All CVE aliases discovered on the finding (vuln_id + parsed aliases). */
+  cve_aliases: string[];
+}
+
+// CISA Known Exploited Vulnerabilities catalog
+export interface KevVulnerability {
+  cve_id: string;
+  vendor_project: string | null;
+  product: string | null;
+  vulnerability_name: string | null;
+  date_added: string | null;
+  short_description: string | null;
+  required_action: string | null;
+  due_date: string | null;
+  known_ransomware_campaign_use: string | null;
+  notes: string | null;
+  cwes: string[];
+  catalog_version: string | null;
+  catalog_date_released: string | null;
+  refreshed_at: string;
+  first_seen_at: string | null;
+  updated_at: string | null;
+}
+
+export type KevRansomwareFilter = 'known' | 'not-known';
+
+export type KevSortField =
+  | 'cve_id'
+  | 'vendor_project'
+  | 'product'
+  | 'vulnerability_name'
+  | 'date_added'
+  | 'due_date'
+  | 'known_ransomware_campaign_use'
+  | 'catalog_version'
+  | 'updated_at';
+
+export type KevSortOrder = 'asc' | 'desc';
+
+export interface KevListParams {
+  q?: string;
+  vendor?: string;
+  product?: string;
+  ransomware?: KevRansomwareFilter;
+  date_added_from?: string;
+  date_added_to?: string;
+  due_date_from?: string;
+  due_date_to?: string;
+  catalog_version?: string;
+  cwe?: string;
+  sort_by?: KevSortField;
+  sort_order?: KevSortOrder;
+  limit?: number;
+  offset?: number;
+}
+
+export interface KevListResponse {
+  total: number;
+  limit: number;
+  offset: number;
+  items: KevVulnerability[];
+}
+
+export interface KevFilterOptions {
+  vendors: string[];
+  products: string[];
+  catalog_versions: string[];
+  cwes: string[];
+  date_added_min: string | null;
+  date_added_max: string | null;
+}
+
+export interface KevSyncResult {
+  ok: boolean;
+  catalog_version: string | null;
+  catalog_date_released: string | null;
+  total_in_feed: number;
+  filtered_since: string | null;
+  matched_after_filter: number;
+  upserted: number;
+  duration_seconds: number;
+}
+
+export interface DashboardStats {
+  // ADR-0001 / docs/terminology.md — canonical fields:
+  total_active_projects: number;
+  total_sboms: number;
+  /** Distinct CVE-equivalent identifiers in scope (latest successful run per SBOM). */
+  total_distinct_vulnerabilities: number;
+  /** Finding rows in scope (one CVE × N components × latest run = N findings). */
+  total_findings: number;
+  // Legacy aliases (one-release deprecation window). Older bundles keyed off
+  // these names. Kept so optional chaining at the call-site keeps working.
+  total_projects?: number;
+  total_vulnerabilities?: number;
+}
+
+export interface HealthResponse {
+  status: string;
+  nvd_mirror?: {
+    available?: boolean;
+    enabled?: boolean;
+    last_success_at?: string | null;
+    watermark?: string | null;
+    stale?: boolean;
+    error?: string;
+  };
+}
+
+/**
+ * Six possible posture framings, computed server-side and returned on
+ * `/dashboard/posture`. The frontend never derives this — it just renders
+ * the matching copy from `headlineCopy.ts`. See `docs/dashboard-redesign.md` §2.
+ */
+export type HeadlineState =
+  | 'no_data'
+  | 'clean'
+  | 'kev_present'
+  | 'criticals_no_kev'
+  | 'high_only'
+  | 'low_volume';
+
+/** Adaptive primary CTA — server-decided from the same payload. */
+export type PrimaryAction =
+  | 'upload'
+  | 'review_kev'
+  | 'review_critical'
+  | 'view_top_sboms';
+
+/**
+ * Time-windowed delta with explicit first-period signaling.
+ *
+ * `is_first_period === true` means there is no prior comparison window
+ * — the FE must render "first scan this week" copy instead of `+N / −0`.
+ * See `docs/dashboard-metrics-spec.md` §3.7.
+ */
+export interface NetChange {
+  added: number;
+  resolved: number;
+  is_first_period: boolean;
+  window_days: number;
+}
+
+export interface DashboardPosture {
+  severity: SeverityData;
+  /**
+   * Finding-rows in scope that are KEV-listed (matches the run-detail badge
+   * "{N} KEV"). Membership = `vuln_id ∪ aliases ∩ kev_entry`. Same predicate
+   * the run-detail page uses; spec §3.3 invariant I3 locks them equal.
+   */
+  kev_count: number;
+  /** Distinct vulns in scope with a non-empty fixed_versions array. */
+  fix_available_count: number;
+  /** ISO timestamp of the most recent successful run, or null if none. */
+  last_successful_run_at: string | null;
+  total_sboms: number;
+  total_active_projects: number;
+
+  // Counter tiles (manager dashboard): "SBOMs Analysed" = distinct SBOMs with
+  // a completed run; "Applications Scanned" = distinct projects with one.
+  total_sboms_analysed?: number;
+  total_applications_scanned?: number;
+
+  // v2 additions — see `docs/dashboard-redesign.md` §9.3.
+  total_findings?: number;
+  distinct_vulnerabilities?: number;
+
+  // Phase-2 exploitability/quality aggregates (dashboard redesign). OPTIONAL
+  // and absent from the posture endpoint today — the FE feature-detects them:
+  // the "likely-exploited" tile and "needs-review" chip render only when the
+  // field is present, so they light up automatically when the backend
+  // aggregates land (no flag, no fake data). See the redesign plan.
+  /** Findings in scope whose CVE sits at/above the high-EPSS percentile
+   *  ({@link HIGH_EPSS_PERCENTILE}) — "likely to be exploited". */
+  high_epss_count?: number;
+  /** Findings in scope that are low-confidence / not-verified matches and
+   *  warrant manual review before action. */
+  needs_review_count?: number;
+  /** Canonical 7-day delta envelope; carries `is_first_period`. */
+  net_7day?: NetChange;
+  /** @deprecated use `net_7day.added` — kept for one-release back-compat. */
+  net_7day_added?: number;
+  /** @deprecated use `net_7day.resolved` — kept for one-release back-compat. */
+  net_7day_resolved?: number;
+  headline_state?: HeadlineState;
+  primary_action?: PrimaryAction;
+
+  /**
+   * Did the configured vulnerability sources actually assess the components in
+   * scope? Severity counts cannot answer this — a source that skipped every
+   * component reports zero findings exactly like one that found none.
+   *
+   * `complete` → zero findings is a clean result.
+   * `incomplete` → zero findings means "nothing reported", not "nothing there".
+   * `unknown` → no usable analysis information in scope.
+   *
+   * Optional: absent on API versions that predate the field. The FE never
+   * derives coverage on its own — when the backend supplies it, it is obeyed.
+   */
+  coverage_status?: CoverageStatus;
+  /** Sources responsible for the gap, e.g. `['OSV', 'NVD']`. Best-effort. */
+  coverage_gap_sources?: string[];
+  schema_version?: number;
+}
+
+/** Mirrors `CoverageStatus` in `app/schemas_dashboard.py`. */
+export type CoverageStatus = 'complete' | 'incomplete' | 'unknown';
+
+/**
+ * Cumulative "Your Analyzer, So Far" panel. Numbers only go up — by design.
+ * No deltas, no comparisons. See `docs/dashboard-redesign.md` §6.
+ */
+export interface LifetimeMetrics {
+  sboms_scanned_total: number;
+  projects_total: number;
+  /** Every run, all statuses (incl. ERROR/RUNNING/PENDING). Spec §3.6. */
+  runs_executed_total: number;
+  /** Successful-only run count. Optional during back-compat window. */
+  runs_completed_total?: number;
+  /**
+   * Distinct calendar dates with ≥1 successful run. Drives the trend chart's
+   * empty-state condition — `< 7` → show empty. Spec §3.6.
+   */
+  runs_distinct_dates?: number;
+  runs_executed_this_week: number;
+  /** Distinct (vuln_id, component_name, component_version) tuples ever surfaced. */
+  findings_surfaced_total: number;
+  /** Findings present in run N but absent from run N+1, summed across pairs. */
+  findings_resolved_total: number;
+  /** ISO 8601 timestamp string. `null` until the first successful run. */
+  first_run_at: string | null;
+  /** Days since the first successful run; 0 when none. */
+  days_monitoring: number;
+  schema_version?: number;
+}
+
+export interface RecentSbom {
+  id: number;
+  sbom_name: string;
+  created_on: string;
+}
+
+export interface ActivityData {
+  active_30d: number;
+  stale: number;
+}
+
+export interface SeverityData {
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  unknown: number;
+}
+
+export interface SBOMType {
+  id: number;
+  typename: string;
+}
+
+export interface ApiError {
+  detail: string;
+}
+
+export interface CreateProjectPayload {
+  project_name: string;
+  project_details?: string;
+  project_status: number;   // 1 = Active, 0 = Inactive
+  created_by?: string;
+}
+
+export interface UpdateProjectPayload {
+  project_name?: string;
+  project_details?: string;
+  project_status?: number;
+  modified_by?: string;
+}
+
+export interface CreateSBOMPayload {
+  sbom_name: string;
+  sbom_data: string;
+  sbom_file?: File;
+  sbom_type?: number;       // integer FK to SBOMType
+  projectid?: number;
+  project_id?: number;
+  product_id?: number;
+  sbom_version?: string;
+  created_by?: string;
+  product_version?: string;
+  productver?: string;
+}
+
+export interface UploadSBOMAcceptedResponse {
+  status: string;
+  workspace_id: string;
+  validation_session_id: string;
+  repair_workspace_url: string;
+  sbom_id: number;
+  sbom_name: string;
+  sbom_version?: string | null;
+  product_version?: string | null;
+  project_id: number | null;
+  product_id?: number | null;
+  product_name?: string | null;
+  project_name?: string | null;
+  spec: string;
+  spec_version: string;
+  detected_format?: string | null;
+  detected_spec_version?: string | null;
+  detection_confidence?: number | null;
+  detection_evidence?: Record<string, unknown> | unknown[] | null;
+  file_size_bytes: number;
+  total_lines: number;
+  sha256: string;
+  is_large_file: boolean;
+  full_editor_allowed: boolean;
+  components: number;
+  validation_errors?: ValidationErrorEntry[];
+  validation_warnings?: ValidationErrorEntry[];
+  warnings: ValidationErrorEntry[];
+  info: ValidationErrorEntry[];
+  enrichment_status?: string | null;
+  message?: string;
+}
+
+export interface UpdateSBOMPayload {
+  project_id?: number | null;
+  product_id?: number | null;
+  name?: string | null;
+  product_name?: string | null;
+  product_version?: string | null;
+  sbom_version?: string | null;
+  description?: string | null;
+  change_reason?: string | null;
+  sbom_name?: string;
+  productver?: string;
+  sbom_type?: number;
+  modified_by?: string;
+}
+
+export interface AnalyzeSBOMPayload {
+  sbom_id: number;
+  sbom_name: string;
+  nvd_api_key?: string;
+  github_token?: string;
+  osv_hydrate?: boolean;
+}
+
+export interface PDFReportPayload {
+  runId: number;
+  title?: string;
+  filename?: string;
+}
+
+export interface SBOMInfo {
+  sbom_id: number;
+  format: string;
+  spec_version: string | null;
+  component_count: number;
+  ecosystems: string[];
+  has_purls: boolean;
+  has_cpes: boolean;
+  components_preview: string[];
+}
+
+export interface SbomDocumentStats {
+  sbom_id: number;
+  sbom_name: string;
+  format: string | null;
+  spec_version: string | null;
+  file_size_bytes: number;
+  line_count: number;
+  parsed_component_count: number;
+  component_count: number;
+  component_total_rows: number;
+  duplicate_component_count: number;
+  dependency_count: number;
+  relationship_count: number;
+  content_sha256: string | null;
+  validation_status: string | null;
+}
+
+export interface SbomRawChunk {
+  sbom_id: number;
+  offset: number;
+  limit: number;
+  total_lines: number;
+  lines: string[];
+  preview: boolean;
+  truncated: boolean;
+}
+
+export interface SbomConversionResponse {
+  source_sbom_id: number;
+  converted_sbom_id: number;
+  source_format: string;
+  target_format: string;
+  status: string;
+  conversion_status: string;
+  enrichment_status: string;
+  message: string;
+  warnings: string[];
+  errors: string[];
+  conversion_report: Record<string, unknown>;
+}
+
+export interface SbomConversionReport {
+  source_format?: string | null;
+  target_format?: string | null;
+  converted_at?: string | null;
+  converted_by?: string | null;
+  source_sbom_id?: number | null;
+  converted_sbom_id?: number | null;
+  conversion_status?: string | null;
+  enrichment_status?: string | null;
+  package_count: number;
+  component_count: number;
+  mapped_relationships: number;
+  unmapped_relationships: number;
+  warnings: string[];
+  errors: string[];
+  unmapped_fields: string[];
+  component_mapping: Record<string, string>;
+  relationship_mapping: Array<Record<string, unknown>>;
+  conversion_report: Record<string, unknown>;
+}
+
+export interface RiskComponent {
+  name: string;
+  version: string;
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  // v2 scorer additions — present from /risk-summary v2 onward
+  kev_count?: number;
+  worst_finding_score?: number;
+  component_score: number;
+  highest_severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'UNKNOWN';
+}
+
+export interface RiskWorstFinding {
+  vuln_id: string | null;
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'UNKNOWN';
+  cvss: number;
+  epss: number;
+  in_kev: boolean;
+  score: number;
+  component_name: string;
+  component_version: string;
+}
+
+export interface RiskMethodology {
+  version: string;
+  name: string;
+  formula: string;
+  aggregation: string;
+  bands: Record<string, string>;
+  sources: Record<string, string>;
+}
+
+export interface SBOMRiskSummary {
+  sbom_id: number;
+  run_id?: number;
+  total_risk_score: number;
+  risk_band: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  components: RiskComponent[];
+  // v2 scorer additions
+  worst_finding?: RiskWorstFinding | null;
+  kev_count?: number;
+  epss_avg?: number;
+  methodology?: RiskMethodology;
+}
+
+export interface DashboardTrendPoint {
+  date: string;
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  /** v2 — first-class bucket. v1 silently dropped these. */
+  unknown?: number;
+  /** v2 — convenience aggregate; same as sum of severities. */
+  total?: number;
+  /** Manager trend overlays — present when the trend is requested with a
+   *  granularity. Distinct active findings with a fix; findings resolved in
+   *  the period. 0/absent on the legacy daily path. */
+  fix_available?: number;
+  resolved?: number;
+}
+
+export type TrendGranularity = 'day' | 'week' | 'month' | 'year';
+
+export interface VulnerabilityAgeBuckets {
+  le_30d: number;
+  d31_90: number;
+  d91_365: number;
+  gt_365: number;
+  unknown: number;
+}
+
+export type AgePeriod = 'all' | 'day' | 'week' | 'month' | 'year' | 'custom';
+
+export interface VulnerabilityAgeResponse {
+  buckets: VulnerabilityAgeBuckets;
+  total: number;
+  period: AgePeriod;
+  date_from: string | null;
+  date_to: string | null;
+  schema_version?: number;
+}
+
+export type TrendAnnotationKind =
+  | 'sbom_uploaded'
+  | 'remediation'
+  | 'kev_first_seen';
+
+export interface TrendAnnotation {
+  date: string;
+  kind: TrendAnnotationKind;
+  label: string;
+  /** Number of underlying events; lets the chart stack same-day markers. */
+  count?: number;
+}
+
+export interface DashboardTrend {
+  days: number;
+  /**
+   * v1 alias — same shape as `points`. Kept for one release so the legacy
+   * hero sparkline keeps working until the v1 dashboard is retired.
+   */
+  series: DashboardTrendPoint[];
+  /** v2 canonical points array. */
+  points?: DashboardTrendPoint[];
+  /** v2 — event markers (uploads, remediations) overlaid on the chart. */
+  annotations?: TrendAnnotation[];
+  /** v2 — 30-day average of `point.total`, for the dashed reference line. */
+  avg_total?: number;
+  /** v2 — earliest successful run date; lets the UI pick the empty state. */
+  earliest_run_date?: string | null;
+  /**
+   * Canonical run count — drives the empty-state copy ("{N} runs so far").
+   * Replaces the FE-side `populatedDays` heuristic that mis-counted runs as
+   * days when multiple runs happened on the same calendar date (Bug 2).
+   */
+  runs_total?: number;
+  /**
+   * Canonical distinct-dates-with-data count — drives the empty-state
+   * condition (`< 7` → show empty). Bug 6 lock.
+   */
+  runs_distinct_dates?: number;
+  /** Period bucketing of `points`: null on the legacy daily path, else
+   *  day/week/month/year (manager trend). */
+  granularity?: TrendGranularity | null;
+  schema_version?: number;
+}
+
+export interface CompareRunsResult {
+  run_a: { id: number; sbom_name: string | null; completed_on: string | null };
+  run_b: { id: number; sbom_name: string | null; completed_on: string | null };
+  new_findings: string[];
+  resolved_findings: string[];
+  common_findings: string[];
+  severity_delta: { critical: number; high: number; medium: number; low: number };
+}
+
+// ─── Periodic analysis schedules ─────────────────────────────────────────────
+export type ScheduleCadence =
+  | 'DAILY'
+  | 'WEEKLY'
+  | 'BIWEEKLY'
+  | 'MONTHLY'
+  | 'QUARTERLY'
+  | 'CUSTOM';
+
+export type ScheduleScope = 'PROJECT' | 'SBOM';
+
+export interface AnalysisSchedule {
+  id: number;
+  scope: ScheduleScope;
+  project_id: number | null;
+  sbom_id: number | null;
+  cadence: ScheduleCadence;
+  cron_expression: string | null;
+  day_of_week: number | null;   // 0=Mon..6=Sun
+  day_of_month: number | null;  // 1..28
+  hour_utc: number;             // 0..23
+  timezone: string;             // IANA, display only
+  enabled: boolean;
+  next_run_at: string | null;
+  last_run_at: string | null;
+  last_run_status: string | null;
+  last_run_id: number | null;
+  consecutive_failures: number;
+  min_gap_minutes: number;
+  created_on: string | null;
+  created_by: string | null;
+  modified_on: string | null;
+  modified_by: string | null;
+}
+
+export interface SbomScheduleResolved {
+  inherited: boolean;
+  schedule: AnalysisSchedule | null;
+}
+
+export interface ScheduleUpsertPayload {
+  cadence: ScheduleCadence;
+  cron_expression?: string | null;
+  day_of_week?: number | null;
+  day_of_month?: number | null;
+  hour_utc?: number;
+  timezone?: string;
+  enabled?: boolean;
+  min_gap_minutes?: number;
+  modified_by?: string;
+}
+
+export interface ConsolidatedAnalysisResult {
+  runId: number;
+  sbom_id?: number;
+  sbom_name?: string;
+  total_components?: number;
+  components_with_cpe?: number;
+  total_findings?: number;
+  critical_count?: number;
+  high_count?: number;
+  medium_count?: number;
+  low_count?: number;
+  unknown_count?: number;
+  status?: string;
+  duration_ms?: number;
+  [key: string]: unknown;
+}
+
+export type {
+  CveSeverity,
+  CveSourceName,
+  CveReferenceType,
+  CveResultStatus,
+  CveUnrecognizedIdEnvelope,
+  CveFixVersion,
+  CveReference,
+  CveExploitation,
+  CveDetail,
+  CveScanContext,
+  CveCurrentVersionStatus,
+  CveDetailWithContext,
+} from './cve';
+
+export type {
+  FindingsForecast,
+  ForecastHistoryPoint,
+  ForecastProjectionPoint,
+  VelocityAnomaly,
+  ExploitationOutlook,
+  ExploitationDriver,
+  RemediationSummary,
+  SlaOffender,
+  SlaSeverity,
+  RiskMapResponse,
+  RiskMapItem,
+  RiskMatrixResponse,
+  RiskMatrixPoint,
+  CopilotBriefing,
+  CopilotAnswer,
+} from './dashboardAdvanced';

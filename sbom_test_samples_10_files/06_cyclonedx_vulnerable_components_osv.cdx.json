@@ -1,0 +1,67 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "serialNumber": "urn:uuid:c4557a01-16e2-4bd6-ae03-92769ae54c4a",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-06-12T00:00:00Z",
+    "tools": {
+      "components": [
+        {
+          "type": "application",
+          "name": "SBOM Analyzer Test Generator",
+          "version": "1.0.0"
+        }
+      ]
+    },
+    "component": {
+      "type": "application",
+      "bom-ref": "vuln-demo-app",
+      "name": "vuln-demo-app",
+      "version": "1.0.0"
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "log4j-core",
+      "group": "org.apache.logging.log4j",
+      "name": "log4j-core",
+      "version": "2.14.1",
+      "purl": "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1"
+    },
+    {
+      "type": "library",
+      "bom-ref": "spring-core",
+      "group": "org.springframework",
+      "name": "spring-core",
+      "version": "5.3.17",
+      "purl": "pkg:maven/org.springframework/spring-core@5.3.17"
+    },
+    {
+      "type": "library",
+      "bom-ref": "minimist",
+      "name": "minimist",
+      "version": "0.0.8",
+      "purl": "pkg:npm/minimist@0.0.8"
+    },
+    {
+      "type": "library",
+      "bom-ref": "lodash-vuln",
+      "name": "lodash",
+      "version": "4.17.15",
+      "purl": "pkg:npm/lodash@4.17.15"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "vuln-demo-app",
+      "dependsOn": [
+        "log4j-core",
+        "spring-core",
+        "minimist",
+        "lodash-vuln"
+      ]
+    }
+  ]
+}

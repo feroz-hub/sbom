@@ -1,0 +1,124 @@
+               
+               
+┌─────────────┐
+│ Scan Status │
+└─────────────┘
+  Scanning 649 files tracked by git with 1074 Code rules:
+                                                                                                                        
+  Language      Rules   Files          Origin      Rules                                                                
+ ─────────────────────────────        ───────────────────                                                               
+  <multilang>      47     649          Community    1074                                                                
+  ts              163     330                                                                                           
+  python          243     295                                                                                           
+  json              4       8                                                                                           
+  yaml             35       1                                                                                           
+                                                                                                                        
+                
+                
+┌──────────────┐
+│ Scan Summary │
+└──────────────┘
+✅ Scan completed successfully.
+ • Findings: 11 (11 blocking)
+ • Rules run: 489
+ • Targets scanned: 649
+ • Parsed lines: ~99.9%
+ • Scan skipped: 
+   ◦ Matching --exclude patterns: 1
+ • Scan was limited to files tracked by git
+ • For a detailed list of skipped files and lines, run semgrep with the --verbose flag
+Ran 489 rules on 649 files: 11 findings.
+                    
+                    
+┌──────────────────┐
+│ 11 Code Findings │
+└──────────────────┘
+                                           
+    /Users/ferozebasha/sbom/app/analysis.py
+    ❯❱ python.lang.security.audit.logging.logger-credential-leak.python-logger-credential-disclosure
+          ❰❰ Blocking ❱❱
+          Detected a python logger call with a potential hardcoded secret "NVD client: api_key=%s,        
+          sleep=%.2fs, sequential, cpe_targets=%d" being logged. This may lead to secret credentials being
+          exposed. Make sure that the logger is not logging  sensitive information.                       
+          Details: https://sg.run/ydNx                                                                    
+                                                                                                          
+          2342┆ LOGGER.info(
+          2343┆     "NVD client: api_key=%s, sleep=%.2fs, sequential, cpe_targets=%d",
+          2344┆     bool(api_key),
+          2345┆     sleep_s,
+          2346┆     total,
+          2347┆ )
+                                       
+    /Users/ferozebasha/sbom/app/main.py
+   ❯❯❱ python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+          ❰❰ Blocking ❱❱
+          sqlalchemy.text passes the constructed SQL statement to the database mostly unchanged. This means  
+          that the usual SQL injection protections are not applied and this function is vulnerable to SQL    
+          injection if user input can reach here. Use normal SQLAlchemy operators (such as `or_()`, `and_()`,
+          etc.) to construct SQL.                                                                            
+          Details: https://sg.run/yP1O                                                                       
+                                                                                                             
+           99┆ existing = {row[1] for row in conn.execute(text(f"PRAGMA table_info({table_name})"))}
+            ⋮┆----------------------------------------
+          102┆ conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} TEXT"))
+            ⋮┆----------------------------------------
+          116┆ existing = {row[1] for row in conn.execute(text(f"PRAGMA table_info({table_name})"))}
+            ⋮┆----------------------------------------
+          122┆ conn.execute(text(ddl))
+            ⋮┆----------------------------------------
+          139┆ max_value = int(db.execute(text(f"SELECT COALESCE(MAX({column_name}), 0) FROM
+               {table_name}")).scalar() or 0)                                               
+            ⋮┆----------------------------------------
+          286┆ conn.execute(text(f"ALTER TABLE sbom_validation_sessions ADD COLUMN {column_name}
+               {column_type}"))                                                                 
+                                             
+    /Users/ferozebasha/sbom/app/rate_limit.py
+    ❯❱ python.flask.security.audit.directly-returned-format-string.directly-returned-format-string
+          ❰❰ Blocking ❱❱
+          Detected Flask route directly returning a formatted string. This is subject to cross-site scripting
+          if user input can reach the string. Consider using the template engine instead and rendering pages 
+          with 'render_template()'.                                                                          
+          Details: https://sg.run/Zv6o                                                                       
+                                                                                                             
+           48┆ return f"{host}|t:{th}"
+                                                             
+    /Users/ferozebasha/sbom/app/services/dashboard_metrics.py
+   ❯❯❱ python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+          ❰❰ Blocking ❱❱
+          sqlalchemy.text passes the constructed SQL statement to the database mostly unchanged. This means  
+          that the usual SQL injection protections are not applied and this function is vulnerable to SQL    
+          injection if user input can reach here. Use normal SQLAlchemy operators (such as `or_()`, `and_()`,
+          etc.) to construct SQL.                                                                            
+          Details: https://sg.run/yP1O                                                                       
+                                                                                                             
+          260┆ sql = text(
+          261┆     f"""
+          262┆     WITH ordered AS (
+          263┆         SELECT
+          264┆             id,
+          265┆             sbom_id,
+          266┆             started_on,
+          267┆             ROW_NUMBER() OVER (PARTITION BY sbom_id ORDER BY id) AS rn
+          268┆         FROM analysis_run
+          269┆         WHERE run_status IN ('OK','FINDINGS','PARTIAL')
+             [hid 9 additional lines, adjust with --max-lines-per-finding] 
+                                                                             
+    /Users/ferozebasha/sbom/app/services/lifecycle/provider_config_service.py
+    ❯❱ python.sqlalchemy.performance.performance-improvements.len-all-count
+          ❰❰ Blocking ❱❱
+          Using QUERY.count() instead of len(QUERY.all()) sends less data to the client since the SQLAlchemy
+          method is performed server-side.                                                                  
+          Details: https://sg.run/4y8g                                                                      
+                                                                                                            
+          658┆ total = len(db.execute(count_stmt).all())
+                                                           
+    /Users/ferozebasha/sbom/app/validation/stages/schema.py
+   ❯❯❱ python.lang.compatibility.python37.python37-compatibility-importlib2
+          ❰❰ Blocking ❱❱
+          Found 'importlib.resources', which is a module only available on Python 3.7+. This does not work in 
+          lower versions, and therefore is not backwards compatible. Use importlib_resources instead for older
+          Python versions.                                                                                    
+          Details: https://sg.run/eL3y                                                                        
+                                                                                                              
+           21┆ from importlib import resources
+

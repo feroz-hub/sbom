@@ -1,0 +1,103 @@
+# Component lifecycle alias mapping.
+# Maps common names to canonical names and provider-specific product slugs.
+aliases:
+  - alias: node
+    canonical_name: nodejs
+    provider_product_name: nodejs
+    ecosystem: npm
+    source: endoflife.date
+  - alias: node.js
+    canonical_name: nodejs
+    provider_product_name: nodejs
+    ecosystem: npm
+    source: endoflife.date
+  - alias: postgres
+    canonical_name: postgresql
+    provider_product_name: postgresql
+    ecosystem: generic
+    source: endoflife.date
+  - alias: postgresql
+    canonical_name: postgresql
+    provider_product_name: postgresql
+    ecosystem: generic
+    source: endoflife.date
+  - alias: ubuntu linux
+    canonical_name: ubuntu
+    provider_product_name: ubuntu
+    ecosystem: ubuntu
+    source: endoflife.date
+  - alias: ubuntu
+    canonical_name: ubuntu
+    provider_product_name: ubuntu
+    ecosystem: ubuntu
+    source: endoflife.date
+  - alias: dotnet
+    canonical_name: dotnet
+    provider_product_name: dotnet
+    ecosystem: nuget
+    source: endoflife.date
+  - alias: .net
+    canonical_name: dotnet
+    provider_product_name: dotnet
+    ecosystem: nuget
+    source: endoflife.date
+  - alias: aspnetcore
+    canonical_name: dotnet
+    provider_product_name: dotnet
+    ecosystem: nuget
+    source: endoflife.date
+  - alias: openjdk
+    canonical_name: java
+    provider_product_name: java
+    ecosystem: maven
+    source: endoflife.date
+  - alias: jdk
+    canonical_name: java
+    provider_product_name: java
+    ecosystem: maven
+    source: endoflife.date
+  - alias: java
+    canonical_name: java
+    provider_product_name: java
+    ecosystem: maven
+    source: endoflife.date
+  - alias: python
+    canonical_name: python
+    provider_product_name: python
+    ecosystem: pypi
+    source: endoflife.date
+  - alias: debian
+    canonical_name: debian
+    provider_product_name: debian
+    ecosystem: debian
+    source: endoflife.date
+  - alias: alpine
+    canonical_name: alpine
+    provider_product_name: alpine
+    ecosystem: alpine
+    source: endoflife.date
+  - alias: mysql
+    canonical_name: mysql
+    provider_product_name: mysql
+    ecosystem: generic
+    source: endoflife.date
+  - alias: angular
+    canonical_name: angular
+    provider_product_name: angular
+    ecosystem: npm
+    source: endoflife.date
+  - alias: django
+    canonical_name: django
+    provider_product_name: django
+    ecosystem: pypi
+    source: endoflife.date
+  - alias: k8s
+    canonical_name: kubernetes
+    provider_product_name: kubernetes
+    ecosystem: generic
+    source: endoflife.date
+  - alias: golang
+    canonical_name: go
+    provider_product_name: go
+    ecosystem: go
+    source: endoflife.date

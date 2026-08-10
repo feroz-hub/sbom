@@ -1,0 +1,615 @@
+'use client';
+
+import Link from 'next/link';
+import { usePathname, useSearchParams } from 'next/navigation';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import {
+  ChevronDown,
+  ChevronLeft,
+  Sparkles,
+  Star,
+  X,
+  type LucideIcon,
+} from 'lucide-react';
+import { cn, formatDate } from '@/lib/utils';
+import { useSidebar } from './SidebarContext';
+import { SidebarStatus } from './SidebarStatus';
+import { TenantSwitcher } from './TenantSwitcher';
+import { usePinned, unpin } from '@/lib/pinned';
+import { getRecentSboms, getRuns } from '@/lib/api';
+import { useAuth } from '@/hooks/useAuth';
+import { navigationItems, type NavItem, type SubNavItem } from '@/lib/navigation';
+
+function splitHref(href: string): { path: string; params: URLSearchParams } {
+  const [path, query = ''] = href.split('?');
+  return { path, params: new URLSearchParams(query) };
+}
+
+function isActiveHref(href: string, pathname: string, searchParams: URLSearchParams): boolean {
+  const { path, params } = splitHref(href);
+  if (path !== pathname) return false;
+  for (const [key, value] of params.entries()) {
+    if (searchParams.get(key) !== value) return false;
+  }
+  if (href === '/analysis?tab=runs') {
+    const tab = searchParams.get('tab');
+    return pathname === '/analysis' && (!tab || tab === 'runs');
+  }
+  return true;
+}
+
+function isActiveItem(item: NavItem, pathname: string): boolean {
+  if (item.href === '/') return pathname === '/';
+  if (item.href === '/analysis') {
+    return pathname.startsWith('/analysis');
+  }
+  // Settings is the parent for both /settings/* and the AI cost dashboard
+  // /admin/ai-usage — both are operator-side configuration surfaces.
+  if (item.href === '/settings') {
+    return pathname.startsWith('/settings') || pathname.startsWith('/admin/');
+  }
+  return pathname.startsWith(item.href);
+}
+
+export function Sidebar() {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const { collapsed, toggleCollapsed, mobileOpen, closeMobile } = useSidebar();
+  const { hasPermission } = useAuth();
+  const navItems = navigationItems
+    .filter((item) => !item.permission || hasPermission(item.permission))
+    .map((item) => ({
+      ...item,
+      children: item.children?.filter((child) => !child.permission || hasPermission(child.permission)),
+    }))
+    .filter((item) => !item.children || item.children.length > 0);
+
+  // Auto-close drawer on navigation (mobile only).
+  useEffect(() => {
+    closeMobile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
+
+  return (
+    <>
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/50 backdrop-blur-sm md:hidden dialog-scrim-in motion-reduce:animate-none"
+          onClick={closeMobile}
+          aria-hidden
+        />
+      )}
+
+      <aside
+        aria-label="Primary navigation"
+        className={cn(
+          'app-sidebar fixed left-0 top-0 z-40 flex h-screen flex-col sidebar-rail',
+          'border-r border-white/10 shadow-[4px_0_24px_rgba(0,0,0,0.12)] dark:border-white/10 dark:shadow-[4px_0_32px_rgba(0,0,0,0.45)]',
+          'transition-all duration-300 ease-in-out motion-reduce:transition-none',
+          'md:translate-x-0',
+          collapsed ? 'md:w-[68px] collapsed' : 'md:w-60',
+          'w-60',
+          mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
+        )}
+      >
+        {/* Brand bar — label slides + fades while the rail narrows; the logo
+            block stays put so nothing jumps (px-4 ≈ centered in the 64px rail). */}
+        <div className="flex shrink-0 items-center gap-3 px-4 py-4 sidebar-brand-bar">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/20 bg-white/10 shadow-inner">
+            <span className="text-xs font-bold leading-none tracking-tight text-white">HCL</span>
+          </div>
+          <div
+            className={cn(
+              'min-w-0 flex-1 overflow-hidden',
+              'transition-[max-width,opacity] duration-300 ease-in-out motion-reduce:transition-none',
+              collapsed ? 'max-w-full md:max-w-0 md:opacity-0' : 'max-w-full opacity-100',
+            )}
+          >
+            <p className="truncate text-sm font-semibold leading-tight text-white">SBOM Analyzer</p>
+            <p className="mt-0.5 truncate text-[11px] font-medium text-white/70">HCLTech Security</p>
+          </div>
+          <button
+            type="button"
+            onClick={closeMobile}
+            aria-label="Close navigation"
+            className={cn(
+              'rounded-lg p-2 text-sidebar-foreground transition-colors hover:bg-sidebar-hover md:hidden',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-cyan',
+            )}
+          >
+            <X className="h-5 w-5" aria-hidden />
+          </button>
+        </div>
+
+        {/* Tenant switcher — collapses with the sidebar */}
+        <div
+          className={cn(
+            'shrink-0 px-2 pb-2',
+            'transition-[max-height,opacity] duration-300 ease-in-out motion-reduce:transition-none',
+            collapsed ? 'max-h-0 opacity-0 md:max-h-0 md:opacity-0 overflow-hidden' : 'max-h-20 opacity-100',
+          )}
+        >
+          <TenantSwitcher />
+        </div>
+
+        {/* Scrollable middle: nav + pinned + recent */}
+        <div className="flex-1 overflow-y-auto">
+          <nav className="space-y-2 px-2 py-3" aria-label="Main">
+            {navItems.map((item) => (
+              <NavLink
+                key={`${item.href}-${item.label}`}
+                item={item}
+                pathname={pathname}
+                searchParams={searchParams}
+                collapsed={collapsed}
+              />
+            ))}
+          </nav>
+
+          {/* Pinned + Recent collapse smoothly via the grid-rows height trick
+              (display:none can't animate; 0fr → 1fr can). */}
+          <div
+            className={cn(
+              'grid transition-[grid-template-rows,opacity] duration-300 ease-in-out motion-reduce:transition-none',
+              collapsed
+                ? 'grid-rows-[1fr] md:grid-rows-[0fr] md:opacity-0'
+                : 'grid-rows-[1fr] opacity-100',
+            )}
+          >
+            <div className="min-h-0 overflow-hidden">
+              <PinnedSection />
+              <RecentSection />
+            </div>
+          </div>
+        </div>
+
+        {/* Footer: status + collapse toggle */}
+        <div className="hidden shrink-0 border-t border-white/15 px-2 py-3 md:block space-y-2">
+          {!collapsed && <SidebarStatus />}
+          {collapsed && <SidebarStatus compact />}
+
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-expanded={!collapsed}
+            className="sidebar-menu-item w-full"
+          >
+            {/* One chevron that rotates instead of two swapped icons — the
+                180° spin reads as the rail changing direction. */}
+            <ChevronLeft
+              className={cn(
+                'sidebar-menu-icon transition-transform duration-300 ease-in-out motion-reduce:transition-none',
+                collapsed && 'md:rotate-180',
+              )}
+              aria-hidden
+            />
+            <span
+              className={cn(
+                'sidebar-menu-label transition-[max-width,opacity,margin-left] duration-300 ease-in-out motion-reduce:transition-none',
+                collapsed
+                  ? 'ml-0 max-w-full opacity-100 md:max-w-0 md:opacity-0'
+                  : 'ml-0 max-w-full opacity-100',
+              )}
+            >
+              Collapse
+            </span>
+          </button>
+          {!collapsed && (
+            <p className="truncate px-3 text-[10px] text-sidebar-muted">© 2026 HCL Technologies</p>
+          )}
+        </div>
+      </aside>
+    </>
+  );
+}
+
+// ─── NavLink with nested children ────────────────────────────────────────────
+
+function NavLink({
+  item,
+  pathname,
+  searchParams,
+  collapsed,
+}: {
+  item: NavItem;
+  pathname: string;
+  searchParams: URLSearchParams;
+  collapsed: boolean;
+}) {
+  const isActive = isActiveItem(item, pathname);
+  const [expanded, setExpanded] = useState(isActive && !!item.children);
+  const [flyoutOpen, setFlyoutOpen] = useState(false);
+  const [flyoutTop, setFlyoutTop] = useState<number | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const flyoutId = `sidebar-flyout-${item.label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+
+  // Auto-expand when route enters this section.
+  useEffect(() => {
+    if (isActive && item.children) setExpanded(true);
+  }, [isActive, item.children]);
+
+  useEffect(() => {
+    if (!collapsed) setFlyoutOpen(false);
+  }, [collapsed]);
+
+  useEffect(() => {
+    if (!flyoutOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setFlyoutOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (triggerRef.current?.contains(target)) return;
+      const flyout = document.getElementById(flyoutId);
+      if (flyout?.contains(target)) return;
+      setFlyoutOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('pointerdown', onPointerDown);
+    };
+  }, [flyoutId, flyoutOpen]);
+
+  const Icon = item.icon;
+  const openCollapsedFlyout = () => {
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (rect) {
+      setFlyoutTop(Math.max(12, Math.min(rect.top, window.innerHeight - 220)));
+    }
+    setFlyoutOpen((open) => !open);
+  };
+
+  if (item.children && item.children.length > 0) {
+    return (
+      <div className="relative">
+        <button
+          ref={triggerRef}
+          type="button"
+          onClick={() => {
+            if (collapsed) {
+              openCollapsedFlyout();
+              return;
+            }
+            setExpanded((v) => !v);
+          }}
+          onMouseEnter={() => {
+            if (collapsed && !flyoutOpen) {
+              const rect = triggerRef.current?.getBoundingClientRect();
+              if (rect) setFlyoutTop(Math.max(12, Math.min(rect.top, window.innerHeight - 220)));
+            }
+          }}
+          aria-expanded={collapsed ? flyoutOpen : expanded}
+          aria-haspopup={collapsed ? 'menu' : undefined}
+          aria-controls={collapsed ? flyoutId : undefined}
+          aria-current={isActive && !expanded ? 'page' : undefined}
+          aria-label={collapsed ? item.label : undefined}
+          title={collapsed ? item.label : undefined}
+          className={cn(
+            'sidebar-menu-item w-full',
+            isActive && 'active',
+          )}
+        >
+          <Icon className="sidebar-menu-icon" aria-hidden />
+          <span
+            className={cn(
+              'sidebar-menu-label text-left',
+              'transition-[max-width,opacity,margin-left] duration-300 ease-in-out motion-reduce:transition-none',
+              collapsed
+                ? 'ml-0 max-w-full opacity-100 md:max-w-0 md:opacity-0'
+                : 'ml-0 max-w-full opacity-100',
+            )}
+          >
+            {item.label}
+          </span>
+          {!collapsed && (
+            <ChevronDown
+              className={cn(
+                'h-3.5 w-3.5 shrink-0 text-white/70 transition-transform duration-base',
+                expanded && 'rotate-180',
+              )}
+              aria-hidden
+            />
+          )}
+        </button>
+
+        {collapsed && flyoutOpen && (
+          <CollapsedNavFlyout
+            id={flyoutId}
+            item={item}
+            pathname={pathname}
+            searchParams={searchParams}
+            top={flyoutTop}
+            onClose={() => setFlyoutOpen(false)}
+          />
+        )}
+
+        {/* Sub-nav height animates via grid-rows so it folds with the rail
+            instead of popping in and out. */}
+        <div
+          className={cn(
+            'grid transition-[grid-template-rows,opacity,visibility] duration-300 ease-in-out motion-reduce:transition-none',
+            // `visibility` flips at the transition's end, so hidden links also
+            // drop out of the tab order once the fold-up finishes.
+            expanded && !collapsed
+              ? 'visible grid-rows-[1fr] opacity-100'
+              : 'invisible grid-rows-[0fr] opacity-0',
+            expanded &&
+              collapsed &&
+              'visible grid-rows-[1fr] opacity-100 md:invisible md:grid-rows-[0fr] md:opacity-0',
+          )}
+        >
+          <ul className="mt-0.5 ml-3 min-h-0 space-y-1.5 overflow-hidden border-l border-white/15 pl-3">
+            {item.children.map((child) => {
+              const childActive = isActiveHref(child.href, pathname, searchParams);
+              return (
+                <li key={child.href}>
+                  <Link
+                    href={child.href}
+                    aria-current={childActive ? 'page' : undefined}
+                    className={cn(
+                      'group flex items-center gap-2 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors duration-150',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-cyan',
+                      childActive
+                        ? 'bg-sidebar-hover text-sidebar-foreground font-semibold'
+                        : 'text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-foreground',
+                    )}
+                  >
+                    <span
+                      aria-hidden
+                      className={cn(
+                        'inline-block h-1 w-1 shrink-0 rounded-full',
+                        childActive ? 'bg-sidebar-accent' : 'bg-sidebar-muted',
+                      )}
+                    />
+                    {child.label}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <Link
+      href={item.href}
+      aria-current={isActive ? 'page' : undefined}
+      aria-label={collapsed ? item.label : undefined}
+      className={cn(
+        'sidebar-menu-item',
+        isActive && 'active',
+      )}
+    >
+      <Icon className="sidebar-menu-icon" aria-hidden />
+      <span
+        className={cn(
+          'sidebar-menu-label',
+          'transition-[max-width,opacity,margin-left] duration-300 ease-in-out motion-reduce:transition-none',
+          collapsed
+            ? 'ml-0 max-w-full opacity-100 md:max-w-0 md:opacity-0'
+            : 'ml-0 max-w-full opacity-100',
+        )}
+      >
+        {item.label}
+      </span>
+    </Link>
+  );
+}
+
+function CollapsedNavFlyout({
+  id,
+  item,
+  pathname,
+  searchParams,
+  top,
+  onClose,
+}: {
+  id: string;
+  item: NavItem;
+  pathname: string;
+  searchParams: URLSearchParams;
+  top: number | null;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      id={id}
+      role="menu"
+      aria-label={`${item.label} menu`}
+      className={cn(
+        'fixed left-[76px] z-[80] hidden min-w-52 rounded-xl border border-hcl-border bg-surface p-2 text-foreground shadow-elev-4 md:block',
+        'animate-in slide-in-from-right',
+      )}
+      style={{ top: top ?? 120 }}
+    >
+      <div className="px-3 pb-2 pt-1 text-xs font-semibold uppercase tracking-wide text-hcl-muted">
+        {item.label}
+      </div>
+      <ul className="space-y-1">
+        {item.children?.map((child) => {
+          const childActive = isActiveHref(child.href, pathname, searchParams);
+          return (
+            <li key={child.href}>
+              <Link
+                href={child.href}
+                role="menuitem"
+                aria-current={childActive ? 'page' : undefined}
+                onClick={onClose}
+                className={cn(
+                  'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/50',
+                  childActive
+                    ? 'bg-hcl-light text-hcl-navy dark:bg-hcl-blue/25 dark:text-foreground'
+                    : 'text-hcl-muted hover:bg-surface-muted hover:text-hcl-navy dark:hover:text-foreground',
+                )}
+              >
+                <span
+                  aria-hidden
+                  className={cn(
+                    'h-1.5 w-1.5 rounded-full',
+                    childActive ? 'bg-hcl-blue' : 'bg-hcl-muted/70',
+                  )}
+                />
+                {child.label}
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+function PinnedSection() {
+  const sboms = usePinned('sbom');
+  const runs = usePinned('run');
+  const all = [
+    ...sboms.items.map((i) => ({ ...i, kind: 'sbom' as const })),
+    ...runs.items.map((i) => ({ ...i, kind: 'run' as const })),
+  ].sort((a, b) => b.pinnedAt - a.pinnedAt);
+
+  if (all.length === 0) return null;
+
+  return (
+    <SidebarSection title="Pinned" Icon={Star} iconClassName="text-amber-400">
+      {all.slice(0, 8).map((item) => (
+        <SidebarRow
+          key={`${item.kind}-${item.id}`}
+          href={item.href}
+          label={item.label}
+          subtitle={item.kind === 'sbom' ? 'SBOM' : 'Run'}
+          onUnpin={() => unpin(item.kind, item.id)}
+        />
+      ))}
+    </SidebarSection>
+  );
+}
+
+// ─── Section: Recent ─────────────────────────────────────────────────────────
+
+function RecentSection() {
+  const sbomsQuery = useQuery({
+    queryKey: ['sidebar-recent-sboms'],
+    queryFn: ({ signal }) => getRecentSboms(3, signal),
+    staleTime: 60_000,
+  });
+
+  const runsQuery = useQuery({
+    queryKey: ['sidebar-recent-runs'],
+    queryFn: ({ signal }) => getRuns({ page: 1, page_size: 3 }, signal),
+    staleTime: 60_000,
+  });
+
+  const sboms = sbomsQuery.data ?? [];
+  const runs = runsQuery.data ?? [];
+
+  if (sboms.length === 0 && runs.length === 0) return null;
+
+  return (
+    <SidebarSection title="Recent" Icon={Sparkles} iconClassName="text-hcl-cyan">
+      {sboms.map((s) => (
+        <SidebarRow
+          key={`sbom-${s.id}`}
+          href={`/sboms/${s.id}`}
+          label={s.sbom_name}
+          subtitle={`SBOM · ${formatDate(s.created_on)}`}
+        />
+      ))}
+      {runs.map((r) => (
+        <SidebarRow
+          key={`run-${r.id}`}
+          href={`/analysis/${r.id}`}
+          label={r.sbom_name ? `${r.sbom_name} · #${r.id}` : `Run #${r.id}`}
+          subtitle={`Run · ${r.run_status}`}
+        />
+      ))}
+    </SidebarSection>
+  );
+}
+
+// ─── Reusable section + row ──────────────────────────────────────────────────
+
+function SidebarSection({
+  title,
+  Icon,
+  iconClassName,
+  children,
+}: {
+  title: string;
+  Icon: LucideIcon;
+  iconClassName?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="px-2 py-2 border-t border-white/15">
+      <p className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-white/70">
+        <Icon className={cn('h-3 w-3', iconClassName)} aria-hidden />
+        {title}
+      </p>
+      <ul className="space-y-0.5">{children}</ul>
+    </section>
+  );
+}
+
+function SidebarRow({
+  href,
+  label,
+  subtitle,
+  onUnpin,
+}: {
+  href: string;
+  label: string;
+  subtitle: string;
+  onUnpin?: () => void;
+}) {
+  return (
+    <li className="group/row">
+      <Link
+        href={href}
+        title={label}
+        className={cn(
+          'flex items-center gap-2 rounded-lg px-3 py-2 text-xs transition-colors duration-150',
+          'text-sidebar-foreground hover:bg-sidebar-hover',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-cyan',
+        )}
+      >
+        <span className="min-w-0 flex-1">
+          <span className="block truncate font-medium">{label}</span>
+          <span className="font-metric block truncate text-[10px] tabular-nums text-sidebar-muted">
+            {subtitle}
+          </span>
+        </span>
+        {onUnpin && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onUnpin();
+            }}
+            aria-label={`Unpin ${label}`}
+            title="Unpin"
+            className={cn(
+              'shrink-0 rounded p-0.5 text-sidebar-muted transition-all duration-base',
+              'opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100',
+              'hover:bg-sidebar-hover hover:text-amber-500 dark:hover:text-amber-300',
+              'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-hcl-cyan',
+            )}
+          >
+            <X className="h-3 w-3" aria-hidden />
+          </button>
+        )}
+      </Link>
+    </li>
+  );
+}

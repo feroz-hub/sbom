@@ -1,0 +1,138 @@
+"""
+Lifecycle router — Endpoints to track component EOL/EOS information.
+"""
+
+from __future__ import annotations
+
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.orm import Session
+
+from ..core.context import CurrentContext
+from ..core.security import get_current_tenant_context
+from ..db import get_db
+from ..models import SBOMComponent
+from ..schemas import LifecycleInfoUpdate, SBOMComponentOut
+from ..services.lifecycle import LifecycleEnrichmentService, refresh_component_lifecycle
+from ..services.lifecycle.provider_config_service import LifecycleProviderConfigService
+from ..services.lifecycle.provider_status import get_provider_status_tracker
+
+log = logging.getLogger(__name__)
+
+router = APIRouter(tags=["lifecycle"])
+
+
+@router.get("/api/lifecycle/sources")
+def list_lifecycle_sources(db: Session = Depends(get_db)):
+    """Return enabled lifecycle providers, priority, and health status."""
+    config_service = LifecycleProviderConfigService()
+    try:
+        rows = config_service.list_configs(db, include_disabled=False)
+        return {
+            "sources": [
+                {
+                    "name": safe["display_name"],
+                    "provider_key": safe["provider_key"],
+                    "provider_type": safe["provider_type"],
+                    "priority": safe["priority"],
+                    "enabled": safe["enabled"],
+                    "status": safe["health_status"],
+                    "last_success": safe["last_success_at"],
+                    "last_failure": safe["last_failure_at"],
+                    "last_error": safe["last_failure_message"],
+                }
+                for row in rows
+                for safe in [config_service.safe_config_dict(db, row)]
+            ]
+        }
+    except Exception as exc:  # noqa: BLE001
+        log.warning("lifecycle.provider_status_db_failed: %s", exc)
+    tracker = get_provider_status_tracker()
+    return {"sources": tracker.list_sources()}
+
+
+@router.get("/api/lifecycle/provider-status")
+def lifecycle_provider_status(db: Session = Depends(get_db)):
+    """Return aggregate provider health/degraded status."""
+    try:
+        service = LifecycleProviderConfigService()
+        rows = service.list_configs(db)
+        providers = [
+            {
+                "name": safe["display_name"],
+                "provider_key": safe["provider_key"],
+                "priority": safe["priority"],
+                "enabled": safe["enabled"],
+                "status": safe["health_status"],
+                "last_success": safe["last_success_at"],
+                "last_failure": safe["last_failure_at"],
+                "last_error": safe["last_failure_message"],
+            }
+            for row in rows
+            for safe in [service.safe_config_dict(db, row)]
+        ]
+        degraded = [row for row in providers if row["status"] == "degraded"]
+        return {
+            "overall_status": "degraded" if degraded else "healthy",
+            "degraded_count": len(degraded),
+            "providers": providers,
+        }
+    except Exception:
+        return get_provider_status_tracker().provider_status_summary()
+
+
+@router.get("/api/lifecycle/component/{component_id}", response_model=SBOMComponentOut)
+def get_component_lifecycle(component_id: int, db: Session = Depends(get_db)):
+    """Fetch lifecycle details for a specific component."""
+    comp = db.get(SBOMComponent, component_id)
+    if not comp:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"Component with ID {component_id} not found."
+        )
+    return comp
+
+
+@router.put("/api/lifecycle/component/{component_id}", response_model=SBOMComponentOut)
+def update_component_lifecycle(
+    component_id: int,
+    payload: LifecycleInfoUpdate,
+    context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
+):
+    """Backward-compatible manual lifecycle override endpoint."""
+
+    return LifecycleEnrichmentService().apply_manual_override(
+        db,
+        component_id,
+        payload.model_dump(exclude_none=True),
+        updated_by=payload.updated_by or context.actor_label(),
+    )
+
+
+@router.patch("/api/components/{component_id}/lifecycle-override", response_model=SBOMComponentOut)
+def patch_component_lifecycle_override(
+    component_id: int,
+    payload: LifecycleInfoUpdate,
+    context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
+):
+    """Apply an audited manual lifecycle override to a component."""
+
+    return LifecycleEnrichmentService().apply_manual_override(
+        db,
+        component_id,
+        payload.model_dump(exclude_none=True),
+        updated_by=payload.updated_by or context.actor_label(),
+    )
+
+
+@router.post("/api/components/{component_id}/lifecycle/refresh", response_model=SBOMComponentOut)
+def refresh_component_lifecycle_endpoint(
+    component_id: int,
+    force: bool = Query(True),
+    db: Session = Depends(get_db),
+):
+    """Force refresh lifecycle enrichment for one component."""
+
+    return refresh_component_lifecycle(db, component_id, force_refresh=force)

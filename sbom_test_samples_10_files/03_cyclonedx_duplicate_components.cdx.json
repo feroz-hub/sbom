@@ -1,0 +1,98 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "serialNumber": "urn:uuid:e28b93a6-f08b-40d8-b454-cfae11477b9d",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-06-12T00:00:00Z",
+    "tools": {
+      "components": [
+        {
+          "type": "application",
+          "name": "SBOM Analyzer Test Generator",
+          "version": "1.0.0"
+        }
+      ]
+    },
+    "component": {
+      "type": "application",
+      "bom-ref": "dedupe-demo-app",
+      "name": "dedupe-demo-app",
+      "version": "1.0.0"
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "lodash-a",
+      "name": "lodash",
+      "version": "4.17.21",
+      "purl": "pkg:npm/lodash@4.17.21",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "lodash-b",
+      "name": "lodash",
+      "version": "4.17.21",
+      "purl": "pkg:npm/lodash@4.17.21",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "lodash-old",
+      "name": "lodash",
+      "version": "4.17.15",
+      "purl": "pkg:npm/lodash@4.17.15"
+    },
+    {
+      "type": "library",
+      "bom-ref": "debug-a",
+      "name": "debug",
+      "version": "4.3.4",
+      "purl": "pkg:npm/debug@4.3.4"
+    },
+    {
+      "type": "library",
+      "bom-ref": "debug-b",
+      "name": "debug",
+      "version": "4.3.4",
+      "purl": "pkg:npm/debug@4.3.4"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "dedupe-demo-app",
+      "dependsOn": [
+        "lodash-a",
+        "lodash-b",
+        "lodash-old",
+        "debug-a",
+        "debug-b"
+      ]
+    },
+    {
+      "ref": "debug-a",
+      "dependsOn": [
+        "lodash-a"
+      ]
+    },
+    {
+      "ref": "debug-b",
+      "dependsOn": [
+        "lodash-b"
+      ]
+    }
+  ]
+}

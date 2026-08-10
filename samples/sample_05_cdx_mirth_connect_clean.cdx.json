@@ -1,0 +1,549 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "serialNumber": "urn:uuid:644cfc3e-abf5-4218-96e1-b107777f4148",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-05-11T06:50:00Z",
+    "tools": [
+      {
+        "vendor": "Future Beyond Technology",
+        "name": "SBOM Sample Generator",
+        "version": "1.0.0"
+      }
+    ],
+    "authors": [
+      {
+        "name": "FBT SBOM Test Team"
+      }
+    ],
+    "component": {
+      "type": "application",
+      "bom-ref": "pkg:generic/nextgenhealthcare/mirth-connect@4.5.0",
+      "name": "mirth-connect",
+      "version": "4.5.0",
+      "description": "Mirth Connect (NextGen Connect Integration Engine) \u2014 open-source healthcare integration engine for HL7v2, FHIR, CCDA, and X12 message routing between EHR, LIS, RIS, PACS and billing systems. SYNTHETIC TEST SBOM: generated for SBOM-validator testing; not an authoritative upstream document.",
+      "scope": "required",
+      "supplier": {
+        "name": "NextGen Healthcare, Inc."
+      },
+      "licenses": [
+        {
+          "expression": "MPL-1.1"
+        }
+      ],
+      "purl": "pkg:generic/nextgenhealthcare/mirth-connect@4.5.0"
+    },
+    "supplier": {
+      "name": "NextGen Healthcare, Inc."
+    },
+    "properties": [
+      {
+        "name": "fbt:fixture-type",
+        "value": "synthetic-test"
+      },
+      {
+        "name": "fbt:medical-domain",
+        "value": "healthcare-integration"
+      },
+      {
+        "name": "fbt:product-class",
+        "value": "HL7 / FHIR integration engine"
+      },
+      {
+        "name": "fbt:phi-relevant",
+        "value": "true"
+      },
+      {
+        "name": "fbt:regulatory-context",
+        "value": "HIPAA technical safeguards (45 CFR \u00a7164.312)"
+      }
+    ]
+  },
+  "components": [
+    {
+      "type": "application",
+      "bom-ref": "pkg:generic/nextgenhealthcare/mirth-connect@4.5.0",
+      "name": "mirth-connect",
+      "version": "4.5.0",
+      "description": "Mirth Connect (NextGen Connect Integration Engine) \u2014 open-source healthcare integration engine for HL7v2, FHIR, CCDA, and X12 message routing between EHR, LIS, RIS, PACS and billing systems. SYNTHETIC TEST SBOM: generated for SBOM-validator testing; not an authoritative upstream document.",
+      "scope": "required",
+      "supplier": {
+        "name": "NextGen Healthcare, Inc."
+      },
+      "licenses": [
+        {
+          "expression": "MPL-1.1"
+        }
+      ],
+      "purl": "pkg:generic/nextgenhealthcare/mirth-connect@4.5.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:maven/ca.uhn.hapi/hapi-base@2.5.1",
+      "group": "ca.uhn.hapi",
+      "name": "hapi-base",
+      "version": "2.5.1",
+      "description": "HAPI HL7v2 \u2014 Java HL7 parser core",
+      "scope": "required",
+      "supplier": {
+        "name": "University Health Network"
+      },
+      "licenses": [
+        {
+          "expression": "MPL-2.0"
+        }
+      ],
+      "purl": "pkg:maven/ca.uhn.hapi/hapi-base@2.5.1"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:maven/ca.uhn.hapi/hapi-structures-v25@2.5.1",
+      "group": "ca.uhn.hapi",
+      "name": "hapi-structures-v25",
+      "version": "2.5.1",
+      "description": "HAPI HL7v2 message structures for v2.5",
+      "scope": "required",
+      "supplier": {
+        "name": "University Health Network"
+      },
+      "licenses": [
+        {
+          "expression": "MPL-2.0"
+        }
+      ],
+      "purl": "pkg:maven/ca.uhn.hapi/hapi-structures-v25@2.5.1"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:maven/ca.uhn.hapi.fhir/hapi-fhir-base@7.4.0",
+      "group": "ca.uhn.hapi.fhir",
+      "name": "hapi-fhir-base",
+      "version": "7.4.0",
+      "description": "HAPI FHIR \u2014 Java FHIR API base",
+      "scope": "required",
+      "supplier": {
+        "name": "Smile CDR, Inc."
+      },
+      "licenses": [
+        {
+          "expression": "Apache-2.0"
+        }
+      ],
+      "purl": "pkg:maven/ca.uhn.hapi.fhir/hapi-fhir-base@7.4.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:maven/ca.uhn.hapi.fhir/hapi-fhir-structures-r4@7.4.0",
+      "group": "ca.uhn.hapi.fhir",
+      "name": "hapi-fhir-structures-r4",
+      "version": "7.4.0",
+      "description": "HAPI FHIR R4 resource structures",
+      "scope": "required",
+      "supplier": {
+        "name": "Smile CDR, Inc."
+      },
+      "licenses": [
+        {
+          "expression": "Apache-2.0"
+        }
+      ],
+      "purl": "pkg:maven/ca.uhn.hapi.fhir/hapi-fhir-structures-r4@7.4.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:maven/org.eclipse.jetty/jetty-server@12.0.14",
+      "group": "org.eclipse.jetty",
+      "name": "jetty-server",
+      "version": "12.0.14",
+      "description": "Embedded Jetty HTTP server",
+      "scope": "required",
+      "supplier": {
+        "name": "Eclipse Foundation"
+      },
+      "licenses": [
+        {
+          "expression": "Apache-2.0"
+        }
+      ],
+      "purl": "pkg:maven/org.eclipse.jetty/jetty-server@12.0.14"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:maven/org.quartz-scheduler/quartz@2.5.0",
+      "group": "org.quartz-scheduler",
+      "name": "quartz",
+      "version": "2.5.0",
+      "description": "Quartz Enterprise Job Scheduler",
+      "scope": "required",
+      "supplier": {
+        "name": "Terracotta, Inc."
+      },
+      "licenses": [
+        {
+          "expression": "Apache-2.0"
+        }
+      ],
+      "purl": "pkg:maven/org.quartz-scheduler/quartz@2.5.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:maven/org.apache.commons/commons-lang3@3.17.0",
+      "group": "org.apache.commons",
+      "name": "commons-lang3",
+      "version": "3.17.0",
+      "description": "Helper utilities for the java.lang API",
+      "scope": "required",
+      "supplier": {
+        "name": "Apache Software Foundation"
+      },
+      "licenses": [
+        {
+          "expression": "Apache-2.0"
+        }
+      ],
+      "purl": "pkg:maven/org.apache.commons/commons-lang3@3.17.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:maven/commons-io/commons-io@2.18.0",
+      "group": "commons-io",
+      "name": "commons-io",
+      "version": "2.18.0",
+      "description": "Utility classes for IO operations",
+      "scope": "required",
+      "supplier": {
+        "name": "Apache Software Foundation"
+      },
+      "licenses": [
+        {
+          "expression": "Apache-2.0"
+        }
+      ],
+      "purl": "pkg:maven/commons-io/commons-io@2.18.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:maven/commons-codec/commons-codec@1.17.1",
+      "group": "commons-codec",
+      "name": "commons-codec",
+      "version": "1.17.1",
+      "description": "Common encoders and decoders",
+      "scope": "required",
+      "supplier": {
+        "name": "Apache Software Foundation"
+      },
+      "licenses": [
+        {
+          "expression": "Apache-2.0"
+        }
+      ],
+      "purl": "pkg:maven/commons-codec/commons-codec@1.17.1"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:maven/org.apache.logging.log4j/log4j-api@2.24.1",
+      "group": "org.apache.logging.log4j",
+      "name": "log4j-api",
+      "version": "2.24.1",
+      "description": "Apache Log4j API",
+      "scope": "required",
+      "supplier": {
+        "name": "Apache Software Foundation"
+      },
+      "licenses": [
+        {
+          "expression": "Apache-2.0"
+        }
+      ],
+      "purl": "pkg:maven/org.apache.logging.log4j/log4j-api@2.24.1"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:maven/org.apache.logging.log4j/log4j-core@2.24.1",
+      "group": "org.apache.logging.log4j",
+      "name": "log4j-core",
+      "version": "2.24.1",
+      "description": "Apache Log4j Core implementation",
+      "scope": "required",
+      "supplier": {
+        "name": "Apache Software Foundation"
+      },
+      "licenses": [
+        {
+          "expression": "Apache-2.0"
+        }
+      ],
+      "purl": "pkg:maven/org.apache.logging.log4j/log4j-core@2.24.1"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:maven/org.slf4j/slf4j-api@2.0.16",
+      "group": "org.slf4j",
+      "name": "slf4j-api",
+      "version": "2.0.16",
+      "description": "Simple Logging Facade for Java",
+      "scope": "required",
+      "supplier": {
+        "name": "QOS.ch Sarl"
+      },
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "purl": "pkg:maven/org.slf4j/slf4j-api@2.0.16"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.18.0",
+      "group": "com.fasterxml.jackson.core",
+      "name": "jackson-databind",
+      "version": "2.18.0",
+      "description": "General data-binding functionality for Jackson",
+      "scope": "required",
+      "supplier": {
+        "name": "FasterXML, LLC"
+      },
+      "licenses": [
+        {
+          "expression": "Apache-2.0"
+        }
+      ],
+      "purl": "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.18.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:maven/org.bouncycastle/bcprov-jdk18on@1.78.1",
+      "group": "org.bouncycastle",
+      "name": "bcprov-jdk18on",
+      "version": "1.78.1",
+      "description": "Bouncy Castle JCE provider (JDK 1.8+)",
+      "scope": "required",
+      "supplier": {
+        "name": "The Legion of the Bouncy Castle Inc."
+      },
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "purl": "pkg:maven/org.bouncycastle/bcprov-jdk18on@1.78.1"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:maven/org.postgresql/postgresql@42.7.4",
+      "group": "org.postgresql",
+      "name": "postgresql",
+      "version": "42.7.4",
+      "description": "PostgreSQL JDBC driver",
+      "scope": "required",
+      "supplier": {
+        "name": "PostgreSQL Global Development Group"
+      },
+      "licenses": [
+        {
+          "expression": "BSD-2-Clause"
+        }
+      ],
+      "purl": "pkg:maven/org.postgresql/postgresql@42.7.4"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:maven/com.mysql/mysql-connector-j@9.1.0",
+      "group": "com.mysql",
+      "name": "mysql-connector-j",
+      "version": "9.1.0",
+      "description": "MySQL Connector/J \u2014 JDBC driver for MySQL",
+      "scope": "required",
+      "supplier": {
+        "name": "Oracle Corporation"
+      },
+      "licenses": [
+        {
+          "expression": "GPL-2.0-only WITH Classpath-exception-2.0"
+        }
+      ],
+      "purl": "pkg:maven/com.mysql/mysql-connector-j@9.1.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:maven/org.apache.mina/mina-core@2.2.4",
+      "group": "org.apache.mina",
+      "name": "mina-core",
+      "version": "2.2.4",
+      "description": "Apache MINA network application framework",
+      "scope": "required",
+      "supplier": {
+        "name": "Apache Software Foundation"
+      },
+      "licenses": [
+        {
+          "expression": "Apache-2.0"
+        }
+      ],
+      "purl": "pkg:maven/org.apache.mina/mina-core@2.2.4"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:maven/org.apache.activemq/activemq-client@6.1.4",
+      "group": "org.apache.activemq",
+      "name": "activemq-client",
+      "version": "6.1.4",
+      "description": "Apache ActiveMQ JMS client",
+      "scope": "required",
+      "supplier": {
+        "name": "Apache Software Foundation"
+      },
+      "licenses": [
+        {
+          "expression": "Apache-2.0"
+        }
+      ],
+      "purl": "pkg:maven/org.apache.activemq/activemq-client@6.1.4"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:maven/org.apache.httpcomponents.client5/httpclient5@5.4",
+      "group": "org.apache.httpcomponents.client5",
+      "name": "httpclient5",
+      "version": "5.4",
+      "description": "Apache HttpClient 5",
+      "scope": "required",
+      "supplier": {
+        "name": "Apache Software Foundation"
+      },
+      "licenses": [
+        {
+          "expression": "Apache-2.0"
+        }
+      ],
+      "purl": "pkg:maven/org.apache.httpcomponents.client5/httpclient5@5.4"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:maven/org.apache.velocity/velocity-engine-core@2.4.1",
+      "group": "org.apache.velocity",
+      "name": "velocity-engine-core",
+      "version": "2.4.1",
+      "description": "Apache Velocity template engine",
+      "scope": "required",
+      "supplier": {
+        "name": "Apache Software Foundation"
+      },
+      "licenses": [
+        {
+          "expression": "Apache-2.0"
+        }
+      ],
+      "purl": "pkg:maven/org.apache.velocity/velocity-engine-core@2.4.1"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "pkg:generic/nextgenhealthcare/mirth-connect@4.5.0",
+      "dependsOn": [
+        "pkg:maven/ca.uhn.hapi/hapi-base@2.5.1",
+        "pkg:maven/ca.uhn.hapi/hapi-structures-v25@2.5.1",
+        "pkg:maven/ca.uhn.hapi.fhir/hapi-fhir-base@7.4.0",
+        "pkg:maven/ca.uhn.hapi.fhir/hapi-fhir-structures-r4@7.4.0",
+        "pkg:maven/org.eclipse.jetty/jetty-server@12.0.14",
+        "pkg:maven/org.quartz-scheduler/quartz@2.5.0",
+        "pkg:maven/org.apache.commons/commons-lang3@3.17.0",
+        "pkg:maven/commons-io/commons-io@2.18.0",
+        "pkg:maven/commons-codec/commons-codec@1.17.1",
+        "pkg:maven/org.apache.logging.log4j/log4j-api@2.24.1",
+        "pkg:maven/org.apache.logging.log4j/log4j-core@2.24.1",
+        "pkg:maven/org.slf4j/slf4j-api@2.0.16",
+        "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.18.0",
+        "pkg:maven/org.bouncycastle/bcprov-jdk18on@1.78.1",
+        "pkg:maven/org.postgresql/postgresql@42.7.4",
+        "pkg:maven/com.mysql/mysql-connector-j@9.1.0",
+        "pkg:maven/org.apache.mina/mina-core@2.2.4",
+        "pkg:maven/org.apache.activemq/activemq-client@6.1.4",
+        "pkg:maven/org.apache.httpcomponents.client5/httpclient5@5.4",
+        "pkg:maven/org.apache.velocity/velocity-engine-core@2.4.1"
+      ]
+    },
+    {
+      "ref": "pkg:maven/ca.uhn.hapi/hapi-base@2.5.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:maven/ca.uhn.hapi/hapi-structures-v25@2.5.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:maven/ca.uhn.hapi.fhir/hapi-fhir-base@7.4.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:maven/ca.uhn.hapi.fhir/hapi-fhir-structures-r4@7.4.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:maven/org.eclipse.jetty/jetty-server@12.0.14",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:maven/org.quartz-scheduler/quartz@2.5.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:maven/org.apache.commons/commons-lang3@3.17.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:maven/commons-io/commons-io@2.18.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:maven/commons-codec/commons-codec@1.17.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:maven/org.apache.logging.log4j/log4j-api@2.24.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:maven/org.apache.logging.log4j/log4j-core@2.24.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:maven/org.slf4j/slf4j-api@2.0.16",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.18.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:maven/org.bouncycastle/bcprov-jdk18on@1.78.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:maven/org.postgresql/postgresql@42.7.4",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:maven/com.mysql/mysql-connector-j@9.1.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:maven/org.apache.mina/mina-core@2.2.4",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:maven/org.apache.activemq/activemq-client@6.1.4",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:maven/org.apache.httpcomponents.client5/httpclient5@5.4",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:maven/org.apache.velocity/velocity-engine-core@2.4.1",
+      "dependsOn": []
+    }
+  ]
+}

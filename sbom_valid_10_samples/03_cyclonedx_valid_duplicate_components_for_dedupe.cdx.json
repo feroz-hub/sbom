@@ -1,0 +1,183 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.4",
+  "serialNumber": "urn:uuid:8a4a7543-436c-4e38-b848-d7b8c454eca7",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-06-12T00:00:00Z",
+    "tools": [
+      {
+        "vendor": "HCLTech",
+        "name": "SBOM Analyzer Test Generator",
+        "version": "1.0.0"
+      }
+    ],
+    "authors": [
+      {
+        "name": "SBOM Analyzer Test Team",
+        "email": "sbom-test@example.com"
+      }
+    ],
+    "supplier": {
+      "name": "HCLTech Security"
+    },
+    "component": {
+      "type": "application",
+      "bom-ref": "app-dedupe",
+      "supplier": {
+        "name": "HCLTech Security"
+      },
+      "name": "valid-duplicate-components-for-dedupe",
+      "version": "1.0.0",
+      "purl": "pkg:generic/valid-duplicate-components-for-dedupe@1.0.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ]
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "lodash-copy-a",
+      "supplier": {
+        "name": "npm"
+      },
+      "name": "lodash",
+      "version": "4.17.21",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "adf9398e2794895e45d0372470c56535eb21e29e7e0e88ecef54e097a4dd327c"
+        }
+      ],
+      "purl": "pkg:npm/lodash@4.17.21"
+    },
+    {
+      "type": "library",
+      "bom-ref": "lodash-copy-b",
+      "supplier": {
+        "name": "npm"
+      },
+      "name": "lodash",
+      "version": "4.17.21",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "42c5588d951eff0709725daac2fbde489b74c3f60610d6c9782e6ea30e8a40d7"
+        }
+      ],
+      "purl": "pkg:npm/lodash@4.17.21"
+    },
+    {
+      "type": "library",
+      "bom-ref": "debug-copy-a",
+      "supplier": {
+        "name": "npm"
+      },
+      "name": "debug",
+      "version": "4.3.4",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "fb7af19918bfab62a7987e21e38d7546d1a931bb4d3f0e9356dc6c9498ed219f"
+        }
+      ],
+      "purl": "pkg:npm/debug@4.3.4"
+    },
+    {
+      "type": "library",
+      "bom-ref": "debug-copy-b",
+      "supplier": {
+        "name": "npm"
+      },
+      "name": "debug",
+      "version": "4.3.4",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "9123c9f169fb62728e51e873d58f9ad72a3e676038bb0e7b7849f02a2b76dba3"
+        }
+      ],
+      "purl": "pkg:npm/debug@4.3.4"
+    },
+    {
+      "type": "library",
+      "bom-ref": "lodash-different-version",
+      "supplier": {
+        "name": "npm"
+      },
+      "name": "lodash",
+      "version": "4.17.15",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "a644437635ff90dcbacc877d292931da1a59adcbb7df815ff404e978ee358424"
+        }
+      ],
+      "purl": "pkg:npm/lodash@4.17.15"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "app-dedupe",
+      "dependsOn": [
+        "lodash-copy-a",
+        "lodash-copy-b",
+        "debug-copy-a",
+        "debug-copy-b",
+        "lodash-different-version"
+      ]
+    },
+    {
+      "ref": "debug-copy-a",
+      "dependsOn": [
+        "lodash-copy-a"
+      ]
+    },
+    {
+      "ref": "debug-copy-b",
+      "dependsOn": [
+        "lodash-copy-b"
+      ]
+    }
+  ]
+}

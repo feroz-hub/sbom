@@ -1,0 +1,475 @@
+"""Lifecycle provider backed by the public endoflife.date API."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from datetime import UTC, date, datetime, timedelta
+from typing import Any
+from urllib.parse import parse_qsl, unquote
+
+import httpx
+from packaging.version import InvalidVersion, Version
+
+from .aliases import resolve_lifecycle_alias
+from .provider_base import LifecycleProvider
+from .provider_chain import PRIORITY_ENDOFLIFE_DATE
+from .types import (
+    EOF,
+    EOL,
+    EOL_SOON,
+    EOS,
+    HIGH,
+    SUPPORTED,
+    UNKNOWN,
+    UNSUPPORTED,
+    LifecycleResult,
+    NormalizedComponent,
+    unknown_result,
+)
+
+END_OF_LIFE_API_V1 = "https://endoflife.date/api/v1/products"
+END_OF_LIFE_LEGACY_API = "https://endoflife.date/api"
+EOL_SOON_DAYS = 180
+
+
+PRODUCT_SLUGS: dict[str, str] = {
+    "node": "nodejs",
+    "nodejs": "nodejs",
+    "node.js": "nodejs",
+    "python": "python",
+    "java": "java",
+    "openjdk": "java",
+    "jdk": "java",
+    "dotnet": "dotnet",
+    ".net": "dotnet",
+    "angular": "angular",
+    "@angular/core": "angular",
+    "django": "django",
+    "spring": "spring-framework",
+    "spring-framework": "spring-framework",
+    "spring framework": "spring-framework",
+    "spring-boot": "spring-boot",
+    "ubuntu": "ubuntu",
+    "debian": "debian",
+    "postgres": "postgresql",
+    "postgresql": "postgresql",
+    "mysql": "mysql",
+    "kubernetes": "kubernetes",
+    "k8s": "kubernetes",
+    "golang": "go",
+    "go": "go",
+    "ruby": "ruby",
+    "php": "php",
+    "nginx": "nginx",
+    "apache": "apache",
+    "httpd": "apache",
+    "redis": "redis",
+    "openssl": "openssl",
+    "docker": "docker-engine",
+    "alpine": "alpine",
+    "elasticsearch": "elasticsearch",
+    "kafka": "kafka",
+}
+
+
+class EndOfLifeDateProvider(LifecycleProvider):
+    name = "endoflife.date"
+    priority = PRIORITY_ENDOFLIFE_DATE
+
+    def supports(self, component: NormalizedComponent) -> bool:
+        return _release_lifecycle_hint(component) is not None or (
+            slug_for_component(component) is not None and bool(component.normalized_version)
+        )
+
+    def __init__(
+        self,
+        *,
+        http_get: Callable[[str], Any] | None = None,
+        base_url: str | None = None,
+        timeout_seconds: float = 5.0,
+        retries: int = 1,
+        today: date | None = None,
+    ) -> None:
+        self._http_get = http_get
+        self._base_url = (base_url or END_OF_LIFE_LEGACY_API).rstrip("/")
+        self._timeout_seconds = timeout_seconds
+        self._retries = retries
+        self._today = today
+        self._product_cache: dict[str, Any | None] = {}
+
+    def lookup(self, component: NormalizedComponent) -> LifecycleResult:
+        release_hint = _release_lifecycle_hint(component)
+        slug = release_hint["product"] if release_hint else slug_for_component(component)
+        lookup_version = release_hint["cycle"] if release_hint else component.normalized_version
+        if not slug or not lookup_version:
+            return unknown_result(component, self.name)
+
+        payload = self._fetch_product(slug)
+        cycles = _extract_cycles(payload)
+        if not cycles:
+            return unknown_result(component, self.name)
+
+        matched = _match_cycle(cycles, lookup_version)
+        if not matched:
+            return unknown_result(component, self.name)
+
+        eol_date = _extract_date(matched, "eol", "eolFrom", "endOfLife")
+        # Extract support/EOS and extendedSupport
+        eos_date = _extract_date(matched, "support", "eos", "endOfSupport", "eoasFrom")
+        extended_support = _extract_date(
+            matched, "extendedSupport", "eoesFrom", "extendedSupportFrom", "extended_support"
+        )
+        if extended_support:
+            eos_date = extended_support
+
+        # EOF only if explicit source field exists
+        eof_date = _extract_date(matched, "eof", "endOfFix", "endOfFullSupport")
+
+        # Handle dict-like latest values from v1 API
+        latest_val = matched.get("latest") or matched.get("latestVersion") or matched.get("latestRelease")
+        if isinstance(latest_val, dict):
+            latest = str(latest_val.get("name") or latest_val.get("version") or "") or None
+        else:
+            latest = _string_value(matched, "latest", "latestVersion", "latestRelease")
+
+        status = self._status_from_dates(eol_date, eos_date, eof_date, matched)
+        recommendation = _recommendation(
+            status,
+            latest,
+            component.normalized_version,
+            slug,
+            release_hint=release_hint,
+            eol_date=eol_date,
+        )
+
+        return LifecycleResult(
+            component_name=component.normalized_name,
+            component_version=component.normalized_version,
+            ecosystem=component.ecosystem,
+            purl=component.purl,
+            cpe=component.cpe,
+            lifecycle_status=status,
+            eos_date=eos_date,
+            eol_date=eol_date,
+            eof_date=eof_date,
+            unsupported=status in {EOL, EOS, EOF, UNSUPPORTED},
+            maintenance_status=_maintenance_status(status),
+            latest_version=None if release_hint else latest,
+            latest_supported_version=None if release_hint else latest,
+            recommended_version=None if release_hint else latest if _is_newer(latest, component.normalized_version) else None,
+            recommendation=recommendation,
+            source_name=self.name,
+            source_url=f"https://endoflife.date/{slug}",
+            evidence={
+                "product": slug,
+                "cycle": matched,
+                "lookup_version": lookup_version,
+                "release_hint": release_hint,
+                "package_version": component.normalized_version if release_hint else None,
+            },
+            confidence=HIGH,
+        ).canonicalized()
+
+    def _fetch_product(self, slug: str) -> Any | None:
+        if slug in self._product_cache:
+            return self._product_cache[slug]
+        urls = _product_urls(slug, self._base_url)
+        for url in urls:
+            payload = self._fetch_json_with_retries(url)
+            if payload:
+                self._product_cache[slug] = payload
+                return payload
+        self._product_cache[slug] = None
+        return None
+
+    def _fetch_json_with_retries(self, url: str) -> Any | None:
+        attempts = max(1, self._retries + 1)
+        for _ in range(attempts):
+            try:
+                if self._http_get is not None:
+                    return self._http_get(url)
+                with httpx.Client(timeout=self._timeout_seconds, follow_redirects=True) as client:
+                    response = client.get(url)
+                    if response.status_code == 404:
+                        return None
+                    response.raise_for_status()
+                    return response.json()
+            except (httpx.HTTPError, ValueError, TypeError):
+                continue
+        return None
+
+    def _status_from_dates(
+        self,
+        eol_date: str | None,
+        eos_date: str | None,
+        eof_date: str | None,
+        cycle: dict[str, Any],
+    ) -> str:
+        today = self._today or datetime.now(UTC).date()
+        eol = _parse_date(eol_date)
+        eos = _parse_date(eos_date)
+        eof = _parse_date(eof_date)
+        # Check if cycle has explicit boolean EOL/support properties
+        is_eol_bool = (
+            cycle.get("eol") is True
+            or str(cycle.get("eol")).lower() == "true"
+            or cycle.get("isEol") is True
+            or str(cycle.get("isEol")).lower() == "true"
+        )
+        if (eol and eol < today) or is_eol_bool:
+            return EOL
+        if eos and eos < today:
+            return EOS
+        if eof and eof < today:
+            return EOF
+        if eol and today <= eol <= today + timedelta(days=EOL_SOON_DAYS):
+            return EOL_SOON
+        if _truthy_any(cycle, "discontinued", "unsupported", "obsolete"):
+            return UNSUPPORTED
+        if eol or eos or eof:
+            return SUPPORTED
+        return UNKNOWN
+
+
+def slug_for_component(component: NormalizedComponent) -> str | None:
+    release_hint = _release_lifecycle_hint(component)
+    if release_hint is not None:
+        return release_hint["product"]
+    alias = resolve_lifecycle_alias(component.normalized_name, component.ecosystem)
+    if alias and alias.source == "endoflife.date":
+        return alias.provider_product_name
+    candidates = [
+        component.normalized_name,
+        component.name,
+        component.component_group or "",
+        component.supplier or "",
+        component.ecosystem if component.ecosystem in {"ubuntu", "debian"} else "",
+    ]
+    for candidate in candidates:
+        cleaned = _slug_key(candidate)
+        if cleaned in PRODUCT_SLUGS:
+            return PRODUCT_SLUGS[cleaned]
+        leaf = cleaned.split("/")[-1]
+        if leaf in PRODUCT_SLUGS:
+            return PRODUCT_SLUGS[leaf]
+    return None
+
+
+def _product_urls(slug: str, base_url: str) -> tuple[str, ...]:
+    base = base_url.rstrip("/")
+    if base == END_OF_LIFE_LEGACY_API.rstrip("/"):
+        return (f"{END_OF_LIFE_API_V1}/{slug}/", f"{base}/{slug}.json")
+    if base == END_OF_LIFE_API_V1.rstrip("/"):
+        return (f"{base}/{slug}/",)
+    return (f"{base}/{slug}.json",)
+
+
+def _slug_key(value: str | None) -> str:
+    if not value:
+        return ""
+    cleaned = value.strip().lower()
+    if cleaned.startswith("@") and "/" in cleaned:
+        return cleaned
+    return cleaned.replace("_", "-").replace(" ", "-")
+
+
+def _release_lifecycle_hint(component: NormalizedComponent) -> dict[str, str] | None:
+    """Map distro package identities to OS release lifecycle lookups.
+
+    Package-level EOL data is usually not published for distro packages like
+    apt/adduser/bash. Their lifecycle follows the OS release encoded in PURL
+    qualifiers such as ``distro=debian-bookworm``.
+    """
+
+    purl_parts = _purl_parts(component.purl)
+    distro = purl_parts["qualifiers"].get("distro")
+    package_type = purl_parts["type"] or component.ecosystem
+    if distro:
+        hint = _hint_from_distro(distro)
+        if hint is not None:
+            return {**hint, "source": "purl.distro"}
+
+    if package_type in {"deb", "debian"} or component.ecosystem == "debian":
+        cycle = _debian_cycle_from_version(component.normalized_version)
+        if cycle:
+            return {"product": "debian", "cycle": cycle, "source": "package_version"}
+
+    return None
+
+
+def _purl_parts(value: str | None) -> dict[str, Any]:
+    if not value or not value.startswith("pkg:"):
+        return {"type": None, "qualifiers": {}}
+    body = value[4:]
+    path, _, query = body.partition("?")
+    package_type = path.split("/", 1)[0].strip().lower() or None
+    qualifiers = {
+        key.lower(): unquote(val)
+        for key, val in parse_qsl(query, keep_blank_values=False)
+        if key
+    }
+    return {"type": package_type, "qualifiers": qualifiers}
+
+
+def _hint_from_distro(value: str) -> dict[str, str] | None:
+    cleaned = value.strip().lower().replace("_", "-")
+    if not cleaned:
+        return None
+    for product in ("debian", "ubuntu", "alpine"):
+        if cleaned == product:
+            return None
+        prefix = f"{product}-"
+        if cleaned.startswith(prefix):
+            cycle = cleaned.removeprefix(prefix)
+            if cycle:
+                return {"product": product, "cycle": cycle}
+    return None
+
+
+def _debian_cycle_from_version(value: str | None) -> str | None:
+    if not value:
+        return None
+    import re
+
+    match = re.search(r"(?:[+~.-])deb(\d+)(?:u\d+)?(?:$|[+~.-])", value.lower())
+    return match.group(1) if match else None
+
+
+def _extract_cycles(payload: Any) -> list[dict[str, Any]]:
+    if isinstance(payload, list):
+        return [item for item in payload if isinstance(item, dict)]
+    if not isinstance(payload, dict):
+        return []
+    for key in ("releases", "cycles", "result"):
+        value = payload.get(key)
+        if isinstance(value, list):
+            return [item for item in value if isinstance(item, dict)]
+        if isinstance(value, dict):
+            nested = _extract_cycles(value)
+            if nested:
+                return nested
+    if "cycle" in payload:
+        return [payload]
+    return []
+
+
+def _match_cycle(cycles: list[dict[str, Any]], version: str) -> dict[str, Any] | None:
+    version_clean = version.strip().lower().lstrip("v")
+    sorted_cycles = sorted(cycles, key=lambda row: len(str(row.get("cycle") or "")), reverse=True)
+    for cycle in sorted_cycles:
+        for cycle_value in _cycle_match_values(cycle):
+            if version_clean == cycle_value or version_clean.startswith(f"{cycle_value}."):
+                return cycle
+    major = version_clean.split(".", 1)[0]
+    for cycle in sorted_cycles:
+        if major in _cycle_match_values(cycle):
+            return cycle
+    return None
+
+
+def _cycle_match_values(cycle: dict[str, Any]) -> set[str]:
+    values: set[str] = set()
+    for key in ("cycle", "name", "codename", "label"):
+        raw = cycle.get(key)
+        if raw in (None, ""):
+            continue
+        cleaned = str(raw).strip().lower().lstrip("v")
+        if cleaned:
+            values.add(cleaned)
+        if key == "label":
+            for token in cleaned.replace("(", " ").replace(")", " ").split():
+                if token:
+                    values.add(token)
+    return values
+
+
+def _extract_date(row: dict[str, Any], *keys: str) -> str | None:
+    value = _first_value(row, *keys)
+    if value in (None, False, "false", "False", ""):
+        return None
+    if value is True:
+        return None
+    parsed = _parse_date(str(value))
+    return parsed.isoformat() if parsed else None
+
+
+def _parse_date(value: str | None) -> date | None:
+    if not value:
+        return None
+    text = value.strip()
+    if not text or text.lower() in {"false", "true", "none", "null"}:
+        return None
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).date()
+    except ValueError:
+        pass
+    try:
+        return date.fromisoformat(text[:10])
+    except ValueError:
+        return None
+
+
+def _string_value(row: dict[str, Any], *keys: str) -> str | None:
+    value = _first_value(row, *keys)
+    if value in (None, False, "false", "False", ""):
+        return None
+    return str(value)
+
+
+def _first_value(row: dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        if key in row:
+            return row[key]
+    return None
+
+
+def _truthy_any(row: dict[str, Any], *keys: str) -> bool:
+    return any(bool(row.get(key)) for key in keys)
+
+
+def _is_newer(candidate: str | None, current: str | None) -> bool:
+    if not candidate or not current:
+        return False
+    try:
+        return Version(candidate) > Version(current)
+    except InvalidVersion:
+        return candidate != current
+
+
+def _maintenance_status(status: str) -> str:
+    if status == EOL:
+        return "End of life"
+    if status == EOS:
+        return "End of support"
+    if status == EOF:
+        return "End of fixes"
+    if status == EOL_SOON:
+        return "EOL within 180 days"
+    if status == UNSUPPORTED:
+        return "Unsupported"
+    if status == SUPPORTED:
+        return "Supported"
+    return "Unknown"
+
+
+def _recommendation(
+    status: str,
+    latest: str | None,
+    current: str | None,
+    slug: str,
+    *,
+    release_hint: dict[str, str] | None = None,
+    eol_date: str | None = None,
+) -> str | None:
+    if status in {EOL, EOS, EOF, EOL_SOON, UNSUPPORTED}:
+        if release_hint:
+            label = f"{slug} {release_hint['cycle']}"
+            date_suffix = f" before {eol_date}" if eol_date else ""
+            return f"Review {label} lifecycle support and plan an OS release upgrade{date_suffix}."
+        if _is_newer(latest, current):
+            return f"Upgrade {slug} to supported version {latest}."
+        return f"Review {slug} lifecycle support and upgrade to a supported cycle."
+    return None
+
+
+__all__ = ["EndOfLifeDateProvider", "slug_for_component"]

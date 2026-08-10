@@ -1,0 +1,8 @@
+
+ ERROR   Unspecified Error (SNYK-CLI-0000)
+                                                                                        
+           /Users/ferozebasha/sbom/requirements.txt: Missing required packages          
+
+Docs:    https://docs.snyk.io/scan-with-snyk/error-catalog#snyk-cli-0000 
+                                                                         
+ID:      urn:snyk:interaction:e9fc36aa-b026-422e-abe5-6dcf7bd595fa 

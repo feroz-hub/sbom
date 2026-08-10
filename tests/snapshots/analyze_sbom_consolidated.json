@@ -1,0 +1,48 @@
+{
+  "completed_on": "<volatile>",
+  "components_with_cpe": 0,
+  "critical_count": 2,
+  "duration_ms": "<volatile>",
+  "high_count": 1,
+  "id": "<volatile>",
+  "low_count": 0,
+  "medium_count": 0,
+  "product_id": "<volatile>",
+  "product_name": "Legacy / Unassigned Product",
+  "project_id": "<volatile>",
+  "query_error_count": 0,
+  "runId": "<volatile>",
+  "run_status": "FINDINGS",
+  "sbom": {
+    "format": "cyclonedx",
+    "id": "<volatile>",
+    "name": "snapshot-fixture",
+    "specVersion": "1.5"
+  },
+  "sbom_id": "<volatile>",
+  "sbom_name": "snapshot-fixture",
+  "source": "NVD,OSV,GITHUB,VULNDB",
+  "started_on": "<volatile>",
+  "status": "FINDINGS",
+  "summary": {
+    "completedOn": "<volatile>",
+    "components": 2,
+    "durationMs": "<volatile>",
+    "errors": 0,
+    "findings": {
+      "bySeverity": {
+        "CRITICAL": 2,
+        "HIGH": 1,
+        "LOW": 0,
+        "MEDIUM": 0,
+        "UNKNOWN": 0
+      },
+      "total": 3
+    },
+    "withCPE": 0
+  },
+  "total_components": 2,
+  "total_findings": 3,
+  "trigger_source": "api",
+  "unknown_count": 0
+}

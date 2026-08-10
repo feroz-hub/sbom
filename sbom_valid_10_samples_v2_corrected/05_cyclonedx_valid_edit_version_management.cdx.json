@@ -1,0 +1,182 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.4",
+  "serialNumber": "urn:uuid:423bef91-5730-4a00-a05e-10f8a7fad9d7",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-06-12T00:00:00Z",
+    "tools": [
+      {
+        "vendor": "HCLTech",
+        "name": "SBOM Analyzer Test Generator",
+        "version": "2.0.0"
+      }
+    ],
+    "authors": [
+      {
+        "name": "SBOM Analyzer Test Team",
+        "email": "sbom-test@example.com"
+      }
+    ],
+    "supplier": {
+      "name": "HCLTech Security"
+    },
+    "component": {
+      "type": "application",
+      "bom-ref": "app-edit",
+      "supplier": {
+        "name": "HCLTech Security"
+      },
+      "name": "valid-edit-version-management",
+      "version": "1.0.0",
+      "purl": "pkg:generic/valid-edit-version-management@1.0.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "c70b148ddc8341ded7fba428ed42698a8c04f37c98793ed3436ac90556e263fd"
+        }
+      ]
+    }
+  },
+  "components": [
+    {
+      "type": "application",
+      "bom-ref": "app-edit",
+      "supplier": {
+        "name": "HCLTech Security"
+      },
+      "name": "valid-edit-version-management",
+      "version": "1.0.0",
+      "purl": "pkg:generic/valid-edit-version-management@1.0.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "c70b148ddc8341ded7fba428ed42698a8c04f37c98793ed3436ac90556e263fd"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "edit-react",
+      "supplier": {
+        "name": "Meta"
+      },
+      "name": "react",
+      "version": "17.0.2",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "2a44204d3fe998552d17d9c73b1786afc6ec4f4155f2d97f26a1885d19e0a0b8"
+        }
+      ],
+      "purl": "pkg:npm/react@17.0.2"
+    },
+    {
+      "type": "library",
+      "bom-ref": "edit-react-dom",
+      "supplier": {
+        "name": "Meta"
+      },
+      "name": "react-dom",
+      "version": "17.0.2",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "47117dd4558249b996c718903332d8cce439076e7b8edd234071798668336491"
+        }
+      ],
+      "purl": "pkg:npm/react-dom@17.0.2"
+    },
+    {
+      "type": "library",
+      "bom-ref": "edit-typescript",
+      "supplier": {
+        "name": "Microsoft"
+      },
+      "name": "typescript",
+      "version": "4.9.5",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "394d52f6290609c4f2cc9156141f838723465d61e0bbe8635827442626b46fdc"
+        }
+      ],
+      "purl": "pkg:npm/typescript@4.9.5"
+    },
+    {
+      "type": "library",
+      "bom-ref": "edit-webpack",
+      "supplier": {
+        "name": "webpack"
+      },
+      "name": "webpack",
+      "version": "5.74.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "10cabe67116442e5b6394f4243c168461ded73b1782dbf383e86d20ba5cecfa1"
+        }
+      ],
+      "purl": "pkg:npm/webpack@5.74.0"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "app-edit",
+      "dependsOn": [
+        "edit-react",
+        "edit-react-dom",
+        "edit-typescript",
+        "edit-webpack"
+      ]
+    }
+  ],
+  "properties": [
+    {
+      "name": "test:feature",
+      "value": "edit-version-management"
+    }
+  ]
+}

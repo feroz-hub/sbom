@@ -1,0 +1,526 @@
+{
+  "spdxVersion": "SPDX-2.3",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "name": "orthanc-1.12.5",
+  "documentNamespace": "https://fbt.io/spdxdocs/orthanc-1.12.5-20260511",
+  "creationInfo": {
+    "created": "2026-05-11T06:45:00Z",
+    "creators": [
+      "Organization: Future Beyond Technology",
+      "Tool: FBT-SBOM-Sample-Generator-1.0.0"
+    ],
+    "comment": "Synthetic SBOM fixture for medical-imaging server testing. Models the real Orthanc DICOM server (https://www.orthanc-server.com)."
+  },
+  "documentDescribes": [
+    "SPDXRef-Application-Orthanc"
+  ],
+  "packages": [
+    {
+      "SPDXID": "SPDXRef-Application-Orthanc",
+      "name": "orthanc",
+      "versionInfo": "1.12.5",
+      "supplier": "Organization: Osimis SA",
+      "downloadLocation": "https://www.orthanc-server.com/download.php",
+      "filesAnalyzed": false,
+      "licenseDeclared": "GPL-3.0-or-later",
+      "licenseConcluded": "GPL-3.0-or-later",
+      "primaryPackagePurpose": "APPLICATION",
+      "description": "Orthanc \u2014 lightweight, open-source DICOM server for medical imaging. SYNTHETIC TEST SBOM: generated for SBOM-validator testing; not an authoritative upstream document.",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:generic/orthanc/orthanc@1.12.5"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Pkg-DCMTK",
+      "name": "dcmtk",
+      "versionInfo": "3.6.8",
+      "supplier": "Organization: OFFIS e.V.",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "BSD-3-Clause",
+      "licenseConcluded": "BSD-3-Clause",
+      "primaryPackagePurpose": "LIBRARY",
+      "description": "DICOM Toolkit \u2014 DICOM C++ implementation",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:generic/dcmtk@3.6.8"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Pkg-OpenJPEG",
+      "name": "openjpeg",
+      "versionInfo": "2.5.2",
+      "supplier": "Organization: Universite catholique de Louvain",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "BSD-2-Clause",
+      "licenseConcluded": "BSD-2-Clause",
+      "primaryPackagePurpose": "LIBRARY",
+      "description": "Open-source JPEG 2000 codec written in C",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:generic/openjpeg@2.5.2"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Pkg-libjpeg-turbo",
+      "name": "libjpeg-turbo",
+      "versionInfo": "3.0.4",
+      "supplier": "Person: Darrell R. Commander",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "IJG",
+      "licenseConcluded": "IJG",
+      "primaryPackagePurpose": "LIBRARY",
+      "description": "SIMD-accelerated libjpeg-compatible JPEG codec",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:generic/libjpeg-turbo@3.0.4"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Pkg-libpng",
+      "name": "libpng",
+      "versionInfo": "1.6.43",
+      "supplier": "Organization: PNG Development Group",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "Libpng",
+      "licenseConcluded": "Libpng",
+      "primaryPackagePurpose": "LIBRARY",
+      "description": "Reference library for the PNG image format",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:generic/libpng@1.6.43"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Pkg-Boost",
+      "name": "boost",
+      "versionInfo": "1.85.0",
+      "supplier": "Organization: Boost Community",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "BSL-1.0",
+      "licenseConcluded": "BSL-1.0",
+      "primaryPackagePurpose": "LIBRARY",
+      "description": "Boost C++ Libraries",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:generic/boost@1.85.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Pkg-jsoncpp",
+      "name": "jsoncpp",
+      "versionInfo": "1.9.5",
+      "supplier": "Person: Baptiste Lepilleur",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "MIT",
+      "licenseConcluded": "MIT",
+      "primaryPackagePurpose": "LIBRARY",
+      "description": "JSON reader and writer for C++",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:generic/jsoncpp@1.9.5"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Pkg-pugixml",
+      "name": "pugixml",
+      "versionInfo": "1.14",
+      "supplier": "Person: Arseny Kapoulkine",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "MIT",
+      "licenseConcluded": "MIT",
+      "primaryPackagePurpose": "LIBRARY",
+      "description": "Light-weight, fast XML processing library for C++",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:generic/pugixml@1.14"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Pkg-SQLite",
+      "name": "sqlite",
+      "versionInfo": "3.46.1",
+      "supplier": "Organization: Hipp, Wyrick & Company, Inc.",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "blessing",
+      "licenseConcluded": "blessing",
+      "primaryPackagePurpose": "LIBRARY",
+      "description": "SQLite embedded SQL database engine",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:generic/sqlite@3.46.1"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Pkg-OpenSSL",
+      "name": "openssl",
+      "versionInfo": "3.3.2",
+      "supplier": "Organization: OpenSSL Software Foundation",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "Apache-2.0",
+      "licenseConcluded": "Apache-2.0",
+      "primaryPackagePurpose": "LIBRARY",
+      "description": "TLS/SSL and cryptography library",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:generic/openssl@3.3.2"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Pkg-libcurl",
+      "name": "libcurl",
+      "versionInfo": "8.10.1",
+      "supplier": "Organization: The cURL Group",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "curl",
+      "licenseConcluded": "curl",
+      "primaryPackagePurpose": "LIBRARY",
+      "description": "Client-side URL transfer library",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:generic/libcurl@8.10.1"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Pkg-CivetWeb",
+      "name": "civetweb",
+      "versionInfo": "1.16",
+      "supplier": "Organization: CivetWeb authors",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "MIT",
+      "licenseConcluded": "MIT",
+      "primaryPackagePurpose": "LIBRARY",
+      "description": "Embedded C/C++ web server",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:generic/civetweb@1.16"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Pkg-zlib",
+      "name": "zlib",
+      "versionInfo": "1.3.1",
+      "supplier": "Person: Jean-loup Gailly and Mark Adler",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "Zlib",
+      "licenseConcluded": "Zlib",
+      "primaryPackagePurpose": "LIBRARY",
+      "description": "General-purpose lossless data-compression library",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:generic/zlib@1.3.1"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Pkg-Lua",
+      "name": "lua",
+      "versionInfo": "5.4.7",
+      "supplier": "Organization: Lua.org, PUC-Rio",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "MIT",
+      "licenseConcluded": "MIT",
+      "primaryPackagePurpose": "LIBRARY",
+      "description": "Powerful, lightweight embeddable scripting language",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:generic/lua@5.4.7"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Pkg-ICU",
+      "name": "icu",
+      "versionInfo": "75.1",
+      "supplier": "Organization: Unicode, Inc.",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "ICU",
+      "licenseConcluded": "ICU",
+      "primaryPackagePurpose": "LIBRARY",
+      "description": "International Components for Unicode",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:generic/icu@75.1"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Pkg-libuuid",
+      "name": "libuuid",
+      "versionInfo": "2.40.2",
+      "supplier": "Organization: util-linux project",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "BSD-3-Clause",
+      "licenseConcluded": "BSD-3-Clause",
+      "primaryPackagePurpose": "LIBRARY",
+      "description": "Universally unique identifier library",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:generic/libuuid@2.40.2"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Pkg-protobuf",
+      "name": "protobuf",
+      "versionInfo": "27.5",
+      "supplier": "Organization: Google LLC",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "BSD-3-Clause",
+      "licenseConcluded": "BSD-3-Clause",
+      "primaryPackagePurpose": "LIBRARY",
+      "description": "Protocol Buffers \u2014 Google's data interchange format",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:generic/protobuf@27.5"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Pkg-py-pydicom",
+      "name": "pydicom",
+      "versionInfo": "2.4.4",
+      "supplier": "Person: Darcy Mason and pydicom contributors",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "MIT",
+      "licenseConcluded": "MIT",
+      "primaryPackagePurpose": "LIBRARY",
+      "description": "Pure-Python package for working with DICOM files",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:pypi/pydicom@2.4.4"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Pkg-py-numpy",
+      "name": "numpy",
+      "versionInfo": "1.26.4",
+      "supplier": "Organization: NumPy Developers",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "BSD-3-Clause",
+      "licenseConcluded": "BSD-3-Clause",
+      "primaryPackagePurpose": "LIBRARY",
+      "description": "Fundamental package for array computing",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:pypi/numpy@1.26.4"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Pkg-py-requests",
+      "name": "requests",
+      "versionInfo": "2.32.3",
+      "supplier": "Organization: Python Software Foundation",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "Apache-2.0",
+      "licenseConcluded": "Apache-2.0",
+      "primaryPackagePurpose": "LIBRARY",
+      "description": "HTTP library for Python",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:pypi/requests@2.32.3"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Pkg-py-pillow",
+      "name": "pillow",
+      "versionInfo": "11.0.0",
+      "supplier": "Organization: Pillow contributors",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseDeclared": "HPND",
+      "licenseConcluded": "HPND",
+      "primaryPackagePurpose": "LIBRARY",
+      "description": "Python Imaging Library fork",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:pypi/pillow@11.0.0"
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-Application-Orthanc"
+    },
+    {
+      "spdxElementId": "SPDXRef-Application-Orthanc",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-DCMTK"
+    },
+    {
+      "spdxElementId": "SPDXRef-Application-Orthanc",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-OpenJPEG"
+    },
+    {
+      "spdxElementId": "SPDXRef-Application-Orthanc",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-libjpeg-turbo"
+    },
+    {
+      "spdxElementId": "SPDXRef-Application-Orthanc",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-libpng"
+    },
+    {
+      "spdxElementId": "SPDXRef-Application-Orthanc",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-Boost"
+    },
+    {
+      "spdxElementId": "SPDXRef-Application-Orthanc",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-jsoncpp"
+    },
+    {
+      "spdxElementId": "SPDXRef-Application-Orthanc",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-pugixml"
+    },
+    {
+      "spdxElementId": "SPDXRef-Application-Orthanc",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-SQLite"
+    },
+    {
+      "spdxElementId": "SPDXRef-Application-Orthanc",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-OpenSSL"
+    },
+    {
+      "spdxElementId": "SPDXRef-Application-Orthanc",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-libcurl"
+    },
+    {
+      "spdxElementId": "SPDXRef-Application-Orthanc",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-CivetWeb"
+    },
+    {
+      "spdxElementId": "SPDXRef-Application-Orthanc",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-zlib"
+    },
+    {
+      "spdxElementId": "SPDXRef-Application-Orthanc",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-Lua"
+    },
+    {
+      "spdxElementId": "SPDXRef-Application-Orthanc",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-ICU"
+    },
+    {
+      "spdxElementId": "SPDXRef-Application-Orthanc",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-libuuid"
+    },
+    {
+      "spdxElementId": "SPDXRef-Application-Orthanc",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-protobuf"
+    },
+    {
+      "spdxElementId": "SPDXRef-Application-Orthanc",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-py-pydicom"
+    },
+    {
+      "spdxElementId": "SPDXRef-Application-Orthanc",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-py-numpy"
+    },
+    {
+      "spdxElementId": "SPDXRef-Application-Orthanc",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-py-requests"
+    },
+    {
+      "spdxElementId": "SPDXRef-Application-Orthanc",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-py-pillow"
+    }
+  ]
+}

@@ -1,0 +1,261 @@
+import Link from 'next/link';
+import { useMemo } from 'react';
+import {
+  AlertTriangle,
+  ArrowDownRight,
+  ArrowUpRight,
+  FileText,
+  FolderOpen,
+  Minus,
+  type LucideIcon,
+} from 'lucide-react';
+import { Skeleton } from '@/components/ui/Spinner';
+import { Sparkline } from '@/components/ui/Sparkline';
+import { cn } from '@/lib/utils';
+import type { DashboardStats, DashboardTrend } from '@/types';
+
+interface StatsGridProps {
+  stats: DashboardStats | undefined;
+  trend?: DashboardTrend | undefined;
+  isLoading: boolean;
+  error: Error | null;
+}
+
+interface StatCardConfig {
+  /** Function that pulls the displayed number from the stats payload. */
+  valueFrom: (stats: DashboardStats) => number | undefined;
+  label: string;
+  icon: LucideIcon;
+  iconClass: string;
+  borderClass: string;
+  href: string;
+  linkLabel: string;
+  /** How to derive a sparkline series from the trend data, if any. */
+  trendSelector?: (trend: DashboardTrend) => number[];
+  /** Tone class for the sparkline color. */
+  sparkColor: string;
+  /** Tooltip / aria description that names exactly what this counts. */
+  tooltip: string;
+  /** Used to flip delta tone (up=bad on vulns; up=neutral on counts). */
+  isVulnCard?: boolean;
+}
+
+// ADR-0001 / docs/terminology.md:
+//   * "Active Projects" filters project_status=1 (server-enforced).
+//   * "Distinct Vulnerabilities" replaces "Total Vulnerabilities" — counts
+//     distinct CVE/GHSA ids in scope (latest successful run per SBOM), not
+//     finding rows. The two numbers are different and one CVE can produce
+//     many findings.
+//   * Deep-link to the runs view filtered by FINDINGS, not the legacy
+//     overloaded FAIL alias.
+const cards: StatCardConfig[] = [
+  {
+    valueFrom: (s) => s.total_active_projects ?? s.total_projects,
+    label: 'Active Projects',
+    icon: FolderOpen,
+    iconClass: 'bg-hcl-light text-hcl-blue',
+    borderClass: 'border-l-hcl-blue',
+    href: '/projects',
+    linkLabel: 'Open projects',
+    sparkColor: 'var(--color-hcl-blue)',
+    tooltip: 'Projects with status = active. Inactive projects are excluded.',
+  },
+  {
+    valueFrom: (s) => s.total_sboms,
+    label: 'Total SBOMs',
+    icon: FileText,
+    iconClass: 'bg-hcl-light text-hcl-dark dark:text-hcl-blue',
+    borderClass: 'border-l-hcl-dark dark:border-l-hcl-blue',
+    href: '/sboms',
+    linkLabel: 'Open SBOMs',
+    sparkColor: 'var(--color-hcl-cyan)',
+    tooltip: 'All SBOM documents uploaded across all projects.',
+  },
+  {
+    valueFrom: (s) => s.total_distinct_vulnerabilities ?? s.total_vulnerabilities,
+    label: 'Distinct Vulnerabilities',
+    icon: AlertTriangle,
+    iconClass: 'bg-red-50 text-red-600 dark:bg-red-950/50 dark:text-red-400',
+    borderClass: 'border-l-red-500',
+    href: '/analysis?tab=runs&status=FINDINGS',
+    linkLabel: 'View runs with findings',
+    trendSelector: (t) =>
+      t.series.map((p) => p.critical + p.high + p.medium + p.low),
+    sparkColor: '#dc2626',
+    tooltip:
+      'Distinct CVE / advisory identifiers in scope (latest successful run per SBOM). One CVE on three components is one vulnerability and three findings.',
+    isVulnCard: true,
+  },
+];
+
+function computeDelta(series: number[]): { pct: number; direction: 'up' | 'down' | 'flat' } | null {
+  if (series.length < 4) return null;
+  const half = Math.floor(series.length / 2);
+  const earlier = series.slice(0, half).reduce((s, v) => s + v, 0);
+  const later = series.slice(-half).reduce((s, v) => s + v, 0);
+  if (earlier === 0 && later === 0) return { pct: 0, direction: 'flat' };
+  if (earlier === 0) return { pct: 100, direction: 'up' };
+  const pct = ((later - earlier) / earlier) * 100;
+  if (Math.abs(pct) < 1) return { pct: 0, direction: 'flat' };
+  return { pct, direction: pct > 0 ? 'up' : 'down' };
+}
+
+export function StatsGrid({ stats, trend, isLoading, error }: StatsGridProps) {
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+        {[0, 1, 2].map((i) => (
+          <div
+            key={i}
+            className="space-y-3 rounded-xl border border-border bg-surface p-6 shadow-card"
+            aria-hidden="true"
+          >
+            <Skeleton className="h-3 w-1/3" />
+            <Skeleton className="h-8 w-1/2" />
+            <Skeleton className="h-3 w-2/3" />
+            <Skeleton className="h-8 w-full" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div
+        role="alert"
+        className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200"
+      >
+        Failed to load stats: {error.message}
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+      {cards.map((card) => {
+        const value = stats ? card.valueFrom(stats) : undefined;
+        const series = trend && card.trendSelector ? card.trendSelector(trend) : [];
+        const delta = computeDelta(series);
+        return (
+          <StatCard
+            key={card.label}
+            label={card.label}
+            value={value}
+            icon={card.icon}
+            iconClass={card.iconClass}
+            borderClass={card.borderClass}
+            href={card.href}
+            linkLabel={card.linkLabel}
+            series={series}
+            delta={delta}
+            sparkColor={card.sparkColor}
+            isVulnCard={card.isVulnCard ?? false}
+            tooltip={card.tooltip}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+interface StatCardProps {
+  label: string;
+  value: number | undefined;
+  icon: LucideIcon;
+  iconClass: string;
+  borderClass: string;
+  href: string;
+  linkLabel: string;
+  series: number[];
+  delta: { pct: number; direction: 'up' | 'down' | 'flat' } | null;
+  sparkColor: string;
+  isVulnCard: boolean;
+  tooltip: string;
+}
+
+function StatCard({
+  label,
+  value,
+  icon: Icon,
+  iconClass,
+  borderClass,
+  href,
+  linkLabel,
+  series,
+  delta,
+  sparkColor,
+  isVulnCard,
+  tooltip,
+}: StatCardProps) {
+  // For vuln card, "up" is bad (red); for others, "up" is neutral/positive.
+  const deltaTone = useMemo(() => {
+    if (!delta || delta.direction === 'flat') return 'text-hcl-muted';
+    if (isVulnCard) {
+      return delta.direction === 'up'
+        ? 'text-red-600 dark:text-red-400'
+        : 'text-emerald-600 dark:text-emerald-400';
+    }
+    return 'text-hcl-muted';
+  }, [delta, isVulnCard]);
+
+  return (
+    <Link
+      href={href}
+      title={tooltip}
+      aria-label={`${label}: ${value?.toLocaleString() ?? '—'}. ${tooltip} ${linkLabel}`}
+      className={cn(
+        'group relative overflow-hidden rounded-xl border border-l-4 border-border bg-surface px-6 py-5 shadow-card',
+        'transition-all duration-base ease-spring',
+        'hover:-translate-y-0.5 hover:shadow-card-hover hover:border-l-primary',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/40',
+        borderClass,
+      )}
+    >
+      {/* Decorative corner glow on hover */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full bg-primary/0 blur-2xl transition-colors duration-slow group-hover:bg-primary/10"
+      />
+      <div className="relative flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-hcl-muted">{label}</p>
+          <p className="mt-1 font-metric text-3xl font-bold text-hcl-navy">
+            {value?.toLocaleString() ?? '—'}
+          </p>
+          {delta ? (
+            <span className={cn('mt-1 inline-flex items-center gap-1 text-xs font-semibold', deltaTone)}>
+              {delta.direction === 'up' && <ArrowUpRight className="h-3 w-3" aria-hidden />}
+              {delta.direction === 'down' && <ArrowDownRight className="h-3 w-3" aria-hidden />}
+              {delta.direction === 'flat' && <Minus className="h-3 w-3" aria-hidden />}
+              {delta.direction === 'flat'
+                ? 'No change'
+                : `${Math.abs(delta.pct).toFixed(0)}% vs prior`}
+            </span>
+          ) : (
+            <span className="mt-1 inline-block text-xs text-transparent select-none">·</span>
+          )}
+        </div>
+        <div className={cn('shrink-0 rounded-lg p-2.5 transition-transform duration-base ease-spring group-hover:scale-110', iconClass)}>
+          <Icon className="h-5 w-5" aria-hidden />
+        </div>
+      </div>
+
+      {series.length > 0 && (
+        <div className="relative mt-3 flex items-end justify-between">
+          <Sparkline data={series} width={140} height={32} color={sparkColor} />
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-primary opacity-0 transition-opacity duration-base group-hover:opacity-100 group-focus-visible:opacity-100">
+            {linkLabel}
+            <ArrowUpRight className="h-3 w-3" aria-hidden />
+          </span>
+        </div>
+      )}
+      {series.length === 0 && (
+        <span className="relative mt-3 inline-flex items-center gap-1 text-xs font-medium text-primary opacity-0 transition-opacity duration-base group-hover:opacity-100 group-focus-visible:opacity-100">
+          {linkLabel}
+          <ArrowUpRight className="h-3 w-3" aria-hidden />
+        </span>
+      )}
+    </Link>
+  );
+}

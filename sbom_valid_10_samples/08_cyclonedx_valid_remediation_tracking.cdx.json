@@ -1,0 +1,150 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.4",
+  "serialNumber": "urn:uuid:bd44cf67-5b3a-4cd3-a44f-338574882ff0",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-06-12T00:00:00Z",
+    "tools": [
+      {
+        "vendor": "HCLTech",
+        "name": "SBOM Analyzer Test Generator",
+        "version": "1.0.0"
+      }
+    ],
+    "authors": [
+      {
+        "name": "SBOM Analyzer Test Team",
+        "email": "sbom-test@example.com"
+      }
+    ],
+    "supplier": {
+      "name": "HCLTech Security"
+    },
+    "component": {
+      "type": "application",
+      "bom-ref": "app-remediation",
+      "supplier": {
+        "name": "HCLTech Security"
+      },
+      "name": "valid-remediation-tracking",
+      "version": "1.0.0",
+      "purl": "pkg:generic/valid-remediation-tracking@1.0.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ]
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "remediate-struts",
+      "supplier": {
+        "name": "Apache"
+      },
+      "name": "struts2-core",
+      "version": "2.5.30",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "bb7316aee4952d3e4ea0acd4b7fce25e842d03f75788c9ced6e70e1823e4b731"
+        }
+      ],
+      "group": "org.apache.struts",
+      "purl": "pkg:maven/org.apache.struts/struts2-core@2.5.30"
+    },
+    {
+      "type": "library",
+      "bom-ref": "remediate-tomcat",
+      "supplier": {
+        "name": "Apache"
+      },
+      "name": "tomcat-catalina",
+      "version": "9.0.65",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "4399995c58c8d1b40ff7e86924a044dffa13ae29d658c31b48fc34ac408ff2ae"
+        }
+      ],
+      "group": "org.apache.tomcat",
+      "purl": "pkg:maven/org.apache.tomcat/tomcat-catalina@9.0.65"
+    },
+    {
+      "type": "library",
+      "bom-ref": "remediate-netty",
+      "supplier": {
+        "name": "Netty"
+      },
+      "name": "netty-codec-http",
+      "version": "4.1.68.Final",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "01dfffb010dd9b08ef2d8010df6a9f511135c11290d14393a22d0d8b3a432d50"
+        }
+      ],
+      "group": "io.netty",
+      "purl": "pkg:maven/io.netty/netty-codec-http@4.1.68.Final"
+    },
+    {
+      "type": "library",
+      "bom-ref": "remediate-jquery",
+      "supplier": {
+        "name": "OpenJS Foundation"
+      },
+      "name": "jquery",
+      "version": "3.4.1",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "2954d651f08fb9d634c6badf64bea5354551cdb8a6010b70e14a82579e6dbd93"
+        }
+      ],
+      "purl": "pkg:npm/jquery@3.4.1"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "app-remediation",
+      "dependsOn": [
+        "remediate-struts",
+        "remediate-tomcat",
+        "remediate-netty",
+        "remediate-jquery"
+      ]
+    }
+  ]
+}

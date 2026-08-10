@@ -1,0 +1,507 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "serialNumber": "urn:uuid:1a95270d-acef-4933-8517-4e04bbda1f3b",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-05-11T06:30:00Z",
+    "tools": [
+      {
+        "vendor": "Future Beyond Technology",
+        "name": "SBOM Sample Generator",
+        "version": "1.0.0"
+      }
+    ],
+    "authors": [
+      {
+        "name": "FBT SBOM Test Team"
+      }
+    ],
+    "component": {
+      "type": "application",
+      "bom-ref": "pkg:generic/fbt/notebook-api@2.1.0",
+      "name": "notebook-api",
+      "version": "2.1.0",
+      "description": "FBT sample test application combining Python backend and Next.js frontend",
+      "scope": "required",
+      "supplier": {
+        "name": "Future Beyond Technology"
+      },
+      "licenses": [
+        {
+          "expression": "Apache-2.0"
+        }
+      ],
+      "purl": "pkg:generic/fbt/notebook-api@2.1.0"
+    },
+    "supplier": {
+      "name": "Future Beyond Technology"
+    }
+  },
+  "components": [
+    {
+      "type": "application",
+      "bom-ref": "pkg:generic/fbt/notebook-api@2.1.0",
+      "name": "notebook-api",
+      "version": "2.1.0",
+      "description": "FBT sample test application combining Python backend and Next.js frontend",
+      "scope": "required",
+      "supplier": {
+        "name": "Future Beyond Technology"
+      },
+      "licenses": [
+        {
+          "expression": "Apache-2.0"
+        }
+      ],
+      "purl": "pkg:generic/fbt/notebook-api@2.1.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/fastapi@0.115.0",
+      "name": "fastapi",
+      "version": "0.115.0",
+      "description": "Modern, fast web framework for building APIs with Python",
+      "scope": "required",
+      "supplier": {
+        "name": "Tiangolo"
+      },
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "purl": "pkg:pypi/fastapi@0.115.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/uvicorn@0.32.0",
+      "name": "uvicorn",
+      "version": "0.32.0",
+      "description": "ASGI web server implementation for Python",
+      "scope": "required",
+      "supplier": {
+        "name": "Encode OSS Ltd."
+      },
+      "licenses": [
+        {
+          "expression": "BSD-3-Clause"
+        }
+      ],
+      "purl": "pkg:pypi/uvicorn@0.32.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/pydantic@2.9.2",
+      "name": "pydantic",
+      "version": "2.9.2",
+      "description": "Data validation using Python type hints",
+      "scope": "required",
+      "supplier": {
+        "name": "Pydantic Services Inc."
+      },
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "purl": "pkg:pypi/pydantic@2.9.2"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/sqlalchemy@2.0.36",
+      "name": "sqlalchemy",
+      "version": "2.0.36",
+      "description": "Python SQL toolkit and ORM",
+      "scope": "required",
+      "supplier": {
+        "name": "SQLAlchemy authors"
+      },
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "purl": "pkg:pypi/sqlalchemy@2.0.36"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/alembic@1.13.3",
+      "name": "alembic",
+      "version": "1.13.3",
+      "description": "Database migration tool for SQLAlchemy",
+      "scope": "required",
+      "supplier": {
+        "name": "Mike Bayer"
+      },
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "purl": "pkg:pypi/alembic@1.13.3"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/httpx@0.27.2",
+      "name": "httpx",
+      "version": "0.27.2",
+      "description": "Next-generation HTTP client for Python",
+      "scope": "required",
+      "supplier": {
+        "name": "Encode OSS Ltd."
+      },
+      "licenses": [
+        {
+          "expression": "BSD-3-Clause"
+        }
+      ],
+      "purl": "pkg:pypi/httpx@0.27.2"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/passlib@1.7.4",
+      "name": "passlib",
+      "version": "1.7.4",
+      "description": "Password hashing library for Python",
+      "scope": "required",
+      "supplier": {
+        "name": "Eli Collins"
+      },
+      "licenses": [
+        {
+          "expression": "BSD-3-Clause"
+        }
+      ],
+      "purl": "pkg:pypi/passlib@1.7.4"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/python-jose@3.3.0",
+      "name": "python-jose",
+      "version": "3.3.0",
+      "description": "JOSE implementation in Python (JWT/JWS/JWE)",
+      "scope": "required",
+      "supplier": {
+        "name": "Michael Davis"
+      },
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "purl": "pkg:pypi/python-jose@3.3.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/redis@5.1.1",
+      "name": "redis",
+      "version": "5.1.1",
+      "description": "Python client for Redis",
+      "scope": "required",
+      "supplier": {
+        "name": "Redis Inc."
+      },
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "purl": "pkg:pypi/redis@5.1.1"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/celery@5.4.0",
+      "name": "celery",
+      "version": "5.4.0",
+      "description": "Distributed task queue",
+      "scope": "required",
+      "supplier": {
+        "name": "Celery Project"
+      },
+      "licenses": [
+        {
+          "expression": "BSD-3-Clause"
+        }
+      ],
+      "purl": "pkg:pypi/celery@5.4.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/next@15.0.3",
+      "name": "next",
+      "version": "15.0.3",
+      "description": "The React framework for production",
+      "scope": "required",
+      "supplier": {
+        "name": "Vercel, Inc."
+      },
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "purl": "pkg:npm/next@15.0.3"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/react@18.3.1",
+      "name": "react",
+      "version": "18.3.1",
+      "description": "JavaScript library for building user interfaces",
+      "scope": "required",
+      "supplier": {
+        "name": "Meta Platforms, Inc."
+      },
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "purl": "pkg:npm/react@18.3.1"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/react-dom@18.3.1",
+      "name": "react-dom",
+      "version": "18.3.1",
+      "description": "React DOM rendering package",
+      "scope": "required",
+      "supplier": {
+        "name": "Meta Platforms, Inc."
+      },
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "purl": "pkg:npm/react-dom@18.3.1"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/typescript@5.6.3",
+      "name": "typescript",
+      "version": "5.6.3",
+      "description": "TypeScript language compiler",
+      "scope": "required",
+      "supplier": {
+        "name": "Microsoft Corporation"
+      },
+      "licenses": [
+        {
+          "expression": "Apache-2.0"
+        }
+      ],
+      "purl": "pkg:npm/typescript@5.6.3"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/tailwindcss@3.4.14",
+      "name": "tailwindcss",
+      "version": "3.4.14",
+      "description": "Utility-first CSS framework",
+      "scope": "required",
+      "supplier": {
+        "name": "Tailwind Labs, Inc."
+      },
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "purl": "pkg:npm/tailwindcss@3.4.14"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/%40tanstack/react-query@5.59.16",
+      "name": "@tanstack/react-query",
+      "version": "5.59.16",
+      "description": "Asynchronous state management for React",
+      "scope": "required",
+      "supplier": {
+        "name": "TanStack"
+      },
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "purl": "pkg:npm/%40tanstack/react-query@5.59.16"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/zod@3.23.8",
+      "name": "zod",
+      "version": "3.23.8",
+      "description": "TypeScript-first schema validation",
+      "scope": "required",
+      "supplier": {
+        "name": "Colin McDonnell"
+      },
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "purl": "pkg:npm/zod@3.23.8"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/swr@2.2.5",
+      "name": "swr",
+      "version": "2.2.5",
+      "description": "React Hooks library for data fetching",
+      "scope": "required",
+      "supplier": {
+        "name": "Vercel, Inc."
+      },
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "purl": "pkg:npm/swr@2.2.5"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/%40radix-ui/react-dialog@1.1.2",
+      "name": "@radix-ui/react-dialog",
+      "version": "1.1.2",
+      "description": "Modal dialog primitive for React",
+      "scope": "required",
+      "supplier": {
+        "name": "WorkOS, Inc."
+      },
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "purl": "pkg:npm/%40radix-ui/react-dialog@1.1.2"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/lucide-react@0.453.0",
+      "name": "lucide-react",
+      "version": "0.453.0",
+      "description": "Lucide icon library for React",
+      "scope": "required",
+      "supplier": {
+        "name": "Lucide Contributors"
+      },
+      "licenses": [
+        {
+          "expression": "ISC"
+        }
+      ],
+      "purl": "pkg:npm/lucide-react@0.453.0"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "pkg:generic/fbt/notebook-api@2.1.0",
+      "dependsOn": [
+        "pkg:pypi/fastapi@0.115.0",
+        "pkg:pypi/uvicorn@0.32.0",
+        "pkg:pypi/pydantic@2.9.2",
+        "pkg:pypi/sqlalchemy@2.0.36",
+        "pkg:pypi/alembic@1.13.3",
+        "pkg:pypi/httpx@0.27.2",
+        "pkg:pypi/passlib@1.7.4",
+        "pkg:pypi/python-jose@3.3.0",
+        "pkg:pypi/redis@5.1.1",
+        "pkg:pypi/celery@5.4.0",
+        "pkg:npm/next@15.0.3",
+        "pkg:npm/react@18.3.1",
+        "pkg:npm/react-dom@18.3.1",
+        "pkg:npm/typescript@5.6.3",
+        "pkg:npm/tailwindcss@3.4.14",
+        "pkg:npm/%40tanstack/react-query@5.59.16",
+        "pkg:npm/zod@3.23.8",
+        "pkg:npm/swr@2.2.5",
+        "pkg:npm/%40radix-ui/react-dialog@1.1.2",
+        "pkg:npm/lucide-react@0.453.0"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/fastapi@0.115.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/uvicorn@0.32.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/pydantic@2.9.2",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/sqlalchemy@2.0.36",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/alembic@1.13.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/httpx@0.27.2",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/passlib@1.7.4",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/python-jose@3.3.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/redis@5.1.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/celery@5.4.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/next@15.0.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/react@18.3.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/react-dom@18.3.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/typescript@5.6.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/tailwindcss@3.4.14",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40tanstack/react-query@5.59.16",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/zod@3.23.8",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/swr@2.2.5",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40radix-ui/react-dialog@1.1.2",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/lucide-react@0.453.0",
+      "dependsOn": []
+    }
+  ]
+}

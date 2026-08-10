@@ -1,0 +1,216 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.4",
+  "serialNumber": "urn:uuid:6af1bb82-62c5-486a-90e0-7db92de6e8be",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-06-12T00:00:00Z",
+    "tools": [
+      {
+        "vendor": "HCLTech",
+        "name": "SBOM Analyzer Test Generator",
+        "version": "1.0.0"
+      }
+    ],
+    "authors": [
+      {
+        "name": "SBOM Analyzer Test Team",
+        "email": "sbom-test@example.com"
+      }
+    ],
+    "supplier": {
+      "name": "HCLTech Security"
+    },
+    "component": {
+      "type": "application",
+      "bom-ref": "app-lifecycle",
+      "supplier": {
+        "name": "HCLTech Security"
+      },
+      "name": "valid-lifecycle-runtimes",
+      "version": "1.0.0",
+      "purl": "pkg:generic/valid-lifecycle-runtimes@1.0.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ]
+    }
+  },
+  "components": [
+    {
+      "type": "framework",
+      "bom-ref": "nodejs-16",
+      "supplier": {
+        "name": "OpenJS Foundation"
+      },
+      "name": "nodejs",
+      "version": "16.20.2",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "f0d5f5f442f7a5563c3a1a303874eae37ec918243695f38cf17f7c84df752766"
+        }
+      ]
+    },
+    {
+      "type": "framework",
+      "bom-ref": "python-38",
+      "supplier": {
+        "name": "Python Software Foundation"
+      },
+      "name": "python",
+      "version": "3.8.10",
+      "licenses": [
+        {
+          "license": {
+            "id": "Python-2.0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "07a95312a2ab320277eeb09b2f9dca7a30d14128c637ddeeda7d537cd370daa0"
+        }
+      ]
+    },
+    {
+      "type": "operating-system",
+      "bom-ref": "ubuntu-2004",
+      "supplier": {
+        "name": "Canonical"
+      },
+      "name": "ubuntu",
+      "version": "20.04",
+      "licenses": [
+        {
+          "license": {
+            "id": "GPL-2.0-only"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "40b9758bb21a984925edca0d81989226967badd09f071c5e037793e3bf9810e1"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "postgresql-12",
+      "supplier": {
+        "name": "PostgreSQL Global Development Group"
+      },
+      "name": "postgresql",
+      "version": "12.15",
+      "licenses": [
+        {
+          "license": {
+            "id": "PostgreSQL"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "e8f30d88f4ee892604963ef192ff86beec7c3f5b0b8a1a425373f354d47c3bad"
+        }
+      ]
+    },
+    {
+      "type": "framework",
+      "bom-ref": "django-32",
+      "supplier": {
+        "name": "Django Software Foundation"
+      },
+      "name": "django",
+      "version": "3.2.25",
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "e43ef8673d695741b769e4d8ef7cc85e82767c05dae98e98de7eea5d6164fbd3"
+        }
+      ],
+      "purl": "pkg:pypi/django@3.2.25"
+    },
+    {
+      "type": "framework",
+      "bom-ref": "angular-12",
+      "supplier": {
+        "name": "Angular"
+      },
+      "name": "angular",
+      "version": "12.2.17",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "74e9a67f139adca8767b834072ce641b52cc70ec252ed5ef1a8f8df4a3fa6384"
+        }
+      ],
+      "purl": "pkg:npm/%40angular/core@12.2.17"
+    },
+    {
+      "type": "framework",
+      "bom-ref": "spring-boot-27",
+      "supplier": {
+        "name": "VMware"
+      },
+      "name": "spring-boot",
+      "version": "2.7.18",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "0a2455d6a8a95e67608e2ebb1cba2b2334d2cce861ed95090776d64c28f75eb0"
+        }
+      ],
+      "group": "org.springframework.boot",
+      "purl": "pkg:maven/org.springframework.boot/spring-boot@2.7.18"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "app-lifecycle",
+      "dependsOn": [
+        "nodejs-16",
+        "python-38",
+        "ubuntu-2004",
+        "postgresql-12",
+        "django-32",
+        "angular-12",
+        "spring-boot-27"
+      ]
+    }
+  ]
+}

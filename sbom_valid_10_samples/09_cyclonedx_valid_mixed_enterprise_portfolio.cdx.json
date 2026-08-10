@@ -1,0 +1,235 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.4",
+  "serialNumber": "urn:uuid:b389e841-364f-463f-ade8-029fae1db671",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-06-12T00:00:00Z",
+    "tools": [
+      {
+        "vendor": "HCLTech",
+        "name": "SBOM Analyzer Test Generator",
+        "version": "1.0.0"
+      }
+    ],
+    "authors": [
+      {
+        "name": "SBOM Analyzer Test Team",
+        "email": "sbom-test@example.com"
+      }
+    ],
+    "supplier": {
+      "name": "HCLTech Security"
+    },
+    "component": {
+      "type": "application",
+      "bom-ref": "app-mixed",
+      "supplier": {
+        "name": "HCLTech Security"
+      },
+      "name": "valid-mixed-enterprise-portfolio",
+      "version": "2.3.4",
+      "purl": "pkg:generic/valid-mixed-enterprise-portfolio@2.3.4",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ]
+    }
+  },
+  "components": [
+    {
+      "type": "framework",
+      "bom-ref": "dotnet-60",
+      "supplier": {
+        "name": "Microsoft"
+      },
+      "name": "dotnet",
+      "version": "6.0.30",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "aac3966244cc393e4b9676ae2395022ceba7b75ab93a522733380543d5aa35ba"
+        }
+      ]
+    },
+    {
+      "type": "framework",
+      "bom-ref": "nodejs-18",
+      "supplier": {
+        "name": "OpenJS Foundation"
+      },
+      "name": "nodejs",
+      "version": "18.19.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "35864e4c099a3e8ef888e17fa73df8d4da01bbc14ee604bfc3bbbceef1379961"
+        }
+      ]
+    },
+    {
+      "type": "framework",
+      "bom-ref": "python-39",
+      "supplier": {
+        "name": "Python Software Foundation"
+      },
+      "name": "python",
+      "version": "3.9.18",
+      "licenses": [
+        {
+          "license": {
+            "id": "Python-2.0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "37f9c8abbf38f7941ae13d0b90b0c9990b2b655d7bcb1ab98ab9e4703306d30c"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "npm-axios",
+      "supplier": {
+        "name": "npm"
+      },
+      "name": "axios",
+      "version": "0.21.1",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "29f845504b7f7cb0f05ba0bde63dacf210eb94b9b4481017fc78c82f31874496"
+        }
+      ],
+      "purl": "pkg:npm/axios@0.21.1"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pypi-requests",
+      "supplier": {
+        "name": "Python Package Index"
+      },
+      "name": "requests",
+      "version": "2.25.1",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "9a752a92b956fd5ba8ce3230568f9a9819c59bfc5158e000de1d841c88841871"
+        }
+      ],
+      "purl": "pkg:pypi/requests@2.25.1"
+    },
+    {
+      "type": "library",
+      "bom-ref": "nuget-newtonsoft",
+      "supplier": {
+        "name": "Newtonsoft"
+      },
+      "name": "Newtonsoft.Json",
+      "version": "12.0.3",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "b3ca32c8410f2e00f86c016a7ade9c9fa25d500a39361fdb38f02b11ee11c6df"
+        }
+      ],
+      "purl": "pkg:nuget/Newtonsoft.Json@12.0.3"
+    },
+    {
+      "type": "library",
+      "bom-ref": "maven-commons-io",
+      "supplier": {
+        "name": "Apache"
+      },
+      "name": "commons-io",
+      "version": "2.6",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "c66a430259dcde919615dee427c4e72c9d72535cae7b068cb61a45d0c2628ad4"
+        }
+      ],
+      "group": "commons-io",
+      "purl": "pkg:maven/commons-io/commons-io@2.6"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "app-mixed",
+      "dependsOn": [
+        "dotnet-60",
+        "nodejs-18",
+        "python-39",
+        "npm-axios",
+        "pypi-requests",
+        "nuget-newtonsoft",
+        "maven-commons-io"
+      ]
+    },
+    {
+      "ref": "nodejs-18",
+      "dependsOn": [
+        "npm-axios"
+      ]
+    },
+    {
+      "ref": "python-39",
+      "dependsOn": [
+        "pypi-requests"
+      ]
+    },
+    {
+      "ref": "dotnet-60",
+      "dependsOn": [
+        "nuget-newtonsoft"
+      ]
+    }
+  ]
+}

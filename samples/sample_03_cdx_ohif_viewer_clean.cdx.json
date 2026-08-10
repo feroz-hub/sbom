@@ -1,0 +1,525 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "serialNumber": "urn:uuid:cb4a839c-44a5-49dc-9384-eaf257ad3410",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-05-11T06:40:00Z",
+    "tools": [
+      {
+        "vendor": "Future Beyond Technology",
+        "name": "SBOM Sample Generator",
+        "version": "1.0.0"
+      }
+    ],
+    "authors": [
+      {
+        "name": "FBT SBOM Test Team"
+      }
+    ],
+    "component": {
+      "type": "application",
+      "bom-ref": "pkg:generic/ohif/viewers@3.9.0",
+      "name": "ohif-viewer",
+      "version": "3.9.0",
+      "description": "OHIF Viewer \u2014 open-source, web-based, zero-footprint DICOM medical imaging viewer. SYNTHETIC TEST SBOM: generated for SBOM-validator testing; not an authoritative upstream document.",
+      "scope": "required",
+      "supplier": {
+        "name": "Open Health Imaging Foundation"
+      },
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "purl": "pkg:generic/ohif/viewers@3.9.0"
+    },
+    "supplier": {
+      "name": "Open Health Imaging Foundation"
+    },
+    "properties": [
+      {
+        "name": "fbt:fixture-type",
+        "value": "synthetic-test"
+      },
+      {
+        "name": "fbt:medical-domain",
+        "value": "diagnostic-imaging"
+      },
+      {
+        "name": "fbt:product-class",
+        "value": "DICOM viewer"
+      },
+      {
+        "name": "fbt:regulatory-context",
+        "value": "RDx / non-diagnostic research use"
+      }
+    ]
+  },
+  "components": [
+    {
+      "type": "application",
+      "bom-ref": "pkg:generic/ohif/viewers@3.9.0",
+      "name": "ohif-viewer",
+      "version": "3.9.0",
+      "description": "OHIF Viewer \u2014 open-source, web-based, zero-footprint DICOM medical imaging viewer. SYNTHETIC TEST SBOM: generated for SBOM-validator testing; not an authoritative upstream document.",
+      "scope": "required",
+      "supplier": {
+        "name": "Open Health Imaging Foundation"
+      },
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "purl": "pkg:generic/ohif/viewers@3.9.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/%40cornerstonejs/core@1.85.0",
+      "name": "@cornerstonejs/core",
+      "version": "1.85.0",
+      "description": "Cornerstone3D core \u2014 medical image rendering",
+      "scope": "required",
+      "supplier": {
+        "name": "Radical Imaging"
+      },
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "purl": "pkg:npm/%40cornerstonejs/core@1.85.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/%40cornerstonejs/tools@1.85.0",
+      "name": "@cornerstonejs/tools",
+      "version": "1.85.0",
+      "description": "Cornerstone3D measurement/annotation tools",
+      "scope": "required",
+      "supplier": {
+        "name": "Radical Imaging"
+      },
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "purl": "pkg:npm/%40cornerstonejs/tools@1.85.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/%40cornerstonejs/dicom-image-loader@1.85.0",
+      "name": "@cornerstonejs/dicom-image-loader",
+      "version": "1.85.0",
+      "description": "DICOM image loader for Cornerstone3D",
+      "scope": "required",
+      "supplier": {
+        "name": "Radical Imaging"
+      },
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "purl": "pkg:npm/%40cornerstonejs/dicom-image-loader@1.85.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/%40cornerstonejs/streaming-image-volume-loader@1.85.0",
+      "name": "@cornerstonejs/streaming-image-volume-loader",
+      "version": "1.85.0",
+      "description": "Streaming volume loader for Cornerstone3D",
+      "scope": "required",
+      "supplier": {
+        "name": "Radical Imaging"
+      },
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "purl": "pkg:npm/%40cornerstonejs/streaming-image-volume-loader@1.85.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/dcmjs@0.30.2",
+      "name": "dcmjs",
+      "version": "0.30.2",
+      "description": "JavaScript implementation of DICOM standard",
+      "scope": "required",
+      "supplier": {
+        "name": "dcmjs contributors"
+      },
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "purl": "pkg:npm/dcmjs@0.30.2"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/dicomweb-client@0.10.4",
+      "name": "dicomweb-client",
+      "version": "0.10.4",
+      "description": "DICOMweb client library for browsers",
+      "scope": "required",
+      "supplier": {
+        "name": "ImagingDataCommons"
+      },
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "purl": "pkg:npm/dicomweb-client@0.10.4"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/dicom-parser@1.8.21",
+      "name": "dicom-parser",
+      "version": "1.8.21",
+      "description": "JavaScript DICOM P10 parser",
+      "scope": "required",
+      "supplier": {
+        "name": "Chris Hafey"
+      },
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "purl": "pkg:npm/dicom-parser@1.8.21"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/react@18.3.1",
+      "name": "react",
+      "version": "18.3.1",
+      "description": "JavaScript library for building user interfaces",
+      "scope": "required",
+      "supplier": {
+        "name": "Meta Platforms, Inc."
+      },
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "purl": "pkg:npm/react@18.3.1"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/react-dom@18.3.1",
+      "name": "react-dom",
+      "version": "18.3.1",
+      "description": "React DOM rendering package",
+      "scope": "required",
+      "supplier": {
+        "name": "Meta Platforms, Inc."
+      },
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "purl": "pkg:npm/react-dom@18.3.1"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/react-router-dom@6.28.0",
+      "name": "react-router-dom",
+      "version": "6.28.0",
+      "description": "Declarative routing for React web apps",
+      "scope": "required",
+      "supplier": {
+        "name": "Remix Software, Inc."
+      },
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "purl": "pkg:npm/react-router-dom@6.28.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/%40reduxjs/toolkit@2.3.0",
+      "name": "@reduxjs/toolkit",
+      "version": "2.3.0",
+      "description": "Official, opinionated, batteries-included Redux toolset",
+      "scope": "required",
+      "supplier": {
+        "name": "Redux Team"
+      },
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "purl": "pkg:npm/%40reduxjs/toolkit@2.3.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/react-redux@9.1.2",
+      "name": "react-redux",
+      "version": "9.1.2",
+      "description": "Official React bindings for Redux",
+      "scope": "required",
+      "supplier": {
+        "name": "Redux Team"
+      },
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "purl": "pkg:npm/react-redux@9.1.2"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/i18next@23.16.4",
+      "name": "i18next",
+      "version": "23.16.4",
+      "description": "Internationalization framework",
+      "scope": "required",
+      "supplier": {
+        "name": "i18next contributors"
+      },
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "purl": "pkg:npm/i18next@23.16.4"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/react-i18next@15.1.1",
+      "name": "react-i18next",
+      "version": "15.1.1",
+      "description": "React bindings for i18next",
+      "scope": "required",
+      "supplier": {
+        "name": "i18next contributors"
+      },
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "purl": "pkg:npm/react-i18next@15.1.1"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/lodash@4.17.21",
+      "name": "lodash",
+      "version": "4.17.21",
+      "description": "Modular JavaScript utility library",
+      "scope": "required",
+      "supplier": {
+        "name": "OpenJS Foundation"
+      },
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "purl": "pkg:npm/lodash@4.17.21"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/classnames@2.5.1",
+      "name": "classnames",
+      "version": "2.5.1",
+      "description": "Conditional className utility",
+      "scope": "required",
+      "supplier": {
+        "name": "Jed Watson"
+      },
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "purl": "pkg:npm/classnames@2.5.1"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/%40tanstack/react-table@8.20.5",
+      "name": "@tanstack/react-table",
+      "version": "8.20.5",
+      "description": "Headless table UI primitive for React",
+      "scope": "required",
+      "supplier": {
+        "name": "TanStack"
+      },
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "purl": "pkg:npm/%40tanstack/react-table@8.20.5"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/dompurify@3.1.6",
+      "name": "dompurify",
+      "version": "3.1.6",
+      "description": "DOM-only, super-fast XSS sanitizer for HTML",
+      "scope": "required",
+      "supplier": {
+        "name": "Cure53"
+      },
+      "licenses": [
+        {
+          "expression": "MPL-2.0"
+        }
+      ],
+      "purl": "pkg:npm/dompurify@3.1.6"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/tailwindcss@3.4.14",
+      "name": "tailwindcss",
+      "version": "3.4.14",
+      "description": "Utility-first CSS framework",
+      "scope": "required",
+      "supplier": {
+        "name": "Tailwind Labs, Inc."
+      },
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "purl": "pkg:npm/tailwindcss@3.4.14"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/typescript@5.6.3",
+      "name": "typescript",
+      "version": "5.6.3",
+      "description": "TypeScript language compiler",
+      "scope": "required",
+      "supplier": {
+        "name": "Microsoft Corporation"
+      },
+      "licenses": [
+        {
+          "expression": "Apache-2.0"
+        }
+      ],
+      "purl": "pkg:npm/typescript@5.6.3"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "pkg:generic/ohif/viewers@3.9.0",
+      "dependsOn": [
+        "pkg:npm/%40cornerstonejs/core@1.85.0",
+        "pkg:npm/%40cornerstonejs/tools@1.85.0",
+        "pkg:npm/%40cornerstonejs/dicom-image-loader@1.85.0",
+        "pkg:npm/%40cornerstonejs/streaming-image-volume-loader@1.85.0",
+        "pkg:npm/dcmjs@0.30.2",
+        "pkg:npm/dicomweb-client@0.10.4",
+        "pkg:npm/dicom-parser@1.8.21",
+        "pkg:npm/react@18.3.1",
+        "pkg:npm/react-dom@18.3.1",
+        "pkg:npm/react-router-dom@6.28.0",
+        "pkg:npm/%40reduxjs/toolkit@2.3.0",
+        "pkg:npm/react-redux@9.1.2",
+        "pkg:npm/i18next@23.16.4",
+        "pkg:npm/react-i18next@15.1.1",
+        "pkg:npm/lodash@4.17.21",
+        "pkg:npm/classnames@2.5.1",
+        "pkg:npm/%40tanstack/react-table@8.20.5",
+        "pkg:npm/dompurify@3.1.6",
+        "pkg:npm/tailwindcss@3.4.14",
+        "pkg:npm/typescript@5.6.3"
+      ]
+    },
+    {
+      "ref": "pkg:npm/%40cornerstonejs/core@1.85.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40cornerstonejs/tools@1.85.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40cornerstonejs/dicom-image-loader@1.85.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40cornerstonejs/streaming-image-volume-loader@1.85.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/dcmjs@0.30.2",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/dicomweb-client@0.10.4",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/dicom-parser@1.8.21",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/react@18.3.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/react-dom@18.3.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/react-router-dom@6.28.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40reduxjs/toolkit@2.3.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/react-redux@9.1.2",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/i18next@23.16.4",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/react-i18next@15.1.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/lodash@4.17.21",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/classnames@2.5.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40tanstack/react-table@8.20.5",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/dompurify@3.1.6",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/tailwindcss@3.4.14",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/typescript@5.6.3",
+      "dependsOn": []
+    }
+  ]
+}
