@@ -1,15 +1,26 @@
 from pathlib import Path
-
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 
-
-def test_fresh_bootstrap_path_reaches_phase9_head_without_live_metadata_replay():
-    source = Path("scripts/bootstrap_fresh_database.py").read_text()
+def test_fresh_bootstrap_uses_dynamic_alembic_head_without_live_metadata_replay():
+    source = Path("scripts/bootstrap_fresh_database.py").read_text() 
     assert "047_email_verification_tokens" in source
     assert '"alembic", "upgrade", "head"' in source
-    assert 'EXPECTED_HEAD = "049_tenant_multi_role_assignments"' in source
-    assert "Base.metadata.create_all" not in source
-    assert ScriptDirectory.from_config(Config("alembic.ini")).get_current_head() == (
-        "049_tenant_multi_role_assignments"
+    # Fresh bootstrap must not hard-code the current Alembic head.
+
+    assert "EXPECTED_HEAD =" not in source
+    # Current Alembic head must be discovered from the migration graph.
+    assert "ScriptDirectory.from_config" in source
+    assert "get_heads()" in source
+
+    # There must be at least one valid repository head.
+    heads = set(
+        ScriptDirectory.from_config(
+            Config("alembic.ini")
+        ).get_heads()
     )
+
+    assert heads
+    # Fresh PostgreSQL bootstrap must use the frozen schema,
+    # not replay SQLAlchemy live metadata.
+    assert "Base.metadata.create_all" not in source

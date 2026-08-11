@@ -17,13 +17,17 @@ from pathlib import Path
 
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import make_url
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 
 ROOT = Path(__file__).resolve().parent.parent
 SNAPSHOT = ROOT / "scripts" / "schema" / "postgresql_047_baseline.sql"
 BASELINE_REVISION = "047_email_verification_tokens"
-EXPECTED_HEAD = "049_tenant_multi_role_assignments"
 
-
+def _expected_head() -> set[str]:
+    config = Config(ROOT / "alembic.ini")
+    script = ScriptDirectory.from_config(config)
+    return set(script.get_heads())
 def _arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--database-url", required=True)
@@ -84,12 +88,42 @@ def bootstrap(database_url: str, confirmation: str) -> None:
     verification_engine = create_engine(database_url)
     try:
         with verification_engine.connect() as connection:
-            revision = connection.scalar(text("SELECT version_num FROM alembic_version"))
-            if revision != EXPECTED_HEAD:
-                raise RuntimeError("Fresh bootstrap did not reach the expected Alembic head")
-    finally:
-        verification_engine.dispose()
+            expected_heads = _expected_heads()
+ 
+verification_engine = create_engine(database_url)
 
+try:
+
+    with verification_engine.connect() as connection:
+
+        actual_heads = {
+
+            str(row[0])
+
+            for row in connection.execute(
+
+                text("SELECT version_num FROM alembic_version")
+
+            )
+
+        }
+ 
+        if actual_heads != expected_heads:
+
+            raise RuntimeError(
+
+                "Fresh bootstrap did not reach the expected Alembic head(s). "
+
+                f"Expected {sorted(expected_heads)}, "
+
+                f"found {sorted(actual_heads)}"
+
+            )
+
+finally:
+
+    verification_engine.dispose()
+ 
 
 def main() -> int:
     args = _arguments()
@@ -98,7 +132,8 @@ def main() -> int:
     except Exception as exc:  # noqa: BLE001
         print(f"Fresh database bootstrap failed: {exc}", file=sys.stderr)
         return 1
-    print(f"Fresh PostgreSQL database bootstrapped at revision {EXPECTED_HEAD}")
+    heads = ", ".join(sorted(_expected_head()))
+    print(f"Fresh PostgreSQL database bootstrapped at revision {heads}")
     return 0
 
 
