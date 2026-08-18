@@ -88,42 +88,21 @@ def bootstrap(database_url: str, confirmation: str) -> None:
     verification_engine = create_engine(database_url)
     try:
         with verification_engine.connect() as connection:
-            expected_heads = _expected_heads()
- 
-verification_engine = create_engine(database_url)
-
-try:
-
-    with verification_engine.connect() as connection:
-
-        actual_heads = {
-
-            str(row[0])
-
-            for row in connection.execute(
-
-                text("SELECT version_num FROM alembic_version")
-
-            )
-
-        }
- 
-        if actual_heads != expected_heads:
-
-            raise RuntimeError(
-
-                "Fresh bootstrap did not reach the expected Alembic head(s). "
-
-                f"Expected {sorted(expected_heads)}, "
-
-                f"found {sorted(actual_heads)}"
-
-            )
-
-finally:
-
-    verification_engine.dispose()
- 
+            expected_heads = _expected_head()
+            actual_heads = {
+                str(row[0])
+                for row in connection.execute(
+                    text("SELECT version_num FROM alembic_version")
+                )
+            }
+            if actual_heads != expected_heads:
+                raise RuntimeError(
+                    "Fresh bootstrap did not reach the expected Alembic head(s). "
+                    f"Expected {sorted(expected_heads)}, "
+                    f"found {sorted(actual_heads)}"
+                )
+    finally:
+        verification_engine.dispose()
 
 def main() -> int:
     args = _arguments()
