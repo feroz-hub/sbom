@@ -118,6 +118,7 @@ from ..services.identity_mapping_service import build_identity_mapping
 def _tenant_dict(tenant: Tenant, role: str | None = None) -> dict:
     return {
         "id": tenant.id,
+        "tenant_key": tenant.tenant_key,
         "name": tenant.name,
         "slug": tenant.slug,
         "external_iam_tenant_id": tenant.external_iam_tenant_id,
@@ -409,6 +410,7 @@ def create_tenant(
         tenant=CreatedTenantResponse.model_validate(
             {
                 "id": result.tenant.id,
+                "tenant_key": result.tenant.tenant_key,
                 "name": result.tenant.name,
                 "slug": result.tenant.slug,
                 "external_iam_tenant_id": result.tenant.external_iam_tenant_id,

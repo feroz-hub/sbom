@@ -192,8 +192,8 @@ def test_reprocess_endpoint_preserves_tenant_isolation(client):
     try:
         db.execute(
             text(
-                "INSERT INTO tenants (id, name, slug, external_iam_tenant_id, status, created_at, updated_at) "
-                "VALUES (2, 'Tenant Two', 'tenant-two', 'tenant-two', 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) "
+                "INSERT INTO tenants (id, tenant_key, name, slug, external_iam_tenant_id, status, created_at, updated_at) "
+                "VALUES (2, 'tnt_00000000000000000000000000000002', 'Tenant Two', 'tenant-two', 'tenant-two', 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) "
                 "ON CONFLICT(id) DO NOTHING"
             )
         )

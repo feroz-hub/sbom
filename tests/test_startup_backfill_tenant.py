@@ -10,12 +10,13 @@ These tests verify that the analytics startup backfill:
 6. Skips inactive (DISABLED) tenants.
 7. Rejects a mismatched tenant_id parameter.
 """
-
 from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
 from uuid import uuid4
+
+from app.core.tenant_keys import generate_tenant_key
 
 import pytest
 from sqlalchemy import func, select, text
@@ -56,13 +57,15 @@ def _create_tenant_raw(db_session, *, name: str, status: str = "ACTIVE") -> int:
     suffix = _suffix()
     slug = f"{name.lower().replace(' ', '-')}-{suffix}"
     ext_id = f"ext-{slug}"
+    tkey = generate_tenant_key()
     result = db_session.execute(
         text(
-            "INSERT INTO tenants (name, slug, external_iam_tenant_id, status, created_at, updated_at) "
-            "VALUES (:name, :slug, :ext_id, :status, :created_at, :updated_at) "
+            "INSERT INTO tenants (tenant_key, name, slug, external_iam_tenant_id, status, created_at, updated_at) "
+            "VALUES (:tenant_key, :name, :slug, :ext_id, :status, :created_at, :updated_at) "
             "RETURNING id"
         ),
         {
+            "tenant_key": tkey,
             "name": name,
             "slug": slug,
             "ext_id": ext_id,

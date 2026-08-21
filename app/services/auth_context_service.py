@@ -313,6 +313,7 @@ def _available_tenant(
 
     return AvailableTenant(
         id=tenant.id,
+        tenant_key=tenant.tenant_key,
         name=tenant.name,
         slug=tenant.slug,
         external_iam_tenant_id=tenant.external_iam_tenant_id,

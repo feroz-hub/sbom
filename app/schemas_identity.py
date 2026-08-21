@@ -34,6 +34,7 @@ class IdentityMappingInfo(BaseModel):
 
 class AvailableTenant(BaseModel):
     id: int
+    tenant_key: str
     name: str
     slug: str
     external_iam_tenant_id: str | None = None

@@ -24,6 +24,7 @@ from ..core.permissions import (
     TENANT_ROLES,
     normalize_role,
 )
+from ..core.tenant_keys import generate_tenant_key
 from ..models import (
     AuthorizationRole,
     IAMUser,
@@ -356,6 +357,7 @@ def create_tenant_with_initial_admin(
 
             now = datetime.now(UTC)
             tenant = Tenant(
+                tenant_key=generate_tenant_key(),
                 name=normalized_name,
                 slug=normalized_slug,
                 external_iam_tenant_id=normalized_external_id,

@@ -22,6 +22,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship, synonym
 from sqlalchemy.sql import expression
 
+from .core.tenant_keys import generate_tenant_key
 from .db import Base
 from .models_mixins import SoftDeleteMixin, TenantOwnedMixin
 
@@ -30,6 +31,12 @@ class Tenant(Base):
     __tablename__ = "tenants"
 
     id = Column(Integer, primary_key=True)
+    tenant_key = Column(
+        String(64),
+        nullable=False,
+        index=True,
+        default=generate_tenant_key,
+    )
     name = Column(String(255), nullable=False)
     slug = Column(String(128), nullable=False, index=True)
     # Optional legacy/external metadata. Tenant authority is local membership,
@@ -41,6 +48,7 @@ class Tenant(Base):
 
     __table_args__ = (
         UniqueConstraint("slug", name="uq_tenants_slug"),
+        UniqueConstraint("tenant_key", name="uq_tenants_tenant_key"),
         UniqueConstraint("external_iam_tenant_id", name="uq_tenants_external_iam_tenant_id"),
         CheckConstraint("status IN ('ACTIVE','PENDING','DISABLED')", name="tenant_status"),
     )

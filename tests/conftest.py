@@ -176,9 +176,9 @@ def _seed_postgres_test_tenant(database_url: str) -> None:
                 text(
                     """
                     INSERT INTO tenants
-                        (id, name, slug, external_iam_tenant_id, status, created_at, updated_at)
+                        (id, tenant_key, name, slug, external_iam_tenant_id, status, created_at, updated_at)
                     VALUES
-                        (1, 'Default Test Tenant', 'default', 'local-default', 'ACTIVE',
+                        (1, 'tnt_00000000000000000000000000000001', 'Default Test Tenant', 'default', 'local-default', 'ACTIVE',
                          CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                     ON CONFLICT (id) DO NOTHING
                     """
