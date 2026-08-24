@@ -33,6 +33,8 @@
     your PATH may not include the new tools until you start a new shell.
 #>
 
+# Internal implementation script — normally invoked through setup/windows/Setup.ps1.
+
 [CmdletBinding()]
 param(
     [switch]$SkipSystem
@@ -69,7 +71,7 @@ function Update-PathFromMachine {
 }
 
 function Test-PythonOk {
-    foreach ($cmd in @("python$RequiredPythonMajor.$RequiredPythonMinor", "python3", "python")) {
+    foreach ($cmd in @("py.exe", "python$RequiredPythonMajor.$RequiredPythonMinor", "python3", "python")) {
         if (-not (Test-Cmd $cmd)) { continue }
         try {
             & $cmd -c "import sys; sys.exit(0 if sys.version_info >= ($RequiredPythonMajor, $RequiredPythonMinor) else 1)"
@@ -206,6 +208,9 @@ function Step-SetupFrontend {
     if (-not (Test-Cmd 'npm')) {
         Write-Fail "npm is not on PATH. Open a new PowerShell after Node install and re-run with -SkipSystem."
     }
+    if (-not (Test-NodeOk)) {
+        Write-Fail "Node.js $RequiredNodeMajor or newer is required."
+    }
 
     Write-Step "Installing frontend deps (npm ci)"
     Push-Location $frontend
@@ -234,10 +239,6 @@ Write-Host ""
 Write-Host "═══════════════════════════════════════════════════════════════════════" -ForegroundColor Green
 Write-Host "  Bootstrap complete." -ForegroundColor Green
 Write-Host ""
-Write-Host "  Start the backend:"
-Write-Host "    .\.venv\Scripts\Activate.ps1"
-Write-Host "    python run.py                       # -> http://localhost:8000"
-Write-Host ""
-Write-Host "  Start the frontend (in another terminal):"
-Write-Host "    cd frontend; npm run dev            # -> http://localhost:3000"
+Write-Host "  Run the canonical daily command:"
+Write-Host "    .\setup\windows\Start.ps1"
 Write-Host "═══════════════════════════════════════════════════════════════════════" -ForegroundColor Green

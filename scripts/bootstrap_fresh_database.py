@@ -3,8 +3,8 @@
 
 This avoids the repository's historical revision-001 ``create_all`` behavior,
 which is not a stable fresh-install contract. The command refuses any database
-that already contains public tables and requires the operator to repeat the
-target database name explicitly.
+that already contains non-system application objects and requires the operator
+to repeat the target database name explicitly.
 """
 
 from __future__ import annotations
@@ -23,6 +23,35 @@ from alembic.script import ScriptDirectory
 ROOT = Path(__file__).resolve().parent.parent
 SNAPSHOT = ROOT / "scripts" / "schema" / "postgresql_047_baseline.sql"
 BASELINE_REVISION = "047_email_verification_tokens"
+SYSTEM_SCHEMAS = {"information_schema", "pg_catalog"}
+
+
+def existing_application_objects(connection) -> list[str]:
+    """Return non-system PostgreSQL objects that make a fresh bootstrap unsafe."""
+
+    inspector = inspect(connection)
+    objects: list[str] = []
+    for schema in inspector.get_schema_names():
+        if schema in SYSTEM_SCHEMAS or schema.startswith("pg_"):
+            continue
+        for getter, label in (
+            ("get_table_names", "table"),
+            ("get_view_names", "view"),
+            ("get_materialized_view_names", "materialized view"),
+            ("get_sequence_names", "sequence"),
+            ("get_enums", "enum"),
+        ):
+            method = getattr(inspector, getter, None)
+            if method is None:
+                continue
+            try:
+                values = method(schema=schema)
+            except NotImplementedError:
+                continue
+            for value in values:
+                name = value.get("name") if isinstance(value, dict) else value
+                objects.append(f"{schema}.{name} ({label})")
+    return objects
 
 def _expected_head() -> set[str]:
     config = Config(ROOT / "alembic.ini")
@@ -30,7 +59,11 @@ def _expected_head() -> set[str]:
     return set(script.get_heads())
 def _arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--database-url", required=True)
+    parser.add_argument(
+        "--database-url",
+        default=os.environ.get("DATABASE_URL", ""),
+        help="PostgreSQL URL; defaults to DATABASE_URL from the environment.",
+    )
     parser.add_argument(
         "--confirm-empty-database",
         required=True,
@@ -53,9 +86,12 @@ def bootstrap(database_url: str, confirmation: str) -> None:
     engine = create_engine(database_url)
     try:
         with engine.connect() as connection:
-            existing = inspect(connection).get_table_names(schema="public")
+            existing = existing_application_objects(connection)
             if existing:
-                raise RuntimeError("Refusing fresh bootstrap because the target database is not empty")
+                raise RuntimeError(
+                    "Refusing fresh bootstrap because the target database contains "
+                    f"application objects: {', '.join(existing[:5])}"
+                )
         raw = engine.raw_connection()
         try:
             cursor = raw.cursor()

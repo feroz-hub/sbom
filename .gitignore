@@ -81,3 +81,4 @@ $RECYCLE.BIN/
 graphify-out/
 .certificates/
 .windows/
+.sbom-dev/

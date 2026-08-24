@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Internal implementation script — normally invoked through setup/unix/setup.sh.
 # ──────────────────────────────────────────────────────────────────────────────
 # SBOM Analyzer — local-machine bootstrap (macOS + Linux)
 #
@@ -325,11 +326,7 @@ cat <<EOF
 $(c_green '═══════════════════════════════════════════════════════════════════════')
   Bootstrap complete.
 
-  Start the backend:
-    source .venv/bin/activate
-    python run.py                      # → http://localhost:8000
-
-  Start the frontend (in another terminal):
-    cd frontend && npm run dev         # → http://localhost:3000
+  Run the canonical daily command:
+    ./setup/unix/start.sh
 $(c_green '═══════════════════════════════════════════════════════════════════════')
 EOF

@@ -1,15 +1,15 @@
+<#
+Internal compatibility wrapper. The canonical stop command owns process
+identity validation; this legacy command delegates to it instead of stopping
+whatever happens to be listening on a well-known port.
+#>
+[CmdletBinding()]
+param()
+
 $ErrorActionPreference = "Stop"
-$ports = 3000, 8000
-$connections = Get-NetTCPConnection -State Listen -LocalPort $ports -ErrorAction SilentlyContinue
-$processIds = @($connections | Select-Object -ExpandProperty OwningProcess -Unique)
-if ($processIds.Count -eq 0) {
-    Write-Host "No SBOM native processes are listening on ports $($ports -join ', ')."
-    exit 0
+$canonical = Join-Path $PSScriptRoot "..\..\setup\windows\Stop.ps1"
+if (-not (Test-Path -LiteralPath $canonical)) {
+    throw "Canonical stop script was not found at $canonical."
 }
-foreach ($processId in $processIds) {
-    $process = Get-Process -Id $processId -ErrorAction SilentlyContinue
-    if ($process) {
-        Write-Host "Stopping $($process.ProcessName) (PID $processId)"
-        Stop-Process -Id $processId
-    }
-}
+& $canonical
+exit 0

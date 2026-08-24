@@ -147,7 +147,9 @@ frontend/               Next.js application
 alembic/versions/       Database migrations
 tests/                  Backend tests
 docs/                   Architecture, user guides, and runbooks
-scripts/windows/        Native Windows setup/start/stop scripts
+setup/windows/          Canonical Windows setup/start/stop/status entry points
+setup/unix/             Canonical macOS/Linux setup/start/stop/status entry points
+scripts/                Internal bootstrap and platform operations
 KEV/                    Optional standalone KEV sync service
 docker-compose.yml      Local PostgreSQL 16 service
 ```
@@ -160,111 +162,77 @@ docker-compose.yml      Local PostgreSQL 16 service
 - Redis when running Celery workers/Beat
 - Docker Compose if using the provided local PostgreSQL service
 
-## Quick start: macOS/Linux
+## Local development
 
-### 1. Start PostgreSQL
+The `setup/` scripts are the canonical developer-facing interface. They preserve existing environment values and delegate lower-level work to the existing bootstrap, database, and HTTPS scripts.
+
+### Windows
+
+First-time setup (Docker Desktop + the repository PostgreSQL service):
+
+```powershell
+.\setup\windows\Setup.ps1
+```
+
+Daily commands:
+
+```powershell
+.\setup\windows\Start.ps1
+.\setup\windows\Status.ps1
+.\setup\windows\Stop.ps1
+```
+
+For the native Windows/HCL.CS PostgreSQL flow, use the explicit native option. Pass the actual
+HCL.CS checkout path when it is not the repository's sibling `SF` directory; the scripts do not
+require `C:\Projects\SF`:
+
+```powershell
+.\setup\windows\Setup.ps1 -UseNativeWindowsPostgres -HclCsRoot C:\path\to\HCL.CS
+```
+
+The native option currently targets the HCL.CS integration documented for `https://localhost:5180`.
+For SF.8 deployments that expose IAM on `https://localhost:5001`, set the issuer/discovery values
+in `.env` and `frontend/.env.local` to that configured endpoint before running setup.
+
+### macOS / Linux
+
+First-time setup:
 
 ```bash
-docker compose up -d postgres
-docker compose ps
+./setup/unix/setup.sh
 ```
 
-The Compose service maps PostgreSQL to host port `55439` by default. Override it with `POSTGRES_PORT` if needed.
-
-### 2. Configure and run the API
+Daily commands:
 
 ```bash
-cp .env.example .env
-
-python3.11 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-
-python -m alembic upgrade head
-python run.py
+./setup/unix/start.sh
+./setup/unix/status.sh
+./setup/unix/stop.sh
 ```
 
-The checked-in `.env.example` is ready for local PostgreSQL on port `55439` and has `AUTH_ENABLED=false`. Change all example secrets and credentials before using a shared environment.
+The Unix setup script verifies prerequisites and gives Homebrew or apt guidance when a tool is missing; it does not install system packages automatically. When Docker Compose is available it starts the repository's PostgreSQL service, which maps host port `55439` by default.
 
-### 3. Configure and run the frontend
+### Configuration and external IAM
 
-```bash
-cp frontend/.env.local.example frontend/.env.local
-cd frontend
-npm install
-npm run dev
-```
+Keep the three configuration concerns separate:
 
-For unauthenticated local development, set these values in `frontend/.env.local`:
+- `.env.example` → `.env`: backend/common settings, including `DATABASE_URL`.
+- `.env.hcl-iam.example`: HCL IAM values to merge into `.env` when authenticated mode is required.
+- `frontend/.env.local.example` → `frontend/.env.local`: browser/BFF settings.
 
-```dotenv
-NEXT_PUBLIC_AUTH_ENABLED=false
-NEXT_PUBLIC_API_URL=http://localhost:8000
-```
+The setup scripts copy a template only when its destination is absent. They never overwrite a developer's `.env` or `frontend/.env.local`, and they never commit secrets.
 
-Open [http://localhost:3000](http://localhost:3000). The API is at [http://localhost:8000](http://localhost:8000), health is at [http://localhost:8000/health](http://localhost:8000/health), and OpenAPI is at [http://localhost:8000/docs](http://localhost:8000/docs).
+The templates default to unauthenticated local development (`AUTH_ENABLED=false` and
+`NEXT_PUBLIC_AUTH_ENABLED=false`). To use HCL IAM, explicitly set both values to `true` and
+configure matching issuer/discovery and certificate settings; setup and status reject mismatches.
 
-## HCL.CS / HCL IAM mode
+HCL Security Framework/IAM is an external dependency. The SBOM setup scripts validate its configured discovery endpoint and report reachability, but do not start it. Use the [HCL.CS authentication configuration](docs/HCL_IAM_CONFIGURATION.md) and [native Windows guide](docs/WINDOWS_NATIVE_SETUP.md) for the external product.
 
-Authenticated deployments use HCL.CS/HCL IAM as the OIDC provider. Copy the dedicated examples and follow the full guide:
+Admin functionality is integrated into this repository's Next.js frontend. Platform and tenant administration are available under the frontend settings/admin routes on the same port `3000`; there is no separate SBOM Admin process or port `3001`. Port `3001` in the Windows guide is for the separate HCL.CS Admin product.
 
-- [HCL.CS authentication configuration](docs/HCL_IAM_CONFIGURATION.md)
-- [Native Windows setup for HCL.CS and SBOM Analyser](docs/WINDOWS_NATIVE_SETUP.md)
+Database migrations run during setup through the existing `scripts/bootstrap_fresh_database.py` (empty PostgreSQL databases) or `alembic upgrade head` (existing databases). Platform Administrator grants remain an explicit operator action through `scripts/bootstrap_platform_admin.py`; setup reports the command but does not silently grant authority.
 
-Backend essentials:
-
-```dotenv
-AUTH_ENABLED=true
-HCL_IAM_ISSUER=https://identity.example
-HCL_IAM_AUDIENCE=sbom-analyser-api
-HCL_IAM_DISCOVERY_URL=https://identity.example/.well-known/openid-configuration
-HCL_IAM_JWKS_URL=https://identity.example/.well-known/openid-configuration/jwks
-HCL_IAM_CLIENT_ID=sbom-analyser-web
-HCL_IAM_ROLE_CLAIM=role
-HCL_IAM_TENANT_CLAIM=tenant_id
-```
-
-Frontend/BFF essentials:
-
-```dotenv
-NEXT_PUBLIC_AUTH_ENABLED=true
-NEXT_PUBLIC_HCL_IAM_ISSUER=https://identity.example
-NEXT_PUBLIC_HCL_IAM_CLIENT_ID=sbom-analyser-web
-NEXT_PUBLIC_HCL_IAM_REDIRECT_URI=https://localhost:3000/auth/callback
-NEXT_PUBLIC_HCL_IAM_POST_LOGOUT_REDIRECT_URI=https://localhost:3000
-NEXT_PUBLIC_HCL_IAM_SCOPES="openid profile email offline_access sbom-analyser-api"
-SBOM_API_URL=http://localhost:8000
-```
-
-OIDC mode requires HTTPS for the issuer and frontend. Generate the local frontend certificate and start Next.js with HTTPS:
-
-```bash
-cd frontend
-npm run setup:https
-npm run dev:https
-```
-
-Use `npm run setup:https:windows` on Windows. `HCL_IAM_CA_BUNDLE` can point the backend or Next.js server to a private/local CA certificate.
-
-Tenant identity is derived from validated claims and local membership. An optional `X-Tenant-ID` selects one of the authenticated user's memberships; it cannot grant access to an unrelated tenant. Backend RBAC and tenant scoping are authoritative.
-
-Defined roles are `PLATFORM_ADMIN`, `TENANT_ADMIN`, `SECURITY_ANALYST`, `DEVELOPER`, and `VIEWER`.
-
-## Native Windows setup
-
-For a complete Windows installation with local PostgreSQL, HCL.CS, trusted HTTPS certificates, and the SBOM application, use [docs/WINDOWS_NATIVE_SETUP.md](docs/WINDOWS_NATIVE_SETUP.md).
-
-The repository provides:
-
-```text
-scripts/windows/Initialize-SbomLocal.ps1
-scripts/windows/Start-SbomApi.ps1
-scripts/windows/Start-SbomFrontend.ps1
-scripts/windows/Stop-SbomLocal.ps1
-```
-
-The initializer creates the database and virtual environment, installs backend/frontend dependencies, applies Alembic migrations, configures local certificates, and writes ignored local settings under `.windows/` without overwriting a real `.env` file.
+The lower-level scripts under `scripts/` remain available for advanced troubleshooting and are implementation details of the canonical entry points.
 
 ## Configuration
 

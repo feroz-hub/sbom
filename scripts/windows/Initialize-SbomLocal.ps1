@@ -1,4 +1,5 @@
 <# Initializes SBOM Analyser for native Windows development with local PostgreSQL and HCL.CS. #>
+# Internal implementation script — normally invoked through setup/windows/Setup.ps1.
 [CmdletBinding()]
 param(
     [string]$PostgresHost = "localhost",
@@ -72,14 +73,18 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Host ""
 Write-Host "[2/9] Checking Python..." -ForegroundColor Cyan
-if (-not (Get-Command py.exe -ErrorAction SilentlyContinue)) {
-    throw "Python 3.11 or newer and the Windows py launcher are required."
+$pythonLauncher = $null
+foreach ($candidate in @("py.exe", "python.exe", "python")) {
+    if (Get-Command $candidate -ErrorAction SilentlyContinue) { $pythonLauncher = $candidate; break }
 }
-& py.exe --version
+if (-not $pythonLauncher) {
+    throw "Python 3.11 or newer is required. Install it and open a new PowerShell window."
+}
+& $pythonLauncher --version
 if ($LASTEXITCODE -ne 0) {
-    throw "Unable to execute py.exe."
+    throw "Unable to execute $pythonLauncher."
 }
-& py.exe -c "import sys; print('Detected Python:', sys.version); raise SystemExit(0 if sys.version_info >= (3,11) else 1)"
+& $pythonLauncher -c "import sys; print('Detected Python:', sys.version); raise SystemExit(0 if sys.version_info >= (3,11) else 1)"
 if ($LASTEXITCODE -ne 0) {
     throw "Python 3.11 or newer is required."
 }
@@ -95,6 +100,11 @@ if (-not (Get-Command node.exe -ErrorAction SilentlyContinue)) {
 & node.exe --version
 if ($LASTEXITCODE -ne 0) {
     throw "Unable to execute Node.js."
+}
+$nodeMajor = & node.exe -p "process.versions.node.split('.')[0]"
+$nodeMajorNumber = 0
+if (-not [int]::TryParse(([string]$nodeMajor).Trim(), [ref]$nodeMajorNumber) -or $nodeMajorNumber -lt 20) {
+    throw "Node.js 20 or newer is required."
 }
 & npm.cmd --version
 if ($LASTEXITCODE -ne 0) {
@@ -206,14 +216,14 @@ $envScript = @(
     "`$env:HCL_IAM_CA_BUNDLE = $(Quote-Ps $hclCertificate)",
     "`$env:CORS_ORIGINS = 'https://localhost:3000'",
     "`$env:NEXT_PUBLIC_AUTH_ENABLED = 'true'",
-    "`$env:NEXT_PUBLIC_API_URL = 'http://localhost:8000'",
+    "if ([string]::IsNullOrWhiteSpace(`$env:NEXT_PUBLIC_API_URL)) { `$env:NEXT_PUBLIC_API_URL = 'http://localhost:8000' }",
     "`$env:NEXT_PUBLIC_APP_URL = 'https://localhost:3000'",
     "`$env:NEXT_PUBLIC_HCL_IAM_ISSUER = 'https://localhost:5180'",
     "`$env:NEXT_PUBLIC_HCL_IAM_CLIENT_ID = 'sbom-analyser-web'",
     "`$env:NEXT_PUBLIC_HCL_IAM_REDIRECT_URI = 'https://localhost:3000/auth/callback'",
     "`$env:NEXT_PUBLIC_HCL_IAM_POST_LOGOUT_REDIRECT_URI = 'https://localhost:3000'",
     "`$env:NEXT_PUBLIC_HCL_IAM_SCOPES = 'openid profile email offline_access sbom-analyser-api'",
-    "`$env:SBOM_API_URL = 'http://localhost:8000'"
+    "if ([string]::IsNullOrWhiteSpace(`$env:SBOM_API_URL)) { `$env:SBOM_API_URL = 'http://localhost:8000' }"
 )
 $environmentFile = Join-Path $windowsDir "sbom.env.ps1"
 Set-Content -Path $environmentFile -Value $envScript -Encoding UTF8
@@ -228,8 +238,8 @@ Write-Host "[7/9] Configuring Python virtual environment..." -ForegroundColor Cy
 $venvPath = Join-Path $RepoRoot ".venv"
 $venvPython = Join-Path $venvPath "Scripts\python.exe"
 if (-not (Test-Path $venvPython)) {
-    Write-Host "Creating .venv using the default py.exe interpreter..." -ForegroundColor Yellow
-    & py.exe -m venv $venvPath
+    Write-Host "Creating .venv using $pythonLauncher..." -ForegroundColor Yellow
+    & $pythonLauncher -m venv $venvPath
     if ($LASTEXITCODE -ne 0) {
         throw "Python virtual environment creation failed."
     }
@@ -293,16 +303,16 @@ Write-Host "[9/9] Applying Alembic migrations..." -ForegroundColor Cyan
 Push-Location $RepoRoot
 try {
     Write-Host "[9/9] Preparing PostgreSQL schema..." -ForegroundColor Cyan
-    $tableCountOutput = & $venvPython -c "import os; from sqlalchemy import create_engine, inspect; e=create_engine(os.environ['DATABASE_URL']); print(len(inspect(e).get_table_names(schema='public'))); e.dispose()"
+    $tableCountOutput = & $venvPython -c "import os; from sqlalchemy import create_engine; from scripts.bootstrap_fresh_database import existing_application_objects; e=create_engine(os.environ['DATABASE_URL']); c=e.connect(); print(len(existing_application_objects(c))); c.close(); e.dispose()"
     if ($LASTEXITCODE -ne 0) {
         throw "Unable to inspect SBOM PostgreSQL database."
     }
-    $tableCount = [int](([string]$tableCountOutput).Trim())
-    if ($tableCount -eq 0) {
+    $applicationObjectCount = [int](([string]$tableCountOutput).Trim())
+    if ($applicationObjectCount -eq 0) {
         Write-Host "Empty PostgreSQL database detected. Running canonical fresh bootstrap..." -ForegroundColor Yellow
         $bootstrapScript = Join-Path $RepoRoot "scripts\bootstrap_fresh_database.py"
 
-        & $venvPython $bootstrapScript "--database-url" $env:DATABASE_URL "--confirm-empty-database" $DatabaseName
+        & $venvPython $bootstrapScript "--confirm-empty-database" $DatabaseName
 
         if ($LASTEXITCODE -ne 0) {
             throw "Fresh PostgreSQL bootstrap failed."
@@ -369,9 +379,6 @@ Write-Host ""
 Write-Host "SBOM UI" -ForegroundColor Cyan
 Write-Host "  https://localhost:3000"
 Write-Host ""
-Write-Host "Start API:" -ForegroundColor Yellow
-Write-Host "  .\scripts\windows\Start-SbomApi.ps1"
-Write-Host ""
-Write-Host "Start UI:" -ForegroundColor Yellow
-Write-Host "  .\scripts\windows\Start-SbomFrontend.ps1"
+Write-Host "Run the canonical daily command:" -ForegroundColor Yellow
+Write-Host "  .\setup\windows\Start.ps1"
 Write-Host ""
