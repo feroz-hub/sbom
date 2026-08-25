@@ -7,6 +7,7 @@ Provides a single source of truth for application configuration.
 Supports both pydantic v2 with pydantic-settings and standalone pydantic v2.
 """
 
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,14 @@ except ImportError:
         BaseSettings = BaseModel
         SettingsConfigDict = None
         HAS_SETTINGS_CONFIG_DICT = False
+
+
+class IdentityGrantAuthorityMode(str, Enum):
+    """Configured authority source for the phased IAM grant rollout."""
+
+    LOCAL = "LOCAL"
+    COMPARE = "COMPARE"
+    IAM = "IAM"
 
 
 class Settings(BaseSettings):
@@ -231,6 +240,10 @@ class Settings(BaseSettings):
         default="tenant_id",
         description="Optional diagnostic JWT tenant hint; never SBOM authorization authority",
     )
+    hcl_iam_grant_claim: str = Field(
+        default="sbom_grant",
+        description="JWT claim reserved for future IAM tenant-role grants",
+    )
     hcl_iam_jwks_cache_seconds: int = Field(default=300, ge=30, le=86400)
     hcl_iam_http_timeout_seconds: float = Field(default=5.0, ge=0.5, le=30.0)
     hcl_iam_clock_skew_seconds: int = Field(default=30, ge=0, le=300)
@@ -244,6 +257,10 @@ class Settings(BaseSettings):
         ge=30,
         le=86400,
         description="Maximum interval between persisted trusted-claim synchronization timestamps",
+    )
+    identity_grant_authority_mode: IdentityGrantAuthorityMode = Field(
+        default=IdentityGrantAuthorityMode.LOCAL,
+        description="Phased IAM grant authority mode; Phase 2 remains configuration-only",
     )
     platform_admin_contact_email: str = Field(
         default="",

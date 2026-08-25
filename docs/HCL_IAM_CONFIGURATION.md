@@ -128,14 +128,18 @@ HCL_IAM_DISCOVERY_URL=https://localhost:5180/.well-known/openid-configuration
 HCL_IAM_JWKS_URL=
 HCL_IAM_ROLE_CLAIM=role
 HCL_IAM_TENANT_CLAIM=tenant_id
+HCL_IAM_GRANT_CLAIM=sbom_grant
 HCL_IAM_ALLOWED_ALGORITHMS=RS256
 HCL_IAM_CLOCK_SKEW_SECONDS=30
 HCL_IAM_HTTP_TIMEOUT_SECONDS=5
+IDENTITY_GRANT_AUTHORITY_MODE=LOCAL
 HCL_IAM_CA_BUNDLE=/absolute/path/to/hcl-cs-local.crt
 CORS_ORIGINS=https://localhost:3000
 ```
 
 `HCL_IAM_JWKS_URL` may be empty; FastAPI reads it from discovery. If set, it must exactly match discovery. The CA bundle is the supported way to trust a private/local issuer; TLS verification is never globally disabled.
+
+`HCL_IAM_GRANT_CLAIM` defaults to `sbom_grant` and names the future IAM tenant-role grant claim. `IDENTITY_GRANT_AUTHORITY_MODE` accepts `LOCAL`, `COMPARE`, or `IAM` and defaults to `LOCAL`. Phase 2 only establishes this configuration contract: local SBOM database authorization remains authoritative, and the later COMPARE/IAM behaviors are not active yet.
 
 Frontend placeholders are in `frontend/.env.local.example`. `SBOM_API_URL` is server-only. There is no client secret and no token in any `NEXT_PUBLIC_*` setting.
 `HCL_IAM_CA_BUNDLE` is also server-only and lets the BFF trust the local/private HCL.CS CA without disabling TLS verification.
