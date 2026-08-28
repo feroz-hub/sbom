@@ -66,9 +66,15 @@ def _jwt_settings() -> tuple[str, str, str | None, str | None]:
 
 
 def validate_auth_setup() -> None:
-    from .settings import get_settings
+    from .settings import IdentityGrantAuthorityMode, get_settings
 
-    if get_settings().auth_enabled:
+    settings = get_settings()
+    if settings.identity_grant_authority_mode is IdentityGrantAuthorityMode.IAM:
+        raise AuthConfigError(
+            "IDENTITY_GRANT_AUTHORITY_MODE=IAM is not enabled in this build; "
+            "use LOCAL or COMPARE"
+        )
+    if settings.auth_enabled:
         from .core.security import validate_hcl_auth_setup
 
         validate_hcl_auth_setup()

@@ -330,6 +330,16 @@ def _resolve_context(
         allow_platform_context=allow_platform_context,
         request=request,
     )
+    from ..services.identity_grant_compare_service import (
+        observe_identity_grant_authority,
+    )
+
+    observe_identity_grant_authority(
+        db,
+        state,
+        claims,
+        request=request,
+    )
     if state.status in {
         AuthorizationState.ACCOUNT_DISABLED,
         AuthorizationState.ACCOUNT_PENDING_APPROVAL,

@@ -241,6 +241,11 @@ def auth_me(
             request=request,
             audit_resolution=True,
         )
+        from ..services.identity_grant_compare_service import (
+            observe_identity_grant_authority,
+        )
+
+        observe_identity_grant_authority(db, state, claims, request=request)
     except HTTPException:
         db.commit()
         raise
@@ -312,6 +317,11 @@ def auth_context(
             request=request,
             audit_resolution=True,
         )
+        from ..services.identity_grant_compare_service import (
+            observe_identity_grant_authority,
+        )
+
+        observe_identity_grant_authority(db, state, claims, request=request)
         response = build_auth_context_response(state, db=db)
     except HTTPException:
         db.commit()

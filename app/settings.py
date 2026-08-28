@@ -242,7 +242,7 @@ class Settings(BaseSettings):
     )
     hcl_iam_grant_claim: str = Field(
         default="sbom_grant",
-        description="JWT claim reserved for future IAM tenant-role grants",
+        description="JWT claim used for shadow IAM tenant-role grant comparison",
     )
     hcl_iam_jwks_cache_seconds: int = Field(default=300, ge=30, le=86400)
     hcl_iam_http_timeout_seconds: float = Field(default=5.0, ge=0.5, le=30.0)
@@ -260,7 +260,7 @@ class Settings(BaseSettings):
     )
     identity_grant_authority_mode: IdentityGrantAuthorityMode = Field(
         default=IdentityGrantAuthorityMode.LOCAL,
-        description="Phased IAM grant authority mode; Phase 2 remains configuration-only",
+        description="IAM grant rollout mode; COMPARE is shadow-only and IAM is not enabled yet",
     )
     platform_admin_contact_email: str = Field(
         default="",
