@@ -4,7 +4,7 @@ import json
 import uuid
 
 from app.db import SessionLocal
-from app.models import Product, Projects, SBOMSource
+from app.models import AnalysisRun, Product, Projects, SBOMSource
 from app.services.analysis_service import persist_analysis_run
 from scripts.backfill_products_for_existing_sboms import run_backfill
 
@@ -133,6 +133,52 @@ def test_analysis_run_inherits_product_id(client):
         )
         db.commit()
         assert run.product_id == product["id"]
+
+
+def test_product_sbom_list_carries_latest_analysis(client):
+    """The product screen renders the same analysis badge as /api/sboms.
+
+    Returning bare ORM rows left ``latest_analysis`` unset, so every row on
+    the product screen read "not_run" no matter how many runs the SBOM had.
+    """
+    project = _project(client)
+    product = _product(client, project["id"], "Analysed Product")
+    accepted = _upload(client, project_id=project["id"], product_id=product["id"])
+    sbom_id = accepted["sbom_id"]
+
+    listed = client.get(f"/api/products/{product['id']}/sboms")
+    assert listed.status_code == 200, listed.text
+    assert listed.json()[0]["latest_analysis"] is None
+
+    with SessionLocal() as db:
+        sbom = db.get(SBOMSource, sbom_id)
+        run = AnalysisRun(
+            sbom_id=sbom.id,
+            project_id=sbom.projectid,
+            product_id=sbom.product_id,
+            tenant_id=sbom.tenant_id,
+            run_status="FINDINGS",
+            source="NVD",
+            started_on="2026-07-03T00:00:00Z",
+            completed_on="2026-07-03T00:00:01Z",
+            total_findings=2,
+            critical_count=1,
+            high_count=1,
+            raw_report=json.dumps({}),
+        )
+        db.add(run)
+        db.commit()
+        run_id = run.id
+
+    listed = client.get(f"/api/products/{product['id']}/sboms")
+    assert listed.status_code == 200, listed.text
+    latest = listed.json()[0]["latest_analysis"]
+    assert latest is not None
+    assert latest["run_id"] == run_id
+    assert latest["status"] == "completed"
+    assert latest["result"] == "findings"
+    assert latest["finding_count"] == 2
+    assert latest["critical_count"] == 1
 
 
 def test_product_sbom_list_delete_policy_and_backfill_idempotent(client):

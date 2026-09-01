@@ -1,6 +1,6 @@
 'use client';
 
-import { LayoutList, Layers } from 'lucide-react';
+import { LayoutList, Layers, ShieldAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { AnalysisHubTab } from '@/hooks/useAnalysisUrlState';
 
@@ -21,6 +21,12 @@ const tabs: { id: AnalysisHubTab; label: string; description: string; icon: type
     label: 'All runs',
     description: 'History, filters, compare & export',
     icon: LayoutList,
+  },
+  {
+    id: 'vulnerabilities',
+    label: 'Vulnerabilities',
+    description: 'Portfolio-wide, grouped by project & product',
+    icon: ShieldAlert,
   },
 ];
 

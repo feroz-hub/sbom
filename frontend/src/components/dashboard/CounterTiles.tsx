@@ -16,11 +16,11 @@ interface TileSpec {
 }
 
 /**
- * The three manager counter tiles: SBOMs Stored / Applications Scanned /
- * SBOMs Analysed. Reuses the ``['dashboard-posture']`` cache (no extra
+ * The three manager counter tiles: SBOMs Stored / Projects Scanned /
+ * SBOM Files Analysed. Reuses the ``['dashboard-posture']`` cache (no extra
  * request) and drills each tile to the relevant list view. "Stored" =
- * uploaded; "Analysed" = SBOMs with a completed run; "Scanned" = applications
- * (projects) with a completed run.
+ * uploaded; "Analysed" = SBOMs with a completed run; "Scanned" = projects
+ * with a completed run.
  */
 export interface CounterTilesProps {
   posture?: any;
@@ -49,14 +49,14 @@ export function CounterTiles({ posture, isLoading: propsIsLoading }: CounterTile
       hint: 'All uploaded SBOMs',
     },
     {
-      label: 'Total Applications Scanned',
+      label: 'Total Projects Scanned',
       value: data?.total_applications_scanned,
       icon: ScanLine,
       href: '/projects',
       hint: 'Projects with a completed analysis',
     },
     {
-      label: 'Total SBOMs Analysed',
+      label: 'Total SBOM Files Analysed',
       value: data?.total_sboms_analysed,
       icon: FileCheck2,
       href: '/analysis?tab=runs',

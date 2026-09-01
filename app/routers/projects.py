@@ -25,13 +25,16 @@ from ..models import (
     AnalysisFinding,
     AnalysisRun,
     AnalysisSchedule,
+    Product,
     Projects,
-    SBOMAnalysisReport,
     SBOMComponent,
     SBOMSource,
+    SBOMValidationSession,
+    SBOMValidationSessionEvent,
 )
 from ..schemas import ProjectCreate, ProjectOut, ProjectUpdate
 from ..services import audit_log
+from ..services.sbom_delete_service import SBOMDeleteConflict, SBOMDeleteService
 from ..services.soft_delete import SoftDeleteService
 from ..services.tenant_access import get_project_for_tenant
 
@@ -255,10 +258,17 @@ def delete_project(
     service = SoftDeleteService(db)
 
     if permanent:
-        # Hard delete with explicit cascade. Existing FKs do NOT carry
-        # ON DELETE CASCADE for SBOM children (only schedules and AI
-        # fix batches do), so we walk the tree manually. Mirrors the
-        # SBOM hard-delete pattern in sboms_crud.py.
+        # Delegate each SBOM to SBOMDeleteService rather than hand-rolling
+        # the cascade here. It owns the full child list (validation sessions
+        # and their events, VEX documents/statements, lifecycle and VEX audit
+        # rows, caches, schedules, version/conversion trees) and guards
+        # against FK edges nobody remembered. The old inline version deleted
+        # five tables and left sbom_validation_sessions behind, so every
+        # permanent project delete died on a foreign-key violation and
+        # surfaced as a 500.
+        #
+        # commit=False keeps all SBOMs plus the project in one transaction:
+        # a failure part-way through must not leave the project half-deleted.
         try:
             tenant_id = project.tenant_id
             sbom_ids = (
@@ -270,6 +280,24 @@ def delete_project(
                 .scalars()
                 .all()
             )
+            delete_service = SBOMDeleteService(db, tenant_id)
+            deleted_sbom_ids: set[int] = set()
+            for sbom_id in sbom_ids:
+                # A version or converted child may already be gone as part of
+                # an earlier SBOM's ownership tree.
+                if sbom_id in deleted_sbom_ids:
+                    continue
+                result = delete_service.permanently_delete_sbom(
+                    sbom_id,
+                    user_id,
+                    confirm=True,
+                    commit=False,
+                )
+                deleted_sbom_ids.update(result["deleted_sbom_ids"])
+
+            # Project-scoped rows that no SBOM owns: runs recorded against the
+            # project without a surviving SBOM, and repair workspaces opened
+            # against the project before an SBOM row existed.
             run_ids = (
                 db.execute(
                     select(AnalysisRun.id)
@@ -293,28 +321,54 @@ def delete_project(
                     .where(AnalysisRun.id.in_(run_ids), AnalysisRun.tenant_id == tenant_id)
                     .execution_options(synchronize_session=False)
                 )
-            if sbom_ids:
+            session_ids = (
                 db.execute(
-                    delete(SBOMComponent)
-                    .where(SBOMComponent.sbom_id.in_(sbom_ids), SBOMComponent.tenant_id == tenant_id)
-                    .execution_options(synchronize_session=False)
-                )
-                db.execute(
-                    delete(SBOMAnalysisReport)
-                    .where(
-                        SBOMAnalysisReport.sbom_ref_id.in_(sbom_ids),
-                        SBOMAnalysisReport.tenant_id == tenant_id,
+                    select(SBOMValidationSession.id).where(
+                        SBOMValidationSession.project_id == project_id,
+                        SBOMValidationSession.tenant_id == tenant_id,
                     )
+                )
+                .scalars()
+                .all()
+            )
+            if session_ids:
+                db.execute(
+                    delete(SBOMValidationSessionEvent)
+                    .where(SBOMValidationSessionEvent.session_id.in_(session_ids))
                     .execution_options(synchronize_session=False)
                 )
                 db.execute(
-                    delete(SBOMSource)
-                    .where(SBOMSource.id.in_(sbom_ids), SBOMSource.tenant_id == tenant_id)
+                    delete(SBOMValidationSession)
+                    .where(SBOMValidationSession.id.in_(session_ids))
                     .execution_options(synchronize_session=False)
                 )
+            # Products carry ON DELETE CASCADE in the schema, but the ORM
+            # relationship has no cascade rule, so ``hard_delete`` would first
+            # try to NULL ``products.project_id`` — which is NOT NULL. Remove
+            # them explicitly, after the SBOMs and runs that reference them.
+            db.execute(
+                delete(Product)
+                .where(Product.project_id == project_id, Product.tenant_id == tenant_id)
+                .execution_options(synchronize_session=False)
+            )
             db.flush()
             service.hard_delete(project)
             db.commit()
+            sbom_ids = sorted(deleted_sbom_ids)
+        except SBOMDeleteConflict as exc:
+            db.rollback()
+            log.warning(
+                "permanent delete_project blocked: project_id=%s blockers=%s",
+                project_id,
+                exc.blocking_dependencies,
+            )
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": "Project cannot be permanently deleted because dependent records still exist.",
+                    "blocking_dependencies": exc.blocking_dependencies,
+                },
+            ) from exc
         except Exception:
             db.rollback()
             log.exception("permanent delete_project failed: project_id=%s", project_id)

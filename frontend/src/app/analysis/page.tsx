@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useCallback, useState } from 'react';
+import { Suspense, useCallback, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -21,6 +21,7 @@ import {
   type SourceKey,
 } from '@/components/analysis/ConsolidatedAnalysisPanel';
 import { AnalysisHubTabs } from '@/components/analysis/AnalysisHubTabs';
+import { VulnerabilitiesByScope } from '@/components/analysis/VulnerabilitiesByScope';
 import { PageSpinner } from '@/components/ui/Spinner';
 import {
   getRuns,
@@ -43,11 +44,15 @@ function AnalysisPageInner() {
 
   const {
     projectFilter,
+    productFilter,
     sbomFilter,
     statusFilter,
+    severityFilter,
     hubTab,
     setProjectFilter,
+    setProductFilter,
     setSbomFilter,
+    setSeverityFilter,
     setStatusFilter,
     setHubTab,
     clearFilters,
@@ -91,12 +96,29 @@ function AnalysisPageInner() {
 
   const { data: sboms } = useSbomsList();
 
+  // Product options come from the unfiltered SBOM list, NOT from the selected
+  // project — the Project and Product filters are independent, so picking a
+  // project must not shrink this list. Products with no SBOM can have no runs,
+  // so the SBOM list is the complete set of products worth offering.
+  const productOptions = useMemo(() => {
+    const byId = new Map<number, string>();
+    for (const sbom of sboms ?? []) {
+      if (sbom.product_id != null && !byId.has(sbom.product_id)) {
+        byId.set(sbom.product_id, sbom.product_name?.trim() || `Product #${sbom.product_id}`);
+      }
+    }
+    return Array.from(byId, ([id, name]) => ({ id, name })).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
+  }, [sboms]);
+
   const { data: runs, isLoading, error, refetch } = useQuery({
-    queryKey: ['runs', { projectFilter, sbomFilter, statusFilter }],
+    queryKey: ['runs', { projectFilter, productFilter, sbomFilter, statusFilter }],
     queryFn: ({ signal }) =>
       getRuns(
         {
           project_id: projectFilter ? Number(projectFilter) : undefined,
+          product_id: productFilter ? Number(productFilter) : undefined,
           sbom_id: sbomFilter ? Number(sbomFilter) : undefined,
           run_status: statusFilter || undefined,
           page: 1,
@@ -112,11 +134,12 @@ function AnalysisPageInner() {
   // into one project / SBOM. Audit §I0.4-F1, F2; metrics layer call is in
   // app/routers/runs.py::runs_aggregate_endpoint.
   const { data: aggregate } = useQuery({
-    queryKey: ['runs-aggregate', { projectFilter, sbomFilter }],
+    queryKey: ['runs-aggregate', { projectFilter, productFilter, sbomFilter }],
     queryFn: ({ signal }) =>
       getRunsAggregate(
         {
           project_id: projectFilter ? Number(projectFilter) : undefined,
+          product_id: productFilter ? Number(productFilter) : undefined,
           sbom_id: sbomFilter ? Number(sbomFilter) : undefined,
         },
         signal,
@@ -135,6 +158,7 @@ function AnalysisPageInner() {
     try {
       await exportRunsJson({
         project_id: projectFilter ? Number(projectFilter) : undefined,
+        product_id: productFilter ? Number(productFilter) : undefined,
         sbom_id: sbomFilter ? Number(sbomFilter) : undefined,
         run_status: statusFilter || undefined,
       });
@@ -270,13 +294,14 @@ function AnalysisPageInner() {
               </div>
             )}
 
-            <div className="flex flex-wrap gap-3 bg-surface rounded-xl border border-hcl-border shadow-card p-4">
+            <div className="flex flex-wrap items-end gap-3 bg-surface rounded-xl border border-hcl-border shadow-card p-4">
               <Select
+                label="Project"
                 value={projectFilter}
                 onChange={(e) => setProjectFilter(e.target.value)}
                 className="w-52"
-                placeholder="All Projects"
               >
+                <option value="">All projects</option>
                 {projects?.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.project_name}
@@ -285,11 +310,26 @@ function AnalysisPageInner() {
               </Select>
 
               <Select
+                label="Product"
+                value={productFilter}
+                onChange={(e) => setProductFilter(e.target.value)}
+                className="w-52"
+              >
+                <option value="">All products</option>
+                {productOptions.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </Select>
+
+              <Select
+                label="SBOM"
                 value={sbomFilter}
                 onChange={(e) => setSbomFilter(e.target.value)}
                 className="w-52"
-                placeholder="All SBOMs"
               >
+                <option value="">All SBOMs</option>
                 {sboms?.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.sbom_name}
@@ -298,10 +338,10 @@ function AnalysisPageInner() {
               </Select>
 
               <Select
+                label="Outcome"
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
                 className="w-56"
-                placeholder="All outcomes"
               >
                 <option value="">All outcomes</option>
                 <option value="OK">{runStatusShortLabel('OK')}</option>
@@ -313,11 +353,11 @@ function AnalysisPageInner() {
                 <option value="PENDING">{runStatusShortLabel('PENDING')}</option>
               </Select>
 
-              {(projectFilter || sbomFilter || statusFilter) && (
+              {(projectFilter || productFilter || sbomFilter || statusFilter) && (
                 <button
                   type="button"
                   onClick={clearFilters}
-                  className="text-sm text-hcl-muted hover:text-hcl-navy underline"
+                  className="h-10 text-sm text-hcl-muted hover:text-hcl-navy underline"
                 >
                   Clear filters
                 </button>
@@ -330,6 +370,19 @@ function AnalysisPageInner() {
               error={error}
               selectedIds={selectedForCompare}
               onToggleSelect={toggleSelectForCompare}
+            />
+          </div>
+        )}
+
+        {hubTab === 'vulnerabilities' && (
+          <div
+            role="tabpanel"
+            id="analysis-panel-vulnerabilities"
+            aria-labelledby="analysis-tab-vulnerabilities"
+          >
+            <VulnerabilitiesByScope
+              severity={severityFilter}
+              onSeverityChange={setSeverityFilter}
             />
           </div>
         )}

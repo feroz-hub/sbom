@@ -1271,12 +1271,17 @@ _executor = concurrent.futures.ThreadPoolExecutor(max_workers=max(4, os.cpu_coun
 
 async def _async_get(url: str, headers: dict | None = None, params: dict | None = None, timeout: int = 60):
     if httpx is not None:
-        try:
-            from .http_client import get_async_http_client
+        from .http_client import get_async_http_client, tls_ssl_context
 
+        try:
             client = get_async_http_client()
         except RuntimeError:
-            async with httpx.AsyncClient(timeout=timeout, headers=headers) as client:
+            # No lifespan (Celery worker, scripts) — build a throwaway client,
+            # but keep the shared TLS context so SSL_CERT_FILE /
+            # REQUESTS_CA_BUNDLE still apply behind a TLS-inspecting proxy.
+            async with httpx.AsyncClient(
+                timeout=timeout, headers=headers, verify=tls_ssl_context()
+            ) as client:
                 r = await client.get(url, params=params, headers=headers)
                 r.raise_for_status()
                 return r.json()
@@ -1298,12 +1303,15 @@ async def _async_get(url: str, headers: dict | None = None, params: dict | None 
 
 async def _async_post(url: str, json_body: dict, headers: dict | None = None, timeout: int = 60):
     if httpx is not None:
-        try:
-            from .http_client import get_async_http_client
+        from .http_client import get_async_http_client, tls_ssl_context
 
+        try:
             client = get_async_http_client()
         except RuntimeError:
-            async with httpx.AsyncClient(timeout=timeout, headers=headers) as client:
+            # See _async_get — same TLS-context reasoning.
+            async with httpx.AsyncClient(
+                timeout=timeout, headers=headers, verify=tls_ssl_context()
+            ) as client:
                 r = await client.post(url, json=json_body, headers=headers)
                 r.raise_for_status()
                 return r.json()

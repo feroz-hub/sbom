@@ -1175,25 +1175,68 @@ export interface RunsAggregate {
 }
 
 export function getRunsAggregate(
-  filter: { sbom_id?: number; project_id?: number } = {},
+  filter: { sbom_id?: number; project_id?: number; product_id?: number } = {},
   signal?: AbortSignal,
 ) {
   const params = new URLSearchParams();
-  if (filter.sbom_id !== undefined && Number.isFinite(filter.sbom_id) && filter.sbom_id > 0) {
-    params.set('sbom_id', String(Math.trunc(filter.sbom_id)));
-  }
-  if (
-    filter.project_id !== undefined &&
-    Number.isFinite(filter.project_id) &&
-    filter.project_id > 0
-  ) {
-    params.set('project_id', String(Math.trunc(filter.project_id)));
-  }
+  const addPositiveInt = (key: string, value: number | undefined) => {
+    if (value === undefined || !Number.isFinite(value) || value <= 0) return;
+    params.set(key, String(Math.trunc(value)));
+  };
+  addPositiveInt('sbom_id', filter.sbom_id);
+  addPositiveInt('project_id', filter.project_id);
+  addPositiveInt('product_id', filter.product_id);
   const qs = params.toString();
   return request<RunsAggregate>(
     qs ? `/api/runs/aggregate?${qs}` : `/api/runs/aggregate`,
     { signal },
   );
+}
+
+
+// ─── Portfolio vulnerabilities, grouped by ownership ─────────────────────────
+// Same scope as the dashboard severity pie (`findings.latest_per_sbom.*`), so a
+// slice and the list it opens report the same number. Mirrors
+// app/routers/vulnerabilities.py.
+
+export interface VulnerabilityRow {
+  finding_id: number;
+  vuln_id: string;
+  severity: string;
+  score: number | null;
+  component_name: string | null;
+  component_version: string | null;
+  /** JSON array stored as text, e.g. '["4.17.21"]'. */
+  fixed_versions: string | null;
+  source: string | null;
+  run_id: number;
+  sbom_id: number | null;
+  sbom_name: string | null;
+  project_id: number | null;
+  project_name: string | null;
+  product_id: number | null;
+  product_name: string | null;
+}
+
+export interface VulnerabilitiesResponse {
+  severity: string | null;
+  page: number;
+  page_size: number;
+  /** Count before pagination, so the UI can say "showing 500 of 731". */
+  total: number;
+  returned: number;
+  findings: VulnerabilityRow[];
+}
+
+export function getVulnerabilities(
+  filter: { severity?: string; page?: number; page_size?: number } = {},
+  signal?: AbortSignal,
+) {
+  const params = new URLSearchParams();
+  if (filter.severity) params.set('severity', filter.severity);
+  params.set('page', String(filter.page ?? 1));
+  params.set('page_size', String(filter.page_size ?? 500));
+  return request<VulnerabilitiesResponse>(`/api/vulnerabilities?${params.toString()}`, { signal });
 }
 
 export function getRun(id: number, signal?: AbortSignal) {

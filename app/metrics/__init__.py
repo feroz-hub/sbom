@@ -32,6 +32,7 @@ from .findings import (
     findings_latest_per_sbom_distinct_vulnerabilities,
     findings_latest_per_sbom_fix_available,
     findings_latest_per_sbom_severity_distribution,
+    findings_latest_per_sbom_grouped_by_scope,
     findings_latest_per_sbom_total,
     findings_with_components_for_run,
     latest_successful_run_for_sbom,
@@ -86,6 +87,7 @@ __all__ = [
     # findings
     "findings_in_run_total",
     "findings_in_run_severity_distribution",
+    "findings_latest_per_sbom_grouped_by_scope",
     "findings_latest_per_sbom_total",
     "findings_latest_per_sbom_severity_distribution",
     "findings_latest_per_sbom_distinct_vulnerabilities",

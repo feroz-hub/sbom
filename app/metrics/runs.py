@@ -111,6 +111,7 @@ def runs_aggregate(
     *,
     sbom_id: int | None = None,
     project_id: int | None = None,
+    product_id: int | None = None,
 ) -> RunsAggregate:
     """The numbers behind the six Analysis Runs page tiles.
 
@@ -135,6 +136,8 @@ def runs_aggregate(
         scope_clauses.append(AnalysisRun.sbom_id == sbom_id)
     if project_id is not None:
         scope_clauses.append(AnalysisRun.project_id == project_id)
+    if product_id is not None:
+        scope_clauses.append(AnalysisRun.product_id == product_id)
 
     total = db.execute(select(func.count(AnalysisRun.id)).where(*scope_clauses)).scalar() or 0
 

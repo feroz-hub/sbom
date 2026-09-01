@@ -1701,7 +1701,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
               <Table striped ariaLabel="SBOM versions">
                 <TableHead>
                   <tr>
-                    <Th className="w-12"><span className="sr-only">Select</span></Th>
+                    <Th className="w-12" resizable={false}><span className="sr-only">Select</span></Th>
                     <Th>Version</Th>
                     <Th>Change Summary</Th>
                     <Th>Created By</Th>
@@ -2513,7 +2513,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                       <TableHead>
                         <tr>
                           <Th className="text-left text-2xs uppercase tracking-wider">Duplicate Reference</Th>
-                          <Th className="w-10">{" "}</Th>
+                          <Th className="w-10" resizable={false}>{" "}</Th>
                           <Th className="text-left text-2xs uppercase tracking-wider">Canonical Reference</Th>
                         </tr>
                       </TableHead>

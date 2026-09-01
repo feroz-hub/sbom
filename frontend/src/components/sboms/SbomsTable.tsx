@@ -31,6 +31,7 @@ import {
   invalidateScheduleLists,
   invalidateSbomSurfaces,
 } from '@/lib/queryInvalidation';
+import { formatSbomFormatLabel } from '@/lib/sbomFormat';
 import { stageLabel, validationStatusMeta } from '@/lib/sbomValidation';
 import { canOpenRepairWorkspace, getRepairWorkspaceUrl } from '@/lib/repairWorkspace';
 import type { AnalysisStatus } from '@/hooks/useBackgroundAnalysis';
@@ -181,7 +182,7 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
           sb.sbom_version,
           sb.product_version,
           sb.productver,
-          String(sb.sbom_type ?? ''),
+          formatSbomFormatLabel(sb.format),
           sb.created_by,
           formatDate(sb.created_on),
         ]),
@@ -352,7 +353,7 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
             </div>
             <div className="w-full min-w-[10rem] sm:w-52">
               <Select
-                label="Analysis"
+                label="Analysis Status"
                 value={analysisFilter}
                 onChange={(e) => setAnalysisFilter(e.target.value)}
                 className="w-full"
@@ -397,10 +398,10 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
           </TableFilterBar>
         ) : null}
 
-        <Table striped ariaLabel="SBOM inventory table">
+        <Table striped bordered ariaLabel="SBOM inventory table">
           <TableHead>
             <tr>
-              <Th className="w-10">
+              <Th className="w-10" resizable={false}>
                 <SelectionCheckbox
                   state={selectionState}
                   onChange={toggleAllFiltered}
@@ -441,9 +442,9 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
                 Product
               </SortableTh>
               <Th>Version</Th>
-              <Th>Format</Th>
-              <Th>Upload</Th>
-              <Th>Analysis</Th>
+              <Th>SBOM Format</Th>
+              <Th>Validation Status</Th>
+              <Th>Analysis Status</Th>
               <SortableTh
                 sortKey="created_by"
                 activeKey={sort.key}
@@ -460,7 +461,7 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
               >
                 Created On
               </SortableTh>
-              <Th className="text-right">Actions</Th>
+              <Th className="text-center">Actions</Th>
             </tr>
           </TableHead>
           <TableBody>
@@ -506,7 +507,7 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
 	                  <Td className="text-hcl-muted">{displayProject(sbom)}</Td>
 	                  <Td className="text-hcl-muted">{displayProduct(sbom)}</Td>
 	                  <Td className="text-hcl-muted">{sbom.sbom_version || '—'}</Td>
-                  <Td className="text-hcl-muted">{sbom.sbom_type || '—'}</Td>
+                  <Td className="whitespace-nowrap text-hcl-muted">{formatSbomFormatLabel(sbom.format)}</Td>
                   <Td>
                     <button
                       type="button"
@@ -527,8 +528,8 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
                   </Td>
                   <Td className="text-hcl-muted">{sbom.created_by || '—'}</Td>
                   <Td className="whitespace-nowrap text-hcl-muted">{formatDate(sbom.created_on)}</Td>
-                  <Td className="text-right">
-                    <div className="flex items-center justify-end gap-2">
+                  <Td className="text-center">
+                    <div className="flex items-center justify-center gap-2">
                       {canOpenRepairWorkspace(sbom) && getRepairWorkspaceUrl(sbom) ? (
                         <button
                           onClick={() => router.push(getRepairWorkspaceUrl(sbom)!)}

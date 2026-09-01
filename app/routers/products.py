@@ -18,6 +18,7 @@ from ..services.product_service import (
     now_iso,
 )
 from ..services.tenant_access import get_product_for_tenant, get_project_for_tenant
+from .sboms_crud import _latest_analysis_by_sbom_id, _serialize_sbom_out
 
 router = APIRouter(prefix="/api", tags=["products"])
 
@@ -277,7 +278,7 @@ def list_product_sboms(
     product = get_product_for_tenant(db, product_id, context.tenant_id)
     if product is None:
         raise HTTPException(status_code=404, detail="Product not found")
-    return db.execute(
+    items = db.execute(
         select(SBOMSource)
         .where(
             SBOMSource.tenant_id == context.tenant_id,
@@ -286,3 +287,19 @@ def list_product_sboms(
         )
         .order_by(SBOMSource.id.desc())
     ).scalars().all()
+    # Serialise through the same path as GET /api/sboms — returning bare ORM
+    # rows leaves ``latest_analysis`` unset, so the product screen's Analysis
+    # column reads "not_run" for every SBOM no matter how many runs it has.
+    latest_analysis_by_sbom_id = _latest_analysis_by_sbom_id(
+        db,
+        sbom_ids=[int(item.id) for item in items],
+        tenant_id=context.tenant_id,
+    )
+    return [
+        _serialize_sbom_out(
+            item,
+            db=db,
+            latest_analysis=latest_analysis_by_sbom_id.get(int(item.id)),
+        )
+        for item in items
+    ]

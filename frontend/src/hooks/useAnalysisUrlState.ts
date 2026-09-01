@@ -4,9 +4,9 @@ import { useCallback, useMemo } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { canonicalRunStatus } from '@/lib/analysisRunStatusLabels';
 
-export type AnalysisHubTab = 'runs' | 'consolidated';
+export type AnalysisHubTab = 'runs' | 'consolidated' | 'vulnerabilities';
 
-const KEYS = ['project', 'sbom', 'status', 'tab'] as const;
+const KEYS = ['project', 'product', 'sbom', 'status', 'severity', 'tab'] as const;
 
 export function useAnalysisUrlState() {
   const router = useRouter();
@@ -14,11 +14,20 @@ export function useAnalysisUrlState() {
   const searchParams = useSearchParams();
 
   const projectFilter = searchParams.get('project') ?? '';
+  const productFilter = searchParams.get('product') ?? '';
   const sbomFilter = searchParams.get('sbom') ?? '';
   const rawStatusFilter = searchParams.get('status') ?? '';
   const statusFilter = rawStatusFilter ? canonicalRunStatus(rawStatusFilter) : '';
+  const rawTab = searchParams.get('tab');
   const hubTab: AnalysisHubTab =
-    searchParams.get('tab') === 'consolidated' ? 'consolidated' : 'runs';
+    rawTab === 'consolidated' ? 'consolidated' : rawTab === 'vulnerabilities' ? 'vulnerabilities' : 'runs';
+  // Lowercase canonical severity bucket, or '' for "all severities". The URL is
+  // user-editable, so an unrecognised value degrades to unfiltered rather than
+  // seeding a filter that matches nothing.
+  const rawSeverity = (searchParams.get('severity') ?? '').trim().toLowerCase();
+  const severityFilter = ['critical', 'high', 'medium', 'low', 'unknown'].includes(rawSeverity)
+    ? rawSeverity
+    : '';
 
   const queryString = useMemo(() => searchParams.toString(), [searchParams]);
 
@@ -37,6 +46,19 @@ export function useAnalysisUrlState() {
       replaceSearchParams((p) => {
         if (value) p.set('project', value);
         else p.delete('project');
+      });
+    },
+    [replaceSearchParams],
+  );
+
+  // Deliberately independent of the project filter: selecting a product
+  // never clears or narrows the project selection, and vice versa. The two
+  // AND together on the server.
+  const setProductFilter = useCallback(
+    (value: string) => {
+      replaceSearchParams((p) => {
+        if (value) p.set('product', value);
+        else p.delete('product');
       });
     },
     [replaceSearchParams],
@@ -62,11 +84,21 @@ export function useAnalysisUrlState() {
     [replaceSearchParams],
   );
 
+  const setSeverityFilter = useCallback(
+    (value: string) => {
+      replaceSearchParams((p) => {
+        if (value) p.set('severity', value.toLowerCase());
+        else p.delete('severity');
+      });
+    },
+    [replaceSearchParams],
+  );
+
   const setHubTab = useCallback(
     (tab: AnalysisHubTab) => {
       replaceSearchParams((p) => {
-        if (tab === 'consolidated') p.set('tab', 'consolidated');
-        else p.delete('tab');
+        if (tab === 'runs') p.delete('tab');
+        else p.set('tab', tab);
       });
     },
     [replaceSearchParams],
@@ -82,11 +114,15 @@ export function useAnalysisUrlState() {
 
   return {
     projectFilter,
+    productFilter,
     sbomFilter,
     statusFilter,
+    severityFilter,
     hubTab,
     setProjectFilter,
+    setProductFilter,
     setSbomFilter,
+    setSeverityFilter,
     setStatusFilter,
     setHubTab,
     clearFilters,

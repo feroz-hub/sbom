@@ -31,9 +31,12 @@ from app.models import (
     AnalysisSchedule,
     AuditLog,
     CompareCache,
+    Product,
     Projects,
     SBOMComponent,
     SBOMSource,
+    SBOMValidationSession,
+    SBOMValidationSessionEvent,
 )
 from app.services.soft_delete import CASCADE_EXCLUDED_TABLES, SoftDeleteService
 from sqlalchemy import select
@@ -388,6 +391,92 @@ def test_endpoint_writes_audit_row_for_soft_delete(client, db):
         .all()
     )
     assert any(r.action == "project.soft_delete" for r in rows)
+
+
+def test_permanent_project_delete_removes_repair_workspaces(client, db):
+    """A repair workspace must not block permanent project deletion.
+
+    ``sbom_validation_sessions`` carries NO ACTION foreign keys to both
+    ``sbom_source`` and ``projects``. The delete used to skip that table
+    entirely, so ``DELETE FROM sbom_source`` raised a ForeignKeyViolation and
+    the endpoint returned 500 for every project whose SBOM had been through
+    the validation pipeline — which is all of them.
+    """
+    tree = _build_tree(db)
+    project = tree["project"]
+    sbom = tree["sbom"]
+    pid = project.id
+
+    # products.project_id is NOT NULL with ON DELETE CASCADE; the ORM
+    # relationship has no cascade rule, so deleting the project used to try
+    # NULLing it first.
+    product = Product(
+        project_id=pid,
+        name=f"sd-product-{pid}",
+        normalized_name=f"sd-product-{pid}",
+        slug=f"sd-product-{pid}",
+        created_by="alice",
+        created_at=_now_iso(),
+        updated_at=_now_iso(),
+    )
+    db.add(product)
+    db.flush()
+
+    session = SBOMValidationSession(
+        id=f"sd-session-{pid}",
+        project_id=pid,
+        imported_sbom_id=sbom.id,
+        sbom_name=sbom.sbom_name,
+        validation_status="validated",
+        created_at=_now_iso(),
+        updated_at=_now_iso(),
+        expires_at=_now_iso(),
+    )
+    db.add(session)
+    db.flush()
+    db.add(
+        SBOMValidationSessionEvent(
+            session_id=session.id,
+            event_type="imported",
+            timestamp=_now_iso(),
+        )
+    )
+    db.commit()
+    session_id = session.id
+    sbom_id = sbom.id
+    product_id = product.id
+
+    resp = client.delete(
+        f"/api/projects/{pid}",
+        params={"user_id": "alice", "confirm": "yes", "permanent": "true"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["permanent"] is True
+
+    db.expire_all()
+    assert (
+        db.execute(
+            select(Projects).where(Projects.id == pid).execution_options(include_deleted=True)
+        ).scalar_one_or_none()
+        is None
+    )
+    assert (
+        db.execute(
+            select(SBOMSource).where(SBOMSource.id == sbom_id).execution_options(include_deleted=True)
+        ).scalar_one_or_none()
+        is None
+    )
+    assert (
+        db.execute(select(SBOMValidationSession).where(SBOMValidationSession.id == session_id)).scalar_one_or_none()
+        is None
+    )
+    assert (
+        db.execute(
+            select(SBOMValidationSessionEvent).where(SBOMValidationSessionEvent.session_id == session_id)
+        ).scalars().all()
+        == []
+    )
+    assert db.execute(select(Product).where(Product.id == product_id)).scalar_one_or_none() is None
 
 
 def test_endpoint_writes_audit_row_for_permanent_delete(client, db):

@@ -83,6 +83,7 @@ from .routers import (
     tenants,
     verification,
     vex,
+    vulnerabilities,
 )
 from .routers import analysis as analysis_export_router
 from .routers import dashboard as dashboard_trend_router
@@ -690,6 +691,7 @@ app.include_router(sbom_validation_sessions.router, dependencies=_protected)
 app.include_router(sbom_validation_sessions.compat_router, dependencies=_protected)
 app.include_router(sbom_validation_sessions.workspace_router, dependencies=_protected)
 app.include_router(runs.router, dependencies=_protected)
+app.include_router(vulnerabilities.router, dependencies=_protected)
 app.include_router(projects.router, dependencies=_protected)
 app.include_router(products.router, dependencies=_protected)
 app.include_router(reports.router, dependencies=_protected)

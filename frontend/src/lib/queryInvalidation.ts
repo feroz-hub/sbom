@@ -33,6 +33,22 @@ export function invalidateProjectSurfaces(qc: QueryClient, projectId?: number | 
   }
 }
 
+/**
+ * The product detail screen's own caches: the header card and its SBOM table.
+ *
+ * Omit `productId` to prefix-bust every product's caches — used by callers
+ * (analysis completion) that know an SBOM changed but not which product owns it.
+ */
+export function invalidateProductSurfaces(qc: QueryClient, productId?: number | null): void {
+  if (productId == null) {
+    qc.invalidateQueries({ queryKey: ['product'] });
+    qc.invalidateQueries({ queryKey: ['product-sboms'] });
+    return;
+  }
+  qc.invalidateQueries({ queryKey: ['product', productId] });
+  qc.invalidateQueries({ queryKey: ['product-sboms', productId] });
+}
+
 export function invalidateDashboardSummary(qc: QueryClient): void {
   qc.invalidateQueries({ queryKey: ['dashboard-posture'] });
   qc.invalidateQueries({ queryKey: ['dashboard-trend'] });
@@ -208,6 +224,8 @@ export function invalidateAnalysisCompletion(
   invalidateDashboardTiles(qc);
   // SBOM analysis status badge surfaces in the main table — refresh.
   invalidateSbomLists(qc);
+  // …and in the product detail screen's SBOM table, which renders the same badge.
+  invalidateProductSurfaces(qc);
   // Findings caches keyed on runId — prefix-bust so re-runs surface new
   // per-finding fields (e.g. match_reason / matched_range) immediately.
   invalidateFindings(qc);

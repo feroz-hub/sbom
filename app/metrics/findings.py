@@ -11,7 +11,7 @@ from datetime import UTC, date, datetime, timedelta
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from ..models import AnalysisFinding, AnalysisRun, SBOMComponent
+from ..models import AnalysisFinding, AnalysisRun, Product, Projects, SBOMComponent
 from ..services.finding_metrics import calculate_run_finding_metrics
 from ._helpers import (
     finding_key,
@@ -185,6 +185,112 @@ def findings_latest_per_sbom_fix_available(db: Session) -> int:
         ).scalar()
         or 0
     )
+
+
+
+# ---------------------------------------------------------------------------
+# Latest state, grouped by ownership — Convention A, scope=latest_per_sbom
+# ---------------------------------------------------------------------------
+
+
+def findings_latest_per_sbom_grouped_by_scope(
+    db: Session,
+    *,
+    severity: str | None = None,
+    limit: int = 500,
+    offset: int = 0,
+) -> dict[str, object]:
+    """findings.latest_per_sbom.grouped_by_scope.
+
+    The findings in each SBOM's latest successful run, carrying the project /
+    product / SBOM they belong to so a caller can group them by ownership.
+
+    Same scope as ``findings_latest_per_sbom_total`` and
+    ``findings_latest_per_sbom_severity_distribution``, so a severity slice on
+    the dashboard pie and the grouped list it opens report the same number.
+    That was the bug this exists to fix: the pie is portfolio-wide but the
+    click used to land on a single run, showing a fraction of the count.
+
+    ``severity`` is matched case-insensitively against the canonical buckets;
+    ``None`` returns every severity. ``total`` is the count before
+    ``limit``/``offset`` so the caller can say "showing 500 of 731".
+    """
+    latest = latest_run_per_sbom_subquery()
+    scope_clauses = [AnalysisFinding.analysis_run_id.in_(latest)]
+
+    if severity is not None:
+        wanted = severity.strip().lower()
+        if wanted not in SEVERITY_KEYS:
+            raise ValueError(f"unknown severity {severity!r}; expected one of {sorted(SEVERITY_KEYS)}")
+        if wanted == "unknown":
+            # Rows with no severity, an unrecognised label, or an empty
+            # string all bucket as unknown in the distribution metric —
+            # match that here or the counts disagree.
+            known = [key for key in SEVERITY_KEYS if key != "unknown"]
+            scope_clauses.append(
+                or_(
+                    AnalysisFinding.severity.is_(None),
+                    func.lower(func.trim(AnalysisFinding.severity)).not_in(known),
+                )
+            )
+        else:
+            scope_clauses.append(func.lower(func.trim(AnalysisFinding.severity)) == wanted)
+
+    total = db.execute(select(func.count(AnalysisFinding.id)).where(*scope_clauses)).scalar() or 0
+
+    rows = db.execute(
+        select(
+            AnalysisFinding.id,
+            AnalysisFinding.vuln_id,
+            AnalysisFinding.severity,
+            AnalysisFinding.score,
+            AnalysisFinding.component_name,
+            AnalysisFinding.component_version,
+            AnalysisFinding.fixed_versions,
+            AnalysisFinding.source,
+            AnalysisRun.id.label("run_id"),
+            AnalysisRun.sbom_id,
+            AnalysisRun.sbom_name,
+            AnalysisRun.project_id,
+            AnalysisRun.product_id,
+            Projects.project_name,
+            Product.name.label("product_name"),
+        )
+        .join(AnalysisRun, AnalysisRun.id == AnalysisFinding.analysis_run_id)
+        .outerjoin(Projects, Projects.id == AnalysisRun.project_id)
+        .outerjoin(Product, Product.id == AnalysisRun.product_id)
+        .where(*scope_clauses)
+        .order_by(
+            func.coalesce(AnalysisFinding.score, 0).desc(),
+            AnalysisFinding.vuln_id.asc(),
+            AnalysisFinding.id.asc(),
+        )
+        .limit(max(1, min(limit, 2000)))
+        .offset(max(0, offset))
+    ).all()
+
+    findings = [
+        {
+            "finding_id": int(row.id),
+            "vuln_id": row.vuln_id,
+            "severity": (row.severity or "unknown"),
+            "score": float(row.score) if row.score is not None else None,
+            "component_name": row.component_name,
+            "component_version": row.component_version,
+            "fixed_versions": row.fixed_versions,
+            "source": row.source,
+            "run_id": int(row.run_id),
+            "sbom_id": int(row.sbom_id) if row.sbom_id is not None else None,
+            "sbom_name": row.sbom_name,
+            "project_id": int(row.project_id) if row.project_id is not None else None,
+            "project_name": row.project_name,
+            "product_id": int(row.product_id) if row.product_id is not None else None,
+            "product_name": row.product_name,
+        }
+        for row in rows
+    ]
+
+    return {"total": int(total), "returned": len(findings), "findings": findings}
 
 
 # ---------------------------------------------------------------------------

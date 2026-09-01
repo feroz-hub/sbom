@@ -1,16 +1,21 @@
 // @vitest-environment jsdom
 /**
  * Dashboard drill-down integration — the source half of the chain. Renders
- * the REAL dashboard page, lets the posture + top-runs queries resolve, then
- * clicks the hero "Critical" count and asserts it navigates to the run that
- * best represents that slice, deep-linked with the canonical
- * `?severity=CRITICAL&globalCount=…` the destination reads back.
+ * the REAL dashboard page, lets the posture query resolve, then clicks a hero
+ * severity count and asserts where it navigates.
  *
- * Fail-before: pre-fix, the page passed no handlers and the counts rendered
- * as static <span>/<div> — there was no button to click, so this fails.
- * Pass-after: the count is a real <button> that pushes the deep-link.
+ * A severity slice is portfolio-scoped, so it opens the portfolio-scoped
+ * Vulnerabilities tab (`/analysis?tab=vulnerabilities&severity=…`). It used to
+ * open `topRunForSeverity(...)` — the single run with the most findings of that
+ * severity — which showed a fraction of the number the user had clicked (77 of
+ * 289 High, in one real case). Both tests below pin that change: the
+ * destination, and the fact that a tier with portfolio findings is clickable
+ * even when no single run carries them.
  *
- * Sibling panels are stubbed so the assertion is pinned on the hero wiring.
+ * The EPSS tile and needs-review chip still drill into a specific run — they
+ * have no per-run column to rank by — so those cases are unchanged.
+ *
+ * Sibling panels are stubbed so the assertions are pinned on the hero wiring.
  */
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -141,12 +146,12 @@ beforeEach(() => {
   getRuns.mockResolvedValue([RUN]);
 });
 
-describe('dashboard hero — Critical drill-down', () => {
-  it('navigates to the top critical run with ?severity=CRITICAL&globalCount=42', async () => {
+describe('dashboard hero — severity drill-down', () => {
+  it('opens the portfolio-wide Vulnerabilities tab for the clicked severity', async () => {
     render(wrap(<DashboardPage />));
 
-    // The Critical count becomes an interactive button once both posture and
-    // the top-runs query resolve (severity bar segment + legend badge).
+    // The Critical count becomes an interactive button once posture resolves
+    // (severity bar segment + legend badge).
     const buttons = await screen.findAllByRole(
       'button',
       { name: /View Critical findings/i },
@@ -156,11 +161,16 @@ describe('dashboard hero — Critical drill-down', () => {
 
     fireEvent.click(buttons[0]!);
 
-    expect(push).toHaveBeenCalledWith('/analysis/7?severity=CRITICAL&globalCount=42');
+    // Portfolio-scoped destination — no run id, no globalCount reconciliation
+    // needed, because the list reports the same number the slice showed.
+    expect(push).toHaveBeenCalledWith('/analysis?tab=vulnerabilities&severity=critical');
+    expect(push).not.toHaveBeenCalledWith(expect.stringContaining('/analysis/7'));
   });
 
-  it('does not make non-resolvable severities clickable (no dead buttons)', async () => {
-    // Portfolio reports highs, but no FINDINGS run carries any → not clickable.
+  it('keeps a severity clickable when no single run carries it', async () => {
+    // Portfolio reports 9 highs, but RUN has high_count: 0. The old gate
+    // required topRunForSeverity('high') to resolve and rendered a dead label
+    // here; the portfolio-wide destination needs no per-run target.
     getDashboardSummary.mockResolvedValue({
       posture: {
         severity: { critical: 42, high: 9, medium: 0, low: 0, unknown: 0 },
@@ -172,7 +182,31 @@ describe('dashboard hero — Critical drill-down', () => {
         headline_state: 'criticals_no_kev',
       },
     });
-    // RUN has high_count: 0 → topRunForSeverity('high') is undefined.
+    render(wrap(<DashboardPage />));
+
+    const highButtons = await screen.findAllByRole(
+      'button',
+      { name: /View High findings/i },
+      { timeout: 5000 },
+    );
+    expect(highButtons.length).toBeGreaterThan(0);
+
+    fireEvent.click(highButtons[0]!);
+    expect(push).toHaveBeenCalledWith('/analysis?tab=vulnerabilities&severity=high');
+  });
+
+  it('leaves a severity with zero portfolio findings unclickable', async () => {
+    getDashboardSummary.mockResolvedValue({
+      posture: {
+        severity: { critical: 42, high: 0, medium: 0, low: 0, unknown: 0 },
+        kev_count: 0,
+        fix_available_count: 0,
+        last_successful_run_at: '2026-05-01T10:02:00Z',
+        total_sboms: 3,
+        total_active_projects: 1,
+        headline_state: 'criticals_no_kev',
+      },
+    });
     render(wrap(<DashboardPage />));
 
     await screen.findAllByRole(

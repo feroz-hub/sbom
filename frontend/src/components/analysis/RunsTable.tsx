@@ -233,7 +233,7 @@ export function RunsTable({ runs, isLoading, error, selectedIds, onToggleSelect 
         <TableHead>
           <tr>
             {selectable && (
-              <Th className="w-8">
+              <Th className="w-8" resizable={false}>
                 <span className="sr-only">Select</span>
               </Th>
             )}
@@ -293,7 +293,7 @@ export function RunsTable({ runs, isLoading, error, selectedIds, onToggleSelect 
               direction={sort.direction}
               onToggle={(k) => toggleSort(k as RunSortKey)}
             >
-              Duration
+              Analysis Duration
             </SortableTh>
             <SortableTh
               sortKey="completed_on"

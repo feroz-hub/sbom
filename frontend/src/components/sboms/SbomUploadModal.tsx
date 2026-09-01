@@ -78,7 +78,6 @@ const schema = z.object({
   projectid: z.string().min(1, 'Project is required'),
   productid: z.string().min(1, 'Product is required'),
   sbom_version: z.string().optional(),
-  created_by: z.string().optional(),
   product_version: z.string().optional(),
 });
 
@@ -160,7 +159,7 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
     resolver: zodResolver(schema),
     defaultValues: {
       sbom_name: '', sbom_data: '', sbom_type_id: '',
-      projectid: '', productid: '', sbom_version: '', created_by: '', product_version: '',
+      projectid: '', productid: '', sbom_version: '', product_version: '',
     },
   });
   const selectedProjectId = watch('projectid');
@@ -278,7 +277,6 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
         project_id: values.projectid ? Number(values.projectid) : undefined,
         product_id: values.productid ? Number(values.productid) : undefined,
         sbom_version: values.sbom_version || undefined,
-        created_by: values.created_by || undefined,
         product_version: values.product_version || undefined,
       },
       {
@@ -681,8 +679,6 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
             <Input label="SBOM Version" placeholder="e.g. 1.0.0" disabled={uploading} {...register('sbom_version')} />
             <Input label="Product Version" placeholder="e.g. 2.3.1" disabled={uploading} {...register('product_version')} />
           </div>
-
-          <Input label="Created By" placeholder="Your name or username" disabled={uploading} {...register('created_by')} />
         </DialogBody>
 
         <DialogFooter>

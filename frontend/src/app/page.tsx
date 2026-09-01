@@ -30,12 +30,7 @@ import {
   getRuns,
 } from '@/lib/api';
 import { getActiveTenantId } from '@/lib/auth';
-import {
-  aggregateRuns,
-  topRunForSeverity,
-  type SeverityKey,
-} from '@/lib/topVulnerableRuns';
-import { severityKeyToParam } from '@/lib/severityParam';
+import { aggregateRuns, type SeverityKey } from '@/lib/topVulnerableRuns';
 import { HIGH_EPSS_PERCENTILE } from '@/lib/findingFilters';
 
 const DRILLABLE_SEVERITIES: readonly SeverityKey[] = [
@@ -94,28 +89,32 @@ export default function DashboardPage() {
     [topRunsQuery.data],
   );
 
-  // A severity is clickable only when the portfolio has findings at that tier
-  // AND a run resolves to drill into — otherwise it stays a static label.
+  // A severity is clickable whenever the portfolio has findings at that tier.
+  //
+  // The old gate also required `topRunForSeverity` to resolve, because the
+  // click needed a run to open. The destination is now the portfolio-wide
+  // Vulnerabilities tab, so no per-run target is needed and a tier with
+  // findings is never a dead label.
   const interactiveSeverities = useMemo(() => {
     const set = new Set<SeverityKey>();
     for (const key of DRILLABLE_SEVERITIES) {
-      if ((posture?.severity?.[key] ?? 0) > 0 && topRunForSeverity(buckets, key)) {
-        set.add(key);
-      }
+      if ((posture?.severity?.[key] ?? 0) > 0) set.add(key);
     }
     return set;
-  }, [buckets, posture]);
+  }, [posture]);
 
+  // A severity slice is portfolio-wide, so it opens the portfolio-wide list.
+  //
+  // This used to route to `topRunForSeverity(...)` — the single run with the
+  // most findings of that severity — which showed a fraction of the number the
+  // user had just clicked (77 of 289 High, in one real case). The
+  // Vulnerabilities tab reads the same `findings.latest_per_sbom` scope as the
+  // pie, so the count on the destination always matches the slice.
   const handleSegmentClick = useCallback(
     (key: SeverityKey) => {
-      const bucket = topRunForSeverity(buckets, key);
-      if (!bucket) return;
-      const globalCount = posture?.severity?.[key] ?? bucket[key];
-      router.push(
-        `/analysis/${bucket.latestRunId}?severity=${severityKeyToParam(key)}&globalCount=${globalCount}`,
-      );
+      router.push(`/analysis?tab=vulnerabilities&severity=${key}`);
     },
-    [buckets, posture, router],
+    [router],
   );
 
   // KEV / EPSS / Fix have no per-run column to rank by, so they land on the
@@ -164,18 +163,24 @@ export default function DashboardPage() {
           <CounterTiles posture={summary?.posture} isLoading={summaryQuery.isLoading} />
         </Motion>
 
+        {/* Lifetime growth — sits directly above the lifecycle box so the
+            portfolio-wide vulnerability total reads before the per-component
+            lifecycle breakdown. */}
         <Motion preset="rise" delay={10}>
+          <LifetimeStats
+            data={summary?.lifetime}
+            findingsTotal={summary?.posture?.total_findings}
+            isLoading={summaryQuery.isLoading}
+          />
+        </Motion>
+
+        <Motion preset="rise" delay={20}>
           <LifecycleHealthTiles
             lifecycle={summary?.lifecycle}
             health={summary?.health}
             vex={summary?.vex}
             isLoading={summaryQuery.isLoading}
           />
-        </Motion>
-
-        {/* "Your Analyzer, So Far" — lifetime growth, kept near the top */}
-        <Motion preset="rise" delay={20}>
-          <LifetimeStats data={summary?.lifetime} isLoading={summaryQuery.isLoading} />
         </Motion>
 
         {/* 1 — the decision */}

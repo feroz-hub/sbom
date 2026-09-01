@@ -3,16 +3,86 @@
 import Link from 'next/link';
 import { use, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Upload } from 'lucide-react';
+import { Eye, Play, Upload } from 'lucide-react';
 import { TopBar } from '@/components/layout/TopBar';
 import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { PageSpinner } from '@/components/ui/Spinner';
 import { Table, TableBody, TableHead, Td, Th, EmptyRow } from '@/components/ui/Table';
+import { SbomStatusBadge } from '@/components/sboms/SbomStatusBadge';
 import { SbomUploadModal } from '@/components/sboms/SbomUploadModal';
+import { useAnalysisStream } from '@/hooks/useAnalysisStream';
 import { getProduct, getProductSboms } from '@/lib/api';
+import { invalidateProductSurfaces } from '@/lib/queryInvalidation';
 import { formatDate } from '@/lib/utils';
+import type { AnalysisStatus } from '@/hooks/useBackgroundAnalysis';
+import type { SBOMSource } from '@/types';
+
+/**
+ * One SBOM row, owning its own analysis stream so Run Analysis works here the
+ * same way it does on the SBOM detail screen. The hook stays inert until
+ * `startAnalysis` is called, so an idle row costs nothing.
+ */
+function ProductSbomRow({ sbom }: { sbom: SBOMSource }) {
+  const { state, startAnalysis } = useAnalysisStream(sbom.id);
+  const isAnalyzing =
+    state.phase === 'connecting' || state.phase === 'parsing' || state.phase === 'running';
+
+  // While the stream is live the server has not refreshed `latest_analysis`
+  // yet — drive the badge off the stream phase until the refetch lands.
+  const optimisticStatus: AnalysisStatus | undefined = isAnalyzing
+    ? 'RUNNING'
+    : state.phase === 'error'
+      ? 'ERROR'
+      : undefined;
+
+  return (
+    <tr>
+      <Td className="font-mono text-xs text-hcl-muted">#{sbom.id}</Td>
+      <Td>
+        <Link
+          href={`/sboms/${sbom.id}`}
+          className="font-medium text-hcl-navy hover:text-hcl-blue hover:underline"
+        >
+          {sbom.sbom_name}
+        </Link>
+      </Td>
+      <Td className="text-hcl-muted">{sbom.sbom_version || sbom.productver || '—'}</Td>
+      <Td>
+        <SbomStatusBadge
+          sbomId={sbom.id}
+          latestAnalysis={sbom.latest_analysis}
+          initialStatus={optimisticStatus}
+          initialFindings={state.summary?.total}
+        />
+      </Td>
+      <Td className="text-hcl-muted">{sbom.created_by || '—'}</Td>
+      <Td className="text-hcl-muted">{formatDate(sbom.created_on)}</Td>
+      <Td className="text-right">
+        <div className="flex items-center justify-end gap-2">
+          <Link
+            href={`/sboms/${sbom.id}`}
+            className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-hcl-muted transition-colors hover:bg-row-hover hover:text-hcl-blue"
+            aria-label={`View ${sbom.sbom_name}`}
+          >
+            <Eye className="h-4 w-4" />
+            View SBOM
+          </Link>
+          <Button
+            onClick={() => startAnalysis({ sources: ['NVD', 'OSV', 'GITHUB'] })}
+            loading={isAnalyzing}
+            disabled={isAnalyzing}
+            size="sm"
+          >
+            <Play className="h-4 w-4" />
+            {isAnalyzing ? 'Analyzing…' : 'Run Analysis'}
+          </Button>
+        </div>
+      </Td>
+    </tr>
+  );
+}
 
 interface ProductDetailPageProps {
   params: Promise<{ id: string }>;
@@ -120,28 +190,16 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
                   <Th>Analysis</Th>
                   <Th>Created By</Th>
                   <Th>Created On</Th>
+                  <Th className="text-right">Actions</Th>
                 </tr>
               </TableHead>
               <TableBody>
                 {sbomsQuery.isLoading ? (
-                  <EmptyRow cols={6} message="Loading SBOMs..." />
+                  <EmptyRow cols={7} message="Loading SBOMs..." />
                 ) : sboms.length === 0 ? (
-                  <EmptyRow cols={6} message="No SBOMs are linked to this product yet." />
+                  <EmptyRow cols={7} message="No SBOMs are linked to this product yet." />
                 ) : (
-                  sboms.map((sbom) => (
-                    <tr key={sbom.id}>
-                      <Td className="font-mono text-xs text-hcl-muted">#{sbom.id}</Td>
-                      <Td>
-                        <Link href={`/sboms/${sbom.id}`} className="font-medium text-hcl-navy hover:text-hcl-blue hover:underline">
-                          {sbom.sbom_name}
-                        </Link>
-                      </Td>
-                      <Td className="text-hcl-muted">{sbom.sbom_version || sbom.productver || '—'}</Td>
-                      <Td className="text-hcl-muted">{sbom.latest_analysis?.status || 'not_run'}</Td>
-                      <Td className="text-hcl-muted">{sbom.created_by || '—'}</Td>
-                      <Td className="text-hcl-muted">{formatDate(sbom.created_on)}</Td>
-                    </tr>
-                  ))
+                  sboms.map((sbom) => <ProductSbomRow key={sbom.id} sbom={sbom} />)
                 )}
               </TableBody>
             </Table>
@@ -154,8 +212,7 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
         initialProjectId={product.project_id}
         initialProductId={product.id}
         onSuccess={() => {
-          queryClient.invalidateQueries({ queryKey: ['product', id] });
-          queryClient.invalidateQueries({ queryKey: ['product-sboms', id] });
+          invalidateProductSurfaces(queryClient, id);
         }}
       />
     </div>

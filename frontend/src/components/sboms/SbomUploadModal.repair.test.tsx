@@ -188,7 +188,6 @@ describe('SbomUploadModal validation repair handoff', () => {
     fireEvent.change(productOption.closest('select')!, { target: { value: '77' } });
     fireEvent.change(screen.getByLabelText(/SBOM Version/i), { target: { value: '1.1.1' } });
     fireEvent.change(screen.getByLabelText(/Product Version/i), { target: { value: '1.0.0' } });
-    fireEvent.change(screen.getByLabelText(/Created By/i), { target: { value: 'Feroze' } });
     fireEvent.change(screen.getByPlaceholderText('Paste a small SPDX, CycloneDX, or XML SBOM preview'), {
       target: { value: '{"bomFormat":"CycloneDX","specVersion":"1.5","components":[]}' },
     });
@@ -199,10 +198,13 @@ describe('SbomUploadModal validation repair handoff', () => {
       expect.objectContaining({
         sbom_version: '1.1.1',
         product_version: '1.0.0',
-        created_by: 'Feroze',
       }),
     );
     expect(useUploadSbomMutate.mock.calls[0][0]).not.toHaveProperty('productver');
+    // The upload form no longer asks who is uploading — the server attributes
+    // the row to the signed-in actor, so sending a client-supplied name would
+    // only let it disagree with the session.
+    expect(useUploadSbomMutate.mock.calls[0][0]).not.toHaveProperty('created_by');
   });
 
   it('closes valid uploads, refreshes upload surfaces, and does not open repair workspace', async () => {

@@ -73,8 +73,16 @@ class SqlAlchemySyncRunRepository:
 
 
 def _ensure_utc(dt: datetime | None) -> datetime | None:
+    """Normalise a driver-returned datetime to UTC.
+
+    Two shapes arrive here. SQLite drops tzinfo on round-trip, so naive
+    values are assumed UTC. PostgreSQL returns ``timestamptz`` rendered in
+    the *session* timezone, so a tz-aware value can carry a non-zero
+    offset (+05:30 when the server runs Asia/Calcutta) — convert it rather
+    than pass it through, or the domain's offset-0 invariant rejects it.
+    """
     if dt is None:
         return None
     if dt.tzinfo is None:
         return dt.replace(tzinfo=UTC)
-    return dt
+    return dt.astimezone(UTC)

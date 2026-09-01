@@ -289,7 +289,17 @@ class SBOMDeleteService:
         sbom_id: int,
         user_id: str | None,
         confirm: bool,
+        *,
+        commit: bool = True,
     ) -> dict[str, Any]:
+        """Permanently delete one SBOM and everything it owns.
+
+        ``commit=False`` leaves the transaction open so a caller deleting a
+        whole ownership tree (see the project delete in
+        ``app/routers/projects.py``) gets one all-or-nothing transaction
+        instead of one commit per SBOM. Rollback on failure still happens
+        here, so the caller only has to translate the raised error.
+        """
         impact = self.get_delete_impact(sbom_id)
         if not confirm:
             raise SBOMDeleteConflict(
@@ -423,7 +433,8 @@ class SBOMDeleteService:
                     "dependent_counts": impact["dependent_counts"],
                 },
             )
-            self.db.commit()
+            if commit:
+                self.db.commit()
         except IntegrityError as exc:
             self.db.rollback()
             diagnostics = self._diagnose_blockers(sbom_id)

@@ -171,6 +171,7 @@ def list_analysis_runs(
 def runs_aggregate_endpoint(
     sbom_id: str | None = Query(None),
     project_id: str | None = Query(None),
+    product_id: str | None = Query(None),
     db: Session = Depends(get_db),
 ):
     """Return the six numbers behind the Analysis Runs page header tiles
@@ -181,7 +182,13 @@ def runs_aggregate_endpoint(
     """
     sbom_id_int = _coerce_optional_int(sbom_id)
     project_id_int = _coerce_optional_int(project_id)
-    agg = runs_aggregate(db, sbom_id=sbom_id_int, project_id=project_id_int)
+    product_id_int = _coerce_optional_int(product_id)
+    agg = runs_aggregate(
+        db,
+        sbom_id=sbom_id_int,
+        project_id=project_id_int,
+        product_id=product_id_int,
+    )
     return RunsAggregateOut(
         total_runs=agg.total_runs,
         by_outcome=agg.by_outcome,
