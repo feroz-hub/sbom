@@ -34,6 +34,7 @@ from fastapi import (
     status,
 )
 from pydantic import BaseModel
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..core.context import CurrentContext
@@ -42,6 +43,11 @@ from ..db import get_db
 from ..models import SBOMSource, SBOMType
 from ..services import audit_service
 from ..services.product_service import resolve_product_assignment
+from ..services.sbom_version_lineage import (
+    VersionLineageError,
+    head_of_lineage,
+    resolve_parent_sbom,
+)
 from ..services.sbom_document_service import byte_size, count_lines, parsed_component_count
 from ..services.sbom_enrichment_service import mark_enrichment_pending, run_post_upload_enrichment
 from ..services.sbom_service import sync_sbom_components
@@ -66,6 +72,7 @@ _UPLOAD_FORM_FIELDS = {
     "product_version",
     "productver",
     "created_by",
+    "parent_sbom_id",
 }
 
 
@@ -127,6 +134,14 @@ async def upload_sbom(
     product_version: str | None = Form(None),
     productver: str | None = Form(None),
     created_by: str | None = Form(None),
+    parent_sbom_id: int | None = Form(
+        None,
+        description=(
+            "Existing SBOM this upload is a new version of. Sets the parent/child "
+            "link that Version History, compare-versions and restore read. Omit for "
+            "a standalone SBOM."
+        ),
+    ),
     context: CurrentContext = Depends(require_permission("product:assign_sbom")),
     strict_ntia: bool = Query(False, description="Promote NTIA warnings to hard errors."),
     db: Session = Depends(get_db),
@@ -169,6 +184,25 @@ async def upload_sbom(
         response.headers["Warning"] = '299 - "product_id will become required in a future version."'
     if sbom_type is not None and db.get(SBOMType, sbom_type) is None:
         raise HTTPException(status_code=404, detail="SBOM type not found")
+
+    # Resolve the version link before reading the file: a rejected link should
+    # cost the caller nothing, and it keeps the failure ahead of any DB write.
+    parent_sbom = None
+    if parent_sbom_id is not None:
+        try:
+            requested_parent = resolve_parent_sbom(
+                db,
+                parent_sbom_id=parent_sbom_id,
+                tenant_id=context.tenant_id,
+                project_id=project_id,
+                product_id=product.id if product else None,
+                new_version=manual_sbom_version,
+            )
+        except VersionLineageError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
+        # Attach to the newest descendant so re-linking an older version
+        # extends the chain instead of forking it.
+        parent_sbom = head_of_lineage(db, requested_parent)
 
     raw = await file.read()
     if len(raw) > max_bytes:
@@ -315,6 +349,13 @@ async def upload_sbom(
         validated_at=_now_iso(),
         original_format=spec or None,
         current_format=spec or None,
+        parent_id=parent_sbom.id if parent_sbom else None,
+        change_summary=(
+            f"Uploaded as a new version of {parent_sbom.sbom_name}"
+            + (f" {parent_sbom.sbom_version}" if parent_sbom.sbom_version else "")
+            if parent_sbom
+            else None
+        ),
     )
     mark_enrichment_pending(obj)
     try:
@@ -341,6 +382,33 @@ async def upload_sbom(
             },
         )
         db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        # uq_sbom_source_tenant_name_version — the same (name, version) pair
+        # already exists. That is a user-correctable conflict, not a server
+        # fault, so it must not surface as a generic 500.
+        if "uq_sbom_source_tenant_name_version" in str(getattr(exc, "orig", exc)):
+            version_label = manual_sbom_version or "(no version)"
+            log.info(
+                "upload_sbom: duplicate name+version name=%s version=%s",
+                sbom_name,
+                version_label,
+            )
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "duplicate_sbom_version",
+                    "message": (
+                        f'An SBOM named "{sbom_name.strip()}" already exists at version '
+                        f"{version_label}. Use a different version, or delete the existing one."
+                    ),
+                },
+            ) from exc
+        log.exception("upload_sbom: persist failed for name=%s", sbom_name)
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "internal_error", "message": "Failed to persist SBOM."},
+        ) from exc
     except Exception:
         db.rollback()
         log.exception("upload_sbom: persist failed for name=%s", sbom_name)
