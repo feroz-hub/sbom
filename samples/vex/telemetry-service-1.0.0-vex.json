@@ -1,0 +1,122 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "serialNumber": "urn:uuid:c48f2a10-6d3b-4e79-9a51-8b26f0d4e7c2",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-09-02T09:00:00Z",
+    "authors": [
+      {
+        "name": "HCLTech Product Security",
+        "email": "product-security@example.com"
+      }
+    ],
+    "component": {
+      "type": "application",
+      "bom-ref": "app-telemetry-service",
+      "name": "Infusion Pump Telemetry Service",
+      "version": "1.0.0"
+    }
+  },
+  "vulnerabilities": [
+    {
+      "id": "CVE-2021-44228",
+      "source": {
+        "name": "NVD",
+        "url": "https://nvd.nist.gov/vuln/detail/CVE-2021-44228"
+      },
+      "analysis": {
+        "state": "exploitable",
+        "detail": "Log4Shell. The telemetry ingest filter logs the inbound X-Device-Id header through log4j-core 2.14.1 with message lookups enabled, so attacker-controlled input reaches the JNDI lookup path. Confirmed reachable by code review and a staged ${jndi:ldap://} probe. Remediation: upgrade to 2.17.1 in release 1.1.0, tracked as CR-4821."
+      },
+      "affects": [
+        {
+          "ref": "maven-log4j-core"
+        }
+      ]
+    },
+    {
+      "id": "CVE-2021-45046",
+      "source": {
+        "name": "NVD",
+        "url": "https://nvd.nist.gov/vuln/detail/CVE-2021-45046"
+      },
+      "analysis": {
+        "state": "not_affected",
+        "justification": "code_not_reachable",
+        "detail": "Exploitation requires a Thread Context Map lookup in the logging pattern. log4j2.xml uses only %d %p %c{1} %m%n with no ${ctx:} pattern, and the configuration is baked into the signed device image, so the vulnerable lookup is never evaluated. Configuration reviewed 2026-09-02 by product security."
+      },
+      "affects": [
+        {
+          "ref": "maven-log4j-core"
+        }
+      ]
+    },
+    {
+      "id": "CVE-2021-44906",
+      "source": {
+        "name": "OSV",
+        "url": "https://osv.dev/vulnerability/CVE-2021-44906"
+      },
+      "analysis": {
+        "state": "resolved",
+        "fixedVersion": "1.2.6",
+        "detail": "minimist prototype pollution. The 0.0.8 copy arrived through a transitive build-time dependency that is removed in release 1.1.0; nothing in the shipped runtime imports it."
+      },
+      "affects": [
+        {
+          "ref": "npm-minimist"
+        }
+      ]
+    },
+    {
+      "id": "CVE-2020-8203",
+      "source": {
+        "name": "OSV",
+        "url": "https://osv.dev/vulnerability/CVE-2020-8203"
+      },
+      "analysis": {
+        "state": "exploitable",
+        "detail": "Prototype pollution in lodash.merge. The device configuration loader merges an operator-supplied JSON profile, so untrusted keys reach merge(). Mitigated by the 4.17.21 upgrade in release 1.1.0."
+      },
+      "affects": [
+        {
+          "ref": "npm-lodash"
+        }
+      ]
+    },
+    {
+      "id": "CVE-2021-23337",
+      "source": {
+        "name": "OSV",
+        "url": "https://osv.dev/vulnerability/CVE-2021-23337"
+      },
+      "analysis": {
+        "state": "not_affected",
+        "justification": "vulnerable_code_not_present",
+        "detail": "Command injection via lodash.template. The production bundle is tree-shaken to lodash.get and lodash.merge only; template is absent from the shipped artifact, verified against the 1.0.0 bundle manifest."
+      },
+      "affects": [
+        {
+          "ref": "npm-lodash"
+        }
+      ]
+    },
+    {
+      "id": "CVE-2021-3749",
+      "source": {
+        "name": "OSV",
+        "url": "https://osv.dev/vulnerability/CVE-2021-3749"
+      },
+      "analysis": {
+        "state": "in_triage",
+        "detail": "ReDoS in the axios trim helper. Assessing whether any attacker-controlled string reaches header parsing on the telemetry upload path. Owner: platform-security. Target date: 2026-09-19."
+      },
+      "affects": [
+        {
+          "ref": "npm-axios"
+        }
+      ]
+    }
+  ]
+}

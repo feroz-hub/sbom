@@ -1,0 +1,181 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "serialNumber": "urn:uuid:2b7f9c41-58ad-4e6b-9f13-7c0a5d8e2f01",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-09-01T08:00:00Z",
+    "tools": [
+      {
+        "vendor": "HCLTech",
+        "name": "Build Pipeline",
+        "version": "2026.09"
+      }
+    ],
+    "authors": [
+      {
+        "name": "Device Software Team",
+        "email": "device-sw@example.com"
+      }
+    ],
+    "supplier": {
+      "name": "HCLTech Medical Devices"
+    },
+    "component": {
+      "type": "application",
+      "bom-ref": "app-telemetry-service",
+      "name": "Infusion Pump Telemetry Service",
+      "version": "1.0.0",
+      "supplier": {
+        "name": "HCLTech Medical Devices"
+      },
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "purl": "pkg:generic/telemetry-service@1.0.0"
+    }
+  },
+  "components": [
+    {
+      "type": "application",
+      "bom-ref": "app-telemetry-service",
+      "name": "Infusion Pump Telemetry Service",
+      "supplier": {
+        "name": "HCLTech Medical Devices"
+      },
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "version": "1.0.0",
+      "purl": "pkg:generic/telemetry-service@1.0.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "npm-lodash",
+      "name": "lodash",
+      "version": "4.17.15",
+      "supplier": {
+        "name": "npm"
+      },
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:npm/lodash@4.17.15",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "fc22e3b035d7471a7d341bbd55fd6fdd009e2b05a1e08cf25f89c60db4c18c50"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "npm-axios",
+      "name": "axios",
+      "version": "0.21.1",
+      "supplier": {
+        "name": "npm"
+      },
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:npm/axios@0.21.1",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "302b99d924914880f296a2e7f65763f9f91c4cba6b072e7cefa3e99a125f805b"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "npm-minimist",
+      "name": "minimist",
+      "version": "0.0.8",
+      "supplier": {
+        "name": "npm"
+      },
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:npm/minimist@0.0.8",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "1a12be60be2f06c0edfdcdfe2a3890135964175fab785961cfb0148058eef413"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "maven-log4j-core",
+      "name": "log4j-core",
+      "version": "2.14.1",
+      "group": "org.apache.logging.log4j",
+      "supplier": {
+        "name": "Apache Software Foundation"
+      },
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "purl": "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "ade7402a70667a727635d5c4c29495f4ff96f061f12539763f6e9d077a897c3a"
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "app-telemetry-service",
+      "dependsOn": [
+        "npm-lodash",
+        "npm-axios",
+        "npm-minimist",
+        "maven-log4j-core"
+      ]
+    },
+    {
+      "ref": "npm-lodash",
+      "dependsOn": []
+    },
+    {
+      "ref": "npm-axios",
+      "dependsOn": []
+    },
+    {
+      "ref": "npm-minimist",
+      "dependsOn": []
+    },
+    {
+      "ref": "maven-log4j-core",
+      "dependsOn": []
+    }
+  ]
+}
