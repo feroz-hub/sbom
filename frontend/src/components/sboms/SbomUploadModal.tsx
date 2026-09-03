@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
@@ -79,6 +79,7 @@ const schema = z.object({
   productid: z.string().min(1, 'Product is required'),
   sbom_version: z.string().optional(),
   product_version: z.string().optional(),
+  parent_sbom_id: z.string().optional(),
 });
 
 type FormInput = z.input<typeof schema>;
@@ -118,7 +119,6 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
   const [validationFailure, setValidationFailure] = useState<SbomValidationFailureDetail | null>(null);
   const [uploadResult, setUploadResult] = useState<SBOMSource | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [duplicateNameError, setDuplicateNameError] = useState<string | null>(null);
   const [newProductName, setNewProductName] = useState('');
   const [documentPreviewMeta, setDocumentPreviewMeta] = useState<{
     bytes: number;
@@ -159,7 +159,7 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
     resolver: zodResolver(schema),
     defaultValues: {
       sbom_name: '', sbom_data: '', sbom_type_id: '',
-      projectid: '', productid: '', sbom_version: '', product_version: '',
+      projectid: '', productid: '', sbom_version: '', product_version: '', parent_sbom_id: '',
     },
   });
   const selectedProjectId = watch('projectid');
@@ -167,6 +167,37 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
   const sbomNameValue = watch('sbom_name');
   const sbomDataValue = watch('sbom_data');
   const selectedSbomTypeId = watch('sbom_type_id');
+  const selectedParentSbomId = watch('parent_sbom_id');
+  const sbomVersionValue = watch('sbom_version');
+
+  /**
+   * Duplicate check, matching the database constraint exactly.
+   *
+   * The unique index is `(tenant_id, sbom_name, sbom_version)` — the same name
+   * at a *different* version is legal, and is precisely what uploading a new
+   * version looks like. This used to reject on name alone, which was stricter
+   * than the server and blocked the versioning workflow outright: you could
+   * pick "New version of - Telemetry Service 1.0.0" and still be told the name
+   * was taken.
+   *
+   * Only an exact name + version collision blocks, because only that would
+   * actually fail on insert.
+   */
+  const duplicateNameError = useMemo(() => {
+    const name = sbomNameValue?.trim();
+    const version = (sbomVersionValue ?? '').trim();
+    if (!name || !existingSboms?.length) return null;
+    const clash = existingSboms.find(
+      (s) =>
+        s.sbom_name.trim().toLowerCase() === name.toLowerCase() &&
+        (s.sbom_version ?? '').trim().toLowerCase() === version.toLowerCase(),
+    );
+    if (!clash) return null;
+    return version
+      ? `"${name}" version ${version} already exists. Use a different version, or delete the existing SBOM first.`
+      : `An unversioned SBOM named "${name}" already exists. Give this upload a version, or choose a different name.`;
+  }, [sbomNameValue, sbomVersionValue, existingSboms]);
+
   const canSubmit = Boolean(
     selectedProjectId &&
     selectedProductId &&
@@ -249,17 +280,6 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
     }
   };
 
-  const handleNameBlur = (name: string) => {
-    const trimmed = name.trim();
-    setDuplicateNameError(null);
-    if (!trimmed || !existingSboms?.length) return;
-    const exists = existingSboms.some(
-      (s) => s.sbom_name.trim().toLowerCase() === trimmed.toLowerCase(),
-    );
-    if (exists) {
-      setDuplicateNameError(`An SBOM named "${trimmed}" already exists. Please choose a different name.`);
-    }
-  };
 
   const onSubmit = (values: FormValues) => {
     handledUploadResultRef.current = false;
@@ -276,6 +296,7 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
         projectid: values.projectid ? Number(values.projectid) : undefined,
         project_id: values.projectid ? Number(values.projectid) : undefined,
         product_id: values.productid ? Number(values.productid) : undefined,
+        parent_sbom_id: values.parent_sbom_id ? Number(values.parent_sbom_id) : undefined,
         sbom_version: values.sbom_version || undefined,
         product_version: values.product_version || undefined,
       },
@@ -292,7 +313,6 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
             detection_confidence: sbom.detection_confidence ?? 0,
             detection_evidence: [],
           });
-          setDuplicateNameError(null);
           const status = sbom.validation_status ?? sbom.upload_status ?? sbom.status;
           const repairUrl = getRepairWorkspaceUrl(sbom);
           invalidateUploadSurfaces(queryClient, sbom.project_id ?? sbom.projectid);
@@ -378,7 +398,6 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
     setValidationFailure(null);
     setUploadResult(null);
     setSelectedFile(null);
-    setDuplicateNameError(null);
     setNewProductName('');
     setDocumentPreviewMeta(null);
     setFormatDetection(null);
@@ -407,6 +426,35 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
   });
   const projectRegistration = register('projectid');
   const productRegistration = register('productid');
+
+  /**
+   * Candidate parents: SBOMs already on the selected product.
+   *
+   * Scoped to the product because the server refuses a parent from a different
+   * project or product — a chain that hops between products would make "all
+   * versions of this SBOM" meaningless on the product screen.
+   */
+  const versionParentOptions = useMemo(() => {
+    if (!selectedProductId) return [];
+    const productId = Number(selectedProductId);
+    return (existingSboms ?? [])
+      .filter((sbom) => sbom.product_id === productId)
+      .sort((a, b) => b.id - a.id)
+      .map((sbom) => ({
+        id: sbom.id,
+        label: `${sbom.sbom_name}${sbom.sbom_version ? ` \u00b7 ${sbom.sbom_version}` : ''}`,
+      }));
+  }, [existingSboms, selectedProductId]);
+
+  // A parent that is no longer offered would be rejected on submit; drop it
+  // when the product changes rather than failing at the end of the form.
+  useEffect(() => {
+    if (!selectedParentSbomId) return;
+    if (!versionParentOptions.some((option) => String(option.id) === selectedParentSbomId)) {
+      setValue('parent_sbom_id', '');
+    }
+  }, [versionParentOptions, selectedParentSbomId, setValue]);
+
   const selectedTypeName = sbomTypes?.find((type) => String(type.id) === selectedSbomTypeId)?.typename;
 
   return (
@@ -524,9 +572,7 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
             placeholder="e.g. my-app-sbom"
             error={errors.sbom_name?.message ?? duplicateNameError ?? undefined}
             disabled={uploading}
-            {...register('sbom_name', {
-              onBlur: (e) => handleNameBlur(e.target.value),
-            })}
+            {...register('sbom_name')}
           />
 
           <div className="flex flex-col gap-1.5">
@@ -678,6 +724,34 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
           <div className="grid grid-cols-2 gap-4">
             <Input label="SBOM Version" placeholder="e.g. 1.0.0" disabled={uploading} {...register('sbom_version')} />
             <Input label="Product Version" placeholder="e.g. 2.3.1" disabled={uploading} {...register('product_version')} />
+          </div>
+
+          {/* Version lineage is declared, never inferred from a matching name:
+              silently merging two different SBOMs is far harder to notice than
+              a missing link. Only SBOMs on the chosen product are offered — the
+              server refuses a parent from elsewhere. */}
+          <div>
+            <Select
+              label="New version of (optional)"
+              disabled={uploading || !selectedProductId}
+              {...register('parent_sbom_id')}
+            >
+              <option value="">Standalone SBOM — not a new version</option>
+              {versionParentOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
+            <p className="mt-1 text-xs text-hcl-muted">
+              {!selectedProductId
+                ? 'Choose a product first to link this upload to an earlier version.'
+                : versionParentOptions.length === 0
+                  ? 'No earlier SBOMs on this product yet.'
+                  : selectedParentSbomId
+                    ? 'Adds this upload to that SBOM\u2019s version history, so you can compare and restore across releases.'
+                    : 'Leave as standalone unless this file supersedes an existing SBOM.'}
+            </p>
           </div>
         </DialogBody>
 

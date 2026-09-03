@@ -1287,6 +1287,12 @@ export interface CreateSBOMPayload {
   created_by?: string;
   product_version?: string;
   productver?: string;
+  /**
+   * Existing SBOM this upload supersedes. Sets the parent/child link that
+   * Version History, compare-versions and restore read. Omit for a standalone
+   * SBOM — upload does not infer lineage from a matching name.
+   */
+  parent_sbom_id?: number;
 }
 
 export interface UploadSBOMAcceptedResponse {

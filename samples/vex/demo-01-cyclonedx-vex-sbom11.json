@@ -1,0 +1,80 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "serialNumber": "urn:uuid:6f2c1d84-3a91-4f7e-9c02-7d5b1e4a8c33",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-09-02T09:00:00Z",
+    "authors": [
+      {
+        "name": "HCLTech Product Security",
+        "email": "product-security@example.com"
+      }
+    ],
+    "component": {
+      "type": "application",
+      "bom-ref": "app-17_osv_purl_focus",
+      "name": "OSV Direct PURL Matching Focus",
+      "version": "1.0.0"
+    }
+  },
+  "vulnerabilities": [
+    {
+      "id": "CVE-2021-44228",
+      "source": { "name": "NVD", "url": "https://nvd.nist.gov/vuln/detail/CVE-2021-44228" },
+      "analysis": {
+        "state": "exploitable",
+        "detail": "Log4Shell. This build logs user-supplied request headers through log4j-core 2.14.1 with message lookups enabled. Confirmed reachable in the request-logging filter. Remediation in progress under CR-4821."
+      },
+      "affects": [{ "ref": "maven-log4j-core" }]
+    },
+    {
+      "id": "CVE-2021-45046",
+      "source": { "name": "NVD", "url": "https://nvd.nist.gov/vuln/detail/CVE-2021-45046" },
+      "analysis": {
+        "state": "not_affected",
+        "justification": "code_not_reachable",
+        "detail": "Exploitation requires a non-default Thread Context Map lookup in the logging pattern. Our log4j2.xml uses only %d/%p/%c/%m with no ${ctx:} pattern, so the vulnerable lookup path is never evaluated. Config reviewed and pinned by CR-4821."
+      },
+      "affects": [{ "ref": "maven-log4j-core" }]
+    },
+    {
+      "id": "CVE-2021-44906",
+      "source": { "name": "OSV", "url": "https://osv.dev/vulnerability/CVE-2021-44906" },
+      "analysis": {
+        "state": "resolved",
+        "fixedVersion": "1.2.6",
+        "detail": "minimist prototype pollution. Upgraded to 1.2.6 in build 2026.09.1; the 0.0.8 copy came from a transitive devDependency now removed."
+      },
+      "affects": [{ "ref": "npm-minimist" }]
+    },
+    {
+      "id": "CVE-2019-11324",
+      "source": { "name": "OSV", "url": "https://osv.dev/vulnerability/CVE-2019-11324" },
+      "analysis": {
+        "state": "in_triage",
+        "detail": "urllib3 certificate verification handling. Assessing whether the device's outbound telemetry client passes a custom CA bundle. Owner: platform-security. Target: 2026-09-12."
+      },
+      "affects": [{ "ref": "pypi-urllib3" }]
+    },
+    {
+      "id": "CVE-2020-28500",
+      "source": { "name": "OSV", "url": "https://osv.dev/vulnerability/CVE-2020-28500" },
+      "analysis": {
+        "state": "false_positive",
+        "justification": "vulnerable_code_not_present",
+        "detail": "ReDoS in lodash.toNumber/trim variants. Our bundle is tree-shaken to lodash.get and lodash.merge only; the affected functions are not present in the shipped artifact. Verified against the production bundle manifest."
+      },
+      "affects": [{ "ref": "npm-lodash" }]
+    },
+    {
+      "id": "CVE-2020-8203",
+      "source": { "name": "OSV", "url": "https://osv.dev/vulnerability/CVE-2020-8203" },
+      "analysis": {
+        "state": "exploitable",
+        "detail": "lodash.merge prototype pollution. The config loader merges an operator-supplied JSON profile, so untrusted keys reach merge(). Mitigate by upgrading to 4.17.21."
+      },
+      "affects": [{ "ref": "npm-lodash" }]
+    }
+  ]
+}

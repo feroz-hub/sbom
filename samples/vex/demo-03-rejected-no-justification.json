@@ -1,0 +1,15 @@
+{
+  "_comment": "DEMO: this document is expected to FAIL with HTTP 422. It marks a finding not_affected with no justification and no impact statement, which app/services/lifecycle/vex_provider.py:625 refuses. Use it to show that a vulnerability cannot be silently dismissed — every not_affected must carry a reason someone can audit later.",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "version": 1,
+  "vulnerabilities": [
+    {
+      "id": "CVE-2021-44228",
+      "analysis": {
+        "state": "not_affected"
+      },
+      "affects": [{ "ref": "maven-log4j-core" }]
+    }
+  ]
+}

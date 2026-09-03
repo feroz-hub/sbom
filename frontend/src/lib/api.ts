@@ -852,6 +852,7 @@ export async function uploadSbom(payload: CreateSBOMPayload, signal?: AbortSigna
   const productVersion = payload.product_version ?? payload.productver;
   if (productVersion) form.set('product_version', productVersion);
   if (payload.created_by) form.set('created_by', payload.created_by);
+  if (payload.parent_sbom_id != null) form.set('parent_sbom_id', String(payload.parent_sbom_id));
 
   const accepted = await request<UploadSBOMAcceptedResponse>(
     '/api/sboms/upload',

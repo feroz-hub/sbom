@@ -22,6 +22,7 @@ import { ScheduleCard } from '@/components/schedules/ScheduleCard';
 import { SbomConversionCard } from '@/components/sboms/SbomConversionCard';
 import { SbomRawViewer } from '@/components/sboms/SbomRawViewer';
 import { ValidationReportSection } from '@/components/sboms/ValidationReportSection';
+import { VexDocumentImport } from '@/components/sboms/VexDocumentImport';
 import { 
   getSbomComponents, 
   getSbomDedupeReport,
@@ -1265,28 +1266,13 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                 ))}
               </div>
 
-              <div className="rounded-lg border border-hcl-border p-3">
-                <label className="block text-xs font-semibold uppercase tracking-wide text-hcl-muted">
-                  Import VEX JSON
-                </label>
-                <textarea
-                  value={vexDocumentText}
-                  onChange={(event) => setVexDocumentText(event.target.value)}
-                  className="mt-2 min-h-28 w-full rounded-lg border border-hcl-border p-2 font-mono text-xs text-hcl-navy focus:outline-none focus:ring-2 focus:ring-hcl-blue"
-                  placeholder='{"bomFormat":"CycloneDX","vulnerabilities":[...]}'
-                />
-                <div className="mt-2 flex items-center justify-between gap-3">
-                  <p className="text-xs text-hcl-muted">{vexMessage}</p>
-                  <Button
-                    size="sm"
-                    onClick={handleUploadVexDocument}
-                    loading={isUploadingVex}
-                    disabled={!vexDocumentText.trim() || isUploadingVex}
-                  >
-                    Import VEX
-                  </Button>
-                </div>
-              </div>
+              <VexDocumentImport
+                value={vexDocumentText}
+                onChange={setVexDocumentText}
+                onImport={handleUploadVexDocument}
+                importing={isUploadingVex}
+                message={vexMessage}
+              />
 
               <div className="overflow-hidden rounded-lg border border-hcl-border">
                 <Table striped ariaLabel="VEX statements">
