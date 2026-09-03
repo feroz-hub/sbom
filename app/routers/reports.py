@@ -53,6 +53,15 @@ class Fda510kReportMetadataIn(BaseModel):
     date_prepared: date | None = None
     reviewed_approved_by: str | None = None
     date_approved: date | None = None
+    # Author block, split into three fields by the revised FDA template.
+    author_organization: str | None = None
+    author_role_title: str | None = None
+    author_email: str | None = None
+    # Manufacturer security-contact block, added by the revised template to
+    # carry the Sec. 524B coordinated-disclosure details.
+    psirt_contact: str | None = None
+    cvd_policy_url: str | None = None
+    vulnerability_intake_method: str | None = None
 
     @field_validator("device_name", "manufacturer_sponsor", "device_software_version", "author_of_sbom_data", "prepared_by")
     @classmethod
