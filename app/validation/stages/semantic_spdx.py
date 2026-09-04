@@ -7,7 +7,8 @@ This stage covers the *semantic* invariants the schema cannot express:
 * ``documentNamespace`` is an absolute URI without a fragment.
 * ``dataLicense`` equals ``CC0-1.0``.
 * Each ``licenseConcluded`` / ``licenseDeclared`` parses against the SPDX
-  License List (via ``license-expression``).
+  License List (via ``license-expression``), allowing the ``LicenseRef-``
+  user-defined references Annex D permits.
 * ``checksums[].checksumValue`` length matches the declared algorithm.
 * ``creationInfo.created`` is ISO-8601 UTC ending in ``Z``.
 * At least one ``DESCRIBES`` relationship from ``SPDXRef-DOCUMENT`` exists.
@@ -27,6 +28,9 @@ from ..normalize import normalize_spdx
 _STAGE = "semantic"
 
 _SPDXID_RE = re.compile(r"^(SPDXRef|DocumentRef)-[a-zA-Z0-9.\-]+$")
+# Annex D `license-ref`: an optional cross-document prefix then LicenseRef-<idstring>.
+# These never appear in the SPDX License List, so they are checked by shape.
+_LICENSE_REF_RE = re.compile(r"^(?:DocumentRef-[a-zA-Z0-9.\-]+:)?LicenseRef-[a-zA-Z0-9.\-]+$")
 _NAMESPACE_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+\-.]*://[^#]+$")
 _HASH_LENGTHS = {
     "SHA1": 40,
@@ -269,8 +273,11 @@ def _check_license_expression(expr: str, path: str, ctx: ValidationContext) -> N
         )
         return
     try:
-        # parse() throws ExpressionParseError on malformed input
-        licensing.parse(expr, validate=True, strict=True)  # type: ignore[attr-defined]
+        # ``validate=True`` rejects every key absent from the SPDX License
+        # List, which includes the ``LicenseRef-`` forms Annex D explicitly
+        # permits. Validate structure here and check the keys ourselves below
+        # so a user-defined licence reference is not reported as unparseable.
+        parsed = licensing.parse(expr, validate=False, strict=True)  # type: ignore[attr-defined]
     except Exception as exc:
         ctx.report.add(
             E.E043_LICENSE_EXPRESSION_INVALID,
@@ -278,6 +285,21 @@ def _check_license_expression(expr: str, path: str, ctx: ValidationContext) -> N
             path=path,
             message=f"License expression '{expr}' is unparseable: {exc}",
             remediation="Use a valid SPDX licence expression. See https://spdx.dev/learn/handling-license-info/.",
+            spec_reference="SPDX 2.3 Annex D",
+        )
+        return
+    unknown = [key for key in licensing.unknown_license_keys(parsed) if not _LICENSE_REF_RE.match(key)]
+    if unknown:
+        ctx.report.add(
+            E.E043_LICENSE_EXPRESSION_INVALID,
+            stage=_STAGE,
+            path=path,
+            message=(f"License expression '{expr}' uses unknown licence key(s): {', '.join(unknown)}."),
+            remediation=(
+                "Use an SPDX License List identifier, or declare a user-defined "
+                "licence as LicenseRef-<id> with a matching hasExtractedLicensingInfos "
+                "entry. See https://spdx.dev/learn/handling-license-info/."
+            ),
             spec_reference="SPDX 2.3 Annex D",
         )
 

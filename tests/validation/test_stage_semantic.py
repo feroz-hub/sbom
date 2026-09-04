@@ -119,6 +119,45 @@ def test_spdx_documentDescribes_satisfies_describes() -> None:
     assert E.E046_DESCRIBES_RELATIONSHIP_MISSING not in codes
 
 
+def test_spdx_license_ref_accepted() -> None:
+    """Annex D permits user-defined ``LicenseRef-`` keys in an expression.
+
+    They are absent from the SPDX License List by definition, so validating
+    against the list alone used to reject every proprietary component.
+    """
+    doc = deepcopy(_SPDX_VALID)
+    doc["packages"][0]["licenseConcluded"] = "LicenseRef-Proprietary"
+    doc["packages"][0]["licenseDeclared"] = "Apache-2.0 AND LicenseRef-Proprietary"
+    ctx = _spdx(doc)
+    codes = [e.code for e in ctx.report.errors]
+    assert E.E043_LICENSE_EXPRESSION_INVALID not in codes
+
+
+def test_spdx_document_ref_license_ref_accepted() -> None:
+    doc = deepcopy(_SPDX_VALID)
+    doc["packages"][0]["licenseConcluded"] = "DocumentRef-upstream:LicenseRef-Vendor-EULA"
+    ctx = _spdx(doc)
+    codes = [e.code for e in ctx.report.errors]
+    assert E.E043_LICENSE_EXPRESSION_INVALID not in codes
+
+
+def test_spdx_unknown_license_key_still_rejected() -> None:
+    """Loosening LicenseRef must not let an invented identifier through."""
+    doc = deepcopy(_SPDX_VALID)
+    doc["packages"][0]["licenseConcluded"] = "NotARealLicense-9.9"
+    ctx = _spdx(doc)
+    codes = [e.code for e in ctx.report.errors]
+    assert E.E043_LICENSE_EXPRESSION_INVALID in codes
+
+
+def test_spdx_malformed_license_expression_still_rejected() -> None:
+    doc = deepcopy(_SPDX_VALID)
+    doc["packages"][0]["licenseConcluded"] = "Apache-2.0 AND"
+    ctx = _spdx(doc)
+    codes = [e.code for e in ctx.report.errors]
+    assert E.E043_LICENSE_EXPRESSION_INVALID in codes
+
+
 # ---------------------------------------------------------------------------
 # CycloneDX
 # ---------------------------------------------------------------------------
