@@ -200,6 +200,28 @@ def _user_id(request: Request) -> str | None:
     return None
 
 
+def _cipher():
+    """Return the process cipher, or 503 when the master key is absent.
+
+    ``get_cipher`` raises ``RuntimeError`` when
+    ``AI_CONFIG_ENCRYPTION_KEY`` is unset. Left uncaught that surfaces
+    as a bare 500 and reads like a bug, when it is really a one-line
+    deployment gap — so name it in the response instead.
+    """
+    try:
+        return get_cipher()
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "AI credential encryption is not configured, so provider keys "
+                "cannot be stored. Set AI_CONFIG_ENCRYPTION_KEY (generate one with "
+                "`python scripts/generate_encryption_key.py --append-to-env`) and "
+                "restart the API."
+            ),
+        ) from exc
+
+
 def _row_to_response(row: AiProviderCredential, *, decrypted_key: str | None = None) -> CredentialResponse:
     """Build a CredentialResponse from a row.
 
@@ -338,7 +360,7 @@ def create_credential(
     )
     encrypted = None
     if body.api_key:
-        encrypted = get_cipher().encrypt(body.api_key)
+        encrypted = _cipher().encrypt(body.api_key)
     now = _now_iso()
     row = AiProviderCredential(
         provider_name=body.provider_name.strip().lower(),
@@ -400,7 +422,7 @@ def update_credential(
     # api_key omitted ⇒ preserve. api_key="" ⇒ explicit clear is rejected
     # (must use DELETE for that). Non-empty ⇒ encrypt + replace.
     if body.api_key:
-        row.api_key_encrypted = get_cipher().encrypt(body.api_key)
+        row.api_key_encrypted = _cipher().encrypt(body.api_key)
         changes.append("api_key")
     if body.base_url is not None:
         row.base_url = body.base_url.strip() or None

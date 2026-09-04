@@ -31,6 +31,17 @@ python scripts/generate_encryption_key.py
 
 Restart the API + Celery workers so the env var is in process memory.
 
+**Local development needs no manual step.** `scripts/bootstrap.{sh,ps1}`
+and `python run.py` both call
+`generate_encryption_key.py --ensure-env`, which fills the key into a
+local `.env` only when it has no value yet — an existing key is never
+replaced, so it cannot orphan credentials you already saved.
+
+This deliberately does **not** happen in a container: `.env` is
+dockerignored, so a self-generated key would be lost on the next deploy
+while the rows it encrypted survived. Deployed environments must inject
+`AI_CONFIG_ENCRYPTION_KEY` from their own secret store.
+
 ### 1.2 Verifying the key is present
 
 ```bash
@@ -39,7 +50,7 @@ curl -s -o /dev/null -w '%{http_code}\n' \
   -H 'content-type: application/json' \
   -d '{"provider_name":"anthropic","api_key":"sk-test","default_model":"claude-sonnet-4-5"}'
 # 201 (or 409 if a row already exists)  → key OK
-# 500 with "AI_CONFIG_ENCRYPTION_KEY is not set"  → fix the env
+# 503 "AI credential encryption is not configured"  → fix the env
 ```
 
 ### 1.3 Rotation

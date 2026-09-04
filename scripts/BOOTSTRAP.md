@@ -86,7 +86,10 @@ distros, so usually nothing is built.
   validating the production path locally.
 - **API keys** — `NVD_API_KEY`, `GITHUB_TOKEN`, `VULNDB_API_KEY`, and any AI
   provider keys are all optional. The script seeds `.env` from `.env.example`;
-  fill in keys later as needed.
+  fill in keys later as needed. The one exception is
+  `AI_CONFIG_ENCRYPTION_KEY`, which the script generates for you — Settings →
+  AI cannot save a provider without it. Deployed environments inject it from
+  their own secret store instead (`docs/runbook-ai-credentials.md` §1.1).
 
 ## After it finishes
 
