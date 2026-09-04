@@ -7,6 +7,21 @@ Run with:  python run.py
 from __future__ import annotations
 
 import os
+from pathlib import Path
+
+# Local dev convenience: make sure .env carries the AI credential master key
+# before it is loaded, so Settings → AI works on a fresh checkout with no
+# extra setup step. Deliberately gated on an existing local .env — that file
+# is dockerignored, so this is a no-op in a container, where the key must come
+# from the platform's secret store (see scripts/generate_encryption_key.py).
+_ENV_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+if os.path.isfile(_ENV_FILE):
+    try:
+        from scripts.generate_encryption_key import ensure_env_key
+
+        ensure_env_key(Path(_ENV_FILE))
+    except Exception:  # noqa: BLE001 — never block startup on a convenience step
+        pass
 
 # Load .env file if present
 try:

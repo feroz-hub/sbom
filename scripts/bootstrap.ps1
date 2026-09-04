@@ -195,6 +195,13 @@ function Step-SetupBackend {
         Copy-Item $envExample $envFile
         Write-Ok "Copied .env.example -> .env  (edit it before running in production)"
     }
+
+    # AI provider credentials are encrypted at rest, so Settings -> AI cannot
+    # save anything without a master key. Fill one in now (idempotent - an
+    # existing key is never replaced) so local setup needs no extra step.
+    if (Test-Path $envFile) {
+        & $venvPython (Join-Path $RepoRoot 'scripts/generate_encryption_key.py') --ensure-env
+    }
 }
 
 function Step-SetupFrontend {

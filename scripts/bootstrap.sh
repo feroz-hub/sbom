@@ -290,12 +290,20 @@ step_setup_backend() {
   source "${REPO_ROOT}/.venv/bin/activate"
   python -m pip install --upgrade pip
   python -m pip install -r "${REPO_ROOT}/requirements.txt"
-  deactivate
 
   if [[ ! -f "${REPO_ROOT}/.env" && -f "${REPO_ROOT}/.env.example" ]]; then
     cp "${REPO_ROOT}/.env.example" "${REPO_ROOT}/.env"
     ok "Copied .env.example → .env  (edit it before running in production)"
   fi
+
+  # AI provider credentials are encrypted at rest, so Settings → AI cannot
+  # save anything without a master key. Fill one in now (idempotent — an
+  # existing key is never replaced) so local setup needs no extra step.
+  if [[ -f "${REPO_ROOT}/.env" ]]; then
+    python "${REPO_ROOT}/scripts/generate_encryption_key.py" --ensure-env
+  fi
+
+  deactivate
 }
 
 step_setup_frontend() {

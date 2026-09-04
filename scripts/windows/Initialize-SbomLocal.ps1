@@ -249,6 +249,25 @@ if ($LASTEXITCODE -ne 0) {
 if ($LASTEXITCODE -ne 0) {
     throw "The virtual environment uses Python older than 3.11. Delete .venv and rerun this script."
 }
+
+# sbom.env.ps1 above covers DB + HCL.CS only; the AI feature flags and the
+# credential master key are read from .env by load_dotenv(). Both AI flags
+# default to false in app/settings.py, so without .env the Settings -> AI page
+# renders a "not enabled" notice and no provider can be saved.
+$dotEnvFile = Join-Path $RepoRoot ".env"
+$dotEnvExample = Join-Path $RepoRoot ".env.example"
+if (-not (Test-Path $dotEnvFile) -and (Test-Path $dotEnvExample)) {
+    Copy-Item $dotEnvExample $dotEnvFile
+    Write-Host "Copied .env.example -> .env  (edit it before running in production)" -ForegroundColor Green
+}
+if (Test-Path $dotEnvFile) {
+    # Idempotent - an existing key is never replaced, so re-running this
+    # script cannot orphan already-saved provider credentials.
+    & $venvPython (Join-Path $RepoRoot "scripts\generate_encryption_key.py") --ensure-env
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to provision AI_CONFIG_ENCRYPTION_KEY in .env."
+    }
+}
 if (-not $SkipDependencyRestore) {
     Write-Host ""
     Write-Host "[8/9] Restoring dependencies..." -ForegroundColor Cyan
