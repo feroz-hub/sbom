@@ -146,44 +146,68 @@ def test_fda_510k_export_uses_template_and_removes_examples(client, db):
         "Instructions",
         "SBOM Metadata",
         "SBOM Components",
+        "Environment & 3rd-Party Deps",
         "Vulnerabilities & VEX",
         "Lifecycle & Support Plan",
+        "Supplier & Security Contacts",
+        "FDA Compliance Dashboard",
     ]
     assert workbook.calculation.calcMode == "auto"
     assert workbook.calculation.fullCalcOnLoad is True
     assert workbook.calculation.forceFullCalc is True
 
+    # Metadata rows shifted when the template gained the author block (16-18)
+    # and the manufacturer security-contact block (26-28).
     metadata = workbook["SBOM Metadata"]
     assert metadata["C5"].value == "Infusion Controller"
-    assert metadata["C16"].is_date
-    assert metadata["C24"].is_date
+    assert metadata["C19"].is_date, "SBOM Timestamp moved from C16 to C19"
+    assert metadata["C32"].is_date, "Date Prepared moved from C24 to C32"
 
     components = workbook["SBOM Components"]
     assert components["A3"].value == 1
     assert components["B3"].value == "crypto-core"
     assert components["E3"].value == "PURL"
     assert components["F3"].value == "pkg:maven/org.example/crypto-core@1.0.0"
-    assert components["L3"].is_date
-    assert components["N3"].value == '=IF(L3="","",L3-TODAY())'
-    assert components["O3"].value.startswith('=IF(L3="","",IF(L3<TODAY()')
+    assert components["T3"].is_date, "EOS date moved from L to T"
+    # Days to EOS / Lifecycle Flag are template formulas keyed on T. Writing a
+    # value into either would break the Compliance Dashboard that reads them.
+    assert components["V3"].value == '=IF(T3="","",T3-TODAY())'
+    assert components["W3"].value.startswith('=IF(T3="","",IF(T3<TODAY()')
 
     vulnerabilities = workbook["Vulnerabilities & VEX"]
     assert vulnerabilities["A3"].value == 1
     assert vulnerabilities["B3"].value == "crypto-core"
     assert vulnerabilities["D3"].value == "CVE-2026-12345"
-    assert vulnerabilities["G3"].value == "High"
+    assert vulnerabilities["H3"].value == "High", "Severity moved from G to H"
+    assert vulnerabilities["J3"].value in {"Yes", "No"}, "CISA KEV Status is a Yes/No dropdown"
+    assert vulnerabilities["K3"].value in {
+        "Not Affected",
+        "Affected",
+        "Fixed",
+        "Under Investigation",
+    }, "VEX Status must match the template dropdown"
 
     lifecycle = workbook["Lifecycle & Support Plan"]
     assert lifecycle["A3"].value == 1
     assert lifecycle["B3"].value == "crypto-core"
     assert lifecycle["F3"].is_date
+    assert lifecycle["H3"].value == '=IF(F3="","",F3-TODAY())', "Days to EOS stays a formula"
+    assert lifecycle["O3"].value in {"Planned", "In Progress", "Complete", "Risk Accepted"}
+
+    # Supplier & Security Contacts is intentionally left blank for manual
+    # completion — the platform holds no PSIRT addresses or CVD policy URLs.
+    contacts = workbook["Supplier & Security Contacts"]
+    assert contacts["B2"].value == "Supplier / Manufacturer Legal Name", "headers preserved"
+    assert all(contacts.cell(row=row, column=col).value is None for row in (3, 4) for col in range(1, 8))
 
     text_values = [
         str(cell.value)
         for worksheet in [
             workbook["SBOM Components"],
+            workbook["Environment & 3rd-Party Deps"],
             workbook["Vulnerabilities & VEX"],
             workbook["Lifecycle & Support Plan"],
+            workbook["Supplier & Security Contacts"],
         ]
         for row in worksheet.iter_rows()
         for cell in row
@@ -195,6 +219,11 @@ def test_fda_510k_export_uses_template_and_removes_examples(client, db):
     assert "OpenSSL" not in joined
     assert "Linux Kernel" not in joined
     assert "CVE-2024-XXXXX" not in joined
+    # Placeholders shipped by the revised template's worked example row.
+    assert "example-library" not in joined
+    assert "Example Software Foundation" not in joined
+    assert "CVE-2026-00000" not in joined
+    assert "example-linux-server" not in joined
 
 
 def test_fda_510k_export_returns_structured_409_for_incomplete_lifecycle(client, db):

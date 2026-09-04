@@ -19,16 +19,182 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..metrics import COMPLETED_RUN_STATUSES
-from ..models import AnalysisFinding, AnalysisRun, Projects, SBOMComponent, SBOMSource, VexStatement
+from ..models import (
+    AnalysisFinding,
+    AnalysisRun,
+    EpssScore,
+    KevEntry,
+    Projects,
+    SBOMComponent,
+    SBOMSource,
+    VexStatement,
+)
 
 log = logging.getLogger(__name__)
 
 EXCEL_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 FDA_510K_TEMPLATE_PATH = Path(__file__).resolve().parents[1] / "templates" / "reports" / "FDA_510k_SBOM_Template 1.xlsx"
 
-DATA_SHEETS = ("SBOM Components", "Vulnerabilities & VEX", "Lifecycle & Support Plan")
-EXPECTED_SHEETS = ("Instructions", "SBOM Metadata", *DATA_SHEETS)
+DATA_SHEETS = (
+    "SBOM Components",
+    "Environment & 3rd-Party Deps",
+    "Vulnerabilities & VEX",
+    "Lifecycle & Support Plan",
+    "Supplier & Security Contacts",
+)
+EXPECTED_SHEETS = ("Instructions", "SBOM Metadata", *DATA_SHEETS, "FDA Compliance Dashboard")
 INCOMPLETE_ANALYSIS_CODE = "fda_510k_report_incomplete_analysis"
+
+# Data rows begin at 3 on every sheet: row 1 is the merged group band, row 2
+# the column headers. Row 3 ships a worked example that must be cleared.
+DATA_START_ROW = 3
+
+# The template pre-builds styling, per-row formulas and dropdown validation
+# down to row 500. Rows within that range are written in place; only a larger
+# SBOM needs the row template copied downward.
+TEMPLATE_LAST_ROW = 500
+
+# Column maps, keyed by the header text on row 2. Named rather than inlined as
+# integers: the FDA template has been revised once already, and last time every
+# writer had to be re-counted by hand because the positions were magic numbers.
+#
+# Columns carrying a template formula are deliberately ABSENT from these maps —
+# writing a value there would replace the calculation the workbook (and the
+# Compliance Dashboard that reads it) depends on:
+#   * SBOM Components  V "Days to EOS",  W "Lifecycle Flag"   <- from T (EOS)
+#   * Lifecycle        H "Days to EOS"                        <- from F (EOS)
+COMPONENT_COLS = {
+    "index": 1,               # A  #
+    "name": 2,                # B  Component Name                     [NTIA]
+    "version": 3,             # C  Version                            [NTIA]
+    "supplier": 4,            # D  Supplier / Legal Entity Name       [NTIA]
+    "unique_id_type": 5,      # E  Unique ID Type                     [NTIA]
+    "unique_id_value": 6,     # F  Unique ID Value                    [NTIA]
+    "dependency_type": 7,     # G  Dependency Type                    [NTIA]
+    "depends_on": 8,          # H  Parent / Depends-On Component
+    "dependency_depth": 9,    # I  Dependency Depth
+    "component_type": 10,     # J  Component Type
+    "origin_category": 11,    # K  Origin / Category
+    "license": 12,            # L  License
+    "runtime_or_build": 13,   # M  Runtime / Build-Time
+    "criticality": 14,        # N  Criticality to Device Operation
+    "safety_relevance": 15,   # O  Safety Relevance
+    "network_exposure": 16,   # P  Network Exposure
+    "auth_dependency": 17,    # Q  Authentication Dependency
+    "internet_facing": 18,    # R  Internet-Facing
+    "support_level": 19,      # S  Level of Support
+    "eos_date": 20,           # T  End-of-Support (EOS) Date
+    "eol_date": 21,           # U  End-of-Life (EOL) Date
+    # V, W are formulas
+    "vulnerabilities": 24,    # X  Known Vulnerabilities (CVE/IDs)
+    "patch_mechanism": 25,    # Y  Patch / Update Mechanism
+    "hash": 26,               # Z  Component Hash / Checksum (SHA-256)
+    "signature_status": 27,   # AA Cryptographic Signature Status
+    "provenance": 28,         # AB Build Environment / Provenance ID
+    "supplier_contact": 29,   # AC Supplier Security Contact (Email)
+    "notes": 30,              # AD Notes / Justification
+}
+
+VULNERABILITY_COLS = {
+    "index": 1,               # A  #
+    "component_name": 2,      # B
+    "component_version": 3,   # C
+    "vulnerability_id": 4,    # D
+    "cvss_version": 5,        # E
+    "cvss_score": 6,          # F
+    "cvss_vector": 7,         # G
+    "severity": 8,            # H
+    "epss_score": 9,          # I
+    "kev_status": 10,         # J  CISA KEV Status
+    "vex_status": 11,         # K
+    "vex_justification": 12,  # L
+    "patient_impact": 13,     # M
+    "exploitability": 14,     # N
+    "remediation": 15,        # O
+    "fixed_versions": 16,     # P
+    "remediation_owner": 17,  # Q
+    "target_date": 18,        # R
+    "status": 19,             # S
+    "notes": 20,              # T
+}
+
+LIFECYCLE_COLS = {
+    "index": 1,               # A  #
+    "name": 2,                # B
+    "version": 3,             # C
+    "supplier": 4,            # D
+    "support_level": 5,       # E
+    "eos_date": 6,            # F
+    "eol_date": 7,            # G
+    # H is a formula
+    "risk": 9,                # I  Risk if Unsupported
+    "plan": 10,               # J  Mitigation / Replacement Plan
+    "controls": 11,           # K  Compensating Controls
+    "verification": 12,       # L  Verification Method
+    "owner": 13,              # M  Owner / Responsible
+    "target_date": 14,        # N  Target Action Date
+    "status": 15,             # O  Status
+}
+
+ENVIRONMENT_COLS = {
+    "index": 1,               # A  #
+    "category": 2,            # B  Dependency Category
+    "name": 3,                # C
+    "version": 4,             # D  Version / Tag / Digest
+    "supplier": 5,            # E
+    "unique_id": 6,           # F  PURL / Image Digest / CPE
+    "support_level": 7,       # G
+    "eos_date": 8,            # H
+    "eol_date": 9,            # I
+    "vulnerabilities": 10,    # J
+    "network_exposure": 11,   # K
+    "notes": 12,              # L
+}
+
+# Values the template's dropdowns accept. Writing anything else leaves Excel
+# showing a validation warning on a submitted workbook, so every value the
+# service produces for these columns is mapped into one of these sets.
+SUPPORT_LEVELS = ("Actively maintained", "No longer maintained", "Abandoned", "Unknown")
+COMPONENT_TYPES = (
+    "Application",
+    "Operating System",
+    "Library",
+    "Framework",
+    "Driver",
+    "Firmware",
+    "Middleware",
+    "Container/Image",
+    "Other",
+)
+ORIGIN_CATEGORIES = (
+    "Commercial (COTS)",
+    "Open-Source (OSS)",
+    "Off-the-Shelf (OTS)",
+    "Proprietary / In-house",
+    "Other",
+)
+UNIQUE_ID_TYPES = ("CPE", "PURL", "SWID", "OmniBOR", "Other")
+VEX_STATUS_LABELS = {
+    "not_affected": "Not Affected",
+    "affected": "Affected",
+    "fixed": "Fixed",
+    "under_investigation": "Under Investigation",
+    "unknown": "Under Investigation",
+}
+EXPLOITABILITY_KEV = "Actively Exploited (CISA KEV)"
+EXPLOITABILITY_NONE = "None Known"
+
+# Ecosystems that belong on the Environment sheet rather than the component
+# inventory: FDA Sec. VII separates OS/container/firmware dependencies from
+# application libraries.
+ENVIRONMENT_PURL_TYPES = {
+    "deb": "Operating System",
+    "rpm": "Operating System",
+    "apk": "Operating System",
+    "alpine": "Operating System",
+    "oci": "Container Base Image",
+    "docker": "Container Base Image",
+}
 
 
 class Fda510kReportError(ValueError):
@@ -73,6 +239,16 @@ class Fda510kReportMetadata:
     date_prepared: date | None = None
     reviewed_approved_by: str | None = None
     date_approved: date | None = None
+    # Author block, split out by the revised template (rows 16-18).
+    author_organization: str | None = None
+    author_role_title: str | None = None
+    author_email: str | None = None
+    # Manufacturer security-contact block (rows 26-28), added by the revised
+    # template to support the 21 U.S.C. 360n-2 (Sec. 524B) coordinated
+    # disclosure expectations.
+    psirt_contact: str | None = None
+    cvd_policy_url: str | None = None
+    vulnerability_intake_method: str | None = None
 
 
 @dataclass(frozen=True)
@@ -98,8 +274,15 @@ class _ComponentAggregate:
     eol_date: date | None = None
     patch_mechanism: str = ""
     crypto_info: str = ""
+    component_hash: str = ""
+    runtime_or_build: str = ""
+    environment_category: str = ""
+    dependency_depth: int | None = None
     source_sboms: set[str] = field(default_factory=set)
     dependencies: set[str] = field(default_factory=set)
+    depends_on: set[str] = field(default_factory=set)
+    required_by: set[str] = field(default_factory=set)
+    is_direct: bool = False
     vulnerabilities: set[str] = field(default_factory=set)
     lifecycle_recommendations: set[str] = field(default_factory=set)
     components: list[SBOMComponent] = field(default_factory=list)
@@ -206,6 +389,95 @@ def _unique_id(component: SBOMComponent) -> tuple[str, str]:
     return "", ""
 
 
+def _coerce_choice(value: Any, allowed: tuple[str, ...], fallback: str = "") -> str:
+    """Snap a value onto one of the template's dropdown options.
+
+    Case- and separator-insensitive, then a substring match, so "operating
+    system" / "OPERATING_SYSTEM" / "os-image" all resolve. Anything that still
+    does not match returns ``fallback`` — an unrecognised value in a validated
+    cell shows as an error in a workbook that goes to a regulator.
+    """
+    text = _clean(value)
+    if not text:
+        return fallback
+    squashed = text.casefold().replace("_", " ").replace("-", " ")
+    for option in allowed:
+        if squashed == option.casefold().replace("_", " ").replace("-", " "):
+            return option
+    for option in allowed:
+        head = option.split("(")[0].split("/")[0].strip().casefold()
+        if head and (head in squashed or squashed in head):
+            return option
+    return fallback
+
+
+def _component_hash(component: SBOMComponent) -> str:
+    """Prefer SHA-256 from the component's hashes, per template column Z.
+
+    Two storage shapes occur in practice: a JSON array of
+    ``{"alg": ..., "content": ...}`` objects from a CycloneDX import, and the
+    flattened ``"SHA-256:abc123"`` string the component upsert writes. Both are
+    accepted, because the FDA column wants the digest either way.
+    """
+    raw = component.hashes
+    if isinstance(raw, str):
+        parsed = _parse_json(raw)
+        raw = parsed if isinstance(parsed, list) else raw
+
+    def pick(alg: str, digest: str) -> str | None:
+        normalized = alg.upper().replace("-", "").replace("_", "")
+        return digest if normalized in {"SHA256", "SHA2256"} else None
+
+    fallback = ""
+    if isinstance(raw, list):
+        for entry in raw:
+            if not isinstance(entry, dict):
+                continue
+            alg = _clean(entry.get("alg") or entry.get("algorithm"))
+            digest = _clean(entry.get("content") or entry.get("value") or entry.get("checksumValue"))
+            if not digest:
+                continue
+            exact = pick(alg, digest)
+            if exact:
+                return exact
+            fallback = fallback or f"{alg or 'HASH'}: {digest}"
+        return fallback
+
+    for piece in re.split(r"[,;\s]+", _clean(raw)):
+        if not piece:
+            continue
+        alg, _, digest = piece.partition(":")
+        if not digest:
+            alg, digest = "", alg
+        exact = pick(alg, digest)
+        if exact:
+            return digest
+        fallback = fallback or (f"{alg}: {digest}" if alg else digest)
+    return fallback
+
+
+def _purl_type(component: SBOMComponent) -> str:
+    purl = _clean(component.purl)
+    if not purl.lower().startswith("pkg:"):
+        return ""
+    return purl[4:].split("/", 1)[0].split("@", 1)[0].strip().casefold()
+
+
+def _environment_category(component: SBOMComponent) -> str:
+    """Environment-sheet category, or "" when the component is an app library."""
+    mapped = ENVIRONMENT_PURL_TYPES.get(_purl_type(component))
+    if mapped:
+        return mapped
+    declared = _clean(component.component_type).casefold()
+    if declared in {"operating-system", "operating system", "os"}:
+        return "Operating System"
+    if declared in {"container", "container-image", "image"}:
+        return "Container Base Image"
+    if declared in {"firmware", "device"}:
+        return "Embedded Firmware"
+    return ""
+
+
 def _support_level(component: SBOMComponent) -> str:
     status = _first_text(component.maintenance_status, component.lifecycle_status)
     lowered = status.casefold()
@@ -234,6 +506,105 @@ def _risk_for_lifecycle(component: SBOMComponent) -> str:
     if "deprecated" in status or "soon" in status or component.deprecated or component.is_deprecated:
         return "Medium"
     return "Low"
+
+
+@dataclass
+class _DependencyFacts:
+    """Structured dependency view for one (sbom_id, bom_ref)."""
+
+    relationships: set[str] = field(default_factory=set)
+    depends_on: set[str] = field(default_factory=set)
+    required_by: set[str] = field(default_factory=set)
+    depth: int | None = None
+    is_direct: bool = False
+
+
+def _dependency_depths(roots: list[str], edges: dict[str, set[str]]) -> dict[str, int]:
+    """Breadth-first depth from the document's root component(s).
+
+    Depth 1 is a direct dependency of the device software, 2+ transitive. BFS
+    (not DFS) so a component reachable by both a short and a long path reports
+    the shortest — the honest answer to "how far from the product is this".
+    """
+    depths: dict[str, int] = {}
+    frontier = [(root, 0) for root in roots]
+    seen = set(roots)
+    while frontier:
+        node, depth = frontier.pop(0)
+        for child in sorted(edges.get(node, set())):
+            if child in seen:
+                continue
+            seen.add(child)
+            depths[child] = depth + 1
+            frontier.append((child, depth + 1))
+    return depths
+
+
+def _extract_dependency_facts(sboms: list[SBOMSource]) -> dict[tuple[int, str], _DependencyFacts]:
+    facts: dict[tuple[int, str], _DependencyFacts] = {}
+
+    def entry(sbom_id: int, ref: str) -> _DependencyFacts:
+        return facts.setdefault((sbom_id, ref), _DependencyFacts())
+
+    for sbom in sboms:
+        raw = _parse_json(sbom.sbom_data)
+        if not isinstance(raw, dict):
+            continue
+
+        names: dict[str, str] = {}
+        for component in raw.get("components") or raw.get("packages") or []:
+            if not isinstance(component, dict):
+                continue
+            ref = _first_text(
+                component.get("bom-ref"), component.get("SPDXID"), component.get("spdxid"), component.get("id")
+            )
+            name = _first_text(component.get("name"), component.get("packageName"), ref)
+            if ref:
+                names[ref] = name
+
+        edges: dict[str, set[str]] = {}
+        for dep in raw.get("dependencies") or []:
+            if not isinstance(dep, dict):
+                continue
+            ref = _clean(dep.get("ref"))
+            depends = [_clean(item) for item in dep.get("dependsOn") or [] if _clean(item)]
+            if not ref or not depends:
+                continue
+            edges.setdefault(ref, set()).update(depends)
+            entry(sbom.id, ref).depends_on.update(names.get(item, item) for item in depends)
+            entry(sbom.id, ref).relationships.add(
+                "Depends on: " + ", ".join(names.get(item, item) for item in depends)
+            )
+            for item in depends:
+                entry(sbom.id, item).required_by.add(names.get(ref, ref))
+                entry(sbom.id, item).relationships.add(f"Required by: {names.get(ref, ref)}")
+
+        # Roots are the document's own component plus anything nothing depends on.
+        metadata = raw.get("metadata") if isinstance(raw.get("metadata"), dict) else {}
+        top = metadata.get("component") if isinstance(metadata.get("component"), dict) else {}
+        declared_root = _first_text(top.get("bom-ref"), top.get("name"))
+        depended_on = {child for children in edges.values() for child in children}
+        roots = [ref for ref in edges if ref not in depended_on]
+        if declared_root and declared_root not in roots:
+            roots.append(declared_root)
+
+        for ref, depth in _dependency_depths(roots, edges).items():
+            record = entry(sbom.id, ref)
+            record.depth = depth if record.depth is None else min(record.depth, depth)
+            record.is_direct = record.is_direct or depth == 1
+
+        for rel in raw.get("relationships") or []:
+            if not isinstance(rel, dict):
+                continue
+            source = _first_text(rel.get("spdxElementId"), rel.get("source"))
+            target = _first_text(rel.get("relatedSpdxElement"), rel.get("target"))
+            rel_type = _first_text(rel.get("relationshipType"), rel.get("type"))
+            if source and target and rel_type:
+                entry(sbom.id, source).relationships.add(f"{rel_type}: {names.get(target, target)}")
+                if rel_type.upper() in {"DEPENDS_ON", "CONTAINS"}:
+                    entry(sbom.id, source).depends_on.add(names.get(target, target))
+                    entry(sbom.id, target).required_by.add(names.get(source, source))
+    return facts
 
 
 def _extract_dependency_map(sboms: list[SBOMSource]) -> dict[tuple[int, str], set[str]]:
@@ -298,7 +669,22 @@ def _copy_row_template(ws: Worksheet, source_row: int, target_row: int) -> None:
 
 
 def _clear_and_prepare_rows(ws: Worksheet, *, start_row: int, style_row: int, last_row: int) -> None:
-    for row in range(start_row, max(ws.max_row, last_row) + 1):
+    """Blank the example row(s), then extend the template for oversized data.
+
+    The template already carries styling, per-row formulas and validation to
+    ``TEMPLATE_LAST_ROW``, so within that band only literal values are cleared
+    — re-copying the style row would overwrite the formula columns. Beyond it,
+    the row template is copied so a >498-row SBOM still renders (and its
+    formulas are translated by ``_copy_row_template``).
+    """
+    formula_safe_last = min(TEMPLATE_LAST_ROW, max(ws.max_row, last_row))
+    for row in range(start_row, formula_safe_last + 1):
+        for col in range(1, ws.max_column + 1):
+            cell = ws.cell(row, col)
+            if isinstance(cell.value, str) and cell.value.startswith("="):
+                continue
+            cell.value = None
+    for row in range(TEMPLATE_LAST_ROW + 1, last_row + 1):
         _copy_row_template(ws, style_row, row)
 
 
@@ -321,11 +707,22 @@ class Fda510kExcelReportService:
         metadata: Fda510kReportMetadata,
     ) -> tuple[bytes, str]:
         project, sboms, runs = self._validate_request(project_id, selections)
-        dependencies = _extract_dependency_map(sboms)
-        component_rows = self._component_aggregates(sboms, runs, dependencies)
+        dependency_facts = _extract_dependency_facts(sboms)
+        aggregates = self._component_aggregates(sboms, runs, dependency_facts)
+        # FDA Sec. VII keeps OS / container / firmware dependencies on their own
+        # sheet, so they are split out of the application component inventory
+        # rather than listed twice.
+        component_rows = [row for row in aggregates if not row.environment_category]
+        environment_rows = [row for row in aggregates if row.environment_category]
         vulnerability_rows = self._vulnerability_rows(runs)
-        lifecycle_rows = self._lifecycle_rows(component_rows)
-        content = self._build_workbook(metadata, component_rows, vulnerability_rows, lifecycle_rows)
+        lifecycle_rows = self._lifecycle_rows(aggregates)
+        content = self._build_workbook(
+            metadata,
+            component_rows,
+            environment_rows,
+            vulnerability_rows,
+            lifecycle_rows,
+        )
         filename = self.filename_for(project.project_name)
         return content, filename
 
@@ -448,7 +845,7 @@ class Fda510kExcelReportService:
         self,
         sboms: list[SBOMSource],
         runs: dict[int, AnalysisRun],
-        dependencies: dict[tuple[int, str], set[str]],
+        dependency_facts: dict[tuple[int, str], _DependencyFacts],
     ) -> list[_ComponentAggregate]:
         findings_by_component: dict[int, set[str]] = {}
         for finding in self.db.execute(
@@ -489,10 +886,23 @@ class Fda510kExcelReportService:
                     eol_date=_parse_date(component.eol_date or component.eof_date),
                     patch_mechanism=_first_text(component.recommended_version, component.latest_supported_version),
                     crypto_info="",
+                    component_hash=_component_hash(component),
+                    environment_category=_environment_category(component),
                 )
                 aggregates[key] = aggregate
             aggregate.source_sboms.add(sbom_names.get(component.sbom_id, f"SBOM #{component.sbom_id}"))
-            aggregate.dependencies.update(dependencies.get((component.sbom_id, component.bom_ref or ""), set()))
+            facts = dependency_facts.get((component.sbom_id, component.bom_ref or ""))
+            if facts is not None:
+                aggregate.dependencies.update(facts.relationships)
+                aggregate.depends_on.update(facts.required_by)
+                aggregate.required_by.update(facts.required_by)
+                aggregate.is_direct = aggregate.is_direct or facts.is_direct
+                if facts.depth is not None:
+                    aggregate.dependency_depth = (
+                        facts.depth
+                        if aggregate.dependency_depth is None
+                        else min(aggregate.dependency_depth, facts.depth)
+                    )
             aggregate.vulnerabilities.update(findings_by_component.get(component.id, set()))
             if _clean(component.lifecycle_recommendation):
                 aggregate.lifecycle_recommendations.add(_clean(component.lifecycle_recommendation))
@@ -520,6 +930,17 @@ class Fda510kExcelReportService:
                 select(VexStatement).where(VexStatement.sbom_id.in_([run.sbom_id for run in runs.values()]))
             ).scalars()
         )
+        # Threat-intel columns added by the revised template (I "EPSS Score",
+        # J "CISA KEV Status"). Batched by CVE rather than per finding.
+        cve_ids = {_clean(finding.vuln_id) for finding in findings if _clean(finding.vuln_id)}
+        epss_by_cve: dict[str, float | None] = {}
+        kev_by_cve: dict[str, bool] = {}
+        if cve_ids:
+            for score in self.db.execute(select(EpssScore).where(EpssScore.cve_id.in_(cve_ids))).scalars():
+                epss_by_cve[_clean(score.cve_id).casefold()] = score.epss
+            for entry in self.db.execute(select(KevEntry).where(KevEntry.cve_id.in_(cve_ids))).scalars():
+                kev_by_cve[_clean(entry.cve_id).casefold()] = True
+
         vex_by_key: dict[tuple[int | None, str], VexStatement] = {}
         for row in vex_rows:
             for vuln in (row.vulnerability_id, row.cve_id):
@@ -539,29 +960,59 @@ class Fda510kExcelReportService:
             vex = vex_by_key.get((finding.component_id, finding.vuln_id.casefold())) or vex_by_key.get(
                 (None, finding.vuln_id.casefold())
             )
-            status = _first_text(getattr(vex, "status", None), "Under Investigation")
+            raw_status = _clean(getattr(vex, "status", None)).casefold().replace(" ", "_")
+            status = VEX_STATUS_LABELS.get(raw_status, "Under Investigation")
+            kev = kev_by_cve.get(finding.vuln_id.casefold())
             rows.append(
                 {
                     "component_name": _first_text(component.name if component else None, finding.component_name),
                     "component_version": _first_text(component.version if component else None, finding.component_version),
                     "vulnerability_id": finding.vuln_id,
-                    "cvss_version": _first_text(finding.cvss_version, "3.1" if _clean(finding.vector).startswith("CVSS:3.") else ""),
+                    "cvss_version": _first_text(
+                        finding.cvss_version, "3.1" if _clean(finding.vector).startswith("CVSS:3.") else ""
+                    ),
                     "cvss_score": finding.score,
+                    "cvss_vector": _clean(finding.vector),
                     "severity": _severity(finding.severity),
+                    "epss_score": epss_by_cve.get(finding.vuln_id.casefold()),
+                    "kev_status": "Yes" if kev else "No",
                     "vex_status": status,
                     "vex_justification": _first_text(getattr(vex, "justification", None)),
                     "patient_impact": "",
+                    # Only KEV membership is evidence the platform holds; the
+                    # richer options (PoC, weaponized) are analyst judgements
+                    # and stay blank rather than being guessed at.
+                    "exploitability": EXPLOITABILITY_KEV if kev else "",
                     "remediation": _first_text(
                         getattr(vex, "action_statement", None),
                         getattr(vex, "mitigation", None),
+                    ),
+                    "fixed_versions": _first_text(
+                        getattr(vex, "fixed_version", None),
                         ", ".join(_as_list(finding.fixed_versions)),
                     ),
+                    "remediation_owner": "",
                     "target_date": None,
                     "status": "Resolved" if status.casefold() == "fixed" else "Open",
                     "notes": _first_text(finding.source, finding.reference_url, finding.match_reason),
                 }
             )
         return rows
+
+    @staticmethod
+    def _dependency_type(row: _ComponentAggregate) -> str:
+        """Direct / Transitive for column G, blank when the graph is unknown.
+
+        An SBOM with no dependency graph gives no basis to call a component
+        either, and guessing "Direct" would overstate what the document says.
+        """
+        if row.is_direct or row.dependency_depth == 1:
+            return "Direct"
+        if row.dependency_depth is not None and row.dependency_depth > 1:
+            return "Transitive"
+        if row.required_by:
+            return "Transitive"
+        return ""
 
     @staticmethod
     def _lifecycle_rows(component_rows: list[_ComponentAggregate]) -> list[dict[str, Any]]:
@@ -597,6 +1048,7 @@ class Fda510kExcelReportService:
                         representative.recommended_version and f"Upgrade to {representative.recommended_version}",
                     ),
                     "controls": "",
+                    "verification": "",
                     "owner": "",
                     "target_date": None,
                     "status": "Planned",
@@ -608,6 +1060,7 @@ class Fda510kExcelReportService:
         self,
         metadata: Fda510kReportMetadata,
         component_rows: list[_ComponentAggregate],
+        environment_rows: list[_ComponentAggregate],
         vulnerability_rows: list[dict[str, Any]],
         lifecycle_rows: list[dict[str, Any]],
     ) -> bytes:
@@ -617,6 +1070,10 @@ class Fda510kExcelReportService:
 
         metadata_ws = workbook["SBOM Metadata"]
         generated_at = datetime.now(UTC).replace(tzinfo=None, microsecond=0)
+        # Row numbers follow the revised template: the author block gained
+        # Organization / Role / Email at 16-18, pushing Timestamp to 19, and a
+        # Manufacturer Security Contact block at 26-28 pushed Sign-off to 31.
+        # Rows 37+ are the workbook's own live formulas — never written here.
         metadata_values = {
             "C5": metadata.device_name,
             "C6": metadata.device_model_catalog_number,
@@ -627,99 +1084,186 @@ class Fda510kExcelReportService:
             "C11": metadata.device_software_version,
             "C12": metadata.top_level_primary_component,
             "C15": metadata.author_of_sbom_data,
-            "C16": generated_at,
-            "C17": metadata.sbom_version,
-            "C18": metadata.sbom_formats_for_submission,
-            "C19": metadata.sbom_generation_tool_and_version,
-            "C20": metadata.primary_data_source,
-            "C23": metadata.prepared_by,
-            "C24": metadata.date_prepared,
-            "C25": metadata.reviewed_approved_by,
-            "C26": metadata.date_approved,
+            "C16": metadata.author_organization,
+            "C17": metadata.author_role_title,
+            "C18": metadata.author_email,
+            "C19": generated_at,
+            "C20": metadata.sbom_version,
+            "C21": metadata.sbom_formats_for_submission,
+            "C22": metadata.sbom_generation_tool_and_version,
+            "C23": metadata.primary_data_source,
+            "C26": metadata.psirt_contact,
+            "C27": metadata.cvd_policy_url,
+            "C28": metadata.vulnerability_intake_method,
+            "C31": metadata.prepared_by,
+            "C32": metadata.date_prepared,
+            "C33": metadata.reviewed_approved_by,
+            "C34": metadata.date_approved,
         }
         for cell, value in metadata_values.items():
             metadata_ws[cell] = value
-        metadata_ws["C16"].number_format = "yyyy-mm-dd hh:mm"
-        metadata_ws["C24"].number_format = "yyyy-mm-dd"
-        metadata_ws["C26"].number_format = "yyyy-mm-dd"
+        metadata_ws["C19"].number_format = "yyyy-mm-dd hh:mm"
+        metadata_ws["C32"].number_format = "yyyy-mm-dd"
+        metadata_ws["C34"].number_format = "yyyy-mm-dd"
 
         comp_ws = workbook["SBOM Components"]
-        _clear_and_prepare_rows(comp_ws, start_row=3, style_row=5, last_row=max(5, 2 + len(component_rows)))
+        _clear_and_prepare_rows(
+            comp_ws,
+            start_row=DATA_START_ROW,
+            style_row=DATA_START_ROW,
+            last_row=max(DATA_START_ROW, DATA_START_ROW - 1 + len(component_rows)),
+        )
         for index, row in enumerate(component_rows, start=1):
-            excel_row = index + 2
-            dependency_parts = []
-            if row.source_sboms:
-                dependency_parts.append("Source SBOM(s): " + ", ".join(sorted(row.source_sboms)))
-            dependency_parts.extend(sorted(row.dependencies))
             _set_row_values(
                 comp_ws,
-                excel_row,
+                DATA_START_ROW - 1 + index,
                 {
-                    1: index,
-                    2: row.name,
-                    3: row.version,
-                    4: row.supplier,
-                    5: row.unique_id_type,
-                    6: row.unique_id_value,
-                    7: "; ".join(dependency_parts),
-                    8: row.component_type,
-                    9: row.origin_category,
-                    10: row.license,
-                    11: row.support_level,
-                    12: row.eos_date,
-                    13: row.eol_date,
-                    16: ", ".join(sorted(row.vulnerabilities)),
-                    17: row.patch_mechanism,
-                    18: row.crypto_info,
+                    COMPONENT_COLS["index"]: index,
+                    COMPONENT_COLS["name"]: row.name,
+                    COMPONENT_COLS["version"]: row.version,
+                    COMPONENT_COLS["supplier"]: row.supplier,
+                    COMPONENT_COLS["unique_id_type"]: _coerce_choice(
+                        row.unique_id_type, UNIQUE_ID_TYPES, "Other" if row.unique_id_value else ""
+                    ),
+                    COMPONENT_COLS["unique_id_value"]: row.unique_id_value,
+                    COMPONENT_COLS["dependency_type"]: self._dependency_type(row),
+                    COMPONENT_COLS["depends_on"]: "; ".join(sorted(row.required_by)),
+                    COMPONENT_COLS["dependency_depth"]: row.dependency_depth,
+                    COMPONENT_COLS["component_type"]: _coerce_choice(
+                        row.component_type, COMPONENT_TYPES, "Library"
+                    ),
+                    COMPONENT_COLS["origin_category"]: _coerce_choice(
+                        row.origin_category, ORIGIN_CATEGORIES
+                    ),
+                    COMPONENT_COLS["license"]: row.license,
+                    COMPONENT_COLS["support_level"]: _coerce_choice(
+                        row.support_level, SUPPORT_LEVELS, "Unknown"
+                    ),
+                    COMPONENT_COLS["eos_date"]: row.eos_date,
+                    COMPONENT_COLS["eol_date"]: row.eol_date,
+                    COMPONENT_COLS["vulnerabilities"]: ", ".join(sorted(row.vulnerabilities)),
+                    COMPONENT_COLS["patch_mechanism"]: row.patch_mechanism,
+                    COMPONENT_COLS["hash"]: row.component_hash,
+                    COMPONENT_COLS["notes"]: "; ".join(
+                        part
+                        for part in (
+                            "Source SBOM(s): " + ", ".join(sorted(row.source_sboms))
+                            if row.source_sboms
+                            else "",
+                            "; ".join(sorted(row.dependencies)),
+                        )
+                        if part
+                    ),
+                },
+            )
+
+        # Environment & 3rd-Party Deps — OS, container base images and firmware,
+        # split out of the component inventory per FDA Sec. VII.
+        env_ws = workbook["Environment & 3rd-Party Deps"]
+        _clear_and_prepare_rows(
+            env_ws,
+            start_row=DATA_START_ROW,
+            style_row=DATA_START_ROW,
+            last_row=max(DATA_START_ROW, DATA_START_ROW - 1 + len(environment_rows)),
+        )
+        for index, row in enumerate(environment_rows, start=1):
+            _set_row_values(
+                env_ws,
+                DATA_START_ROW - 1 + index,
+                {
+                    ENVIRONMENT_COLS["index"]: index,
+                    ENVIRONMENT_COLS["category"]: row.environment_category,
+                    ENVIRONMENT_COLS["name"]: row.name,
+                    ENVIRONMENT_COLS["version"]: row.version,
+                    ENVIRONMENT_COLS["supplier"]: row.supplier,
+                    ENVIRONMENT_COLS["unique_id"]: row.unique_id_value,
+                    ENVIRONMENT_COLS["support_level"]: _coerce_choice(
+                        row.support_level, SUPPORT_LEVELS, "Unknown"
+                    ),
+                    ENVIRONMENT_COLS["eos_date"]: row.eos_date,
+                    ENVIRONMENT_COLS["eol_date"]: row.eol_date,
+                    ENVIRONMENT_COLS["vulnerabilities"]: ", ".join(sorted(row.vulnerabilities)),
+                    ENVIRONMENT_COLS["notes"]: "; ".join(sorted(row.source_sboms)),
                 },
             )
 
         vuln_ws = workbook["Vulnerabilities & VEX"]
-        _clear_and_prepare_rows(vuln_ws, start_row=3, style_row=4, last_row=max(4, 2 + len(vulnerability_rows)))
+        _clear_and_prepare_rows(
+            vuln_ws,
+            start_row=DATA_START_ROW,
+            style_row=DATA_START_ROW,
+            last_row=max(DATA_START_ROW, DATA_START_ROW - 1 + len(vulnerability_rows)),
+        )
         for index, row in enumerate(vulnerability_rows, start=1):
             _set_row_values(
                 vuln_ws,
-                index + 2,
+                DATA_START_ROW - 1 + index,
                 {
-                    1: index,
-                    2: row["component_name"],
-                    3: row["component_version"],
-                    4: row["vulnerability_id"],
-                    5: row["cvss_version"],
-                    6: row["cvss_score"],
-                    7: row["severity"],
-                    8: row["vex_status"],
-                    9: row["vex_justification"],
-                    10: row["patient_impact"],
-                    11: row["remediation"],
-                    12: row["target_date"],
-                    13: row["status"],
-                    14: row["notes"],
+                    VULNERABILITY_COLS["index"]: index,
+                    VULNERABILITY_COLS["component_name"]: row["component_name"],
+                    VULNERABILITY_COLS["component_version"]: row["component_version"],
+                    VULNERABILITY_COLS["vulnerability_id"]: row["vulnerability_id"],
+                    VULNERABILITY_COLS["cvss_version"]: row["cvss_version"],
+                    VULNERABILITY_COLS["cvss_score"]: row["cvss_score"],
+                    VULNERABILITY_COLS["cvss_vector"]: row["cvss_vector"],
+                    VULNERABILITY_COLS["severity"]: row["severity"],
+                    VULNERABILITY_COLS["epss_score"]: row["epss_score"],
+                    VULNERABILITY_COLS["kev_status"]: row["kev_status"],
+                    VULNERABILITY_COLS["vex_status"]: row["vex_status"],
+                    VULNERABILITY_COLS["vex_justification"]: row["vex_justification"],
+                    VULNERABILITY_COLS["patient_impact"]: row["patient_impact"],
+                    VULNERABILITY_COLS["exploitability"]: row["exploitability"],
+                    VULNERABILITY_COLS["remediation"]: row["remediation"],
+                    VULNERABILITY_COLS["fixed_versions"]: row["fixed_versions"],
+                    VULNERABILITY_COLS["remediation_owner"]: row["remediation_owner"],
+                    VULNERABILITY_COLS["target_date"]: row["target_date"],
+                    VULNERABILITY_COLS["status"]: row["status"],
+                    VULNERABILITY_COLS["notes"]: row["notes"],
                 },
             )
 
         lifecycle_ws = workbook["Lifecycle & Support Plan"]
-        _clear_and_prepare_rows(lifecycle_ws, start_row=3, style_row=4, last_row=max(4, 2 + len(lifecycle_rows)))
+        _clear_and_prepare_rows(
+            lifecycle_ws,
+            start_row=DATA_START_ROW,
+            style_row=DATA_START_ROW,
+            last_row=max(DATA_START_ROW, DATA_START_ROW - 1 + len(lifecycle_rows)),
+        )
         for index, row in enumerate(lifecycle_rows, start=1):
             _set_row_values(
                 lifecycle_ws,
-                index + 2,
+                DATA_START_ROW - 1 + index,
                 {
-                    1: index,
-                    2: row["name"],
-                    3: row["version"],
-                    4: row["supplier"],
-                    5: row["support_level"],
-                    6: row["eos_date"],
-                    7: row["eol_date"],
-                    9: row["risk"],
-                    10: row["plan"],
-                    11: row["controls"],
-                    12: row["owner"],
-                    13: row["target_date"],
-                    14: row["status"],
+                    LIFECYCLE_COLS["index"]: index,
+                    LIFECYCLE_COLS["name"]: row["name"],
+                    LIFECYCLE_COLS["version"]: row["version"],
+                    LIFECYCLE_COLS["supplier"]: row["supplier"],
+                    LIFECYCLE_COLS["support_level"]: _coerce_choice(
+                        row["support_level"], SUPPORT_LEVELS, "Unknown"
+                    ),
+                    LIFECYCLE_COLS["eos_date"]: row["eos_date"],
+                    LIFECYCLE_COLS["eol_date"]: row["eol_date"],
+                    LIFECYCLE_COLS["risk"]: row["risk"],
+                    LIFECYCLE_COLS["plan"]: row["plan"],
+                    LIFECYCLE_COLS["controls"]: row["controls"],
+                    LIFECYCLE_COLS["verification"]: row["verification"],
+                    LIFECYCLE_COLS["owner"]: row["owner"],
+                    LIFECYCLE_COLS["target_date"]: row["target_date"],
+                    LIFECYCLE_COLS["status"]: row["status"],
                 },
             )
+
+        # Supplier & Security Contacts is left blank for manual completion:
+        # PSIRT addresses and CVD policy URLs are not data the platform holds,
+        # and inventing them in a regulatory submission would be worse than an
+        # empty sheet the submitter must fill in.
+        contacts_ws = workbook["Supplier & Security Contacts"]
+        _clear_and_prepare_rows(
+            contacts_ws,
+            start_row=DATA_START_ROW,
+            style_row=DATA_START_ROW,
+            last_row=DATA_START_ROW,
+        )
 
         workbook.calculation.calcMode = "auto"
         workbook.calculation.fullCalcOnLoad = True
