@@ -321,8 +321,8 @@ default 200) to protect the SMTP relay from a misconfigured schedule.
 
 ## 6. Data model changes
 
-Four new tables. All tenant-owned tables MUST use `TenantOwnedMixin`; user-managed rows MUST use
-`SoftDeleteMixin`, consistent with existing models.
+Three new tables and one extension to an existing table. All tenant-owned tables MUST use
+`TenantOwnedMixin`; user-managed rows MUST use `SoftDeleteMixin`, consistent with existing models.
 
 ### 6.1 `report_subscription` — migration `051`
 
