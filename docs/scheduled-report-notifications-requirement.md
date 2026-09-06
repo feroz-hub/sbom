@@ -4,7 +4,7 @@
 > **Author:** Feroze Basha S
 > **Date:** 2026-09-04
 > **Applies to:** SBOM Spectra / SBOM Analyser `2.0.0`
-> **Current Alembic head at time of writing:** `044_kev_vulnerabilities_table`
+> **Current Alembic head at time of writing:** `050_optional_external_tenant_mapping`
 > **Companion docs:** [`metric-conventions.md`](./metric-conventions.md) · [`runbook-compare.md`](./runbook-compare.md) · [`notification-coverage.md`](./notification-coverage.md) · [`adr/0008-compare-runs-architecture.md`](./adr/0008-compare-runs-architecture.md)
 
 ---
@@ -324,7 +324,7 @@ default 200) to protect the SMTP relay from a misconfigured schedule.
 Four new tables. All tenant-owned tables MUST use `TenantOwnedMixin`; user-managed rows MUST use
 `SoftDeleteMixin`, consistent with existing models.
 
-### 6.1 `report_subscription` — migration `045`
+### 6.1 `report_subscription` — migration `051`
 
 | Column | Type | Notes |
 |---|---|---|
@@ -347,7 +347,7 @@ Four new tables. All tenant-owned tables MUST use `TenantOwnedMixin`; user-manag
 Unique constraint on `(tenant_id, iam_user_id, scope, project_id, product_id, sbom_id)` where not
 deleted — one subscription per user per scope target.
 
-### 6.2 `report_delivery` — migration `046`
+### 6.2 `report_delivery` — migration `052`
 
 Append-only delivery ledger. Columns: `id`, `tenant_id`, `subscription_id` FK, `cycle_start`,
 `cycle_end`, `status`, `error_code`, `attempt_count`, `recipient_email`, `sbom_count`,
@@ -355,13 +355,13 @@ Append-only delivery ledger. Columns: `id`, `tenant_id`, `subscription_id` FK, `
 `(subscription_id, cycle_start, cycle_end)` per **NR-35**. Indexed on `(tenant_id, status)` and
 `(subscription_id, cycle_end)`.
 
-### 6.3 `report_artifact` — migration `046`
+### 6.3 `report_artifact` — migration `052`
 
 Generated files. Columns: `id`, `tenant_id`, `delivery_id` FK, `kind` (`PDF` | `XLSX` | `JSON`),
 `filename`, `media_type`, `size_bytes`, `sha256`, `storage_path`, `expires_at`, `created_on`.
 Retention sweeper deletes rows past `expires_at`.
 
-### 6.4 `analysis_schedule` extension — migration `047`
+### 6.4 `analysis_schedule` extension — migration `053`
 
 Add `TENANT` to `ck_analysis_schedule_scope` and to `ck_analysis_schedule_target`, allowing a row
 with all three target FKs null when `scope = 'TENANT'`. Extend `find_due_targets` accordingly.
@@ -526,7 +526,7 @@ Existing SMTP settings (`smtp_host`, `smtp_port`, `smtp_use_tls`, `smtp_use_star
 
 | Phase | Content | Exit criterion |
 |---|---|---|
-| **P1 — Foundations** | Migrations 045–047. Generalised email sender with attachments. `TENANT` scope on schedules. Baseline metric functions. | Sender sends an arbitrary email with an attachment; verification email still passes its existing tests. |
+| **P1 — Foundations** | Migrations 051–053. Generalised email sender with attachments. `TENANT` scope on schedules. Baseline metric functions. | Sender sends an arbitrary email with an attachment; verification email still passes its existing tests. |
 | **P2 — Part A** | Scope resolution, Part A composition, HTML body, delivery ledger, `ON_EVERY_RUN` cadence. | A subscribed user receives a consolidated posture email after a scheduled run. |
 | **P3 — Parts B & C** | Previous-run and initial-run deltas, `insufficient_history` handling, persistent-findings ranking. | Deltas match `POST /api/v1/compare` output for the same run pair, exactly. |
 | **P4 — Part D** | Lineage-aware `RunRelationship`, cross-version comparison, change attribution. | A v1.0 → v1.1 upload chain produces a correct cross-version report. |
