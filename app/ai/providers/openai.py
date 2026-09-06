@@ -73,6 +73,8 @@ class OpenAiProvider(LlmProvider):
         breaker_reset_seconds: float = 60.0,
         request_timeout_seconds: float = 30.0,
         structured_output_mode: StructuredOutputMode = "json_schema_strict",
+        reasoning_effort: Literal["minimal", "low", "medium", "high"] | None = None,
+        temperature_override: float | None = None,
     ) -> None:
         if not api_key:
             raise ProviderUnavailableError(f"{self.name}: api_key is required")
@@ -89,6 +91,8 @@ class OpenAiProvider(LlmProvider):
         self._max_retries = max_retries
         self._timeout = request_timeout_seconds
         self._structured_output_mode: StructuredOutputMode = structured_output_mode
+        self._reasoning_effort = reasoning_effort
+        self._temperature_override = temperature_override
 
     async def generate(self, req: LlmRequest) -> LlmResponse:
         self._breaker.allow()
@@ -138,12 +142,13 @@ class OpenAiProvider(LlmProvider):
         return result.success
 
     async def test_connection(self, *, model: str | None = None) -> ConnectionTestResult:
-        """Try ``GET /models`` first; fall back to a 1-token chat completion.
+        """Enumerate models, then run a tiny completion with the selected model.
 
-        The two-step probe keeps the test cost-free for providers that
-        expose the models endpoint (Anthropic / OpenAI / Gemini / Grok all do)
-        while still working against barebones OpenAI-compatible servers
-        that only implement chat completions (LiteLLM / LM Studio).
+        A successful ``GET /models`` proves that the credential is accepted but
+        does *not* prove that the configured model can generate for this account.
+        Providers may continue listing deprecated or entitlement-restricted
+        models.  The completion probe is therefore authoritative; enumeration is
+        retained only to populate the diagnostic model list.
         """
         from . import _probe
 
@@ -160,7 +165,6 @@ class OpenAiProvider(LlmProvider):
             return _probe.network_failure(provider=self.name, model=target_model, exc=exc)
 
         if probe is None:
-            # No /models endpoint — fall back to a tiny completion.
             return await self._probe_via_completion(target_model, client)
 
         models, status = probe
@@ -173,12 +177,8 @@ class OpenAiProvider(LlmProvider):
                 body_text="models endpoint returned error",
                 latency_ms=latency,
             )
-        return _probe.success(
-            provider=self.name,
-            model=target_model,
-            detected_models=models,
-            latency_ms=latency,
-        )
+        completion_result = await self._probe_via_completion(target_model, client)
+        return completion_result.model_copy(update={"detected_models": models})
 
     async def _probe_via_completion(self, model: str, client: httpx.AsyncClient) -> ConnectionTestResult:
         from . import _probe
@@ -186,12 +186,14 @@ class OpenAiProvider(LlmProvider):
         body = {
             "model": model,
             "max_tokens": 4,
-            "temperature": 0.0,
+            "temperature": self._temperature_override if self._temperature_override is not None else 0.0,
             "messages": [
                 {"role": "system", "content": "You are a connectivity probe."},
                 {"role": "user", "content": "Reply with the single word ok."},
             ],
         }
+        if self._reasoning_effort is not None:
+            body["reasoning_effort"] = self._reasoning_effort
         t0 = time.perf_counter()
         try:
             resp = await client.post(
@@ -250,12 +252,16 @@ class OpenAiProvider(LlmProvider):
         body: dict[str, Any] = {
             "model": model,
             "max_tokens": req.max_output_tokens,
-            "temperature": req.temperature,
+            "temperature": (
+                self._temperature_override if self._temperature_override is not None else req.temperature
+            ),
             "messages": [
                 {"role": "system", "content": req.system},
                 {"role": "user", "content": req.user},
             ],
         }
+        if self._reasoning_effort is not None:
+            body["reasoning_effort"] = self._reasoning_effort
         if req.response_schema is not None:
             rf = self._build_response_format(req.response_schema)
             if rf is not None:

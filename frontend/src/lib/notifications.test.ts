@@ -19,6 +19,11 @@ describe('notification error mapping', () => {
       .toBe('A project with this name already exists.');
   });
 
+  it('keeps actionable AI encryption setup diagnostics', () => {
+    const message = 'Set AI_CONFIG_ENCRYPTION_KEY and restart the API.';
+    expect(getApiErrorMessage(new ApiError(message, 503), 'fallback')).toBe(message);
+  });
+
   it('maps validation fields without rendering raw detail', () => {
     const error = new ApiError('raw validation', 422, undefined, undefined, { slug: ['Invalid slug'] });
     expect(toUserFacingApiError(error, 'fallback')).toEqual({

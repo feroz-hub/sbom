@@ -467,7 +467,7 @@ Configuration is environment-driven via pydantic-settings (`app/settings.py`, `.
 | `VULNDB_API_KEY` | secret | For VulnDB | "" | VulnDB adapter emits a warning-only empty result; VULNDB-only endpoint returns 400. |
 | `ANALYSIS_SOURCES` | csv | No | `NVD,OSV,GITHUB` | Source selection for analysis runs (`VULNDB` may be appended). |
 | `CORS_ORIGINS` | csv | No | `*` | Wildcard default; credentials disabled. Production should restrict. |
-| `AI_CONFIG_ENCRYPTION_KEY` | secret | For AI credentials | — | AES-256-GCM master key; credential encrypt/decrypt fails without it. **Missing from `.env.example`** (OQ-021). |
+| `AI_CONFIG_ENCRYPTION_KEY` | secret | For AI credentials | — | AES-256-GCM master key; credential encrypt/decrypt fails safely without it. `.env.example` contains an empty placeholder; supply the generated value through the deployment secret store. |
 | `NVD_MIRROR_FERNET_KEY` | secret | For mirror secret storage | — | Fernet key; must be identical on api/worker/beat. Missing from `.env.example`. |
 | `API_RATE_LIMIT_DEFAULT` / `API_RATE_LIMIT_ANALYZE` | str | No | `300/minute` / `15/minute` | slowapi buckets. |
 | Feature flags | bool | No | see Appendix 17.6 | `NVD_VERSION_RANGE_FILTER_ENABLED`, `SOURCE_CACHE_ENABLED`, `DISTRO_CPE_ENABLED`, `AI_FIXES_*`, `CVE_MODAL_ENABLED`, `COMPARE_*`, lifecycle provider flags, `NVD_MIRROR_ENABLED` — all default-off except `CVE_MODAL_ENABLED`/`NVD_ENABLED`. Restart required (Settings singleton). |

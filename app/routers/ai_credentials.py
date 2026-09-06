@@ -28,6 +28,7 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 from typing import Literal
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
@@ -36,19 +37,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..ai import credential_audit
-from ..ai.catalog import get_catalog_entry
 from ..ai.config_loader import get_loader, preview_api_key
-from ..ai.providers.anthropic import AnthropicProvider
-from ..ai.providers.base import ConnectionTestResult
-from ..ai.providers.custom_openai_compatible import CustomOpenAiCompatibleProvider
-from ..ai.providers.gemini import GeminiProvider
-from ..ai.providers.grok import GrokProvider
-from ..ai.providers.ollama import OllamaProvider
-from ..ai.providers.openai import OpenAiProvider
-from ..ai.providers.vllm import VllmProvider
+from ..ai.config_types import ProviderConfig
+from ..ai.provider_factory import build_provider, validate_provider_config
+from ..ai.providers.base import ConnectionTestResult, ProviderUnavailableError
 from ..db import get_db
 from ..models import AiProviderCredential, AiSettings
-from ..security.secrets import get_cipher
+from ..security.secrets import encryption_config_diagnostic, get_cipher
 
 log = logging.getLogger("sbom.routers.ai_credentials")
 
@@ -105,11 +100,11 @@ class CredentialCreateRequest(BaseModel):
     enabled: bool = True
     is_default: bool = False
     is_fallback: bool = False
-    cost_per_1k_input_usd: float = 0.0
-    cost_per_1k_output_usd: float = 0.0
+    cost_per_1k_input_usd: float = Field(default=0.0, ge=0.0)
+    cost_per_1k_output_usd: float = Field(default=0.0, ge=0.0)
     is_local: bool = False
-    max_concurrent: int | None = None
-    rate_per_minute: float | None = None
+    max_concurrent: int | None = Field(default=None, gt=0)
+    rate_per_minute: float | None = Field(default=None, gt=0)
 
 
 class CredentialUpdateRequest(BaseModel):
@@ -127,11 +122,11 @@ class CredentialUpdateRequest(BaseModel):
     default_model: str | None = Field(default=None, max_length=128)
     tier: TierLiteral | None = None
     enabled: bool | None = None
-    cost_per_1k_input_usd: float | None = None
-    cost_per_1k_output_usd: float | None = None
+    cost_per_1k_input_usd: float | None = Field(default=None, ge=0.0)
+    cost_per_1k_output_usd: float | None = Field(default=None, ge=0.0)
     is_local: bool | None = None
-    max_concurrent: int | None = None
-    rate_per_minute: float | None = None
+    max_concurrent: int | None = Field(default=None, gt=0)
+    rate_per_minute: float | None = Field(default=None, gt=0)
 
 
 class TestConnectionRequest(BaseModel):
@@ -145,14 +140,17 @@ class TestConnectionRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    credential_id: int | None = Field(default=None, gt=0)
     provider_name: str = Field(..., min_length=1, max_length=32)
     api_key: str | None = Field(default=None, max_length=4096)
     base_url: str | None = Field(default=None, max_length=512)
     default_model: str | None = Field(default=None, max_length=128)
     tier: TierLiteral = "paid"
-    cost_per_1k_input_usd: float = 0.0
-    cost_per_1k_output_usd: float = 0.0
+    cost_per_1k_input_usd: float = Field(default=0.0, ge=0.0)
+    cost_per_1k_output_usd: float = Field(default=0.0, ge=0.0)
     is_local: bool = False
+    max_concurrent: int | None = Field(default=None, gt=0)
+    rate_per_minute: float | None = Field(default=None, gt=0)
 
 
 class SettingsResponse(BaseModel):
@@ -165,7 +163,7 @@ class SettingsResponse(BaseModel):
     budget_daily_usd: float
     updated_at: str
     updated_by_user_id: str | None
-    source: str  # "db"
+    source: str  # "db" | "env"
 
 
 class SettingsUpdateRequest(BaseModel):
@@ -176,6 +174,37 @@ class SettingsUpdateRequest(BaseModel):
     budget_per_request_usd: float | None = Field(default=None, ge=0.0)
     budget_per_scan_usd: float | None = Field(default=None, ge=0.0)
     budget_daily_usd: float | None = Field(default=None, ge=0.0)
+
+
+class EffectiveProviderDiagnostic(BaseModel):
+    selection_key: str
+    provider_name: str
+    credential_id: int | None
+    label: str
+    source: str
+    enabled: bool
+    credential_present: bool
+    model: str
+    base_url: str | None
+    is_default: bool
+    is_fallback: bool
+    config_error: str | None
+    last_test_at: str | None = None
+    last_test_success: bool | None = None
+
+
+class EffectiveConfigDiagnostic(BaseModel):
+    feature_enabled: bool
+    kill_switch_active: bool
+    settings_source: str
+    ai_ui_config_enabled: bool
+    budget_caps_usd: dict[str, float]
+    configured_providers: list[EffectiveProviderDiagnostic]
+    default_selection_key: str | None
+    fallback_selection_key: str | None
+    registry_config_version: int
+    encryption_config_available: bool
+    encryption_config_status: str
 
 
 # ---------------------------------------------------------------------------
@@ -210,7 +239,7 @@ def _cipher():
     """
     try:
         return get_cipher()
-    except RuntimeError as exc:
+    except (RuntimeError, ValueError) as exc:
         raise HTTPException(
             status_code=503,
             detail=(
@@ -220,6 +249,24 @@ def _cipher():
                 "restart the API."
             ),
         ) from exc
+
+
+def _sanitized_base_url(value: str) -> str | None:
+    if not value:
+        return None
+    parsed = urlsplit(value)
+    if not parsed.scheme or not parsed.hostname:
+        return None
+    host = parsed.hostname
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    try:
+        parsed_port = parsed.port
+    except ValueError:
+        return None
+    port = f":{parsed_port}" if parsed_port is not None else ""
+    path = parsed.path.rstrip("/")
+    return f"{parsed.scheme}://{host}{port}{path}"
 
 
 def _row_to_response(row: AiProviderCredential, *, decrypted_key: str | None = None) -> CredentialResponse:
@@ -261,23 +308,41 @@ def _row_to_response(row: AiProviderCredential, *, decrypted_key: str | None = N
     )
 
 
-def _validate_catalog_compat(provider_name: str, *, base_url: str | None, default_model: str | None) -> None:
-    """Catalog-aware validation. Mirrors the UI form rules at the API."""
-    entry = get_catalog_entry(provider_name)
-    if entry is None:
-        raise HTTPException(status_code=400, detail=f"Unknown provider: {provider_name!r}")
-    if entry.requires_base_url and not base_url:
-        raise HTTPException(
-            status_code=400,
-            detail=f"{provider_name} requires a base URL.",
-        )
-    if not default_model and not (entry.requires_base_url and entry.name == "custom_openai"):
-        # Catalogged providers have model lists; require one.
-        # The custom provider accepts free-text and the request shape's
-        # ``default_model`` field is optional in the type but required
-        # downstream — re-check.
-        if not default_model and provider_name != "custom_openai":
-            raise HTTPException(status_code=400, detail="default_model is required.")
+def _provider_config(
+    *,
+    provider_name: str,
+    api_key: str | None,
+    base_url: str | None,
+    default_model: str | None,
+    tier: str = "paid",
+    cost_per_1k_input_usd: float = 0.0,
+    cost_per_1k_output_usd: float = 0.0,
+    is_local: bool = False,
+    max_concurrent: int | None = None,
+    rate_per_minute: float | None = None,
+) -> ProviderConfig:
+    return ProviderConfig(
+        name=provider_name.strip().lower(),
+        enabled=True,
+        default_model=(default_model or "").strip(),
+        api_key=(api_key or "").strip(),
+        base_url=(base_url or "").strip(),
+        max_concurrent=max_concurrent or 10,
+        rate_per_minute=rate_per_minute or 60.0,
+        tier=tier,
+        cost_per_1k_input_usd=cost_per_1k_input_usd,
+        cost_per_1k_output_usd=cost_per_1k_output_usd,
+        is_local=is_local,
+        source="transient",
+    )
+
+
+def _validate_catalog_compat(config: ProviderConfig) -> None:
+    """Apply the exact same validation used by runtime construction."""
+    try:
+        validate_provider_config(config)
+    except ProviderUnavailableError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 def _build_transient_provider(payload: TestConnectionRequest):
@@ -287,33 +352,20 @@ def _build_transient_provider(payload: TestConnectionRequest):
     surface as :class:`ConnectionTestResult` rather than HTTP errors
     where possible — the UI shows them as inline banners.
     """
-    name = payload.provider_name.strip().lower()
-    if name == "anthropic":
-        return AnthropicProvider(api_key=payload.api_key or "")
-    if name == "openai":
-        return OpenAiProvider(api_key=payload.api_key or "")
-    if name == "gemini":
-        return GeminiProvider(api_key=payload.api_key or "", tier=payload.tier)
-    if name == "grok":
-        return GrokProvider(api_key=payload.api_key or "", tier=payload.tier)
-    if name == "ollama":
-        return OllamaProvider(base_url=payload.base_url or "http://localhost:11434")
-    if name == "vllm":
-        return VllmProvider(
-            base_url=payload.base_url or "",
-            api_key=payload.api_key or "EMPTY",
-            default_model=payload.default_model or "",
-        )
-    if name == "custom_openai":
-        return CustomOpenAiCompatibleProvider(
-            base_url=payload.base_url or "",
-            api_key=payload.api_key or "EMPTY",
-            default_model=payload.default_model or "",
-            cost_per_1k_input_usd=payload.cost_per_1k_input_usd,
-            cost_per_1k_output_usd=payload.cost_per_1k_output_usd,
-            is_local=payload.is_local,
-        )
-    raise HTTPException(status_code=400, detail=f"Unknown provider: {name!r}")
+    config = _provider_config(
+        provider_name=payload.provider_name,
+        api_key=payload.api_key,
+        base_url=payload.base_url,
+        default_model=payload.default_model,
+        tier=payload.tier,
+        cost_per_1k_input_usd=payload.cost_per_1k_input_usd,
+        cost_per_1k_output_usd=payload.cost_per_1k_output_usd,
+        is_local=payload.is_local,
+        max_concurrent=payload.max_concurrent,
+        rate_per_minute=payload.rate_per_minute,
+    )
+    _validate_catalog_compat(config)
+    return build_provider(config)
 
 
 def _stamp_test_result(row: AiProviderCredential, result: ConnectionTestResult) -> None:
@@ -342,6 +394,67 @@ def get_credential(cred_id: int, db: Session = Depends(get_db)) -> CredentialRes
     return _row_to_response(row)
 
 
+@router.get("/effective-config", response_model=EffectiveConfigDiagnostic)
+def get_effective_config_diagnostic(db: Session = Depends(get_db)) -> EffectiveConfigDiagnostic:
+    """Safe administrator/smoke-check view of the exact runtime snapshot."""
+    from ..settings import get_settings
+
+    loader = get_loader()
+    configs, effective = loader.resolve()
+    rows = {
+        row.id: row
+        for row in db.execute(select(AiProviderCredential).order_by(AiProviderCredential.id)).scalars()
+    }
+    default = next((cfg for cfg in configs if cfg.is_default), None)
+    if default is None:
+        try:
+            from ..ai.registry import get_registry
+
+            default = get_registry(db).get_default_config()
+        except Exception:  # noqa: BLE001
+            default = None
+    fallback = next((cfg for cfg in configs if cfg.is_fallback), None)
+    encryption_available, encryption_status = encryption_config_diagnostic()
+    providers: list[EffectiveProviderDiagnostic] = []
+    for cfg in configs:
+        row = rows.get(cfg.credential_id) if cfg.credential_id is not None else None
+        providers.append(
+            EffectiveProviderDiagnostic(
+                selection_key=cfg.selection_key,
+                provider_name=cfg.name,
+                credential_id=cfg.credential_id,
+                label=cfg.label,
+                source=cfg.source,
+                enabled=cfg.enabled,
+                credential_present=bool(row.api_key_encrypted) if row is not None else bool(cfg.api_key),
+                model=cfg.default_model,
+                base_url=_sanitized_base_url(cfg.base_url),
+                is_default=cfg.is_default,
+                is_fallback=cfg.is_fallback,
+                config_error=cfg.config_error,
+                last_test_at=row.last_test_at if row is not None else None,
+                last_test_success=row.last_test_success if row is not None else None,
+            )
+        )
+    return EffectiveConfigDiagnostic(
+        feature_enabled=effective.feature_enabled,
+        kill_switch_active=effective.kill_switch_active,
+        settings_source=effective.source,
+        ai_ui_config_enabled=bool(get_settings().ai_fixes_ui_config_enabled),
+        budget_caps_usd={
+            "per_request_usd": effective.budget_per_request_usd,
+            "per_scan_usd": effective.budget_per_scan_usd,
+            "per_day_org_usd": effective.budget_daily_usd,
+        },
+        configured_providers=providers,
+        default_selection_key=default.selection_key if default is not None else None,
+        fallback_selection_key=fallback.selection_key if fallback is not None else None,
+        registry_config_version=loader.current_version(),
+        encryption_config_available=encryption_available,
+        encryption_config_status=encryption_status,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Create / update / delete
 # ---------------------------------------------------------------------------
@@ -353,15 +466,32 @@ def create_credential(
     request: Request,
     db: Session = Depends(get_db),
 ) -> CredentialResponse:
+    if body.is_default and body.is_fallback:
+        raise HTTPException(status_code=400, detail="Default and fallback must be different credentials.")
     _validate_catalog_compat(
-        body.provider_name,
-        base_url=body.base_url,
-        default_model=body.default_model,
+        _provider_config(
+            provider_name=body.provider_name,
+            api_key=body.api_key,
+            base_url=body.base_url,
+            default_model=body.default_model,
+            tier=body.tier,
+            cost_per_1k_input_usd=body.cost_per_1k_input_usd,
+            cost_per_1k_output_usd=body.cost_per_1k_output_usd,
+            is_local=body.is_local,
+            max_concurrent=body.max_concurrent,
+            rate_per_minute=body.rate_per_minute,
+        )
     )
     encrypted = None
     if body.api_key:
         encrypted = _cipher().encrypt(body.api_key)
     now = _now_iso()
+    if body.is_default:
+        for existing in db.execute(select(AiProviderCredential)).scalars():
+            existing.is_default = False
+    if body.is_fallback:
+        for existing in db.execute(select(AiProviderCredential)).scalars():
+            existing.is_fallback = False
     row = AiProviderCredential(
         provider_name=body.provider_name.strip().lower(),
         label=body.label.strip(),
@@ -369,8 +499,8 @@ def create_credential(
         base_url=(body.base_url or "").strip() or None,
         default_model=body.default_model,
         tier=body.tier,
-        is_default=False,  # explicit promotion only via /set-default
-        is_fallback=False,
+        is_default=body.is_default,
+        is_fallback=body.is_fallback,
         enabled=body.enabled,
         cost_per_1k_input_usd=body.cost_per_1k_input_usd,
         cost_per_1k_output_usd=body.cost_per_1k_output_usd,
@@ -415,6 +545,38 @@ def update_credential(
     if row is None:
         raise HTTPException(status_code=404, detail=f"Credential {cred_id} not found.")
 
+    # Validate the complete post-update configuration before mutating the
+    # row. ``PRESENT`` represents an existing encrypted key for validation
+    # only; it is never persisted, logged, or returned.
+    _validate_catalog_compat(
+        _provider_config(
+            provider_name=row.provider_name,
+            api_key=body.api_key or ("PRESENT" if row.api_key_encrypted else None),
+            base_url=body.base_url if body.base_url is not None else row.base_url,
+            default_model=(
+                body.default_model if body.default_model is not None else row.default_model
+            ),
+            tier=body.tier if body.tier is not None else (row.tier or "paid"),
+            cost_per_1k_input_usd=(
+                body.cost_per_1k_input_usd
+                if body.cost_per_1k_input_usd is not None
+                else float(row.cost_per_1k_input_usd or 0.0)
+            ),
+            cost_per_1k_output_usd=(
+                body.cost_per_1k_output_usd
+                if body.cost_per_1k_output_usd is not None
+                else float(row.cost_per_1k_output_usd or 0.0)
+            ),
+            is_local=body.is_local if body.is_local is not None else bool(row.is_local),
+            max_concurrent=(
+                body.max_concurrent if body.max_concurrent is not None else row.max_concurrent
+            ),
+            rate_per_minute=(
+                body.rate_per_minute if body.rate_per_minute is not None else row.rate_per_minute
+            ),
+        )
+    )
+
     changes: list[str] = []
     if body.label is not None and body.label != row.label:
         row.label = body.label
@@ -453,7 +615,14 @@ def update_credential(
         changes.append("rate")
 
     row.updated_at = _now_iso()
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail=f"A credential for ({row.provider_name}, {row.label}) already exists.",
+        ) from exc
     db.refresh(row)
 
     credential_audit.record(
@@ -512,6 +681,7 @@ def set_default_credential(
     for other in db.execute(select(AiProviderCredential).where(AiProviderCredential.id != cred_id)).scalars():
         other.is_default = False
     row.is_default = True
+    row.is_fallback = False
     row.updated_at = _now_iso()
     db.commit()
     db.refresh(row)
@@ -537,6 +707,8 @@ def set_fallback_credential(
     row = db.execute(select(AiProviderCredential).where(AiProviderCredential.id == cred_id)).scalar_one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail=f"Credential {cred_id} not found.")
+    if row.is_default:
+        raise HTTPException(status_code=400, detail="Default and fallback must be different credentials.")
     for other in db.execute(select(AiProviderCredential).where(AiProviderCredential.id != cred_id)).scalars():
         other.is_fallback = False
     row.is_fallback = True
@@ -567,9 +739,36 @@ async def test_unsaved_credential(
     request: Request,
     db: Session = Depends(get_db),
 ) -> ConnectionTestResult:
-    """Run a probe against the supplied config without persisting it."""
+    """Probe candidate values without persisting them.
+
+    Edit forms may supply ``credential_id`` and omit ``api_key``.  In that
+    case the key is decrypted server-side while all other candidate values
+    still come from the request, so an administrator can test a model or URL
+    change without re-entering or exposing the saved secret.
+    """
+    test_body = body
+    target_id: int | None = None
+    if body.credential_id is not None:
+        row = db.execute(
+            select(AiProviderCredential).where(AiProviderCredential.id == body.credential_id)
+        ).scalar_one_or_none()
+        if row is None:
+            raise HTTPException(status_code=404, detail=f"Credential {body.credential_id} not found.")
+        if row.provider_name != body.provider_name.strip().lower():
+            raise HTTPException(status_code=400, detail="Credential provider does not match the test request.")
+        api_key = body.api_key
+        if not api_key and row.api_key_encrypted:
+            try:
+                api_key = _cipher().decrypt(row.api_key_encrypted)
+            except Exception as exc:  # noqa: BLE001
+                raise HTTPException(
+                    status_code=503,
+                    detail="The saved AI credential cannot be decrypted with the configured encryption key.",
+                ) from exc
+        test_body = body.model_copy(update={"api_key": api_key})
+        target_id = row.id
     try:
-        provider = _build_transient_provider(body)
+        provider = _build_transient_provider(test_body)
     except HTTPException:
         raise
     except Exception as exc:  # noqa: BLE001
@@ -577,18 +776,18 @@ async def test_unsaved_credential(
             success=False,
             error_message=str(exc)[:240],
             error_kind="unknown",
-            provider=body.provider_name,
-            model_tested=body.default_model,
+            provider=test_body.provider_name,
+            model_tested=test_body.default_model,
         )
-    result = await provider.test_connection(model=body.default_model)
+    result = await provider.test_connection(model=test_body.default_model)
     credential_audit.record(
         db,
         user_id=_user_id(request),
         action="credential.test",
         target_kind="credential",
-        target_id=None,
-        provider_name=body.provider_name,
-        detail=f"unsaved success={result.success} kind={result.error_kind or 'ok'}",
+        target_id=target_id,
+        provider_name=test_body.provider_name,
+        detail=f"candidate success={result.success} kind={result.error_kind or 'ok'}",
     )
     return result
 
@@ -608,14 +807,11 @@ async def test_saved_credential(
     if row.api_key_encrypted:
         try:
             api_key = get_cipher().decrypt(row.api_key_encrypted)
-        except Exception:  # noqa: BLE001
-            return ConnectionTestResult(
-                success=False,
-                error_message="Stored credential could not be decrypted; re-enter the key.",
-                error_kind="auth",
-                provider=row.provider_name,
-                model_tested=row.default_model,
-            )
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(
+                status_code=503,
+                detail="The saved AI credential cannot be decrypted with the configured encryption key.",
+            ) from exc
 
     payload = TestConnectionRequest(
         provider_name=row.provider_name,
@@ -626,6 +822,8 @@ async def test_saved_credential(
         cost_per_1k_input_usd=float(row.cost_per_1k_input_usd or 0.0),
         cost_per_1k_output_usd=float(row.cost_per_1k_output_usd or 0.0),
         is_local=bool(row.is_local),
+        max_concurrent=row.max_concurrent,
+        rate_per_minute=row.rate_per_minute,
     )
     provider = _build_transient_provider(payload)
     result = await provider.test_connection(model=row.default_model)
@@ -653,17 +851,19 @@ async def test_saved_credential(
 def get_singleton_settings(db: Session = Depends(get_db)) -> SettingsResponse:
     row = db.execute(select(AiSettings).where(AiSettings.id == 1)).scalar_one_or_none()
     if row is None:
-        # Migration creates this row on apply; if missing, return defaults
-        # so the UI doesn't 500 in mid-migration deployments.
+        # Migration/startup compatibility: surface the exact env fallback
+        # runtime is enforcing until the first DB write establishes an
+        # authoritative singleton.
+        effective = get_loader().resolve_settings()
         return SettingsResponse(
-            feature_enabled=True,
-            kill_switch_active=False,
-            budget_per_request_usd=0.10,
-            budget_per_scan_usd=5.00,
-            budget_daily_usd=5.00,
+            feature_enabled=effective.feature_enabled,
+            kill_switch_active=effective.kill_switch_active,
+            budget_per_request_usd=effective.budget_per_request_usd,
+            budget_per_scan_usd=effective.budget_per_scan_usd,
+            budget_daily_usd=effective.budget_daily_usd,
             updated_at=_now_iso(),
             updated_by_user_id=None,
-            source="db",
+            source=effective.source,
         )
     return SettingsResponse(
         feature_enabled=bool(row.feature_enabled),
@@ -685,15 +885,16 @@ def update_singleton_settings(
 ) -> SettingsResponse:
     row = db.execute(select(AiSettings).where(AiSettings.id == 1)).scalar_one_or_none()
     if row is None:
-        # Edge case: missing seed row. Insert with defaults + apply
-        # caller's overrides.
+        # First write promotes the current effective env fallback into an
+        # authoritative DB row, then applies the caller's overrides.
+        effective = get_loader().resolve_settings()
         row = AiSettings(
             id=1,
-            feature_enabled=True,
-            kill_switch_active=False,
-            budget_per_request_usd=0.10,
-            budget_per_scan_usd=5.00,
-            budget_daily_usd=5.00,
+            feature_enabled=effective.feature_enabled,
+            kill_switch_active=effective.kill_switch_active,
+            budget_per_request_usd=effective.budget_per_request_usd,
+            budget_per_scan_usd=effective.budget_per_scan_usd,
+            budget_daily_usd=effective.budget_daily_usd,
             updated_at=_now_iso(),
         )
         db.add(row)

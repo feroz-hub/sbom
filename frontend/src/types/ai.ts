@@ -433,6 +433,7 @@ export interface AiCredentialUpdateRequest {
 }
 
 export interface AiTestConnectionRequest {
+  credential_id?: number | null;
   provider_name: string;
   api_key?: string | null;
   base_url?: string | null;
@@ -441,6 +442,8 @@ export interface AiTestConnectionRequest {
   cost_per_1k_input_usd?: number;
   cost_per_1k_output_usd?: number;
   is_local?: boolean;
+  max_concurrent?: number | null;
+  rate_per_minute?: number | null;
 }
 
 /** Singleton settings — DB-backed. */

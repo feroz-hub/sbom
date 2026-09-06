@@ -20,11 +20,12 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from ..ai.cost import BudgetGuard, estimate_cost_usd, estimate_tokens, write_usage_log_row
-from ..ai.fix_generator import _budget_caps_from_settings
+from ..ai.cost import estimate_cost_usd, estimate_tokens, write_usage_log_row
 from ..ai.parse import ParseError, parse_llm_json
 from ..ai.providers.base import AiProviderError, LlmRequest
 from ..ai.registry import get_registry
+from ..ai.rollout import evaluate_access
+from ..ai.runtime_config import build_budget_guard
 from ..models import (
     Projects,
     SBOMSource,
@@ -978,6 +979,13 @@ class ValidationRepairService:
         *,
         user_instruction: str | None,
     ) -> AiRepairSuggestion:
+        access = evaluate_access(rollout_key=None, apply_canary=False)
+        if not access.allowed:
+            raise HTTPException(
+                status_code=access.http_status,
+                detail={"error_code": "AI_DISABLED", "message": access.message},
+            )
+
         registry = get_registry(self.db)
         try:
             provider = registry.get_default()
@@ -1012,12 +1020,27 @@ class ValidationRepairService:
             output_tokens=max_output_tokens,
             is_local=getattr(provider, "is_local", False),
         )
-        guard = BudgetGuard(_budget_caps_from_settings(), self.db)
+        try:
+            fallback = registry.get_fallback()
+        except Exception:  # noqa: BLE001 — invalid fallback cannot block primary
+            fallback = None
+        if fallback is not None:
+            estimated_cost = max(
+                estimated_cost,
+                estimate_cost_usd(
+                    provider=fallback.name,
+                    model=fallback.default_model,
+                    input_tokens=estimate_tokens(system) + estimate_tokens(user),
+                    output_tokens=max_output_tokens,
+                    is_local=getattr(fallback, "is_local", False),
+                ),
+            )
+        guard = build_budget_guard()
         guard.check_request(estimated_usd=estimated_cost)
         request_id = str(uuid.uuid4())
         started = time.perf_counter()
         try:
-            response = await provider.generate(
+            routed = await registry.generate_with_fallback(
                 LlmRequest(
                     system=system,
                     user=user,
@@ -1028,6 +1051,28 @@ class ValidationRepairService:
                     purpose="sbom_validation_repair",
                 )
             )
+            response = routed.response
+            provider = routed.provider
+            if routed.fallback_used:
+                primary_failure = routed.primary_error
+                failure_kind = (
+                    primary_failure.failure.kind
+                    if primary_failure is not None and primary_failure.failure is not None
+                    else "circuit_breaker_open"
+                )
+                write_usage_log_row(
+                    self.db,
+                    request_id=request_id,
+                    provider=routed.primary_provider.name,
+                    model=routed.primary_provider.default_model,
+                    purpose="sbom_validation_repair_primary_failed",
+                    finding_cache_key=session.id,
+                    input_tokens=0,
+                    output_tokens=0,
+                    cost_usd=0.0,
+                    latency_ms=0,
+                    error=f"fallback_selected:{failure_kind}",
+                )
         except AiProviderError as exc:
             write_usage_log_row(
                 self.db,

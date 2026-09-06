@@ -4,10 +4,11 @@
 > verify against the upstream "API key" link before relying on numbers
 > in this doc.
 
-The SBOM Analyzer's AI fix generator supports seven providers. The
-provider abstraction (`app/ai/providers/`) makes adding more a
-one-file change; what's documented here is the curated list shipped
-with the platform and tested in CI.
+The SBOM Analyzer supports eight providers. A catalog-driven contract test
+requires every entry to work through request validation, unsaved Test
+Connection, encrypted save/decrypt, saved Test Connection, config loading,
+registry selection, and mocked generation. Adding a provider therefore means
+supporting the complete factory contract, not only adding a provider class.
 
 ---
 
@@ -34,7 +35,7 @@ them the recommended starting point for evaluation.
 
 | | |
 |---|---|
-| Default model | `gemini-2.5-flash` |
+| Default model | `gemini-3.6-flash` |
 | Free tier limits | **15 req/min · 1M tokens/day · 1500 req/day** |
 | Free tier pricing | $0 |
 | Paid tier pricing | Flash: in $0.000075 · out $0.0003 per 1k tokens |
@@ -64,6 +65,12 @@ tokens/day cap fills quickly with batch use.
 
 **When to avoid:** any batch run — the daily token cap is the
 binding constraint, not RPM.
+
+### Sarvam AI
+
+Sarvam uses its OpenAI-compatible chat endpoint and is supported through the
+same runtime and Test Connection factory as every other catalog provider.
+Configure the API key, model, and optional base URL in Settings -> AI.
 
 ---
 
@@ -129,11 +136,12 @@ exception ships keys in the clear.
 | **Production at highest quality** | Anthropic Sonnet 4.5 as default · OpenAI gpt-4o as fallback |
 | **Air-gapped / on-prem** | Ollama (Llama 3.3 70B) as default · no fallback |
 
-Default-and-fallback semantics: the Settings UI lets the admin pick
-one of each. The orchestrator uses the default for every call;
-falling back to the secondary on a per-finding error is a future
-follow-up (Phase 4 anti-pattern §7 explicitly rejects mid-batch
-auto-failover for v1).
+Default-and-fallback semantics: the Settings UI selects exact credential
+identities, including two labelled credentials for the same provider. The
+orchestrator makes at most one fallback attempt for transient network,
+throttling/quota, upstream 5xx, or open-circuit failures. It never falls back
+for authentication, invalid model/request/schema, grounding, budget, or local
+configuration failures.
 
 ---
 

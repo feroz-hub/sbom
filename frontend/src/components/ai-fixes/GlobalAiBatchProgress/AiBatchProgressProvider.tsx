@@ -162,7 +162,7 @@ function BatchStreamSubscription({
     }
 
     try {
-      es = new EventSource(streamUrl, { withCredentials: false });
+      es = new EventSource(streamUrl, { withCredentials: true });
     } catch {
       startPolling();
       return () => {

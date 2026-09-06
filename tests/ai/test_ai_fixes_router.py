@@ -12,12 +12,14 @@ from __future__ import annotations
 import json
 
 import pytest
+from app.ai.config_loader import reset_loader
 from app.ai.progress import InMemoryProgressStore, _set_store, reset_progress_store
 from app.ai.providers.base import LlmRequest, LlmResponse, LlmUsage, ProviderInfo
 from app.ai.registry import ProviderRegistry
 from app.db import SessionLocal
 from app.models import (
     AiFixCache,
+    AiSettings,
     AiUsageLog,
     AnalysisFinding,
     AnalysisRun,
@@ -27,6 +29,27 @@ from app.models import (
 from app.settings import reset_settings
 
 from tests.ai.fixtures import EX1_CRITICAL_KEV_WITH_FIX_BUNDLE
+
+
+def _set_effective_ai_state(*, enabled: bool, kill_switch: bool) -> None:
+    db = SessionLocal()
+    try:
+        row = db.query(AiSettings).filter_by(id=1).one_or_none()
+        if row is None:
+            row = AiSettings(
+                id=1,
+                budget_per_request_usd=0.10,
+                budget_per_scan_usd=5.0,
+                budget_daily_usd=5.0,
+                updated_at="2026-09-06T00:00:00+00:00",
+            )
+            db.add(row)
+        row.feature_enabled = enabled
+        row.kill_switch_active = kill_switch
+        db.commit()
+    finally:
+        db.close()
+    reset_loader()
 
 
 class _RouterFakeProvider:
@@ -67,7 +90,9 @@ def _enable_ai(monkeypatch):
     monkeypatch.setenv("AI_FIXES_ENABLED", "true")
     monkeypatch.delenv("AI_FIXES_KILL_SWITCH", raising=False)
     reset_settings()
+    _set_effective_ai_state(enabled=True, kill_switch=False)
     yield
+    reset_loader()
     reset_settings()
 
 
@@ -165,6 +190,7 @@ def test_trigger_returns_409_when_ai_disabled(client, _seeded_run, monkeypatch):
     # AI_FIXES_ENABLED defaults to False → trigger should refuse.
     monkeypatch.setenv("AI_FIXES_ENABLED", "false")
     reset_settings()
+    _set_effective_ai_state(enabled=False, kill_switch=False)
     try:
         resp = client.post(f"/api/v1/runs/{_seeded_run['run_id']}/ai-fixes")
         assert resp.status_code == 409
@@ -172,12 +198,14 @@ def test_trigger_returns_409_when_ai_disabled(client, _seeded_run, monkeypatch):
         assert body["detail"]["error_code"] == "AI_FIXES_DISABLED"
     finally:
         reset_settings()
+        reset_loader()
 
 
 def test_kill_switch_returns_409(client, _seeded_run, monkeypatch):
     monkeypatch.setenv("AI_FIXES_ENABLED", "true")
     monkeypatch.setenv("AI_FIXES_KILL_SWITCH", "true")
     reset_settings()
+    _set_effective_ai_state(enabled=True, kill_switch=True)
     try:
         resp = client.post(f"/api/v1/runs/{_seeded_run['run_id']}/ai-fixes")
         assert resp.status_code == 409
@@ -185,6 +213,7 @@ def test_kill_switch_returns_409(client, _seeded_run, monkeypatch):
     finally:
         monkeypatch.delenv("AI_FIXES_KILL_SWITCH", raising=False)
         reset_settings()
+        reset_loader()
 
 
 def test_404_on_unknown_run(client, _enable_ai):

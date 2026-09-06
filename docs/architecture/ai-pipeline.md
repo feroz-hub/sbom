@@ -37,9 +37,12 @@ is built, why each layer exists, and where to add code when extending.
 │    prompts/          ─── v1.system.txt · v1.user.txt
 │    progress.py       ─── Redis or in-memory progress store
 │    observability.py  ─── counters / histograms / gauges
-│    rollout.py        ─── canary sampling
-│    registry.py       ─── ProviderRegistry (lazy init)
-│    providers/        ─── anthropic · openai · ollama · vllm
+│    config_loader.py  ─── DB-first EffectiveAiConfig + credentials
+│    runtime_config.py ─── shared gates/budgets
+│    provider_factory.py ─ one runtime/Test Connection factory
+│    rollout.py        ─── global policy + Fix-only canary sampling
+│    registry.py       ─── exact credential selection + one fallback
+│    providers/        ─── all eight catalog providers
 └─────────────┬──────────────┘
               │ httpx.AsyncClient (shared)
 ┌─────────────▼──────────────┐
@@ -47,13 +50,17 @@ is built, why each layer exists, and where to add code when extending.
 └────────────────────────────┘
 ```
 
-Persistent state lives in two tables:
+Persistent AI state lives in four tables:
 
 * `ai_usage_log` — append-only audit ledger. One row per LLM call
   (success, failure, cache hit). Powers `/api/v1/ai/usage*` aggregates.
 * `ai_fix_cache` — generated bundles, keyed by
   `sha256(vuln_id|component_name|component_version|prompt_version)`.
   Tenant-shared by design (Phase 2 §2.4).
+* `ai_settings` — authoritative master enabled state, global kill switch,
+  and three budget caps.
+* `ai_provider_credential` — labelled encrypted credentials plus exact
+  default/fallback selection and provider-specific runtime fields.
 
 ---
 
@@ -114,8 +121,11 @@ POST /api/v1/runs/{id}/ai-fixes
                 progress.write(terminal)
 ```
 
-The frontend reads progress via SSE (`/runs/{id}/ai-fixes/stream`) with
-2s polling fallback when the EventSource fails.
+The frontend reads progress via same-origin BFF SSE
+(`/runs/{id}/ai-fixes/stream`) with 2s polling fallback. Native EventSource
+cannot attach `X-Tenant-ID`, so the non-secret active tenant id is mirrored to
+a strict same-site cookie and converted to the normal header by `/api/backend`.
+The bearer remains in the server-side session and never enters a URL.
 
 ---
 
@@ -129,6 +139,8 @@ The frontend reads progress via SSE (`/runs/{id}/ai-fixes/stream`) with
 | **Orchestrator** (`app/ai/fix_generator.py`) | Per-finding flow, parse, post-validate, ledger | Decides cache vs provider |
 | **Provider** (`app/ai/providers/*.py`) | HTTP, retry, circuit breaker, token-bucket | Provider-specific request body shape |
 | **Registry** (`app/ai/registry.py`) | Lazy provider construction | Resolves env / DB config → instances |
+| **Config loader** (`app/ai/config_loader.py`) | Canonical DB-first controls and exact credentials | Source precedence + cross-process version invalidation |
+| **Provider factory** (`app/ai/provider_factory.py`) | Shared validation/construction | Runtime and Test Connection cannot drift |
 | **Cache** (`app/ai/cache.py`) | Cache-key + TTL + R/W | Pure functions on `ai_fix_cache` |
 | **Cost** (`app/ai/cost.py`) | Pricing table + `BudgetGuard` | Pre-flight + post-flight cost accounting |
 | **Grounding** (`app/ai/grounding.py`) | Build the model's view of the world | Reads `cve_cache` / KEV / EPSS |
@@ -141,6 +153,26 @@ The dependency graph is intentionally one-way. The router doesn't import
 provider classes. The pipeline doesn't import HTTP. The orchestrator
 doesn't know about Celery. Test coverage stays sane because unit tests
 can mock at the right boundary.
+
+### Effective configuration and authorization
+
+`EffectiveAiConfig` is the sole runtime source for feature enabled, kill
+switch, and three budget caps. A DB settings row wins; env is used only when
+the row is absent or DB access is unavailable. The presence of any DB
+credential row for a provider suppresses its env counterpart even when the DB
+row is disabled or cannot decrypt. Routing metadata (`credential_id`, label,
+default, fallback) is separate from provider HTTP configuration, so it cannot
+leak into fields such as `OpenAI-Organization`.
+
+Every external invocation rechecks the common policy. AI Fixes additionally
+apply the environment-controlled canary; Copilot and validation repair do not,
+but both still obey the global feature flag and kill switch. Budget guards use
+the canonical caps and a SQLAlchemy session factory, reconciling the durable
+ledger before calls across API and worker processes.
+
+Fallback is one attempt only and is limited to network/outage, rate/quota,
+upstream 5xx, and open-circuit failures. Deterministic auth, model, request,
+schema, grounding, budget, and configuration errors return directly.
 
 ---
 
@@ -289,7 +321,7 @@ playbooks that consume these.
 | Add a new metric | `record_call` (or a new helper) in `app/ai/observability.py` |
 | Lower daily cap during incident | `AI_BUDGET_PER_DAY_ORG_USD` env var |
 | Disable a misbehaving provider | `AI_PROVIDERS` env var (drop from list) |
-| Halt all AI immediately | `AI_FIXES_KILL_SWITCH=true` |
+| Halt all AI immediately | Settings -> AI kill switch (env fallback only before DB migration) |
 | Roll back UI surface | `AI_FIXES_ENABLED=false` |
 | Pause for canary cohort only | `AI_CANARY_PERCENTAGE=10` (then 50, 100) |
 

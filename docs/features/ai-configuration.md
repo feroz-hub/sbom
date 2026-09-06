@@ -18,8 +18,8 @@ file edits, no SSH access required.
   vLLM (self-hosted), or any custom OpenAI-compatible endpoint.
 * Switch the default provider — every AI fix generation request after
   the next save uses the new provider.
-* Set a fallback — currently informational; mid-batch auto-failover is
-  not enabled (see [the architecture doc §11](../architecture/ai-pipeline.md)).
+* Set a fallback — one controlled attempt is made after a transient provider
+  outage, network failure, throttling, upstream 5xx, or open circuit.
 * Toggle the kill switch — immediately blocks every AI call across
   the deployment.
 * Adjust budget caps — per request, per scan, per day.
@@ -55,7 +55,7 @@ Click **Add provider** in the AI providers section.
 
 ### 2. Pick the provider
 
-The dropdown lists the seven supported providers. Free-tier providers
+The dropdown lists the eight supported providers. Free-tier providers
 are flagged with ⭐. Self-hosted options (Ollama / vLLM / Custom) are
 labeled "local".
 
@@ -69,6 +69,7 @@ The form changes based on what each provider needs:
 | OpenAI | API key + model | https://platform.openai.com/api-keys |
 | Google Gemini | API key + model + tier | https://aistudio.google.com/app/apikey |
 | xAI Grok | API key + model + tier | https://console.x.ai/ |
+| Sarvam AI | API key + model | https://dashboard.sarvam.ai/ |
 | Ollama | Base URL + model | (self-hosted, no API key) |
 | vLLM | Base URL + model | (self-hosted) |
 | Custom OpenAI-compatible | Base URL + optional API key + model + cost overrides | (your endpoint) |
@@ -126,11 +127,11 @@ defaults" state).
 
 * **Default** — used for every AI fix generation request unless
   overridden per-request.
-* **Fallback** — currently informational. Mid-batch auto-failover is
-  intentionally not enabled in v1 because debugging mixed-provider
-  batches is hard. If the default provider fails mid-run, the run
-  fails; you switch defaults manually and re-run (cache absorbs
-  everything that completed before the failure).
+* **Fallback** — attempted at most once when the primary has a transient
+  provider outage, network failure, throttling/quota response, upstream 5xx,
+  or open circuit. Authentication, model, request/schema, grounding, budget,
+  and local configuration failures do not fall back. Usage telemetry records
+  the primary failure and selected fallback without credential material.
 
 ---
 
@@ -162,6 +163,36 @@ Three caps protect you from runaway spend:
 
 Caps must satisfy ``per_request ≤ per_scan ≤ daily``. The form
 validates this client-side and the backend re-validates.
+
+All three displayed caps are read from the same effective configuration used
+by AI Fixes, Security Copilot, validation repair, API processes, and workers.
+Daily spend is reconciled against the durable `ai_usage_log` ledger before an
+external call, so a second process does not start from a zero local counter.
+
+---
+
+## Effective configuration precedence
+
+There is one runtime read path: `AiConfigLoader` resolves an
+`EffectiveAiConfig` and the provider registry consumes the same credential
+snapshot.
+
+1. A DB `ai_settings` row is authoritative for enabled state, kill switch,
+   and budgets. Environment values are used only while that row is absent or
+   the database is unavailable during migration/startup.
+2. Any DB credential row for a provider makes that provider authoritative.
+   A disabled or unreadable DB row does not resurrect an older environment
+   credential.
+3. Multiple labelled credentials are selected by credential identity; the
+   default and fallback flags do not enter provider HTTP fields.
+4. `AI_FIXES_UI_CONFIG_ENABLED` and `AI_CANARY_PERCENTAGE` remain environment-
+   only deployment controls. Canary applies to AI Fix generation; the global
+   enabled and kill-switch gates apply to every LLM invocation.
+
+Changes invalidate the shared configuration version, so API processes and
+workers pick them up on their next call without restart. Administrators can
+inspect the safe snapshot at `GET /api/v1/ai/effective-config`; it never
+returns keys, ciphertext, tokens, or authorization headers.
 
 Hit caps don't lose your work — the cache absorbs everything that
 completed before the cap fired. After bumping the cap, trigger the

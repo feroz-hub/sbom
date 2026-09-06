@@ -11,6 +11,8 @@ import { request } from '@/lib/api';
  */
 describe('shared request helper tenant scoping', () => {
   const fetchMock = vi.fn();
+  const requestHeaders = (callIndex: number) =>
+    new Headers((fetchMock.mock.calls[callIndex]?.[1] as RequestInit | undefined)?.headers);
 
   beforeEach(() => {
     sessionStorage.clear();
@@ -36,13 +38,13 @@ describe('shared request helper tenant scoping', () => {
 
     await request('/api/sboms');
 
-    expect(fetchMock.mock.calls[0][1].headers['X-Tenant-ID']).toBe('7');
+    expect(requestHeaders(0).get('X-Tenant-ID')).toBe('7');
   });
 
   it('omits the tenant header when no tenant is selected', async () => {
     await request('/api/sboms');
 
-    expect(fetchMock.mock.calls[0][1].headers['X-Tenant-ID']).toBeUndefined();
+    expect(requestHeaders(0).get('X-Tenant-ID')).toBeNull();
   });
 
   it('uses the newly selected tenant on the next request after a switch', async () => {
@@ -52,7 +54,17 @@ describe('shared request helper tenant scoping', () => {
     sessionStorage.setItem('sbom_active_tenant_id', '1');
     await request('/api/sboms');
 
-    expect(fetchMock.mock.calls[0][1].headers['X-Tenant-ID']).toBe('7');
-    expect(fetchMock.mock.calls[1][1].headers['X-Tenant-ID']).toBe('1');
+    expect(requestHeaders(0).get('X-Tenant-ID')).toBe('7');
+    expect(requestHeaders(1).get('X-Tenant-ID')).toBe('1');
+  });
+
+  it('does not duplicate content-type when caller casing differs', async () => {
+    await request('/api/v1/ai/credentials/test', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ provider_name: 'gemini' }),
+    });
+
+    expect(requestHeaders(0).get('Content-Type')).toBe('application/json');
   });
 });

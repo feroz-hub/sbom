@@ -45,13 +45,15 @@ while the rows it encrypted survived. Deployed environments must inject
 ### 1.2 Verifying the key is present
 
 ```bash
-curl -s -o /dev/null -w '%{http_code}\n' \
-  -X POST $API/api/v1/ai/credentials \
-  -H 'content-type: application/json' \
-  -d '{"provider_name":"anthropic","api_key":"sk-test","default_model":"claude-sonnet-4-5"}'
-# 201 (or 409 if a row already exists)  → key OK
-# 503 "AI credential encryption is not configured"  → fix the env
+curl -s "$API/api/v1/ai/effective-config"
+# encryption_config_available=true and encryption_config_status=available
 ```
+
+This diagnostic is read-only and exposes no key, ciphertext, bearer token, or
+authorization header. Startup/readiness logs safely report `missing`,
+`invalid_base64`, or `invalid_length`. Credential create/update returns 503
+with setup guidance when encryption is unavailable; an unreadable saved key
+also returns a controlled diagnostic and never falls back to a legacy env key.
 
 ### 1.3 Rotation
 

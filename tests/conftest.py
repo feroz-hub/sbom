@@ -299,6 +299,9 @@ def app(_tmp_database_path: str):
     # TestClient executes BackgroundTasks before returning; provider-specific
     # tests opt in explicitly so general upload tests never call public NVD.
     os.environ["NVD_ENABLED"] = "false"
+    os.environ["AI_FIXES_ENABLED"] = "true"
+    os.environ["AI_FIXES_KILL_SWITCH"] = "false"
+    os.environ["AI_CANARY_PERCENTAGE"] = "100"
     os.environ.pop("VULNDB_API_KEY", None)
 
     # Reset cached settings singleton if it exists.
@@ -361,15 +364,22 @@ def _reset_settings_and_base_env_after_test():
     os.environ["DEV_DEFAULT_TENANT"] = "true"
     os.environ["API_RATE_LIMIT_ENABLED"] = "false"
     os.environ["NVD_ENABLED"] = "false"
+    os.environ["AI_FIXES_ENABLED"] = "true"
+    os.environ["AI_FIXES_KILL_SWITCH"] = "false"
+    os.environ["AI_CANARY_PERCENTAGE"] = "100"
     os.environ.pop("API_AUTH_TOKENS", None)
     os.environ.pop("GITHUB_TOKEN", None)
     os.environ.pop("NVD_API_KEY", None)
     os.environ.pop("VULNDB_API_KEY", None)
     try:
+        from app.ai.config_loader import reset_loader
+        from app.ai.registry import reset_registry
         from app.core.security import clear_authorization_cache
         from app.settings import reset_settings
 
         clear_authorization_cache()
+        reset_loader()
+        reset_registry()
         reset_settings()
     except Exception:
         pass
@@ -380,15 +390,22 @@ def _reset_settings_and_base_env_after_test():
     os.environ["DEV_DEFAULT_TENANT"] = "true"
     os.environ["API_RATE_LIMIT_ENABLED"] = "false"
     os.environ["NVD_ENABLED"] = "false"
+    os.environ["AI_FIXES_ENABLED"] = "true"
+    os.environ["AI_FIXES_KILL_SWITCH"] = "false"
+    os.environ["AI_CANARY_PERCENTAGE"] = "100"
     os.environ.pop("API_AUTH_TOKENS", None)
     os.environ.pop("GITHUB_TOKEN", None)
     os.environ.pop("NVD_API_KEY", None)
     os.environ.pop("VULNDB_API_KEY", None)
     try:
+        from app.ai.config_loader import reset_loader
+        from app.ai.registry import reset_registry
         from app.core.security import clear_authorization_cache
         from app.settings import reset_settings
 
         clear_authorization_cache()
+        reset_loader()
+        reset_registry()
         reset_settings()
     except Exception:
         pass

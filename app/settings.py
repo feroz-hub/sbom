@@ -553,7 +553,7 @@ class Settings(BaseSettings):
 
     # Google Gemini
     gemini_api_key: str = Field(default="", description="Google AI Studio API key.")
-    ai_gemini_model: str = Field(default="gemini-2.5-flash", description="Default Gemini model.")
+    ai_gemini_model: str = Field(default="gemini-3.6-flash", description="Default Gemini model.")
     ai_gemini_tier: str = Field(
         default="free",
         description="Gemini tier ('free' or 'paid'). Free tier clamps RPM to 15.",

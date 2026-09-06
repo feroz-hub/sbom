@@ -144,6 +144,20 @@ def generate_master_key() -> str:
     return base64.b64encode(secrets.token_bytes(_KEY_BYTES)).decode("ascii")
 
 
+def encryption_config_diagnostic() -> tuple[bool, str]:
+    """Return a secret-safe readiness result for DB credential encryption."""
+    raw = os.environ.get(SecretCipher.ENV_VAR)
+    if not raw:
+        return False, "missing"
+    try:
+        decoded = base64.b64decode(raw.encode("ascii"), validate=True)
+    except Exception:  # noqa: BLE001
+        return False, "invalid_base64"
+    if len(decoded) != _KEY_BYTES:
+        return False, "invalid_length"
+    return True, "available"
+
+
 # ---------------------------------------------------------------------------
 # Process-wide singleton
 # ---------------------------------------------------------------------------
@@ -173,6 +187,7 @@ def reset_cipher() -> None:
 
 __all__ = [
     "SecretCipher",
+    "encryption_config_diagnostic",
     "generate_master_key",
     "get_cipher",
     "reset_cipher",

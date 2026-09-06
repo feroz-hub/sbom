@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { ACTIVE_TENANT_COOKIE } from '@/lib/auth';
+import { applyServerDerivedTenantHeader } from '@/lib/auth/tenantHeader';
 import { getDiscovery, refreshTokens } from '@/lib/auth/oidc';
 import { serverAuthConfig } from '@/lib/auth/server-config';
 import {
@@ -38,6 +40,12 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
   for (const name of ['host', 'cookie', 'content-length', 'connection']) headers.delete(name);
   if (session) headers.set('Authorization', `Bearer ${session.accessToken}`);
   else headers.delete('Authorization');
+  // Native EventSource cannot set X-Tenant-ID. The browser-side tenant
+  // selector mirrors the non-secret numeric id into a strict same-site
+  // cookie; authenticated same-origin streams reach this BFF, which derives
+  // the normal header server-side. Backend membership checks remain the
+  // authorization boundary. Bearer tokens are never placed in URLs.
+  applyServerDerivedTenantHeader(headers, request.cookies.get(ACTIVE_TENANT_COOKIE)?.value);
   const body = ['GET', 'HEAD'].includes(request.method) ? undefined : await request.arrayBuffer();
   const send = () => fetch(target, { method: request.method, headers, body, redirect: 'manual', cache: 'no-store' });
   let upstream = await send();

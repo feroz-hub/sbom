@@ -312,7 +312,21 @@ Database-backed provider administration can override supported lifecycle setting
 
 ### Optional AI settings
 
-Set `AI_FIXES_ENABLED=true` and configure at least one supported provider using environment variables or Settings -> AI. Supported integrations include Anthropic, OpenAI, Gemini, Grok, Sarvam, Ollama, vLLM, and custom OpenAI-compatible endpoints where configured.
+Before saving provider credentials, configure a stable 32-byte base64
+`AI_CONFIG_ENCRYPTION_KEY` in the API and worker environment:
+
+```bash
+python scripts/generate_encryption_key.py
+```
+
+Store the printed value in the deployment secret store; never commit it. Then
+use Settings -> AI to add and test Anthropic, OpenAI, Gemini, Grok, Sarvam,
+Ollama, vLLM, or a custom OpenAI-compatible endpoint. Settings saved in the
+database are authoritative for feature state, kill switch, budgets,
+credentials, default, and fallback selection. The corresponding environment
+variables are migration fallbacks only when no authoritative DB row exists.
+`AI_FIXES_UI_CONFIG_ENABLED` and `AI_CANARY_PERCENTAGE` remain intentional
+deployment controls. See [AI configuration](docs/features/ai-configuration.md).
 
 Never commit real `.env`, `.env.local`, certificates, API keys, or `.windows/` configuration.
 

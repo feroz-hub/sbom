@@ -129,8 +129,10 @@ def test_loader_db_row_overrides_env(client, fresh_cipher, monkeypatch):
         assert anthropic is not None
         # DB plaintext, decrypted on read.
         assert anthropic.api_key == "sk-ant-from-DB"
-        # Default-flag carried via the sentinel.
-        assert anthropic.organization == "__default__"
+        # Routing metadata is explicit and cannot leak into OpenAI headers.
+        assert anthropic.is_default is True
+        assert anthropic.credential_id is not None
+        assert anthropic.organization == ""
     finally:
         reset_settings()
 
@@ -155,10 +157,13 @@ def test_loader_fallback_marker_for_secondary(client, fresh_cipher):
     loader = _make_loader(fresh_cipher)
     configs = loader.resolve_configs()
     gemini = next(c for c in configs if c.name == "gemini")
-    assert gemini.organization == "__fallback__"
+    assert gemini.is_fallback is True
+    assert gemini.organization == ""
 
 
-def test_loader_skips_disabled_rows(client, fresh_cipher):
+def test_disabled_db_row_suppresses_legacy_env_credential(client, fresh_cipher, monkeypatch):
+    monkeypatch.setenv("GROK_API_KEY", "xai-legacy-env-key")
+    reset_settings()
     with _session() as db:
         db.add(
             AiProviderCredential(
@@ -176,15 +181,21 @@ def test_loader_skips_disabled_rows(client, fresh_cipher):
     loader = _make_loader(fresh_cipher)
     configs = loader.resolve_configs()
     grok = next((c for c in configs if c.name == "grok"), None)
-    # Disabled DB row is skipped → falls through to env config (which is
-    # enabled=False because no GROK_API_KEY is set in tests). Either way,
-    # the api_key from the disabled DB row must NOT leak.
-    if grok is not None:
-        assert grok.api_key == ""
+    assert grok is not None
+    assert grok.source == "db"
+    assert grok.enabled is False
+    assert grok.config_error == "disabled_by_administrator"
+    assert grok.api_key == ""
+    assert all(c.api_key != "xai-legacy-env-key" for c in configs)
+    reset_settings()
 
 
-def test_loader_skips_rows_with_decrypt_failure(client, fresh_cipher, caplog):
-    """A row encrypted with one key + decrypted with another → skipped, not raised."""
+def test_decrypt_failure_suppresses_legacy_env_credential(
+    client, fresh_cipher, caplog, monkeypatch
+):
+    """Wrong master key never resurrects the older environment credential."""
+    monkeypatch.setenv("GROK_API_KEY", "xai-legacy-env-key")
+    reset_settings()
     other_cipher = SecretCipher.from_b64(generate_master_key())
     with _session() as db:
         db.add(
@@ -203,15 +214,45 @@ def test_loader_skips_rows_with_decrypt_failure(client, fresh_cipher, caplog):
     loader = _make_loader(fresh_cipher)
     with caplog.at_level("ERROR"):
         configs = loader.resolve_configs()
-    # Decrypt-failed rows are dropped — env-only fallback (env has no key
-    # for grok in tests, so the entry is enabled=False).
     grok = next((c for c in configs if c.name == "grok"), None)
-    if grok is not None:
-        assert grok.api_key == ""
+    assert grok is not None
+    assert grok.source == "db"
+    assert grok.enabled is False
+    assert grok.config_error == "credential_decryption_failed"
+    assert grok.api_key == ""
+    assert all(c.api_key != "xai-legacy-env-key" for c in configs)
     # The error is logged but the ciphertext / plaintext is not.
     log_text = "\n".join(r.getMessage() for r in caplog.records)
     assert "xai-from-bad-key" not in log_text
     assert "decrypt_failed" in log_text
+    reset_settings()
+
+
+def test_loader_preserves_multiple_labelled_credentials(client, fresh_cipher):
+    with _session() as db:
+        for label, key, is_default in [
+            ("primary", "sk-first", True),
+            ("secondary", "sk-second", False),
+        ]:
+            db.add(
+                AiProviderCredential(
+                    provider_name="openai",
+                    label=label,
+                    api_key_encrypted=fresh_cipher.encrypt(key),
+                    default_model="gpt-4o-mini",
+                    tier="paid",
+                    is_default=is_default,
+                    enabled=True,
+                    created_at=_now(),
+                    updated_at=_now(),
+                )
+            )
+        db.commit()
+
+    configs = [c for c in _make_loader(fresh_cipher).resolve_configs() if c.name == "openai"]
+    assert [c.label for c in configs] == ["primary", "secondary"]
+    assert len({c.selection_key for c in configs}) == 2
+    assert next(c for c in configs if c.is_default).api_key == "sk-first"
 
 
 # ============================================================ Cache invalidation

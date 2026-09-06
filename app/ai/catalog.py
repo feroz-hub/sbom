@@ -17,7 +17,7 @@ Why a static catalog separate from the runtime registry:
     means PR review catches breaking changes — a Gemini free-tier
     bump from 15 to 30 RPM is a code edit, code review, deploy.
 
-Sources (last verified 2026-05-04 — re-check each quarter):
+Sources (last verified 2026-09-06 — re-check each quarter):
   * Anthropic    https://docs.anthropic.com/en/docs/about-claude/models
   * OpenAI       https://platform.openai.com/docs/models
   * Gemini       https://ai.google.dev/pricing  ·  https://ai.google.dev/gemini-api/docs/rate-limits
@@ -140,10 +140,10 @@ GEMINI = ProviderCatalogEntry(
     free_tier_daily_token_limit=1_000_000,
     available_models=[
         ModelInfo(
-            name="gemini-2.5-flash",
-            display_name="Gemini 2.5 Flash",
+            name="gemini-3.6-flash",
+            display_name="Gemini 3.6 Flash",
             default_tier="free",
-            notes="Free tier: 15 req/min, 1M tokens/day, 1500 req/day",
+            notes="Current stable Flash model; free tier available",
         ),
         ModelInfo(
             name="gemini-2.5-flash-lite",
@@ -320,6 +320,7 @@ __all__ = [
     "OPENAI",
     "PROVIDER_CATALOG",
     "ProviderCatalogEntry",
+    "SARVAM",
     "VLLM",
     "get_catalog_entry",
     "list_catalog",

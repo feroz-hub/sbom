@@ -19,9 +19,10 @@ import logging
 from celery import shared_task
 
 from ..ai.batch import AiFixBatchPipeline
-from ..ai.cost import BudgetCaps, BudgetGuard
 from ..ai.progress import BatchProgress, get_progress_store
-from ..settings import get_settings
+from ..ai.rollout import evaluate_access
+from ..ai.runtime_config import build_budget_guard
+from ..core.context import minimal_background_context, tenant_scope
 
 log = logging.getLogger("sbom.ai.tasks")
 
@@ -45,6 +46,7 @@ def generate_run_fixes(
     self,
     run_id: int,
     *,
+    tenant_id: int | None = None,
     provider_name: str | None = None,
     force_refresh: bool = False,
     budget_usd: float | None = None,
@@ -79,58 +81,63 @@ def generate_run_fixes(
         len(finding_ids) if finding_ids is not None else "all",
     )
 
-    s = get_settings()
-    if s.ai_fixes_kill_switch:
+    if tenant_id is None:
         store = get_progress_store()
         prog = BatchProgress(
             run_id=run_id,
             batch_id=batch_id,
             scope_label=scope_label,
             status="failed",
-            last_error="AI fixes kill switch is enabled",
+            last_error="AI batch is missing its tenant context",
         )
         store.write(prog)
         return prog.model_dump(mode="json")
 
-    caps = BudgetCaps(
-        per_request_usd=float(s.ai_budget_per_request_usd) if s.ai_budget_per_request_usd is not None else None,
-        per_scan_usd=float(budget_usd)
-        if budget_usd is not None
-        else (float(s.ai_budget_per_scan_usd) if s.ai_budget_per_scan_usd is not None else None),
-        per_day_org_usd=float(s.ai_budget_per_day_org_usd) if s.ai_budget_per_day_org_usd is not None else None,
-    )
-
-    db = SessionLocal()
-    try:
-        pipeline = AiFixBatchPipeline(
-            db,
-            budget=BudgetGuard(caps, db_session_factory=SessionLocal),
+    access = evaluate_access(rollout_key=f"run:{run_id}")
+    if not access.allowed:
+        store = get_progress_store()
+        prog = BatchProgress(
+            run_id=run_id,
+            batch_id=batch_id,
+            scope_label=scope_label,
+            status="failed",
+            last_error=access.message,
         )
-        summary = asyncio.run(
-            _run_pipeline_with_http_client(
-                pipeline,
+        store.write(prog)
+        return prog.model_dump(mode="json")
+
+    with tenant_scope(minimal_background_context(tenant_id)):
+        db = SessionLocal()
+        try:
+            pipeline = AiFixBatchPipeline(
+                db,
+                budget=build_budget_guard(per_scan_override_usd=budget_usd),
+            )
+            summary = asyncio.run(
+                _run_pipeline_with_http_client(
+                    pipeline,
+                    run_id=run_id,
+                    provider_name=provider_name,
+                    force_refresh=force_refresh,
+                    finding_ids=finding_ids,
+                    batch_id=batch_id,
+                    scope_label=scope_label,
+                )
+            )
+        except Exception as exc:  # noqa: BLE001
+            log.exception("ai.task.generate_run_fixes.failed: run=%s batch=%s err=%s", run_id, batch_id, exc)
+            store = get_progress_store()
+            prog = BatchProgress(
                 run_id=run_id,
-                provider_name=provider_name,
-                force_refresh=force_refresh,
-                finding_ids=finding_ids,
                 batch_id=batch_id,
                 scope_label=scope_label,
+                status="failed",
+                last_error=str(exc)[:240],
             )
-        )
-    except Exception as exc:  # noqa: BLE001
-        log.exception("ai.task.generate_run_fixes.failed: run=%s batch=%s err=%s", run_id, batch_id, exc)
-        store = get_progress_store()
-        prog = BatchProgress(
-            run_id=run_id,
-            batch_id=batch_id,
-            scope_label=scope_label,
-            status="failed",
-            last_error=str(exc)[:240],
-        )
-        store.write(prog)
-        return prog.model_dump(mode="json")
-    finally:
-        db.close()
+            store.write(prog)
+            return prog.model_dump(mode="json")
+        finally:
+            db.close()
 
     log.info(
         "ai.task.generate_run_fixes.done: run=%s status=%s generated=%s from_cache=%s failed=%s cost=%.4f",

@@ -25,15 +25,32 @@ export function resolveAuthConfig(): AuthConfig {
 }
 
 const ACTIVE_TENANT_KEY = 'sbom_active_tenant_id';
+export const ACTIVE_TENANT_COOKIE = 'sbom_active_tenant_id';
+
+function syncActiveTenantCookie(value: string | null): void {
+  if (typeof document === 'undefined') return;
+  const secure = typeof location !== 'undefined' && location.protocol === 'https:' ? '; Secure' : '';
+  if (value && /^\d+$/.test(value)) {
+    document.cookie = `${ACTIVE_TENANT_COOKIE}=${encodeURIComponent(value)}; Path=/; SameSite=Strict; Max-Age=86400${secure}`;
+    return;
+  }
+  document.cookie = `${ACTIVE_TENANT_COOKIE}=; Path=/; SameSite=Strict; Max-Age=0${secure}`;
+}
 
 export function getActiveTenantId(): string | null {
   return typeof sessionStorage === 'undefined' ? null : sessionStorage.getItem(ACTIVE_TENANT_KEY);
 }
 
 export function setActiveTenantId(tenantId: string): void {
+  if (!/^\d+$/.test(tenantId)) {
+    clearActiveTenantId();
+    return;
+  }
   sessionStorage.setItem(ACTIVE_TENANT_KEY, tenantId);
+  syncActiveTenantCookie(tenantId);
 }
 
 export function clearActiveTenantId(): void {
   if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem(ACTIVE_TENANT_KEY);
+  syncActiveTenantCookie(null);
 }

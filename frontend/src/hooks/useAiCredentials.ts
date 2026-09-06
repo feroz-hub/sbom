@@ -178,9 +178,8 @@ export function useAiCredentialSettings(args: { enabled?: boolean } = {}) {
 }
 
 
-// @no-invalidation-needed — onSuccess primes the same cache key consumers
-// read (kill switch + budget caps), so a separate invalidateQueries pass
-// would just re-fetch what we already wrote.
+// Prime the direct settings query, then invalidate every runtime-derived
+// surface (analysis config, usage caps, Copilot visibility, fix estimates).
 export function useUpdateAiCredentialSettings() {
   const qc = useQueryClient();
   return useMutation<
@@ -191,6 +190,8 @@ export function useUpdateAiCredentialSettings() {
     mutationFn: (body) => updateAiCredentialSettings(body),
     onSuccess: (data) => {
       qc.setQueryData(aiCredentialSettingsQueryKey, data);
+      invalidateAiCredentialSurfaces(qc);
+      invalidateAiFixCaches(qc);
     },
   });
 }

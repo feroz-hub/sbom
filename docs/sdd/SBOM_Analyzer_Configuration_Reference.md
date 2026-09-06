@@ -9,7 +9,7 @@
 
 Environment variables, feature flags, configuration consumers and restart requirements. **No secret values appear in this document** — variable names only; all values `<REDACTED>`. Legend — Consumer: A=API, W=Celery worker, B=Celery beat, F=Frontend, AL=Alembic, DC=docker-compose, T=tests. Restart: R=process restart required (cached at startup/import), req=read per request/call (no restart), build=frontend build-time. Class: S=secret, C=config, P=public (NEXT_PUBLIC values ship in the JS bundle).
 
-Known completeness gaps (tracked as OQ-021, OQ-009): `.env.example` omits `AI_CONFIG_ENCRYPTION_KEY` and `NVD_MIRROR_FERNET_KEY`; `AWS_S3_BUCKET`/`AWS_S3_ENDPOINT_URL` are declared but have no code consumer.
+Known completeness gaps (tracked as OQ-009): `.env.example` omits `NVD_MIRROR_FERNET_KEY`; `AWS_S3_BUCKET`/`AWS_S3_ENDPOINT_URL` are declared but have no code consumer. `AI_CONFIG_ENCRYPTION_KEY` is documented with an empty placeholder and must be supplied through the deployment secret store.
 
 ## 1. Configuration sources and reading semantics
 
@@ -27,7 +27,7 @@ Known completeness gaps (tracked as OQ-021, OQ-009): `.env.example` omits `AI_CO
 | Alembic | `alembic/env.py:30` `get_url()` | `DATABASE_URL` env, falling back to `app.db.DATABASE_URL`; loads `.env` via `python-dotenv` (L8–12). |
 | Celery | `app/workers/celery_app.py:29–48` | broker/backend = `CELERY_BROKER_URL` or `REDIS_URL` via `get_settings()`. |
 
-`.env` (real, present at repo root) — variable **names only**, all values `<REDACTED>`: `NVD_API_KEY`, `GITHUB_TOKEN`, `VULNDB_API_KEY`, `ANALYSIS_SOURCES`, `CORS_ORIGINS`, `API_AUTH_MODE`, `HOST`, `PORT`, `DATABASE_URL`, `ANALYSIS_LEGACY_LEVEL`, `LOG_LEVEL`, `LOG_FORMAT`, `AI_FIXES_ENABLED`, `AI_FIXES_UI_CONFIG_ENABLED`, **`AI_CONFIG_ENCRYPTION_KEY`** (the only name in `.env` absent from `.env.example`).
+`.env` (real, present at repo root) — variable **names only**, all values `<REDACTED>`: `NVD_API_KEY`, `GITHUB_TOKEN`, `VULNDB_API_KEY`, `ANALYSIS_SOURCES`, `CORS_ORIGINS`, `API_AUTH_MODE`, `HOST`, `PORT`, `DATABASE_URL`, `ANALYSIS_LEGACY_LEVEL`, `LOG_LEVEL`, `LOG_FORMAT`, `AI_FIXES_ENABLED`, `AI_FIXES_UI_CONFIG_ENABLED`, **`AI_CONFIG_ENCRYPTION_KEY`**. The encryption-key variable is also present as an empty, safe placeholder in `.env.example`.
 Frontend `frontend/.env.local` (names only): `NEXT_PUBLIC_API_URL`.
 
 ## 2. Master variable table
@@ -157,7 +157,7 @@ Legend — Consumer: **A**=API, **W**=Celery worker, **B**=Celery beat, **F**=Fr
 | `AI_DEFAULT_PROVIDER` | provider when unspecified | `anthropic` | C |
 | `AI_PROVIDERS` | providers to wire | `anthropic,openai,gemini,grok,sarvam,ollama,vllm,custom_openai` | C |
 | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY` / `GROK_API_KEY` / `SARVAM_API_KEY` / `VLLM_API_KEY` / `AI_CUSTOM_OPENAI_API_KEY` | provider credentials | "" / "" / "" / "" / "" / `EMPTY` / `EMPTY` | **S** |
-| `AI_ANTHROPIC_MODEL`=claude-sonnet-4-5, `AI_OPENAI_MODEL`=gpt-4o-mini, `AI_OLLAMA_MODEL`=llama3.3:70b, `AI_VLLM_MODEL`=Meta-Llama-3.1-70B-Instruct, `AI_GEMINI_MODEL`=gemini-2.5-flash, `AI_GROK_MODEL`=grok-2-mini, `AI_SARVAM_MODEL`=sarvam-m, `AI_CUSTOM_OPENAI_MODEL`="" | per-provider models | as listed | C |
+| `AI_ANTHROPIC_MODEL`=claude-sonnet-4-5, `AI_OPENAI_MODEL`=gpt-4o-mini, `AI_OLLAMA_MODEL`=llama3.3:70b, `AI_VLLM_MODEL`=Meta-Llama-3.1-70B-Instruct, `AI_GEMINI_MODEL`=gemini-3.6-flash, `AI_GROK_MODEL`=grok-2-mini, `AI_SARVAM_MODEL`=sarvam-m, `AI_CUSTOM_OPENAI_MODEL`="" | per-provider models | as listed | C |
 | `AI_*_MAX_CONCURRENT` (anthropic 10, openai 20, ollama 8, vllm 32, gemini 4, grok 4, sarvam 10, custom 8) / `AI_*_RPM` (50, 200, 1000, 5000, 15, 60, 60, 5000) | throughput caps | as listed | C |
 | `AI_GEMINI_TIER` / `AI_GROK_TIER` | free/paid RPM clamp | free | C |
 | `AI_OPENAI_BASE_URL` / `AI_OPENAI_ORGANIZATION` / `OLLAMA_BASE_URL` / `VLLM_BASE_URL` / `AI_SARVAM_BASE_URL` / `AI_CUSTOM_OPENAI_BASE_URL` | endpoints (empty base URL disables ollama/vllm/custom) | api.openai.com / "" / localhost:11434 / "" / api.sarvam.ai / "" | C |

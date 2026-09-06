@@ -6,7 +6,7 @@ so the implementation is a thin specialisation of :class:`OpenAiProvider`
 that overrides:
 
   * the base URL
-  * the default model (``gemini-2.5-flash`` — the free-tier sweet spot)
+  * the default model (``gemini-3.6-flash``)
   * the rate limit (15 RPM on Flash free tier; tighter for Pro)
   * the cost lookup (uses the Gemini ``PRICING`` table, not OpenAI's)
 
@@ -37,8 +37,8 @@ log = logging.getLogger("sbom.ai.providers.gemini")
 
 _BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
 
-# Free-tier rate limits (Flash 2.5; Pro is tighter at 5 RPM and the user
-# is responsible for not selecting it for batch work).
+# Conservative free-tier rate limit. Google may grant higher limits by account
+# and model; staying at 15 RPM prevents a free key from being over-saturated.
 _FREE_TIER_RPM = 15
 _FREE_TIER_DAILY_TOKENS = 1_000_000
 
@@ -52,7 +52,7 @@ class GeminiProvider(LlmProvider):
         self,
         *,
         api_key: str,
-        default_model: str = "gemini-2.5-flash",
+        default_model: str = "gemini-3.6-flash",
         tier: Literal["free", "paid"] = "free",
         client_factory: Any | None = None,
         max_concurrent: int = 4,
@@ -104,6 +104,11 @@ class GeminiProvider(LlmProvider):
             breaker_reset_seconds=breaker_reset_seconds,
             request_timeout_seconds=request_timeout_seconds,
             structured_output_mode="json_object",
+            # Gemini 3 is tuned for temperature 1.0; lower values can cause
+            # looping/degraded answers. Low thinking keeps bounded dashboard
+            # calls useful without consuming the output allowance on reasoning.
+            reasoning_effort="minimal",
+            temperature_override=1.0,
         )
         # Override the inner provider's identity so cost / metrics /
         # ledger rows attribute to "gemini", not "openai".

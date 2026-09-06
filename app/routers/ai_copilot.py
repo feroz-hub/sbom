@@ -4,8 +4,8 @@ Routes:
   GET  /api/ai/copilot/briefing   cached executive briefing (?force=true regenerates)
   POST /api/ai/copilot/ask        one-shot grounded Q&A {"question": "..."}
 
-Gating mirrors the AI-fixes rollout gate (kill switch → master flag →
-canary) so the Copilot never outlives an AI shutdown. Costs flow through
+Gating shares the global kill switch and master flag with AI Fixes. The
+Fix-only canary is deliberately not applied to Copilot. Costs flow through
 the same BudgetGuard + ai_usage_log ledger as fix generation (purposes
 ``copilot_briefing`` / ``copilot_ask``) — visible on /admin/ai-usage.
 
@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 
 from ..ai.copilot import answer_question, generate_briefing
 from ..ai.providers.base import AiProviderError, BudgetExceededError
-from ..ai.rollout import evaluate_access
+from ..ai.rollout import AiAccessDeniedError, evaluate_access
 from ..db import get_db
 
 log = logging.getLogger("sbom.api.ai_copilot")
@@ -39,7 +39,7 @@ class AskBody(BaseModel):
 
 def _require_copilot_enabled() -> None:
     """Same rollout gate as AI fixes — Copilot is part of the AI surface."""
-    access = evaluate_access(rollout_key=None)
+    access = evaluate_access(rollout_key=None, apply_canary=False)
     if access.allowed:
         return
     raise HTTPException(
@@ -57,6 +57,11 @@ async def copilot_briefing(
     _require_copilot_enabled()
     try:
         return await generate_briefing(db, force=force)
+    except AiAccessDeniedError as exc:
+        raise HTTPException(
+            status_code=exc.http_status,
+            detail={"error_code": "AI_FIXES_DISABLED", "message": str(exc)},
+        ) from exc
     except BudgetExceededError as exc:
         raise HTTPException(
             status_code=429,
@@ -76,6 +81,11 @@ async def copilot_ask(body: AskBody, db: Session = Depends(get_db)):
     _require_copilot_enabled()
     try:
         return await answer_question(db, body.question)
+    except AiAccessDeniedError as exc:
+        raise HTTPException(
+            status_code=exc.http_status,
+            detail={"error_code": "AI_FIXES_DISABLED", "message": str(exc)},
+        ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except BudgetExceededError as exc:

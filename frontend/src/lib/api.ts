@@ -333,15 +333,14 @@ async function performRequest(
   const { authErrorMode = 'redirect', ...fetchOptions } = options;
   const isFormData = typeof FormData !== 'undefined' && fetchOptions.body instanceof FormData;
   const authHeaders = getAuthHeaders();
+  const headers = new Headers(isFormData ? undefined : { 'Content-Type': 'application/json' });
+  for (const [name, value] of Object.entries(authHeaders)) headers.set(name, value);
+  new Headers(fetchOptions.headers).forEach((value, name) => headers.set(name, value));
   const res = await fetchWithTimeout(
     url,
     {
       ...fetchOptions,
-      headers: {
-        ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
-        ...authHeaders,
-        ...fetchOptions.headers,
-      },
+      headers,
     },
     timeoutMs,
   );

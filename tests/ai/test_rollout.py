@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import pytest
+from app.ai.config_loader import reset_loader
 from app.ai.rollout import _canary_bucket, evaluate_access
+from app.db import SessionLocal
+from app.models import AiSettings
 from app.settings import reset_settings
 
 
@@ -15,8 +18,10 @@ def _env(monkeypatch):
         for k, v in kv.items():
             monkeypatch.setenv(k, v)
         reset_settings()
+        reset_loader()
 
     yield _set
+    reset_loader()
     reset_settings()
 
 
@@ -58,6 +63,36 @@ def test_master_flag_off_returns_not_enabled(_env):
     decision = evaluate_access(rollout_key="run:1")
     assert decision.allowed is False
     assert decision.reason == "not_enabled"
+
+
+def test_db_feature_and_kill_switch_override_conflicting_env(_env):
+    _env(
+        AI_FIXES_KILL_SWITCH="false",
+        AI_FIXES_ENABLED="true",
+        AI_CANARY_PERCENTAGE="100",
+    )
+    db = SessionLocal()
+    try:
+        db.query(AiSettings).delete()
+        db.add(
+            AiSettings(
+                id=1,
+                feature_enabled=False,
+                kill_switch_active=True,
+                budget_per_request_usd=0.01,
+                budget_per_scan_usd=0.10,
+                budget_daily_usd=1.0,
+                updated_at="2026-09-06T00:00:00+00:00",
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+    reset_loader()
+
+    decision = evaluate_access(rollout_key="run:db-wins")
+    assert decision.allowed is False
+    assert decision.reason == "kill_switch"
 
 
 # ============================================================ Layer 3 — canary
@@ -174,3 +209,33 @@ def test_router_master_flag_off_returns_409(client, _env):
     resp = client.post("/api/v1/runs/1/ai-fixes")
     assert resp.status_code == 409
     assert resp.json()["detail"]["error_code"] == "AI_FIXES_DISABLED"
+
+
+def test_db_kill_switch_blocks_copilot_before_service_call(client, _env, monkeypatch):
+    _env(AI_FIXES_KILL_SWITCH="false", AI_FIXES_ENABLED="true", AI_CANARY_PERCENTAGE="100")
+    db = SessionLocal()
+    try:
+        db.query(AiSettings).delete()
+        db.add(
+            AiSettings(
+                id=1,
+                feature_enabled=True,
+                kill_switch_active=True,
+                budget_per_request_usd=0.10,
+                budget_per_scan_usd=5.0,
+                budget_daily_usd=5.0,
+                updated_at="2026-09-06T00:00:00+00:00",
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+    reset_loader()
+
+    async def _must_not_run(*args, **kwargs):
+        raise AssertionError("Copilot service ran past the global kill switch")
+
+    monkeypatch.setattr("app.routers.ai_copilot.generate_briefing", _must_not_run)
+    response = client.get("/api/ai/copilot/briefing")
+    assert response.status_code == 409
+    assert response.json()["detail"]["error_code"] == "AI_FIXES_DISABLED"

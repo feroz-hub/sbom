@@ -1521,12 +1521,11 @@ class AiUsageLog(Base, TenantOwnedMixin):
 
 class AiProviderConfig(Base):
     """
-    Per-provider runtime overrides for the AI subsystem.
+    Legacy per-provider runtime overrides retained for compatibility.
 
-    Env vars in ``Settings`` provide the safe defaults; rows in this table
-    let an admin toggle providers, change models, or adjust concurrency
-    without a redeploy. Secrets (API keys) deliberately do NOT live here —
-    they remain in env / vault, see ``ProviderRegistry.apply_db_overrides``.
+    New DB-backed credentials and selection metadata live in
+    ``ai_provider_credentials`` and are resolved through ``AiConfigLoader``.
+    This table is intentionally not a credential store.
     """
 
     __tablename__ = "ai_provider_config"
@@ -1645,9 +1644,9 @@ class AiProviderCredential(Base):
     """
     AES-GCM-encrypted API credential for one AI provider (Phase 2 §2.2).
 
-    Tenant-shared by design (single-admin v1). The ``label`` column
-    scaffolds for the future "multiple keys per provider" feature; v1
-    UI keeps every row at ``label='default'``.
+    Tenant-shared by design (single-admin v1). ``provider_name`` + ``label``
+    identifies one credential, allowing deterministic default/fallback
+    selection even when a provider has multiple keys.
 
     Hard rule: ``api_key_encrypted`` must NEVER be returned by any
     endpoint. The router exposes ``api_key_preview`` (first 6 + last 4)
