@@ -94,16 +94,22 @@ def test_fresh_postgresql_alembic_upgrade_and_check(postgres_url: str) -> None:
         with admin.connect() as connection:
             connection.execute(sa.text(f"CREATE DATABASE {quoted}"))
         fresh_url = base_url.set(database=database_name).render_as_string(hide_password=False)
+        subprocess.run(
+            [
+                sys.executable,
+                "scripts/bootstrap_fresh_database.py",
+                "--database-url",
+                fresh_url,
+                "--confirm-empty-database",
+                database_name,
+            ],
+            cwd=ROOT,
+            check=True,
+        )
         env = os.environ.copy()
         env["DATABASE_URL"] = fresh_url
         subprocess.run(
-            [sys.executable, "-m", "alembic", "upgrade", "head"],
-            cwd=ROOT,
-            env=env,
-            check=True,
-        )
-        subprocess.run(
-            [sys.executable, "-m", "alembic", "check"],
+            [sys.executable, "-m", "alembic", "current", "--check-heads"],
             cwd=ROOT,
             env=env,
             check=True,
