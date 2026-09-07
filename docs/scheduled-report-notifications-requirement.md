@@ -1,6 +1,6 @@
 # Requirement — Scheduled Consolidated Report Notifications
 
-> **Status:** Draft for review
+> **Status:** Implemented with documented operational and historical-data qualifications; see [runbook](./runbook-report-notifications.md).
 > **Author:** Feroze Basha S
 > **Date:** 2026-09-04
 > **Applies to:** SBOM Spectra / SBOM Analyser `2.0.0`
@@ -10,6 +10,11 @@
 ---
 
 ## 1. Purpose
+
+Implementation decisions (2026-09-07): existing platform SMTP, private shared filesystem, one
+`ON_EVERY_RUN` digest per scheduler tick, and tenant-wide subscriptions restricted to tenant
+administrators/security analysts. The runbook records the historical KEV snapshot limitation and
+SMTP ambiguous-delivery handling; the requirements below remain the original design reference.
 
 When a scheduled analysis runs today, the result is silent. A user has to remember to open the
 application, navigate to the run, and manually pick a second run to compare against. Nothing is

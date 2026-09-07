@@ -54,6 +54,49 @@ log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["schedules"])
 
 
+def _tenant_schedule(db, tenant_id, context):
+    from ..services.report_access import is_report_admin, report_error
+    if context.tenant_id != tenant_id or not is_report_admin(context):
+        raise report_error("TENANT_SCHEDULE_ADMIN_REQUIRED", "A tenant administrator must manage tenant-wide schedules.")
+    return db.scalar(select(AnalysisSchedule).where(AnalysisSchedule.tenant_id == tenant_id, AnalysisSchedule.scope == "TENANT"))
+
+
+@router.get("/tenants/{tenant_id}/schedule", response_model=ScheduleOut | None)
+def get_tenant_schedule(tenant_id: int, context: CurrentContext = Depends(require_permission("product:read")), db: Session = Depends(get_db)):
+    row = _tenant_schedule(db, tenant_id, context)
+    return _serialize(row) if row else None
+
+
+@router.post("/tenants/{tenant_id}/schedule", response_model=ScheduleOut)
+@router.patch("/tenants/{tenant_id}/schedule", response_model=ScheduleOut)
+def upsert_tenant_schedule(payload: ScheduleUpsert, tenant_id: int, context: CurrentContext = Depends(require_permission("product:manage_schedule")), db: Session = Depends(get_db)):
+    from ..services.audit_service import write_audit_log
+    row = _tenant_schedule(db, tenant_id, context)
+    if row is None:
+        row = AnalysisSchedule(tenant_id=tenant_id, scope="TENANT", created_on=to_iso(_now()), created_by=context.actor_label())
+        db.add(row)
+    _apply_payload(row, payload, partial=False)
+    _validate_or_422(_spec_from_row(row))
+    _refresh_next_run_at(row)
+    row.modified_on = to_iso(_now())
+    db.flush()
+    write_audit_log(db, context, "schedule.tenant.upsert", entity_type="analysis_schedule", entity_id=row.id)
+    db.commit()
+    return _serialize(row)
+
+
+@router.delete("/tenants/{tenant_id}/schedule", status_code=204)
+def delete_tenant_schedule(tenant_id: int, context: CurrentContext = Depends(require_permission("product:manage_schedule")), db: Session = Depends(get_db)):
+    from ..services.audit_service import write_audit_log
+    row = _tenant_schedule(db, tenant_id, context)
+    if row:
+        row.is_active, row.enabled = False, False
+        row.deactivated_at, row.deactivated_by = _now(), context.actor_label()
+        write_audit_log(db, context, "schedule.tenant.delete", entity_type="analysis_schedule", entity_id=row.id)
+        db.commit()
+    return Response(status_code=204)
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -151,6 +194,7 @@ def _get_product_or_404(db: Session, product_id: int, tenant_id: int | None = No
 def _serialize(row: AnalysisSchedule) -> dict[str, Any]:
     return {
         "id": row.id,
+        "tenant_id": row.tenant_id,
         "scope": row.scope,
         "project_id": row.project_id,
         "product_id": row.product_id,
@@ -604,8 +648,8 @@ def list_schedules(
     base = select(AnalysisSchedule).where(AnalysisSchedule.tenant_id == context.tenant_id)
     if scope:
         norm = scope.strip().upper()
-        if norm not in {"PROJECT", "PRODUCT", "SBOM"}:
-            raise HTTPException(status_code=422, detail="scope must be PROJECT, PRODUCT, or SBOM")
+        if norm not in {"TENANT", "PROJECT", "PRODUCT", "SBOM"}:
+            raise HTTPException(status_code=422, detail="scope must be TENANT, PROJECT, PRODUCT, or SBOM")
         base = base.where(AnalysisSchedule.scope == norm)
     if enabled is not None:
         base = base.where(AnalysisSchedule.enabled.is_(enabled))
@@ -683,83 +727,28 @@ def run_schedule_now(
 
     row = _get_schedule_or_404(db, schedule_id, context.tenant_id)
 
-    if row.scope == "SBOM" and row.sbom_id is not None:
-        target_sbom_ids = [row.sbom_id]
-    elif row.scope == "PRODUCT" and row.product_id is not None:
-        target_sbom_ids = [
-            sid
-            for sid in db.execute(
-                select(SBOMSource.id).where(
-                    SBOMSource.tenant_id == context.tenant_id,
-                    SBOMSource.product_id == row.product_id,
-                )
-            ).scalars().all()
-        ]
-        overridden = set(
-            db.execute(
-                select(AnalysisSchedule.sbom_id).where(
-                    AnalysisSchedule.tenant_id == context.tenant_id,
-                    AnalysisSchedule.scope == "SBOM",
-                    AnalysisSchedule.sbom_id.isnot(None),
-                )
-            )
-            .scalars()
-            .all()
-        )
-        target_sbom_ids = [sid for sid in target_sbom_ids if sid not in overridden]
-    elif row.scope == "PROJECT" and row.project_id is not None:
-        target_sbom_ids = [
-            sid
-            for sid in db.execute(
-                select(SBOMSource.id).where(
-                    SBOMSource.tenant_id == context.tenant_id,
-                    SBOMSource.projectid == row.project_id,
-                )
-            ).scalars().all()
-        ]
-        # Honour SBOM-level overrides during manual fan-out too — same
-        # rule as the tick: an explicit SBOM row (even paused) opts out.
-        overridden = set(
-            db.execute(
-                select(AnalysisSchedule.sbom_id).where(
-                    AnalysisSchedule.tenant_id == context.tenant_id,
-                    AnalysisSchedule.scope == "SBOM",
-                    AnalysisSchedule.sbom_id.isnot(None),
-                )
-            )
-            .scalars()
-            .all()
-        )
-        target_sbom_ids = [sid for sid in target_sbom_ids if sid not in overridden]
-        overridden_products = set(
-            db.execute(
-                select(AnalysisSchedule.product_id).where(
-                    AnalysisSchedule.tenant_id == context.tenant_id,
-                    AnalysisSchedule.scope == "PRODUCT",
-                    AnalysisSchedule.product_id.isnot(None),
-                )
-            )
-            .scalars()
-            .all()
-        )
-        if overridden_products:
-            product_rows = db.execute(
-                select(SBOMSource.id, SBOMSource.product_id).where(
-                    SBOMSource.tenant_id == context.tenant_id,
-                    SBOMSource.projectid == row.project_id,
-                    SBOMSource.id.in_(target_sbom_ids),
-                )
-            ).all()
-            target_sbom_ids = [sid for sid, product_id in product_rows if product_id not in overridden_products]
-    else:
-        raise HTTPException(status_code=409, detail="Schedule is missing a target")
+    from ..services.schedule_resolver import targets_for_schedule
+    target_sbom_ids = targets_for_schedule(db, row)
+
+    from ..settings import get_settings
+    report_cycle = None
+    if get_settings().report_notifications_enabled:
+        from ..services.report_cycles import prepare_run_cycle
+        from ..services.schedule_resolver import DueTarget
+        try:
+            report_cycle = _now().isoformat()
+            prepare_run_cycle(db, [DueTarget(sid, row.id, row.scope) for sid in target_sbom_ids], report_cycle)
+        except Exception:
+            db.rollback()
+            report_cycle = None
+            log.warning("schedule_manual_report_cycle_failed")
 
     enqueued: list[int] = []
     failed: list[int] = []
     last_error: str | None = None
     for sid in target_sbom_ids:
         try:
-            analyze_sbom_async.delay(sbom_id=sid, schedule_id=row.id)
+            analyze_sbom_async.delay(sbom_id=sid, schedule_id=row.id, **({"report_cycle": report_cycle} if report_cycle else {}))
             enqueued.append(sid)
         except Exception as exc:
             last_error = f"{type(exc).__name__}: {exc}"

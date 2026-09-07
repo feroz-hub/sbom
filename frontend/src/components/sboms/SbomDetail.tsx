@@ -19,6 +19,7 @@ import { SkeletonRow } from '@/components/ui/Spinner';
 import { Pagination } from '@/components/ui/Pagination';
 import { AnalysisProgress } from '@/components/analysis/AnalysisProgress';
 import { ScheduleCard } from '@/components/schedules/ScheduleCard';
+import { NotifyMeLink } from '@/components/reports/NotifyMeLink';
 import { SbomConversionCard } from '@/components/sboms/SbomConversionCard';
 import { SbomRawViewer } from '@/components/sboms/SbomRawViewer';
 import { ValidationReportSection } from '@/components/sboms/ValidationReportSection';
@@ -1082,6 +1083,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
           </Card>
 
           <ScheduleCard scope="SBOM" targetId={sbom.id} />
+          <NotifyMeLink scope="SBOM" targetId={sbom.id} />
 
           <SbomConversionCard sbom={sbom} formatLabel={info?.format} />
 

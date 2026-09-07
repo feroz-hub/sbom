@@ -13,6 +13,10 @@
 
 import type { QueryClient } from '@tanstack/react-query';
 
+export function invalidateReportSurfaces(qc: QueryClient): void {
+  qc.invalidateQueries({ queryKey: ['reports'] });
+}
+
 export function invalidateSbomLists(qc: QueryClient): void {
   qc.invalidateQueries({ queryKey: ['sboms'] });
   qc.invalidateQueries({ queryKey: ['sidebar-recent-sboms'] });

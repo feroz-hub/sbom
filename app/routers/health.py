@@ -115,6 +115,7 @@ def public_analysis_config() -> dict:
         # Phase 4 rollout flag — true when the Settings → AI UI surface is
         # available. Frontend reads this to gate /settings/ai.
         "ai_ui_config_enabled": bool(app_settings.ai_fixes_ui_config_enabled),
+        "report_notifications_enabled": app_settings.report_notifications_enabled,
     }
 
 

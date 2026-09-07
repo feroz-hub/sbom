@@ -1578,10 +1578,12 @@ export type ScheduleCadence =
   | 'QUARTERLY'
   | 'CUSTOM';
 
-export type ScheduleScope = 'PROJECT' | 'SBOM';
+export type ScheduleScope = 'TENANT' | 'PROJECT' | 'PRODUCT' | 'SBOM';
 
 export interface AnalysisSchedule {
   id: number;
+  tenant_id?: number | null;
+  product_id?: number | null;
   scope: ScheduleScope;
   project_id: number | null;
   sbom_id: number | null;

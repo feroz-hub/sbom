@@ -1,169 +1,54 @@
-"""
-Schedule resolver — turn the (project, sbom) hierarchy into a concrete
-list of SBOMs that need to be re-analyzed at tick time.
-
-Resolution rules:
-  1. An SBOM with its own enabled SBOM-level schedule wins.
-  2. Otherwise, a PRODUCT-level schedule cascades to every SBOM in the
-     product that does NOT have its own schedule.
-  3. Otherwise, a PROJECT-level schedule cascades to every SBOM in the
-     project that does NOT have an SBOM- or product-level schedule.
-"""
-
-from __future__ import annotations
-
+"""SBOM > PRODUCT > PROJECT > TENANT; explicit paused children opt out."""
 from dataclasses import dataclass
 
-from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy import or_, select
 
-from ..models import AnalysisSchedule, SBOMSource
+from ..models import AnalysisSchedule, Product, Projects, SBOMSource
 
 
 @dataclass(frozen=True)
 class DueTarget:
-    """A concrete SBOM that should be analyzed, with the schedule that triggered it."""
-
     sbom_id: int
     schedule_id: int
-    schedule_scope: str  # 'PROJECT' | 'PRODUCT' | 'SBOM'
+    schedule_scope: str
 
 
-def find_due_targets(db: Session, now_iso_str: str) -> list[DueTarget]:
-    """
-    Return every SBOM that is due to be re-analyzed at ``now_iso_str``.
+def _eligible_sboms(db):
+    return list(db.scalars(select(SBOMSource).where(
+        or_(SBOMSource.projectid.is_(None), SBOMSource.projectid.in_(select(Projects.id).where(Projects.is_active.is_(True)))),
+        or_(SBOMSource.product_id.is_(None), SBOMSource.product_id.in_(select(Product.id).where(Product.is_active.is_(True)))),
+    )))
 
-    Walks all enabled schedules whose ``next_run_at <= now`` and expands
-    project-scope schedules into their member SBOMs, honouring the
-    "SBOM-level row opts out of cascade" rule.
-    """
-    due_schedules = (
-        db.execute(
-            select(AnalysisSchedule)
-            .where(AnalysisSchedule.enabled.is_(True))
-            .where(AnalysisSchedule.next_run_at.isnot(None))
-            .where(AnalysisSchedule.next_run_at <= now_iso_str)
-            .order_by(AnalysisSchedule.id.asc())
-        )
-        .scalars()
-        .all()
-    )
 
-    if not due_schedules:
-        return []
+def _index(schedules):
+    return {(s.tenant_id, s.scope, s.sbom_id if s.scope == "SBOM" else s.product_id if s.scope == "PRODUCT" else s.project_id if s.scope == "PROJECT" else s.tenant_id): s for s in schedules}
 
-    # SBOM-scope schedules: one target each, deduped by sbom_id (a sanity
-    # belt — the partial-unique index already prevents this row-side).
-    sbom_scope_targets: dict[int, DueTarget] = {}
-    product_scope_schedules: list[AnalysisSchedule] = []
-    project_scope_schedules: list[AnalysisSchedule] = []
 
-    for sched in due_schedules:
-        if sched.scope == "SBOM" and sched.sbom_id is not None:
-            sbom_scope_targets[sched.sbom_id] = DueTarget(
-                sbom_id=sched.sbom_id,
-                schedule_id=sched.id,
-                schedule_scope="SBOM",
-            )
-        elif sched.scope == "PROJECT" and sched.project_id is not None:
-            project_scope_schedules.append(sched)
-        elif sched.scope == "PRODUCT" and sched.product_id is not None:
-            product_scope_schedules.append(sched)
+def _effective(sbom, index):
+    for scope, identifier in [("SBOM", sbom.id), ("PRODUCT", sbom.product_id), ("PROJECT", sbom.projectid), ("TENANT", sbom.tenant_id)]:
+        if identifier is not None and (row := index.get((sbom.tenant_id, scope, identifier))) is not None:
+            return row
+    return None
 
-    # For cascade expansion we need explicit lower-level rows, including
-    # disabled rows; an explicit child row opts out of the parent cascade.
-    overridden_sbom_ids: set[int] = set(
-        db.execute(
-            select(AnalysisSchedule.sbom_id).where(
-                AnalysisSchedule.scope == "SBOM",
-                AnalysisSchedule.sbom_id.isnot(None),
-            )
-        )
-        .scalars()
-        .all()
-    )
 
-    targets: list[DueTarget] = list(sbom_scope_targets.values())
-
-    scheduled_product_ids: set[int] = set(
-        db.execute(
-            select(AnalysisSchedule.product_id).where(
-                AnalysisSchedule.scope == "PRODUCT",
-                AnalysisSchedule.product_id.isnot(None),
-            )
-        )
-        .scalars()
-        .all()
-    )
-
-    for sched in product_scope_schedules:
-        member_ids = db.execute(select(SBOMSource.id).where(SBOMSource.product_id == sched.product_id)).scalars().all()
-        for sid in member_ids:
-            if sid in overridden_sbom_ids or sid in sbom_scope_targets:
-                continue
-            targets.append(
-                DueTarget(
-                    sbom_id=sid,
-                    schedule_id=sched.id,
-                    schedule_scope="PRODUCT",
-                )
-            )
-
-    for sched in project_scope_schedules:
-        rows = db.execute(
-            select(SBOMSource.id, SBOMSource.product_id).where(SBOMSource.projectid == sched.project_id)
-        ).all()
-        for sid, product_id in rows:
-            if sid in overridden_sbom_ids:
-                continue
-            if product_id in scheduled_product_ids:
-                continue
-            if sid in sbom_scope_targets:  # belt-and-suspenders
-                continue
-            targets.append(
-                DueTarget(
-                    sbom_id=sid,
-                    schedule_id=sched.id,
-                    schedule_scope="PROJECT",
-                )
-            )
-
+def find_due_targets(db, now_iso_str):
+    index = _index(db.scalars(select(AnalysisSchedule).order_by(AnalysisSchedule.id)))
+    targets = []
+    for sbom in _eligible_sboms(db):
+        row = _effective(sbom, index)
+        if row and row.enabled and row.next_run_at and row.next_run_at <= now_iso_str:
+            targets.append(DueTarget(sbom.id, row.id, row.scope))
     return targets
 
 
-def resolve_for_sbom(db: Session, sbom_id: int) -> AnalysisSchedule | None:
-    """
-    Return the effective schedule for a single SBOM, or None.
+def targets_for_schedule(db, schedule):
+    index = _index(db.scalars(select(AnalysisSchedule).where(AnalysisSchedule.tenant_id == schedule.tenant_id)))
+    return [sbom.id for sbom in _eligible_sboms(db) if sbom.tenant_id == schedule.tenant_id
+            and (row := _effective(sbom, index)) is not None and row.id == schedule.id]
 
-    Used by the API ``GET /api/sboms/{id}/schedule`` to render the
-    "inherited from project" badge in the UI.
-    """
-    own = db.execute(
-        select(AnalysisSchedule).where(
-            AnalysisSchedule.scope == "SBOM",
-            AnalysisSchedule.sbom_id == sbom_id,
-        )
-    ).scalar_one_or_none()
-    if own is not None:
-        return own
 
-    sbom = db.get(SBOMSource, sbom_id)
-    if sbom is None or sbom.projectid is None:
+def resolve_for_sbom(db, sbom_id):
+    sbom = next((s for s in _eligible_sboms(db) if s.id == sbom_id), None)
+    if not sbom:
         return None
-
-    if sbom.product_id is not None:
-        product = db.execute(
-            select(AnalysisSchedule).where(
-                AnalysisSchedule.scope == "PRODUCT",
-                AnalysisSchedule.product_id == sbom.product_id,
-            )
-        ).scalar_one_or_none()
-        if product is not None:
-            return product
-
-    return db.execute(
-        select(AnalysisSchedule).where(
-            AnalysisSchedule.scope == "PROJECT",
-            AnalysisSchedule.project_id == sbom.projectid,
-        )
-    ).scalar_one_or_none()
+    return _effective(sbom, _index(db.scalars(select(AnalysisSchedule).where(AnalysisSchedule.tenant_id == sbom.tenant_id))))

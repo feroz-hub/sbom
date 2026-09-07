@@ -572,6 +572,10 @@ async def lifespan(app: FastAPI):
     _reconcile_zombie_ai_fix_batches()
     _reconcile_stale_analysis_runs()
     _log_ai_configuration_readiness()
+    from .services.report_storage import configuration_errors
+    log.info("reports.startup enabled=%s authenticated=%s smtp_enabled=%s diagnostics=%s",
+             settings.report_notifications_enabled, settings.auth_enabled, settings.email_delivery_enabled,
+             ",".join(configuration_errors(settings)) or "ready")
     validate_auth_setup()
     log.info("Startup complete. API ready.")
     yield
@@ -735,6 +739,10 @@ error_handlers.install(app)
 # costs essentially nothing in dev but makes production a one-env-var flip.
 
 _protected = [Depends(enforce_request_access)]
+
+from .routers import report_notifications
+
+app.include_router(report_notifications.router, dependencies=_protected)
 
 app.include_router(health.router)  # intentionally unprotected
 app.include_router(sbom_versions.router, dependencies=_protected)

@@ -28,6 +28,7 @@ from celery import shared_task
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..core.context import bind_context, minimal_background_context, reset_context
 from ..models import AnalysisRun, AnalysisSchedule, SBOMSource
 from ..services.schedule_resolver import find_due_targets
 from ..services.scheduling import (
@@ -85,6 +86,17 @@ def tick_scheduled_analyses(self) -> dict:
             log.info("scheduled_analysis_tick_idle")
             return {"due": 0, "enqueued": 0}
 
+        from ..settings import get_settings
+        report_cycle = None
+        if get_settings().report_notifications_enabled:
+            try:
+                from ..services.report_cycles import prepare_run_cycle
+                prepare_run_cycle(db, targets, now.isoformat())
+                report_cycle = now.isoformat()
+            except Exception:
+                db.rollback()
+                log.warning("scheduled_report_cycle_failed")
+
         # Snapshot of schedule rows we need to advance — fetch once, mutate
         # in place. We want next_run_at moved forward whether or not the
         # per-SBOM task ultimately succeeds, otherwise a failing schedule
@@ -99,6 +111,7 @@ def tick_scheduled_analyses(self) -> dict:
                 analyze_sbom_async.delay(
                     sbom_id=tgt.sbom_id,
                     schedule_id=tgt.schedule_id,
+                    **({"report_cycle": report_cycle} if report_cycle else {}),
                 )
                 enqueued += 1
             except Exception:
@@ -153,6 +166,7 @@ def analyze_sbom_async(
     sbom_id: int,
     schedule_id: int,
     force_refresh: bool = False,
+    report_cycle: str | None = None,
 ) -> dict:
     """Run create_auto_report for one SBOM and write back to the schedule row.
 
@@ -165,9 +179,17 @@ def analyze_sbom_async(
     from app.services.analysis_orchestrator import AnalysisOrchestrator
 
     db: Session = SessionLocal()
+    context_token = None
+    completion = {"status": "ERROR"}
+    tenant_id = None
     try:
         sched = db.get(AnalysisSchedule, schedule_id)
         sbom = db.get(SBOMSource, sbom_id)
+
+        if sched is None or sbom is not None and sbom.tenant_id != sched.tenant_id:
+            return {"status": "SKIPPED", "reason": "schedule_scope_invalid"}
+        tenant_id = sched.tenant_id
+        context_token = bind_context(minimal_background_context(tenant_id))
 
         if sbom is None:
             log.warning("scheduled_analysis_sbom_missing", extra={"sbom_id": sbom_id})
@@ -175,7 +197,8 @@ def analyze_sbom_async(
                 sched.last_run_status = "SKIPPED"
                 sched.last_run_at = to_iso(_now())
                 db.commit()
-            return {"status": "SKIPPED", "reason": "sbom_not_found"}
+            completion = {"status": "SKIPPED", "reason": "sbom_not_found"}
+            return completion
 
         gap_minutes = sched.min_gap_minutes if sched is not None else 60
         if _recent_run_exists(db, sbom_id, gap_minutes):
@@ -187,7 +210,8 @@ def analyze_sbom_async(
                 sched.last_run_status = "SKIPPED"
                 sched.last_run_at = to_iso(_now())
                 db.commit()
-            return {"status": "SKIPPED", "reason": "recent_run_within_gap"}
+            completion = {"status": "SKIPPED", "reason": "recent_run_within_gap"}
+            return completion
 
         try:
             outcome = asyncio.run(
@@ -213,6 +237,8 @@ def analyze_sbom_async(
                 # source warrants slowing down further.
                 sched.next_run_at = to_iso(compute_failure_backoff(sched.consecutive_failures, _now()))
                 db.commit()
+            if self.request.retries < self.max_retries:
+                completion = {"status": "RETRYING"}
             raise self.retry(exc=exc)
 
         if sched is not None:
@@ -222,10 +248,23 @@ def analyze_sbom_async(
             sched.consecutive_failures = 0
             db.commit()
 
-        return {
+        completion = {
             "status": run.run_status if run is not None else "NO_DATA",
             "run_id": run.id if run is not None else None,
             "sbom_id": sbom_id,
         }
+        return completion
     finally:
         db.close()
+        if report_cycle and tenant_id and completion["status"] != "RETRYING":
+            try:
+                from ..services.report_cycles import record_run_completion
+                from ..workers.report_notifications import dispatch_pending
+                with SessionLocal() as report_db:
+                    record_run_completion(report_db, tenant_id=tenant_id, sbom_id=sbom_id, cycle=report_cycle,
+                                          status=completion["status"], run_id=completion.get("run_id"))
+                dispatch_pending.delay()
+            except Exception:
+                log.warning("scheduled_report_completion_deferred sbom_id=%s", sbom_id)
+        if context_token is not None:
+            reset_context(context_token)

@@ -585,6 +585,7 @@ class ScheduleUpsert(BaseModel):
 
 class ScheduleOut(ORMModel):
     id: int
+    tenant_id: int | None = None
     scope: str  # 'PROJECT' | 'PRODUCT' | 'SBOM'
     project_id: int | None = None
     product_id: int | None = None

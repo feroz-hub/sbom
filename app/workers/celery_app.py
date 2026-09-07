@@ -48,6 +48,7 @@ celery_app = Celery(
         "app.workers.ai_fix_tasks",
         "app.workers.source_cache",
         "app.workers.kev_sync",
+        "app.workers.report_notifications",
     ],
 )
 
@@ -58,9 +59,13 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True,
     task_track_started=True,
+    task_routes={"report_notifications.*": {"queue": "reports"}},
 )
 
 celery_app.conf.beat_schedule = {
+    "report-notifications-hourly": {"task": "report_notifications.tick", "schedule": crontab(minute=50)},
+    "report-notifications-outbox": {"task": "report_notifications.dispatch_pending", "schedule": crontab(minute="*")},
+    "report-notifications-retention": {"task": "report_notifications.purge", "schedule": crontab(minute=50, hour=4)},
     "nvd-mirror-hourly": {
         "task": "nvd_mirror.mirror_nvd",
         "schedule": crontab(minute=15),

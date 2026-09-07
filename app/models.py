@@ -1346,13 +1346,14 @@ class AnalysisSchedule(Base, SoftDeleteMixin, TenantOwnedMixin):
     sbom = relationship("SBOMSource", foreign_keys=[sbom_id])
 
     __table_args__ = (
-        CheckConstraint("scope IN ('PROJECT','PRODUCT','SBOM')", name="ck_analysis_schedule_scope"),
+        CheckConstraint("scope IN ('TENANT','PROJECT','PRODUCT','SBOM')", name="ck_analysis_schedule_scope"),
         CheckConstraint(
             "cadence IN ('DAILY','WEEKLY','BIWEEKLY','MONTHLY','QUARTERLY','CUSTOM')",
             name="ck_analysis_schedule_cadence",
         ),
         CheckConstraint(
-            "(scope = 'PROJECT' AND project_id IS NOT NULL AND product_id IS NULL AND sbom_id IS NULL) "
+            "(scope = 'TENANT' AND project_id IS NULL AND product_id IS NULL AND sbom_id IS NULL) "
+            "OR (scope = 'PROJECT' AND project_id IS NOT NULL AND product_id IS NULL AND sbom_id IS NULL) "
             "OR (scope = 'PRODUCT' AND product_id IS NOT NULL AND project_id IS NULL AND sbom_id IS NULL) "
             "OR (scope = 'SBOM' AND sbom_id IS NOT NULL AND project_id IS NULL AND product_id IS NULL)",
             name="ck_analysis_schedule_target",
@@ -1916,3 +1917,6 @@ Index(
     postgresql_where=sql_text("is_fallback = true"),
     sqlite_where=sql_text("is_fallback = 1"),
 )
+
+# Register report tables for Alembic and metadata-based test databases.
+from .models_reports import ReportArtifact, ReportDelivery, ReportSubscription  # noqa: E402,F401

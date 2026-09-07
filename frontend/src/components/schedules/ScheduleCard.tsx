@@ -231,8 +231,8 @@ export function ScheduleCard({ scope, targetId }: ScheduleCardProps) {
               {sched.cadence.toLowerCase()}
             </span>
             {inherited && (
-              <span title="Following the project's cascade. Click Override to set a per-SBOM schedule.">
-                <Badge variant="gray">inherited from project</Badge>
+              <span title={`Following the ${sched.scope.toLowerCase()} cascade. Click Override to set a per-SBOM schedule.`}>
+                <Badge variant="gray">inherited from {sched.scope.toLowerCase()}</Badge>
               </span>
             )}
             {!sched.enabled && <Badge variant="gray">paused</Badge>}

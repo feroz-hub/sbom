@@ -14,6 +14,7 @@ import { SbomStatusBadge } from '@/components/sboms/SbomStatusBadge';
 import { SbomUploadModal } from '@/components/sboms/SbomUploadModal';
 import { useAnalysisStream } from '@/hooks/useAnalysisStream';
 import { getProduct, getProductSboms } from '@/lib/api';
+import { NotifyMeLink } from '@/components/reports/NotifyMeLink';
 import { invalidateProductSurfaces } from '@/lib/queryInvalidation';
 import { formatDate } from '@/lib/utils';
 import type { AnalysisStatus } from '@/hooks/useBackgroundAnalysis';
@@ -146,6 +147,7 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
         }
       />
       <div className="space-y-6 p-6">
+        <NotifyMeLink scope="PRODUCT" targetId={product.id} />
         <Card>
           <CardHeader>
             <CardTitle>Product Details</CardTitle>

@@ -32,6 +32,7 @@ import { ScheduleEditor } from '@/components/schedules/ScheduleEditor';
 import {
   deleteProjectSchedule,
   deleteSbomSchedule,
+  deleteScopedSchedule,
   getProjects,
   getSboms,
   listSchedules,
@@ -51,7 +52,7 @@ import {
 } from '@/lib/queryInvalidation';
 import type { AnalysisSchedule, Project, SBOMSource } from '@/types';
 
-type ScopeFilter = 'all' | 'PROJECT' | 'SBOM';
+type ScopeFilter = 'all' | 'TENANT' | 'PROJECT' | 'PRODUCT' | 'SBOM';
 type EnabledFilter = 'all' | 'enabled' | 'paused';
 
 const cadenceSummary = (s: AnalysisSchedule): string => {
@@ -118,6 +119,8 @@ export default function SchedulesPage() {
   );
 
   const targetLabel = (sched: AnalysisSchedule): string => {
+    if (sched.scope === 'TENANT') return `Tenant #${sched.tenant_id ?? ''}`;
+    if (sched.scope === 'PRODUCT') return `Product #${sched.product_id ?? ''}`;
     if (sched.scope === 'PROJECT' && sched.project_id != null) {
       return projectById.get(sched.project_id)?.project_name ?? `project #${sched.project_id}`;
     }
@@ -190,7 +193,9 @@ export default function SchedulesPage() {
       sched: AnalysisSchedule;
       permanent: boolean;
     }) =>
-      sched.scope === 'PROJECT' && sched.project_id != null
+      sched.scope === 'TENANT' && sched.tenant_id != null ? deleteScopedSchedule('TENANT', sched.tenant_id)
+        : sched.scope === 'PRODUCT' && sched.product_id != null ? deleteScopedSchedule('PRODUCT', sched.product_id)
+        : sched.scope === 'PROJECT' && sched.project_id != null
         ? deleteProjectSchedule(sched.project_id, { permanent })
         : sched.scope === 'SBOM' && sched.sbom_id != null
           ? deleteSbomSchedule(sched.sbom_id, { permanent })
@@ -252,6 +257,8 @@ export default function SchedulesPage() {
               >
                 <option value="all">All scopes</option>
                 <option value="PROJECT">Project</option>
+                <option value="TENANT">Tenant</option>
+                <option value="PRODUCT">Product</option>
                 <option value="SBOM">SBOM</option>
               </Select>
             </div>
@@ -298,7 +305,7 @@ export default function SchedulesPage() {
                   <tr key={s.id} className="hover:bg-hcl-light/40">
                     <Td>
                       <Badge variant={s.scope === 'PROJECT' ? 'info' : 'gray'}>
-                        {s.scope === 'PROJECT' ? 'Project' : 'SBOM'}
+                        {s.scope}
                       </Badge>
                     </Td>
                     <Td className="font-medium text-hcl-navy">
@@ -434,7 +441,7 @@ export default function SchedulesPage() {
           open={!!editing}
           onClose={() => setEditing(null)}
           scope={editing.scope}
-          targetId={(editing.scope === 'PROJECT' ? editing.project_id : editing.sbom_id) ?? 0}
+          targetId={(editing.scope === 'TENANT' ? editing.tenant_id : editing.scope === 'PRODUCT' ? editing.product_id : editing.scope === 'PROJECT' ? editing.project_id : editing.sbom_id) ?? 0}
           existing={editing}
         />
       )}

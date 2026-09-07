@@ -1982,6 +1982,10 @@ async function downloadBinary(
   return { blob: await res.blob(), filename: match?.[1] || fallbackName };
 }
 
+export function downloadReportArtifact(deliveryId: number, artifactId: number) {
+  return downloadBinary(`/api/report-deliveries/${deliveryId}/artifacts/${artifactId}`, 'security-report');
+}
+
 export function exportRunCsv(runId: number) {
   return downloadBinary(`/api/analysis-runs/${runId}/export/csv`, `sbom_findings_${runId}.csv`);
 }
@@ -2107,9 +2111,21 @@ export function deleteSbomSchedule(
 }
 
 export interface ListSchedulesFilter {
-  scope?: 'PROJECT' | 'SBOM';
+  scope?: 'TENANT' | 'PROJECT' | 'PRODUCT' | 'SBOM';
   enabled?: boolean;
   project_id?: number;
+}
+
+export function getTenantSchedule(tenantId: number, signal?: AbortSignal) {
+  return request<AnalysisSchedule | null>(`/api/tenants/${tenantId}/schedule`, { signal });
+}
+
+export function upsertScopedSchedule(scope: 'TENANT' | 'PRODUCT', targetId: number, payload: ScheduleUpsertPayload) {
+  return request<AnalysisSchedule>(`/api/${scope === 'TENANT' ? 'tenants' : 'products'}/${targetId}/schedule`, { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export function deleteScopedSchedule(scope: 'TENANT' | 'PRODUCT', targetId: number) {
+  return requestVoid(`/api/${scope === 'TENANT' ? 'tenants' : 'products'}/${targetId}/schedule`, { method: 'DELETE' });
 }
 
 export function listSchedules(filter: ListSchedulesFilter = {}, signal?: AbortSignal) {

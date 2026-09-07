@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/Input';
 import {
   upsertProjectSchedule,
   upsertSbomSchedule,
+  upsertScopedSchedule,
 } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
 import { getApiErrorMessage } from '@/lib/notifications';
@@ -33,7 +34,7 @@ import type {
 interface ScheduleEditorProps {
   open: boolean;
   onClose: () => void;
-  scope: 'PROJECT' | 'SBOM';
+  scope: 'TENANT' | 'PROJECT' | 'PRODUCT' | 'SBOM';
   targetId: number;          // project_id or sbom_id depending on scope
   existing?: AnalysisSchedule | null;
 }
@@ -109,7 +110,7 @@ export function ScheduleEditor({
 
   const mutation = useMutation({
     mutationFn: () =>
-      scope === 'PROJECT'
+      scope === 'TENANT' || scope === 'PRODUCT' ? upsertScopedSchedule(scope, targetId, payload) : scope === 'PROJECT'
         ? upsertProjectSchedule(targetId, payload)
         : upsertSbomSchedule(targetId, payload),
     onSuccess: () => {

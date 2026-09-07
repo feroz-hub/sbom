@@ -2,7 +2,7 @@
 
 SBOM Analyser is a FastAPI and Next.js platform for importing, validating, normalizing, analysing, and managing software bills of materials. It combines SBOM inventory, multi-source vulnerability analysis, CISA Known Exploited Vulnerabilities (KEV), lifecycle intelligence, VEX, remediation, reporting, tenant isolation, and role-based access control in one application.
 
-The current application version is `2.0.0`. The current Alembic schema head is `044_kev_vulnerabilities_table`.
+The current application version is `2.0.0`. The current Alembic schema head is `053_tenant_analysis_schedule`.
 
 ## Highlights
 
@@ -36,6 +36,15 @@ The backend is a modular monolith. HTTP behavior lives in `app/routers`, busines
 In authenticated mode, the browser receives only an HTTP-only session cookie. Next.js performs Authorization Code + PKCE, stores and refreshes tokens server-side, and proxies API calls to FastAPI. FastAPI remains the authority for JWT validation, tenant membership, and permissions.
 
 ## Main features
+
+### Scheduled security report notifications
+
+Settings → Notifications supports per-user Tenant/Project/Product/SBOM subscriptions, consolidated
+latest-state and historical/version comparisons, HTML/plain-text email, executive PDF and detailed
+Excel, retained authenticated downloads, pause/resume and delivery history. The feature is opt-in
+behind `REPORT_NOTIFICATIONS_ENABLED`, uses the existing SMTP relay and a separate `reports` Celery
+worker, and requires private shared artifact storage. No report delivery occurs in unauthenticated
+local mode. See [setup, guarantees, limitations and smoke tests](docs/runbook-report-notifications.md).
 
 ### Supported SBOM formats
 
