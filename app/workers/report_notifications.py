@@ -18,7 +18,7 @@ from ..services.report_access import authorize_preferences, recipient_context, s
 from ..services.report_composer import compose_report
 from ..services.report_cycles import cadence_window, create_cycles, now_iso
 from ..services.report_rendering import render_attachments, render_email
-from ..services.report_storage import artifact_path, configuration_errors, store_artifact
+from ..services.report_storage import artifact_path, configuration_errors, purge_orphaned_artifacts, store_artifact
 from ..settings import get_settings
 
 log = logging.getLogger(__name__)
@@ -79,7 +79,7 @@ def generate(delivery_id, tenant_id):
             payload = dict(row.payload)
             if payload.get("expected") and len(payload.get("completed", {})) < len(payload["expected"]):
                 if datetime.fromisoformat(row.created_on) > datetime.now(UTC) - timedelta(
-                    seconds=settings.report_generation_timeout_seconds
+                    seconds=settings.report_cycle_wait_seconds
                 ):
                     return {"status": "WAITING_FOR_RUNS"}
                 payload["snapshot_at"] = now_iso()
@@ -135,7 +135,7 @@ def generate(delivery_id, tenant_id):
                 artifacts = [store_artifact(db, row, a) for a in attachments]
                 row.artifact_ids = [a.id for a in artifacts]
                 row.sbom_count = report["included_sboms"]
-                row.run_count = sum(s["A"]["run_id"] is not None for s in report["sboms"])
+                row.run_count = report["runs_considered"]
                 base = settings.report_notification_base_url.rstrip("/")
                 # Link to authenticated UI; browser download uses normal tenant-aware BFF.
                 links = [
@@ -145,7 +145,12 @@ def generate(delivery_id, tenant_id):
                     links.append((f"{sbom['name']} · latest state", f"{base}/sboms/{sbom['id']}"))
                     for part, comparison in sbom["comparisons"].items():
                         if comparison["status"] == "available":
-                            links.append((f"{sbom['name']} · Part {part}", f"{base}/analysis/compare?run_a={comparison['run_a']['id']}&run_b={comparison['run_b']['id']}"))
+                            links.append(
+                                (
+                                    f"{sbom['name']} · Part {part}",
+                                    f"{base}/analysis/compare?run_a={comparison['run_a']['id']}&run_b={comparison['run_b']['id']}",
+                                )
+                            )
                 db.commit()
             selected, omitted = [], []
             for attachment in attachments:
@@ -199,7 +204,9 @@ def generate(delivery_id, tenant_id):
                 if current_context.email != context.email or preferences_for(sub) != preferences:
                     raise HTTPException(403, {"code": "RECIPIENT_OR_PREFERENCES_CHANGED"})
                 current_ids = {s.id for s in scope_sboms(db, preferences, tenant_id)}
-                if not {s["id"] for s in report["sboms"]} <= current_ids:
+                # Headline totals cover the entire queued scope, not just the
+                # capped detail rows. Recheck every contributing target.
+                if not set(payload["sbom_ids"]) <= current_ids:
                     raise HTTPException(403, {"code": "REPORT_SCOPE_CHANGED"})
             except HTTPException as exc:
                 return _finish(db, row, "SUPPRESSED", exc.detail["code"], context)
@@ -299,4 +306,6 @@ def purge():
             artifact_path(row.storage_path).unlink(missing_ok=True)
             db.delete(row)
             db.commit()
-    return {"removed": len(targets)}
+    with SessionLocal() as db:
+        orphans = purge_orphaned_artifacts(db)
+    return {"removed": len(targets), "orphaned_files_removed": orphans}

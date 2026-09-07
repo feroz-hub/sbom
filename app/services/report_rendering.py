@@ -26,14 +26,39 @@ def report_sections(report, *, compact=False):
     yield (
         "Reporting window",
         ["Field", "Value"],
-        [[k, report[k]] for k in ("cycle_start", "cycle_end", "generated_at", "timezone", "scope", "severity_floor")],
+        [
+            [k, report[k]]
+            for k in (
+                "tenant_id",
+                "schema_version",
+                "cycle_start",
+                "cycle_end",
+                "generated_at",
+                "timezone",
+                "scope",
+                "runs_considered",
+                "severity_floor",
+            )
+        ],
     )
     yield "Portfolio summary · Convention A", ["Metric", "Value"], [[k, v] for k, v in summary.items()]
+    for part, totals in report["comparison_summary"].items():
+        yield (
+            f"Part {part} · Full-scope changes · Convention B per-SBOM occurrences",
+            ["Metric", "Value"],
+            list(totals.items()),
+        )
     yield (
         "Coverage",
         ["Resolved SBOMs", "Included in detail", "Omitted by cap"],
         [[report["total_sboms"], report["included_sboms"], report["truncated_sboms"]]],
     )
+    if report.get("scheduled_outcomes"):
+        yield (
+            "Scheduled cycle outcomes (posture uses the last successful data)",
+            ["SBOM ID", "Completion status", "Run ID"],
+            [[sid, outcome["status"], outcome.get("run_id")] for sid, outcome in report["scheduled_outcomes"].items()],
+        )
     yield (
         "SBOM results",
         ["SBOM", "Version", "Run ID", "Successful status", "Latest attempt", "Findings"],
@@ -109,7 +134,11 @@ def report_sections(report, *, compact=False):
                 ],
             )
             if compact and part == "C":
-                yield title + " · Persistent finding count", ["Count"], [[len(comparison["persistent_findings"])]]
+                yield (
+                    title + " · Persistent finding count (all severities)",
+                    ["Count"],
+                    [[comparison["persistent_findings_count"]]],
+                )
                 yield (
                     title + " · Top persistent risks",
                     ["Vulnerability", "Component", "KEV", "First observed", "Age days"],

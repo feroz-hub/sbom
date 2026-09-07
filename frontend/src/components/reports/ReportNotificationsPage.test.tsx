@@ -2,12 +2,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor, cleanup } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ReportPreferencesEditor, defaultReportPreferences } from './ReportNotificationsPage';
+import { ReportNotificationsPage, ReportPreferencesEditor, defaultReportPreferences } from './ReportNotificationsPage';
 import * as api from '@/lib/reportApi';
 
-vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams() }));
+let searchParams = new URLSearchParams();
+vi.mock('next/navigation', () => ({ useSearchParams: () => searchParams }));
 vi.mock('@/hooks/useToast', () => ({ useToast: () => ({ showToast: vi.fn() }) }));
 vi.mock('@/lib/reportApi', () => ({
+  getReportConfig: vi.fn().mockResolvedValue({ enabled: false, delivery_enabled: false, diagnostics: [], tenant_id: 1, is_tenant_admin: false, retention_days: 90 }),
+  getReportSubscriptions: vi.fn().mockResolvedValue([]),
+  getReportDeliveries: vi.fn().mockResolvedValue([]),
+  deleteReportSubscription: vi.fn(),
+  sendReportNow: vi.fn(),
   getReportTargets: vi.fn().mockResolvedValue([{ id: 3, label: 'Production' }]),
   createReportSubscription: vi.fn().mockResolvedValue({ id: 1 }),
   updateReportSubscription: vi.fn().mockResolvedValue({ id: 1 }),
@@ -21,8 +27,16 @@ function setup(initial = defaultReportPreferences('PROJECT', 3), allowed = false
   return { invalidate };
 }
 
-beforeEach(() => { cleanup(); vi.clearAllMocks(); });
+beforeEach(() => { cleanup(); vi.clearAllMocks(); searchParams = new URLSearchParams(); });
 describe('Notification preferences', () => {
+  it('opens the exact emailed delivery and lets the user return to recent history', async () => {
+    searchParams = new URLSearchParams('delivery=52');
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><ReportNotificationsPage /></QueryClientProvider>);
+    await waitFor(() => expect(api.getReportDeliveries).toHaveBeenCalledWith(false, '', 52));
+    fireEvent.click(await screen.findByRole('button', { name: 'Show recent deliveries' }));
+    await waitFor(() => expect(api.getReportDeliveries).toHaveBeenCalledWith(false, '', undefined));
+  });
   it('keeps Part A mandatory and no free-text recipient', async () => {
     setup();
     expect(screen.getByLabelText('Part A: Latest state (required)')).toBeDisabled();

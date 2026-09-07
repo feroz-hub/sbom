@@ -541,16 +541,26 @@ def test_preview_is_rate_limited(fixture):
 
 
 def test_report_routes_use_read_permission_not_tenant_settings_permission():
-    from starlette.requests import Request
     from app.core.security import permission_for_request
-    for method, path in [("POST", "/api/report-subscriptions"), ("PATCH", "/api/report-subscriptions/1"),
-                         ("POST", "/api/report-subscriptions/preview"), ("GET", "/api/report-deliveries/1/artifacts/1")]:
-        assert permission_for_request(Request({"type": "http", "method": method, "path": path, "headers": []})) == "sbom:read"
+    from starlette.requests import Request
+
+    for method, path in [
+        ("POST", "/api/report-subscriptions"),
+        ("PATCH", "/api/report-subscriptions/1"),
+        ("POST", "/api/report-subscriptions/preview"),
+        ("GET", "/api/report-deliveries/1/artifacts/1"),
+    ]:
+        assert (
+            permission_for_request(Request({"type": "http", "method": method, "path": path, "headers": []}))
+            == "sbom:read"
+        )
 
 
 def test_read_only_member_can_subscribe_to_project(fixture):
-    from app.core.security import get_current_tenant_context
     from dataclasses import replace
+
+    from app.core.security import get_current_tenant_context
+
     f = fixture
     f.member.role = "VIEWER"
     f.db.commit()
@@ -561,6 +571,180 @@ def test_read_only_member_can_subscribe_to_project(fixture):
         assert response.status_code == 201, response.text
     finally:
         f.client.app.dependency_overrides.pop(get_current_tenant_context, None)
+
+
+def test_cycle_replay_after_cursor_advance_reuses_existing_delivery(fixture):
+    f = fixture
+    sub = subscribe(f)
+    identifier = queued(f, sub)
+    sub.last_delivered_at = (f.now - timedelta(days=1)).isoformat()
+    f.db.commit()
+    replay = create_delivery(f.db, sub, start=sub.last_delivered_at, end=f.now.isoformat(), sbom_ids=[f.sbom.id])
+    assert replay.id == identifier
+    assert f.db.scalar(select(func.count(ReportDelivery.id))) == 1
+
+
+@pytest.mark.parametrize("action", ["pause", "resume", "run-now"])
+def test_generic_tenant_schedule_actions_require_admin(fixture, action):
+    from dataclasses import replace
+
+    from app.core.security import get_current_tenant_context
+
+    f = fixture
+    schedule = AnalysisSchedule(
+        tenant_id=1, scope="TENANT", cadence="DAILY", hour_utc=8, enabled=True, created_on=f.old
+    )
+    f.db.add(schedule)
+    f.db.commit()
+    context = replace(
+        f.context, roles=frozenset({"SECURITY_ANALYST"}), permissions=f.context.permissions | {"schedule:write"}
+    )
+    f.client.app.dependency_overrides[get_current_tenant_context] = lambda: context
+    try:
+        response = f.client.post(f"/api/schedules/{schedule.id}/{action}")
+        assert response.status_code == 403, response.text
+        assert response.json()["detail"]["code"] == "TENANT_SCHEDULE_ADMIN_REQUIRED"
+    finally:
+        f.client.app.dependency_overrides.pop(get_current_tenant_context, None)
+
+
+def test_delivery_link_filter_finds_old_row_and_excludes_other_tenants(fixture):
+    f = fixture
+    sub = subscribe(f)
+    identifier = queued(f, sub)
+    for i in range(51):
+        create_delivery(
+            f.db, sub, start=f.old, end=(f.now + timedelta(seconds=i + 1)).isoformat(), sbom_ids=[f.sbom.id]
+        )
+    f.db.commit()
+    assert identifier not in {r["id"] for r in f.client.get("/api/report-deliveries").json()}
+    response = f.client.get(f"/api/report-deliveries?delivery_id={identifier}")
+    assert response.status_code == 200
+    assert [r["id"] for r in response.json()] == [identifier]
+    row = f.db.get(ReportDelivery, identifier)
+    other = Tenant(
+        name="Other report tenant", slug="other-report-tenant", status="ACTIVE", created_at=f.now, updated_at=f.now
+    )
+    f.db.add(other)
+    f.db.flush()
+    row.tenant_id = other.id
+    f.db.commit()
+    assert f.client.get(f"/api/report-deliveries?delivery_id={identifier}").json() == []
+
+
+def test_severity_floor_does_not_change_persistent_headline(fixture):
+    f = fixture
+    with tenant_scope(f.context):
+        report = compose_report(
+            f.db,
+            ReportPreferences(scope="SBOM", sbom_id=f.sbom.id, parts=["A", "C"], severity_floor="CRITICAL"),
+            tenant_id=1,
+            cycle_start=f.old,
+            cycle_end=f.now.isoformat(),
+        )
+    comparison = report["sboms"][0]["comparisons"]["C"]
+    assert comparison["persistent_findings"] == []
+    assert comparison["persistent_findings_count"] == 1
+    assert report["comparison_summary"]["C"]["findings_unchanged_count"] == 1
+    assert report["runs_considered"] == 2
+    assert "Persistent finding count (all severities)" in render_email(report)[1]
+
+
+def test_analysis_barrier_uses_its_own_deadline(fixture):
+    f = fixture
+    identifier = queued(f, subscribe(f))
+    row = f.db.get(ReportDelivery, identifier)
+    row.created_on = (datetime.now(UTC) - timedelta(seconds=600)).isoformat()
+    row.payload = {**row.payload, "expected": [f.sbom.id]}
+    f.db.commit()
+    assert f.worker.generate(identifier, 1)["status"] == "WAITING_FOR_RUNS"
+    assert not f.sent
+
+
+def test_retention_expires_artifacts_and_only_owned_orphans(fixture):
+    import os
+
+    from app.models import ReportArtifact
+    from app.services.report_storage import artifact_path, storage_root
+
+    f = fixture
+    identifier = queued(f, subscribe(f))
+    assert f.worker.generate(identifier, 1)["status"] == "SENT"
+    f.db.expire_all()
+    artifacts = list(f.db.scalars(select(ReportArtifact)))
+    artifact_id = artifacts[0].id
+    for artifact in artifacts:
+        artifact.expires_at = f.old
+    f.db.commit()
+    orphan = artifact_path("a" * 32)
+    orphan.write_bytes(b"crash leftover")
+    unrelated = storage_root() / "operator-note.txt"
+    unrelated.write_text("preserve")
+    old = (f.now - timedelta(days=100)).timestamp()
+    os.utime(orphan, (old, old))
+    os.utime(unrelated, (old, old))
+    outcome = f.worker.purge()
+    assert outcome == {"removed": len(artifacts), "orphaned_files_removed": 1}
+    assert unrelated.exists() and not orphan.exists()
+    assert f.client.get(f"/api/report-deliveries/{identifier}/artifacts/{artifact_id}").status_code == 404
+
+
+def test_scope_cap_keeps_full_comparison_totals(fixture, monkeypatch):
+    f = fixture
+    # Both versions become independent active heads, each with stored results.
+    f.sbom.parent_id = None
+    f.db.commit()
+    monkeypatch.setattr(get_settings(), "report_max_sboms_per_digest", 1)
+    report = compose_report(
+        f.db,
+        ReportPreferences(scope="PROJECT", project_id=f.project.id, parts=["A", "B"]),
+        tenant_id=1,
+        cycle_start=f.old,
+        cycle_end=f.now.isoformat(),
+    )
+    assert report["included_sboms"] == 1 and report["truncated_sboms"] == 1
+    assert report["summary"]["total_findings"] == 2
+    assert report["comparison_summary"]["B"]["sboms_considered"] == 2
+    assert report["comparison_summary"]["B"]["available_baselines"] == 1
+    assert report["comparison_summary"]["B"]["unavailable_baselines"] == 1
+    assert report["comparison_summary"]["B"]["findings_unchanged_count"] == 1
+
+
+def test_quiet_delivery_writes_ledger_without_smtp_or_artifacts(fixture):
+    from app.models import ReportArtifact
+
+    f = fixture
+    sub = subscribe(f, suppress_when_unchanged=True)
+    sub.parts = "A,B"
+    f.db.commit()
+    identifier = queued(f, sub)
+    assert f.worker.generate(identifier, 1) == {"status": "SKIPPED", "error_code": "UNCHANGED"}
+    assert not f.sent and f.db.scalar(select(func.count(ReportArtifact.id))) == 0
+
+
+def test_smtp_retries_stop_after_three_attempts(fixture, monkeypatch):
+    f = fixture
+    identifier = queued(f, subscribe(f))
+    monkeypatch.setattr(f.worker, "get_email_sender", lambda: SimpleNamespace(send_email=lambda message: EmailDeliveryResult(EmailDeliveryStatus.FAILED, "SMTP_UNAVAILABLE")))
+    for attempt, status in enumerate(["PENDING", "PENDING", "FAILED"], 1):
+        assert f.worker.generate(identifier, 1)["status"] == status
+        f.db.expire_all()
+        row = f.db.get(ReportDelivery, identifier)
+        assert row.attempt_count == attempt
+        row.next_attempt_at = None
+        f.db.commit()
+    assert f.worker.generate(identifier, 1)["status"] == "NOT_CLAIMED"
+
+
+def test_failed_scheduled_completion_is_visible_in_email(fixture):
+    f = fixture
+    identifier = queued(f, subscribe(f))
+    row = f.db.get(ReportDelivery, identifier)
+    row.payload = {**row.payload, "completed": {str(f.sbom.id): {"status": "ERROR", "run_id": None}}}
+    f.db.commit()
+    assert f.worker.generate(identifier, 1)["status"] == "SENT"
+    plain = f.sent[0].get_body(preferencelist=("plain",)).get_content()
+    assert "Scheduled cycle outcomes" in plain and "ERROR" in plain
 
 
 @pytest.mark.parametrize("sbom_count", [50, 250])

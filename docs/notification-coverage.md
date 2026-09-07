@@ -23,6 +23,12 @@ state or have not been migrated to the centralized safe error mapper.
 | VEX | Create/update/delete/import | NO | NO | NO | NO |
 | Remediation | Update | PARTIAL | PARTIAL | NOT APPLICABLE | NO |
 | Reports | Generate/download | YES | YES | NOT APPLICABLE | PARTIAL |
+| Report subscriptions | Create/update | YES | YES | NOT APPLICABLE | YES |
+| Report subscriptions | Pause/resume | YES | YES | NOT APPLICABLE | PARTIAL |
+| Report subscriptions | Delete | YES | YES | YES | PARTIAL |
+| Report subscriptions | Send now | YES | YES | NOT APPLICABLE | PARTIAL |
+| Report subscriptions | Preview | Inert preview dialog | YES | NOT APPLICABLE | YES |
+| Report deliveries | Download | Browser download | YES | NOT APPLICABLE | YES |
 | Tenant users | Add | YES | YES | NOT APPLICABLE | YES |
 | Tenant users | Role/status | YES | YES | YES | YES |
 | Tenant users | Remove | YES | YES | YES | YES |

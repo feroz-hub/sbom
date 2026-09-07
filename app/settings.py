@@ -259,6 +259,7 @@ class Settings(BaseSettings):
     report_max_emails_per_tenant_per_hour: int = Field(default=200, ge=1)
     report_artifact_storage_path: str = ""
     report_generation_timeout_seconds: int = Field(default=300, ge=30, le=3600)
+    report_cycle_wait_seconds: int = Field(default=3600, ge=60, le=86400)
     email_provider: str = Field(default="smtp", pattern=r"^smtp$")
     email_from_address: str = ""
     email_from_name: str = Field(default="SBOM Analyzer", min_length=1, max_length=128)

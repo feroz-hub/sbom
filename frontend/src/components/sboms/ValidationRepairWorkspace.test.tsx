@@ -246,7 +246,8 @@ describe('ValidationRepairWorkspace', () => {
   it('renders the editor and validation errors grouped by stage', async () => {
     render(wrap(<ValidationRepairWorkspace sessionId="session-1" />));
 
-    expect(await screen.findByLabelText('SBOM repair editor')).toHaveValue(FAILED_SESSION.current_content);
+    // The editor mounts before the separate content request has populated it.
+    await waitFor(() => expect(screen.getByLabelText('SBOM repair editor')).toHaveValue(FAILED_SESSION.current_content));
     expect(getValidationRepairContent).toHaveBeenCalledWith('session-1', 0, 65536, expect.any(AbortSignal));
     expect(screen.getByText('session-1')).toBeInTheDocument();
     expect(screen.getByText('bad.json')).toBeInTheDocument();

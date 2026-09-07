@@ -275,6 +275,7 @@ def send_now(identifier: int, context: CurrentContext = Depends(reader), db: Ses
 def deliveries(
     all_tenant: bool = False,
     subscription_id: int | None = None,
+    delivery_id: int | None = Query(None, ge=1),
     status: str | None = None,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
@@ -293,6 +294,8 @@ def deliveries(
         query = query.where(ReportSubscription.iam_user_id == context.user_id)
     if subscription_id:
         query = query.where(ReportDelivery.subscription_id == subscription_id)
+    if delivery_id:
+        query = query.where(ReportDelivery.id == delivery_id)
     if status:
         query = query.where(ReportDelivery.status == status)
     result = []

@@ -2,10 +2,13 @@
 
 import hashlib
 import os
+import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlsplit
 from uuid import uuid4
+
+from sqlalchemy import select
 
 from ..models import ReportArtifact
 from ..settings import get_settings
@@ -88,3 +91,24 @@ def store_artifact(db, delivery, attachment):
     except Exception:
         path.unlink(missing_ok=True)
         raise
+
+
+def purge_orphaned_artifacts(db):
+    """Expire crash leftovers as well as ledger-backed artifacts.
+
+    Only this service's random filenames are eligible. Never follow symlinks or
+    remove unrelated files. The retention-age delay protects in-flight writes.
+    """
+    cutoff = (datetime.now(UTC) - timedelta(days=get_settings().report_retention_days)).timestamp()
+    removed = 0
+    for path in storage_root().iterdir():
+        if not re.fullmatch(r"[0-9a-f]{32}", path.name) or path.is_symlink() or not path.is_file():
+            continue
+        if path.stat().st_mtime >= cutoff:
+            continue
+        if db.scalar(select(ReportArtifact.id).where(ReportArtifact.storage_path == path.name)) is None:
+            artifact_path(path.name).unlink(missing_ok=True)
+            removed += 1
+        if removed >= 1000:
+            break
+    return removed

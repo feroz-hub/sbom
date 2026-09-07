@@ -688,6 +688,8 @@ def pause_schedule(
     db: Session = Depends(get_db),
 ):
     row = _get_schedule_or_404(db, schedule_id, context.tenant_id)
+    if row.scope == "TENANT":
+        _tenant_schedule(db, row.tenant_id, context)
     row.enabled = False
     row.next_run_at = None  # paused → no cursor
     row.modified_on = to_iso(_now())
@@ -703,6 +705,8 @@ def resume_schedule(
     db: Session = Depends(get_db),
 ):
     row = _get_schedule_or_404(db, schedule_id, context.tenant_id)
+    if row.scope == "TENANT":
+        _tenant_schedule(db, row.tenant_id, context)
     row.enabled = True
     _refresh_next_run_at(row)
     row.modified_on = to_iso(_now())
@@ -726,6 +730,8 @@ def run_schedule_now(
     from ..workers.scheduled_analysis import analyze_sbom_async
 
     row = _get_schedule_or_404(db, schedule_id, context.tenant_id)
+    if row.scope == "TENANT":
+        _tenant_schedule(db, row.tenant_id, context)
 
     from ..services.schedule_resolver import targets_for_schedule
     target_sbom_ids = targets_for_schedule(db, row)

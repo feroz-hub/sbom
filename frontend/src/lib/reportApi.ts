@@ -4,7 +4,7 @@ import type { ReportConfig, ReportDelivery, ReportPreferences, ReportPreview, Re
 export const getReportConfig = () => request<ReportConfig>('/api/report-notifications/config');
 export const getReportTargets = (scope: string, search: string) => request<Array<{ id: number; label: string }>>(`/api/report-notifications/targets?scope=${encodeURIComponent(scope)}&search=${encodeURIComponent(search)}`);
 export const getReportSubscriptions = (tenantId?: number) => request<ReportSubscription[]>(tenantId ? `/api/tenants/${tenantId}/report-subscriptions` : '/api/report-subscriptions');
-export const getReportDeliveries = (allTenant = false, status = '') => request<ReportDelivery[]>(`/api/report-deliveries?all_tenant=${allTenant}&status=${encodeURIComponent(status)}`);
+export const getReportDeliveries = (allTenant = false, status = '', deliveryId?: number) => request<ReportDelivery[]>(`/api/report-deliveries?all_tenant=${allTenant}&status=${encodeURIComponent(status)}${deliveryId ? `&delivery_id=${deliveryId}` : ''}`);
 export const createReportSubscription = (body: ReportPreferences) => request<ReportSubscription>('/api/report-subscriptions', { method: 'POST', body: JSON.stringify(body) });
 export const updateReportSubscription = (id: number, body: Partial<ReportPreferences>) => request<ReportSubscription>(`/api/report-subscriptions/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
 export const deleteReportSubscription = (id: number) => requestVoid(`/api/report-subscriptions/${id}`, { method: 'DELETE' });

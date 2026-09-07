@@ -100,9 +100,13 @@ export function ReportNotificationsPage() {
   const [remove, setRemove] = useState<ReportSubscription | null>(null);
   const [allTenant, setAllTenant] = useState(false);
   const [status, setStatus] = useState('');
+  const [deliveryId, setDeliveryId] = useState(() => {
+    const value = Number(params.get('delivery'));
+    return Number.isSafeInteger(value) && value > 0 ? value : undefined;
+  });
   const config = useReportConfig();
   const subscriptions = useReportSubscriptions(allTenant ? config.data?.tenant_id : undefined);
-  const deliveries = useReportDeliveries(allTenant, status);
+  const deliveries = useReportDeliveries(allTenant, status, deliveryId);
   const pause = usePauseReportSubscription();
   const deletion = useDeleteReportSubscription();
   const send = useSendReportNow();
@@ -137,6 +141,7 @@ export function ReportNotificationsPage() {
     </section>
     <section className="rounded-xl border border-border-subtle bg-surface p-5"><div className="mb-4 flex flex-wrap items-center justify-between gap-2"><h2 className="text-lg font-semibold">Delivery history</h2><label className="text-sm">Status <select className={fieldClass} value={status} onChange={e => setStatus(e.target.value)}><option value="">All</option>{['PENDING', 'SENT', 'FAILED', 'SKIPPED', 'SUPPRESSED'].map(s => <option key={s}>{s}</option>)}</select></label></div>
       {deliveries.isError && <p role="alert">Delivery history could not be loaded.</p>}
+      {deliveryId && <p className="mb-3 text-sm">Showing linked delivery #{deliveryId}. <button className="text-hcl-blue underline" onClick={() => setDeliveryId(undefined)}>Show recent deliveries</button></p>}
       {!deliveries.data?.length && <p className="text-sm text-hcl-muted">No deliveries in this filter.</p>}
       <div className="space-y-3">{deliveries.data?.map(row => <article id={`delivery-${row.id}`} key={row.id} className="rounded-lg border border-border-subtle p-3"><strong>#{row.id} · {row.status}</strong><p className="text-sm text-hcl-muted">{row.cycle_start} → {row.cycle_end} · {row.sbom_count} SBOMs · {row.run_count} runs · {row.attempt_count} attempts</p>{row.error_code && <p role="status" className="text-sm text-amber-800">{row.error_code.replaceAll('_', ' ')}{row.error_code === 'SMTP_OUTCOME_UNKNOWN' ? ' — do not resend until the SMTP delivery outcome has been checked.' : ''}</p>}<div className="mt-2 flex flex-wrap gap-3">{row.artifacts.map(a => <button className="text-sm text-hcl-blue underline" key={a.id} onClick={() => download(row.id, a.id)}>{a.kind} · expires {a.expires_at.slice(0, 10)}</button>)}</div></article>)}</div>
     </section>

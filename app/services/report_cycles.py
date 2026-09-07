@@ -43,11 +43,21 @@ def cadence_window(subscription, now):
 
 
 def create_delivery(db, subscription, *, start, end, sbom_ids, expected=(), manual=False):
+    # The start cursor can advance while an earlier worker finishes. Serialize
+    # creation per subscription and identify the already-issued cycle by its end
+    # boundary, so replaying a scheduler tick cannot issue that cycle twice.
+    db.scalar(
+        select(ReportSubscription.id)
+        .where(
+            ReportSubscription.id == subscription.id,
+            ReportSubscription.tenant_id == subscription.tenant_id,
+        )
+        .with_for_update()
+    )
     existing = db.scalar(
         select(ReportDelivery).where(
             ReportDelivery.subscription_id == subscription.id,
             ReportDelivery.tenant_id == subscription.tenant_id,
-            ReportDelivery.cycle_start == start,
             ReportDelivery.cycle_end == end,
         )
     )

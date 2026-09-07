@@ -4,6 +4,7 @@ import logging
 from datetime import UTC, datetime
 
 from ..metrics.reporting import (
+    comparison_rollup,
     elapsed_days,
     latest_snapshots,
     lineage,
@@ -49,9 +50,13 @@ def compose_report(db, preferences, *, tenant_id, cycle_start, cycle_end, sbom_i
         return (max((risk_rank(f)[:3] for f in snapshots[sbom.id]["findings"]), default=(False, 0, 0)), -sbom.id)
 
     selected = sorted(all_sboms, key=rank, reverse=True)[: get_settings().report_max_sboms_per_digest]
+    selected_ids = {s.id for s in selected}
+    comparison_summaries = {part: [] for part in preferences.parts if part != "A"}
+    considered_runs = {s["run_id"] for s in snapshots.values() if s["run_id"] is not None}
     comparator = CompareService(db)
     report = {
         "schema_version": 1,
+        "tenant_id": tenant_id,
         "scope": preferences.scope,
         "generated_at": datetime.now(UTC).isoformat(),
         "cycle_start": cycle_start,
@@ -67,7 +72,9 @@ def compose_report(db, preferences, *, tenant_id, cycle_start, cycle_end, sbom_i
         "caveats": CAVEATS,
         "unchanged": True,
     }
-    for sbom in selected:
+    # Compare the full scope for truthful aggregate deltas; only retain detail
+    # for the capped risk-ranked selection. No remote enrichers are called.
+    for sbom in all_sboms:
         current = snapshots[sbom.id]
         data = {
             "id": sbom.id,
@@ -105,6 +112,7 @@ def compose_report(db, preferences, *, tenant_id, cycle_start, cycle_end, sbom_i
                 report["unchanged"] = False
                 continue
             try:
+                considered_runs.add(baseline.id)
                 result = comparator.compare(baseline.id, current["run_id"]).model_dump(mode="json")
                 posture = result["posture"]
                 changed = any(
@@ -135,6 +143,7 @@ def compose_report(db, preferences, *, tenant_id, cycle_start, cycle_end, sbom_i
                         if row["change_kind"] in {"unchanged", "severity_changed"}
                     ]
                     result["persistent_findings"].sort(key=risk_rank, reverse=True)
+                    result["persistent_findings_count"] = len(result["persistent_findings"])
                 data["comparisons"][part] = result
             except Exception as exc:
                 db.rollback()
@@ -145,6 +154,12 @@ def compose_report(db, preferences, *, tenant_id, cycle_start, cycle_end, sbom_i
                     "message": "Comparison could not be generated for these runs.",
                 }
                 report["unchanged"] = False
+        for part, comparison in data["comparisons"].items():
+            comparison_summaries[part].append(
+                {key: comparison[key] for key in ("status", "posture", "relationship") if key in comparison}
+            )
+        if sbom.id not in selected_ids:
+            continue
         current["findings"] = [f for f in current["findings"] if _visible(f["severity"], preferences.severity_floor)]
         for comparison in data["comparisons"].values():
             for key in ("findings", "persistent_findings"):
@@ -155,6 +170,10 @@ def compose_report(db, preferences, *, tenant_id, cycle_start, cycle_end, sbom_i
                         if _visible(f.get("severity_b") or f.get("severity_a"), preferences.severity_floor)
                     ]
         report["sboms"].append(data)
+    selected_order = {s.id: index for index, s in enumerate(selected)}
+    report["sboms"].sort(key=lambda s: selected_order[s["id"]])
+    report["runs_considered"] = len(considered_runs)
+    report["comparison_summary"] = {part: comparison_rollup(rows) for part, rows in comparison_summaries.items()}
     # Empty/partial/capped scopes are never certified unchanged.
     if not selected or report["truncated_sboms"] or not set(preferences.parts) & {"B", "C", "D"}:
         report["unchanged"] = False

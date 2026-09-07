@@ -232,9 +232,12 @@ describe('AuthProvider membership-based tenant context', () => {
     expect(screen.getByTestId('authenticated')).toHaveTextContent('false');
     expect(sessionStorage.getItem('sbom_active_tenant_id')).toBeNull();
     // No tenant-scoped roles or permissions are exposed before selection.
-    expect(latestAuth?.user?.roles).toEqual([]);
-    expect(latestAuth?.user?.permissions).toEqual([]);
-    expect(latestAuth?.hasPermission('tenant:user:read')).toBe(false);
+    // Probe publishes latestAuth in a passive effect after the DOM commit.
+    await waitFor(() => {
+      expect(latestAuth?.user?.roles).toEqual([]);
+      expect(latestAuth?.user?.permissions).toEqual([]);
+      expect(latestAuth?.hasPermission('tenant:user:read')).toBe(false);
+    });
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 

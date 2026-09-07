@@ -5,7 +5,7 @@ import type { ReportPreferences } from '@/types/reports';
 
 export const useReportConfig = () => useQuery({ queryKey: ['reports', 'config'], queryFn: getReportConfig });
 export const useReportSubscriptions = (tenantId?: number) => useQuery({ queryKey: ['reports', 'subscriptions', tenantId], queryFn: () => getReportSubscriptions(tenantId) });
-export const useReportDeliveries = (allTenant = false, status = '') => useQuery({ queryKey: ['reports', 'deliveries', allTenant, status], queryFn: () => getReportDeliveries(allTenant, status), refetchInterval: 15_000 });
+export const useReportDeliveries = (allTenant = false, status = '', deliveryId?: number) => useQuery({ queryKey: ['reports', 'deliveries', allTenant, status, deliveryId], queryFn: () => getReportDeliveries(allTenant, status, deliveryId), refetchInterval: 15_000 });
 export function useSaveReportSubscription() {
   const qc = useQueryClient();
   return useMutation({ mutationFn: ({ id, body }: { id?: number; body: ReportPreferences }) => id ? updateReportSubscription(id, body) : createReportSubscription(body), onSuccess: () => invalidateReportSurfaces(qc) });

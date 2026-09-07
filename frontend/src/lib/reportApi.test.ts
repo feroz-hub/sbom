@@ -6,6 +6,14 @@ vi.mock('./env', () => ({ resolveBaseUrl: () => 'http://localhost:8000' }));
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.resetModules(); });
 
 describe('Report BFF contracts', () => {
+  it('requests the linked delivery explicitly instead of relying on the latest page', async () => {
+    vi.stubEnv('NEXT_PUBLIC_AUTH_ENABLED', 'true');
+    const fetchMock = vi.fn().mockResolvedValue(new Response('[]', { headers: { 'Content-Type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+    const { getReportDeliveries } = await import('./reportApi');
+    await getReportDeliveries(false, '', 42);
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/backend/api/report-deliveries?all_tenant=false&status=&delivery_id=42');
+  });
   it('sends JSON and tenant headers through authenticated same-origin BFF', async () => {
     vi.stubEnv('NEXT_PUBLIC_AUTH_ENABLED', 'true');
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: 1 }), { status: 201, headers: { 'Content-Type': 'application/json' } }));

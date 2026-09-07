@@ -31,6 +31,7 @@ The feature is opt-in. Existing analysis, verification mail and env-only local w
    | `REPORT_RETENTION_DAYS` | `90` |
    | `REPORT_MAX_EMAILS_PER_TENANT_PER_HOUR` | `200`; durable quota reservation |
    | `REPORT_GENERATION_TIMEOUT_SECONDS` | `300` |
+   | `REPORT_CYCLE_WAIT_SECONDS` | `3600`; completion-barrier deadline, separate from rendering |
 
 5. Restart API and workers to load operational environment changes. Subscription changes are DB-backed and do **not** require restart. `AUTH_ENABLED=false` always results in `SKIPPED / DELIVERY_DISABLED`; configuring SMTP alone cannot send reports from local unauthenticated mode.
 6. Run one ordinary analysis worker, one **separate** report worker (`bash scripts/report_worker.sh`), and exactly one Beat (`bash scripts/celery_beat.sh`). Report tasks are routed to `reports`; a default worker consuming only `celery` will not pick them up. The report script uses concurrency 1, prefetch 1 and process recycling to isolate CPU/memory from analysis.
@@ -41,6 +42,8 @@ Preferences may be prepared and previewed before delivery is enabled. The UI exp
 ## Data flow and cadence
 
 The scheduler records a durable completion barrier before enqueueing its analyses. Each terminal completion updates that barrier. A separate report task reads the persisted results. Missing/failed completion events time out into an explicitly partial digest showing the last successful data. Reports never trigger live NVD, OSV, KEV, EPSS or AI requests.
+
+Analysis completion waits up to `REPORT_CYCLE_WAIT_SECONDS`; the smaller generation timeout only limits the report task itself. Replayed scheduler ticks reuse the existing end boundary even if a preceding delivery advanced the subscription cursor meanwhile.
 
 `ON_EVERY_RUN` observes **scheduled** analyses, including the schedule's Run now action; it is not an alert on every ad-hoc analysis HTTP request. The barrier has one cycle per scheduler tick. `DAILY` closes at local midnight, `WEEKLY` at Monday midnight, `MONTHLY` at the first day of the month. Boundaries use the subscription's IANA timezone (UTC by default), including DST; persisted timestamps and displayed offsets are UTC. The hourly cadence tick runs at minute **50**, outside the 03:00–03:45 maintenance window. A lightweight minute outbox sweep recovers enqueue failures/retries; artifact cleanup runs at 04:50 UTC.
 
@@ -55,6 +58,7 @@ Broad report scopes use active **head versions**, matching latest-state dashboar
 - C includes initial∩latest persistent findings and age since that initial observation. This does **not** prove continuous presence in every intervening scan.
 - D uses declared ancestry, never filename/version guesses, and carries stable attribution kinds plus the existing human-readable explanation. Existing `same_sbom`/`same_project` fields remain compatible.
 - No baseline means `insufficient_history`, not zero change. A failed comparison degrades just that part with a safe error code. Severity floor filters detail, never headline or comparison totals. Incomplete/capped scopes are never certified unchanged.
+- B/C/D aggregate the entire resolved scope, including SBOMs omitted from detail by the cap. These are sums of per-SBOM Convention B occurrences, not globally distinct CVEs. Coverage and elapsed-time ranges are explicit. The header includes tenant, schema version and unique run IDs considered; persistent-finding counts remain unfiltered.
 - The email and executive PDF contain all selected part summaries. XLSX is write-only/streamed, with all selected finding/component detail, Part A–D sheets, Rollup and Metadata (run IDs, UTC time and conventions). Retained JSON is the same secret-free snapshot. Excel formula prefixes and HTML are escaped; raw SBOM documents, repair patches, credentials and provider payloads are not included.
 - Oversized PDF/XLSX attachments remain stored and are replaced by an explicit omission reason plus an authenticated history link. The actual encoded MIME message is measured. JSON is downloadable, not attached.
 

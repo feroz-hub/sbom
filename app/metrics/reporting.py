@@ -223,3 +223,45 @@ def elapsed_days(a, b):
         return round((datetime.fromisoformat(b) - datetime.fromisoformat(a)).total_seconds() / 86400, 2)
     except (TypeError, ValueError):
         return None
+
+
+def comparison_rollup(comparisons):
+    """Sum Convention B per-SBOM run-pair changes, never raw observations.
+
+    These are component-vulnerability occurrences across SBOMs, not distinct
+    portfolio CVEs. Missing baselines have coverage counts, not zero deltas.
+    """
+    rows = list(comparisons)
+    available = [row for row in rows if row["status"] == "available"]
+    keys = (
+        "findings_added_count",
+        "findings_resolved_count",
+        "findings_unchanged_count",
+        "findings_severity_changed_count",
+        "components_added_count",
+        "components_removed_count",
+        "components_version_bumped_count",
+        "high_critical_count_delta",
+    )
+    totals = {key: sum(row["posture"][key] for row in available) if available else None for key in keys}
+    net = None if not available else totals["findings_added_count"] - totals["findings_resolved_count"]
+    elapsed = [
+        row["relationship"]["days_between"] for row in available if row["relationship"]["days_between"] is not None
+    ]
+    return {
+        "sboms_considered": len(rows),
+        "available_baselines": len(available),
+        "unavailable_baselines": len(rows) - len(available),
+        **totals,
+        "net_finding_delta": net,
+        "direction": "unavailable"
+        if net is None
+        else "more_findings"
+        if net > 0
+        else "fewer_findings"
+        if net < 0
+        else "unchanged_count",
+        "elapsed_days_min": min(elapsed, default=None),
+        "elapsed_days_max": max(elapsed, default=None),
+        "newly_kev": "unavailable: historical KEV membership was not snapshotted",
+    }
