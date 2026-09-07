@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
-import { Dialog } from '@/components/ui/Dialog';
+import { Dialog, DialogBody, DialogFooter } from '@/components/ui/Dialog';
 import { Input } from '@/components/ui/Input';
 import { exportFda510kSbomReport, HttpError } from '@/lib/api';
 import { downloadBlob } from '@/lib/utils';
@@ -126,17 +126,17 @@ export function Fda510kReportDialog({ open, onClose, sboms }: Fda510kReportDialo
       title="FDA 510(k) SBOM Report"
       maxWidth="2xl"
       footer={
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <DialogFooter>
           <Button variant="secondary" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
           <Button onClick={handleSubmit} loading={submitting} disabled={!canExport}>
             Export workbook
           </Button>
-        </div>
+        </DialogFooter>
       }
     >
-      <div className="space-y-4">
+      <DialogBody className="space-y-4">
         <div className="rounded-lg border border-border bg-surface-muted/50 px-3 py-2 text-sm text-hcl-muted">
           {sboms.length} selected SBOM{sboms.length === 1 ? '' : 's'}
           {projectId === null ? ' across multiple or unassigned projects' : ''}
@@ -166,7 +166,7 @@ export function Fda510kReportDialog({ open, onClose, sboms }: Fda510kReportDialo
           </Alert>
         ) : null}
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2">
           <Input label="Device Name" required value={metadata.device_name} onChange={(e) => setField('device_name', e.target.value)} />
           <Input label="Manufacturer / Sponsor" required value={metadata.manufacturer_sponsor} onChange={(e) => setField('manufacturer_sponsor', e.target.value)} />
           <Input label="Device Software Version" required value={metadata.device_software_version} onChange={(e) => setField('device_software_version', e.target.value)} />
@@ -185,7 +185,7 @@ export function Fda510kReportDialog({ open, onClose, sboms }: Fda510kReportDialo
           <Input label="Reviewed / Approved By" value={metadata.reviewed_approved_by ?? ''} onChange={(e) => setField('reviewed_approved_by', e.target.value)} />
           <Input label="Date Approved" type="date" value={metadata.date_approved ?? ''} onChange={(e) => setField('date_approved', e.target.value)} />
         </div>
-      </div>
+      </DialogBody>
     </Dialog>
   );
 }
