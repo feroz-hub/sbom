@@ -686,7 +686,7 @@ def test_retention_expires_artifacts_and_only_owned_orphans(fixture):
     outcome = f.worker.purge()
     assert outcome == {"removed": len(artifacts), "orphaned_files_removed": 1}
     assert unrelated.exists() and not orphan.exists()
-    assert f.client.get(f"/api/report-deliveries/{identifier}/artifacts/{artifact_id}").status_code == 404
+    assert f.client.get(f"/api/report-deliveries/{identifier}/artifacts/{artifact_id}").status_code == 410
 
 
 def test_scope_cap_keeps_full_comparison_totals(fixture, monkeypatch):
