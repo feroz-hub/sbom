@@ -1,4 +1,4 @@
-"""Celery application — broker/backend from settings (Redis).
+"""Celery application — independently resolved broker and result backend.
 
 Tasks live in:
   * ``app.nvd_mirror.tasks``           — NVD mirror (mirror_nvd)
@@ -33,14 +33,46 @@ def _broker_url() -> str:
     from app.settings import get_settings
 
     s = get_settings()
+    if s.celery_use_database_broker:
+        database_url = (s.database_url or "").strip()
+        if not database_url:
+            raise RuntimeError(
+                "CELERY_USE_DATABASE_BROKER is enabled, but DATABASE_URL is not configured."
+            )
+        if database_url.startswith("db+"):
+            database_url = database_url.removeprefix("db+")
+        return f"sqla+{database_url}"
+
     b = (s.celery_broker_url or "").strip()
     return b or s.redis_url
+
+
+def _result_backend() -> str:
+    """Return a backend URL compatible with the selected broker transport.
+
+    Redis URLs work as both broker and result backend. Kombu's SQLAlchemy
+    transport is different: ``sqla+...`` is a broker-only scheme, while
+    Celery's database result backend requires ``db+...``. Keep an explicit
+    override for other broker/backend combinations.
+    """
+    from app.settings import get_settings
+
+    s = get_settings()
+    configured = (s.celery_result_backend or "").strip()
+    if configured:
+        return configured
+
+    broker = _broker_url()
+    for prefix in ("sqla+", "sqlalchemy+"):
+        if broker.startswith(prefix):
+            return f"db+{broker.removeprefix(prefix)}"
+    return broker
 
 
 celery_app = Celery(
     "sbom_analyzer",
     broker=_broker_url(),
-    backend=_broker_url(),
+    backend=_result_backend(),
     include=[
         "app.nvd_mirror.tasks",
         "app.workers.scheduled_analysis",

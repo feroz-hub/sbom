@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Eye, Pencil, Plus, Trash2, Upload } from 'lucide-react';
 import { TopBar } from '@/components/layout/TopBar';
 import { Button } from '@/components/ui/Button';
+import { Badge } from '@/components/ui/Badge';
 import { ProjectsTable } from '@/components/projects/ProjectsTable';
 import { ProjectModal } from '@/components/projects/ProjectModal';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
@@ -14,7 +15,7 @@ import { Input, Textarea } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Table, TableBody, TableHead, Td, Th, EmptyRow } from '@/components/ui/Table';
 import { SbomUploadModal } from '@/components/sboms/SbomUploadModal';
-import { createProduct, deleteProduct, getProducts, getProjects, updateProduct } from '@/lib/api';
+import { createProduct, deleteProduct, getEffectiveProductSchedule, getProducts, getProjects, updateProduct } from '@/lib/api';
 import { useNotifications } from '@/hooks/useNotifications';
 import { getApiErrorMessage } from '@/lib/notifications';
 import { DeleteConfirmDialog } from '@/components/ui/DeleteConfirmDialog';
@@ -35,6 +36,26 @@ const emptyProductForm: ProductFormState = {
   category: '',
   status: 'active',
 };
+
+function ProductScheduleStatus({ productId }: { productId: number }) {
+  const query = useQuery({
+    queryKey: ['schedule', 'PRODUCT', productId],
+    queryFn: ({ signal }) => getEffectiveProductSchedule(productId, signal),
+  });
+  if (query.isLoading) return <span className="text-xs text-hcl-muted">Loading…</span>;
+  if (query.error || !query.data?.schedule) return <Badge variant="gray">None</Badge>;
+  const state = query.data.state;
+  return (
+    <div className="space-y-1">
+      <Badge variant={state === 'CUSTOM' || state === 'INHERITED' ? 'success' : 'gray'}>
+        {state.toLowerCase()}
+      </Badge>
+      <p className="text-xs text-hcl-muted">
+        {query.data.schedule.cadence.toLowerCase()} · {query.data.source_scope?.toLowerCase()}
+      </p>
+    </div>
+  );
+}
 
 function ProductFormDialog({
   open,
@@ -202,15 +223,17 @@ function ProjectProducts({ project }: { project: Project }) {
               <Th>SBOM Count</Th>
               <Th>Latest SBOM</Th>
               <Th>Latest Version</Th>
+              <Th>Current SBOM</Th>
+              <Th>Schedule</Th>
               <Th>Status</Th>
               <Th className="text-right">Actions</Th>
             </tr>
           </TableHead>
           <TableBody>
             {isLoading ? (
-              <EmptyRow cols={7} message="Loading products..." />
+              <EmptyRow cols={9} message="Loading products..." />
             ) : products.length === 0 ? (
-              <EmptyRow cols={7} message="No products found for this project. Create one before uploading SBOMs." />
+              <EmptyRow cols={9} message="No products found for this project. Create one before uploading SBOMs." />
             ) : (
               products.map((product) => (
                 <tr key={product.id}>
@@ -231,6 +254,16 @@ function ProjectProducts({ project }: { project: Project }) {
                     )}
                   </Td>
                   <Td className="text-hcl-muted">{product.latest_sbom_version || '—'}</Td>
+                  <Td className="text-hcl-muted">
+                    {product.current_sbom_id ? (
+                      <Link href={`/sboms/${product.current_sbom_id}`} className="hover:text-hcl-blue hover:underline">
+                        {product.current_sbom_version || `#${product.current_sbom_id}`}
+                      </Link>
+                    ) : (
+                      <span title="CURRENT_ONLY schedules skip this product until a current SBOM is selected.">Not set</span>
+                    )}
+                  </Td>
+                  <Td><ProductScheduleStatus productId={product.id} /></Td>
                   <Td className="text-hcl-muted">{product.status || 'active'}</Td>
                   <Td>
                     <div className="flex justify-end gap-1.5">

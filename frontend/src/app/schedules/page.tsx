@@ -1,10 +1,11 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import {
   CalendarClock,
+  Eye,
   Pause,
   Pencil,
   Play,
@@ -37,6 +38,7 @@ import {
   getSboms,
   listSchedules,
   pauseSchedule,
+  previewScheduleTargets,
   resumeSchedule,
   runScheduleNow,
 } from '@/lib/api';
@@ -84,6 +86,7 @@ export default function SchedulesPage() {
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<AnalysisSchedule | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<AnalysisSchedule | null>(null);
+  const [previewing, setPreviewing] = useState<AnalysisSchedule | null>(null);
 
   const schedulesQuery = useQuery({
     queryKey: ['schedules', { scope, enabled }],
@@ -118,17 +121,18 @@ export default function SchedulesPage() {
     [sbomsQuery.data],
   );
 
-  const targetLabel = (sched: AnalysisSchedule): string => {
+  const targetLabel = useCallback((sched: AnalysisSchedule): string => {
     if (sched.scope === 'TENANT') return `Tenant #${sched.tenant_id ?? ''}`;
-    if (sched.scope === 'PRODUCT') return `Product #${sched.product_id ?? ''}`;
+    if (sched.scope === 'PRODUCT') return sched.product_name ?? `Product #${sched.product_id ?? ''}`;
     if (sched.scope === 'PROJECT' && sched.project_id != null) {
-      return projectById.get(sched.project_id)?.project_name ?? `project #${sched.project_id}`;
+      return sched.project_name ?? projectById.get(sched.project_id)?.project_name ?? `Project #${sched.project_id}`;
     }
     if (sched.scope === 'SBOM' && sched.sbom_id != null) {
-      return sbomById.get(sched.sbom_id)?.sbom_name ?? `SBOM #${sched.sbom_id}`;
+      const name = sched.sbom_name ?? sbomById.get(sched.sbom_id)?.sbom_name ?? `SBOM #${sched.sbom_id}`;
+      return `${name}${sched.sbom_version ? ` ${sched.sbom_version}` : ''}`;
     }
     return '—';
-  };
+  }, [projectById, sbomById]);
 
   const filteredRows = useMemo(() => {
     const rows = schedulesQuery.data ?? [];
@@ -142,7 +146,7 @@ export default function SchedulesPage() {
         s.last_run_status,
       ]),
     );
-  }, [schedulesQuery.data, search, projectById, sbomById]);
+  }, [schedulesQuery.data, search, targetLabel]);
 
   // Mutations — share the same invalidator since the schedules list is the
   // canonical source for this page; the per-target schedule queries (used
@@ -211,6 +215,12 @@ export default function SchedulesPage() {
     onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Schedule deletion failed.'), 'error'),
   });
 
+  const previewQuery = useQuery({
+    queryKey: ['schedule-targets', previewing?.id],
+    queryFn: ({ signal }) => previewScheduleTargets(previewing!.id, signal),
+    enabled: previewing != null,
+  });
+
   const filtersActive = scope !== 'all' || enabled !== 'all' || search.trim() !== '';
   const total = schedulesQuery.data?.length ?? 0;
   const shown = filteredRows.length;
@@ -219,7 +229,7 @@ export default function SchedulesPage() {
     <div className="flex flex-col flex-1">
       <TopBar
         title="Schedules"
-        subtitle="Periodic analysis configuration across projects & SBOMs"
+        subtitle="Periodic analysis configuration across projects, products, and SBOMs"
       />
       <div className="p-6 space-y-4">
         {schedulesQuery.error ? (
@@ -282,6 +292,7 @@ export default function SchedulesPage() {
                 <Th>Scope</Th>
                 <Th>Target</Th>
                 <Th>Cadence</Th>
+                <Th>Target policy</Th>
                 <Th>Next run</Th>
                 <Th>Last run</Th>
                 <Th>State</Th>
@@ -290,14 +301,14 @@ export default function SchedulesPage() {
             </TableHead>
             <TableBody>
               {schedulesQuery.isLoading ? (
-                Array.from({ length: 4 }).map((_, i) => <SkeletonRow key={i} cols={7} />)
+                Array.from({ length: 4 }).map((_, i) => <SkeletonRow key={i} cols={8} />)
               ) : !shown ? (
                 <EmptyRow
-                  cols={7}
+                  cols={8}
                   message={
                     filtersActive
                       ? 'No schedules match your filters.'
-                      : 'No schedules yet. Configure one from a project or SBOM page.'
+                      : 'No schedules yet. Configure one from a project, product, or SBOM page.'
                   }
                 />
               ) : (
@@ -313,6 +324,10 @@ export default function SchedulesPage() {
                         <Link href={`/projects`} className="hover:underline">
                           {targetLabel(s)}
                         </Link>
+                      ) : s.scope === 'PRODUCT' && s.product_id != null ? (
+                        <Link href={`/products/${s.product_id}`} className="hover:underline">
+                          {targetLabel(s)}
+                        </Link>
                       ) : s.scope === 'SBOM' && s.sbom_id != null ? (
                         <Link href={`/sboms/${s.sbom_id}`} className="hover:underline">
                           {targetLabel(s)}
@@ -322,6 +337,13 @@ export default function SchedulesPage() {
                       )}
                     </Td>
                     <Td className="text-sm text-hcl-navy">{cadenceSummary(s)}</Td>
+                    <Td className="text-sm text-hcl-navy">
+                      {s.scope === 'SBOM'
+                        ? 'Exact SBOM'
+                        : s.target_version_policy === 'ALL_ACTIVE_VERSIONS'
+                          ? 'All active versions'
+                          : 'Current only'}
+                    </Td>
                     <Td className="text-sm">
                       {s.enabled && s.next_run_at ? (
                         <span title={s.next_run_at}>{formatRelative(s.next_run_at)}</span>
@@ -360,8 +382,8 @@ export default function SchedulesPage() {
                       )}
                     </Td>
                     <Td>
-                      <Badge variant={s.enabled ? 'success' : 'gray'}>
-                        {s.enabled ? 'Enabled' : 'Paused'}
+                      <Badge variant={s.state === 'CUSTOM' ? 'success' : 'gray'}>
+                        {s.state === 'EXCLUDED' ? 'Excluded' : s.enabled ? 'Enabled' : 'Paused'}
                       </Badge>
                       {s.consecutive_failures > 0 && (
                         <span
@@ -377,13 +399,22 @@ export default function SchedulesPage() {
                         <Button
                           size="sm"
                           variant="secondary"
+                          onClick={() => setPreviewing(s)}
+                        >
+                          <Eye className="h-4 w-4" />
+                          Preview
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={s.state === 'EXCLUDED'}
                           loading={runNowM.isPending && runNowM.variables === s.id}
                           onClick={() => runNowM.mutate(s.id)}
                         >
                           <Zap className="h-4 w-4" />
                           Run now
                         </Button>
-                        {s.enabled ? (
+                        {s.state === 'EXCLUDED' ? null : s.enabled ? (
                           <Button
                             size="sm"
                             variant="secondary"
@@ -429,10 +460,55 @@ export default function SchedulesPage() {
           </Table>
         </Card>
 
+        {previewing && (
+          <Card>
+            <div className="flex items-center justify-between border-b border-hcl-border p-4">
+              <div>
+                <h2 className="font-semibold text-hcl-navy">Target preview — {targetLabel(previewing)}</h2>
+                <p className="text-sm text-hcl-muted">
+                  The same resolver is used by Run Now and Celery Beat.
+                </p>
+              </div>
+              <Button size="sm" variant="secondary" onClick={() => setPreviewing(null)}>Close</Button>
+            </div>
+            <div className="p-4">
+              {previewQuery.isLoading ? (
+                <p className="text-sm text-hcl-muted">Resolving targets…</p>
+              ) : previewQuery.error ? (
+                <Alert variant="error" title="Could not preview targets">
+                  {(previewQuery.error as Error).message}
+                </Alert>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-sm text-hcl-navy">
+                    {previewQuery.data?.target_count ?? 0} included · {previewQuery.data?.skipped_count ?? 0} skipped
+                  </p>
+                  <div className="max-h-80 space-y-1 overflow-auto">
+                    {(previewQuery.data?.targets ?? []).map((target, index) => (
+                      <div
+                        key={`${target.sbom_id ?? 'product'}-${index}`}
+                        className="flex items-center justify-between rounded border border-hcl-border px-3 py-2 text-sm"
+                      >
+                        <span className={target.included ? 'text-hcl-navy' : 'text-hcl-muted'}>
+                          {target.project_name ?? 'Project'} / {target.product_name ?? 'Product'} /{' '}
+                          {target.sbom_name ?? 'No current SBOM'}{target.sbom_version ? ` ${target.sbom_version}` : ''}
+                        </span>
+                        <Badge variant={target.included ? 'success' : 'gray'}>
+                          {target.resolution.replaceAll('_', ' ').toLowerCase()}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </Card>
+        )}
+
         {/* Helper text — explains where new schedules come from. */}
         <div className="text-xs text-hcl-muted flex items-center gap-2">
           <CalendarClock className="h-3.5 w-3.5" />
-          Schedules are created from a project page (cascade) or an SBOM detail page (override).
+          Schedules are created from project, product, or SBOM pages. More-specific rows override parent schedules.
         </div>
       </div>
 
@@ -455,12 +531,22 @@ export default function SchedulesPage() {
         loading={deleteM.isPending}
         recordName={confirmDelete ? cadenceSummary(confirmDelete) : ''}
         recordKind={
-          confirmDelete?.scope === 'PROJECT' ? 'project schedule' : 'SBOM schedule override'
+          confirmDelete?.scope === 'PROJECT'
+            ? 'project schedule'
+            : confirmDelete?.scope === 'PRODUCT'
+              ? 'product schedule override'
+              : confirmDelete?.scope === 'TENANT'
+                ? 'tenant schedule'
+                : 'SBOM schedule override'
         }
         title={
           confirmDelete?.scope === 'PROJECT'
             ? 'Remove project schedule?'
-            : 'Remove SBOM override?'
+            : confirmDelete?.scope === 'PRODUCT'
+              ? 'Remove product override?'
+              : confirmDelete?.scope === 'TENANT'
+                ? 'Remove tenant schedule?'
+                : 'Remove SBOM override?'
         }
         cascadeImpact={[]}
       />

@@ -2,7 +2,7 @@
 
 SBOM Analyser is a FastAPI and Next.js platform for importing, validating, normalizing, analysing, and managing software bills of materials. It combines SBOM inventory, multi-source vulnerability analysis, CISA Known Exploited Vulnerabilities (KEV), lifecycle intelligence, VEX, remediation, reporting, tenant isolation, and role-based access control in one application.
 
-The current application version is `2.0.0`. The current Alembic schema head is `053_tenant_analysis_schedule`.
+The current application version is `2.0.0`. The current Alembic schema head is `054_hierarchical_scheduler`.
 
 ## Highlights
 
@@ -28,7 +28,7 @@ Browser
        -> routers -> services -> repositories/models
        -> PostgreSQL 16
        -> external vulnerability and lifecycle providers
-       -> Celery / Redis for scheduled and background work
+       -> Celery / Redis (or PostgreSQL local fallback) for scheduled and background work
 ```
 
 The backend is a modular monolith. HTTP behavior lives in `app/routers`, business behavior in `app/services`, persistence in SQLAlchemy models/repositories, validation in `app/validation`, and asynchronous tasks in `app/workers` and `app/nvd_mirror`.
@@ -134,7 +134,7 @@ The platform also supports:
 | --- | --- |
 | Backend | Python 3.11+, FastAPI, Pydantic 2, SQLAlchemy 2, Alembic, psycopg 3 |
 | Database | PostgreSQL 16; SQLite only for explicit test/emergency fallback |
-| Workers | Celery and Redis |
+| Workers | Celery with Redis; PostgreSQL polling broker for local fallback |
 | Frontend | Next.js 16, React 19, TypeScript 6, TanStack Query, Tailwind CSS, Recharts |
 | Authentication | OIDC Authorization Code + PKCE, HCL.CS/HCL IAM, PyJWT/JWKS |
 | Testing | pytest, Vitest, Testing Library, Ruff, mypy |
@@ -166,7 +166,7 @@ docker-compose.yml      Local PostgreSQL 16 service
 - Python 3.11 or newer
 - Node.js 20 or newer and npm
 - PostgreSQL 16
-- Redis when running Celery workers/Beat
+- Redis when running Celery workers/Beat in the normal configuration. A PostgreSQL-backed Kombu broker is available for local development when Redis cannot be installed.
 - Docker Compose if using the provided local PostgreSQL service
 
 ## Quick start: macOS/Linux
@@ -290,7 +290,7 @@ Start with `.env.example` for the backend and `frontend/.env.local.example` for 
 | `AUTH_ENABLED` | Enables HCL.CS/HCL IAM authentication. |
 | `DEV_DEFAULT_TENANT` | Enables the synthetic local tenant/user context when auth is disabled. |
 | `APP_SECRET_KEY` / `SETTINGS_SECRET_KEY` | Encryption key material for stored provider secrets. |
-| `REDIS_URL`, `CELERY_BROKER_URL` | Celery broker/backend configuration. |
+| `REDIS_URL`, `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND` | Celery broker and independently resolved result-backend configuration. |
 
 ### Vulnerability and KEV settings
 
@@ -361,10 +361,25 @@ Recent schema work:
 | `041` | Project/product hierarchy. |
 | `042`-`043` | Wider vulnerability evidence and match-reason fields. |
 | `044` | Canonical CISA KEV vulnerabilities table and metadata. |
+| `054` | Hierarchical Project/Product/SBOM scheduling, explicit current SBOMs, and target policies. |
 
 ## Background workers
 
-Redis must be available before starting workers.
+Redis must normally be available before starting workers. For local development
+or smoke tests on a machine where Redis cannot be installed, the existing
+PostgreSQL database can provide Kombu's polling SQLAlchemy broker transport:
+
+```bash
+export CELERY_USE_DATABASE_BROKER=true
+```
+
+This setting derives the broker from the existing `DATABASE_URL`, avoiding a
+second copy of the database password. A full `sqla+postgresql+psycopg://...`
+broker URL is also accepted. The application derives the matching result backend as
+`db+postgresql+psycopg://...`. Set `CELERY_RESULT_BACKEND` explicitly if a
+different backend is required. This SQLAlchemy broker is appropriate for local
+verification, not production throughput; production deployments should use
+Redis or another production-grade Celery broker.
 
 ```bash
 celery -A app.workers.celery_app worker --loglevel=info
@@ -372,6 +387,12 @@ celery -A app.workers.celery_app beat --loglevel=info
 ```
 
 Scheduled work includes NVD mirroring, due analysis schedules, daily KEV sync, CVE cache cleanup, and source-response cache cleanup. Deploy Celery Beat as a single process to avoid duplicate scheduling.
+
+### Hierarchical analysis schedules
+
+Schedules resolve in the order `SBOM > Product > Project > Tenant`. Project and Product schedules target each Product's explicit current SBOM by default; choose `ALL_ACTIVE_VERSIONS` only when historical active versions should also be rescanned. A missing child row inherits, a disabled custom row is paused and blocks inheritance, and an explicit exclusion blocks inheritance without deleting the parent schedule.
+
+Use the Product detail page to select the current SBOM. New Products automatically select their first accepted upload; later uploads replace it only when **Set as current SBOM** is selected. Run Now and the target preview use the same resolver as Celery Beat. See [Hierarchical analysis scheduler](docs/hierarchical-analysis-scheduler.md) for API, operations, and smoke-test details.
 
 ## API overview
 

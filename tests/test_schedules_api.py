@@ -266,7 +266,14 @@ def test_delete_sbom_override_falls_back_to_inherited(client, project_id, sbom_i
 def test_get_sbom_schedule_when_no_schedule_anywhere(client, sbom_id):
     resp = client.get(f"/api/sboms/{sbom_id}/schedule")
     assert resp.status_code == 200
-    assert resp.json() == {"inherited": False, "schedule": None}
+    assert resp.json() == {
+        "inherited": False,
+        "schedule": None,
+        "state": "NONE",
+        "source_scope": None,
+        "resolution_reason": "NO_SCHEDULE",
+        "included": False,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -419,3 +426,141 @@ def test_run_now_skips_product_overrides_in_project_fan_out(
     resp = client.post(f"/api/schedules/{proj_schedule_id}/run-now")
     assert resp.status_code == 202
     assert sbom_id not in resp.json()["sbom_ids"]
+
+
+def test_product_effective_schedule_exclude_and_restore_inheritance(
+    client,
+    project_id,
+    product_id,
+    sample_sbom_dict,
+):
+    _product_sbom(client, project_id, product_id, sample_sbom_dict)
+    parent = client.post(f"/api/projects/{project_id}/schedule", json={"cadence": "DAILY"})
+    assert parent.status_code == 201, parent.text
+
+    inherited = client.get(f"/api/products/{product_id}/schedule/effective")
+    assert inherited.status_code == 200
+    assert inherited.json()["state"] == "INHERITED"
+    assert inherited.json()["source_scope"] == "PROJECT"
+
+    excluded = client.post(f"/api/products/{product_id}/schedule/exclude")
+    assert excluded.status_code == 200, excluded.text
+    assert excluded.json()["state"] == "EXCLUDED"
+
+    effective = client.get(f"/api/products/{product_id}/schedule/effective").json()
+    assert effective["state"] == "EXCLUDED"
+    assert effective["included"] is False
+
+    restored = client.post(f"/api/products/{product_id}/schedule/inherit")
+    assert restored.status_code == 200
+    assert restored.json()["status"] == "inherited"
+    effective = client.get(f"/api/products/{product_id}/schedule/effective").json()
+    assert effective["state"] == "INHERITED"
+    assert effective["source_scope"] == "PROJECT"
+
+
+def test_sbom_exclusion_blocks_parent_and_restore_reenables_inheritance(client, project_id, sbom_id):
+    parent = client.post(f"/api/projects/{project_id}/schedule", json={"cadence": "DAILY"})
+    assert parent.status_code == 201
+    excluded = client.post(f"/api/sboms/{sbom_id}/schedule/exclude")
+    assert excluded.status_code == 200
+    effective = client.get(f"/api/sboms/{sbom_id}/schedule").json()
+    assert effective["state"] == "EXCLUDED"
+    assert effective["included"] is False
+
+    restored = client.post(f"/api/sboms/{sbom_id}/schedule/inherit")
+    assert restored.status_code == 200
+    effective = client.get(f"/api/sboms/{sbom_id}/schedule").json()
+    assert effective["state"] == "INHERITED"
+    assert effective["source_scope"] == "PROJECT"
+
+
+def test_preview_and_run_now_use_identical_product_targets(
+    client,
+    project_id,
+    product_id,
+    sample_sbom_dict,
+    _stub_celery,
+):
+    first = _product_sbom(client, project_id, product_id, sample_sbom_dict)
+    second = _product_sbom(client, project_id, product_id, sample_sbom_dict)
+    schedule = client.post(
+        f"/api/products/{product_id}/schedule",
+        json={"cadence": "DAILY", "target_version_policy": "ALL_ACTIVE_VERSIONS"},
+    )
+    assert schedule.status_code == 201, schedule.text
+    schedule_id = schedule.json()["id"]
+
+    preview = client.get(f"/api/schedules/{schedule_id}/targets")
+    assert preview.status_code == 200, preview.text
+    preview_ids = {target["sbom_id"] for target in preview.json()["targets"] if target["included"]}
+    assert preview_ids == {first, second}
+
+    run_now = client.post(f"/api/schedules/{schedule_id}/run-now")
+    assert run_now.status_code == 202, run_now.text
+    assert set(run_now.json()["sbom_ids"]) == preview_ids
+
+
+def test_current_sbom_assignment_rejects_cross_product_and_changes_target(
+    client,
+    project_id,
+    product_id,
+    sample_sbom_dict,
+):
+    first = _product_sbom(client, project_id, product_id, sample_sbom_dict)
+    other_product = client.post(
+        f"/api/projects/{project_id}/products",
+        json={"name": f"other-product-{uuid.uuid4().hex[:8]}"},
+    ).json()
+    other_sbom = _product_sbom(client, project_id, other_product["id"], sample_sbom_dict)
+
+    rejected = client.patch(f"/api/products/{product_id}", json={"current_sbom_id": other_sbom})
+    assert rejected.status_code == 422
+    assert rejected.json()["detail"]["code"] == "invalid_current_sbom"
+
+    accepted = client.patch(f"/api/products/{product_id}", json={"current_sbom_id": first})
+    assert accepted.status_code == 200, accepted.text
+    assert accepted.json()["current_sbom_id"] == first
+
+
+def test_new_upload_can_become_current_without_deleting_history(
+    client,
+    project_id,
+    product_id,
+    sample_sbom_dict,
+):
+    first = _product_sbom(client, project_id, product_id, sample_sbom_dict)
+    name = f"new-current-{uuid.uuid4().hex[:8]}"
+    response = client.post(
+        "/api/sboms",
+        json={
+            "sbom_name": name,
+            "sbom_data": json.dumps(sample_sbom_dict),
+            "projectid": project_id,
+            "product_id": product_id,
+            "set_as_current": True,
+        },
+    )
+    assert response.status_code == 201, response.text
+    second = response.json()["id"]
+    product = client.get(f"/api/products/{product_id}").json()
+    assert product["current_sbom_id"] == second
+    sbom_ids = {item["id"] for item in client.get(f"/api/products/{product_id}/sboms").json()}
+    assert {first, second} <= sbom_ids
+
+
+def test_current_only_preview_reports_missing_current_sbom(
+    client,
+    project_id,
+    product_id,
+    sample_sbom_dict,
+):
+    _product_sbom(client, project_id, product_id, sample_sbom_dict)
+    cleared = client.patch(f"/api/products/{product_id}", json={"current_sbom_id": None})
+    assert cleared.status_code == 200, cleared.text
+    schedule = client.post(f"/api/products/{product_id}/schedule", json={"cadence": "DAILY"})
+    schedule_id = schedule.json()["id"]
+    preview = client.get(f"/api/schedules/{schedule_id}/targets")
+    assert preview.status_code == 200
+    assert preview.json()["target_count"] == 0
+    assert any(target["resolution"] == "NO_CURRENT_SBOM" for target in preview.json()["targets"])

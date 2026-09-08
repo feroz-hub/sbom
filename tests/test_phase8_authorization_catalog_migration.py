@@ -7,7 +7,7 @@ def test_revision_and_version_column_are_current_and_wide():
     try:
         with engine.connect() as connection:
             assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
-                "053_tenant_analysis_schedule"
+                "054_hierarchical_scheduler"
             )
             width = connection.scalar(
                 text(

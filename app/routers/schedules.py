@@ -9,14 +9,21 @@ Project-scope:
     PATCH  /api/projects/{id}/schedule
     DELETE /api/projects/{id}/schedule
 
-SBOM-scope (overrides project cascade):
+Product-scope (overrides project cascade):
+    POST   /api/products/{id}/schedule
+    GET    /api/products/{id}/schedule
+    PATCH  /api/products/{id}/schedule
+    DELETE /api/products/{id}/schedule
+
+SBOM-scope (overrides product/project cascade):
     POST   /api/sboms/{id}/schedule       create or replace SBOM-level override
-    GET    /api/sboms/{id}/schedule       returns inherited project schedule if no override
+    GET    /api/sboms/{id}/schedule       returns the effective inherited schedule
     PATCH  /api/sboms/{id}/schedule
     DELETE /api/sboms/{id}/schedule       removes override; SBOM falls back to cascade
 
 Operator surface:
     GET    /api/schedules                 flat list (filter by scope/enabled)
+    GET    /api/schedules/{id}/targets    effective target preview with reasons
     POST   /api/schedules/{id}/run-now    fire immediately, does NOT change next_run_at
     POST   /api/schedules/{id}/pause      enabled=false
     POST   /api/schedules/{id}/resume     enabled=true, recomputes next_run_at
@@ -36,9 +43,8 @@ from ..core.context import CurrentContext
 from ..core.security import require_permission
 from ..db import get_db
 from ..models import AnalysisSchedule, Product, Projects, SBOMSource
-from ..schemas import ScheduleOut, ScheduleResolved, ScheduleUpsert
-from ..services import audit_log
-from ..services.schedule_resolver import resolve_for_sbom
+from ..schemas import ScheduleOut, ScheduleResolved, ScheduleTargetPreview, ScheduleUpsert
+from ..services.schedule_resolver import resolve_effective_schedule, resolve_effective_schedule_for_product
 from ..services.scheduling import (
     ScheduleSpec,
     ScheduleValidationError,
@@ -70,7 +76,7 @@ def get_tenant_schedule(tenant_id: int, context: CurrentContext = Depends(requir
 @router.post("/tenants/{tenant_id}/schedule", response_model=ScheduleOut)
 @router.patch("/tenants/{tenant_id}/schedule", response_model=ScheduleOut)
 def upsert_tenant_schedule(payload: ScheduleUpsert, tenant_id: int, context: CurrentContext = Depends(require_permission("product:manage_schedule")), db: Session = Depends(get_db)):
-    from ..services.audit_service import write_audit_log
+    _validate_scope_options("TENANT", payload)
     row = _tenant_schedule(db, tenant_id, context)
     if row is None:
         row = AnalysisSchedule(tenant_id=tenant_id, scope="TENANT", created_on=to_iso(_now()), created_by=context.actor_label())
@@ -80,7 +86,7 @@ def upsert_tenant_schedule(payload: ScheduleUpsert, tenant_id: int, context: Cur
     _refresh_next_run_at(row)
     row.modified_on = to_iso(_now())
     db.flush()
-    write_audit_log(db, context, "schedule.tenant.upsert", entity_type="analysis_schedule", entity_id=row.id)
+    _audit_schedule(db, context, "schedule.tenant.upsert", row)
     db.commit()
     return _serialize(row)
 
@@ -141,6 +147,8 @@ def _apply_payload(row: AnalysisSchedule, payload: ScheduleUpsert, *, partial: b
         "day_of_month",
         "hour_utc",
         "timezone",
+        "mode",
+        "target_version_policy",
         "enabled",
         "min_gap_minutes",
     ):
@@ -148,6 +156,10 @@ def _apply_payload(row: AnalysisSchedule, payload: ScheduleUpsert, *, partial: b
             setattr(row, field, data[field])
     if data.get("modified_by"):
         row.modified_by = data["modified_by"]
+    if row.scope == "SBOM":
+        row.target_version_policy = "CURRENT_ONLY"
+    if row.mode == "EXCLUDED":
+        row.enabled = False
 
 
 def _validate_or_422(spec: ScheduleSpec) -> None:
@@ -163,7 +175,7 @@ def _refresh_next_run_at(row: AnalysisSchedule) -> None:
     Called after every create / patch / resume so the tick scanner sees a
     correct cursor without waiting for the row to drift naturally.
     """
-    if not row.enabled:
+    if not row.enabled or row.mode == "EXCLUDED":
         row.next_run_at = None
         return
     nxt = compute_next_run_at(_spec_from_row(row), _now())
@@ -192,6 +204,15 @@ def _get_product_or_404(db: Session, product_id: int, tenant_id: int | None = No
 
 
 def _serialize(row: AnalysisSchedule) -> dict[str, Any]:
+    project = row.project
+    product = row.product
+    sbom = row.sbom
+    if project is None and product is not None:
+        project = product.project
+    if sbom is not None:
+        product = product or sbom.product
+        project = project or sbom.project
+    state = "EXCLUDED" if row.mode == "EXCLUDED" else "PAUSED" if not row.enabled else "CUSTOM"
     return {
         "id": row.id,
         "tenant_id": row.tenant_id,
@@ -205,6 +226,9 @@ def _serialize(row: AnalysisSchedule) -> dict[str, Any]:
         "day_of_month": row.day_of_month,
         "hour_utc": row.hour_utc,
         "timezone": row.timezone,
+        "mode": row.mode,
+        "target_version_policy": row.target_version_policy,
+        "state": state,
         "enabled": bool(row.enabled),
         "next_run_at": row.next_run_at,
         "last_run_at": row.last_run_at,
@@ -216,7 +240,90 @@ def _serialize(row: AnalysisSchedule) -> dict[str, Any]:
         "created_by": row.created_by,
         "modified_on": row.modified_on,
         "modified_by": row.modified_by,
+        "project_name": project.project_name if project else None,
+        "product_name": product.name if product else None,
+        "sbom_name": sbom.sbom_name if sbom else None,
+        "sbom_version": (sbom.sbom_version or sbom.productver) if sbom else None,
     }
+
+
+def _validate_scope_options(scope: str, payload: ScheduleUpsert) -> None:
+    if payload.mode == "EXCLUDED" and scope not in {"PRODUCT", "SBOM"}:
+        raise HTTPException(status_code=422, detail="Only Product and SBOM schedules can be excluded")
+    if scope == "SBOM" and payload.target_version_policy != "CURRENT_ONLY":
+        raise HTTPException(status_code=422, detail="SBOM schedules always target their exact SBOM")
+
+
+def _audit_schedule(db: Session, context: CurrentContext, action: str, row: AnalysisSchedule) -> None:
+    from ..services.audit_service import write_audit_log
+
+    write_audit_log(
+        db,
+        context,
+        action,
+        entity_type="analysis_schedule",
+        entity_id=row.id,
+        new_value={
+            "scope": row.scope,
+            "project_id": row.project_id,
+            "product_id": row.product_id,
+            "sbom_id": row.sbom_id,
+            "mode": row.mode,
+            "enabled": bool(row.enabled),
+            "target_version_policy": row.target_version_policy,
+        },
+    )
+
+
+def _set_excluded(
+    db: Session,
+    context: CurrentContext,
+    *,
+    scope: str,
+    product_id: int | None = None,
+    sbom_id: int | None = None,
+) -> AnalysisSchedule:
+    stmt = select(AnalysisSchedule).where(
+        AnalysisSchedule.tenant_id == context.tenant_id,
+        AnalysisSchedule.scope == scope,
+    )
+    stmt = stmt.where(AnalysisSchedule.product_id == product_id) if scope == "PRODUCT" else stmt.where(
+        AnalysisSchedule.sbom_id == sbom_id
+    )
+    row = db.scalar(stmt)
+    if row is None:
+        row = AnalysisSchedule(
+            tenant_id=context.tenant_id,
+            scope=scope,
+            product_id=product_id,
+            sbom_id=sbom_id,
+            cadence="DAILY",
+            hour_utc=2,
+            timezone="UTC",
+            created_on=to_iso(_now()),
+            created_by=context.actor_label(),
+        )
+        db.add(row)
+    row.mode = "EXCLUDED"
+    row.enabled = False
+    row.next_run_at = None
+    row.target_version_policy = "CURRENT_ONLY"
+    row.modified_on = to_iso(_now())
+    row.modified_by = context.actor_label()
+    db.flush()
+    _audit_schedule(db, context, f"schedule.{scope.lower()}.exclude", row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def _restore_inheritance(db: Session, context: CurrentContext, row: AnalysisSchedule) -> dict[str, Any]:
+    schedule_id = int(row.id)
+    scope = row.scope
+    SoftDeleteService(db).soft_delete(row, user_id=context.actor_label(), cascade=False)
+    _audit_schedule(db, context, f"schedule.{scope.lower()}.restore_inheritance", row)
+    db.commit()
+    return {"status": "inherited", "id": schedule_id, "scope": scope}
 
 
 # ---------------------------------------------------------------------------
@@ -236,6 +343,7 @@ def upsert_project_schedule(
     db: Session = Depends(get_db),
 ):
     _get_project_or_404(db, project_id, context.tenant_id)
+    _validate_scope_options("PROJECT", payload)
     _validate_or_422(_spec_from_payload(payload))
 
     existing = db.execute(
@@ -254,7 +362,7 @@ def upsert_project_schedule(
             sbom_id=None,
             cadence=payload.cadence,
             created_on=to_iso(_now()),
-            created_by=payload.modified_by,
+            created_by=context.actor_label(),
         )
         db.add(existing)
 
@@ -262,6 +370,8 @@ def upsert_project_schedule(
     existing.modified_on = to_iso(_now())
     _refresh_next_run_at(existing)
 
+    db.flush()
+    _audit_schedule(db, context, "schedule.project.upsert", existing)
     db.commit()
     db.refresh(existing)
     return _serialize(existing)
@@ -294,6 +404,7 @@ def patch_project_schedule(
     db: Session = Depends(get_db),
 ):
     _get_project_or_404(db, project_id, context.tenant_id)
+    _validate_scope_options("PROJECT", payload)
     row = db.execute(
         select(AnalysisSchedule).where(
             AnalysisSchedule.tenant_id == context.tenant_id,
@@ -309,6 +420,7 @@ def patch_project_schedule(
     row.modified_on = to_iso(_now())
     _refresh_next_run_at(row)
 
+    _audit_schedule(db, context, "schedule.project.update", row)
     db.commit()
     db.refresh(row)
     return _serialize(row)
@@ -342,21 +454,17 @@ def delete_project_schedule(
 
     schedule_id = row.id
     service = SoftDeleteService(db)
+    _audit_schedule(
+        db,
+        context,
+        "schedule.project.permanent_delete" if permanent else "schedule.project.delete",
+        row,
+    )
     if permanent:
         service.hard_delete(row)
-        action = "schedule.permanent_delete"
     else:
-        service.soft_delete(row, user_id=user_id, cascade=False)
-        action = "schedule.soft_delete"
+        service.soft_delete(row, user_id=context.actor_label(), cascade=False)
     db.commit()
-    audit_log.record(
-        db,
-        user_id=user_id,
-        action=action,
-        target_kind="schedule",
-        target_id=schedule_id,
-        detail=f"scope=PROJECT project_id={project_id}",
-    )
     return {"status": "deleted", "permanent": permanent, "id": schedule_id}
 
 
@@ -377,6 +485,7 @@ def upsert_product_schedule(
     db: Session = Depends(get_db),
 ):
     _get_product_or_404(db, product_id, context.tenant_id)
+    _validate_scope_options("PRODUCT", payload)
     _validate_or_422(_spec_from_payload(payload))
     existing = db.execute(
         select(AnalysisSchedule).where(
@@ -394,12 +503,14 @@ def upsert_product_schedule(
             sbom_id=None,
             cadence=payload.cadence,
             created_on=to_iso(_now()),
-            created_by=payload.modified_by,
+            created_by=context.actor_label(),
         )
         db.add(existing)
     _apply_payload(existing, payload, partial=False)
     existing.modified_on = to_iso(_now())
     _refresh_next_run_at(existing)
+    db.flush()
+    _audit_schedule(db, context, "schedule.product.upsert", existing)
     db.commit()
     db.refresh(existing)
     return _serialize(existing)
@@ -424,6 +535,53 @@ def get_product_schedule(
     return _serialize(row)
 
 
+@router.get("/products/{product_id}/schedule/effective", response_model=ScheduleResolved)
+def get_effective_product_schedule(
+    product_id: int = Path(..., ge=1),
+    context: CurrentContext = Depends(require_permission("product:read")),
+    db: Session = Depends(get_db),
+):
+    _get_product_or_404(db, product_id, context.tenant_id)
+    resolution = resolve_effective_schedule_for_product(db, product_id)
+    if resolution is None or resolution.schedule is None:
+        return {"inherited": False, "schedule": None, "state": "NONE", "resolution_reason": "NO_SCHEDULE"}
+    return {
+        "inherited": resolution.schedule.scope != "PRODUCT",
+        "schedule": _serialize(resolution.schedule),
+        "state": resolution.state,
+        "source_scope": resolution.schedule.scope,
+        "resolution_reason": resolution.reason,
+        "included": resolution.included,
+    }
+
+
+@router.post("/products/{product_id}/schedule/exclude", response_model=ScheduleOut)
+def exclude_product_from_parent_schedule(
+    product_id: int = Path(..., ge=1),
+    context: CurrentContext = Depends(require_permission("product:manage_schedule")),
+    db: Session = Depends(get_db),
+):
+    _get_product_or_404(db, product_id, context.tenant_id)
+    return _serialize(_set_excluded(db, context, scope="PRODUCT", product_id=product_id))
+
+
+@router.post("/products/{product_id}/schedule/inherit")
+def restore_product_schedule_inheritance(
+    product_id: int = Path(..., ge=1),
+    context: CurrentContext = Depends(require_permission("product:manage_schedule")),
+    db: Session = Depends(get_db),
+):
+    _get_product_or_404(db, product_id, context.tenant_id)
+    row = db.scalar(
+        select(AnalysisSchedule).where(
+            AnalysisSchedule.tenant_id == context.tenant_id,
+            AnalysisSchedule.scope == "PRODUCT",
+            AnalysisSchedule.product_id == product_id,
+        )
+    )
+    return _restore_inheritance(db, context, row) if row else {"status": "already_inherited"}
+
+
 @router.patch("/products/{product_id}/schedule", response_model=ScheduleOut)
 def patch_product_schedule(
     payload: ScheduleUpsert,
@@ -432,6 +590,7 @@ def patch_product_schedule(
     db: Session = Depends(get_db),
 ):
     _get_product_or_404(db, product_id, context.tenant_id)
+    _validate_scope_options("PRODUCT", payload)
     row = db.execute(
         select(AnalysisSchedule).where(
             AnalysisSchedule.tenant_id == context.tenant_id,
@@ -445,6 +604,7 @@ def patch_product_schedule(
     _validate_or_422(_spec_from_row(row))
     row.modified_on = to_iso(_now())
     _refresh_next_run_at(row)
+    _audit_schedule(db, context, "schedule.product.update", row)
     db.commit()
     db.refresh(row)
     return _serialize(row)
@@ -470,21 +630,17 @@ def delete_product_schedule(
         return {"status": "no_schedule"}
     schedule_id = row.id
     service = SoftDeleteService(db)
+    _audit_schedule(
+        db,
+        context,
+        "schedule.product.permanent_delete" if permanent else "schedule.product.delete",
+        row,
+    )
     if permanent:
         service.hard_delete(row)
-        action = "schedule.permanent_delete"
     else:
-        service.soft_delete(row, user_id=user_id, cascade=False)
-        action = "schedule.soft_delete"
+        service.soft_delete(row, user_id=context.actor_label(), cascade=False)
     db.commit()
-    audit_log.record(
-        db,
-        user_id=user_id,
-        action=action,
-        target_kind="schedule",
-        target_id=schedule_id,
-        detail=f"scope=PRODUCT product_id={product_id}",
-    )
     return {"status": "deleted", "permanent": permanent, "id": schedule_id}
 
 
@@ -505,6 +661,7 @@ def upsert_sbom_schedule(
     db: Session = Depends(get_db),
 ):
     _get_sbom_or_404(db, sbom_id, context.tenant_id)
+    _validate_scope_options("SBOM", payload)
     _validate_or_422(_spec_from_payload(payload))
 
     existing = db.execute(
@@ -523,7 +680,7 @@ def upsert_sbom_schedule(
             sbom_id=sbom_id,
             cadence=payload.cadence,
             created_on=to_iso(_now()),
-            created_by=payload.modified_by,
+            created_by=context.actor_label(),
         )
         db.add(existing)
 
@@ -531,6 +688,8 @@ def upsert_sbom_schedule(
     existing.modified_on = to_iso(_now())
     _refresh_next_run_at(existing)
 
+    db.flush()
+    _audit_schedule(db, context, "schedule.sbom.upsert", existing)
     db.commit()
     db.refresh(existing)
     return _serialize(existing)
@@ -549,13 +708,51 @@ def get_sbom_schedule(
     and offer an "Override" button.
     """
     _get_sbom_or_404(db, sbom_id, context.tenant_id)
-    row = resolve_for_sbom(db, sbom_id)
-    if row is None:
-        return {"inherited": False, "schedule": None}
+    resolution = resolve_effective_schedule(db, sbom_id)
+    if resolution is None or resolution.schedule is None:
+        return {
+            "inherited": False,
+            "schedule": None,
+            "state": "NONE",
+            "resolution_reason": "NO_SCHEDULE",
+            "included": False,
+        }
+    row = resolution.schedule
     return {
-        "inherited": row.scope in {"PROJECT", "PRODUCT"},
+        "inherited": row.scope != "SBOM",
         "schedule": _serialize(row),
+        "state": resolution.state,
+        "source_scope": row.scope,
+        "resolution_reason": resolution.reason,
+        "included": resolution.included,
     }
+
+
+@router.post("/sboms/{sbom_id}/schedule/exclude", response_model=ScheduleOut)
+def exclude_sbom_from_parent_schedule(
+    sbom_id: int = Path(..., ge=1),
+    context: CurrentContext = Depends(require_permission("product:manage_schedule")),
+    db: Session = Depends(get_db),
+):
+    _get_sbom_or_404(db, sbom_id, context.tenant_id)
+    return _serialize(_set_excluded(db, context, scope="SBOM", sbom_id=sbom_id))
+
+
+@router.post("/sboms/{sbom_id}/schedule/inherit")
+def restore_sbom_schedule_inheritance(
+    sbom_id: int = Path(..., ge=1),
+    context: CurrentContext = Depends(require_permission("product:manage_schedule")),
+    db: Session = Depends(get_db),
+):
+    _get_sbom_or_404(db, sbom_id, context.tenant_id)
+    row = db.scalar(
+        select(AnalysisSchedule).where(
+            AnalysisSchedule.tenant_id == context.tenant_id,
+            AnalysisSchedule.scope == "SBOM",
+            AnalysisSchedule.sbom_id == sbom_id,
+        )
+    )
+    return _restore_inheritance(db, context, row) if row else {"status": "already_inherited"}
 
 
 @router.patch("/sboms/{sbom_id}/schedule", response_model=ScheduleOut)
@@ -566,6 +763,7 @@ def patch_sbom_schedule(
     db: Session = Depends(get_db),
 ):
     _get_sbom_or_404(db, sbom_id, context.tenant_id)
+    _validate_scope_options("SBOM", payload)
     row = db.execute(
         select(AnalysisSchedule).where(
             AnalysisSchedule.tenant_id == context.tenant_id,
@@ -584,6 +782,7 @@ def patch_sbom_schedule(
     row.modified_on = to_iso(_now())
     _refresh_next_run_at(row)
 
+    _audit_schedule(db, context, "schedule.sbom.update", row)
     db.commit()
     db.refresh(row)
     return _serialize(row)
@@ -610,21 +809,17 @@ def delete_sbom_schedule(
 
     schedule_id = row.id
     service = SoftDeleteService(db)
+    _audit_schedule(
+        db,
+        context,
+        "schedule.sbom.permanent_delete" if permanent else "schedule.sbom.delete",
+        row,
+    )
     if permanent:
         service.hard_delete(row)
-        action = "schedule.permanent_delete"
     else:
-        service.soft_delete(row, user_id=user_id, cascade=False)
-        action = "schedule.soft_delete"
+        service.soft_delete(row, user_id=context.actor_label(), cascade=False)
     db.commit()
-    audit_log.record(
-        db,
-        user_id=user_id,
-        action=action,
-        target_kind="schedule",
-        target_id=schedule_id,
-        detail=f"scope=SBOM sbom_id={sbom_id}",
-    )
     return {"status": "deleted", "permanent": permanent, "id": schedule_id}
 
 
@@ -681,6 +876,27 @@ def _get_schedule_or_404(db: Session, schedule_id: int, tenant_id: int | None = 
     return row
 
 
+@router.get("/schedules/{schedule_id}/targets", response_model=ScheduleTargetPreview)
+def preview_schedule_targets(
+    schedule_id: int = Path(..., ge=1),
+    context: CurrentContext = Depends(require_permission("product:read")),
+    db: Session = Depends(get_db),
+):
+    from ..services.schedule_resolver import preview_targets_for_schedule
+
+    row = _get_schedule_or_404(db, schedule_id, context.tenant_id)
+    if row.scope == "TENANT":
+        _tenant_schedule(db, row.tenant_id, context)
+    targets = preview_targets_for_schedule(db, row)
+    return {
+        "schedule_id": row.id,
+        "scope": row.scope,
+        "target_count": sum(item.included for item in targets),
+        "skipped_count": sum(not item.included for item in targets),
+        "targets": [item.__dict__ for item in targets],
+    }
+
+
 @router.post("/schedules/{schedule_id}/pause", response_model=ScheduleOut)
 def pause_schedule(
     schedule_id: int = Path(..., ge=1),
@@ -693,6 +909,7 @@ def pause_schedule(
     row.enabled = False
     row.next_run_at = None  # paused → no cursor
     row.modified_on = to_iso(_now())
+    _audit_schedule(db, context, "schedule.pause", row)
     db.commit()
     db.refresh(row)
     return _serialize(row)
@@ -707,9 +924,15 @@ def resume_schedule(
     row = _get_schedule_or_404(db, schedule_id, context.tenant_id)
     if row.scope == "TENANT":
         _tenant_schedule(db, row.tenant_id, context)
+    if row.mode == "EXCLUDED":
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "schedule_excluded", "message": "Restore inheritance or create a custom schedule first."},
+        )
     row.enabled = True
     _refresh_next_run_at(row)
     row.modified_on = to_iso(_now())
+    _audit_schedule(db, context, "schedule.resume", row)
     db.commit()
     db.refresh(row)
     return _serialize(row)
@@ -733,8 +956,9 @@ def run_schedule_now(
     if row.scope == "TENANT":
         _tenant_schedule(db, row.tenant_id, context)
 
-    from ..services.schedule_resolver import targets_for_schedule
-    target_sbom_ids = targets_for_schedule(db, row)
+    from ..services.schedule_resolver import preview_targets_for_schedule
+    preview = preview_targets_for_schedule(db, row)
+    target_sbom_ids = [int(item.sbom_id) for item in preview if item.included and item.sbom_id is not None]
 
     from ..settings import get_settings
     report_cycle = None
@@ -782,9 +1006,14 @@ def run_schedule_now(
             },
         )
 
+    _audit_schedule(db, context, "schedule.run_now", row)
+    db.commit()
     return {
         "status": "enqueued" if not failed else "partial",
         "schedule_id": row.id,
+        "scope": row.scope,
         "sbom_ids": enqueued,
         "failed_sbom_ids": failed,
+        "target_count": len(enqueued),
+        "skipped_count": sum(not item.included for item in preview),
     }
