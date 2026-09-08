@@ -1241,7 +1241,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                       <RefreshCw className="h-3.5 w-3.5" /> Discover
                     </Button>
                     <Button size="sm" onClick={() => openVexOverrideModal()}>
-                      <Edit2 className="h-3.5 w-3.5" /> Override
+                      <Edit2 className="h-3.5 w-3.5" /> Manual Edit VEX
                     </Button>
                   </>
                 ) : null}
@@ -1327,7 +1327,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                                 onClick={() => openVexOverrideModal(statement)}
                                 className="inline-flex items-center gap-1 text-xs font-medium text-hcl-blue transition-colors hover:text-hcl-navy"
                               >
-                                <Edit2 className="h-3 w-3" /> Override
+                                <Edit2 className="h-3 w-3" /> Manual Edit VEX
                               </button>
                             ) : null}
                           </Td>
@@ -1948,7 +1948,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                     }
                   }}
                 >
-                  <Edit2 className="h-3.5 w-3.5" /> Override
+                  <Edit2 className="h-3.5 w-3.5" /> Manual Edit VEX
                 </Button>
               ) : null}
             </div>
@@ -2037,7 +2037,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
       <Dialog
         open={isVexOverrideOpen}
         onClose={() => setIsVexOverrideOpen(false)}
-        title="Manual VEX Override"
+        title="Manual Edit VEX"
         maxWidth="xl"
         footer={
           <div className="flex items-center justify-end gap-2 px-6 py-4">
