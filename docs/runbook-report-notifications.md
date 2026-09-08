@@ -1,7 +1,7 @@
 # Scheduled report notifications — implementation and operations
 
 Implemented on `feat/sbom-version-lineage-vex-import`; migrations are
-`051_report_subscription` → `052_report_delivery_artifact` → `053_tenant_analysis_schedule`.
+`051_report_subscription` → `052_report_delivery_artifact` → `053_tenant_analysis_schedule` → `054_hierarchical_scheduler`.
 The feature is opt-in. Existing analysis, verification mail and env-only local workflows remain available with it disabled.
 
 ## Product decisions confirmed on 2026-09-07
@@ -35,6 +35,8 @@ The feature is opt-in. Existing analysis, verification mail and env-only local w
 
 5. Restart API and workers to load operational environment changes. Subscription changes are DB-backed and do **not** require restart. `AUTH_ENABLED=false` always results in `SKIPPED / DELIVERY_DISABLED`; configuring SMTP alone cannot send reports from local unauthenticated mode.
 6. Run one ordinary analysis worker, one **separate** report worker (`bash scripts/report_worker.sh`), and exactly one Beat (`bash scripts/celery_beat.sh`). Report tasks are routed to `reports`; a default worker consuming only `celery` will not pick them up. The report script uses concurrency 1, prefetch 1 and process recycling to isolate CPU/memory from analysis.
+
+For local Windows development without Redis, `CELERY_USE_DATABASE_BROKER=true` safely derives Kombu's polling SQLAlchemy broker from the existing `DATABASE_URL`; a full `CELERY_BROKER_URL=sqla+postgresql+psycopg://...` value also works. The application derives the required `db+postgresql+psycopg://...` result backend automatically. This is suitable for exercising report generation and MailHog delivery locally; keep Redis or another production-grade broker for deployed environments.
 7. Check `GET /api/report-notifications/config` while authenticated. Safe diagnostic codes identify missing URL/private storage. Startup logs show flags and codes, never SMTP credentials or filesystem contents.
 
 Preferences may be prepared and previewed before delivery is enabled. The UI explicitly distinguishes saved preferences from delivery readiness.

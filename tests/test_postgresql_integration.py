@@ -134,7 +134,7 @@ def test_migration_script_copies_rows_and_resets_sequences(
 ) -> None:
     import app.nvd_mirror.db.models  # noqa: F401 -- register mirror tables on Base.metadata
     from app.db import Base
-    from app.models import Projects, SBOMComponent, SBOMSource, SBOMType, Tenant
+    from app.models import Product, Projects, SBOMComponent, SBOMSource, SBOMType, Tenant
     from scripts.migrate_sqlite_to_postgres import main
 
     source_path = tmp_path / "source.db"
@@ -157,6 +157,14 @@ def test_migration_script_copies_rows_and_resets_sequences(
             updated_at=now,
         )
         project = Projects(id=10, project_name="migration-project", project_status=1)
+        product = Product(
+            id=11,
+            project_id=10,
+            name="migration-product",
+            normalized_name="migration-product",
+            slug="migration-product",
+            created_at=now.isoformat(),
+        )
         sbom_type = SBOMType(id=4, typename="CycloneDX")
         parent = SBOMSource(
             id=20,
@@ -164,6 +172,7 @@ def test_migration_script_copies_rows_and_resets_sequences(
             sbom_data='{"bomFormat":"CycloneDX"}',
             sbom_type=4,
             projectid=10,
+            product_id=11,
             status="validated",
         )
         child = SBOMSource(
@@ -172,6 +181,7 @@ def test_migration_script_copies_rows_and_resets_sequences(
             sbom_data='{"bomFormat":"CycloneDX","version":2}',
             sbom_type=4,
             projectid=10,
+            product_id=11,
             parent_id=20,
             status="validated",
         )
@@ -183,7 +193,9 @@ def test_migration_script_copies_rows_and_resets_sequences(
             lifecycle_evidence_json={"source": "test"},
             unsupported=False,
         )
-        session.add_all([tenant, project, sbom_type, parent, child, component])
+        session.add_all([tenant, project, product, sbom_type, parent, child, component])
+        session.commit()
+        product.current_sbom_id = child.id
         session.commit()
     source_engine.dispose()
 
@@ -219,6 +231,7 @@ def test_migration_script_copies_rows_and_resets_sequences(
     with target_engine.begin() as connection:
         assert connection.scalar(sa.text("SELECT COUNT(*) FROM sbom_source")) == 2
         assert connection.scalar(sa.text("SELECT parent_id FROM sbom_source WHERE id = 21")) == 20
+        assert connection.scalar(sa.text("SELECT current_sbom_id FROM products WHERE id = 11")) == 21
         next_project_id = connection.scalar(
             sa.text(
                 "INSERT INTO projects(project_name, project_status, is_active, tenant_id) "

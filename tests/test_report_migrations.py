@@ -23,7 +23,7 @@ def test_report_migrations_round_trip_preserves_inventory(client):
         command.upgrade(config, "head")
     with engine.connect() as conn:
         assert (
-            conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "053_tenant_analysis_schedule"
+            conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "054_hierarchical_scheduler"
         )
         assert (
             conn.execute(text("SELECT project_name FROM projects WHERE id=:id"), {"id": identifier}).scalar_one()

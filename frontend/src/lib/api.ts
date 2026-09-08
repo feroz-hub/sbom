@@ -34,6 +34,7 @@ import type {
   AnalysisSchedule,
   SbomScheduleResolved,
   ScheduleUpsertPayload,
+  ScheduleTargetPreview,
   DashboardLifecycle,
   DashboardVex,
   LifecycleOverridePayload,
@@ -852,6 +853,7 @@ export async function uploadSbom(payload: CreateSBOMPayload, signal?: AbortSigna
   if (productVersion) form.set('product_version', productVersion);
   if (payload.created_by) form.set('created_by', payload.created_by);
   if (payload.parent_sbom_id != null) form.set('parent_sbom_id', String(payload.parent_sbom_id));
+  if (payload.set_as_current != null) form.set('set_as_current', String(payload.set_as_current));
 
   const accepted = await request<UploadSBOMAcceptedResponse>(
     '/api/sboms/upload',
@@ -2034,6 +2036,43 @@ export function getProjectSchedule(projectId: number, signal?: AbortSignal) {
   return request<AnalysisSchedule>(`/api/projects/${projectId}/schedule`, { signal });
 }
 
+export function getProductSchedule(productId: number, signal?: AbortSignal) {
+  return request<AnalysisSchedule>(`/api/products/${productId}/schedule`, { signal });
+}
+
+export function getEffectiveProductSchedule(productId: number, signal?: AbortSignal) {
+  return request<SbomScheduleResolved>(`/api/products/${productId}/schedule/effective`, { signal });
+}
+
+export function upsertProductSchedule(
+  productId: number,
+  payload: ScheduleUpsertPayload,
+  signal?: AbortSignal,
+) {
+  return request<AnalysisSchedule>(`/api/products/${productId}/schedule`, {
+    method: 'POST', body: JSON.stringify(payload), signal,
+  });
+}
+
+export function patchProductSchedule(
+  productId: number,
+  payload: Partial<ScheduleUpsertPayload>,
+  signal?: AbortSignal,
+) {
+  return request<AnalysisSchedule>(`/api/products/${productId}/schedule`, {
+    method: 'PATCH', body: JSON.stringify(payload), signal,
+  });
+}
+
+export function deleteProductSchedule(
+  productId: number,
+  options: { permanent?: boolean } = {},
+  signal?: AbortSignal,
+) {
+  const qs = options.permanent ? '?permanent=true' : '';
+  return requestVoid(`/api/products/${productId}/schedule${qs}`, { method: 'DELETE', signal });
+}
+
 export function upsertProjectSchedule(
   projectId: number,
   payload: ScheduleUpsertPayload,
@@ -2128,6 +2167,23 @@ export function deleteScopedSchedule(scope: 'TENANT' | 'PRODUCT', targetId: numb
   return requestVoid(`/api/${scope === 'TENANT' ? 'tenants' : 'products'}/${targetId}/schedule`, { method: 'DELETE' });
 }
 
+export function excludeFromParentSchedule(scope: 'PRODUCT' | 'SBOM', targetId: number) {
+  return request<AnalysisSchedule>(`/api/${scope === 'PRODUCT' ? 'products' : 'sboms'}/${targetId}/schedule/exclude`, {
+    method: 'POST',
+  });
+}
+
+export function restoreScheduleInheritance(scope: 'PRODUCT' | 'SBOM', targetId: number) {
+  return request<{ status: string; id?: number }>(
+    `/api/${scope === 'PRODUCT' ? 'products' : 'sboms'}/${targetId}/schedule/inherit`,
+    { method: 'POST' },
+  );
+}
+
+export function previewScheduleTargets(scheduleId: number, signal?: AbortSignal) {
+  return request<ScheduleTargetPreview>(`/api/schedules/${scheduleId}/targets`, { signal });
+}
+
 export function listSchedules(filter: ListSchedulesFilter = {}, signal?: AbortSignal) {
   const qs = new URLSearchParams();
   if (filter.scope) qs.set('scope', filter.scope);
@@ -2155,6 +2211,10 @@ export interface RunNowResult {
   status: string;
   schedule_id: number;
   sbom_ids: number[];
+  failed_sbom_ids?: number[];
+  scope?: string;
+  target_count?: number;
+  skipped_count?: number;
 }
 
 export function runScheduleNow(scheduleId: number, signal?: AbortSignal) {

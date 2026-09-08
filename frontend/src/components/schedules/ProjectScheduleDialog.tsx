@@ -26,8 +26,8 @@ export function ProjectScheduleDialog({ open, onClose, project }: ProjectSchedul
     >
       <DialogBody>
         <p className="mb-4 text-sm text-hcl-muted">
-          Configure how often every SBOM in this project is re-analyzed. Individual SBOMs can
-          override this on their own detail page.
+          Configure how often eligible Product SBOMs in this Project are re-analyzed. Product and
+          SBOM overrides, exclusions, and the selected version policy are respected.
         </p>
         <ScheduleCard scope="PROJECT" targetId={project.id} />
       </DialogBody>

@@ -19,7 +19,7 @@ import { useToast } from '@/hooks/useToast';
 import { getApiErrorMessage } from '@/lib/notifications';
 import { useSbomsList } from '@/hooks/useSbomsList';
 import { useUploadSbom } from '@/hooks/useSbomMutations';
-import { invalidateUploadSurfaces } from '@/lib/queryInvalidation';
+import { invalidateProductSurfaces, invalidateUploadSurfaces } from '@/lib/queryInvalidation';
 import { stageLabel, stageNumber } from '@/lib/sbomValidation';
 import {
   isUnsupportedUploadStatus,
@@ -80,6 +80,7 @@ const schema = z.object({
   sbom_version: z.string().optional(),
   product_version: z.string().optional(),
   parent_sbom_id: z.string().optional(),
+  set_as_current: z.boolean().default(true),
 });
 
 type FormInput = z.input<typeof schema>;
@@ -160,6 +161,7 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
     defaultValues: {
       sbom_name: '', sbom_data: '', sbom_type_id: '',
       projectid: '', productid: '', sbom_version: '', product_version: '', parent_sbom_id: '',
+      set_as_current: true,
     },
   });
   const selectedProjectId = watch('projectid');
@@ -299,6 +301,7 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
         parent_sbom_id: values.parent_sbom_id ? Number(values.parent_sbom_id) : undefined,
         sbom_version: values.sbom_version || undefined,
         product_version: values.product_version || undefined,
+        set_as_current: values.set_as_current,
       },
       {
         onSuccess: (sbom) => {
@@ -316,6 +319,9 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
           const status = sbom.validation_status ?? sbom.upload_status ?? sbom.status;
           const repairUrl = getRepairWorkspaceUrl(sbom);
           invalidateUploadSurfaces(queryClient, sbom.project_id ?? sbom.projectid);
+          invalidateProductSurfaces(queryClient, sbom.product_id);
+          queryClient.invalidateQueries({ queryKey: ['schedule-targets'] });
+          queryClient.invalidateQueries({ queryKey: ['schedule'] });
 
           if (shouldAutoOpenRepairWorkspace(status)) {
             showToast(
@@ -725,6 +731,21 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
             <Input label="SBOM Version" placeholder="e.g. 1.0.0" disabled={uploading} {...register('sbom_version')} />
             <Input label="Product Version" placeholder="e.g. 2.3.1" disabled={uploading} {...register('product_version')} />
           </div>
+
+          <label className="flex items-start gap-2 rounded-lg border border-hcl-border p-3">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 rounded border-hcl-border text-hcl-blue focus:ring-hcl-blue"
+              disabled={uploading}
+              {...register('set_as_current')}
+            />
+            <span>
+              <span className="block text-sm font-medium text-hcl-navy">Set as current SBOM</span>
+              <span className="block text-xs text-hcl-muted">
+                CURRENT_ONLY parent schedules will target this version on future runs.
+              </span>
+            </span>
+          </label>
 
           {/* Version lineage is declared, never inferred from a matching name:
               silently merging two different SBOMs is far harder to notice than

@@ -80,9 +80,20 @@ def tick_scheduled_analyses(self) -> dict:
     db: Session = SessionLocal()
     try:
         now = _now()
+        due_schedules = list(
+            db.scalars(
+                select(AnalysisSchedule).where(
+                    AnalysisSchedule.is_active.is_(True),
+                    AnalysisSchedule.enabled.is_(True),
+                    AnalysisSchedule.mode == "CUSTOM",
+                    AnalysisSchedule.next_run_at.is_not(None),
+                    AnalysisSchedule.next_run_at <= now.isoformat(),
+                )
+            )
+        )
         targets = find_due_targets(db, now.isoformat())
 
-        if not targets:
+        if not due_schedules:
             log.info("scheduled_analysis_tick_idle")
             return {"due": 0, "enqueued": 0}
 
@@ -101,9 +112,7 @@ def tick_scheduled_analyses(self) -> dict:
         # in place. We want next_run_at moved forward whether or not the
         # per-SBOM task ultimately succeeds, otherwise a failing schedule
         # would re-fire on the next 15-min tick.
-        schedule_ids = {t.schedule_id for t in targets}
-        schedules = db.execute(select(AnalysisSchedule).where(AnalysisSchedule.id.in_(schedule_ids))).scalars().all()
-        schedule_by_id = {s.id: s for s in schedules}
+        schedule_by_id = {schedule.id: schedule for schedule in due_schedules}
 
         enqueued = 0
         for tgt in targets:
@@ -137,9 +146,9 @@ def tick_scheduled_analyses(self) -> dict:
         db.commit()
         log.info(
             "scheduled_analysis_tick_done",
-            extra={"due": len(targets), "enqueued": enqueued},
+            extra={"due": len(due_schedules), "targets": len(targets), "enqueued": enqueued},
         )
-        return {"due": len(targets), "enqueued": enqueued}
+        return {"due": len(due_schedules), "targets": len(targets), "enqueued": enqueued}
     except Exception:
         db.rollback()
         log.exception("scheduled_analysis_tick_failed")
@@ -198,6 +207,26 @@ def analyze_sbom_async(
                 sched.last_run_at = to_iso(_now())
                 db.commit()
             completion = {"status": "SKIPPED", "reason": "sbom_not_found"}
+            return completion
+
+        # Resolve again immediately before the external analysis begins.
+        # This closes the window where an administrator pauses/excludes or
+        # overrides a target after Beat enqueues it but before a worker starts.
+        from ..services.schedule_resolver import resolve_effective_schedule
+
+        effective = resolve_effective_schedule(db, sbom_id)
+        if (
+            effective is None
+            or not effective.included
+            or effective.schedule is None
+            or effective.schedule.id != schedule_id
+        ):
+            reason = effective.reason if effective is not None else "TARGET_INACTIVE"
+            log.info(
+                "scheduled_analysis_skip_resolution_changed",
+                extra={"sbom_id": sbom_id, "schedule_id": schedule_id, "reason": reason},
+            )
+            completion = {"status": "SKIPPED", "reason": reason}
             return completion
 
         gap_minutes = sched.min_gap_minutes if sched is not None else 60

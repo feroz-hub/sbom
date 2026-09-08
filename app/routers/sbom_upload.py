@@ -43,14 +43,14 @@ from ..db import get_db
 from ..models import SBOMSource, SBOMType
 from ..services import audit_service
 from ..services.product_service import resolve_product_assignment
+from ..services.sbom_document_service import byte_size, count_lines, parsed_component_count
+from ..services.sbom_enrichment_service import mark_enrichment_pending, run_post_upload_enrichment
+from ..services.sbom_service import sync_sbom_components
 from ..services.sbom_version_lineage import (
     VersionLineageError,
     head_of_lineage,
     resolve_parent_sbom,
 )
-from ..services.sbom_document_service import byte_size, count_lines, parsed_component_count
-from ..services.sbom_enrichment_service import mark_enrichment_pending, run_post_upload_enrichment
-from ..services.sbom_service import sync_sbom_components
 from ..services.validation_repair_service import (
     ValidationRepairService,
     build_validation_failed_detail,
@@ -73,6 +73,7 @@ _UPLOAD_FORM_FIELDS = {
     "productver",
     "created_by",
     "parent_sbom_id",
+    "set_as_current",
 }
 
 
@@ -90,6 +91,7 @@ class SbomAcceptedResponse(BaseModel):
     project_id: int | None = None
     product_id: int | None = None
     product_name: str | None = None
+    is_current: bool = False
     project_name: str | None = None
     spec: str
     spec_version: str
@@ -142,6 +144,7 @@ async def upload_sbom(
             "a standalone SBOM."
         ),
     ),
+    set_as_current: bool = Form(False, description="Set this upload as the Product's current SBOM."),
     context: CurrentContext = Depends(require_permission("product:assign_sbom")),
     strict_ntia: bool = Query(False, description="Promote NTIA warnings to hard errors."),
     db: Session = Depends(get_db),
@@ -360,6 +363,21 @@ async def upload_sbom(
     mark_enrichment_pending(obj)
     try:
         db.add(obj)
+        db.flush()
+        make_current = bool(product and (set_as_current or product.current_sbom_id is None))
+        if make_current:
+            previous_current_id = product.current_sbom_id
+            product.current_sbom_id = obj.id
+            product.updated_at = _now_iso()
+            audit_service.write_audit_log(
+                db,
+                context,
+                "product.current_sbom.changed",
+                entity_type="product",
+                entity_id=product.id,
+                old_value={"current_sbom_id": previous_current_id},
+                new_value={"current_sbom_id": obj.id, "source": "sbom.upload"},
+            )
         db.commit()
         db.refresh(obj)
         session.imported_sbom_id = obj.id
@@ -452,6 +470,7 @@ async def upload_sbom(
         project_id=obj.projectid,
         product_id=obj.product_id,
         product_name=obj.product_name,
+        is_current=bool(product and product.current_sbom_id == obj.id),
         project_name=obj.project_name,
         spec=spec,
         spec_version=spec_version,

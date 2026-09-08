@@ -310,6 +310,14 @@ class Settings(BaseSettings):
         default="",
         description="Override broker; defaults to redis_url when empty",
     )
+    celery_use_database_broker: bool = Field(
+        default=False,
+        description="Derive a local Celery SQLAlchemy broker from database_url instead of Redis",
+    )
+    celery_result_backend: str = Field(
+        default="",
+        description="Override Celery result backend; defaults to a broker-compatible backend when empty",
+    )
 
     # CVE Detail Modal — enrichment service knobs
     #

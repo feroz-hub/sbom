@@ -27,6 +27,8 @@ export interface Product {
   sbom_count?: number;
   latest_sbom_id?: number | null;
   latest_sbom_version?: string | null;
+  current_sbom_id?: number | null;
+  current_sbom_version?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
   is_active?: boolean;
@@ -1293,6 +1295,7 @@ export interface CreateSBOMPayload {
    * SBOM — upload does not infer lineage from a matching name.
    */
   parent_sbom_id?: number;
+  set_as_current?: boolean;
 }
 
 export interface UploadSBOMAcceptedResponse {
@@ -1307,6 +1310,7 @@ export interface UploadSBOMAcceptedResponse {
   project_id: number | null;
   product_id?: number | null;
   product_name?: string | null;
+  is_current?: boolean;
   project_name?: string | null;
   spec: string;
   spec_version: string;
@@ -1579,6 +1583,9 @@ export type ScheduleCadence =
   | 'CUSTOM';
 
 export type ScheduleScope = 'TENANT' | 'PROJECT' | 'PRODUCT' | 'SBOM';
+export type ScheduleTargetPolicy = 'CURRENT_ONLY' | 'ALL_ACTIVE_VERSIONS';
+export type ScheduleMode = 'CUSTOM' | 'EXCLUDED';
+export type ScheduleState = 'NONE' | 'INHERITED' | 'CUSTOM' | 'PAUSED' | 'EXCLUDED';
 
 export interface AnalysisSchedule {
   id: number;
@@ -1593,6 +1600,9 @@ export interface AnalysisSchedule {
   day_of_month: number | null;  // 1..28
   hour_utc: number;             // 0..23
   timezone: string;             // IANA, display only
+  mode: ScheduleMode;
+  target_version_policy: ScheduleTargetPolicy;
+  state: ScheduleState;
   enabled: boolean;
   next_run_at: string | null;
   last_run_at: string | null;
@@ -1604,11 +1614,19 @@ export interface AnalysisSchedule {
   created_by: string | null;
   modified_on: string | null;
   modified_by: string | null;
+  project_name?: string | null;
+  product_name?: string | null;
+  sbom_name?: string | null;
+  sbom_version?: string | null;
 }
 
 export interface SbomScheduleResolved {
   inherited: boolean;
   schedule: AnalysisSchedule | null;
+  state: ScheduleState;
+  source_scope?: ScheduleScope | null;
+  resolution_reason: string;
+  included: boolean;
 }
 
 export interface ScheduleUpsertPayload {
@@ -1618,9 +1636,33 @@ export interface ScheduleUpsertPayload {
   day_of_month?: number | null;
   hour_utc?: number;
   timezone?: string;
+  mode?: ScheduleMode;
+  target_version_policy?: ScheduleTargetPolicy;
   enabled?: boolean;
   min_gap_minutes?: number;
   modified_by?: string;
+}
+
+export interface ScheduleTarget {
+  project_id: number | null;
+  project_name: string | null;
+  product_id: number | null;
+  product_name: string | null;
+  sbom_id: number | null;
+  sbom_name: string | null;
+  sbom_version: string | null;
+  effective_schedule_id: number | null;
+  effective_scope: ScheduleScope | null;
+  included: boolean;
+  resolution: string;
+}
+
+export interface ScheduleTargetPreview {
+  schedule_id: number;
+  scope: ScheduleScope;
+  target_count: number;
+  skipped_count: number;
+  targets: ScheduleTarget[];
 }
 
 export interface ConsolidatedAnalysisResult {

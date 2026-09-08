@@ -13,7 +13,7 @@ from sqlalchemy.engine import make_url
 pytestmark = pytest.mark.postgres
 
 REVISION = "047_email_verification_tokens"
-CURRENT_HEAD = "053_tenant_analysis_schedule"
+CURRENT_HEAD = "054_hierarchical_scheduler"
 PREVIOUS_REVISION = "046_external_identity_and_verification_fields"
 
 

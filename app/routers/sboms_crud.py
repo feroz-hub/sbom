@@ -45,6 +45,7 @@ from ..idempotency import (
 from ..models import (
     AnalysisFinding,
     AnalysisRun,
+    Product,
     Projects,
     SBOMComponent,
     SBOMSource,
@@ -784,6 +785,7 @@ def create_sbom(
 
     try:
         data = payload.model_dump()
+        set_as_current = bool(data.pop("set_as_current", False))
         data["sbom_data"] = raw_text or None
         data["created_by"] = data.get("created_by") or context.actor_label()
         data["product_id"] = product.id if product else None
@@ -801,6 +803,19 @@ def create_sbom(
         mark_enrichment_pending(obj)
         db.add(obj)
         db.flush()
+        if product and (set_as_current or product.current_sbom_id is None):
+            previous_current_id = product.current_sbom_id
+            product.current_sbom_id = obj.id
+            product.updated_at = now_iso()
+            audit_service.write_audit_log(
+                db,
+                context,
+                "product.current_sbom.changed",
+                entity_type="product",
+                entity_id=product.id,
+                old_value={"current_sbom_id": previous_current_id},
+                new_value={"current_sbom_id": obj.id, "source": "legacy_sbom_create"},
+            )
         db.commit()
         db.refresh(obj)
         log.info(
@@ -1266,6 +1281,30 @@ def update_sbom(
         sbom.product_id = product.id if product else None
         if product:
             sbom.product_name = product.name
+
+        # Moving a current SBOM out of a Product must not leave a dangling
+        # cross-product scheduler target. Selection of a replacement remains
+        # explicit; version strings are deliberately never sorted here.
+        if old_product_id is not None and old_product_id != sbom.product_id:
+            old_product = db.execute(
+                select(Product).where(
+                    Product.id == old_product_id,
+                    Product.tenant_id == context.tenant_id,
+                    Product.is_active.is_(True),
+                )
+            ).scalar_one_or_none()
+            if old_product is not None and old_product.current_sbom_id == sbom.id:
+                old_product.current_sbom_id = None
+                old_product.updated_at = now_iso()
+                audit_service.write_audit_log(
+                    db,
+                    context,
+                    "product.current_sbom.changed",
+                    entity_type="product",
+                    entity_id=old_product.id,
+                    old_value={"current_sbom_id": sbom.id},
+                    new_value={"current_sbom_id": None, "source": "sbom.product_changed"},
+                )
 
         # Update project_id in related AnalysisRuns
         from sqlalchemy import update as sa_update

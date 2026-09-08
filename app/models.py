@@ -527,9 +527,27 @@ class Product(Base, SoftDeleteMixin, TenantOwnedMixin):
     created_at = Column(String, nullable=False, index=True)
     updated_at = Column(String, nullable=True)
     deleted_at = Column(String, nullable=True, index=True)
+    # Explicit scheduler target.  Version strings are intentionally not used
+    # to infer "latest/current" because product versions are not reliably
+    # sortable (for example R2.1, 2026.09, or Firmware-22A).
+    current_sbom_id = Column(
+        Integer,
+        ForeignKey("sbom_source.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
     project = relationship("Projects", back_populates="products")
-    sboms = relationship("SBOMSource", back_populates="product")
+    sboms = relationship(
+        "SBOMSource",
+        back_populates="product",
+        foreign_keys="SBOMSource.product_id",
+    )
+    current_sbom = relationship(
+        "SBOMSource",
+        foreign_keys=[current_sbom_id],
+        post_update=True,
+    )
     analysis_runs = relationship("AnalysisRun", back_populates="product")
     schedules = relationship(
         "AnalysisSchedule",
@@ -626,7 +644,7 @@ class SBOMSource(Base, SoftDeleteMixin, TenantOwnedMixin):
     component_extraction_completed_at = Column(String, nullable=True)
 
     project = relationship("Projects", back_populates="sboms")
-    product = relationship("Product", back_populates="sboms")
+    product = relationship("Product", back_populates="sboms", foreign_keys=[product_id])
     sbom_type_rel = relationship("SBOMType", back_populates="sboms")
     analysis_reports = relationship("SBOMAnalysisReport", back_populates="sbom")
     components = relationship("SBOMComponent", back_populates="sbom")
@@ -1304,16 +1322,16 @@ class KevEntry(Base):
 
 class AnalysisSchedule(Base, SoftDeleteMixin, TenantOwnedMixin):
     """
-    Periodic analysis schedule. One row per scope target (PROJECT or SBOM).
+    Periodic analysis schedule. One active row per scope target.
 
-    A project-level row applies to every SBOM in the project at tick time;
-    an SBOM-level row overrides the cascade for that one SBOM.
+    Resolution is SBOM > PRODUCT > PROJECT > TENANT. Missing child rows
+    inherit, paused custom rows block inheritance, and EXCLUDED rows opt out.
     """
 
     __tablename__ = "analysis_schedule"
 
     id = Column(Integer, primary_key=True, index=True)
-    scope = Column(String(16), nullable=False)  # 'PROJECT' | 'SBOM'
+    scope = Column(String(16), nullable=False)  # TENANT|PROJECT|PRODUCT|SBOM
 
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True)
     product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=True, index=True)
@@ -1325,6 +1343,16 @@ class AnalysisSchedule(Base, SoftDeleteMixin, TenantOwnedMixin):
     day_of_month = Column(Integer, nullable=True)  # 1..28 for MONTHLY/QUARTERLY
     hour_utc = Column(Integer, nullable=False, default=2)
     timezone = Column(String(64), nullable=False, default="UTC")
+
+    # A missing child row means INHERIT.  CUSTOM rows may be enabled or
+    # paused; EXCLUDED rows explicitly block all parent inheritance.
+    mode = Column(String(16), nullable=False, default="CUSTOM", server_default="CUSTOM")
+    target_version_policy = Column(
+        String(32),
+        nullable=False,
+        default="CURRENT_ONLY",
+        server_default="CURRENT_ONLY",
+    )
 
     enabled = Column(Boolean, nullable=False, default=True)
 
@@ -1350,6 +1378,11 @@ class AnalysisSchedule(Base, SoftDeleteMixin, TenantOwnedMixin):
         CheckConstraint(
             "cadence IN ('DAILY','WEEKLY','BIWEEKLY','MONTHLY','QUARTERLY','CUSTOM')",
             name="ck_analysis_schedule_cadence",
+        ),
+        CheckConstraint("mode IN ('CUSTOM','EXCLUDED')", name="ck_analysis_schedule_mode"),
+        CheckConstraint(
+            "target_version_policy IN ('CURRENT_ONLY','ALL_ACTIVE_VERSIONS')",
+            name="ck_analysis_schedule_target_version_policy",
         ),
         CheckConstraint(
             "(scope = 'TENANT' AND project_id IS NULL AND product_id IS NULL AND sbom_id IS NULL) "
