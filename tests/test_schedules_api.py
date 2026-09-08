@@ -82,7 +82,7 @@ def _stub_celery(monkeypatch):
 
     class _FakeTask:
         @staticmethod
-        def delay(sbom_id, schedule_id):
+        def delay(sbom_id, schedule_id, report_cycle=None):  # noqa: ARG004
             captured.append((sbom_id, schedule_id))
             return None
 
@@ -373,7 +373,7 @@ def test_run_now_returns_502_when_broker_drops_every_enqueue(client, sbom_id, mo
 
     class _BrokenTask:
         @staticmethod
-        def delay(sbom_id, schedule_id):  # noqa: ARG004
+        def delay(sbom_id, schedule_id, report_cycle=None):  # noqa: ARG004
             raise ConnectionError("[Errno 111] Connection refused")
 
     from app.workers import scheduled_analysis
