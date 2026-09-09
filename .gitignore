@@ -53,6 +53,10 @@ logs/
 # ── PDF reports (generated at runtime) ───────────────────
 *.pdf
 
+# ── Celery beat state (per-machine runtime, regenerated) ─
+celerybeat-schedule*
+celerybeat.pid
+
 # ── IDE / editor ─────────────────────────────────────────
 .vscode/
 .idea/
