@@ -21,4 +21,20 @@ foreach ($s in $services) {
 }
 
 Write-Host ""
+$celery = Get-CimInstance Win32_Process -Filter "Name like 'python%' or Name like 'celery%'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -match 'app\.workers\.celery_app' }
+foreach ($c in @(
+        @{ Label = 'Celery worker (default)'; Pattern = 'hostname=default@' },
+        @{ Label = 'Celery worker (reports)'; Pattern = 'hostname=reports@' },
+        @{ Label = 'Celery Beat';             Pattern = ' beat ' }
+    )) {
+    if ($celery | Where-Object { $_.CommandLine -match $c.Pattern }) {
+        Write-Host ("{0,-24}: RUNNING" -f $c.Label) -ForegroundColor Green
+    }
+    else {
+        Write-Host ("{0,-24}: DOWN" -f $c.Label) -ForegroundColor Red
+    }
+}
+
+Write-Host ""
 Get-Service 'MSSQL$SQLEXPRESS', postgresql* -ErrorAction SilentlyContinue | Format-Table Name, Status
