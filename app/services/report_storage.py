@@ -3,6 +3,7 @@
 import hashlib
 import os
 import re
+import subprocess
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -43,6 +44,43 @@ def configuration_errors(settings=None):
     return errors
 
 
+_windows_hardened_roots: set[str] = set()
+
+
+def _harden_windows_directory(root: Path):
+    """NTFS equivalent of the POSIX owner-only requirement below.
+
+    Windows ignores ``mkdir(mode=...)`` and synthesizes ``st_mode`` as 0o777
+    for any writable directory, so the POSIX bit check can never pass there.
+    Instead, strip inherited ACEs and grant access to the current user and
+    SYSTEM only. ``whoami``/``icacls`` ship with every supported Windows;
+    SID forms keep this locale-independent. Failure fails closed, matching
+    the POSIX branch.
+    """
+    key = str(root)
+    if key in _windows_hardened_roots:
+        return
+    try:
+        whoami = subprocess.run(
+            ["whoami", "/user", "/fo", "csv", "/nh"],
+            capture_output=True, text=True, check=True, timeout=30,
+        )
+        user_sid = whoami.stdout.strip().rsplit(",", 1)[-1].strip().strip('"')
+        if not re.fullmatch(r"S-1-[0-9-]+", user_sid):
+            raise ValueError("REPORT_STORAGE_PERMISSIONS")
+        subprocess.run(
+            [
+                "icacls", str(root), "/inheritance:r",
+                "/grant:r", f"*{user_sid}:(OI)(CI)F",
+                "/grant:r", "*S-1-5-18:(OI)(CI)F",
+            ],
+            capture_output=True, text=True, check=True, timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError):
+        raise ValueError("REPORT_STORAGE_PERMISSIONS") from None
+    _windows_hardened_roots.add(key)
+
+
 def storage_root():
     if configuration_errors():
         raise ValueError("REPORT_CONFIGURATION_INVALID")
@@ -50,7 +88,9 @@ def storage_root():
     if root.is_symlink():
         raise ValueError("REPORT_STORAGE_UNSAFE")
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
-    if root.stat().st_mode & 0o077:
+    if os.name == "nt":
+        _harden_windows_directory(root)
+    elif root.stat().st_mode & 0o077:
         raise ValueError("REPORT_STORAGE_PERMISSIONS")
     return root.resolve()
 
@@ -66,7 +106,10 @@ def artifact_path(relative):
 def store_artifact(db, delivery, attachment):
     relative = uuid4().hex
     path = artifact_path(relative)
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    # O_NOFOLLOW is POSIX-only; O_CREAT|O_EXCL already refuses any pre-existing
+    # path (including symlinks), and artifact_path() rejects symlinks upfront.
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags, 0o600)
     try:
         with os.fdopen(descriptor, "wb") as stream:
             stream.write(attachment.content)
