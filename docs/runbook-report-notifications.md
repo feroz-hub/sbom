@@ -1,7 +1,7 @@
 # Scheduled report notifications — implementation and operations
 
 Implemented on `feat/sbom-version-lineage-vex-import`; migrations are
-`051_report_subscription` → `052_report_delivery_artifact` → `053_tenant_analysis_schedule` → `054_hierarchical_scheduler`.
+`051_report_subscription` → `052_report_delivery_artifact` → `053_tenant_analysis_schedule` → `054_hierarchical_scheduler` → `055_ai_model_registry`.
 The feature is opt-in. Existing analysis, verification mail and env-only local workflows remain available with it disabled.
 
 ## Product decisions confirmed on 2026-09-07

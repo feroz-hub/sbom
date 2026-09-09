@@ -1,6 +1,6 @@
 # AI providers — supported list
 
-> Last verified 2026-05-04. Pricing and rate limits drift quarterly —
+> Last verified 2026-09-09. Pricing and rate limits drift quarterly —
 > verify against the upstream "API key" link before relying on numbers
 > in this doc.
 
@@ -10,14 +10,20 @@ Connection, encrypted save/decrypt, saved Test Connection, config loading,
 registry selection, and mocked generation. Adding a provider therefore means
 supporting the complete factory contract, not only adding a provider class.
 
+Model names in the tables below are bootstrap examples for the initial,
+unsaved form; they are not the production availability catalog. After saving
+a credential, use **Refresh Models** to populate the persistent registry from
+the provider, **Test Model**, then explicitly **Set active**. Discovery never
+changes the active production model by itself.
+
 ---
 
 ## Cloud — paid
 
-| Provider | Default model | Pricing (per 1k tokens) | Notes |
+| Provider | Bootstrap model | Pricing (per 1k tokens) | Notes |
 |---|---|---|---|
-| **Anthropic** | `claude-sonnet-4-5` | in $0.003 · out $0.015 | Production default. Best fix-generation quality in our testing. |
-| **OpenAI**    | `gpt-4o-mini`       | in $0.00015 · out $0.0006 | Cheapest paid option. Good cost-quality tradeoff. |
+| **Anthropic** | `claude-sonnet-4-5` | in $0.003 · out $0.015 | Initial form value; refresh before production selection. |
+| **OpenAI**    | `gpt-4o-mini`       | in $0.00015 · out $0.0006 | Initial form value; refresh before production selection. |
 
 **API keys:**
 * Anthropic: https://console.anthropic.com/settings/keys
@@ -35,7 +41,7 @@ them the recommended starting point for evaluation.
 
 | | |
 |---|---|
-| Default model | `gemini-3.6-flash` |
+| Bootstrap model | `gemini-3.6-flash` |
 | Free tier limits | **15 req/min · 1M tokens/day · 1500 req/day** |
 | Free tier pricing | $0 |
 | Paid tier pricing | Flash: in $0.000075 · out $0.0003 per 1k tokens |
@@ -53,7 +59,7 @@ surface a warning before starting).
 
 | | |
 |---|---|
-| Default model | `grok-2-mini` |
+| Bootstrap model | `grok-2-mini` |
 | Free tier limits | **~60 req/min · ~25k tokens/day** |
 | Free tier pricing | $0 |
 | Paid tier pricing | grok-2-mini: in $0.0002 · out $0.001 per 1k tokens |
@@ -80,7 +86,7 @@ Configure the API key, model, and optional base URL in Settings -> AI.
 
 | | |
 |---|---|
-| Default model | `llama3.3:70b` |
+| Bootstrap model | `llama3.3:70b` |
 | Pricing | $0 (you provide the GPU) |
 | Default URL | `http://localhost:11434` |
 | Docs | https://github.com/ollama/ollama/blob/main/docs/api.md |
@@ -96,7 +102,7 @@ Configure the API key, model, and optional base URL in Settings -> AI.
 
 | | |
 |---|---|
-| Default model | varies (free-text per deployment) |
+| Bootstrap model | varies (free-text per deployment) |
 | Pricing | $0 (you provide the GPU) |
 | Default URL | none — operator-supplied |
 | Docs | https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html |
@@ -115,7 +121,7 @@ isn't in the curated list above.
 |---|---|---|
 | Base URL | Yes | Must start with `https://` or `http://localhost`. Plaintext public URLs are rejected at validation time. |
 | API key | No | Defaults to `EMPTY` (most local setups don't need one). Provide if your endpoint requires it. |
-| Default model | Yes | Free-text — the platform doesn't enumerate available models. |
+| Bootstrap model | Yes | Free-text for the first save; Refresh Models then attempts the endpoint's standard `GET /v1/models`. |
 | Cost per 1k input | No | Defaults to $0. Set if you want to track local-compute equivalents. |
 | Cost per 1k output | No | Same. |
 
@@ -166,9 +172,14 @@ paid?") so the user can choose between waiting or upgrading.
 
 ## Adding a new provider in code
 
-Three files:
+Provider implementations must support the shared `list_models()` contract. If
+an upstream genuinely has no compatible listing endpoint, raise the typed
+`unsupported` discovery result and document the adapter fallback instead of
+presenting a static list as live data.
 
-1. `app/ai/providers/<name>.py` — implement the `LlmProvider` protocol.
+Four files:
+
+1. `app/ai/providers/<name>.py` — implement `generate`, `test_connection`, and `list_models` from the `LlmProvider` protocol.
 2. `app/ai/cost.py` — add the per-1k-token pricing table entry.
 3. `app/ai/registry.py` — add the env→config branch and the
    factory branch in `_build_provider`.

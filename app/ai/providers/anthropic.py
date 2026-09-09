@@ -16,6 +16,7 @@ import json
 import logging
 import time
 from typing import Any
+from urllib.parse import urlencode
 
 import httpx
 
@@ -24,10 +25,12 @@ from ..limiter import CircuitBreaker, RateLimiter
 from .base import (
     AiProviderError,
     ConnectionTestResult,
+    DiscoveredModel,
     LlmProvider,
     LlmRequest,
     LlmResponse,
     LlmUsage,
+    ModelDiscoveryError,
     ProviderInfo,
     ProviderUnavailableError,
     classify_http_failure,
@@ -120,6 +123,55 @@ class AnthropicProvider(LlmProvider):
     async def health_check(self) -> bool:
         result = await self.test_connection()
         return result.success
+
+    async def list_models(self) -> list[DiscoveredModel]:
+        client = await self._client()
+        url: str | None = "https://api.anthropic.com/v1/models?limit=1000"
+        discovered: list[DiscoveredModel] = []
+        while url:
+            try:
+                response = await client.get(url, headers=self._headers(), timeout=self._timeout)
+            except httpx.TimeoutException as exc:
+                raise ModelDiscoveryError("timeout", "anthropic: model discovery timed out") from exc
+            except httpx.RequestError as exc:
+                raise ModelDiscoveryError("provider_unreachable", "anthropic: provider unreachable") from exc
+            if response.status_code in (401, 403):
+                raise ModelDiscoveryError("authentication_failed", "anthropic: authentication failed")
+            if response.status_code == 404:
+                raise ModelDiscoveryError("unsupported", "anthropic: model discovery is not supported")
+            if response.status_code == 429:
+                raise ModelDiscoveryError("rate_limited", "anthropic: model discovery was rate limited")
+            if response.status_code >= 400:
+                raise ModelDiscoveryError("invalid_response", f"anthropic: model listing returned HTTP {response.status_code}")
+            try:
+                body = response.json()
+                items = body["data"]
+                if not isinstance(items, list):
+                    raise TypeError("data is not a list")
+            except (ValueError, KeyError, TypeError) as exc:
+                raise ModelDiscoveryError("invalid_response", "anthropic: invalid model listing response") from exc
+            for item in items:
+                if not isinstance(item, dict) or not isinstance(item.get("id"), str):
+                    continue
+                model_id = item["id"].strip()
+                if not model_id:
+                    continue
+                discovered.append(DiscoveredModel(
+                    provider_model_id=model_id,
+                    runtime_model_id=model_id,
+                    display_name=item.get("display_name") if isinstance(item.get("display_name"), str) else model_id,
+                    provider_name=self.name,
+                    supports_chat=True,
+                    supports_structured_output=True,
+                    supports_streaming=True,
+                    supports_tools=True,
+                    raw_metadata={key: item[key] for key in ("type", "created_at") if isinstance(item.get(key), str)} or None,
+                ))
+            if body.get("has_more") is True and isinstance(body.get("last_id"), str):
+                url = f"https://api.anthropic.com/v1/models?{urlencode({'limit': 1000, 'after_id': body['last_id']})}"
+            else:
+                url = None
+        return discovered
 
     async def test_connection(self, *, model: str | None = None) -> ConnectionTestResult:
         """Probe Anthropic via ``GET /v1/models``.

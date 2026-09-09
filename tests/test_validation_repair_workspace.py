@@ -815,7 +815,11 @@ def test_validation_repair_ai_uses_shared_registry_budget_and_review_contract(cl
         is_local = True
         max_concurrent = 1
 
+        def __init__(self):
+            self.requested_models = []
+
         async def generate(self, request):
+            self.requested_models.append(request.model)
             return LlmResponse(
                 text=json.dumps(suggestion),
                 parsed=suggestion,
@@ -845,8 +849,9 @@ def test_validation_repair_ai_uses_shared_registry_budget_and_review_contract(cl
     finally:
         db.close()
     reset_loader()
+    provider = _RepairProvider()
     registry = ProviderRegistry(configs=[], default_provider="fake")
-    registry.register_instance(_RepairProvider())
+    registry.register_instance(provider)
     monkeypatch.setattr("app.services.validation_repair_service.get_registry", lambda db=None: registry)
 
     response = client.post(
@@ -856,6 +861,7 @@ def test_validation_repair_ai_uses_shared_registry_budget_and_review_contract(cl
     assert response.status_code == 200, response.text
     assert response.json()["requires_user_review"] is True
     assert response.json()["patches"][0]["target"] == "/components/0/purl"
+    assert provider.requested_models == [provider.default_model]
     db = SessionLocal()
     try:
         assert db.query(AiUsageLog).filter(AiUsageLog.purpose == "sbom_validation_repair").count() == 1

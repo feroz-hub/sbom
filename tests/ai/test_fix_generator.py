@@ -193,6 +193,7 @@ async def test_cache_miss_then_hit(_seeded):
     # _parse_response → _post_validate → write_cache on the MISS path.
     assert first.bundle.overall_confidence == "high"
     assert len(fake.calls) == 1
+    assert fake.calls[0].model == fake.default_model
 
     # Second call — same finding → cache hit, no extra LLM invocation.
     db = SessionLocal()

@@ -2239,6 +2239,9 @@ import type {
   AiPricingEntry,
   AiProviderCatalogEntry,
   AiProviderInfo,
+  AiProviderModel,
+  AiModelRefreshResult,
+  AiModelTestResult,
   AiTestConnectionRequest,
   AiTopCachedItem,
   AiTriggerBatchRequest,
@@ -2529,6 +2532,31 @@ export function testAiCredentialSaved(
   });
 }
 
+export function listAiProviderModels(id: number, signal?: AbortSignal): Promise<AiProviderModel[]> {
+  return request<AiProviderModel[]>(`/api/v1/ai/credentials/${id}/models`, { signal });
+}
+
+export function refreshAiProviderModels(id: number, signal?: AbortSignal): Promise<AiModelRefreshResult> {
+  return request<AiModelRefreshResult>(`/api/v1/ai/credentials/${id}/models/refresh`, {
+    method: 'POST',
+    signal,
+  });
+}
+
+export function selectAiProviderModel(credentialId: number, modelId: number, signal?: AbortSignal): Promise<AiProviderModel> {
+  return request<AiProviderModel>(`/api/v1/ai/credentials/${credentialId}/models/${modelId}/select`, {
+    method: 'POST',
+    signal,
+  });
+}
+
+export function testAiProviderModel(credentialId: number, modelId: number, signal?: AbortSignal): Promise<AiModelTestResult> {
+  return request<AiModelTestResult>(`/api/v1/ai/credentials/${credentialId}/models/${modelId}/test`, {
+    method: 'POST',
+    signal,
+  });
+}
+
 export function getAiCredentialSettings(signal?: AbortSignal): Promise<AiCredentialSettings> {
   return request<AiCredentialSettings>(`/api/v1/ai/settings`, { signal });
 }
@@ -2545,7 +2573,7 @@ export function updateAiCredentialSettings(
   });
 }
 
-/** Static catalog driving the AddProviderDialog dropdown + form. */
+/** Provider/bootstrap catalog driving the unsaved AddProviderDialog only. */
 export function listAiProviderCatalog(signal?: AbortSignal): Promise<AiProviderCatalogEntry[]> {
   return request<AiProviderCatalogEntry[]>(`/api/v1/ai/providers/available`, { signal });
 }

@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from .base import ConnectionTestResult, LlmProvider, LlmRequest, LlmResponse, ProviderInfo
+from .base import ConnectionTestResult, DiscoveredModel, LlmProvider, LlmRequest, LlmResponse, ProviderInfo
 from .openai import OpenAiProvider
 
 log = logging.getLogger("sbom.ai.providers.vllm")
@@ -73,6 +73,10 @@ class VllmProvider(LlmProvider):
         result = await self._inner.test_connection(model=model)
         # Override the provider label so callers see "vllm", not "openai".
         return result.model_copy(update={"provider": self.name})
+
+    async def list_models(self) -> list[DiscoveredModel]:
+        models = await self._inner.list_models()
+        return [model.model_copy(update={"provider_name": self.name}) for model in models]
 
     def info(self) -> ProviderInfo:
         inner = self._inner.info()

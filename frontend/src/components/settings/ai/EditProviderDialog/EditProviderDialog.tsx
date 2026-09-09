@@ -215,33 +215,13 @@ export function EditProviderDialog({ credential, onClose }: EditProviderDialogPr
           ) : null}
 
           <div>
-            <label className="text-xs font-medium text-hcl-navy" htmlFor="ai-edit-model">
-              Model
-            </label>
-            {entry && entry.available_models.length > 0 ? (
-              <select
-                id="ai-edit-model"
-                value={defaultModel}
-                onChange={(e) => setDefaultModel(e.target.value)}
-                className="mt-1 w-full rounded-md border border-border-subtle bg-surface px-3 py-2 text-sm"
-              >
-                {entry.available_models.map((m) => (
-                  <option key={m.name} value={m.name}>
-                    {m.display_name}
-                    {m.notes ? ` — ${m.notes}` : ''}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input
-                id="ai-edit-model"
-                type="text"
-                value={defaultModel}
-                onChange={(e) => setDefaultModel(e.target.value)}
-                spellCheck={false}
-                className="mt-1 w-full rounded-md border border-border-subtle bg-surface px-3 py-2 font-mono text-sm"
-              />
-            )}
+            <p className="text-xs font-medium text-hcl-navy">Active model</p>
+            <p className="mt-1 rounded-md border border-border-subtle bg-surface-muted px-3 py-2 font-mono text-sm text-hcl-navy">
+              {defaultModel || 'Not selected'}
+            </p>
+            <p className="mt-1 text-xs text-hcl-muted">
+              Refresh, test, and change the active model from the provider card.
+            </p>
           </div>
 
           {entry?.supports_free_tier ? (

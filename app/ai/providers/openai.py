@@ -18,10 +18,12 @@ from ..limiter import CircuitBreaker, RateLimiter
 from .base import (
     AiProviderError,
     ConnectionTestResult,
+    DiscoveredModel,
     LlmProvider,
     LlmRequest,
     LlmResponse,
     LlmUsage,
+    ModelDiscoveryError,
     ProviderInfo,
     ProviderUnavailableError,
     classify_http_failure,
@@ -140,6 +142,57 @@ class OpenAiProvider(LlmProvider):
     async def health_check(self) -> bool:
         result = await self.test_connection()
         return result.success
+
+    async def list_models(self) -> list[DiscoveredModel]:
+        """List models exposed by an OpenAI-compatible ``/models`` endpoint."""
+        client = await self._client()
+        try:
+            response = await client.get(
+                f"{self._base_url}/models",
+                headers=self._headers(),
+                timeout=self._timeout,
+            )
+        except httpx.TimeoutException as exc:
+            raise ModelDiscoveryError("timeout", f"{self.name}: model discovery timed out") from exc
+        except httpx.RequestError as exc:
+            raise ModelDiscoveryError("provider_unreachable", f"{self.name}: provider unreachable") from exc
+        if response.status_code in (401, 403):
+            raise ModelDiscoveryError("authentication_failed", f"{self.name}: authentication failed")
+        if response.status_code == 404:
+            raise ModelDiscoveryError("unsupported", f"{self.name}: model discovery is not supported")
+        if response.status_code == 429:
+            raise ModelDiscoveryError("rate_limited", f"{self.name}: model discovery was rate limited")
+        if response.status_code >= 400:
+            raise ModelDiscoveryError("invalid_response", f"{self.name}: model listing returned HTTP {response.status_code}")
+        try:
+            body = response.json()
+            items = body["data"]
+            if not isinstance(items, list):
+                raise TypeError("data is not a list")
+        except (ValueError, KeyError, TypeError) as exc:
+            raise ModelDiscoveryError("invalid_response", f"{self.name}: invalid model listing response") from exc
+        discovered: list[DiscoveredModel] = []
+        for item in items:
+            if not isinstance(item, dict) or not isinstance(item.get("id"), str) or not item["id"].strip():
+                continue
+            model_id = item["id"].strip()
+            metadata = {
+                key: item[key]
+                for key in ("created", "owned_by", "object")
+                if key in item and isinstance(item[key], (str, int, float, bool, type(None)))
+            }
+            discovered.append(
+                DiscoveredModel(
+                    provider_model_id=model_id,
+                    runtime_model_id=model_id,
+                    display_name=model_id,
+                    provider_name=self.name,
+                    raw_metadata=metadata or None,
+                )
+            )
+        if items and not discovered:
+            raise ModelDiscoveryError("invalid_response", f"{self.name}: model listing contained no valid model IDs")
+        return discovered
 
     async def test_connection(self, *, model: str | None = None) -> ConnectionTestResult:
         """Enumerate models, then run a tiny completion with the selected model.

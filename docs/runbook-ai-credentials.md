@@ -111,6 +111,26 @@ without KMS. The KMS upgrade path is in the architecture doc §11.
 
 ## 2. Credential rows
 
+### Model registry operations
+
+In Settings → AI, click **Refresh models**, **Test** the intended model, then
+**Set active**. Refresh does not switch production. Beat repeats discovery
+daily at 04:10 UTC, and provider failures preserve the last working selection.
+
+For diagnostics, query only non-sensitive fields:
+
+```sql
+SELECT provider_credential_id, provider_name, provider_model_id,
+       runtime_model_id, is_available, is_selected, last_discovered_at,
+       last_verified_at, last_test_success
+FROM ai_provider_model
+ORDER BY provider_credential_id, provider_model_id;
+```
+
+The model administration endpoints use the same authenticated tenant-settings
+administrator boundary as provider credentials. API keys and raw authorization
+headers are neither returned nor stored in model metadata.
+
 ### 2.1 Listing what's there
 
 ```sql

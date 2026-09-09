@@ -16,7 +16,11 @@ class _CopilotProvider:
     is_local = True
     max_concurrent = 1
 
+    def __init__(self) -> None:
+        self.requested_models: list[str | None] = []
+
     async def generate(self, request: LlmRequest) -> LlmResponse:
+        self.requested_models.append(request.model)
         return LlmResponse(
             text="Use the prioritized findings and validate each remediation.",
             parsed=None,
@@ -67,14 +71,16 @@ def test_copilot_ask_uses_effective_config_registry_and_durable_ledger(
     monkeypatch,
     _enabled_db_settings,
 ):
+    provider = _CopilotProvider()
     registry = ProviderRegistry(configs=[], default_provider="fake")
-    registry.register_instance(_CopilotProvider())
+    registry.register_instance(provider)
     monkeypatch.setattr("app.ai.copilot.get_registry", lambda db=None: registry)
 
     response = client.post("/api/ai/copilot/ask", json={"question": "What should we fix first?"})
 
     assert response.status_code == 200, response.text
     assert response.json()["provider"] == "fake"
+    assert provider.requested_models == [provider.default_model]
     db = SessionLocal()
     try:
         rows = db.query(AiUsageLog).filter(AiUsageLog.purpose == "copilot_ask").all()

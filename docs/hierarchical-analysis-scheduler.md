@@ -98,7 +98,7 @@ Back up the deployment database, deploy the same revision to API/worker/Beat, an
 .venv/bin/python -m alembic current
 ```
 
-The expected head is `054_hierarchical_scheduler`. Then start the API, a Celery broker, at least one Celery worker, and exactly one Celery Beat process. API-only startup is insufficient for recurring execution. Redis is the production/default broker. On a local machine without Redis, set `CELERY_USE_DATABASE_BROKER=true` to derive a SQLAlchemy broker URL from the existing `DATABASE_URL` without duplicating its password. A full `CELERY_BROKER_URL=sqla+postgresql+psycopg://...` value is also accepted. The application automatically converts that broker URL to the `db+postgresql+psycopg://...` result-backend scheme. The polling SQLAlchemy transport is intended for development and smoke tests, not production.
+The expected head is `055_ai_model_registry`. Then start the API, a Celery broker, at least one Celery worker, and exactly one Celery Beat process. API-only startup is insufficient for recurring execution. Redis is the production/default broker. On a local machine without Redis, set `CELERY_USE_DATABASE_BROKER=true` to derive a SQLAlchemy broker URL from the existing `DATABASE_URL` without duplicating its password. A full `CELERY_BROKER_URL=sqla+postgresql+psycopg://...` value is also accepted. The application automatically converts that broker URL to the `db+postgresql+psycopg://...` result-backend scheme. The polling SQLAlchemy transport is intended for development and smoke tests, not production.
 
 Recommended verification:
 

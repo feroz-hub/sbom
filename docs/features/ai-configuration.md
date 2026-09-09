@@ -25,6 +25,53 @@ file edits, no SSH access required.
 * Adjust budget caps — per request, per scan, per day.
 * See live usage — total spent this month, cache hit rate, top
   provider. The full dashboard lives at ``/admin/ai-usage``.
+* Refresh the live model catalog, run a low-cost structured-output test, and
+  explicitly choose the active model for each saved credential.
+
+## Model discovery and selection
+
+After a connection test succeeds, save the credential and use this production
+workflow:
+
+```
+Configure provider → Test connection → Save → Refresh models
+→ Test model → Set active → Enable AI
+```
+
+Refresh queries the provider through its adapter and stores normalized rows in
+`ai_provider_model`. New rows are shown as available but are never selected
+automatically. A model that disappears remains in history and is marked
+unavailable; if it was active, it remains active until an administrator makes
+an explicit change. This avoids an upstream catalog change silently changing
+production behavior.
+
+The UI distinguishes provider IDs from runtime IDs where the adapter must
+normalize them (for example, Gemini's `models/...` resource name). Capability
+values are three-state: yes, no, or unknown. Unknown does not mean unsupported.
+
+Current model precedence is:
+
+1. Feature-specific assignment (reserved extension point; no feature-specific
+   assignments are stored yet).
+2. Selected registry model for the exact provider credential.
+3. Preserved legacy `default_model` from the DB or environment.
+4. A provider constructor bootstrap value only for an unsaved/legacy setup.
+
+AI Fix, Copilot, validation repair, batch processing, regeneration, API
+processes, and Celery workers all consume the same effective provider config.
+The registry stamps the resolved model on every generation request and stamps
+the fallback provider's own resolved model if fallback is used.
+
+| Provider | Discovery mechanism |
+|---|---|
+| OpenAI | Native `GET /v1/models` |
+| Anthropic | Paginated native `GET /v1/models` |
+| Gemini | Native Models API; retains `models/...` provider IDs |
+| xAI / Grok | xAI OpenAI-compatible `GET /v1/models` |
+| Ollama | Local `GET /api/tags` installed-model list |
+| vLLM | OpenAI-compatible `GET /v1/models` |
+| Custom OpenAI-compatible | Attempts validated-base `GET /v1/models`; reports unsupported on 404 |
+| Sarvam | Attempts the current integration's `/v1/models`; reports unsupported when that chat endpoint does not expose listing. Sarvam's separate v2 catalog is not presented as compatible with the current v1 runtime. |
 
 ---
 

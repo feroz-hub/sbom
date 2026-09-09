@@ -5,6 +5,7 @@ Tasks live in:
   * ``app.workers.scheduled_analysis`` — periodic SBOM rescans
                                           (tick + per-SBOM worker)
   * ``app.workers.kev_sync``           — daily CISA KEV catalog sync
+  * ``app.workers.ai_model_discovery`` — daily provider model refresh
 
 Beat schedule:
   * ``nvd-mirror-hourly`` — fires ``mirror_nvd`` at minute 15 every hour.
@@ -13,6 +14,8 @@ Beat schedule:
     rows whose next_run_at has passed.
   * ``kev-sync-daily`` — refreshes the local ``kev_vulnerabilities`` table
     every 24 hours.
+  * ``ai-model-registry-daily`` — refreshes enabled provider catalogs once
+    daily without changing active selections.
 
 Beat must run as a SINGLE instance (deploy as its own process).
 """
@@ -81,6 +84,7 @@ celery_app = Celery(
         "app.workers.source_cache",
         "app.workers.kev_sync",
         "app.workers.report_notifications",
+        "app.workers.ai_model_discovery",
     ],
 )
 
@@ -129,6 +133,10 @@ celery_app.conf.beat_schedule = {
         # co-fire and amplify lock contention.
         "task": "source_cache.sweep_expired",
         "schedule": crontab(minute=45, hour=3),
+    },
+    "ai-model-registry-daily": {
+        "task": "ai_models.refresh_all",
+        "schedule": crontab(minute=10, hour=4),
     },
 }
 

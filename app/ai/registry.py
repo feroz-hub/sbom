@@ -208,8 +208,9 @@ class ProviderRegistry:
         deterministic and are returned directly.
         """
         primary = self.get(provider_name) if provider_name else self.get_default()
+        primary_request = request.model_copy(update={"model": primary.default_model})
         try:
-            response = await primary.generate(request)
+            response = await primary.generate(primary_request)
             return RoutedGeneration(response=response, provider=primary, primary_provider=primary)
         except AiProviderError as exc:
             if not _fallback_eligible(exc):
@@ -223,7 +224,8 @@ class ProviderRegistry:
                 fallback.name,
                 _safe_failure_kind(exc),
             )
-            response = await fallback.generate(request)
+            fallback_request = request.model_copy(update={"model": fallback.default_model})
+            response = await fallback.generate(fallback_request)
             return RoutedGeneration(
                 response=response,
                 provider=fallback,

@@ -2,7 +2,7 @@
 
 SBOM Analyser is a FastAPI and Next.js platform for importing, validating, normalizing, analysing, and managing software bills of materials. It combines SBOM inventory, multi-source vulnerability analysis, CISA Known Exploited Vulnerabilities (KEV), lifecycle intelligence, VEX, remediation, reporting, tenant isolation, and role-based access control in one application.
 
-The current application version is `2.0.0`. The current Alembic schema head is `054_hierarchical_scheduler`.
+The current application version is `2.0.0`. The current Alembic schema head is `055_ai_model_registry`.
 
 ## Highlights
 
@@ -332,8 +332,12 @@ Store the printed value in the deployment secret store; never commit it. Then
 use Settings -> AI to add and test Anthropic, OpenAI, Gemini, Grok, Sarvam,
 Ollama, vLLM, or a custom OpenAI-compatible endpoint. Settings saved in the
 database are authoritative for feature state, kill switch, budgets,
-credentials, default, and fallback selection. The corresponding environment
-variables are migration fallbacks only when no authoritative DB row exists.
+credentials, default, fallback, and active model selection. After saving a
+credential, use **Refresh models → Test model → Set active**. Live model lists
+are persisted and refreshed daily; discovery never changes the active model
+automatically. The corresponding environment variables and catalog model
+names are migration/bootstrap fallbacks only when no authoritative DB row
+exists.
 `AI_FIXES_UI_CONFIG_ENABLED` and `AI_CANARY_PERCENTAGE` remain intentional
 deployment controls. See [AI configuration](docs/features/ai-configuration.md).
 

@@ -1541,7 +1541,7 @@ class AiUsageLog(Base, TenantOwnedMixin):
     id = Column(Integer, primary_key=True, index=True)
     request_id = Column(String(64), nullable=False)
     provider = Column(String(32), nullable=False, index=True)
-    model = Column(String(96), nullable=False)
+    model = Column(String(256), nullable=False)
     purpose = Column(String(48), nullable=False, index=True)
     finding_cache_key = Column(String(64), nullable=True, index=True)
     input_tokens = Column(Integer, nullable=False, default=0)
@@ -1566,7 +1566,7 @@ class AiProviderConfig(Base):
 
     provider_name = Column(String(32), primary_key=True)
     enabled = Column(Boolean, nullable=True)
-    default_model = Column(String(96), nullable=True)
+    default_model = Column(String(256), nullable=True)
     base_url = Column(String(256), nullable=True)
     max_concurrent = Column(Integer, nullable=True)
     rate_per_minute = Column(Float, nullable=True)
@@ -1611,7 +1611,7 @@ class AiFixCache(Base):
     overall_confidence = Column(String(16), nullable=True)
 
     provider_used = Column(String(32), nullable=False)
-    model_used = Column(String(96), nullable=False)
+    model_used = Column(String(256), nullable=False)
     total_cost_usd = Column(Float, nullable=False, default=0.0)
 
     generated_at = Column(String, nullable=False)
@@ -1694,7 +1694,7 @@ class AiProviderCredential(Base):
     label = Column(String(64), nullable=False, default="default")
     api_key_encrypted = Column(Text, nullable=True)
     base_url = Column(String(512), nullable=True)
-    default_model = Column(String(128), nullable=True)
+    default_model = Column(String(256), nullable=True)
     tier = Column(String(16), nullable=False, default="paid")
     is_default = Column(Boolean, nullable=False, default=False)
     is_fallback = Column(Boolean, nullable=False, default=False)
@@ -1711,6 +1711,76 @@ class AiProviderCredential(Base):
     last_test_error = Column(Text, nullable=True)
 
     __table_args__ = (UniqueConstraint("provider_name", "label", name="uq_ai_provider_credential_provider_label"),)
+
+
+class AiProviderModel(Base):
+    """Persisted model discovered for one exact provider credential.
+
+    Discovery is intentionally historical: a model that disappears upstream is
+    marked unavailable rather than deleted. ``is_available`` is nullable so a
+    legacy configured model can remain selected with an explicit "not yet
+    verified" state until the first successful provider refresh.
+
+    ``provider_model_id`` preserves the identifier returned by the provider;
+    ``runtime_model_id`` is the adapter-owned identifier sent to generation
+    APIs (notably Gemini returns ``models/<id>`` but the OpenAI-compatible
+    runtime accepts ``<id>``).
+    """
+
+    __tablename__ = "ai_provider_model"
+
+    id = Column(Integer, primary_key=True, index=True)
+    provider_credential_id = Column(
+        Integer,
+        ForeignKey("ai_provider_credential.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    provider_name = Column(String(32), nullable=False, index=True)
+    provider_model_id = Column(String(256), nullable=False)
+    runtime_model_id = Column(String(256), nullable=False)
+    display_name = Column(String(256), nullable=True)
+
+    is_available = Column(Boolean, nullable=True)
+    is_enabled = Column(Boolean, nullable=False, default=True)
+    is_selected = Column(Boolean, nullable=False, default=False)
+
+    supports_chat = Column(Boolean, nullable=True)
+    supports_structured_output = Column(Boolean, nullable=True)
+    supports_streaming = Column(Boolean, nullable=True)
+    supports_tools = Column(Boolean, nullable=True)
+    context_window = Column(Integer, nullable=True)
+    max_output_tokens = Column(Integer, nullable=True)
+
+    discovery_source = Column(String(24), nullable=False, default="live")
+    first_discovered_at = Column(String, nullable=True)
+    last_discovered_at = Column(String, nullable=True)
+    last_verified_at = Column(String, nullable=True)
+    last_test_success = Column(Boolean, nullable=True)
+    last_test_error = Column(String(240), nullable=True)
+    raw_metadata = Column(JSON, nullable=True)
+    created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "provider_credential_id",
+            "provider_model_id",
+            name="uq_ai_provider_model_credential_provider_model",
+        ),
+        Index(
+            "ix_ai_provider_model_only_one_selected",
+            "provider_credential_id",
+            unique=True,
+            sqlite_where=sql_text("is_selected = 1"),
+            postgresql_where=sql_text("is_selected = TRUE"),
+        ),
+        Index(
+            "ix_ai_provider_model_credential_available",
+            "provider_credential_id",
+            "is_available",
+        ),
+    )
 
 
 class AiSettings(Base):

@@ -200,6 +200,7 @@ async def test_full_cache_miss_generates_each_finding(client):
     assert summary.progress.failed == 0
     assert len(summary.results) == 3
     assert len(fake.calls) == 3
+    assert {request.model for request in fake.calls} == {fake.default_model}
 
 
 @pytest.mark.asyncio

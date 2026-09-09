@@ -6,13 +6,13 @@ from sqlalchemy import inspect, text
 
 def test_phase9_is_single_alembic_head():
     scripts = ScriptDirectory.from_config(Config("alembic.ini"))
-    assert scripts.get_heads() == ["054_hierarchical_scheduler"]
+    assert scripts.get_heads() == ["055_ai_model_registry"]
 
 
 def test_phase9_database_is_at_head_and_has_partial_primary_index():
     with engine.connect() as connection:
         assert connection.scalar(text("select version_num from alembic_version")) == (
-            "054_hierarchical_scheduler"
+            "055_ai_model_registry"
         )
     indexes = inspect(engine).get_indexes("tenant_user_role_assignments")
     primary = next(

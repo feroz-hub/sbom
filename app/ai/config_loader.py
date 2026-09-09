@@ -29,6 +29,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from ..models import AiProviderCredential, AiSettings
 from ..security.secrets import SecretCipher, get_cipher
@@ -230,7 +231,7 @@ class AiConfigLoader:
                 rows = session.execute(select(AiProviderCredential).order_by(AiProviderCredential.id)).scalars().all()
                 for row in rows:
                     authoritative_provider_names.add(str(row.provider_name).strip().lower())
-                    cfg = self._row_to_config(row)
+                    cfg = self._row_to_config(row, session=session)
                     db_configs.append(cfg)
                 settings_row = session.execute(select(AiSettings).where(AiSettings.id == 1)).scalar_one_or_none()
                 if settings_row is not None:
@@ -273,7 +274,7 @@ class AiConfigLoader:
 
         return merged_configs, settings
 
-    def _row_to_config(self, row: AiProviderCredential) -> ProviderConfig:
+    def _row_to_config(self, row: AiProviderCredential, *, session: Session | None = None) -> ProviderConfig:
         """Decrypt + map one DB row into a registry-shaped ProviderConfig.
 
         Disabled and unreadable rows remain in the resolved model as explicit
@@ -298,10 +299,16 @@ class AiConfigLoader:
                 )
                 config_error = "credential_decryption_failed"
 
+        default_model = row.default_model or ""
+        if session is not None:
+            from .model_resolver import resolve_model_for_credential
+
+            default_model = resolve_model_for_credential(session, row).model_id
+
         return ProviderConfig(
             name=str(row.provider_name).strip().lower(),
             enabled=enabled and config_error is None,
-            default_model=row.default_model or "",
+            default_model=default_model,
             api_key=api_key,
             base_url=(row.base_url or "").strip(),
             organization="",

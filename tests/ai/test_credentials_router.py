@@ -13,7 +13,12 @@ from __future__ import annotations
 import logging
 
 import pytest
-from app.ai.providers.base import ConnectionTestResult
+from app.ai.providers.base import (
+    ConnectionTestResult,
+    DiscoveredModel,
+    LlmResponse,
+    LlmUsage,
+)
 from app.db import SessionLocal
 from app.models import (
     AiCredentialAuditLog,
@@ -564,3 +569,59 @@ def test_candidate_edit_test_uses_saved_key_without_exposing_it(client, monkeypa
     assert response.json()["success"] is True
     assert seen == {"key": raw_key, "model": "gpt-4.1-mini"}
     assert raw_key not in response.text
+
+
+def test_model_registry_api_refresh_test_and_explicit_select(client, monkeypatch):
+    created = client.post(
+        "/api/v1/ai/credentials",
+        json={"provider_name": "openai", "api_key": "model-registry-secret", "default_model": "legacy"},
+    )
+    credential_id = created.json()["id"]
+
+    class _Provider:
+        name = "openai"
+        default_model = "legacy"
+
+        async def list_models(self):
+            return [
+                DiscoveredModel(
+                    provider_model_id="new-live-model",
+                    runtime_model_id="new-live-model",
+                    display_name="New live model",
+                    provider_name="openai",
+                    supports_chat=True,
+                    supports_structured_output=True,
+                )
+            ]
+
+        async def generate(self, request):
+            assert request.model == "new-live-model"
+            return LlmResponse(
+                text='{"ok": true}',
+                parsed={"ok": True},
+                usage=LlmUsage(input_tokens=1, output_tokens=1, cost_usd=0),
+                provider="openai",
+                model=request.model,
+                latency_ms=1,
+            )
+
+    monkeypatch.setattr("app.ai.model_registry.build_provider_for_credential", lambda row: _Provider())
+    refreshed = client.post(f"/api/v1/ai/credentials/{credential_id}/models/refresh")
+    assert refreshed.status_code == 200, refreshed.text
+    assert refreshed.json()["created"] == 1
+
+    models = client.get(f"/api/v1/ai/credentials/{credential_id}/models").json()
+    legacy = next(model for model in models if model["runtime_model_id"] == "legacy")
+    live = next(model for model in models if model["runtime_model_id"] == "new-live-model")
+    assert legacy["is_selected"] is True
+    assert legacy["is_available"] is False
+    assert live["is_selected"] is False
+
+    tested = client.post(f"/api/v1/ai/credentials/{credential_id}/models/{live['id']}/test")
+    assert tested.status_code == 200
+    assert tested.json()["success"] is True
+
+    selected = client.post(f"/api/v1/ai/credentials/{credential_id}/models/{live['id']}/select")
+    assert selected.status_code == 200
+    assert selected.json()["is_selected"] is True
+    assert client.get(f"/api/v1/ai/credentials/{credential_id}").json()["default_model"] == "new-live-model"

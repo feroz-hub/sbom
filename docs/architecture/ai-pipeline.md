@@ -37,7 +37,9 @@ is built, why each layer exists, and where to add code when extending.
 │    prompts/          ─── v1.system.txt · v1.user.txt
 │    progress.py       ─── Redis or in-memory progress store
 │    observability.py  ─── counters / histograms / gauges
-│    config_loader.py  ─── DB-first EffectiveAiConfig + credentials
+│    config_loader.py  ─── DB-first EffectiveAiConfig + selected model
+│    model_registry.py ─── discovery lifecycle, model test, selection
+│    model_resolver.py ─── one runtime model-resolution path
 │    runtime_config.py ─── shared gates/budgets
 │    provider_factory.py ─ one runtime/Test Connection factory
 │    rollout.py        ─── global policy + Fix-only canary sampling
@@ -50,7 +52,7 @@ is built, why each layer exists, and where to add code when extending.
 └────────────────────────────┘
 ```
 
-Persistent AI state lives in four tables:
+Persistent AI state lives in five tables:
 
 * `ai_usage_log` — append-only audit ledger. One row per LLM call
   (success, failure, cache hit). Powers `/api/v1/ai/usage*` aggregates.
@@ -61,6 +63,9 @@ Persistent AI state lives in four tables:
   and three budget caps.
 * `ai_provider_credential` — labelled encrypted credentials plus exact
   default/fallback selection and provider-specific runtime fields.
+* `ai_provider_model` — historical, credential-scoped discovered models,
+  provider/runtime IDs, tri-state capabilities, availability, test state, and
+  the one explicit active selection.
 
 ---
 
@@ -211,6 +216,7 @@ class LlmProvider(Protocol):
     max_concurrent: int
 
     async def generate(self, req: LlmRequest) -> LlmResponse: ...
+    async def list_models(self) -> list[DiscoveredModel]: ...
     async def health_check(self) -> bool: ...
     def info(self) -> ProviderInfo: ...
 ```
@@ -228,6 +234,20 @@ Adding a new provider is **one file**:
 No router / orchestrator / pipeline / test changes required. The
 abstraction enforces this — `app/ai/fix_generator.py` only imports
 from `app/ai/providers/base`.
+
+### Model discovery lifecycle
+
+Manual refresh is exposed under
+`/api/v1/ai/credentials/{credential_id}/models`; Celery Beat also runs
+`ai_models.refresh_all` daily at 04:10 UTC. A successful refresh upserts by
+`(provider_credential_id, provider_model_id)`, updates returned models, and
+marks missing models unavailable without deletion. A failed refresh performs
+no availability changes and cannot replace or disable the selected model.
+
+Raw provider payloads are not persisted wholesale. Adapters allow-list useful
+metadata and the registry removes secret-like keys and caps the serialized
+size. Custom OpenAI-compatible discovery reuses the exact base URL that passed
+the existing HTTPS/localhost validation.
 
 ---
 

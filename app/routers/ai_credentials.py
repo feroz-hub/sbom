@@ -32,17 +32,24 @@ from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import case, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..ai import credential_audit
 from ..ai.config_loader import get_loader, preview_api_key
 from ..ai.config_types import ProviderConfig
+from ..ai.model_registry import (
+    ensure_legacy_model,
+    refresh_models,
+    select_model,
+    sync_legacy_configured_model,
+    test_model,
+)
 from ..ai.provider_factory import build_provider, validate_provider_config
-from ..ai.providers.base import ConnectionTestResult, ProviderUnavailableError
+from ..ai.providers.base import ConnectionTestResult, ModelDiscoveryError, ProviderUnavailableError
 from ..db import get_db
-from ..models import AiProviderCredential, AiSettings
+from ..models import AiProviderCredential, AiProviderModel, AiSettings
 from ..security.secrets import encryption_config_diagnostic, get_cipher
 
 log = logging.getLogger("sbom.routers.ai_credentials")
@@ -95,7 +102,7 @@ class CredentialCreateRequest(BaseModel):
     label: str = Field(default="default", min_length=1, max_length=64)
     api_key: str | None = Field(default=None, max_length=4096)
     base_url: str | None = Field(default=None, max_length=512)
-    default_model: str | None = Field(default=None, max_length=128)
+    default_model: str | None = Field(default=None, max_length=256)
     tier: TierLiteral = "paid"
     enabled: bool = True
     is_default: bool = False
@@ -119,7 +126,7 @@ class CredentialUpdateRequest(BaseModel):
     label: str | None = Field(default=None, min_length=1, max_length=64)
     api_key: str | None = Field(default=None, max_length=4096)
     base_url: str | None = Field(default=None, max_length=512)
-    default_model: str | None = Field(default=None, max_length=128)
+    default_model: str | None = Field(default=None, max_length=256)
     tier: TierLiteral | None = None
     enabled: bool | None = None
     cost_per_1k_input_usd: float | None = Field(default=None, ge=0.0)
@@ -144,7 +151,7 @@ class TestConnectionRequest(BaseModel):
     provider_name: str = Field(..., min_length=1, max_length=32)
     api_key: str | None = Field(default=None, max_length=4096)
     base_url: str | None = Field(default=None, max_length=512)
-    default_model: str | None = Field(default=None, max_length=128)
+    default_model: str | None = Field(default=None, max_length=256)
     tier: TierLiteral = "paid"
     cost_per_1k_input_usd: float = Field(default=0.0, ge=0.0)
     cost_per_1k_output_usd: float = Field(default=0.0, ge=0.0)
@@ -205,6 +212,44 @@ class EffectiveConfigDiagnostic(BaseModel):
     registry_config_version: int
     encryption_config_available: bool
     encryption_config_status: str
+
+
+class ProviderModelResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    provider_credential_id: int
+    provider_name: str
+    provider_model_id: str
+    runtime_model_id: str
+    display_name: str | None
+    is_available: bool | None
+    is_enabled: bool
+    is_selected: bool
+    supports_chat: bool | None
+    supports_structured_output: bool | None
+    supports_streaming: bool | None
+    supports_tools: bool | None
+    context_window: int | None
+    max_output_tokens: int | None
+    discovery_source: str
+    first_discovered_at: str | None
+    last_discovered_at: str | None
+    last_verified_at: str | None
+    last_test_success: bool | None
+    last_test_error: str | None
+
+
+class ModelRefreshResponse(BaseModel):
+    discovered: int
+    created: int
+    updated: int
+    unavailable: int
+
+
+class ModelTestResponse(BaseModel):
+    success: bool
+    error_message: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -306,6 +351,29 @@ def _row_to_response(row: AiProviderCredential, *, decrypted_key: str | None = N
         last_test_success=row.last_test_success,
         last_test_error=row.last_test_error,
     )
+
+
+def _model_response(row: AiProviderModel) -> ProviderModelResponse:
+    return ProviderModelResponse.model_validate(row, from_attributes=True)
+
+
+def _credential_or_404(db: Session, cred_id: int) -> AiProviderCredential:
+    row = db.execute(select(AiProviderCredential).where(AiProviderCredential.id == cred_id)).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"Credential {cred_id} not found.")
+    return row
+
+
+def _model_or_404(db: Session, cred_id: int, model_id: int) -> AiProviderModel:
+    row = db.execute(
+        select(AiProviderModel).where(
+            AiProviderModel.id == model_id,
+            AiProviderModel.provider_credential_id == cred_id,
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"Model {model_id} not found for credential {cred_id}.")
+    return row
 
 
 def _provider_config(
@@ -520,6 +588,8 @@ def create_credential(
             detail=f"A credential for ({body.provider_name}, {body.label}) already exists.",
         ) from exc
     db.refresh(row)
+    ensure_legacy_model(db, row)
+    db.commit()
 
     credential_audit.record(
         db,
@@ -589,8 +659,9 @@ def update_credential(
     if body.base_url is not None:
         row.base_url = body.base_url.strip() or None
         changes.append("base_url")
-    if body.default_model is not None:
+    if body.default_model is not None and body.default_model != row.default_model:
         row.default_model = body.default_model
+        sync_legacy_configured_model(db, row)
         changes.append("default_model")
     if body.tier is not None:
         row.tier = body.tier
@@ -840,6 +911,113 @@ async def test_saved_credential(
         detail=f"saved success={result.success} kind={result.error_kind or 'ok'}",
     )
     return result
+
+
+# ---------------------------------------------------------------------------
+# Dynamic model registry
+# ---------------------------------------------------------------------------
+
+
+@router.get("/credentials/{cred_id}/models", response_model=list[ProviderModelResponse])
+def list_provider_models(cred_id: int, db: Session = Depends(get_db)) -> list[ProviderModelResponse]:
+    _credential_or_404(db, cred_id)
+    rows = db.execute(
+        select(AiProviderModel)
+        .where(AiProviderModel.provider_credential_id == cred_id)
+        .order_by(
+            AiProviderModel.is_selected.desc(),
+            case(
+                (AiProviderModel.is_available.is_(True), 0),
+                (AiProviderModel.is_available.is_(None), 1),
+                else_=2,
+            ),
+            AiProviderModel.provider_model_id,
+        )
+    ).scalars().all()
+    return [_model_response(row) for row in rows]
+
+
+@router.post("/credentials/{cred_id}/models/refresh", response_model=ModelRefreshResponse)
+async def refresh_provider_models(
+    cred_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> ModelRefreshResponse:
+    credential = _credential_or_404(db, cred_id)
+    if not credential.enabled:
+        raise HTTPException(status_code=409, detail="Enable the provider credential before refreshing models.")
+    try:
+        result = await refresh_models(db, credential)
+    except ModelDiscoveryError as exc:
+        status = {
+            "unsupported": 501,
+            "authentication_failed": 400,
+            "configuration_incomplete": 400,
+            "rate_limited": 429,
+            "timeout": 504,
+        }.get(exc.kind, 502)
+        raise HTTPException(status_code=status, detail={"kind": exc.kind, "message": str(exc)}) from exc
+    except Exception as exc:  # noqa: BLE001
+        log.warning("ai.model_refresh.failed provider=%s credential_id=%s error_type=%s", credential.provider_name, credential.id, type(exc).__name__)
+        raise HTTPException(status_code=502, detail={"kind": "unknown", "message": "Model discovery failed."}) from exc
+    credential_audit.record(
+        db,
+        user_id=_user_id(request),
+        action="model.refresh",
+        target_kind="credential",
+        target_id=credential.id,
+        provider_name=credential.provider_name,
+        detail=f"discovered={result.discovered} created={result.created} unavailable={result.unavailable}",
+    )
+    return ModelRefreshResponse(**result.__dict__)
+
+
+@router.post("/credentials/{cred_id}/models/{model_id}/select", response_model=ProviderModelResponse)
+def select_provider_model(
+    cred_id: int,
+    model_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> ProviderModelResponse:
+    credential = _credential_or_404(db, cred_id)
+    model = _model_or_404(db, cred_id, model_id)
+    try:
+        select_model(db, credential, model)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    db.refresh(model)
+    credential_audit.record(
+        db,
+        user_id=_user_id(request),
+        action="model.select",
+        target_kind="model",
+        target_id=model.id,
+        provider_name=credential.provider_name,
+        detail="active model changed",
+    )
+    return _model_response(model)
+
+
+@router.post("/credentials/{cred_id}/models/{model_id}/test", response_model=ModelTestResponse)
+async def test_provider_model(
+    cred_id: int,
+    model_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> ModelTestResponse:
+    credential = _credential_or_404(db, cred_id)
+    model = _model_or_404(db, cred_id, model_id)
+    success, error = await test_model(db, credential, model)
+    credential_audit.record(
+        db,
+        user_id=_user_id(request),
+        action="model.test",
+        target_kind="model",
+        target_id=model.id,
+        provider_name=credential.provider_name,
+        detail=f"success={success}",
+    )
+    return ModelTestResponse(success=success, error_message=error)
 
 
 # ---------------------------------------------------------------------------
