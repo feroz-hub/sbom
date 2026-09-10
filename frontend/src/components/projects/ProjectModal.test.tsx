@@ -32,8 +32,14 @@ describe('ProjectModal notifications', () => {
     const user = userEvent.setup();
     vi.mocked(createProject).mockResolvedValue({ id: 9, project_name: 'Visible Toast' } as never);
     const { onClose, queryClient, unmount } = renderModal();
+    expect(screen.queryByRole('textbox', { name: 'Created By' })).not.toBeInTheDocument();
     await user.type(screen.getByRole('textbox', { name: 'Project Name' }), 'Visible Toast');
     await user.click(screen.getByRole('button', { name: 'Create Project' }));
+    expect(createProject).toHaveBeenCalledWith({
+      project_name: 'Visible Toast',
+      project_details: '',
+      project_status: 1,
+    });
     expect(await screen.findByRole('status')).toHaveTextContent('Project created successfully.');
     expect(onClose).toHaveBeenCalledTimes(1);
     unmount();

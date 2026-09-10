@@ -88,7 +88,7 @@ def create_project(
             )
 
         data = payload.model_dump()
-        data["created_by"] = data.get("created_by") or context.actor_label()
+        data["created_by"] = context.actor_label()
         obj = Projects(**data, created_on=now_iso())
         db.add(obj)
         db.commit()

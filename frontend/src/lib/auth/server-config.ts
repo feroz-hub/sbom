@@ -17,7 +17,9 @@ export function resolveFrontendPath(value: string): string
   if (!configured) return '';
 
   if (path.isAbsolute(configured) || path.win32.isAbsolute(configured) || path.posix.isAbsolute(configured)) return configured;
-  return path.resolve(process.cwd(), configured);
+  // The path is a runtime-mounted certificate. Do not make the standalone
+  // output tracer copy the build machine's project (or local certificates).
+  return path.resolve(/* turbopackIgnore: true */ process.cwd(), configured);
 }
 
 export function serverAuthConfig(): ServerAuthConfig {

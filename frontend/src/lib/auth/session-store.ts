@@ -40,7 +40,12 @@ let cachedTransactionKey: Buffer | null = null;
 function transactionKey(): Buffer {
   if (cachedTransactionKey) return cachedTransactionKey;
   const configured = process.env.AUTH_TRANSACTION_KEY_FILE;
-  const keyFile = configured ? resolve(configured) : resolve(process.cwd(), 'certificates/localhost-key.pem');
+  // Both paths are runtime inputs. In production the key is mounted under
+  // /run/secrets; excluding it from output tracing prevents build-host key
+  // material from being copied into standalone output.
+  const keyFile = configured
+    ? resolve(/* turbopackIgnore: true */ configured)
+    : resolve(/* turbopackIgnore: true */ process.cwd(), 'certificates/localhost-key.pem');
   cachedTransactionKey = createHash('sha256').update(readFileSync(keyFile)).digest();
   return cachedTransactionKey;
 }

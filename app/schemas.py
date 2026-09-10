@@ -21,7 +21,6 @@ class ProjectCreate(BaseModel):
     project_name: str
     project_details: str | None = None
     project_status: int | str = Field(1, description="1 or 'Active' / 0 or 'Inactive'")
-    created_by: str | None = None
 
     @field_validator("project_status", mode="before")
     @classmethod

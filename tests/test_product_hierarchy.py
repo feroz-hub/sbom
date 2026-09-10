@@ -75,6 +75,23 @@ def test_create_and_list_products_unique_within_project(client):
     assert any(item["id"] == created["id"] for item in listed.json()["items"])
 
 
+def test_product_create_and_update_accept_custom_category_strings(client):
+    project = _project(client)
+    created = client.post(
+        f"/api/projects/{project['id']}/products",
+        json={"name": _name("categorized-product"), "category": "Healthcare Integration Appliance"},
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["category"] == "Healthcare Integration Appliance"
+
+    updated = client.patch(
+        f"/api/products/{created.json()['id']}",
+        json={"category": "Legacy Healthcare Platform"},
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["category"] == "Legacy Healthcare Platform"
+
+
 def test_upload_requires_matching_project_product_and_returns_product(client):
     project_a = _project(client)
     project_b = _project(client)

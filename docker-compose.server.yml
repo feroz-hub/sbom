@@ -1,0 +1,185 @@
+name: sbom-analyser-server
+
+x-backend-environment: &backend-environment
+  DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env.server}
+  HOST: 0.0.0.0
+  PORT: "8000"
+  CORS_ORIGINS: ${CORS_ORIGINS:?Set CORS_ORIGINS in .env.server}
+  AUTH_ENABLED: ${AUTH_ENABLED:-true}
+  DEV_DEFAULT_TENANT: ${DEV_DEFAULT_TENANT:-false}
+  API_AUTH_MODE: ${API_AUTH_MODE:-none}
+  HCL_IAM_ISSUER: ${HCL_IAM_ISSUER:-}
+  HCL_IAM_AUDIENCE: ${HCL_IAM_AUDIENCE:-}
+  HCL_IAM_DISCOVERY_URL: ${HCL_IAM_DISCOVERY_URL:-}
+  HCL_IAM_JWKS_URL: ${HCL_IAM_JWKS_URL:-}
+  HCL_IAM_CLIENT_ID: ${HCL_IAM_CLIENT_ID:-}
+  HCL_IAM_ALLOWED_ALGORITHMS: ${HCL_IAM_ALLOWED_ALGORITHMS:-RS256}
+  HCL_IAM_ROLE_CLAIM: ${HCL_IAM_ROLE_CLAIM:-role}
+  HCL_IAM_TENANT_CLAIM: ${HCL_IAM_TENANT_CLAIM:-tenant_id}
+  HCL_IAM_REQUIRE_EMPLOYEE_ID: ${HCL_IAM_REQUIRE_EMPLOYEE_ID:-true}
+  HCL_IAM_CA_BUNDLE: ${HCL_IAM_CA_BUNDLE:-}
+  REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+  CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+  CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+  SBOM_WORKSPACE_STORAGE_DIR: /var/lib/sbom/sbom-workspaces
+  REPORT_ARTIFACT_STORAGE_PATH: /var/lib/sbom/report-artifacts
+  REPORT_NOTIFICATIONS_ENABLED: ${REPORT_NOTIFICATIONS_ENABLED:-false}
+  REPORT_NOTIFICATION_BASE_URL: ${REPORT_NOTIFICATION_BASE_URL:-}
+  EMAIL_DELIVERY_ENABLED: ${EMAIL_DELIVERY_ENABLED:-false}
+  EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS:-}
+  SMTP_HOST: ${SMTP_HOST:-}
+  SMTP_PORT: ${SMTP_PORT:-587}
+  SMTP_USERNAME: ${SMTP_USERNAME:-}
+  SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+  SMTP_USE_TLS: ${SMTP_USE_TLS:-false}
+  SMTP_USE_STARTTLS: ${SMTP_USE_STARTTLS:-true}
+  EMAIL_VERIFICATION_FRONTEND_URL: ${EMAIL_VERIFICATION_FRONTEND_URL:-https://localhost:3000/verify-email}
+  ANALYSIS_SOURCES: ${ANALYSIS_SOURCES:-NVD,OSV,GITHUB}
+  NVD_API_KEY: ${NVD_API_KEY:-}
+  GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+  VULNDB_API_KEY: ${VULNDB_API_KEY:-}
+  NVD_MIRROR_FERNET_KEY: ${NVD_MIRROR_FERNET_KEY:-}
+  AI_CONFIG_ENCRYPTION_KEY: ${AI_CONFIG_ENCRYPTION_KEY:-}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+  GROK_API_KEY: ${GROK_API_KEY:-}
+  SARVAM_API_KEY: ${SARVAM_API_KEY:-}
+  XEOL_ENABLED: ${XEOL_ENABLED:-false}
+  XEOL_DB_PATH: ${XEOL_DB_PATH:-}
+  SSL_CERT_FILE: ${SSL_CERT_FILE:-}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  LOG_FORMAT: ${LOG_FORMAT:-json}
+  COMPARE_V1_FALLBACK: ${COMPARE_V1_FALLBACK:-false}
+
+x-backend-service: &backend-service
+  image: sbom-analyser-backend:${SBOM_ANALYSER_VERSION:-2.0.0}
+  platform: linux/amd64
+  init: true
+  restart: unless-stopped
+  environment: *backend-environment
+  volumes:
+    - app_data:/var/lib/sbom
+    - ./deploy/certs:/opt/sbom/certs:ro
+
+services:
+  postgres:
+    image: postgres:16
+    platform: linux/amd64
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env.server}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env.server}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.server}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    platform: linux/amd64
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  migrate:
+    <<: *backend-service
+    restart: "no"
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  backend:
+    <<: *backend-service
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:${BACKEND_PORT:-8000}:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import json,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)); assert d['status']=='ok' and d['database']['available']"
+      interval: 10s
+      timeout: 6s
+      retries: 12
+      start_period: 20s
+
+  worker:
+    <<: *backend-service
+    command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info", "--queues=celery,reports"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.workers.celery_app inspect ping --destination celery@$$HOSTNAME --timeout 5 | grep -q pong"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  beat:
+    <<: *backend-service
+    command:
+      - celery
+      - -A
+      - app.workers.celery_app
+      - beat
+      - --loglevel=info
+      - --schedule=/var/lib/sbom/celerybeat-schedule
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  frontend:
+    image: sbom-analyser-frontend:${SBOM_ANALYSER_VERSION:-2.0.0}
+    platform: linux/amd64
+    init: true
+    restart: unless-stopped
+    environment:
+      HOSTNAME: 0.0.0.0
+      PORT: "3000"
+      SBOM_API_URL: ${SBOM_API_URL:-http://backend:8000}
+      HCL_IAM_CA_BUNDLE: ${FRONTEND_HCL_IAM_CA_BUNDLE:-}
+      AUTH_TRANSACTION_KEY_FILE: ${AUTH_TRANSACTION_KEY_FILE:-}
+    volumes:
+      - ./deploy/certs:/opt/sbom/certs:ro
+      - ./deploy/secrets:/run/secrets:ro
+    ports:
+      - "${FRONTEND_BIND_ADDRESS:-0.0.0.0}:${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:3000/"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+volumes:
+  postgres_data:
+  redis_data:
+  app_data:

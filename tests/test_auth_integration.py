@@ -93,12 +93,16 @@ def test_authenticated_tenant_write_preserves_context(client, app, monkeypatch):
 
     app.dependency_overrides[get_current_user] = lambda: claims
     try:
-        response = client.post("/api/projects", json={"project_name": "Authenticated Context Project"})
+        response = client.post(
+            "/api/projects",
+            json={"project_name": "Authenticated Context Project", "created_by": "spoofed-user"},
+        )
         assert response.status_code == 201, response.text
         with SessionLocal() as db:
             project = db.execute(
                 select(Projects).where(Projects.project_name == "Authenticated Context Project")
             ).scalar_one()
             assert project.tenant_id == tenant_id
+            assert project.created_by == claims["email"]
     finally:
         app.dependency_overrides.pop(get_current_user, None)

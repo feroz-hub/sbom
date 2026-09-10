@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type FormEvent } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Eye, Pencil, Plus, Trash2, Upload } from 'lucide-react';
@@ -9,33 +9,15 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { ProjectsTable } from '@/components/projects/ProjectsTable';
 import { ProjectModal } from '@/components/projects/ProjectModal';
+import { ProductFormDialog } from '@/components/products/ProductFormDialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
-import { Dialog, DialogBody, DialogFooter } from '@/components/ui/Dialog';
-import { Input, Textarea } from '@/components/ui/Input';
-import { Select } from '@/components/ui/Select';
 import { Table, TableBody, TableHead, Td, Th, EmptyRow } from '@/components/ui/Table';
 import { SbomUploadModal } from '@/components/sboms/SbomUploadModal';
-import { createProduct, deleteProduct, getEffectiveProductSchedule, getProducts, getProjects, updateProduct } from '@/lib/api';
+import { deleteProduct, getEffectiveProductSchedule, getProducts, getProjects } from '@/lib/api';
 import { useNotifications } from '@/hooks/useNotifications';
 import { getApiErrorMessage } from '@/lib/notifications';
 import { DeleteConfirmDialog } from '@/components/ui/DeleteConfirmDialog';
-import type { Product, Project, SBOMSource } from '@/types';
-
-type ProductFormState = {
-  name: string;
-  description: string;
-  vendor: string;
-  category: string;
-  status: string;
-};
-
-const emptyProductForm: ProductFormState = {
-  name: '',
-  description: '',
-  vendor: '',
-  category: '',
-  status: 'active',
-};
+import type { Product, Project } from '@/types';
 
 function ProductScheduleStatus({ productId }: { productId: number }) {
   const query = useQuery({
@@ -54,126 +36,6 @@ function ProductScheduleStatus({ productId }: { productId: number }) {
         {query.data.schedule.cadence.toLowerCase()} · {query.data.source_scope?.toLowerCase()}
       </p>
     </div>
-  );
-}
-
-function ProductFormDialog({
-  open,
-  project,
-  product,
-  onClose,
-}: {
-  open: boolean;
-  project: Project | null;
-  product?: Product | null;
-  onClose: () => void;
-}) {
-  const queryClient = useQueryClient();
-  const { showSuccess, showError } = useNotifications();
-  const [form, setForm] = useState<ProductFormState>(emptyProductForm);
-
-  const mutation = useMutation({
-    mutationFn: () => {
-      if (!project) throw new Error('Project is required');
-      const payload = {
-        name: form.name.trim(),
-        description: form.description.trim() || null,
-        vendor: form.vendor.trim() || null,
-        category: form.category.trim() || null,
-        status: form.status,
-      };
-      return product ? updateProduct(product.id, payload) : createProduct(project.id, payload);
-    },
-    onSuccess: (_result, _variables) => {
-      if (project) queryClient.invalidateQueries({ queryKey: ['products', project.id] });
-      showSuccess(`Product “${form.name.trim()}” was ${product ? 'updated' : 'created'} successfully.`);
-      onClose();
-    },
-    onError: (error: unknown) => showError(getApiErrorMessage(error, 'Product save failed. Please try again.')),
-  });
-
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!form.name.trim()) return;
-    mutation.mutate();
-  };
-
-  useEffect(() => {
-    if (!open) return;
-    setForm(
-      product
-        ? {
-            name: product.name,
-            description: product.description ?? '',
-            vendor: product.vendor ?? '',
-            category: product.category ?? '',
-            status: product.status ?? 'active',
-          }
-        : emptyProductForm,
-    );
-  }, [open, product]);
-
-  return (
-    <Dialog
-      open={open}
-      onClose={() => {
-        setForm(emptyProductForm);
-        onClose();
-      }}
-      title={product ? 'Edit Product' : 'Create Product'}
-      maxWidth="lg"
-    >
-      <form onSubmit={handleSubmit}>
-        <DialogBody className="space-y-4">
-          <Input
-            label="Name"
-            required
-            value={form.name}
-            onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
-          />
-          <Textarea
-            label="Description"
-            value={form.description}
-            onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
-          />
-          <div className="grid gap-4 sm:grid-cols-3">
-            <Input
-              label="Vendor"
-              value={form.vendor}
-              onChange={(event) => setForm((current) => ({ ...current, vendor: event.target.value }))}
-            />
-            <Input
-              label="Category"
-              value={form.category}
-              onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))}
-            />
-            <Select
-              label="Status"
-              value={form.status}
-              onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}
-            >
-              <option value="active">Active</option>
-              <option value="maintenance">Maintenance</option>
-              <option value="retired">Retired</option>
-            </Select>
-          </div>
-        </DialogBody>
-        <DialogFooter>
-          <Button
-            variant="secondary"
-            onClick={() => {
-              setForm(emptyProductForm);
-              onClose();
-            }}
-          >
-            Cancel
-          </Button>
-          <Button type="submit" loading={mutation.isPending} disabled={!form.name.trim()}>
-            {product ? 'Save Product' : 'Create Product'}
-          </Button>
-        </DialogFooter>
-      </form>
-    </Dialog>
   );
 }
 
@@ -201,7 +63,7 @@ function ProjectProducts({ project }: { project: Project }) {
     onError: (error: unknown) => showError(getApiErrorMessage(error, 'Product deletion failed. Please try again.')),
   });
 
-  const handleUploadSuccess = (_sbom: SBOMSource) => {
+  const handleUploadSuccess = () => {
     queryClient.invalidateQueries({ queryKey: ['products', project.id] });
   };
 

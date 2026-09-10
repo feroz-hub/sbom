@@ -1267,7 +1267,6 @@ export interface CreateProjectPayload {
   project_name: string;
   project_details?: string;
   project_status: number;   // 1 = Active, 0 = Inactive
-  created_by?: string;
 }
 
 export interface UpdateProjectPayload {
