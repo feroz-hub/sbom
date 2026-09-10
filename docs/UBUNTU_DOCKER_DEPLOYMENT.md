@@ -19,6 +19,14 @@ docker buildx version
 Add the deployment operator to the `docker` group only if your security policy
 permits root-equivalent Docker access.
 
+Redis recommends Linux memory overcommit so background persistence remains
+reliable during memory pressure. Configure it on the Ubuntu host:
+
+```bash
+echo 'vm.overcommit_memory = 1' | sudo tee /etc/sysctl.d/99-sbom-redis.conf
+sudo sysctl --system
+```
+
 ## 2. Copy and load the application images
 
 Copy these files to a fixed deployment directory such as `/opt/sbom-analyser`:
@@ -65,9 +73,10 @@ URLs are the canonical browser-facing application URLs.
 Create private mount directories without copying keys into an image:
 
 ```bash
-install -d -m 0750 deploy/certs deploy/secrets
+install -d -o 10001 -g 10001 -m 0750 deploy/certs deploy/secrets
 install -m 0644 /secure/source/hcl-ca.crt deploy/certs/hcl-ca.crt
 openssl rand -out deploy/secrets/auth-transaction.key 32
+chown 10001:10001 deploy/secrets/auth-transaction.key
 chmod 0400 deploy/secrets/auth-transaction.key
 ```
 
@@ -80,6 +89,8 @@ VulDB, or AI HTTPS calls.
 Configure the HCL.CS public PKCE client outside Docker with:
 
 - exact issuer and API audience expected by the backend;
+- `SBOM_IDENTITY_BACKFILL_ISSUER` set to that same exact trusted issuer for
+  migration 046 (it is harmless after the backfill is complete);
 - exact redirect URI `https://SBOM_HOST/auth/callback`;
 - exact post-logout URI `https://SBOM_HOST`;
 - client ID and allowed scopes matching the build arguments;
@@ -105,9 +116,11 @@ docker compose --env-file .env.server -f docker-compose.server.yml up -d
 docker compose --env-file .env.server -f docker-compose.server.yml ps -a
 ```
 
-The `migrate` service must show `Exited (0)`. Backend, worker, and Beat are gated
-on migration success, so a failed migration prevents a stale-schema API from
-starting.
+The `migrate` service must show `Exited (0)`. On a provably empty PostgreSQL
+database its launcher uses the repository's guarded frozen schema baseline and
+then runs `alembic upgrade head`; on an existing database it runs
+`alembic upgrade head` directly. Backend, worker, and Beat are gated on migration
+success, so a failed migration prevents a stale-schema API from starting.
 
 ## 6. Verify the deployment
 

@@ -7,6 +7,7 @@
 .env.*
 !.env.example
 !.env.hcl-iam.example
+!.env.server.example
 
 # ── Python ────────────────────────────────────────────────
 __pycache__/

@@ -18,6 +18,9 @@ x-backend-environment: &backend-environment
   HCL_IAM_TENANT_CLAIM: ${HCL_IAM_TENANT_CLAIM:-tenant_id}
   HCL_IAM_REQUIRE_EMPLOYEE_ID: ${HCL_IAM_REQUIRE_EMPLOYEE_ID:-true}
   HCL_IAM_CA_BUNDLE: ${HCL_IAM_CA_BUNDLE:-}
+  # Migration 046 uses this only to backfill identities that predate issuer
+  # tracking. It must be the exact trusted HCL.CS JWT issuer in production.
+  SBOM_IDENTITY_BACKFILL_ISSUER: ${SBOM_IDENTITY_BACKFILL_ISSUER:?Set SBOM_IDENTITY_BACKFILL_ISSUER in .env.server}
   REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
   CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
   CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
@@ -33,7 +36,7 @@ x-backend-environment: &backend-environment
   SMTP_PASSWORD: ${SMTP_PASSWORD:-}
   SMTP_USE_TLS: ${SMTP_USE_TLS:-false}
   SMTP_USE_STARTTLS: ${SMTP_USE_STARTTLS:-true}
-  EMAIL_VERIFICATION_FRONTEND_URL: ${EMAIL_VERIFICATION_FRONTEND_URL:-https://localhost:3000/verify-email}
+  EMAIL_VERIFICATION_FRONTEND_URL: ${EMAIL_VERIFICATION_FRONTEND_URL:?Set EMAIL_VERIFICATION_FRONTEND_URL in .env.server}
   ANALYSIS_SOURCES: ${ANALYSIS_SOURCES:-NVD,OSV,GITHUB}
   NVD_API_KEY: ${NVD_API_KEY:-}
   GITHUB_TOKEN: ${GITHUB_TOKEN:-}
@@ -47,6 +50,9 @@ x-backend-environment: &backend-environment
   SARVAM_API_KEY: ${SARVAM_API_KEY:-}
   XEOL_ENABLED: ${XEOL_ENABLED:-false}
   XEOL_DB_PATH: ${XEOL_DB_PATH:-}
+  # Disable the local-development default unless an operator explicitly
+  # provides a reachable inference service URL.
+  OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-}
   SSL_CERT_FILE: ${SSL_CERT_FILE:-}
   LOG_LEVEL: ${LOG_LEVEL:-INFO}
   LOG_FORMAT: ${LOG_FORMAT:-json}
@@ -97,7 +103,7 @@ services:
   migrate:
     <<: *backend-service
     restart: "no"
-    command: ["alembic", "upgrade", "head"]
+    command: ["python", "scripts/docker_migrate.py"]
     depends_on:
       postgres:
         condition: service_healthy
@@ -163,7 +169,7 @@ services:
       PORT: "3000"
       SBOM_API_URL: ${SBOM_API_URL:-http://backend:8000}
       HCL_IAM_CA_BUNDLE: ${FRONTEND_HCL_IAM_CA_BUNDLE:-}
-      AUTH_TRANSACTION_KEY_FILE: ${AUTH_TRANSACTION_KEY_FILE:-}
+      AUTH_TRANSACTION_KEY_FILE: ${AUTH_TRANSACTION_KEY_FILE:?Set AUTH_TRANSACTION_KEY_FILE in .env.server}
     volumes:
       - ./deploy/certs:/opt/sbom/certs:ro
       - ./deploy/secrets:/run/secrets:ro

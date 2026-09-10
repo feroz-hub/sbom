@@ -5,7 +5,7 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 
-FROM node:20-alpine AS builder
+FROM deps AS builder
 
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -28,7 +28,6 @@ ENV NEXT_PUBLIC_AUTH_ENABLED=${NEXT_PUBLIC_AUTH_ENABLED} \
     NEXT_PUBLIC_HCL_IAM_SCOPES=${NEXT_PUBLIC_HCL_IAM_SCOPES} \
     NEXT_PUBLIC_COMPARE_V1_FALLBACK=${NEXT_PUBLIC_COMPARE_V1_FALLBACK}
 
-COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
 
