@@ -1,11 +1,13 @@
 'use client';
 
 import { AlertCircle, CheckCircle, Info, Loader2, ShieldAlert } from 'lucide-react';
+import { normalizeNotificationMessage, toUserFacingApiError } from '@/lib/notifications';
 import type { AiConnectionTestResult } from '@/types/ai';
 
 interface TestResultDisplayProps {
   result: AiConnectionTestResult | null;
   testing: boolean;
+  error?: unknown;
 }
 
 /**
@@ -15,12 +17,44 @@ interface TestResultDisplayProps {
  * specific message + icon + colour. Never parse ``error_message`` to
  * decide UX (it's a free-form string for debugging).
  */
-export function TestResultDisplay({ result, testing }: TestResultDisplayProps) {
+export function TestResultDisplay({ result, testing, error }: TestResultDisplayProps) {
   if (testing) {
     return (
       <p className="flex items-center gap-2 text-sm text-hcl-muted" role="status">
         <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Testing…
       </p>
+    );
+  }
+  if (error) {
+    const normalized = toUserFacingApiError(
+      error,
+      'The connection test could not be completed.',
+    );
+    const fieldErrors = Object.entries(normalized.fieldErrors);
+
+    return (
+      <div
+        className="flex items-start gap-2 text-sm text-red-700"
+        role="alert"
+        data-testid="test-result-request-error"
+      >
+        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+        <div>
+          <strong>Test could not run.</strong> {normalized.message}
+          {fieldErrors.length > 0 ? (
+            <ul className="mt-1 list-disc pl-5">
+              {fieldErrors.flatMap(([field, messages]) =>
+                messages.map((message, index) => (
+                  <li key={`${field}-${index}`}>
+                    <span className="font-medium">{field}:</span>{' '}
+                    {normalizeNotificationMessage(message, 'Invalid value.')}
+                  </li>
+                )),
+              )}
+            </ul>
+          ) : null}
+        </div>
+      </div>
     );
   }
   if (!result) {
@@ -97,9 +131,12 @@ export function TestResultDisplay({ result, testing }: TestResultDisplayProps) {
         >
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
           <span>
-            <strong>Connected, but {result.model_tested ?? 'this model'} isn't available.</strong>
+            <strong>
+              Connected, but {result.model_tested ?? 'this model'} cannot generate for this
+              account.
+            </strong>
             {result.detected_models.length > 0
-              ? ` Available: ${result.detected_models.slice(0, 5).join(', ')}${result.detected_models.length > 5 ? '…' : ''}`
+              ? ` Models reported by the provider: ${result.detected_models.slice(0, 5).join(', ')}${result.detected_models.length > 5 ? '…' : ''}`
               : ''}
           </span>
         </p>

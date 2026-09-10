@@ -48,6 +48,7 @@ async def test_gemini_uses_openai_compatible_endpoint():
     def handler(request: httpx.Request) -> httpx.Response:
         captured["url"] = str(request.url)
         captured["headers"] = dict(request.headers)
+        captured["body"] = json.loads(request.content.decode())
         return httpx.Response(
             200,
             json={
@@ -64,11 +65,12 @@ async def test_gemini_uses_openai_compatible_endpoint():
     resp = await provider.generate(_llm_req())
     # Endpoint = Gemini's OpenAI-compatible path.
     assert "generativelanguage.googleapis.com/v1beta/openai" in captured["url"]
-    # Cost falls under Gemini's pricing table — gemini-2.5-flash:
-    # $0.000075 / 1k input + $0.0003 / 1k output.
-    expected = round(30 / 1000 * 0.000075 + 10 / 1000 * 0.0003, 6)
+    # Cost falls under Gemini's pricing table — gemini-3.6-flash.
+    expected = round(30 / 1000 * 0.00075 + 10 / 1000 * 0.00375, 6)
     assert resp.usage.cost_usd == expected
     assert resp.provider == "gemini"
+    assert captured["body"]["temperature"] == 1.0
+    assert captured["body"]["reasoning_effort"] == "minimal"
 
 
 @pytest.mark.asyncio

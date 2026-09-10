@@ -535,6 +535,10 @@ def permission_for_request(request: Request) -> str:
         return "platform:admin"
     if path.startswith("/dashboard"):
         return "dashboard:read"
+    if path.startswith(("/api/report-subscriptions", "/api/report-deliveries", "/api/report-notifications")):
+        # These are per-user preferences, not tenant settings administration.
+        # The report router enforces owner/admin and scope checks separately.
+        return "sbom:read"
     if "/vex" in path:
         return "vex:read" if method == "GET" else "vex:write"
     if path.startswith("/api/remediation"):

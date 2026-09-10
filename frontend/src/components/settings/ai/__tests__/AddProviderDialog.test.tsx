@@ -145,4 +145,64 @@ describe('AddProviderDialog', () => {
     );
     expect(screen.getByRole('button', { name: /save provider/i })).toBeDisabled();
   });
+
+  it('shows a request error when the test endpoint rejects the payload', async () => {
+    testAiCredentialUnsaved.mockRejectedValue(new Error('request rejected'));
+
+    renderWithProviders(<AddProviderDialog open onClose={() => {}} />);
+    await screen.findByLabelText('API key');
+    await userEvent.type(screen.getByLabelText('API key'), 'sk-ant-FAKE-KEY');
+    await userEvent.click(screen.getByRole('button', { name: /test connection/i }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('test-result-request-error')).toHaveTextContent(
+        'The connection test could not be completed.',
+      ),
+    );
+    expect(screen.queryByText(/not tested/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /save provider/i })).toBeDisabled();
+  });
+
+  it('validates custom OpenAI URL/model and keeps its API key optional', async () => {
+    listAiProviderCatalog.mockResolvedValue([
+      ...SAMPLE_CATALOG,
+      {
+        name: 'custom_openai',
+        display_name: 'Custom OpenAI-compatible',
+        requires_api_key: false,
+        requires_base_url: true,
+        is_local: true,
+        supports_free_tier: false,
+        free_tier_rate_limit_rpm: null,
+        free_tier_daily_token_limit: null,
+        available_models: [],
+        docs_url: '',
+        api_key_url: '',
+        notes: 'Custom endpoint.',
+      },
+    ]);
+    testAiCredentialUnsaved.mockResolvedValue(makeTestResult({ provider: 'custom_openai' }));
+
+    renderWithProviders(<AddProviderDialog open onClose={() => {}} />);
+    await screen.findByLabelText('API key');
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: /provider/i }), 'custom_openai');
+
+    const optionalKey = await screen.findByLabelText(/API key \(optional\)/i);
+    expect(optionalKey).toHaveValue('');
+    await userEvent.type(screen.getByLabelText('Base URL'), 'http://example.com/v1');
+    await userEvent.type(screen.getByLabelText('Model'), 'custom-model');
+    expect(screen.getByText(/HTTPS for remote endpoints/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /test connection/i })).toBeDisabled();
+
+    await userEvent.clear(screen.getByLabelText('Base URL'));
+    await userEvent.type(screen.getByLabelText('Base URL'), 'http://localhost:1234/v1');
+    expect(screen.getByRole('button', { name: /test connection/i })).not.toBeDisabled();
+    await userEvent.click(screen.getByRole('button', { name: /test connection/i }));
+    await waitFor(() => expect(testAiCredentialUnsaved).toHaveBeenCalled());
+    expect(testAiCredentialUnsaved.mock.calls[0][0]).toMatchObject({
+      api_key: null,
+      base_url: 'http://localhost:1234/v1',
+      default_model: 'custom-model',
+    });
+  });
 });

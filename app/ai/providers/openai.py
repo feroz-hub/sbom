@@ -18,10 +18,12 @@ from ..limiter import CircuitBreaker, RateLimiter
 from .base import (
     AiProviderError,
     ConnectionTestResult,
+    DiscoveredModel,
     LlmProvider,
     LlmRequest,
     LlmResponse,
     LlmUsage,
+    ModelDiscoveryError,
     ProviderInfo,
     ProviderUnavailableError,
     classify_http_failure,
@@ -73,6 +75,8 @@ class OpenAiProvider(LlmProvider):
         breaker_reset_seconds: float = 60.0,
         request_timeout_seconds: float = 30.0,
         structured_output_mode: StructuredOutputMode = "json_schema_strict",
+        reasoning_effort: Literal["minimal", "low", "medium", "high"] | None = None,
+        temperature_override: float | None = None,
     ) -> None:
         if not api_key:
             raise ProviderUnavailableError(f"{self.name}: api_key is required")
@@ -89,6 +93,8 @@ class OpenAiProvider(LlmProvider):
         self._max_retries = max_retries
         self._timeout = request_timeout_seconds
         self._structured_output_mode: StructuredOutputMode = structured_output_mode
+        self._reasoning_effort = reasoning_effort
+        self._temperature_override = temperature_override
 
     async def generate(self, req: LlmRequest) -> LlmResponse:
         self._breaker.allow()
@@ -137,13 +143,65 @@ class OpenAiProvider(LlmProvider):
         result = await self.test_connection()
         return result.success
 
-    async def test_connection(self, *, model: str | None = None) -> ConnectionTestResult:
-        """Try ``GET /models`` first; fall back to a 1-token chat completion.
+    async def list_models(self) -> list[DiscoveredModel]:
+        """List models exposed by an OpenAI-compatible ``/models`` endpoint."""
+        client = await self._client()
+        try:
+            response = await client.get(
+                f"{self._base_url}/models",
+                headers=self._headers(),
+                timeout=self._timeout,
+            )
+        except httpx.TimeoutException as exc:
+            raise ModelDiscoveryError("timeout", f"{self.name}: model discovery timed out") from exc
+        except httpx.RequestError as exc:
+            raise ModelDiscoveryError("provider_unreachable", f"{self.name}: provider unreachable") from exc
+        if response.status_code in (401, 403):
+            raise ModelDiscoveryError("authentication_failed", f"{self.name}: authentication failed")
+        if response.status_code == 404:
+            raise ModelDiscoveryError("unsupported", f"{self.name}: model discovery is not supported")
+        if response.status_code == 429:
+            raise ModelDiscoveryError("rate_limited", f"{self.name}: model discovery was rate limited")
+        if response.status_code >= 400:
+            raise ModelDiscoveryError("invalid_response", f"{self.name}: model listing returned HTTP {response.status_code}")
+        try:
+            body = response.json()
+            items = body["data"]
+            if not isinstance(items, list):
+                raise TypeError("data is not a list")
+        except (ValueError, KeyError, TypeError) as exc:
+            raise ModelDiscoveryError("invalid_response", f"{self.name}: invalid model listing response") from exc
+        discovered: list[DiscoveredModel] = []
+        for item in items:
+            if not isinstance(item, dict) or not isinstance(item.get("id"), str) or not item["id"].strip():
+                continue
+            model_id = item["id"].strip()
+            metadata = {
+                key: item[key]
+                for key in ("created", "owned_by", "object")
+                if key in item and isinstance(item[key], (str, int, float, bool, type(None)))
+            }
+            discovered.append(
+                DiscoveredModel(
+                    provider_model_id=model_id,
+                    runtime_model_id=model_id,
+                    display_name=model_id,
+                    provider_name=self.name,
+                    raw_metadata=metadata or None,
+                )
+            )
+        if items and not discovered:
+            raise ModelDiscoveryError("invalid_response", f"{self.name}: model listing contained no valid model IDs")
+        return discovered
 
-        The two-step probe keeps the test cost-free for providers that
-        expose the models endpoint (Anthropic / OpenAI / Gemini / Grok all do)
-        while still working against barebones OpenAI-compatible servers
-        that only implement chat completions (LiteLLM / LM Studio).
+    async def test_connection(self, *, model: str | None = None) -> ConnectionTestResult:
+        """Enumerate models, then run a tiny completion with the selected model.
+
+        A successful ``GET /models`` proves that the credential is accepted but
+        does *not* prove that the configured model can generate for this account.
+        Providers may continue listing deprecated or entitlement-restricted
+        models.  The completion probe is therefore authoritative; enumeration is
+        retained only to populate the diagnostic model list.
         """
         from . import _probe
 
@@ -160,7 +218,6 @@ class OpenAiProvider(LlmProvider):
             return _probe.network_failure(provider=self.name, model=target_model, exc=exc)
 
         if probe is None:
-            # No /models endpoint — fall back to a tiny completion.
             return await self._probe_via_completion(target_model, client)
 
         models, status = probe
@@ -173,12 +230,8 @@ class OpenAiProvider(LlmProvider):
                 body_text="models endpoint returned error",
                 latency_ms=latency,
             )
-        return _probe.success(
-            provider=self.name,
-            model=target_model,
-            detected_models=models,
-            latency_ms=latency,
-        )
+        completion_result = await self._probe_via_completion(target_model, client)
+        return completion_result.model_copy(update={"detected_models": models})
 
     async def _probe_via_completion(self, model: str, client: httpx.AsyncClient) -> ConnectionTestResult:
         from . import _probe
@@ -186,12 +239,14 @@ class OpenAiProvider(LlmProvider):
         body = {
             "model": model,
             "max_tokens": 4,
-            "temperature": 0.0,
+            "temperature": self._temperature_override if self._temperature_override is not None else 0.0,
             "messages": [
                 {"role": "system", "content": "You are a connectivity probe."},
                 {"role": "user", "content": "Reply with the single word ok."},
             ],
         }
+        if self._reasoning_effort is not None:
+            body["reasoning_effort"] = self._reasoning_effort
         t0 = time.perf_counter()
         try:
             resp = await client.post(
@@ -250,12 +305,16 @@ class OpenAiProvider(LlmProvider):
         body: dict[str, Any] = {
             "model": model,
             "max_tokens": req.max_output_tokens,
-            "temperature": req.temperature,
+            "temperature": (
+                self._temperature_override if self._temperature_override is not None else req.temperature
+            ),
             "messages": [
                 {"role": "system", "content": req.system},
                 {"role": "user", "content": req.user},
             ],
         }
+        if self._reasoning_effort is not None:
+            body["reasoning_effort"] = self._reasoning_effort
         if req.response_schema is not None:
             rf = self._build_response_format(req.response_schema)
             if rf is not None:

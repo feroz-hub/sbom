@@ -527,9 +527,27 @@ class Product(Base, SoftDeleteMixin, TenantOwnedMixin):
     created_at = Column(String, nullable=False, index=True)
     updated_at = Column(String, nullable=True)
     deleted_at = Column(String, nullable=True, index=True)
+    # Explicit scheduler target.  Version strings are intentionally not used
+    # to infer "latest/current" because product versions are not reliably
+    # sortable (for example R2.1, 2026.09, or Firmware-22A).
+    current_sbom_id = Column(
+        Integer,
+        ForeignKey("sbom_source.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
     project = relationship("Projects", back_populates="products")
-    sboms = relationship("SBOMSource", back_populates="product")
+    sboms = relationship(
+        "SBOMSource",
+        back_populates="product",
+        foreign_keys="SBOMSource.product_id",
+    )
+    current_sbom = relationship(
+        "SBOMSource",
+        foreign_keys=[current_sbom_id],
+        post_update=True,
+    )
     analysis_runs = relationship("AnalysisRun", back_populates="product")
     schedules = relationship(
         "AnalysisSchedule",
@@ -626,7 +644,7 @@ class SBOMSource(Base, SoftDeleteMixin, TenantOwnedMixin):
     component_extraction_completed_at = Column(String, nullable=True)
 
     project = relationship("Projects", back_populates="sboms")
-    product = relationship("Product", back_populates="sboms")
+    product = relationship("Product", back_populates="sboms", foreign_keys=[product_id])
     sbom_type_rel = relationship("SBOMType", back_populates="sboms")
     analysis_reports = relationship("SBOMAnalysisReport", back_populates="sbom")
     components = relationship("SBOMComponent", back_populates="sbom")
@@ -1304,16 +1322,16 @@ class KevEntry(Base):
 
 class AnalysisSchedule(Base, SoftDeleteMixin, TenantOwnedMixin):
     """
-    Periodic analysis schedule. One row per scope target (PROJECT or SBOM).
+    Periodic analysis schedule. One active row per scope target.
 
-    A project-level row applies to every SBOM in the project at tick time;
-    an SBOM-level row overrides the cascade for that one SBOM.
+    Resolution is SBOM > PRODUCT > PROJECT > TENANT. Missing child rows
+    inherit, paused custom rows block inheritance, and EXCLUDED rows opt out.
     """
 
     __tablename__ = "analysis_schedule"
 
     id = Column(Integer, primary_key=True, index=True)
-    scope = Column(String(16), nullable=False)  # 'PROJECT' | 'SBOM'
+    scope = Column(String(16), nullable=False)  # TENANT|PROJECT|PRODUCT|SBOM
 
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True)
     product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=True, index=True)
@@ -1325,6 +1343,16 @@ class AnalysisSchedule(Base, SoftDeleteMixin, TenantOwnedMixin):
     day_of_month = Column(Integer, nullable=True)  # 1..28 for MONTHLY/QUARTERLY
     hour_utc = Column(Integer, nullable=False, default=2)
     timezone = Column(String(64), nullable=False, default="UTC")
+
+    # A missing child row means INHERIT.  CUSTOM rows may be enabled or
+    # paused; EXCLUDED rows explicitly block all parent inheritance.
+    mode = Column(String(16), nullable=False, default="CUSTOM", server_default="CUSTOM")
+    target_version_policy = Column(
+        String(32),
+        nullable=False,
+        default="CURRENT_ONLY",
+        server_default="CURRENT_ONLY",
+    )
 
     enabled = Column(Boolean, nullable=False, default=True)
 
@@ -1346,13 +1374,19 @@ class AnalysisSchedule(Base, SoftDeleteMixin, TenantOwnedMixin):
     sbom = relationship("SBOMSource", foreign_keys=[sbom_id])
 
     __table_args__ = (
-        CheckConstraint("scope IN ('PROJECT','PRODUCT','SBOM')", name="ck_analysis_schedule_scope"),
+        CheckConstraint("scope IN ('TENANT','PROJECT','PRODUCT','SBOM')", name="ck_analysis_schedule_scope"),
         CheckConstraint(
             "cadence IN ('DAILY','WEEKLY','BIWEEKLY','MONTHLY','QUARTERLY','CUSTOM')",
             name="ck_analysis_schedule_cadence",
         ),
+        CheckConstraint("mode IN ('CUSTOM','EXCLUDED')", name="ck_analysis_schedule_mode"),
         CheckConstraint(
-            "(scope = 'PROJECT' AND project_id IS NOT NULL AND product_id IS NULL AND sbom_id IS NULL) "
+            "target_version_policy IN ('CURRENT_ONLY','ALL_ACTIVE_VERSIONS')",
+            name="ck_analysis_schedule_target_version_policy",
+        ),
+        CheckConstraint(
+            "(scope = 'TENANT' AND project_id IS NULL AND product_id IS NULL AND sbom_id IS NULL) "
+            "OR (scope = 'PROJECT' AND project_id IS NOT NULL AND product_id IS NULL AND sbom_id IS NULL) "
             "OR (scope = 'PRODUCT' AND product_id IS NOT NULL AND project_id IS NULL AND sbom_id IS NULL) "
             "OR (scope = 'SBOM' AND sbom_id IS NOT NULL AND project_id IS NULL AND product_id IS NULL)",
             name="ck_analysis_schedule_target",
@@ -1507,7 +1541,7 @@ class AiUsageLog(Base, TenantOwnedMixin):
     id = Column(Integer, primary_key=True, index=True)
     request_id = Column(String(64), nullable=False)
     provider = Column(String(32), nullable=False, index=True)
-    model = Column(String(96), nullable=False)
+    model = Column(String(256), nullable=False)
     purpose = Column(String(48), nullable=False, index=True)
     finding_cache_key = Column(String(64), nullable=True, index=True)
     input_tokens = Column(Integer, nullable=False, default=0)
@@ -1521,19 +1555,18 @@ class AiUsageLog(Base, TenantOwnedMixin):
 
 class AiProviderConfig(Base):
     """
-    Per-provider runtime overrides for the AI subsystem.
+    Legacy per-provider runtime overrides retained for compatibility.
 
-    Env vars in ``Settings`` provide the safe defaults; rows in this table
-    let an admin toggle providers, change models, or adjust concurrency
-    without a redeploy. Secrets (API keys) deliberately do NOT live here —
-    they remain in env / vault, see ``ProviderRegistry.apply_db_overrides``.
+    New DB-backed credentials and selection metadata live in
+    ``ai_provider_credentials`` and are resolved through ``AiConfigLoader``.
+    This table is intentionally not a credential store.
     """
 
     __tablename__ = "ai_provider_config"
 
     provider_name = Column(String(32), primary_key=True)
     enabled = Column(Boolean, nullable=True)
-    default_model = Column(String(96), nullable=True)
+    default_model = Column(String(256), nullable=True)
     base_url = Column(String(256), nullable=True)
     max_concurrent = Column(Integer, nullable=True)
     rate_per_minute = Column(Float, nullable=True)
@@ -1578,7 +1611,7 @@ class AiFixCache(Base):
     overall_confidence = Column(String(16), nullable=True)
 
     provider_used = Column(String(32), nullable=False)
-    model_used = Column(String(96), nullable=False)
+    model_used = Column(String(256), nullable=False)
     total_cost_usd = Column(Float, nullable=False, default=0.0)
 
     generated_at = Column(String, nullable=False)
@@ -1645,9 +1678,9 @@ class AiProviderCredential(Base):
     """
     AES-GCM-encrypted API credential for one AI provider (Phase 2 §2.2).
 
-    Tenant-shared by design (single-admin v1). The ``label`` column
-    scaffolds for the future "multiple keys per provider" feature; v1
-    UI keeps every row at ``label='default'``.
+    Tenant-shared by design (single-admin v1). ``provider_name`` + ``label``
+    identifies one credential, allowing deterministic default/fallback
+    selection even when a provider has multiple keys.
 
     Hard rule: ``api_key_encrypted`` must NEVER be returned by any
     endpoint. The router exposes ``api_key_preview`` (first 6 + last 4)
@@ -1661,7 +1694,7 @@ class AiProviderCredential(Base):
     label = Column(String(64), nullable=False, default="default")
     api_key_encrypted = Column(Text, nullable=True)
     base_url = Column(String(512), nullable=True)
-    default_model = Column(String(128), nullable=True)
+    default_model = Column(String(256), nullable=True)
     tier = Column(String(16), nullable=False, default="paid")
     is_default = Column(Boolean, nullable=False, default=False)
     is_fallback = Column(Boolean, nullable=False, default=False)
@@ -1678,6 +1711,76 @@ class AiProviderCredential(Base):
     last_test_error = Column(Text, nullable=True)
 
     __table_args__ = (UniqueConstraint("provider_name", "label", name="uq_ai_provider_credential_provider_label"),)
+
+
+class AiProviderModel(Base):
+    """Persisted model discovered for one exact provider credential.
+
+    Discovery is intentionally historical: a model that disappears upstream is
+    marked unavailable rather than deleted. ``is_available`` is nullable so a
+    legacy configured model can remain selected with an explicit "not yet
+    verified" state until the first successful provider refresh.
+
+    ``provider_model_id`` preserves the identifier returned by the provider;
+    ``runtime_model_id`` is the adapter-owned identifier sent to generation
+    APIs (notably Gemini returns ``models/<id>`` but the OpenAI-compatible
+    runtime accepts ``<id>``).
+    """
+
+    __tablename__ = "ai_provider_model"
+
+    id = Column(Integer, primary_key=True, index=True)
+    provider_credential_id = Column(
+        Integer,
+        ForeignKey("ai_provider_credential.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    provider_name = Column(String(32), nullable=False, index=True)
+    provider_model_id = Column(String(256), nullable=False)
+    runtime_model_id = Column(String(256), nullable=False)
+    display_name = Column(String(256), nullable=True)
+
+    is_available = Column(Boolean, nullable=True)
+    is_enabled = Column(Boolean, nullable=False, default=True)
+    is_selected = Column(Boolean, nullable=False, default=False)
+
+    supports_chat = Column(Boolean, nullable=True)
+    supports_structured_output = Column(Boolean, nullable=True)
+    supports_streaming = Column(Boolean, nullable=True)
+    supports_tools = Column(Boolean, nullable=True)
+    context_window = Column(Integer, nullable=True)
+    max_output_tokens = Column(Integer, nullable=True)
+
+    discovery_source = Column(String(24), nullable=False, default="live")
+    first_discovered_at = Column(String, nullable=True)
+    last_discovered_at = Column(String, nullable=True)
+    last_verified_at = Column(String, nullable=True)
+    last_test_success = Column(Boolean, nullable=True)
+    last_test_error = Column(String(240), nullable=True)
+    raw_metadata = Column(JSON, nullable=True)
+    created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "provider_credential_id",
+            "provider_model_id",
+            name="uq_ai_provider_model_credential_provider_model",
+        ),
+        Index(
+            "ix_ai_provider_model_only_one_selected",
+            "provider_credential_id",
+            unique=True,
+            sqlite_where=sql_text("is_selected = 1"),
+            postgresql_where=sql_text("is_selected = TRUE"),
+        ),
+        Index(
+            "ix_ai_provider_model_credential_available",
+            "provider_credential_id",
+            "is_available",
+        ),
+    )
 
 
 class AiSettings(Base):
@@ -1917,3 +2020,6 @@ Index(
     postgresql_where=sql_text("is_fallback = true"),
     sqlite_where=sql_text("is_fallback = 1"),
 )
+
+# Register report tables for Alembic and metadata-based test databases.
+from .models_reports import ReportArtifact, ReportDelivery, ReportSubscription  # noqa: E402,F401

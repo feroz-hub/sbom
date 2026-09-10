@@ -28,6 +28,7 @@ from celery import shared_task
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..core.context import bind_context, minimal_background_context, reset_context
 from ..models import AnalysisRun, AnalysisSchedule, SBOMSource
 from ..services.schedule_resolver import find_due_targets
 from ..services.scheduling import (
@@ -79,19 +80,39 @@ def tick_scheduled_analyses(self) -> dict:
     db: Session = SessionLocal()
     try:
         now = _now()
+        due_schedules = list(
+            db.scalars(
+                select(AnalysisSchedule).where(
+                    AnalysisSchedule.is_active.is_(True),
+                    AnalysisSchedule.enabled.is_(True),
+                    AnalysisSchedule.mode == "CUSTOM",
+                    AnalysisSchedule.next_run_at.is_not(None),
+                    AnalysisSchedule.next_run_at <= now.isoformat(),
+                )
+            )
+        )
         targets = find_due_targets(db, now.isoformat())
 
-        if not targets:
+        if not due_schedules:
             log.info("scheduled_analysis_tick_idle")
             return {"due": 0, "enqueued": 0}
+
+        from ..settings import get_settings
+        report_cycle = None
+        if get_settings().report_notifications_enabled:
+            try:
+                from ..services.report_cycles import prepare_run_cycle
+                prepare_run_cycle(db, targets, now.isoformat())
+                report_cycle = now.isoformat()
+            except Exception:
+                db.rollback()
+                log.warning("scheduled_report_cycle_failed")
 
         # Snapshot of schedule rows we need to advance — fetch once, mutate
         # in place. We want next_run_at moved forward whether or not the
         # per-SBOM task ultimately succeeds, otherwise a failing schedule
         # would re-fire on the next 15-min tick.
-        schedule_ids = {t.schedule_id for t in targets}
-        schedules = db.execute(select(AnalysisSchedule).where(AnalysisSchedule.id.in_(schedule_ids))).scalars().all()
-        schedule_by_id = {s.id: s for s in schedules}
+        schedule_by_id = {schedule.id: schedule for schedule in due_schedules}
 
         enqueued = 0
         for tgt in targets:
@@ -99,6 +120,7 @@ def tick_scheduled_analyses(self) -> dict:
                 analyze_sbom_async.delay(
                     sbom_id=tgt.sbom_id,
                     schedule_id=tgt.schedule_id,
+                    **({"report_cycle": report_cycle} if report_cycle else {}),
                 )
                 enqueued += 1
             except Exception:
@@ -124,9 +146,9 @@ def tick_scheduled_analyses(self) -> dict:
         db.commit()
         log.info(
             "scheduled_analysis_tick_done",
-            extra={"due": len(targets), "enqueued": enqueued},
+            extra={"due": len(due_schedules), "targets": len(targets), "enqueued": enqueued},
         )
-        return {"due": len(targets), "enqueued": enqueued}
+        return {"due": len(due_schedules), "targets": len(targets), "enqueued": enqueued}
     except Exception:
         db.rollback()
         log.exception("scheduled_analysis_tick_failed")
@@ -153,6 +175,7 @@ def analyze_sbom_async(
     sbom_id: int,
     schedule_id: int,
     force_refresh: bool = False,
+    report_cycle: str | None = None,
 ) -> dict:
     """Run create_auto_report for one SBOM and write back to the schedule row.
 
@@ -165,9 +188,17 @@ def analyze_sbom_async(
     from app.services.analysis_orchestrator import AnalysisOrchestrator
 
     db: Session = SessionLocal()
+    context_token = None
+    completion = {"status": "ERROR"}
+    tenant_id = None
     try:
         sched = db.get(AnalysisSchedule, schedule_id)
         sbom = db.get(SBOMSource, sbom_id)
+
+        if sched is None or sbom is not None and sbom.tenant_id != sched.tenant_id:
+            return {"status": "SKIPPED", "reason": "schedule_scope_invalid"}
+        tenant_id = sched.tenant_id
+        context_token = bind_context(minimal_background_context(tenant_id))
 
         if sbom is None:
             log.warning("scheduled_analysis_sbom_missing", extra={"sbom_id": sbom_id})
@@ -175,7 +206,28 @@ def analyze_sbom_async(
                 sched.last_run_status = "SKIPPED"
                 sched.last_run_at = to_iso(_now())
                 db.commit()
-            return {"status": "SKIPPED", "reason": "sbom_not_found"}
+            completion = {"status": "SKIPPED", "reason": "sbom_not_found"}
+            return completion
+
+        # Resolve again immediately before the external analysis begins.
+        # This closes the window where an administrator pauses/excludes or
+        # overrides a target after Beat enqueues it but before a worker starts.
+        from ..services.schedule_resolver import resolve_effective_schedule
+
+        effective = resolve_effective_schedule(db, sbom_id)
+        if (
+            effective is None
+            or not effective.included
+            or effective.schedule is None
+            or effective.schedule.id != schedule_id
+        ):
+            reason = effective.reason if effective is not None else "TARGET_INACTIVE"
+            log.info(
+                "scheduled_analysis_skip_resolution_changed",
+                extra={"sbom_id": sbom_id, "schedule_id": schedule_id, "reason": reason},
+            )
+            completion = {"status": "SKIPPED", "reason": reason}
+            return completion
 
         gap_minutes = sched.min_gap_minutes if sched is not None else 60
         if _recent_run_exists(db, sbom_id, gap_minutes):
@@ -187,7 +239,8 @@ def analyze_sbom_async(
                 sched.last_run_status = "SKIPPED"
                 sched.last_run_at = to_iso(_now())
                 db.commit()
-            return {"status": "SKIPPED", "reason": "recent_run_within_gap"}
+            completion = {"status": "SKIPPED", "reason": "recent_run_within_gap"}
+            return completion
 
         try:
             outcome = asyncio.run(
@@ -213,6 +266,8 @@ def analyze_sbom_async(
                 # source warrants slowing down further.
                 sched.next_run_at = to_iso(compute_failure_backoff(sched.consecutive_failures, _now()))
                 db.commit()
+            if self.request.retries < self.max_retries:
+                completion = {"status": "RETRYING"}
             raise self.retry(exc=exc)
 
         if sched is not None:
@@ -222,10 +277,23 @@ def analyze_sbom_async(
             sched.consecutive_failures = 0
             db.commit()
 
-        return {
+        completion = {
             "status": run.run_status if run is not None else "NO_DATA",
             "run_id": run.id if run is not None else None,
             "sbom_id": sbom_id,
         }
+        return completion
     finally:
         db.close()
+        if report_cycle and tenant_id and completion["status"] != "RETRYING":
+            try:
+                from ..services.report_cycles import record_run_completion
+                from ..workers.report_notifications import dispatch_pending
+                with SessionLocal() as report_db:
+                    record_run_completion(report_db, tenant_id=tenant_id, sbom_id=sbom_id, cycle=report_cycle,
+                                          status=completion["status"], run_id=completion.get("run_id"))
+                dispatch_pending.delay()
+            except Exception:
+                log.warning("scheduled_report_completion_deferred sbom_id=%s", sbom_id)
+        if context_token is not None:
+            reset_context(context_token)

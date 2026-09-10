@@ -1,9 +1,9 @@
-"""Static catalog of supported AI providers and their model lists.
+"""Static catalog of provider configuration fields and bootstrap models.
 
 Phase 1 §1.4 deliverable. This is the metadata the Settings UI uses to
 populate the "Add provider" dropdown — provider name, display label,
 which fields the form must collect, the free-tier rate limits, the
-"where do I get an API key" link, and the per-provider model list.
+"where do I get an API key" link, and a pre-save bootstrap model.
 
 Why a static catalog separate from the runtime registry:
 
@@ -13,11 +13,11 @@ Why a static catalog separate from the runtime registry:
     talk to, regardless of current configuration.
   * The two have different lifecycles. New runtime credentials are
     common; new provider classes are rare.
-  * Storing curated rate-limit and model metadata as code (not config)
-    means PR review catches breaking changes — a Gemini free-tier
-    bump from 15 to 30 RPM is a code edit, code review, deploy.
+  * ``available_models`` is retained for the unsaved Add Provider form only.
+    Once saved, the provider adapter and ``ai_provider_model`` registry are
+    the model source of truth.
 
-Sources (last verified 2026-05-04 — re-check each quarter):
+Sources (last verified 2026-09-06 — re-check each quarter):
   * Anthropic    https://docs.anthropic.com/en/docs/about-claude/models
   * OpenAI       https://platform.openai.com/docs/models
   * Gemini       https://ai.google.dev/pricing  ·  https://ai.google.dev/gemini-api/docs/rate-limits
@@ -36,7 +36,7 @@ ModelTier = Literal["free", "paid"]
 
 
 class ModelInfo(BaseModel):
-    """One model exposed by a provider.
+    """One bootstrap model used only before live discovery is possible.
 
     ``default_tier`` is the *expected* tier for this model. Free-tier
     models on cloud providers (Gemini Flash, Grok 2 Mini) carry rate
@@ -90,11 +90,11 @@ ANTHROPIC = ProviderCatalogEntry(
     requires_api_key=True,
     requires_base_url=False,
     available_models=[
-        ModelInfo(name="claude-opus-4-7", display_name="Claude Opus 4.7", default_tier="paid"),
-        ModelInfo(name="claude-sonnet-4-6", display_name="Claude Sonnet 4.6", default_tier="paid"),
-        ModelInfo(name="claude-sonnet-4-5", display_name="Claude Sonnet 4.5", default_tier="paid"),
         ModelInfo(
-            name="claude-haiku-4-5", display_name="Claude Haiku 4.5", default_tier="paid", notes="Cheapest in family"
+            name="claude-sonnet-4-5",
+            display_name="Claude Sonnet 4.5 (bootstrap)",
+            default_tier="paid",
+            notes="Temporary pre-save value; refresh after saving credentials",
         ),
     ],
     docs_url="https://docs.anthropic.com/en/api/messages",
@@ -113,12 +113,12 @@ OPENAI = ProviderCatalogEntry(
     requires_api_key=True,
     requires_base_url=False,
     available_models=[
-        ModelInfo(name="gpt-4o", display_name="GPT-4o", default_tier="paid"),
         ModelInfo(
-            name="gpt-4o-mini", display_name="GPT-4o mini", default_tier="paid", notes="Cheapest paid OpenAI tier"
+            name="gpt-4o-mini",
+            display_name="GPT-4o mini (bootstrap)",
+            default_tier="paid",
+            notes="Temporary pre-save value; refresh after saving credentials",
         ),
-        ModelInfo(name="gpt-4.1", display_name="GPT-4.1", default_tier="paid"),
-        ModelInfo(name="gpt-4.1-mini", display_name="GPT-4.1 mini", default_tier="paid"),
     ],
     docs_url="https://platform.openai.com/docs/api-reference/chat",
     api_key_url="https://platform.openai.com/api-keys",
@@ -140,22 +140,10 @@ GEMINI = ProviderCatalogEntry(
     free_tier_daily_token_limit=1_000_000,
     available_models=[
         ModelInfo(
-            name="gemini-2.5-flash",
-            display_name="Gemini 2.5 Flash",
+            name="gemini-3.6-flash",
+            display_name="Gemini 3.6 Flash (bootstrap)",
             default_tier="free",
-            notes="Free tier: 15 req/min, 1M tokens/day, 1500 req/day",
-        ),
-        ModelInfo(
-            name="gemini-2.5-flash-lite",
-            display_name="Gemini 2.5 Flash Lite",
-            default_tier="paid",
-            notes="Cheapest paid Gemini tier",
-        ),
-        ModelInfo(
-            name="gemini-2.5-pro",
-            display_name="Gemini 2.5 Pro",
-            default_tier="paid",
-            notes="Free tier: 5 req/min — too tight for batch use",
+            notes="Temporary pre-save value; refresh after saving credentials",
         ),
     ],
     docs_url="https://ai.google.dev/gemini-api/docs",
@@ -179,12 +167,10 @@ GROK = ProviderCatalogEntry(
     available_models=[
         ModelInfo(
             name="grok-2-mini",
-            display_name="Grok 2 Mini",
+            display_name="Grok 2 Mini (bootstrap)",
             default_tier="free",
-            notes="Free tier: ~1 req/sec, ~25k tokens/day. Tight for batch.",
+            notes="Temporary pre-save value; refresh after saving credentials",
         ),
-        ModelInfo(name="grok-2", display_name="Grok 2", default_tier="paid"),
-        ModelInfo(name="grok-3", display_name="Grok 3", default_tier="paid"),
     ],
     docs_url="https://docs.x.ai/docs",
     api_key_url="https://console.x.ai/",
@@ -223,11 +209,11 @@ OLLAMA = ProviderCatalogEntry(
     is_local=True,
     supports_free_tier=False,
     available_models=[
-        ModelInfo(name="llama3.3:70b", display_name="Llama 3.3 70B", default_tier="free"),
-        ModelInfo(name="llama3.1:70b", display_name="Llama 3.1 70B", default_tier="free"),
-        ModelInfo(name="qwen2.5:72b", display_name="Qwen 2.5 72B", default_tier="free"),
         ModelInfo(
-            name="qwen2.5:32b", display_name="Qwen 2.5 32B", default_tier="free", notes="Smaller — fits more GPUs"
+            name="llama3.3:70b",
+            display_name="Llama 3.3 70B (bootstrap)",
+            default_tier="free",
+            notes="Temporary pre-save value; refresh to list locally installed models",
         ),
     ],
     docs_url="https://github.com/ollama/ollama/blob/main/docs/api.md",
@@ -320,6 +306,7 @@ __all__ = [
     "OPENAI",
     "PROVIDER_CATALOG",
     "ProviderCatalogEntry",
+    "SARVAM",
     "VLLM",
     "get_catalog_entry",
     "list_catalog",

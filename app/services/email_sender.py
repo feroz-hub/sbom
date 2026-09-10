@@ -19,12 +19,39 @@ class EmailDeliveryStatus(StrEnum):
     SENT = "SENT"
     FAILED = "FAILED"
     SKIPPED = "SKIPPED"
+    SUPPRESSED = "SUPPRESSED"
 
 
 @dataclass(frozen=True, slots=True)
 class EmailDeliveryResult:
     status: EmailDeliveryStatus
     error_code: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class EmailAttachment:
+    filename: str
+    media_type: str
+    content: bytes
+
+
+def build_email(settings: Settings, *, recipient_email: str, subject: str,
+                text_body: str, html_body: str, attachments=()) -> EmailMessage:
+    """Shared MIME construction. No request identifiers, tokens or arbitrary headers."""
+    message = EmailMessage()
+    message["Subject"] = subject
+    message["From"] = f"{settings.email_from_name} <{settings.email_from_address}>"
+    message["To"] = recipient_email
+    message.set_content(text_body)
+    message.add_alternative(html_body, subtype="html")
+    for attachment in attachments:
+        main, sub = attachment.media_type.split("/", 1)
+        message.add_attachment(attachment.content, maintype=main, subtype=sub, filename=attachment.filename)
+    return message
+
+
+class EmailSender(Protocol):
+    def send_email(self, message: EmailMessage) -> EmailDeliveryResult: ...
 
 
 class VerificationEmailSender(Protocol):
@@ -40,6 +67,9 @@ class VerificationEmailSender(Protocol):
 
 
 class DisabledVerificationEmailSender:
+    def send_email(self, message: EmailMessage) -> EmailDeliveryResult:
+        return EmailDeliveryResult(EmailDeliveryStatus.SKIPPED, "DELIVERY_DISABLED")
+
     def send_verification_email(
         self,
         *,
@@ -71,15 +101,8 @@ class SmtpVerificationEmailSender:
             verification_url=verification_url,
             expires_at=expires_at,
         )
-        message = EmailMessage()
-        message["Subject"] = rendered.subject
-        message["From"] = (
-            f"{self.settings.email_from_name} <{self.settings.email_from_address}>"
-        )
-        message["To"] = recipient_email
-        message.set_content(rendered.text_body)
-        message.add_alternative(rendered.html_body, subtype="html")
-        return message
+        return build_email(self.settings, recipient_email=recipient_email, subject=rendered.subject,
+                           text_body=rendered.text_body, html_body=rendered.html_body)
 
     def send_verification_email(
         self,
@@ -97,8 +120,15 @@ class SmtpVerificationEmailSender:
             verification_url=verification_url,
             expires_at=expires_at,
         )
+        return self._send(message, distinguish_unknown=False)
+
+    def send_email(self, message: EmailMessage) -> EmailDeliveryResult:
+        return self._send(message, distinguish_unknown=True)
+
+    def _send(self, message: EmailMessage, *, distinguish_unknown: bool) -> EmailDeliveryResult:
         settings = self.settings
         tls_context = ssl.create_default_context()
+        dispatching = False
         try:
             if settings.smtp_use_tls:
                 client: smtplib.SMTP = smtplib.SMTP_SSL(
@@ -125,19 +155,36 @@ class SmtpVerificationEmailSender:
                         settings.smtp_username,
                         settings.smtp_password.get_secret_value(),
                     )
+                dispatching = True
                 client.send_message(message)
             return EmailDeliveryResult(EmailDeliveryStatus.SENT)
         except smtplib.SMTPAuthenticationError:
             return EmailDeliveryResult(EmailDeliveryStatus.FAILED, "SMTP_AUTHENTICATION_FAILED")
         except (ssl.SSLError, smtplib.SMTPNotSupportedError):
             return EmailDeliveryResult(EmailDeliveryStatus.FAILED, "SMTP_TLS_FAILED")
+        except smtplib.SMTPRecipientsRefused:
+            return EmailDeliveryResult(EmailDeliveryStatus.FAILED, "SMTP_RECIPIENT_REJECTED")
+        except smtplib.SMTPDataError as exc:
+            return EmailDeliveryResult(EmailDeliveryStatus.FAILED,
+                                       "SMTP_TEMPORARY_REJECTION" if exc.smtp_code < 500 else "SMTP_MESSAGE_REJECTED")
         except TimeoutError:
+            if distinguish_unknown and dispatching:
+                return EmailDeliveryResult(EmailDeliveryStatus.FAILED, "SMTP_OUTCOME_UNKNOWN")
             return EmailDeliveryResult(EmailDeliveryStatus.FAILED, "SMTP_TIMEOUT")
         except (OSError, smtplib.SMTPException):
+            if distinguish_unknown and dispatching:
+                return EmailDeliveryResult(EmailDeliveryStatus.FAILED, "SMTP_OUTCOME_UNKNOWN")
             return EmailDeliveryResult(EmailDeliveryStatus.FAILED, "SMTP_UNAVAILABLE")
 
 
 def get_verification_email_sender() -> VerificationEmailSender:
+    settings = get_settings()
+    if not settings.email_delivery_enabled:
+        return DisabledVerificationEmailSender()
+    return SmtpVerificationEmailSender(settings)
+
+
+def get_email_sender() -> EmailSender:
     settings = get_settings()
     if not settings.email_delivery_enabled:
         return DisabledVerificationEmailSender()

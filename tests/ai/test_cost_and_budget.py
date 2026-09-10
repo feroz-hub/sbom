@@ -114,3 +114,14 @@ def test_budget_guard_reset_clears_in_memory_state():
     guard.reset()
     # After reset, the same call passes.
     guard.check_request(estimated_usd=0.05, scan_id=7)
+
+
+def test_budget_guard_rejects_active_session_instead_of_silently_degrading():
+    from app.db import SessionLocal
+
+    session = SessionLocal()
+    try:
+        with pytest.raises(TypeError, match="session factory"):
+            BudgetGuard(BudgetCaps(per_day_org_usd=1.0), session)
+    finally:
+        session.close()

@@ -3,9 +3,9 @@
 Single decision point used by every endpoint that would trigger an AI
 call. Composes the three layers in order:
 
-  1. **Kill switch** (``AI_FIXES_KILL_SWITCH``) — operator panic button.
+  1. **Kill switch** (DB-first effective AI settings) — operator panic button.
      Reasons returned: ``kill_switch``.
-  2. **Master flag** (``AI_FIXES_ENABLED``) — feature gate. Reasons:
+  2. **Master flag** (DB-first effective setting, env migration fallback) — feature gate. Reasons:
      ``not_enabled``.
   3. **Canary sampling** (``AI_CANARY_PERCENTAGE`` ∈ [0, 100]) —
      deterministic hash of the rollout key (run / finding / user) decides
@@ -31,6 +31,8 @@ from dataclasses import dataclass
 from typing import Literal
 
 from ..settings import get_settings
+from .providers.base import AiProviderError
+from .runtime_config import get_effective_ai_config
 
 AccessReason = Literal[
     "ok",
@@ -59,6 +61,15 @@ class AiAccess:
         return 200 if self.allowed else 409
 
 
+class AiAccessDeniedError(AiProviderError):
+    """Raised when runtime state changes after an API-level gate check."""
+
+    def __init__(self, access: AiAccess) -> None:
+        super().__init__(access.message)
+        self.reason = access.reason
+        self.http_status = access.http_status
+
+
 def _canary_bucket(key: str) -> int:
     """Deterministic 0-99 bucket from the rollout key.
 
@@ -72,29 +83,36 @@ def _canary_bucket(key: str) -> int:
     return int(digest[:8], 16) % 100
 
 
-def evaluate_access(*, rollout_key: str | None = None) -> AiAccess:
+def evaluate_access(*, rollout_key: str | None = None, apply_canary: bool = True) -> AiAccess:
     """Apply every gate in order. ``rollout_key`` keys the canary hash.
 
     Operators always pass through the master + kill-switch gates. The
     canary sampling only runs when both upper gates pass.
     """
-    s = get_settings()
+    effective = get_effective_ai_config()
 
-    if s.ai_fixes_kill_switch:
+    if effective.kill_switch_active:
         return AiAccess(
             allowed=False,
             reason="kill_switch",
             message="AI fixes are temporarily disabled by an operator.",
         )
 
-    if not s.ai_fixes_enabled:
+    if not effective.feature_enabled:
         return AiAccess(
             allowed=False,
             reason="not_enabled",
             message="AI fix generation is not enabled for this deployment.",
         )
 
-    pct = max(0, min(100, int(s.ai_canary_percentage)))
+    # Canary rollout is intentionally infrastructure-controlled and applies
+    # only to AI Fix generation. Copilot and validation repair call this
+    # policy with ``apply_canary=False`` while still honoring the same master
+    # enable and kill switch.
+    if not apply_canary:
+        return AiAccess(allowed=True, reason="ok")
+
+    pct = max(0, min(100, int(get_settings().ai_canary_percentage)))
     if pct >= 100:
         return AiAccess(allowed=True, reason="ok")
     if pct <= 0:
@@ -124,4 +142,4 @@ def evaluate_access(*, rollout_key: str | None = None) -> AiAccess:
     )
 
 
-__all__ = ["AccessReason", "AiAccess", "evaluate_access"]
+__all__ = ["AccessReason", "AiAccess", "AiAccessDeniedError", "evaluate_access"]

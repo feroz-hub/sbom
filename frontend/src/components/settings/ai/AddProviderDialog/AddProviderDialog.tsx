@@ -13,6 +13,7 @@ import type {
 } from '@/types/ai';
 import { TestResultDisplay } from './TestResultDisplay';
 import { getApiErrorMessage } from '@/lib/notifications';
+import { customOpenAiBaseUrlError } from '@/lib/aiProviderValidation';
 
 interface AddProviderDialogProps {
   open: boolean;
@@ -41,6 +42,7 @@ export function AddProviderDialog({ open, onClose }: AddProviderDialogProps) {
   const createMut = useCreateAiCredential();
 
   const [providerName, setProviderName] = useState<string>('anthropic');
+  const [label, setLabel] = useState<string>('default');
   const [apiKey, setApiKey] = useState<string>('');
   const [showKey, setShowKey] = useState(false);
   const [baseUrl, setBaseUrl] = useState<string>('');
@@ -60,6 +62,7 @@ export function AddProviderDialog({ open, onClose }: AddProviderDialogProps) {
   useEffect(() => {
     if (!entry) return;
     setApiKey('');
+    setLabel('default');
     setShowKey(false);
     setBaseUrl(entry.name === 'ollama' ? 'http://localhost:11434' : '');
     const firstModel = entry.available_models[0]?.name ?? '';
@@ -74,10 +77,15 @@ export function AddProviderDialog({ open, onClose }: AddProviderDialogProps) {
 
   if (!open) return null;
 
+  const baseUrlError = entry?.name === 'custom_openai'
+    ? customOpenAiBaseUrlError(baseUrl)
+    : null;
   const formValid = (() => {
     if (!entry) return false;
+    if (!label.trim()) return false;
     if (entry.requires_api_key && !apiKey.trim()) return false;
     if (entry.requires_base_url && !baseUrl.trim()) return false;
+    if (baseUrlError) return false;
     if (!defaultModel.trim() && entry.name !== 'custom_openai') return false;
     if (entry.name === 'custom_openai' && !defaultModel.trim()) return false;
     return true;
@@ -92,7 +100,9 @@ export function AddProviderDialog({ open, onClose }: AddProviderDialogProps) {
     setSubmitError(null);
     testMut.mutate({
       provider_name: providerName,
-      api_key: entry.requires_api_key ? apiKey.trim() : null,
+      api_key: (entry.requires_api_key || entry.name === 'custom_openai')
+        ? apiKey.trim() || null
+        : null,
       base_url: entry.requires_base_url ? baseUrl.trim() : null,
       default_model: defaultModel.trim() || null,
       tier,
@@ -108,8 +118,10 @@ export function AddProviderDialog({ open, onClose }: AddProviderDialogProps) {
     createMut.mutate(
       {
         provider_name: providerName,
-        label: 'default',
-        api_key: entry.requires_api_key ? apiKey.trim() : null,
+        label: label.trim(),
+        api_key: (entry.requires_api_key || entry.name === 'custom_openai')
+          ? apiKey.trim() || null
+          : null,
         base_url: entry.requires_base_url ? baseUrl.trim() : null,
         default_model: defaultModel.trim() || null,
         tier,
@@ -176,6 +188,23 @@ export function AddProviderDialog({ open, onClose }: AddProviderDialogProps) {
           {entry?.notes ? (
             <p className="mt-1 text-xs text-hcl-muted">{entry.notes}</p>
           ) : null}
+          <div className="mt-3">
+            <label className="text-xs font-medium text-hcl-navy" htmlFor="ai-add-label">
+              Credential label
+            </label>
+            <input
+              id="ai-add-label"
+              type="text"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              maxLength={64}
+              placeholder="default"
+              className="mt-1 w-full rounded-md border border-border-subtle bg-surface px-3 py-2 text-sm"
+            />
+            <p className="mt-1 text-xs text-hcl-muted">
+              Use distinct labels when adding more than one credential for this provider.
+            </p>
+          </div>
         </fieldset>
 
         {/* 2. Configure — provider-specific fields */}
@@ -185,10 +214,10 @@ export function AddProviderDialog({ open, onClose }: AddProviderDialogProps) {
               2. Configure
             </legend>
 
-            {entry.requires_api_key ? (
+            {entry.requires_api_key || entry.name === 'custom_openai' ? (
               <div>
                 <label className="text-xs font-medium text-hcl-navy" htmlFor="ai-add-api-key">
-                  API key
+                  API key{entry.requires_api_key ? '' : ' (optional)'}
                 </label>
                 <div className="mt-1 flex gap-2">
                   <input
@@ -238,9 +267,8 @@ export function AddProviderDialog({ open, onClose }: AddProviderDialogProps) {
                   className="mt-1 w-full rounded-md border border-border-subtle bg-surface px-3 py-2 font-mono text-sm"
                 />
                 {entry.name === 'custom_openai' ? (
-                  <p className="mt-1 text-xs text-hcl-muted">
-                    Must start with <code>https://</code> or <code>http://localhost</code>.
-                    Plaintext public URLs are rejected.
+                  <p className={`mt-1 text-xs ${baseUrlError ? 'text-red-700' : 'text-hcl-muted'}`}>
+                    {baseUrlError ?? <>Must start with <code>https://</code> or a local <code>http://</code> URL.</>}
                   </p>
                 ) : null}
               </div>
@@ -371,7 +399,11 @@ export function AddProviderDialog({ open, onClose }: AddProviderDialogProps) {
               ) : null}
               Test connection
             </button>
-            <TestResultDisplay result={testMut.data ?? null} testing={testMut.isPending} />
+            <TestResultDisplay
+              result={testMut.data ?? null}
+              testing={testMut.isPending}
+              error={testMut.error}
+            />
           </div>
         </fieldset>
 

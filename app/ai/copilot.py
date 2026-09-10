@@ -37,10 +37,11 @@ from sqlalchemy.orm import Session
 from .. import metrics
 from ..db import SessionLocal
 from ..metrics.cache import invalidation_key
-from .cost import BudgetGuard, estimate_cost_usd, estimate_tokens, write_usage_log_row
-from .fix_generator import _budget_caps_from_settings
+from .cost import estimate_cost_usd, estimate_tokens, write_usage_log_row
 from .providers.base import LlmRequest
 from .registry import get_registry
+from .rollout import AiAccessDeniedError, evaluate_access
+from .runtime_config import build_budget_guard
 
 # Briefing cache: {invalidation_key: (monotonic_ts, payload)}.
 _BRIEFING_TTL_SECONDS = 6 * 3600
@@ -48,8 +49,8 @@ _briefing_cache: dict[tuple, tuple[float, dict]] = {}
 _briefing_lock = threading.Lock()
 
 _MAX_QUESTION_CHARS = 500
-_BRIEFING_MAX_TOKENS = 700
-_ASK_MAX_TOKENS = 500
+_BRIEFING_MAX_TOKENS = 1_200
+_ASK_MAX_TOKENS = 900
 
 _BRIEFING_SYSTEM = """You are the AI Security Copilot embedded in an SBOM vulnerability-analysis dashboard.
 You receive a JSON snapshot of the organisation's current security posture. Every number you state MUST come from that snapshot — never invent CVE ids, counts, or trends.
@@ -141,7 +142,11 @@ async def generate_briefing(db: Session, *, force: bool = False) -> dict:
 
     result = await _call_llm(
         system=_BRIEFING_SYSTEM,
-        user=json.dumps(snapshot, separators=(",", ":")),
+        user=(
+            "SNAPSHOT:\n"
+            + json.dumps(snapshot, separators=(",", ":"))
+            + "\n\nTASK: Based only on the preceding snapshot, write the requested executive briefing now."
+        ),
         purpose="copilot_briefing",
         max_output_tokens=_BRIEFING_MAX_TOKENS,
     )
@@ -191,23 +196,42 @@ async def answer_question(db: Session, question: str) -> dict:
 
 async def _call_llm(*, system: str, user: str, purpose: str, max_output_tokens: int) -> dict:
     """Shared provider call: pre-flight budget, generate, record, ledger."""
+    access = evaluate_access(rollout_key=None, apply_canary=False)
+    if not access.allowed:
+        raise AiAccessDeniedError(access)
+
     with SessionLocal() as db:
         registry = get_registry(db)
         provider = registry.get_default()
         model = provider.default_model
 
-        guard = BudgetGuard(_budget_caps_from_settings(), db)
+        guard = build_budget_guard()
         estimated = estimate_cost_usd(
             provider=provider.name,
             model=model,
             input_tokens=estimate_tokens(system) + estimate_tokens(user),
             output_tokens=max_output_tokens,
         )
+        try:
+            fallback = registry.get_fallback()
+        except Exception:  # noqa: BLE001 — an invalid fallback cannot block primary
+            fallback = None
+        if fallback is not None:
+            estimated = max(
+                estimated,
+                estimate_cost_usd(
+                    provider=fallback.name,
+                    model=fallback.default_model,
+                    input_tokens=estimate_tokens(system) + estimate_tokens(user),
+                    output_tokens=max_output_tokens,
+                    is_local=getattr(fallback, "is_local", False),
+                ),
+            )
         guard.check_request(estimated_usd=estimated)
 
     request_id = uuid.uuid4().hex
     started = time.monotonic()
-    response = await provider.generate(
+    routed = await registry.generate_with_fallback(
         LlmRequest(
             system=system,
             user=user,
@@ -217,12 +241,33 @@ async def _call_llm(*, system: str, user: str, purpose: str, max_output_tokens: 
             purpose=purpose,
         )
     )
+    response = routed.response
     latency_ms = int((time.monotonic() - started) * 1000)
 
     actual_cost = float(response.usage.cost_usd or 0.0)
     with SessionLocal() as db:
-        guard = BudgetGuard(_budget_caps_from_settings(), db)
         guard.record(actual_usd=actual_cost)
+        if routed.fallback_used:
+            primary_failure = routed.primary_error
+            failure_kind = (
+                primary_failure.failure.kind
+                if primary_failure is not None and primary_failure.failure is not None
+                else "circuit_breaker_open"
+            )
+            write_usage_log_row(
+                db,
+                request_id=request_id,
+                provider=routed.primary_provider.name,
+                model=routed.primary_provider.default_model,
+                purpose=f"{purpose}_primary_failed",
+                finding_cache_key=None,
+                input_tokens=0,
+                output_tokens=0,
+                cost_usd=0.0,
+                latency_ms=0,
+                cache_hit=False,
+                error=f"fallback_selected:{failure_kind}",
+            )
         write_usage_log_row(
             db,
             request_id=request_id,

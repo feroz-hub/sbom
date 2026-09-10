@@ -7,7 +7,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from ..core.context import CurrentContext
@@ -17,7 +17,6 @@ from ..core.identity_states import (
 )
 from ..core.security import invalidate_user_contexts, require_platform_permission
 from ..db import get_db
-from sqlalchemy import or_
 from ..models import AuthorizationAuditLog, IAMUser, Tenant, TenantUser
 from ..schemas_platform import (
     PlatformAdministratorGrantRequest,

@@ -22,7 +22,6 @@ const schema = z.object({
   project_name: z.string().min(1, 'Project name is required'),
   project_details: z.string().optional(),
   project_status: z.enum(['Active', 'Inactive']),  // UI uses strings; converted to int on submit
-  created_by: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -53,7 +52,6 @@ export function ProjectModal({ open, onClose, project }: ProjectModalProps) {
       project_name: '',
       project_details: '',
       project_status: 'Active',
-      created_by: '',
     },
   });
 
@@ -63,10 +61,9 @@ export function ProjectModal({ open, onClose, project }: ProjectModalProps) {
         project_name: project.project_name,
         project_details: project.project_details ?? '',
         project_status: toStatusStr(project.project_status),
-        created_by: project.created_by ?? '',
       });
     } else {
-      reset({ project_name: '', project_details: '', project_status: 'Active', created_by: '' });
+      reset({ project_name: '', project_details: '', project_status: 'Active' });
     }
   }, [project, reset]);
 
@@ -83,10 +80,9 @@ export function ProjectModal({ open, onClose, project }: ProjectModalProps) {
         project_name: values.project_name,
         project_details: values.project_details,
         project_status: toStatusInt(values.project_status),
-        created_by: values.created_by,
       });
     },
-    onSuccess: (_result, values) => {
+    onSuccess: () => {
       invalidateProjectLists(queryClient);
       // SBOM rows render project_name; a rename leaves them stale until
       // staleTime expires. Bust the SBOM list surfaces too.
@@ -139,14 +135,6 @@ export function ProjectModal({ open, onClose, project }: ProjectModalProps) {
             <option value="Active">Active</option>
             <option value="Inactive">Inactive</option>
           </Select>
-          {!isEdit && (
-            <Input
-              label="Created By"
-              placeholder="Your name or username"
-              error={errors.created_by?.message}
-              {...register('created_by')}
-            />
-          )}
         </DialogBody>
         <DialogFooter>
           <Button type="button" variant="secondary" onClick={onClose}>

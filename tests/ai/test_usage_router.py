@@ -8,8 +8,11 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
+from app.ai.config_loader import reset_loader
+from app.ai.cost import BudgetCaps, BudgetGuard
+from app.ai.providers.base import BudgetExceededError
 from app.db import SessionLocal
-from app.models import AiUsageLog
+from app.models import AiSettings, AiUsageLog
 
 
 @pytest.fixture(autouse=True)
@@ -91,6 +94,90 @@ def test_get_ai_usage_aggregates(client):
     by_provider = {b["label"]: b for b in body["by_provider"]}
     assert by_provider["anthropic"]["calls"] == 2
     assert by_provider["openai"]["calls"] == 1
+
+
+def test_usage_caps_are_the_db_backed_runtime_caps(client, monkeypatch):
+    monkeypatch.setenv("AI_BUDGET_PER_REQUEST_USD", "9.0")
+    monkeypatch.setenv("AI_BUDGET_PER_SCAN_USD", "90.0")
+    monkeypatch.setenv("AI_BUDGET_PER_DAY_ORG_USD", "900.0")
+    db = SessionLocal()
+    try:
+        db.query(AiSettings).delete()
+        db.add(
+            AiSettings(
+                id=1,
+                feature_enabled=True,
+                kill_switch_active=False,
+                budget_per_request_usd=0.02,
+                budget_per_scan_usd=0.30,
+                budget_daily_usd=4.0,
+                updated_at="2026-09-06T00:00:00+00:00",
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+    reset_loader()
+
+    body = client.get("/api/v1/ai/usage").json()
+    assert body["budget_caps_usd"] == {
+        "per_request_usd": 0.02,
+        "per_scan_usd": 0.30,
+        "per_day_org_usd": 4.0,
+    }
+
+
+def test_analysis_config_matches_effective_db_kill_switch(client):
+    db = SessionLocal()
+    try:
+        db.query(AiSettings).delete()
+        db.add(
+            AiSettings(
+                id=1,
+                feature_enabled=True,
+                kill_switch_active=True,
+                budget_per_request_usd=0.02,
+                budget_per_scan_usd=0.30,
+                budget_daily_usd=4.0,
+                updated_at="2026-09-06T00:00:00+00:00",
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+    reset_loader()
+
+    body = client.get("/api/analysis/config").json()
+    assert body["ai_fixes_enabled"] is False
+    assert body["ai_settings_source"] == "db"
+
+
+def test_analysis_config_fails_closed_when_effective_config_is_unavailable(client, monkeypatch):
+    from app.ai import config_loader, runtime_config
+
+    def unavailable():
+        raise RuntimeError("synthetic configuration failure")
+
+    monkeypatch.setattr(runtime_config, "get_effective_ai_config", unavailable)
+    monkeypatch.setattr(config_loader, "get_loader", unavailable)
+
+    body = client.get("/api/analysis/config").json()
+    assert body["ai_fixes_enabled"] is False
+    assert body["ai_settings_source"] == "unavailable"
+    assert body["ai_default_provider"] == ""
+
+
+def test_daily_budget_reconciles_spend_written_by_another_session(client):
+    _add_log(cost=0.009)
+    guard = BudgetGuard(
+        BudgetCaps(per_request_usd=1.0, per_scan_usd=1.0, per_day_org_usd=0.01),
+        db_session_factory=SessionLocal,
+        recheck_seconds=0.0,
+    )
+
+    with pytest.raises(BudgetExceededError) as exc_info:
+        guard.check_request(estimated_usd=0.002)
+    assert exc_info.value.scope == "per_day_org"
 
 
 def test_list_providers_endpoint(client):

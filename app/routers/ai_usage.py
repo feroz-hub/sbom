@@ -31,9 +31,9 @@ from ..ai.cost import PRICING
 from ..ai.observability import ai_telemetry
 from ..ai.providers.base import ProviderInfo
 from ..ai.registry import get_registry, reset_registry
+from ..ai.runtime_config import get_effective_budget_caps
 from ..db import get_db
 from ..models import AiFixCache, AiUsageLog
-from ..settings import get_settings
 
 log = logging.getLogger("sbom.routers.ai_usage")
 
@@ -151,11 +151,11 @@ def get_ai_usage(db: Session = Depends(get_db)) -> AiUsageSummary:
     by_purpose = _bucket_by(db, since_iso=last30_iso, column=AiUsageLog.purpose)
     by_provider = _bucket_by(db, since_iso=last30_iso, column=AiUsageLog.provider)
 
-    s = get_settings()
+    effective_caps = get_effective_budget_caps()
     caps = {
-        "per_request_usd": float(s.ai_budget_per_request_usd),
-        "per_scan_usd": float(s.ai_budget_per_scan_usd),
-        "per_day_org_usd": float(s.ai_budget_per_day_org_usd),
+        "per_request_usd": effective_caps.per_request_usd,
+        "per_scan_usd": effective_caps.per_scan_usd,
+        "per_day_org_usd": effective_caps.per_day_org_usd,
     }
     spent_today = today.total_cost_usd
     daily_remaining = max(caps["per_day_org_usd"] - spent_today, 0.0) if caps["per_day_org_usd"] is not None else None

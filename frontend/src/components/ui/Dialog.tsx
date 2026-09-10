@@ -185,9 +185,11 @@ export function Dialog({
           'focus-visible:outline-none',
           // Mobile: bottom sheet — full-width, 90dvh tall, only top corners rounded.
           'max-h-[90dvh] rounded-t-xl rounded-b-none',
-          // Desktop: centered card — bounded width, dvh-aware max-height capped at 800px,
-          // fully rounded.
-          'sm:w-[min(92vw,720px)] sm:max-h-[min(calc(100dvh-4rem),800px)] sm:rounded-xl',
+          // Desktop: centered card — 92vw bounded by the maxWidth class below,
+          // dvh-aware max-height capped at 800px, fully rounded. Width must not be
+          // hard-capped here: a literal 720px silently overrode maxWidth="2xl"
+          // (max-w-4xl = 896px), so wide forms rendered in a narrow panel.
+          'sm:w-[92vw] sm:max-h-[min(calc(100dvh-4rem),800px)] sm:rounded-xl',
           // The maxWidth prop only applies on sm+ (mobile is full-width).
           maxWidthClasses[maxWidth],
         )}

@@ -8,6 +8,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { ApiError } from '@/lib/api';
 import { TestResultDisplay } from '../AddProviderDialog/TestResultDisplay';
 import { makeTestResult } from './test-utils';
 
@@ -21,6 +22,38 @@ describe('TestResultDisplay', () => {
   it('shows "not tested" when there is no result yet', () => {
     render(<TestResultDisplay result={null} testing={false} />);
     expect(screen.getByText(/not tested/i)).toBeInTheDocument();
+  });
+
+  it('shows validation details when the test request is rejected', () => {
+    const error = new ApiError(
+      'raw validation',
+      422,
+      undefined,
+      undefined,
+      { tier: ['Input should be free or paid'] },
+    );
+
+    render(<TestResultDisplay result={null} testing={false} error={error} />);
+
+    const alert = screen.getByTestId('test-result-request-error');
+    expect(alert).toHaveTextContent('Please correct the highlighted fields.');
+    expect(alert).toHaveTextContent('tier:');
+    expect(alert).toHaveTextContent('Input should be free or paid');
+    expect(screen.queryByText(/not tested/i)).not.toBeInTheDocument();
+  });
+
+  it('shows a safe fallback for an unexpected request error', () => {
+    render(
+      <TestResultDisplay
+        result={null}
+        testing={false}
+        error={new Error('internal failure')}
+      />,
+    );
+
+    expect(screen.getByTestId('test-result-request-error')).toHaveTextContent(
+      'The connection test could not be completed.',
+    );
   });
 
   it('shows green success message with latency', () => {
@@ -100,8 +133,8 @@ describe('TestResultDisplay', () => {
       />,
     );
     expect(screen.getByTestId('test-result-model')).toBeInTheDocument();
-    expect(screen.getByText(/fake-model isn't available/i)).toBeInTheDocument();
-    expect(screen.getByText(/Available:.*gemini-2\.5-flash/)).toBeInTheDocument();
+    expect(screen.getByText(/fake-model cannot generate for this account/i)).toBeInTheDocument();
+    expect(screen.getByText(/Models reported by the provider:.*gemini-2\.5-flash/)).toBeInTheDocument();
   });
 
   it('renders unknown branch as the catch-all', () => {

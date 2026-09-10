@@ -34,6 +34,7 @@ import type {
   AnalysisSchedule,
   SbomScheduleResolved,
   ScheduleUpsertPayload,
+  ScheduleTargetPreview,
   DashboardLifecycle,
   DashboardVex,
   LifecycleOverridePayload,
@@ -333,15 +334,14 @@ async function performRequest(
   const { authErrorMode = 'redirect', ...fetchOptions } = options;
   const isFormData = typeof FormData !== 'undefined' && fetchOptions.body instanceof FormData;
   const authHeaders = getAuthHeaders();
+  const headers = new Headers(isFormData ? undefined : { 'Content-Type': 'application/json' });
+  for (const [name, value] of Object.entries(authHeaders)) headers.set(name, value);
+  new Headers(fetchOptions.headers).forEach((value, name) => headers.set(name, value));
   const res = await fetchWithTimeout(
     url,
     {
       ...fetchOptions,
-      headers: {
-        ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
-        ...authHeaders,
-        ...fetchOptions.headers,
-      },
+      headers,
     },
     timeoutMs,
   );
@@ -853,6 +853,7 @@ export async function uploadSbom(payload: CreateSBOMPayload, signal?: AbortSigna
   if (productVersion) form.set('product_version', productVersion);
   if (payload.created_by) form.set('created_by', payload.created_by);
   if (payload.parent_sbom_id != null) form.set('parent_sbom_id', String(payload.parent_sbom_id));
+  if (payload.set_as_current != null) form.set('set_as_current', String(payload.set_as_current));
 
   const accepted = await request<UploadSBOMAcceptedResponse>(
     '/api/sboms/upload',
@@ -1983,6 +1984,10 @@ async function downloadBinary(
   return { blob: await res.blob(), filename: match?.[1] || fallbackName };
 }
 
+export function downloadReportArtifact(deliveryId: number, artifactId: number) {
+  return downloadBinary(`/api/report-deliveries/${deliveryId}/artifacts/${artifactId}`, 'security-report');
+}
+
 export function exportRunCsv(runId: number) {
   return downloadBinary(`/api/analysis-runs/${runId}/export/csv`, `sbom_findings_${runId}.csv`);
 }
@@ -2029,6 +2034,43 @@ export function analyzeSbomOsv(payload: AnalyzeSBOMPayload, signal?: AbortSignal
 
 export function getProjectSchedule(projectId: number, signal?: AbortSignal) {
   return request<AnalysisSchedule>(`/api/projects/${projectId}/schedule`, { signal });
+}
+
+export function getProductSchedule(productId: number, signal?: AbortSignal) {
+  return request<AnalysisSchedule>(`/api/products/${productId}/schedule`, { signal });
+}
+
+export function getEffectiveProductSchedule(productId: number, signal?: AbortSignal) {
+  return request<SbomScheduleResolved>(`/api/products/${productId}/schedule/effective`, { signal });
+}
+
+export function upsertProductSchedule(
+  productId: number,
+  payload: ScheduleUpsertPayload,
+  signal?: AbortSignal,
+) {
+  return request<AnalysisSchedule>(`/api/products/${productId}/schedule`, {
+    method: 'POST', body: JSON.stringify(payload), signal,
+  });
+}
+
+export function patchProductSchedule(
+  productId: number,
+  payload: Partial<ScheduleUpsertPayload>,
+  signal?: AbortSignal,
+) {
+  return request<AnalysisSchedule>(`/api/products/${productId}/schedule`, {
+    method: 'PATCH', body: JSON.stringify(payload), signal,
+  });
+}
+
+export function deleteProductSchedule(
+  productId: number,
+  options: { permanent?: boolean } = {},
+  signal?: AbortSignal,
+) {
+  const qs = options.permanent ? '?permanent=true' : '';
+  return requestVoid(`/api/products/${productId}/schedule${qs}`, { method: 'DELETE', signal });
 }
 
 export function upsertProjectSchedule(
@@ -2108,9 +2150,38 @@ export function deleteSbomSchedule(
 }
 
 export interface ListSchedulesFilter {
-  scope?: 'PROJECT' | 'SBOM';
+  scope?: 'TENANT' | 'PROJECT' | 'PRODUCT' | 'SBOM';
   enabled?: boolean;
   project_id?: number;
+}
+
+export function getTenantSchedule(tenantId: number, signal?: AbortSignal) {
+  return request<AnalysisSchedule | null>(`/api/tenants/${tenantId}/schedule`, { signal });
+}
+
+export function upsertScopedSchedule(scope: 'TENANT' | 'PRODUCT', targetId: number, payload: ScheduleUpsertPayload) {
+  return request<AnalysisSchedule>(`/api/${scope === 'TENANT' ? 'tenants' : 'products'}/${targetId}/schedule`, { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export function deleteScopedSchedule(scope: 'TENANT' | 'PRODUCT', targetId: number) {
+  return requestVoid(`/api/${scope === 'TENANT' ? 'tenants' : 'products'}/${targetId}/schedule`, { method: 'DELETE' });
+}
+
+export function excludeFromParentSchedule(scope: 'PRODUCT' | 'SBOM', targetId: number) {
+  return request<AnalysisSchedule>(`/api/${scope === 'PRODUCT' ? 'products' : 'sboms'}/${targetId}/schedule/exclude`, {
+    method: 'POST',
+  });
+}
+
+export function restoreScheduleInheritance(scope: 'PRODUCT' | 'SBOM', targetId: number) {
+  return request<{ status: string; id?: number }>(
+    `/api/${scope === 'PRODUCT' ? 'products' : 'sboms'}/${targetId}/schedule/inherit`,
+    { method: 'POST' },
+  );
+}
+
+export function previewScheduleTargets(scheduleId: number, signal?: AbortSignal) {
+  return request<ScheduleTargetPreview>(`/api/schedules/${scheduleId}/targets`, { signal });
 }
 
 export function listSchedules(filter: ListSchedulesFilter = {}, signal?: AbortSignal) {
@@ -2140,6 +2211,10 @@ export interface RunNowResult {
   status: string;
   schedule_id: number;
   sbom_ids: number[];
+  failed_sbom_ids?: number[];
+  scope?: string;
+  target_count?: number;
+  skipped_count?: number;
 }
 
 export function runScheduleNow(scheduleId: number, signal?: AbortSignal) {
@@ -2164,6 +2239,9 @@ import type {
   AiPricingEntry,
   AiProviderCatalogEntry,
   AiProviderInfo,
+  AiProviderModel,
+  AiModelRefreshResult,
+  AiModelTestResult,
   AiTestConnectionRequest,
   AiTopCachedItem,
   AiTriggerBatchRequest,
@@ -2454,6 +2532,31 @@ export function testAiCredentialSaved(
   });
 }
 
+export function listAiProviderModels(id: number, signal?: AbortSignal): Promise<AiProviderModel[]> {
+  return request<AiProviderModel[]>(`/api/v1/ai/credentials/${id}/models`, { signal });
+}
+
+export function refreshAiProviderModels(id: number, signal?: AbortSignal): Promise<AiModelRefreshResult> {
+  return request<AiModelRefreshResult>(`/api/v1/ai/credentials/${id}/models/refresh`, {
+    method: 'POST',
+    signal,
+  });
+}
+
+export function selectAiProviderModel(credentialId: number, modelId: number, signal?: AbortSignal): Promise<AiProviderModel> {
+  return request<AiProviderModel>(`/api/v1/ai/credentials/${credentialId}/models/${modelId}/select`, {
+    method: 'POST',
+    signal,
+  });
+}
+
+export function testAiProviderModel(credentialId: number, modelId: number, signal?: AbortSignal): Promise<AiModelTestResult> {
+  return request<AiModelTestResult>(`/api/v1/ai/credentials/${credentialId}/models/${modelId}/test`, {
+    method: 'POST',
+    signal,
+  });
+}
+
 export function getAiCredentialSettings(signal?: AbortSignal): Promise<AiCredentialSettings> {
   return request<AiCredentialSettings>(`/api/v1/ai/settings`, { signal });
 }
@@ -2470,7 +2573,7 @@ export function updateAiCredentialSettings(
   });
 }
 
-/** Static catalog driving the AddProviderDialog dropdown + form. */
+/** Provider/bootstrap catalog driving the unsaved AddProviderDialog only. */
 export function listAiProviderCatalog(signal?: AbortSignal): Promise<AiProviderCatalogEntry[]> {
   return request<AiProviderCatalogEntry[]>(`/api/v1/ai/providers/available`, { signal });
 }

@@ -30,6 +30,7 @@ from app.ai.schemas import AiFixError, AiFixResult
 from app.db import SessionLocal
 from app.models import (
     AiFixCache,
+    AiSettings,
     AiUsageLog,
     AnalysisFinding,
     AnalysisRun,
@@ -192,6 +193,7 @@ async def test_cache_miss_then_hit(_seeded):
     # _parse_response → _post_validate → write_cache on the MISS path.
     assert first.bundle.overall_confidence == "high"
     assert len(fake.calls) == 1
+    assert fake.calls[0].model == fake.default_model
 
     # Second call — same finding → cache hit, no extra LLM invocation.
     db = SessionLocal()
@@ -446,10 +448,8 @@ async def test_parse_failure_includes_prior_bad_response_in_retry_user_prompt(_s
 
 
 @pytest.mark.asyncio
-async def test_parse_failure_writes_raw_response_preview_to_ledger(_seeded):
-    """The 500-char raw preview must reach ai_usage_log.error so an
-    operator can SQL the row and see what the model actually produced.
-    """
+async def test_parse_failure_keeps_raw_response_out_of_ledger(_seeded):
+    """Malformed model output is hashed for telemetry, never persisted."""
     bad_first = "blah blah definitely not JSON " + ("x" * 100)
     bad_second = "still nope " + ("y" * 100)
     fake = FakeProvider([bad_first, bad_second])
@@ -468,17 +468,13 @@ async def test_parse_failure_writes_raw_response_preview_to_ledger(_seeded):
         db.close()
     assert rows
     err = rows[0].error or ""
-    assert err.startswith("schema_parse_failed:"), err
-    # Raw preview lands in the ledger via the ``raw=`` suffix.
-    assert "raw=" in err
-    # And it includes a meaningful slice of the model's output.
-    assert "still nope" in err or "yyyy" in err
+    assert err == "schema_parse_failed", err
+    assert "raw=" not in err
+    assert "not-json" not in err
 
 
 @pytest.mark.asyncio
-async def test_parse_failure_populates_upstream_message_with_raw_preview(_seeded):
-    """The AiFixError surfaces the raw response on ``upstream_message``
-    so the modal can show admins what came back from the model."""
+async def test_parse_failure_does_not_return_raw_model_output(_seeded):
     bad = "not even close to JSON, sorry"
     fake = FakeProvider([bad, bad])
     db = SessionLocal()
@@ -490,8 +486,8 @@ async def test_parse_failure_populates_upstream_message_with_raw_preview(_seeded
         db.close()
     assert isinstance(result, AiFixError)
     assert result.error_code == "schema_parse_failed"
-    assert result.upstream_message is not None
-    assert bad in result.upstream_message
+    assert result.upstream_message is None
+    assert bad not in result.message
 
 
 @pytest.mark.asyncio
@@ -601,12 +597,24 @@ async def test_parse_failure_quota_cost_is_exactly_two_calls(_seeded):
 
 
 @pytest.mark.asyncio
-async def test_kill_switch_blocks_generation(_seeded, monkeypatch):
-    monkeypatch.setenv("AI_FIXES_KILL_SWITCH", "true")
-    from app.settings import reset_settings
+async def test_db_kill_switch_blocks_generation(_seeded):
+    from app.ai.config_loader import reset_loader
 
-    reset_settings()
+    settings_db = SessionLocal()
     try:
+        settings_db.merge(
+            AiSettings(
+                id=1,
+                feature_enabled=True,
+                kill_switch_active=True,
+                budget_per_request_usd=10.0,
+                budget_per_scan_usd=10.0,
+                budget_daily_usd=10.0,
+                updated_at="2026-09-06T00:00:00+00:00",
+            )
+        )
+        settings_db.commit()
+        reset_loader()
         fake = FakeProvider([EX1_CRITICAL_KEV_WITH_FIX_BUNDLE])
         db = SessionLocal()
         try:
@@ -619,9 +627,8 @@ async def test_kill_switch_blocks_generation(_seeded, monkeypatch):
         assert result.error_code == "provider_unavailable"
         assert len(fake.calls) == 0
     finally:
-        # Restore env so later tests don't see the kill switch enabled.
-        monkeypatch.delenv("AI_FIXES_KILL_SWITCH", raising=False)
-        reset_settings()
+        settings_db.close()
+        reset_loader()
 
 
 @pytest.mark.asyncio

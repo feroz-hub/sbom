@@ -19,6 +19,7 @@ import {
 import type { AiCredential, AiProviderCatalogEntry } from '@/types/ai';
 import { ProviderStatusIndicator } from './ProviderStatusIndicator';
 import { ProviderTierBadge } from './ProviderTierBadge';
+import { ProviderModels } from './ProviderModels';
 
 interface ProviderCardProps {
   credential: AiCredential;
@@ -217,6 +218,12 @@ export function ProviderCard({ credential, catalog, onEdit }: ProviderCardProps)
             : `Test failed (${testSaved.data.error_kind ?? 'unknown'}): ${testSaved.data.error_message ?? 'no detail'}`}
         </p>
       ) : null}
+
+      <ProviderModels
+        credentialId={credential.id}
+        providerName={displayName}
+        enabled={credential.enabled}
+      />
 
       {/* Delete confirmation. Phase 3 §3.4 — type provider name to confirm. */}
       {confirmDelete ? (

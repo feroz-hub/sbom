@@ -34,7 +34,6 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from ..models import AnalysisFinding
-from ..settings import get_settings
 from . import cache as cache_mod
 from .cache_lock import CacheLock, get_cache_lock
 from .cost import (
@@ -62,6 +61,8 @@ from .providers.base import (
     UpstreamFailure,
 )
 from .registry import ProviderRegistry, get_registry
+from .rollout import evaluate_access
+from .runtime_config import build_budget_guard, get_effective_budget_caps
 from .schemas import (
     AiFixBundle,
     AiFixError,
@@ -80,12 +81,8 @@ log = logging.getLogger("sbom.ai.fix_generator")
 
 
 def _budget_caps_from_settings() -> BudgetCaps:
-    s = get_settings()
-    return BudgetCaps(
-        per_request_usd=float(s.ai_budget_per_request_usd) if s.ai_budget_per_request_usd is not None else None,
-        per_scan_usd=float(s.ai_budget_per_scan_usd) if s.ai_budget_per_scan_usd is not None else None,
-        per_day_org_usd=float(s.ai_budget_per_day_org_usd) if s.ai_budget_per_day_org_usd is not None else None,
-    )
+    """Backward-compatible name for the canonical DB-first budget snapshot."""
+    return get_effective_budget_caps()
 
 
 # ---------------------------------------------------------------------------
@@ -110,7 +107,7 @@ class AiFixGenerator:
     ) -> None:
         self._db = db
         self._registry = registry or get_registry(db)
-        self._budget = budget or BudgetGuard(_budget_caps_from_settings())
+        self._budget = budget or build_budget_guard()
         # Generation lock — prevents two concurrent batches from making
         # duplicate LLM calls for the same cache key. Falls back to a
         # process-local lock when Redis is unreachable; documented in
@@ -138,9 +135,6 @@ class AiFixGenerator:
         Returns ``None`` on cache miss so the read-only HTTP endpoint can
         surface a 404 without touching LLM budget.
         """
-        s = get_settings()
-        if s.ai_fixes_kill_switch:
-            return None
         try:
             ctx = build_grounding_context(finding, db=self._db)
         except Exception:  # noqa: BLE001
@@ -166,15 +160,15 @@ class AiFixGenerator:
         suppress_audit_log: bool = False,
     ) -> AiFixResult | AiFixError:
         """Generate (or fetch from cache) the AI fix bundle for one finding."""
-        s = get_settings()
-        if s.ai_fixes_kill_switch:
+        access = evaluate_access(rollout_key=f"finding:{finding.id}")
+        if not access.allowed:
             return AiFixError(
                 finding_id=finding.id,
                 vuln_id=finding.vuln_id or "",
                 component_name=finding.component_name or "",
                 component_version=finding.component_version or "",
                 error_code="provider_unavailable",
-                message="AI fixes kill switch is enabled.",
+                message=access.message,
             )
 
         try:
@@ -276,6 +270,7 @@ class AiFixGenerator:
                 ctx=ctx,
                 cache_key=cache_key,
                 provider=provider,
+                provider_name=provider_name,
                 scan_id=scan_id,
                 suppress_audit_log=suppress_audit_log,
             )
@@ -318,6 +313,7 @@ class AiFixGenerator:
         ctx: GroundingContext,
         cache_key: str,
         provider: LlmProvider,
+        provider_name: str | None,
         scan_id: int | None,
         suppress_audit_log: bool = False,
     ) -> AiFixResult | AiFixError:
@@ -343,6 +339,24 @@ class AiFixGenerator:
             output_tokens=max_output_tokens,
             is_local=getattr(provider, "is_local", False),
         )
+        # A transient primary failure may route once to the configured
+        # fallback. Reserve enough request budget for the more expensive of
+        # the two candidates before making either call.
+        try:
+            fallback = self._registry.get_fallback()
+        except ProviderUnavailableError:
+            fallback = None
+        if fallback is not None:
+            estimated_cost = max(
+                estimated_cost,
+                estimate_cost_usd(
+                    provider=fallback.name,
+                    model=fallback.default_model,
+                    input_tokens=estimated_input,
+                    output_tokens=max_output_tokens,
+                    is_local=getattr(fallback, "is_local", False),
+                ),
+            )
         try:
             self._budget.check_request(estimated_usd=estimated_cost, scan_id=scan_id)
         except BudgetExceededError as exc:
@@ -373,6 +387,7 @@ class AiFixGenerator:
         )
 
         t0 = time.perf_counter()
+        prior_generation_cost_usd = 0.0
         try:
             with generate_span(
                 provider=provider.name,
@@ -381,7 +396,33 @@ class AiFixGenerator:
                 request_id=request_id,
                 cache_hit=False,
             ):
-                resp = await provider.generate(req)
+                routed = await self._registry.generate_with_fallback(
+                    req,
+                    provider_name=provider_name,
+                )
+                resp = routed.response
+                provider = routed.provider
+                if routed.fallback_used:
+                    primary_failure = routed.primary_error
+                    failure_kind = (
+                        primary_failure.failure.kind
+                        if primary_failure is not None and primary_failure.failure is not None
+                        else "circuit_breaker_open"
+                    )
+                    write_usage_log_row(
+                        self._db,
+                        request_id=request_id,
+                        provider=routed.primary_provider.name,
+                        model=routed.primary_provider.default_model,
+                        purpose="fix_bundle_primary_failed",
+                        finding_cache_key=cache_key,
+                        input_tokens=0,
+                        output_tokens=0,
+                        cost_usd=0.0,
+                        latency_ms=0,
+                        cache_hit=False,
+                        error=f"fallback_selected:{failure_kind}",
+                    )
         except CircuitBreakerOpenError as exc:
             self._log_failed_call(
                 request_id=request_id,
@@ -445,6 +486,66 @@ class AiFixGenerator:
                 "with `{` and end with `}`."
             )
             retry_req = req.model_copy(update={"user": retry_user, "request_id": str(uuid.uuid4())})
+
+            # The first provider response was billable even though it failed
+            # application schema validation. Record it exactly once before a
+            # second external invocation, then re-check both the global policy
+            # and durable budgets so a just-activated kill switch or cap wins.
+            prior_generation_cost_usd = float(resp.usage.cost_usd or 0.0)
+            self._budget.record(actual_usd=prior_generation_cost_usd, scan_id=scan_id)
+            write_usage_log_row(
+                self._db,
+                request_id=request_id,
+                provider=provider.name,
+                model=resp.model,
+                purpose="fix_bundle_schema_invalid",
+                finding_cache_key=cache_key,
+                input_tokens=resp.usage.input_tokens,
+                output_tokens=resp.usage.output_tokens,
+                cost_usd=prior_generation_cost_usd,
+                latency_ms=latency_ms,
+                cache_hit=False,
+                error="schema_parse_failed",
+            )
+            record_call(
+                provider=provider.name,
+                model=resp.model,
+                purpose="fix_bundle",
+                outcome="schema_parse_failed",
+                latency_seconds=latency_ms / 1000.0,
+                cost_usd=prior_generation_cost_usd,
+                cache_hit=False,
+            )
+
+            retry_access = evaluate_access(rollout_key=f"finding:{finding.id}")
+            if not retry_access.allowed:
+                return self._error(
+                    finding,
+                    ctx,
+                    "provider_unavailable",
+                    retry_access.message,
+                    provider_name=provider.name,
+                    model_name=provider.default_model,
+                )
+            retry_estimated = estimate_cost_usd(
+                provider=provider.name,
+                model=provider.default_model,
+                input_tokens=estimate_tokens(sys_p) + estimate_tokens(retry_user),
+                output_tokens=max_output_tokens,
+                is_local=getattr(provider, "is_local", False),
+            )
+            try:
+                self._budget.check_request(estimated_usd=retry_estimated, scan_id=scan_id)
+            except BudgetExceededError as exc:
+                return self._error(
+                    finding,
+                    ctx,
+                    "budget_exceeded",
+                    str(exc),
+                    provider_name=provider.name,
+                    model_name=provider.default_model,
+                )
+            retry_t0 = time.perf_counter()
             try:
                 resp = await provider.generate(retry_req)
             except (AiProviderError, CircuitBreakerOpenError) as exc:
@@ -464,9 +565,8 @@ class AiFixGenerator:
                     provider_name=provider.name,
                     model_name=provider.default_model,
                     failure=getattr(exc, "failure", None),
-                    upstream_response=bad_preview,
-                )
-            latency_ms += int((time.perf_counter() - t0) * 1000)
+            )
+            latency_ms += int((time.perf_counter() - retry_t0) * 1000)
             bundle, parse_error = self._parse_response(resp.text, resp.parsed)
 
         if bundle is None:
@@ -476,17 +576,16 @@ class AiFixGenerator:
                 provider=provider.name,
                 model=provider.default_model,
                 cache_key=cache_key,
-                error=f"schema_parse_failed:{parse_error}",
+                error="schema_parse_failed",
                 raw_response=raw_preview,
             )
             return self._error(
                 finding,
                 ctx,
                 "schema_parse_failed",
-                parse_error or "model returned non-conforming JSON",
+                "The AI provider returned a response that did not match the required schema.",
                 provider_name=provider.name,
                 model_name=provider.default_model,
-                upstream_response=raw_preview,
             )
 
         validated = self._post_validate(bundle, ctx)
@@ -543,7 +642,7 @@ class AiFixGenerator:
             bundle=validated,
             provider_used=provider.name,
             model_used=resp.model,
-            total_cost_usd=resp.usage.cost_usd,
+            total_cost_usd=prior_generation_cost_usd + resp.usage.cost_usd,
             kev_listed=ctx.kev_listed,
         )
         return result.model_copy(update={"finding_id": finding.id})
@@ -645,16 +744,12 @@ class AiFixGenerator:
         provider_name: str | None = None,
         model_name: str | None = None,
         failure: UpstreamFailure | None = None,
-        upstream_response: str | None = None,
     ) -> AiFixError:
         retry_after = failure.retry_after_seconds if failure else None
         upstream_status = failure.upstream_status if failure else None
-        # ``upstream_message`` carries the actionable upstream context for
-        # the modal. For HTTP errors it's the provider's error message
-        # (e.g. "You exceeded your current quota"); for parse failures
-        # it's a 500-char preview of the model's raw output so an
-        # operator can debug without opening the ledger.
-        upstream_message = (failure.upstream_message if failure else None) or upstream_response
+        # Only normalized provider error context may reach the client. Raw
+        # model output is tenant data and is never returned or persisted.
+        upstream_message = failure.upstream_message if failure else None
         # Provider name on the failure wins over the orchestrator's hint —
         # it reflects the wrapping provider's identity (e.g. "gemini") set
         # by ``_inner.name`` overrides on the wrapper classes.
@@ -684,16 +779,10 @@ class AiFixGenerator:
         error: str,
         raw_response: str | None = None,
     ) -> None:
-        # When ``raw_response`` is supplied (every parse failure), embed
-        # a 500-char preview directly into ``ai_usage_log.error`` so a
-        # SQL query against the ledger surfaces what the model actually
-        # produced — essential for ongoing pattern analysis without
-        # touching the running app.
-        if raw_response:
-            preview = raw_response[:500].replace("\n", " ")
-            ledger_error = f"{error[:200]} | raw={preview}"
-        else:
-            ledger_error = error
+        # Provider/model output may contain tenant data. Keep only the safe
+        # classification in the durable ledger; ``log_ai_call`` records a
+        # hash and byte count for correlation without retaining the payload.
+        ledger_error = error
         write_usage_log_row(
             self._db,
             request_id=request_id,
@@ -733,10 +822,8 @@ class AiFixGenerator:
             latency_ms=0,
             cache_hit=False,
             outcome=outcome,
-            # Pass the raw response into the structured audit log too —
-            # ``log_ai_call`` already hashes it (response_sha256) and
-            # records the byte count, so future deduplication / trend
-            # analysis works even when the raw text is dropped on rotation.
+            # ``log_ai_call`` hashes the response and records its byte count;
+            # it never emits the response text itself.
             response_text=raw_response,
             error=ledger_error,
         )

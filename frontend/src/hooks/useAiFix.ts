@@ -166,7 +166,7 @@ export function useAiBatchProgress(
     const url = aiFixStreamUrl(runId as number);
     let es: EventSource | null = null;
     try {
-      es = new EventSource(url, { withCredentials: false });
+      es = new EventSource(url, { withCredentials: true });
     } catch {
       setSseAvailable(false);
       return;

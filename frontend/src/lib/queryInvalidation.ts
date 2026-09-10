@@ -13,6 +13,10 @@
 
 import type { QueryClient } from '@tanstack/react-query';
 
+export function invalidateReportSurfaces(qc: QueryClient): void {
+  qc.invalidateQueries({ queryKey: ['reports'] });
+}
+
 export function invalidateSbomLists(qc: QueryClient): void {
   qc.invalidateQueries({ queryKey: ['sboms'] });
   qc.invalidateQueries({ queryKey: ['sidebar-recent-sboms'] });
@@ -251,8 +255,12 @@ export function invalidateAnalysisCompletion(
  */
 export function invalidateAiCredentialSurfaces(qc: QueryClient): void {
   qc.invalidateQueries({ queryKey: ['ai', 'credentials'] });
+  qc.invalidateQueries({ queryKey: ['ai', 'credential-settings'] });
   qc.invalidateQueries({ queryKey: ['ai-settings'] });
+  qc.invalidateQueries({ queryKey: ['ai-usage'] });
   qc.invalidateQueries({ queryKey: ['analysis-config'] });
+  qc.invalidateQueries({ queryKey: ['copilot-briefing'] });
+  qc.invalidateQueries({ queryKey: ['validation-session'] });
 }
 
 /**

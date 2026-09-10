@@ -125,6 +125,9 @@ class RunRelationship(BaseModel):
 
     same_project: bool
     same_sbom: bool
+    classification: Literal["SAME_SBOM", "SAME_LINEAGE_DIFFERENT_VERSION", "UNRELATED"] = "UNRELATED"
+    version_a: str | None = None
+    version_b: str | None = None
     days_between: float | None = None
     direction_warning: str | None = Field(
         default=None,
@@ -169,6 +172,10 @@ class FindingDiffRow(BaseModel):
 
     #: Human-readable attribution string. See ADR-0008 §7.5.
     attribution: str | None = None
+    attribution_kind: Literal[
+        "introduced_by_new_component", "introduced_by_version_upgrade",
+        "resolved_by_version_upgrade", "resolved_by_component_removal", "landscape_change",
+    ] | None = None
 
 
 class ComponentDiffRow(BaseModel):

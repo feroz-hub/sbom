@@ -2,7 +2,7 @@
 
 SBOM Analyser is a FastAPI and Next.js platform for importing, validating, normalizing, analysing, and managing software bills of materials. It combines SBOM inventory, multi-source vulnerability analysis, CISA Known Exploited Vulnerabilities (KEV), lifecycle intelligence, VEX, remediation, reporting, tenant isolation, and role-based access control in one application.
 
-The current application version is `2.0.0`. The current Alembic schema head is `044_kev_vulnerabilities_table`.
+The current application version is `2.0.0`. The current Alembic schema head is `055_ai_model_registry`.
 
 ## Highlights
 
@@ -28,7 +28,7 @@ Browser
        -> routers -> services -> repositories/models
        -> PostgreSQL 16
        -> external vulnerability and lifecycle providers
-       -> Celery / Redis for scheduled and background work
+       -> Celery / Redis (or PostgreSQL local fallback) for scheduled and background work
 ```
 
 The backend is a modular monolith. HTTP behavior lives in `app/routers`, business behavior in `app/services`, persistence in SQLAlchemy models/repositories, validation in `app/validation`, and asynchronous tasks in `app/workers` and `app/nvd_mirror`.
@@ -36,6 +36,15 @@ The backend is a modular monolith. HTTP behavior lives in `app/routers`, busines
 In authenticated mode, the browser receives only an HTTP-only session cookie. Next.js performs Authorization Code + PKCE, stores and refreshes tokens server-side, and proxies API calls to FastAPI. FastAPI remains the authority for JWT validation, tenant membership, and permissions.
 
 ## Main features
+
+### Scheduled security report notifications
+
+Settings → Notifications supports per-user Tenant/Project/Product/SBOM subscriptions, consolidated
+latest-state and historical/version comparisons, HTML/plain-text email, executive PDF and detailed
+Excel, retained authenticated downloads, pause/resume and delivery history. The feature is opt-in
+behind `REPORT_NOTIFICATIONS_ENABLED`, uses the existing SMTP relay and a separate `reports` Celery
+worker, and requires private shared artifact storage. No report delivery occurs in unauthenticated
+local mode. See [setup, guarantees, limitations and smoke tests](docs/runbook-report-notifications.md).
 
 ### Supported SBOM formats
 
@@ -125,7 +134,7 @@ The platform also supports:
 | --- | --- |
 | Backend | Python 3.11+, FastAPI, Pydantic 2, SQLAlchemy 2, Alembic, psycopg 3 |
 | Database | PostgreSQL 16; SQLite only for explicit test/emergency fallback |
-| Workers | Celery and Redis |
+| Workers | Celery with Redis; PostgreSQL polling broker for local fallback |
 | Frontend | Next.js 16, React 19, TypeScript 6, TanStack Query, Tailwind CSS, Recharts |
 | Authentication | OIDC Authorization Code + PKCE, HCL.CS/HCL IAM, PyJWT/JWKS |
 | Testing | pytest, Vitest, Testing Library, Ruff, mypy |
@@ -157,7 +166,7 @@ docker-compose.yml      Local PostgreSQL 16 service
 - Python 3.11 or newer
 - Node.js 20 or newer and npm
 - PostgreSQL 16
-- Redis when running Celery workers/Beat
+- Redis when running Celery workers/Beat in the normal configuration. A PostgreSQL-backed Kombu broker is available for local development when Redis cannot be installed.
 - Docker Compose if using the provided local PostgreSQL service
 
 ## Quick start: macOS/Linux
@@ -281,7 +290,7 @@ Start with `.env.example` for the backend and `frontend/.env.local.example` for 
 | `AUTH_ENABLED` | Enables HCL.CS/HCL IAM authentication. |
 | `DEV_DEFAULT_TENANT` | Enables the synthetic local tenant/user context when auth is disabled. |
 | `APP_SECRET_KEY` / `SETTINGS_SECRET_KEY` | Encryption key material for stored provider secrets. |
-| `REDIS_URL`, `CELERY_BROKER_URL` | Celery broker/backend configuration. |
+| `REDIS_URL`, `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND` | Celery broker and independently resolved result-backend configuration. |
 
 ### Vulnerability and KEV settings
 
@@ -312,7 +321,25 @@ Database-backed provider administration can override supported lifecycle setting
 
 ### Optional AI settings
 
-Set `AI_FIXES_ENABLED=true` and configure at least one supported provider using environment variables or Settings -> AI. Supported integrations include Anthropic, OpenAI, Gemini, Grok, Sarvam, Ollama, vLLM, and custom OpenAI-compatible endpoints where configured.
+Before saving provider credentials, configure a stable 32-byte base64
+`AI_CONFIG_ENCRYPTION_KEY` in the API and worker environment:
+
+```bash
+python scripts/generate_encryption_key.py
+```
+
+Store the printed value in the deployment secret store; never commit it. Then
+use Settings -> AI to add and test Anthropic, OpenAI, Gemini, Grok, Sarvam,
+Ollama, vLLM, or a custom OpenAI-compatible endpoint. Settings saved in the
+database are authoritative for feature state, kill switch, budgets,
+credentials, default, fallback, and active model selection. After saving a
+credential, use **Refresh models → Test model → Set active**. Live model lists
+are persisted and refreshed daily; discovery never changes the active model
+automatically. The corresponding environment variables and catalog model
+names are migration/bootstrap fallbacks only when no authoritative DB row
+exists.
+`AI_FIXES_UI_CONFIG_ENABLED` and `AI_CANARY_PERCENTAGE` remain intentional
+deployment controls. See [AI configuration](docs/features/ai-configuration.md).
 
 Never commit real `.env`, `.env.local`, certificates, API keys, or `.windows/` configuration.
 
@@ -338,10 +365,25 @@ Recent schema work:
 | `041` | Project/product hierarchy. |
 | `042`-`043` | Wider vulnerability evidence and match-reason fields. |
 | `044` | Canonical CISA KEV vulnerabilities table and metadata. |
+| `054` | Hierarchical Project/Product/SBOM scheduling, explicit current SBOMs, and target policies. |
 
 ## Background workers
 
-Redis must be available before starting workers.
+Redis must normally be available before starting workers. For local development
+or smoke tests on a machine where Redis cannot be installed, the existing
+PostgreSQL database can provide Kombu's polling SQLAlchemy broker transport:
+
+```bash
+export CELERY_USE_DATABASE_BROKER=true
+```
+
+This setting derives the broker from the existing `DATABASE_URL`, avoiding a
+second copy of the database password. A full `sqla+postgresql+psycopg://...`
+broker URL is also accepted. The application derives the matching result backend as
+`db+postgresql+psycopg://...`. Set `CELERY_RESULT_BACKEND` explicitly if a
+different backend is required. This SQLAlchemy broker is appropriate for local
+verification, not production throughput; production deployments should use
+Redis or another production-grade Celery broker.
 
 ```bash
 celery -A app.workers.celery_app worker --loglevel=info
@@ -349,6 +391,12 @@ celery -A app.workers.celery_app beat --loglevel=info
 ```
 
 Scheduled work includes NVD mirroring, due analysis schedules, daily KEV sync, CVE cache cleanup, and source-response cache cleanup. Deploy Celery Beat as a single process to avoid duplicate scheduling.
+
+### Hierarchical analysis schedules
+
+Schedules resolve in the order `SBOM > Product > Project > Tenant`. Project and Product schedules target each Product's explicit current SBOM by default; choose `ALL_ACTIVE_VERSIONS` only when historical active versions should also be rescanned. A missing child row inherits, a disabled custom row is paused and blocks inheritance, and an explicit exclusion blocks inheritance without deleting the parent schedule.
+
+Use the Product detail page to select the current SBOM. New Products automatically select their first accepted upload; later uploads replace it only when **Set as current SBOM** is selected. Run Now and the target preview use the same resolver as Celery Beat. See [Hierarchical analysis scheduler](docs/hierarchical-analysis-scheduler.md) for API, operations, and smoke-test details.
 
 ## API overview
 

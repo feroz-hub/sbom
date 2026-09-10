@@ -433,6 +433,7 @@ export interface AiCredentialUpdateRequest {
 }
 
 export interface AiTestConnectionRequest {
+  credential_id?: number | null;
   provider_name: string;
   api_key?: string | null;
   base_url?: string | null;
@@ -441,6 +442,8 @@ export interface AiTestConnectionRequest {
   cost_per_1k_input_usd?: number;
   cost_per_1k_output_usd?: number;
   is_local?: boolean;
+  max_concurrent?: number | null;
+  rate_per_minute?: number | null;
 }
 
 /** Singleton settings — DB-backed. */
@@ -463,7 +466,43 @@ export interface AiCredentialSettingsUpdateRequest {
   budget_daily_usd?: number;
 }
 
-// Catalog (Phase 1 endpoint, consumed by Phase 3 UI for form rendering).
+export interface AiProviderModel {
+  id: number;
+  provider_credential_id: number;
+  provider_name: string;
+  provider_model_id: string;
+  runtime_model_id: string;
+  display_name: string | null;
+  is_available: boolean | null;
+  is_enabled: boolean;
+  is_selected: boolean;
+  supports_chat: boolean | null;
+  supports_structured_output: boolean | null;
+  supports_streaming: boolean | null;
+  supports_tools: boolean | null;
+  context_window: number | null;
+  max_output_tokens: number | null;
+  discovery_source: string;
+  first_discovered_at: string | null;
+  last_discovered_at: string | null;
+  last_verified_at: string | null;
+  last_test_success: boolean | null;
+  last_test_error: string | null;
+}
+
+export interface AiModelRefreshResult {
+  discovered: number;
+  created: number;
+  updated: number;
+  unavailable: number;
+}
+
+export interface AiModelTestResult {
+  success: boolean;
+  error_message: string | null;
+}
+
+// Provider/bootstrap catalog for the unsaved Add form. Saved models use the registry.
 
 export interface AiCatalogModel {
   name: string;

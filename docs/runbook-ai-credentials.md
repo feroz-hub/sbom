@@ -31,16 +31,29 @@ python scripts/generate_encryption_key.py
 
 Restart the API + Celery workers so the env var is in process memory.
 
+**Local development needs no manual step.** `scripts/bootstrap.{sh,ps1}`
+and `python run.py` both call
+`generate_encryption_key.py --ensure-env`, which fills the key into a
+local `.env` only when it has no value yet — an existing key is never
+replaced, so it cannot orphan credentials you already saved.
+
+This deliberately does **not** happen in a container: `.env` is
+dockerignored, so a self-generated key would be lost on the next deploy
+while the rows it encrypted survived. Deployed environments must inject
+`AI_CONFIG_ENCRYPTION_KEY` from their own secret store.
+
 ### 1.2 Verifying the key is present
 
 ```bash
-curl -s -o /dev/null -w '%{http_code}\n' \
-  -X POST $API/api/v1/ai/credentials \
-  -H 'content-type: application/json' \
-  -d '{"provider_name":"anthropic","api_key":"sk-test","default_model":"claude-sonnet-4-5"}'
-# 201 (or 409 if a row already exists)  → key OK
-# 500 with "AI_CONFIG_ENCRYPTION_KEY is not set"  → fix the env
+curl -s "$API/api/v1/ai/effective-config"
+# encryption_config_available=true and encryption_config_status=available
 ```
+
+This diagnostic is read-only and exposes no key, ciphertext, bearer token, or
+authorization header. Startup/readiness logs safely report `missing`,
+`invalid_base64`, or `invalid_length`. Credential create/update returns 503
+with setup guidance when encryption is unavailable; an unreadable saved key
+also returns a controlled diagnostic and never falls back to a legacy env key.
 
 ### 1.3 Rotation
 
@@ -97,6 +110,26 @@ without KMS. The KMS upgrade path is in the architecture doc §11.
 ---
 
 ## 2. Credential rows
+
+### Model registry operations
+
+In Settings → AI, click **Refresh models**, **Test** the intended model, then
+**Set active**. Refresh does not switch production. Beat repeats discovery
+daily at 04:10 UTC, and provider failures preserve the last working selection.
+
+For diagnostics, query only non-sensitive fields:
+
+```sql
+SELECT provider_credential_id, provider_name, provider_model_id,
+       runtime_model_id, is_available, is_selected, last_discovered_at,
+       last_verified_at, last_test_success
+FROM ai_provider_model
+ORDER BY provider_credential_id, provider_model_id;
+```
+
+The model administration endpoints use the same authenticated tenant-settings
+administrator boundary as provider credentials. API keys and raw authorization
+headers are neither returned nor stored in model metadata.
 
 ### 2.1 Listing what's there
 

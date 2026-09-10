@@ -12,17 +12,17 @@ response for the AI-driven remediation feature (Phases 1-5).
 
 | Knob | Where | Default | Effect |
 |---|---|---|---|
-| `AI_FIXES_ENABLED` | env → `Settings.ai_fixes_enabled` | `false` | Master flag. `false` hides every AI surface; clients see `409 AI_FIXES_DISABLED` from triggers. |
-| `AI_FIXES_KILL_SWITCH` | env → `Settings.ai_fixes_kill_switch` | `false` | Operator panic button. Overrides `AI_FIXES_ENABLED` regardless. Returns `409 AI_FIXES_KILL_SWITCH`. |
-| `AI_DEFAULT_PROVIDER` | env, str | `anthropic` | Provider name used when a request omits the override. Must appear in `AI_PROVIDERS`. |
+| Feature enabled | Settings -> AI DB; env fallback `AI_FIXES_ENABLED` | `false` | Master gate shared by Fixes, Copilot, validation repair, API, and workers. |
+| Kill switch | Settings -> AI DB; env fallback `AI_FIXES_KILL_SWITCH` | `false` | Immediate global block. Kill switch always wins. |
+| Default/fallback credential | Settings -> AI DB; env fallback `AI_DEFAULT_PROVIDER` | `anthropic` | Exact labelled credential selection; fallback is attempted once only for transient provider failures. |
 | `AI_PROVIDERS` | env, csv | `anthropic,openai,ollama,vllm` | Comma-separated allowlist. Disabled providers still surface in `/api/v1/ai/providers` with `available=false`. |
 | `ANTHROPIC_API_KEY` | env, secret | unset | Required for Anthropic. Without it the registry reports the provider as unavailable. |
 | `OPENAI_API_KEY` | env, secret | unset | Same shape for OpenAI. |
 | `OLLAMA_BASE_URL` | env | `http://localhost:11434` | Local Ollama endpoint. Empty disables. |
 | `VLLM_BASE_URL` | env | unset | Self-hosted vLLM endpoint. Empty disables. |
-| `AI_BUDGET_PER_REQUEST_USD` | env, float | `0.10` | Max single-call cost. Estimate exceeding cap → 402-style structured error. |
-| `AI_BUDGET_PER_SCAN_USD` | env, float | `5.00` | Max cumulative cost in one batch run. Hit → status flips to `paused_budget`. |
-| `AI_BUDGET_PER_DAY_ORG_USD` | env, float | `50.00` | Daily org-wide cap. Resets at UTC midnight. |
+| Budget caps | Settings -> AI DB; env fallback `AI_BUDGET_*` | varies | Same caps are reported and enforced for all AI consumers; daily spend reconciles with the durable ledger. |
+| `AI_FIXES_UI_CONFIG_ENABLED` | env only | `false` | Infrastructure rollout of the Settings UI; does not authorize LLM calls. |
+| `AI_CANARY_PERCENTAGE` | env only | `100` | Deliberate canary for AI Fix generation only; global master/kill still cover Copilot and validation repair. |
 | `AI_<PROVIDER>_MODEL` | env, str | provider-specific | Default model per provider (`AI_ANTHROPIC_MODEL=claude-sonnet-4-5`). |
 | `AI_<PROVIDER>_MAX_CONCURRENT` | env, int | 8-32 | Bounded `asyncio.Semaphore` size in the batch pipeline. |
 | `AI_<PROVIDER>_RPM` | env, float | provider-specific | Token-bucket rate limit (requests / minute). |
@@ -45,6 +45,7 @@ upper-snake-case (the field name uppercased).
 | `GET /api/v1/ai/providers` | Provider list + which are available. Read by the Settings page. |
 | `GET /api/v1/ai/pricing` | Static pricing table (per-1k-token rates). |
 | `POST /api/v1/ai/registry/reset` | Drop the cached provider registry. Picks up env / DB config changes without restart. |
+| `GET /api/v1/ai/effective-config` | Secret-safe effective state, source, provider/default/fallback selections, budgets, config version, and encryption readiness. |
 
 Operator-facing dashboards live at:
 
@@ -82,10 +83,10 @@ record for billing reconciliation.
 3. If a single CVE / component shows up disproportionately, check
    `top-cached` — the most-expensive bundles often catch a regression
    in prompt engineering (large grounding contexts).
-4. **Containment**: `export AI_FIXES_KILL_SWITCH=true` and restart the
-   API. New calls return `409`; in-flight Celery tasks finish.
-5. **Recovery**: drop the cap with `AI_BUDGET_PER_DAY_ORG_USD=5` and
-   un-kill (`AI_FIXES_KILL_SWITCH=false`). Investigate prompt size.
+4. **Containment**: enable the kill switch in Settings -> AI. New calls in
+   every API/worker process are blocked without restart.
+5. **Recovery**: lower/raise the DB-backed caps as appropriate, investigate
+   prompt size, then clear the kill switch.
 
 ### 4.2 "Provider is down"
 
@@ -102,11 +103,9 @@ record for billing reconciliation.
 2. The circuit breaker opens after **5 consecutive failures** per
    provider (configurable via `AI_<PROVIDER>_BREAKER_THRESHOLD` if you
    added one — defaults are hardcoded today). It half-opens 60s later.
-3. **Containment**: switch the default provider:
-   ```bash
-   export AI_DEFAULT_PROVIDER=openai  # or whichever fallback is hot
-   curl -X POST http://api/api/v1/ai/registry/reset
-   ```
+3. Confirm an enabled fallback in Settings -> AI. Eligible failures make one
+   automatic attempt. For deterministic failures, correct the key/model or
+   select another default; changes propagate without restart.
 
 ### 4.3 "Batch is stuck at paused_budget"
 
@@ -174,7 +173,7 @@ journalctl -u sbom-api | jq 'select(.finding_cache_key == "abc123")'
 
 ## 7. Rollout checklist (mirrors prompt §6)
 
-1. Default-off in production (`AI_FIXES_ENABLED=false`).
+1. Default-off in production (Settings -> AI `feature_enabled=false`; env fallback for pre-migration deployments).
 2. Internal-only enable for the org's own SBOMs.
 3. Daily cap defaults to **$5 (not $50)** for the first 14 days.
 4. Watch `ai_request_total{outcome="provider_error"}` for elevated
@@ -184,8 +183,8 @@ journalctl -u sbom-api | jq 'select(.finding_cache_key == "abc123")'
 6. Per-tenant enable via the future `org.ai_fixes_enabled` toggle (not
    shipped in Phase 5; tracked as F-2 follow-up).
 7. Canary 10% → 50% → 100%.
-8. Kill-switch dry-run: set `AI_FIXES_KILL_SWITCH=true`, confirm UI
-   shows the kill-switch banner and triggers return `409`, then unset.
+8. Kill-switch dry-run: enable it in Settings -> AI, confirm Fixes, Copilot,
+   and validation repair are blocked immediately, then clear it.
 
 ---
 

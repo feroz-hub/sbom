@@ -53,8 +53,15 @@ export function getApiErrorMessage(error: unknown, fallbackMessage: string): str
       return 'Too many requests were submitted. Please wait and try again.';
     case 500:
     case 502:
-    case 503:
     case 504:
+      return 'The operation could not be completed because the service is temporarily unavailable.';
+    case 503:
+      if (/AI_CONFIG_ENCRYPTION_KEY|saved AI credential cannot be decrypted/i.test(error.message)) {
+        return normalizeNotificationMessage(
+          error.message,
+          'AI credential encryption is unavailable. Ask an operator to check the encryption-key configuration.',
+        );
+      }
       return 'The operation could not be completed because the service is temporarily unavailable.';
     default:
       return normalizeNotificationMessage(error.message, fallbackMessage);

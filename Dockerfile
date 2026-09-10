@@ -1,27 +1,48 @@
-# SBOM Analyzer — single image (API + optional Celery worker command)
-FROM python:3.11-slim AS base
+# SBOM Analyzer backend image. The same runtime image serves the API, Celery
+# worker/beat, and Alembic migration process (commands are overridden by Compose).
+FROM python:3.11-slim AS builder
 
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1
 
-RUN useradd --create-home --shell /bin/bash appuser
+WORKDIR /build
 
-WORKDIR /app
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:${PATH}"
 
 COPY pyproject.toml README.md ./
 COPY app ./app
-COPY alembic.ini ./
-COPY alembic ./alembic/
-COPY run.py ./
 
 RUN pip install --upgrade pip && pip install .
+
+
+FROM python:3.11-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/opt/venv/bin:${PATH}" \
+    HOST=0.0.0.0 \
+    PORT=8000
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 10001 appuser \
+    && useradd --uid 10001 --gid appuser --create-home --shell /usr/sbin/nologin appuser \
+    && install -d -o appuser -g appuser -m 0700 \
+        /var/lib/sbom \
+        /var/lib/sbom/report-artifacts \
+        /var/lib/sbom/sbom-workspaces
+
+WORKDIR /app
+
+COPY --from=builder /opt/venv /opt/venv
+COPY --chown=appuser:appuser app ./app
+COPY --chown=appuser:appuser alembic.ini ./
+COPY --chown=appuser:appuser alembic ./alembic
+COPY --chown=appuser:appuser run.py ./
+COPY --chown=appuser:appuser scripts/bootstrap_fresh_database.py scripts/docker_migrate.py ./scripts/
+COPY --chown=appuser:appuser scripts/schema/postgresql_047_baseline.sql ./scripts/schema/
 
 USER appuser
 

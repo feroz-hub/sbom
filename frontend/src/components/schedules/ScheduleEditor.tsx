@@ -9,20 +9,22 @@ import { Input } from '@/components/ui/Input';
 import {
   upsertProjectSchedule,
   upsertSbomSchedule,
+  upsertScopedSchedule,
 } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
 import { getApiErrorMessage } from '@/lib/notifications';
 import type {
   AnalysisSchedule,
   ScheduleCadence,
+  ScheduleTargetPolicy,
   ScheduleUpsertPayload,
 } from '@/types';
 
 /**
  * The friendly schedule editor: cadence preset chips + day/hour pickers.
  *
- * Targets either a project (scope='PROJECT') or a single SBOM
- * (scope='SBOM'). When editing an existing schedule, the form pre-fills
+ * Targets a Project, Product, or exact SBOM. When editing an existing
+ * schedule, the form pre-fills
  * from the row; otherwise it shows the most common defaults
  * (Weekly, Monday, 02:00 UTC).
  *
@@ -33,7 +35,7 @@ import type {
 interface ScheduleEditorProps {
   open: boolean;
   onClose: () => void;
-  scope: 'PROJECT' | 'SBOM';
+  scope: 'TENANT' | 'PROJECT' | 'PRODUCT' | 'SBOM';
   targetId: number;          // project_id or sbom_id depending on scope
   existing?: AnalysisSchedule | null;
 }
@@ -63,6 +65,8 @@ interface FormState {
   hourUtc: number;
   cronExpression: string;
   enabled: boolean;
+  targetPolicy: ScheduleTargetPolicy;
+  minGapMinutes: number;
   showAdvanced: boolean;
 }
 
@@ -73,6 +77,8 @@ const defaultsFromExisting = (existing?: AnalysisSchedule | null): FormState => 
   hourUtc: existing?.hour_utc ?? 2,
   cronExpression: existing?.cron_expression ?? '',
   enabled: existing?.enabled ?? true,
+  targetPolicy: existing?.target_version_policy ?? 'CURRENT_ONLY',
+  minGapMinutes: existing?.min_gap_minutes ?? 60,
   showAdvanced: existing?.cadence === 'CUSTOM',
 });
 
@@ -100,16 +106,19 @@ export function ScheduleEditor({
       cadence: form.cadence,
       hour_utc: form.hourUtc,
       enabled: form.enabled,
+      mode: 'CUSTOM',
+      target_version_policy: scope === 'SBOM' ? 'CURRENT_ONLY' : form.targetPolicy,
+      min_gap_minutes: form.minGapMinutes,
     };
     if (showWeekdayField) p.day_of_week = form.dayOfWeek;
     if (showMonthDayField) p.day_of_month = form.dayOfMonth;
     if (showCronField) p.cron_expression = form.cronExpression.trim();
     return p;
-  }, [form, showWeekdayField, showMonthDayField, showCronField]);
+  }, [form, scope, showWeekdayField, showMonthDayField, showCronField]);
 
   const mutation = useMutation({
     mutationFn: () =>
-      scope === 'PROJECT'
+      scope === 'TENANT' || scope === 'PRODUCT' ? upsertScopedSchedule(scope, targetId, payload) : scope === 'PROJECT'
         ? upsertProjectSchedule(targetId, payload)
         : upsertSbomSchedule(targetId, payload),
     onSuccess: () => {
@@ -232,6 +241,34 @@ export function ScheduleEditor({
             />
             <span className="text-sm text-hcl-navy">Enabled</span>
           </label>
+
+          {scope !== 'SBOM' && (
+            <Select
+              label="Target versions"
+              value={form.targetPolicy}
+              onChange={(e) => setForm((s) => ({
+                ...s,
+                targetPolicy: e.target.value as ScheduleTargetPolicy,
+              }))}
+              hint="Current only uses each Product's explicit current SBOM; historical versions are skipped."
+            >
+              <option value="CURRENT_ONLY">Current SBOM only</option>
+              <option value="ALL_ACTIVE_VERSIONS">All active SBOM versions</option>
+            </Select>
+          )}
+
+          <Input
+            label="Minimum analysis gap (minutes)"
+            type="number"
+            min={0}
+            max={1440}
+            value={form.minGapMinutes}
+            onChange={(e) => setForm((s) => ({
+              ...s,
+              minGapMinutes: Math.max(0, Math.min(1440, Number(e.target.value) || 0)),
+            }))}
+            hint="Skip a scheduled run when this SBOM completed recently."
+          />
 
           {/* Advanced disclosure — cron */}
           <div className="border-t border-hcl-border pt-3">

@@ -67,12 +67,13 @@ PRICING: dict[str, ModelPricing] = {
         "gpt-4.1-mini": (0.00015, 0.00060),
     },
     # Gemini — paid-tier pricing per 1k tokens (Flash / Pro / Lite).
-    # Source: https://ai.google.dev/pricing (verified 2026-05-04).
+    # Source: https://ai.google.dev/gemini-api/docs/pricing (verified 2026-09-06).
     # Free-tier usage is reported as $0.00 — the registry passes
     # ``is_local=False`` but the actual call's ``cost_usd`` lands at the
     # paid-tier rate; operators on free tier should treat the recorded
     # cost as a "what this would have cost on paid" projection.
     "gemini": {
+        "gemini-3.6-flash": (0.00075, 0.00375),
         "gemini-2.5-flash": (0.000075, 0.0003),
         "gemini-2.5-flash-lite": (0.0000375, 0.00015),
         "gemini-2.5-pro": (0.00125, 0.005),
@@ -201,22 +202,28 @@ class _DayCounter:
             self._maybe_roll()
             return self._spent
 
+    def set_at_least(self, usd: float) -> float:
+        """Raise the counter to ``usd`` without racing concurrent calls."""
+        with self._lock:
+            self._maybe_roll()
+            self._spent = max(self._spent, float(usd))
+            return self._spent
+
 
 class BudgetGuard:
     """Enforce per-request / per-scan / per-day caps before the LLM call.
 
     Usage::
 
-        guard = BudgetGuard(caps, db)
+        guard = BudgetGuard(caps, SessionLocal)
         guard.check_request(estimated_usd=0.0042, scan_id=run_id)
         # … call LLM …
         guard.record(actual_usd=0.0041, scan_id=run_id)
 
-    The guard is process-local. In a multi-worker deployment (Celery +
-    Uvicorn) the day cap is best-effort: each worker tracks its own slice
-    and reconciles via ``ai_usage_log`` once per ``recheck_seconds``. This
-    is acceptable because the cap is a guardrail, not a billing system —
-    the ledger remains authoritative.
+    The fast path is process-local, while the daily cap reconciles against
+    the durable ``ai_usage_log`` ledger through a SQLAlchemy session factory.
+    Runtime callers use a zero-second recheck so every external call observes
+    spend written by other API or worker processes.
     """
 
     def __init__(
@@ -227,6 +234,8 @@ class BudgetGuard:
         recheck_seconds: float = 30.0,
     ) -> None:
         self._caps = caps
+        if db_session_factory is not None and not callable(db_session_factory):
+            raise TypeError("db_session_factory must be a callable SQLAlchemy session factory")
         self._db_session_factory = db_session_factory
         self._recheck_seconds = recheck_seconds
         self._counter = _DayCounter()
@@ -325,8 +334,7 @@ class BudgetGuard:
             try:
                 db_total = self._spent_today_db()
                 # Use whichever is larger — being conservative protects the cap.
-                if db_total > self._counter.get():
-                    self._counter._spent = db_total  # type: ignore[attr-defined]
+                self._counter.set_at_least(db_total)
                 self._last_db_recheck = now
             except Exception as exc:
                 log.debug("ai.cost.db_recheck_failed: %s", exc)

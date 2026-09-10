@@ -45,6 +45,7 @@ export const navigationItems: NavItem[] = [
     icon: SettingsIcon,
     children: [
       { href: '/settings/ai', label: 'AI configuration', permission: 'platform:user:read' },
+      { href: '/settings/notifications', label: 'Notifications', permission: 'sbom:read' },
       { href: '/settings/tenant', label: 'Tenant users', permission: 'tenant:user:read' },
       { href: '/settings/platform/tenants', label: 'Platform tenants', permission: 'platform:tenant:create' },
       { href: '/settings/platform', label: 'Platform administrators', permission: 'platform:administrator:read' },

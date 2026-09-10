@@ -21,7 +21,6 @@ class ProjectCreate(BaseModel):
     project_name: str
     project_details: str | None = None
     project_status: int | str = Field(1, description="1 or 'Active' / 0 or 'Inactive'")
-    created_by: str | None = None
 
     @field_validator("project_status", mode="before")
     @classmethod
@@ -61,6 +60,7 @@ class ProductUpdate(BaseModel):
     status: str | None = None
     latest_version: str | None = None
     metadata_json: dict[str, Any] | None = None
+    current_sbom_id: int | None = Field(None, ge=1)
 
 
 class ProductRead(ORMModel):
@@ -85,6 +85,8 @@ class ProductRead(ORMModel):
     sbom_count: int = 0
     latest_sbom_id: int | None = None
     latest_sbom_version: str | None = None
+    current_sbom_id: int | None = None
+    current_sbom_version: str | None = None
 
 
 class ProductSummary(BaseModel):
@@ -99,6 +101,8 @@ class ProductSummary(BaseModel):
     sbom_count: int = 0
     latest_sbom_id: int | None = None
     latest_sbom_version: str | None = None
+    current_sbom_id: int | None = None
+    current_sbom_version: str | None = None
 
 
 class ProductListResponse(BaseModel):
@@ -125,6 +129,7 @@ class SBOMSourceCreate(BaseModel):
     sbom_version: str | None = None
     created_by: str | None = None
     productver: str | None = None
+    set_as_current: bool = False
 
     @model_validator(mode="before")
     @classmethod
@@ -544,6 +549,8 @@ class SbomPatchRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 _VALID_CADENCES = {"DAILY", "WEEKLY", "BIWEEKLY", "MONTHLY", "QUARTERLY", "CUSTOM"}
+_VALID_SCHEDULE_MODES = {"CUSTOM", "EXCLUDED"}
+_VALID_TARGET_POLICIES = {"CURRENT_ONLY", "ALL_ACTIVE_VERSIONS"}
 
 
 class ScheduleUpsert(BaseModel):
@@ -559,6 +566,11 @@ class ScheduleUpsert(BaseModel):
     day_of_month: int | None = Field(None, ge=1, le=28, description="1..28 (MONTHLY/QUARTERLY)")
     hour_utc: int = Field(2, ge=0, le=23)
     timezone: str = Field("UTC", description="IANA name; display only — firing is computed in UTC")
+    mode: str = Field("CUSTOM", description="CUSTOM or EXCLUDED; absence of a row means INHERIT")
+    target_version_policy: str = Field(
+        "CURRENT_ONLY",
+        description="CURRENT_ONLY or ALL_ACTIVE_VERSIONS (Project/Product/Tenant only)",
+    )
     enabled: bool = True
     min_gap_minutes: int = Field(
         60,
@@ -582,9 +594,34 @@ class ScheduleUpsert(BaseModel):
             raise ValueError(f"cadence must be one of {sorted(_VALID_CADENCES)}")
         return v
 
+    @field_validator("mode", mode="before")
+    @classmethod
+    def _upper_mode(cls, v: str) -> str:
+        return v.strip().upper() if isinstance(v, str) else v
+
+    @field_validator("mode")
+    @classmethod
+    def _check_mode(cls, v: str) -> str:
+        if v not in _VALID_SCHEDULE_MODES:
+            raise ValueError(f"mode must be one of {sorted(_VALID_SCHEDULE_MODES)}")
+        return v
+
+    @field_validator("target_version_policy", mode="before")
+    @classmethod
+    def _upper_target_policy(cls, v: str) -> str:
+        return v.strip().upper() if isinstance(v, str) else v
+
+    @field_validator("target_version_policy")
+    @classmethod
+    def _check_target_policy(cls, v: str) -> str:
+        if v not in _VALID_TARGET_POLICIES:
+            raise ValueError(f"target_version_policy must be one of {sorted(_VALID_TARGET_POLICIES)}")
+        return v
+
 
 class ScheduleOut(ORMModel):
     id: int
+    tenant_id: int | None = None
     scope: str  # 'PROJECT' | 'PRODUCT' | 'SBOM'
     project_id: int | None = None
     product_id: int | None = None
@@ -595,6 +632,9 @@ class ScheduleOut(ORMModel):
     day_of_month: int | None = None
     hour_utc: int
     timezone: str
+    mode: str = "CUSTOM"
+    target_version_policy: str = "CURRENT_ONLY"
+    state: str = "CUSTOM"
     enabled: bool
     next_run_at: str | None = None
     last_run_at: str | None = None
@@ -606,6 +646,10 @@ class ScheduleOut(ORMModel):
     created_by: str | None = None
     modified_on: str | None = None
     modified_by: str | None = None
+    project_name: str | None = None
+    product_name: str | None = None
+    sbom_name: str | None = None
+    sbom_version: str | None = None
 
 
 class ScheduleResolved(BaseModel):
@@ -618,6 +662,32 @@ class ScheduleResolved(BaseModel):
 
     inherited: bool
     schedule: ScheduleOut | None = None
+    state: str = "NONE"
+    source_scope: str | None = None
+    resolution_reason: str = "NO_SCHEDULE"
+    included: bool = False
+
+
+class ScheduleTargetOut(BaseModel):
+    project_id: int | None = None
+    project_name: str | None = None
+    product_id: int | None = None
+    product_name: str | None = None
+    sbom_id: int | None = None
+    sbom_name: str | None = None
+    sbom_version: str | None = None
+    effective_schedule_id: int | None = None
+    effective_scope: str | None = None
+    included: bool
+    resolution: str
+
+
+class ScheduleTargetPreview(BaseModel):
+    schedule_id: int
+    scope: str
+    target_count: int
+    skipped_count: int
+    targets: list[ScheduleTargetOut]
 
 
 # --- SBOM Lifecycle Management Platform schemas ---

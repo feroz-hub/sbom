@@ -16,7 +16,7 @@ No callers outside this package change.
 from __future__ import annotations
 
 import re
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -104,13 +104,60 @@ class ProviderInfo(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Model discovery contract
+# ---------------------------------------------------------------------------
+
+
+class DiscoveredModel(BaseModel):
+    """Provider-neutral description of one discoverable runtime model.
+
+    Capability fields deliberately use three-state booleans. Provider model
+    APIs often return little more than an ID; ``None`` means unknown and must
+    not be treated as unsupported.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    provider_model_id: str = Field(..., min_length=1, max_length=256)
+    runtime_model_id: str = Field(..., min_length=1, max_length=256)
+    display_name: str | None = Field(default=None, max_length=256)
+    provider_name: str = Field(..., min_length=1, max_length=32)
+
+    supports_chat: bool | None = None
+    supports_structured_output: bool | None = None
+    supports_streaming: bool | None = None
+    supports_tools: bool | None = None
+    context_window: int | None = Field(default=None, ge=1)
+    max_output_tokens: int | None = Field(default=None, ge=1)
+
+    # Adapters must place only explicitly allow-listed, non-sensitive fields
+    # here. The persistence service applies a second defensive sanitizer.
+    raw_metadata: dict[str, Any] | None = None
+
+    @property
+    def model_id(self) -> str:
+        """Compatibility alias for code that needs one normalized ID."""
+        return self.runtime_model_id
+
+
+ModelDiscoveryErrorKind = Literal[
+    "authentication_failed",
+    "provider_unreachable",
+    "unsupported",
+    "rate_limited",
+    "timeout",
+    "invalid_response",
+    "configuration_incomplete",
+    "unknown",
+]
+
+
+# ---------------------------------------------------------------------------
 # Test-connection contract
 # ---------------------------------------------------------------------------
 
 
-from typing import Literal as _Literal
-
-ConnectionErrorKind = _Literal[
+ConnectionErrorKind = Literal[
     "network",
     "auth",
     "rate_limit",
@@ -143,7 +190,7 @@ class ConnectionTestResult(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-UpstreamFailureKind = _Literal[
+UpstreamFailureKind = Literal[
     "quota_exceeded",
     "rate_limited",
     "auth_failed",
@@ -370,6 +417,14 @@ class AiProviderError(RuntimeError):
         self.failure = failure
 
 
+class ModelDiscoveryError(AiProviderError):
+    """Controlled model-listing failure safe to translate at the API edge."""
+
+    def __init__(self, kind: ModelDiscoveryErrorKind, message: str) -> None:
+        super().__init__(message)
+        self.kind = kind
+
+
 class ProviderUnavailableError(AiProviderError):
     """Provider is not configured or its remote endpoint is unreachable.
 
@@ -445,6 +500,15 @@ class LlmProvider(Protocol):
         provider", "Model not available"). Implementations SHOULD attempt
         a ``/models`` enumeration first when the provider supports it,
         falling back to a tiny chat completion otherwise.
+        """
+        ...
+
+    async def list_models(self) -> list[DiscoveredModel]:
+        """Discover models available to this configured credential.
+
+        Implementations raise :class:`ModelDiscoveryError` with a stable kind
+        when listing is unavailable or fails. They must never substitute a
+        static fallback while claiming the result came from the provider.
         """
         ...
 

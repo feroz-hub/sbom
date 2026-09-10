@@ -6,7 +6,7 @@
  *   * ``useAiCredentials``        — CRUD on the saved-credential list
  *   * ``useAiCredentialSettings`` — singleton settings (kill switch + caps)
  *   * ``useTestConnection``       — un-saved + saved test mutations
- *   * ``useProviderCatalog``      — static catalog (drives Add dialog form)
+ *   * ``useProviderCatalog``      — provider fields/bootstrap (Add dialog only)
  *   * ``useRunBatchEstimate``     — free-tier batch-duration warning
  *
  * Mutations always invalidate the relevant query keys so the UI
@@ -23,6 +23,10 @@ import {
   getRunBatchEstimate,
   listAiCredentials,
   listAiProviderCatalog,
+  listAiProviderModels,
+  refreshAiProviderModels,
+  selectAiProviderModel,
+  testAiProviderModel,
   setAiCredentialDefault,
   setAiCredentialFallback,
   testAiCredentialSaved,
@@ -43,6 +47,9 @@ import type {
   AiCredentialSettingsUpdateRequest,
   AiCredentialUpdateRequest,
   AiProviderCatalogEntry,
+  AiProviderModel,
+  AiModelRefreshResult,
+  AiModelTestResult,
   AiTestConnectionRequest,
 } from '@/types/ai';
 
@@ -52,6 +59,7 @@ import type {
 export const aiCredentialsQueryKey = ['ai', 'credentials'] as const;
 export const aiCredentialSettingsQueryKey = ['ai', 'credential-settings'] as const;
 export const aiProviderCatalogQueryKey = ['ai', 'provider-catalog'] as const;
+export const aiProviderModelsQueryKey = (credentialId: number) => ['ai', 'provider-models', credentialId] as const;
 
 
 // ─── Credentials list + mutations ──────────────────────────────────────────
@@ -165,6 +173,46 @@ export function useTestConnection() {
 }
 
 
+export function useAiProviderModels(credentialId: number) {
+  return useQuery<AiProviderModel[]>({
+    queryKey: aiProviderModelsQueryKey(credentialId),
+    queryFn: ({ signal }) => listAiProviderModels(credentialId, signal),
+    staleTime: 30_000,
+  });
+}
+
+
+export function useRefreshAiProviderModels(credentialId: number) {
+  const qc = useQueryClient();
+  return useMutation<AiModelRefreshResult, Error>({
+    mutationFn: () => refreshAiProviderModels(credentialId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: aiProviderModelsQueryKey(credentialId) }),
+  });
+}
+
+
+export function useSelectAiProviderModel(credentialId: number) {
+  const qc = useQueryClient();
+  return useMutation<AiProviderModel, Error, number>({
+    mutationFn: (modelId) => selectAiProviderModel(credentialId, modelId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: aiProviderModelsQueryKey(credentialId) });
+      invalidateAiCredentialSurfaces(qc);
+      invalidateAiFixCaches(qc);
+    },
+  });
+}
+
+
+export function useTestAiProviderModel(credentialId: number) {
+  const qc = useQueryClient();
+  return useMutation<AiModelTestResult, Error, number>({
+    mutationFn: (modelId) => testAiProviderModel(credentialId, modelId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: aiProviderModelsQueryKey(credentialId) }),
+  });
+}
+
+
 // ─── Singleton settings ────────────────────────────────────────────────────
 
 
@@ -178,9 +226,8 @@ export function useAiCredentialSettings(args: { enabled?: boolean } = {}) {
 }
 
 
-// @no-invalidation-needed — onSuccess primes the same cache key consumers
-// read (kill switch + budget caps), so a separate invalidateQueries pass
-// would just re-fetch what we already wrote.
+// Prime the direct settings query, then invalidate every runtime-derived
+// surface (analysis config, usage caps, Copilot visibility, fix estimates).
 export function useUpdateAiCredentialSettings() {
   const qc = useQueryClient();
   return useMutation<
@@ -191,12 +238,14 @@ export function useUpdateAiCredentialSettings() {
     mutationFn: (body) => updateAiCredentialSettings(body),
     onSuccess: (data) => {
       qc.setQueryData(aiCredentialSettingsQueryKey, data);
+      invalidateAiCredentialSurfaces(qc);
+      invalidateAiFixCaches(qc);
     },
   });
 }
 
 
-// ─── Catalog ───────────────────────────────────────────────────────────────
+// ─── Provider bootstrap catalog (never the saved model source of truth) ───
 
 
 export function useProviderCatalog() {

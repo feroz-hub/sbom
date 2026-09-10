@@ -29,11 +29,12 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from ..models import AiProviderCredential, AiSettings
 from ..security.secrets import SecretCipher, get_cipher
 from ..settings import get_settings
-from .registry import ProviderConfig, build_configs_from_settings
+from .config_types import EffectiveAiConfig, ProviderConfig
 
 log = logging.getLogger("sbom.ai.config_loader")
 
@@ -43,16 +44,9 @@ log = logging.getLogger("sbom.ai.config_loader")
 # ---------------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
-class ResolvedSettings:
-    """Singleton AI settings — DB-first, env fallback when no DB row."""
-
-    feature_enabled: bool
-    kill_switch_active: bool
-    budget_per_request_usd: float
-    budget_per_scan_usd: float
-    budget_daily_usd: float
-    source: str  # "db" | "env"
+# Backward-compatible import name.  New runtime code should use the more
+# explicit ``EffectiveAiConfig`` name.
+ResolvedSettings = EffectiveAiConfig
 
 
 @dataclass(frozen=True)
@@ -223,19 +217,22 @@ class AiConfigLoader:
     # ------------------------------------------------------------------
 
     def _resolve_uncached(self) -> tuple[list[ProviderConfig], ResolvedSettings]:
-        env_configs = build_configs_from_settings()
-        env_by_name = {c.name: c for c in env_configs}
+        # Local import avoids a config-loader/registry import cycle while
+        # retaining the env-only migration path.
+        from .registry import build_configs_from_settings
 
-        db_configs: dict[str, ProviderConfig] = {}
+        env_configs = build_configs_from_settings()
+        db_configs: list[ProviderConfig] = []
+        authoritative_provider_names: set[str] = set()
         db_settings: ResolvedSettings | None = None
 
         try:
             with self._session_factory() as session:
-                rows = session.execute(select(AiProviderCredential)).scalars().all()
+                rows = session.execute(select(AiProviderCredential).order_by(AiProviderCredential.id)).scalars().all()
                 for row in rows:
-                    cfg = self._row_to_config(row)
-                    if cfg is not None:
-                        db_configs[cfg.name] = cfg
+                    authoritative_provider_names.add(str(row.provider_name).strip().lower())
+                    cfg = self._row_to_config(row, session=session)
+                    db_configs.append(cfg)
                 settings_row = session.execute(select(AiSettings).where(AiSettings.id == 1)).scalar_one_or_none()
                 if settings_row is not None:
                     db_settings = ResolvedSettings(
@@ -248,13 +245,18 @@ class AiConfigLoader:
                     )
         except Exception as exc:  # noqa: BLE001 — DB unavailable falls back to env
             log.warning("ai.config.db_read_failed: %s — falling back to env", exc)
-            db_configs = {}
+            db_configs = []
+            authoritative_provider_names = set()
             db_settings = None
 
-        # DB rows win over env. Providers present in env but not in DB
-        # keep their env config (the migration path).
-        merged_configs: dict[str, ProviderConfig] = dict(env_by_name)
-        merged_configs.update(db_configs)
+        # Any DB row is authoritative for that provider name, including an
+        # explicitly disabled row or one whose credential cannot be
+        # decrypted.  Legacy env credentials are used only when no DB row for
+        # that provider exists.
+        merged_configs = [
+            cfg for cfg in env_configs if cfg.name not in authoritative_provider_names
+        ]
+        merged_configs.extend(db_configs)
 
         # Settings: DB row wins; otherwise pull from env.
         if db_settings is not None:
@@ -270,20 +272,19 @@ class AiConfigLoader:
                 source="env",
             )
 
-        return list(merged_configs.values()), settings
+        return merged_configs, settings
 
-    def _row_to_config(self, row: AiProviderCredential) -> ProviderConfig | None:
+    def _row_to_config(self, row: AiProviderCredential, *, session: Session | None = None) -> ProviderConfig:
         """Decrypt + map one DB row into a registry-shaped ProviderConfig.
 
-        Returns ``None`` (skips) if the row is disabled or has a
-        decryption failure (logged but not raised — bad rows shouldn't
-        bring down the whole loader).
+        Disabled and unreadable rows remain in the resolved model as explicit
+        unavailable configurations.  Their presence suppresses legacy env
+        fallback for the same provider.
         """
-        if not bool(row.enabled):
-            return None
-
+        enabled = bool(row.enabled)
         api_key = ""
-        if row.api_key_encrypted:
+        config_error: str | None = None if enabled else "disabled_by_administrator"
+        if enabled and row.api_key_encrypted:
             try:
                 cipher = self._cipher or get_cipher()
                 api_key = cipher.decrypt(row.api_key_encrypted)
@@ -296,32 +297,33 @@ class AiConfigLoader:
                     row.provider_name,
                     row.id,
                 )
-                return None
+                config_error = "credential_decryption_failed"
 
-        # The registry inspects ``organization == "__default__"`` to pick
-        # the default provider when one is flagged in the DB. ``"__fallback__"``
-        # encodes the secondary. Both are sentinel values that never reach
-        # the OpenAI provider's actual ``OpenAI-Organization`` header
-        # (only the ``openai`` provider sets that header at all).
-        org_marker = ""
-        if bool(row.is_default):
-            org_marker = "__default__"
-        elif bool(row.is_fallback):
-            org_marker = "__fallback__"
+        default_model = row.default_model or ""
+        if session is not None:
+            from .model_resolver import resolve_model_for_credential
+
+            default_model = resolve_model_for_credential(session, row).model_id
 
         return ProviderConfig(
-            name=row.provider_name,
-            enabled=True,
-            default_model=row.default_model or "",
+            name=str(row.provider_name).strip().lower(),
+            enabled=enabled and config_error is None,
+            default_model=default_model,
             api_key=api_key,
             base_url=(row.base_url or "").strip(),
-            organization=org_marker,
+            organization="",
             max_concurrent=int(row.max_concurrent) if row.max_concurrent else 10,
             rate_per_minute=float(row.rate_per_minute) if row.rate_per_minute else 60.0,
             tier=(row.tier or "paid").lower(),
             cost_per_1k_input_usd=float(row.cost_per_1k_input_usd or 0.0),
             cost_per_1k_output_usd=float(row.cost_per_1k_output_usd or 0.0),
             is_local=bool(row.is_local),
+            credential_id=int(row.id),
+            label=row.label or "default",
+            is_default=bool(row.is_default),
+            is_fallback=bool(row.is_fallback),
+            source="db",
+            config_error=config_error,
         )
 
 
@@ -379,6 +381,7 @@ def reset_loader() -> None:
 
 __all__ = [
     "AiConfigLoader",
+    "EffectiveAiConfig",
     "ResolvedSettings",
     "get_loader",
     "now_iso",

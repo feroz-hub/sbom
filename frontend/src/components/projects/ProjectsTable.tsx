@@ -14,6 +14,7 @@ import { Skeleton, SkeletonRow } from '@/components/ui/Spinner';
 import { Pagination } from '@/components/ui/Pagination';
 import { ProjectModal } from './ProjectModal';
 import { ProjectScheduleDialog } from '@/components/schedules/ProjectScheduleDialog';
+import { NotifyMeLink } from '@/components/reports/NotifyMeLink';
 import { deleteProject, getProjectDeleteImpact } from '@/lib/api';
 import { matchesMultiField } from '@/lib/tableFilters';
 import { formatDate } from '@/lib/utils';
@@ -53,6 +54,7 @@ function ProjectRowActions({
 }) {
   return (
     <div className={`flex items-center gap-2 ${align === 'end' ? 'justify-end' : 'justify-start'}`}>
+      <NotifyMeLink scope="PROJECT" targetId={project.id} />
       <button
         onClick={() => onSchedule(project)}
         className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-hcl-muted transition-colors hover:bg-hcl-light hover:text-hcl-blue"

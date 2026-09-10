@@ -1,0 +1,123 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "serialNumber": "urn:uuid:71b3e5c9-0d84-4f26-b1a7-5e93c2f80ad4",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-09-16T09:00:00Z",
+    "authors": [
+      {
+        "name": "HCLTech Product Security",
+        "email": "product-security@example.com"
+      }
+    ],
+    "component": {
+      "type": "application",
+      "bom-ref": "app-telemetry-service",
+      "name": "Infusion Pump Telemetry Service",
+      "version": "1.1.0"
+    }
+  },
+  "vulnerabilities": [
+    {
+      "id": "CVE-2021-44228",
+      "source": {
+        "name": "NVD",
+        "url": "https://nvd.nist.gov/vuln/detail/CVE-2021-44228"
+      },
+      "analysis": {
+        "state": "resolved",
+        "fixedVersion": "2.17.1",
+        "detail": "Log4Shell. Remediated in release 1.1.0 by upgrading log4j-core from 2.14.1 to 2.17.1 under CR-4821. The finding was Affected in 1.0.0 and CISA KEV-listed with known ransomware use; this statement is retained as the remediation record for the 510(k) submission."
+      },
+      "affects": [
+        {
+          "ref": "maven-log4j-core"
+        }
+      ]
+    },
+    {
+      "id": "CVE-2021-45046",
+      "source": {
+        "name": "NVD",
+        "url": "https://nvd.nist.gov/vuln/detail/CVE-2021-45046"
+      },
+      "analysis": {
+        "state": "resolved",
+        "fixedVersion": "2.17.1",
+        "detail": "Closed by the same 2.17.1 upgrade. Assessed Not Affected in 1.0.0 on configuration grounds (no ${ctx:} lookup pattern); the upgrade removes the reliance on that configuration control."
+      },
+      "affects": [
+        {
+          "ref": "maven-log4j-core"
+        }
+      ]
+    },
+    {
+      "id": "CVE-2021-23337",
+      "source": {
+        "name": "OSV",
+        "url": "https://osv.dev/vulnerability/CVE-2021-23337"
+      },
+      "analysis": {
+        "state": "not_affected",
+        "justification": "vulnerable_code_not_present",
+        "detail": "Command injection in lodash.template. Fixed upstream in 4.17.21, which this release ships; the scanner matched on an advisory range that includes the patched version. Additionally the production bundle is tree-shaken to lodash.get and lodash.merge, so template is absent from the shipped artifact."
+      },
+      "affects": [
+        {
+          "ref": "npm-lodash"
+        }
+      ]
+    },
+    {
+      "id": "CVE-2021-3749",
+      "source": {
+        "name": "OSV",
+        "url": "https://osv.dev/vulnerability/CVE-2021-3749"
+      },
+      "analysis": {
+        "state": "exploitable",
+        "detail": "ReDoS in the axios trim helper, reachable from telemetry upload header parsing. Carried over unremediated from release 1.0.0 — axios remains at 0.21.1 because the 1.x upgrade changes the interceptor contract used by the retry layer. Owner: platform-security. Planned for release 1.2.0 under CR-4890; compensating control is the 8 KB header cap at the ingress proxy."
+      },
+      "affects": [
+        {
+          "ref": "npm-axios"
+        }
+      ]
+    },
+    {
+      "id": "CVE-2024-29041",
+      "source": {
+        "name": "OSV",
+        "url": "https://osv.dev/vulnerability/CVE-2024-29041"
+      },
+      "analysis": {
+        "state": "in_triage",
+        "detail": "Open redirect via res.location in express 4.17.1, newly introduced by this release. Assessing whether any redirect target derives from request input on the clinician callback route. Owner: platform-security. Target date: 2026-09-30."
+      },
+      "affects": [
+        {
+          "ref": "npm-express"
+        }
+      ]
+    },
+    {
+      "id": "CVE-2024-43796",
+      "source": {
+        "name": "OSV",
+        "url": "https://osv.dev/vulnerability/CVE-2024-43796"
+      },
+      "analysis": {
+        "state": "not_affected",
+        "justification": "vulnerable_code_not_in_execute_path",
+        "detail": "XSS via res.redirect in express. The telemetry service exposes only JSON API routes and never calls res.redirect; the sole redirect in the codebase is a static constant in the health probe. Verified by grep over the 1.1.0 source tree and by route inventory review."
+      },
+      "affects": [
+        {
+          "ref": "npm-express"
+        }
+      ]
+    }
+  ]
+}

@@ -94,6 +94,7 @@ from ..ai.scope import (
     count_cached_for_finding_ids,
     resolve_scope_findings,
 )
+from ..core.context import get_bound_context
 from ..db import SessionLocal, get_db
 from ..models import AiFixBatch, AiFixCache, AnalysisFinding, AnalysisRun
 
@@ -385,6 +386,10 @@ async def trigger_run_fixes(
     store = get_progress_store()
     store.write(progress)
 
+    current_context = get_bound_context()
+    if current_context is None or current_context.tenant_id is None:
+        raise HTTPException(status_code=400, detail="An active tenant is required for AI generation.")
+
     enqueued = False
     try:
         from ..workers.ai_fix_tasks import generate_run_fixes
@@ -392,6 +397,7 @@ async def trigger_run_fixes(
         generate_run_fixes.apply_async(
             kwargs={
                 "run_id": run_id,
+                "tenant_id": current_context.tenant_id,
                 "provider_name": payload.provider_name,
                 "force_refresh": payload.force_refresh,
                 "budget_usd": payload.budget_usd,

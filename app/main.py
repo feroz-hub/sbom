@@ -490,6 +490,60 @@ def _reconcile_stale_analysis_runs() -> None:
                     db.rollback()
 
 
+def _log_ai_configuration_readiness() -> None:
+    """Emit one secret-safe startup summary for the effective AI snapshot."""
+    from .ai.config_loader import get_loader
+    from .ai.registry import get_registry
+    from .security.secrets import encryption_config_diagnostic
+
+    encryption_available, encryption_status = encryption_config_diagnostic()
+    try:
+        loader = get_loader()
+        configs, effective = loader.resolve()
+        configured_names = sorted({cfg.name for cfg in configs if cfg.enabled})
+        unavailable = sorted(
+            {cfg.config_error for cfg in configs if cfg.config_error is not None}
+        )
+        try:
+            default_config = get_registry().get_default_config()
+        except Exception:  # noqa: BLE001 — summarized below without secrets
+            default_config = None
+        default_selection = default_config.selection_key if default_config is not None else None
+        reason = "available"
+        if effective.kill_switch_active:
+            reason = "kill_switch_active"
+        elif not effective.feature_enabled:
+            reason = "feature_disabled"
+        elif default_config is None:
+            reason = "no_default_credential"
+        elif not default_config.enabled:
+            reason = default_config.config_error or "default_credential_disabled"
+        elif not configured_names:
+            reason = "no_enabled_provider"
+        log_method = log.info if reason == "available" else log.warning
+        log_method(
+            "ai.startup.readiness: reason=%s settings_source=%s default=%s "
+            "providers=%s encryption=%s provider_issues=%s",
+            reason,
+            effective.source,
+            default_selection,
+            configured_names,
+            encryption_status,
+            unavailable,
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.warning(
+            "ai.startup.readiness: reason=configuration_unavailable encryption=%s error_type=%s",
+            encryption_status,
+            type(exc).__name__,
+        )
+    if not encryption_available:
+        log.warning(
+            "ai.startup.encryption_unavailable: status=%s; DB-backed provider keys cannot be saved or decrypted",
+            encryption_status,
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Re-apply logging config AFTER uvicorn has fully initialised. Uvicorn
@@ -517,6 +571,11 @@ async def lifespan(app: FastAPI):
     _update_sbom_names()
     _reconcile_zombie_ai_fix_batches()
     _reconcile_stale_analysis_runs()
+    _log_ai_configuration_readiness()
+    from .services.report_storage import configuration_errors
+    log.info("reports.startup enabled=%s authenticated=%s smtp_enabled=%s diagnostics=%s",
+             settings.report_notifications_enabled, settings.auth_enabled, settings.email_delivery_enabled,
+             ",".join(configuration_errors(settings)) or "ready")
     validate_auth_setup()
     log.info("Startup complete. API ready.")
     yield
@@ -680,6 +739,10 @@ error_handlers.install(app)
 # costs essentially nothing in dev but makes production a one-env-var flip.
 
 _protected = [Depends(enforce_request_access)]
+
+from .routers import report_notifications
+
+app.include_router(report_notifications.router, dependencies=_protected)
 
 app.include_router(health.router)  # intentionally unprotected
 app.include_router(sbom_versions.router, dependencies=_protected)

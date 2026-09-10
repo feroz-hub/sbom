@@ -23,6 +23,7 @@ from urllib.parse import urlparse
 
 from .base import (
     ConnectionTestResult,
+    DiscoveredModel,
     LlmProvider,
     LlmRequest,
     LlmResponse,
@@ -129,6 +130,12 @@ class CustomOpenAiCompatibleProvider(LlmProvider):
     async def test_connection(self, *, model: str | None = None) -> ConnectionTestResult:
         result = await self._inner.test_connection(model=model)
         return result.model_copy(update={"provider": self.name})
+
+    async def list_models(self) -> list[DiscoveredModel]:
+        # The inner base URL has already passed this adapter's SSRF/plaintext
+        # validation; discovery deliberately uses that exact validated URL.
+        models = await self._inner.list_models()
+        return [model.model_copy(update={"provider_name": self.name}) for model in models]
 
     def info(self) -> ProviderInfo:
         return ProviderInfo(

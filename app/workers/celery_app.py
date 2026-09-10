@@ -1,10 +1,11 @@
-"""Celery application — broker/backend from settings (Redis).
+"""Celery application — independently resolved broker and result backend.
 
 Tasks live in:
   * ``app.nvd_mirror.tasks``           — NVD mirror (mirror_nvd)
   * ``app.workers.scheduled_analysis`` — periodic SBOM rescans
                                           (tick + per-SBOM worker)
   * ``app.workers.kev_sync``           — daily CISA KEV catalog sync
+  * ``app.workers.ai_model_discovery`` — daily provider model refresh
 
 Beat schedule:
   * ``nvd-mirror-hourly`` — fires ``mirror_nvd`` at minute 15 every hour.
@@ -13,6 +14,8 @@ Beat schedule:
     rows whose next_run_at has passed.
   * ``kev-sync-daily`` — refreshes the local ``kev_vulnerabilities`` table
     every 24 hours.
+  * ``ai-model-registry-daily`` — refreshes enabled provider catalogs once
+    daily without changing active selections.
 
 Beat must run as a SINGLE instance (deploy as its own process).
 """
@@ -33,14 +36,46 @@ def _broker_url() -> str:
     from app.settings import get_settings
 
     s = get_settings()
+    if s.celery_use_database_broker:
+        database_url = (s.database_url or "").strip()
+        if not database_url:
+            raise RuntimeError(
+                "CELERY_USE_DATABASE_BROKER is enabled, but DATABASE_URL is not configured."
+            )
+        if database_url.startswith("db+"):
+            database_url = database_url.removeprefix("db+")
+        return f"sqla+{database_url}"
+
     b = (s.celery_broker_url or "").strip()
     return b or s.redis_url
+
+
+def _result_backend() -> str:
+    """Return a backend URL compatible with the selected broker transport.
+
+    Redis URLs work as both broker and result backend. Kombu's SQLAlchemy
+    transport is different: ``sqla+...`` is a broker-only scheme, while
+    Celery's database result backend requires ``db+...``. Keep an explicit
+    override for other broker/backend combinations.
+    """
+    from app.settings import get_settings
+
+    s = get_settings()
+    configured = (s.celery_result_backend or "").strip()
+    if configured:
+        return configured
+
+    broker = _broker_url()
+    for prefix in ("sqla+", "sqlalchemy+"):
+        if broker.startswith(prefix):
+            return f"db+{broker.removeprefix(prefix)}"
+    return broker
 
 
 celery_app = Celery(
     "sbom_analyzer",
     broker=_broker_url(),
-    backend=_broker_url(),
+    backend=_result_backend(),
     include=[
         "app.nvd_mirror.tasks",
         "app.workers.scheduled_analysis",
@@ -48,6 +83,8 @@ celery_app = Celery(
         "app.workers.ai_fix_tasks",
         "app.workers.source_cache",
         "app.workers.kev_sync",
+        "app.workers.report_notifications",
+        "app.workers.ai_model_discovery",
     ],
 )
 
@@ -58,9 +95,13 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True,
     task_track_started=True,
+    task_routes={"report_notifications.*": {"queue": "reports"}},
 )
 
 celery_app.conf.beat_schedule = {
+    "report-notifications-hourly": {"task": "report_notifications.tick", "schedule": crontab(minute=50)},
+    "report-notifications-outbox": {"task": "report_notifications.dispatch_pending", "schedule": crontab(minute="*")},
+    "report-notifications-retention": {"task": "report_notifications.purge", "schedule": crontab(minute=50, hour=4)},
     "nvd-mirror-hourly": {
         "task": "nvd_mirror.mirror_nvd",
         "schedule": crontab(minute=15),
@@ -92,6 +133,10 @@ celery_app.conf.beat_schedule = {
         # co-fire and amplify lock contention.
         "task": "source_cache.sweep_expired",
         "schedule": crontab(minute=45, hour=3),
+    },
+    "ai-model-registry-daily": {
+        "task": "ai_models.refresh_all",
+        "schedule": crontab(minute=10, hour=4),
     },
 }
 

@@ -181,6 +181,10 @@ class CompareService:
         cache_key = compute_cache_key(run_a_id, run_b_id)
         cached = self._read_cache(cache_key)
         if cached is not None:
+            # Old cache payloads predate lineage metadata; resolve against current
+            # declared lineage, without altering cache TTL or comparison counts.
+            cached.relationship = self._compute_relationship(run_a, run_b)
+            self._attribute_findings(cached.findings, cached.components, tally=False)
             log.info(
                 "compare cache_hit cache_key=%s run_a=%d run_b=%d",
                 cache_key,
@@ -475,6 +479,8 @@ class CompareService:
         self,
         findings: list[FindingDiffRow],
         components: list[ComponentDiffRow],
+        *,
+        tally: bool = True,
     ) -> None:
         # Strict index by (name_lower, ecosystem) — preferred match.
         # Lax index by name_lower only — fallback for findings whose
@@ -498,7 +504,11 @@ class CompareService:
             if comp is None:
                 comp = lax.get(f.component_name.lower())
             f.attribution = _attribution_string(f.change_kind, comp)
-            if comp is not None:
+            if f.change_kind == FindingChangeKind.ADDED:
+                f.attribution_kind = "introduced_by_new_component" if comp and comp.change_kind == ComponentChangeKind.ADDED else "introduced_by_version_upgrade" if comp and comp.change_kind == ComponentChangeKind.VERSION_BUMPED else "landscape_change"
+            else:
+                f.attribution_kind = "resolved_by_component_removal" if comp and comp.change_kind == ComponentChangeKind.REMOVED else "resolved_by_version_upgrade" if comp and comp.change_kind == ComponentChangeKind.VERSION_BUMPED else "landscape_change"
+            if comp is not None and tally:
                 if f.change_kind == FindingChangeKind.RESOLVED:
                     comp.findings_resolved += 1
                 else:
@@ -576,6 +586,12 @@ class CompareService:
     # -- step 8 (relationship) -----------------------------------------------
 
     def _compute_relationship(self, run_a: AnalysisRun, run_b: AnalysisRun) -> RunRelationship:
+        from ..metrics.reporting import lineage
+
+        a = self._db.get(SBOMSource, run_a.sbom_id)
+        b = self._db.get(SBOMSource, run_b.sbom_id)
+        common_lineage = bool(a and b and a.tenant_id == b.tenant_id and
+                             lineage(self._db, a, a.tenant_id)[-1].id == lineage(self._db, b, b.tenant_id)[-1].id)
         same_project = (
             run_a.project_id is not None and run_b.project_id is not None and run_a.project_id == run_b.project_id
         )
@@ -590,6 +606,9 @@ class CompareService:
         return RunRelationship(
             same_project=same_project,
             same_sbom=same_sbom,
+            classification="SAME_SBOM" if same_sbom else "SAME_LINEAGE_DIFFERENT_VERSION" if common_lineage else "UNRELATED",
+            version_a=(a.sbom_version or a.productver) if a else None,
+            version_b=(b.sbom_version or b.productver) if b else None,
             days_between=days_between,
             direction_warning=direction_warning,
         )

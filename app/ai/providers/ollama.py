@@ -24,10 +24,12 @@ from ..limiter import CircuitBreaker, RateLimiter
 from .base import (
     AiProviderError,
     ConnectionTestResult,
+    DiscoveredModel,
     LlmProvider,
     LlmRequest,
     LlmResponse,
     LlmUsage,
+    ModelDiscoveryError,
     ProviderInfo,
     classify_http_failure,
     classify_network_failure,
@@ -156,6 +158,59 @@ class OllamaProvider(LlmProvider):
             detected_models=models,
             latency_ms=latency,
         )
+
+    async def list_models(self) -> list[DiscoveredModel]:
+        client = await self._client()
+        try:
+            response = await client.get(f"{self._base_url}/api/tags", timeout=min(self._timeout, 10.0))
+        except httpx.TimeoutException as exc:
+            raise ModelDiscoveryError("timeout", "ollama: model discovery timed out") from exc
+        except httpx.RequestError as exc:
+            raise ModelDiscoveryError("provider_unreachable", "ollama: provider unreachable") from exc
+        if response.status_code == 404:
+            raise ModelDiscoveryError("unsupported", "ollama: model discovery is not supported")
+        if response.status_code >= 400:
+            raise ModelDiscoveryError("invalid_response", f"ollama: model listing returned HTTP {response.status_code}")
+        try:
+            body = response.json()
+            items = body.get("models", [])
+            if not isinstance(items, list):
+                raise TypeError("models is not a list")
+        except (ValueError, TypeError) as exc:
+            raise ModelDiscoveryError("invalid_response", "ollama: invalid model listing response") from exc
+        discovered: list[DiscoveredModel] = []
+        for item in items:
+            if not isinstance(item, dict) or not isinstance(item.get("name"), str):
+                continue
+            model_id = item["name"].strip()
+            if not model_id:
+                continue
+            details = item.get("details") if isinstance(item.get("details"), dict) else {}
+            metadata = {
+                key: value
+                for key, value in {
+                    "modified_at": item.get("modified_at"),
+                    "size": item.get("size"),
+                    "format": details.get("format"),
+                    "family": details.get("family"),
+                    "parameter_size": details.get("parameter_size"),
+                    "quantization_level": details.get("quantization_level"),
+                }.items()
+                if isinstance(value, (str, int, float, bool))
+            }
+            discovered.append(DiscoveredModel(
+                provider_model_id=model_id,
+                runtime_model_id=model_id,
+                display_name=model_id,
+                provider_name=self.name,
+                supports_chat=True,
+                supports_structured_output=True,
+                supports_streaming=True,
+                raw_metadata=metadata or None,
+            ))
+        if items and not discovered:
+            raise ModelDiscoveryError("invalid_response", "ollama: model listing contained no valid model IDs")
+        return discovered
 
     def info(self) -> ProviderInfo:
         return ProviderInfo(

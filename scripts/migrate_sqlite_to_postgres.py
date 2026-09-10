@@ -22,6 +22,7 @@ import sqlalchemy as sa
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.sql.ddl import sort_tables
 
 ALEMBIC_TABLE = "alembic_version"
 DEFAULT_BATCH_SIZE = 1_000
@@ -117,9 +118,22 @@ def validate_schema_compatibility(source: sa.MetaData, target: sa.MetaData) -> N
             )
 
 
+def _deferred_ordering_fk(foreign_key: sa.ForeignKey) -> bool:
+    """Break the one intentional nullable cross-table cycle.
+
+    ``sbom_source.product_id`` must order Product before SBOM, while
+    ``products.current_sbom_id`` is restored after every table has been copied.
+    """
+    return foreign_key.parent.table.name == "products" and foreign_key.parent.name == "current_sbom_id"
+
+
 def dependency_order(metadata: sa.MetaData) -> list[sa.Table]:
     names = application_table_names(metadata)
-    return [table for table in metadata.sorted_tables if table.name in names]
+    return [
+        table
+        for table in sort_tables(metadata.tables.values(), skip_fn=_deferred_ordering_fk)
+        if table.name in names
+    ]
 
 
 def _batches(rows: Sequence[dict[str, Any]], size: int) -> Iterator[list[dict[str, Any]]]:
@@ -170,15 +184,18 @@ def convert_value(value: Any, column: sa.Column) -> Any:
     return value
 
 
-def _self_fk_columns(table: sa.Table) -> set[str]:
+def _deferred_fk_columns(table: sa.Table) -> set[str]:
     columns: set[str] = set()
     for constraint in table.foreign_key_constraints:
-        if constraint.referred_table is not table:
+        elements = list(constraint.elements)
+        is_self_reference = constraint.referred_table is table
+        is_ordering_cycle = any(_deferred_ordering_fk(element) for element in elements)
+        if not is_self_reference and not is_ordering_cycle:
             continue
-        for element in constraint.elements:
+        for element in elements:
             if not element.parent.nullable:
                 raise MigrationError(
-                    f"Non-nullable self-reference requires manual ordering: {table.name}.{element.parent.name}"
+                    f"Non-nullable deferred reference requires manual ordering: {table.name}.{element.parent.name}"
                 )
             columns.add(element.parent.name)
     return columns
@@ -190,18 +207,18 @@ def prepare_rows(
     target_table: sa.Table,
 ) -> tuple[list[dict[str, Any]], list[tuple[dict[str, Any], dict[str, Any]]]]:
     pk_names = [column.name for column in target_table.primary_key.columns]
-    self_columns = _self_fk_columns(target_table)
+    deferred_columns = _deferred_fk_columns(target_table)
     prepared: list[dict[str, Any]] = []
     deferred: list[tuple[dict[str, Any], dict[str, Any]]] = []
     for source_row in source_connection.execute(sa.select(source_table)).mappings():
         row = {column.name: convert_value(source_row[column.name], column) for column in target_table.columns}
-        self_values = {name: row[name] for name in self_columns if row[name] is not None}
-        if self_values:
+        deferred_values = {name: row[name] for name in deferred_columns if row[name] is not None}
+        if deferred_values:
             identity = {name: row[name] for name in pk_names}
             if any(value is None for value in identity.values()):
-                raise MigrationError(f"Self-referenced row in {target_table.name} has a NULL primary key")
-            deferred.append((identity, self_values))
-            for name in self_values:
+                raise MigrationError(f"Deferred row in {target_table.name} has a NULL primary key")
+            deferred.append((identity, deferred_values))
+            for name in deferred_values:
                 row[name] = None
         prepared.append(row)
     return prepared, deferred
@@ -235,14 +252,16 @@ def copy_all_tables(
     *,
     batch_size: int,
 ) -> None:
+    deferred_updates: list[tuple[sa.Table, dict[str, Any], dict[str, Any]]] = []
     for target_table in dependency_order(target):
         source_table = source.tables[target_table.name]
         rows, deferred = prepare_rows(source_connection, source_table, target_table)
         for batch in _batches(rows, batch_size):
             target_connection.execute(target_table.insert(), batch)
-        for identity, values in deferred:
-            predicate = sa.and_(*(target_table.c[name] == value for name, value in identity.items()))
-            target_connection.execute(target_table.update().where(predicate).values(**values))
+        deferred_updates.extend((target_table, identity, values) for identity, values in deferred)
+    for target_table, identity, values in deferred_updates:
+        predicate = sa.and_(*(target_table.c[name] == value for name, value in identity.items()))
+        target_connection.execute(target_table.update().where(predicate).values(**values))
 
 
 def reset_sequences(connection: sa.Connection, metadata: sa.MetaData) -> None:

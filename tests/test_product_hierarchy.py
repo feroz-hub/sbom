@@ -25,7 +25,14 @@ def _product(client, project_id: int, name: str | None = None) -> dict:
     return response.json()
 
 
-def _upload(client, *, project_id: int | None = None, product_id: int | None = None, name: str | None = None) -> dict:
+def _upload(
+    client,
+    *,
+    project_id: int | None = None,
+    product_id: int | None = None,
+    name: str | None = None,
+    set_as_current: bool | None = None,
+) -> dict:
     sbom = {
         "bomFormat": "CycloneDX",
         "specVersion": "1.5",
@@ -37,6 +44,8 @@ def _upload(client, *, project_id: int | None = None, product_id: int | None = N
         data["project_id"] = str(project_id)
     if product_id is not None:
         data["product_id"] = str(product_id)
+    if set_as_current is not None:
+        data["set_as_current"] = "true" if set_as_current else "false"
     response = client.post(
         "/api/sboms/upload",
         data=data,
@@ -66,6 +75,23 @@ def test_create_and_list_products_unique_within_project(client):
     assert any(item["id"] == created["id"] for item in listed.json()["items"])
 
 
+def test_product_create_and_update_accept_custom_category_strings(client):
+    project = _project(client)
+    created = client.post(
+        f"/api/projects/{project['id']}/products",
+        json={"name": _name("categorized-product"), "category": "Healthcare Integration Appliance"},
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["category"] == "Healthcare Integration Appliance"
+
+    updated = client.patch(
+        f"/api/products/{created.json()['id']}",
+        json={"category": "Legacy Healthcare Platform"},
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["category"] == "Legacy Healthcare Platform"
+
+
 def test_upload_requires_matching_project_product_and_returns_product(client):
     project_a = _project(client)
     project_b = _project(client)
@@ -83,6 +109,35 @@ def test_upload_requires_matching_project_product_and_returns_product(client):
         files={"file": ("sbom.cdx.json", json.dumps({"bomFormat": "CycloneDX", "specVersion": "1.5"}), "application/json")},
     )
     assert mismatch.status_code == 409
+
+
+def test_upload_current_sbom_selection_is_explicit_and_first_upload_is_safe_default(client):
+    project = _project(client)
+    product = _product(client, project["id"], "Versioned Controller")
+
+    first = _upload(client, project_id=project["id"], product_id=product["id"], set_as_current=False)
+    assert first["is_current"] is True
+    assert client.get(f"/api/products/{product['id']}").json()["current_sbom_id"] == first["sbom_id"]
+
+    historical = _upload(client, project_id=project["id"], product_id=product["id"], set_as_current=False)
+    assert historical["is_current"] is False
+    assert client.get(f"/api/products/{product['id']}").json()["current_sbom_id"] == first["sbom_id"]
+
+    replacement = _upload(client, project_id=project["id"], product_id=product["id"], set_as_current=True)
+    assert replacement["is_current"] is True
+    detail = client.get(f"/api/products/{product['id']}").json()
+    assert detail["current_sbom_id"] == replacement["sbom_id"]
+
+
+def test_soft_deleting_current_sbom_clears_product_pointer(client):
+    project = _project(client)
+    product = _product(client, project["id"], "Delete Current")
+    uploaded = _upload(client, project_id=project["id"], product_id=product["id"])
+    assert client.get(f"/api/products/{product['id']}").json()["current_sbom_id"] == uploaded["sbom_id"]
+
+    deleted = client.delete(f"/api/sboms/{uploaded['sbom_id']}?confirm=yes")
+    assert deleted.status_code == 200, deleted.text
+    assert client.get(f"/api/products/{product['id']}").json()["current_sbom_id"] is None
 
 
 def test_legacy_upload_with_only_project_uses_default_product(client):
@@ -106,6 +161,7 @@ def test_patch_sbom_changes_product_and_rejects_mismatch(client):
     assert moved.status_code == 200, moved.text
     assert moved.json()["project_id"] == project_b["id"]
     assert moved.json()["product_id"] == product_b["id"]
+    assert client.get(f"/api/products/{product_a['id']}").json()["current_sbom_id"] is None
 
     mismatch = client.patch(
         f"/api/sboms/{sbom_id}",

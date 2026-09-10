@@ -13,6 +13,12 @@ from __future__ import annotations
 import logging
 
 import pytest
+from app.ai.providers.base import (
+    ConnectionTestResult,
+    DiscoveredModel,
+    LlmResponse,
+    LlmUsage,
+)
 from app.db import SessionLocal
 from app.models import (
     AiCredentialAuditLog,
@@ -185,6 +191,34 @@ def test_set_default_swaps_atomically(client):
     assert defaults[0]["id"] == b["id"]
 
 
+def test_default_provider_change_rebuilds_registry_without_restart(client):
+    from app.ai.registry import get_registry
+
+    first = client.post(
+        "/api/v1/ai/credentials",
+        json={
+            "provider_name": "openai",
+            "label": "primary",
+            "api_key": "first-secret-value",
+            "default_model": "gpt-4o-mini",
+        },
+    ).json()
+    second = client.post(
+        "/api/v1/ai/credentials",
+        json={
+            "provider_name": "openai",
+            "label": "secondary",
+            "api_key": "second-secret-value",
+            "default_model": "gpt-4.1-mini",
+        },
+    ).json()
+    client.put(f"/api/v1/ai/credentials/{first['id']}/set-default")
+    assert get_registry().get_default_config().credential_id == first["id"]
+
+    client.put(f"/api/v1/ai/credentials/{second['id']}/set-default")
+    assert get_registry().get_default_config().credential_id == second["id"]
+
+
 def test_set_fallback_swaps_atomically(client):
     a = client.post(
         "/api/v1/ai/credentials",
@@ -231,11 +265,11 @@ def test_delete_credential_removes_row_and_audits(client):
 # ============================================================ Settings
 
 
-def test_settings_get_returns_singleton(client):
+def test_settings_get_matches_env_fallback_when_singleton_missing(client):
     resp = client.get("/api/v1/ai/settings")
     assert resp.status_code == 200
     body = resp.json()
-    assert body["source"] == "db"
+    assert body["source"] == "env"
 
 
 def test_settings_update_validates_cap_ordering(client):
@@ -259,8 +293,33 @@ def test_settings_update_persists(client):
     )
     assert resp.status_code == 200
     body = resp.json()
+    assert body["source"] == "db"
     assert body["kill_switch_active"] is True
     assert body["budget_daily_usd"] == 10.00
+
+
+def test_settings_write_updates_runtime_surfaces_without_restart(client):
+    response = client.put(
+        "/api/v1/ai/settings",
+        json={
+            "feature_enabled": True,
+            "kill_switch_active": True,
+            "budget_per_request_usd": 0.03,
+            "budget_per_scan_usd": 0.40,
+            "budget_daily_usd": 6.00,
+        },
+    )
+    assert response.status_code == 200
+
+    analysis = client.get("/api/analysis/config").json()
+    usage = client.get("/api/v1/ai/usage").json()
+    assert analysis["ai_fixes_enabled"] is False
+    assert analysis["ai_settings_source"] == "db"
+    assert usage["budget_caps_usd"] == {
+        "per_request_usd": 0.03,
+        "per_scan_usd": 0.40,
+        "per_day_org_usd": 6.00,
+    }
 
 
 # ============================================================ Audit trail
@@ -375,3 +434,194 @@ def test_unknown_provider_returns_400(client):
         json={"provider_name": "bogus", "default_model": "x", "api_key": "k"},
     )
     assert resp.status_code == 400
+
+
+@pytest.mark.parametrize(
+    ("base_url", "model", "expected"),
+    [
+        (None, "model", 400),
+        ("http://localhost:1234/v1", None, 400),
+        ("http://example.com/v1", "model", 400),
+        ("http://localhost:1234/v1", "model", 201),
+        ("https://example.com/v1", "model", 201),
+    ],
+)
+def test_custom_openai_validation_contract(client, base_url, model, expected):
+    response = client.post(
+        "/api/v1/ai/credentials",
+        json={
+            "provider_name": "custom_openai",
+            "api_key": None,
+            "base_url": base_url,
+            "default_model": model,
+            "cost_per_1k_input_usd": 0.001,
+            "cost_per_1k_output_usd": 0.002,
+            "is_local": base_url is not None and "localhost" in base_url,
+        },
+    )
+    assert response.status_code == expected, response.text
+
+
+def test_missing_encryption_key_returns_actionable_503(client, monkeypatch):
+    monkeypatch.delenv("AI_CONFIG_ENCRYPTION_KEY", raising=False)
+    reset_cipher()
+    response = client.post(
+        "/api/v1/ai/credentials",
+        json={"provider_name": "openai", "api_key": "secret-value", "default_model": "gpt-4o-mini"},
+    )
+    assert response.status_code == 503
+    assert "AI_CONFIG_ENCRYPTION_KEY" in response.json()["detail"]
+    assert "secret-value" not in response.text
+
+
+def test_malformed_encryption_key_returns_actionable_503(client, monkeypatch):
+    monkeypatch.setenv("AI_CONFIG_ENCRYPTION_KEY", "not-valid-base64")
+    reset_cipher()
+    response = client.post(
+        "/api/v1/ai/credentials",
+        json={"provider_name": "openai", "api_key": "secret-value", "default_model": "gpt-4o-mini"},
+    )
+    assert response.status_code == 503
+    assert "AI_CONFIG_ENCRYPTION_KEY" in response.json()["detail"]
+    assert "secret-value" not in response.text
+
+
+def test_saved_key_remains_decryptable_after_cipher_restart(client, monkeypatch):
+    stable_key = generate_master_key()
+    monkeypatch.setenv("AI_CONFIG_ENCRYPTION_KEY", stable_key)
+    reset_cipher()
+    raw_key = "restart-safe-secret-value"
+    created = client.post(
+        "/api/v1/ai/credentials",
+        json={"provider_name": "openai", "api_key": raw_key, "default_model": "gpt-4o-mini"},
+    )
+    assert created.status_code == 201
+
+    reset_cipher()  # simulate a new API process using the same environment key
+    listing = client.get("/api/v1/ai/credentials")
+    assert listing.status_code == 200
+    assert listing.json()[0]["api_key_preview"].endswith(raw_key[-4:])
+    assert raw_key not in listing.text
+
+
+def test_wrong_key_saved_test_returns_safe_diagnostic(client, monkeypatch):
+    raw_key = "wrong-key-secret-value"
+    created = client.post(
+        "/api/v1/ai/credentials",
+        json={"provider_name": "openai", "api_key": raw_key, "default_model": "gpt-4o-mini"},
+    )
+    credential_id = created.json()["id"]
+    monkeypatch.setenv("AI_CONFIG_ENCRYPTION_KEY", generate_master_key())
+    reset_cipher()
+
+    response = client.post(f"/api/v1/ai/credentials/{credential_id}/test")
+    assert response.status_code == 503
+    assert "cannot be decrypted" in response.json()["detail"]
+    assert raw_key not in response.text
+
+
+def test_effective_config_diagnostic_never_exposes_secrets(client):
+    raw_key = "diagnostic-secret-value"
+    created = client.post(
+        "/api/v1/ai/credentials",
+        json={"provider_name": "openai", "api_key": raw_key, "default_model": "gpt-4o-mini"},
+    )
+    client.put(f"/api/v1/ai/credentials/{created.json()['id']}/set-default")
+
+    response = client.get("/api/v1/ai/effective-config")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["encryption_config_available"] is True
+    assert body["default_selection_key"].startswith("credential:")
+    assert raw_key not in response.text
+    assert "api_key" not in response.text
+
+
+def test_candidate_edit_test_uses_saved_key_without_exposing_it(client, monkeypatch):
+    raw_key = "candidate-edit-secret-value"
+    created = client.post(
+        "/api/v1/ai/credentials",
+        json={"provider_name": "openai", "api_key": raw_key, "default_model": "gpt-4o-mini"},
+    )
+    credential_id = created.json()["id"]
+    seen = {}
+
+    class _Provider:
+        async def test_connection(self, *, model=None):
+            return ConnectionTestResult(success=True, provider="openai", model_tested=model)
+
+    def _build(payload):
+        seen["key"] = payload.api_key
+        seen["model"] = payload.default_model
+        return _Provider()
+
+    monkeypatch.setattr("app.routers.ai_credentials._build_transient_provider", _build)
+    response = client.post(
+        "/api/v1/ai/credentials/test",
+        json={
+            "credential_id": credential_id,
+            "provider_name": "openai",
+            "api_key": None,
+            "default_model": "gpt-4.1-mini",
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+    assert seen == {"key": raw_key, "model": "gpt-4.1-mini"}
+    assert raw_key not in response.text
+
+
+def test_model_registry_api_refresh_test_and_explicit_select(client, monkeypatch):
+    created = client.post(
+        "/api/v1/ai/credentials",
+        json={"provider_name": "openai", "api_key": "model-registry-secret", "default_model": "legacy"},
+    )
+    credential_id = created.json()["id"]
+
+    class _Provider:
+        name = "openai"
+        default_model = "legacy"
+
+        async def list_models(self):
+            return [
+                DiscoveredModel(
+                    provider_model_id="new-live-model",
+                    runtime_model_id="new-live-model",
+                    display_name="New live model",
+                    provider_name="openai",
+                    supports_chat=True,
+                    supports_structured_output=True,
+                )
+            ]
+
+        async def generate(self, request):
+            assert request.model == "new-live-model"
+            return LlmResponse(
+                text='{"ok": true}',
+                parsed={"ok": True},
+                usage=LlmUsage(input_tokens=1, output_tokens=1, cost_usd=0),
+                provider="openai",
+                model=request.model,
+                latency_ms=1,
+            )
+
+    monkeypatch.setattr("app.ai.model_registry.build_provider_for_credential", lambda row: _Provider())
+    refreshed = client.post(f"/api/v1/ai/credentials/{credential_id}/models/refresh")
+    assert refreshed.status_code == 200, refreshed.text
+    assert refreshed.json()["created"] == 1
+
+    models = client.get(f"/api/v1/ai/credentials/{credential_id}/models").json()
+    legacy = next(model for model in models if model["runtime_model_id"] == "legacy")
+    live = next(model for model in models if model["runtime_model_id"] == "new-live-model")
+    assert legacy["is_selected"] is True
+    assert legacy["is_available"] is False
+    assert live["is_selected"] is False
+
+    tested = client.post(f"/api/v1/ai/credentials/{credential_id}/models/{live['id']}/test")
+    assert tested.status_code == 200
+    assert tested.json()["success"] is True
+
+    selected = client.post(f"/api/v1/ai/credentials/{credential_id}/models/{live['id']}/select")
+    assert selected.status_code == 200
+    assert selected.json()["is_selected"] is True
+    assert client.get(f"/api/v1/ai/credentials/{credential_id}").json()["default_model"] == "new-live-model"

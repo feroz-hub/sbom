@@ -91,7 +91,10 @@ describe('Dialog primitive — layout', () => {
     expect(cls).toMatch(/rounded-b-none/);
     // Desktop card: dvh-aware max-height capped at 800px, centered width.
     expect(cls).toMatch(/sm:max-h-\[min\(calc\(100dvh-4rem\),800px\)\]/);
-    expect(cls).toMatch(/sm:w-\[min\(92vw,720px\)\]/);
+    expect(cls).toMatch(/sm:w-\[92vw\]/);
+    // Width is bounded by the maxWidth class, never by a hard-coded px cap.
+    expect(cls).not.toMatch(/sm:w-\[min\(92vw,720px\)\]/);
+    expect(cls).toMatch(/sm:max-w-2xl/);
     expect(cls).toMatch(/sm:rounded-xl/);
     // No legacy ``100vh``.
     expect(cls).not.toMatch(/100vh\b/);

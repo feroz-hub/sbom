@@ -4,6 +4,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request
 from pydantic import AliasChoices, BaseModel, Field, model_validator
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..core.context import CurrentContext
@@ -21,13 +22,7 @@ from ..core.security import (
     require_permission,
     require_platform_permission,
 )
-from sqlalchemy import or_
 from ..db import get_db
-from ..schemas_platform import (
-    TenantMembershipBrief,
-    UserSearchResponse,
-    UserSearchResult,
-)
 from ..models import (
     AuthorizationAuditLog,
     AuthorizationRole,
@@ -36,6 +31,10 @@ from ..models import (
     TenantUser,
 )
 from ..schemas_identity import AuthContextResponse
+from ..schemas_platform import (
+    UserSearchResponse,
+    UserSearchResult,
+)
 from ..schemas_tenants import (
     CreatedTenantResponse,
     InitialTenantAdministratorResponse,
@@ -648,7 +647,8 @@ def search_tenant_user_candidates(
     if not q_clean:
         raise HTTPException(status_code=422, detail="Query string cannot be empty or whitespace only")
 
-    from sqlalchemy import not_, exists, or_
+    from sqlalchemy import exists, not_
+
     from ..services.platform_service import _escape_search
 
     pattern = f"%{_escape_search(q_clean)}%"

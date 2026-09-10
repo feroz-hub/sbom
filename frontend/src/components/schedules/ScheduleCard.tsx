@@ -2,17 +2,22 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CalendarClock, Pause, Pencil, Play, Trash2, Zap } from 'lucide-react';
+import { Ban, CalendarClock, Pause, Pencil, Play, RotateCcw, Trash2, Zap } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { DeleteConfirmDialog } from '@/components/ui/DeleteConfirmDialog';
 import {
   deleteProjectSchedule,
+  deleteProductSchedule,
   deleteSbomSchedule,
+  excludeFromParentSchedule,
+  getEffectiveProductSchedule,
   getProjectSchedule,
   getSbomSchedule,
   pauseSchedule,
+  previewScheduleTargets,
+  restoreScheduleInheritance,
   resumeSchedule,
   runScheduleNow,
 } from '@/lib/api';
@@ -26,20 +31,18 @@ import {
   invalidateSbomLists,
 } from '@/lib/queryInvalidation';
 import { ScheduleEditor } from './ScheduleEditor';
-import type { AnalysisSchedule, ScheduleCadence } from '@/types';
+import type { AnalysisSchedule, SbomScheduleResolved, ScheduleCadence } from '@/types';
 
 /**
- * Schedule summary card slotted into project / SBOM detail surfaces.
+ * Schedule summary card shared by Project, Product, and SBOM surfaces.
  *
  * - Project scope: GET /api/projects/{id}/schedule. 404 = no schedule.
- * - SBOM scope: GET /api/sboms/{id}/schedule returns inherited + schedule;
- *   so the card can show "Inherits from project: weekly Monday 02:00"
- *   with an "Override" CTA, or the SBOM's own override with "Remove
- *   override" semantics.
+ * - Product/SBOM scopes return an effective result so the card can explain
+ *   inheritance, custom overrides, pauses, and exclusions consistently.
  */
 
 interface ScheduleCardProps {
-  scope: 'PROJECT' | 'SBOM';
+  scope: 'PROJECT' | 'PRODUCT' | 'SBOM';
   targetId: number;
 }
 
@@ -84,19 +87,31 @@ export function ScheduleCard({ scope, targetId }: ScheduleCardProps) {
 
   const queryKey = ['schedule', scope, targetId];
 
-  const query = useQuery({
+  const query = useQuery<SbomScheduleResolved>({
     queryKey,
     queryFn: ({ signal }) =>
       scope === 'PROJECT'
-        ? getProjectSchedule(targetId, signal).then((s) => ({ inherited: false, schedule: s }))
-        : getSbomSchedule(targetId, signal),
+        ? getProjectSchedule(targetId, signal).then((s) => ({
+            inherited: false,
+            schedule: s,
+            state: s.enabled ? 'CUSTOM' : 'PAUSED',
+            source_scope: 'PROJECT',
+            resolution_reason: s.enabled ? 'custom' : 'paused',
+            included: s.enabled,
+          }))
+        : scope === 'PRODUCT'
+          ? getEffectiveProductSchedule(targetId, signal)
+          : getSbomSchedule(targetId, signal),
     // 404 from GET /api/projects/{id}/schedule means "no schedule" — render
     // the empty state instead of an error toast. Other errors still surface.
     retry: (failureCount, err) =>
       err instanceof HttpError && err.status === 404 ? false : failureCount < 2,
   });
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['schedule'] });
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['schedule'] });
+    queryClient.invalidateQueries({ queryKey: ['schedule-targets'] });
+  };
 
   const pauseMutation = useMutation({
     mutationFn: (id: number) => pauseSchedule(id),
@@ -134,7 +149,9 @@ export function ScheduleCard({ scope, targetId }: ScheduleCardProps) {
     mutationFn: ({ permanent }: { permanent: boolean }) =>
       scope === 'PROJECT'
         ? deleteProjectSchedule(targetId, { permanent })
-        : deleteSbomSchedule(targetId, { permanent }),
+        : scope === 'PRODUCT'
+          ? deleteProductSchedule(targetId, { permanent })
+          : deleteSbomSchedule(targetId, { permanent }),
     onSuccess: (_data, { permanent }) => {
       const noun = scope === 'PROJECT' ? 'Schedule' : 'Override';
       showToast(
@@ -147,11 +164,36 @@ export function ScheduleCard({ scope, targetId }: ScheduleCardProps) {
     onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Schedule deletion failed.'), 'error'),
   });
 
+  const excludeMutation = useMutation({
+    mutationFn: () => excludeFromParentSchedule(scope as 'PRODUCT' | 'SBOM', targetId),
+    onSuccess: () => {
+      showToast(`${scope === 'PRODUCT' ? 'Product' : 'SBOM'} excluded from parent schedules`, 'success');
+      invalidate();
+    },
+    onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Schedule exclusion failed.'), 'error'),
+  });
+
+  const inheritMutation = useMutation({
+    mutationFn: () => restoreScheduleInheritance(scope as 'PRODUCT' | 'SBOM', targetId),
+    onSuccess: () => {
+      showToast('Parent schedule inheritance restored', 'success');
+      invalidate();
+    },
+    onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Could not restore inheritance.'), 'error'),
+  });
+
   // Empty state — no project schedule, or no SBOM override AND no parent cascade.
   const noScheduleAtAll =
     !query.isLoading &&
     !query.error &&
     (!query.data?.schedule || (scope === 'PROJECT' && query.data.schedule === null));
+
+  const scheduleId = query.data?.schedule?.id;
+  const previewQuery = useQuery({
+    queryKey: ['schedule-targets', scheduleId],
+    queryFn: ({ signal }) => previewScheduleTargets(scheduleId!, signal),
+    enabled: scheduleId != null,
+  });
 
   if (query.isLoading) {
     return (
@@ -200,8 +242,10 @@ export function ScheduleCard({ scope, targetId }: ScheduleCardProps) {
           <CardContent>
             <p className="text-sm text-hcl-muted">
               {scope === 'PROJECT'
-                ? 'No schedule. SBOMs in this project are only analyzed on manual runs.'
-                : 'No schedule (own or inherited). This SBOM is only analyzed on manual runs.'}
+                ? 'No schedule. Products in this project are only analyzed on manual runs.'
+                : scope === 'PRODUCT'
+                  ? 'No schedule (own or inherited). This product is only analyzed on manual runs.'
+                  : 'No schedule (own or inherited). This SBOM is only analyzed on manual runs.'}
             </p>
           </CardContent>
         </Card>
@@ -216,7 +260,13 @@ export function ScheduleCard({ scope, targetId }: ScheduleCardProps) {
   }
 
   const sched = query.data!.schedule!;
-  const inherited = scope === 'SBOM' && (query.data!.inherited === true);
+  const inherited = scope !== 'PROJECT' && (query.data!.inherited === true);
+  const state = query.data!.state ?? sched.state;
+  const excluded = state === 'EXCLUDED' || sched.mode === 'EXCLUDED';
+
+  const previewTargets = (previewQuery.data?.targets ?? []).filter((target) =>
+    scope === 'PRODUCT' ? target.product_id === targetId : scope === 'SBOM' ? target.sbom_id === targetId : true,
+  );
 
   return (
     <>
@@ -231,18 +281,39 @@ export function ScheduleCard({ scope, targetId }: ScheduleCardProps) {
               {sched.cadence.toLowerCase()}
             </span>
             {inherited && (
-              <span title="Following the project's cascade. Click Override to set a per-SBOM schedule.">
-                <Badge variant="gray">inherited from project</Badge>
+              <span title={`Following the ${sched.scope.toLowerCase()} cascade. Create an override to use a target-specific schedule.`}>
+                <Badge variant="gray">inherited from {sched.scope.toLowerCase()}</Badge>
               </span>
             )}
-            {!sched.enabled && <Badge variant="gray">paused</Badge>}
+            {excluded && <Badge variant="gray">excluded</Badge>}
+            {!excluded && !sched.enabled && <Badge variant="gray">paused</Badge>}
           </CardTitle>
           <div className="flex items-center gap-2">
             <Button size="sm" variant="secondary" onClick={() => setShowEditor(true)}>
               <Pencil className="h-4 w-4" />
-              {inherited ? 'Override' : 'Edit'}
+              {inherited || excluded ? 'Create override' : 'Edit'}
             </Button>
-            {!inherited && (
+            {(scope === 'PRODUCT' || scope === 'SBOM') && inherited && (
+              <Button
+                size="sm"
+                variant="secondary"
+                loading={excludeMutation.isPending}
+                onClick={() => excludeMutation.mutate()}
+              >
+                <Ban className="h-4 w-4" /> Exclude
+              </Button>
+            )}
+            {(scope === 'PRODUCT' || scope === 'SBOM') && excluded && (
+              <Button
+                size="sm"
+                variant="secondary"
+                loading={inheritMutation.isPending}
+                onClick={() => inheritMutation.mutate()}
+              >
+                <RotateCcw className="h-4 w-4" /> Restore inheritance
+              </Button>
+            )}
+            {!inherited && !excluded && (
               <>
                 {sched.enabled ? (
                   <Button
@@ -306,7 +377,35 @@ export function ScheduleCard({ scope, targetId }: ScheduleCardProps) {
               label="Skip recent runs"
               value={`if a run completed in the last ${sched.min_gap_minutes} min`}
             />
+            {scope !== 'SBOM' && (
+              <Field
+                label="Target policy"
+                value={sched.target_version_policy === 'ALL_ACTIVE_VERSIONS' ? 'All active versions' : 'Current SBOM only'}
+              />
+            )}
+            <Field label="Schedule source" value={inherited ? `Inherited from ${sched.scope.toLowerCase()}` : state.toLowerCase()} />
           </dl>
+          <div className="mt-4 border-t border-hcl-border pt-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-hcl-muted">Target preview</p>
+            {previewQuery.isLoading ? (
+              <p className="mt-1 text-sm text-hcl-muted">Loading targets…</p>
+            ) : previewQuery.error ? (
+              <p className="mt-1 text-sm text-red-600">Target preview could not be loaded.</p>
+            ) : (
+              <div className="mt-2 space-y-1 text-sm">
+                <p className="text-hcl-navy">
+                  {previewTargets.filter((target) => target.included).length} included ·{' '}
+                  {previewTargets.filter((target) => !target.included).length} skipped
+                </p>
+                {previewTargets.slice(0, 8).map((target, index) => (
+                  <p key={`${target.sbom_id ?? 'product'}-${index}`} className={target.included ? 'text-hcl-navy' : 'text-hcl-muted'}>
+                    {target.product_name ?? 'Product'} / {target.sbom_name ?? 'No current SBOM'}
+                    {target.sbom_version ? ` ${target.sbom_version}` : ''} — {target.resolution.replaceAll('_', ' ').toLowerCase()}
+                  </p>
+                ))}
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
 
@@ -319,7 +418,7 @@ export function ScheduleCard({ scope, targetId }: ScheduleCardProps) {
         // SBOM-level override — we do NOT pass the project's row as the
         // "existing" record, since editing it would mutate the project
         // schedule from inside the SBOM page (surprising).
-        existing={inherited ? null : sched}
+        existing={inherited || excluded ? null : sched}
       />
 
       <DeleteConfirmDialog
@@ -328,8 +427,8 @@ export function ScheduleCard({ scope, targetId }: ScheduleCardProps) {
         onConfirm={({ permanent }) => deleteMutation.mutate({ permanent })}
         loading={deleteMutation.isPending}
         recordName={cadenceLabel(sched as AnalysisSchedule)}
-        recordKind={scope === 'PROJECT' ? 'project schedule' : 'SBOM schedule override'}
-        title={scope === 'PROJECT' ? 'Remove schedule?' : 'Remove SBOM override?'}
+        recordKind={`${scope.toLowerCase()} schedule override`}
+        title={scope === 'PROJECT' ? 'Remove schedule?' : `Restore ${scope.toLowerCase()} inheritance?`}
         // Schedules have no children — pre-flight impact is empty.
         cascadeImpact={[]}
       />

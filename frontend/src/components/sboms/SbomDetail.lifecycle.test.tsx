@@ -382,9 +382,9 @@ describe('SbomDetail lifecycle management', () => {
 
     expect(await screen.findByText('VEX Statements')).toBeInTheDocument();
     expect(await screen.findByText('CVE-2026-0001')).toBeInTheDocument();
-    fireEvent.click(screen.getAllByRole('button', { name: /^Override$/i })[1]);
+    fireEvent.click(screen.getAllByRole('button', { name: /^Manual Edit VEX$/i })[1]);
 
-    expect(await screen.findByRole('dialog', { name: /Manual VEX Override/i })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: /Manual Edit VEX/i })).toBeInTheDocument();
     expect(screen.getByLabelText('Component')).toHaveValue('99');
     expect(screen.getByLabelText('Vulnerability or CVE')).toHaveValue('CVE-2026-0001');
     fireEvent.click(screen.getByRole('button', { name: /Save Override/i }));
@@ -401,7 +401,7 @@ describe('SbomDetail lifecycle management', () => {
     render(wrap(<SbomDetail sbom={SBOM} />));
 
     expect(await screen.findByText('CVE-2026-0001')).toBeInTheDocument();
-    fireEvent.click(screen.getAllByRole('button', { name: /^Override$/i })[1]);
+    fireEvent.click(screen.getAllByRole('button', { name: /^Manual Edit VEX$/i })[1]);
     expect(await screen.findByText('Prior risk review')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('VEX Status'), { target: { value: 'affected' } });
     fireEvent.change(screen.getByLabelText('Action Statement'), { target: { value: 'Upgrade immediately' } });
@@ -471,6 +471,7 @@ describe('SbomDetail lifecycle management', () => {
     render(wrap(<SbomDetail sbom={SBOM} />));
 
     expect(await screen.findByText('VEX Statements')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Manual Edit VEX$/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Override$/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Discover/i })).not.toBeInTheDocument();
   }, 15000);

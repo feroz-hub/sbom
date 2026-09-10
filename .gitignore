@@ -7,6 +7,7 @@
 .env.*
 !.env.example
 !.env.hcl-iam.example
+!.env.server.example
 
 # ── Python ────────────────────────────────────────────────
 __pycache__/
@@ -53,6 +54,10 @@ logs/
 # ── PDF reports (generated at runtime) ───────────────────
 *.pdf
 
+# ── Celery beat state (per-machine runtime, regenerated) ─
+celerybeat-schedule*
+celerybeat.pid
+
 # ── IDE / editor ─────────────────────────────────────────
 .vscode/
 .idea/
@@ -81,3 +86,10 @@ $RECYCLE.BIN/
 graphify-out/
 .certificates/
 .windows/
+
+# Docker deployment secrets/certificates and exported image bundles
+deploy/certs/*
+!deploy/certs/.gitkeep
+deploy/secrets/*
+!deploy/secrets/.gitkeep
+sbom-analyser-images-*.tar

@@ -4,7 +4,7 @@
 
 The fastest way to evaluate the AI fix generator without spending
 anything. Gemini's free tier ships 15 requests/minute, 1,500
-requests/day, and 1,000,000 tokens/day on Flash 2.5 — plenty for
+requests/day, and 1,000,000 tokens/day on Flash — plenty for
 hundreds of findings per day.
 
 ---
@@ -24,7 +24,7 @@ hundreds of findings per day.
 2. Click **Add provider**.
 3. In the dropdown, select **Google Gemini — free tier available ⭐**.
 4. **API key** — paste the key you just copied.
-5. **Model** — leave on **Gemini 2.5 Flash** (the free-tier sweet spot).
+5. **Model** — leave on **Gemini 3.6 Flash** (the current stable Flash model).
 6. **Tier** — leave on **Free (15 req/min)**.
 7. Click **Test connection**.
    * On success you'll see ✅ with the latency in milliseconds.

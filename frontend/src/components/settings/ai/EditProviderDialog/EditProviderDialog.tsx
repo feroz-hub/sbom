@@ -14,6 +14,7 @@ import type {
 } from '@/types/ai';
 import { TestResultDisplay } from '../AddProviderDialog/TestResultDisplay';
 import { getApiErrorMessage } from '@/lib/notifications';
+import { customOpenAiBaseUrlError } from '@/lib/aiProviderValidation';
 
 interface EditProviderDialogProps {
   credential: AiCredential | null;
@@ -40,19 +41,27 @@ export function EditProviderDialog({ credential, onClose }: EditProviderDialogPr
   );
 
   const [apiKey, setApiKey] = useState('');
+  const [label, setLabel] = useState('default');
   const [showKey, setShowKey] = useState(false);
   const [baseUrl, setBaseUrl] = useState('');
   const [defaultModel, setDefaultModel] = useState('');
   const [tier, setTier] = useState<AiTier>('paid');
+  const [costIn, setCostIn] = useState('0');
+  const [costOut, setCostOut] = useState('0');
+  const [isLocal, setIsLocal] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!credential) return;
     setApiKey('');
+    setLabel(credential.label);
     setShowKey(false);
     setBaseUrl(credential.base_url ?? '');
     setDefaultModel(credential.default_model ?? '');
     setTier((credential.tier === 'free' ? 'free' : 'paid'));
+    setCostIn(String(credential.cost_per_1k_input_usd));
+    setCostOut(String(credential.cost_per_1k_output_usd));
+    setIsLocal(credential.is_local);
     testMut.reset();
     setSubmitError(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -60,29 +69,43 @@ export function EditProviderDialog({ credential, onClose }: EditProviderDialogPr
 
   if (!credential) return null;
 
+  const baseUrlError = entry?.name === 'custom_openai'
+    ? customOpenAiBaseUrlError(baseUrl)
+    : null;
+  const formValid = Boolean(label.trim()) && Boolean(defaultModel.trim())
+    && (!entry?.requires_base_url || Boolean(baseUrl.trim()))
+    && !baseUrlError;
+
   const handleTest = () => {
     if (!entry) return;
     setSubmitError(null);
     testMut.mutate({
+      credential_id: credential.id,
       provider_name: credential.provider_name,
-      // If the user didn't type a new key, fall back to the saved one
-      // by passing null — the unsaved-test path requires a key, so on
-      // edits without a new key, use the /credentials/{id}/test
-      // endpoint instead. This dialog uses the unsaved path for new
-      // values; the ProviderCard's Test button covers the saved path.
+      // The API resolves the existing encrypted key server-side when this
+      // is blank, while still testing the candidate URL/model values.
       api_key: apiKey.trim() || null,
       base_url: baseUrl.trim() || null,
       default_model: defaultModel.trim() || null,
       tier,
+      cost_per_1k_input_usd: Number.parseFloat(costIn) || 0,
+      cost_per_1k_output_usd: Number.parseFloat(costOut) || 0,
+      is_local: isLocal,
+      max_concurrent: credential.max_concurrent,
+      rate_per_minute: credential.rate_per_minute,
     });
   };
 
   const handleSave = () => {
     setSubmitError(null);
     const body: AiCredentialUpdateRequest = {
+      label: label.trim(),
       base_url: baseUrl.trim() || null,
       default_model: defaultModel.trim(),
       tier,
+      cost_per_1k_input_usd: Number.parseFloat(costIn) || 0,
+      cost_per_1k_output_usd: Number.parseFloat(costOut) || 0,
+      is_local: isLocal,
     };
     if (apiKey.trim()) {
       body.api_key = apiKey.trim();
@@ -126,10 +149,23 @@ export function EditProviderDialog({ credential, onClose }: EditProviderDialogPr
         </header>
 
         <div className="space-y-3">
-          {entry?.requires_api_key ? (
+          <div>
+            <label className="text-xs font-medium text-hcl-navy" htmlFor="ai-edit-label">
+              Credential label
+            </label>
+            <input
+              id="ai-edit-label"
+              type="text"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              maxLength={64}
+              className="mt-1 w-full rounded-md border border-border-subtle bg-surface px-3 py-2 text-sm"
+            />
+          </div>
+          {entry?.requires_api_key || entry?.name === 'custom_openai' ? (
             <div>
               <label className="text-xs font-medium text-hcl-navy" htmlFor="ai-edit-api-key">
-                API key
+                API key{entry.requires_api_key ? '' : ' (optional)'}
               </label>
               <div className="mt-1 flex gap-2">
                 <input
@@ -170,37 +206,22 @@ export function EditProviderDialog({ credential, onClose }: EditProviderDialogPr
                 spellCheck={false}
                 className="mt-1 w-full rounded-md border border-border-subtle bg-surface px-3 py-2 font-mono text-sm"
               />
+              {entry.name === 'custom_openai' ? (
+                <p className={`mt-1 text-xs ${baseUrlError ? 'text-red-700' : 'text-hcl-muted'}`}>
+                  {baseUrlError ?? 'HTTPS is required remotely; local HTTP is allowed.'}
+                </p>
+              ) : null}
             </div>
           ) : null}
 
           <div>
-            <label className="text-xs font-medium text-hcl-navy" htmlFor="ai-edit-model">
-              Model
-            </label>
-            {entry && entry.available_models.length > 0 ? (
-              <select
-                id="ai-edit-model"
-                value={defaultModel}
-                onChange={(e) => setDefaultModel(e.target.value)}
-                className="mt-1 w-full rounded-md border border-border-subtle bg-surface px-3 py-2 text-sm"
-              >
-                {entry.available_models.map((m) => (
-                  <option key={m.name} value={m.name}>
-                    {m.display_name}
-                    {m.notes ? ` — ${m.notes}` : ''}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input
-                id="ai-edit-model"
-                type="text"
-                value={defaultModel}
-                onChange={(e) => setDefaultModel(e.target.value)}
-                spellCheck={false}
-                className="mt-1 w-full rounded-md border border-border-subtle bg-surface px-3 py-2 font-mono text-sm"
-              />
-            )}
+            <p className="text-xs font-medium text-hcl-navy">Active model</p>
+            <p className="mt-1 rounded-md border border-border-subtle bg-surface-muted px-3 py-2 font-mono text-sm text-hcl-navy">
+              {defaultModel || 'Not selected'}
+            </p>
+            <p className="mt-1 text-xs text-hcl-muted">
+              Refresh, test, and change the active model from the provider card.
+            </p>
           </div>
 
           {entry?.supports_free_tier ? (
@@ -225,11 +246,28 @@ export function EditProviderDialog({ credential, onClose }: EditProviderDialogPr
             </div>
           ) : null}
 
+          {entry?.name === 'custom_openai' ? (
+            <div className="grid grid-cols-2 gap-3">
+              <label className="text-xs text-hcl-navy">
+                Cost per 1k input ($)
+                <input type="number" min="0" step="0.000001" value={costIn} onChange={(e) => setCostIn(e.target.value)} className="mt-1 w-full rounded-md border border-border-subtle bg-surface px-3 py-2 font-mono text-sm" />
+              </label>
+              <label className="text-xs text-hcl-navy">
+                Cost per 1k output ($)
+                <input type="number" min="0" step="0.000001" value={costOut} onChange={(e) => setCostOut(e.target.value)} className="mt-1 w-full rounded-md border border-border-subtle bg-surface px-3 py-2 font-mono text-sm" />
+              </label>
+              <label className="col-span-2 inline-flex items-center gap-2 text-xs text-hcl-navy">
+                <input type="checkbox" checked={isLocal} onChange={(e) => setIsLocal(e.target.checked)} />
+                Treat as local (cost reported as $0 in ledger)
+              </label>
+            </div>
+          ) : null}
+
           <div>
             <button
               type="button"
               onClick={handleTest}
-              disabled={testMut.isPending}
+              disabled={testMut.isPending || !formValid}
               className="inline-flex items-center gap-1 rounded-md border border-border-subtle bg-surface px-3 py-1.5 text-sm text-hcl-navy hover:bg-surface-muted disabled:cursor-progress disabled:opacity-60"
             >
               {testMut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : null}
@@ -258,7 +296,7 @@ export function EditProviderDialog({ credential, onClose }: EditProviderDialogPr
           <button
             type="button"
             onClick={handleSave}
-            disabled={updateMut.isPending}
+            disabled={updateMut.isPending || !formValid}
             className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white shadow-elev-1 hover:bg-hcl-dark disabled:cursor-not-allowed disabled:opacity-50"
           >
             {updateMut.isPending ? 'Saving…' : 'Save changes'}

@@ -2,18 +2,23 @@
 
 import Link from 'next/link';
 import { use, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Eye, Play, Upload } from 'lucide-react';
 import { TopBar } from '@/components/layout/TopBar';
 import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
+import { Select } from '@/components/ui/Select';
 import { PageSpinner } from '@/components/ui/Spinner';
 import { Table, TableBody, TableHead, Td, Th, EmptyRow } from '@/components/ui/Table';
 import { SbomStatusBadge } from '@/components/sboms/SbomStatusBadge';
 import { SbomUploadModal } from '@/components/sboms/SbomUploadModal';
 import { useAnalysisStream } from '@/hooks/useAnalysisStream';
-import { getProduct, getProductSboms } from '@/lib/api';
+import { getProduct, getProductSboms, updateProduct } from '@/lib/api';
+import { NotifyMeLink } from '@/components/reports/NotifyMeLink';
+import { ScheduleCard } from '@/components/schedules/ScheduleCard';
+import { useToast } from '@/hooks/useToast';
+import { getApiErrorMessage } from '@/lib/notifications';
 import { invalidateProductSurfaces } from '@/lib/queryInvalidation';
 import { formatDate } from '@/lib/utils';
 import type { AnalysisStatus } from '@/hooks/useBackgroundAnalysis';
@@ -92,6 +97,7 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
   const { id: idParam } = use(params);
   const id = Number(idParam);
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
   const [showUpload, setShowUpload] = useState(false);
 
   const productQuery = useQuery({
@@ -104,6 +110,17 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
     queryKey: ['product-sboms', id],
     queryFn: ({ signal }) => getProductSboms(id, signal),
     enabled: Number.isFinite(id),
+  });
+
+  const currentSbomMutation = useMutation({
+    mutationFn: (currentSbomId: number) => updateProduct(id, { current_sbom_id: currentSbomId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['product', id] });
+      queryClient.invalidateQueries({ queryKey: ['schedule-targets'] });
+      queryClient.invalidateQueries({ queryKey: ['schedule'] });
+      showToast('Current SBOM updated', 'success');
+    },
+    onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Current SBOM update failed.'), 'error'),
   });
 
   if (productQuery.isLoading) {
@@ -146,6 +163,35 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
         }
       />
       <div className="space-y-6 p-6">
+        <NotifyMeLink scope="PRODUCT" targetId={product.id} />
+        <ScheduleCard scope="PRODUCT" targetId={product.id} />
+        <Card>
+          <CardHeader>
+            <CardTitle>Current SBOM</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {sboms.length ? (
+              <div className="max-w-xl">
+                <Select
+                  label="Current version used by CURRENT_ONLY schedules"
+                  value={product.current_sbom_id ? String(product.current_sbom_id) : ''}
+                  disabled={currentSbomMutation.isPending}
+                  onChange={(event) => currentSbomMutation.mutate(Number(event.target.value))}
+                  hint="This selection is explicit; version text is never used to guess the current SBOM."
+                >
+                  <option value="" disabled>Select current SBOM…</option>
+                  {sboms.map((sbom) => (
+                    <option key={sbom.id} value={sbom.id}>
+                      {sbom.sbom_name} — {sbom.sbom_version || sbom.productver || 'unversioned'}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            ) : (
+              <p className="text-sm text-hcl-muted">Upload an SBOM before selecting the current version.</p>
+            )}
+          </CardContent>
+        </Card>
         <Card>
           <CardHeader>
             <CardTitle>Product Details</CardTitle>

@@ -24,6 +24,7 @@ from ..models import (
     AuditLog,
     CompareCache,
     ComponentLifecycleOverrideAudit,
+    Product,
     RunCache,
     SBOMAnalysisReport,
     SBOMComponent,
@@ -67,6 +68,7 @@ class SBOMDeleteService:
             ("analysis_schedule", "last_run_id", "analysis_run"),
             ("analysis_schedule", "sbom_id", "sbom_source"),
             ("component_lifecycle_override_audit", "component_id", "sbom_component"),
+            ("products", "current_sbom_id", "sbom_source"),
             ("sbom_analysis_report", "sbom_ref_id", "sbom_source"),
             ("sbom_component", "duplicate_of_component_id", "sbom_component"),
             ("sbom_component", "sbom_id", "sbom_source"),
@@ -258,7 +260,17 @@ class SBOMDeleteService:
         sbom = self.get_sbom(sbom_id)
         if sbom is None:
             raise LookupError("SBOM not found")
+        tree_ids, _, _ = self._dependency_tree(sbom_id)
         try:
+            cleared_current_products = self.db.execute(
+                update(Product)
+                .where(
+                    Product.tenant_id == sbom.tenant_id,
+                    Product.current_sbom_id.in_(tree_ids),
+                )
+                .values(current_sbom_id=None, updated_at=datetime.now(UTC).isoformat())
+                .execution_options(synchronize_session=False)
+            ).rowcount
             cascaded_count = SoftDeleteService(self.db).soft_delete(
                 sbom,
                 user_id=user_id,
@@ -269,7 +281,10 @@ class SBOMDeleteService:
                 user_id,
                 "sbom.soft_delete",
                 detail=f"cascaded={cascaded_count}",
-                metadata={"cascaded_count": cascaded_count},
+                metadata={
+                    "cascaded_count": cascaded_count,
+                    "cleared_current_products": int(cleared_current_products or 0),
+                },
             )
             self.db.commit()
         except Exception:
@@ -323,6 +338,18 @@ class SBOMDeleteService:
         )
 
         try:
+            # Clear explicit Product targets before deleting the SBOM tree.
+            # The FK also uses ON DELETE SET NULL, but doing it explicitly
+            # keeps upgraded and metadata-created databases consistent.
+            self.db.execute(
+                update(Product)
+                .where(
+                    Product.tenant_id == self._tenant_id,
+                    Product.current_sbom_id.in_(tree_ids),
+                )
+                .values(current_sbom_id=None, updated_at=datetime.now(UTC).isoformat())
+                .execution_options(synchronize_session=False)
+            )
             # Repair workspaces and VEX/component-owned audit data.
             self._delete(
                 SBOMValidationSessionEvent, SBOMValidationSessionEvent.session_id.in_(session_ids), session_ids
