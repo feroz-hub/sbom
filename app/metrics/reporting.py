@@ -116,10 +116,14 @@ def latest_snapshots(db, *, sbom_ids, tenant_id, as_of):
     ):
         components[component.sbom_id].append(component)
     vex = {}
-    for statement in db.scalars(
-        select(VexStatement)
-        .where(VexStatement.tenant_id == tenant_id, VexStatement.sbom_id.in_(sbom_ids))
-        .order_by(VexStatement.created_at, VexStatement.id)
+    from ..services.lifecycle.vex_provider import effective_vex_statements
+
+    for statement in effective_vex_statements(
+        db.scalars(
+            select(VexStatement)
+            .where(VexStatement.tenant_id == tenant_id, VexStatement.sbom_id.in_(sbom_ids))
+            .order_by(VexStatement.created_at, VexStatement.id)
+        )
     ):
         key = (statement.sbom_id, statement.component_id, (statement.cve_id or statement.vulnerability_id).upper())
         vex[key] = statement.status
@@ -137,7 +141,7 @@ def latest_snapshots(db, *, sbom_ids, tenant_id, as_of):
             cves = set(cves_for_finding(row.vuln_id, row.aliases))
             distinct |= cves
             vuln = canonical_vulnerability_id(row.vuln_id, parse_json_list(row.aliases))
-            statement = vex.get((sid, row.component_id, vuln), vex.get((sid, None, vuln)))
+            statement = vex.get((sid, row.component_id, vuln)) if row.component_id else None
             findings.append(
                 {
                     "vuln_id": vuln,

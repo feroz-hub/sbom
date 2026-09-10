@@ -386,6 +386,8 @@ describe('SbomDetail lifecycle management', () => {
 
     expect(await screen.findByRole('dialog', { name: /Manual Edit VEX/i })).toBeInTheDocument();
     expect(screen.getByLabelText('Component')).toHaveValue('99');
+    expect(screen.getByLabelText('Component')).toBeDisabled();
+    expect(screen.getByLabelText('Vulnerability or CVE')).toBeDisabled();
     expect(screen.getByLabelText('Vulnerability or CVE')).toHaveValue('CVE-2026-0001');
     fireEvent.click(screen.getByRole('button', { name: /Save Override/i }));
     expect(await screen.findByText('Override reason is required.')).toBeInTheDocument();
@@ -396,6 +398,29 @@ describe('SbomDetail lifecycle management', () => {
     fireEvent.click(screen.getByRole('button', { name: /Save Override/i }));
     expect(await screen.findByText('fixed requires fixed version or evidence URL.')).toBeInTheDocument();
   }, 15000);
+
+  it('filters CVEs by component and clears evidence when switching the selected pair', async () => {
+    const response = await getSbomVexStatements();
+    getSbomVexStatements.mockResolvedValue({ ...response, vulnerability_options: [
+      { component_id: 99, vulnerability_id: 'CVE-2026-0001' },
+      { component_id: 99, vulnerability_id: 'CVE-2026-0002' },
+      { component_id: 100, vulnerability_id: 'CVE-2026-9999' },
+    ] });
+    render(wrap(<SbomDetail sbom={SBOM} />));
+    await screen.findByText('CVE-2026-0001');
+    fireEvent.click(screen.getAllByRole('button', { name: /^Manual Edit VEX$/i })[0]);
+    const picker = await screen.findByLabelText('Vulnerability or CVE');
+    expect(picker).toHaveValue('');
+    expect(screen.queryByRole('option', { name: 'CVE-2026-9999' })).not.toBeInTheDocument();
+    fireEvent.change(picker, { target: { value: 'CVE-2026-0001' } });
+    expect(screen.getByLabelText('VEX Status')).toHaveValue('not_affected');
+    fireEvent.change(screen.getByLabelText('Reason for Override'), { target: { value: 'old reason' } });
+    fireEvent.change(picker, { target: { value: 'CVE-2026-0002' } });
+    expect(screen.getByLabelText('VEX Status')).toHaveValue('under_investigation');
+    expect(screen.getByLabelText('Reason for Override')).toHaveValue('');
+    expect(screen.getByLabelText('Impact Statement')).toHaveValue('');
+    expect(screen.getByLabelText('Evidence URL')).toHaveValue('');
+  });
 
   it('submits a manual VEX override and shows audit history', async () => {
     render(wrap(<SbomDetail sbom={SBOM} />));

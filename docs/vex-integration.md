@@ -78,3 +78,26 @@ are not the same as "no vulnerability found." `affected`,
   or component name. Ambiguous product-level statements are retained but may not
   link to a component id.
 - VEX does not modify lifecycle status.
+
+## Manual decisions for multiple vulnerabilities
+
+Each manual decision applies to one component instance in one SBOM and one
+vulnerability identifier. The form offers component-specific identifiers from
+stored findings and VEX statements, plus an explicit manual-entry option.
+Editing an existing statement locks its identity; choosing a different pair in
+the new-decision form resets evidence and loads that pair's current decision
+and history. Each save requires a reason and records the authenticated actor.
+
+Statements remain append-only. Current lists, lifecycle VEX reports, dashboard
+counts, scheduled report metrics and FDA report decisions use the newest manual
+decision per pair, otherwise the newest imported statement. Subsequent imports
+do not replace manual decisions. Override history retains previous values.
+Unmatched statements are retained as evidence and cannot reduce a different
+component's risk. Bulk editing and override revocation are not offered by this
+form; replace a manual decision by explicitly editing the same pair.
+
+Focused checks (explicit disposable SQLite, no fallback enabled):
+
+```sh
+DATABASE_URL=sqlite:///:memory: AUTH_ENABLED=false .venv/bin/python -m unittest discover -s tests -p test_vex_decisions.py -v
+```
