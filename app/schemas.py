@@ -470,6 +470,8 @@ class VulnerabilityRemediationOut(ORMModel):
 
 
 class AnalysisFindingOut(ORMModel):
+    vex_status: str | None = None
+    vex_decision: dict | None = None
     id: int
     analysis_run_id: int
     component_id: int | None = None

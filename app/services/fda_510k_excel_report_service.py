@@ -941,25 +941,27 @@ class Fda510kExcelReportService:
             for entry in self.db.execute(select(KevEntry).where(KevEntry.cve_id.in_(cve_ids))).scalars():
                 kev_by_cve[_clean(entry.cve_id).casefold()] = True
 
-        vex_by_key: dict[tuple[int | None, str], VexStatement] = {}
+        vex_by_key: dict[tuple[int, int, int | None, str], VexStatement] = {}
         from .lifecycle.vex_provider import effective_vex_statements
 
         for row in effective_vex_statements(vex_rows):
             for vuln in (row.vulnerability_id, row.cve_id):
                 if _clean(vuln):
-                    vex_by_key[(row.component_id, _clean(vuln).casefold())] = row
+                    vex_by_key[(row.tenant_id, row.sbom_id, row.component_id, _clean(vuln).casefold())] = row
                     # Component-specific decisions must never apply to another component.
 
         rows: list[dict[str, Any]] = []
-        seen: set[tuple[str, str]] = set()
+        seen = set()
+        runs_by_id = {run.id: run for run in runs.values()}
         for finding in findings:
             component = components.get(finding.component_id) if finding.component_id else None
             identity = _component_identity(component) if component else f"finding-component:{finding.component_name}:{finding.component_version}"
-            key = (identity, finding.vuln_id.casefold())
+            run = runs_by_id[finding.analysis_run_id]
+            key = (run.tenant_id, run.sbom_id, identity, finding.vuln_id.casefold())
             if key in seen:
                 continue
             seen.add(key)
-            vex = vex_by_key.get((finding.component_id, finding.vuln_id.casefold())) if finding.component_id else None
+            vex = vex_by_key.get((run.tenant_id, run.sbom_id, finding.component_id, finding.vuln_id.casefold())) if finding.component_id else None
             raw_status = _clean(getattr(vex, "status", None)).casefold().replace(" ", "_")
             status = VEX_STATUS_LABELS.get(raw_status, "Under Investigation")
             kev = kev_by_cve.get(finding.vuln_id.casefold())

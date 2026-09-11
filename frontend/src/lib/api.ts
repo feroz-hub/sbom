@@ -1794,6 +1794,11 @@ export function getDashboardRemediationStats(signal?: AbortSignal) {
   }>('/dashboard/remediation-stats', { signal });
 }
 
+export function getComponentVulnerabilities(sbomId: number, componentId: number, signal?: AbortSignal) {
+  return request<import('@/types').ComponentVulnerabilitiesResponse>(
+    `/api/sboms/${sbomId}/components/${componentId}/vulnerabilities`, { signal });
+}
+
 export function getSbomVexStatements(sbomId: number, signal?: AbortSignal) {
   return request<VexListResponse>(`/api/sboms/${sbomId}/vex`, { signal });
 }
@@ -1831,9 +1836,10 @@ export function overrideVexStatement(
   vulnerabilityId: string,
   payload: VexOverridePayload,
   signal?: AbortSignal,
+  sbomId?: number,
 ) {
   return request<VexListResponse['statements'][number]>(
-    `/api/components/${componentId}/vulnerabilities/${encodeURIComponent(vulnerabilityId)}/vex-override`,
+    `/api${sbomId ? `/sboms/${sbomId}` : ''}/components/${componentId}/vulnerabilities/${encodeURIComponent(vulnerabilityId)}/vex-override`,
     {
       method: 'PATCH',
       body: JSON.stringify(payload),
@@ -1842,9 +1848,9 @@ export function overrideVexStatement(
   );
 }
 
-export function getVexOverrideHistory(componentId: number, vulnerabilityId: string, signal?: AbortSignal) {
+export function getVexOverrideHistory(componentId: number, vulnerabilityId: string, signal?: AbortSignal, sbomId?: number) {
   return request<VexOverrideHistoryResponse>(
-    `/api/components/${componentId}/vulnerabilities/${encodeURIComponent(vulnerabilityId)}/vex-override/history`,
+    `/api${sbomId ? `/sboms/${sbomId}` : ''}/components/${componentId}/vulnerabilities/${encodeURIComponent(vulnerabilityId)}/vex-override/history`,
     { signal },
   );
 }

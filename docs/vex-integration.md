@@ -88,7 +88,7 @@ Editing an existing statement locks its identity; choosing a different pair in
 the new-decision form resets evidence and loads that pair's current decision
 and history. Each save requires a reason and records the authenticated actor.
 
-Statements remain append-only. Current lists, lifecycle VEX reports, dashboard
+Statements remain append-only. Current lists, VEX reports, dashboard
 counts, scheduled report metrics and FDA report decisions use the newest manual
 decision per pair, otherwise the newest imported statement. Subsequent imports
 do not replace manual decisions. Override history retains previous values.
@@ -101,3 +101,25 @@ Focused checks (explicit disposable SQLite, no fallback enabled):
 ```sh
 DATABASE_URL=sqlite:///:memory: AUTH_ENABLED=false .venv/bin/python -m unittest discover -s tests -p test_vex_decisions.py -v
 ```
+
+### Component-first management
+
+Every component row has a **Manage VEX** action, separate from the component
+lifecycle **Edit** action. The searchable vulnerability table shows detected
+findings (including match details), existing decisions, severity, source and
+last-updated time. Add Decision, Edit, Override and History operate on the
+selected vulnerability only. Add Vulnerability Manually supports externally
+reported CVE, GHSA and vendor identifiers without a detected finding.
+
+- `GET /api/sboms/{sbom_id}/components/{component_id}/vulnerabilities` returns
+  the union of this component's analysis findings and existing VEX statements.
+- `PATCH /api/sboms/{sbom_id}/components/{component_id}/vulnerabilities/{vulnerability_id}/vex-override`
+  validates both tenant and SBOM ownership before appending one decision.
+- `GET /api/sboms/{sbom_id}/components/{component_id}/vulnerabilities/{vulnerability_id}/vex-override/history`
+  returns the current decision, full imported/manual statement history and the
+  manual audit trail separately. Legacy pair endpoints remain compatible.
+
+The analysis findings APIs and table expose effective VEX independently of
+remediation status. Analysis CSV and SARIF exports include effective status and
+source. No VEX action writes component lifecycle fields. Unmatched imported
+statements remain evidence, not decisions for an arbitrarily chosen component.

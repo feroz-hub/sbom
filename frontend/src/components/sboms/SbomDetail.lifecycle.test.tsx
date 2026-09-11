@@ -52,6 +52,7 @@ const exportSbomVexReportJson = vi.fn();
 const exportSbomVexReportPack = vi.fn();
 const getVexOverrideHistory = vi.fn();
 const getSbomVexStatements = vi.fn();
+const getComponentVulnerabilities = vi.fn();
 const overrideVexStatement = vi.fn();
 const uploadSbomVexDocument = vi.fn();
 const overrideComponentLifecycle = vi.fn();
@@ -80,6 +81,7 @@ vi.mock('@/lib/api', async () => {
     exportSbomVexReportPack: (...args: unknown[]) => exportSbomVexReportPack(...args),
     getVexOverrideHistory: (...args: unknown[]) => getVexOverrideHistory(...args),
     getSbomVexStatements: (...args: unknown[]) => getSbomVexStatements(...args),
+    getComponentVulnerabilities: (...args: unknown[]) => getComponentVulnerabilities(...args),
     overrideVexStatement: (...args: unknown[]) => overrideVexStatement(...args),
     uploadSbomVexDocument: (...args: unknown[]) => uploadSbomVexDocument(...args),
     overrideComponentLifecycle: (...args: unknown[]) => overrideComponentLifecycle(...args),
@@ -237,6 +239,13 @@ beforeEach(() => {
         created_at: '2026-06-11T00:00:00Z',
       },
     ],
+  });
+  getComponentVulnerabilities.mockImplementation(async (_sbomId, componentId) => {
+    const data = await getSbomVexStatements();
+    const ids = [...data.statements, ...(data.vulnerability_options ?? [])].filter(row => row.component_id === componentId);
+    return { component_id: componentId, vulnerabilities: Array.from(new Set(ids.map(row => row.vulnerability_id))).map(id => ({
+      vulnerability_id: id, severity: null, findings: [], current_decision: data.statements.find((row: { component_id: number; vulnerability_id: string }) => row.component_id === componentId && row.vulnerability_id === id) ?? null,
+    })) };
   });
   uploadSbomVexDocument.mockResolvedValue({
     document_id: 1,
@@ -411,6 +420,9 @@ describe('SbomDetail lifecycle management', () => {
     fireEvent.click(screen.getAllByRole('button', { name: /^Manual Edit VEX$/i })[0]);
     const picker = await screen.findByLabelText('Vulnerability or CVE');
     expect(picker).toHaveValue('');
+    expect(screen.getByLabelText('Component')).toHaveValue('');
+    fireEvent.change(screen.getByLabelText('Component'), { target: { value: '99' } });
+    await screen.findByRole('option', { name: 'CVE-2026-0002' });
     expect(screen.queryByRole('option', { name: 'CVE-2026-9999' })).not.toBeInTheDocument();
     fireEvent.change(picker, { target: { value: 'CVE-2026-0001' } });
     expect(screen.getByLabelText('VEX Status')).toHaveValue('not_affected');
@@ -420,6 +432,41 @@ describe('SbomDetail lifecycle management', () => {
     expect(screen.getByLabelText('Reason for Override')).toHaveValue('');
     expect(screen.getByLabelText('Impact Statement')).toHaveValue('');
     expect(screen.getByLabelText('Evidence URL')).toHaveValue('');
+  });
+
+  it('switching components clears the selected CVE and all decision fields', async () => {
+    getSbomComponents.mockResolvedValue({ items: [COMPONENT, { ...COMPONENT, id: 100, name: 'other' }], total_count: 2 });
+    render(wrap(<SbomDetail sbom={SBOM} />));
+    await screen.findByText('CVE-2026-0001');
+    fireEvent.click(screen.getAllByRole('button', { name: /^Manual Edit VEX$/i })[0]);
+    fireEvent.change(screen.getByLabelText('Component'), { target: { value: '99' } });
+    await screen.findByRole('option', { name: 'CVE-2026-0001' });
+    fireEvent.change(screen.getByLabelText('Vulnerability or CVE'), { target: { value: 'CVE-2026-0001' } });
+    await screen.findByText('Prior risk review');
+    fireEvent.change(screen.getByLabelText('Reason for Override'), { target: { value: 'old reason' } });
+    fireEvent.change(screen.getByLabelText('Component'), { target: { value: '100' } });
+    expect(screen.getByLabelText('Vulnerability or CVE')).toHaveValue('');
+    expect(screen.getByLabelText('VEX Status')).toHaveValue('under_investigation');
+    expect(screen.getByLabelText('Justification')).toHaveValue('');
+    expect(screen.getByLabelText('Evidence URL')).toHaveValue('');
+    expect(screen.getByLabelText('Reason for Override')).toHaveValue('');
+    expect(screen.queryByText('Prior risk review')).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'CVE-2026-0001' })).not.toBeInTheDocument();
+  });
+
+  it('Manage VEX can add an undetected vendor vulnerability without opening lifecycle override', async () => {
+    render(wrap(<SbomDetail sbom={SBOM} />));
+    fireEvent.click(await screen.findByRole('button', { name: /Components List/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage VEX' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Add Vulnerability Manually' }));
+    expect(screen.getByLabelText('Component')).toBeDisabled();
+    expect(screen.queryByText('Edit Component Override')).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Vulnerability or CVE'), { target: { value: 'VENDOR-42' } });
+    fireEvent.change(screen.getByLabelText('Reason for Override'), { target: { value: 'External advisory' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save Override' }));
+    await waitFor(() => expect(overrideVexStatement).toHaveBeenCalledWith(99, 'VENDOR-42',
+      expect.objectContaining({ status: 'under_investigation', reason: 'External advisory' }), undefined, 42));
+    expect(overrideComponentLifecycle).not.toHaveBeenCalled();
   });
 
   it('submits a manual VEX override and shows audit history', async () => {
@@ -441,7 +488,7 @@ describe('SbomDetail lifecycle management', () => {
           status: 'affected',
           action_statement: 'Upgrade immediately',
           reason: 'confirmed reachable in deployment',
-        }),
+        }), undefined, 42,
       );
     });
     expect(await screen.findByText(/Manual VEX override saved/i)).toBeInTheDocument();

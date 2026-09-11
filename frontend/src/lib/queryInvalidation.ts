@@ -115,6 +115,10 @@ export function invalidateLifecycleOverrideSurfaces(qc: QueryClient, sbomId: num
 
 export function invalidateVexSurfaces(qc: QueryClient, sbomId: number): void {
   qc.invalidateQueries({ queryKey: ['sbom-vex', sbomId] });
+  qc.invalidateQueries({ queryKey: ['component-vulnerabilities', sbomId] });
+  qc.invalidateQueries({ queryKey: ['vex-pair-history', sbomId] });
+  qc.invalidateQueries({ queryKey: ['findings'] });
+  qc.invalidateQueries({ queryKey: ['findings-enriched'] });
   qc.invalidateQueries({ queryKey: ['dashboard-vex'] });
 }
 
@@ -140,6 +144,10 @@ export function invalidateSbomSurfaces(qc: QueryClient, sbomId?: number | null):
     qc.invalidateQueries({ queryKey: ['sbom-validation-report', sbomId] });
     qc.invalidateQueries({ queryKey: ['sbom-versions', sbomId] });
     qc.invalidateQueries({ queryKey: ['sbom-vex', sbomId] });
+    qc.invalidateQueries({ queryKey: ['component-vulnerabilities', sbomId] });
+    qc.invalidateQueries({ queryKey: ['vex-pair-history', sbomId] });
+    qc.invalidateQueries({ queryKey: ['findings'] });
+    qc.invalidateQueries({ queryKey: ['findings-enriched'] });
     qc.invalidateQueries({ queryKey: ['sbom-conversion-report', sbomId] });
   }
 }
@@ -208,7 +216,7 @@ export function invalidateDashboardTiles(qc: QueryClient): void {
  * stayed invisible until F5.
  */
 export function invalidateFindings(qc: QueryClient): void {
-  qc.invalidateQueries({ queryKey: ['findings-enriched'] });
+    qc.invalidateQueries({ queryKey: ['findings-enriched'] });
 }
 
 /**

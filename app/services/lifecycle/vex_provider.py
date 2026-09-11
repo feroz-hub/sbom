@@ -9,7 +9,7 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ...models import AnalysisFinding, SBOMComponent, SBOMSource, VexDocument, VexOverrideAudit, VexStatement
+from ...models import AnalysisFinding, AnalysisRun, SBOMComponent, SBOMSource, VexDocument, VexOverrideAudit, VexStatement
 from .types import HIGH, LOW, MEDIUM, UNKNOWN_CONFIDENCE, VexResult, now_iso
 
 ALLOWED_VEX_STATUSES = {"affected", "not_affected", "fixed", "under_investigation", "unknown"}
@@ -381,11 +381,64 @@ def effective_vex_statements(statements):
     for row in statements:
         key = (row.tenant_id, row.sbom_id, row.component_id,
                row.vulnerability_id.strip().casefold(), row.id if row.component_id is None else None)
-        rank = (row.source_name == "Manual VEX Override", row.id)
+        rank = (row.vex_document_id is None and row.source_name == "Manual VEX Override", row.id)
         previous = current.get(key)
-        if previous is None or rank > (previous.source_name == "Manual VEX Override", previous.id):
+        if previous is None or rank > (previous.vex_document_id is None and previous.source_name == "Manual VEX Override", previous.id):
             current[key] = row
     return list(current.values())
+
+
+def component_vulnerabilities(db: Session, *, tenant_id: int, sbom_id: int, component_id: int):
+    """Detected findings and VEX evidence for an exact tenant/SBOM/component."""
+    component = db.scalar(select(SBOMComponent).where(
+        SBOMComponent.id == component_id, SBOMComponent.sbom_id == sbom_id,
+        SBOMComponent.tenant_id == tenant_id,
+    ))
+    if component is None:
+        raise HTTPException(status_code=404, detail="Component not found in this SBOM")
+    statements = db.scalars(select(VexStatement).where(
+        VexStatement.tenant_id == tenant_id, VexStatement.sbom_id == sbom_id,
+        VexStatement.component_id == component_id,
+    )).all()
+    decisions = {row.vulnerability_id.strip().upper(): row for row in effective_vex_statements(statements)}
+    entries = {}
+    findings = db.scalars(select(AnalysisFinding).join(AnalysisRun).where(
+        AnalysisFinding.tenant_id == tenant_id, AnalysisFinding.component_id == component_id,
+        AnalysisRun.tenant_id == tenant_id, AnalysisRun.sbom_id == sbom_id,
+    ).order_by(AnalysisFinding.id.desc())).all()
+    for finding in findings:
+        key = finding.vuln_id.strip().upper()
+        entry = entries.setdefault(key, {"vulnerability_id": key, "severity": finding.severity,
+                                        "findings": []})
+        entry["findings"].append({"id": finding.id, "run_id": finding.analysis_run_id,
+            "source": finding.source, "match_reason": finding.match_reason,
+            "matched_range": finding.matched_range, "title": finding.title})
+    for key in decisions:
+        entries.setdefault(key, {"vulnerability_id": key, "severity": None, "findings": []})
+    for key, entry in entries.items():
+        entry["current_decision"] = _statement_dict(decisions.get(key))
+    return {"tenant_id": tenant_id, "sbom_id": sbom_id, "component_id": component_id,
+            "component_name": component.name, "component_version": component.version,
+            "vulnerabilities": [entries[key] for key in sorted(entries)]}
+
+
+def pair_history(db: Session, *, tenant_id: int, sbom_id: int, component_id: int, vulnerability_id: str):
+    rows = db.scalars(select(VexStatement).where(
+        VexStatement.tenant_id == tenant_id, VexStatement.sbom_id == sbom_id,
+        VexStatement.component_id == component_id,
+        func.lower(VexStatement.vulnerability_id) == vulnerability_id.strip().lower(),
+    ).order_by(VexStatement.id.desc())).all()
+    current = effective_vex_statements(rows)
+    return {"current_decision": _statement_dict(current[0]) if current else None,
+            "statements": [_statement_dict(row) for row in rows]}
+
+
+def effective_vex_for_sbom(db: Session, *, tenant_id: int, sbom_id: int):
+    return {(row.component_id, row.vulnerability_id.strip().upper()): row
+            for row in effective_vex_statements(db.scalars(select(VexStatement).where(
+                VexStatement.tenant_id == tenant_id, VexStatement.sbom_id == sbom_id,
+                VexStatement.component_id.is_not(None),
+            )).all())}
 
 
 def list_vex_statements(db: Session, sbom_id: int) -> dict[str, Any]:
@@ -415,13 +468,14 @@ def vex_report(db: Session, sbom_id: int, *, status_filter: str | None = None) -
     counts = {status: 0 for status in ALLOWED_VEX_STATUSES}
     unmatched = 0
     for statement in statements:
-        counts[_normalize_vex_status(statement.get("status"))] += 1
         if statement.get("component_id") is None:
             unmatched += 1
+            continue
+        counts[_normalize_vex_status(statement.get("status"))] += 1
     return {
         **data,
         "generated_at": now_iso(),
-        "summary": {**counts, "total": len(statements), "unmatched": unmatched},
+        "summary": {**counts, "total": len(statements) - unmatched, "unmatched": unmatched},
         "statements": statements,
     }
 
@@ -524,7 +578,8 @@ def apply_vex_override(
     if not payload.get("reason"):
         raise HTTPException(status_code=422, detail="Manual VEX override requires reason")
     previous = effective_vex_statements(db.scalars(
-        select(VexStatement).where(VexStatement.component_id == component_id)
+        select(VexStatement).where(VexStatement.component_id == component_id,
+            VexStatement.sbom_id == component.sbom_id, VexStatement.tenant_id == component.tenant_id)
         .where(func.lower(VexStatement.vulnerability_id) == vulnerability_id.lower())
     ).all())
     existing = previous[0] if previous else None
@@ -536,10 +591,12 @@ def apply_vex_override(
         components=[component],
         created_at=now_iso(),
     )
+    statement.tenant_id = component.tenant_id
     db.add(statement)
     db.flush()
     db.add(
         VexOverrideAudit(
+            tenant_id=component.tenant_id,
             component_id=component_id,
             vulnerability_id=vulnerability_id,
             old_value_json=old,
@@ -558,7 +615,7 @@ def apply_vex_override(
 def vex_dashboard_summary(db: Session) -> dict[str, Any]:
     statements = db.execute(select(VexStatement)).scalars().all()
     counts = {status: 0 for status in ALLOWED_VEX_STATUSES}
-    latest_by_key = {row.id: row for row in effective_vex_statements(statements)}
+    latest_by_key = {row.id: row for row in effective_vex_statements(statements) if row.component_id is not None}
     for statement in latest_by_key.values():
         counts[_normalize_vex_status(statement.status)] += 1
     requiring_action = counts["affected"] + counts["under_investigation"] + counts["unknown"]

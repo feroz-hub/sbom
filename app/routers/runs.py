@@ -21,6 +21,7 @@ from ..metrics import runs_aggregate
 from ..metrics._helpers import cves_for_finding
 from ..metrics.findings import canonical_finding_metrics_for_run, canonical_findings_for_run
 from ..models import AnalysisFinding, AnalysisRun, EpssScore, Product, SBOMSource
+from ..services.lifecycle.vex_provider import effective_vex_for_sbom, _statement_dict
 from ..schemas import AnalysisFindingOut, AnalysisRunOut, RunsAggregateOut
 from ..services.finding_metrics import canonicalize_finding_rows, metrics_to_dict, normalize_severity
 from ..services.kev_enrichment import EMPTY_KEV_ENRICHMENT, enrich_findings_with_kev
@@ -359,7 +360,11 @@ def list_run_findings(
     )
     rem_map = {(r.vuln_id, r.component_name, r.component_version): r for r in remediations}
 
+    vex = effective_vex_for_sbom(db, tenant_id=context.tenant_id, sbom_id=run.sbom_id)
     for item in items:
+        decision = vex.get((item.component_id, item.vuln_id.strip().upper()))
+        item.vex_status = decision.status if decision else None
+        item.vex_decision = _statement_dict(decision)
         key = (item.vuln_id, item.component_name, item.component_version)
         r = rem_map.get(key)
         if r:
@@ -460,8 +465,10 @@ def list_run_findings_enriched(
     )
     rem_map = {(r.vuln_id, r.component_name, r.component_version): r for r in remediations}
 
+    vex = effective_vex_for_sbom(db, tenant_id=context.tenant_id, sbom_id=run.sbom_id)
     items: list[dict] = []
     for f in findings:
+        decision = vex.get((f.component_id, f.vuln_id.strip().upper()))
         cves = finding_cves.get(f.id, [])
         # Per-finding EPSS = max EPSS across any CVE alias on the finding.
         epss = 0.0
@@ -514,6 +521,8 @@ def list_run_findings_enriched(
                 "analysis_run_id": f.analysis_run_id,
                 "component_id": f.component_id,
                 "vuln_id": f.vuln_id,
+                "vex_status": decision.status if decision else None,
+                "vex_decision": _statement_dict(decision),
                 "source": f.source,
                 "title": f.title,
                 "description": f.description,

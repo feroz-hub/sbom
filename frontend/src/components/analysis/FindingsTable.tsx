@@ -600,7 +600,7 @@ export function FindingsTable({
   const cellPadding = DENSITY_CLASS[density];
   // (select?) + chevron + vuln + severity + cvss + epss + risk + component + remediation + sources + (ai?) + fix
   const COL_COUNT =
-    (selectionEnabled ? 1 : 0) + (showAiCol ? 11 : 10);
+    (selectionEnabled ? 1 : 0) + (showAiCol ? 12 : 11);
 
   const toggleExpand = (id: number) => {
     setExpandedRows((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -803,6 +803,7 @@ export function FindingsTable({
               >
                 Component
               </SortableTh>
+              <Th>Current VEX</Th>
               <Th>Remediation</Th>
               <Th>Sources</Th>
               {showAiCol ? (
@@ -971,6 +972,10 @@ export function FindingsTable({
                           {f.component_version || '—'}
                         </span>
                       </div>
+                    </td>
+                    <td className={cn('px-4 align-top', cellPadding)}>
+                      <span>{f.vex_status ?? 'No decision'}</span>
+                      <div className="text-xs text-hcl-muted">{f.vex_decision?.source_name}</div>
                     </td>
                     <td className={cn('px-4 align-top', cellPadding)}>
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border capitalize ${

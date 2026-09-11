@@ -15,6 +15,7 @@ from ..core.context import CurrentContext
 from ..core.security import get_current_tenant_context
 from ..db import get_db
 from ..metrics._helpers import cves_for_finding
+from ..services.lifecycle.vex_provider import effective_vex_for_sbom
 from ..models import AnalysisFinding, AnalysisRun, SBOMComponent
 from ..schemas_compare import COMPARABLE_RUN_STATUSES
 
@@ -217,7 +218,9 @@ def export_sarif(
             }
 
     results = []
+    vex = effective_vex_for_sbom(db, tenant_id=run.tenant_id, sbom_id=run.sbom_id)
     for f in findings:
+        decision = vex.get((f.component_id, f.vuln_id.strip().upper()))
         purl = None
         if f.component_id:
             comp = db.get(SBOMComponent, f.component_id)
@@ -250,6 +253,8 @@ def export_sarif(
                     "cpe": f.cpe,
                     "published": f.published_on,
                     "cve_aliases": cve_aliases,
+                    "vex_status": decision.status if decision else None,
+                    "vex_source": decision.source_name if decision else None,
                     # Roadmap #6 / #1 — finding-provenance properties.
                     # SARIF lets toolchain consumers (GitHub Code
                     # Scanning, VS Code, Azure DevOps) filter and
@@ -341,10 +346,14 @@ def export_csv(
             # strategy-floor. Empty when the source did not emit a
             # value (pre-PR-D scans, untagged paths).
             "match_confidence",
+            "vex_status",
+            "vex_source",
         ]
     )
 
+    vex = effective_vex_for_sbom(db, tenant_id=run.tenant_id, sbom_id=run.sbom_id)
     for f in findings:
+        decision = vex.get((f.component_id, f.vuln_id.strip().upper()))
         purl = None
         if f.component_id:
             comp = db.get(SBOMComponent, f.component_id)
@@ -383,6 +392,8 @@ def export_csv(
                 # explicit ``""`` for None so consumers can tell
                 # "untagged" from a real 0.0 score.
                 "" if getattr(f, "match_confidence", None) is None else f"{f.match_confidence:.3f}",
+                decision.status if decision else "",
+                decision.source_name if decision else "",
             ]
         )
 

@@ -704,6 +704,22 @@ export interface VexStatement {
   created_at: string;
 }
 
+export interface ComponentVulnerability {
+  vulnerability_id: string;
+  severity: string | null;
+  findings: { id: number; run_id: number; source: string | null; match_reason: string | null; matched_range: string | null; title: string | null }[];
+  current_decision: VexStatement | null;
+}
+
+export interface ComponentVulnerabilitiesResponse {
+  tenant_id: number;
+  sbom_id: number;
+  component_id: number;
+  component_name: string;
+  component_version: string | null;
+  vulnerabilities: ComponentVulnerability[];
+}
+
 export interface VexListResponse {
   vulnerability_options?: { component_id: number; vulnerability_id: string }[];
   sbom_id: number;
@@ -743,6 +759,8 @@ export interface VexOverrideAuditEntry {
 }
 
 export interface VexOverrideHistoryResponse {
+  current_decision?: VexStatement | null;
+  statements?: VexStatement[];
   component_id: number;
   vulnerability_id: string;
   history: VexOverrideAuditEntry[];
@@ -946,6 +964,8 @@ export type MatchStrategy =
   | 'ghsa_alias';
 
 export interface AnalysisFinding {
+  vex_status?: VexStatus | null;
+  vex_decision?: VexStatement | null;
   id: number;
   analysis_run_id: number;          // backend field name
   component_id?: number | null;

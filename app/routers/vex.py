@@ -19,6 +19,8 @@ from ..models import VexOverrideAudit
 from ..services.lifecycle.vex_discovery import discover_and_import_vex_documents
 from ..services.lifecycle.vex_provider import (
     apply_vex_override,
+    component_vulnerabilities,
+    pair_history,
     import_vex_document,
     list_vex_statements,
     vex_report,
@@ -127,6 +129,18 @@ def discover_vex_documents(
     return discover_and_import_vex_documents(db, sbom_id, force=force)
 
 
+@router.get("/api/sboms/{sbom_id}/components/{component_id}/vulnerabilities")
+def get_component_vulnerabilities(
+    sbom_id: int, component_id: int,
+    context: CurrentContext = Depends(get_current_tenant_context),
+    db: Session = Depends(get_db),
+):
+    _require_sbom(db, sbom_id, context.tenant_id)
+    return component_vulnerabilities(db, tenant_id=context.tenant_id,
+                                    sbom_id=sbom_id, component_id=component_id)
+
+
+@router.patch("/api/sboms/{sbom_id}/components/{component_id}/vulnerabilities/{vulnerability_id}/vex-override")
 @router.patch("/api/components/{component_id}/vulnerabilities/{vulnerability_id}/vex-override")
 def patch_vex_override(
     component_id: int,
@@ -134,9 +148,13 @@ def patch_vex_override(
     payload: dict[str, Any],
     context: CurrentContext = Depends(get_current_tenant_context),
     db: Session = Depends(get_db),
+    sbom_id: int | None = None,
 ):
     """Apply an audited manual VEX override."""
-    if get_component_for_tenant(db, component_id, context.tenant_id) is None:
+    if sbom_id is not None:
+        _require_sbom(db, sbom_id, context.tenant_id)
+    component = get_component_for_tenant(db, component_id, context.tenant_id)
+    if component is None or (sbom_id is not None and component.sbom_id != sbom_id):
         raise HTTPException(status_code=404, detail="Component not found")
     statement = apply_vex_override(
         db,
@@ -162,23 +180,30 @@ def patch_vex_override(
     }
 
 
+@router.get("/api/sboms/{sbom_id}/components/{component_id}/vulnerabilities/{vulnerability_id}/vex-override/history")
 @router.get("/api/components/{component_id}/vulnerabilities/{vulnerability_id}/vex-override/history")
 def get_vex_override_history(
     component_id: int,
     vulnerability_id: str,
     context: CurrentContext = Depends(get_current_tenant_context),
     db: Session = Depends(get_db),
+    sbom_id: int | None = None,
 ):
-    if get_component_for_tenant(db, component_id, context.tenant_id) is None:
+    if sbom_id is not None:
+        _require_sbom(db, sbom_id, context.tenant_id)
+    component = get_component_for_tenant(db, component_id, context.tenant_id)
+    if component is None or (sbom_id is not None and component.sbom_id != sbom_id):
         raise HTTPException(status_code=404, detail="Component not found")
     rows = (
         db.query(VexOverrideAudit)
-        .filter(VexOverrideAudit.component_id == component_id)
+        .filter(VexOverrideAudit.component_id == component_id, VexOverrideAudit.tenant_id == context.tenant_id)
         .filter(func.lower(VexOverrideAudit.vulnerability_id) == vulnerability_id.strip().lower())
         .order_by(VexOverrideAudit.id.asc())
         .all()
     )
     return {
+        **pair_history(db, tenant_id=context.tenant_id, sbom_id=component.sbom_id,
+                       component_id=component_id, vulnerability_id=vulnerability_id),
         "component_id": component_id,
         "vulnerability_id": vulnerability_id,
         "history": [

@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  allowedDevOrigins: ['hcltestserver'],
   // Emit the minimal production server and traced runtime dependencies used
   // by the multi-stage Docker image.
   output: 'standalone',

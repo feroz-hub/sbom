@@ -539,7 +539,7 @@ def permission_for_request(request: Request) -> str:
         # These are per-user preferences, not tenant settings administration.
         # The report router enforces owner/admin and scope checks separately.
         return "sbom:read"
-    if "/vex" in path:
+    if "/vex" in path or (path.startswith("/api/sboms/") and "/components/" in path and path.endswith("/vulnerabilities")):
         return "vex:read" if method == "GET" else "vex:write"
     if path.startswith("/api/remediation"):
         return "remediation:read" if method == "GET" else "remediation:write"

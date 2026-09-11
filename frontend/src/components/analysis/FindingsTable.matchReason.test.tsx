@@ -155,3 +155,15 @@ describe('FindingsTable — match-reason trust badge', () => {
     expect(screen.queryByText('Not verified')).toBeNull();
   });
 });
+
+it('shows independent effective VEX statuses for vulnerabilities of the same component', () => {
+  renderTable([
+    makeFinding(1, { component_id: 99, component_name: 'demo', vex_status: 'affected' }),
+    makeFinding(2, { component_id: 99, component_name: 'demo', vex_status: 'not_affected' }),
+    makeFinding(3, { component_id: 99, component_name: 'demo', vex_status: 'fixed' }),
+  ]);
+  expect(screen.getByText('Current VEX')).toBeInTheDocument();
+  expect(screen.getByText('affected')).toBeInTheDocument();
+  expect(screen.getByText('not_affected')).toBeInTheDocument();
+  expect(screen.getByText('fixed')).toBeInTheDocument();
+});
