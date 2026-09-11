@@ -9,6 +9,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..core.context import CurrentContext
@@ -142,7 +143,7 @@ def patch_vex_override(
         component_id,
         vulnerability_id,
         payload,
-        changed_by=payload.get("updated_by") or payload.get("changed_by") or context.actor_label(),
+        changed_by=context.actor_label(),
     )
     return {
         "id": statement.id,
@@ -173,7 +174,7 @@ def get_vex_override_history(
     rows = (
         db.query(VexOverrideAudit)
         .filter(VexOverrideAudit.component_id == component_id)
-        .filter(VexOverrideAudit.vulnerability_id == vulnerability_id)
+        .filter(func.lower(VexOverrideAudit.vulnerability_id) == vulnerability_id.strip().lower())
         .order_by(VexOverrideAudit.id.asc())
         .all()
     )

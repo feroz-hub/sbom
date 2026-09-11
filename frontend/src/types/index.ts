@@ -705,6 +705,7 @@ export interface VexStatement {
 }
 
 export interface VexListResponse {
+  vulnerability_options?: { component_id: number; vulnerability_id: string }[];
   sbom_id: number;
   statements: VexStatement[];
 }

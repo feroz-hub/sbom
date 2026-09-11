@@ -259,6 +259,8 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
   const [isDiscoveringVex, setIsDiscoveringVex] = useState(false);
   const [downloadMessage, setDownloadMessage] = useState('');
   const [evidenceModal, setEvidenceModal] = useState<EvidenceModalState>(null);
+  const [vexPairLocked, setVexPairLocked] = useState(false);
+  const [manualVulnerability, setManualVulnerability] = useState(false);
   const [isVexOverrideOpen, setIsVexOverrideOpen] = useState(false);
   const [vexOverrideComponentId, setVexOverrideComponentId] = useState('');
   const [vexOverrideVulnerability, setVexOverrideVulnerability] = useState('');
@@ -541,9 +543,37 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
     }, {});
   }, [vexStatements]);
   const vulnerabilityOptions = useMemo(
-    () => Array.from(new Set(vexStatements.map((statement) => statement.vulnerability_id).filter(Boolean))),
-    [vexStatements],
+    () => Array.from(new Set([
+      ...(vexData?.vulnerability_options ?? []), ...vexStatements,
+    ].filter(row => String(row.component_id) === vexOverrideComponentId)
+      .map(row => row.vulnerability_id))).sort(),
+    [vexData, vexStatements, vexOverrideComponentId],
   );
+  useEffect(() => {
+    if (!isVexOverrideOpen) return;
+    let cancelled = false;
+    const statement = vexStatements.find(row => String(row.component_id) === vexOverrideComponentId
+      && row.vulnerability_id.toUpperCase() === vexOverrideVulnerability.trim().toUpperCase());
+    setVexOverrideStatus((statement?.status as VexStatus) || 'under_investigation');
+    setVexOverrideJustification(statement?.justification || '');
+    setVexOverrideImpact(statement?.impact_statement || '');
+    setVexOverrideAction(statement?.action_statement || '');
+    setVexOverrideFixedVersion(statement?.fixed_version || '');
+    setVexOverrideMitigation(statement?.mitigation || '');
+    setVexOverrideEvidenceUrl(statement?.source_url || '');
+    setVexOverrideReason('');
+    setVexOverrideError('');
+    setVexOverrideHistory([]);
+    setIsLoadingVexHistory(false);
+    if (statement?.component_id) {
+      setIsLoadingVexHistory(true);
+      getVexOverrideHistory(statement.component_id, statement.vulnerability_id)
+        .then(result => { if (!cancelled) setVexOverrideHistory(result.history); })
+        .catch(() => { if (!cancelled) setVexOverrideError('Could not load override history.'); })
+        .finally(() => { if (!cancelled) setIsLoadingVexHistory(false); });
+    }
+    return () => { cancelled = true; };
+  }, [isVexOverrideOpen, vexOverrideComponentId, vexOverrideVulnerability, vexStatements]);
   const selectedOverrideComponent = useMemo(
     () => componentRows.find((component) => String(component.id) === vexOverrideComponentId) ?? null,
     [componentRows, vexOverrideComponentId],
@@ -840,7 +870,9 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
   const openVexOverrideModal = async (statement?: VexStatement) => {
     if (!canManageEvidence) return;
     const componentId = statement?.component_id ? String(statement.component_id) : String(componentRows[0]?.id ?? '');
-    const vulnerabilityId = statement?.vulnerability_id ?? vulnerabilityOptions[0] ?? '';
+    const vulnerabilityId = statement?.vulnerability_id ?? '';
+    setVexPairLocked(Boolean(statement?.component_id));
+    setManualVulnerability(false);
     setVexOverrideComponentId(componentId);
     setVexOverrideVulnerability(vulnerabilityId);
     setVexOverrideStatus((statement?.status as VexStatus) || 'under_investigation');
@@ -855,17 +887,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
     setVexOverrideHistory([]);
     setIsVexOverrideOpen(true);
 
-    if (statement?.component_id && statement.vulnerability_id) {
-      setIsLoadingVexHistory(true);
-      try {
-        const history = await getVexOverrideHistory(statement.component_id, statement.vulnerability_id);
-        setVexOverrideHistory(history.history);
-      } catch {
-        setVexOverrideHistory([]);
-      } finally {
-        setIsLoadingVexHistory(false);
-      }
-    }
+
   };
 
   const validateVexOverride = () => {
@@ -899,7 +921,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
         mitigation: vexOverrideMitigation.trim() || null,
         evidence_url: vexOverrideEvidenceUrl.trim() || null,
         reason: vexOverrideReason.trim(),
-        updated_by: sbom.created_by || null,
+
       });
       setVexMessage(`Manual VEX override saved for ${vexOverrideVulnerability.trim()}.`);
       setIsVexOverrideOpen(false);
@@ -2062,7 +2084,8 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
               <select
                 aria-label="Component"
                 value={vexOverrideComponentId}
-                onChange={(event) => setVexOverrideComponentId(event.target.value)}
+                disabled={vexPairLocked}
+                onChange={(event) => { setVexOverrideComponentId(event.target.value); setVexOverrideVulnerability(''); }}
                 className="mt-1 w-full rounded-lg border border-hcl-border p-2 text-sm text-hcl-navy focus:outline-none focus:ring-2 focus:ring-hcl-blue"
               >
                 <option value="">Select component</option>
@@ -2080,19 +2103,25 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
             </div>
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wide text-hcl-muted">Vulnerability / CVE</label>
-              <input
+              {manualVulnerability ? <input
                 aria-label="Vulnerability or CVE"
-                list="vex-vulnerability-options"
                 value={vexOverrideVulnerability}
-                onChange={(event) => setVexOverrideVulnerability(event.target.value)}
-                className="mt-1 w-full rounded-lg border border-hcl-border p-2 font-mono text-sm text-hcl-navy focus:outline-none focus:ring-2 focus:ring-hcl-blue"
-                placeholder="CVE-2026-0001"
-              />
-              <datalist id="vex-vulnerability-options">
-                {vulnerabilityOptions.map((id) => (
-                  <option key={id} value={id} />
-                ))}
-              </datalist>
+                onChange={event => setVexOverrideVulnerability(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-hcl-border p-2"
+                placeholder="CVE-2026-0001 or GHSA identifier"
+              /> : <select aria-label="Vulnerability or CVE" value={vexOverrideVulnerability}
+                disabled={vexPairLocked}
+                onChange={event => setVexOverrideVulnerability(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-hcl-border p-2">
+                <option value="">Select a vulnerability</option>
+                {vulnerabilityOptions.map(id => <option key={id} value={id}>{id}</option>)}
+              </select>}
+              {!vexPairLocked && <label className="mt-2 flex gap-2 text-xs">
+                <input type="checkbox" checked={manualVulnerability} onChange={event => {
+                  setManualVulnerability(event.target.checked); setVexOverrideVulnerability('');
+                }} />Add vulnerability manually
+              </label>}
+              <p className="mt-1 text-xs text-hcl-muted">This decision applies only to the selected component version and vulnerability.</p>
             </div>
           </div>
 

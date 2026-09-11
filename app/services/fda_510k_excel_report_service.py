@@ -942,11 +942,13 @@ class Fda510kExcelReportService:
                 kev_by_cve[_clean(entry.cve_id).casefold()] = True
 
         vex_by_key: dict[tuple[int | None, str], VexStatement] = {}
-        for row in vex_rows:
+        from .lifecycle.vex_provider import effective_vex_statements
+
+        for row in effective_vex_statements(vex_rows):
             for vuln in (row.vulnerability_id, row.cve_id):
                 if _clean(vuln):
                     vex_by_key[(row.component_id, _clean(vuln).casefold())] = row
-                    vex_by_key[(None, _clean(vuln).casefold())] = row
+                    # Component-specific decisions must never apply to another component.
 
         rows: list[dict[str, Any]] = []
         seen: set[tuple[str, str]] = set()
@@ -957,9 +959,7 @@ class Fda510kExcelReportService:
             if key in seen:
                 continue
             seen.add(key)
-            vex = vex_by_key.get((finding.component_id, finding.vuln_id.casefold())) or vex_by_key.get(
-                (None, finding.vuln_id.casefold())
-            )
+            vex = vex_by_key.get((finding.component_id, finding.vuln_id.casefold())) if finding.component_id else None
             raw_status = _clean(getattr(vex, "status", None)).casefold().replace(" ", "_")
             status = VEX_STATUS_LABELS.get(raw_status, "Under Investigation")
             kev = kev_by_cve.get(finding.vuln_id.casefold())
