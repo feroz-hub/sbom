@@ -105,3 +105,103 @@ def test_orphan_emitted_as_info() -> None:
     ctx = integrity.run(_ctx(model))
     info_codes = [e.code for e in ctx.report.info]
     assert info_codes.count(E.I075_ORPHAN_COMPONENT) == 2
+
+
+# ---------------------------------------------------------------------------
+# Regression: the BOM root component as dependency-graph root, and accurate
+# error paths for one-to-many dependency entries.
+# ---------------------------------------------------------------------------
+
+
+def test_root_component_as_graph_root_is_not_dangling() -> None:
+    """End-to-end over normalize → integrity: the real-world shape that broke.
+
+    ``metadata.component.bom-ref`` used to be absent from ``declared_refs``, so
+    every generator that roots the graph at the BOM's own component got one
+    E070 per dependsOn target.
+    """
+    from app.validation.normalize import normalize_cyclonedx
+
+    doc = {
+        "bomFormat": "CycloneDX",
+        "specVersion": "1.5",
+        "metadata": {"component": {"type": "device", "bom-ref": "root-device", "name": "gw"}},
+        "components": [
+            {"type": "library", "bom-ref": "lib-a", "name": "a", "version": "1"},
+            {"type": "library", "bom-ref": "lib-b", "name": "b", "version": "1"},
+        ],
+        "dependencies": [
+            {"ref": "root-device", "dependsOn": ["lib-a", "lib-b"]},
+            {"ref": "lib-a", "dependsOn": ["lib-b"]},
+            {"ref": "lib-b", "dependsOn": []},
+        ],
+    }
+    ctx = integrity.run(_ctx(normalize_cyclonedx(doc, "1.5")))
+    assert [e.code for e in ctx.report.errors] == []
+
+
+def test_dangling_source_reported_once_with_source_document_path() -> None:
+    """A fan-out entry with a bad ``ref`` is one defect, so it reports once.
+
+    The path must point at the source document's entry index, not at the index
+    of the flattened edge.
+    """
+    model = InternalSbom(
+        spec="cyclonedx",
+        spec_version="1.6",
+        metadata=DocumentMetadata(),
+        components=[_component("a"), _component("b")],
+        dependencies=[
+            DependencyEdge(
+                source="ghost",
+                target=t,
+                source_path="dependencies[3].ref",
+                target_path=f"dependencies[3].dependsOn[{i}]",
+            )
+            for i, t in enumerate(("a", "b"))
+        ],
+        declared_refs={"a", "b"},
+    )
+    ctx = integrity.run(_ctx(model))
+    dangling = [e for e in ctx.report.errors if e.code == E.E070_DEPENDENCY_REF_DANGLING]
+    assert len(dangling) == 1
+    assert dangling[0].path == "dependencies[3].ref"
+
+
+def test_dangling_target_reported_per_target_with_indexed_path() -> None:
+    """Distinct bad *targets* are distinct defects and each gets its own path."""
+    model = InternalSbom(
+        spec="cyclonedx",
+        spec_version="1.6",
+        metadata=DocumentMetadata(),
+        components=[_component("a")],
+        dependencies=[
+            DependencyEdge(
+                source="a",
+                target=t,
+                source_path="dependencies[0].ref",
+                target_path=f"dependencies[0].dependsOn[{i}]",
+            )
+            for i, t in enumerate(("ghost-1", "ghost-2"))
+        ],
+        declared_refs={"a"},
+    )
+    ctx = integrity.run(_ctx(model))
+    paths = sorted(e.path for e in ctx.report.errors if e.code == E.E070_DEPENDENCY_REF_DANGLING)
+    assert paths == ["dependencies[0].dependsOn[0]", "dependencies[0].dependsOn[1]"]
+
+
+def test_dangling_still_detected_without_recorded_paths() -> None:
+    """Edges built without path metadata keep the old fallback path shape."""
+    model = InternalSbom(
+        spec="cyclonedx",
+        spec_version="1.6",
+        metadata=DocumentMetadata(),
+        components=[_component("a")],
+        dependencies=[DependencyEdge(source="a", target="missing")],
+        declared_refs={"a"},
+    )
+    ctx = integrity.run(_ctx(model))
+    dangling = [e for e in ctx.report.errors if e.code == E.E070_DEPENDENCY_REF_DANGLING]
+    assert len(dangling) == 1
+    assert dangling[0].path == "dependencies[0].dependsOn"

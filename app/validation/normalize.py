@@ -17,6 +17,31 @@ from typing import Any
 from .models import Component, DependencyEdge, DocumentMetadata, InternalSbom
 
 
+def _register_bom_ref(entry: dict[str, Any], sink: set[str]) -> None:
+    """Add ``entry``'s bom-ref to ``sink`` if it declares one."""
+    ref = entry.get("bom-ref") or entry.get("bomRef")
+    if isinstance(ref, str) and ref:
+        sink.add(ref)
+
+
+def _collect_bom_refs(entries: Any, sink: set[str]) -> None:
+    """Recursively register bom-refs from a components / services list.
+
+    A CycloneDX ``refLinkType`` may target *any* bom-ref in the document, so
+    nested sub-assemblies (``components[].components[]``) and services are
+    legal dependency endpoints exactly like top-level components. Collecting
+    them here keeps stage 5 from reporting them as dangling.
+    """
+    if not isinstance(entries, list):
+        return
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        _register_bom_ref(entry, sink)
+        _collect_bom_refs(entry.get("components"), sink)
+        _collect_bom_refs(entry.get("services"), sink)
+
+
 def normalize_cyclonedx(doc: dict[str, Any], spec_version: str) -> InternalSbom:
     """Project a parsed CycloneDX dict into the internal model."""
     components: list[Component] = []
@@ -56,6 +81,23 @@ def normalize_cyclonedx(doc: dict[str, Any], spec_version: str) -> InternalSbom:
         created=metadata_block.get("timestamp"),
     )
 
+    # The BOM's root component (``metadata.component``) never appears in
+    # ``components[]``, but it *is* a component and generators conventionally
+    # emit it as the dependency-graph root. Its bom-ref must be declarable, or
+    # stage 5 reports the graph root as dangling.
+    root_component = metadata_block.get("component")
+    if isinstance(root_component, dict):
+        _register_bom_ref(root_component, declared_refs)
+        _collect_bom_refs(root_component.get("components"), declared_refs)
+        _collect_bom_refs(root_component.get("services"), declared_refs)
+
+    # Tools in the 1.5+ object form are themselves components / services.
+    if isinstance(metadata_block.get("tools"), dict):
+        _collect_bom_refs(metadata_block["tools"].get("components"), declared_refs)
+        _collect_bom_refs(metadata_block["tools"].get("services"), declared_refs)
+
+    _collect_bom_refs(doc.get("services"), declared_refs)
+
     raw_components = doc.get("components") or []
     if not isinstance(raw_components, list):
         raw_components = []
@@ -66,6 +108,8 @@ def normalize_cyclonedx(doc: dict[str, Any], spec_version: str) -> InternalSbom:
         ref = comp.get("bom-ref") or comp.get("bomRef") or f"__index_{index}__"
         if isinstance(ref, str):
             declared_refs.add(ref)
+        _collect_bom_refs(comp.get("components"), declared_refs)
+        _collect_bom_refs(comp.get("services"), declared_refs)
         licenses: list[str] = []
         for lic in comp.get("licenses") or []:
             if isinstance(lic, dict):
@@ -98,15 +142,22 @@ def normalize_cyclonedx(doc: dict[str, Any], spec_version: str) -> InternalSbom:
         )
 
     dependencies: list[DependencyEdge] = []
-    for dep in doc.get("dependencies") or []:
+    for dep_index, dep in enumerate(doc.get("dependencies") or []):
         if not isinstance(dep, dict):
             continue
         source = dep.get("ref")
         if not isinstance(source, str):
             continue
-        for target in dep.get("dependsOn") or []:
+        for target_index, target in enumerate(dep.get("dependsOn") or []):
             if isinstance(target, str):
-                dependencies.append(DependencyEdge(source=source, target=target))
+                dependencies.append(
+                    DependencyEdge(
+                        source=source,
+                        target=target,
+                        source_path=f"dependencies[{dep_index}].ref",
+                        target_path=f"dependencies[{dep_index}].dependsOn[{target_index}]",
+                    )
+                )
 
     return InternalSbom(
         spec="cyclonedx",
@@ -204,14 +255,22 @@ def normalize_spdx(doc: dict[str, Any], spec_version: str) -> InternalSbom:
             declared_refs.add(file_block["SPDXID"])
 
     dependencies: list[DependencyEdge] = []
-    for rel in doc.get("relationships") or []:
+    for rel_index, rel in enumerate(doc.get("relationships") or []):
         if not isinstance(rel, dict):
             continue
         source = rel.get("spdxElementId")
         target = rel.get("relatedSpdxElement")
         kind = rel.get("relationshipType") or "RELATES_TO"
         if isinstance(source, str) and isinstance(target, str):
-            dependencies.append(DependencyEdge(source=source, target=target, kind=kind))
+            dependencies.append(
+                DependencyEdge(
+                    source=source,
+                    target=target,
+                    kind=kind,
+                    source_path=f"relationships[{rel_index}].spdxElementId",
+                    target_path=f"relationships[{rel_index}].relatedSpdxElement",
+                )
+            )
 
     return InternalSbom(
         spec="spdx",
