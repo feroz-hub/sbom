@@ -35,7 +35,8 @@ export function AuthGuard({ children, requiredPermission, requiredRoles }: AuthG
       bootstrapState === 'checking-session' ||
       bootstrapState === 'processing-callback' ||
       bootstrapState === 'loading-auth-context' ||
-      bootstrapState === 'loading-tenant-context'
+      bootstrapState === 'loading-tenant-context' ||
+      bootstrapState === 'logging-out'
     ) {
       return;
     }
@@ -95,6 +96,7 @@ export function AuthGuard({ children, requiredPermission, requiredRoles }: AuthG
     bootstrapState === 'processing-callback' ||
     bootstrapState === 'loading-auth-context' ||
     bootstrapState === 'loading-tenant-context' ||
+    bootstrapState === 'logging-out' ||
     authStatus === 'loading'
   ) {
     return (
