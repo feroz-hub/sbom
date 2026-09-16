@@ -5,6 +5,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from '@/hooks/useToast';
+import { ThemeProvider } from '@/components/theme/ThemeProvider';
 
 const api = vi.hoisted(() => ({
   getPlatformAdministrators: vi.fn(),
@@ -13,13 +14,16 @@ const api = vi.hoisted(() => ({
   revokePlatformAdministrator: vi.fn(),
   getTenantAuditHistory: vi.fn(),
 }));
+const logout = vi.hoisted(() => vi.fn());
 
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({
-    user: { tenantId: 1, externalUserId: 'subject-1' },
+    user: { tenantId: 1, externalUserId: 'subject-1', roles: ['PLATFORM_ADMIN'], isPlatformAdmin: true },
     tenants: [{ id: 1, name: 'Default Tenant', slug: 'default' }],
     hasPermission: () => true,
     isLoading: false,
+    config: { enabled: true },
+    logout,
   }),
 }));
 vi.mock('@/hooks/usePermission', () => ({ usePermission: () => true }));
@@ -51,9 +55,11 @@ function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
+      <ThemeProvider>
       <ToastProvider>
         <PlatformAdminsPage />
       </ToastProvider>
+      </ThemeProvider>
     </QueryClientProvider>,
   );
 }
@@ -88,6 +94,15 @@ describe('PlatformAdminsPage', () => {
     await user.click(screen.getByRole('button', { name: 'Revoke' }));
     await user.click(screen.getByRole('button', { name: 'Revoke authority' }));
     await waitFor(() => expect(api.revokePlatformAdministrator).toHaveBeenCalledWith(1));
+  });
+
+  it('offers the shared user menu and Sign Out in platform context', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    expect(screen.getByRole('heading', { name: 'Platform Administrators' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /subject-1/i }));
+    await user.click(screen.getByRole('menuitem', { name: 'Sign Out' }));
+    expect(logout).toHaveBeenCalledTimes(1);
   });
 
   it('searches existing users and grants platform administrator role', async () => {

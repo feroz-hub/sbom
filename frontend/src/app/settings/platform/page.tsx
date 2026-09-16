@@ -15,6 +15,7 @@ import { getApiErrorMessage } from '@/lib/notifications';
 import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog';
 import { UserSearchCombobox } from '@/components/admin/UserSearchCombobox';
 import { VerificationBadge, UserStatusBadge, RoleBadge } from '@/components/admin/StatusBadges';
+import { TopBar } from '@/components/layout/TopBar';
 
 export default function PlatformAdministratorsPage() {
   const { hasPermission, isLoading: authLoading } = useAuth();
@@ -68,13 +69,12 @@ export default function PlatformAdministratorsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Platform Administrators</h1>
-        <p className="mt-1 max-w-3xl text-sm text-hcl-muted">
-          Platform administrators can manage tenants and platform-level access. HCL.CS roles alone do not grant this authority.
-        </p>
-      </div>
+    <>
+      <TopBar
+        title="Platform Administrators"
+        subtitle="Platform administrators can manage tenants and platform-level access. HCL.CS roles alone do not grant this authority."
+      />
+    <div className="mx-auto w-full max-w-6xl space-y-6 p-6">
 
       <nav aria-label="Platform administration" className="flex gap-2 border-b border-border pb-3 text-sm">
         <Link href="/settings/platform" aria-current="page" className="rounded-md bg-hcl-blue px-3 py-2 font-medium text-white">Administrators</Link>
@@ -193,5 +193,6 @@ export default function PlatformAdministratorsPage() {
         onConfirm={() => revokeTarget && revokeAdmin.mutate(revokeTarget.id)}
       />
     </div>
+    </>
   );
 }

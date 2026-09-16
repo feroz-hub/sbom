@@ -19,7 +19,7 @@ export function resolveAuthConfig(): AuthConfig {
     postLogoutRedirectUri:
       process.env.NEXT_PUBLIC_HCL_IAM_POST_LOGOUT_REDIRECT_URI ||
       process.env.NEXT_PUBLIC_HCL_IAM_POST_LOGOUT_URI ||
-      origin,
+      `${origin}/logged-out`,
     scopes: process.env.NEXT_PUBLIC_HCL_IAM_SCOPES || 'openid profile email offline_access sbom-analyser-api',
   };
 }

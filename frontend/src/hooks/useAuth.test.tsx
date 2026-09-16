@@ -7,6 +7,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
 
+const followLogoutRedirect = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/auth/logout-navigation', () => ({ followLogoutRedirect }));
+
 vi.mock('@/lib/auth', async () => {
   const actual = await vi.importActual<typeof import('@/lib/auth')>('@/lib/auth');
   return {
@@ -41,6 +44,7 @@ function Probe() {
   return (
     <div>
       <span data-testid="status">{auth.authStatus}</span>
+      <span data-testid="bootstrap-state">{auth.bootstrapState}</span>
       <span data-testid="session-authenticated">{String(auth.sessionAuthenticated)}</span>
       <span data-testid="authenticated">{String(auth.isAuthenticated)}</span>
       <span data-testid="active-tenant">{auth.activeTenantId ?? ''}</span>
@@ -328,8 +332,31 @@ describe('AuthProvider membership-based tenant context', () => {
     });
 
     expect(sessionStorage.getItem('sbom_active_tenant_id')).toBeNull();
-    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('unauthenticated'));
+    await waitFor(() => expect(screen.getByTestId('bootstrap-state')).toHaveTextContent('logging-out'));
+    expect(screen.getByTestId('status')).toHaveTextContent('loading');
     expect(screen.getByTestId('active-tenant')).toHaveTextContent('');
+    expect(fetchMock).toHaveBeenCalledWith('/api/auth/logout', {
+      method: 'POST', credentials: 'include', cache: 'no-store',
+    });
+  });
+
+  it('follows the OIDC end-session redirect without restarting login', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ authenticated: true }))
+      .mockResolvedValueOnce(jsonResponse(meBody('READY', [wellysis], 7)))
+      .mockResolvedValueOnce(jsonResponse({ redirectUrl: 'https://identity.test/security/endsession?post_logout_redirect_uri=...' }));
+
+    render(wrap(<Probe />));
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('authenticated'));
+    act(() => latestAuth!.logout());
+
+    await waitFor(() => expect(screen.getByTestId('bootstrap-state')).toHaveTextContent('logging-out'));
+    await waitFor(() => expect(followLogoutRedirect).toHaveBeenCalledWith('https://identity.test/security/endsession?post_logout_redirect_uri=...'));
+    expect(fetchMock).toHaveBeenCalledWith('/api/auth/logout', {
+      method: 'POST', credentials: 'include', cache: 'no-store',
+    });
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/auth/login'))).toBe(false);
   });
 
   it('restores a valid persisted tenant on initial load', async () => {

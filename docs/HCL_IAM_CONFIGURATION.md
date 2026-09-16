@@ -20,12 +20,12 @@ Docker applies `scripts/migrations/20260717_sbom_analyser_client_postgresql.sql`
 | Response type | `code` |
 | PKCE | Required, S256 only |
 | Redirect | `https://localhost:3000/auth/callback` |
-| Post logout | `https://localhost:3000` |
+| Post logout in existing registration | `https://localhost:3000` |
 | Scopes | `openid profile email offline_access sbom-analyser-api` |
 | Audience/resource | `sbom-analyser-api` |
 | Signing | RS256 |
 
-The Docker runtime is `demos/HCL.CS.Demo.Server/Program.cs`; the placeholder Identity API project is not used for this configuration. CORS/form-action allow `https://localhost:3000` and the admin UI at `https://localhost:3001`.
+The Docker runtime is `demos/HCL.CS.Demo.Server/Program.cs`; the placeholder Identity API project is not used for this configuration. CORS/form-action allow `https://localhost:3000` and the admin UI at `https://localhost:3001`. The existing registration above does not include the new page. The deployment operator must register the exact `NEXT_PUBLIC_HCL_IAM_POST_LOGOUT_REDIRECT_URI` as an allowed Post Logout Redirect URI for `sbom-analyser-web` in HCL.CS. Register `https://localhost:3000/logged-out` for local use and `https://hcltestserver:3000/logged-out` for production, while retaining any existing valid post-logout URIs.
 
 Discovery is authoritative:
 
@@ -231,7 +231,7 @@ Manual browser checks:
 1. Sign in and confirm HCL.CS then `/auth/callback` then the original page.
 2. Confirm requests go to `/api/backend/*`; FastAPI receives a bearer token server-side.
 3. Confirm localStorage/sessionStorage contain no access, ID or refresh token.
-4. Confirm name/email appear in the user menu and logout clears `__Host-sbom-session`.
+4. Confirm name/email appear in the user menu, including in platform context before opening a tenant. Sign out, confirm `__Host-sbom-session` is cleared, and confirm HCL.CS returns to `/logged-out` without automatically starting a new login. The Sign in again action starts a new login only when clicked.
 5. Confirm a viewer receives the permission page for a write (`403`), not a login loop.
 6. Change a project/SBOM/run ID to another tenant and confirm it is denied/not disclosed.
 

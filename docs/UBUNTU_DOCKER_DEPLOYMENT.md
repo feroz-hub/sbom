@@ -92,7 +92,7 @@ Configure the HCL.CS public PKCE client outside Docker with:
 - `SBOM_IDENTITY_BACKFILL_ISSUER` set to that same exact trusted issuer for
   migration 046 (it is harmless after the backfill is complete);
 - exact redirect URI `https://SBOM_HOST/auth/callback`;
-- exact post-logout URI `https://SBOM_HOST`;
+- exact post-logout URI `https://SBOM_HOST/logged-out`, registered as an allowed Post Logout Redirect URI for `sbom-analyser-web` in HCL.CS (retain other valid URIs);
 - client ID and allowed scopes matching the build arguments;
 - RS256 signing and reachable discovery/JWKS endpoints;
 - role, tenant, subject, email, and (when required) `employee_id` claims;

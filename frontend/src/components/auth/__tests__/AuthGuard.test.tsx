@@ -201,3 +201,31 @@ describe('AuthGuard platform context', () => {
     expect(mockReplace).not.toHaveBeenCalled();
   });
 });
+
+describe('AuthGuard public and logout routes', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockAuthContext = contextFor('unauthenticated', 'unauthenticated');
+  });
+
+  it.each(['/logged-out', '/auth/callback'])('renders %s without login', (path) => {
+    mockPathname = path;
+    render(<AuthGuard><div>Public content</div></AuthGuard>);
+    expect(screen.getByText('Public content')).toBeInTheDocument();
+    expect(mockLogin).not.toHaveBeenCalled();
+  });
+
+  it('does not restart login while logout is in progress', () => {
+    mockPathname = '/';
+    mockAuthContext = contextFor('logging-out', 'loading');
+    render(<AuthGuard><div>Protected content</div></AuthGuard>);
+    expect(screen.queryByText('Protected content')).not.toBeInTheDocument();
+    expect(mockLogin).not.toHaveBeenCalled();
+  });
+
+  it('starts login for a protected route when unauthenticated', () => {
+    mockPathname = '/';
+    render(<AuthGuard><div>Protected content</div></AuthGuard>);
+    expect(mockLogin).toHaveBeenCalledTimes(1);
+  });
+});

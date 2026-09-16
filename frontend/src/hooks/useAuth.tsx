@@ -7,6 +7,7 @@ import {
   setActiveTenantId,
 } from '@/lib/auth';
 import type { IdentityMappingInfo } from '@/lib/identityMapping';
+import { followLogoutRedirect } from '@/lib/auth/logout-navigation';
 
 export interface AuthUser {
   userId: number | null; externalUserId: string; email: string | null; displayName: string | null;
@@ -548,9 +549,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         return response.json();
       })
-      .then((body) => window.location.replace(body.redirectUrl || '/'))
-      .catch(() => window.location.replace('/'));
-  }, [config.enabled, queryClient, setBootstrapState]);
+      .then((body) => followLogoutRedirect(body.redirectUrl || config.postLogoutRedirectUri))
+      .catch(() => followLogoutRedirect(config.postLogoutRedirectUri));
+  }, [config.enabled, config.postLogoutRedirectUri, queryClient, setBootstrapState]);
 
   const reloadAuth = useCallback(() => {
     void checkAuth();

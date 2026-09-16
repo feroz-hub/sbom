@@ -8,7 +8,7 @@ import { GlobalAiBatchBanner } from '@/components/ai-fixes/GlobalAiBatchProgress
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
 
-const PUBLIC_PATHS = ['/auth/callback', '/access-denied', '/verification-required', '/access-pending'];
+const PUBLIC_PATHS = ['/auth/callback', '/access-denied', '/verification-required', '/access-pending', '/logged-out'];
 
 function FullScreenBrandedLoader({ message = 'Verifying authentication…' }: { message?: string }) {
   return (
@@ -134,10 +134,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     bootstrapState === 'checking-session' ||
     bootstrapState === 'processing-callback' ||
     bootstrapState === 'loading-auth-context' ||
-    bootstrapState === 'loading-tenant-context'
+    bootstrapState === 'loading-tenant-context' ||
+    bootstrapState === 'logging-out'
   ) {
     const loaderMessage =
-      bootstrapState === 'processing-callback'
+      bootstrapState === 'logging-out'
+        ? 'Signing out…'
+        : bootstrapState === 'processing-callback'
         ? 'Establishing your secure session…'
         : bootstrapState === 'loading-tenant-context'
           ? 'Loading workspace context…'

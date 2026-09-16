@@ -5,8 +5,9 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from '@/hooks/useToast';
+import { ThemeProvider } from '@/components/theme/ThemeProvider';
 
-const auth = vi.hoisted(() => ({ allowed: true, loading: false }));
+const auth = vi.hoisted(() => ({ allowed: true, loading: false, logout: vi.fn() }));
 const routerPush = vi.hoisted(() => vi.fn());
 const api = vi.hoisted(() => ({
   listPlatformTenants: vi.fn(),
@@ -28,6 +29,9 @@ vi.mock('@/hooks/useAuth', () => ({
     isLoading: auth.loading,
     hasPermission: (permission: string) => auth.allowed && permission === 'platform:tenant:create',
     switchTenant: vi.fn(),
+    user: { displayName: 'Platform Admin', email: 'admin@example.test', roles: ['PLATFORM_ADMIN'], isPlatformAdmin: true },
+    config: { enabled: true },
+    logout: auth.logout,
   }),
 }));
 vi.mock('@/lib/api', async (importOriginal) => ({
@@ -50,7 +54,7 @@ const tenant = {
 
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  return render(<QueryClientProvider client={client}><ToastProvider><PlatformTenantsPage /></ToastProvider></QueryClientProvider>);
+  return render(<QueryClientProvider client={client}><ThemeProvider><ToastProvider><PlatformTenantsPage /></ToastProvider></ThemeProvider></QueryClientProvider>);
 }
 
 async function openAndFillForm() {
@@ -100,6 +104,15 @@ describe('PlatformTenantsPage', () => {
     expect(screen.queryByText(/External tenant mapping/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Connected to HCL.CS tenant/i)).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Administrators' })).toHaveAttribute('href', '/settings/platform');
+  });
+
+  it('offers the shared user menu and Sign Out in platform context', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    expect(screen.getByRole('heading', { name: 'Platform Tenants' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Platform Admin/i }));
+    await user.click(screen.getByRole('menuitem', { name: 'Sign Out' }));
+    expect(auth.logout).toHaveBeenCalledTimes(1);
   });
 
   it('renders an empty state and refresh action', async () => {
