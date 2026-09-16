@@ -35,20 +35,27 @@ def run(ctx: ValidationContext) -> ValidationContext:
     declared = sbom.declared_refs | sbom.document_refs | {"SPDXRef-DOCUMENT"}
 
     edges_by_source: dict[str, list[str]] = defaultdict(list)
+    # One source-document entry fans out into one edge per dependsOn target, so
+    # a dangling *source* would otherwise be reported once per target. Report
+    # each (path, ref) pair at most once.
+    reported_sources: set[tuple[str, str]] = set()
     for index, dep in enumerate(sbom.dependencies):
+        source_path = dep.source_path or f"dependencies[{index}].ref"
+        target_path = dep.target_path or f"dependencies[{index}].dependsOn"
         if dep.source == dep.target:
             ctx.report.add(
                 E.E071_DEPENDENCY_REF_SELF,
                 stage=_STAGE,
-                path=f"dependencies[{index}]",
+                path=source_path,
                 message=f"Dependency entry '{dep.source}' depends on itself.",
                 remediation="Self-edges are never legitimate. Remove the entry.",
                 spec_reference="CycloneDX 1.6 §6",
             )
-        if dep.source not in declared:
-            _emit_dangling(ctx, sbom.spec, f"dependencies[{index}].ref", dep.source)
+        if dep.source not in declared and (source_path, dep.source) not in reported_sources:
+            reported_sources.add((source_path, dep.source))
+            _emit_dangling(ctx, sbom.spec, source_path, dep.source)
         if dep.target not in declared:
-            _emit_dangling(ctx, sbom.spec, f"dependencies[{index}].dependsOn", dep.target)
+            _emit_dangling(ctx, sbom.spec, target_path, dep.target)
         edges_by_source[dep.source].append(dep.target)
 
     cycles = _tarjan_scc(declared, edges_by_source)

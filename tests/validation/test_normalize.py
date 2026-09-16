@@ -170,3 +170,127 @@ def test_spdx_relationship_with_kind() -> None:
     sbom = normalize_spdx(doc, "SPDX-2.3")
     assert any(d.kind == "CONTAINS" for d in sbom.dependencies)
     assert len(sbom.dependencies) == 1
+
+
+# ---------------------------------------------------------------------------
+# declared_refs completeness — every legal refLinkType target must be
+# registered, or stage 5 reports it as dangling. See _collect_bom_refs.
+# ---------------------------------------------------------------------------
+
+
+def test_cdx_root_component_bom_ref_is_declarable() -> None:
+    """``metadata.component`` is a component and the conventional graph root.
+
+    It never appears in ``components[]``, so a normaliser that walks only that
+    list reports the BOM's own root as a dangling dependency ref.
+    """
+    doc = {
+        "bomFormat": "CycloneDX",
+        "specVersion": "1.5",
+        "metadata": {"component": {"type": "device", "bom-ref": "root-device", "name": "gw"}},
+        "components": [{"type": "library", "bom-ref": "lib-a", "name": "a", "version": "1"}],
+        "dependencies": [{"ref": "root-device", "dependsOn": ["lib-a"]}],
+    }
+    sbom = normalize_cyclonedx(doc, "1.5")
+    assert "root-device" in sbom.declared_refs
+    assert "lib-a" in sbom.declared_refs
+    # The root component stays out of components[] so component counts and the
+    # orphan check are unaffected by this registration.
+    assert [c.ref for c in sbom.components] == ["lib-a"]
+
+
+def test_cdx_nested_subassembly_refs_are_declarable() -> None:
+    """``components[].components[]`` sub-assemblies are valid ref targets."""
+    doc = {
+        "bomFormat": "CycloneDX",
+        "specVersion": "1.6",
+        "metadata": {
+            "component": {
+                "type": "device",
+                "bom-ref": "root",
+                "components": [{"type": "firmware", "bom-ref": "root-sub", "name": "fw"}],
+            }
+        },
+        "components": [
+            {
+                "type": "application",
+                "bom-ref": "app",
+                "name": "app",
+                "components": [
+                    {
+                        "type": "library",
+                        "bom-ref": "nested-1",
+                        "name": "n1",
+                        "components": [{"type": "library", "bom-ref": "nested-2", "name": "n2"}],
+                    }
+                ],
+            }
+        ],
+    }
+    sbom = normalize_cyclonedx(doc, "1.6")
+    assert {"root", "root-sub", "app", "nested-1", "nested-2"} <= sbom.declared_refs
+
+
+def test_cdx_service_and_tool_refs_are_declarable() -> None:
+    doc = {
+        "bomFormat": "CycloneDX",
+        "specVersion": "1.6",
+        "metadata": {
+            "tools": {
+                "components": [{"type": "application", "bom-ref": "tool-a", "name": "t"}],
+                "services": [{"bom-ref": "tool-svc", "name": "s"}],
+            }
+        },
+        "components": [],
+        "services": [{"bom-ref": "svc-a", "name": "svc"}],
+    }
+    sbom = normalize_cyclonedx(doc, "1.6")
+    assert {"tool-a", "tool-svc", "svc-a"} <= sbom.declared_refs
+
+
+def test_cdx_malformed_nested_entries_are_skipped() -> None:
+    """Nested collection walking must tolerate junk without raising."""
+    doc = {
+        "bomFormat": "CycloneDX",
+        "specVersion": "1.6",
+        "metadata": {"component": {"bom-ref": "root", "components": "not-a-list"}},
+        "components": [{"bom-ref": "a", "name": "a", "components": ["garbage", {"name": "no-ref"}]}],
+        "services": "not-a-list",
+    }
+    sbom = normalize_cyclonedx(doc, "1.6")
+    assert {"root", "a"} <= sbom.declared_refs
+
+
+def test_cdx_dependency_edges_record_source_document_paths() -> None:
+    """A fan-out entry keeps the *source* index, not the flattened edge index."""
+    doc = {
+        "bomFormat": "CycloneDX",
+        "specVersion": "1.6",
+        "metadata": {},
+        "components": [],
+        "dependencies": [
+            {"ref": "a", "dependsOn": ["b", "c"]},
+            {"ref": "b", "dependsOn": ["c"]},
+        ],
+    }
+    sbom = normalize_cyclonedx(doc, "1.6")
+    assert [(e.source_path, e.target_path) for e in sbom.dependencies] == [
+        ("dependencies[0].ref", "dependencies[0].dependsOn[0]"),
+        ("dependencies[0].ref", "dependencies[0].dependsOn[1]"),
+        ("dependencies[1].ref", "dependencies[1].dependsOn[0]"),
+    ]
+
+
+def test_spdx_relationship_edges_record_source_document_paths() -> None:
+    doc = {
+        "spdxVersion": "SPDX-2.3",
+        "SPDXID": "SPDXRef-DOCUMENT",
+        "creationInfo": {"creators": []},
+        "packages": [],
+        "relationships": [
+            {"spdxElementId": "SPDXRef-A", "relatedSpdxElement": "SPDXRef-B", "relationshipType": "DEPENDS_ON"},
+        ],
+    }
+    sbom = normalize_spdx(doc, "SPDX-2.3")
+    assert sbom.dependencies[0].source_path == "relationships[0].spdxElementId"
+    assert sbom.dependencies[0].target_path == "relationships[0].relatedSpdxElement"

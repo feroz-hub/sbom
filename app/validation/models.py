@@ -41,6 +41,12 @@ class DependencyEdge(BaseModel):
     source: str
     target: str
     kind: str = "DEPENDS_ON"  # SPDX relationshipType, or "DEPENDS_ON" for CycloneDX
+    # JSONPaths into the source doc, for error.path. Both specs collapse a
+    # one-to-many entry into several edges, so an edge's index in
+    # ``InternalSbom.dependencies`` is *not* its index in the source document —
+    # the normaliser records the real paths here.
+    source_path: str = ""
+    target_path: str = ""
 
 
 class DocumentMetadata(BaseModel):
