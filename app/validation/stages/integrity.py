@@ -2,7 +2,7 @@
 
 Operates on :class:`InternalSbom` produced by stage 4. Three checks:
 
-* **Dangling refs** — every dependency / relationship target must resolve to
+* **Dangling refs** — every dependency node and relationship target must resolve to
   a declared component or to a valid ``DocumentRef-…`` (SPDX). Unresolved
   refs are hard errors.
 * **Self-edges** — ``A → A`` is never legitimate; emit
@@ -32,13 +32,20 @@ def run(ctx: ValidationContext) -> ValidationContext:
     if sbom is None:
         return ctx
 
-    declared = sbom.declared_refs | sbom.document_refs | {"SPDXRef-DOCUMENT"}
+    declared = sbom.declared_refs.copy()
+    if sbom.spec == "spdx":
+        declared.update(sbom.document_refs)
+        declared.add("SPDXRef-DOCUMENT")
 
     edges_by_source: dict[str, list[str]] = defaultdict(list)
-    # One source-document entry fans out into one edge per dependsOn target, so
-    # a dangling *source* would otherwise be reported once per target. Report
-    # each (path, ref) pair at most once.
+    # CycloneDX dependency nodes are retained separately from their edges so
+    # entries with an empty dependsOn list are still validated. Hand-built
+    # models and SPDX relationships without nodes retain the edge fallback.
     reported_sources: set[tuple[str, str]] = set()
+    for node in sbom.dependency_nodes:
+        reported_sources.add((node.path, node.ref))
+        if node.ref not in declared:
+            _emit_dangling(ctx, sbom.spec, sbom.spec_version, node.path, node.ref)
     for index, dep in enumerate(sbom.dependencies):
         source_path = dep.source_path or f"dependencies[{index}].ref"
         target_path = dep.target_path or f"dependencies[{index}].dependsOn"
@@ -49,13 +56,13 @@ def run(ctx: ValidationContext) -> ValidationContext:
                 path=source_path,
                 message=f"Dependency entry '{dep.source}' depends on itself.",
                 remediation="Self-edges are never legitimate. Remove the entry.",
-                spec_reference="CycloneDX 1.6 §6",
+                spec_reference=f"CycloneDX {sbom.spec_version} §6" if sbom.spec == "cyclonedx" else "SPDX 2.3 §11",
             )
         if dep.source not in declared and (source_path, dep.source) not in reported_sources:
             reported_sources.add((source_path, dep.source))
-            _emit_dangling(ctx, sbom.spec, source_path, dep.source)
+            _emit_dangling(ctx, sbom.spec, sbom.spec_version, source_path, dep.source)
         if dep.target not in declared:
-            _emit_dangling(ctx, sbom.spec, target_path, dep.target)
+            _emit_dangling(ctx, sbom.spec, sbom.spec_version, target_path, dep.target)
         edges_by_source[dep.source].append(dep.target)
 
     cycles = _tarjan_scc(declared, edges_by_source)
@@ -88,7 +95,7 @@ def run(ctx: ValidationContext) -> ValidationContext:
     return ctx
 
 
-def _emit_dangling(ctx: ValidationContext, spec: str, path: str, ref: str) -> None:
+def _emit_dangling(ctx: ValidationContext, spec: str, spec_version: str, path: str, ref: str) -> None:
     if spec == "spdx":
         if ref.startswith("DocumentRef-"):
             return  # documentRefs are valid by spec, even if not declared in this doc
@@ -105,9 +112,12 @@ def _emit_dangling(ctx: ValidationContext, spec: str, path: str, ref: str) -> No
             E.E070_DEPENDENCY_REF_DANGLING,
             stage=_STAGE,
             path=path,
-            message=f"dependencies ref '{ref}' does not match any declared bom-ref.",
-            remediation="Either declare a component with that bom-ref, or remove the dependency entry.",
-            spec_reference="CycloneDX 1.6 §6",
+            message=(
+                f"{'dependsOn' if '.dependsOn[' in path else 'dependencies'} ref '{ref}' "
+                "does not match any declared bom-ref."
+            ),
+            remediation="Declare a component or service with that bom-ref, or remove the reference.",
+            spec_reference=f"CycloneDX {spec_version} §6",
         )
 
 

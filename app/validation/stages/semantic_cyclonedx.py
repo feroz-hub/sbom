@@ -21,7 +21,7 @@ from typing import Any
 
 from .. import errors as E
 from ..context import ValidationContext
-from ..normalize import normalize_cyclonedx
+from ..normalize import iter_declared_bom_refs, normalize_cyclonedx
 
 _STAGE = "semantic"
 
@@ -76,11 +76,12 @@ def run(ctx: ValidationContext) -> ValidationContext:
     _check_metadata_timestamp(doc, ctx)
 
     seen_refs: dict[str, str] = {}
+    for ref, path in iter_declared_bom_refs(doc):
+        _check_bom_ref_unique(ref, path, seen_refs, ctx)
     for index, comp in enumerate(doc.get("components") or []):
         if not isinstance(comp, dict):
             continue
         path = f"components[{index}]"
-        _check_component_ref_unique(comp, path, seen_refs, ctx)
         _check_component_type(comp, path, ctx)
         _check_purl(comp.get("purl"), f"{path}.purl", ctx)
         _check_cpe(comp.get("cpe"), f"{path}.cpe", ctx)
@@ -102,7 +103,7 @@ def _check_serial_number(value: object, ctx: ValidationContext) -> None:
             path="serialNumber",
             message=f"serialNumber '{value}' does not match urn:uuid:<uuid> form.",
             remediation="Use the form 'urn:uuid:{uuid4}'.",
-            spec_reference="CycloneDX 1.6 §3",
+            spec_reference=f"CycloneDX {ctx.spec_version} §3",
         )
 
 
@@ -125,7 +126,7 @@ def _check_bom_version(value: object, ctx: ValidationContext) -> None:
             path="version",
             message=f"Top-level 'version' must be a non-negative integer (BOM revision), got '{value}'.",
             remediation="This is the BOM revision, not a component version. Set to an integer ≥ 0.",
-            spec_reference="CycloneDX 1.6 §3",
+            spec_reference=f"CycloneDX {ctx.spec_version} §3",
         )
 
 
@@ -141,7 +142,7 @@ def _check_metadata_timestamp(doc: dict[str, Any], ctx: ValidationContext) -> No
             path="metadata.timestamp",
             message=f"metadata.timestamp '{ts}' is not a string.",
             remediation="Emit timestamps as 2026-04-30T12:34:56Z.",
-            spec_reference="CycloneDX 1.6 §3.3",
+            spec_reference=f"CycloneDX {ctx.spec_version} §3.3",
         )
         return
     try:
@@ -153,25 +154,22 @@ def _check_metadata_timestamp(doc: dict[str, Any], ctx: ValidationContext) -> No
             path="metadata.timestamp",
             message=f"metadata.timestamp '{ts}' is not parseable as ISO-8601.",
             remediation="Emit timestamps as 2026-04-30T12:34:56Z.",
-            spec_reference="CycloneDX 1.6 §3.3",
+            spec_reference=f"CycloneDX {ctx.spec_version} §3.3",
         )
 
 
-def _check_component_ref_unique(comp: dict, path: str, seen: dict[str, str], ctx: ValidationContext) -> None:
-    ref = comp.get("bom-ref") or comp.get("bomRef")
-    if not isinstance(ref, str) or not ref:
-        return
+def _check_bom_ref_unique(ref: str, path: str, seen: dict[str, str], ctx: ValidationContext) -> None:
     if ref in seen:
         ctx.report.add(
             E.E051_BOM_REF_DUPLICATE,
             stage=_STAGE,
-            path=f"{path}.bom-ref",
+            path=path,
             message=f"bom-ref '{ref}' is duplicated; first seen at {seen[ref]}.",
             remediation="Every bom-ref must be unique within the document.",
-            spec_reference="CycloneDX 1.6 §4.1",
+            spec_reference=f"CycloneDX {ctx.spec_version} §4.1",
         )
         return
-    seen[ref] = f"{path}.bom-ref"
+    seen[ref] = path
 
 
 def _check_component_type(comp: dict, path: str, ctx: ValidationContext) -> None:
@@ -189,7 +187,7 @@ def _check_component_type(comp: dict, path: str, ctx: ValidationContext) -> None
                 "operating-system, device, device-driver, firmware, file, "
                 "machine-learning-model, data, cryptographic-asset."
             ),
-            spec_reference="CycloneDX 1.6 §4.4",
+            spec_reference=f"CycloneDX {ctx.spec_version} §4.4",
         )
 
 
@@ -203,7 +201,7 @@ def _check_purl(value: object, path: str, ctx: ValidationContext) -> None:
             path=path,
             message="PURL is not a string.",
             remediation="Encode PURL as a string.",
-            spec_reference="CycloneDX 1.6 §4.4.1",
+            spec_reference=f"CycloneDX {ctx.spec_version} §4.4.1",
         )
         return
     from ...services.lifecycle.normalizer import parse_purl
@@ -218,7 +216,7 @@ def _check_purl(value: object, path: str, ctx: ValidationContext) -> None:
             remediation=(
                 "Use the form `pkg:{type}/{namespace}/{name}@{version}`. See https://github.com/package-url/purl-spec."
             ),
-            spec_reference="CycloneDX 1.6 §4.4.1",
+            spec_reference=f"CycloneDX {ctx.spec_version} §4.4.1",
         )
 
 
@@ -232,7 +230,7 @@ def _check_cpe(value: object, path: str, ctx: ValidationContext) -> None:
             path=path,
             message=f"CPE '{value}' does not parse as CPE 2.3.",
             remediation="Use the CPE 2.3 form: cpe:2.3:{part}:{vendor}:{product}:{version}:…",
-            spec_reference="CycloneDX 1.6 §4.4.1",
+            spec_reference=f"CycloneDX {ctx.spec_version} §4.4.1",
         )
 
 
@@ -251,5 +249,5 @@ def _check_hash(h: dict, path: str, ctx: ValidationContext) -> None:
             path=path,
             message=(f"Hash has alg '{alg}' but content length {len(content)} hex chars (expected {expected})."),
             remediation="Recompute the digest with the algorithm declared.",
-            spec_reference="CycloneDX 1.6 §4.4.5",
+            spec_reference=f"CycloneDX {ctx.spec_version} §4.4.5",
         )

@@ -213,6 +213,35 @@ def test_cdx_duplicate_bom_ref_rejected() -> None:
     assert E.E051_BOM_REF_DUPLICATE in [e.code for e in ctx.report.errors]
 
 
+def test_cdx_duplicate_metadata_and_nested_refs_rejected() -> None:
+    doc = deepcopy(_CDX_VALID)
+    doc["metadata"]["component"] = {"type": "application", "bom-ref": "shared-ref", "name": "Root"}
+    doc["components"][0]["components"] = [{"type": "library", "bom-ref": "shared-ref", "name": "Nested"}]
+    ctx = _cdx(doc)
+    duplicates = [entry for entry in ctx.report.errors if entry.code == E.E051_BOM_REF_DUPLICATE]
+    assert [entry.path for entry in duplicates] == ["components[0].components[0].bom-ref"]
+    assert "metadata.component.bom-ref" in duplicates[0].message
+
+
+def test_cdx_duplicate_service_ref_rejected() -> None:
+    doc = deepcopy(_CDX_VALID)
+    doc["services"] = [{"bom-ref": doc["components"][0]["bom-ref"], "name": "API"}]
+    ctx = _cdx(doc)
+    duplicates = [entry for entry in ctx.report.errors if entry.code == E.E051_BOM_REF_DUPLICATE]
+    assert len(duplicates) == 1
+    assert duplicates[0].path == "services[0].bom-ref"
+
+
+def test_cdx_duplicate_citation_uses_declared_version() -> None:
+    doc = deepcopy(_CDX_VALID)
+    doc["specVersion"] = "1.5"
+    doc["components"].append(deepcopy(doc["components"][0]))
+    ctx = ValidationContext(raw_bytes=b"", spec="cyclonedx", spec_version="1.5", parsed_dict=doc)
+    semantic_cyclonedx.run(ctx)
+    duplicate = next(entry for entry in ctx.report.errors if entry.code == E.E051_BOM_REF_DUPLICATE)
+    assert duplicate.spec_reference == "CycloneDX 1.5 §4.1"
+
+
 def test_cdx_bad_purl_rejected() -> None:
     doc = deepcopy(_CDX_VALID)
     doc["components"][0]["purl"] = "garbage"
