@@ -75,16 +75,31 @@ def test_uncaught_stage_exception_mapped_to_e025() -> None:
     assert E.E025_SCHEMA_VIOLATION in [e.code for e in report.errors]
 
 
-def test_cyclonedx_1_6_clean_file_validates(read_fixture) -> None:
+def test_cyclonedx_1_6_fixture_reports_duplicate_subject_ref(read_fixture) -> None:
     # Regression: Stage 3 hardcoded Draft202012Validator, which crashed on
     # CycloneDX's draft-07 tuple-form `items` ('list' object has no attribute
     # 'get' inside referencing), and the orchestrator wrapped the crash as a
-    # generic E025 "Internal validator error". A clean 1.6 file must validate.
+    # generic E025 "Internal validator error". This fixture also declares its
+    # subject twice (metadata.component and components[0]), so Stage 4 must
+    # report a real duplicate rather than treating it as clean.
     raw = read_fixture("valid/cyclonedx_1_6_clean.json")
     report = run_validation(raw)
     error_codes = [e.code for e in report.errors]
-    assert not report.has_errors(), error_codes
+    assert error_codes == [E.E051_BOM_REF_DUPLICATE]
     assert E.E025_SCHEMA_VIOLATION not in error_codes
+
+
+def test_cyclonedx_1_6_clean_document_validates() -> None:
+    doc = {
+        "bomFormat": "CycloneDX",
+        "specVersion": "1.6",
+        "version": 1,
+        "metadata": {"component": {"type": "application", "bom-ref": "app", "name": "App", "version": "1.0.0"}},
+        "components": [{"type": "library", "bom-ref": "lib", "name": "Library", "version": "1.0.0"}],
+        "dependencies": [{"ref": "app", "dependsOn": ["lib"]}],
+    }
+    report = run_validation(json.dumps(doc).encode())
+    assert not report.has_errors(), [(entry.code, entry.path) for entry in report.errors]
 
 
 def test_cyclonedx_license_id_ref_resolves_offline() -> None:
@@ -116,6 +131,50 @@ def test_cyclonedx_license_id_ref_resolves_offline() -> None:
         e.message for e in report.errors
     )
     assert not any("Internal validator error" in e.message for e in report.errors)
+
+
+def test_cyclonedx_1_5_device_subject_dependency_validates_end_to_end() -> None:
+    refs = [
+        "hw-mcu-stm32f407",
+        "hw-flash-w25q128",
+        "hw-wifi-esp32",
+        "hw-sensor-bme280",
+        "hw-sensor-lsm6dso",
+        "fw-bootloader-mcuboot",
+        "os-freertos-kernel",
+        "app-gateway-firmware",
+    ]
+    doc = {
+        "bomFormat": "CycloneDX",
+        "specVersion": "1.5",
+        "serialNumber": "urn:uuid:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+        "version": 1,
+        "metadata": {
+            "component": {
+                "type": "device",
+                "bom-ref": "device-securenode-gw100",
+                "name": "SecureNode-GW100",
+                "version": "2.4.1",
+            }
+        },
+        "components": [{"type": "library", "bom-ref": ref, "name": ref, "version": "1.0.0"} for ref in refs],
+        "dependencies": [{"ref": "device-securenode-gw100", "dependsOn": refs}],
+    }
+    report = run_validation(json.dumps(doc).encode())
+    assert not report.has_errors(), [(entry.code, entry.path) for entry in report.errors]
+
+
+def test_cyclonedx_1_5_dangling_citation_uses_document_version() -> None:
+    doc = {
+        "bomFormat": "CycloneDX",
+        "specVersion": "1.5",
+        "version": 1,
+        "metadata": {"component": {"type": "application", "bom-ref": "root", "name": "Root"}},
+        "dependencies": [{"ref": "missing", "dependsOn": []}],
+    }
+    report = run_validation(json.dumps(doc).encode())
+    dangling = [entry for entry in report.errors if entry.code == E.E070_DEPENDENCY_REF_DANGLING]
+    assert [(entry.path, entry.spec_reference) for entry in dangling] == [("dependencies[0].ref", "CycloneDX 1.5 §6")]
 
 
 def test_dispatcher_routes_spdx_2_x_to_semantic_spdx() -> None:

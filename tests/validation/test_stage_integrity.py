@@ -10,6 +10,7 @@ from app.validation.models import (
     DocumentMetadata,
     InternalSbom,
 )
+from app.validation.normalize import normalize_cyclonedx
 from app.validation.stages import integrity
 
 
@@ -205,3 +206,130 @@ def test_dangling_still_detected_without_recorded_paths() -> None:
     dangling = [e for e in ctx.report.errors if e.code == E.E070_DEPENDENCY_REF_DANGLING]
     assert len(dangling) == 1
     assert dangling[0].path == "dependencies[0].dependsOn"
+
+
+def _cyclonedx_doc() -> dict:
+    return {
+        "bomFormat": "CycloneDX",
+        "specVersion": "1.5",
+        "metadata": {
+            "component": {"type": "application", "bom-ref": "root-app", "name": "Root App", "version": "1.0.0"}
+        },
+        "components": [{"type": "library", "bom-ref": "lib-a", "name": "Library A", "version": "1.0.0"}],
+        "dependencies": [{"ref": "root-app", "dependsOn": ["lib-a"]}],
+    }
+
+
+def _run_cyclonedx(doc: dict) -> ValidationContext:
+    return integrity.run(_ctx(normalize_cyclonedx(doc, doc["specVersion"])))
+
+
+def _dangling(ctx: ValidationContext) -> list:
+    return [entry for entry in ctx.report.errors if entry.code == E.E070_DEPENDENCY_REF_DANGLING]
+
+
+def test_metadata_subject_as_dependency_root_passes_stage_five() -> None:
+    assert _dangling(_run_cyclonedx(_cyclonedx_doc())) == []
+
+
+def test_dangling_dependency_node_with_no_edges_has_its_own_path() -> None:
+    doc = _cyclonedx_doc()
+    doc["dependencies"] = [{"ref": "does-not-exist", "dependsOn": []}]
+    errors = _dangling(_run_cyclonedx(doc))
+    assert [(error.path, error.message) for error in errors] == [
+        ("dependencies[0].ref", "dependencies ref 'does-not-exist' does not match any declared bom-ref.")
+    ]
+    assert errors[0].spec_reference == "CycloneDX 1.5 §6"
+
+
+def test_dangling_dependson_target_uses_edge_path_only() -> None:
+    doc = _cyclonedx_doc()
+    doc["dependencies"] = [{"ref": "root-app", "dependsOn": ["lib-a", "missing-lib"]}]
+    errors = _dangling(_run_cyclonedx(doc))
+    assert [(error.path, "missing-lib" in error.message) for error in errors] == [
+        ("dependencies[0].dependsOn[1]", True)
+    ]
+
+
+def test_dependency_node_indexes_use_each_entries_own_ref() -> None:
+    doc = _cyclonedx_doc()
+    doc["components"].append({"type": "library", "bom-ref": "valid-a", "name": "Valid A"})
+    doc["dependencies"] = [
+        {"ref": "valid-a", "dependsOn": []},
+        {"ref": "missing-b", "dependsOn": []},
+        {"ref": "missing-c", "dependsOn": []},
+    ]
+    errors = _dangling(_run_cyclonedx(doc))
+    assert [(error.path, error.message) for error in errors] == [
+        ("dependencies[1].ref", "dependencies ref 'missing-b' does not match any declared bom-ref."),
+        ("dependencies[2].ref", "dependencies ref 'missing-c' does not match any declared bom-ref."),
+    ]
+
+
+def test_nested_component_and_service_refs_resolve() -> None:
+    doc = _cyclonedx_doc()
+    doc["components"] = [
+        {
+            "type": "application",
+            "bom-ref": "parent",
+            "name": "Parent",
+            "components": [{"type": "library", "bom-ref": "nested-lib", "name": "Nested"}],
+        }
+    ]
+    doc["services"] = [
+        {
+            "bom-ref": "service-api",
+            "name": "API Service",
+            "services": [{"bom-ref": "service-child", "name": "Child Service"}],
+        }
+    ]
+    doc["dependencies"] = [{"ref": "root-app", "dependsOn": ["nested-lib", "service-api", "service-child"]}]
+    assert _dangling(_run_cyclonedx(doc)) == []
+
+
+def test_real_device_subject_and_all_dependency_targets_resolve() -> None:
+    doc = _cyclonedx_doc()
+    refs = [
+        "hw-mcu-stm32f407",
+        "hw-flash-w25q128",
+        "hw-wifi-esp32",
+        "hw-sensor-bme280",
+        "hw-sensor-lsm6dso",
+        "fw-bootloader-mcuboot",
+        "os-freertos-kernel",
+        "app-gateway-firmware",
+    ]
+    doc["metadata"]["component"]["bom-ref"] = "device-securenode-gw100"
+    doc["components"] = [{"type": "library", "bom-ref": ref, "name": ref, "version": "1.0.0"} for ref in refs]
+    doc["dependencies"] = [{"ref": "device-securenode-gw100", "dependsOn": refs}]
+    assert _dangling(_run_cyclonedx(doc)) == []
+
+
+def test_missing_and_empty_dependencies_do_not_emit_dangling_errors() -> None:
+    doc = _cyclonedx_doc()
+    del doc["dependencies"]
+    assert _dangling(_run_cyclonedx(doc)) == []
+    doc["dependencies"] = []
+    assert _dangling(_run_cyclonedx(doc)) == []
+
+
+def test_malformed_dependency_entries_do_not_create_false_edges() -> None:
+    doc = _cyclonedx_doc()
+    doc["dependencies"] = [None, {"ref": 42, "dependsOn": ["lib-a"]}, {"ref": "root-app", "dependsOn": "lib-a"}]
+    ctx = _run_cyclonedx(doc)
+    assert _dangling(ctx) == []
+    assert ctx.internal_model.dependencies == []
+
+
+def test_declared_refs_work_for_supported_cyclonedx_versions() -> None:
+    for version in ("1.4", "1.5", "1.6"):
+        doc = _cyclonedx_doc()
+        doc["specVersion"] = version
+        assert _dangling(_run_cyclonedx(doc)) == []
+
+
+def test_spdx_document_ref_is_not_implicitly_declared_in_cyclonedx() -> None:
+    doc = _cyclonedx_doc()
+    doc["dependencies"] = [{"ref": "SPDXRef-DOCUMENT", "dependsOn": []}]
+    errors = _dangling(_run_cyclonedx(doc))
+    assert [error.path for error in errors] == ["dependencies[0].ref"]

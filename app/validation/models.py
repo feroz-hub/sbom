@@ -49,6 +49,15 @@ class DependencyEdge(BaseModel):
     target_path: str = ""
 
 
+class DependencyNode(BaseModel):
+    """A CycloneDX ``dependencies[]`` entry, including entries with no edges."""
+
+    model_config = ConfigDict(frozen=True)
+
+    ref: str
+    path: str
+
+
 class DocumentMetadata(BaseModel):
     """Top-level metadata used by stage 7 (NTIA)."""
 
@@ -74,6 +83,7 @@ class InternalSbom(BaseModel):
     metadata: DocumentMetadata
     components: list[Component] = Field(default_factory=list)
     dependencies: list[DependencyEdge] = Field(default_factory=list)
+    dependency_nodes: list[DependencyNode] = Field(default_factory=list)
     declared_refs: set[str] = Field(default_factory=set)
     document_refs: set[str] = Field(default_factory=set)  # SPDX externalDocumentRefs
     signature_block: dict[str, Any] | None = None
