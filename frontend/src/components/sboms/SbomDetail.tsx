@@ -1581,29 +1581,33 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                           ) : null}
                         </Td>
                         <Td className="text-right">
-                          <button
-                            onClick={() => setEvidenceModal({ kind: 'lifecycle', component: c })}
-                            className="mr-3 inline-flex items-center gap-1 text-xs font-medium text-hcl-muted transition-colors hover:text-hcl-navy"
-                          >
-                            <Eye className="h-3 w-3" /> Evidence
-                          </button>
-                          <button
-                            onClick={() => handleRefreshComponentLifecycle(c)}
-                            disabled={refreshingComponentId === c.id}
-                            className="mr-3 inline-flex items-center gap-1 text-xs font-medium text-hcl-muted transition-colors hover:text-hcl-navy disabled:opacity-60"
-                          >
-                            <RefreshCw className={`h-3 w-3 ${refreshingComponentId === c.id ? 'animate-spin' : ''}`} /> Refresh
-                          </button>
-                          <button onClick={() => setManagedVexComponent(c)}
-                            className="mr-3 inline-flex items-center gap-1 text-xs font-medium text-hcl-blue">
-                            Manage VEX
-                          </button>
-                          <button
-                            onClick={() => openEditModal(c)}
-                            className="inline-flex items-center gap-1 text-xs text-hcl-blue hover:text-hcl-navy transition-colors font-medium"
-                          >
-                            <Edit2 className="h-3 w-3" /> Edit
-                          </button>
+                          <div className="inline-grid grid-cols-[max-content_max-content] justify-items-end gap-x-3 gap-y-1 whitespace-nowrap">
+                            <button
+                              onClick={() => setEvidenceModal({ kind: 'lifecycle', component: c })}
+                              className="inline-flex items-center gap-1 text-xs font-medium text-hcl-muted transition-colors hover:text-hcl-navy"
+                            >
+                              <Eye className="h-3 w-3" /> Evidence
+                            </button>
+                            <button
+                              onClick={() => handleRefreshComponentLifecycle(c)}
+                              disabled={refreshingComponentId === c.id}
+                              className="inline-flex items-center gap-1 text-xs font-medium text-hcl-muted transition-colors hover:text-hcl-navy disabled:opacity-60"
+                            >
+                              <RefreshCw className={`h-3 w-3 ${refreshingComponentId === c.id ? 'animate-spin' : ''}`} /> Refresh
+                            </button>
+                            <button
+                              onClick={() => setManagedVexComponent(c)}
+                              className="inline-flex items-center gap-1 text-xs font-medium text-hcl-blue"
+                            >
+                              Manage VEX
+                            </button>
+                            <button
+                              onClick={() => openEditModal(c)}
+                              className="inline-flex items-center gap-1 text-xs text-hcl-blue hover:text-hcl-navy transition-colors font-medium"
+                            >
+                              <Edit2 className="h-3 w-3" /> Edit
+                            </button>
+                          </div>
                         </Td>
                     </tr>
                     );
