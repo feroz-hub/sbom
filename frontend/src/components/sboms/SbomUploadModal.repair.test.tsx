@@ -110,12 +110,12 @@ describe('SbomUploadModal validation repair handoff', () => {
 
     await screen.findByRole('option', { name: 'Payments API' });
     const projectSelect = screen.getByRole('combobox', { name: /Project/i });
-    const productSelect = screen.getByRole('combobox', { name: /^Product/i });
+    const productSelect = screen.getByRole('combobox', { name: /^Application/i });
     await waitFor(() => expect(projectSelect).toHaveValue('42'));
     await waitFor(() => expect(productSelect).toHaveValue('77'));
 
     fireEvent.change(productSelect, { target: { value: '77' } });
-    expect(screen.queryByText('Product is required')).not.toBeInTheDocument();
+    expect(screen.queryByText('Application is required')).not.toBeInTheDocument();
   });
 
   it('detects SPDX JSON content and selects the matching SPDX type', async () => {

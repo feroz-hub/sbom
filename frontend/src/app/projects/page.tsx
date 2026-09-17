@@ -57,10 +57,10 @@ function ProjectProducts({ project }: { project: Project }) {
     mutationFn: (product: Product) => deleteProduct(product.id),
     onSuccess: (_data, deletedProduct) => {
       queryClient.invalidateQueries({ queryKey: ['products', project.id] });
-      showSuccess(`Product “${deletedProduct.name}” was deleted successfully.`);
+      showSuccess(`Application “${deletedProduct.name}” was deleted successfully.`);
       setDeleteProductTarget(null);
     },
-    onError: (error: unknown) => showError(getApiErrorMessage(error, 'Product deletion failed. Please try again.')),
+    onError: (error: unknown) => showError(getApiErrorMessage(error, 'Application deletion failed. Please try again.')),
   });
 
   const handleUploadSuccess = () => {
@@ -73,14 +73,14 @@ function ProjectProducts({ project }: { project: Project }) {
         <CardTitle>{project.project_name}</CardTitle>
         <Button size="sm" variant="secondary" onClick={() => setFormOpen(true)}>
           <Plus className="h-4 w-4" />
-          Create Product
+          Create Application
         </Button>
       </CardHeader>
       <CardContent>
-        <Table ariaLabel={`${project.project_name} products`}>
+        <Table ariaLabel={`${project.project_name} applications`}>
           <TableHead>
             <tr>
-              <Th>Product Name</Th>
+              <Th>Application Name</Th>
               <Th>Description</Th>
               <Th>SBOM Count</Th>
               <Th>Latest SBOM</Th>
@@ -93,9 +93,9 @@ function ProjectProducts({ project }: { project: Project }) {
           </TableHead>
           <TableBody>
             {isLoading ? (
-              <EmptyRow cols={9} message="Loading products..." />
+              <EmptyRow cols={9} message="Loading applications..." />
             ) : products.length === 0 ? (
-              <EmptyRow cols={9} message="No products found for this project. Create one before uploading SBOMs." />
+              <EmptyRow cols={9} message="No applications found for this project. Create one before uploading SBOMs." />
             ) : (
               products.map((product) => (
                 <tr key={product.id}>
@@ -122,7 +122,7 @@ function ProjectProducts({ project }: { project: Project }) {
                         {product.current_sbom_version || `#${product.current_sbom_id}`}
                       </Link>
                     ) : (
-                      <span title="CURRENT_ONLY schedules skip this product until a current SBOM is selected.">Not set</span>
+                      <span title="CURRENT_ONLY schedules skip this application until a current SBOM is selected.">Not set</span>
                     )}
                   </Td>
                   <Td><ProductScheduleStatus productId={product.id} /></Td>
@@ -132,11 +132,11 @@ function ProjectProducts({ project }: { project: Project }) {
                       <Link
                         href={`/products/${product.id}`}
                         className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-transparent text-hcl-navy transition-colors hover:bg-surface-muted hover:text-hcl-blue"
-                        title="View product"
+                        title="View application"
                       >
                         <Eye className="h-4 w-4" />
                       </Link>
-                      <Button size="icon" variant="ghost" title="Edit product" onClick={() => setEditingProduct(product)}>
+                      <Button size="icon" variant="ghost" title="Edit application" onClick={() => setEditingProduct(product)}>
                         <Pencil className="h-4 w-4" />
                       </Button>
                       <Button size="icon" variant="ghost" title="Upload SBOM" onClick={() => setUploadProduct(product)}>
@@ -145,7 +145,7 @@ function ProjectProducts({ project }: { project: Project }) {
                       <Button
                         size="icon"
                         variant="ghost"
-                        title="Delete product"
+                        title="Delete application"
                         onClick={() => setDeleteProductTarget(product)}
                         disabled={deleteMutation.isPending}
                       >
@@ -182,9 +182,9 @@ function ProjectProducts({ project }: { project: Project }) {
         onConfirm={() => deleteProductTarget && deleteMutation.mutate(deleteProductTarget)}
         loading={deleteMutation.isPending}
         recordName={deleteProductTarget?.name ?? ''}
-        recordKind="product"
+        recordKind="application"
         allowPermanent={false}
-        title={`Delete product “${deleteProductTarget?.name ?? ''}”?`}
+        title={`Delete application “${deleteProductTarget?.name ?? ''}”?`}
       />
     </Card>
   );
@@ -217,7 +217,7 @@ export default function ProjectsPage() {
         />
         {!isLoading && !error && projects?.length ? (
           <div className="space-y-4">
-            <h2 className="text-lg font-semibold text-hcl-navy">Products</h2>
+            <h2 className="text-lg font-semibold text-hcl-navy">Applications</h2>
             {projects.map((project) => (
               <ProjectProducts key={project.id} project={project} />
             ))}

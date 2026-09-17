@@ -76,7 +76,7 @@ const schema = z.object({
   sbom_data: z.string().optional().default(''),
   sbom_type_id: z.string().optional(),
   projectid: z.string().min(1, 'Project is required'),
-  productid: z.string().min(1, 'Product is required'),
+  productid: z.string().min(1, 'Application is required'),
   sbom_version: z.string().optional(),
   product_version: z.string().optional(),
   parent_sbom_id: z.string().optional(),
@@ -226,9 +226,9 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
       queryClient.invalidateQueries({ queryKey: ['products', selectedProjectNumber] });
       setValue('productid', String(product.id), { shouldValidate: true });
       setNewProductName('');
-      showToast('Product created', 'success');
+      showToast('Application created', 'success');
     },
-    onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Product creation failed. Please try again.'), 'error'),
+    onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Application creation failed. Please try again.'), 'error'),
   });
 
   useEffect(() => {
@@ -669,14 +669,14 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
               ))}
             </Select>
             <Select
-              label="Product"
-              placeholder="Select product..."
+              label="Application"
+              placeholder="Select application..."
               disabled={uploading || !selectedProjectId || productsQuery.isLoading}
               required
               error={errors.productid?.message}
               hint={
                 selectedProjectId && productItems.length === 0
-                  ? 'No products found for this project.'
+                  ? 'No applications found for this project.'
                   : undefined
               }
               {...productRegistration}
@@ -695,7 +695,7 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
           {selectedProjectId && productItems.length === 0 && (
             <div className="flex items-end gap-2 rounded-lg border border-border bg-surface-muted p-3">
               <Input
-                label="Create Product"
+                label="Create Application"
                 placeholder="e.g. Authorization Server"
                 value={newProductName}
                 onChange={(event) => setNewProductName(event.target.value)}
@@ -766,9 +766,9 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
             </Select>
             <p className="mt-1 text-xs text-hcl-muted">
               {!selectedProductId
-                ? 'Choose a product first to link this upload to an earlier version.'
+                ? 'Choose an application first to link this upload to an earlier version.'
                 : versionParentOptions.length === 0
-                  ? 'No earlier SBOMs on this product yet.'
+                  ? 'No earlier SBOMs on this application yet.'
                   : selectedParentSbomId
                     ? 'Adds this upload to that SBOM\u2019s version history, so you can compare and restore across releases.'
                     : 'Leave as standalone unless this file supersedes an existing SBOM.'}

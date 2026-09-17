@@ -126,7 +126,7 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
   if (productQuery.isLoading) {
     return (
       <div className="flex flex-col flex-1">
-        <TopBar title="Product" />
+        <TopBar title="Application" />
         <div className="p-6">
           <PageSpinner />
         </div>
@@ -137,10 +137,10 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
   if (productQuery.error || !productQuery.data) {
     return (
       <div className="flex flex-col flex-1">
-        <TopBar title="Product" breadcrumbs={[{ label: 'Projects', href: '/projects' }]} />
+        <TopBar title="Application" breadcrumbs={[{ label: 'Projects', href: '/projects' }]} />
         <div className="p-6">
-          <Alert variant="error" title={productQuery.error ? 'Could not load product' : 'Not found'}>
-            {productQuery.error ? productQuery.error.message : 'This product does not exist or was removed.'}
+          <Alert variant="error" title={productQuery.error ? 'Could not load application' : 'Not found'}>
+            {productQuery.error ? productQuery.error.message : 'This application does not exist or was removed.'}
           </Alert>
         </div>
       </div>
@@ -194,7 +194,7 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Product Details</CardTitle>
+            <CardTitle>Application Details</CardTitle>
           </CardHeader>
           <CardContent>
             <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -227,7 +227,7 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
             <CardTitle>SBOMs</CardTitle>
           </CardHeader>
           <CardContent>
-            <Table ariaLabel="Product SBOMs">
+            <Table ariaLabel="Application SBOMs">
               <TableHead>
                 <tr>
                   <Th>ID</Th>
@@ -243,7 +243,7 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
                 {sbomsQuery.isLoading ? (
                   <EmptyRow cols={7} message="Loading SBOMs..." />
                 ) : sboms.length === 0 ? (
-                  <EmptyRow cols={7} message="No SBOMs are linked to this product yet." />
+                  <EmptyRow cols={7} message="No SBOMs are linked to this application yet." />
                 ) : (
                   sboms.map((sbom) => <ProductSbomRow key={sbom.id} sbom={sbom} />)
                 )}
