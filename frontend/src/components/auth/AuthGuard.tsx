@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { isActiveMembership, useAuth } from '@/hooks/useAuth';
 import { getRoleLabel } from '@/lib/roles';
 
-const PUBLIC_PATHS = ['/auth/callback', '/access-denied', '/verification-required', '/access-pending'];
+const PUBLIC_PATHS = ['/auth/callback', '/access-denied', '/verification-required', '/access-pending', '/logged-out'];
 
 /** Where a platform administrator lands when signing in to platform context. */
 const PLATFORM_HOME = '/settings/platform/tenants';
@@ -35,7 +35,8 @@ export function AuthGuard({ children, requiredPermission, requiredRoles }: AuthG
       bootstrapState === 'checking-session' ||
       bootstrapState === 'processing-callback' ||
       bootstrapState === 'loading-auth-context' ||
-      bootstrapState === 'loading-tenant-context'
+      bootstrapState === 'loading-tenant-context' ||
+      bootstrapState === 'logging-out'
     ) {
       return;
     }
@@ -95,6 +96,7 @@ export function AuthGuard({ children, requiredPermission, requiredRoles }: AuthG
     bootstrapState === 'processing-callback' ||
     bootstrapState === 'loading-auth-context' ||
     bootstrapState === 'loading-tenant-context' ||
+    bootstrapState === 'logging-out' ||
     authStatus === 'loading'
   ) {
     return (

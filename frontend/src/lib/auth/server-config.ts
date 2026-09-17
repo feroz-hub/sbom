@@ -31,7 +31,7 @@ export function serverAuthConfig(): ServerAuthConfig {
     postLogoutRedirectUri:
       process.env.NEXT_PUBLIC_HCL_IAM_POST_LOGOUT_REDIRECT_URI ||
       process.env.NEXT_PUBLIC_HCL_IAM_POST_LOGOUT_URI ||
-      'https://localhost:3000',
+      'https://localhost:3000/logged-out',
     scopes: process.env.NEXT_PUBLIC_HCL_IAM_SCOPES || 'openid profile email offline_access sbom-analyser-api',
     apiUrl: (process.env.SBOM_API_URL || 'http://localhost:8000').replace(/\/$/, ''),
     caBundle: resolveFrontendPath(process.env.HCL_IAM_CA_BUNDLE || ''),

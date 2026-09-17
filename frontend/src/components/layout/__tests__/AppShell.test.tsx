@@ -71,6 +71,31 @@ describe('AppShell route isolation & bootstrap loader UX', () => {
     expect(screen.queryByText('API healthy')).not.toBeInTheDocument();
   });
 
+  it('keeps the logged-out page public without starting login', () => {
+    mockPathname.current = '/logged-out';
+    mockAuth.bootstrapState = 'unauthenticated';
+    wrap(<AppShell><div>Logged-out content</div></AppShell>);
+
+    expect(screen.getByText('Logged-out content')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Primary navigation')).not.toBeInTheDocument();
+    expect(mockAuth.login).not.toHaveBeenCalled();
+  });
+
+  it('shows a signing-out loader while OIDC logout is running', () => {
+    mockAuth.bootstrapState = 'logging-out';
+    wrap(<AppShell><div>Protected Content</div></AppShell>);
+
+    expect(screen.getByText('Signing out…')).toBeInTheDocument();
+    expect(screen.queryByText('Protected Content')).not.toBeInTheDocument();
+    expect(mockAuth.login).not.toHaveBeenCalled();
+  });
+
+  it('starts login on a protected route when unauthenticated', () => {
+    mockAuth.bootstrapState = 'unauthenticated';
+    wrap(<AppShell><div>Protected Content</div></AppShell>);
+    expect(mockAuth.login).toHaveBeenCalledTimes(1);
+  });
+
   it('renders recovery UX on bootstrap timeout with Retry and Sign in again actions', () => {
     mockPathname.current = '/';
     mockAuth.bootstrapState = 'error';

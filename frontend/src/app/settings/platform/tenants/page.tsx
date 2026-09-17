@@ -19,6 +19,7 @@ import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog';
 import { slugFromName, validateTenantForm } from '@/lib/tenantForm';
 import { TenantStatusBadge } from '@/components/admin/StatusBadges';
 import { UserSearchCombobox } from '@/components/admin/UserSearchCombobox';
+import { TopBar } from '@/components/layout/TopBar';
 
 const EMPTY_FORM: CreateTenantRequest = {
   name: '',
@@ -161,22 +162,19 @@ export default function PlatformTenantsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">Platform Tenants</h1>
-          <p className="mt-1 max-w-3xl text-sm text-hcl-muted">
-            Create and manage SBOM tenants, memberships, and local authorization.
-          </p>
-        </div>
-        <button
+    <>
+      <TopBar
+        title="Platform Tenants"
+        subtitle="Create and manage SBOM tenants, memberships, and local authorization."
+        action={<button
           type="button"
           onClick={() => setFormOpen(true)}
           className="rounded-md bg-hcl-blue px-4 py-2 text-sm font-medium text-white hover:bg-hcl-blue/90 transition-colors"
         >
           Create Tenant
-        </button>
-      </div>
+        </button>}
+      />
+    <div className="mx-auto w-full max-w-6xl space-y-6 p-6">
 
       <nav aria-label="Platform administration" className="flex gap-2 border-b border-border pb-3 text-sm">
         <Link href="/settings/platform" className="rounded-md px-3 py-2 font-medium text-hcl-blue hover:bg-surface-elevated">Administrators</Link>
@@ -362,5 +360,6 @@ export default function PlatformTenantsPage() {
         onConfirm={() => disableTarget && changeStatus.mutate({ ...disableTarget, status: 'DISABLED' })}
       />
     </div>
+    </>
   );
 }

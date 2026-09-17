@@ -241,7 +241,7 @@ NEXT_PUBLIC_AUTH_ENABLED=true
 NEXT_PUBLIC_HCL_IAM_ISSUER=https://identity.example
 NEXT_PUBLIC_HCL_IAM_CLIENT_ID=sbom-analyser-web
 NEXT_PUBLIC_HCL_IAM_REDIRECT_URI=https://localhost:3000/auth/callback
-NEXT_PUBLIC_HCL_IAM_POST_LOGOUT_REDIRECT_URI=https://localhost:3000
+NEXT_PUBLIC_HCL_IAM_POST_LOGOUT_REDIRECT_URI=https://localhost:3000/logged-out
 NEXT_PUBLIC_HCL_IAM_SCOPES="openid profile email offline_access sbom-analyser-api"
 SBOM_API_URL=http://localhost:8000
 ```

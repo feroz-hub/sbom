@@ -7,6 +7,7 @@ import {
   setActiveTenantId,
 } from '@/lib/auth';
 import type { IdentityMappingInfo } from '@/lib/identityMapping';
+import { followLogoutRedirect } from '@/lib/auth/logout-navigation';
 
 export interface AuthUser {
   userId: number | null; externalUserId: string; email: string | null; displayName: string | null;
@@ -41,6 +42,7 @@ export type BootstrapState =
   | 'verification-required'
   | 'tenant-selection-required'
   | 'access-pending'
+  | 'logging-out'
   | 'unauthenticated'
   | 'error';
 
@@ -147,7 +149,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       state === 'checking-session' ||
       state === 'processing-callback' ||
       state === 'loading-auth-context' ||
-      state === 'loading-tenant-context'
+      state === 'loading-tenant-context' ||
+      state === 'logging-out'
     ) {
       setAuthStatus('loading');
     } else if (state === 'ready') {
@@ -519,15 +522,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [config.enabled]);
 
   const logout = useCallback(() => {
-    clearActiveTenantId(); setUser(null); setTenants([]); setActiveTenantIdState(null); queryClient.clear();
+    clearActiveTenantId();
+    setUser(null);
+    setTenants([]);
+    setActiveTenantIdState(null);
+    queryClient.clear();
     setSessionAuthenticated(false);
-    setBootstrapState('unauthenticated');
-    if (!config.enabled) return;
-    void fetch('/api/auth/logout', { method: 'POST' })
-      .then((response) => response.json())
-      .then((body) => window.location.assign(body.redirectUrl || '/'))
-      .catch(() => window.location.assign('/'));
-  }, [config.enabled, queryClient, setBootstrapState]);
+
+    if (!config.enabled) {
+      setBootstrapState('unauthenticated');
+      return;
+    }
+
+    // Prevent AuthGuard from starting a new authorization request while
+    // OIDC logout is still in progress.
+    setBootstrapState('logging-out');
+
+    void fetch('/api/auth/logout', {
+      method: 'POST',
+      credentials: 'include',
+      cache: 'no-store',
+    })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`Logout failed: ${response.status}`);
+        }
+        return response.json();
+      })
+      .then((body) => followLogoutRedirect(body.redirectUrl || config.postLogoutRedirectUri))
+      .catch(() => followLogoutRedirect(config.postLogoutRedirectUri));
+  }, [config.enabled, config.postLogoutRedirectUri, queryClient, setBootstrapState]);
 
   const reloadAuth = useCallback(() => {
     void checkAuth();
