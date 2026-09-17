@@ -97,7 +97,7 @@ describe('ProductFormDialog category behavior', () => {
 
     const categorySelect = screen.getByRole('combobox', { name: 'Category' });
     expect(categorySelect).toHaveValue('');
-    expect(within(categorySelect).getByRole('option', { name: 'Select product category' })).toBeDisabled();
+    expect(within(categorySelect).getByRole('option', { name: 'Select application category' })).toBeDisabled();
     for (const category of PRODUCT_CATEGORIES) {
       expect(within(categorySelect).getByRole('option', { name: category.label })).toHaveValue(category.code);
     }
@@ -112,7 +112,7 @@ describe('ProductFormDialog category behavior', () => {
     fireEvent.change(screen.getByRole('combobox', { name: 'Category' }), {
       target: { value: 'MEDICAL_DEVICE_GATEWAY' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Create Product' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create Application' }));
 
     await waitFor(() => expect(api.createProduct).toHaveBeenCalledWith(project.id, {
       name: 'Infusion Pump Gateway',
@@ -135,7 +135,7 @@ describe('ProductFormDialog category behavior', () => {
     expect(screen.getByRole('textbox', { name: 'Name' })).toHaveValue('Custom Product');
     expect(screen.getByRole('combobox', { name: 'Category' })).toHaveValue('OTHER');
     expect(screen.getByRole('textbox', { name: 'Specify Category' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Create Product' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create Application' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Specify category is required when Other is selected.',
@@ -159,7 +159,7 @@ describe('ProductFormDialog category behavior', () => {
     expect(screen.getByRole('textbox', { name: 'Specify Category' })).toHaveValue(
       '  Healthcare Integration Appliance  ',
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Create Product' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create Application' }));
 
     await waitFor(() => expect(api.createProduct).toHaveBeenCalledWith(
       project.id,
@@ -179,7 +179,7 @@ describe('ProductFormDialog category behavior', () => {
 
     await waitFor(() => expect(screen.getByRole('combobox', { name: 'Category' })).toHaveValue('OTHER'));
     expect(screen.getByRole('textbox', { name: 'Specify Category' })).toHaveValue('Legacy Healthcare Platform');
-    fireEvent.click(screen.getByRole('button', { name: 'Save Product' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save Application' }));
 
     await waitFor(() => expect(api.updateProduct).toHaveBeenCalledWith(
       22,

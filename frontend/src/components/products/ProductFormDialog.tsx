@@ -64,10 +64,10 @@ export function ProductFormDialog({ open, project, product, onClose }: ProductFo
     },
     onSuccess: () => {
       if (project) queryClient.invalidateQueries({ queryKey: ['products', project.id] });
-      showSuccess(`Product “${form.name.trim()}” was ${product ? 'updated' : 'created'} successfully.`);
+      showSuccess(`Application “${form.name.trim()}” was ${product ? 'updated' : 'created'} successfully.`);
       onClose();
     },
-    onError: (error: unknown) => showError(getApiErrorMessage(error, 'Product save failed. Please try again.')),
+    onError: (error: unknown) => showError(getApiErrorMessage(error, 'Application save failed. Please try again.')),
   });
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -105,7 +105,7 @@ export function ProductFormDialog({ open, project, product, onClose }: ProductFo
   };
 
   return (
-    <Dialog open={open} onClose={resetAndClose} title={product ? 'Edit Product' : 'Create Product'} maxWidth="lg">
+    <Dialog open={open} onClose={resetAndClose} title={product ? 'Edit Application' : 'Create Application'} maxWidth="lg">
       <form onSubmit={handleSubmit} noValidate>
         <DialogBody className="space-y-4">
           <Input
@@ -128,7 +128,7 @@ export function ProductFormDialog({ open, project, product, onClose }: ProductFo
             <div className="space-y-4">
               <Select
                 label="Category"
-                placeholder="Select product category"
+                placeholder="Select application category"
                 value={form.selectedCategory}
                 className={form.selectedCategory ? undefined : 'text-hcl-muted'}
                 onChange={(event) => {
@@ -174,7 +174,7 @@ export function ProductFormDialog({ open, project, product, onClose }: ProductFo
             Cancel
           </Button>
           <Button type="submit" loading={mutation.isPending} disabled={!form.name.trim()}>
-            {product ? 'Save Product' : 'Create Product'}
+            {product ? 'Save Application' : 'Create Application'}
           </Button>
         </DialogFooter>
       </form>
