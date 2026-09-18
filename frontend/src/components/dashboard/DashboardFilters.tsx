@@ -7,7 +7,6 @@ import {
   getDashboardApplicationOptions,
   getDashboardProjectOptions,
   getDashboardSbomOptions,
-  listPlatformTenants,
   type DashboardFilterScope,
   type DashboardOption,
 } from '@/lib/api';
@@ -32,18 +31,8 @@ function optionElements(items: DashboardOption[], label: 'name' | 'display_name'
 }
 
 export function DashboardFilters({ scope, onChange, isUpdating }: Props) {
-  const { activeTenant, activeTenantId, availableTenants, selectTenant, user } = useAuth();
+  const { activeTenant, activeTenantId } = useAuth();
   const tenantId = activeTenantId ?? '';
-  // Platform administrators can select tenants without holding a membership.
-  // The auth context intentionally lists memberships/current tenant only;
-  // share the platform list query with the sidebar tenant switcher.
-  const platformTenants = useQuery({
-    queryKey: ['platform-tenants'],
-    queryFn: listPlatformTenants,
-    enabled: Boolean(user?.isPlatformAdmin),
-    staleTime: 60_000,
-    retry: false,
-  });
   const projects = useQuery({
     queryKey: ['dashboard-projects', tenantId],
     queryFn: ({ signal }) => getDashboardProjectOptions(signal),
@@ -63,19 +52,10 @@ export function DashboardFilters({ scope, onChange, isUpdating }: Props) {
   const project = projects.data?.items.find((item) => item.id === scope.projectId);
   const application = applications.data?.items.find((item) => item.id === scope.applicationId);
   const sbom = sboms.data?.items.find((item) => item.id === scope.sbomId);
-  const tenants = (user?.isPlatformAdmin && platformTenants.data
-    ? platformTenants.data : availableTenants
-  ).filter((item) => item.status === 'ACTIVE');
 
   return (
     <section className="rounded-xl border border-border bg-surface p-4" aria-label="Dashboard filters">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Select label="Tenant" value={tenantId} onChange={(event) => {
-          onChange(ALL);
-          void selectTenant(event.target.value);
-        }}>
-          {tenants.map((tenant) => <option key={tenant.id} value={tenant.id}>{tenant.name}</option>)}
-        </Select>
+      <div className="grid gap-3 md:grid-cols-3">
         <Select label="Project" value={scope.projectId ?? ''} disabled={!tenantId || projects.isPending} onChange={(event) => {
           onChange({ projectId: idOrNull(event.target.value), applicationId: null, sbomId: null });
         }}>

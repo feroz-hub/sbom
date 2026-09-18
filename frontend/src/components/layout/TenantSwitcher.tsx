@@ -16,6 +16,7 @@
 
 import { useRef, useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { usePathname, useRouter } from 'next/navigation';
 import { Building2, Check, ChevronsUpDown, Globe2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { listPlatformTenants } from '@/lib/api';
@@ -33,6 +34,8 @@ interface SwitcherOption {
 }
 
 export function TenantSwitcher() {
+  const pathname = usePathname();
+  const router = useRouter();
   const {
     tenants, activeTenantId, selectTenant, switchTenant, clearTenantSelection, user,
   } = useAuth();
@@ -121,6 +124,9 @@ export function TenantSwitcher() {
 
   const choose = (tenantId: string) => {
     if (tenantId === activeTenantId) return;
+    // Project/Application/SBOM IDs in the dashboard URL belong to the old
+    // tenant. Clear them before resolving the newly selected tenant context.
+    if (pathname === '/') router.replace('/', { scroll: false });
     if (selectTenant) {
       void selectTenant(tenantId);
     } else {
