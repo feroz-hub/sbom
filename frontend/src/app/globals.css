@@ -56,6 +56,31 @@
   --shadow-card-hover: 0 4px 16px 0 rgba(0, 0, 0, 0.10), 0 1px 4px 0 rgba(0, 0, 0, 0.06);
   --shadow-topbar: 0 1px 0 0 rgba(0, 0, 0, 0.06), 0 2px 8px 0 rgba(0, 0, 0, 0.04);
 
+  /* ── Dashboard surface & border tokens ── */
+  --dashboard-page-bg: #F8FAFC;
+  --dashboard-card-bg: #FFFFFF;
+  --dashboard-border: #D1D9E6;
+  --dashboard-border-strong: #C7D0DD;
+  --dashboard-border-subtle: #E2E8F0;
+  --dashboard-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+  --dashboard-shadow-subtle: 0 1px 3px rgba(15, 23, 42, 0.06);
+  --dashboard-card-hover-border: #B8C4D4;
+  --dashboard-card-hover-shadow: 0 2px 6px rgba(15, 23, 42, 0.10);
+
+  /* ── Modern Select tokens ── */
+  --select-bg: #FFFFFF;
+  --select-border: #CBD5E1;
+  --select-border-hover: #94A3B8;
+  --select-text: #1E293B;
+  --select-text-muted: #94A3B8;
+  --select-disabled-bg: #F8FAFC;
+  --select-disabled-border: #E2E8F0;
+  --select-popup-bg: #FFFFFF;
+  --select-popup-border: #E2E8F0;
+  --select-item-hover: #F1F5F9;
+  --select-item-active: #EFF6FF;
+  --select-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+
   /* Elevation tiers — composable depth language */
   --elev-0: none;
   --elev-1: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
@@ -133,6 +158,31 @@
   --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.45), 0 4px 20px 0 rgba(0, 40, 90, 0.15);
   --shadow-card-hover: 0 12px 40px 0 rgba(0, 0, 0, 0.5), 0 4px 16px 0 rgba(0, 103, 177, 0.12);
   --shadow-topbar: 0 1px 0 0 rgba(0, 168, 232, 0.08), 0 6px 24px 0 rgba(0, 0, 0, 0.35);
+
+  /* ── Dashboard surface & border tokens — dark theme ── */
+  --dashboard-page-bg: #0a101c;
+  --dashboard-card-bg: #151f30;
+  --dashboard-border: #2d3f56;
+  --dashboard-border-strong: #384c66;
+  --dashboard-border-subtle: #243047;
+  --dashboard-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.45), 0 4px 20px 0 rgba(0, 40, 90, 0.15);
+  --dashboard-shadow-subtle: 0 1px 3px 0 rgba(0, 0, 0, 0.35);
+  --dashboard-card-hover-border: #425875;
+  --dashboard-card-hover-shadow: 0 4px 16px 0 rgba(0, 0, 0, 0.5), 0 2px 8px 0 rgba(0, 103, 177, 0.12);
+
+  /* ── Modern Select tokens — dark theme ── */
+  --select-bg: #151f30;
+  --select-border: #334155;
+  --select-border-hover: #64748b;
+  --select-text: #eef4fb;
+  --select-text-muted: #64748b;
+  --select-disabled-bg: #101827;
+  --select-disabled-border: #1e293b;
+  --select-popup-bg: #151f30;
+  --select-popup-border: #2d3f56;
+  --select-item-hover: #1e2d42;
+  --select-item-active: rgba(16, 104, 230, 0.15);
+  --select-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
 
   --elev-0: none;
   --elev-1: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
@@ -215,6 +265,39 @@
 }
 
 @layer utilities {
+  /* Dashboard layout & surface primitives */
+  .dashboard-root {
+    background-color: var(--dashboard-page-bg);
+  }
+
+  /* Scoped styling for dashboard surfaces without affecting other pages */
+  .dashboard-root [data-surface="elevated"],
+  .dashboard-root [data-surface="solid"] {
+    background-color: var(--dashboard-card-bg);
+    border-color: var(--dashboard-border);
+    box-shadow: var(--dashboard-shadow);
+  }
+
+  .dashboard-root [data-surface="gradient"] {
+    border-color: var(--dashboard-border);
+  }
+
+  .dashboard-filter-card {
+    background-color: var(--dashboard-card-bg);
+    border: 1px solid var(--dashboard-border-strong);
+    border-radius: 12px;
+    box-shadow: var(--dashboard-shadow-subtle);
+  }
+
+  .dashboard-kpi-interactive {
+    transition: border-color var(--duration-base) var(--ease-out), box-shadow var(--duration-base) var(--ease-out);
+  }
+
+  .dashboard-kpi-interactive:hover {
+    border-color: var(--dashboard-card-hover-border) !important;
+    box-shadow: var(--dashboard-card-hover-shadow) !important;
+  }
+
   /* Reusable sidebar and page heading primitives */
   .app-sidebar {
     background-color: var(--color-sidebar);

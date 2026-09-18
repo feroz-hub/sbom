@@ -179,12 +179,12 @@ function DashboardContent() {
   const needsReview = posture?.needs_review_count;
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="dashboard-root flex flex-1 flex-col min-h-full">
       <TopBar
         title="Dashboard"
         subtitle="Real-time security posture across your SBOM portfolio"
       />
-      <div className="space-y-6 p-6 [&_.border]:border-2">
+      <div className="space-y-6 p-6">
         <DashboardFilters scope={scope} onChange={changeScope} isUpdating={summaryQuery.isFetching} />
         {summaryQuery.isError && <p role="alert" className="text-sm text-red-700">Unable to load this dashboard scope. Check the selected filters.</p>}
         {!summaryQuery.isPending && scope.sbomId && summary?.posture?.total_sboms_analysed === 0 &&

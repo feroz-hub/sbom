@@ -71,7 +71,7 @@ export function CounterTiles({ posture, isLoading: propsIsLoading, scope }: Coun
       {tiles.map((t) => {
         const Icon = t.icon;
         return (
-          <Surface key={t.label} variant="elevated" className="p-0">
+          <Surface key={t.label} variant="elevated" className="p-0 dashboard-kpi-interactive">
             <button
               type="button"
               onClick={() => router.push(dashboardDrilldownUrl(t.href, scope))}

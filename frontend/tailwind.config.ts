@@ -22,6 +22,13 @@ const config: Config = {
           DEFAULT: 'var(--color-border)',
           subtle: 'var(--color-border-subtle)',
         },
+        dashboard: {
+          page: 'var(--dashboard-page-bg)',
+          card: 'var(--dashboard-card-bg)',
+          border: 'var(--dashboard-border)',
+          'border-strong': 'var(--dashboard-border-strong)',
+          'border-subtle': 'var(--dashboard-border-subtle)',
+        },
         // Brand scale — anchored on enterprise blue #1068E6
         primary: {
           DEFAULT: '#1068E6',
@@ -83,6 +90,9 @@ const config: Config = {
         card: 'var(--shadow-card)',
         'card-hover': 'var(--shadow-card-hover)',
         topbar: 'var(--shadow-topbar)',
+        'dashboard-card': 'var(--dashboard-shadow)',
+        'dashboard-card-hover': 'var(--dashboard-card-hover-shadow)',
+        'dashboard-subtle': 'var(--dashboard-shadow-subtle)',
         'elev-1': 'var(--elev-1)',
         'elev-2': 'var(--elev-2)',
         'elev-3': 'var(--elev-3)',

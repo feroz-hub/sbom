@@ -54,15 +54,15 @@ export function DashboardFilters({ scope, onChange, isUpdating }: Props) {
   const sbom = sboms.data?.items.find((item) => item.id === scope.sbomId);
 
   return (
-    <section className="rounded-xl border border-border bg-surface p-4" aria-label="Dashboard filters">
+    <section className="dashboard-filter-card p-4" aria-label="Dashboard filters">
       <div className="grid gap-3 md:grid-cols-3">
-        <Select label="Project" value={scope.projectId ?? ''} disabled={!tenantId || projects.isPending} onChange={(event) => {
+        <Select variant="filter" label="Project" value={scope.projectId ?? ''} disabled={!tenantId || projects.isPending} onChange={(event) => {
           onChange({ projectId: idOrNull(event.target.value), applicationId: null, sbomId: null });
         }}>
           <option value="">ALL</option>
           {optionElements(projects.data?.items ?? [])}
         </Select>
-        <Select label="Application" value={scope.applicationId ?? ''}
+        <Select variant="filter" label="Application" value={scope.applicationId ?? ''}
           disabled={!scope.projectId || applications.isPending}
           hint={!scope.projectId ? 'Select a project to filter by application.' : undefined}
           onChange={(event) => {
@@ -71,7 +71,7 @@ export function DashboardFilters({ scope, onChange, isUpdating }: Props) {
           <option value="">ALL</option>
           {optionElements(applications.data?.items ?? [])}
         </Select>
-        <Select label="SBOM" value={scope.sbomId ?? ''}
+        <Select variant="filter" label="SBOM" value={scope.sbomId ?? ''}
           disabled={!scope.applicationId || sboms.isPending}
           onChange={(event) => onChange({ ...scope, sbomId: idOrNull(event.target.value) })}>
           <option value="">ALL</option>
@@ -88,7 +88,7 @@ export function DashboardFilters({ scope, onChange, isUpdating }: Props) {
           type="button"
           onClick={() => onChange(ALL)}
           disabled={!scope.projectId && !scope.applicationId && !scope.sbomId}
-          className="rounded-md border border-border px-2.5 py-1 text-xs font-medium text-hcl-blue transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/40 disabled:cursor-default disabled:opacity-50"
+          className="rounded-md border border-[var(--dashboard-border-strong)] px-2.5 py-1 text-xs font-medium text-hcl-blue transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/40 disabled:cursor-default disabled:opacity-50"
         >
           Clear all filters
         </button>

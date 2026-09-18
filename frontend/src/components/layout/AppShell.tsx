@@ -63,6 +63,8 @@ function BootstrapTimeoutRecovery({ message, onRetry, onLogin }: { message: stri
 
 function Shell({ children }: { children: React.ReactNode }) {
   const { collapsed } = useSidebar();
+  const pathname = usePathname();
+  const isDashboard = pathname === '/';
   return (
     <div className="flex min-h-screen">
       {/* Skip link — WCAG 2.4.1 Bypass Blocks. First focusable element so
@@ -80,6 +82,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         tabIndex={-1}
         className={cn(
           'flex-1 flex flex-col min-h-screen w-full',
+          isDashboard && 'bg-dashboard-page',
           'transition-[margin-left] duration-300 ease-in-out motion-reduce:transition-none',
           // Mobile: sidebar is overlay, no margin offset
           'ml-0',

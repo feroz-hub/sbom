@@ -53,6 +53,7 @@ export const Surface = forwardRef<HTMLDivElement, SurfaceProps>(function Surface
   return (
     <div
       ref={ref}
+      data-surface={variant}
       className={cn(
         'rounded-xl transition-[box-shadow,transform,border-color] duration-base motion-reduce:transition-none',
         variantClasses[variant],
