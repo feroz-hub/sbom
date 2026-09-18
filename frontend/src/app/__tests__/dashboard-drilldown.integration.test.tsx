@@ -19,7 +19,7 @@
  */
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ToastProvider } from '@/hooks/useToast';
@@ -28,9 +28,10 @@ import { ThemeProvider } from '@/components/theme/ThemeProvider';
 import type { AnalysisRun } from '@/types';
 
 const push = vi.fn();
+let queryString = '';
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push, replace: vi.fn(), back: vi.fn() }),
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => new URLSearchParams(queryString),
   usePathname: () => '/',
 }));
 
@@ -42,6 +43,10 @@ vi.mock('@/lib/api', async () => {
     ...actual,
     getDashboardSummary: (...a: unknown[]) => getDashboardSummary(...a),
     getRuns: (...a: unknown[]) => getRuns(...a),
+    getDashboardRuns: (...a: unknown[]) => getRuns(...a),
+    getDashboardProjectOptions: async () => ({ items: [] }),
+    getDashboardApplicationOptions: async () => ({ items: [] }),
+    getDashboardSbomOptions: async () => ({ items: [] }),
   };
 });
 
@@ -129,6 +134,7 @@ function wrap(children: ReactNode) {
 }
 
 beforeEach(() => {
+  queryString = '';
   push.mockReset();
   getDashboardSummary.mockReset();
   getRuns.mockReset();
@@ -147,6 +153,24 @@ beforeEach(() => {
 });
 
 describe('dashboard hero — severity drill-down', () => {
+  it('clears the URL hierarchy without switching tenants', () => {
+    queryString = 'project=1&application=2&sbom=3';
+    render(wrap(<DashboardPage />));
+    fireEvent.click(screen.getByRole('button', { name: 'Clear all filters' }));
+    expect(push).toHaveBeenCalledWith('/', { scroll: false });
+  });
+
+  it('loads and propagates the selected hierarchy to findings', async () => {
+    queryString = 'project=1&application=2&sbom=3';
+    render(wrap(<DashboardPage />));
+    const buttons = await screen.findAllByRole('button', { name: /View Critical findings/i });
+    expect(getDashboardSummary).toHaveBeenCalledWith(expect.anything(), {
+      projectId: 1, applicationId: 2, sbomId: 3,
+    });
+    fireEvent.click(buttons[0]!);
+    expect(push).toHaveBeenCalledWith('/analysis?tab=vulnerabilities&severity=critical&project=1&product=2&sbom=3');
+  });
+
   it('opens the portfolio-wide Vulnerabilities tab for the clicked severity', async () => {
     render(wrap(<DashboardPage />));
 

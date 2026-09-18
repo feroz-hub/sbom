@@ -56,7 +56,8 @@ def memoize_with_ttl(
     ``_MAX_ENTRIES``; oldest entry evicted on overflow.
     """
     inv = invalidation_key(db)
-    key = (name, inv, *key_extra)
+    scope = db.info.get("dashboard_scope")
+    key = (name, inv, scope.key if scope is not None else None, *key_extra)
     now = time.time()
     with _cache_lock:
         cached = _cache.get(key)

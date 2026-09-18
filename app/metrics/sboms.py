@@ -50,6 +50,20 @@ def applications_scanned_total(db: Session) -> int:
     )
 
 
+def scanned_project_ids(db: Session) -> list[int]:
+    """Project IDs with a successful analysis in the installed scope."""
+    return list(db.execute(
+        select(AnalysisRun.project_id)
+        .where(AnalysisRun.run_status.in_(COMPLETED_RUN_STATUSES), AnalysisRun.project_id.is_not(None))
+        .distinct()
+    ).scalars())
+
+
+def analysed_sbom_ids_subquery():
+    """SBOM IDs with at least one successful analysis, for list drilldowns."""
+    return select(AnalysisRun.sbom_id).where(AnalysisRun.run_status.in_(COMPLETED_RUN_STATUSES)).distinct()
+
+
 def projects_total(db: Session) -> int:
     """projects.total — see metrics-spec.md §3.8."""
     return db.execute(select(func.count(Projects.id))).scalar() or 0
@@ -64,6 +78,8 @@ __all__ = [
     "sboms_total",
     "sboms_analysed_total",
     "applications_scanned_total",
+    "scanned_project_ids",
+    "analysed_sbom_ids_subquery",
     "projects_total",
     "projects_active_total",
 ]

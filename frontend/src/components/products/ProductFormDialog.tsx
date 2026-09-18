@@ -9,6 +9,7 @@ import { Select } from '@/components/ui/Select';
 import { useNotifications } from '@/hooks/useNotifications';
 import { createProduct, updateProduct } from '@/lib/api';
 import { getApiErrorMessage } from '@/lib/notifications';
+import { invalidateDashboardTiles, invalidateProductSurfaces } from '@/lib/queryInvalidation';
 import {
   CUSTOM_PRODUCT_CATEGORY_CODE,
   getProductCategoryFormValue,
@@ -64,6 +65,8 @@ export function ProductFormDialog({ open, project, product, onClose }: ProductFo
     },
     onSuccess: () => {
       if (project) queryClient.invalidateQueries({ queryKey: ['products', project.id] });
+      invalidateProductSurfaces(queryClient, product?.id);
+      invalidateDashboardTiles(queryClient);
       showSuccess(`Application “${form.name.trim()}” was ${product ? 'updated' : 'created'} successfully.`);
       onClose();
     },

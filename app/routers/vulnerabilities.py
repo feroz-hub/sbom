@@ -21,13 +21,14 @@ from sqlalchemy.orm import Session
 
 from .. import metrics
 from ..db import get_db
+from ..services.dashboard_scope import dashboard_scope_dependency
 
 log = logging.getLogger("sbom.api.vulnerabilities")
 
 router = APIRouter(prefix="/api", tags=["vulnerabilities"])
 
 
-@router.get("/vulnerabilities")
+@router.get("/vulnerabilities", dependencies=[Depends(dashboard_scope_dependency)])
 def list_vulnerabilities(
     severity: str | None = Query(
         None,

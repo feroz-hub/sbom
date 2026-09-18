@@ -9,7 +9,7 @@ import { Select } from '@/components/ui/Select';
 import { Surface } from '@/components/ui/Surface';
 import { PageSpinner } from '@/components/ui/Spinner';
 import { Table, TableBody, TableHead, Td, Th } from '@/components/ui/Table';
-import { getVulnerabilities, type VulnerabilityRow } from '@/lib/api';
+import { getVulnerabilities, type DashboardFilterScope, type VulnerabilityRow } from '@/lib/api';
 import { severityBg } from '@/lib/utils';
 
 const SEVERITY_OPTIONS = [
@@ -93,6 +93,7 @@ function fixHint(raw: string | null): string {
 export interface VulnerabilitiesByScopeProps {
   severity: string;
   onSeverityChange: (value: string) => void;
+  scope?: DashboardFilterScope;
 }
 
 /**
@@ -103,12 +104,12 @@ export interface VulnerabilitiesByScopeProps {
  * it showed. Previously that click routed to a single analysis run and
  * displayed a fraction of the portfolio count.
  */
-export function VulnerabilitiesByScope({ severity, onSeverityChange }: VulnerabilitiesByScopeProps) {
+export function VulnerabilitiesByScope({ severity, onSeverityChange, scope }: VulnerabilitiesByScopeProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['vulnerabilities', { severity }],
-    queryFn: ({ signal }) => getVulnerabilities({ severity: severity || undefined, page_size: 2000 }, signal),
+    queryKey: ['vulnerabilities', { severity, scope }],
+    queryFn: ({ signal }) => getVulnerabilities({ severity: severity || undefined, page_size: 2000 }, signal, scope),
   });
 
   const groups = useMemo(() => groupRows(data?.findings ?? []), [data]);

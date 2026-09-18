@@ -49,6 +49,7 @@ from .runs import (
     CoverageAssessment,
     CoverageStatus,
     RunsAggregate,
+    dashboard_runs,
     runs_aggregate,
     runs_completed_lifetime,
     runs_completed_this_week,
@@ -58,11 +59,13 @@ from .runs import (
     runs_total_lifetime,
 )
 from .sboms import (
+    analysed_sbom_ids_subquery,
     applications_scanned_total,
     projects_active_total,
     projects_total,
     sboms_analysed_total,
     sboms_total,
+    scanned_project_ids,
 )
 from .trend import findings_trend
 from .windows import findings_net_change
@@ -115,6 +118,7 @@ __all__ = [
     "CoverageAssessment",
     "CoverageStatus",
     "RunsAggregate",
+    "dashboard_runs",
     # trend / windows
     "findings_trend",
     "findings_net_change",
@@ -134,6 +138,8 @@ __all__ = [
     "sboms_total",
     "sboms_analysed_total",
     "applications_scanned_total",
+    "scanned_project_ids",
+    "analysed_sbom_ids_subquery",
     "projects_total",
     "projects_active_total",
 ]

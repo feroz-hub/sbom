@@ -1,8 +1,8 @@
 'use client';
 
-import { useCallback, useMemo } from 'react';
+import { Suspense, useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { ClipboardCheck } from 'lucide-react';
 import { TopBar } from '@/components/layout/TopBar';
 import { Motion } from '@/components/ui/Motion';
@@ -18,6 +18,7 @@ import { FindingsTrendChart } from '@/components/dashboard/FindingsTrendChart/Fi
 import { LifetimeStats } from '@/components/dashboard/LifetimeStats/LifetimeStats';
 import { TopVulnerableSboms } from '@/components/dashboard/TopVulnerableSboms';
 import { ActivityFeed } from '@/components/dashboard/ActivityFeed';
+import { DashboardFilters } from '@/components/dashboard/DashboardFilters';
 import { AiConfigBanner } from '@/components/dashboard/AiConfigBanner';
 import { CopilotPanel } from '@/components/dashboard/advanced/CopilotPanel';
 import { ForecastCard } from '@/components/dashboard/advanced/ForecastCard';
@@ -27,11 +28,13 @@ import { RiskMatrixCard } from '@/components/dashboard/advanced/RiskMatrixCard';
 import { RemediationPanel } from '@/components/dashboard/advanced/RemediationPanel';
 import {
   getDashboardSummary,
-  getRuns,
+  getDashboardRuns,
+  type DashboardFilterScope,
 } from '@/lib/api';
-import { getActiveTenantId } from '@/lib/auth';
+import { useAuth } from '@/hooks/useAuth';
 import { aggregateRuns, type SeverityKey } from '@/lib/topVulnerableRuns';
 import { HIGH_EPSS_PERCENTILE } from '@/lib/findingFilters';
+import { parseDashboardScope } from '@/lib/dashboardScopeUrl';
 
 const DRILLABLE_SEVERITIES: readonly SeverityKey[] = [
   'critical',
@@ -63,12 +66,37 @@ const DRILLABLE_SEVERITIES: readonly SeverityKey[] = [
  * the Phase 2 aggregates land.
  */
 export default function DashboardPage() {
+  return <Suspense fallback={null}><DashboardContent /></Suspense>;
+}
+
+function DashboardContent() {
   const router = useRouter();
-  const tenantId = typeof window !== 'undefined' ? getActiveTenantId() : null;
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const { activeTenantId: tenantId } = useAuth();
+  const scope = useMemo<DashboardFilterScope>(() => parseDashboardScope(searchParams), [searchParams]);
+  const scopeKey = [tenantId, scope.projectId, scope.applicationId, scope.sbomId];
+  const changeScope = useCallback((next: DashboardFilterScope) => {
+    const params = new URLSearchParams();
+    if (next.projectId) params.set('project', String(next.projectId));
+    if (next.applicationId) params.set('application', String(next.applicationId));
+    if (next.sbomId) params.set('sbom', String(next.sbomId));
+    const query = params.toString();
+    router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }, [router, pathname]);
+
+  const drilldownScope = useMemo(() => {
+    const params = new URLSearchParams();
+    if (scope.projectId) params.set('project', String(scope.projectId));
+    if (scope.applicationId) params.set('product', String(scope.applicationId));
+    if (scope.sbomId) params.set('sbom', String(scope.sbomId));
+    return params.toString();
+  }, [scope]);
 
   const summaryQuery = useQuery({
-    queryKey: ['dashboard-summary', tenantId],
-    queryFn: ({ signal }) => getDashboardSummary(signal),
+    queryKey: ['dashboard-summary', ...scopeKey],
+    queryFn: ({ signal }) => getDashboardSummary(signal, scope),
+    enabled: !!tenantId,
     staleTime: 60_000,
     refetchOnWindowFocus: false,
     retry: 1,
@@ -77,9 +105,10 @@ export default function DashboardPage() {
   // Same key + fetch as TopVulnerableSboms → shared cache, one network call.
   // Resolves which run a hero drill-down should land on.
   const topRunsQuery = useQuery({
-    queryKey: ['top-vulnerable-runs'],
+    queryKey: ['top-vulnerable-runs', ...scopeKey],
     queryFn: ({ signal }) =>
-      getRuns({ run_status: 'FINDINGS', page: 1, page_size: 100 }, signal),
+      getDashboardRuns(scope, 'FINDINGS', 100, signal, true),
+    enabled: !!tenantId,
   });
 
   const summary = summaryQuery.data;
@@ -112,9 +141,9 @@ export default function DashboardPage() {
   // pie, so the count on the destination always matches the slice.
   const handleSegmentClick = useCallback(
     (key: SeverityKey) => {
-      router.push(`/analysis?tab=vulnerabilities&severity=${key}`);
+      router.push(`/analysis?tab=vulnerabilities&severity=${key}${drilldownScope ? `&${drilldownScope}` : ''}`);
     },
-    [router],
+    [router, drilldownScope],
   );
 
   // KEV / EPSS / Fix have no per-run column to rank by, so they land on the
@@ -156,11 +185,17 @@ export default function DashboardPage() {
         subtitle="Real-time security posture across your SBOM portfolio"
       />
       <div className="space-y-6 p-6">
+        <DashboardFilters scope={scope} onChange={changeScope} isUpdating={summaryQuery.isFetching} />
+        {summaryQuery.isError && <p role="alert" className="text-sm text-red-700">Unable to load this dashboard scope. Check the selected filters.</p>}
+        {!summaryQuery.isPending && scope.sbomId && summary?.posture?.total_sboms_analysed === 0 &&
+          <p className="rounded-lg border border-border bg-surface p-4 text-sm text-hcl-muted">No successful analysis is available for this SBOM.</p>}
+        {!summaryQuery.isPending && summary?.posture?.total_sboms_analysed > 0 && summary?.posture?.total_findings === 0 &&
+          <p className="rounded-lg border border-border bg-surface p-4 text-sm text-hcl-muted">No findings match the selected dashboard scope.</p>}
         <AiConfigBanner />
 
         {/* Counter tiles — stored / scanned / analysed */}
         <Motion preset="rise">
-          <CounterTiles posture={summary?.posture} isLoading={summaryQuery.isLoading} />
+          <CounterTiles posture={summary?.posture ?? null} isLoading={summaryQuery.isLoading} scope={scope} />
         </Motion>
 
         {/* Lifetime growth — sits directly above the lifecycle box so the
@@ -176,9 +211,9 @@ export default function DashboardPage() {
 
         <Motion preset="rise" delay={20}>
           <LifecycleHealthTiles
-            lifecycle={summary?.lifecycle}
-            health={summary?.health}
-            vex={summary?.vex}
+            lifecycle={summary?.lifecycle ?? null}
+            health={summary?.health ?? null}
+            vex={summary?.vex ?? null}
             isLoading={summaryQuery.isLoading}
           />
         </Motion>
@@ -203,17 +238,17 @@ export default function DashboardPage() {
 
         {/* 2 — what's changed (delta drives action more than totals) */}
         <Motion preset="rise" delay={60}>
-          <WhatsNewStrip posture={summary?.posture} />
+          <WhatsNewStrip posture={summary?.posture} scope={scope} />
         </Motion>
 
         {/* 3 — the primary action */}
         <Motion preset="rise" delay={120}>
-          <QuickActionsV2 primaryAction={summary?.posture?.primary_action} />
+          <QuickActionsV2 primaryAction={summary?.posture?.primary_action} scope={scope} />
         </Motion>
 
-        <Motion preset="rise" delay={140}>
+        {!scope.projectId && <Motion preset="rise" delay={140}>
           <CopilotPanel />
-        </Motion>
+        </Motion>}
 
         {/* Distribution pies — vulnerability by threat level + by age. Placed
             ABOVE the vulnerable-SBOM list so the overview reads before the list. */}
@@ -228,15 +263,16 @@ export default function DashboardPage() {
           </Motion>
           <Motion preset="rise" delay={220}>
             <VulnerabilityAgePie
-              vulnerabilityAge={summary?.vulnerability_age}
+              vulnerabilityAge={summary?.vulnerability_age ?? null}
               isLoading={summaryQuery.isLoading}
+              scope={scope}
             />
           </Motion>
         </div>
 
         {/* Where to look first */}
         <Motion preset="rise" delay={260}>
-          <TopVulnerableSboms />
+          <TopVulnerableSboms scope={scope} tenantId={tenantId} />
         </Motion>
 
         {/* Needs-review — quiet, feature-gated until the Phase 2 aggregate. */}
@@ -262,39 +298,39 @@ export default function DashboardPage() {
 
         {/* Trend explorer — granularity + application filter + fix/resolved */}
         <Motion preset="rise" delay={260}>
-          <TrendExplorer />
+          <TrendExplorer scope={scope} tenantId={tenantId} />
         </Motion>
 
         {/* ── Dashboard v4 — Advanced Analytics ────────────────── */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <Motion preset="rise" delay={280}>
-            <ForecastCard forecast={summary?.forecast} isLoading={summaryQuery.isLoading} />
+            <ForecastCard forecast={summary?.forecast ?? null} isLoading={summaryQuery.isLoading} />
           </Motion>
           <Motion preset="rise" delay={300}>
-            <ExploitationOutlookCard exploitation={summary?.exploitation} isLoading={summaryQuery.isLoading} />
+            <ExploitationOutlookCard exploitation={summary?.exploitation ?? null} isLoading={summaryQuery.isLoading} />
           </Motion>
         </div>
 
         <Motion preset="rise" delay={320}>
           <RemediationPanel
-            remediation={summary?.remediation}
-            remediationStats={summary?.remediation_stats}
+            remediation={summary?.remediation ?? null}
+            remediationStats={summary?.remediation_stats ?? null}
             isLoading={summaryQuery.isLoading}
           />
         </Motion>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <Motion preset="rise" delay={340}>
-            <PortfolioRiskMap riskMap={summary?.risk_map} isLoading={summaryQuery.isLoading} />
+            <PortfolioRiskMap riskMap={summary?.risk_map ?? null} isLoading={summaryQuery.isLoading} />
           </Motion>
           <Motion preset="rise" delay={360}>
-            <RiskMatrixCard riskMatrix={summary?.risk_matrix} isLoading={summaryQuery.isLoading} />
+            <RiskMatrixCard riskMatrix={summary?.risk_matrix ?? null} isLoading={summaryQuery.isLoading} />
           </Motion>
         </div>
 
         {/* Recent activity — supporting detail at the foot of the dashboard. */}
         <Motion preset="rise" delay={400}>
-          <ActivityFeed />
+          <ActivityFeed scope={scope} tenantId={tenantId} />
         </Motion>
       </div>
     </div>
