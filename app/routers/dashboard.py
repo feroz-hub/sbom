@@ -26,7 +26,9 @@ from ..services.dashboard_metrics import build_trend_annotations
 
 log = logging.getLogger("sbom.api.dashboard")
 
-router = APIRouter()
+from ..services.dashboard_scope import dashboard_scope_dependency
+
+router = APIRouter(dependencies=[Depends(dashboard_scope_dependency)])
 
 
 @router.get("/trend", response_model=FindingsTrendResponse, status_code=200)

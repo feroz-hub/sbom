@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Area,
@@ -18,7 +18,7 @@ import { ChevronDown } from 'lucide-react';
 import { Surface, SurfaceContent, SurfaceHeader } from '@/components/ui/Surface';
 import { Spinner } from '@/components/ui/Spinner';
 import { useTheme } from '@/components/theme/ThemeProvider';
-import { getDashboardTrendFiltered, getProjects } from '@/lib/api';
+import { getDashboardTrendFiltered, getProjects, type DashboardFilterScope } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import type { TrendGranularity } from '@/types';
 
@@ -71,25 +71,27 @@ function TrendTooltip({ active, payload, label }: TooltipContentProps) {
  * the two fix overlays — ``fix_available`` and ``resolved`` — as lines.
  * Separate from the calm v2 ``FindingsTrendChart`` so that stays untouched.
  */
-export function TrendExplorer() {
+export function TrendExplorer({ scope, tenantId }: { scope?: DashboardFilterScope; tenantId?: string | null } = {}) {
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';
   const [granularity, setGranularity] = useState<TrendGranularity>('week');
   const [selectedApps, setSelectedApps] = useState<number[]>([]);
+  useEffect(() => { setSelectedApps([]); }, [scope?.projectId, scope?.applicationId, scope?.sbomId, tenantId]);
 
   const projectsQuery = useQuery({
-    queryKey: ['projects'],
+    queryKey: ['projects', tenantId],
     queryFn: ({ signal }) => getProjects(signal),
   });
   const projects = projectsQuery.data ?? [];
 
   const { data, isLoading } = useQuery({
-    queryKey: ['trend-explorer', granularity, [...selectedApps].sort((a, b) => a - b)],
-    queryFn: ({ signal }) =>
-      getDashboardTrendFiltered(
-        { granularity, applicationIds: selectedApps.length ? selectedApps : undefined },
-        signal,
-      ),
+    queryKey: ['trend-explorer', tenantId, scope?.projectId, scope?.applicationId, scope?.sbomId, granularity, [...selectedApps].sort((a, b) => a - b)],
+    queryFn: ({ signal }) => {
+      const opts = { granularity, applicationIds: selectedApps.length ? selectedApps : undefined };
+      return scope
+        ? getDashboardTrendFiltered(opts, signal, scope)
+        : getDashboardTrendFiltered(opts, signal);
+    },
   });
   const points = data?.points ?? [];
 
@@ -131,7 +133,7 @@ export function TrendExplorer() {
             ))}
           </div>
           {/* Application filter */}
-          <details className="relative">
+          {!scope?.projectId && <details className="relative">
             <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-lg border border-border bg-surface px-2.5 py-1 text-[11px] font-medium text-hcl-navy">
               {selectedApps.length ? `${selectedApps.length} application${selectedApps.length > 1 ? 's' : ''}` : 'All applications'}
               <ChevronDown className="h-3 w-3" aria-hidden />
@@ -166,7 +168,7 @@ export function TrendExplorer() {
                 </button>
               )}
             </div>
-          </details>
+          </details>}
         </div>
       </SurfaceHeader>
       <SurfaceContent>

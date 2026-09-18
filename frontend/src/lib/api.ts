@@ -674,12 +674,57 @@ export function getHealth(signal?: AbortSignal) {
 }
 
 // ─── Dashboard ───────────────────────────────────────────────────────────────
+export interface DashboardFilterScope {
+  projectId: number | null;
+  applicationId: number | null;
+  sbomId: number | null;
+}
+
+export function dashboardScopeParams(scope?: DashboardFilterScope): URLSearchParams {
+  const params = new URLSearchParams();
+  if (scope?.projectId) params.set('project_id', String(scope.projectId));
+  if (scope?.applicationId) params.set('product_id', String(scope.applicationId));
+  if (scope?.sbomId) params.set('sbom_id', String(scope.sbomId));
+  return params;
+}
+
+function withDashboardScope(path: string, scope?: DashboardFilterScope): string {
+  const query = dashboardScopeParams(scope).toString();
+  return query ? `${path}${path.includes('?') ? '&' : '?'}${query}` : path;
+}
+
+export interface DashboardOption { id: number; name: string; version?: string | null; display_name?: string }
+
+export function getDashboardProjectOptions(signal?: AbortSignal) {
+  return request<{ items: DashboardOption[] }>('/dashboard/filter-options/projects', { signal });
+}
+
+export function getDashboardScannedProjectIds(scope?: DashboardFilterScope, signal?: AbortSignal) {
+  return request<{ ids: number[] }>(withDashboardScope('/dashboard/scanned-project-ids', scope), { signal });
+}
+
+export function getDashboardApplicationOptions(projectId: number, signal?: AbortSignal) {
+  return request<{ items: DashboardOption[] }>(`/dashboard/filter-options/applications?project_id=${projectId}`, { signal });
+}
+
+export function getDashboardSbomOptions(scope: DashboardFilterScope, signal?: AbortSignal) {
+  return request<{ items: DashboardOption[] }>(withDashboardScope('/dashboard/filter-options/sboms', scope), { signal });
+}
+
+export function getDashboardRuns(scope: DashboardFilterScope, runStatus?: string, limit = 100, signal?: AbortSignal, latestOnly = false) {
+  const params = dashboardScopeParams(scope);
+  params.set('limit', String(limit));
+  if (runStatus) params.set('run_status', runStatus);
+  if (latestOnly) params.set('latest_only', 'true');
+  return request<AnalysisRun[]>(`/dashboard/runs?${params.toString()}`, { signal });
+}
+
 export function getDashboardStats(signal?: AbortSignal) {
   return request<DashboardStats>('/dashboard/stats', { signal });
 }
 
-export function getRecentSboms(limit = 5, signal?: AbortSignal) {
-  return request<RecentSbom[]>(`/dashboard/recent-sboms?limit=${limit}`, { signal });
+export function getRecentSboms(limit = 5, signal?: AbortSignal, scope?: DashboardFilterScope) {
+  return request<RecentSbom[]>(withDashboardScope(`/dashboard/recent-sboms?limit=${limit}`, scope), { signal });
 }
 
 export function getDashboardActivity(signal?: AbortSignal) {
@@ -700,8 +745,8 @@ export function getDashboardPosture(signal?: AbortSignal) {
   return request<DashboardPosture>('/dashboard/posture', { signal });
 }
 
-export function getDashboardSummary(signal?: AbortSignal) {
-  return request<any>('/dashboard/summary', { signal });
+export function getDashboardSummary(signal?: AbortSignal, scope?: DashboardFilterScope) {
+  return request<any>(withDashboardScope('/dashboard/summary', scope), { signal });
 }
 
 // ─── Projects ────────────────────────────────────────────────────────────────
@@ -797,8 +842,9 @@ export function deleteProject(
 }
 
 // ─── SBOMs ───────────────────────────────────────────────────────────────────
-export function getSboms(page = 1, pageSize = 50, signal?: AbortSignal) {
-  return request<SBOMSource[]>(`/api/sboms?page=${page}&page_size=${pageSize}`, { signal });
+export function getSboms(page = 1, pageSize = 50, signal?: AbortSignal, scope?: DashboardFilterScope, analysed = false) {
+  const path = `/api/sboms?page=${page}&page_size=${pageSize}${analysed ? '&analysed=true' : ''}`;
+  return request<SBOMSource[]>(withDashboardScope(path, scope), { signal });
 }
 
 export function getSbom(id: number, signal?: AbortSignal, includeRaw = false) {
@@ -1233,8 +1279,9 @@ export interface VulnerabilitiesResponse {
 export function getVulnerabilities(
   filter: { severity?: string; page?: number; page_size?: number } = {},
   signal?: AbortSignal,
+  scope?: DashboardFilterScope,
 ) {
-  const params = new URLSearchParams();
+  const params = dashboardScopeParams(scope);
   if (filter.severity) params.set('severity', filter.severity);
   params.set('page', String(filter.page ?? 1));
   params.set('page_size', String(filter.page_size ?? 500));
@@ -1705,8 +1752,9 @@ export function getDashboardTrend(days = 30, signal?: AbortSignal) {
 export function getDashboardTrendFiltered(
   opts: { granularity: TrendGranularity; applicationIds?: number[] },
   signal?: AbortSignal,
+  scope?: DashboardFilterScope,
 ) {
-  const params = new URLSearchParams();
+  const params = dashboardScopeParams(scope);
   params.set('granularity', opts.granularity);
   for (const id of opts.applicationIds ?? []) {
     params.append('application_ids', String(id));
@@ -1718,8 +1766,9 @@ export function getDashboardTrendFiltered(
 export function getVulnerabilityAge(
   opts: { period?: AgePeriod; from?: string; to?: string } = {},
   signal?: AbortSignal,
+  scope?: DashboardFilterScope,
 ) {
-  const params = new URLSearchParams();
+  const params = dashboardScopeParams(scope);
   if (opts.period) params.set('period', opts.period);
   if (opts.from) params.set('date_from', opts.from);
   if (opts.to) params.set('date_to', opts.to);

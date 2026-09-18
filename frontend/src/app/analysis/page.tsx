@@ -383,6 +383,11 @@ function AnalysisPageInner() {
             <VulnerabilitiesByScope
               severity={severityFilter}
               onSeverityChange={setSeverityFilter}
+              scope={projectFilter ? {
+                projectId: projectFilter ? Number(projectFilter) : null,
+                applicationId: productFilter ? Number(productFilter) : null,
+                sbomId: productFilter && sbomFilter ? Number(sbomFilter) : null,
+              } : undefined}
             />
           </div>
         )}

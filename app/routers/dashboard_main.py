@@ -33,13 +33,14 @@ from sqlalchemy.orm import Session
 from .. import metrics
 from ..db import get_db
 from ..etag import maybe_not_modified
-from ..models import SBOMSource
+from ..models import Product, Projects, SBOMSource, Tenant
 from ..schemas_dashboard import (
     DashboardPostureResponse,
     LifetimeMetrics,
     NetChange,
     VulnerabilityAgeResponse,
 )
+from ..services.dashboard_scope import dashboard_scope_dependency
 from ..services.lifecycle.vex_provider import vex_dashboard_summary
 
 # Observation-window lengths (days) for the vulnerability-age period filter.
@@ -52,7 +53,67 @@ from ..services.dashboard_metrics import (
 
 log = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/dashboard", tags=["dashboard"])
+router = APIRouter(
+    prefix="/dashboard", tags=["dashboard"],
+    dependencies=[Depends(dashboard_scope_dependency)],
+)
+
+
+@router.get("/filter-options/projects")
+def dashboard_project_options(db: Session = Depends(get_db)):
+    rows = db.execute(
+        select(Projects.id, Projects.project_name).order_by(Projects.project_name, Projects.id)
+    ).all()
+    return {"items": [{"id": row.id, "name": row.project_name} for row in rows]}
+
+
+@router.get("/scanned-project-ids")
+def dashboard_scanned_project_ids(db: Session = Depends(get_db)):
+    return {"ids": metrics.scanned_project_ids(db)}
+
+
+@router.get("/filter-options/applications")
+def dashboard_application_options(
+    project_id: int = Query(..., ge=1), db: Session = Depends(get_db),
+):
+    rows = db.execute(
+        select(Product.id, Product.name)
+        .where(Product.project_id == project_id, Product.deleted_at.is_(None))
+        .order_by(Product.name, Product.id)
+    ).all()
+    return {"items": [{"id": row.id, "name": row.name} for row in rows]}
+
+
+@router.get("/filter-options/sboms")
+def dashboard_sbom_options(
+    project_id: int = Query(..., ge=1),
+    product_id: int = Query(..., ge=1),
+    db: Session = Depends(get_db),
+):
+    # The installed scope applies the active HEAD rule to this query.
+    rows = db.execute(
+        select(SBOMSource.id, SBOMSource.sbom_name, SBOMSource.sbom_version, SBOMSource.productver)
+        .where(SBOMSource.projectid == project_id, SBOMSource.product_id == product_id)
+        .order_by(SBOMSource.id.desc())
+    ).all()
+    return {"items": [
+        {"id": row.id, "name": row.sbom_name,
+         "version": row.sbom_version or row.productver,
+         "display_name": f"{row.sbom_name} — v{row.sbom_version or row.productver}"
+         if (row.sbom_version or row.productver) else row.sbom_name}
+        for row in rows
+    ]}
+
+
+@router.get("/runs")
+def dashboard_scoped_runs(
+    run_status: str | None = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+    latest_only: bool = Query(False),
+    db: Session = Depends(get_db),
+):
+    """Run-list representation over the dashboard's eligible set."""
+    return metrics.dashboard_runs(db, limit=limit, latest_only=latest_only, run_status=run_status)
 
 
 @router.get("/stats")
@@ -527,6 +588,7 @@ def get_dashboard_summary(
     lifetime_payload["runs_distinct_dates"] = int(lifetime_runs_distinct)
 
     payload = {
+        "scope": _scope_metadata(request, db),
         "posture": posture_payload,
         "lifecycle": lifecycle_payload,
         "health": health_payload,
@@ -547,3 +609,18 @@ def get_dashboard_summary(
     if nm is not None:
         return nm
     return payload
+
+
+def _scope_metadata(request: Request, db: Session) -> dict:
+    scope = request.state.dashboard_scope
+    tenant_name = db.execute(select(Tenant.name).where(Tenant.id == scope.tenant_id)).scalar_one_or_none()
+    project_name = db.execute(select(Projects.project_name).where(Projects.id == scope.project_id)).scalar_one_or_none() if scope.project_id else None
+    product_name = db.execute(select(Product.name).where(Product.id == scope.product_id)).scalar_one_or_none() if scope.product_id else None
+    sbom = db.execute(select(SBOMSource.sbom_name, SBOMSource.sbom_version, SBOMSource.productver).where(SBOMSource.id == scope.sbom_id)).first() if scope.sbom_id else None
+    return {
+        "level": scope.level,
+        "tenant": {"id": scope.tenant_id, "name": tenant_name},
+        "project": {"id": scope.project_id, "name": project_name} if scope.project_id else None,
+        "application": {"id": scope.product_id, "name": product_name} if scope.product_id else None,
+        "sbom": {"id": scope.sbom_id, "name": sbom.sbom_name, "version": sbom.sbom_version or sbom.productver} if sbom else None,
+    }

@@ -4,10 +4,13 @@ import Link from 'next/link';
 import { ArrowDownRight, ArrowUpRight, Clock3, Sparkles } from 'lucide-react';
 import { Surface } from '@/components/ui/Surface';
 import { cn } from '@/lib/utils';
+import { dashboardDrilldownUrl } from '@/lib/dashboardScopeUrl';
+import type { DashboardFilterScope } from '@/lib/api';
 import type { DashboardPosture } from '@/types';
 
 interface WhatsNewStripProps {
   posture: DashboardPosture | undefined;
+  scope?: DashboardFilterScope;
 }
 
 /**
@@ -22,7 +25,7 @@ interface WhatsNewStripProps {
  * Phase 2 upgrades this to a true "new since last scan" findings drill-down
  * once that aggregate exists.
  */
-export function WhatsNewStrip({ posture }: WhatsNewStripProps) {
+export function WhatsNewStrip({ posture, scope }: WhatsNewStripProps) {
   if (!posture) return null;
 
   const added = posture.net_7day?.added ?? posture.net_7day_added ?? 0;
@@ -81,7 +84,7 @@ export function WhatsNewStrip({ posture }: WhatsNewStripProps) {
         )}
 
         <Link
-          href="/analysis?tab=runs"
+          href={dashboardDrilldownUrl('/analysis?tab=runs', scope)}
           className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-primary transition-colors hover:text-hcl-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/40"
         >
           View recent runs <ArrowUpRight className="h-3 w-3" aria-hidden />

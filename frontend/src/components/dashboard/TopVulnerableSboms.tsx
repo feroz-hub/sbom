@@ -7,10 +7,11 @@ import { ArrowUpRight, ShieldAlert } from 'lucide-react';
 import { Surface, SurfaceContent, SurfaceHeader } from '@/components/ui/Surface';
 import { Skeleton } from '@/components/ui/Spinner';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { getRuns } from '@/lib/api';
+import { getDashboardRuns, type DashboardFilterScope } from '@/lib/api';
 import { aggregateRuns, type SeverityKey } from '@/lib/topVulnerableRuns';
 import { severityKeyToParam } from '@/lib/severityParam';
 import { cn } from '@/lib/utils';
+import { dashboardDrilldownUrl } from '@/lib/dashboardScopeUrl';
 
 const TOP_N = 5;
 
@@ -22,13 +23,13 @@ const SEVERITY_BADGES: Array<{ key: SeverityKey; label: string; dot: string }> =
   { key: 'low', label: 'Low', dot: 'bg-sky-600' },
 ];
 
-export function TopVulnerableSboms() {
+export function TopVulnerableSboms({ scope, tenantId }: { scope?: DashboardFilterScope; tenantId?: string | null } = {}) {
   // Pull the most recent runs that produced findings.
   // ADR-0001 renamed this status from FAIL to FINDINGS.
   const runsQuery = useQuery({
-    queryKey: ['top-vulnerable-runs'],
+    queryKey: ['top-vulnerable-runs', tenantId, scope?.projectId, scope?.applicationId, scope?.sbomId],
     queryFn: ({ signal }) =>
-      getRuns({ run_status: 'FINDINGS', page: 1, page_size: 100 }, signal),
+      getDashboardRuns(scope ?? { projectId: null, applicationId: null, sbomId: null }, 'FINDINGS', 100, signal, true),
   });
 
   // aggregateRuns returns the full ranked set; this panel shows the top N.
@@ -51,7 +52,7 @@ export function TopVulnerableSboms() {
           </p>
         </div>
         <Link
-          href="/analysis?tab=runs&status=FINDINGS"
+          href={dashboardDrilldownUrl('/analysis?tab=runs&status=FINDINGS', scope)}
           className="inline-flex items-center gap-1 text-xs font-medium text-primary transition-colors hover:text-hcl-dark"
         >
           All runs with findings <ArrowUpRight className="h-3 w-3" aria-hidden />
