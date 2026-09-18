@@ -11,6 +11,15 @@ const mockSwitchTenant = vi.fn();
 const mockSelectTenant = vi.fn();
 const mockClearTenantSelection = vi.fn();
 const mockListPlatformTenants = vi.fn();
+const mockReplace = vi.fn();
+let mockPathname = '/';
+
+vi.mock('next/navigation', () => ({
+  usePathname: () => mockPathname,
+  useRouter: () => ({ replace: mockReplace }),
+}));
+
+beforeEach(() => { mockPathname = '/'; });
 
 const sampleTenants = [
   {
@@ -102,6 +111,27 @@ describe('TenantSwitcher', () => {
     await user.click(screen.getByRole('option', { name: /Acme Corp/i }));
 
     expect(mockSelectTenant).toHaveBeenCalledWith('2');
+    expect(mockReplace).toHaveBeenCalledWith('/', { scroll: false });
+    expect(mockReplace.mock.invocationCallOrder[0]).toBeLessThan(mockSelectTenant.mock.invocationCallOrder[0]!);
+  });
+
+  it('keeps the dashboard filters when the current tenant is selected again', async () => {
+    const user = userEvent.setup();
+    renderSwitcher();
+    await user.click(screen.getByRole('button', { name: /switch tenant/i }));
+    await user.click(screen.getByRole('option', { name: /Wellysis/i }));
+    expect(mockSelectTenant).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it('keeps other page navigation unchanged when switching tenant', async () => {
+    mockPathname = '/projects';
+    const user = userEvent.setup();
+    renderSwitcher();
+    await user.click(screen.getByRole('button', { name: /switch tenant/i }));
+    await user.click(screen.getByRole('option', { name: /Acme Corp/i }));
+    expect(mockSelectTenant).toHaveBeenCalledWith('2');
+    expect(mockReplace).not.toHaveBeenCalled();
   });
 
   it('closes dropdown on Escape key', async () => {
