@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import { Boxes, FileCheck2, ScanLine, type LucideIcon } from 'lucide-react';
 import { Surface } from '@/components/ui/Surface';
 import { Skeleton } from '@/components/ui/Spinner';
-import { getDashboardPosture } from '@/lib/api';
+import { getDashboardPosture, type DashboardFilterScope } from '@/lib/api';
+import { dashboardDrilldownUrl } from '@/lib/dashboardScopeUrl';
 
 interface TileSpec {
   label: string;
@@ -25,9 +26,10 @@ interface TileSpec {
 export interface CounterTilesProps {
   posture?: any;
   isLoading?: boolean;
+  scope?: DashboardFilterScope;
 }
 
-export function CounterTiles({ posture, isLoading: propsIsLoading }: CounterTilesProps = {}) {
+export function CounterTiles({ posture, isLoading: propsIsLoading, scope }: CounterTilesProps = {}) {
   const router = useRouter();
   const hasProps = posture !== undefined;
 
@@ -52,14 +54,14 @@ export function CounterTiles({ posture, isLoading: propsIsLoading }: CounterTile
       label: 'Total Projects Scanned',
       value: data?.total_applications_scanned,
       icon: ScanLine,
-      href: '/projects',
+      href: '/projects?scanned=1',
       hint: 'Projects with a completed analysis',
     },
     {
       label: 'Total SBOM Files Analysed',
       value: data?.total_sboms_analysed,
       icon: FileCheck2,
-      href: '/analysis?tab=runs',
+      href: '/sboms?analysed=1',
       hint: 'SBOMs with a completed run',
     },
   ];
@@ -72,7 +74,7 @@ export function CounterTiles({ posture, isLoading: propsIsLoading }: CounterTile
           <Surface key={t.label} variant="elevated" className="p-0">
             <button
               type="button"
-              onClick={() => router.push(t.href)}
+              onClick={() => router.push(dashboardDrilldownUrl(t.href, scope))}
               className="flex w-full items-center gap-4 rounded-xl px-5 py-4 text-left transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/40"
             >
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-hcl-light text-hcl-blue">

@@ -26,7 +26,12 @@ from ..etag import maybe_not_modified
 
 log = logging.getLogger("sbom.api.dashboard_advanced")
 
-router = APIRouter(prefix="/dashboard", tags=["dashboard-advanced"])
+from ..services.dashboard_scope import dashboard_scope_dependency
+
+router = APIRouter(
+    prefix="/dashboard", tags=["dashboard-advanced"],
+    dependencies=[Depends(dashboard_scope_dependency)],
+)
 
 
 @router.get("/forecast")

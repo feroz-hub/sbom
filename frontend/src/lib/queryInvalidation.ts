@@ -19,6 +19,7 @@ export function invalidateReportSurfaces(qc: QueryClient): void {
 
 export function invalidateSbomLists(qc: QueryClient): void {
   qc.invalidateQueries({ queryKey: ['sboms'] });
+  qc.invalidateQueries({ queryKey: ['dashboard-sboms'] });
   qc.invalidateQueries({ queryKey: ['sidebar-recent-sboms'] });
   qc.invalidateQueries({ queryKey: ['recent-sboms'] });
   qc.invalidateQueries({ queryKey: ['palette-recent-sboms'] });
@@ -26,6 +27,9 @@ export function invalidateSbomLists(qc: QueryClient): void {
 
 export function invalidateProjectLists(qc: QueryClient): void {
   qc.invalidateQueries({ queryKey: ['projects'] });
+  qc.invalidateQueries({ queryKey: ['dashboard-projects'] });
+  qc.invalidateQueries({ queryKey: ['dashboard-applications'] });
+  qc.invalidateQueries({ queryKey: ['dashboard-scanned-projects'] });
 }
 
 export function invalidateProjectSurfaces(qc: QueryClient, projectId?: number | null): void {
@@ -44,6 +48,9 @@ export function invalidateProjectSurfaces(qc: QueryClient, projectId?: number | 
  * (analysis completion) that know an SBOM changed but not which product owns it.
  */
 export function invalidateProductSurfaces(qc: QueryClient, productId?: number | null): void {
+  qc.invalidateQueries({ queryKey: ['dashboard-applications'] });
+  qc.invalidateQueries({ queryKey: ['dashboard-sboms'] });
+  qc.invalidateQueries({ queryKey: ['dashboard-summary'] });
   if (productId == null) {
     qc.invalidateQueries({ queryKey: ['product'] });
     qc.invalidateQueries({ queryKey: ['product-sboms'] });
@@ -54,6 +61,7 @@ export function invalidateProductSurfaces(qc: QueryClient, productId?: number | 
 }
 
 export function invalidateDashboardSummary(qc: QueryClient): void {
+  qc.invalidateQueries({ queryKey: ['dashboard-summary'] });
   qc.invalidateQueries({ queryKey: ['dashboard-posture'] });
   qc.invalidateQueries({ queryKey: ['dashboard-trend'] });
   qc.invalidateQueries({ queryKey: ['dashboard-lifetime'] });
@@ -184,6 +192,10 @@ export function invalidateScheduleLists(qc: QueryClient): void {
  * call this so the dashboard reflects the change without F5.
  */
 export function invalidateDashboardTiles(qc: QueryClient): void {
+  qc.invalidateQueries({ queryKey: ['dashboard-summary'] });
+  qc.invalidateQueries({ queryKey: ['dashboard-scanned-projects'] });
+  qc.invalidateQueries({ queryKey: ['trend-explorer'] });
+  qc.invalidateQueries({ queryKey: ['vulnerabilities'] });
   qc.invalidateQueries({ queryKey: ['dashboard-posture'] });
   qc.invalidateQueries({ queryKey: ['dashboard-trend'] });
   qc.invalidateQueries({ queryKey: ['dashboard-lifetime'] });

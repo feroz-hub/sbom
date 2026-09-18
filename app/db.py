@@ -205,6 +205,58 @@ def _filter_soft_deleted(execute_state) -> None:
             )
         )
 
+    scope = execute_state.session.info.get("dashboard_scope")
+    if scope is not None:
+        # Core table subqueries avoid recursively applying ORM criteria to
+        # themselves.  This one eligible SBOM set is shared by every dashboard
+        # metric, including raw run/finding lifetime and trend queries.
+        from sqlalchemy import select
+
+        from .models import (
+            AnalysisFinding,
+            AnalysisRun,
+            Product,
+            Projects,
+            SBOMComponent,
+            SBOMSource,
+            VexStatement,
+            VulnerabilityRemediation,
+        )
+
+        sbom_ids = scope.eligible_sbom_ids()
+        r = AnalysisRun.__table__.c
+        run_ids = select(r.id).where(
+            r.tenant_id == scope.tenant_id,
+            r.is_active.is_(True),
+            r.sbom_id.in_(sbom_ids),
+        )
+        criteria = [
+            (SBOMSource, SBOMSource.id.in_(sbom_ids)),
+            (AnalysisRun, AnalysisRun.sbom_id.in_(sbom_ids)),
+            (AnalysisFinding, AnalysisFinding.analysis_run_id.in_(run_ids)),
+            (SBOMComponent, SBOMComponent.sbom_id.in_(sbom_ids)),
+            (VexStatement, VexStatement.sbom_id.in_(sbom_ids)),
+            (Projects, Projects.tenant_id == scope.tenant_id),
+            (VulnerabilityRemediation, VulnerabilityRemediation.tenant_id == scope.tenant_id),
+        ]
+        if scope.project_id is not None:
+            criteria.extend([
+                (VulnerabilityRemediation, VulnerabilityRemediation.project_id == scope.project_id),
+            ])
+            criteria.append((Projects, Projects.id == scope.project_id))
+        if scope.product_id is not None:
+            criteria.append((Product, (Product.id == scope.product_id) & (Product.tenant_id == scope.tenant_id)))
+        else:
+            p = Product.__table__.c
+            product_ids = select(p.id).where(p.tenant_id == scope.tenant_id)
+            if scope.project_id is not None:
+                product_ids = product_ids.where(p.project_id == scope.project_id)
+            criteria.append((Product, Product.id.in_(product_ids)))
+        for model, clause in criteria:
+            execute_state.statement = execute_state.statement.options(
+                with_loader_criteria(model, clause, include_aliases=True)
+            )
+
 
 @event.listens_for(_OrmSession, "before_flush")
 def _enforce_tenant_on_writes(session, _flush_context, _instances) -> None:

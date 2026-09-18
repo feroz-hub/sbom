@@ -889,6 +889,10 @@ _ALLOWED_STAGES = {
 
 @router.get("/sboms", response_model=list[SBOMSourceOut])
 def get_sbom_details(
+    project_id: int | None = Query(None, ge=1),
+    product_id: int | None = Query(None, ge=1),
+    sbom_id: int | None = Query(None, ge=1),
+    analysed: bool = Query(False),
     user_id: str | None = Query(None, description="Filter by CreatedBy (letters/digits/_/./-, 1–64 chars)"),
     status_filter: str | None = Query(
         None,
@@ -927,6 +931,22 @@ def get_sbom_details(
     try:
         stmt = select(SBOMSource).where(SBOMSource.tenant_id == context.tenant_id)
         count_stmt = select(func.count(SBOMSource.id)).where(SBOMSource.tenant_id == context.tenant_id)
+        if project_id is not None or product_id is not None or sbom_id is not None or analysed:
+            from ..services.dashboard_scope import resolve_dashboard_scope
+
+            scope = resolve_dashboard_scope(
+                db, tenant_id=context.tenant_id,
+                project_id=project_id, product_id=product_id, sbom_id=sbom_id,
+            )
+            eligible_ids = scope.eligible_sbom_ids()
+            stmt = stmt.where(SBOMSource.id.in_(eligible_ids))
+            count_stmt = count_stmt.where(SBOMSource.id.in_(eligible_ids))
+        if analysed:
+            from ..metrics import analysed_sbom_ids_subquery
+
+            analysed_ids = analysed_sbom_ids_subquery()
+            stmt = stmt.where(SBOMSource.id.in_(analysed_ids))
+            count_stmt = count_stmt.where(SBOMSource.id.in_(analysed_ids))
         if user_id is not None:
             stmt = stmt.where(SBOMSource.created_by == user_id)
             count_stmt = count_stmt.where(SBOMSource.created_by == user_id)

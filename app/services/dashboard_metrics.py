@@ -369,7 +369,7 @@ def compute_net_7day_change(db: Session) -> tuple[int, int]:
 
 
 _LIFETIME_TTL_SECONDS = 15 * 60  # 15 minutes — see redesign §9.3
-_lifetime_cache: dict[tuple[int, int, int], tuple[float, LifetimeMetrics]] = {}
+_lifetime_cache: dict[tuple, tuple[float, LifetimeMetrics]] = {}
 _lifetime_cache_lock = threading.Lock()
 
 
@@ -390,7 +390,8 @@ def compute_lifetime_metrics(db: Session) -> LifetimeMetrics:
     we'll either key the cache by tenant or move to Redis with a per-tenant
     namespace — see redesign §9.3 for the deferred decision.
     """
-    key = _lifetime_cache_key(db)
+    scope = db.info.get("dashboard_scope")
+    key = (_lifetime_cache_key(db), scope.key if scope is not None else None)
     now = time.time()
 
     with _lifetime_cache_lock:

@@ -11,11 +11,14 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { dashboardDrilldownUrl } from '@/lib/dashboardScopeUrl';
+import type { DashboardFilterScope } from '@/lib/api';
 import type { PrimaryAction } from '@/types';
 
 interface QuickActionsV2Props {
   /** Server-decided primary action, from `/dashboard/posture`. */
   primaryAction?: PrimaryAction;
+  scope?: DashboardFilterScope;
 }
 
 interface ActionConfig {
@@ -80,7 +83,7 @@ const linkBase = cn(
  *
  * Mapping locked in `docs/dashboard-redesign.md` §4.
  */
-export function QuickActionsV2({ primaryAction = 'upload' }: QuickActionsV2Props) {
+export function QuickActionsV2({ primaryAction = 'upload', scope }: QuickActionsV2Props) {
   const primary = ACTIONS[primaryAction] ?? ACTIONS.upload;
   // Outline actions = the four canonical secondary aids, minus whichever
   // one is currently primary so we don't duplicate it.
@@ -96,7 +99,7 @@ export function QuickActionsV2({ primaryAction = 'upload' }: QuickActionsV2Props
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
       <Link
-        href={primary.href}
+        href={dashboardDrilldownUrl(primary.href, scope)}
         className={cn(linkBase, 'bg-primary text-white shadow-sm hover:bg-hcl-dark')}
       >
         <primary.Icon className="h-4 w-4" aria-hidden />
@@ -108,7 +111,7 @@ export function QuickActionsV2({ primaryAction = 'upload' }: QuickActionsV2Props
         return (
           <Link
             key={key}
-            href={a.href}
+            href={key === 'compare' ? a.href : dashboardDrilldownUrl(a.href, scope)}
             className={cn(
               linkBase,
               dashed

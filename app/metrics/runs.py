@@ -25,6 +25,34 @@ from .base import COMPLETED_RUN_STATUSES
 log = logging.getLogger("sbom.metrics.runs")
 
 
+def dashboard_runs(db: Session, *, limit: int, latest_only: bool = False, run_status: str | None = None) -> list[dict]:
+    """Run-list data over the installed dashboard scope's eligible SBOMs.
+
+    ``latest_only`` uses the canonical latest-successful-run helper so a
+    previously vulnerable SBOM with a newer clean run is not ranked as risky.
+    """
+    # The feed/ranking UI needs run metadata and counters, never the potentially
+    # large raw_report. Select only the fields used by those dashboard views.
+    statement = select(
+        AnalysisRun.id, AnalysisRun.sbom_id, AnalysisRun.project_id,
+        AnalysisRun.product_id, AnalysisRun.run_status, AnalysisRun.sbom_name,
+        AnalysisRun.source, AnalysisRun.trigger_source, AnalysisRun.started_on,
+        AnalysisRun.completed_on, AnalysisRun.duration_ms,
+        AnalysisRun.total_components, AnalysisRun.components_with_cpe,
+        AnalysisRun.total_findings, AnalysisRun.critical_count,
+        AnalysisRun.high_count, AnalysisRun.medium_count,
+        AnalysisRun.low_count, AnalysisRun.unknown_count,
+        AnalysisRun.query_error_count,
+    )
+    if latest_only:
+        statement = statement.where(AnalysisRun.id.in_(latest_run_per_sbom_subquery()))
+    if run_status:
+        normalized = normalize_run_status(run_status)
+        statement = statement.where(AnalysisRun.run_status == normalized)
+    rows = db.execute(statement.order_by(AnalysisRun.id.desc()).limit(limit)).mappings().all()
+    return [dict(row) for row in rows]
+
+
 def runs_total_lifetime(db: Session) -> int:
     """runs.total_lifetime — see metrics-spec.md §3.6.
 

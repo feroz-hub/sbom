@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Eye, Pencil, Plus, Trash2, Upload } from 'lucide-react';
@@ -13,9 +14,10 @@ import { ProductFormDialog } from '@/components/products/ProductFormDialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Table, TableBody, TableHead, Td, Th, EmptyRow } from '@/components/ui/Table';
 import { SbomUploadModal } from '@/components/sboms/SbomUploadModal';
-import { deleteProduct, getEffectiveProductSchedule, getProducts, getProjects } from '@/lib/api';
+import { deleteProduct, getDashboardScannedProjectIds, getEffectiveProductSchedule, getProducts, getProjects, type DashboardFilterScope } from '@/lib/api';
 import { useNotifications } from '@/hooks/useNotifications';
 import { getApiErrorMessage } from '@/lib/notifications';
+import { invalidateDashboardTiles, invalidateProductSurfaces } from '@/lib/queryInvalidation';
 import { DeleteConfirmDialog } from '@/components/ui/DeleteConfirmDialog';
 import type { Product, Project } from '@/types';
 
@@ -57,6 +59,8 @@ function ProjectProducts({ project }: { project: Project }) {
     mutationFn: (product: Product) => deleteProduct(product.id),
     onSuccess: (_data, deletedProduct) => {
       queryClient.invalidateQueries({ queryKey: ['products', project.id] });
+      invalidateProductSurfaces(queryClient, deletedProduct.id);
+      invalidateDashboardTiles(queryClient);
       showSuccess(`Application “${deletedProduct.name}” was deleted successfully.`);
       setDeleteProductTarget(null);
     },
@@ -191,12 +195,33 @@ function ProjectProducts({ project }: { project: Project }) {
 }
 
 export default function ProjectsPage() {
+  return <Suspense fallback={null}><ProjectsContent /></Suspense>;
+}
+
+function ProjectsContent() {
   const [showCreate, setShowCreate] = useState(false);
+  const params = useSearchParams();
+  const projectId = Number(params?.get('project')) || null;
+  const applicationId = projectId ? Number(params?.get('product')) || null : null;
+  const sbomId = applicationId ? Number(params?.get('sbom')) || null : null;
+  const scanned = params?.get('scanned') === '1';
+  const scope: DashboardFilterScope = { projectId, applicationId, sbomId };
 
   const { data: projects, isLoading, error } = useQuery({
     queryKey: ['projects'],
     queryFn: ({ signal }) => getProjects(signal),
   });
+  const scannedProjects = useQuery({
+    queryKey: ['dashboard-scanned-projects', projectId, applicationId, sbomId],
+    queryFn: ({ signal }) => getDashboardScannedProjectIds(scope, signal),
+    enabled: scanned,
+  });
+  const scannedIds = scanned ? new Set(scannedProjects.data?.ids ?? []) : null;
+  const visibleProjects = projects?.filter((project) =>
+    (!projectId || project.id === projectId) && (!scannedIds || scannedIds.has(project.id)),
+  );
+  const pageLoading = isLoading || (scanned && scannedProjects.isLoading);
+  const pageError = error || (scanned ? scannedProjects.error : null);
 
   return (
     <div className="flex flex-col flex-1">
@@ -211,14 +236,14 @@ export default function ProjectsPage() {
       />
       <div className="space-y-6 p-6">
         <ProjectsTable
-          projects={projects}
-          isLoading={isLoading}
-          error={error}
+          projects={visibleProjects}
+          isLoading={pageLoading}
+          error={pageError}
         />
-        {!isLoading && !error && projects?.length ? (
+        {!pageLoading && !pageError && visibleProjects?.length ? (
           <div className="space-y-4">
             <h2 className="text-lg font-semibold text-hcl-navy">Applications</h2>
-            {projects.map((project) => (
+            {visibleProjects.map((project) => (
               <ProjectProducts key={project.id} project={project} />
             ))}
           </div>

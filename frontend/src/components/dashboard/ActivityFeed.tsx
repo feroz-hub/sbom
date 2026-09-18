@@ -17,8 +17,9 @@ import {
 import { Surface, SurfaceContent, SurfaceHeader } from '@/components/ui/Surface';
 import { Skeleton } from '@/components/ui/Spinner';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { getRecentSboms, getRuns } from '@/lib/api';
+import { getDashboardRuns, getRecentSboms, type DashboardFilterScope } from '@/lib/api';
 import { cn, formatDate } from '@/lib/utils';
+import { dashboardDrilldownUrl } from '@/lib/dashboardScopeUrl';
 import type { AnalysisRun, RecentSbom } from '@/types';
 
 type FeedItem =
@@ -73,15 +74,15 @@ const statusGlyph: Record<
   NO_DATA: { Icon: CircleDashed, tone: 'text-hcl-muted', bg: 'bg-surface-muted', label: 'No data' },
 };
 
-export function ActivityFeed() {
+export function ActivityFeed({ scope, tenantId }: { scope?: DashboardFilterScope; tenantId?: string | null } = {}) {
   const recentSbomsQuery = useQuery({
-    queryKey: ['recent-sboms'],
-    queryFn: ({ signal }) => getRecentSboms(8, signal),
+    queryKey: ['recent-sboms', tenantId, scope?.projectId, scope?.applicationId, scope?.sbomId],
+    queryFn: ({ signal }) => getRecentSboms(8, signal, scope),
   });
 
   const recentRunsQuery = useQuery({
-    queryKey: ['recent-runs'],
-    queryFn: ({ signal }) => getRuns({ page: 1, page_size: 12 }, signal),
+    queryKey: ['recent-runs', tenantId, scope?.projectId, scope?.applicationId, scope?.sbomId],
+    queryFn: ({ signal }) => getDashboardRuns(scope ?? { projectId: null, applicationId: null, sbomId: null }, undefined, 12, signal),
   });
 
   const feed = useMemo<FeedItem[]>(() => {
@@ -110,7 +111,7 @@ export function ActivityFeed() {
           </p>
         </div>
         <Link
-          href="/sboms"
+          href={dashboardDrilldownUrl('/sboms', scope)}
           className="inline-flex items-center gap-1 text-xs font-medium text-primary transition-colors hover:text-hcl-dark"
         >
           All SBOMs <ArrowUpRight className="h-3 w-3" aria-hidden />
@@ -136,7 +137,7 @@ export function ActivityFeed() {
             description="Uploaded SBOMs and analysis runs will appear here."
             action={
               <Link
-                href="/sboms"
+                href={dashboardDrilldownUrl('/sboms', scope)}
                 className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-white transition-all duration-base ease-spring hover:-translate-y-px hover:bg-hcl-dark hover:shadow-glow-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/40"
               >
                 Upload SBOM
