@@ -68,7 +68,7 @@ export function LifecycleHealthTiles({
         ) : null}
 
         <div className="mt-4 grid grid-cols-3 gap-3">
-          <div className="rounded-xl border border-[var(--dashboard-border-subtle)] bg-red-50/70 p-3 dark:border-slate-800 dark:bg-red-950/20">
+          <div className="dashboard-stat-card rounded-xl bg-red-50/70 p-3 dark:bg-red-950/20">
             <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-red-800 dark:text-red-300">
               <ShieldAlert className="h-3.5 w-3.5" />
               EOL Components
@@ -83,7 +83,7 @@ export function LifecycleHealthTiles({
             <div className="mt-0.5 text-[9px] text-red-600/80 dark:text-red-400/80">Active threat (EOL reached)</div>
           </div>
 
-          <div className="rounded-xl border border-[var(--dashboard-border-subtle)] bg-amber-50/70 p-3 dark:border-slate-800 dark:bg-amber-950/20">
+          <div className="dashboard-stat-card rounded-xl bg-amber-50/70 p-3 dark:bg-amber-950/20">
             <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-amber-800 dark:text-amber-300">
               <AlertTriangle className="h-3.5 w-3.5" />
               Upcoming EOS
@@ -98,7 +98,7 @@ export function LifecycleHealthTiles({
             <div className="mt-0.5 text-[9px] text-amber-600/80 dark:text-amber-400/80">Retiring in &lt; 90 days</div>
           </div>
 
-          <div className="rounded-xl border border-[var(--dashboard-border-subtle)] bg-blue-50/70 p-3 dark:border-slate-800 dark:bg-blue-950/20">
+          <div className="dashboard-stat-card rounded-xl bg-blue-50/70 p-3 dark:bg-blue-950/20">
             <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-blue-800 dark:text-blue-300">
               <AlertCircle className="h-3.5 w-3.5" />
               Unsupported
@@ -124,7 +124,7 @@ export function LifecycleHealthTiles({
             ['Possibly Unmaintained', lifecycle?.possibly_unmaintained_count ?? 0, 'text-yellow-700 dark:text-yellow-300'],
             ['Stale Data', lifecycle?.stale_lifecycle_count ?? 0, 'text-slate-700 dark:text-slate-300'],
           ] as const).map(([label, value, color]) => (
-            <div key={label} className="rounded-lg border border-[var(--dashboard-border-subtle)] p-2 dark:border-slate-800">
+            <div key={label} className="dashboard-stat-card rounded-lg p-2">
               <div className="text-[10px] font-semibold uppercase tracking-wider text-hcl-muted">{label}</div>
               {loading ? (
                 <Skeleton className="mt-2 h-5 w-10" />
@@ -160,7 +160,7 @@ export function LifecycleHealthTiles({
         </div>
 
         <div className="mt-4 grid grid-cols-3 gap-3">
-          <div className="rounded-xl border border-[var(--dashboard-border-subtle)] bg-emerald-50/70 p-3 dark:border-slate-800 dark:bg-emerald-950/20">
+          <div className="dashboard-stat-card rounded-xl bg-emerald-50/70 p-3 dark:bg-emerald-950/20">
             <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
               <Award className="h-3.5 w-3.5" />
               Completeness
@@ -175,7 +175,7 @@ export function LifecycleHealthTiles({
             <div className="mt-0.5 text-[9px] text-emerald-600/80 dark:text-emerald-400/80">Average quality rating</div>
           </div>
 
-          <div className="rounded-xl border border-[var(--dashboard-border-subtle)] bg-amber-50/70 p-3 dark:border-slate-800 dark:bg-amber-950/20">
+          <div className="dashboard-stat-card rounded-xl bg-amber-50/70 p-3 dark:bg-amber-950/20">
             <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-amber-800 dark:text-amber-300">
               <FileWarning className="h-3.5 w-3.5" />
               Missing Info
@@ -190,7 +190,7 @@ export function LifecycleHealthTiles({
             <div className="mt-0.5 text-[9px] text-amber-600/80 dark:text-amber-400/80">Missing licenses/hashes</div>
           </div>
 
-          <div className="rounded-xl border border-[var(--dashboard-border-subtle)] bg-gray-50 p-3 dark:border-slate-800 dark:bg-gray-800/40">
+          <div className="dashboard-stat-card rounded-xl bg-gray-50 p-3 dark:bg-gray-800/40">
             <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-700 dark:text-gray-300">
               <HelpCircle className="h-3.5 w-3.5" />
               Outdated Pkgs
@@ -235,7 +235,7 @@ export function LifecycleHealthTiles({
             ['Unknown', vex?.unknown_count ?? 0, 'text-gray-700 dark:text-gray-300'],
             ['Requires Action', vex?.vulnerabilities_requiring_action ?? 0, 'text-rose-700 dark:text-rose-300'],
           ] as const).map(([label, value, color]) => (
-            <div key={label} className="rounded-lg border border-[var(--dashboard-border-subtle)] p-2 dark:border-slate-800">
+            <div key={label} className="dashboard-stat-card rounded-lg p-2">
               <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-hcl-muted">
                 <ShieldCheck className="h-3.5 w-3.5" />
                 {label}

@@ -268,30 +268,24 @@ const CustomFilterSelect = forwardRef<HTMLSelectElement, CustomFilterSelectProps
             aria-controls={listboxId}
             aria-label={props['aria-label']}
             className={cn(
-              'flex h-10 w-full items-center justify-between gap-2 rounded-lg border px-3 text-sm text-left',
+              'dashboard-filter-select-trigger flex h-10 w-full items-center justify-between gap-2 rounded-lg border px-3 text-sm text-left',
               'transition-colors duration-150 select-none',
               'focus:outline-none focus-visible:outline-none',
               props.disabled
-                ? 'cursor-not-allowed bg-[#F8FAFC] border-[#E2E8F0] text-[#94A3B8] dark:bg-slate-900/60 dark:border-slate-800 dark:text-slate-500'
-                : cn(
-                    'bg-white text-[#1E293B] border-[#CBD5E1] hover:border-[#94A3B8]',
-                    'dark:bg-[#151f30] dark:text-[#eef4fb] dark:border-slate-700 dark:hover:border-slate-500',
-                    isOpen
-                      ? 'border-primary ring-[3px] ring-primary/15 dark:ring-primary/25'
-                      : 'focus:border-primary focus:ring-[3px] focus:ring-primary/15 dark:focus:ring-primary/25',
-                  ),
+                ? 'cursor-not-allowed'
+                : undefined,
               error && 'border-red-400 focus:border-red-500 focus:ring-red-300/40',
               className,
             )}
           >
-            <span className={cn('truncate flex-1', !selectedOption && 'text-[#94A3B8] dark:text-slate-500')}>
+            <span className={cn('truncate flex-1', !selectedOption && 'text-[var(--select-text-muted)]')}>
               {displayLabel}
             </span>
             <ChevronDown
               className={cn(
                 'h-4 w-4 shrink-0 transition-transform duration-200',
                 isOpen && 'rotate-180',
-                props.disabled ? 'text-[#94A3B8] dark:text-slate-500 opacity-60' : 'text-hcl-muted',
+                props.disabled ? 'text-[var(--select-text-muted)] opacity-60' : 'text-hcl-muted',
               )}
               aria-hidden="true"
             />
@@ -304,16 +298,16 @@ const CustomFilterSelect = forwardRef<HTMLSelectElement, CustomFilterSelectProps
               className={cn(
                 'absolute left-0 right-0 z-50 w-full',
                 placement === 'top' ? 'bottom-full mb-1' : 'top-full mt-1',
-                'rounded-[10px] border border-[#E2E8F0] dark:border-[#2d3f56]',
-                'bg-white dark:bg-[#151f30]',
-                'shadow-[0_8px_24px_rgba(15,23,42,0.12)] dark:shadow-[0_8px_24px_rgba(0,0,0,0.5)]',
+                'rounded-[10px] border border-[var(--select-popup-border)]',
+                'bg-[var(--select-popup-bg)]',
+                'shadow-[var(--select-shadow)]',
                 'p-1 flex flex-col',
                 'animate-in fade-in duration-100',
               )}
             >
               {/* Optional Search for 10+ values */}
               {options.length >= 10 && (
-                <div className="p-1 pb-1.5 border-b border-[#E2E8F0] dark:border-slate-800 mb-1">
+                <div className="p-1 pb-1.5 border-b border-[var(--select-popup-border)] mb-1">
                   <div className="relative">
                     <Search
                       className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-hcl-muted"
@@ -327,7 +321,7 @@ const CustomFilterSelect = forwardRef<HTMLSelectElement, CustomFilterSelectProps
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       onKeyDown={handleSearchKeyDown}
-                      className="w-full rounded-md border border-[#CBD5E1] dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60 pl-8 pr-3 py-1.5 text-xs text-foreground placeholder:text-hcl-muted focus:border-primary focus:bg-white dark:focus:bg-[#151f30] focus:outline-none focus:ring-1 focus:ring-primary"
+                      className="w-full rounded-md border border-[var(--select-border)] bg-[var(--select-item-hover)] pl-8 pr-3 py-1.5 text-xs text-[var(--select-text)] placeholder:text-hcl-muted focus:border-hcl-blue focus:bg-[var(--select-bg)] focus:outline-none focus:ring-1 focus:ring-[var(--select-focus-ring)]"
                     />
                   </div>
                 </div>
@@ -364,17 +358,17 @@ const CustomFilterSelect = forwardRef<HTMLSelectElement, CustomFilterSelectProps
                           'flex min-h-[38px] w-full items-center justify-between rounded-md px-2.5 py-2 text-sm text-left',
                           'cursor-pointer transition-colors duration-100 select-none',
                           isSelected
-                            ? 'bg-[#EFF6FF] text-primary font-medium dark:bg-hcl-blue/15 dark:text-[#38d4ff]'
+                            ? 'bg-[var(--select-item-active)] text-hcl-blue font-medium'
                             : isHighlighted
-                              ? 'bg-[#F1F5F9] text-[#1D4ED8] dark:bg-slate-800/60 dark:text-[#38d4ff]'
-                              : 'text-[#1E293B] hover:bg-[#F1F5F9] dark:text-[#eef4fb] dark:hover:bg-slate-800/60',
+                              ? 'bg-[var(--select-item-hover)] text-hcl-blue'
+                              : 'text-[var(--select-text)] hover:bg-[var(--select-item-hover)]',
                           opt.disabled && 'cursor-not-allowed opacity-50',
                         )}
                       >
                         <span className="truncate flex-1">{opt.label}</span>
                         {isSelected && (
                           <Check
-                            className="h-4 w-4 shrink-0 text-primary dark:text-[#38d4ff] ml-2"
+                            className="h-4 w-4 shrink-0 text-hcl-blue ml-2"
                             aria-hidden="true"
                           />
                         )}
