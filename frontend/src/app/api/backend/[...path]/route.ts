@@ -69,6 +69,11 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
   responseHeaders.delete('content-encoding');
   responseHeaders.delete('content-length');
   responseHeaders.delete('transfer-encoding');
+  // These statuses prohibit a response body, including an empty ArrayBuffer.
+  // A JSON content type on a successful DELETE must not turn its 204 into a 500.
+  if ([204, 205, 304].includes(upstream.status)) {
+    return new NextResponse(null, { status: upstream.status, headers: responseHeaders });
+  }
   // Next.js development route handlers can close a proxied JSON stream before
   // the browser finishes reading it. Buffer structured API responses here;
   // binary downloads remain streamed to avoid loading large files into memory.
