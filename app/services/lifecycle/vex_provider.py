@@ -9,7 +9,16 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ...models import AnalysisFinding, AnalysisRun, SBOMComponent, SBOMSource, VexDocument, VexOverrideAudit, VexStatement
+from ...models import (
+    AnalysisFinding,
+    AnalysisRun,
+    SBOMComponent,
+    SBOMSource,
+    VexDocument,
+    VexOverrideAudit,
+    VexStatement,
+)
+from ..sbom_workflow_logging import workflow_event
 from .types import HIGH, LOW, MEDIUM, UNKNOWN_CONFIDENCE, VexResult, now_iso
 
 ALLOWED_VEX_STATUSES = {"affected", "not_affected", "fixed", "under_investigation", "unknown"}
@@ -286,6 +295,7 @@ class VexProvider:
         return results
 
 
+@workflow_event("vex_import", completed_event="vex_processing_completed")
 def import_vex_document(
     db: Session,
     sbom_id: int,
@@ -530,6 +540,7 @@ def vex_report_csv(db: Session, sbom_id: int, *, status_filter: str | None = Non
     return out.getvalue()
 
 
+@workflow_event("vex_override", completed_event="vex_processing_completed")
 def apply_vex_override(
     db: Session,
     component_id: int,

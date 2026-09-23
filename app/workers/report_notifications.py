@@ -1,12 +1,15 @@
 """Isolated report queue. Durable outbox is authority; Celery messages are hints."""
 
 import logging
+import time
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 from celery import shared_task
 from fastapi import HTTPException
 from sqlalchemy import func, select
+
+from app.logger import log_context, log_event
 
 from ..core.context import minimal_background_context, tenant_scope
 from ..db import SessionLocal
@@ -65,7 +68,7 @@ def _finish(db, row, status, code, context=None):
 @shared_task(name="report_notifications.generate", queue="reports", ignore_result=True, acks_late=True)
 def generate(delivery_id, tenant_id):
     settings = get_settings()
-    with tenant_scope(minimal_background_context(tenant_id)):
+    with tenant_scope(minimal_background_context(tenant_id)), log_context(tenant_id=tenant_id):
         with SessionLocal() as db:
             row = db.scalar(
                 select(ReportDelivery)
@@ -107,6 +110,8 @@ def generate(delivery_id, tenant_id):
             row.recipient_email = context.email
             start, end = row.cycle_start, row.cycle_end
             db.commit()
+        started_at = time.perf_counter()
+        log_event(log, "report_generation_started", delivery_id=delivery_id, report_type="security_digest")
         try:
             with SessionLocal() as db:
                 report = compose_report(
@@ -127,6 +132,14 @@ def generate(delivery_id, tenant_id):
                 report["scheduled_outcomes"] = payload.get("completed", {})
             # Session is CLOSED before any PDF/Excel/MIME rendering.
             if preferences.suppress_when_unchanged and report["unchanged"]:
+                log_event(
+                    log,
+                    "report_generation_completed",
+                    delivery_id=delivery_id,
+                    report_type="security_digest",
+                    outcome="unchanged",
+                    duration_ms=int((time.perf_counter() - started_at) * 1000),
+                )
                 with SessionLocal() as db:
                     return _finish(db, db.get(ReportDelivery, delivery_id), "SKIPPED", "UNCHANGED", context)
             attachments = render_attachments(report, preferences.formats)
@@ -188,9 +201,29 @@ def generate(delivery_id, tenant_id):
                 and str(exc) in {"REPORT_MESSAGE_TOO_LARGE", "REPORT_STORAGE_PERMISSIONS", "REPORT_STORAGE_UNSAFE"}
                 else "REPORT_RENDER_FAILED"
             )
-            log.warning("report.generate_failed delivery_id=%s code=%s", delivery_id, code)
+            log_event(
+                log,
+                "report_generation_failed",
+                level=logging.ERROR,
+                exc_info=True,
+                delivery_id=delivery_id,
+                report_type="security_digest",
+                error_code=code,
+                duration_ms=int((time.perf_counter() - started_at) * 1000),
+            )
             with SessionLocal() as db:
                 return _finish(db, db.get(ReportDelivery, delivery_id), "FAILED", code, context)
+        summary = report["summary"]
+        log_event(
+            log,
+            "report_generation_completed",
+            delivery_id=delivery_id,
+            report_type="security_digest",
+            component_count=summary.get("total_components"),
+            **{key.lower(): value for key, value in summary.get("severity", {}).items()},
+            attachment_count=len(attachments),
+            duration_ms=int((time.perf_counter() - started_at) * 1000),
+        )
         with SessionLocal() as db:
             # Serialize per tenant for durable hourly quota reservation.
             db.scalar(select(Tenant).where(Tenant.id == tenant_id).with_for_update())

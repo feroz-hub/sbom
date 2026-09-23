@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from ..models import AnalysisFinding, AnalysisRun, RunCache, SBOMComponent, SBOMSource
 from ..pdf_report import build_pdf_from_run_bytes
+from .report_logging import report_generation
 
 log = logging.getLogger(__name__)
 
@@ -231,25 +232,33 @@ def generate_pdf_report(
     Raises:
         ValueError: If run not found or PDF generation fails
     """
-    # Ensure filename has .pdf extension
-    if not filename.lower().endswith(".pdf"):
-        filename = f"{filename}.pdf"
+    with report_generation(log, report_type="analysis_pdf", analysis_run_id=run_id) as fields:
+        # Ensure filename has .pdf extension
+        if not filename.lower().endswith(".pdf"):
+            filename = f"{filename}.pdf"
 
-    # Try RunCache first
-    run = load_run_cache(db, run_id)
+        # Try RunCache first
+        run = load_run_cache(db, run_id)
 
-    # Fallback: reconstruct from AnalysisRun + AnalysisFinding tables
-    if run is None:
-        log.debug("Run id=%d not in cache, rebuilding from DB", run_id)
-        run = rebuild_run_from_db(db, run_id)
+        # Fallback: reconstruct from AnalysisRun + AnalysisFinding tables
+        if run is None:
+            log.debug("Run id=%d not in cache, rebuilding from DB", run_id)
+            run = rebuild_run_from_db(db, run_id)
 
-    if run is None:
-        raise ValueError(f"Run {run_id} not found in cache or database")
+        if run is None:
+            raise ValueError(f"Run {run_id} not found in cache or database")
 
-    try:
-        pdf_bytes = build_pdf_from_run_bytes(run, title=title)
-        log.info("PDF generated: run_id=%d size=%d bytes filename=%s", run_id, len(pdf_bytes), filename)
-        return pdf_bytes, filename
-    except Exception as e:
-        log.error("PDF generation failed: run_id=%d error=%s", run_id, e, exc_info=True)
-        raise ValueError(f"Failed to generate PDF: {e}")
+        try:
+            pdf_bytes = build_pdf_from_run_bytes(run, title=title)
+            summary = run.get("summary") or {}
+            severity = (summary.get("findings") or {}).get("bySeverity") or {}
+            fields.update(
+                sbom_id=(run.get("sbom") or {}).get("id"),
+                component_count=summary.get("components"),
+                vulnerable_components=sum(bool(c.get("combined")) for c in run.get("components", [])),
+                **{key.lower(): severity[key] for key in ("CRITICAL", "HIGH", "MEDIUM", "LOW") if key in severity},
+                size_bytes=len(pdf_bytes),
+            )
+            return pdf_bytes, filename
+        except Exception as e:
+            raise ValueError(f"Failed to generate PDF: {e}")

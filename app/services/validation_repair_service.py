@@ -20,6 +20,8 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.logger import log_context
+
 from ..ai.cost import estimate_cost_usd, estimate_tokens, write_usage_log_row
 from ..ai.parse import ParseError, parse_llm_json
 from ..ai.providers.base import AiProviderError, LlmRequest
@@ -41,6 +43,7 @@ from ..services.sbom_service import sync_sbom_components
 from ..validation import ErrorReport
 from ..validation import run as run_validation
 from ..validation.stages import STAGE_NUMBERS
+from .sbom_workflow_logging import workflow_event
 from .validation_patch_service import PatchApplyError, apply_repair_patches
 
 SECURITY_BLOCKING_CODES = {
@@ -510,6 +513,7 @@ class ValidationRepairService:
     ) -> SBOMValidationSession:
         return self.update_session(session_id, content=content, actor_user_id=actor_user_id)
 
+    @workflow_event("sbom_validation_session_check", result_kind="validation")
     def validate_session(
         self,
         session_id: str,
@@ -520,11 +524,12 @@ class ValidationRepairService:
     ) -> SBOMValidationSession:
         session = self.get_session(session_id)
         content = session_repair_text(session)
-        report = run_validation(
-            content.encode("utf-8", errors="replace"),
-            strict_ntia=strict_ntia,
-            verify_signature=verify_signature,
-        )
+        with log_context(tenant_id=session.tenant_id, project_id=session.project_id, sbom_id=session.imported_sbom_id):
+            report = run_validation(
+                content.encode("utf-8", errors="replace"),
+                strict_ntia=strict_ntia,
+                verify_signature=verify_signature,
+            )
         detection = detect_sbom_format(content)
         serialized = serialize_report(report)
         safe, reason = payload_is_safe_to_stage(report)
@@ -563,6 +568,7 @@ class ValidationRepairService:
         self.db.refresh(session)
         return session
 
+    @workflow_event("sbom_validation_session_persist", result_kind="sbom")
     def import_session(
         self,
         session_id: str,

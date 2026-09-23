@@ -16,6 +16,7 @@ from ..models import SBOMValidationSession
 from ..schemas import SBOMSourceOut
 from ..services import audit_service
 from ..services.sbom_enrichment_service import run_post_upload_enrichment
+from ..services.sbom_workflow_logging import workflow_event
 from ..services.validation_repair_service import (
     ValidationRepairService,
     session_to_dict,
@@ -226,6 +227,7 @@ def save_repair_draft(
 
 
 @router.post("/{session_id}/validate")
+@workflow_event("sbom_validation_session_validate", result_kind="validation")
 def validate_session(
     session_id: str,
     strict_ntia: bool = Query(False),
@@ -258,6 +260,7 @@ def validate_session(
 
 
 @router.post("/{session_id}/revalidate")
+@workflow_event("sbom_validation_session_revalidate", result_kind="validation")
 def revalidate_session(
     session_id: str,
     strict_ntia: bool = Query(False),
@@ -290,6 +293,7 @@ def revalidate_session(
 
 
 @router.post("/{session_id}/import", response_model=SBOMSourceOut)
+@workflow_event("sbom_validation_session_import", result_kind="sbom")
 def import_session(
     session_id: str,
     background_tasks: BackgroundTasks,
@@ -346,6 +350,7 @@ async def suggest_fixes(
 
 
 @router.post("/{session_id}/apply-patch")
+@workflow_event("sbom_validation_session_apply_patch", result_kind="validation")
 def apply_patch(
     session_id: str,
     payload: ApplyPatchRequest,

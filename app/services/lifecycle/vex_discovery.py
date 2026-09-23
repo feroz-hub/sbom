@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -20,11 +21,15 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.logger import log_event
+
 from ...models import SBOMComponent, SBOMSource, VexDocument
+from ..sbom_workflow_logging import workflow_event
 from ..source_response_cache import SourceResponseCacheRepository
 from .vex_provider import import_vex_document
 
 DISCOVERY_CACHE_TTL_SECONDS = 24 * 60 * 60
+log = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -97,6 +102,7 @@ class VendorVexDiscoveryProvider:
                 response.raise_for_status()
                 return response.json()
         except (httpx.HTTPError, ValueError, TypeError):
+            log_event(log, "vex_discovery_fetch_failed", level=logging.WARNING, exc_info=True)
             return None
 
 
@@ -116,6 +122,7 @@ class CsafVexDiscoveryProvider(VendorVexDiscoveryProvider):
         return _dedupe_safe_urls(urls)
 
 
+@workflow_event("vex_discovery", result_kind="discovery", completed_event="vex_processing_completed")
 def discover_and_import_vex_documents(
     db: Session,
     sbom_id: int,
@@ -140,6 +147,7 @@ def discover_and_import_vex_documents(
         try:
             candidate_urls = provider.candidates(sbom, list(components))
         except Exception as exc:
+            log_event(log, "vex_discovery_candidates_failed", level=logging.WARNING, exc_info=True)
             errors.append({"provider": provider.name, "error": str(exc)})
             continue
         for url in candidate_urls:

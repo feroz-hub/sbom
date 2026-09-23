@@ -31,6 +31,7 @@ RUN apt-get update \
     && useradd --uid 10001 --gid appuser --create-home --shell /usr/sbin/nologin appuser \
     && install -d -o appuser -g appuser -m 0700 \
         /var/lib/sbom \
+        /var/lib/sbom/logs \
         /var/lib/sbom/report-artifacts \
         /var/lib/sbom/sbom-workspaces
 

@@ -20,6 +20,8 @@ import logging
 from collections.abc import Iterable
 from typing import Protocol
 
+from app.logger import log_event
+
 from .context import ValidationContext
 from .errors import ErrorReport
 from .stages import (
@@ -121,6 +123,7 @@ def run(
         Override the default stage list — used by tests to swap individual
         stages with stubs.
     """
+    log_event(log, "sbom_validation_started", size_bytes=len(raw_bytes))
     ctx = ValidationContext(
         raw_bytes=raw_bytes,
         content_encoding=content_encoding,
@@ -135,10 +138,9 @@ def run(
             # A stage raising is a bug; do not leak the exception text into
             # the response. Map to a synthetic schema-violation error so the
             # caller gets a stable shape, and log full detail server-side.
-            log.exception(
-                "validation stage %s raised %s — promoted to E025",
-                stage.name,
-                type(exc).__name__,
+            log_event(
+                log, "sbom_validation_stage_failed", level=logging.ERROR,
+                exc_info=True, stage=stage.name, error_type=type(exc).__name__,
             )
             ctx.report.add(
                 "SBOM_VAL_E025_SCHEMA_VIOLATION",
@@ -151,6 +153,15 @@ def run(
                 ),
             )
             break
+    log_event(
+        log,
+        "sbom_validation_failed" if ctx.report.has_errors() else "sbom_validation_completed",
+        level=logging.WARNING if ctx.report.has_errors() else logging.INFO,
+        error_count=ctx.report.error_count,
+        warning_count=ctx.report.warning_count,
+        failed_stage=ctx.report.first_error_stage,
+        size_bytes=len(raw_bytes),
+    )
     return ctx.report
 
 

@@ -13,6 +13,8 @@ from sqlalchemy import delete, inspect, select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.sqltypes import String
 
+from app.logger import log_event
+
 from ..models import AnalysisRun, SBOMAnalysisReport, SBOMSource
 from ..settings import get_analysis_legacy_level
 from ..sources.routing import (
@@ -393,6 +395,19 @@ def mark_analysis_run_failed(
     log.info(
         "analysis.run_mark_failed.completed",
         extra={"run_id": run_id, "sbom_id": run.sbom_id, "correlation_id": correlation_id},
+    )
+    log_event(
+        log,
+        "analysis_failed",
+        level=logging.ERROR,
+        exc_info=True,
+        analysis_run_id=run_id,
+        sbom_id=run.sbom_id,
+        tenant_id=run.tenant_id,
+        correlation_id=correlation_id,
+        request_id=correlation_id,
+        error_category=error_category,
+        duration_ms=duration_ms,
     )
     return run
 

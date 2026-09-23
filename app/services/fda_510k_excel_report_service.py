@@ -29,6 +29,7 @@ from ..models import (
     SBOMSource,
     VexStatement,
 )
+from .report_logging import report_generation
 
 log = logging.getLogger(__name__)
 
@@ -706,25 +707,35 @@ class Fda510kExcelReportService:
         selections: list[Fda510kSelection],
         metadata: Fda510kReportMetadata,
     ) -> tuple[bytes, str]:
-        project, sboms, runs = self._validate_request(project_id, selections)
-        dependency_facts = _extract_dependency_facts(sboms)
-        aggregates = self._component_aggregates(sboms, runs, dependency_facts)
-        # FDA Sec. VII keeps OS / container / firmware dependencies on their own
-        # sheet, so they are split out of the application component inventory
-        # rather than listed twice.
-        component_rows = [row for row in aggregates if not row.environment_category]
-        environment_rows = [row for row in aggregates if row.environment_category]
-        vulnerability_rows = self._vulnerability_rows(runs)
-        lifecycle_rows = self._lifecycle_rows(aggregates)
-        content = self._build_workbook(
-            metadata,
-            component_rows,
-            environment_rows,
-            vulnerability_rows,
-            lifecycle_rows,
-        )
-        filename = self.filename_for(project.project_name)
-        return content, filename
+        with report_generation(log, report_type="fda_510k_xlsx", project_id=project_id) as fields:
+            project, sboms, runs = self._validate_request(project_id, selections)
+            dependency_facts = _extract_dependency_facts(sboms)
+            aggregates = self._component_aggregates(sboms, runs, dependency_facts)
+            # FDA Sec. VII keeps OS / container / firmware dependencies on their own
+            # sheet, so they are split out of the application component inventory
+            # rather than listed twice.
+            component_rows = [row for row in aggregates if not row.environment_category]
+            environment_rows = [row for row in aggregates if row.environment_category]
+            vulnerability_rows = self._vulnerability_rows(runs)
+            lifecycle_rows = self._lifecycle_rows(aggregates)
+            content = self._build_workbook(
+                metadata,
+                component_rows,
+                environment_rows,
+                vulnerability_rows,
+                lifecycle_rows,
+            )
+            filename = self.filename_for(project.project_name)
+            fields.update(
+                component_count=len(aggregates),
+                vulnerable_components=len({(row["component_name"], row["component_version"]) for row in vulnerability_rows}),
+                **{
+                    key: sum(row["severity"].lower() == key for row in vulnerability_rows)
+                    for key in ("critical", "high", "medium", "low")
+                },
+                size_bytes=len(content),
+            )
+            return content, filename
 
     @staticmethod
     def filename_for(project_name: str | None) -> str:

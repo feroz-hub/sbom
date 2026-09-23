@@ -35,6 +35,7 @@ from ..models import (
     VexOverrideAudit,
     VexStatement,
 )
+from .sbom_workflow_logging import workflow_event
 from .soft_delete import SoftDeleteService
 
 log = logging.getLogger("sbom.delete")
@@ -256,6 +257,7 @@ class SBOMDeleteService:
             "delete_order": list(self.DELETE_ORDER),
         }
 
+    @workflow_event("sbom_deactivation", result_kind="delete", completed_event="sbom_deactivated", expected_errors=(LookupError,))
     def soft_delete_sbom(self, sbom_id: int, user_id: str | None) -> dict[str, Any]:
         sbom = self.get_sbom(sbom_id)
         if sbom is None:
@@ -299,6 +301,7 @@ class SBOMDeleteService:
             "message": f"SBOM {sbom_id} moved to deleted (recoverable).",
         }
 
+    @workflow_event("sbom_permanent_deletion", result_kind="delete", completed_event="sbom_deleted", expected_errors=(SBOMDeleteConflict, LookupError))
     def permanently_delete_sbom(
         self,
         sbom_id: int,
@@ -465,12 +468,6 @@ class SBOMDeleteService:
         except IntegrityError as exc:
             self.db.rollback()
             diagnostics = self._diagnose_blockers(sbom_id)
-            log.warning(
-                "sbom.permanent_delete_fk_conflict sbom_id=%s blockers=%s",
-                sbom_id,
-                diagnostics,
-                exc_info=True,
-            )
             raise SBOMDeleteConflict(
                 "SBOM cannot be permanently deleted because dependent records still exist.",
                 blocking_dependencies=diagnostics,

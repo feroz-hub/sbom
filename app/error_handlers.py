@@ -30,15 +30,18 @@ def install(app: FastAPI) -> None:
 
     @app.exception_handler(Exception)
     async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
-        correlation_id = uuid.uuid4().hex[:12]
+        correlation_id = getattr(request.state, "request_id", None) or uuid.uuid4().hex[:12]
         log.exception(
             "unhandled error: method=%s path=%s correlation_id=%s",
             request.method,
             request.url.path,
             correlation_id,
+            extra={"event": "unhandled_error", "request_id": correlation_id},
+            exc_info=(type(exc), exc, exc.__traceback__),
         )
         return JSONResponse(
             status_code=500,
+            headers={"X-Request-ID": correlation_id, "X-Correlation-ID": correlation_id},
             content={
                 "detail": {
                     "code": "internal_error",

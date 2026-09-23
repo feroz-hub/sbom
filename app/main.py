@@ -22,9 +22,6 @@ Design principles applied here:
 
 from __future__ import annotations
 
-import logging
-import secrets
-import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -49,6 +46,7 @@ from .core.security import enforce_request_access
 from .db import Base, SessionLocal, engine
 from .http_client import close_async_http_client, init_async_http_client
 from .middleware import MaxBodySizeMiddleware
+from .middleware.request_logging import RequestLoggingMiddleware
 
 # --- Routers --------------------------------------------------------------
 from .nvd_mirror.api import router as nvd_mirror_admin_router
@@ -608,6 +606,8 @@ async def sqlalchemy_timeout_exception_handler(request: Request, exc: SQLAlchemy
         getattr(pool, "overflow", lambda: "N/A")()
         if callable(getattr(pool, "overflow", None))
         else getattr(pool, "overflow", "N/A"),
+        exc_info=(type(exc), exc, exc.__traceback__),
+        extra={"event": "database_pool_timeout"},
     )
     return JSONResponse(
         status_code=503,
@@ -628,50 +628,10 @@ app.add_middleware(
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # --- Request / response logging middleware ------------------------------
-_access_log = get_logger("access")
-
-
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
-    """Log every incoming request and its response status + duration."""
-    t0 = time.perf_counter()
-    correlation_id = (
-        request.headers.get("x-request-id")
-        or request.headers.get("x-correlation-id")
-        or secrets.token_hex(12)
-    )[:128]
-    request.state.correlation_id = correlation_id
-    _access_log.info(
-        "→ %s %s  client=%s",
-        request.method,
-        request.url.path,
-        request.client.host if request.client else "unknown",
-    )
-    try:
-        response = await call_next(request)
-    except Exception as exc:
-        _access_log.error(
-            "✗ %s %s  UNHANDLED %s: %s",
-            request.method,
-            request.url.path,
-            type(exc).__name__,
-            exc,
-            exc_info=True,
-        )
-        raise
-    duration_ms = int((time.perf_counter() - t0) * 1000)
-    response.headers.setdefault("X-Correlation-ID", correlation_id)
-    # Every completed request is logged at INFO; 4xx/5xx escalate to WARNING
-    # so they remain visible even if operators run at WARNING-only in prod.
-    level = logging.WARNING if response.status_code >= 400 else logging.INFO
-    _access_log.log(
-        level,
-        "← %s %s  status=%d  %dms",
-        request.method,
-        request.url.path,
-        response.status_code,
-        duration_ms,
-    )
+    """Preserve existing security audit writes; ASGI middleware logs HTTP."""
+    response = await call_next(request)
     context = getattr(request.state, "current_context", None)
     audit_action = None
     if request.url.path == "/api/auth/me":
@@ -717,6 +677,8 @@ async def log_requests(request: Request, call_next):
 # OUTERMOST in the stack — oversize requests are rejected with 413
 # before any other middleware spends cycles on them.
 app.add_middleware(MaxBodySizeMiddleware, max_bytes=settings.MAX_UPLOAD_BYTES)
+# Wrap body-size checks too, so early 413 responses receive an ID and event.
+app.add_middleware(RequestLoggingMiddleware)
 
 # --- Global exception handler (BE-002) ----------------------------------
 # Converts unhandled exceptions into a canonical, non-leaky 500 envelope

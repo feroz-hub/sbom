@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import logging
+import time
 from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+
+from app.logger import log_context, log_event
 
 from ...models import AuditLog, ComponentLifecycleCache, ComponentLifecycleOverrideAudit, SBOMComponent, SBOMSource
 from ...settings import get_settings
@@ -50,6 +54,7 @@ from .xeol_db_provider import XeolDbProvider
 from .xeol_provider import XeolProvider
 
 DEFAULT_CACHE_TTL_DAYS = 7
+log = logging.getLogger(__name__)
 
 
 class LifecycleEnrichmentService:
@@ -121,9 +126,11 @@ class LifecycleEnrichmentService:
         return providers
 
     def enrich_sbom(self, db: Session, sbom_id: int, *, force_refresh: bool = False) -> dict[str, Any]:
+        started_at = time.perf_counter()
         sbom = db.get(SBOMSource, sbom_id)
         if sbom is None:
             raise HTTPException(status_code=404, detail="SBOM not found")
+        tenant_id = sbom.tenant_id
         components = (
             db.execute(
                 select(SBOMComponent).where(
@@ -214,9 +221,43 @@ class LifecycleEnrichmentService:
             upsert_lifecycle_cache_entries(db, cache_rows)
         db.commit()
         summary["provider_errors"] = list(dict.fromkeys(summary["provider_errors"]))
+        log_event(
+            log,
+            "lifecycle_check_completed",
+            sbom_id=sbom_id,
+            tenant_id=tenant_id,
+            component_count=len(components),
+            cache_hits=summary["cache_hits"],
+            provider_lookups=summary["provider_lookups"],
+            error_count=len(summary["provider_errors"]),
+            eol_count=summary["eol_count"],
+            eos_count=summary["eos_count"],
+            unknown_count=summary["unknown_count"],
+            duration_ms=int((time.perf_counter() - started_at) * 1000),
+        )
         return summary
 
     def enrich_component(
+        self,
+        db: Session,
+        component: SBOMComponent,
+        *,
+        force_refresh: bool = False,
+    ) -> LifecycleResult:
+        started_at = time.perf_counter()
+        with log_context(sbom_id=component.sbom_id, tenant_id=component.tenant_id):
+            result = self._enrich_component(db, component, force_refresh=force_refresh)
+            log_event(
+                log,
+                "lifecycle_check_completed",
+                component_id=component.id,
+                component_count=1,
+                lifecycle_status=result.lifecycle_status,
+                duration_ms=int((time.perf_counter() - started_at) * 1000),
+            )
+            return result
+
+    def _enrich_component(
         self,
         db: Session,
         component: SBOMComponent,

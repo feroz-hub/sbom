@@ -27,6 +27,8 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.logger import log_context, log_event
+
 from ..analysis import (
     _augment_components_with_cpe,
     enrich_component_for_osv,
@@ -90,6 +92,7 @@ from ..services.sbom_service import (
     coerce_sbom_data,
     detect_supported_component_extraction_format,
 )
+from ..services.sbom_workflow_logging import workflow_event
 from ..services.soft_delete import SoftDeleteService
 from ..services.tenant_access import get_sbom_for_tenant
 from ..services.validation_repair_service import (
@@ -697,6 +700,7 @@ def download_sbom_original(
 
 
 @router.post("/sboms", response_model=SBOMSourceOut, status_code=status.HTTP_201_CREATED, deprecated=True)
+@workflow_event("sbom_upload", result_kind="sbom")
 def create_sbom(
     payload: SBOMSourceCreate,
     background_tasks: BackgroundTasks,
@@ -710,7 +714,6 @@ def create_sbom(
         successor="/api/sboms/upload",
         sunset=LEGACY_JSON_SBOM_SUNSET,
     )
-    log.info("Creating SBOM: name='%s' project_id=%s", payload.sbom_name, payload.projectid)
     # --- Foreign key checks ---
     resolved_project_id, product, _used_default_product = resolve_product_assignment(
         db,
@@ -722,14 +725,12 @@ def create_sbom(
     )
     payload.projectid = resolved_project_id
     if payload.sbom_type is not None and db.get(SBOMType, payload.sbom_type) is None:
-        log.warning("create_sbom: sbom_type=%s not found", payload.sbom_type)
         raise HTTPException(status_code=404, detail="SBOM type not found")
 
     # --- Preflight duplicate check on name (global uniqueness) ---
     if payload.sbom_name:
         exists = db.execute(select(SBOMSource.id).where(SBOMSource.sbom_name == payload.sbom_name.strip())).first()
         if exists:
-            log.warning("create_sbom: duplicate name '%s'", payload.sbom_name)
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={
@@ -818,23 +819,15 @@ def create_sbom(
             )
         db.commit()
         db.refresh(obj)
-        log.info(
-            "SBOM created: id=%d name='%s' status=%s errors=%d warnings=%d",
-            obj.id,
-            obj.sbom_name,
-            obj.status,
-            report.error_count,
-            report.warning_count,
-        )
 
         # Clean SBOM (or warnings only) — sync components for the UI.
         try:
             components = sync_sbom_components(db, obj)
             db.commit()
-            log.info("SBOM components synced: sbom id=%d components=%d", obj.id, len(components))
+            log_event(log, "sbom_upload_component_sync_succeeded", sbom_id=obj.id, component_count=len(components))
         except Exception as exc:
             db.rollback()
-            log.warning("Component sync failed for SBOM id=%d: %s", obj.id, exc)
+            log_event(log, "sbom_upload_component_sync_failed", level=logging.WARNING, exc_info=True, sbom_id=obj.id)
 
         background_tasks.add_task(run_post_upload_enrichment, obj.id, context.tenant_id)
         return obj
@@ -842,7 +835,6 @@ def create_sbom(
     except IntegrityError as exc:
         db.rollback()
         msg = str(getattr(exc, "orig", exc))
-        log.error("create_sbom IntegrityError: %s", msg)
         if "UNIQUE" in msg.upper() and "sbom_name" in msg:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -857,7 +849,6 @@ def create_sbom(
         ) from exc
     except SQLAlchemyError as exc:
         db.rollback()
-        log.error("create_sbom DB error: %s", exc, exc_info=True)
         raise HTTPException(
             status_code=500, detail={"code": "db_error", "message": "Internal database error while creating SBOM."}
         ) from exc
@@ -868,7 +859,6 @@ def create_sbom(
         raise
     except Exception:
         db.rollback()
-        log.exception("create_sbom unexpected error: name=%s", payload.sbom_name)
         raise HTTPException(
             status_code=500, detail={"code": "unexpected", "message": "Unexpected error while creating SBOM."}
         )
@@ -1416,6 +1406,7 @@ def sbom_delete_impact(
 
 
 @router.delete("/sboms/{sbom_id}", status_code=status.HTTP_200_OK)
+@workflow_event("sbom_deletion", result_kind="delete")
 def delete_sbom(
     sbom_id: int,
     confirm: str = Query("no", description="Set to 'yes' to confirm deletion"),
@@ -1468,7 +1459,6 @@ def delete_sbom(
                 detail["delete_impact"] = exc.impact
             raise HTTPException(status_code=409, detail=detail)
         except Exception:
-            log.exception("permanent delete_sbom failed: sbom_id=%s user=%s", sbom_id, user_id)
             raise HTTPException(
                 status_code=500,
                 detail={"code": "internal_error", "message": "Internal server error."},
@@ -1477,7 +1467,6 @@ def delete_sbom(
     try:
         return service.soft_delete_sbom(sbom_id, user_id)
     except Exception:
-        log.exception("soft delete_sbom failed: sbom_id=%s user=%s", sbom_id, user_id)
         raise HTTPException(
             status_code=500,
             detail={"code": "internal_error", "message": "Internal server error."},
@@ -1485,6 +1474,7 @@ def delete_sbom(
 
 
 @router.post("/sboms/{sbom_id}/restore", status_code=status.HTTP_200_OK)
+@workflow_event("sbom_activation", result_kind="activation", completed_event="sbom_activated")
 def restore_sbom(
     sbom_id: int = Path(..., ge=1),
     context: CurrentContext = Depends(get_current_tenant_context),
@@ -1515,6 +1505,7 @@ def restore_sbom(
 
 
 @router.post("/sboms/{sbom_id}/revalidate", response_model=SBOMSourceOut)
+@workflow_event("sbom_revalidation", result_kind="sbom")
 def revalidate_sbom(
     sbom_id: int = Path(..., description="SBOM ID (positive integer)"),
     db: Session = Depends(get_db),
@@ -1551,7 +1542,8 @@ def revalidate_sbom(
         )
 
     raw = body.encode("utf-8") if isinstance(body, str) else bytes(body)
-    report = run_validation(raw)
+    with log_context(tenant_id=sbom.tenant_id, project_id=sbom.projectid, product_id=sbom.product_id, sbom_id=sbom.id):
+        report = run_validation(raw)
     sbom_status = _classify_status(report)
     serialized_entries = [e.model_dump() for e in report.entries] if report.entries else None
 
@@ -1568,20 +1560,10 @@ def revalidate_sbom(
         db.refresh(sbom)
     except SQLAlchemyError as exc:
         db.rollback()
-        log.error("revalidate_sbom DB error sbom_id=%d: %s", sbom_id, exc, exc_info=True)
         raise HTTPException(
             status_code=500,
             detail={"code": "db_error", "message": "Failed to persist revalidation."},
         ) from exc
-
-    log.info(
-        "SBOM revalidated: id=%d name='%s' status=%s errors=%d warnings=%d",
-        sbom_id,
-        sbom.sbom_name,
-        sbom_status,
-        report.error_count,
-        report.warning_count,
-    )
 
     if report.has_errors():
         raise _validation_failure_response(int(sbom.id), report, str(sbom.sbom_name))

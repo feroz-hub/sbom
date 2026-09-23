@@ -27,7 +27,54 @@ import logging
 
 from celery import Celery
 from celery.schedules import crontab
-from celery.signals import worker_process_init, worker_process_shutdown, worker_ready, worker_shutdown
+from celery.signals import (
+    before_task_publish,
+    task_postrun,
+    task_prerun,
+    worker_process_init,
+    worker_process_shutdown,
+    worker_ready,
+    worker_shutdown,
+)
+from celery.signals import setup_logging as celery_setup_logging
+
+from app.logger import CONTEXT_FIELDS, current_log_context, log_context, setup_logging
+
+
+@celery_setup_logging.connect
+def configure_celery_logging(loglevel=None, **kwargs):
+    """Prevent Celery replacing our console + rotating-file handlers."""
+    import os
+
+    level = os.getenv("LOG_LEVEL") or (logging.getLevelName(loglevel) if isinstance(loglevel, int) else loglevel)
+    setup_logging(level=level)
+
+
+@before_task_publish.connect
+def propagate_logging_context(headers=None, **kwargs):
+    if headers is not None:
+        headers["sbom_log_context"] = current_log_context()
+
+
+@task_prerun.connect
+def bind_task_logging_context(task=None, **kwargs):
+    if task is not None:
+        fields = (getattr(task.request, "headers", None) or {}).get("sbom_log_context", {})
+        if not isinstance(fields, dict):
+            fields = {}
+        fields = {k: v for k, v in fields.items() if k in CONTEXT_FIELDS and isinstance(v, (str, int))}
+        scope = log_context(**fields)
+        scope.__enter__()
+        task.request._sbom_log_scope = scope
+
+
+@task_postrun.connect
+def reset_task_logging_context(task=None, **kwargs):
+    scope = getattr(task.request, "_sbom_log_scope", None) if task is not None else None
+    if scope is not None:
+        scope.__exit__(None, None, None)
+        del task.request._sbom_log_scope
+
 
 log = logging.getLogger(__name__)
 
@@ -39,9 +86,7 @@ def _broker_url() -> str:
     if s.celery_use_database_broker:
         database_url = (s.database_url or "").strip()
         if not database_url:
-            raise RuntimeError(
-                "CELERY_USE_DATABASE_BROKER is enabled, but DATABASE_URL is not configured."
-            )
+            raise RuntimeError("CELERY_USE_DATABASE_BROKER is enabled, but DATABASE_URL is not configured.")
         if database_url.startswith("db+"):
             database_url = database_url.removeprefix("db+")
         return f"sqla+{database_url}"
@@ -89,6 +134,7 @@ celery_app = Celery(
 )
 
 celery_app.conf.update(
+    worker_hijack_root_logger=False,
     task_serializer="json",
     accept_content=["json"],
     result_serializer="json",

@@ -30,9 +30,14 @@ Design notes:
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from collections.abc import Sequence
 from typing import Any
+
+from app.logger import log_event
+
+log = logging.getLogger(__name__)
 
 from .base import VulnSource
 from .routing import finding_sources, normalize_query_errors, queryable_components, summarize_source
@@ -147,6 +152,10 @@ async def run_sources_concurrently(
                 )
         except Exception as exc:
             elapsed_ms = int((time.perf_counter() - src_start) * 1000)
+            log_event(
+                log, "vulnerability_lookup_failed", level=logging.ERROR, exc_info=True,
+                source=source.name, component_count=len(filtered_components), duration_ms=elapsed_ms,
+            )
             err_msg = str(exc)
             errors = normalize_query_errors([{"source": source.name, "error": err_msg}])
             all_errors.extend(errors)

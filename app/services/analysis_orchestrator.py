@@ -12,6 +12,8 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.logger import log_context, log_event
+
 from ..analysis import _augment_components_with_cpe, enrich_component_for_osv, get_analysis_settings_multi
 from ..models import AnalysisRun, SBOMComponent, SBOMSource
 from ..sources import (
@@ -29,6 +31,7 @@ from .analysis_service import (
     mark_analysis_run_failed,
     persist_analysis_run,
 )
+from .finding_metrics import component_identity_from_dict
 from .sbom_service import (
     MISSING_SBOM_CONTENT_REASON,
     UNPARSEABLE_SBOM_CONTENT_REASON,
@@ -69,6 +72,7 @@ class AnalysisOrchestrator:
 
     def __init__(self, db: Session) -> None:
         self.db = db
+        self._log_ids: dict[str, Any] = {}
 
     def resolve_sbom(
         self,
@@ -118,6 +122,14 @@ class AnalysisOrchestrator:
         run_id: int | None,
         correlation_id: str | None = None,
     ) -> list[dict[str, Any]]:
+        started_at = time.perf_counter()
+        self._log_ids = {"sbom_id": sbom.id, "tenant_id": sbom.tenant_id}
+        if run_id is not None:
+            self._log_ids["analysis_run_id"] = run_id
+        if correlation_id is not None:
+            self._log_ids["correlation_id"] = correlation_id
+            self._log_ids["request_id"] = correlation_id
+
         def _rows() -> list[SBOMComponent]:
             return list(
                 self.db.execute(
@@ -174,6 +186,15 @@ class AnalysisOrchestrator:
                 "correlation_id": correlation_id,
             },
         )
+        log_event(
+            log,
+            "component_matching_completed",
+            **self._log_ids,
+            component_count=len(components),
+            components_with_cpe=count_authoritative_cpes(components),
+            generated_cpe_count=_generated_cpe,
+            duration_ms=int((time.perf_counter() - started_at) * 1000),
+        )
         return components
 
     def create_pending_run(
@@ -204,6 +225,8 @@ class AnalysisOrchestrator:
         self.db.add(run)
         self.db.commit()
         self.db.refresh(run)
+        self._log_ids.update(analysis_run_id=run.id, sbom_id=run.sbom_id, tenant_id=run.tenant_id)
+        log_event(log, "analysis_queued", **self._log_ids, trigger_source=trigger_source)
         return run
 
     def mark_running(self, run: AnalysisRun, *, sources: list[str], components: list[dict] | None = None) -> None:
@@ -221,10 +244,61 @@ class AnalysisOrchestrator:
                 ),
             )
         run.raw_report = json.dumps(payload)
+        self._log_ids.update(analysis_run_id=run.id, sbom_id=run.sbom_id, tenant_id=run.tenant_id)
+        component_count = len(components) if components is not None else run.total_components
         self.db.add(run)
         self.db.commit()
+        log_event(
+            log,
+            "analysis_started",
+            **self._log_ids,
+            component_count=component_count,
+        )
 
     async def execute_providers(
+        self,
+        *,
+        components: list[dict[str, Any]],
+        sources: list[str] | None,
+        force_refresh: bool = False,
+        progress_queue: asyncio.Queue | None = None,
+    ) -> AnalysisExecution:
+        started_at = time.perf_counter()
+        with log_context(**self._log_ids):
+            log_event(log, "vulnerability_lookup_started", component_count=len(components))
+            try:
+                execution = await self._execute_providers(
+                    components=components,
+                    sources=sources,
+                    force_refresh=force_refresh,
+                    progress_queue=progress_queue,
+                )
+            except Exception:
+                log_event(
+                    log,
+                    "vulnerability_lookup_failed",
+                    level=logging.ERROR,
+                    exc_info=True,
+                    component_count=len(components),
+                    duration_ms=int((time.perf_counter() - started_at) * 1000),
+                )
+                raise
+            lookup_failed = bool(execution.errors)
+            log_event(
+                log,
+                "vulnerability_lookup_failed" if lookup_failed else "vulnerability_lookup_completed",
+                level=logging.ERROR if lookup_failed else logging.INFO,
+                component_count=len(components),
+                vulnerable_components=len({component_identity_from_dict(f) for f in execution.findings}),
+                **{severity.lower(): count for severity, count in execution.buckets.items()},
+                finding_count=len(execution.findings),
+                error_count=len(execution.errors),
+                run_status=execution.run_status,
+                duration_ms=int((time.perf_counter() - started_at) * 1000),
+            )
+            return execution
+
+    async def _execute_providers(
         self,
         *,
         components: list[dict[str, Any]],
@@ -323,7 +397,27 @@ class AnalysisOrchestrator:
             trigger_source=trigger_source,
             correlation_id=correlation_id,
         )
+        failed = run.run_status in {"ERROR", "FAIL", "FAILED", "INTERRUPTED"}
+        # Snapshot before commit expires ORM attributes: logging must not
+        # cause extra database reads after a successful transaction.
+        fields = dict(
+            analysis_run_id=run.id,
+            sbom_id=sbom.id,
+            tenant_id=sbom.tenant_id,
+            correlation_id=correlation_id,
+            request_id=correlation_id,
+            run_status=run.run_status,
+            component_count=run.total_components,
+            vulnerable_components=len({component_identity_from_dict(f) for f in execution.findings}),
+            critical=run.critical_count,
+            high=run.high_count,
+            medium=run.medium_count,
+            low=run.low_count,
+            duration_ms=duration_ms,
+        )
         self.db.commit()
+        log_event(log, "analysis_failed" if failed else "analysis_completed",
+                  level=logging.ERROR if failed else logging.INFO, **fields)
         return run
 
     def fail_run(

@@ -37,13 +37,15 @@ from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.logger import log_event
+
 from ..core.context import CurrentContext
 from ..core.security import require_permission
 from ..db import get_db
 from ..models import SBOMSource, SBOMType
 from ..services import audit_service
 from ..services.product_service import resolve_product_assignment
-from ..services.sbom_document_service import byte_size, count_lines, parsed_component_count
+from ..services.sbom_document_service import count_lines, parsed_component_count
 from ..services.sbom_enrichment_service import mark_enrichment_pending, run_post_upload_enrichment
 from ..services.sbom_service import sync_sbom_components
 from ..services.sbom_version_lineage import (
@@ -51,6 +53,7 @@ from ..services.sbom_version_lineage import (
     head_of_lineage,
     resolve_parent_sbom,
 )
+from ..services.sbom_workflow_logging import workflow_event
 from ..services.validation_repair_service import (
     ValidationRepairService,
     build_validation_failed_detail,
@@ -123,6 +126,7 @@ def _now_iso() -> str:
     status_code=status.HTTP_202_ACCEPTED,
     response_model=SbomAcceptedResponse,
 )
+@workflow_event("sbom_upload", result_kind="sbom")
 async def upload_sbom(
     background_tasks: BackgroundTasks,
     request: Request,
@@ -331,7 +335,7 @@ async def upload_sbom(
                 spec_version = str(as_dict.get("spdxVersion") or "")
                 components_count = len(as_dict.get("packages") or [])
     except (TypeError, ValueError, json.JSONDecodeError) as exc:
-        log.debug("upload_sbom: metadata_preview_failed name=%s err=%s", sbom_name, exc)
+        log_event(log, "sbom_upload_metadata_preview_failed", level=logging.DEBUG, exc_info=True)
 
     obj = SBOMSource(
         sbom_name=sbom_name.strip(),
@@ -407,11 +411,6 @@ async def upload_sbom(
         # fault, so it must not surface as a generic 500.
         if "uq_sbom_source_tenant_name_version" in str(getattr(exc, "orig", exc)):
             version_label = manual_sbom_version or "(no version)"
-            log.info(
-                "upload_sbom: duplicate name+version name=%s version=%s",
-                sbom_name,
-                version_label,
-            )
             raise HTTPException(
                 status_code=409,
                 detail={
@@ -422,14 +421,12 @@ async def upload_sbom(
                     ),
                 },
             ) from exc
-        log.exception("upload_sbom: persist failed for name=%s", sbom_name)
         raise HTTPException(
             status_code=500,
             detail={"code": "internal_error", "message": "Failed to persist SBOM."},
         ) from exc
     except Exception:
         db.rollback()
-        log.exception("upload_sbom: persist failed for name=%s", sbom_name)
         raise HTTPException(
             status_code=500,
             detail={"code": "internal_error", "message": "Failed to persist SBOM."},
@@ -441,20 +438,8 @@ async def upload_sbom(
         components_count = parsed_component_count(obj.sbom_data)
     except Exception as exc:  # pragma: no cover - defensive enrichment path
         db.rollback()
-        log.warning("Failed to sync uploaded SBOM components %s: %s", obj.id, exc)
+        log_event(log, "sbom_upload_component_sync_failed", level=logging.WARNING, exc_info=True, sbom_id=obj.id)
         components_count = 0
-
-    log.info(
-        "upload_sbom: persisted sbom_id=%s name=%s filename=%s bytes=%s lines=%s format=%s components=%s validation=%s",
-        obj.id,
-        obj.sbom_name,
-        file.filename,
-        byte_size(body_text),
-        count_lines(body_text),
-        spec or "unknown",
-        components_count,
-        obj.status,
-    )
 
     background_tasks.add_task(run_post_upload_enrichment, obj.id, context.tenant_id)
 

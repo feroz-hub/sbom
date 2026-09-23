@@ -20,12 +20,13 @@ from ..services.lifecycle.vex_discovery import discover_and_import_vex_documents
 from ..services.lifecycle.vex_provider import (
     apply_vex_override,
     component_vulnerabilities,
-    pair_history,
     import_vex_document,
     list_vex_statements,
+    pair_history,
     vex_report,
     vex_report_csv,
 )
+from ..services.sbom_workflow_logging import workflow_event
 from ..services.tenant_access import get_component_for_tenant, get_sbom_for_tenant
 
 router = APIRouter(tags=["vex"])
@@ -37,6 +38,7 @@ def _require_sbom(db: Session, sbom_id: int, tenant_id: int) -> None:
 
 
 @router.post("/api/sboms/{sbom_id}/vex")
+@workflow_event("vex_upload")
 def upload_vex_document(
     sbom_id: int,
     payload: dict[str, Any],
@@ -70,6 +72,7 @@ def get_vex_statements(
 
 
 @router.get("/api/sboms/{sbom_id}/vex/report")
+@workflow_event("vex_report")
 def get_vex_report(
     sbom_id: int,
     format: str = Query("json", pattern="^(json|csv)$"),
@@ -95,6 +98,7 @@ def get_vex_report(
 
 
 @router.get("/api/sboms/{sbom_id}/reports/vex-pack")
+@workflow_event("vex_report_pack")
 def get_vex_report_pack(
     sbom_id: int,
     context: CurrentContext = Depends(get_current_tenant_context),
@@ -117,6 +121,7 @@ def get_vex_report_pack(
 
 
 @router.post("/api/sboms/{sbom_id}/vex/discover")
+@workflow_event("vex_discovery_request", result_kind="discovery")
 def discover_vex_documents(
     sbom_id: int,
     force: bool = Query(False),
@@ -142,6 +147,7 @@ def get_component_vulnerabilities(
 
 @router.patch("/api/sboms/{sbom_id}/components/{component_id}/vulnerabilities/{vulnerability_id}/vex-override")
 @router.patch("/api/components/{component_id}/vulnerabilities/{vulnerability_id}/vex-override")
+@workflow_event("vex_override_request")
 def patch_vex_override(
     component_id: int,
     vulnerability_id: str,
