@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from typing import Any
 
 from fastapi import HTTPException
@@ -20,6 +21,7 @@ from ...models import (
 )
 from ..sbom_workflow_logging import workflow_event
 from ..vex.enums import EffectiveVexStatus
+from ..vex.matching import match_component, version_applies
 from .types import HIGH, LOW, MEDIUM, UNKNOWN_CONFIDENCE, VexResult, now_iso
 
 ALLOWED_VEX_STATUSES = {"affected", "not_affected", "fixed", "under_investigation", "unknown"}
@@ -38,6 +40,31 @@ CYCLONEDX_AFFECTED_STATUS_MAP = {
     "unaffected": "not_affected",
     "unknown": "unknown",
 }
+
+
+def is_vex_assertion(vulnerability: Any) -> bool:
+    """Does a CycloneDX ``vulnerabilities[]`` entry carry a VEX determination?
+
+    VEX-ING-001. A CycloneDX document may list vulnerabilities purely as
+    disclosure data; that is not an exploitability determination and must not
+    become one. An entry qualifies only with actual impact-analysis evidence:
+    an ``analysis`` block with state/justification/response, or per-product
+    ``affects[].versions[].status``.
+    """
+    if not isinstance(vulnerability, dict):
+        return False
+    analysis = vulnerability.get("analysis")
+    if isinstance(analysis, dict) and any(
+        analysis.get(key) for key in ("state", "justification", "response", "detail")
+    ):
+        return True
+    for affected in vulnerability.get("affects") or []:
+        if not isinstance(affected, dict):
+            continue
+        for version in affected.get("versions") or []:
+            if isinstance(version, dict) and version.get("status"):
+                return True
+    return False
 
 
 class VexProvider:
@@ -85,6 +112,10 @@ class VexProvider:
                 continue
             vuln_id = _vulnerability_id(vuln)
             if not vuln_id:
+                continue
+            if not is_vex_assertion(vuln):
+                # Disclosure data only — retained in the SBOM, but it is not a
+                # VEX determination and must not become one (VEX-ING-001).
                 continue
             analysis = vuln.get("analysis") if isinstance(vuln.get("analysis"), dict) else {}
             native_state = str(analysis.get("state") or "").strip().lower() or None
@@ -412,6 +443,10 @@ def import_vex_document(
     ]
     for statement in statements:
         db.add(statement)
+    db.flush()
+    # Reconciliation trigger (spec section 11): new assertions change the
+    # context set, so refresh before the commit rather than after it.
+    _reconcile_vex(db, tenant_id=vex_document.tenant_id, sbom_id=sbom_id)
     db.commit()
     db.refresh(vex_document)
     return {
@@ -451,6 +486,22 @@ def process_embedded_vex_for_sbom(db: Session, sbom_id: int) -> dict[str, Any]:
         )
     except HTTPException:
         return {"sbom_id": sbom_id, "statements_imported": 0, "validation_status": "ignored"}
+
+
+def _reconcile_vex(db: Session, *, tenant_id: int, sbom_id: int) -> None:
+    """Refresh VEX contexts for one SBOM; never fatal to the caller.
+
+    Imported late to avoid a circular import: the reconciliation engine reads
+    this module's status helpers.
+    """
+    try:
+        from ..vex.reconciliation import recompute_for_sbom
+
+        recompute_for_sbom(db, tenant_id=tenant_id, sbom_id=sbom_id)
+    except Exception:  # noqa: BLE001 — an import or decision must still land
+        logging.getLogger("sbom.vex").exception(
+            "vex.reconciliation.failed", extra={"sbom_id": sbom_id}
+        )
 
 
 def effective_vex_statements(statements):
@@ -687,6 +738,9 @@ def apply_vex_override(
             changed_at=now_iso(),
         )
     )
+    # Reconciliation trigger (spec section 11): a manual decision is the
+    # highest-authority input, so the context must reflect it immediately.
+    _reconcile_vex(db, tenant_id=component.tenant_id, sbom_id=component.sbom_id)
     db.commit()
     db.refresh(statement)
     return statement
@@ -765,9 +819,31 @@ def _statement_from_result(
     components: list[SBOMComponent],
     created_at: str,
 ) -> VexStatement:
-    matched_id = result.evidence.get("matched_component_id") if isinstance(result.evidence, dict) else None
+    # Candidate-aware mapping (VEX-MAP-001): several components satisfying a
+    # weak match yields no binding at all rather than an arbitrary first pick.
+    # The legacy single-component matcher stays as the fallback for references
+    # the structured matcher cannot read.
+    evidence = result.evidence if isinstance(result.evidence, dict) else {}
+    reference = evidence.get("affected_ref") or evidence.get("product") or result.component_name
+    match = match_component(reference, components)
+
+    matched_id = evidence.get("matched_component_id")
     component = next((c for c in components if c.id == matched_id), None) if matched_id else None
-    component = component or _match_component(components, result.component_name)
+    if component is None and match.component_id is not None:
+        component = next((c for c in components if c.id == match.component_id), None)
+    if component is None and not match.is_ambiguous:
+        component = _match_component(components, result.component_name)
+
+    # Version applicability (VEX-MAP-002): a statement that does not cover the
+    # component's version is kept as evidence but cannot become effective.
+    affected_version = evidence.get("affected_version")
+    specification = None
+    if isinstance(affected_version, dict):
+        specification = affected_version.get("range") or affected_version.get("version")
+    version_applicable = (
+        version_applies(component.version, specification) if component is not None else None
+    )
+
     return VexStatement(
         vex_document_id=vex_document_id,
         sbom_id=sbom_id,
@@ -789,6 +865,9 @@ def _statement_from_result(
         source_status=result.source_status,
         normalized_status=effective_status_for(result.vex_status),
         asserted_at=result.asserted_at,
+        match_strategy=match.strategy.value,
+        match_confidence=match.confidence.value,
+        version_applicable=version_applicable,
     )
 
 

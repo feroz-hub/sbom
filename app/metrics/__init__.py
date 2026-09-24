@@ -68,7 +68,13 @@ from .sboms import (
     scanned_project_ids,
 )
 from .trend import findings_trend
-from .vex import vex_component_findings, vex_sbom_finding_pairs
+from .vex import (
+    latest_successful_run_id_for_sbom,
+    vex_component_findings,
+    vex_current_findings_for_sbom,
+    vex_run_query_error_count,
+    vex_sbom_finding_pairs,
+)
 from .windows import findings_net_change
 
 __all__ = [
@@ -123,7 +129,10 @@ __all__ = [
     # trend / windows
     "findings_trend",
     "findings_net_change",
+    "latest_successful_run_id_for_sbom",
     "vex_component_findings",
+    "vex_current_findings_for_sbom",
+    "vex_run_query_error_count",
     "vex_sbom_finding_pairs",
     # forecast / exploitation (dashboard v4)
     "findings_forecast",

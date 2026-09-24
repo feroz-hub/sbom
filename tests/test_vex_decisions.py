@@ -6,10 +6,14 @@ from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from app.models import Base, AnalysisRun, AnalysisFinding, SBOMSource, SBOMComponent, VexStatement, VexOverrideAudit
+from app.models import (
+    Base, AnalysisRun, AnalysisFinding, SBOMSource, SBOMComponent, VexStatement,
+    VexInvestigation, VexOverrideAudit,
+)
 from app.services.lifecycle.vex_provider import (
     apply_vex_override, effective_vex_statements, list_vex_statements, vex_report,
 )
+from app.services.vex.reconciliation import recompute_for_sbom
 
 
 class VexDecisionTests(unittest.TestCase):
@@ -32,6 +36,17 @@ class VexDecisionTests(unittest.TestCase):
     def override(self, vuln, status='affected', **kwargs):
         return apply_vex_override(self.db, self.component.id, vuln,
                                   {'status': status, 'reason': 'reviewed', **kwargs}, changed_by='reviewer')
+
+    def seed_detected_finding(self, vuln='CVE-2026-1234'):
+        """One successful run with one analyser finding on self.component."""
+        run = AnalysisRun(sbom_id=self.component.sbom_id, tenant_id=1, run_status='OK',
+                          started_on='2026-01-01T00:00:00Z', completed_on='2026-01-01T00:01:00Z')
+        self.db.add(run)
+        self.db.flush()
+        self.db.add(AnalysisFinding(analysis_run_id=run.id, component_id=self.component.id,
+                                   vuln_id=vuln, tenant_id=1))
+        self.db.commit()
+        return run
 
     def test_multiple_cves_and_history_are_independent(self):
         self.override('cve-2026-0001')
@@ -60,17 +75,38 @@ class VexDecisionTests(unittest.TestCase):
                 self.override(vuln, **values)
         self.assertEqual(self.db.query(VexStatement).count(), 0)
 
-    def test_detected_findings_are_options_without_a_vex_statement(self):
-        run = AnalysisRun(sbom_id=self.component.sbom_id, tenant_id=1, run_status='completed', started_on='2026-01-01T00:00:00Z', completed_on='2026-01-01T00:01:00Z')
-        self.db.add(run)
-        self.db.flush()
-        self.db.add(AnalysisFinding(analysis_run_id=run.id, component_id=self.component.id,
-                                   vuln_id='CVE-2026-1234', tenant_id=1))
-        self.db.commit()
+    def test_detected_finding_yields_an_under_investigation_context__GAP_001(self):
+        """GAP-001, intentionally inverted by PR-2 of the VEX workstream.
+
+        This test used to assert that a detected CVE with no VEX produces
+        *nothing* — an empty statement list and a bare vulnerability option.
+        That was the gap: an analyser finding had no VEX disposition at all.
+        Per VEX-REC-002 scenario A it now yields an investigation context with
+        UNDER_INVESTIGATION / ANALYZER_ONLY.
+
+        The two original assertions are kept: no VexStatement is fabricated
+        (VEX-DATA-003) and the option list is unchanged, so the component-first
+        manual-decision flow still behaves exactly as before.
+        """
+        self.seed_detected_finding()
+
         data = list_vex_statements(self.db, self.component.sbom_id)
         self.assertEqual(data['statements'], [])
         self.assertEqual(data['vulnerability_options'], [
             {'component_id': self.component.id, 'vulnerability_id': 'CVE-2026-1234'}])
+
+        recompute_for_sbom(self.db, tenant_id=1, sbom_id=self.component.sbom_id)
+        self.db.commit()
+
+        context = self.db.query(VexInvestigation).one()
+        self.assertEqual(context.canonical_vulnerability_id, 'CVE-2026-1234')
+        self.assertEqual(context.component_id, self.component.id)
+        self.assertEqual(context.effective_status, 'UNDER_INVESTIGATION')
+        self.assertEqual(context.reconciliation_status, 'ANALYZER_ONLY')
+        self.assertEqual(context.analyzer_detection_state, 'DETECTED')
+        self.assertTrue(context.is_current)
+        # No AnalysisFinding was fabricated or removed (VEX-DATA-003/004).
+        self.assertEqual(self.db.query(AnalysisFinding).count(), 1)
 
     def test_same_cve_in_other_scopes_remains_independent(self):
         rows = [VexStatement(id=i, tenant_id=tenant, sbom_id=sbom, component_id=component,
@@ -132,7 +168,7 @@ class VexDecisionTests(unittest.TestCase):
 
     def test_scoped_list_union_and_history_include_imports(self):
         from app.services.lifecycle.vex_provider import component_vulnerabilities, pair_history
-        self.test_detected_findings_are_options_without_a_vex_statement()
+        self.seed_detected_finding()
         imported = VexStatement(tenant_id=1, sbom_id=self.component.sbom_id, component_id=self.component.id,
             vulnerability_id='CVE-2026-1234', status='affected', source_name='Vendor', created_at='2026-01-01')
         self.db.add(imported)

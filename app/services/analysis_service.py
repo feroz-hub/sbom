@@ -807,7 +807,33 @@ def persist_analysis_run(
     # the 24h TTL will eventually clean up — but until then, users would
     # see a CompareResult containing references to the mutated/deleted
     # run, which is a correctness bug.
+
+    # VEX reconciliation trigger (spec section 11, VEX-INV-001). Runs in this
+    # transaction so contexts land with the run rather than beside it. Never
+    # fatal: a reconciliation failure must not lose a completed analysis.
+    _reconcile_vex_after_run(db, run)
+
     return run
+
+
+def _reconcile_vex_after_run(db: Session, run: AnalysisRun) -> None:
+    """Refresh VEX investigation contexts after a successful run.
+
+    Only successful runs change current state; an ERROR run leaves the prior
+    contexts in place, because a failed scan is not evidence that anything
+    stopped being detected (VEX-REC-004).
+    """
+    if run.run_status not in SUCCESSFUL_RUN_STATUSES:
+        return
+    try:
+        from .vex.reconciliation import recompute_for_sbom
+
+        recompute_for_sbom(db, tenant_id=run.tenant_id, sbom_id=run.sbom_id)
+    except Exception:  # noqa: BLE001 — never fail an analysis over reconciliation
+        log.exception(
+            "vex.reconciliation.failed",
+            extra={"run_id": run.id, "sbom_id": run.sbom_id},
+        )
 
 
 def filter_unconfirmed_provider_findings(details: dict, components: list[dict]) -> dict:
