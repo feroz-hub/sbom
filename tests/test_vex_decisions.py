@@ -150,7 +150,16 @@ class VexDecisionTests(unittest.TestCase):
                                component_id=self.component.id, vulnerability_id='CVE-2026-0001')
         self.assertEqual(len(history['statements']), 2)
         self.assertEqual(vex_report(self.db, self.component.sbom_id)['summary']['total'], 3)
-        self.assertEqual(vex_dashboard_summary(self.db)['affected_count'], 1)
+        # Scope is explicit since PR-3: the summary aggregates reconciled
+        # contexts for the SBOMs it is given, never whatever the session
+        # happens to be bound to.
+        recompute_for_sbom(self.db, tenant_id=1, sbom_id=self.component.sbom_id)
+        recompute_for_sbom(self.db, tenant_id=1, sbom_id=sbom2.id)
+        self.db.commit()
+        summary = vex_dashboard_summary(
+            self.db, tenant_id=1, sbom_ids=[self.component.sbom_id, sbom2.id]
+        )
+        self.assertEqual(summary['affected_count'], 1)
 
     def test_scoped_api_rejects_wrong_tenant_or_sbom(self):
         from app.routers.vex import get_component_vulnerabilities, patch_vex_override, get_vex_override_history
@@ -231,4 +240,20 @@ class VexDecisionTests(unittest.TestCase):
         report = vex_report(self.db, self.component.sbom_id)
         self.assertEqual(report['summary']['unmatched'], 1)
         self.assertEqual(report['summary']['total'], 0)
-        self.assertEqual(vex_dashboard_summary(self.db)['vulnerabilities_reduced_by_vex'], 0)
+        recompute_for_sbom(self.db, tenant_id=1, sbom_id=self.component.sbom_id)
+        self.db.commit()
+        summary = vex_dashboard_summary(
+            self.db, tenant_id=1, sbom_ids=[self.component.sbom_id]
+        )
+        # An unresolved mapping is real evidence but must never look like
+        # risk reduction (VEX-DASH-002).
+        self.assertEqual(summary['vulnerabilities_reduced_by_vex'], 0)
+        self.assertEqual(summary['unresolved_mapping_count'], 1)
+
+    def test_unscoped_summary_is_refused__VEX_SEC_002(self):
+        """Calling without scope must fail loudly, not read across tenants."""
+        from app.services.lifecycle.vex_provider import vex_dashboard_summary
+
+        with self.assertRaises(HTTPException) as caught:
+            vex_dashboard_summary(self.db)
+        self.assertEqual(caught.exception.status_code, 403)

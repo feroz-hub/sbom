@@ -81,6 +81,7 @@ from .routers import (
     tenants,
     verification,
     vex,
+    vex_investigations,
     vulnerabilities,
 )
 from .routers import analysis as analysis_export_router
@@ -735,6 +736,7 @@ app.include_router(ai_credentials.router, dependencies=_protected)
 app.include_router(lifecycle.router, dependencies=_protected)
 app.include_router(lifecycle_admin.router, dependencies=_protected)
 app.include_router(vex.router, dependencies=_protected)
+app.include_router(vex_investigations.router, dependencies=_protected)
 app.include_router(remediation.router, dependencies=_protected)
 # Identity onboarding routes in this router perform JWT validation and local
 # state resolution themselves; its application routes retain explicit

@@ -225,8 +225,32 @@ def vex_top_affected_components(
     return [(r[0], str(r[1]), str(r[2])) for r in rows]
 
 
+def vex_severity_filter_clause(severity: str):
+    """EXISTS predicate matching contexts whose analyser finding has ``severity``.
+
+    Severity lives on ``AnalysisFinding``, never on the context — VEX does not
+    rewrite it (VEX-DATA-005) — so filtering needs a correlated subquery back
+    to the findings. It belongs here rather than in the router because routers
+    may not query AnalysisFinding directly (``docs/metric-conventions.md``).
+
+    A VEX-only context has no analyser finding and therefore no severity, so
+    it is correctly excluded whenever a severity filter is applied.
+    """
+    return (
+        select(AnalysisFinding.id)
+        .where(
+            AnalysisFinding.component_id == VexInvestigation.component_id,
+            AnalysisFinding.tenant_id == VexInvestigation.tenant_id,
+            func.upper(AnalysisFinding.vuln_id) == VexInvestigation.canonical_vulnerability_id,
+            func.lower(AnalysisFinding.severity) == severity.strip().lower(),
+        )
+        .exists()
+    )
+
+
 __all__ = [
     "latest_successful_run_id_for_sbom",
+    "vex_severity_filter_clause",
     "vex_context_counts",
     "vex_top_affected_components",
     "vex_component_findings",
