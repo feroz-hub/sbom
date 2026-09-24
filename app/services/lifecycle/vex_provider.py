@@ -732,7 +732,13 @@ def apply_vex_override(
         VexOverrideAudit(
             tenant_id=component.tenant_id,
             component_id=component_id,
+            sbom_id=component.sbom_id,
             vulnerability_id=vulnerability_id,
+            action=VexOverrideAudit.ACTION_DECISION,
+            # Statuses are columns as well as JSON since migration 057, so
+            # "who set this to AFFECTED" is a query (VEX-AUD-001).
+            previous_status=effective_status_for((old or {}).get("status")) if old else None,
+            new_status=effective_status_for(statement.status),
             old_value_json=old,
             new_value_json=_statement_dict(statement),
             reason=str(payload.get("reason")),

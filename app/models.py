@@ -1286,13 +1286,41 @@ class ComponentLifecycleOverrideAudit(Base, TenantOwnedMixin):
 
 
 class VexOverrideAudit(Base, TenantOwnedMixin):
-    """Dedicated audit trail for manual VEX overrides."""
+    """Append-only audit trail for manual VEX actions (VEX-AUD-001).
+
+    Spec section 40 requires tenant, SBOM, component, vulnerability, previous
+    status, new status, reason, evidence, changed-by and changed-at. The
+    statuses were previously only readable inside ``old_value_json`` /
+    ``new_value_json``; they are now first-class columns so "who changed this
+    to AFFECTED and when" is a query rather than a JSON scan. Those JSON blobs
+    stay as the full before/after record.
+
+    ``component_id`` is nullable because an analyst can act on a context whose
+    component could not be resolved (VEX-MAP-001) — binding that assertion to
+    a component is itself an audited action, and it happens while
+    ``component_id`` is still NULL.
+
+    Rows are never updated or deleted.
+    """
 
     __tablename__ = "vex_override_audit"
 
+    #: What the actor did. Decisions, assignments and mapping resolutions all
+    #: land here so one query reconstructs a context's human history.
+    ACTION_DECISION = "DECISION"
+    ACTION_ASSIGNMENT = "ASSIGNMENT"
+    ACTION_MAPPING_RESOLUTION = "MAPPING_RESOLUTION"
+
     id = Column(Integer, primary_key=True, index=True)
-    component_id = Column(Integer, ForeignKey("sbom_component.id", ondelete="CASCADE"), nullable=False, index=True)
+    component_id = Column(Integer, ForeignKey("sbom_component.id", ondelete="CASCADE"), nullable=True, index=True)
+    sbom_id = Column(Integer, ForeignKey("sbom_source.id", ondelete="CASCADE"), nullable=True, index=True)
+    investigation_id = Column(
+        Integer, ForeignKey("vex_investigation.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     vulnerability_id = Column(String, nullable=False, index=True)
+    action = Column(String(32), nullable=False, default=ACTION_DECISION, server_default="DECISION", index=True)
+    previous_status = Column(String(32), nullable=True)
+    new_status = Column(String(32), nullable=True)
     old_value_json = Column(JSON, nullable=True)
     new_value_json = Column(JSON, nullable=True)
     reason = Column(Text, nullable=False)

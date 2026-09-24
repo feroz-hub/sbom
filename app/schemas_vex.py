@@ -197,6 +197,28 @@ class InvestigationDecisionRequest(BaseModel):
     assigned_to: str | None = Field(default=None, max_length=255)
 
 
+class InvestigationAssignmentRequest(BaseModel):
+    """Assign or unassign a context (spec section 27, audited)."""
+
+    row_version: int = Field(ge=1)
+    reason: str = Field(min_length=1, max_length=2000)
+    #: ``None`` unassigns. Distinct from omitting the field, which is invalid.
+    assigned_to: str | None = Field(default=None, max_length=255)
+
+
+class InvestigationMappingRequest(BaseModel):
+    """Bind an UNRESOLVED_MAPPING context to a component (VEX-MAP-001).
+
+    Only an analyst may do this: the matcher refuses to guess between weak
+    candidates, and a wrong binding would attach someone's determination to
+    the wrong component.
+    """
+
+    row_version: int = Field(ge=1)
+    component_id: int = Field(ge=1)
+    reason: str = Field(min_length=1, max_length=2000)
+
+
 class InvestigationConflict(BaseModel):
     """409 body — carries the current row so the client can re-present it."""
 
@@ -210,7 +232,9 @@ __all__ = [
     "HistoryEntry",
     "ImportedVexAssertion",
     "InternalDecisionSection",
+    "InvestigationAssignmentRequest",
     "InvestigationConflict",
+    "InvestigationMappingRequest",
     "InvestigationDecisionRequest",
     "InvestigationDetail",
     "InvestigationListResponse",

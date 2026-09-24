@@ -25,21 +25,28 @@ from ..db import get_db
 from ..metrics.vex import vex_component_findings, vex_severity_filter_clause
 from ..models import (
     Product,
+    VexOverrideAudit,
     Projects,
     SBOMComponent,
     SBOMSource,
     VexInvestigation,
-    VexOverrideAudit,
     VexStatement,
 )
 from ..schemas_vex import (
+    InvestigationAssignmentRequest,
     InvestigationDecisionRequest,
+    InvestigationMappingRequest,
     InvestigationDetail,
     InvestigationListResponse,
     InvestigationSortField,
     SortOrder,
 )
 from ..services.lifecycle.types import now_iso
+from ..services.vex.audit import (
+    record_action,
+    record_assignment,
+    record_mapping_resolution,
+)
 from ..services.vex.enums import NEEDS_REVIEW_STATUSES
 from ..services.vex.identity import parse_alias_column
 
@@ -83,6 +90,15 @@ def _investigation_or_404(db: Session, investigation_id: int, tenant_id: int) ->
     if row is None:
         raise HTTPException(status_code=404, detail="Investigation not found")
     return row
+
+
+def _actor(context: CurrentContext) -> str | None:
+    return context.actor_label() if hasattr(context, "actor_label") else None
+
+
+def _check_row_version(investigation: VexInvestigation, supplied: int) -> bool:
+    """True when the caller holds the current version (VEX-AUD-002)."""
+    return supplied == (investigation.row_version or 1)
 
 
 def _statements_for(db: Session, investigation: VexInvestigation) -> list[VexStatement]:
@@ -515,9 +531,12 @@ def set_investigation_decision(
         )
 
     # Optimistic concurrency before any write (VEX-AUD-002).
-    if payload.row_version != (investigation.row_version or 1):
+    if not _check_row_version(investigation, payload.row_version):
         response.status_code = 409
         return _detail_payload(db, investigation)
+
+    previous_status = investigation.effective_status
+    previous_reconciliation = investigation.reconciliation_status
 
     # Validation lives in the existing override path (VEX-VAL-001/002), so
     # NOT_AFFECTED still needs justification or impact, FIXED still needs a
@@ -540,16 +559,139 @@ def set_investigation_decision(
     )
 
     db.refresh(investigation)
-    investigation.assigned_to = payload.assigned_to or investigation.assigned_to
-    investigation.reviewed_by = (
-        context.actor_label() if hasattr(context, "actor_label") else None
+
+    # apply_vex_override writes its own component-scoped audit row; this one
+    # records the transition at the *context* level, including the
+    # reconciliation status change the decision caused (VEX-AUD-001).
+    record_action(
+        db,
+        investigation,
+        action=VexOverrideAudit.ACTION_DECISION,
+        reason=payload.reason,
+        changed_by=_actor(context),
+        previous_status=previous_status,
+        new_status=payload.status,
+        evidence_url=payload.evidence_url,
+        old_value={
+            "effective_status": previous_status,
+            "reconciliation_status": previous_reconciliation,
+        },
+        new_value={
+            "effective_status": payload.status,
+            "reconciliation_status": investigation.reconciliation_status,
+        },
     )
+
+    investigation.assigned_to = payload.assigned_to or investigation.assigned_to
+    investigation.reviewed_by = _actor(context)
     investigation.reviewed_at = now_iso()
     investigation.updated_at = now_iso()
     investigation.row_version = (investigation.row_version or 1) + 1
     db.commit()
     db.refresh(investigation)
 
+    return _detail_payload(db, investigation)
+
+
+@router.put(
+    "/api/vex/investigations/{investigation_id}/assignment",
+    response_model=InvestigationDetail,
+)
+def set_investigation_assignment(
+    investigation_id: int,
+    payload: InvestigationAssignmentRequest,
+    response: Response,
+    db: Session = Depends(get_db),
+    context: CurrentContext = Depends(get_current_tenant_context),
+) -> Any:
+    """Assign or unassign a context. Requires ``vex:write``; audited."""
+    tenant_id = _tenant_id(context)
+    investigation = _investigation_or_404(db, investigation_id, tenant_id)
+
+    if not _check_row_version(investigation, payload.row_version):
+        response.status_code = 409
+        return _detail_payload(db, investigation)
+
+    previous = investigation.assigned_to
+    investigation.assigned_to = payload.assigned_to
+    investigation.updated_at = now_iso()
+    investigation.row_version = (investigation.row_version or 1) + 1
+    record_assignment(
+        db,
+        investigation,
+        previous_assignee=previous,
+        new_assignee=payload.assigned_to,
+        reason=payload.reason,
+        changed_by=_actor(context),
+    )
+    db.commit()
+    db.refresh(investigation)
+    return _detail_payload(db, investigation)
+
+
+@router.put(
+    "/api/vex/investigations/{investigation_id}/component",
+    response_model=InvestigationDetail,
+)
+def resolve_investigation_mapping(
+    investigation_id: int,
+    payload: InvestigationMappingRequest,
+    response: Response,
+    db: Session = Depends(get_db),
+    context: CurrentContext = Depends(get_current_tenant_context),
+) -> Any:
+    """Bind an UNRESOLVED_MAPPING context to a component (VEX-MAP-001).
+
+    The matcher deliberately refuses to choose between weak candidates, so
+    this is the analyst's escape hatch. The component must belong to the same
+    tenant and the same SBOM — a binding across either would attach a
+    determination to the wrong product context (VEX-CTX-001, VEX-SEC-002).
+    """
+    from ..services.vex.reconciliation import recompute_for_sbom
+
+    tenant_id = _tenant_id(context)
+    investigation = _investigation_or_404(db, investigation_id, tenant_id)
+
+    if investigation.reconciliation_status != "UNRESOLVED_MAPPING":
+        raise HTTPException(
+            status_code=409,
+            detail="Only an UNRESOLVED_MAPPING context can be bound to a component",
+        )
+    if not _check_row_version(investigation, payload.row_version):
+        response.status_code = 409
+        return _detail_payload(db, investigation)
+
+    component = db.scalar(
+        select(SBOMComponent).where(
+            SBOMComponent.id == payload.component_id,
+            SBOMComponent.tenant_id == tenant_id,
+            SBOMComponent.sbom_id == investigation.sbom_id,
+        )
+    )
+    if component is None:
+        raise HTTPException(
+            status_code=404, detail="Component not found in this tenant and SBOM"
+        )
+
+    previous_component_id = investigation.component_id
+    investigation.assign_component(component.id)
+    investigation.updated_at = now_iso()
+    investigation.row_version = (investigation.row_version or 1) + 1
+    record_mapping_resolution(
+        db,
+        investigation,
+        previous_component_id=previous_component_id,
+        new_component_id=component.id,
+        reason=payload.reason,
+        changed_by=_actor(context),
+    )
+    db.flush()
+
+    # The binding changes what the context reconciles against, so recompute
+    # rather than leaving a stale UNRESOLVED_MAPPING status behind.
+    recompute_for_sbom(db, tenant_id=tenant_id, sbom_id=investigation.sbom_id)
+    db.commit()
+    db.refresh(investigation)
     return _detail_payload(db, investigation)
 
 
