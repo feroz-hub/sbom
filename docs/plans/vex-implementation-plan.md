@@ -28,22 +28,29 @@ Every PR below assumes a green suite. Replicating the scan logic of
 `tests/test_metric_consistency.py` by hand against the current tree shows two architectural tests
 that should already be failing:
 
-1. `test_no_new_direct_finding_or_run_queries_outside_metrics` —
-   `app/services/lifecycle/vex_provider.py` matches `select(\s*AnalysisFinding` at **:415** and
-   **:461** and is **not** in `_LEGACY_DIRECT_QUERY_ALLOWLIST` (`tests/test_metric_consistency.py:781-797`).
-2. `test_legacy_allowlist_does_not_grow_unnoticed` — `app/services/dashboard_metrics.py` is on the
-   allowlist but no longer matches any forbidden pattern (stale entry).
+1. `test_no_new_direct_finding_or_run_queries_outside_metrics` — **confirmed failing.**
+   `app/services/lifecycle/vex_provider.py` matched `select(\s*AnalysisFinding` at :415 and :461
+   and is not in `_LEGACY_DIRECT_QUERY_ALLOWLIST` (`tests/test_metric_consistency.py:781-797`).
+2. `test_legacy_allowlist_does_not_grow_unnoticed` — **was NOT failing.** The Session-0 prediction
+   was wrong: `app/services/dashboard_metrics.py` does match, via a multi-line
+   `select(
+    AnalysisRun` at :283 and :316 that a line-based grep cannot see but the test's
+   whole-file `re.search` does. The allowlist entry is legitimate and was left alone.
 
 **Verify:** `pytest tests/test_metric_consistency.py -k "direct_finding or allowlist"`
 
-**Fix, on its own commit before PR-1:**
-- Create `app/metrics/vex.py`; move the two finding queries out of `vex_provider.py` into it
-  (`component_vulnerabilities`' finding fetch, and `list_vex_statements`' finding-pair fetch).
-  Re-export from `app/metrics/__init__.py`. Per CLAUDE.md, **do not** add `vex_provider.py` to the
-  allowlist — this is a removal from the backlog, not an addition.
-- Delete the stale `app/services/dashboard_metrics.py` allowlist entry.
+**Done in commit `eeaecd2`:** added `app/metrics/vex.py` with `vex_component_findings()` and
+`vex_sbom_finding_pairs()` (the two queries lifted unchanged), exported from
+`app/metrics/__init__.py`, and pointed `component_vulnerabilities()` / `list_vex_statements()` at
+them. `AnalysisFinding` and `AnalysisRun` no longer appear in `vex_provider.py`. The allowlist was
+not touched. Both new functions are Convention C; GAP-008's rescope stays in PR-2.
 
-- [ ] PR-0 complete, suite green
+**Local test-DB note.** `tests/conftest.py:56` defaults to port **55439**; this machine's Postgres
+is on **5432**. Create `sbom_analyser_test` once and run every suite with
+`TEST_DATABASE_URL=postgresql+psycopg://sbom:sbom@127.0.0.1:5432/sbom_analyser_test`, or pytest
+dies with a connection timeout before collection.
+
+- [x] PR-0 complete — commit `eeaecd2`, targeted suites green (47 passed)
 
 ---
 
@@ -406,4 +413,5 @@ PR-6. Render them read-only/empty in PR-5 and wire the assignment action in PR-6
 
 | Date | Session | Outcome |
 |---|---|---|
+| 2026-09-24 | PR-0 | `app/metrics/vex.py` added; `vex_provider.py` off direct finding queries. Corrected a Session-0 error: only one architectural test was failing, not two. |
 | 2026-09-24 | Session 0 | Discovery + this plan. Spec vendored to `docs/requirements/`, CLAUDE.md addendum appended. Decided: synchronous reconciliation, plan-only session. Found two pre-existing red architectural tests → added PR-0. |
