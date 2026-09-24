@@ -9,9 +9,8 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from ...metrics.vex import vex_component_findings, vex_sbom_finding_pairs
 from ...models import (
-    AnalysisFinding,
-    AnalysisRun,
     SBOMComponent,
     SBOMSource,
     VexDocument,
@@ -412,10 +411,9 @@ def component_vulnerabilities(db: Session, *, tenant_id: int, sbom_id: int, comp
     )).all()
     decisions = {row.vulnerability_id.strip().upper(): row for row in effective_vex_statements(statements)}
     entries = {}
-    findings = db.scalars(select(AnalysisFinding).join(AnalysisRun).where(
-        AnalysisFinding.tenant_id == tenant_id, AnalysisFinding.component_id == component_id,
-        AnalysisRun.tenant_id == tenant_id, AnalysisRun.sbom_id == sbom_id,
-    ).order_by(AnalysisFinding.id.desc())).all()
+    findings = vex_component_findings(
+        db, tenant_id=tenant_id, sbom_id=sbom_id, component_id=component_id
+    )
     for finding in findings:
         key = finding.vuln_id.strip().upper()
         entry = entries.setdefault(key, {"vulnerability_id": key, "severity": finding.severity,
@@ -457,11 +455,7 @@ def list_vex_statements(db: Session, sbom_id: int) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail="SBOM not found")
     statements = db.execute(select(VexStatement).where(VexStatement.sbom_id == sbom_id)).scalars().all()
     options = {(row.component_id, row.vulnerability_id.strip().upper()) for row in statements if row.component_id}
-    findings = db.execute(
-        select(AnalysisFinding.component_id, AnalysisFinding.vuln_id)
-        .join(SBOMComponent, SBOMComponent.id == AnalysisFinding.component_id)
-        .where(SBOMComponent.sbom_id == sbom_id)
-    ).all()
+    findings = vex_sbom_finding_pairs(db, sbom_id=sbom_id)
     options.update((component_id, vuln.strip().upper()) for component_id, vuln in findings if vuln)
     return {"sbom_id": sbom_id,
             "statements": [_statement_dict(row) for row in effective_vex_statements(statements)],

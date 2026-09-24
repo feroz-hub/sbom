@@ -68,6 +68,7 @@ from .sboms import (
     scanned_project_ids,
 )
 from .trend import findings_trend
+from .vex import vex_component_findings, vex_sbom_finding_pairs
 from .windows import findings_net_change
 
 __all__ = [
@@ -122,6 +123,8 @@ __all__ = [
     # trend / windows
     "findings_trend",
     "findings_net_change",
+    "vex_component_findings",
+    "vex_sbom_finding_pairs",
     # forecast / exploitation (dashboard v4)
     "findings_forecast",
     "linear_fit",
