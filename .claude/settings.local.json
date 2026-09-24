@@ -7,7 +7,8 @@
       "Bash(python -c \"from pptx import Presentation; p = Presentation\\('SBOM_Analyser_HCLTech.pptx'\\); print\\(f'Slides: {len\\(p.slides\\)}'\\); [print\\(f'\\\\n=== Slide {i+1} ==='\\) or [print\\(s.text_frame.text\\) for s in slide.shapes if s.has_text_frame] for i, slide in enumerate\\(p.slides\\)]\")",
       "Bash(python -m pip install python-pptx --quiet)",
       "Bash(D=\"/c/Users/thanigaivelv/OneDrive - HCL TECHNOLOGIES LIMITED/Desktop\"; find \"$D/SBOM-Analysis\" -maxdepth 3 -iname '*vex*' 2>/dev/null | head -20; echo \"--- any vex md anywhere on desktop/downloads ---\"; find \"$D\" \"/c/Users/thanigaivelv/Downloads\" -maxdepth 3 -iname '*vex*' 2>/dev/null | head -20)",
-      "Bash(cd \"C:/SBOM_Analyzer/.claude/worktrees/sbom-spectra-presentation-script-ecec13/frontend/src\" && sed -n '1,80p' components/dashboard/LifecycleHealthTiles.tsx && echo \"===SBOM_API_URL===\" && grep -rn \"SBOM_API_URL\" --include=*.ts --include=*.tsx --include=*.js --include=*.mjs .. | head -20)"
+      "Bash(cd \"C:/SBOM_Analyzer/.claude/worktrees/sbom-spectra-presentation-script-ecec13/frontend/src\" && sed -n '1,80p' components/dashboard/LifecycleHealthTiles.tsx && echo \"===SBOM_API_URL===\" && grep -rn \"SBOM_API_URL\" --include=*.ts --include=*.tsx --include=*.js --include=*.mjs .. | head -20)",
+      "Bash(git fetch *)"
     ]
   }
 }
