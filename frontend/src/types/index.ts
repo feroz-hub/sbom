@@ -1766,3 +1766,181 @@ export type {
   CopilotBriefing,
   CopilotAnswer,
 } from './dashboardAdvanced';
+
+// --- VEX investigation (portfolio) -----------------------------------------
+// Spec: docs/requirements/vex-dashboard-investigation.md sections 27-29.
+
+export type VexEffectiveStatus =
+  | 'AFFECTED'
+  | 'NOT_AFFECTED'
+  | 'FIXED'
+  | 'UNDER_INVESTIGATION';
+
+export type VexReconciliationStatus =
+  | 'MATCHED'
+  | 'ANALYZER_ONLY'
+  | 'VEX_ONLY'
+  | 'CONFLICT_REVIEW_REQUIRED'
+  | 'REVALIDATION_REQUIRED'
+  | 'UNRESOLVED_MAPPING';
+
+/**
+ * Sortable columns. `severity` is deliberately absent: it lives on the
+ * analyser finding and is resolved per row, so the API rejects it with 400
+ * rather than returning an arbitrary order.
+ */
+export type VexInvestigationSortField =
+  | 'vulnerability_id'
+  | 'component'
+  | 'effective_status'
+  | 'reconciliation_status'
+  | 'last_seen_at'
+  | 'first_seen_at'
+  | 'updated_at';
+
+export interface VexInvestigationRow {
+  id: number;
+  canonical_vulnerability_id: string;
+  aliases: string[];
+  severity: string | null;
+  component_id: number | null;
+  component_name: string | null;
+  component_version: string | null;
+  project_id: number | null;
+  project_name: string | null;
+  product_id: number | null;
+  product_name: string | null;
+  sbom_id: number;
+  sbom_name: string | null;
+  analyzer_detection_state: string | null;
+  analyzer_sources: string[];
+  vex_source: string | null;
+  native_vex_status: string | null;
+  effective_status: VexEffectiveStatus;
+  reconciliation_status: VexReconciliationStatus;
+  justification: string | null;
+  assigned_to: string | null;
+  reviewed_by: string | null;
+  last_seen_at: string | null;
+  updated_at: string | null;
+  row_version: number;
+  needs_review: boolean;
+}
+
+export interface VexInvestigationListResponse {
+  total: number;
+  limit: number;
+  offset: number;
+  items: VexInvestigationRow[];
+}
+
+export interface VexImportedAssertion {
+  statement_id: number;
+  source_format: string | null;
+  source_status: string | null;
+  normalized_status: string | null;
+  author: string | null;
+  source_document_id: string | null;
+  source_document_version: string | null;
+  asserted_at: string | null;
+  justification: string | null;
+  impact_statement: string | null;
+  action_statement: string | null;
+  mitigation: string | null;
+  fixed_version: string | null;
+  evidence_url: string | null;
+  mapping_confidence: string | null;
+  match_strategy: string | null;
+  version_applicable: boolean | null;
+  is_effective: boolean;
+  superseded: boolean;
+}
+
+export interface VexInvestigationDetail {
+  id: number;
+  sbom_id: number;
+  project_name: string | null;
+  product_name: string | null;
+  sbom_name: string | null;
+  vulnerability: {
+    canonical_vulnerability_id: string;
+    aliases: string[];
+    severity: string | null;
+    cvss_score: number | null;
+    description: string | null;
+    references: string[];
+  };
+  component: {
+    component_id: number | null;
+    name: string | null;
+    version: string | null;
+    purl: string | null;
+    cpe: string | null;
+    bom_ref: string | null;
+    supplier: string | null;
+  };
+  analyzer_evidence: {
+    detection_state: string | null;
+    sources: string[];
+    analysis_run_id: number | null;
+    match_strategy: string | null;
+    match_confidence: string | null;
+    matched_range: string | null;
+    first_seen_at: string | null;
+    last_seen_at: string | null;
+  };
+  imported_vex: VexImportedAssertion[];
+  internal_decision: {
+    effective_status: string | null;
+    reviewer: string | null;
+    assigned_to: string | null;
+    reason: string | null;
+    justification: string | null;
+    impact_statement: string | null;
+    action_statement: string | null;
+    evidence_url: string | null;
+    updated_at: string | null;
+  };
+  reconciliation_status: VexReconciliationStatus;
+  effective_status: VexEffectiveStatus;
+  history: Array<{
+    at: string | null;
+    kind: 'import' | 'decision';
+    actor: string | null;
+    summary: string | null;
+    previous_status: string | null;
+    new_status: string | null;
+    reason: string | null;
+  }>;
+  row_version: number;
+}
+
+export interface VexInvestigationListParams {
+  project_id?: number;
+  product_id?: number;
+  sbom_id?: number;
+  effective_status?: string;
+  reconciliation_status?: string;
+  severity?: string;
+  component?: string;
+  q?: string;
+  vex_source?: string;
+  analyzer_source?: string;
+  needs_review?: boolean;
+  sort_by?: VexInvestigationSortField;
+  sort_order?: 'asc' | 'desc';
+  limit?: number;
+  offset?: number;
+}
+
+export interface VexInvestigationDecision {
+  status: VexEffectiveStatus;
+  row_version: number;
+  reason: string;
+  justification?: string;
+  impact_statement?: string;
+  action_statement?: string;
+  fixed_version?: string;
+  evidence_url?: string;
+  assigned_to?: string;
+}

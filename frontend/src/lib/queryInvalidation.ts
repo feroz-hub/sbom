@@ -121,10 +121,22 @@ export function invalidateLifecycleOverrideSurfaces(qc: QueryClient, sbomId: num
   invalidateLifecycleSummary(qc);
 }
 
-export function invalidateVexSurfaces(qc: QueryClient, sbomId: number): void {
-  qc.invalidateQueries({ queryKey: ['sbom-vex', sbomId] });
-  qc.invalidateQueries({ queryKey: ['component-vulnerabilities', sbomId] });
-  qc.invalidateQueries({ queryKey: ['vex-pair-history', sbomId] });
+export function invalidateVexSurfaces(qc: QueryClient, sbomId?: number): void {
+  if (sbomId !== undefined) {
+    qc.invalidateQueries({ queryKey: ['sbom-vex', sbomId] });
+    qc.invalidateQueries({ queryKey: ['component-vulnerabilities', sbomId] });
+    qc.invalidateQueries({ queryKey: ['vex-pair-history', sbomId] });
+  } else {
+    qc.invalidateQueries({ queryKey: ['sbom-vex'] });
+    qc.invalidateQueries({ queryKey: ['component-vulnerabilities'] });
+    qc.invalidateQueries({ queryKey: ['vex-pair-history'] });
+  }
+  // Portfolio surfaces are NOT sbom-scoped: a decision taken from the
+  // investigation queue changes rows the caller may not know the sbomId for,
+  // so these must be invalidated unscoped or the table serves stale rows
+  // until a manual refresh.
+  qc.invalidateQueries({ queryKey: ['vex-investigations'] });
+  qc.invalidateQueries({ queryKey: ['vex-investigation'] });
   qc.invalidateQueries({ queryKey: ['findings'] });
   qc.invalidateQueries({ queryKey: ['findings-enriched'] });
   qc.invalidateQueries({ queryKey: ['dashboard-vex'] });

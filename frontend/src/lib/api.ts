@@ -1,4 +1,8 @@
 import type {
+  VexInvestigationDetail,
+  VexInvestigationDecision,
+  VexInvestigationListParams,
+  VexInvestigationListResponse,
   Project,
   Product,
   ProductListResponse,
@@ -2867,4 +2871,60 @@ export function importLifecycleVendorRecords(
 
 export function exportLifecycleVendorRecords(signal?: AbortSignal): Promise<{ records: LifecycleVendorRecordPayload[] }> {
   return request<{ records: LifecycleVendorRecordPayload[] }>('/api/admin/lifecycle-vendor-records/export', { signal });
+}
+
+// --- VEX investigation (portfolio) -----------------------------------------
+
+export function listVexInvestigations(
+  args: VexInvestigationListParams = {},
+  signal?: AbortSignal,
+): Promise<VexInvestigationListResponse> {
+  const params = new URLSearchParams();
+  const textParams: Array<keyof VexInvestigationListParams> = [
+    'effective_status',
+    'reconciliation_status',
+    'severity',
+    'component',
+    'q',
+    'vex_source',
+    'analyzer_source',
+    'sort_by',
+    'sort_order',
+  ];
+  textParams.forEach((key) => {
+    const value = args[key];
+    if (typeof value === 'string' && value.trim()) params.set(key, value.trim());
+  });
+  (['project_id', 'product_id', 'sbom_id'] as const).forEach((key) => {
+    const value = args[key];
+    if (typeof value === 'number') params.set(key, String(value));
+  });
+  if (typeof args.needs_review === 'boolean') params.set('needs_review', String(args.needs_review));
+  params.set('limit', String(args.limit ?? 50));
+  params.set('offset', String(args.offset ?? 0));
+  return request<VexInvestigationListResponse>(`/api/vex/investigations?${params.toString()}`, { signal });
+}
+
+export function getVexInvestigation(
+  investigationId: number,
+  signal?: AbortSignal,
+): Promise<VexInvestigationDetail> {
+  return request<VexInvestigationDetail>(`/api/vex/investigations/${investigationId}`, { signal });
+}
+
+/**
+ * Record a manual determination.
+ *
+ * `row_version` is mandatory: the backend returns 409 when someone else has
+ * saved since the row was loaded, and the caller must re-present the fresh
+ * version rather than retrying blind.
+ */
+export function setVexInvestigationDecision(
+  investigationId: number,
+  decision: VexInvestigationDecision,
+): Promise<VexInvestigationDetail> {
+  return request<VexInvestigationDetail>(`/api/vex/investigations/${investigationId}/decision`, {
+    method: 'PUT',
+    body: JSON.stringify(decision),
+  });
 }

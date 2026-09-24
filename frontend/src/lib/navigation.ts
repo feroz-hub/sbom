@@ -5,6 +5,7 @@ import {
   FolderOpen,
   LayoutDashboard,
   ShieldCheck,
+  ShieldQuestion,
   Settings as SettingsIcon,
   type LucideIcon,
 } from 'lucide-react';
@@ -38,6 +39,7 @@ export const navigationItems: NavItem[] = [
     ],
   },
   { href: '/kev', label: 'CISA KEV', icon: ShieldCheck },
+  { href: '/vex-investigation', label: 'VEX Investigation', icon: ShieldQuestion, permission: 'vex:read' },
   { href: '/schedules', label: 'Schedules', icon: CalendarClock },
   {
     href: '/settings',
