@@ -92,10 +92,19 @@ links `AnalysisFinding`, `VexStatement` and manual decisions (VEX-DATA-001). Exi
 response fields (e.g. `unknown_count`) stay for compatibility.
 
 Specific reuse obligations — do not reimplement these:
-- Canonical vulnerability identity → `app/integrations/cve/identifiers.py:114 resolve()`.
+- Canonical vulnerability identity → `app/services/vex/identity.py`, which wraps
+  `app/integrations/cve/identifiers.py:114 resolve()`. Note `resolve()` alone is **not** enough:
+  it preserves an already-canonical GHSA rather than preferring that advisory's CVE, so
+  `identity.py` applies CVE preference itself (VEX-CTX-002).
 - Eligible-SBOM scope → `app/services/dashboard_scope.py` (`DashboardScope.eligible_sbom_ids`).
 - Latest successful run → `app/metrics/_helpers.py latest_run_per_sbom_subquery()`.
 - NOT_AFFECTED / FIXED validation → `_validate_vex_result` in `app/services/lifecycle/vex_provider.py`.
+- Reconciliation → `app/services/vex/reconciliation.py:recompute_for_sbom`. Call it inside
+  `db.begin_nested()`: swallowing a reconciliation error without a savepoint leaves the session's
+  transaction aborted and takes the caller's work down with it.
+- Component mapping → `app/services/vex/matching.py:match_component`, which returns candidates and
+  a confidence. The legacy `_match_component` returns the first hit and must not be used for new
+  VEX mapping decisions.
 - `choose_vex_result` / `VEX_PRIORITY` in `app/services/lifecycle/decision_engine.py` currently has
   zero callers. It must NEVER be wired up as conflict-resolution policy (VEX-INV-005).
 

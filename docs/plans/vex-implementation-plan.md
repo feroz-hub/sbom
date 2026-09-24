@@ -45,10 +45,18 @@ that should already be failing:
 them. `AnalysisFinding` and `AnalysisRun` no longer appear in `vex_provider.py`. The allowlist was
 not touched. Both new functions are Convention C; GAP-008's rescope stays in PR-2.
 
-**Local test-DB note.** `tests/conftest.py:56` defaults to port **55439**; this machine's Postgres
-is on **5432**. Create `sbom_analyser_test` once and run every suite with
-`TEST_DATABASE_URL=postgresql+psycopg://sbom:sbom@127.0.0.1:5432/sbom_analyser_test`, or pytest
-dies with a connection timeout before collection.
+**Local test-DB notes.** Three things that each cost a debugging cycle:
+1. `tests/conftest.py:56` defaults to port **55439**; this machine's Postgres is on **5432**. Run
+   every suite with
+   `TEST_DATABASE_URL=postgresql+psycopg://sbom:sbom@127.0.0.1:5432/sbom_analyser_test`, or pytest
+   dies with a connection timeout before collection.
+2. **Test databases are not re-migrated.** After a model change, drop and recreate the database or
+   stale tables raise `UndefinedColumn` errors that look like application bugs.
+3. **Never run two pytest processes against one test database.** The autouse reset truncates shared
+   tables, so concurrent runs produce phantom `ForeignKeyViolation` setup errors. Use
+   `sbom_analyser_test_b` for a second concurrent run.
+4. `pytest-timeout` is **not** installed — `--timeout=` makes pytest exit immediately having run
+   nothing, and a pipe to `tail` still reports exit 0. Check the summary line, never the exit code.
 
 - [x] PR-0 complete — commit `eeaecd2`, targeted suites green (47 passed)
 
@@ -56,11 +64,15 @@ dies with a connection timeout before collection.
 
 ## 2. Design decisions (Session 0)
 
-**D1 — `VexInvestigation` identity.** Unique on
-`(tenant_id, sbom_id, component_id, canonical_vulnerability_id)`. Postgres treats NULLs as
-distinct, so unresolved mappings (`component_id IS NULL`) would multiply on every recompute. Add a
-deterministic `unresolved_discriminator` (hash of the owning statement's identity) that is `''`
-for mapped contexts, and include it in the unique key so recompute is idempotent.
+**D1 — `VexInvestigation` identity.** *(Corrected during PR-1 — the original plan was unsound.)*
+The plan proposed a unique key over `component_id` plus a discriminator. That does not work: SQL
+treats NULL as distinct from NULL, so with `component_id IS NULL` the constraint never fires at all
+and the discriminator is irrelevant. **As built:** the key is
+`(tenant_id, sbom_id, component_key, canonical_vulnerability_id, unresolved_discriminator)`, where
+`component_key` mirrors `component_id` with NULL collapsed to `0`, kept in step by a
+`before_insert`/`before_update` listener so a caller setting `component_id` directly cannot corrupt
+context identity. `unresolved_discriminator` is `''` for mapped contexts and a stable
+per-assertion hash otherwise.
 
 **D2 — Current vs historical.** Contexts absent from the latest successful run are marked
 `is_current = false`, never deleted (VEX-INV-001/002). Queue and tiles filter on `is_current`.
@@ -82,6 +94,18 @@ is **not** a conflict. `choose_vex_result` is never used.
 **D6 — Backward compatibility.** Every existing `/dashboard/vex` field stays, `unknown_count`
 included (documented deprecated). New metrics fold `unknown` into `under_investigation_count`.
 Existing component-scoped endpoints and report/CSV/ZIP exports keep working (DoD 19).
+
+**D8 — Canonical identity needs more than `resolve()`.** *(Discovered in PR-1.)* Session 0 recorded
+that `app/integrations/cve/identifiers.py:114 resolve()` "already prefers CVE" and PR-1 would
+simply wrap it. It does not: `resolve` preserves an already-canonical GHSA unchanged, which is
+right for the cache and provider fan-out it was built for and wrong for VEX-CTX-002.
+`app/services/vex/identity.py` therefore applies CVE preference itself and delegates classification,
+prefix stripping and alias fallback to `resolve`.
+
+**D9 — Reconciliation triggers run inside a SAVEPOINT.** *(Fixed in PR-3.)* PR-2's triggers caught
+exceptions without rolling back, leaving the session's transaction aborted so the caller's next
+statement failed with `InFailedSqlTransaction` — the guard meant to stop reconciliation losing an
+analysis was the thing losing it. Both triggers now use `db.begin_nested()`.
 
 **D7 — Scope is passed explicitly.** `vex_dashboard_summary(db)` currently relies on ambient
 session state: `app/db.py:238` applies `VexStatement.sbom_id.in_(scope.eligible_sbom_ids())` as ORM
@@ -135,7 +159,7 @@ mapping, CycloneDX `false_positive` native preservation.
 
 **Not in this PR:** `vex_dashboard_summary`, `effective_vex_statements`, the matcher, APIs, frontend.
 
-- [ ] PR-1 complete
+- [x] PR-1 complete — `5a12d0e` (data foundation; migration verified forward and back)
 
 ---
 
@@ -171,7 +195,7 @@ determination.
 
 **Not in this PR:** dashboard aggregation, APIs, UI.
 
-- [ ] PR-2 complete
+- [x] PR-2 complete — `0b89382` (reconciliation engine; GAP-001 test inverted)
 
 ---
 
@@ -199,7 +223,7 @@ determination.
   no visual change yet. Note `LifecycleHealthTiles.tsx:10-13` types props as `any`.
 - Verify report / CSV / ZIP exports still work; add a smoke test.
 
-- [ ] PR-3 complete
+- [x] PR-3 complete — `f3294b6` (dashboard over contexts; fixed two PR-2 defects)
 
 ---
 
@@ -230,7 +254,7 @@ determination.
   409; validation failures → 4xx; every filter; sorting/pagination stability.
 - Keep existing component-scoped VEX endpoints unchanged and passing.
 
-- [ ] PR-4 complete
+- [x] PR-4 complete — `cef1380` (portfolio API; 27 tests)
 
 ---
 
@@ -279,7 +303,7 @@ training data; check `node_modules/next/dist/docs/` before writing route code.
   `app/kev/page.test.tsx:16-38`): cards render counts from the API, filters map to query params,
   decision form validation, 409 handling, read-only rendering without `vex:write`.
 
-- [ ] PR-5 complete
+- [x] PR-5 complete — `d96a4e7` (investigation UI; 15 tests)
 
 ---
 
@@ -334,33 +358,37 @@ training data; check `node_modules/next/dist/docs/` before writing route code.
 
 ## 11. Acceptance matrix (§47) — checklist
 
-- [ ] Embedded VEX CVE not found by analyser → `VEX_ONLY`
-- [ ] Analyser CVE with no VEX → `UNDER_INVESTIGATION` + `ANALYZER_ONLY`
-- [ ] Same CVE in analyser + VEX → one context, no duplicate
-- [ ] Analyser + VEX AFFECTED → AFFECTED + MATCHED
-- [ ] Analyser + VEX NOT_AFFECTED → NOT_AFFECTED + MATCHED
-- [ ] Analyser + VEX UNDER_INVESTIGATION → UNDER_INVESTIGATION + MATCHED
-- [ ] Analyser redetects FIXED CVE → UNDER_INVESTIGATION + `REVALIDATION_REQUIRED`
-- [ ] VEX-only AFFECTED → AFFECTED + `VEX_ONLY`
-- [ ] VEX-only NOT_AFFECTED → NOT_AFFECTED + `VEX_ONLY`
-- [ ] VEX-only FIXED → FIXED + `VEX_ONLY`
-- [ ] GHSA finding aliases VEX CVE → same context
-- [ ] Same CVE on two components → two contexts
-- [ ] Same CVE on two component versions → separate contexts
-- [ ] Multiple scanners find same vulnerability → one context, multiple evidence sources
-- [ ] Ambiguous component mapping → `UNRESOLVED_MAPPING`
-- [ ] VEX version range doesn't apply → VEX not applied
-- [ ] Conflicting VEX sources → `CONFLICT_REVIEW_REQUIRED`
-- [ ] Duplicate VEX document upload → idempotent
-- [ ] Re-analysis after manual decision → manual decision preserved
-- [ ] Source API fails → `SOURCE_ERROR`, not `NOT_DETECTED`
-- [ ] `not_affected` without evidence → validation failure
-- [ ] Ordinary CycloneDX vulnerability with no analysis → not a VEX determination
-- [ ] CycloneDX `false_positive` → native value preserved, normalized mapping retained
-- [ ] Inactive SBOM → excluded from current dashboard
-- [ ] Superseded SBOM → excluded from current dashboard
-- [ ] Cross-tenant access → rejected
-- [ ] Concurrent analyst updates → conflict detected
+- [x] Embedded VEX CVE not found by analyser → `VEX_ONLY` — `test_vex_only_not_affected__VEX_REC_002_C`
+- [x] Analyser CVE with no VEX → `UNDER_INVESTIGATION` + `ANALYZER_ONLY` — `test_analyzer_only__VEX_REC_002_A`
+- [x] Same CVE in analyser + VEX → one context, no duplicate — `test_analyzer_and_vex_not_affected__VEX_REC_002_B`
+- [x] Analyser + VEX AFFECTED → AFFECTED + MATCHED — `test_analyzer_and_vex_affected__VEX_REC_002_E`
+- [x] Analyser + VEX NOT_AFFECTED → NOT_AFFECTED + MATCHED — `test_analyzer_and_vex_not_affected__VEX_REC_002_B`
+- [x] Analyser + VEX UNDER_INVESTIGATION → UNDER_INVESTIGATION + MATCHED — `test_analyzer_and_vex_under_investigation__VEX_REC_002_F`
+- [x] Analyser redetects FIXED CVE → UNDER_INVESTIGATION + `REVALIDATION_REQUIRED` — `test_redetected_fixed_requires_revalidation__VEX_REC_002_G`
+- [x] VEX-only AFFECTED → AFFECTED + `VEX_ONLY` — `test_vex_only_affected_is_flagged__VEX_REC_002_D`
+- [x] VEX-only NOT_AFFECTED → NOT_AFFECTED + `VEX_ONLY` — `test_vex_only_not_affected__VEX_REC_002_C`
+- [x] VEX-only FIXED → FIXED + `VEX_ONLY` — `test_vex_only_fixed__VEX_REC_002_C`
+- [x] GHSA finding aliases VEX CVE → same context — `test_ghsa_finding_and_cve_vex_share_one_context__VEX_CTX_002`
+- [x] Same CVE on two components → two contexts — `test_same_cve_on_two_components_is_two_contexts__VEX_CTX_001`
+- [x] Same CVE on two component versions → separate contexts — `test_same_cve_on_two_versions_is_two_contexts__VEX_CTX_001`
+- [x] Multiple scanners find same vulnerability → one context, multiple evidence sources — `test_multiple_scanners_collapse_to_one_context__VEX_REC_003`
+- [x] Ambiguous component mapping → `UNRESOLVED_MAPPING` — `test_ambiguous_weak_match_does_not_bind__VEX_MAP_001`
+- [x] VEX version range doesn't apply → VEX not applied — `test_non_applicable_statement_cannot_become_effective__VEX_MAP_002`
+- [x] Conflicting VEX sources → `CONFLICT_REVIEW_REQUIRED` — `test_conflicting_independent_sources__VEX_INV_005`
+- [x] Duplicate VEX document upload → idempotent — `test_reimporting_the_same_document_is_a_no_op__VEX_ING_002`
+- [x] Re-analysis after manual decision → manual decision preserved — `test_reanalysis_preserves_a_manual_decision__VEX_INV_001`
+- [x] Source API fails → `SOURCE_ERROR`, not `NOT_DETECTED` — `test_source_failure_is_not_not_detected__VEX_REC_004`
+- [x] `not_affected` without evidence → validation failure — `test_not_affected_still_requires_evidence__VEX_VAL_001`
+- [x] Ordinary CycloneDX vulnerability with no analysis → not a VEX determination — `test_plain_vulnerability_entry_is_not_a_vex_assertion__VEX_ING_001`
+- [x] CycloneDX `false_positive` → native value preserved, normalized mapping retained — `test_cyclonedx_false_positive_keeps_its_native_value__VEX_STAT_002`
+- [ ] Inactive SBOM → excluded from current dashboard *(partial: PR-3's
+      `test_excluded_sbom_contributes_nothing__VEX_DASH_005` proves the aggregation honours the
+      ids it is given, and `DashboardScope.eligible_sbom_ids` is tested separately, but no test
+      yet drives an inactive SBOM end-to-end through `/dashboard/vex`. PR-7.)*
+- [ ] Superseded SBOM → excluded from current dashboard *(same gap: the HEAD-version rule is
+      tested in `tests/test_dashboard_scope.py`, not through the VEX surface. PR-7.)*
+- [x] Cross-tenant access → rejected — `test_cross_tenant_detail_is_404_not_403__VEX_SEC_002`
+- [x] Concurrent analyst updates → conflict detected — `test_stale_row_version_conflicts__VEX_AUD_002`
 
 ## 12. Definition of Done (§48) — checklist
 
@@ -413,5 +441,10 @@ PR-6. Render them read-only/empty in PR-5 and wire the assignment action in PR-6
 
 | Date | Session | Outcome |
 |---|---|---|
+| 2026-09-24 | PR-5 | Portfolio investigation UI, `d96a4e7`. Architectural test caught invalidation living outside the useMutation block. |
+| 2026-09-24 | PR-4 | Portfolio API, `cef1380`. Severity sort refused rather than faked; severity filter implemented via EXISTS in the metric layer. |
+| 2026-09-24 | PR-3 | Dashboard over contexts, `f3294b6`. Fixed two PR-2 defects: the non-rollback trigger guard and unvalidated `normalized_status`. |
+| 2026-09-24 | PR-2 | Reconciliation engine, `0b89382`. GAP-001 test inverted. New contexts were starting at row_version 2; fixed. |
+| 2026-09-24 | PR-1 | Data foundation, `5a12d0e`. D1 corrected (see above); `resolve()` turned out not to prefer CVE. |
 | 2026-09-24 | PR-0 | `app/metrics/vex.py` added; `vex_provider.py` off direct finding queries. Corrected a Session-0 error: only one architectural test was failing, not two. |
 | 2026-09-24 | Session 0 | Discovery + this plan. Spec vendored to `docs/requirements/`, CLAUDE.md addendum appended. Decided: synchronous reconciliation, plan-only session. Found two pre-existing red architectural tests → added PR-0. |
