@@ -80,7 +80,14 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 const DEV_USER: AuthUser = {
   userId: 1, externalUserId: 'dev-user', email: 'dev@local', displayName: 'Dev User', tenantId: 1,
   externalTenantId: 'local-default', roles: ['TENANT_ADMIN'],
-  permissions: ['dashboard:read', 'tenant:user:read', 'tenant:user:invite', 'tenant:user:update'],
+  // Must stay consistent with what TENANT_ADMIN actually grants server-side
+  // (app/core/permissions.py). A permission missing here makes the feature
+  // unreachable with auth disabled even though the real role holds it — the
+  // nav entry hides and the page refuses, which looks like a broken build.
+  permissions: [
+    'dashboard:read', 'tenant:user:read', 'tenant:user:invite', 'tenant:user:update',
+    'vex:read', 'vex:write',
+  ],
   isPlatformAdmin: false,
 };
 const DEV_TENANTS: TenantInfo[] = [{
