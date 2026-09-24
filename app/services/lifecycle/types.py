@@ -231,6 +231,12 @@ class VexResult:
     evidence: dict[str, Any] = field(default_factory=dict)
     confidence: str = UNKNOWN_CONFIDENCE
     checked_at: str = field(default_factory=now_iso)
+    # Source-native provenance (VEX-STAT-002). ``vex_status`` above is the
+    # normalized application status; these keep the producer's own terms so a
+    # CycloneDX ``false_positive`` is not lost behind ``not_affected``.
+    source_format: str | None = None
+    source_status: str | None = None
+    asserted_at: str | None = None
 
 
 def unknown_result(component: NormalizedComponent, source_name: str | None = None) -> LifecycleResult:

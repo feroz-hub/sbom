@@ -19,6 +19,7 @@ from sqlalchemy import (
 from sqlalchemy import (
     text as sql_text,
 )
+from sqlalchemy import event
 from sqlalchemy.orm import relationship, synonym
 from sqlalchemy.sql import expression
 
@@ -1094,6 +1095,19 @@ class VexDocument(Base, TenantOwnedMixin):
     raw_document_json = Column(JSON, nullable=True)
     validation_status = Column(String, nullable=False, default="accepted", index=True)
 
+    # Provenance and idempotency (VEX-ING-002/003, spec sections 33-34).
+    # ``source_hash`` is a SHA-256 over the canonicalised document body, so a
+    # byte-different but semantically identical re-upload is still recognised
+    # as already imported. ``superseded_by_id`` chains document versions: a new
+    # version appends and points the prior row at itself rather than deleting.
+    source_document_id = Column(String, nullable=True, index=True)
+    source_document_version = Column(String, nullable=True)
+    source_hash = Column(String(64), nullable=True, index=True)
+    asserted_at = Column(String, nullable=True, index=True)
+    superseded_by_id = Column(
+        Integer, ForeignKey("vex_documents.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+
     sbom = relationship("SBOMSource", back_populates="vex_documents")
     statements = relationship(
         "VexStatement",
@@ -1126,6 +1140,23 @@ class VexStatement(Base, TenantOwnedMixin):
     evidence_json = Column(JSON, nullable=True)
     created_at = Column(String, nullable=False, index=True)
 
+    # Source-native status preserved beside the normalized one (VEX-STAT-002).
+    # ``status`` stays as-is for backward compatibility and remains the column
+    # existing reports and exports read; ``normalized_status`` carries the
+    # canonical EffectiveVexStatus value, and ``source_status`` the untouched
+    # vendor term (e.g. CycloneDX ``false_positive``).
+    source_format = Column(String(32), nullable=True, index=True)
+    source_status = Column(String(64), nullable=True)
+    normalized_status = Column(String(32), nullable=True, index=True)
+    asserted_at = Column(String, nullable=True)
+    # Component-mapping provenance (VEX-MAP-001/002). Populated by the matcher
+    # in PR-2; nullable so PR-1 rows and the backfill stay valid.
+    match_strategy = Column(String(32), nullable=True)
+    match_confidence = Column(String(16), nullable=True)
+    #: NULL = applicability not evaluated yet; False = statement retained as
+    #: evidence but not eligible to become the effective determination.
+    version_applicable = Column(Boolean, nullable=True)
+
     vex_document = relationship("VexDocument", back_populates="statements")
     component = relationship("SBOMComponent", back_populates="vex_statements")
 
@@ -1133,6 +1164,110 @@ class VexStatement(Base, TenantOwnedMixin):
         Index("ix_vex_statement_sbom_status", "sbom_id", "status"),
         Index("ix_vex_statement_component_vuln", "component_id", "vulnerability_id"),
     )
+
+
+class VexInvestigation(Base, TenantOwnedMixin):
+    """One vulnerability context: the unit a VEX decision applies to.
+
+    Spec section 35 (VEX-DATA-001). This is the entity that joins the three
+    independent evidence streams — ``AnalysisFinding`` (scanner),
+    ``VexStatement`` (imported assertions) and manual decisions — and carries
+    the reconciled outcome. ``VexStatement`` remains the assertion/history
+    store; ``AnalysisFinding`` remains scanner evidence. Neither is modified or
+    deleted by reconciliation (VEX-DATA-003/004/005).
+
+    Identity is tenant + SBOM + component + canonical vulnerability
+    (VEX-CTX-001): the same CVE on two components, or on two versions of one
+    component, is two contexts. A CVE alone is never global.
+    """
+
+    __tablename__ = "vex_investigation"
+
+    id = Column(Integer, primary_key=True, index=True)
+    sbom_id = Column(Integer, ForeignKey("sbom_source.id", ondelete="CASCADE"), nullable=False, index=True)
+    #: NULL for an assertion whose component could not be resolved
+    #: unambiguously (VEX-MAP-001) — the context still exists and is counted
+    #: separately as UNRESOLVED_MAPPING.
+    component_id = Column(Integer, ForeignKey("sbom_component.id", ondelete="SET NULL"), nullable=True, index=True)
+
+    canonical_vulnerability_id = Column(String(255), nullable=False, index=True)
+    aliases_json = Column(Text, nullable=True)
+
+    effective_status = Column(String(32), nullable=False, index=True)
+    reconciliation_status = Column(String(32), nullable=False, index=True)
+    analyzer_detection_state = Column(String(32), nullable=True, index=True)
+    effective_vex_statement_id = Column(
+        Integer, ForeignKey("vex_statements.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+
+    #: ``component_id`` mirrored with NULL collapsed to 0, because SQL treats
+    #: NULL as distinct from NULL: a unique key over the nullable column would
+    #: never fire for unresolved contexts and every recompute would insert a
+    #: fresh duplicate. The unique key uses this column instead; keep the two
+    #: in step via :meth:`assign_component`.
+    component_key = Column(Integer, nullable=False, default=0, server_default="0")
+
+    #: Distinguishes several unresolved assertions for the same vulnerability
+    #: in one SBOM. "" for mapped contexts, a stable per-assertion value
+    #: otherwise, which is what keeps ``recompute_for_sbom`` idempotent.
+    unresolved_discriminator = Column(String(64), nullable=False, default="", server_default="")
+
+    #: False once the context is absent from the latest successful run. Rows
+    #: are never deleted (VEX-INV-001/002): the current queue and dashboard
+    #: tiles filter on this, history keeps everything.
+    is_current = Column(Boolean, nullable=False, default=True, server_default=sql_text("true"), index=True)
+
+    first_seen_at = Column(String, nullable=False, index=True)
+    last_seen_at = Column(String, nullable=False, index=True)
+    last_analysis_run_id = Column(
+        Integer, ForeignKey("analysis_run.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+
+    assigned_to = Column(String, nullable=True, index=True)
+    reviewed_by = Column(String, nullable=True)
+    reviewed_at = Column(String, nullable=True)
+
+    created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=True)
+
+    #: Optimistic concurrency (VEX-AUD-002). Every write bumps this; mutation
+    #: endpoints require the caller's value and return 409 on mismatch.
+    row_version = Column(Integer, nullable=False, default=1, server_default="1")
+
+    sbom = relationship("SBOMSource")
+    component = relationship("SBOMComponent")
+    effective_statement = relationship("VexStatement")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "sbom_id",
+            "component_key",
+            "canonical_vulnerability_id",
+            "unresolved_discriminator",
+            name="uq_vex_investigation_context",
+        ),
+        Index("ix_vex_investigation_queue", "tenant_id", "is_current", "reconciliation_status"),
+        Index("ix_vex_investigation_status", "tenant_id", "is_current", "effective_status"),
+        Index("ix_vex_investigation_sbom_current", "sbom_id", "is_current"),
+    )
+
+    def assign_component(self, component_id: int | None) -> None:
+        """Set ``component_id`` and keep ``component_key`` consistent."""
+        self.component_id = component_id
+        self.component_key = component_id or 0
+
+
+@event.listens_for(VexInvestigation, "before_insert")
+@event.listens_for(VexInvestigation, "before_update")
+def _sync_vex_investigation_component_key(mapper, connection, target):
+    """Derive ``component_key`` from ``component_id`` on every write.
+
+    Belt and braces for :meth:`VexInvestigation.assign_component`: the unique
+    key depends on these two staying in step, so a caller that sets
+    ``component_id`` directly must not be able to corrupt context identity.
+    """
+    target.component_key = target.component_id or 0
 
 
 class ComponentLifecycleOverrideAudit(Base, TenantOwnedMixin):

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from typing import Any
 
@@ -18,6 +19,7 @@ from ...models import (
     VexStatement,
 )
 from ..sbom_workflow_logging import workflow_event
+from ..vex.enums import EffectiveVexStatus
 from .types import HIGH, LOW, MEDIUM, UNKNOWN_CONFIDENCE, VexResult, now_iso
 
 ALLOWED_VEX_STATUSES = {"affected", "not_affected", "fixed", "under_investigation", "unknown"}
@@ -85,12 +87,17 @@ class VexProvider:
             if not vuln_id:
                 continue
             analysis = vuln.get("analysis") if isinstance(vuln.get("analysis"), dict) else {}
+            native_state = str(analysis.get("state") or "").strip().lower() or None
             base_status = _normalize_vex_status(
-                CYCLONEDX_ANALYSIS_STATUS_MAP.get(str(analysis.get("state") or "").lower(), "unknown")
+                CYCLONEDX_ANALYSIS_STATUS_MAP.get(native_state or "", "unknown")
             )
+            published = vuln.get("published") or vuln.get("updated")
             affected_entries = vuln.get("affects") or []
             if not isinstance(affected_entries, list) or not affected_entries:
-                results.append(_result_from_payload(vuln, None, vuln_id, base_status, sbom, source_name, source_url))
+                results.append(_result_from_payload(
+                    vuln, None, vuln_id, base_status, sbom, source_name, source_url,
+                    source_status=native_state, asserted_at=published,
+                ))
                 continue
             for affected in affected_entries:
                 if not isinstance(affected, dict):
@@ -104,7 +111,8 @@ class VexProvider:
                     for version in versions:
                         if not isinstance(version, dict):
                             continue
-                        mapped = CYCLONEDX_AFFECTED_STATUS_MAP.get(str(version.get("status") or "").lower())
+                        native_version_state = str(version.get("status") or "").strip().lower() or None
+                        mapped = CYCLONEDX_AFFECTED_STATUS_MAP.get(native_version_state or "")
                         status = _normalize_vex_status(mapped or status)
                         if version.get("version") and status == "fixed":
                             fixed_version = str(version.get("version"))
@@ -120,6 +128,8 @@ class VexProvider:
                                 fixed_version=fixed_version,
                                 affected_ref=ref,
                                 affected_version=version,
+                                source_status=native_version_state or native_state,
+                                asserted_at=published,
                             )
                         )
                 else:
@@ -134,6 +144,8 @@ class VexProvider:
                             source_url,
                             fixed_version=fixed_version,
                             affected_ref=ref,
+                            source_status=native_state,
+                            asserted_at=published,
                         )
                     )
         return [_validate_vex_result(result) for result in results]
@@ -162,7 +174,9 @@ class VexProvider:
             products = statement.get("products") or []
             if not isinstance(products, list):
                 products = []
+            native_status = str(statement.get("status") or "").strip().lower() or None
             status = _normalize_vex_status(statement.get("status"))
+            statement_timestamp = statement.get("timestamp") or document.get("timestamp")
             for product in products or [None]:
                 component = _match_component(components, product)
                 evidence = {"statement": statement, "product": product}
@@ -186,6 +200,9 @@ class VexProvider:
                             source_url=source_url,
                             evidence=evidence,
                             confidence=MEDIUM if component else LOW,
+                            source_format="openvex",
+                            source_status=native_status,
+                            asserted_at=str(statement_timestamp) if statement_timestamp else None,
                         )
                     )
                 )
@@ -259,6 +276,9 @@ class VexProvider:
                                 evidence=evidence,
                                 confidence=MEDIUM if component else LOW,
                                 checked_at=str(timestamp),
+                                source_format="csaf",
+                                source_status=str(csaf_status).strip().lower() or None,
+                                asserted_at=str(timestamp),
                             )
                         )
                     )
@@ -288,6 +308,9 @@ class VexProvider:
                             },
                             confidence=LOW,
                             checked_at=str(timestamp),
+                            source_format="csaf",
+                            source_status="unknown",
+                            asserted_at=str(timestamp),
                         )
                     )
                 )
@@ -312,6 +335,31 @@ def import_vex_document(
     sbom = db.get(SBOMSource, sbom_id)
     if sbom is None:
         raise HTTPException(status_code=404, detail="SBOM not found")
+
+    # Idempotency (VEX-ING-002): an identical document is a no-op, a new
+    # version of a known document appends and supersedes its predecessor.
+    source_hash = document_source_hash(document)
+    source_document_id, source_document_version, asserted_at = _document_identity(document)
+    existing = db.scalars(
+        select(VexDocument).where(
+            VexDocument.sbom_id == sbom_id,
+            VexDocument.source_hash == source_hash,
+            VexDocument.superseded_by_id.is_(None),
+        )
+    ).first()
+    if existing is not None:
+        return {
+            "document_id": existing.id,
+            "sbom_id": sbom_id,
+            "statements_imported": 0,
+            "matched_statements": 0,
+            "unmatched_statements": 0,
+            "format": existing.format,
+            "validation_status": existing.validation_status,
+            "already_imported": True,
+            "source_hash": source_hash,
+        }
+
     components = db.execute(select(SBOMComponent).where(SBOMComponent.sbom_id == sbom_id)).scalars().all()
     results = VexProvider().parse_document(
         document,
@@ -334,9 +382,28 @@ def import_vex_document(
         uploaded_at=now,
         raw_document_json=document,
         validation_status="accepted",
+        source_document_id=source_document_id,
+        source_document_version=source_document_version,
+        source_hash=source_hash,
+        asserted_at=asserted_at,
     )
     db.add(vex_document)
     db.flush()
+
+    # A new version of a document we already hold: keep the old row as history
+    # and point it at its replacement rather than deleting anything.
+    superseded_ids: list[int] = []
+    if source_document_id:
+        for prior in db.scalars(
+            select(VexDocument).where(
+                VexDocument.sbom_id == sbom_id,
+                VexDocument.source_document_id == source_document_id,
+                VexDocument.id != vex_document.id,
+                VexDocument.superseded_by_id.is_(None),
+            )
+        ).all():
+            prior.superseded_by_id = vex_document.id
+            superseded_ids.append(prior.id)
     statements = [
         _statement_from_result(
             result, sbom_id=sbom_id, vex_document_id=vex_document.id, components=list(components), created_at=now
@@ -355,6 +422,11 @@ def import_vex_document(
         "unmatched_statements": sum(1 for statement in statements if statement.component_id is None),
         "format": vex_document.format,
         "validation_status": vex_document.validation_status,
+        "already_imported": False,
+        "source_hash": source_hash,
+        "source_document_id": source_document_id,
+        "source_document_version": source_document_version,
+        "superseded_document_ids": superseded_ids,
     }
 
 
@@ -578,6 +650,9 @@ def apply_vex_override(
             source_url=payload.get("evidence_url") or payload.get("source_url"),
             evidence={"reason": payload.get("reason"), "evidence_url": payload.get("evidence_url")},
             confidence=HIGH if payload.get("evidence_url") else MEDIUM,
+            source_format="manual",
+            source_status=str(payload.get("status") or status).strip().lower() or None,
+            asserted_at=now_iso(),
         )
     )
     if not payload.get("reason"):
@@ -653,6 +728,8 @@ def _result_from_payload(
     fixed_version: str | None = None,
     affected_ref: Any | None = None,
     affected_version: Any | None = None,
+    source_status: str | None = None,
+    asserted_at: str | None = None,
 ) -> VexResult:
     analysis = vuln.get("analysis") if isinstance(vuln.get("analysis"), dict) else {}
     evidence = {"vulnerability": vuln, "affected_ref": affected_ref, "affected_version": affected_version}
@@ -674,6 +751,9 @@ def _result_from_payload(
         source_url=source_url,
         evidence=evidence,
         confidence=MEDIUM if component else LOW,
+        source_format="cyclonedx",
+        source_status=source_status,
+        asserted_at=asserted_at,
     )
 
 
@@ -705,6 +785,10 @@ def _statement_from_result(
         confidence=result.confidence,
         evidence_json=result.evidence,
         created_at=created_at,
+        source_format=result.source_format,
+        source_status=result.source_status,
+        normalized_status=effective_status_for(result.vex_status),
+        asserted_at=result.asserted_at,
     )
 
 
@@ -732,6 +816,65 @@ def _normalize_vex_status(value: Any) -> str:
     if text not in ALLOWED_VEX_STATUSES:
         raise HTTPException(status_code=422, detail="Invalid VEX status")
     return text
+
+
+#: Legacy five-value VEX status -> the four canonical effective statuses
+#: (VEX-STAT-001). ``unknown`` is source evidence only: per spec section 8 its
+#: effective status is UNDER_INVESTIGATION, while the native term survives on
+#: ``VexStatement.source_status``.
+_EFFECTIVE_STATUS_BY_NORMALIZED: dict[str, str] = {
+    "affected": EffectiveVexStatus.AFFECTED.value,
+    "not_affected": EffectiveVexStatus.NOT_AFFECTED.value,
+    "fixed": EffectiveVexStatus.FIXED.value,
+    "under_investigation": EffectiveVexStatus.UNDER_INVESTIGATION.value,
+    "unknown": EffectiveVexStatus.UNDER_INVESTIGATION.value,
+}
+
+
+def effective_status_for(normalized_status: Any) -> str:
+    """Map a legacy lowercase VEX status to its canonical effective status."""
+    key = str(normalized_status or "unknown").strip().lower()
+    return _EFFECTIVE_STATUS_BY_NORMALIZED.get(key, EffectiveVexStatus.UNDER_INVESTIGATION.value)
+
+
+def document_source_hash(document: Any) -> str:
+    """Stable SHA-256 identity for an imported VEX document (VEX-ING-002).
+
+    Hashes a canonical JSON serialisation — sorted keys, no insignificant
+    whitespace — so re-uploading the same document with different formatting
+    is still recognised as already imported rather than duplicating every
+    statement.
+    """
+    canonical = json.dumps(document, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _document_identity(document: Any) -> tuple[str | None, str | None, str | None]:
+    """Best-effort ``(document_id, version, asserted_at)`` across VEX formats."""
+    if not isinstance(document, dict):
+        return None, None, None
+    tracking = {}
+    metadata = document.get("document") if isinstance(document.get("document"), dict) else {}
+    if isinstance(metadata.get("tracking"), dict):
+        tracking = metadata["tracking"]
+    doc_id = (
+        document.get("@id")                      # OpenVEX
+        or document.get("serialNumber")          # CycloneDX
+        or tracking.get("id")                    # CSAF
+        or None
+    )
+    version = document.get("version") or tracking.get("version")
+    asserted_at = (
+        document.get("timestamp")                # OpenVEX
+        or tracking.get("current_release_date")  # CSAF
+        or tracking.get("initial_release_date")
+        or ((document.get("metadata") or {}).get("timestamp") if isinstance(document.get("metadata"), dict) else None)
+    )
+    return (
+        str(doc_id) if doc_id is not None else None,
+        str(version) if version is not None else None,
+        str(asserted_at) if asserted_at is not None else None,
+    )
 
 
 def _match_component(components: list[SBOMComponent], ref: Any) -> SBOMComponent | None:
