@@ -3,13 +3,14 @@
 **Spec:** [`docs/requirements/vex-dashboard-investigation.md`](../requirements/vex-dashboard-investigation.md) v1.0
 **Branch:** `SBOM_VEX`
 **Date:** 2026-09-24
+**Last verified:** `pytest tests/test_vex_acceptance_e2e.py` — 22 passed (2026-09-24)
 
 Maps every section 47 acceptance scenario and every section 48 Definition of Done item to the
 test that covers it. Anything not met is listed as an open item rather than omitted.
 
 **Status reporting rule used here:** a row is *Pass* only when a named test asserts it and that
-test has been run green. Rows whose test exists but has not yet been run in a clean full-suite
-pass are marked *Written, unrun*, not Pass.
+test has been observed green. A test that exists but has not been run is marked *Written, unrun*,
+never Pass. As of the last verification every row has been observed green.
 
 ---
 
@@ -17,7 +18,7 @@ pass are marked *Written, unrun*, not Pass.
 
 | # | Scenario | Test | Status |
 |---|---|---|---|
-| 1 | Embedded VEX CVE not found by analyser → `VEX_ONLY` | `test_vex_acceptance_e2e.py::test_embedded_vex_only_cve_survives__VEX_REC_002_C` | Written, unrun |
+| 1 | Embedded VEX CVE not found by analyser → `VEX_ONLY` | `test_vex_acceptance_e2e.py::test_embedded_vex_only_cve_survives__VEX_REC_002_C` | **Pass** |
 | 2 | Analyser CVE with no VEX → `UNDER_INVESTIGATION` + `ANALYZER_ONLY` | `test_vex_reconciliation_engine.py::test_analyzer_only__VEX_REC_002_A` · `test_vex_decisions.py::test_detected_finding_yields_an_under_investigation_context__GAP_001` | **Pass** |
 | 3 | Same CVE in analyser + VEX → one context, no duplicate | `test_vex_reconciliation_engine.py::test_analyzer_and_vex_not_affected__VEX_REC_002_B` | **Pass** |
 | 4 | Analyser + VEX AFFECTED → AFFECTED + MATCHED | `test_vex_reconciliation_engine.py::test_analyzer_and_vex_affected__VEX_REC_002_E` | **Pass** |
@@ -27,27 +28,27 @@ pass are marked *Written, unrun*, not Pass.
 | 8 | VEX-only AFFECTED → AFFECTED + `VEX_ONLY` | `test_vex_reconciliation_engine.py::test_vex_only_affected_is_flagged__VEX_REC_002_D` | **Pass** |
 | 9 | VEX-only NOT_AFFECTED → NOT_AFFECTED + `VEX_ONLY` | `test_vex_reconciliation_engine.py::test_vex_only_not_affected__VEX_REC_002_C` | **Pass** |
 | 10 | VEX-only FIXED → FIXED + `VEX_ONLY` | `test_vex_reconciliation_engine.py::test_vex_only_fixed__VEX_REC_002_C` | **Pass** |
-| 11 | GHSA finding aliases VEX CVE → same context | `test_vex_reconciliation_engine.py::test_ghsa_finding_and_cve_vex_share_one_context__VEX_CTX_002` · e2e `test_ghsa_finding_and_cve_vex_share_one_context__VEX_CTX_002` | **Pass** (engine) |
+| 11 | GHSA finding aliases VEX CVE → same context | `test_vex_reconciliation_engine.py::test_ghsa_finding_and_cve_vex_share_one_context__VEX_CTX_002` · e2e `test_ghsa_finding_and_cve_vex_share_one_context__VEX_CTX_002` | **Pass** |
 | 12 | Same CVE on two components → two contexts | `test_vex_reconciliation_engine.py::test_same_cve_on_two_components_is_two_contexts__VEX_CTX_001` | **Pass** |
 | 13 | Same CVE on two component versions → separate contexts | `test_vex_reconciliation_engine.py::test_same_cve_on_two_versions_is_two_contexts__VEX_CTX_001` | **Pass** |
-| 14 | Multiple scanners find same vulnerability → one context | `test_vex_reconciliation_engine.py::test_multiple_scanners_collapse_to_one_context__VEX_REC_003` · e2e `test_three_scanners_produce_one_context__VEX_REC_003` | **Pass** (engine) |
+| 14 | Multiple scanners find same vulnerability → one context | `test_vex_reconciliation_engine.py::test_multiple_scanners_collapse_to_one_context__VEX_REC_003` · e2e `test_three_scanners_produce_one_context__VEX_REC_003` | **Pass** |
 | 15 | Ambiguous component mapping → `UNRESOLVED_MAPPING` | `test_vex_reconciliation_engine.py::test_ambiguous_weak_match_does_not_bind__VEX_MAP_001` · `test_unresolved_mapping_becomes_its_own_context__VEX_MAP_001` | **Pass** |
 | 16 | VEX version range doesn't apply → VEX not applied | `test_vex_reconciliation_engine.py::test_non_applicable_statement_cannot_become_effective__VEX_MAP_002` · `test_version_range_that_does_not_apply__VEX_MAP_002` | **Pass** |
-| 17 | Conflicting VEX sources → `CONFLICT_REVIEW_REQUIRED` | `test_vex_reconciliation_engine.py::test_conflicting_independent_sources__VEX_INV_005` · e2e `test_conflicting_suppliers_require_review__VEX_INV_005` | **Pass** (engine) |
+| 17 | Conflicting VEX sources → `CONFLICT_REVIEW_REQUIRED` | `test_vex_reconciliation_engine.py::test_conflicting_independent_sources__VEX_INV_005` · e2e `test_conflicting_suppliers_require_review__VEX_INV_005` | **Pass** |
 | 18 | Duplicate VEX document upload → idempotent | `test_vex_investigation_foundation.py::test_reimporting_the_same_document_is_a_no_op__VEX_ING_002` | **Pass** |
 | 19 | Re-analysis after manual decision → decision preserved | `test_vex_reconciliation_engine.py::test_reanalysis_preserves_a_manual_decision__VEX_INV_001` · `test_vex_audit_concurrency.py::test_reconciliation_preserves_a_manual_decision__VEX_INV_004` | **Pass** |
 | 20 | Source API fails → `SOURCE_ERROR`, not `NOT_DETECTED` | `test_vex_reconciliation_engine.py::test_source_failure_is_not_not_detected__VEX_REC_004` | **Pass** |
 | 21 | `not_affected` without evidence → validation failure | `test_vex_investigation_foundation.py::test_not_affected_still_requires_evidence__VEX_VAL_001` · API `test_not_affected_without_evidence_is_rejected__VEX_VAL_001` | **Pass** |
-| 22 | Ordinary CycloneDX vulnerability with no analysis → not a VEX determination | `test_vex_reconciliation_engine.py::test_plain_vulnerability_entry_is_not_a_vex_assertion__VEX_ING_001` · e2e `test_plain_disclosure_entry_is_not_a_vex_determination__VEX_ING_001` | **Pass** (unit) |
+| 22 | Ordinary CycloneDX vulnerability with no analysis → not a VEX determination | `test_vex_reconciliation_engine.py::test_plain_vulnerability_entry_is_not_a_vex_assertion__VEX_ING_001` · e2e `test_plain_disclosure_entry_is_not_a_vex_determination__VEX_ING_001` | **Pass** |
 | 23 | CycloneDX `false_positive` → native preserved, normalized retained | `test_vex_investigation_foundation.py::test_cyclonedx_false_positive_keeps_its_native_value__VEX_STAT_002` | **Pass** |
-| 24 | Inactive SBOM → excluded from current dashboard | `test_vex_acceptance_e2e.py::test_inactive_sbom_is_excluded_from_current_counts__VEX_DASH_005` | Written, unrun |
-| 25 | Superseded SBOM → excluded from current dashboard | `test_vex_acceptance_e2e.py::test_superseded_sbom_version_is_excluded__VEX_DASH_005` | Written, unrun |
+| 24 | Inactive SBOM → excluded from current dashboard | `test_vex_acceptance_e2e.py::test_inactive_sbom_is_excluded_from_current_counts__VEX_DASH_005` | **Pass** |
+| 25 | Superseded SBOM → excluded from current dashboard | `test_vex_acceptance_e2e.py::test_superseded_sbom_version_is_excluded__VEX_DASH_005` | **Pass** |
 | 26 | Cross-tenant access → rejected | `test_vex_investigations_api.py::test_cross_tenant_detail_is_404_not_403__VEX_SEC_002` · `test_vex_audit_concurrency.py::test_cross_tenant_mutations_are_rejected__VEX_SEC_002` | **Pass** |
 | 27 | Concurrent analyst updates → conflict detected | `test_vex_investigations_api.py::test_stale_row_version_conflicts__VEX_AUD_002` · `test_vex_audit_concurrency.py::test_assignment_conflicts_on_a_stale_version__VEX_AUD_002` | **Pass** |
 
-**22 of 27 Pass; 5 written but not yet run green** (rows 1, 24, 25 plus the e2e duplicates of 11,
-14, 17 and 22 — those four rows already Pass at engine level, so only rows 1, 24 and 25 lack any
-green coverage).
+**27 of 27 Pass.** The `test_vex_acceptance_e2e.py` suite ran green (22 tests), which closed the
+three rows that previously had no coverage: 1 (VEX-only survival), 24 (inactive SBOM) and 25
+(superseded SBOM).
 
 ---
 
@@ -55,7 +56,7 @@ green coverage).
 
 | # | Item | Evidence | Status |
 |---|---|---|---|
-| 1 | Every current analyser finding has a VEX investigation state | `test_vex_acceptance_e2e.py::test_backfill_gives_every_current_finding_a_context__DoD_1` | Written, unrun |
+| 1 | Every current analyser finding has a VEX investigation state | `test_vex_acceptance_e2e.py::test_backfill_gives_every_current_finding_a_context__DoD_1` | **Met** |
 | 2 | New findings without VEX default to `UNDER_INVESTIGATION` | Row 2 above | **Met** |
 | 3 | Embedded/imported VEX-only vulnerabilities retained | Rows 1, 8-10 | **Met** |
 | 4 | Scanner findings and VEX reconciled without duplication | Rows 3, 14 | **Met** |
@@ -74,7 +75,7 @@ green coverage).
 | 17 | Tenant/Project/Application/SBOM filters apply consistently | `test_vex_investigations_api.py` filter tests; `test_tile_counts_equal_row_counts_for_the_same_filters__VEX_DASH_004` | **Met** |
 | 18 | `vex:read` / `vex:write` enforced server-side | `test_vex_audit_concurrency.py::test_every_investigation_route_maps_to_a_vex_permission__VEX_SEC_001`, `test_role_permissions_match_the_spec__VEX_SEC_001` | **Partial — see open items** |
 | 19 | Current exports continue to work | `test_vex_dashboard_metrics.py::test_vex_report_still_produces_statement_rows`; e2e `test_report_and_csv_carry_native_and_effective_status__DoD_19`, `test_vex_pack_zip_still_builds__DoD_19` | **Met** |
-| 20 | All mandatory acceptance scenarios pass automated tests | Section 1 | **Not yet — 3 rows lack green coverage** |
+| 20 | All mandatory acceptance scenarios pass automated tests | Section 1 — all 27 rows Pass | **Met** |
 
 ---
 
@@ -82,9 +83,8 @@ green coverage).
 
 These are genuinely not met. None is silently omitted.
 
-**O-1 — Three acceptance rows have no green run yet.** Rows 1, 24 and 25 are covered by tests
-written in PR-7 that have not been executed in a clean pass. This report will be wrong until they
-are run; re-run `pytest tests/test_vex_acceptance_e2e.py` and update.
+**O-1 — Closed.** Rows 1, 24 and 25 now pass; `tests/test_vex_acceptance_e2e.py` ran green with
+22 tests on 2026-09-24.
 
 **O-2 — DoD 18 is only partially demonstrated.** The tests assert that the route-to-permission
 mapping and the role-to-permission table are correct. They do **not** drive a real request as a
@@ -104,8 +104,10 @@ Spec section 2 lists it as existing functionality; section 47 does not require a
 
 **O-5 — The full backend suite has not completed green since PR-4.** PR-2's and PR-3's regressions
 each surfaced real defects that later PRs fixed, but PR-4 onward have been verified only by their
-own suites plus targeted re-runs. A clean full-suite result is required before this report can
-claim item 20.
+own suites plus targeted re-runs. Every VEX suite passes individually — foundation 29, engine 33,
+dashboard 13, API 27, audit 17, acceptance 22 — but a clean *whole-suite* run is still outstanding
+and remains the real gate on this report. Item 20 above claims only that the section 47 matrix
+passes, not that the wider suite is green.
 
 ---
 
