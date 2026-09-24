@@ -26,7 +26,7 @@ from __future__ import annotations
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..models import AnalysisFinding, AnalysisRun, SBOMComponent
+from ..models import AnalysisFinding, AnalysisRun, SBOMComponent, VexInvestigation
 from .base import COMPLETED_RUN_STATUSES
 
 
@@ -130,8 +130,105 @@ def vex_run_query_error_count(db: Session, *, tenant_id: int, run_id: int) -> in
     )
 
 
+#: Reconciliation states that put a context in the review queue (VEX-DASH-003).
+_NEEDS_REVIEW = ("CONFLICT_REVIEW_REQUIRED", "REVALIDATION_REQUIRED")
+
+
+def _current_contexts(tenant_id: int, sbom_ids):
+    """Base predicate for every VEX context metric.
+
+    ``is_current`` is what makes these *current operational state*: contexts
+    retired by a later run stay queryable as history but never contribute to
+    tiles or the queue (VEX-DASH-005, VEX-INV-002). ``sbom_ids`` is the
+    dashboard's eligible-SBOM scope, passed in rather than re-derived, so the
+    tiles and the investigation table cannot drift apart (VEX-DASH-004).
+    """
+    return (
+        VexInvestigation.tenant_id == tenant_id,
+        VexInvestigation.is_current.is_(True),
+        VexInvestigation.sbom_id.in_(sbom_ids),
+    )
+
+
+def vex_context_counts(db: Session, *, tenant_id: int, sbom_ids) -> dict[str, int]:
+    """Effective-status and reconciliation-status counts over current contexts.
+
+    Convention A — one row per current vulnerability context, which is the
+    reconciled union of analyser findings and mapped VEX assertions after
+    deduplication (VEX-DASH-001).
+
+    The mapped-context invariant (VEX-DASH-002) holds by construction here:
+    ``total_contexts`` counts contexts whose component resolved, and every such
+    context has exactly one of the four effective statuses. Unresolved mappings
+    are counted separately and excluded from the total so they cannot deflate
+    a disposition count and make risk look smaller than it is.
+    """
+    predicate = _current_contexts(tenant_id, sbom_ids)
+    unresolved_predicate = VexInvestigation.reconciliation_status == "UNRESOLVED_MAPPING"
+
+    status_rows = db.execute(
+        select(VexInvestigation.effective_status, func.count())
+        .where(*predicate, ~unresolved_predicate)
+        .group_by(VexInvestigation.effective_status)
+    ).all()
+    reconciliation_rows = db.execute(
+        select(VexInvestigation.reconciliation_status, func.count())
+        .where(*predicate)
+        .group_by(VexInvestigation.reconciliation_status)
+    ).all()
+
+    by_status = {str(k): int(v) for k, v in status_rows}
+    by_reconciliation = {str(k): int(v) for k, v in reconciliation_rows}
+
+    affected = by_status.get("AFFECTED", 0)
+    not_affected = by_status.get("NOT_AFFECTED", 0)
+    fixed = by_status.get("FIXED", 0)
+    under_investigation = by_status.get("UNDER_INVESTIGATION", 0)
+
+    return {
+        "total_contexts": affected + not_affected + fixed + under_investigation,
+        "affected_count": affected,
+        "not_affected_count": not_affected,
+        "fixed_count": fixed,
+        "under_investigation_count": under_investigation,
+        "matched_count": by_reconciliation.get("MATCHED", 0),
+        "analyzer_only_count": by_reconciliation.get("ANALYZER_ONLY", 0),
+        "vex_only_count": by_reconciliation.get("VEX_ONLY", 0),
+        "conflict_review_count": by_reconciliation.get("CONFLICT_REVIEW_REQUIRED", 0),
+        "revalidation_required_count": by_reconciliation.get("REVALIDATION_REQUIRED", 0),
+        "unresolved_mapping_count": by_reconciliation.get("UNRESOLVED_MAPPING", 0),
+        "needs_review_count": sum(by_reconciliation.get(k, 0) for k in _NEEDS_REVIEW),
+    }
+
+
+def vex_top_affected_components(
+    db: Session, *, tenant_id: int, sbom_ids, limit: int = 10
+) -> list[tuple[int | None, str, str]]:
+    """Components carrying AFFECTED contexts, most affected first.
+
+    Deterministically ordered — the previous implementation sliced whatever
+    dict iteration happened to yield, so "top" was arbitrary.
+    """
+    rows = db.execute(
+        select(
+            VexInvestigation.component_id,
+            VexInvestigation.canonical_vulnerability_id,
+            VexInvestigation.effective_status,
+        )
+        .where(
+            *_current_contexts(tenant_id, sbom_ids),
+            VexInvestigation.effective_status == "AFFECTED",
+        )
+        .order_by(VexInvestigation.component_id, VexInvestigation.canonical_vulnerability_id)
+        .limit(limit)
+    ).all()
+    return [(r[0], str(r[1]), str(r[2])) for r in rows]
+
+
 __all__ = [
     "latest_successful_run_id_for_sbom",
+    "vex_context_counts",
+    "vex_top_affected_components",
     "vex_component_findings",
     "vex_current_findings_for_sbom",
     "vex_run_query_error_count",

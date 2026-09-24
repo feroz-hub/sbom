@@ -775,15 +775,47 @@ export interface VexDiscoveryResponse {
   errors: Array<{ provider?: string; url?: string; error: string }>;
 }
 
+export interface VexTopAffectedComponent {
+  component_id: number | null;
+  component_name: string | null;
+  component_version: string | null;
+  vulnerability_id: string;
+  status: string;
+}
+
+/**
+ * `GET /dashboard/vex` (VEX-API-001).
+ *
+ * Counts are over reconciled *vulnerability contexts*, not VEX statements:
+ * an analyser finding with no VEX assertion now contributes an
+ * ANALYZER_ONLY / UNDER_INVESTIGATION context.
+ *
+ * `total_contexts` is deliberately NOT equal to the analyser finding total on
+ * the posture response (VEX-DASH-001) — legitimate VEX-only vulnerabilities
+ * exist. The invariant that does hold (VEX-DASH-002) is
+ * `total_contexts === affected + not_affected + fixed + under_investigation`
+ * for mapped contexts, with `unresolved_mapping_count` reported separately.
+ */
 export interface DashboardVex {
   affected_count: number;
   not_affected_count: number;
   fixed_count: number;
   under_investigation_count: number;
+  /** @deprecated No UNKNOWN effective status exists (VEX-STAT-001); source-level
+   *  unknown folds into `under_investigation_count`. Always 0. */
   unknown_count: number;
   vulnerabilities_reduced_by_vex: number;
   vulnerabilities_requiring_action: number;
-  top_affected_components: VexStatement[];
+  top_affected_components: VexTopAffectedComponent[];
+
+  total_contexts: number;
+  matched_count: number;
+  analyzer_only_count: number;
+  vex_only_count: number;
+  conflict_review_count: number;
+  revalidation_required_count: number;
+  unresolved_mapping_count: number;
+  needs_review_count: number;
 }
 
 export interface LifecycleReport {

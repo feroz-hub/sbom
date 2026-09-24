@@ -263,3 +263,56 @@ class DashboardPostureResponse(BaseModel):
     coverage_gap_sources: list[str] = Field(default_factory=list)
 
     schema_version: int = 1
+
+
+class VexTopAffectedComponent(BaseModel):
+    """One AFFECTED context shown on the dashboard's top-affected list."""
+
+    component_id: int | None = None
+    component_name: str | None = None
+    component_version: str | None = None
+    vulnerability_id: str
+    status: str = "affected"
+
+
+class DashboardVexResponse(BaseModel):
+    """``GET /dashboard/vex`` (VEX-API-001).
+
+    Two totals coexist deliberately (VEX-DASH-001). The analyser finding total
+    lives on the posture response; ``total_contexts`` here is the reconciled
+    union of analyser findings and mapped VEX assertions after deduplication.
+    They are not forced equal, because legitimate VEX-only vulnerabilities
+    exist.
+
+    Invariant (VEX-DASH-002): ``total_contexts == affected_count +
+    not_affected_count + fixed_count + under_investigation_count`` for mapped
+    contexts. ``unresolved_mapping_count`` is reported separately and excluded
+    from the total, so an unresolved mapping can never make risk look smaller.
+    """
+
+    # Legacy fields — unchanged shape for existing consumers.
+    affected_count: int = 0
+    not_affected_count: int = 0
+    fixed_count: int = 0
+    under_investigation_count: int = 0
+    unknown_count: int = Field(
+        default=0,
+        description=(
+            "Deprecated. There is no UNKNOWN effective status (VEX-STAT-001); "
+            "source-level unknown folds into under_investigation_count per "
+            "spec section 8. Retained for backward compatibility only."
+        ),
+    )
+    vulnerabilities_reduced_by_vex: int = 0
+    vulnerabilities_requiring_action: int = 0
+    top_affected_components: list[VexTopAffectedComponent] = Field(default_factory=list)
+
+    # Reconciliation metrics.
+    total_contexts: int = 0
+    matched_count: int = 0
+    analyzer_only_count: int = 0
+    vex_only_count: int = 0
+    conflict_review_count: int = 0
+    revalidation_required_count: int = 0
+    unresolved_mapping_count: int = 0
+    needs_review_count: int = 0

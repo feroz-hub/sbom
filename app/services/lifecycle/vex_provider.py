@@ -494,10 +494,13 @@ def _reconcile_vex(db: Session, *, tenant_id: int, sbom_id: int) -> None:
     Imported late to avoid a circular import: the reconciliation engine reads
     this module's status helpers.
     """
-    try:
-        from ..vex.reconciliation import recompute_for_sbom
+    from ..vex.reconciliation import recompute_for_sbom
 
-        recompute_for_sbom(db, tenant_id=tenant_id, sbom_id=sbom_id)
+    # SAVEPOINT so a reconciliation failure cannot poison the caller's
+    # transaction; see the matching note in analysis_service.
+    try:
+        with db.begin_nested():
+            recompute_for_sbom(db, tenant_id=tenant_id, sbom_id=sbom_id)
     except Exception:  # noqa: BLE001 — an import or decision must still land
         logging.getLogger("sbom.vex").exception(
             "vex.reconciliation.failed", extra={"sbom_id": sbom_id}
@@ -746,27 +749,87 @@ def apply_vex_override(
     return statement
 
 
-def vex_dashboard_summary(db: Session) -> dict[str, Any]:
-    statements = db.execute(select(VexStatement)).scalars().all()
-    counts = {status: 0 for status in ALLOWED_VEX_STATUSES}
-    latest_by_key = {row.id: row for row in effective_vex_statements(statements) if row.component_id is not None}
-    for statement in latest_by_key.values():
-        counts[_normalize_vex_status(statement.status)] += 1
-    requiring_action = counts["affected"] + counts["under_investigation"] + counts["unknown"]
+def vex_dashboard_summary(
+    db: Session, *, tenant_id: int | None = None, sbom_ids: Any | None = None
+) -> dict[str, Any]:
+    """Portfolio VEX metrics over reconciled contexts (VEX-DASH-001/002/003).
+
+    Aggregates :class:`~app.models.VexInvestigation` rather than
+    ``VexStatement``, which is GAP-002: an analyser finding with no VEX
+    statement used to contribute nothing to this dashboard, and now appears as
+    an ANALYZER_ONLY / UNDER_INVESTIGATION context.
+
+    ``tenant_id`` and ``sbom_ids`` make the scope explicit. Passing them is
+    strongly preferred: without them the function falls back to the ambient
+    ``dashboard_scope`` in the session (``app/db.py``), which works for the
+    dashboard router but silently returns cross-tenant counts to any caller
+    outside a scoped session.
+
+    Every pre-existing response field is retained, ``unknown_count`` included.
+    It is **deprecated**: the four canonical statuses have no UNKNOWN member,
+    so the new metrics fold it into ``under_investigation_count`` (spec
+    section 8) and this key is reported as 0 unless legacy statements are
+    being counted.
+    """
+    from ...metrics.vex import vex_context_counts, vex_top_affected_components
+
+    scope = db.info.get("dashboard_scope")
+    if tenant_id is None:
+        tenant_id = getattr(scope, "tenant_id", None)
+    if tenant_id is None:
+        raise HTTPException(status_code=403, detail="Tenant context required for VEX metrics")
+    if sbom_ids is None:
+        if scope is None:
+            raise HTTPException(status_code=400, detail="Dashboard scope required for VEX metrics")
+        sbom_ids = scope.eligible_sbom_ids()
+
+    counts = vex_context_counts(db, tenant_id=tenant_id, sbom_ids=sbom_ids)
+
+    component_names = {
+        row.id: row
+        for row in db.scalars(
+            select(SBOMComponent).where(
+                SBOMComponent.id.in_(
+                    [cid for cid, _, _ in vex_top_affected_components(
+                        db, tenant_id=tenant_id, sbom_ids=sbom_ids
+                    ) if cid is not None]
+                )
+            )
+        ).all()
+    }
     top_affected = [
-        _statement_dict(statement)
-        for statement in latest_by_key.values()
-        if _normalize_vex_status(statement.status) == "affected"
-    ][:10]
+        {
+            "component_id": component_id,
+            "component_name": getattr(component_names.get(component_id), "name", None),
+            "component_version": getattr(component_names.get(component_id), "version", None),
+            "vulnerability_id": vulnerability_id,
+            "status": "affected",
+        }
+        for component_id, vulnerability_id, _ in vex_top_affected_components(
+            db, tenant_id=tenant_id, sbom_ids=sbom_ids
+        )
+    ]
+
     return {
-        "affected_count": counts["affected"],
-        "not_affected_count": counts["not_affected"],
-        "fixed_count": counts["fixed"],
-        "under_investigation_count": counts["under_investigation"],
-        "unknown_count": counts["unknown"],
-        "vulnerabilities_reduced_by_vex": counts["not_affected"] + counts["fixed"],
-        "vulnerabilities_requiring_action": requiring_action,
+        # --- legacy shape, unchanged for backward compatibility ---
+        "affected_count": counts["affected_count"],
+        "not_affected_count": counts["not_affected_count"],
+        "fixed_count": counts["fixed_count"],
+        "under_investigation_count": counts["under_investigation_count"],
+        "unknown_count": 0,  # deprecated; folded into under_investigation_count
+        "vulnerabilities_reduced_by_vex": counts["not_affected_count"] + counts["fixed_count"],
+        "vulnerabilities_requiring_action": counts["affected_count"]
+        + counts["under_investigation_count"],
         "top_affected_components": top_affected,
+        # --- reconciliation metrics (VEX-API-001) ---
+        "total_contexts": counts["total_contexts"],
+        "matched_count": counts["matched_count"],
+        "analyzer_only_count": counts["analyzer_only_count"],
+        "vex_only_count": counts["vex_only_count"],
+        "conflict_review_count": counts["conflict_review_count"],
+        "revalidation_required_count": counts["revalidation_required_count"],
+        "unresolved_mapping_count": counts["unresolved_mapping_count"],
+        "needs_review_count": counts["needs_review_count"],
     }
 
 

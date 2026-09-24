@@ -54,11 +54,28 @@ def _is_manual(statement: VexStatement) -> bool:
     return statement.vex_document_id is None and statement.source_name == MANUAL_SOURCE_NAME
 
 
+#: The only values an effective status may take (VEX-STAT-001).
+_CANONICAL_STATUSES = frozenset(s.value for s in EffectiveVexStatus)
+
+
 def _effective_status(statement: VexStatement) -> str:
-    """Canonical status for a statement, preferring the normalized column."""
+    """Canonical status for a statement, preferring the normalized column.
+
+    ``normalized_status`` is *validated*, not trusted. A row written before
+    this column existed, backfilled from an unrecognised legacy status, or
+    carrying a stray value like ``UNKNOWN`` would otherwise leak a fifth
+    status into the contexts — which silently breaks the VEX-DASH-002
+    invariant, because the dashboard sums exactly four buckets and such a
+    context would fall outside all of them. Anything unrecognised is re-derived
+    from the legacy ``status`` column, and ultimately lands on
+    UNDER_INVESTIGATION (spec section 8).
+    """
     from ..lifecycle.vex_provider import effective_status_for
 
-    return statement.normalized_status or effective_status_for(statement.status)
+    normalized = (statement.normalized_status or "").strip().upper()
+    if normalized in _CANONICAL_STATUSES:
+        return normalized
+    return effective_status_for(statement.status)
 
 
 def _authority(statement: VexStatement) -> tuple:

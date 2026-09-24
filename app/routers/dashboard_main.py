@@ -36,6 +36,7 @@ from ..etag import maybe_not_modified
 from ..models import Product, Projects, SBOMSource, Tenant
 from ..schemas_dashboard import (
     DashboardPostureResponse,
+    DashboardVexResponse,
     LifetimeMetrics,
     NetChange,
     VulnerabilityAgeResponse,
@@ -371,10 +372,19 @@ def get_dashboard_lifecycle(db: Session = Depends(get_db)):
     }
 
 
-@router.get("/vex")
-def get_dashboard_vex(db: Session = Depends(get_db)):
-    """Fetch VEX exploitability metrics for the dashboard."""
-    return vex_dashboard_summary(db)
+@router.get("/vex", response_model=DashboardVexResponse)
+def get_dashboard_vex(request: Request, db: Session = Depends(get_db)):
+    """Fetch VEX exploitability metrics for the dashboard.
+
+    Scope is taken from ``request.state.dashboard_scope`` and passed to the
+    service explicitly, so the counts cannot depend on ambient session state
+    (VEX-DASH-004). This is the same scope the investigation queue uses, which
+    is what keeps tile counts equal to table counts for identical filters.
+    """
+    scope = request.state.dashboard_scope
+    return vex_dashboard_summary(
+        db, tenant_id=scope.tenant_id, sbom_ids=scope.eligible_sbom_ids()
+    )
 
 
 @router.get("/health")
@@ -494,7 +504,10 @@ def get_dashboard_summary(
     }
 
     # 4. VEX
-    vex_payload = vex_dashboard_summary(db)
+    vex_scope = request.state.dashboard_scope
+    vex_payload = vex_dashboard_summary(
+        db, tenant_id=vex_scope.tenant_id, sbom_ids=vex_scope.eligible_sbom_ids()
+    )
 
     # 5. Vulnerability Age
     age_buckets = metrics.findings_age_distribution(db, window=None)

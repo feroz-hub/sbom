@@ -254,7 +254,7 @@ export function LifecycleHealthTiles({
             <div className="text-[10px] font-semibold uppercase tracking-wider text-hcl-muted">Top Affected</div>
             <div className="mt-2 space-y-1.5">
               {vex?.top_affected_components.slice(0, 3).map((item: any) => (
-                <div key={`${item.id}-${item.vulnerability_id}`} className="flex items-center justify-between gap-3 text-xs">
+                <div key={`${item.component_id}-${item.vulnerability_id}`} className="flex items-center justify-between gap-3 text-xs">
                   <span className="truncate font-medium text-hcl-navy">{item.component_name ?? 'Component'}</span>
                   <span className="shrink-0 text-hcl-muted">{item.vulnerability_id}</span>
                 </div>

@@ -825,10 +825,16 @@ def _reconcile_vex_after_run(db: Session, run: AnalysisRun) -> None:
     """
     if run.run_status not in SUCCESSFUL_RUN_STATUSES:
         return
-    try:
-        from .vex.reconciliation import recompute_for_sbom
+    from .vex.reconciliation import recompute_for_sbom
 
-        recompute_for_sbom(db, tenant_id=run.tenant_id, sbom_id=run.sbom_id)
+    # SAVEPOINT, not a bare try/except. Swallowing a database error without
+    # rolling back leaves the session's transaction aborted, so the caller's
+    # next statement fails with InFailedSqlTransaction — the "non-fatal" guard
+    # would then be the thing that loses the analysis. The nested transaction
+    # confines a reconciliation failure to itself.
+    try:
+        with db.begin_nested():
+            recompute_for_sbom(db, tenant_id=run.tenant_id, sbom_id=run.sbom_id)
     except Exception:  # noqa: BLE001 — never fail an analysis over reconciliation
         log.exception(
             "vex.reconciliation.failed",
