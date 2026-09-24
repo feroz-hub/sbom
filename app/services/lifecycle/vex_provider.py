@@ -35,6 +35,10 @@ CYCLONEDX_ANALYSIS_STATUS_MAP = {
     "not_affected": "not_affected",
 }
 
+#: CycloneDX ``affects[].versions[].status``. This describes whether a version
+#: falls inside the vulnerable range — it is NOT the VEX determination, which
+#: lives in ``analysis.state``. Used only as a fallback when a producer omits
+#: the analysis block entirely, and as version-applicability evidence.
 CYCLONEDX_AFFECTED_STATUS_MAP = {
     "affected": "affected",
     "unaffected": "not_affected",
@@ -143,8 +147,21 @@ class VexProvider:
                         if not isinstance(version, dict):
                             continue
                         native_version_state = str(version.get("status") or "").strip().lower() or None
-                        mapped = CYCLONEDX_AFFECTED_STATUS_MAP.get(native_version_state or "")
-                        status = _normalize_vex_status(mapped or status)
+                        # `analysis.state` is the VEX determination; a version's
+                        # `status` only says whether that version falls in the
+                        # vulnerable range. They answer different questions, so
+                        # the version must not overwrite the determination:
+                        # "not_affected because the code is unreachable" stays
+                        # not_affected even when this version is in range.
+                        #
+                        # Only when the producer gave no analysis state at all
+                        # does the version status stand in as the best evidence
+                        # available.
+                        if native_state:
+                            status = base_status
+                        else:
+                            mapped = CYCLONEDX_AFFECTED_STATUS_MAP.get(native_version_state or "")
+                            status = _normalize_vex_status(mapped or status)
                         if version.get("version") and status == "fixed":
                             fixed_version = str(version.get("version"))
                         results.append(
