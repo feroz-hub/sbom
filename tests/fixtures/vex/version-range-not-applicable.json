@@ -1,0 +1,16 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://example.test/vex/range-only",
+  "author": "Supplier C",
+  "timestamp": "2026-09-04T00:00:00Z",
+  "version": "1",
+  "statements": [
+    {
+      "vulnerability": { "name": "CVE-2026-7002" },
+      "products": ["pkg:generic/zlib@1.2.11"],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "affected_versions": ">= 0.9, < 1.0"
+    }
+  ]
+}
