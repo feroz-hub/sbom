@@ -108,13 +108,13 @@ caller outside a scoped session cannot silently read cross-tenant.
   `row_version`); extend `VexStatement` with `source_format`, `source_status`, `normalized_status`,
   `asserted_at`, `match_strategy`, `match_confidence`, `version_applicable` (keep `status`);
   extend `VexDocument` with `source_document_id`, `source_document_version`, `source_hash`,
-  `asserted_at` (keep discovery/provider-error fields).
-- `app/services/vex/enums.py` — `EffectiveVexStatus` (4), `ReconciliationStatus` (6),
+  `asserted_at` (VEX-ING-003; keep discovery/provider-error fields).
+- `app/services/vex/enums.py` (VEX-REC-001) — `EffectiveVexStatus` (4), `ReconciliationStatus` (6),
   `AnalyzerDetectionState` (5), `MappingConfidence`.
-- `app/services/vex/identity.py` — canonical id service **wrapping**
+- `app/services/vex/identity.py` (VEX-CTX-002) — canonical id service **wrapping**
   `app/integrations/cve/identifiers.py:114 resolve()`; reads `AnalysisFinding.aliases` (:1239).
 - `app/services/lifecycle/vex_provider.py` — importers populate
-  `source_format`/`source_status`/`normalized_status`; `unknown` → normalized
+  `source_format`/`source_status`/`normalized_status` (VEX-DATA-002); `unknown` → normalized
   `UNDER_INVESTIGATION` with `source_status='unknown'` (§8); preserve raw source data.
 - Document idempotency (VEX-ING-002): stable `source_hash` on import; identical document →
   "already imported", no duplicate statements; new version appends and marks the prior superseded.
@@ -175,7 +175,7 @@ determination.
 - Replace the `VexStatement`-only aggregation in `vex_provider.py:626` with aggregation over
   current `VexInvestigation` rows, using the same eligible-SBOM scope and Project/Product/SBOM
   filters as the rest of the dashboard (VEX-DASH-004/005). Pass scope **explicitly** (D7).
-- Extend the `/dashboard/vex` response (`app/routers/dashboard_main.py:377`) with `total_contexts`,
+- Extend the `/dashboard/vex` response (VEX-API-001, `app/routers/dashboard_main.py:377`) with `total_contexts`,
   `analyzer_only_count`, `vex_only_count`, `matched_count`, `conflict_review_count`,
   `revalidation_required_count`, `unresolved_mapping_count`, `needs_review_count`. Keep every
   existing field including `unknown_count` (deprecated). Add a Pydantic `response_model` in
@@ -204,15 +204,15 @@ determination.
   `app/schemas_vex.py`. **Model it on `app/routers/kev.py:266-357 list_kev_vulnerabilities`** —
   `response_model`, `q` ilike search, enum `sort_by`/`sort_order` through a `SORT_COLUMNS` map with
   a stable tiebreaker, `limit`/`offset` with `ge`/`le` bounds, separate `COUNT(*)`, envelope
-  `{total, limit, offset, items}`. Filters per §28. Same eligible-SBOM scope as the dashboard so
+  `{total, limit, offset, items}`. Filters per §28 (VEX-UI-002). Same eligible-SBOM scope as the dashboard so
   tile counts == list counts for identical filters (assert this in a test).
-- `GET /api/vex/investigations/{id}` — §29 evidence sections: vulnerability, component, analyser
+- `GET /api/vex/investigations/{id}` (VEX-UI-003) — §29 evidence sections: vulnerability, component, analyser
   evidence, imported VEX assertions (all, including non-applicable and conflicting, with native +
   normalized status and mapping confidence), internal decision, reconciliation, chronological
   history from `VexOverrideAudit`.
 - Decision endpoint — reuse the existing override API if practical
   (`app/routers/vex.py:148 patch_vex_override`), else add POST/PUT on the investigation. Requires
-  `vex:write`; reuses `_validate_vex_result`'s NOT_AFFECTED/FIXED rules; accepts `assigned_to`;
+  `vex:write`; reuses `_validate_vex_result`'s NOT_AFFECTED/FIXED rules (VEX-VAL-001/002); accepts `assigned_to`;
   requires `row_version`, returns **409 with the latest row** on mismatch (VEX-AUD-002); writes an
   append-only `VexOverrideAudit` record; re-runs reconciliation for that context.
 - Authorization: `app/core/security.py:542` already maps `/vex` paths to `vex:read`/`vex:write` by
@@ -232,7 +232,7 @@ determination.
 **Spec:** §23–24, §27–30, §46. Follow `frontend/AGENTS.md` — this Next.js version differs from
 training data; check `node_modules/next/dist/docs/` before writing route code.
 
-- New page `frontend/src/app/vex-investigation/page.tsx` (`'use client'`, `<Suspense>` wrapper,
+- New page `frontend/src/app/vex-investigation/page.tsx` (VEX-UI-001) (`'use client'`, `<Suspense>` wrapper,
   `<TopBar>` + `p-6` body), plus one entry in `frontend/src/lib/navigation.ts:26-57` with
   `permission: 'vex:read'` (filtered by `Sidebar.tsx:60-66`).
 - **Copy the `frontend/src/app/kev/page.tsx` pattern** for the table — it is the repo's only true
@@ -241,14 +241,14 @@ training data; check `node_modules/next/dist/docs/` before writing route code.
   state→URL `router.replace`, 350 ms debounced search, `placeholderData: keepPreviousData`,
   page clamping, active-filter count. UI kit: `Table`/`SortableTh`/`EmptyRow`, `Pagination`,
   `TableFilterBar`/`TableSearchInput`, `Select`, `Badge`, `Dialog`, `SkeletonRow`, `useToast`.
-- Summary cards: Total Contexts, Affected, Not Affected, Fixed, Under Investigation, Analyzer Only,
+- Summary cards (VEX-DASH-003): Total Contexts, Affected, Not Affected, Fixed, Under Investigation, Analyzer Only,
   VEX Only, Matched, Needs Review, Unresolved Mapping. Clicking a card applies the matching filter.
 - Scope selector reusing the existing Tenant→Project→Product→SBOM controls.
 - Visually flag VEX-only AFFECTED, `CONFLICT_REVIEW_REQUIRED`, `REVALIDATION_REQUIRED`,
   `UNRESOLVED_MAPPING` rows. Severity always the vulnerability's severity, unchanged by VEX.
-- Detail drawer: §29 sections side by side — Analyzer Evidence vs Imported VEX (all assertions,
+- Detail drawer (VEX-UI-003): §29 sections side by side — Analyzer Evidence vs Imported VEX (all assertions,
   native + normalized) vs Internal Decision, plus Reconciliation and History.
-- Decision action (`vex:write` only): client-side validation mirroring the backend — reuse the
+- Decision action (VEX-INV-003, `vex:write` only): client-side validation mirroring the backend — reuse the
   rules in `SbomDetail.tsx:909-922 validateVexOverride`; on 409 show "updated by someone else —
   reload" and refresh.
 - **Permissions:** use `usePermission('vex:read')` / `('vex:write')` from
