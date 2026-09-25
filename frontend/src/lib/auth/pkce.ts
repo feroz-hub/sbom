@@ -16,7 +16,4 @@ export function constantTimeEqual(left: string, right: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-export function safeReturnPath(value: string | null | undefined): string {
-  if (!value || !value.startsWith('/') || value.startsWith('//') || value.includes('\\')) return '/';
-  return value;
-}
+export { safeReturnPath } from './return-path';

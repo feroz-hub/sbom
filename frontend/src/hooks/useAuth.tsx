@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useQueryClient } from '@tanstack/react-query';
 import {
   type AuthConfig, clearActiveTenantId, getActiveTenantId, resolveAuthConfig,
-  setActiveTenantId,
+  safeReturnPath, setActiveTenantId,
 } from '@/lib/auth';
 import type { IdentityMappingInfo } from '@/lib/identityMapping';
 import { followLogoutRedirect } from '@/lib/auth/logout-navigation';
@@ -524,7 +524,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async () => {
     if (!config.enabled) return;
-    const returnTo = `${window.location.pathname}${window.location.search}`;
+    const currentPath = `${window.location.pathname}${window.location.search}`;
+    const returnTo = safeReturnPath(currentPath);
     window.location.assign(`/api/auth/login?returnTo=${encodeURIComponent(returnTo)}`);
   }, [config.enabled]);
 

@@ -4,16 +4,14 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useNotifications } from '@/hooks/useNotifications';
+import { safeReturnPath } from '@/lib/auth';
 
 type CallbackStatus = 'processing' | 'error';
 
 function sanitizeReturnUrl(url?: string | null): string {
-  if (!url || typeof url !== 'string') return '/';
-  if (url.startsWith('/') && !url.startsWith('//') && !url.startsWith('/\\')) {
-    return url;
-  }
-  return '/';
+  return safeReturnPath(url);
 }
+
 
 export function LoginCallback() {
   const router = useRouter();

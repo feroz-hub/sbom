@@ -54,3 +54,5 @@ export function clearActiveTenantId(): void {
   if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem(ACTIVE_TENANT_KEY);
   syncActiveTenantCookie(null);
 }
+
+export { safeReturnPath } from './auth/return-path';

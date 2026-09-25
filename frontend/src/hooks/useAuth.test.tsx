@@ -3,7 +3,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { useEffect, type ReactNode } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
 
@@ -536,5 +536,98 @@ describe('AuthProvider platform administrator context', () => {
     expect(screen.getByTestId('active-tenant')).toHaveTextContent('');
     expect(sessionStorage.getItem('sbom_active_tenant_id')).toBeNull();
     expect(lastMeTenantHeader(fetchMock)).toBeNull();
+  });
+});
+
+describe('AuthProvider login() returnTo sanitization', () => {
+  const windowObj = window as unknown as Record<string, unknown>;
+  let originalLocation: Location;
+  let assignSpy: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    sessionStorage.clear();
+    latestAuth = null;
+    vi.restoreAllMocks();
+    originalLocation = window.location;
+    assignSpy = vi.fn();
+  });
+
+  afterEach(() => {
+    delete windowObj.location;
+    windowObj.location = originalLocation;
+  });
+
+  it('requests returnTo=/ when login is initiated while browser path is /auth/callback', async () => {
+    delete windowObj.location;
+    windowObj.location = {
+      ...originalLocation,
+      pathname: '/auth/callback',
+      search: '?error=configuration_error',
+      assign: assignSpy,
+    };
+
+    render(wrap(<Probe />));
+    await act(async () => {
+      await latestAuth!.login();
+    });
+
+    expect(assignSpy).toHaveBeenCalledWith('/api/auth/login?returnTo=%2F');
+    expect(assignSpy).not.toHaveBeenCalledWith(expect.stringContaining('/auth/callback'));
+  });
+
+  it('requests returnTo=/ when login is initiated while browser path is /logged-out', async () => {
+    delete windowObj.location;
+    windowObj.location = {
+      ...originalLocation,
+      pathname: '/logged-out',
+      search: '?reason=user',
+      assign: assignSpy,
+    };
+
+    render(wrap(<Probe />));
+    await act(async () => {
+      await latestAuth!.login();
+    });
+
+    expect(assignSpy).toHaveBeenCalledWith('/api/auth/login?returnTo=%2F');
+    expect(assignSpy).not.toHaveBeenCalledWith(expect.stringContaining('/logged-out'));
+  });
+
+  it('requests returnTo=/ when login is initiated from lifecycle routes (/verification-required, /access-denied, /access-pending)', async () => {
+    render(wrap(<Probe />));
+    for (const route of ['/verification-required', '/access-denied', '/access-pending']) {
+      assignSpy.mockClear();
+      delete windowObj.location;
+      windowObj.location = {
+        ...originalLocation,
+        pathname: route,
+        search: '?code=403',
+        assign: assignSpy,
+      };
+
+      await act(async () => {
+        await latestAuth!.login();
+      });
+
+      expect(assignSpy).toHaveBeenCalledWith('/api/auth/login?returnTo=%2F');
+      expect(assignSpy).not.toHaveBeenCalledWith(expect.stringContaining(route));
+    }
+  });
+
+  it('preserves application path and query string when login is initiated from normal routes', async () => {
+    delete windowObj.location;
+    windowObj.location = {
+      ...originalLocation,
+      pathname: '/sboms/42',
+      search: '?tab=components',
+      assign: assignSpy,
+    };
+
+    render(wrap(<Probe />));
+    await act(async () => {
+      await latestAuth!.login();
+    });
+
+    expect(assignSpy).toHaveBeenCalledWith('/api/auth/login?returnTo=%2Fsboms%2F42%3Ftab%3Dcomponents');
   });
 });
