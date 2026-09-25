@@ -22,8 +22,13 @@ set "FE_PORT=3000"
 set "CERT_ARGS="
 set "CERT_ONLY=0"
 
-if /i "%~1"=="--force-cert" set "CERT_ARGS=-Force"
-if /i "%~1"=="--cert-only"  set "CERT_ONLY=1"
+set "SKIP_API_CHECK=0"
+
+if /i "%~1"=="--force-cert"   set "CERT_ARGS=-Force"
+if /i "%~1"=="--cert-only"    set "CERT_ONLY=1"
+rem start-all.bat launches the API moments before calling this, and uvicorn
+rem takes a few seconds to bind. Checking the port then would always warn.
+if /i "%~1"=="--no-api-check" set "SKIP_API_CHECK=1"
 
 echo.
 echo  SBOM Analyzer - frontend (HTTPS)
@@ -41,10 +46,12 @@ if not exist "%REPO%\frontend\.env.local" (
 )
 
 rem Warn, do not block: the page loads without the API, it just cannot sign in.
-netstat -ano -p tcp | findstr /c:":8000 " | findstr /c:"LISTENING" >nul 2>&1
-if errorlevel 1 (
-    echo  [WARN]  The API is not listening on 8000 - start it with start-all.bat api
-    echo.
+if "%SKIP_API_CHECK%"=="0" (
+    netstat -ano -p tcp | findstr /c:":8000 " | findstr /c:"LISTENING" >nul 2>&1
+    if errorlevel 1 (
+        echo  [WARN]  The API is not listening on 8000 - start it with start-all.bat api
+        echo.
+    )
 )
 
 rem --- certificate -----------------------------------------------------------
