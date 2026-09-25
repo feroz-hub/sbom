@@ -17,6 +17,7 @@ import { Table, TableHead, TableBody, Th, SortableTh, Td, EmptyRow } from '@/com
 import { TableFilterBar, TableSearchInput } from '@/components/ui/TableFilterBar';
 import { SkeletonRow } from '@/components/ui/Spinner';
 import { Pagination } from '@/components/ui/Pagination';
+import { VexDecisionEditor } from '@/components/vex/VexDecisionEditor';
 import { ComponentVexManager } from './ComponentVexManager';
 import { AnalysisProgress } from '@/components/analysis/AnalysisProgress';
 import { ScheduleCard } from '@/components/schedules/ScheduleCard';
@@ -48,6 +49,7 @@ import {
   exportSbomVexReportJson,
   exportSbomVexReportPack,
   exportSbomVulnerabilityExcel,
+  getVexInvestigationByTriple,
   getVexOverrideHistory,
   getComponentVulnerabilities,
   getSbomVexStatements,
@@ -547,6 +549,23 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
       return acc;
     }, {});
   }, [vexStatements]);
+  // Resolves the reconciled context for this pair, when one exists. Supplies
+  // the row_version the concurrency check needs; null for a vulnerability
+  // nothing has asserted yet, where the editor falls back to the override.
+  const vexInvestigation = useQuery({
+    queryKey: ['vex-investigation-by-triple', sbom.id, vexOverrideComponentId, vexOverrideVulnerability],
+    queryFn: ({ signal }) =>
+      getVexInvestigationByTriple(
+        {
+          sbom_id: sbom.id,
+          component_id: Number(vexOverrideComponentId),
+          vulnerability_id: vexOverrideVulnerability,
+        },
+        signal,
+      ),
+    enabled: isVexOverrideOpen && Boolean(vexOverrideComponentId) && Boolean(vexOverrideVulnerability),
+  });
+
   const componentVex = useQuery({
     queryKey: ['component-vulnerabilities', sbom.id, Number(vexOverrideComponentId)],
     queryFn: ({ signal }) => getComponentVulnerabilities(sbom.id, Number(vexOverrideComponentId), signal),
@@ -901,48 +920,6 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
 
   };
 
-  const validateVexOverride = () => {
-    if (!vexOverrideComponentId) return 'Component is required.';
-    if (!vexOverrideVulnerability.trim()) return 'Vulnerability or CVE is required.';
-    if (!vexOverrideReason.trim()) return 'Override reason is required.';
-    if (vexOverrideStatus === 'not_affected' && !vexOverrideJustification.trim() && !vexOverrideImpact.trim()) {
-      return 'not_affected requires justification or impact statement.';
-    }
-    if (vexOverrideStatus === 'fixed' && !vexOverrideFixedVersion.trim() && !vexOverrideEvidenceUrl.trim()) {
-      return 'fixed requires fixed version or evidence URL.';
-    }
-    return '';
-  };
-
-  const handleSubmitVexOverride = async () => {
-    const validation = validateVexOverride();
-    if (validation) {
-      setVexOverrideError(validation);
-      return;
-    }
-    setIsSavingVexOverride(true);
-    setVexOverrideError('');
-    try {
-      await overrideVexStatement(Number(vexOverrideComponentId), vexOverrideVulnerability.trim(), {
-        status: vexOverrideStatus,
-        justification: vexOverrideJustification.trim() || null,
-        impact_statement: vexOverrideImpact.trim() || null,
-        action_statement: vexOverrideAction.trim() || null,
-        fixed_version: vexOverrideFixedVersion.trim() || null,
-        mitigation: vexOverrideMitigation.trim() || null,
-        evidence_url: vexOverrideEvidenceUrl.trim() || null,
-        reason: vexOverrideReason.trim(),
-      }, undefined, sbom.id);
-      setVexMessage(`Manual VEX override saved for ${vexOverrideVulnerability.trim()}.`);
-      setIsVexOverrideOpen(false);
-      invalidateVexSurfaces(queryClient, sbom.id);
-    } catch (err: any) {
-      setVexOverrideError(err.message || 'Manual VEX override failed.');
-    } finally {
-      setIsSavingVexOverride(false);
-    }
-  };
-
   const handleDownload = async (label: string, loader: () => Promise<{ blob: Blob; filename: string }>) => {
     setDownloadMessage(`Preparing ${label}…`);
     try {
@@ -1273,7 +1250,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                       <RefreshCw className="h-3.5 w-3.5" /> Discover
                     </Button>
                     <Button size="sm" onClick={() => openVexOverrideModal()}>
-                      <Edit2 className="h-3.5 w-3.5" /> Manual Edit VEX
+                      <Edit2 className="h-3.5 w-3.5" /> Manage VEX
                     </Button>
                   </>
                 ) : null}
@@ -1359,7 +1336,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                                 onClick={() => openVexOverrideModal(statement)}
                                 className="inline-flex items-center gap-1 text-xs font-medium text-hcl-blue transition-colors hover:text-hcl-navy"
                               >
-                                <Edit2 className="h-3 w-3" /> Manual Edit VEX
+                                <Edit2 className="h-3 w-3" /> Manage VEX
                               </button>
                             ) : null}
                           </Td>
@@ -1988,7 +1965,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                     }
                   }}
                 >
-                  <Edit2 className="h-3.5 w-3.5" /> Manual Edit VEX
+                  <Edit2 className="h-3.5 w-3.5" /> Manage VEX
                 </Button>
               ) : null}
             </div>
@@ -2082,183 +2059,118 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
       <Dialog
         open={isVexOverrideOpen}
         onClose={() => setIsVexOverrideOpen(false)}
-        title="Manual Edit VEX"
+        title="Manage VEX"
         maxWidth="xl"
-        footer={
-          <div className="flex items-center justify-end gap-2 px-6 py-4">
-            <Button size="sm" variant="ghost" onClick={() => setIsVexOverrideOpen(false)}>
-              Cancel
-            </Button>
-            <Button size="sm" onClick={handleSubmitVexOverride} loading={isSavingVexOverride}>
-              Save Override
-            </Button>
-          </div>
-        }
       >
-        <DialogBody className="space-y-4">
-          {vexOverrideError ? (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs font-medium text-red-800">
-              {vexOverrideError}
+        <DialogBody>
+          {/* Selection is a separate step from the decision. Opened from a row
+              the pair is already known and this is skipped entirely; opened
+              from the toolbar the analyst picks one first. Mixing the two into
+              a single form is what let someone save against the wrong pair. */}
+          {!vexOverrideComponentId || !vexOverrideVulnerability ? (
+            <div className="space-y-3">
+              <p className="text-xs text-hcl-muted">
+                Choose the component and vulnerability this decision applies to.
+              </p>
+              <label className="block text-xs font-medium">
+                Component
+                <select
+                  className="mt-1 w-full rounded border p-2 text-sm"
+                  value={vexOverrideComponentId}
+                  onChange={(event) => {
+                    setVexOverrideComponentId(event.target.value);
+                    setVexOverrideVulnerability('');
+                  }}
+                >
+                  <option value="">Select a component…</option>
+                  {componentRows.map((component) => (
+                    <option key={component.id} value={component.id}>
+                      {component.name} {component.version}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-xs font-medium">
+                Vulnerability
+                {manualVulnerability ? (
+                  <input
+                    className="mt-1 w-full rounded border p-2 text-sm"
+                    placeholder="CVE-2026-0001 or GHSA-…"
+                    value={vexOverrideVulnerability}
+                    onChange={(event) => setVexOverrideVulnerability(event.target.value)}
+                  />
+                ) : (
+                  <select
+                    className="mt-1 w-full rounded border p-2 text-sm"
+                    value={vexOverrideVulnerability}
+                    onChange={(event) => setVexOverrideVulnerability(event.target.value)}
+                    disabled={!vexOverrideComponentId}
+                  >
+                    <option value="">Select a vulnerability…</option>
+                    {vulnerabilityOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </label>
+              <label className="flex items-center gap-2 text-xs">
+                <input
+                  type="checkbox"
+                  checked={manualVulnerability}
+                  onChange={(event) => {
+                    setManualVulnerability(event.target.checked);
+                    setVexOverrideVulnerability('');
+                  }}
+                />
+                Add vulnerability manually
+              </label>
             </div>
           ) : null}
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wide text-hcl-muted">Component</label>
-              <select
-                aria-label="Component"
-                value={vexOverrideComponentId}
-                disabled={vexComponentLocked}
-                onChange={(event) => { setVexOverrideComponentId(event.target.value); setVexOverrideVulnerability(''); setManualVulnerability(false); }}
-                className="mt-1 w-full rounded-lg border border-hcl-border p-2 text-sm text-hcl-navy focus:outline-none focus:ring-2 focus:ring-hcl-blue"
-              >
-                <option value="">Select component</option>
-                {[...componentRows, ...(managedVexComponent && !componentRows.some(c => c.id === managedVexComponent.id) ? [managedVexComponent] : [])].map((component) => (
-                  <option key={component.id} value={component.id}>
-                    {component.name}{component.version ? ` @ ${component.version}` : ''}
-                  </option>
-                ))}
-              </select>
-              {selectedOverrideComponent ? (
-                <p className="mt-1 text-[11px] text-hcl-muted">
-                  {selectedOverrideComponent.purl || selectedOverrideComponent.cpe || selectedOverrideComponent.supplier || 'No package identifier recorded.'}
-                </p>
-              ) : null}
-            </div>
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wide text-hcl-muted">Vulnerability / CVE</label>
-              {manualVulnerability ? <input
-                aria-label="Vulnerability or CVE"
-                value={vexOverrideVulnerability}
-                onChange={event => setVexOverrideVulnerability(event.target.value)}
-                className="mt-1 w-full rounded-lg border border-hcl-border p-2"
-                placeholder="CVE-2026-0001 or GHSA identifier"
-              /> : <select aria-label="Vulnerability or CVE" value={vexOverrideVulnerability}
-                disabled={vexPairLocked}
-                onChange={event => setVexOverrideVulnerability(event.target.value)}
-                className="mt-1 w-full rounded-lg border border-hcl-border p-2">
-                <option value="">Select a vulnerability</option>
-                {Array.from(new Set([...vulnerabilityOptions, ...(vexPairLocked ? [vexOverrideVulnerability] : [])])).map(id => <option key={id} value={id}>{id}</option>)}
-              </select>}
-              {componentVex.isError && <p role="alert">Could not load component vulnerabilities.</p>}
-              {!vexPairLocked && <label className="mt-2 flex gap-2 text-xs">
-                <input type="checkbox" checked={manualVulnerability} onChange={event => {
-                  setManualVulnerability(event.target.checked); setVexOverrideVulnerability('');
-                }} />Add vulnerability manually
-              </label>}
-              <p className="mt-1 text-xs text-hcl-muted">This decision applies only to the selected component version and vulnerability.</p>
-            </div>
-          </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wide text-hcl-muted">VEX Status</label>
-              <select
-                aria-label="VEX Status"
-                value={vexOverrideStatus}
-                onChange={(event) => setVexOverrideStatus(event.target.value as VexStatus)}
-                className="mt-1 w-full rounded-lg border border-hcl-border p-2 text-sm text-hcl-navy focus:outline-none focus:ring-2 focus:ring-hcl-blue"
-              >
-                {VEX_STATUSES.map((status) => (
-                  <option key={status} value={status}>
-                    {labelize(status)}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wide text-hcl-muted">Evidence URL</label>
-              <input
-                aria-label="Evidence URL"
-                type="url"
-                value={vexOverrideEvidenceUrl}
-                onChange={(event) => setVexOverrideEvidenceUrl(event.target.value)}
-                className="mt-1 w-full rounded-lg border border-hcl-border p-2 text-sm text-hcl-navy focus:outline-none focus:ring-2 focus:ring-hcl-blue"
-                placeholder="https://vendor.example/security/advisory"
-              />
-            </div>
-          </div>
+          {vexOverrideComponentId && vexOverrideVulnerability ? (
+          <VexDecisionEditor
+            sbomId={sbom.id}
+            componentId={Number(vexOverrideComponentId)}
+            componentLabel={
+              selectedOverrideComponent
+                ? `${selectedOverrideComponent.name}${selectedOverrideComponent.version ? ` ${selectedOverrideComponent.version}` : ''}`
+                : undefined
+            }
+            vulnerabilityId={vexOverrideVulnerability}
+            investigation={vexInvestigation.data ?? null}
+            mode="compact"
+            canWrite={canManageEvidence}
+            onSaved={() => {
+              setVexMessage('VEX decision saved.');
+              setIsVexOverrideOpen(false);
+            }}
+            onConflict={() => {
+              vexInvestigation.refetch();
+              setVexMessage('Updated by someone else - reloaded the latest version.');
+            }}
+            onCancel={() => setIsVexOverrideOpen(false)}
+          />
+          ) : null}
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wide text-hcl-muted">Justification</label>
-              <input
-                aria-label="Justification"
-                value={vexOverrideJustification}
-                onChange={(event) => setVexOverrideJustification(event.target.value)}
-                className="mt-1 w-full rounded-lg border border-hcl-border p-2 text-sm text-hcl-navy focus:outline-none focus:ring-2 focus:ring-hcl-blue"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wide text-hcl-muted">Fixed Version</label>
-              <input
-                aria-label="Fixed Version"
-                value={vexOverrideFixedVersion}
-                onChange={(event) => setVexOverrideFixedVersion(event.target.value)}
-                className="mt-1 w-full rounded-lg border border-hcl-border p-2 text-sm text-hcl-navy focus:outline-none focus:ring-2 focus:ring-hcl-blue"
-              />
-            </div>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wide text-hcl-muted">Impact Statement</label>
-              <textarea
-                aria-label="Impact Statement"
-                value={vexOverrideImpact}
-                onChange={(event) => setVexOverrideImpact(event.target.value)}
-                className="mt-1 min-h-24 w-full rounded-lg border border-hcl-border p-2 text-sm text-hcl-navy focus:outline-none focus:ring-2 focus:ring-hcl-blue"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wide text-hcl-muted">Action Statement</label>
-              <textarea
-                aria-label="Action Statement"
-                value={vexOverrideAction}
-                onChange={(event) => setVexOverrideAction(event.target.value)}
-                className="mt-1 min-h-24 w-full rounded-lg border border-hcl-border p-2 text-sm text-hcl-navy focus:outline-none focus:ring-2 focus:ring-hcl-blue"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wide text-hcl-muted">Mitigation</label>
-            <textarea
-              aria-label="Mitigation"
-              value={vexOverrideMitigation}
-              onChange={(event) => setVexOverrideMitigation(event.target.value)}
-              className="mt-1 min-h-20 w-full rounded-lg border border-hcl-border p-2 text-sm text-hcl-navy focus:outline-none focus:ring-2 focus:ring-hcl-blue"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wide text-hcl-muted">Reason for Override</label>
-            <textarea
-              aria-label="Reason for Override"
-              value={vexOverrideReason}
-              onChange={(event) => setVexOverrideReason(event.target.value)}
-              className="mt-1 min-h-20 w-full rounded-lg border border-hcl-border p-2 text-sm text-hcl-navy focus:outline-none focus:ring-2 focus:ring-hcl-blue"
-            />
-          </div>
-
-          <div className="rounded-lg border border-hcl-border p-3">
-            <div className="text-xs font-semibold uppercase tracking-wide text-hcl-muted">Audit History</div>
-            {isLoadingVexHistory ? (
-              <p className="mt-2 text-xs text-hcl-muted">Loading audit history…</p>
-            ) : vexOverrideHistory.length ? (
-              <ul className="mt-2 space-y-2">
+          {vexOverrideHistory.length > 0 ? (
+            <div className="mt-4 border-t border-gray-200 pt-3 dark:border-gray-800">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-hcl-muted">
+                Decision history
+              </div>
+              <div className="mt-2 space-y-1">
                 {vexOverrideHistory.map((entry) => (
-                  <li key={entry.id} className="rounded-lg bg-hcl-light/50 p-2 text-xs text-hcl-navy">
-                    <div className="font-semibold">{entry.reason}</div>
-                    <div className="mt-0.5 text-hcl-muted">
-                      {entry.changed_by || 'Unknown user'} · {formatDate(entry.changed_at)}
-                    </div>
-                  </li>
+                  <p key={entry.id} className="text-xs">
+                    <span className="text-hcl-muted">
+                      {formatDate(entry.changed_at)} · {entry.changed_by ?? 'unknown'}
+                    </span>{' '}
+                    <span>{entry.reason}</span>
+                  </p>
                 ))}
-              </ul>
-            ) : (
-              <p className="mt-2 text-xs text-hcl-muted">No manual override history for this vulnerability/component pair.</p>
-            )}
-          </div>
+              </div>
+            </div>
+          ) : null}
         </DialogBody>
       </Dialog>
 

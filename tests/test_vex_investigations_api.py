@@ -375,3 +375,99 @@ def test_sbom_vex_list_endpoint_still_responds(client, seeded):
     response = client.get(f"/api/sboms/{seeded['sbom'].id}/vex")
     assert response.status_code == 200, response.text
     assert "statements" in response.json()
+
+
+# ---------------------------------------------------------------------------
+# Resolve by (sbom, component, vulnerability) — how the SBOM page reaches the
+# same context the queue addresses by id
+# ---------------------------------------------------------------------------
+
+RESOLVE = f"{BASE}/resolve"
+
+
+def resolve(client, seeded, vuln_id, component=None):
+    return client.get(
+        RESOLVE,
+        params={
+            "sbom_id": seeded["sbom"].id,
+            "component_id": (component or seeded["zlib"]).id,
+            "vulnerability_id": vuln_id,
+        },
+    )
+
+
+def test_resolve_finds_the_context_for_a_pair(client, seeded, db):
+    response = resolve(client, seeded, "CVE-2026-5002")
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["vulnerability"]["canonical_vulnerability_id"] == "CVE-2026-5002"
+    assert payload["component"]["component_id"] == seeded["zlib"].id
+    # Carries the concurrency token the SBOM page previously had no way to get.
+    assert payload["row_version"] >= 1
+
+
+def test_resolve_returns_404_when_nothing_has_asserted_it(client, seeded):
+    """An ordinary state, not an error: the editor falls back to the override."""
+    assert resolve(client, seeded, "CVE-2026-0000").status_code == 404
+
+
+def test_resolve_matches_an_alias__VEX_CTX_002(client, seeded, db):
+    """A context canonicalised to its CVE is reachable by the GHSA reported."""
+    context = context_for(db, "CVE-2026-5002")
+    context.aliases_json = '["GHSA-ZZZZ-YYYY-XXXX"]'
+    db.commit()
+    response = resolve(client, seeded, "GHSA-zzzz-yyyy-xxxx")
+    assert response.status_code == 200, response.text
+    assert response.json()["id"] == context.id
+
+
+def test_resolve_is_tenant_scoped__VEX_SEC_002(client, seeded, db):
+    db.execute(
+        text(
+            "INSERT INTO tenants (id, name, slug, external_iam_tenant_id, status, "
+            "created_at, updated_at) VALUES (2, 'Other', 'other', 'other', 'ACTIVE', "
+            ":now, :now) ON CONFLICT (id) DO NOTHING"
+        ),
+        {"now": NOW},
+    )
+    context = context_for(db, "CVE-2026-5002")
+    db.execute(
+        text("UPDATE vex_investigation SET tenant_id = 2 WHERE id = :id"), {"id": context.id}
+    )
+    db.commit()
+    assert resolve(client, seeded, "CVE-2026-5002").status_code == 404
+    db.execute(
+        text("UPDATE vex_investigation SET tenant_id = 1 WHERE id = :id"), {"id": context.id}
+    )
+    db.commit()
+
+
+def test_resolve_does_not_create_a_context(client, seeded, db):
+    """Read-only by design: a context the analyst has not committed to would
+    be invented here and possibly retired by the next reconciliation."""
+    before = db.query(VexInvestigation).count()
+    resolve(client, seeded, "CVE-2026-0000")
+    db.expire_all()
+    assert db.query(VexInvestigation).count() == before
+
+
+def test_mitigation_survives_the_decision_endpoint(client, seeded, db):
+    """`mitigation` existed on the override path but not here, so the shared
+    editor would have dropped it whenever an analyst worked from the queue."""
+    context = context_for(db, "CVE-2026-5001")
+    response = client.put(
+        f"{BASE}/{context.id}/decision",
+        json={
+            "status": "AFFECTED",
+            "row_version": context.row_version,
+            "reason": "confirmed reachable",
+            "mitigation": "Disable the legacy TLS listener until patched.",
+        },
+    )
+    assert response.status_code == 200, response.text
+    statement = db.scalars(
+        select(VexStatement)
+        .where(VexStatement.vulnerability_id == "CVE-2026-5001")
+        .order_by(VexStatement.id.desc())
+    ).first()
+    assert statement.mitigation == "Disable the legacy TLS listener until patched."
