@@ -32,7 +32,7 @@ describe('backend response proxy', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     const response = await DELETE(new NextRequest('http://frontend.test/api/backend/' + path.join('/'), {
-      method: 'DELETE',
+      method: 'DELETE', headers: { origin: 'https://localhost:3000' },
     }), context());
 
     expect(response.status).toBe(status);
@@ -52,4 +52,15 @@ describe('backend response proxy', () => {
     expect(response.status).toBe(status);
     expect(await response.json()).toEqual(payload);
   });
+});
+
+it.each([
+  ['api', 'auth', 'native', 'login'],
+  ['api', '%61uth', 'native', 'login'],
+  ['api', 'auth', 'other', '..', 'native', 'login'],
+])('blocks native token responses through generic proxy %s', async (...parts) => {
+  vi.stubGlobal('fetch', vi.fn());
+  const response = await GET(new NextRequest('http://frontend.test/api/backend/test'), { params: Promise.resolve({ path: parts }) });
+  expect(response.status).toBe(404);
+  expect(fetch).not.toHaveBeenCalled();
 });

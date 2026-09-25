@@ -108,7 +108,8 @@ def transition_account(
             select(NativeUserCredential).where(NativeUserCredential.user_id == user_id).with_for_update()
         )
         if credential is not None:
-            credential.security_version += 1
+            if target not in {AccountStatus.DISABLED, AccountStatus.LOCKED, AccountStatus.FORCE_PASSWORD_CHANGE}:
+                credential.security_version += 1
             credential.updated_at = now
             if target == AccountStatus.LOCKED:
                 credential.locked_at = now

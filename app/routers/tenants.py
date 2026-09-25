@@ -48,8 +48,7 @@ from ..services.auth_context_service import (
     build_auth_context_response,
     resolve_authorization_state,
 )
-from ..services.email_verification_service import ensure_initial_verification_delivery
-from ..services.identity_service import provision_local_identity
+from ..services.authenticated_principal_service import resolve_principal
 from ..settings import get_settings
 
 router = APIRouter(prefix="/api", tags=["identity"])
@@ -227,10 +226,7 @@ def auth_me(
     db: Session = Depends(get_db),
 ) -> dict:
     try:
-        provisioned = provision_local_identity(db, claims, request=request)
-        db.commit()
-        ensure_initial_verification_delivery(db, provisioned.user, request=request)
-        db.refresh(provisioned.user)
+        provisioned = resolve_principal(db, claims, request=request)
         state = resolve_authorization_state(
             db,
             provisioned.user,
@@ -298,10 +294,7 @@ def auth_context(
     db: Session = Depends(get_db),
 ) -> AuthContextResponse:
     try:
-        provisioned = provision_local_identity(db, claims, request=request)
-        db.commit()
-        ensure_initial_verification_delivery(db, provisioned.user, request=request)
-        db.refresh(provisioned.user)
+        provisioned = resolve_principal(db, claims, request=request)
         state = resolve_authorization_state(
             db,
             provisioned.user,

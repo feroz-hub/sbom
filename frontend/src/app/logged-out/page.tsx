@@ -15,6 +15,7 @@ export default function LoggedOutPage() {
         >
           Sign in again
         </a>
+        <a className="block underline" href="/native-sign-in">Native sign in</a>
       </div>
     </main>
   );

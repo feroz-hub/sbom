@@ -225,6 +225,7 @@ export default function TenantUsersPage() {
         memberCount={members.data?.length}
       />
 
+      {canInvite && <a className="underline" href="/settings/native-users">Invite native user</a>}
       {canInvite && (
         <section aria-labelledby="add-member-heading" className="rounded-xl border border-border bg-surface p-5 shadow-elev-1 space-y-4">
           <div>

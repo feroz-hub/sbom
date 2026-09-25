@@ -465,7 +465,7 @@ def update_user_status(
                     .with_for_update()
                 )
             )
-    user = db.scalar(select(IAMUser).where(IAMUser.id == user_id).with_for_update())
+    user = db.scalar(select(IAMUser).where(IAMUser.id == user_id).with_for_update().execution_options(populate_existing=True))
     if user is None:
         raise _error(
             IdentityErrorCode.USER_NOT_FOUND,
@@ -532,6 +532,15 @@ def update_user_status(
                 invalidation_reason="USER_DISABLED",
             )
         )
+    # Administrative disable/re-enable must not revive previously issued JWTs.
+    from ..models import NativeUserCredential
+    credential = db.scalar(select(NativeUserCredential).where(
+        NativeUserCredential.user_id == user.id).with_for_update())
+    if credential is not None:
+        credential.security_version += 1
+        if old_status == "LOCKED" and requested == "ACTIVE":
+            credential.failed_login_count = 0
+            credential.locked_at = credential.locked_until = None
     user.status = requested
     user.updated_at = datetime.now(UTC)
     db.flush()

@@ -251,6 +251,15 @@ class Settings(BaseSettings):
     )
     email_delivery_enabled: bool = False
     # Foundation only: these flags do not expose native login/creation routes.
+    native_jwt_issuer: str = ""
+    native_jwt_audience: str = "sbom-analyser-api"
+    native_jwt_algorithm: str = "RS256"
+    native_jwt_private_key: str = Field(default="", repr=False)
+    native_jwt_access_token_ttl_seconds: int = Field(default=900, ge=60, le=3600)
+    native_login_max_failed_attempts: int = Field(default=5, ge=1, le=100)
+    native_login_lockout_seconds: int = Field(default=900, ge=60, le=86400)
+    native_password_min_length: int = Field(default=12, ge=12, le=128)
+    native_activation_frontend_url: str = "https://localhost:3000/activate-account"
     native_auth_enabled: bool = False
     native_user_creation_enabled: bool = False
     native_account_activation_ttl_seconds: int = Field(default=18000, ge=18000, le=18000)

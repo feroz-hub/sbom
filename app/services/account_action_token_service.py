@@ -15,7 +15,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from ..core.identity_states import IdentityAuditEvent
-from ..core.native_identity import AccountActionPurpose, AccountStatus
+from ..core.native_identity import AccountActionPurpose, AccountStatus, canonicalize_email
 from ..models import AccountActionToken, IAMUser, UserIdentity
 from ..settings import get_settings
 from . import audit_service
@@ -31,6 +31,7 @@ class IssuedAccountActionToken:
     id: int
     raw_token: str = field(repr=False)
     expires_at: datetime
+    email_snapshot: str
 
 
 def hash_action_token(raw_token: str) -> str:
@@ -48,6 +49,8 @@ def _lock_native_user(db: Session, user_id: int) -> tuple[IAMUser, UserIdentity]
         )
     )
     if user is None or identity is None or user.status != AccountStatus.PENDING_EMAIL_VERIFICATION:
+        raise InvalidAccountActionToken()
+    if canonicalize_email(user.email) != identity.provider_identifier:
         raise InvalidAccountActionToken()
     return user, identity
 
@@ -87,7 +90,7 @@ def issue_activation_token(db: Session, user_id: int, *, actor_user_id: int | No
             new_value={"token_id": token.id, "purpose": token.purpose},
         )
         db.flush()
-        result = IssuedAccountActionToken(token.id, raw, token.expires_at)
+        result = IssuedAccountActionToken(token.id, raw, token.expires_at, token.email_snapshot)
     return result
 
 

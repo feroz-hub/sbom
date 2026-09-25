@@ -8,7 +8,8 @@ export async function GET(request: NextRequest) {
   const config = serverAuthConfig();
   if (!config.enabled) return NextResponse.json({ authenticated: true, development: true });
   const id = request.cookies.get(SESSION_COOKIE)?.value;
-  return NextResponse.json({ authenticated: Boolean(id && getSession(id)) }, {
+  const session = id ? getSession(id) : null;
+  return NextResponse.json({ authenticated: Boolean(session && (session.provider !== 'NATIVE' || session.expiresAt > Date.now())) }, {
     headers: { 'Cache-Control': 'no-store' },
   });
 }

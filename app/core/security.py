@@ -183,6 +183,15 @@ def get_current_claims(
     token = authorization[7:].strip()
     if not token:
         raise _unauthorized()
+    # Unverified issuer selects a fixed validator; it never grants trust and
+    # a native validation failure must never fall back to HCL.
+    try:
+        issuer = jwt.decode(token, options={"verify_signature": False}).get("iss")
+    except jwt.InvalidTokenError:
+        raise _unauthorized() from None
+    if settings.native_auth_enabled and issuer == settings.native_jwt_issuer:
+        from ..services.native_jwt_service import validate_token
+        return validate_token(token)
     return validate_hcl_token(token)
 
 
@@ -310,18 +319,12 @@ def _resolve_context(
 ) -> CurrentContext:
     from ..services import audit_service
     from ..services.auth_context_service import resolve_authorization_state
-    from ..services.email_verification_service import (
-        ensure_initial_verification_delivery,
-    )
-    from ..services.identity_service import provision_local_identity
+    from ..services.authenticated_principal_service import resolve_principal
 
     settings = get_settings()
-    provisioned = provision_local_identity(db, claims, request=request)
-    user = provisioned.user
-    db.commit()
-    ensure_initial_verification_delivery(db, user, request=request)
-    db.refresh(user)
-    identity_roles = _roles(_claim(claims, settings.hcl_iam_role_claim))
+    principal = resolve_principal(db, claims, request=request)
+    user = principal.user
+    identity_roles = _roles(_claim(claims, settings.hcl_iam_role_claim)) if principal.provider == "HCL_CS" else frozenset()
     state = resolve_authorization_state(
         db,
         user,

@@ -1,3 +1,4 @@
+import { trustedMutationOrigin } from '@/lib/auth/origin';
 import { NextRequest, NextResponse } from 'next/server';
 import { ACTIVE_TENANT_COOKIE } from '@/lib/auth';
 import { applyServerDerivedTenantHeader } from '@/lib/auth/tenantHeader';
@@ -13,6 +14,11 @@ export const dynamic = 'force-dynamic';
 async function usableSession(id: string, force = false): Promise<TokenSession | null> {
   const current = getSession(id);
   if (!current) return null;
+  if (current.provider === 'NATIVE') {
+    if (!force && current.expiresAt > Date.now()) return current;
+    destroySession(id);
+    return null;
+  }
   if (!force && current.expiresAt > Date.now() + 60_000) return current;
   return singleFlightRefresh(id, async () => {
     const latest = getSession(id);
@@ -27,6 +33,9 @@ async function usableSession(id: string, force = false): Promise<TokenSession | 
 }
 
 async function proxy(request: NextRequest, context: { params: Promise<{ path: string[] }> }) {
+  if (!['GET', 'HEAD'].includes(request.method) && !trustedMutationOrigin(request)) {
+    return NextResponse.json({ detail: 'Untrusted origin' }, { status: 403 });
+  }
   const config = serverAuthConfig();
   const id = request.cookies.get(SESSION_COOKIE)?.value;
   if (config.enabled && !id) return NextResponse.json({ detail: 'Authentication required' }, { status: 401 });
@@ -35,6 +44,13 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
 
   const { path } = await context.params;
   const target = new URL(`/${path.join('/')}`, `${config.apiUrl}/`);
+  let decodedTarget: URL;
+  try { decodedTarget = new URL(decodeURIComponent(target.pathname), config.apiUrl); }
+  catch { return NextResponse.json({ detail: 'Invalid path' }, { status: 400 }); }
+  const backendOrigin = new URL(config.apiUrl).origin;
+  if (target.origin !== backendOrigin || decodedTarget.origin !== backendOrigin || decodedTarget.pathname.startsWith('/api/auth/native')) {
+    return NextResponse.json({ detail: 'Not found' }, { status: 404 });
+  }
   target.search = request.nextUrl.search;
   const headers = new Headers(request.headers);
   for (const name of ['host', 'cookie', 'content-length', 'connection']) headers.delete(name);

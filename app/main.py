@@ -743,6 +743,9 @@ app.include_router(remediation.router, dependencies=_protected)
 # tenant/permission dependencies at the route level.
 app.include_router(tenants.router)
 app.include_router(verification.router)
+from .routers import native_auth
+
+app.include_router(native_auth.router)
 app.include_router(platform.router, dependencies=_protected)
 app.include_router(authorization_catalog.router, dependencies=_protected)
 

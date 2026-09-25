@@ -16,6 +16,7 @@ export interface LoginTransaction {
 }
 
 export interface TokenSession {
+  provider?: 'HCL_CS' | 'NATIVE';
   accessToken: string;
   refreshToken?: string;
   idToken?: string;
