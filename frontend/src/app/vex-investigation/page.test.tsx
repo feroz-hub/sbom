@@ -310,39 +310,39 @@ describe('decision form', () => {
 
   it('requires a reason__VEX_AUD_001', async () => {
     await openDetail();
-    fireEvent.click(screen.getByText('Save decision'));
+    fireEvent.click(screen.getByRole('button', { name: 'Save decision' }));
     expect(await screen.findByText('A reason is required.')).toBeInTheDocument();
     expect(api.setVexInvestigationDecision).not.toHaveBeenCalled();
   });
 
   it('requires justification or impact for NOT_AFFECTED__VEX_VAL_001', async () => {
     await openDetail();
-    fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'reviewed' } });
-    fireEvent.change(screen.getByLabelText('Decision status'), {
+    fireEvent.change(screen.getByLabelText(/Reason for this decision/), { target: { value: 'reviewed' } });
+    fireEvent.change(screen.getByLabelText(/^Status/), {
       target: { value: 'NOT_AFFECTED' },
     });
-    fireEvent.click(screen.getByText('Save decision'));
+    fireEvent.click(screen.getByRole('button', { name: 'Save decision' }));
     expect(
-      await screen.findByText('NOT_AFFECTED requires a justification or an impact statement.'),
-    ).toBeInTheDocument();
+      (await screen.findAllByText('NOT_AFFECTED requires a justification or an impact statement.')).length,
+    ).toBeGreaterThan(0);
     expect(api.setVexInvestigationDecision).not.toHaveBeenCalled();
   });
 
   it('requires a fixed version or evidence for FIXED__VEX_VAL_002', async () => {
     await openDetail();
-    fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'patched' } });
-    fireEvent.change(screen.getByLabelText('Decision status'), { target: { value: 'FIXED' } });
-    fireEvent.click(screen.getByText('Save decision'));
+    fireEvent.change(screen.getByLabelText(/Reason for this decision/), { target: { value: 'patched' } });
+    fireEvent.change(screen.getByLabelText(/^Status/), { target: { value: 'FIXED' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save decision' }));
     expect(
-      await screen.findByText('FIXED requires a fixed version or evidence.'),
-    ).toBeInTheDocument();
+      (await screen.findAllByText('FIXED requires a fixed version or evidence.')).length,
+    ).toBeGreaterThan(0);
   });
 
   it('submits the current row_version__VEX_AUD_002', async () => {
     await openDetail();
-    fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'reviewed' } });
-    fireEvent.change(screen.getByLabelText('Decision status'), { target: { value: 'AFFECTED' } });
-    fireEvent.click(screen.getByText('Save decision'));
+    fireEvent.change(screen.getByLabelText(/Reason for this decision/), { target: { value: 'reviewed' } });
+    fireEvent.change(screen.getByLabelText(/^Status/), { target: { value: 'AFFECTED' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save decision' }));
     await waitFor(() => {
       expect(api.setVexInvestigationDecision).toHaveBeenCalledWith(
         1,
@@ -356,9 +356,9 @@ describe('decision form', () => {
       Object.assign(new Error('conflict'), { status: 409 }),
     );
     await openDetail();
-    fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'reviewed' } });
-    fireEvent.change(screen.getByLabelText('Decision status'), { target: { value: 'AFFECTED' } });
-    fireEvent.click(screen.getByText('Save decision'));
+    fireEvent.change(screen.getByLabelText(/Reason for this decision/), { target: { value: 'reviewed' } });
+    fireEvent.change(screen.getByLabelText(/^Status/), { target: { value: 'AFFECTED' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save decision' }));
     await waitFor(() => {
       expect(api.getVexInvestigation).toHaveBeenCalledTimes(2);
     });

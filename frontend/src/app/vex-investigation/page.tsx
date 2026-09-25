@@ -19,6 +19,7 @@ import { AlertTriangle, ShieldQuestion } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { DashboardFilters } from '@/components/dashboard/DashboardFilters';
 import { TopBar } from '@/components/layout/TopBar';
+import { VexDecisionEditor } from '@/components/vex/VexDecisionEditor';
 import { Alert } from '@/components/ui/Alert';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -554,12 +555,6 @@ function InvestigationDetailPanel({
   onSaved: () => void;
   onConflict: () => void;
 }) {
-  const [status, setStatus] = useState<VexEffectiveStatus>(detail.effective_status);
-  const [reason, setReason] = useState('');
-  const [justification, setJustification] = useState('');
-  const [impactStatement, setImpactStatement] = useState('');
-  const [fixedVersion, setFixedVersion] = useState('');
-  const [evidenceUrl, setEvidenceUrl] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [assignee, setAssignee] = useState(detail.internal_decision.assigned_to ?? '');
   const [componentId, setComponentId] = useState('');
@@ -596,48 +591,6 @@ function InvestigationDetailPanel({
     onError: (error: unknown) => {
       if ((error as { status?: number })?.status === 409) return onConflict();
       setFormError(error instanceof Error ? error.message : 'Could not bind the component.');
-    },
-  });
-
-  // Mirrors the backend rules (VEX-VAL-001/002) so the analyst sees the
-  // problem before a round trip; the backend still enforces them.
-  function validate(): string | null {
-    if (!reason.trim()) return 'A reason is required.';
-    if (status === 'NOT_AFFECTED' && !justification.trim() && !impactStatement.trim()) {
-      return 'NOT_AFFECTED requires a justification or an impact statement.';
-    }
-    if (status === 'FIXED' && !fixedVersion.trim() && !evidenceUrl.trim()) {
-      return 'FIXED requires a fixed version or evidence.';
-    }
-    return null;
-  }
-
-  const decision = useMutation({
-    mutationFn: () =>
-      setVexInvestigationDecision(detail.id, {
-        status,
-        row_version: detail.row_version,
-        reason: reason.trim(),
-        justification: justification.trim() || undefined,
-        impact_statement: impactStatement.trim() || undefined,
-        fixed_version: fixedVersion.trim() || undefined,
-        evidence_url: evidenceUrl.trim() || undefined,
-      }),
-    onSuccess: () => {
-      setFormError(null);
-      // A decision changes the queue, the detail, the dashboard tiles and the
-      // component-scoped surfaces, so the mutation invalidates them itself
-      // rather than relying on a caller to remember (repo CLAUDE.md).
-      invalidateVexSurfaces(queryClient);
-      onSaved();
-    },
-    onError: (error: unknown) => {
-      const status = (error as { status?: number })?.status;
-      if (status === 409) {
-        onConflict();
-        return;
-      }
-      setFormError(error instanceof Error ? error.message : 'Could not save the decision.');
     },
   });
 
@@ -750,48 +703,25 @@ function InvestigationDetailPanel({
         </Section>
       ) : null}
 
-      {canWrite ? (
-        <Section title="Record a decision">
-          {formError ? <Alert variant="error">{formError}</Alert> : null}
-          <div className="grid gap-2 md:grid-cols-2">
-            <Select
-              value={status}
-              onChange={(event) => setStatus(event.target.value as VexEffectiveStatus)}
-              aria-label="Decision status"
-            >
-              {EFFECTIVE_STATUSES.map((value) => (
-                <option key={value} value={value}>
-                  {value.replace(/_/g, ' ')}
-                </option>
-              ))}
-            </Select>
-            <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason (required)" aria-label="Reason" />
-            <Input value={justification} onChange={(e) => setJustification(e.target.value)} placeholder="Justification" aria-label="Justification" />
-            <Input value={impactStatement} onChange={(e) => setImpactStatement(e.target.value)} placeholder="Impact statement" aria-label="Impact statement" />
-            <Input value={fixedVersion} onChange={(e) => setFixedVersion(e.target.value)} placeholder="Fixed version" aria-label="Fixed version" />
-            <Input value={evidenceUrl} onChange={(e) => setEvidenceUrl(e.target.value)} placeholder="Evidence URL" aria-label="Evidence URL" />
-          </div>
-          <Button
-            className="mt-2"
-            disabled={decision.isPending}
-            onClick={() => {
-              const error = validate();
-              if (error) {
-                setFormError(error);
-                return;
-              }
-              setFormError(null);
-              decision.mutate();
-            }}
-          >
-            {decision.isPending ? 'Saving...' : 'Save decision'}
-          </Button>
-        </Section>
-      ) : (
-        <p className="text-xs text-hcl-muted">
-          Read-only: recording a decision requires the vex:write permission.
-        </p>
-      )}
+      <Section title="Record a decision">
+        {/* The shared editor — the same component the SBOM page hosts, so the
+            fields and validation cannot drift between the two entry points. */}
+        <VexDecisionEditor
+          sbomId={detail.sbom_id}
+          componentId={detail.component.component_id ?? 0}
+          componentLabel={
+            detail.component.name
+              ? `${detail.component.name}${detail.component.version ? ` ${detail.component.version}` : ''}`
+              : undefined
+          }
+          vulnerabilityId={detail.vulnerability.canonical_vulnerability_id}
+          investigation={detail}
+          mode="full"
+          canWrite={canWrite}
+          onSaved={onSaved}
+          onConflict={onConflict}
+        />
+      </Section>
     </div>
   );
 }

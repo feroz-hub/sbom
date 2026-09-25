@@ -48,7 +48,7 @@ from ..services.vex.audit import (
     record_mapping_resolution,
 )
 from ..services.vex.enums import NEEDS_REVIEW_STATUSES
-from ..services.vex.identity import parse_alias_column
+from ..services.vex.identity import canonical_vulnerability, parse_alias_column
 
 router = APIRouter(tags=["vex"])
 
@@ -337,6 +337,63 @@ def list_investigations(
     return {"total": int(total), "limit": limit, "offset": offset, "items": items}
 
 
+@router.get("/api/vex/investigations/resolve", response_model=InvestigationDetail)
+def resolve_investigation(
+    sbom_id: int = Query(ge=1),
+    component_id: int = Query(ge=1),
+    vulnerability_id: str = Query(min_length=1, max_length=255),
+    db: Session = Depends(get_db),
+    context: CurrentContext = Depends(get_current_tenant_context),
+) -> dict[str, Any]:
+    """Find the context for a component/vulnerability pair, or 404.
+
+    The queue addresses contexts by id, but the SBOM page only knows
+    (sbom, component, CVE). This is how the shared decision editor reaches the
+    same record from there, so it can show real evidence and carry the
+    ``row_version`` the concurrency check needs.
+
+    Deliberately read-only. A vulnerability that no scanner found and no
+    document asserted has no context until a decision creates the statement
+    behind it; fabricating one here would invent a context that the next
+    reconciliation could immediately retire. The caller falls back to the
+    component-scoped override for that first save.
+
+    Declared before ``/{investigation_id}`` so "resolve" is not captured as an
+    id by the path converter.
+    """
+    tenant_id = _tenant_id(context)
+    canonical = canonical_vulnerability(vulnerability_id).canonical_id
+
+    row = db.scalar(
+        select(VexInvestigation).where(
+            VexInvestigation.tenant_id == tenant_id,
+            VexInvestigation.sbom_id == sbom_id,
+            VexInvestigation.component_id == component_id,
+            VexInvestigation.canonical_vulnerability_id == canonical,
+            VexInvestigation.is_current.is_(True),
+        )
+    )
+    if row is None:
+        # The raw identifier may be an alias of the canonical one the context
+        # is keyed on (VEX-CTX-002), e.g. a GHSA reported against a CVE.
+        raw = vulnerability_id.strip().upper()
+        for candidate in db.scalars(
+            select(VexInvestigation).where(
+                VexInvestigation.tenant_id == tenant_id,
+                VexInvestigation.sbom_id == sbom_id,
+                VexInvestigation.component_id == component_id,
+                VexInvestigation.is_current.is_(True),
+            )
+        ).all():
+            if raw in set(parse_alias_column(candidate.aliases_json)):
+                row = candidate
+                break
+
+    if row is None:
+        raise HTTPException(status_code=404, detail="No investigation for this pair")
+    return _detail_payload(db, row)
+
+
 @router.get("/api/vex/investigations/{investigation_id}", response_model=InvestigationDetail)
 def get_investigation(
     investigation_id: int,
@@ -555,6 +612,7 @@ def set_investigation_decision(
             "justification": payload.justification,
             "impact_statement": payload.impact_statement,
             "action_statement": payload.action_statement,
+            "mitigation": payload.mitigation,
             "fixed_version": payload.fixed_version,
             "evidence_url": payload.evidence_url,
         },
