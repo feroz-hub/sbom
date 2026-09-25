@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from enum import Enum
 
+from .native_identity import AccountStatus
+
 TENANT_ROLES = frozenset({"TENANT_ADMIN", "SECURITY_ANALYST", "DEVELOPER", "VIEWER"})
 MEMBERSHIP_STATUSES = frozenset({"ACTIVE", "DISABLED", "PENDING"})
-USER_STATUSES = frozenset({"ACTIVE", "DISABLED", "PENDING"})
+USER_STATUSES = frozenset(status.value for status in AccountStatus)
 TENANT_STATUSES = frozenset({"ACTIVE", "DISABLED", "PENDING"})
 PLATFORM_GRANT_STATUSES = frozenset({"ACTIVE", "DISABLED"})
 

@@ -15,14 +15,15 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    event,
 )
 from sqlalchemy import (
     text as sql_text,
 )
-from sqlalchemy import event
 from sqlalchemy.orm import relationship, synonym
 from sqlalchemy.sql import expression
 
+from .core.native_identity import canonicalize_email
 from .db import Base
 from .models_mixins import SoftDeleteMixin, TenantOwnedMixin
 
@@ -54,7 +55,7 @@ class IAMUser(Base):
     # Deprecated compatibility identifier.  New HCL.CS identities are keyed
     # by (external_issuer, external_subject), but this column remains available
     # until every caller and deployment has completed the transition.
-    external_iam_user_id = Column(String(255), nullable=False, index=True)
+    external_iam_user_id = Column(String(255), nullable=True, index=True)
     external_issuer = Column(String(512), nullable=True)
     external_subject = Column(String(255), nullable=True)
     employee_id = Column(String(128), nullable=True, index=True)
@@ -62,6 +63,12 @@ class IAMUser(Base):
     department = Column(String(255), nullable=True)
     email = Column(String(320), nullable=True, index=True)
     display_name = Column(String(255), nullable=True)
+    first_name = Column(String(255), nullable=True)
+    last_name = Column(String(255), nullable=True)
+    phone = Column(String(64), nullable=True)
+    # Derived profile search value; native login authority lives in
+    # UserIdentity.provider_identifier, not this non-unique HCL profile field.
+    normalized_email = Column(String(320), nullable=True, index=True)
     status = Column(String(32), nullable=False, default="ACTIVE")
     email_verified = Column(Boolean, nullable=False, default=False, server_default=expression.false())
     email_verified_at = Column(DateTime(timezone=True), nullable=True)
@@ -75,7 +82,10 @@ class IAMUser(Base):
         UniqueConstraint("external_iam_user_id", name="uq_iam_users_external_iam_user_id"),
         UniqueConstraint("external_issuer", "external_subject", name="uq_iam_users_external_identity"),
         Index("ix_iam_users_verification_status", "verification_required", "status"),
-        CheckConstraint("status IN ('ACTIVE','PENDING','DISABLED')", name="iam_user_status"),
+        CheckConstraint(
+            "status IN ('ACTIVE','PENDING','DISABLED','PENDING_EMAIL_VERIFICATION','LOCKED','FORCE_PASSWORD_CHANGE')",
+            name="iam_user_status",
+        ),
         CheckConstraint(
             "external_issuer IS NULL OR length(trim(external_issuer)) > 0",
             name="external_issuer_not_blank",
@@ -91,9 +101,103 @@ class IAMUser(Base):
     )
 
     @property
-    def effective_external_subject(self) -> str:
+    def effective_external_subject(self) -> str | None:
         """Return the composite subject, falling back during legacy transition."""
         return self.external_subject or self.external_iam_user_id
+
+
+@event.listens_for(IAMUser, "before_insert")
+@event.listens_for(IAMUser, "before_update")
+def _normalize_user_email(_mapper, _connection, user: IAMUser) -> None:
+    user.normalized_email = canonicalize_email(user.email)
+
+
+class UserIdentity(Base):
+    """Provider identity owned by one local person; email never links people."""
+
+    __tablename__ = "user_identities"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="CASCADE"), nullable=False, index=True)
+    provider_type = Column(String(16), nullable=False)
+    issuer = Column(String(512), nullable=True)
+    subject = Column(String(255), nullable=True)
+    provider_identifier = Column(String(320), nullable=True)
+    provider_email = Column(String(320), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    updated_at = Column(DateTime(timezone=True), nullable=False)
+    last_authenticated_at = Column(DateTime(timezone=True), nullable=True)
+    user = relationship("IAMUser", backref="identities")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "provider_type", name="uq_user_identities_user_provider"),
+        UniqueConstraint("provider_type", "issuer", "subject", name="uq_user_identities_external"),
+        Index("uq_user_identities_native_email", "provider_identifier", unique=True,
+              postgresql_where=sql_text("provider_type = 'NATIVE'"),
+              sqlite_where=sql_text("provider_type = 'NATIVE'")),
+        CheckConstraint("provider_type IN ('HCL_CS','NATIVE')", name="identity_provider"),
+        CheckConstraint(
+            "(provider_type = 'HCL_CS' AND issuer IS NOT NULL AND length(trim(issuer)) > 0 "
+            "AND subject IS NOT NULL AND length(trim(subject)) > 0) OR "
+            "(provider_type = 'NATIVE' AND issuer IS NULL AND subject IS NULL "
+            "AND provider_identifier IS NOT NULL AND length(trim(provider_identifier)) > 0 "
+            "AND provider_identifier = lower(trim(provider_identifier)))",
+            name="identity_provider_fields",
+        ),
+    )
+
+
+@event.listens_for(UserIdentity, "before_insert")
+@event.listens_for(UserIdentity, "before_update")
+def _normalize_native_identifier(_mapper, _connection, identity: UserIdentity) -> None:
+    if identity.provider_type == "NATIVE":
+        from .services.identity_service import normalize_email
+
+        identity.provider_identifier = normalize_email(identity.provider_identifier)
+
+
+class NativeUserCredential(Base):
+    __tablename__ = "native_user_credentials"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="CASCADE"), nullable=False, unique=True)
+    password_hash = Column(String(512), nullable=False)
+    password_hash_scheme = Column(String(32), nullable=False, default="argon2id")
+    password_changed_at = Column(DateTime(timezone=True), nullable=False)
+    failed_login_count = Column(Integer, nullable=False, default=0, server_default="0")
+    locked_at = Column(DateTime(timezone=True), nullable=True)
+    locked_until = Column(DateTime(timezone=True), nullable=True)
+    security_version = Column(Integer, nullable=False, default=1, server_default="1")
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    updated_at = Column(DateTime(timezone=True), nullable=False)
+    user = relationship("IAMUser")
+    __table_args__ = (
+        CheckConstraint("failed_login_count >= 0 AND security_version >= 1", name="native_security_counters"),
+        CheckConstraint("password_hash_scheme = 'argon2id' AND password_hash LIKE '$argon2id$%'", name="native_password_scheme"),
+    )
+
+
+class AccountActionToken(Base):
+    """Separate from HCL email verification; only hashes are persisted."""
+
+    __tablename__ = "account_action_tokens"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="CASCADE"), nullable=False, index=True)
+    purpose = Column(String(32), nullable=False)
+    token_hash = Column(String(64), nullable=False, unique=True)
+    email_snapshot = Column(String(320), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    consumed_at = Column(DateTime(timezone=True), nullable=True)
+    invalidated_at = Column(DateTime(timezone=True), nullable=True)
+    user = relationship("IAMUser")
+    __table_args__ = (
+        CheckConstraint("purpose IN ('ACCOUNT_ACTIVATION','PASSWORD_RESET','EMAIL_CHANGE')", name="account_action_purpose"),
+        CheckConstraint("expires_at > created_at", name="account_action_expiry"),
+        CheckConstraint("consumed_at IS NULL OR consumed_at >= created_at", name="account_action_consumed_time"),
+        CheckConstraint("invalidated_at IS NULL OR invalidated_at >= created_at", name="account_action_invalidated_time"),
+        Index("uq_account_action_tokens_active", "user_id", "purpose", unique=True,
+              postgresql_where=sql_text("consumed_at IS NULL AND invalidated_at IS NULL"),
+              sqlite_where=sql_text("consumed_at IS NULL AND invalidated_at IS NULL")),
+    )
 
 
 class EmailVerificationToken(Base):

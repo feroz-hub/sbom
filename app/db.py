@@ -122,7 +122,9 @@ def engine_options(database_url: str, settings=None) -> dict:
     return {}
 
 
-engine = create_engine(DATABASE_URL, **engine_options(DATABASE_URL))
+# Credentials and token hashes may be bound parameters. Never include parameter
+# values in SQLAlchemy engine logs or formatted database exceptions.
+engine = create_engine(DATABASE_URL, hide_parameters=True, **engine_options(DATABASE_URL))
 
 
 @event.listens_for(engine, "connect")

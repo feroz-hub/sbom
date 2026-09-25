@@ -119,7 +119,7 @@ def resolve_authorization_state(
             frozenset(),
             (),
         )
-    elif not user.email_verified or user.verification_required:
+    elif user.status == "PENDING_EMAIL_VERIFICATION" or not user.email_verified or user.verification_required:
         result = ResolvedAuthorizationState(
             AuthorizationState.VERIFICATION_REQUIRED,
             NextAction.VERIFY_EMAIL,
@@ -127,6 +127,13 @@ def resolve_authorization_state(
             False,
             frozenset(),
             (),
+        )
+    elif user.status != "ACTIVE":
+        # Native security states (including future unknown states) cannot
+        # fall through to membership/permission resolution.
+        result = ResolvedAuthorizationState(
+            AuthorizationState.ACCOUNT_DISABLED, NextAction.CONTACT_SUPPORT,
+            user, False, frozenset(), (),
         )
     else:
         is_platform_admin = (

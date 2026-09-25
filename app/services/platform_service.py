@@ -304,6 +304,12 @@ def _validate_grant_eligibility(user: IAMUser) -> None:
             "Pending users cannot receive platform authority.",
             status_code=409,
         )
+    if user.status != "ACTIVE":
+        raise _error(
+            IdentityErrorCode.USER_STATUS_INVALID,
+            "Only active users can receive platform authority.",
+            status_code=409,
+        )
     if not user.email_verified or user.verification_required:
         raise _error(
             IdentityErrorCode.EMAIL_VERIFICATION_REQUIRED,
@@ -469,12 +475,11 @@ def update_user_status(
     old_status = user.status
     if old_status == requested:
         return StatusMutation(user, old_status, False)
-    allowed = {
-        ("PENDING", "ACTIVE"),
-        ("ACTIVE", "DISABLED"),
-        ("DISABLED", "ACTIVE"),
-    }
-    if (old_status, requested) not in allowed:
+    from .account_state_service import InvalidAccountTransition, validate_transition
+
+    try:
+        validate_transition(old_status, requested, explicitly_authorized=True, legacy_approval=True)
+    except InvalidAccountTransition:
         raise _error(
             IdentityErrorCode.USER_STATUS_TRANSITION_NOT_ALLOWED,
             f"Transition from {old_status} to {requested} is not allowed.",

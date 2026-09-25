@@ -648,15 +648,23 @@ def add_user_to_tenant(
     normalized_role_codes = [
         normalize_role(code) for code in (role_codes or [role])
     ]
+    tenant_role_assignment_service.validate_role_delegation(
+        normalized_role_codes, is_platform_admin=assignment_source == "PLATFORM_ADMIN",
+    )
     status = validate_membership_status(status)
     user = db.execute(select(IAMUser).where(IAMUser.external_iam_user_id == external_iam_user_id)).scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=404, detail="IAM user not found; the user must sign in once before onboarding")
     if user.status == "DISABLED":
         raise HTTPException(status_code=422, detail="Disabled IAM user cannot receive an active membership")
+    if user.status not in {"ACTIVE", "PENDING"}:
+        raise HTTPException(status_code=422, detail="IAM user is not eligible for membership onboarding")
     if status == "ACTIVE" and user.status == "PENDING":
         # Adding an active membership is the tenant administrator's explicit
         # onboarding approval for this discovered identity.
+        from .account_state_service import validate_transition
+
+        validate_transition(user.status, "ACTIVE", legacy_approval=True)
         user.status = "ACTIVE"
         user.updated_at = now
     membership = db.execute(

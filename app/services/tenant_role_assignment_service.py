@@ -55,6 +55,20 @@ def _source(*, is_platform_admin: bool) -> str:
     return "PLATFORM_ADMIN" if is_platform_admin else "TENANT_ADMIN"
 
 
+def validate_role_delegation(role_codes: Iterable[str], *, is_platform_admin: bool) -> None:
+    """Caller supplies verified actor context; catalog scope checks still apply."""
+    # Do not replace the database-authoritative catalog with a static role
+    # allowlist: existing custom assignable tenant roles remain supported.
+    # Catalog validation separately rejects unknown, inactive or platform roles.
+    forbidden = {"PLATFORM_ADMIN"} if is_platform_admin else {"PLATFORM_ADMIN", "TENANT_ADMIN"}
+    if any(normalize_role(code) in forbidden for code in role_codes):
+        raise _problem(
+            IdentityErrorCode.TENANT_ROLE_NOT_ASSIGNABLE,
+            "The administrator cannot delegate the requested role.",
+            403,
+        )
+
+
 def _correlation_id(request: Request | None) -> str | None:
     if request is None:
         return None
@@ -296,6 +310,10 @@ def create_initial_assignments(
     token = bind_context(minimal_background_context(membership.tenant_id))
     try:
         catalog = _catalog_roles(db, normalized)
+        # SYSTEM/MIGRATION/TENANT_CREATION are internal bootstrap paths.
+        # Request-driven initial assignments always carry actor source.
+        if source not in {"SYSTEM", "MIGRATION", "TENANT_CREATION"}:
+            validate_role_delegation(normalized, is_platform_admin=source == "PLATFORM_ADMIN")
         now = datetime.now(UTC)
         assignments: list[TenantUserRoleAssignment] = []
         membership.role = primary
@@ -623,6 +641,7 @@ def grant_role(
         membership, _user, assignments = _locks_for_mutation(db, tenant_id, user_id)
         _check_version(membership, expected_version)
         role = _catalog_roles(db, [role_code], for_update=True)[normalize_role(role_code)]
+        validate_role_delegation([role.code], is_platform_admin=is_platform_admin)
         roles_by_id = {
             item.id: item
             for item in db.scalars(
@@ -804,6 +823,7 @@ def replace_roles(
                 409,
             )
         catalog = _catalog_roles(db, codes, for_update=True)
+        validate_role_delegation(codes, is_platform_admin=is_platform_admin)
         existing_roles = {
             role.id: role
             for role in db.scalars(

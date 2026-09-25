@@ -9,6 +9,7 @@ description = "SBOM Analyzer API — modular monolith (FastAPI, Celery, PostgreS
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "argon2-cffi>=25.1.0,<26",
     "fastapi>=0.139.0",
     "uvicorn[standard]>=0.50.1",
     "sqlalchemy>=2.0.51",

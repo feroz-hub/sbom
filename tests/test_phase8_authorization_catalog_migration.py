@@ -1,3 +1,5 @@
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from app.db import DATABASE_URL
 from sqlalchemy import create_engine, inspect, text
 
@@ -7,7 +9,7 @@ def test_revision_and_version_column_are_current_and_wide():
     try:
         with engine.connect() as connection:
             assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
-                "055_ai_model_registry"
+                ScriptDirectory.from_config(Config("alembic.ini")).get_current_head()
             )
             width = connection.scalar(
                 text(

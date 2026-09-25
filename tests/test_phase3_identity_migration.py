@@ -8,12 +8,13 @@ import pytest
 import sqlalchemy as sa
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy.engine import make_url
 
 pytestmark = pytest.mark.postgres
 
 REVISION = "046_external_identity_and_verification_fields"
-CURRENT_HEAD = "055_ai_model_registry"
+CURRENT_HEAD = ScriptDirectory.from_config(Config("alembic.ini")).get_current_head()
 PREVIOUS_REVISION = "045_secure_authorization_model"
 TEST_ISSUER = "https://hcl-cs.test"
 

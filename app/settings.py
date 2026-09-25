@@ -250,6 +250,10 @@ class Settings(BaseSettings):
         description="Informational support contact shown during identity onboarding",
     )
     email_delivery_enabled: bool = False
+    # Foundation only: these flags do not expose native login/creation routes.
+    native_auth_enabled: bool = False
+    native_user_creation_enabled: bool = False
+    native_account_activation_ttl_seconds: int = Field(default=18000, ge=18000, le=18000)
     report_notifications_enabled: bool = False
     report_notification_base_url: str = ""
     report_max_sboms_per_digest: int = Field(default=250, ge=1, le=10000)

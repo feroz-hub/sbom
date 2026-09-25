@@ -282,7 +282,7 @@ def _block_user_access(
 
 def require_verified_user(user: IAMUser) -> IAMUser:
     """Enforce local enablement and SBOM email verification."""
-    if user.status == "DISABLED":
+    if user.status not in {"ACTIVE", "PENDING", "PENDING_EMAIL_VERIFICATION"}:
         raise identity_http_error(
             IdentityErrorCode.ACCOUNT_DISABLED,
             "This SBOM Analyzer account is disabled. Contact support.",
@@ -292,7 +292,7 @@ def require_verified_user(user: IAMUser) -> IAMUser:
             IdentityErrorCode.ACCOUNT_PENDING_APPROVAL,
             "This SBOM Analyzer account is awaiting administrator approval.",
         )
-    if not user.email_verified or user.verification_required:
+    if user.status == "PENDING_EMAIL_VERIFICATION" or not user.email_verified or user.verification_required:
         raise identity_http_error(
             IdentityErrorCode.EMAIL_VERIFICATION_REQUIRED,
             "Email verification is required before accessing SBOM Analyzer.",
