@@ -29,13 +29,18 @@ without changing callers.
 from __future__ import annotations
 
 import hashlib
+import json
 from dataclasses import dataclass, field
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ...metrics.vex import vex_current_findings_for_sbom, vex_run_query_error_count
+from ...metrics.vex import (
+    vex_current_findings_for_sbom,
+    vex_run_query_error_count,
+    vex_run_source_summary,
+)
 from ...models import VexInvestigation, VexStatement
 from ..lifecycle.types import now_iso
 from .enums import (
@@ -216,16 +221,39 @@ def decide(evidence: ContextEvidence) -> tuple[str, str]:
     return status, ReconciliationStatus.VEX_ONLY.value
 
 
+#: ``source_summary[].status`` values meaning the provider was never actually
+#: consulted — disabled, unconfigured, or otherwise skipped.
+_UNAVAILABLE_STATUSES = frozenset({"skipped", "disabled", "unavailable", "not_configured"})
+
+
 def _detection_state(
-    detected: bool, *, run_id: int | None, query_errors: int
+    detected: bool,
+    *,
+    run_id: int | None,
+    query_errors: int,
+    source_summary: list[dict] | None = None,
 ) -> str:
-    """Distinguish a true negative from an absent or failed query (VEX-REC-004)."""
+    """Distinguish a true negative from an absent or failed query (VEX-REC-004).
+
+    Four negatives, in descending severity of doubt:
+
+    * ``NOT_QUERIED``       — no successful run at all.
+    * ``SOURCE_ERROR``      — a provider was consulted and failed.
+    * ``SOURCE_UNAVAILABLE``— a provider was never consulted (no credentials,
+      disabled). Its silence is not evidence of absence.
+    * ``NOT_DETECTED``      — every provider ran cleanly and none matched. The
+      only one of the four that is a real negative determination.
+    """
     if detected:
         return AnalyzerDetectionState.DETECTED.value
     if run_id is None:
         return AnalyzerDetectionState.NOT_QUERIED.value
-    if query_errors:
+
+    entries = source_summary or []
+    if query_errors or any(int(e.get("errors") or 0) for e in entries):
         return AnalyzerDetectionState.SOURCE_ERROR.value
+    if any(str(e.get("status") or "").strip().lower() in _UNAVAILABLE_STATUSES for e in entries):
+        return AnalyzerDetectionState.SOURCE_UNAVAILABLE.value
     return AnalyzerDetectionState.NOT_DETECTED.value
 
 
@@ -246,11 +274,14 @@ def _discriminator(statement: VexStatement) -> str:
 
 def _collect(
     db: Session, *, tenant_id: int, sbom_id: int
-) -> tuple[dict[tuple[int | None, str, str], ContextEvidence], int | None, int]:
+) -> tuple[dict[tuple[int | None, str, str], ContextEvidence], int | None, int, list[dict]]:
     """Gather analyser and VEX evidence into one context map."""
     run_id, findings = vex_current_findings_for_sbom(db, tenant_id=tenant_id, sbom_id=sbom_id)
     query_errors = (
         vex_run_query_error_count(db, tenant_id=tenant_id, run_id=run_id) if run_id else 0
+    )
+    source_summary = (
+        vex_run_source_summary(db, tenant_id=tenant_id, run_id=run_id) if run_id else []
     )
 
     contexts: dict[tuple[int | None, str, str], ContextEvidence] = {}
@@ -296,7 +327,7 @@ def _collect(
         entry.aliases.update(identity.aliases)
         entry.statements.append(statement)
 
-    return contexts, run_id, query_errors
+    return contexts, run_id, query_errors, source_summary
 
 
 def recompute_for_sbom(db: Session, *, tenant_id: int, sbom_id: int) -> dict[str, Any]:
@@ -309,7 +340,9 @@ def recompute_for_sbom(db: Session, *, tenant_id: int, sbom_id: int) -> dict[str
     Does not commit — the caller owns the transaction, so reconciliation joins
     the analysis-run or import commit rather than half-landing beside it.
     """
-    contexts, run_id, query_errors = _collect(db, tenant_id=tenant_id, sbom_id=sbom_id)
+    contexts, run_id, query_errors, source_summary = _collect(
+        db, tenant_id=tenant_id, sbom_id=sbom_id
+    )
     now = now_iso()
 
     existing = {
@@ -326,8 +359,14 @@ def recompute_for_sbom(db: Session, *, tenant_id: int, sbom_id: int) -> dict[str
     for key, evidence in contexts.items():
         effective_status, reconciliation_status = decide(evidence)
         detection_state = _detection_state(
-            evidence.analyzer_detected, run_id=run_id, query_errors=query_errors
+            evidence.analyzer_detected,
+            run_id=run_id,
+            query_errors=query_errors,
+            source_summary=source_summary,
         )
+        # VEX-REC-003: the contributing sources must survive the dedup that
+        # collapses NVD/OSV/GHSA hits into one context.
+        analyzer_sources_json = json.dumps(sorted(evidence.analyzer_sources)) or None
         aliases_json = canonical_vulnerability(
             evidence.canonical_id, aliases=sorted(evidence.aliases)
         ).aliases_json
@@ -361,6 +400,7 @@ def recompute_for_sbom(db: Session, *, tenant_id: int, sbom_id: int) -> dict[str
             or row.reconciliation_status != reconciliation_status
             or row.analyzer_detection_state != detection_state
             or row.aliases_json != aliases_json
+            or row.analyzer_sources_json != analyzer_sources_json
             or row.effective_vex_statement_id != (effective_statement.id if effective_statement else None)
             or not row.is_current
         )
@@ -369,6 +409,7 @@ def recompute_for_sbom(db: Session, *, tenant_id: int, sbom_id: int) -> dict[str
         row.reconciliation_status = reconciliation_status
         row.analyzer_detection_state = detection_state
         row.aliases_json = aliases_json
+        row.analyzer_sources_json = analyzer_sources_json
         row.effective_vex_statement_id = effective_statement.id if effective_statement else None
         row.is_current = True
         row.last_seen_at = now

@@ -73,6 +73,7 @@ from .vex import (
     vex_component_findings,
     vex_current_findings_for_sbom,
     vex_run_query_error_count,
+    vex_run_source_summary,
     vex_sbom_finding_pairs,
 )
 from .windows import findings_net_change
@@ -133,6 +134,7 @@ __all__ = [
     "vex_component_findings",
     "vex_current_findings_for_sbom",
     "vex_run_query_error_count",
+    "vex_run_source_summary",
     "vex_sbom_finding_pairs",
     # forecast / exploitation (dashboard v4)
     "findings_forecast",

@@ -165,7 +165,7 @@ def _row_payload(
         "sbom_id": investigation.sbom_id,
         "sbom_name": getattr(sbom, "sbom_name", None),
         "analyzer_detection_state": investigation.analyzer_detection_state,
-        "analyzer_sources": [],
+        "analyzer_sources": parse_alias_column(investigation.analyzer_sources_json),
         "vex_source": getattr(effective, "source_name", None),
         "native_vex_status": getattr(effective, "source_status", None),
         "effective_status": investigation.effective_status,
@@ -474,7 +474,10 @@ def _detail_payload(db: Session, investigation: VexInvestigation) -> dict[str, A
         },
         "analyzer_evidence": {
             "detection_state": investigation.analyzer_detection_state,
-            "sources": [s for s in [getattr(finding, "source", None)] if s],
+            # The recorded set, not just this finding's source: one context
+            # can be evidenced by several scanners (VEX-REC-003).
+            "sources": parse_alias_column(investigation.analyzer_sources_json)
+            or [s for s in [getattr(finding, "source", None)] if s],
             "analysis_run_id": investigation.last_analysis_run_id,
             "match_strategy": getattr(finding, "match_strategy", None),
             "match_confidence": getattr(finding, "match_confidence", None),

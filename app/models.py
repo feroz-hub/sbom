@@ -1196,6 +1196,11 @@ class VexInvestigation(Base, TenantOwnedMixin):
     effective_status = Column(String(32), nullable=False, index=True)
     reconciliation_status = Column(String(32), nullable=False, index=True)
     analyzer_detection_state = Column(String(32), nullable=True, index=True)
+    #: JSON array of the analyser sources that contributed evidence, e.g.
+    #: ``["NVD","OSV","GITHUB"]``. VEX-REC-003 collapses aliases of one
+    #: vulnerability into a single context, so the contributing sources have
+    #: to be recorded here or they are lost in the dedup.
+    analyzer_sources_json = Column(Text, nullable=True)
     effective_vex_statement_id = Column(
         Integer, ForeignKey("vex_statements.id", ondelete="SET NULL"), nullable=True, index=True
     )

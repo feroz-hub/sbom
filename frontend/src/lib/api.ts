@@ -2928,3 +2928,30 @@ export function setVexInvestigationDecision(
     body: JSON.stringify(decision),
   });
 }
+
+/** Assign or unassign an investigation. `assigned_to: null` unassigns. */
+export function setVexInvestigationAssignment(
+  investigationId: number,
+  body: { assigned_to: string | null; row_version: number; reason: string },
+): Promise<VexInvestigationDetail> {
+  return request<VexInvestigationDetail>(`/api/vex/investigations/${investigationId}/assignment`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+}
+
+/**
+ * Bind an UNRESOLVED_MAPPING context to a component.
+ *
+ * The matcher refuses to choose between weak candidates, so this is the
+ * analyst's escape hatch. The component must belong to the same SBOM.
+ */
+export function resolveVexInvestigationComponent(
+  investigationId: number,
+  body: { component_id: number; row_version: number; reason: string },
+): Promise<VexInvestigationDetail> {
+  return request<VexInvestigationDetail>(`/api/vex/investigations/${investigationId}/component`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+}

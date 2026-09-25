@@ -17,6 +17,7 @@ import { Suspense, useEffect, useMemo, useState } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, ShieldQuestion } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { DashboardFilters } from '@/components/dashboard/DashboardFilters';
 import { TopBar } from '@/components/layout/TopBar';
 import { Alert } from '@/components/ui/Alert';
 import { Badge } from '@/components/ui/Badge';
@@ -35,7 +36,10 @@ import {
   getDashboardVex,
   getVexInvestigation,
   listVexInvestigations,
+  resolveVexInvestigationComponent,
+  setVexInvestigationAssignment,
   setVexInvestigationDecision,
+  type DashboardFilterScope,
 } from '@/lib/api';
 import { invalidateVexSurfaces } from '@/lib/queryInvalidation';
 import type {
@@ -106,6 +110,11 @@ const DEFAULT_FILTERS: Filters = {
   sortOrder: 'desc',
 };
 
+function positiveOrNull(value: string | null): number | null {
+  const id = Number(value);
+  return value && Number.isSafeInteger(id) && id > 0 ? id : null;
+}
+
 function positiveInteger(value: string | null, fallback: number, maximum?: number): number {
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed < 1 || (maximum !== undefined && parsed > maximum)) {
@@ -167,6 +176,13 @@ function VexInvestigationContent() {
   const [page, setPage] = useState(initial.page);
   const [pageSize, setPageSize] = useState(initial.pageSize);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  // Section 28 requires Project / Application / SBOM filters. Reuses the
+  // dashboard's own cascading control so the two surfaces cannot drift apart.
+  const [scope, setScope] = useState<DashboardFilterScope>(() => ({
+    projectId: positiveOrNull(searchParams.get('project_id')),
+    applicationId: positiveOrNull(searchParams.get('product_id')),
+    sbomId: positiveOrNull(searchParams.get('sbom_id')),
+  }));
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -190,9 +206,12 @@ function VexInvestigationContent() {
     if (filters.sortOrder !== DEFAULT_FILTERS.sortOrder) params.set('sort_order', filters.sortOrder);
     if (page !== 1) params.set('page', String(page));
     if (pageSize !== DEFAULT_PAGE_SIZE) params.set('limit', String(pageSize));
+    if (scope.projectId) params.set('project_id', String(scope.projectId));
+    if (scope.applicationId) params.set('product_id', String(scope.applicationId));
+    if (scope.sbomId) params.set('sbom_id', String(scope.sbomId));
     const query = params.toString();
     router.replace(query ? `/vex-investigation?${query}` : '/vex-investigation', { scroll: false });
-  }, [filters, page, pageSize, router]);
+  }, [filters, page, pageSize, scope, router]);
 
   const offset = (page - 1) * pageSize;
 
@@ -202,7 +221,7 @@ function VexInvestigationContent() {
   });
 
   const listQuery = useQuery({
-    queryKey: ['vex-investigations', filters, page, pageSize],
+    queryKey: ['vex-investigations', filters, scope, page, pageSize],
     queryFn: ({ signal }) =>
       listVexInvestigations(
         {
@@ -213,6 +232,9 @@ function VexInvestigationContent() {
           component: filters.component || undefined,
           vex_source: filters.vexSource || undefined,
           needs_review: filters.needsReview ? true : undefined,
+          project_id: scope.projectId ?? undefined,
+          product_id: scope.applicationId ?? undefined,
+          sbom_id: scope.sbomId ?? undefined,
           sort_by: filters.sortBy,
           sort_order: filters.sortOrder,
           limit: pageSize,
@@ -308,6 +330,16 @@ function VexInvestigationContent() {
         </div>
 
         <Card>
+          <div className="border-b border-gray-200 p-3 dark:border-gray-800">
+            <DashboardFilters
+              scope={scope}
+              onChange={(next) => {
+                setScope(next);
+                setPage(1);
+              }}
+              isUpdating={listQuery.isFetching}
+            />
+          </div>
           <TableFilterBar>
             <TableSearchInput
               value={searchInput}
@@ -529,7 +561,43 @@ function InvestigationDetailPanel({
   const [fixedVersion, setFixedVersion] = useState('');
   const [evidenceUrl, setEvidenceUrl] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
+  const [assignee, setAssignee] = useState(detail.internal_decision.assigned_to ?? '');
+  const [componentId, setComponentId] = useState('');
   const queryClient = useQueryClient();
+
+  const assignment = useMutation({
+    mutationFn: () =>
+      setVexInvestigationAssignment(detail.id, {
+        assigned_to: assignee.trim() || null,
+        row_version: detail.row_version,
+        reason: assignee.trim() ? `Assigned to ${assignee.trim()}` : 'Unassigned',
+      }),
+    onSuccess: () => {
+      invalidateVexSurfaces(queryClient);
+      onSaved();
+    },
+    onError: (error: unknown) => {
+      if ((error as { status?: number })?.status === 409) return onConflict();
+      setFormError(error instanceof Error ? error.message : 'Could not save the assignment.');
+    },
+  });
+
+  const mapping = useMutation({
+    mutationFn: () =>
+      resolveVexInvestigationComponent(detail.id, {
+        component_id: Number(componentId),
+        row_version: detail.row_version,
+        reason: `Bound to component ${componentId} by analyst review`,
+      }),
+    onSuccess: () => {
+      invalidateVexSurfaces(queryClient);
+      onSaved();
+    },
+    onError: (error: unknown) => {
+      if ((error as { status?: number })?.status === 409) return onConflict();
+      setFormError(error instanceof Error ? error.message : 'Could not bind the component.');
+    },
+  });
 
   // Mirrors the backend rules (VEX-VAL-001/002) so the analyst sees the
   // problem before a round trip; the backend still enforces them.
@@ -638,6 +706,49 @@ function InvestigationDetailPanel({
           )}
         </Section>
       </div>
+
+      {canWrite ? (
+        <Section title="Ownership and mapping">
+          <div className="grid gap-2 md:grid-cols-2">
+            <Input
+              value={assignee}
+              onChange={(e) => setAssignee(e.target.value)}
+              placeholder="Assign to (blank to unassign)"
+              aria-label="Assign to"
+            />
+            <Button
+              variant="ghost"
+              disabled={assignment.isPending}
+              onClick={() => assignment.mutate()}
+            >
+              {assignment.isPending ? 'Saving...' : 'Save assignment'}
+            </Button>
+            {detail.reconciliation_status === 'UNRESOLVED_MAPPING' ? (
+              <>
+                <Input
+                  value={componentId}
+                  onChange={(e) => setComponentId(e.target.value)}
+                  placeholder="Component ID to bind"
+                  aria-label="Component ID"
+                />
+                <Button
+                  variant="ghost"
+                  disabled={mapping.isPending || !componentId.trim()}
+                  onClick={() => mapping.mutate()}
+                >
+                  {mapping.isPending ? 'Binding...' : 'Bind to component'}
+                </Button>
+              </>
+            ) : null}
+          </div>
+          {detail.reconciliation_status === 'UNRESOLVED_MAPPING' ? (
+            <p className="mt-2 text-[11px] text-hcl-muted">
+              The matcher found several equally weak candidates and refused to guess.
+              Binding re-runs reconciliation for this context.
+            </p>
+          ) : null}
+        </Section>
+      ) : null}
 
       {canWrite ? (
         <Section title="Record a decision">

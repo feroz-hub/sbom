@@ -24,6 +24,8 @@ const api = vi.hoisted(() => ({
   getVexInvestigation: vi.fn(),
   listVexInvestigations: vi.fn(),
   setVexInvestigationDecision: vi.fn(),
+  setVexInvestigationAssignment: vi.fn(),
+  resolveVexInvestigationComponent: vi.fn(),
 }));
 
 const navigation = vi.hoisted(() => ({ replace: vi.fn(), search: '' }));
@@ -40,6 +42,22 @@ vi.mock('@/hooks/usePermission', () => ({
 }));
 vi.mock('@/components/layout/TopBar', () => ({
   TopBar: ({ title }: { title: string; action?: ReactNode }) => <h1>{title}</h1>,
+}));
+// Stubbed like TopBar: the cascading control needs an AuthProvider and has
+// its own tests in DashboardFilters.test.tsx. Here we only care that this
+// page feeds its selection through to the query.
+vi.mock('@/components/dashboard/DashboardFilters', () => ({
+  DashboardFilters: ({ scope, onChange }: {
+    scope: { projectId: number | null };
+    onChange: (s: { projectId: number | null; applicationId: number | null; sbomId: number | null }) => void;
+  }) => (
+    <button
+      type="button"
+      onClick={() => onChange({ projectId: 7, applicationId: null, sbomId: null })}
+    >
+      pick-project-7 (current: {String(scope.projectId)})
+    </button>
+  ),
 }));
 
 const summary: DashboardVex = {
@@ -217,6 +235,8 @@ beforeEach(() => {
   api.listVexInvestigations.mockResolvedValue(listResponse);
   api.getVexInvestigation.mockResolvedValue(detail);
   api.setVexInvestigationDecision.mockResolvedValue(detail);
+  api.setVexInvestigationAssignment.mockResolvedValue(detail);
+  api.resolveVexInvestigationComponent.mockResolvedValue(detail);
 });
 
 describe('summary cards', () => {
@@ -364,5 +384,72 @@ describe('permissions', () => {
       screen.getByText('You do not have permission to view VEX investigations.'),
     ).toBeInTheDocument();
     expect(api.listVexInvestigations).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('scope selector', () => {
+  it('sends the selected project to the server__VEX_UI_002', async () => {
+    renderPage();
+    await screen.findByText('CVE-2026-4001');
+    fireEvent.click(screen.getByText(/pick-project-7/));
+    await waitFor(() => {
+      const last = api.listVexInvestigations.mock.calls.at(-1)?.[0];
+      expect(last).toMatchObject({ project_id: 7 });
+    });
+  });
+});
+
+describe('ownership and mapping', () => {
+  async function openDetail() {
+    renderPage();
+    await screen.findByText('CVE-2026-4001');
+    fireEvent.click(screen.getAllByText('Open')[0]);
+    await screen.findByText('Ownership and mapping');
+  }
+
+  it('assigns an owner with the current row_version__VEX_AUD_002', async () => {
+    await openDetail();
+    fireEvent.change(screen.getByLabelText('Assign to'), { target: { value: 'alice' } });
+    fireEvent.click(screen.getByText('Save assignment'));
+    await waitFor(() => {
+      expect(api.setVexInvestigationAssignment).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({ assigned_to: 'alice', row_version: 1 }),
+      );
+    });
+  });
+
+  it('unassigns by clearing the field', async () => {
+    await openDetail();
+    fireEvent.click(screen.getByText('Save assignment'));
+    await waitFor(() => {
+      expect(api.setVexInvestigationAssignment).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({ assigned_to: null }),
+      );
+    });
+  });
+
+  it('offers component binding only for an unresolved mapping__VEX_MAP_001', async () => {
+    await openDetail();
+    // The fixture is VEX_ONLY, so the binding control must not appear.
+    expect(screen.queryByLabelText('Component ID')).not.toBeInTheDocument();
+  });
+
+  it('binds an unresolved mapping to a component__VEX_MAP_001', async () => {
+    api.getVexInvestigation.mockResolvedValue({
+      ...detail,
+      reconciliation_status: 'UNRESOLVED_MAPPING',
+    });
+    await openDetail();
+    fireEvent.change(screen.getByLabelText('Component ID'), { target: { value: '42' } });
+    fireEvent.click(screen.getByText('Bind to component'));
+    await waitFor(() => {
+      expect(api.resolveVexInvestigationComponent).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({ component_id: 42, row_version: 1 }),
+      );
+    });
   });
 });
