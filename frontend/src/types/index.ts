@@ -1940,6 +1940,8 @@ export interface VexInvestigationDecision {
   justification?: string;
   impact_statement?: string;
   action_statement?: string;
+  /** Available on this path since the editors were consolidated. */
+  mitigation?: string;
   fixed_version?: string;
   evidence_url?: string;
   assigned_to?: string;

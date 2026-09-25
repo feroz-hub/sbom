@@ -192,6 +192,10 @@ class InvestigationDecisionRequest(BaseModel):
     justification: str | None = Field(default=None, max_length=2000)
     impact_statement: str | None = Field(default=None, max_length=2000)
     action_statement: str | None = Field(default=None, max_length=2000)
+    #: Present on the component-scoped override path since before this API
+    #: existed. Without it here, a shared editor would silently drop the
+    #: field whenever the analyst worked from the investigation queue.
+    mitigation: str | None = Field(default=None, max_length=2000)
     fixed_version: str | None = Field(default=None, max_length=255)
     evidence_url: str | None = Field(default=None, max_length=2000)
     assigned_to: str | None = Field(default=None, max_length=255)

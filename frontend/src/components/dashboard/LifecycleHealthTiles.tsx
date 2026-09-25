@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { ShieldAlert, AlertTriangle, AlertCircle, Award, FileWarning, HelpCircle, ShieldCheck } from 'lucide-react';
 import { Surface } from '@/components/ui/Surface';
@@ -251,7 +252,17 @@ export function LifecycleHealthTiles({
 
         {!loading && (vex?.top_affected_components?.length ?? 0) > 0 ? (
           <div className="mt-3 border-t border-gray-200 pt-3 dark:border-gray-800">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-hcl-muted">Top Affected</div>
+            <div className="flex items-center justify-between">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-hcl-muted">Top Affected</div>
+              {/* Spec section 46: this card is a summary and drill-down entry
+                  point, not the investigation workflow itself. */}
+              <Link
+                href="/vex-investigation"
+                className="text-[10px] font-medium text-hcl-blue hover:underline"
+              >
+                Investigate →
+              </Link>
+            </div>
             <div className="mt-2 space-y-1.5">
               {vex?.top_affected_components.slice(0, 3).map((item: any) => (
                 <div key={`${item.component_id}-${item.vulnerability_id}`} className="flex items-center justify-between gap-3 text-xs">

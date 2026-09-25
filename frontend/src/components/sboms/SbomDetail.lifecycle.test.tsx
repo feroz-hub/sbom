@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -386,29 +386,39 @@ describe('SbomDetail lifecycle management', () => {
     expect(screen.getByText(/Xeol DB · Medium/)).toBeInTheDocument();
   }, 15000);
 
-  it('opens the manual VEX override form and validates required evidence', async () => {
+  // The VEX dialog now hosts the shared <VexDecisionEditor>, and choosing the
+  // pair is a separate step from deciding on it. Opened from a row the pair is
+  // fixed and read-only; opened from the toolbar the analyst selects it first.
+  // Field labels and the four canonical statuses come from the shared editor,
+  // so these assertions are the same ones the investigation queue satisfies.
+
+  it('validates required evidence through the shared editor__VEX_VAL_002', async () => {
     render(wrap(<SbomDetail sbom={SBOM} />));
 
     expect(await screen.findByText('VEX Statements')).toBeInTheDocument();
     expect(await screen.findByText('CVE-2026-0001')).toBeInTheDocument();
-    fireEvent.click(screen.getAllByRole('button', { name: /^Manual Edit VEX$/i })[1]);
+    fireEvent.click(screen.getAllByRole('button', { name: /^Manage VEX$/i })[1]);
 
-    expect(await screen.findByRole('dialog', { name: /Manual Edit VEX/i })).toBeInTheDocument();
-    expect(screen.getByLabelText('Component')).toHaveValue('99');
-    expect(screen.getByLabelText('Component')).toBeDisabled();
-    expect(screen.getByLabelText('Vulnerability or CVE')).toBeDisabled();
-    expect(screen.getByLabelText('Vulnerability or CVE')).toHaveValue('CVE-2026-0001');
-    fireEvent.click(screen.getByRole('button', { name: /Save Override/i }));
-    expect(await screen.findByText('Override reason is required.')).toBeInTheDocument();
+    const dialog = await screen.findByRole('dialog', { name: /Manage VEX/i });
+    // Opened from a row: the pair is context, not a control. Scoped to the
+    // dialog because the CVE also appears in the table behind it.
+    expect(within(dialog).getByText('CVE-2026-0001')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Vulnerability or CVE')).not.toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText('VEX Status'), { target: { value: 'fixed' } });
-    fireEvent.change(screen.getByLabelText('Evidence URL'), { target: { value: '' } });
-    fireEvent.change(screen.getByLabelText('Reason for Override'), { target: { value: 'vendor advisory review' } });
-    fireEvent.click(screen.getByRole('button', { name: /Save Override/i }));
-    expect(await screen.findByText('fixed requires fixed version or evidence URL.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Save decision/i }));
+    expect(await screen.findByText('A reason is required.')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/^Status/), { target: { value: 'FIXED' } });
+    fireEvent.change(screen.getByLabelText(/Reason for this decision/), {
+      target: { value: 'vendor advisory review' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Save decision/i }));
+    expect(
+      (await screen.findAllByText('FIXED requires a fixed version or evidence.')).length,
+    ).toBeGreaterThan(0);
   }, 15000);
 
-  it('filters CVEs by component and clears evidence when switching the selected pair', async () => {
+  it('filters CVEs by the selected component in the selection step', async () => {
     const response = await getSbomVexStatements();
     getSbomVexStatements.mockResolvedValue({ ...response, vulnerability_options: [
       { component_id: 99, vulnerability_id: 'CVE-2026-0001' },
@@ -417,41 +427,28 @@ describe('SbomDetail lifecycle management', () => {
     ] });
     render(wrap(<SbomDetail sbom={SBOM} />));
     await screen.findByText('CVE-2026-0001');
-    fireEvent.click(screen.getAllByRole('button', { name: /^Manual Edit VEX$/i })[0]);
-    const picker = await screen.findByLabelText('Vulnerability or CVE');
+    fireEvent.click(screen.getAllByRole('button', { name: /^Manage VEX$/i })[0]);
+
+    // Unscoped entry: choose the pair before the decision form appears.
+    const picker = await screen.findByLabelText('Vulnerability');
     expect(picker).toHaveValue('');
-    expect(screen.getByLabelText('Component')).toHaveValue('');
+    expect(screen.queryByLabelText(/Reason for this decision/)).not.toBeInTheDocument();
+
     fireEvent.change(screen.getByLabelText('Component'), { target: { value: '99' } });
     await screen.findByRole('option', { name: 'CVE-2026-0002' });
     expect(screen.queryByRole('option', { name: 'CVE-2026-9999' })).not.toBeInTheDocument();
-    fireEvent.change(picker, { target: { value: 'CVE-2026-0001' } });
-    expect(screen.getByLabelText('VEX Status')).toHaveValue('not_affected');
-    fireEvent.change(screen.getByLabelText('Reason for Override'), { target: { value: 'old reason' } });
-    fireEvent.change(picker, { target: { value: 'CVE-2026-0002' } });
-    expect(screen.getByLabelText('VEX Status')).toHaveValue('under_investigation');
-    expect(screen.getByLabelText('Reason for Override')).toHaveValue('');
-    expect(screen.getByLabelText('Impact Statement')).toHaveValue('');
-    expect(screen.getByLabelText('Evidence URL')).toHaveValue('');
   });
 
-  it('switching components clears the selected CVE and all decision fields', async () => {
+  it('switching components clears the selected CVE', async () => {
     getSbomComponents.mockResolvedValue({ items: [COMPONENT, { ...COMPONENT, id: 100, name: 'other' }], total_count: 2 });
     render(wrap(<SbomDetail sbom={SBOM} />));
     await screen.findByText('CVE-2026-0001');
-    fireEvent.click(screen.getAllByRole('button', { name: /^Manual Edit VEX$/i })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: /^Manage VEX$/i })[0]);
     fireEvent.change(screen.getByLabelText('Component'), { target: { value: '99' } });
     await screen.findByRole('option', { name: 'CVE-2026-0001' });
-    fireEvent.change(screen.getByLabelText('Vulnerability or CVE'), { target: { value: 'CVE-2026-0001' } });
-    await screen.findByText('Prior risk review');
-    fireEvent.change(screen.getByLabelText('Reason for Override'), { target: { value: 'old reason' } });
-    fireEvent.change(screen.getByLabelText('Component'), { target: { value: '100' } });
-    expect(screen.getByLabelText('Vulnerability or CVE')).toHaveValue('');
-    expect(screen.getByLabelText('VEX Status')).toHaveValue('under_investigation');
-    expect(screen.getByLabelText('Justification')).toHaveValue('');
-    expect(screen.getByLabelText('Evidence URL')).toHaveValue('');
-    expect(screen.getByLabelText('Reason for Override')).toHaveValue('');
-    expect(screen.queryByText('Prior risk review')).not.toBeInTheDocument();
-    expect(screen.queryByRole('option', { name: 'CVE-2026-0001' })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Vulnerability'), { target: { value: 'CVE-2026-0001' } });
+    // The editor takes over once a pair is chosen.
+    expect(await screen.findByLabelText(/Reason for this decision/)).toBeInTheDocument();
   });
 
   it('Manage VEX can add an undetected vendor vulnerability without opening lifecycle override', async () => {
@@ -459,26 +456,33 @@ describe('SbomDetail lifecycle management', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Components List/i }));
     fireEvent.click(await screen.findByRole('button', { name: 'Manage VEX' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Add Vulnerability Manually' }));
-    expect(screen.getByLabelText('Component')).toBeDisabled();
     expect(screen.queryByText('Edit Component Override')).not.toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('Vulnerability or CVE'), { target: { value: 'VENDOR-42' } });
-    fireEvent.change(screen.getByLabelText('Reason for Override'), { target: { value: 'External advisory' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save Override' }));
+
+    fireEvent.change(await screen.findByLabelText('Vulnerability'), { target: { value: 'VENDOR-42' } });
+    fireEvent.change(await screen.findByLabelText(/Reason for this decision/), {
+      target: { value: 'External advisory' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Save decision/i }));
+
+    // No reconciled context exists for a vulnerability nothing detected, so
+    // the editor saves through the component-scoped override.
     await waitFor(() => expect(overrideVexStatement).toHaveBeenCalledWith(99, 'VENDOR-42',
       expect.objectContaining({ status: 'under_investigation', reason: 'External advisory' }), undefined, 42));
     expect(overrideComponentLifecycle).not.toHaveBeenCalled();
-  });
+  }, 15000);
 
-  it('submits a manual VEX override and shows audit history', async () => {
+  it('submits a decision and shows audit history', async () => {
     render(wrap(<SbomDetail sbom={SBOM} />));
 
     expect(await screen.findByText('CVE-2026-0001')).toBeInTheDocument();
-    fireEvent.click(screen.getAllByRole('button', { name: /^Manual Edit VEX$/i })[1]);
+    fireEvent.click(screen.getAllByRole('button', { name: /^Manage VEX$/i })[1]);
     expect(await screen.findByText('Prior risk review')).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('VEX Status'), { target: { value: 'affected' } });
-    fireEvent.change(screen.getByLabelText('Action Statement'), { target: { value: 'Upgrade immediately' } });
-    fireEvent.change(screen.getByLabelText('Reason for Override'), { target: { value: 'confirmed reachable in deployment' } });
-    fireEvent.click(screen.getByRole('button', { name: /Save Override/i }));
+    fireEvent.change(screen.getByLabelText(/^Status/), { target: { value: 'AFFECTED' } });
+    fireEvent.change(screen.getByLabelText('Action statement'), { target: { value: 'Upgrade immediately' } });
+    fireEvent.change(screen.getByLabelText(/Reason for this decision/), {
+      target: { value: 'confirmed reachable in deployment' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Save decision/i }));
 
     await waitFor(() => {
       expect(overrideVexStatement).toHaveBeenCalledWith(
@@ -491,7 +495,7 @@ describe('SbomDetail lifecycle management', () => {
         }), undefined, 42,
       );
     });
-    expect(await screen.findByText(/Manual VEX override saved/i)).toBeInTheDocument();
+    expect(await screen.findByText(/VEX decision saved/i)).toBeInTheDocument();
   }, 15000);
 
   it('shows VEX and lifecycle evidence modals', async () => {

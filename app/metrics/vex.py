@@ -23,6 +23,8 @@ See ``docs/requirements/vex-dashboard-investigation.md`` and
 
 from __future__ import annotations
 
+import json
+
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -111,6 +113,34 @@ def vex_current_findings_for_sbom(
         ).all()
     )
     return run_id, findings
+
+
+def vex_run_source_summary(db: Session, *, tenant_id: int, run_id: int) -> list[dict]:
+    """Per-source outcome for a run, from ``analysis_run.raw_report``.
+
+    Each entry carries ``source``, ``status`` and sometimes ``reason`` —
+    e.g. ``{"source": "GITHUB", "status": "skipped",
+    "reason": "missing_credentials"}``. This is what lets the engine tell a
+    provider that was never consulted (SOURCE_UNAVAILABLE) from one that was
+    consulted and failed (SOURCE_ERROR), which VEX-REC-004 requires and a bare
+    ``query_error_count`` cannot express.
+
+    Returns ``[]`` when the run has no parseable report; callers treat that as
+    "no per-source evidence", never as "all sources succeeded".
+    """
+    raw = db.execute(
+        select(AnalysisRun.raw_report).where(
+            AnalysisRun.tenant_id == tenant_id, AnalysisRun.id == run_id
+        )
+    ).scalar()
+    if not raw:
+        return []
+    try:
+        report = json.loads(raw)
+    except (TypeError, ValueError):
+        return []
+    summary = (report.get("analysis_metadata") or {}).get("source_summary")
+    return [entry for entry in summary or [] if isinstance(entry, dict)]
 
 
 def vex_run_query_error_count(db: Session, *, tenant_id: int, run_id: int) -> int:
@@ -256,5 +286,6 @@ __all__ = [
     "vex_component_findings",
     "vex_current_findings_for_sbom",
     "vex_run_query_error_count",
+    "vex_run_source_summary",
     "vex_sbom_finding_pairs",
 ]

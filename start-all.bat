@@ -11,6 +11,12 @@ rem
 rem  PostgreSQL is NOT started or stopped: it is shared infrastructure running
 rem  as a Windows service, not part of this stack.
 rem
+rem  The frontend runs over HTTPS via start-frontend-https.bat, which creates
+rem  and trusts the localhost certificate on first run. HTTPS is not optional
+rem  once IAM is on: the OIDC redirect URI is
+rem  https://localhost:3000/auth/callback, and a plain-HTTP dev server never
+rem  completes the sign-in round trip.
+rem
 rem  Usage:  start-all.bat            start API + frontend
 rem          start-all.bat api        start the API only
 rem          start-all.bat frontend   start the frontend only
@@ -72,8 +78,13 @@ call :is_listening %FE_PORT%
 if "%PORT_BUSY%"=="1" (
     echo  [SKIP]  Frontend     - port %FE_PORT% already in use
 ) else (
-    start "SBOM Frontend" /d "%REPO%\frontend" cmd /k "npm run dev"
-    echo  [START] Frontend     - http://localhost:%FE_PORT%
+    rem Delegated so the certificate is created and trusted before the dev
+    rem server starts; that script also reports the URL it is serving.
+    call "%REPO%\start-frontend-https.bat" --no-api-check
+    if errorlevel 1 (
+        echo  [ERROR] Frontend     - could not start over HTTPS, see above
+        exit /b 1
+    )
 )
 
 :done

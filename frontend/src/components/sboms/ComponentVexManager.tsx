@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getComponentVulnerabilities, getVexOverrideHistory } from '@/lib/api';
@@ -46,7 +47,16 @@ export function ComponentVexManager({ sbomId, component, canEdit, onClose, onDec
               <td className="p-2">{row.current_decision?.created_at ?? '—'}</td>
               <td className="p-2">{canEdit && <Button size="sm" onClick={() => onDecision(row.vulnerability_id, row.current_decision ?? undefined)}>
                 {!row.current_decision ? 'Add Decision' : row.current_decision.source_name === 'Manual VEX Override' ? 'Edit' : 'Override'}
-              </Button>} <Button size="sm" variant="ghost" onClick={() => setHistoryPair(row.vulnerability_id)}>History</Button></td>
+              </Button>} <Button size="sm" variant="ghost" onClick={() => setHistoryPair(row.vulnerability_id)}>History</Button>{' '}
+                {/* Cross-link to the portfolio queue, filtered to this
+                    vulnerability — the component view answers "what about this
+                    component", the queue answers "what about this CVE". */}
+                <Link
+                  href={`/vex-investigation?q=${encodeURIComponent(row.vulnerability_id)}`}
+                  className="text-xs text-hcl-blue hover:underline"
+                >
+                  Investigate
+                </Link></td>
             </tr>)}</tbody>
           </table>{!rows.length && <p className="py-4">No matching vulnerabilities for this component.</p>}</div>}
       </DialogBody>

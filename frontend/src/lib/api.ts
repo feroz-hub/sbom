@@ -2928,3 +2928,58 @@ export function setVexInvestigationDecision(
     body: JSON.stringify(decision),
   });
 }
+
+/** Assign or unassign an investigation. `assigned_to: null` unassigns. */
+export function setVexInvestigationAssignment(
+  investigationId: number,
+  body: { assigned_to: string | null; row_version: number; reason: string },
+): Promise<VexInvestigationDetail> {
+  return request<VexInvestigationDetail>(`/api/vex/investigations/${investigationId}/assignment`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+}
+
+/**
+ * Bind an UNRESOLVED_MAPPING context to a component.
+ *
+ * The matcher refuses to choose between weak candidates, so this is the
+ * analyst's escape hatch. The component must belong to the same SBOM.
+ */
+export function resolveVexInvestigationComponent(
+  investigationId: number,
+  body: { component_id: number; row_version: number; reason: string },
+): Promise<VexInvestigationDetail> {
+  return request<VexInvestigationDetail>(`/api/vex/investigations/${investigationId}/component`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+}
+
+/**
+ * Find the investigation for a component/vulnerability pair, or null.
+ *
+ * The queue addresses contexts by id; the SBOM page only knows the triple.
+ * Returns null on 404 rather than throwing, because "no context yet" is an
+ * ordinary state for a vulnerability nothing has asserted — the editor then
+ * saves through the component-scoped override instead.
+ */
+export async function getVexInvestigationByTriple(
+  args: { sbom_id: number; component_id: number; vulnerability_id: string },
+  signal?: AbortSignal,
+): Promise<VexInvestigationDetail | null> {
+  const params = new URLSearchParams({
+    sbom_id: String(args.sbom_id),
+    component_id: String(args.component_id),
+    vulnerability_id: args.vulnerability_id,
+  });
+  try {
+    return await request<VexInvestigationDetail>(
+      `/api/vex/investigations/resolve?${params.toString()}`,
+      { signal },
+    );
+  } catch (error) {
+    if ((error as { status?: number })?.status === 404) return null;
+    throw error;
+  }
+}
