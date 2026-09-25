@@ -444,6 +444,74 @@ class MappingTests(_EngineTestCase):
         self.assertEqual(self.db.query(VexStatement).count(), 1)
 
 
+class CycloneDxStatusPrecedenceTests(unittest.TestCase):
+    """`analysis.state` outranks `affects[].versions[].status` (VEX-STAT-002).
+
+    They answer different questions. `analysis.state` is the producer's VEX
+    determination; a version's `status` only says whether that version falls
+    inside the vulnerable range. Letting the version win inverted real vendor
+    determinations — a `not_affected` with justification `code_not_present`
+    was displayed as AFFECTED merely because the shipped version was in range,
+    which overstates risk on every CycloneDX import that carries both.
+    """
+
+    def _parse(self, state, version_status):
+        from app.services.lifecycle.vex_provider import VexProvider
+
+        class _Component:
+            id = 1
+            name = "openssl"
+            version = "3.0.2"
+            purl = "pkg:generic/openssl@3.0.2"
+            cpe = None
+            bom_ref = "pkg:generic/openssl@3.0.2"
+            supplier = None
+
+        class _Sbom:
+            id = 1
+            sbom_name = "t"
+            productver = "1.0"
+
+        vulnerability = {
+            "id": "CVE-2026-1111",
+            "affects": [{
+                "ref": "pkg:generic/openssl@3.0.2",
+                "versions": [{"version": "3.0.2", "status": version_status}],
+            }],
+        }
+        if state:
+            vulnerability["analysis"] = {"state": state, "justification": "code_not_present"}
+        results = VexProvider().parse_document(
+            {"bomFormat": "CycloneDX", "vulnerabilities": [vulnerability]},
+            sbom=_Sbom(), components=[_Component()],
+        )
+        return [r.vex_status for r in results]
+
+    def test_not_affected_survives_an_in_range_version__VEX_STAT_002(self):
+        self.assertEqual(self._parse("not_affected", "affected"), ["not_affected"])
+
+    def test_resolved_survives_an_in_range_version__VEX_STAT_002(self):
+        self.assertEqual(self._parse("resolved", "affected"), ["fixed"])
+
+    def test_exploitable_is_not_softened_by_an_unaffected_version__VEX_STAT_002(self):
+        self.assertEqual(self._parse("exploitable", "unaffected"), ["affected"])
+
+    def test_version_status_is_used_when_there_is_no_analysis_block(self):
+        """Without a determination the version status is the best evidence."""
+        self.assertEqual(self._parse(None, "affected"), ["affected"])
+
+    def test_unaffected_without_an_analysis_block_still_needs_evidence__VEX_VAL_001(self):
+        """Pre-existing and correct: a bare `unaffected` version normalises to
+        NOT_AFFECTED, which requires a justification or impact statement. The
+        importer rejects the document rather than recording an unevidenced
+        not-affected claim."""
+        from fastapi import HTTPException
+
+        with self.assertRaises(HTTPException) as caught:
+            self._parse(None, "unaffected")
+        self.assertEqual(caught.exception.status_code, 422)
+
+
 class EmbeddedDetectionTests(unittest.TestCase):
     """VEX-ING-001 — disclosure data is not an exploitability determination."""
 
