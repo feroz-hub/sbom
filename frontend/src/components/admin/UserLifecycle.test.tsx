@@ -73,7 +73,7 @@ describe('user lifecycle administration', () => {
   });
   it('warns before force password change', async () => {
     await openUser(); fireEvent.click(screen.getByRole('button', { name: 'Force password change' }));
-    expect(screen.getByRole('dialog')).toHaveTextContent('will remain blocked'); expect(writes()).toHaveLength(0);
+    expect(screen.getByRole('dialog')).toHaveTextContent('must set a new password'); expect(writes()).toHaveLength(0);
   });
   it('supports global enable and manual unlock for eligible states', async () => {
     account = 'LOCKED'; await openUser(); fireEvent.click(screen.getByRole('button', { name: 'Unlock account' }));

@@ -50,3 +50,19 @@ describe('sealed login transactions', () => {
     expect(sessionStore.consumeTransaction(expired)).toBeNull();
   });
 });
+
+it('refuses process-memory sessions in production', async () => {
+  vi.stubEnv('NODE_ENV', 'production'); vi.stubEnv('AUTH_SESSION_STORE', 'memory');
+  try { await expect(sessionStore.getSession('any')).rejects.toThrow('Production requires shared sessions'); }
+  finally { vi.unstubAllEnvs(); }
+});
+
+it('creates opaque native sessions, expires them, and supports idempotent logout', async () => {
+  const session = { provider: 'NATIVE' as const, accessToken: 'server-side-only', expiresAt: Date.now()+60000, createdAt: Date.now() };
+  const id = await sessionStore.createSession(session);
+  expect(id).not.toContain('server-side-only'); expect(await sessionStore.getSession(id)).toEqual(session);
+  await sessionStore.destroySession(id); await sessionStore.destroySession(id);
+  expect(await sessionStore.getSession(id)).toBeNull();
+  const expired = await sessionStore.createSession({ ...session, expiresAt: Date.now()-1 });
+  expect(await sessionStore.getSession(expired)).toBeNull();
+});

@@ -1,7 +1,6 @@
 """Administrator-authorized native enrollment; commit before email delivery."""
 
 from datetime import UTC, datetime, timedelta
-from html import escape
 from urllib.parse import urlsplit
 
 from fastapi import HTTPException
@@ -12,10 +11,10 @@ from ..core.context import CurrentContext
 from ..models import AccountActionToken, IAMUser, Tenant, TenantUser, UserIdentity
 from ..settings import get_settings
 from . import account_action_token_service as tokens
-from . import email_sender
 from . import tenant_role_assignment_service as roles
 from .identity_service import normalize_email
 from .native_auth_service import audit
+from .native_security_delivery import send_security_email
 
 
 def authorize(context: CurrentContext, tenant_id: int) -> None:
@@ -176,17 +175,4 @@ def deliver_activation(user: IAMUser, issued: tokens.IssuedAccountActionToken) -
         "This link is valid for five hours. If you did not expect this invitation, ignore it.\n"
         f"Support: {s.platform_admin_contact_email or 'Contact your administrator'}"
     )
-    try:
-        result = email_sender.get_email_sender().send_email(
-            email_sender.build_email(
-                s,
-                recipient_email=issued.email_snapshot,
-                subject="Activate your SBOM Analyser account",
-                text_body=text,
-                html_body=f"<p>{escape(text).replace(chr(10), '<br>')}</p>",
-            )
-        )
-        return {"status": str(result.status), "error_code": result.error_code}
-    except Exception:
-        # Never serialize an SMTP exception that may contain message contents.
-        return {"status": "FAILED", "error_code": "DELIVERY_FAILED"}
+    return send_security_email(issued.email_snapshot, "Activate your SBOM Analyser account", text)

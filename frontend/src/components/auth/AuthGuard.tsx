@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { isActiveMembership, useAuth } from '@/hooks/useAuth';
 import { getRoleLabel } from '@/lib/roles';
 
-const PUBLIC_PATHS = ['/native-sign-in', '/activate-account', '/auth/callback', '/access-denied', '/verification-required', '/access-pending', '/logged-out'];
+const PUBLIC_PATHS = ['/forgot-password', '/reset-password', '/change-password', '/native-sign-in', '/activate-account', '/auth/callback', '/access-denied', '/verification-required', '/access-pending', '/logged-out'];
 
 /** Where a platform administrator lands when signing in to platform context. */
 const PLATFORM_HOME = '/settings/platform/tenants';

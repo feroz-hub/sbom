@@ -9,7 +9,6 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 
-from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -35,10 +34,7 @@ def activate(db: Session, raw_token: str, password: str) -> IAMUser:
         raise tokens.InvalidAccountActionToken()
     if re.fullmatch(r"[A-Za-z0-9_-]{43}", raw_token) is None:
         raise tokens.InvalidAccountActionToken()
-    if len(password) < get_settings().native_password_min_length:
-        raise HTTPException(422, "Password must contain at least 12 characters.")
-    if len(password.encode("utf-8")) > password_service.MAX_PASSWORD_BYTES:
-        raise HTTPException(422, "Password exceeds the maximum byte length.")
+    password_service.validate_password(password)
     with db.begin_nested():
         row = db.scalar(
             select(AccountActionToken).where(AccountActionToken.token_hash == tokens.hash_action_token(raw_token))

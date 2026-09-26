@@ -12,22 +12,22 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 async function usableSession(id: string, force = false): Promise<TokenSession | null> {
-  const current = getSession(id);
+  const current = await getSession(id);
   if (!current) return null;
   if (current.provider === 'NATIVE') {
     if (!force && current.expiresAt > Date.now()) return current;
-    destroySession(id);
+    await destroySession(id);
     return null;
   }
   if (!force && current.expiresAt > Date.now() + 60_000) return current;
   return singleFlightRefresh(id, async () => {
-    const latest = getSession(id);
+    const latest = await getSession(id);
     if (!latest) return null;
     if (!force && latest.expiresAt > Date.now() + 60_000) return latest;
     const config = serverAuthConfig();
     const next = await refreshTokens(latest, config, await getDiscovery(config));
-    if (next) setSession(id, next);
-    else destroySession(id);
+    if (next) await setSession(id, next);
+    else await destroySession(id);
     return next;
   });
 }

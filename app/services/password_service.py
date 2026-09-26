@@ -35,3 +35,18 @@ def needs_rehash(password_hash: str) -> bool:
         return _HASHER.check_needs_rehash(password_hash)
     except (InvalidHashError, TypeError):
         return True
+
+
+def validate_password(password: str, current_hash: str | None = None) -> None:
+    """No normalization, composition rules, external calls or speculative history."""
+    from fastapi import HTTPException
+
+    from ..settings import get_settings
+
+    minimum = get_settings().native_password_min_length
+    if not isinstance(password, str) or len(password) < minimum or not password.strip():
+        raise HTTPException(422, f"Password must contain at least {minimum} characters and not be all whitespace.")
+    if len(password.encode("utf-8")) > MAX_PASSWORD_BYTES:
+        raise HTTPException(422, "Password exceeds the maximum UTF-8 byte length.")
+    if current_hash and verify_password(password, current_hash):
+        raise HTTPException(422, "Choose a different password.")

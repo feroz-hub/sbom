@@ -21,6 +21,7 @@ x-backend-environment: &backend-environment
   # Migration 046 uses this only to backfill identities that predate issuer
   # tracking. It must be the exact trusted HCL.CS JWT issuer in production.
   SBOM_IDENTITY_BACKFILL_ISSUER: ${SBOM_IDENTITY_BACKFILL_ISSUER:?Set SBOM_IDENTITY_BACKFILL_ISSUER in .env.server}
+  NATIVE_AUTH_RATE_LIMIT_STORAGE_URI: ${NATIVE_AUTH_RATE_LIMIT_STORAGE_URI:-redis://redis:6379/2}
   REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
   CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
   CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
@@ -186,6 +187,9 @@ services:
       PORT: "3000"
       SBOM_API_URL: ${SBOM_API_URL:-http://backend:8000}
       HCL_IAM_CA_BUNDLE: ${FRONTEND_HCL_IAM_CA_BUNDLE:-}
+      AUTH_SESSION_STORE: redis
+      AUTH_SESSION_REDIS_URL: ${AUTH_SESSION_REDIS_URL:-redis://redis:6379/1}
+      AUTH_SESSION_ENCRYPTION_KEY: ${AUTH_SESSION_ENCRYPTION_KEY:?Set a base64 encoded 32-byte session encryption key}
       AUTH_TRANSACTION_KEY_FILE: ${AUTH_TRANSACTION_KEY_FILE:?Set AUTH_TRANSACTION_KEY_FILE in .env.server}
     volumes:
       - ./deploy/certs:/opt/sbom/certs:ro

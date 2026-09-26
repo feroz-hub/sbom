@@ -10,9 +10,13 @@ export async function POST(request: NextRequest) {
   if (!trustedMutationOrigin(request)) return NextResponse.json({ detail: 'Untrusted origin' }, { status: 403 });
   const config = serverAuthConfig();
   const id = request.cookies.get(SESSION_COOKIE)?.value;
-  const session = id ? getSession(id) : null;
+  const session = id ? await getSession(id) : null;
+  if (id) await destroySession(id);
+  if (session?.provider === 'NATIVE') {
+    await fetch(`${config.apiUrl}/api/auth/native/logout`, { method: 'POST', headers: { Authorization: `Bearer ${session.accessToken}` }, cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(3000) }).catch(() => undefined);
+  }
   let redirectUrl = config.postLogoutRedirectUri;
-  if (session?.provider !== 'NATIVE') {
+  if (session && session.provider !== 'NATIVE') {
   try {
     const discovery = await getDiscovery(config);
     if (session && discovery.revocation_endpoint) {
@@ -31,7 +35,6 @@ export async function POST(request: NextRequest) {
     // Local session deletion remains authoritative if the provider is down.
   }
   }
-  if (id) destroySession(id);
   const response = NextResponse.json({ redirectUrl });
   response.cookies.set(SESSION_COOKIE, '', { httpOnly: true, secure: true, sameSite: 'lax', path: '/', maxAge: 0 });
   return response;

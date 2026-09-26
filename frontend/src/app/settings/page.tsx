@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { NativePasswordSettings } from '@/components/auth/NativePasswordSettings';
 import { ChevronRight, Sparkles } from 'lucide-react';
 import { TopBar } from '@/components/layout/TopBar';
 
@@ -17,6 +18,7 @@ export default function SettingsPage() {
       <TopBar title="Settings" />
       <main className="mx-auto w-full max-w-4xl space-y-4 px-6 py-6">
         <h1 className="text-xl font-semibold text-hcl-navy">Settings</h1>
+        <NativePasswordSettings />
         <ul className="space-y-2">
           <li>
             <Link

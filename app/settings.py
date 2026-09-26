@@ -258,6 +258,14 @@ class Settings(BaseSettings):
     native_jwt_access_token_ttl_seconds: int = Field(default=900, ge=60, le=3600)
     native_login_max_failed_attempts: int = Field(default=5, ge=1, le=100)
     native_login_lockout_seconds: int = Field(default=900, ge=60, le=86400)
+    native_password_reset_ttl_seconds: int = Field(default=3600, ge=300, le=86400)
+    native_password_reset_frontend_url: str = "https://localhost:3000/reset-password"
+    native_auth_rate_limit_enabled: bool = True
+    native_auth_rate_limit_storage_uri: str = "memory://"
+    native_auth_ip_limit_per_minute: int = Field(default=30, ge=1, le=1000)
+    native_auth_account_limit_per_minute: int = Field(default=10, ge=1, le=100)
+    native_jwt_active_kid: str = "native-v1"
+    native_jwt_verification_keys_json: str = Field(default="{}", repr=False)
     native_password_min_length: int = Field(default=12, ge=12, le=128)
     native_activation_frontend_url: str = "https://localhost:3000/activate-account"
     native_auth_enabled: bool = False

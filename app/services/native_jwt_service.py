@@ -1,5 +1,7 @@
 """Strict native identity tokens. Roles and permissions are never token authority."""
 
+import json
+import re
 from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urlsplit
@@ -30,6 +32,7 @@ def signing_key() -> rsa.RSAPrivateKey:
         or issuer.username
         or issuer.query
         or issuer.fragment
+        or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", s.native_jwt_active_kid)
         or not s.native_jwt_audience.strip()
         or s.native_jwt_issuer == s.hcl_iam_issuer
         or s.tenant_role_assignment_mode != "DATABASE"
@@ -63,6 +66,7 @@ def issue_token(user: IAMUser, credential: NativeUserCredential) -> str:
         ),
         signing_key(),
         algorithm="RS256",
+        headers={"kid": s.native_jwt_active_kid},
     )
 
 
@@ -70,9 +74,26 @@ def validate_token(token: str) -> dict[str, Any]:
     s = get_settings()
     key = signing_key()
     try:
+        header = jwt.get_unverified_header(token)
+        kid = header.get("kid")
+        verification_key = key.public_key()
+        # Tokens issued before rotation rollout have no kid and use the active
+        # key only. Retired keys always require explicit kid and overlap expiry.
+        if kid is not None and kid != s.native_jwt_active_kid:
+            keys = json.loads(s.native_jwt_verification_keys_json)
+            entry = keys.get(kid) if isinstance(kid, str) else None
+            if (
+                not entry
+                or type(entry.get("not_after")) is not int
+                or entry["not_after"] <= int(datetime.now(UTC).timestamp())
+            ):
+                raise jwt.InvalidTokenError()
+            verification_key = serialization.load_pem_public_key(entry["public_key"].encode())
+            if not isinstance(verification_key, rsa.RSAPublicKey) or verification_key.key_size < 2048:
+                raise jwt.InvalidTokenError()
         claims = jwt.decode(
             token,
-            key.public_key(),
+            verification_key,
             algorithms=["RS256"],
             issuer=s.native_jwt_issuer,
             audience=s.native_jwt_audience,
@@ -96,7 +117,7 @@ def validate_token(token: str) -> dict[str, Any]:
         ):
             raise jwt.InvalidTokenError()
         return claims
-    except (jwt.InvalidTokenError, ValueError, TypeError):
+    except (jwt.InvalidTokenError, ValueError, TypeError, KeyError):
         raise HTTPException(401, "Authentication required") from None
 
 

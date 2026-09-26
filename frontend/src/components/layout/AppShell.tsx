@@ -8,7 +8,7 @@ import { GlobalAiBatchBanner } from '@/components/ai-fixes/GlobalAiBatchProgress
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
 
-const PUBLIC_PATHS = ['/native-sign-in', '/activate-account', '/auth/callback', '/access-denied', '/verification-required', '/access-pending', '/logged-out'];
+const PUBLIC_PATHS = ['/forgot-password', '/reset-password', '/change-password', '/native-sign-in', '/activate-account', '/auth/callback', '/access-denied', '/verification-required', '/access-pending', '/logged-out'];
 
 function FullScreenBrandedLoader({ message = 'Verifying authentication…' }: { message?: string }) {
   return (

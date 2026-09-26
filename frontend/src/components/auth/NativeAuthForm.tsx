@@ -22,7 +22,7 @@ export function NativeAuthForm({ activation = false }: { activation?: boolean })
       if (activation) {
         window.history.replaceState(null, '', window.location.pathname);
         setMessage('Account activated. You can now sign in.');
-      } else window.location.assign('/');
+      } else window.location.assign(data.password_change_required ? '/change-password?forced=1' : '/');
     } catch { setMessage('Unable to reach the authentication service.'); }
     finally { setBusy(false); }
   }
@@ -36,6 +36,7 @@ export function NativeAuthForm({ activation = false }: { activation?: boolean })
       <button className="rounded bg-hcl-blue text-white px-4 py-2" disabled={busy}>{busy ? 'Please wait…' : activation ? 'Activate account' : 'Sign in'}</button>
     </form>
     <p role="status">{message}</p>
+    {!activation && <Link className="underline" href="/forgot-password">Forgot password?</Link>}
     <Link className="underline" href={activation ? '/native-sign-in' : '/api/auth/login'}>{activation ? 'Native sign in' : 'Sign in with HCL.CS'}</Link>
   </main>;
 }

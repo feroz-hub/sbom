@@ -3,6 +3,7 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { randomBase64Url } from './pkce';
+import { configuredRedisStore, MemorySessionStore, type SessionStore } from './shared-session-store';
 
 export const SESSION_COOKIE = '__Host-sbom-session';
 export const LOGIN_COOKIE = '__Host-sbom-login';
@@ -25,13 +26,13 @@ export interface TokenSession {
 }
 
 interface StoreState {
-  sessions: Map<string, TokenSession>;
+  sessions: SessionStore;
   refreshes: Map<string, Promise<TokenSession | null>>;
 }
 
 const globalStore = globalThis as typeof globalThis & { __sbomAuthStore?: StoreState };
 const store = globalStore.__sbomAuthStore ?? {
-  sessions: new Map(),
+  sessions: new MemorySessionStore(),
   refreshes: new Map(),
 };
 globalStore.__sbomAuthStore = store;
@@ -49,13 +50,6 @@ function transactionKey(): Buffer {
     : resolve(/* turbopackIgnore: true */ process.cwd(), 'certificates/localhost-key.pem');
   cachedTransactionKey = createHash('sha256').update(readFileSync(keyFile)).digest();
   return cachedTransactionKey;
-}
-
-function prune(): void {
-  const now = Date.now();
-  for (const [key, session] of store.sessions) {
-    if (session.expiresAt + 24 * 60 * 60 * 1000 <= now) store.sessions.delete(key);
-  }
 }
 
 export function createTransaction(value: LoginTransaction): string {
@@ -102,23 +96,31 @@ export function consumeTransaction(value: string): LoginTransaction | null {
   }
 }
 
-export function createSession(value: TokenSession): string {
-  prune();
+export async function createSession(value: TokenSession): Promise<string> {
   const id = randomBase64Url();
-  store.sessions.set(id, value);
+  if (shared()) await (await configuredRedisStore()).put(id, value);
+  else await store.sessions.put(id, value);
   return id;
 }
 
-export function getSession(id: string): TokenSession | null {
-  return store.sessions.get(id) ?? null;
+function shared(): boolean {
+  if (process.env.AUTH_SESSION_STORE === 'redis') return true;
+  if (process.env.NODE_ENV === 'production') throw new Error('Production requires shared sessions');
+  return false;
+}
+export async function getSession(id: string): Promise<TokenSession | null> {
+  if (shared()) return (await configuredRedisStore()).get(id);
+  return store.sessions.get(id);
 }
 
-export function setSession(id: string, value: TokenSession): void {
-  store.sessions.set(id, value);
+export async function setSession(id: string, value: TokenSession): Promise<void> {
+  if (shared()) { await (await configuredRedisStore()).put(id, value, true); return; }
+  await store.sessions.put(id, value, true);
 }
 
-export function destroySession(id: string): void {
-  store.sessions.delete(id);
+export async function destroySession(id: string): Promise<void> {
+  if (shared()) await (await configuredRedisStore()).delete(id);
+  else await store.sessions.delete(id);
   store.refreshes.delete(id);
 }
 
@@ -126,6 +128,7 @@ export async function singleFlightRefresh(
   id: string,
   refresh: () => Promise<TokenSession | null>,
 ): Promise<TokenSession | null> {
+  if (shared()) return (await configuredRedisStore()).refresh(id, refresh);
   const existing = store.refreshes.get(id);
   if (existing) return existing;
   const pending = refresh().finally(() => store.refreshes.delete(id));
