@@ -9,6 +9,13 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class PlatformUserSummary(BaseModel):
+    first_name: str | None = None
+    last_name: str | None = None
+    phone: str | None = None
+    providers: list[str] = Field(default_factory=list)
+    last_login_at: datetime | None = None
+    updated_at: datetime | None = None
+    account_status: str | None = None
     id: int
     email: str | None
     display_name: str | None
@@ -50,6 +57,10 @@ class UserSearchResponse(BaseModel):
 
 
 class PlatformTenantMembershipSummary(BaseModel):
+    membership_id: int
+    roles: list[str] = Field(default_factory=list)
+    primary_role: str | None = None
+    role_assignment_version: int = 1
     tenant_id: int
     tenant_name: str
     tenant_slug: str
@@ -75,6 +86,8 @@ class PlatformGrantSummary(BaseModel):
 
 
 class PlatformUserDetail(PlatformUserSummary):
+    security: dict | None = None
+    activity: dict = Field(default_factory=dict)
     platform_grant: PlatformGrantSummary | None
     tenant_memberships: list[PlatformTenantMembershipSummary]
 

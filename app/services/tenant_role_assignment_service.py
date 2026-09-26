@@ -857,6 +857,7 @@ def replace_roles(
 
         removed_admin = "TENANT_ADMIN" in old_codes and "TENANT_ADMIN" not in codes
         if removed_admin:
+            validate_role_delegation(["TENANT_ADMIN"], is_platform_admin=is_platform_admin)
             _protect_last_admin(db, membership, assignments, existing_roles)
 
         before = membership.role_assignment_version
@@ -1015,6 +1016,7 @@ def revoke_role(
     _require_database_mutation_mode()
     reason = _bounded_reason(reason)
     code = normalize_role(role_code)
+    validate_role_delegation([code], is_platform_admin=is_platform_admin)
     if db.in_transaction():
         db.rollback()
     with db.begin():

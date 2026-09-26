@@ -4,7 +4,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request
 from pydantic import AliasChoices, BaseModel, Field, model_validator
-from sqlalchemy import or_
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from ..core.context import CurrentContext
@@ -13,6 +13,7 @@ from ..core.identity_states import (
     IdentityErrorCode,
     identity_http_error,
 )
+from ..core.native_identity import AccountStatus
 from ..core.security import (
     _claim,
     _roles,
@@ -41,9 +42,11 @@ from ..schemas_tenants import (
     TenantCreateRequest,
     TenantCreationResponse,
 )
+from ..schemas_user_management import ProfileUpdate
 from ..services import audit_service
 from ..services import tenant_role_assignment_service as tras
 from ..services import tenant_service as ts
+from ..services import user_management_service as ums
 from ..services.auth_context_service import (
     build_auth_context_response,
     resolve_authorization_state,
@@ -640,7 +643,7 @@ def search_tenant_user_candidates(
     if not q_clean:
         raise HTTPException(status_code=422, detail="Query string cannot be empty or whitespace only")
 
-    from sqlalchemy import exists, not_
+    from sqlalchemy import exists
 
     from ..services.platform_service import _escape_search
 
@@ -657,7 +660,7 @@ def search_tenant_user_candidates(
             IAMUser.status == "ACTIVE",
             IAMUser.email_verified.is_(True),
             IAMUser.verification_required.is_(False),
-            not_(existing_membership),
+            existing_membership,
             or_(
                 IAMUser.email.ilike(pattern, escape="\\"),
                 IAMUser.display_name.ilike(pattern, escape="\\"),
@@ -682,8 +685,6 @@ def search_tenant_user_candidates(
             status=user.status,
             email_verified=bool(user.email_verified),
             verification_required=bool(user.verification_required),
-            external_issuer=user.external_issuer,
-            external_subject=user.effective_external_subject,
             tenant_membership=None,
         )
         for user in users
@@ -695,16 +696,20 @@ def search_tenant_user_candidates(
 @router.get("/tenants/{tenant_id}/users")
 def list_tenant_users(
     tenant_id: int,
+    page: int | None = Query(default=None, ge=1),
+    page_size: int = Query(default=50, ge=1, le=100),
+    search: str | None = Query(default=None, max_length=200),
+    account_status: AccountStatus | None = None,
+    role: str | None = Query(default=None, max_length=64),
     context: CurrentContext = Depends(require_permission("tenant:user:read")),
     db: Session = Depends(get_db),
-) -> list[dict]:
+) -> list[dict] | dict:
     _require_current_tenant(tenant_id, context)
+    if page is not None or search or account_status or role or page_size != 50:
+        return ums.tenant_page(db, tenant_id, page=page or 1, page_size=page_size, search=search,
+                               account_status=account_status, role=role)
     return [
-        _membership_dict(
-            membership,
-            user,
-            roles=sorted(tras.effective_role_codes(db, membership)),
-        )
+        _membership_dict(membership, user, roles=sorted(tras.effective_role_codes(db, membership)))
         for membership, user in ts.list_tenant_users(db, tenant_id)
     ]
 
@@ -774,11 +779,9 @@ def get_tenant_user(
 ) -> dict:
     _require_current_tenant(tenant_id, context)
     membership, user = ts.get_tenant_membership(db, tenant_id, membership_id)
-    return _membership_dict(
-        membership,
-        user,
-        roles=sorted(tras.effective_role_codes(db, membership)),
-    )
+    return (ums.profile(db, user) | ums.membership_summary(db, membership, db.get(Tenant, tenant_id))
+            | {"activity": ums.audit_history(db, user.id, tenant_id=tenant_id, page_size=50),
+               "user_status": user.status, "status": membership.status, "role": membership.role})
 
 
 @router.post("/tenants/{tenant_id}/users", status_code=201)
@@ -1015,7 +1018,12 @@ def _set_membership_status(
     db: Session,
 ) -> dict:
     _require_current_tenant(tenant_id, context)
+    # Serialize lifecycle changes in the same tenant -> user -> membership order
+    # as role and global administrative changes, refreshing any cached rows.
+    db.scalar(select(Tenant).where(Tenant.id == tenant_id).with_for_update())
     membership, user = ts.get_tenant_membership(db, tenant_id, membership_id)
+    db.scalar(select(IAMUser).where(IAMUser.id == user.id).with_for_update().execution_options(populate_existing=True))
+    db.scalar(select(TenantUser).where(TenantUser.id == membership_id, TenantUser.tenant_id == tenant_id).with_for_update().execution_options(populate_existing=True))
     if (
         status_value == "ACTIVE"
         and tras.active_assignment_count(db, membership.id) == 0
@@ -1158,3 +1166,25 @@ def delete_tenant_user(
     )
     db.commit()
     invalidate_user_contexts(user.id)
+
+
+@router.patch("/tenants/{tenant_id}/users/{membership_id}/profile")
+def edit_tenant_profile(tenant_id: int, membership_id: int, payload: ProfileUpdate,
+                        context: CurrentContext = Depends(require_permission("tenant:user:update")),
+                        db: Session = Depends(get_db)):
+    _require_current_tenant(tenant_id, context)
+    member, user = ts.get_tenant_membership(db, tenant_id, membership_id)
+    user = ums.update_profile(db, user.id, payload.model_dump(exclude_unset=True),
+                               actor_user_id=context.user_id, tenant_id=tenant_id)
+    db.commit()
+    return ums.profile(db, user)
+
+
+@router.get("/tenants/{tenant_id}/users/{membership_id}/audit")
+def tenant_user_audit(tenant_id: int, membership_id: int,
+                      page: int = Query(default=1, ge=1), page_size: int = Query(default=50, ge=1, le=100),
+                      context: CurrentContext = Depends(require_permission("tenant:user:read")),
+                      db: Session = Depends(get_db)):
+    _require_current_tenant(tenant_id, context)
+    member, user = ts.get_tenant_membership(db, tenant_id, membership_id)
+    return ums.audit_history(db, user.id, tenant_id=tenant_id, page=page, page_size=page_size)

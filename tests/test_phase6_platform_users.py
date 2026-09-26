@@ -114,6 +114,10 @@ def test_platform_user_detail_contains_only_safe_membership_summary(client):
     assert body["id"] == user_id
     assert body["tenant_memberships"] == [
         {
+            "membership_id": membership_id,
+            "roles": ["SECURITY_ANALYST"],
+            "primary_role": "SECURITY_ANALYST",
+            "role_assignment_version": 1,
             "tenant_id": 1,
             "tenant_name": "Default Test Tenant",
             "tenant_slug": "default",

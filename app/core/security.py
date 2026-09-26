@@ -524,6 +524,8 @@ def permission_for_request(request: Request) -> str:
         if method == "POST":
             return "platform:administrator:grant"
         return "platform:administrator:revoke"
+    if path.startswith("/api/platform/users") and path.endswith("/profile") and method == "PATCH":
+        return "platform:user:write"
     if path.startswith("/api/platform/users"):
         return (
             "platform:user:read"

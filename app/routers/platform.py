@@ -15,6 +15,7 @@ from ..core.identity_states import (
     IdentityAuditEvent,
     IdentityErrorCode,
 )
+from ..core.native_identity import AccountStatus
 from ..core.security import invalidate_user_contexts, require_platform_permission
 from ..db import get_db
 from ..models import AuthorizationAuditLog, IAMUser, Tenant, TenantUser
@@ -33,8 +34,10 @@ from ..schemas_platform import (
     UserSearchResponse,
     UserSearchResult,
 )
+from ..schemas_user_management import ProfileUpdate
 from ..services import audit_service, platform_service
 from ..services import tenant_role_assignment_service as tras
+from ..services import user_management_service as ums
 from ..services.email_verification_service import ensure_initial_verification_delivery
 
 router = APIRouter(prefix="/api/platform", tags=["platform-identity"])
@@ -94,9 +97,11 @@ def _grant_summary(grant, user) -> PlatformGrantSummary:
     )
 
 
-def _user_summary(user, grant, active_tenant_count: int) -> PlatformUserSummary:
+def _user_summary(db, user, grant, active_tenant_count: int) -> PlatformUserSummary:
     return PlatformUserSummary(
         id=user.id,
+        first_name=user.first_name, last_name=user.last_name, phone=user.phone,
+        providers=ums.providers(db, user), updated_at=user.updated_at, account_status=user.status,
         email=user.email,
         display_name=user.display_name,
         user_principal_name=user.user_principal_name,
@@ -290,7 +295,11 @@ def list_platform_users(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=100),
     search: str | None = Query(default=None, min_length=1, max_length=200),
-    local_status: Literal["ACTIVE", "PENDING", "DISABLED"] | None = None,
+    local_status: AccountStatus | None = None,
+    role: str | None = Query(default=None, max_length=64),
+    provider: Literal["NATIVE", "HCL_CS"] | None = None,
+    sort_by: Literal["name", "email", "created_at", "last_login_at"] = "created_at",
+    sort_order: Literal["asc", "desc"] = "desc",
     email_verified: bool | None = None,
     verification_required: bool | None = None,
     is_platform_admin: bool | None = None,
@@ -318,7 +327,7 @@ def list_platform_users(
         db,
         page=page,
         page_size=page_size,
-        search=search,
+        search=search, role=role, provider=provider, sort_by=sort_by, sort_order=sort_order,
         local_status=local_status,
         email_verified=email_verified,
         verification_required=verification_required,
@@ -358,7 +367,7 @@ def list_platform_users(
     db.commit()
     return PlatformUserPage(
         items=[
-            _user_summary(user, grant, active_count)
+            _user_summary(db, user, grant, active_count)
             for user, grant, active_count in result.items
         ],
         page=result.page,
@@ -388,19 +397,14 @@ def get_platform_user(
         target_user_id=user.id,
     )
     db.commit()
-    summary = _user_summary(user, grant, active_count)
+    summary = _user_summary(db, user, grant, active_count)
     return PlatformUserDetail(
         **summary.model_dump(),
+        security=ums.security_summary(db, user.id),
+        activity=ums.audit_history(db, user.id, page_size=50),
         platform_grant=_grant_summary(grant, user) if grant else None,
         tenant_memberships=[
-            PlatformTenantMembershipSummary(
-                tenant_id=tenant.id,
-                tenant_name=tenant.name,
-                tenant_slug=tenant.slug,
-                membership_status=membership.status,
-                current_role=membership.role,
-                tenant_status=tenant.status,
-            )
+            PlatformTenantMembershipSummary(**ums.membership_summary(db, membership, tenant))
             for membership, tenant in memberships
         ],
     )
@@ -549,7 +553,23 @@ def _change_user_status(
     db: Session,
 ) -> PlatformUserStatusResponse:
     try:
-        mutation = platform_service.update_user_status(db, user_id, payload.status)
+        from ..services.account_state_service import InvalidAccountTransition, transition_account
+        with db.begin_nested():
+            # Preserve legacy approval/idempotence, but centralize actual account
+            # lifecycle transitions and required audit/token invalidation.
+            initial = platform_service.lock_account_for_administration(db, user_id, removing_access=payload.status == "DISABLED")
+            if initial is None:
+                raise HTTPException(404, "User not found")
+            if initial.status == "PENDING" or initial.status == payload.status:
+                mutation = platform_service.update_user_status(db, user_id, payload.status)
+            else:
+                old_status = initial.status
+                try:
+                    changed_user = transition_account(db, user_id, payload.status,
+                        actor_user_id=context.user_id, explicitly_authorized=True)
+                except InvalidAccountTransition as exc:
+                    raise HTTPException(409, str(exc)) from None
+                mutation = platform_service.StatusMutation(changed_user, old_status, True)
     except HTTPException as exc:
         error_code = _error_code(exc)
         if error_code in {
@@ -577,7 +597,7 @@ def _change_user_status(
             ("PENDING", "ACTIVE"): IdentityAuditEvent.PLATFORM_USER_ACTIVATED,
             ("ACTIVE", "DISABLED"): IdentityAuditEvent.PLATFORM_USER_DISABLED,
             ("DISABLED", "ACTIVE"): IdentityAuditEvent.PLATFORM_USER_REACTIVATED,
-        }[(mutation.old_status, mutation.user.status)]
+        }.get((mutation.old_status, mutation.user.status), IdentityAuditEvent.PLATFORM_USER_STATUS_CHANGED)
         _audit_platform(
             db,
             event=event,
@@ -706,3 +726,60 @@ def update_tenant_status(
     )
     db.commit()
     return {"tenant_id": tenant.id, "status": tenant.status}
+
+
+@router.patch('/users/{user_id}/profile')
+def edit_user_profile(user_id: int, payload: ProfileUpdate,
+                      context: CurrentContext = Depends(require_platform_permission('platform:user:write')),
+                      db: Session = Depends(get_db)):
+    user = ums.update_profile(db, user_id, payload.model_dump(exclude_unset=True), actor_user_id=context.user_id)
+    db.commit()
+    return ums.profile(db, user)
+
+
+@router.get('/users/{user_id}/audit')
+def user_audit(user_id: int, page: int = Query(default=1, ge=1), page_size: int = Query(default=50, ge=1, le=100),
+               context: CurrentContext = Depends(require_platform_permission('platform:user:read')),
+               db: Session = Depends(get_db)):
+    platform_service.get_platform_user(db, user_id)
+    return ums.audit_history(db, user_id, page=page, page_size=page_size)
+
+
+@router.post('/users/{user_id}/unlock')
+def unlock_user(user_id: int,
+                context: CurrentContext = Depends(require_platform_permission('platform:user:manage_status')),
+                db: Session = Depends(get_db)):
+    return _security_action(db, context, user_id, 'unlock')
+
+
+@router.post('/users/{user_id}/force-password-change')
+def force_password_change(user_id: int,
+                          context: CurrentContext = Depends(require_platform_permission('platform:user:manage_status')),
+                          db: Session = Depends(get_db)):
+    return _security_action(db, context, user_id, 'force-password-change')
+
+
+def _security_action(db, context, user_id, action):
+    from sqlalchemy import select
+
+    from ..models import NativeUserCredential
+    from ..services.account_state_service import InvalidAccountTransition, transition_account
+    try:
+        # Force-change locks follow the central tenant->user order. Eligibility
+        # is checked again by the lifecycle service while holding the user lock.
+        if action == 'unlock':
+            user = db.scalar(select(IAMUser).where(IAMUser.id == user_id).with_for_update()
+                             .execution_options(populate_existing=True))
+            if not user or user.status != 'LOCKED':
+                raise HTTPException(409, 'Only locked accounts may be unlocked')
+            target = 'ACTIVE'
+        else:
+            if not db.scalar(select(NativeUserCredential.id).where(NativeUserCredential.user_id == user_id)):
+                raise HTTPException(409, 'An enrolled native account is required')
+            target = 'FORCE_PASSWORD_CHANGE'
+        user = transition_account(db, user_id, target, actor_user_id=context.user_id, explicitly_authorized=True)
+        db.commit()
+        return {'user_id': user.id, 'status': user.status}
+    except InvalidAccountTransition as exc:
+        db.rollback()
+        raise HTTPException(409, str(exc)) from None

@@ -5,11 +5,14 @@ from __future__ import annotations
 from app.core.security import get_current_user
 from app.db import SessionLocal
 from app.models import Tenant
-from tests.phase6_helpers import identity_claims, seed_membership, seed_user
+
+from tests.phase6_helpers import identity_claims, now, seed_membership, seed_user
 
 
 def _seed_tenant(db, name: str, slug: str) -> Tenant:
-    tenant = Tenant(name=name, slug=slug, status="ACTIVE")
+    # Fixtures reference tenant IDs after the setup session has closed.
+    db.expire_on_commit = False
+    tenant = Tenant(name=name, slug=slug, status="ACTIVE", created_at=now(), updated_at=now())
     db.add(tenant)
     db.flush()
     return tenant
@@ -30,6 +33,7 @@ def test_tenant_admin_can_search_eligible_users_in_active_tenant(app, client):
         seed_membership(db, tenant_admin, tenant_id=wellysis.id, role="TENANT_ADMIN")
 
         candidate = seed_user(db, email="eligible.candidate@hcltech.com", display_name="Eligible Candidate")
+        seed_membership(db, candidate, tenant_id=wellysis.id, role="VIEWER")
         candidate_id = candidate.id
         claims = identity_claims(tenant_admin)
         db.commit()
@@ -49,7 +53,7 @@ def test_tenant_admin_can_search_eligible_users_in_active_tenant(app, client):
     assert len(data) == 1
     assert data[0]["id"] == candidate_id
     assert data[0]["email"] == "eligible.candidate@hcltech.com"
-    assert data[0]["external_issuer"] == "https://hcl-cs.test"
+    assert data[0]["external_issuer"] is None
 
 
 def test_external_issuer_serialization_and_subject_regression(app, client):
@@ -67,6 +71,7 @@ def test_external_issuer_serialization_and_subject_regression(app, client):
         )
         aswini.external_issuer = "https://localhost:5180"
         aswini.external_subject = "aswini-subject-5180"
+        seed_membership(db, aswini, tenant_id=wellysis.id, role="VIEWER")
         aswini_id = aswini.id
 
         claims = identity_claims(tenant_admin)
@@ -89,14 +94,14 @@ def test_external_issuer_serialization_and_subject_regression(app, client):
     assert item["id"] == aswini_id
     assert item["email"] == "aswini.v@hcltech.com"
     assert item["display_name"] == "Aswini Venkatesh"
-    assert item["external_issuer"] == "https://localhost:5180"
-    assert item["external_subject"] == "aswini-subject-5180"
+    assert item["external_issuer"] is None
+    assert item["external_subject"] is None
     assert "token" not in item
     assert "password" not in item
     assert "secret" not in item
 
 
-def test_user_in_another_tenant_is_returned(app, client):
+def test_user_in_another_tenant_is_hidden(app, client):
     with SessionLocal() as db:
         wellysis = _seed_tenant(db, name="Wellysis", slug="wellysis-2")
         medtronics = _seed_tenant(db, name="Medtronics", slug="medtronics")
@@ -123,10 +128,10 @@ def test_user_in_another_tenant_is_returned(app, client):
 
     assert res.status_code == 200, res.text
     items = res.json()["items"]
-    assert any(item["id"] == feroze_id for item in items)
+    assert not any(item["id"] == feroze_id for item in items)
 
 
-def test_user_already_in_selected_tenant_is_excluded(app, client):
+def test_user_already_in_selected_tenant_is_visible(app, client):
     with SessionLocal() as db:
         wellysis = _seed_tenant(db, name="Wellysis", slug="wellysis-3")
         wellysis_admin = seed_user(db, email="wadmin3@wellysis.test", display_name="Wellysis Admin 3")
@@ -151,10 +156,10 @@ def test_user_already_in_selected_tenant_is_excluded(app, client):
 
     assert res.status_code == 200, res.text
     items = res.json()["items"]
-    assert not any(item["id"] == existing_id for item in items)
+    assert any(item["id"] == existing_id for item in items)
 
 
-def test_disabled_membership_in_selected_tenant_is_excluded(app, client):
+def test_disabled_membership_in_selected_tenant_is_visible_for_management(app, client):
     with SessionLocal() as db:
         wellysis = _seed_tenant(db, name="Wellysis", slug="wellysis-4")
         wellysis_admin = seed_user(db, email="wadmin4@wellysis.test", display_name="Wellysis Admin 4")
@@ -180,7 +185,7 @@ def test_disabled_membership_in_selected_tenant_is_excluded(app, client):
 
     assert res.status_code == 200, res.text
     items = res.json()["items"]
-    assert not any(item["id"] == disabled_id for item in items)
+    assert any(item["id"] == disabled_id for item in items)
 
 
 def test_active_verified_user_is_returned(app, client):
@@ -196,6 +201,7 @@ def test_active_verified_user_is_returned(app, client):
             verified=True,
             status="ACTIVE",
         )
+        seed_membership(db, active_verified, tenant_id=wellysis.id, role="VIEWER")
         active_id = active_verified.id
 
         claims = identity_claims(wellysis_admin)
@@ -228,6 +234,7 @@ def test_unverified_user_is_excluded(app, client):
             display_name="Unverified User",
             verified=False,
         )
+        seed_membership(db, unverified, tenant_id=wellysis.id, role="VIEWER")
         unverified_id = unverified.id
 
         claims = identity_claims(wellysis_admin)
@@ -261,6 +268,7 @@ def test_verification_required_user_is_excluded(app, client):
             verified=True,
         )
         req_verif.verification_required = True
+        seed_membership(db, req_verif, tenant_id=wellysis.id, role="VIEWER")
         req_id = req_verif.id
 
         claims = identity_claims(wellysis_admin)
@@ -293,6 +301,7 @@ def test_disabled_user_is_excluded(app, client):
             display_name="Disabled Account User",
             status="DISABLED",
         )
+        seed_membership(db, disabled_user, tenant_id=wellysis.id, role="VIEWER")
         disabled_id = disabled_user.id
 
         claims = identity_claims(wellysis_admin)
@@ -320,6 +329,7 @@ def test_search_matches_email(app, client):
         seed_membership(db, wellysis_admin, tenant_id=wellysis.id, role="TENANT_ADMIN")
 
         target = seed_user(db, email="unique.email.match@hcltech.com", display_name="Random Name")
+        seed_membership(db, target, tenant_id=wellysis.id, role="VIEWER")
         target_id = target.id
 
         claims = identity_claims(wellysis_admin)
@@ -346,6 +356,7 @@ def test_search_matches_display_name(app, client):
         seed_membership(db, wellysis_admin, tenant_id=wellysis.id, role="TENANT_ADMIN")
 
         target = seed_user(db, email="random.email@hcltech.com", display_name="Unique Display Name")
+        seed_membership(db, target, tenant_id=wellysis.id, role="VIEWER")
         target_id = target.id
 
         claims = identity_claims(wellysis_admin)
@@ -373,6 +384,7 @@ def test_search_matches_username_user_principal_name(app, client):
 
         target = seed_user(db, email="principal.user@hcltech.com", display_name="Principal Person")
         target.user_principal_name = "unique_principal_username"
+        seed_membership(db, target, tenant_id=wellysis.id, role="VIEWER")
         target_id = target.id
 
         claims = identity_claims(wellysis_admin)
@@ -496,6 +508,7 @@ def test_wildcard_characters_are_escaped_safely(app, client):
 
         seed_user(db, email="normaluser@hcltech.com", display_name="Normal User")
         special_user = seed_user(db, email="special_user%test@hcltech.com", display_name="Special % User")
+        seed_membership(db, special_user, tenant_id=tenant.id, role="VIEWER")
         special_id = special_user.id
 
         claims = identity_claims(admin)
@@ -524,11 +537,12 @@ def test_results_are_limited_and_deterministically_ordered(app, client):
         seed_membership(db, admin, tenant_id=tenant.id, role="TENANT_ADMIN")
 
         for i in range(30):
-            seed_user(
+            candidate = seed_user(
                 db,
                 email=f"candidate{i:02d}@limit.test",
                 display_name=f"Candidate {i:02d}",
             )
+            seed_membership(db, candidate, tenant_id=tenant.id, role="VIEWER")
 
         claims = identity_claims(admin)
         db.commit()

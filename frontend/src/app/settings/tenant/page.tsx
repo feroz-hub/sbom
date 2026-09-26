@@ -39,6 +39,7 @@ export default function TenantUsersPage() {
   const qc = useQueryClient();
   const { showSuccess, showError } = useNotifications();
 
+  const [existingUserId, setExistingUserId] = useState('');
   const [selectedUser, setSelectedUser] = useState<UserSearchResult | null>(null);
   const [initialRoles, setInitialRoles] = useState<TenantRole[]>(['VIEWER']);
 
@@ -64,15 +65,16 @@ export default function TenantUsersPage() {
 
   const addMemberMutation = useMutation({
     mutationFn: async () => {
-      if (!selectedUser || !currentTenantId) return;
+      if ((!selectedUser && !existingUserId) || !currentTenantId) return;
       await addTenantMember(currentTenantId, {
-        user_id: selectedUser.id,
+        user_id: selectedUser?.id ?? Number(existingUserId),
         roles: initialRoles,
       });
     },
     onSuccess: async () => {
-      showSuccess(`User “${selectedUser?.display_name || selectedUser?.email}” was added to the tenant.`);
+      showSuccess(`User “${selectedUser?.display_name || selectedUser?.email || existingUserId}” was added to the tenant.`);
       setSelectedUser(null);
+      setExistingUserId('');
       await qc.invalidateQueries({ queryKey: ['tenant-users', currentTenantId] });
       await qc.invalidateQueries({ queryKey: ['tenant-audit-history', currentTenantId] });
     },
@@ -81,7 +83,7 @@ export default function TenantUsersPage() {
 
   const submitMember = (event: FormEvent) => {
     event.preventDefault();
-    if (!selectedUser || !currentTenantId) return;
+    if ((!selectedUser && !existingUserId) || !currentTenantId) return;
     addMemberMutation.mutate();
   };
 
@@ -225,26 +227,27 @@ export default function TenantUsersPage() {
         memberCount={members.data?.length}
       />
 
-      {canInvite && <a className="underline" href="/settings/native-users">Invite native user</a>}
+      {canInvite && <a className="underline" href="/settings/native-users">Manage users</a>}
       {canInvite && (
         <section aria-labelledby="add-member-heading" className="rounded-xl border border-border bg-surface p-5 shadow-elev-1 space-y-4">
           <div>
             <h2 id="add-member-heading" className="text-lg font-semibold text-foreground">Add tenant member</h2>
-            <p className="mt-1 text-xs text-hcl-muted">Search existing authenticated SBOM users to add to this tenant.</p>
+            <p className="mt-1 text-xs text-hcl-muted">Add an existing user by their known user ID. Platform Admins can also search users.</p>
           </div>
 
           <form onSubmit={submitMember} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Select User</label>
+              {user?.isPlatformAdmin ? <><label className="block text-sm font-medium mb-1">Select User</label>
               <UserSearchCombobox
-                tenantId={currentTenantId}
                 onSelect={(u) => setSelectedUser(u)}
                 selectedUser={selectedUser}
                 placeholder="Search existing SBOM users by email or name…"
-              />
+              /></> : <label className="block text-sm font-medium">Existing user ID
+                <input type="number" min="1" required value={existingUserId} onChange={event => setExistingUserId(event.target.value)} className="mt-1 block rounded border border-border bg-background p-2" />
+              </label>}
             </div>
 
-            {selectedUser && (
+            {(selectedUser || existingUserId) && (
               <div className="grid gap-3 sm:grid-cols-[1fr_auto] items-end pt-2">
                 <label className="text-sm font-medium">
                   Initial Roles

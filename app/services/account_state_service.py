@@ -101,6 +101,13 @@ def transition_account(
                 raise InvalidAccountTransition(
                     "Activation requires a stored credential and completed email verification."
                 )
+        if target == AccountStatus.FORCE_PASSWORD_CHANGE and not db.scalar(
+            select(NativeUserCredential.id).where(NativeUserCredential.user_id == user_id)
+        ):
+            raise InvalidAccountTransition("An enrolled native account is required.")
+        if before == AccountStatus.DISABLED and target == AccountStatus.ACTIVE:
+            from .platform_service import validate_native_reenable
+            validate_native_reenable(db, user)
         user.status = target
         now = datetime.now(UTC)
         user.updated_at = now

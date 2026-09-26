@@ -6,6 +6,8 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from '@/hooks/useToast';
 
+let mockPlatform = true;
+
 const api = vi.hoisted(() => ({
   getTenantMembers: vi.fn(),
   getAssignableTenantRoles: vi.fn(),
@@ -29,7 +31,7 @@ vi.mock('next/navigation', () => ({
 
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({
-    user: { tenantId: 1, externalUserId: 'subject-1', userId: 999, isPlatformAdmin: true },
+    user: { tenantId: 1, externalUserId: 'subject-1', userId: 999, isPlatformAdmin: mockPlatform },
     activeTenantId: 1,
     activeTenant: { id: 1, name: 'Default Tenant', slug: 'default', externalIamTenantId: 'local-default', status: 'ACTIVE', role: 'TENANT_ADMIN', membershipStatus: 'ACTIVE' },
     tenants: [{ id: 1, name: 'Default Tenant', slug: 'default', externalIamTenantId: 'local-default', status: 'ACTIVE', role: 'TENANT_ADMIN', membershipStatus: 'ACTIVE' }],
@@ -69,6 +71,7 @@ function renderPage() {
 
 describe('TenantUsersPage', () => {
   beforeEach(() => {
+  mockPlatform = true;
     vi.clearAllMocks();
     api.getTenantMembers.mockResolvedValue([member]);
     api.getAssignableTenantRoles.mockResolvedValue({ roles: ['TENANT_ADMIN', 'SECURITY_ANALYST', 'DEVELOPER', 'VIEWER'] });
@@ -102,9 +105,22 @@ describe('TenantUsersPage', () => {
     expect(screen.queryByText(/Technical identity details/i)).not.toBeInTheDocument();
   });
 
+  it('allows tenant admins to add a known ID without global user discovery', async () => {
+    mockPlatform = false;
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findAllByText('Example User');
+    expect(screen.queryByPlaceholderText(/Search existing SBOM users/i)).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText('Existing user ID'), '99');
+    await user.click(screen.getByRole('button', { name: 'Add Member' }));
+    await waitFor(() => expect(api.addTenantMember).toHaveBeenCalledWith(1, { user_id: 99, roles: ['VIEWER'] }));
+    expect(api.searchPlatformUsers).not.toHaveBeenCalled();
+    expect(api.searchTenantUserCandidates).not.toHaveBeenCalled();
+  });
+
   it('adds a member with an initial tenant role', async () => {
     const user = userEvent.setup();
-    api.searchTenantUserCandidates.mockResolvedValue([
+    api.searchPlatformUsers.mockResolvedValue([
       {
         id: 99,
         email: 'new.user@hcltech.com',
