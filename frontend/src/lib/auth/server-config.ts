@@ -36,7 +36,7 @@ export function serverAuthConfig(): ServerAuthConfig {
     apiUrl: (process.env.SBOM_API_URL || 'http://localhost:8000').replace(/\/$/, ''),
     caBundle: resolveFrontendPath(process.env.HCL_IAM_CA_BUNDLE || ''),
   };
-  if (config.enabled) {
+  if (config.enabled && process.env.NEXT_PUBLIC_HCL_AUTH_ENABLED !== 'false') {
     for (const [name, value] of Object.entries({ issuer: config.issuer, clientId: config.clientId })) {
       if (!value) throw new Error(`Missing OIDC configuration: ${name}`);
     }

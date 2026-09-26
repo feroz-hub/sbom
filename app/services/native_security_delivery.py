@@ -44,6 +44,7 @@ def send_security_email(recipient, subject, text, message_id=None):
         if message_id:
             message["Message-ID"] = message_id
         result = email_sender.get_email_sender().send_email(message)
-        return {"status": str(result.status), "error_code": result.error_code}
+        return {"status": str(result.status), "error_code": result.error_code,
+                "provider": getattr(result, "provider", s.email_provider), "retryable": getattr(result, "retryable", True)}
     except Exception:
         return {"status": "FAILED", "error_code": "DELIVERY_FAILED"}

@@ -45,35 +45,8 @@ def lock_native(db, uid):
 
 
 def forced_proof(db, email, password):
-    """Credential proof grants no token/session; completion rechecks credentials.
-
-    Forced accounts retain their forced state when throttled, so unlock cannot
-    accidentally bypass password replacement. Temporary credential lock remains.
-    """
-    identity = db.scalar(
-        select(UserIdentity).where(
-            UserIdentity.provider_type == "NATIVE", UserIdentity.provider_identifier == canonicalize_email(email)
-        )
-    )
-    if not identity:
-        password_service.verify_password(password, native_auth_service._dummy_hash())
-        return None
-    user, cred, _ = lock_native(db, identity.user_id)
-    now = datetime.now(UTC)
-    eligible = user.status == "FORCE_PASSWORD_CHANGE" and (not cred.locked_until or cred.locked_until <= now)
-    valid = password_service.verify_password(
-        password, cred.password_hash if eligible else native_auth_service._dummy_hash()
-    )
-    if not eligible or not valid:
-        if eligible:
-            cred.failed_login_count += 1
-            if cred.failed_login_count >= get_settings().native_login_max_failed_attempts:
-                cred.locked_at = now
-                cred.locked_until = now + timedelta(seconds=get_settings().native_login_lockout_seconds)
-                cred.security_version += 1
-        audit(db, "LOGIN_FAILED", user.id, outcome="DENIED")
-        return None
-    return user, cred
+    proved = native_auth_service.verify_native_credential(db, email, password, purpose="forced_change")
+    return proved[:2] if proved else None
 
 
 def replace_password(db, user, cred, password, *, reset=False):
@@ -113,8 +86,8 @@ def change_password(db, uid, version, current, new):
     user, cred, _ = lock_native(db, uid)
     if user.status != "ACTIVE" or cred.security_version != version:
         raise HTTPException(401, "Authentication required")
-    # Reuse login's brute-force accounting, with the account lock still held.
-    if native_auth_service.login(db, user.email, current) is None:
+    # Verify under the same lock without successful-login side effects.
+    if native_auth_service.verify_native_credential(db, user.email, current, purpose="password_change") is None:
         return False
     replace_password(db, user, cred, new)
     return True
@@ -193,6 +166,7 @@ def request_reset(db, email):
         audit(db, "PASSWORD_RESET_TOKEN_CREATED", user.id, new_value={"token_id": row.id})
         issued = action_tokens.IssuedAccountActionToken(row.id, raw, row.expires_at, row.email_snapshot)
         from .security_mail_outbox import enqueue
+
         enqueue(db, issued, user.id, "PASSWORD_RESET")
         return user, issued
 

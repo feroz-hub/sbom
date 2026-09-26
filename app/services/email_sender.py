@@ -26,6 +26,9 @@ class EmailDeliveryStatus(StrEnum):
 class EmailDeliveryResult:
     status: EmailDeliveryStatus
     error_code: str | None = None
+    provider: str = "smtp"
+    provider_message_id: str | None = None
+    retryable: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -157,7 +160,7 @@ class SmtpVerificationEmailSender:
                     )
                 dispatching = True
                 client.send_message(message)
-            return EmailDeliveryResult(EmailDeliveryStatus.SENT)
+            return EmailDeliveryResult(EmailDeliveryStatus.SENT, retryable=False)
         except smtplib.SMTPAuthenticationError:
             return EmailDeliveryResult(EmailDeliveryStatus.FAILED, "SMTP_AUTHENTICATION_FAILED")
         except (ssl.SSLError, smtplib.SMTPNotSupportedError):
@@ -179,6 +182,8 @@ class SmtpVerificationEmailSender:
 
 def get_verification_email_sender() -> VerificationEmailSender:
     settings = get_settings()
+    if settings.email_provider != "smtp":
+        raise RuntimeError("Unsupported EMAIL_PROVIDER")
     if not settings.email_delivery_enabled:
         return DisabledVerificationEmailSender()
     return SmtpVerificationEmailSender(settings)
@@ -186,6 +191,8 @@ def get_verification_email_sender() -> VerificationEmailSender:
 
 def get_email_sender() -> EmailSender:
     settings = get_settings()
+    if settings.email_provider != "smtp":
+        raise RuntimeError("Unsupported EMAIL_PROVIDER")
     if not settings.email_delivery_enabled:
         return DisabledVerificationEmailSender()
     return SmtpVerificationEmailSender(settings)

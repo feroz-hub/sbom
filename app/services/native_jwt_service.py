@@ -20,7 +20,7 @@ from ..settings import get_settings
 REQUIRED = ["iss", "sub", "aud", "iat", "exp", "jti", "auth_provider", "security_version"]
 
 
-def signing_key() -> rsa.RSAPrivateKey:
+def validate_configuration() -> None:
     s = get_settings()
     issuer = urlsplit(s.native_jwt_issuer)
     if (
@@ -41,6 +41,11 @@ def signing_key() -> rsa.RSAPrivateKey:
         or not s.authorization_catalog_fail_closed
     ):
         raise RuntimeError("Invalid native JWT configuration")
+
+
+def active_signing_key() -> rsa.RSAPrivateKey:
+    validate_configuration()
+    s = get_settings()
     try:
         key = serialization.load_pem_private_key(s.native_jwt_private_key.encode(), password=None)
         if not isinstance(key, rsa.RSAPrivateKey) or key.key_size < 2048:
@@ -48,6 +53,40 @@ def signing_key() -> rsa.RSAPrivateKey:
         return key
     except (ValueError, TypeError):
         raise RuntimeError("Invalid native JWT signing key") from None
+
+
+# Compatibility name for existing issuing paths. Never used by validation.
+signing_key = active_signing_key
+
+
+def active_verification_key() -> rsa.RSAPublicKey:
+    validate_configuration()
+    try:
+        key = serialization.load_pem_public_key(get_settings().native_jwt_public_key.encode())
+        if not isinstance(key, rsa.RSAPublicKey) or key.key_size < 2048:
+            raise ValueError()
+        return key
+    except (ValueError, TypeError):
+        raise RuntimeError("Invalid native JWT public verification key") from None
+
+
+def verification_key_for_kid(kid) -> rsa.RSAPublicKey:
+    s = get_settings()
+    if kid is None or kid == s.native_jwt_active_kid:
+        return active_verification_key()
+    keys = json.loads(s.native_jwt_verification_keys_json)
+    entry = keys.get(kid) if isinstance(keys, dict) and isinstance(kid, str) else None
+    if (
+        not isinstance(entry, dict)
+        or type(entry.get("not_after")) is not int
+        or entry["not_after"] <= int(datetime.now(UTC).timestamp())
+        or not isinstance(entry.get("public_key"), str)
+    ):
+        raise jwt.InvalidTokenError()
+    key = serialization.load_pem_public_key(entry["public_key"].encode())
+    if not isinstance(key, rsa.RSAPublicKey) or key.key_size < 2048:
+        raise jwt.InvalidTokenError()
+    return key
 
 
 def issue_token(user: IAMUser, credential: NativeUserCredential) -> str:
@@ -72,27 +111,11 @@ def issue_token(user: IAMUser, credential: NativeUserCredential) -> str:
 
 def validate_token(token: str) -> dict[str, Any]:
     s = get_settings()
-    key = signing_key()
+    validate_configuration()
     try:
         header = jwt.get_unverified_header(token)
         kid = header.get("kid")
-        verification_key = key.public_key()
-        # Tokens issued before rotation rollout have no kid and use the active
-        # key only. Retired keys always require explicit kid and overlap expiry.
-        if kid is not None and kid != s.native_jwt_active_kid:
-            keys = json.loads(s.native_jwt_verification_keys_json)
-            entry = keys.get(kid) if isinstance(keys, dict) and isinstance(kid, str) else None
-            if (
-                not isinstance(entry, dict)
-                or type(entry.get("not_after")) is not int
-                or entry["not_after"] <= int(datetime.now(UTC).timestamp())
-            ):
-                raise jwt.InvalidTokenError()
-            if not isinstance(entry.get("public_key"), str):
-                raise jwt.InvalidTokenError()
-            verification_key = serialization.load_pem_public_key(entry["public_key"].encode())
-            if not isinstance(verification_key, rsa.RSAPublicKey) or verification_key.key_size < 2048:
-                raise jwt.InvalidTokenError()
+        verification_key = verification_key_for_kid(kid)
         claims = jwt.decode(
             token,
             verification_key,

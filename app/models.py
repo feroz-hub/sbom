@@ -200,6 +200,22 @@ class AccountActionToken(Base):
     )
 
 
+class NativePlatformBootstrap(Base):
+    """Permanent singleton reservation; deleting an account cannot reopen bootstrap."""
+    __tablename__ = "native_platform_bootstrap"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="RESTRICT"), nullable=False, unique=True)
+    state = Column(String(16), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    completed_at = Column(DateTime(timezone=True))
+    operator_reference = Column(String(128), nullable=False)
+    __table_args__ = (
+        CheckConstraint("id = 1", name="native_bootstrap_singleton"),
+        CheckConstraint("state IN ('PENDING','COMPLETED')", name="native_bootstrap_state"),
+        CheckConstraint("(state = 'PENDING' AND completed_at IS NULL) OR (state = 'COMPLETED' AND completed_at IS NOT NULL)", name="native_bootstrap_completion"),
+    )
+
+
 class SecurityMailOutbox(Base):
     """Encrypted, short-lived action delivery; never a plaintext token queue."""
     __tablename__ = "security_mail_outbox"

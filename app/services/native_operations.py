@@ -23,7 +23,10 @@ def validate_configuration():
         return
     errors = []
     try:
-        native_jwt_service.signing_key()
+        private = native_jwt_service.active_signing_key()
+        public = native_jwt_service.active_verification_key()
+        if private.public_key().public_numbers() != public.public_numbers():
+            raise ValueError()
         cipher()
     except Exception:
         errors.append("signing_or_outbox_key")

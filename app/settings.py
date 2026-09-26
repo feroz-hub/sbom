@@ -220,6 +220,7 @@ class Settings(BaseSettings):
     # HCL IAM / OIDC. AUTH_ENABLED=false is restricted to local development
     # and tests; production validation uses asymmetric JWTs from JWKS.
     auth_enabled: bool = Field(default=False, description="Require HCL IAM authentication")
+    hcl_auth_enabled: bool = True
     hcl_iam_issuer: str = Field(default="", description="Expected HCL IAM token issuer")
     hcl_iam_audience: str = Field(default="", description="Expected API audience")
     hcl_iam_discovery_url: str = Field(default="", description="OIDC discovery URL; derived from issuer when empty")
@@ -249,11 +250,14 @@ class Settings(BaseSettings):
         default="",
         description="Informational support contact shown during identity onboarding",
     )
+    email_provider: str = "smtp"
+    native_platform_bootstrap_enabled: bool = False
     email_delivery_enabled: bool = False
     # Foundation only: these flags do not expose native login/creation routes.
     native_jwt_issuer: str = ""
     native_jwt_audience: str = "sbom-analyser-api"
     native_jwt_algorithm: str = "RS256"
+    native_jwt_public_key: str = Field(default="", repr=False)
     native_jwt_private_key: str = Field(default="", repr=False)
     native_jwt_access_token_ttl_seconds: int = Field(default=900, ge=60, le=3600)
     native_login_max_failed_attempts: int = Field(default=5, ge=1, le=100)
@@ -784,6 +788,8 @@ class Settings(BaseSettings):
     def validate_email_delivery_configuration(self):
         from urllib.parse import urlsplit
 
+        if self.email_provider != "smtp":
+            raise ValueError("Unsupported EMAIL_PROVIDER")
         if self.smtp_use_tls and self.smtp_use_starttls:
             raise ValueError("SMTP_USE_TLS and SMTP_USE_STARTTLS cannot both be enabled")
         parsed = urlsplit(self.email_verification_frontend_url.strip())

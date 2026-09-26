@@ -38,6 +38,9 @@ def native_config(monkeypatch):
         auth_enabled=True,
         dev_default_tenant=False,
         native_jwt_issuer="https://native.test",
+        native_jwt_public_key=key.public_key()
+        .public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo)
+        .decode(),
         native_jwt_private_key=key.private_bytes(
             serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()
         ).decode(),

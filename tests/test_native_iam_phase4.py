@@ -340,6 +340,13 @@ def test_signing_rotation(account, monkeypatch):
             serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()
         ).decode(),
     )
+    monkeypatch.setattr(
+        s,
+        "native_jwt_public_key",
+        next_key.public_key()
+        .public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo)
+        .decode(),
+    )
     monkeypatch.setattr(s, "native_jwt_active_kid", "native-v2")
     monkeypatch.setattr(
         s,

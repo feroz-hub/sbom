@@ -125,6 +125,8 @@ def get_jwks_client() -> PyJWKClient:
 
 def validate_hcl_token(token: str) -> dict[str, Any]:
     settings = get_settings()
+    if not settings.hcl_auth_enabled:
+        raise _unauthorized()
     algorithms = [value.strip() for value in settings.hcl_iam_allowed_algorithms.split(",") if value.strip()]
     if not algorithms or any(value.upper().startswith("HS") for value in algorithms):
         raise RuntimeError("HCL IAM must use configured asymmetric JWT algorithms")
@@ -640,6 +642,10 @@ def validate_hcl_auth_setup() -> None:
     settings = get_settings()
     if not settings.auth_enabled:
         log.warning("AUTH_ENABLED=false: using explicit local development identity")
+        return
+    if not settings.hcl_auth_enabled:
+        if not settings.native_auth_enabled or settings.dev_default_tenant:
+            raise RuntimeError("Native-only authentication requires Native IAM and no development tenant")
         return
     required = {
         "HCL_IAM_ISSUER": settings.hcl_iam_issuer,

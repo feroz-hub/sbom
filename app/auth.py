@@ -75,7 +75,7 @@ def validate_auth_setup() -> None:
         from .core.security import validate_hcl_auth_setup
 
         validate_hcl_auth_setup()
-        log.info("HCL IAM JWT/JWKS authentication enabled.")
+        log.info("Database-authorized authentication enabled.")
         return
     mode = _read_mode()
     if mode == "none":

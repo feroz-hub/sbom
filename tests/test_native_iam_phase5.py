@@ -221,6 +221,7 @@ def test_rotation_timeline_two_validator_configurations(monkeypatch):
         a = copy(s)
         a.native_jwt_verification_keys_json = json.dumps({"B": {"public_key": public(new_key), "not_after": deadline}})
         b = copy(s)
+        b.native_jwt_public_key = public(new_key)
         b.native_jwt_active_kid = "B"
         b.native_jwt_private_key = new_key.private_bytes(
             serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()

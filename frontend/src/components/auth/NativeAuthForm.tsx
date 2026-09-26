@@ -37,6 +37,6 @@ export function NativeAuthForm({ activation = false }: { activation?: boolean })
     </form>
     <p role="status">{message}</p>
     {!activation && <Link className="underline" href="/forgot-password">Forgot password?</Link>}
-    <Link className="underline" href={activation ? '/native-sign-in' : '/api/auth/login'}>{activation ? 'Native sign in' : 'Sign in with HCL.CS'}</Link>
+    {(activation || process.env.NEXT_PUBLIC_HCL_AUTH_ENABLED !== 'false') && <Link className="underline" href={activation ? '/native-sign-in' : '/api/auth/login'}>{activation ? 'Native sign in' : 'Sign in with HCL.CS'}</Link>}
   </main>;
 }
