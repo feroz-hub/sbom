@@ -565,6 +565,8 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         log.error("Failed to parse database URL for logging: %s", e)
 
+    from .services.native_operations import validate_configuration
+    validate_configuration()
     _ensure_seed_data()
     _backfill_analytics_per_tenant()
     _update_sbom_names()

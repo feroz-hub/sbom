@@ -6,6 +6,7 @@ Storage failure fails closed before Argon2. No email/token appears in keys.
 """
 
 import hashlib
+import logging
 import os
 from functools import lru_cache
 
@@ -15,6 +16,8 @@ from limits.storage import storage_from_string
 from limits.strategies import FixedWindowRateLimiter
 
 from ..settings import get_settings
+
+log = logging.getLogger(__name__)
 
 
 @lru_cache(maxsize=4)
@@ -43,6 +46,8 @@ def check(request, endpoint, account=""):
                 and allowed
             )
     except Exception:
+        log.warning("native_auth_limit_unavailable")
         raise HTTPException(503, "Authentication service unavailable") from None
     if not allowed:
+        log.warning("native_auth_throttled endpoint=%s", endpoint)
         raise HTTPException(429, "Too many requests", headers={"Retry-After": "60"})

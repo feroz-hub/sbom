@@ -91,6 +91,8 @@ def issue_activation_token(db: Session, user_id: int, *, actor_user_id: int | No
         )
         db.flush()
         result = IssuedAccountActionToken(token.id, raw, token.expires_at, token.email_snapshot)
+        from .security_mail_outbox import enqueue
+        enqueue(db, result, user_id, "ACCOUNT_ACTIVATION")
     return result
 
 

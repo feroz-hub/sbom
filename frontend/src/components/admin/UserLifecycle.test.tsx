@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import UserLifecycle from './UserLifecycle';
+import { axe } from 'vitest-axe';
 let platform = true;
 let tenant = '1';
 const permission = (p: string) => platform || p.startsWith('tenant:');
@@ -28,6 +29,33 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 async function openUser() { render(<UserLifecycle />); fireEvent.click(await screen.findByRole('button', { name: 'John Smith' })); await screen.findByRole('heading', { name: 'John Smith' }); }
 const writes = () => fetchMock.mock.calls.filter(call => call[1].method !== 'GET');
 describe('user lifecycle administration', () => {
+  it('paginates and shows empty results', async () => {
+    fetchMock.mockResolvedValue(Response.json({ items: [user], total: 41 }));
+    render(<UserLifecycle />); await screen.findByRole('button', { name: 'John Smith' });
+    fetchMock.mockImplementation(async () => Response.json({ items: [], total: 41 }));
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await screen.findByText('No users found.');
+    expect(fetchMock.mock.calls.at(-1)?.[0]).toContain('page=2');
+  });
+  it('has an accessible table and detail structure', async () => {
+    const { container } = render(<UserLifecycle />);
+    fireEvent.click(await screen.findByRole('button', { name: 'John Smith' }));
+    await screen.findByRole('heading', { name: 'John Smith' });
+    const result = await axe(container); expect(result.violations).toEqual([]);
+  });
+  it('filters status, role, tenant, provider and sort on the server', async () => {
+    render(<UserLifecycle />); await screen.findByRole('button', { name: 'John Smith' });
+    for (const [label, value, key] of [['Account status','LOCKED','local_status'], ['Role','VIEWER','role'], ['Provider','NATIVE','provider'], ['Tenant ID','2','tenant_id'], ['Sort','email','sort_by']]) {
+      fireEvent.change(screen.getByLabelText(label), { target: { value } });
+      await waitFor(() => expect(fetchMock.mock.calls.some(c => c[0].includes(`${key}=${value}`))).toBe(true));
+    }
+  });
+  it('confirms logout all with the global native scope', async () => {
+    await openUser(); fireEvent.click(screen.getByRole('button', { name: 'Logout all native sessions' }));
+    expect(writes()).toHaveLength(0); expect(screen.getByRole('dialog')).toHaveTextContent('every tenant');
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' })); await waitFor(() => expect(writes()).toHaveLength(1));
+    expect(writes()[0][0]).toContain('/platform/users/42/logout-all');
+  });
   it('loads platform list, filters and all memberships', async () => {
     await openUser();
     expect(screen.getByText('Hospital B · ACTIVE')).toBeInTheDocument();
@@ -69,6 +97,7 @@ describe('user lifecycle administration', () => {
   });
   it('resends activation only for pending native members', async () => {
     platform = false; account = 'PENDING_EMAIL_VERIFICATION'; await openUser(); fireEvent.click(screen.getByRole('button', { name: 'Resend activation' }));
+    expect(writes()).toHaveLength(0); fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
     await screen.findByText('Activation delivery: sent.'); expect(writes()[0][0]).toContain('/tenants/1/native-users/42/resend-activation');
   });
   it('warns before force password change', async () => {
@@ -77,6 +106,7 @@ describe('user lifecycle administration', () => {
   });
   it('supports global enable and manual unlock for eligible states', async () => {
     account = 'LOCKED'; await openUser(); fireEvent.click(screen.getByRole('button', { name: 'Unlock account' }));
+    expect(writes()).toHaveLength(0); fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
     await waitFor(() => expect(writes()).toHaveLength(1)); expect(writes()[0][0]).toContain('/platform/users/42/unlock');
   });
   it('shows loading and API errors', async () => {

@@ -783,3 +783,20 @@ def _security_action(db, context, user_id, action):
     except InvalidAccountTransition as exc:
         db.rollback()
         raise HTTPException(409, str(exc)) from None
+
+
+@router.get("/iam/operations")
+def iam_operations(context: CurrentContext = Depends(require_platform_permission("platform:user:read")), db: Session = Depends(get_db)):
+    from ..services.native_operations import delivery_health, readiness
+    return {"delivery": delivery_health(db), "readiness": readiness(db)}
+
+
+@router.post("/users/{user_id}/logout-all")
+def revoke_native_sessions(user_id: int, context: CurrentContext = Depends(require_platform_permission("platform:user:manage_status")), db: Session = Depends(get_db)):
+    from ..services.native_password_service import lock_native
+    user, credential, _ = lock_native(db, user_id)
+    credential.security_version += 1
+    audit_service.write_authorization_audit(db, action="ALL_SESSIONS_REVOKED", actor_user_id=context.user_id, target_user_id=user.id)
+    db.commit()
+    invalidate_user_contexts(user.id)
+    return {"success": True}

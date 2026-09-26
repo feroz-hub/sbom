@@ -6,7 +6,7 @@ import { randomBytes } from 'node:crypto';
 import { createClient } from 'redis';
 import { beforeAll, afterAll, describe, expect, it, vi } from 'vitest';
 vi.mock('server-only', () => ({}));
-import { RedisSessionStore, MemorySessionStore } from './shared-session-store';
+import { RedisSessionStore, MemorySessionStore, redisReconnectDelay } from './shared-session-store';
 let process: ChildProcess;
 let directory: string;
 let a: ReturnType<typeof createClient>;
@@ -16,10 +16,10 @@ let second: RedisSessionStore;
 beforeAll(async () => {
   directory = mkdtempSync(join(tmpdir(), 'sbom-session-test-'));
   const socket = join(directory, 'redis.sock');
-  process = spawn('redis-server', ['--port', '0', '--unixsocket', socket, '--save', '', '--appendonly', 'no'], { stdio: 'ignore' });
+  process = spawn('redis-server', ['--port', '0', '--unixsocket', socket, '--save', '', '--appendonly', 'yes', '--dir', directory], { stdio: 'ignore' });
   for (let i = 0; i < 100 && !existsSync(socket); i++) await new Promise(resolve => setTimeout(resolve, 30));
-  a = createClient({ socket: { path: socket, reconnectStrategy: false } });
-  b = createClient({ socket: { path: socket, reconnectStrategy: false } });
+  a = createClient({ disableOfflineQueue: true, socket: { path: socket, reconnectStrategy: redisReconnectDelay } });
+  b = createClient({ disableOfflineQueue: true, socket: { path: socket, reconnectStrategy: redisReconnectDelay } });
   a.on('error', () => {}); b.on('error', () => {});
   await a.connect(); await b.connect();
   const key = randomBytes(32);
@@ -41,6 +41,11 @@ describe('two replicas sharing encrypted Redis sessions', () => {
     await second.delete('opaque-secret'); expect(await first.get('opaque-secret')).toBeNull();
     await second.delete('opaque-secret');
   });
+  it('rejects a different encryption key', async () => {
+    await first.put('wrong-key', session());
+    const wrong = new RedisSessionStore(b, randomBytes(32));
+    expect(await wrong.get('wrong-key')).toBeNull();
+  });
   it('expires native sessions', async () => {
     await first.put('expired', { ...session(), expiresAt: Date.now() - 1 });
     expect(await second.get('expired')).toBeNull();
@@ -61,6 +66,18 @@ describe('two replicas sharing encrypted Redis sessions', () => {
     const [key] = await a.keys('sbom:bff:*'); await a.set(key, 'bad.cipher.text');
     expect(await second.get('tampered')).toBeNull();
   });
+  it('fails closed during Redis loss and recovers both replicas after restart', async () => {
+    await first.put('restart', session());
+    const stopped = new Promise(resolve => process.once('exit', resolve)); process.kill('SIGTERM'); await stopped;
+    for (let i = 0; i < 50 && a.isReady; i++) await new Promise(resolve => setTimeout(resolve, 20));
+    await expect(first.get('restart')).rejects.toThrow();
+    await expect(second.put('offline', session())).rejects.toThrow();
+    process = spawn('redis-server', ['--port', '0', '--unixsocket', join(directory, 'redis.sock'), '--save', '', '--appendonly', 'yes', '--dir', directory], { stdio: 'ignore' });
+    for (let i = 0; i < 200 && (!a.isReady || !b.isReady); i++) await new Promise(resolve => setTimeout(resolve, 30));
+    expect(await second.get('restart')).not.toBeNull();
+    expect(await first.get('offline')).toBeNull();
+    await second.delete('restart'); expect(await first.get('restart')).toBeNull();
+  }, 15000);
   it('memory fallback is development-only and honors expiry', async () => {
     const memory = new MemorySessionStore(); await memory.put('dev', session()); expect(await memory.get('dev')).not.toBeNull();
     await memory.delete('dev'); expect(await memory.get('dev')).toBeNull();

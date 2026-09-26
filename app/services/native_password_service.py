@@ -191,7 +191,10 @@ def request_reset(db, email):
         db.flush()
         audit(db, "PASSWORD_RESET_REQUESTED", user.id)
         audit(db, "PASSWORD_RESET_TOKEN_CREATED", user.id, new_value={"token_id": row.id})
-        return user, action_tokens.IssuedAccountActionToken(row.id, raw, row.expires_at, row.email_snapshot)
+        issued = action_tokens.IssuedAccountActionToken(row.id, raw, row.expires_at, row.email_snapshot)
+        from .security_mail_outbox import enqueue
+        enqueue(db, issued, user.id, "PASSWORD_RESET")
+        return user, issued
 
 
 def reset_password(db, raw, new):

@@ -30,7 +30,9 @@ export class RedisSessionStore implements SessionStore {
     if (key.length !== 32) throw new Error('Session encryption requires a 32-byte key');
   }
   private name(id: string) { return `${this.prefix}${createHash('sha256').update(id).digest('hex')}`; }
+  async ready() { return this.client.isReady && await this.client.ping() === "PONG"; }
   async get(id: string) {
+    if (!this.client.isReady) throw new Error("Session store unavailable");
     const raw = await this.client.get(this.name(id));
     if (!raw) return null;
     try {
@@ -43,6 +45,7 @@ export class RedisSessionStore implements SessionStore {
     } catch { return null; }
   }
   async put(id: string, value: TokenSession, onlyExisting = false) {
+    if (!this.client.isReady) throw new Error("Session store unavailable");
     const iv = randomBytes(12); const cipher = createCipheriv('aes-256-gcm', this.key, iv);
     cipher.setAAD(Buffer.from(this.name(id)));
     const encrypted = Buffer.concat([cipher.update(JSON.stringify(value)), cipher.final()]);
@@ -67,13 +70,15 @@ export class RedisSessionStore implements SessionStore {
     throw new Error('Session refresh unavailable');
   }
 }
+export const redisReconnectDelay = (retries: number) => retries < 8 ? Math.min(2000, 100 * 2 ** retries) : false;
 let redisStore: Promise<RedisSessionStore> | undefined;
 export async function configuredRedisStore() {
   if (!redisStore) redisStore = (async () => {
     const url = process.env.AUTH_SESSION_REDIS_URL;
     const key = Buffer.from(process.env.AUTH_SESSION_ENCRYPTION_KEY || '', 'base64');
     if (!url || key.length !== 32) throw new Error('Shared session store is not configured');
-    const client = createClient({ url, disableOfflineQueue: true, socket: { connectTimeout: 5000, reconnectStrategy: false } });
+    const client = createClient({ url, disableOfflineQueue: true, socket: { connectTimeout: 5000, reconnectStrategy: redisReconnectDelay } });
+    client.on('end', () => { redisStore = undefined; });
     client.on('error', () => { /* Never log URLs, tokens or Redis diagnostics. */ });
     await client.connect();
     return new RedisSessionStore(client, key);

@@ -214,3 +214,14 @@ def get_analysis_config() -> dict:
 def list_sbom_types(db: Session = Depends(get_db)):
     """List SBOM types (e.g. CycloneDX, SPDX) for upload/edit dropdowns."""
     return db.execute(select(SBOMType).order_by(SBOMType.typename.asc())).scalars().all()
+
+
+@router.get("/ready/iam")
+def iam_readiness(db: Session = Depends(get_db)):
+    from fastapi.responses import JSONResponse
+
+    from ..services.native_operations import readiness
+    if not get_settings().native_auth_enabled:
+        return {"ready": True, "enabled": False}
+    result = readiness(db)
+    return JSONResponse(result, status_code=200 if result["ready"] else 503)

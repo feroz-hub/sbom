@@ -31,20 +31,16 @@ export function VerificationBadge({ verified }: { verified: boolean }) {
   );
 }
 
+export const ACCOUNT_STATUS_HELP: Record<string, string> = {
+  ACTIVE: 'Account is active. Tenant access depends on membership and roles.',
+  PENDING_EMAIL_VERIFICATION: 'User must verify their email and activate their account.',
+  LOCKED: 'Account temporarily locked after failed authentication attempts.',
+  DISABLED: 'Account disabled by an administrator.',
+  FORCE_PASSWORD_CHANGE: 'User must replace their native password before normal access resumes.',
+};
 export function UserStatusBadge({ status }: { status: string }) {
-  const isEnabled = status === 'ACTIVE';
-  return (
-    <span
-      className={cn(
-        'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border',
-        isEnabled
-          ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/20 dark:text-blue-400 dark:border-blue-800/50'
-          : 'bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700',
-      )}
-    >
-      User account: {isEnabled ? 'Active' : 'Disabled'}
-    </span>
-  );
+  const label = (status || 'UNKNOWN').toLowerCase().replaceAll('_', ' ');
+  return <span title={ACCOUNT_STATUS_HELP[status] || 'Account awaiting administration.'} className={cn('inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold', status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-800 border-emerald-300' : status === 'DISABLED' ? 'bg-red-50 text-red-800 border-red-300' : 'bg-amber-50 text-amber-900 border-amber-300')}>User account: {label.charAt(0).toUpperCase() + label.slice(1)}</span>;
 }
 
 export function TenantStatusBadge({ status }: { status: string }) {

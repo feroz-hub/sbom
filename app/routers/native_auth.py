@@ -109,7 +109,7 @@ def _create(payload, context, db):
     except AssignmentProblem as exc:
         db.rollback()
         raise HTTPException(exc.status_code, str(exc)) from None
-    return {"user_id": user.id, "status": user.status, "delivery": enrollment.deliver_activation(user, issued)}
+    return {"user_id": user.id, "status": user.status, "delivery": ({"status": "PENDING", "error_code": None} if get_settings().native_security_outbox_enabled else enrollment.deliver_activation(user, issued))}
 
 
 @router.post("/platform/native-users", status_code=201)
@@ -164,7 +164,7 @@ def resend(
     except InvalidAccountActionToken:
         db.rollback()
         raise HTTPException(400, "Activation unavailable") from None
-    return {"user_id": user.id, "delivery": enrollment.deliver_activation(user, issued)}
+    return {"user_id": user.id, "delivery": ({"status": "PENDING", "error_code": None} if get_settings().native_security_outbox_enabled else enrollment.deliver_activation(user, issued))}
 
 
 class ForgotPassword(BaseModel):
@@ -218,7 +218,7 @@ def forgot_password(
     abuse.check(request, "forgot-password", payload.email)
     issued = passwords.request_reset(db, payload.email)
     db.commit()
-    if issued:
+    if issued and not get_settings().native_security_outbox_enabled:
         background.add_task(reset_delivery, issued[0].id, issued[1])
     return {"message": passwords.GENERIC_RESET}
 

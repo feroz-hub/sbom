@@ -268,6 +268,10 @@ class Settings(BaseSettings):
     native_jwt_verification_keys_json: str = Field(default="{}", repr=False)
     native_password_min_length: int = Field(default=12, ge=12, le=128)
     native_activation_frontend_url: str = "https://localhost:3000/activate-account"
+    native_iam_production: bool = False
+    native_security_outbox_enabled: bool = False
+    native_security_outbox_key: str = Field(default="", repr=False)
+    native_security_outbox_max_attempts: int = Field(default=5, ge=1, le=10)
     native_auth_enabled: bool = False
     native_user_creation_enabled: bool = False
     native_account_activation_ttl_seconds: int = Field(default=18000, ge=18000, le=18000)

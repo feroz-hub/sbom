@@ -175,4 +175,4 @@ def deliver_activation(user: IAMUser, issued: tokens.IssuedAccountActionToken) -
         "This link is valid for five hours. If you did not expect this invitation, ignore it.\n"
         f"Support: {s.platform_admin_contact_email or 'Contact your administrator'}"
     )
-    return send_security_email(issued.email_snapshot, "Activate your SBOM Analyser account", text)
+    return send_security_email(issued.email_snapshot, "Activate your SBOM Analyser account", text, f"<security-{issued.id}@sbom.invalid>")

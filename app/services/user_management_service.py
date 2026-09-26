@@ -154,6 +154,7 @@ def security_summary(db, user_id):
     credential = db.scalar(select(NativeUserCredential).where(NativeUserCredential.user_id == user_id))
     return (
         dict(
+            password_changed_at=credential.password_changed_at,
             failed_login_count=credential.failed_login_count,
             locked_at=credential.locked_at,
             locked_until=credential.locked_until,

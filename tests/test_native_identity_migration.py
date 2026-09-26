@@ -5,10 +5,11 @@ import os
 import pytest
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, inspect, text
 
 PREVIOUS = "059_vex_analyzer_sources"
-REVISION = "060_native_identity_foundation"
+REVISION = ScriptDirectory.from_config(Config("alembic.ini")).get_current_head()
 
 
 def test_compatibility_migration_preserves_duplicates_pending_and_membership():

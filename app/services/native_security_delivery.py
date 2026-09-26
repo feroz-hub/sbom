@@ -1,7 +1,6 @@
 """Security-email delivery boundary; caller commits issuance before SMTP.
 
-No Celery token payload: broker/result/log storage is not a secret outbox.
-A future durable adapter must encrypt payloads and preserve token expiry.
+Durable mode uses the PostgreSQL encrypted outbox; Celery carries no token.
 """
 
 from html import escape
@@ -23,25 +22,28 @@ def deliver_reset(user, issued):
         "If you did not request this, ignore this email.\n"
         f"Support: {s.platform_admin_contact_email or 'Contact your administrator'}"
     )
-    return send_security_email(issued.email_snapshot, "Reset your SBOM Analyser password", text)
+    return send_security_email(
+        issued.email_snapshot, "Reset your SBOM Analyser password", text, f"<security-{issued.id}@sbom.invalid>"
+    )
 
 
-def send_security_email(recipient, subject, text):
+def send_security_email(recipient, subject, text, message_id=None):
     """Replaceable delivery adapter shared by activation, resend and reset.
 
     SMTP errors are reduced to fixed codes; never retry issuance here.
     """
     s = get_settings()
     try:
-        result = email_sender.get_email_sender().send_email(
-            email_sender.build_email(
-                s,
-                recipient_email=recipient,
-                subject=subject,
-                text_body=text,
-                html_body=f"<p>{escape(text).replace(chr(10), '<br>')}</p>",
-            )
+        message = email_sender.build_email(
+            s,
+            recipient_email=recipient,
+            subject=subject,
+            text_body=text,
+            html_body=f"<p>{escape(text).replace(chr(10), '<br>')}</p>",
         )
+        if message_id:
+            message["Message-ID"] = message_id
+        result = email_sender.get_email_sender().send_email(message)
         return {"status": str(result.status), "error_code": result.error_code}
     except Exception:
         return {"status": "FAILED", "error_code": "DELIVERY_FAILED"}

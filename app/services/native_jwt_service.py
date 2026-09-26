@@ -81,12 +81,14 @@ def validate_token(token: str) -> dict[str, Any]:
         # key only. Retired keys always require explicit kid and overlap expiry.
         if kid is not None and kid != s.native_jwt_active_kid:
             keys = json.loads(s.native_jwt_verification_keys_json)
-            entry = keys.get(kid) if isinstance(kid, str) else None
+            entry = keys.get(kid) if isinstance(keys, dict) and isinstance(kid, str) else None
             if (
-                not entry
+                not isinstance(entry, dict)
                 or type(entry.get("not_after")) is not int
                 or entry["not_after"] <= int(datetime.now(UTC).timestamp())
             ):
+                raise jwt.InvalidTokenError()
+            if not isinstance(entry.get("public_key"), str):
                 raise jwt.InvalidTokenError()
             verification_key = serialization.load_pem_public_key(entry["public_key"].encode())
             if not isinstance(verification_key, rsa.RSAPublicKey) or verification_key.key_size < 2048:

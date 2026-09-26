@@ -200,6 +200,29 @@ class AccountActionToken(Base):
     )
 
 
+class SecurityMailOutbox(Base):
+    """Encrypted, short-lived action delivery; never a plaintext token queue."""
+    __tablename__ = "security_mail_outbox"
+    id = Column(Integer, primary_key=True)
+    token_id = Column(Integer, ForeignKey("account_action_tokens.id", ondelete="CASCADE"), nullable=False, unique=True)
+    user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="CASCADE"), nullable=False)
+    purpose = Column(String(32), nullable=False)
+    recipient = Column(String(320), nullable=False)
+    payload = Column(LargeBinary, nullable=True)
+    status = Column(String(16), nullable=False, default="PENDING")
+    attempts = Column(Integer, nullable=False, default=0)
+    next_attempt_at = Column(DateTime(timezone=True), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    sent_at = Column(DateTime(timezone=True))
+    failed_at = Column(DateTime(timezone=True))
+    __table_args__ = (
+        CheckConstraint("status IN ('PENDING','DELIVERED','FAILED','EXPIRED','CANCELLED')", name="security_mail_status"),
+        CheckConstraint("attempts >= 0", name="security_mail_attempts"),
+        Index("ix_security_mail_due", "status", "next_attempt_at"),
+    )
+
+
 class EmailVerificationToken(Base):
     """Single-use, hashed credential for verifying one email snapshot."""
 
