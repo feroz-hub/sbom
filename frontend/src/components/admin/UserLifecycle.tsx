@@ -3,6 +3,8 @@ import { FormEvent, useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { UserStatusBadge } from './StatusBadges';
 import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog';
+import { type TenantSummary } from '@/lib/api';
+import { TenantSearchSelect } from './TenantSearchSelect';
 
 type Membership = { membership_id: number; tenant_id: number; tenant_name: string; membership_status: string; roles: string[]; primary_role: string; role_assignment_version: number };
 type Audit = { actor_user_id?: number | null; tenant_id?: number | null; id: number; action: string; outcome: string; timestamp: string };
@@ -34,7 +36,8 @@ function Lifecycle({ platform, scope, permission }: { platform: boolean; scope: 
   const [status, setStatus] = useState('');
   const [role, setRole] = useState('');
   const [provider, setProvider] = useState('');
-  const [tenantFilter, setTenantFilter] = useState('');
+  const [tenantFilter, setTenantFilter] = useState<TenantSummary | null>(null);
+  const [newTenant, setNewTenant] = useState<TenantSummary | null>(null);
   const [sort, setSort] = useState('name');
   const [page, setPage] = useState(1);
   const [rows, setRows] = useState<User[]>([]);
@@ -59,7 +62,7 @@ function Lifecycle({ platform, scope, permission }: { platform: boolean; scope: 
     const query = new URLSearchParams({ page: String(page), page_size: '20', search });
     if (status) query.set(platform ? 'local_status' : 'account_status', status);
     if (role) query.set('role', role);
-    if (platform) { query.set('sort_by', sort); if (provider) query.set('provider', provider); if (tenantFilter) query.set('tenant_id', tenantFilter); }
+    if (platform) { query.set('sort_by', sort); if (provider) query.set('provider', provider); if (tenantFilter) query.set('tenant_id', String(tenantFilter.id)); }
     api(`${prefix}?${query}`, scope).then(data => { if (current) { setRows(data.items); setTotal(data.total); } }).catch(e => { if (current) setError(e.message); }).finally(() => { if (current) setLoading(false); });
     return () => { current = false; };
   }, [prefix, scope, platform, page, search, status, role, provider, tenantFilter, sort, revision]);
@@ -87,7 +90,7 @@ function Lifecycle({ platform, scope, permission }: { platform: boolean; scope: 
       <label>Account status <select className={inputClass} value={status} onChange={e => filter(setStatus, e.target.value)}><option value="">All</option>{statuses.map(s => <option key={s}>{s}</option>)}</select></label>
       <label>Role <select className={inputClass} value={role} onChange={e => filter(setRole, e.target.value)}><option value="">All</option>{roles.map(r => <option key={r}>{r}</option>)}</select></label>
       {platform && <><label>Provider <select className={inputClass} value={provider} onChange={e => filter(setProvider, e.target.value)}><option value="">All</option><option>NATIVE</option><option>HCL_CS</option></select></label>
-        <label>Tenant ID <input className={inputClass} type="number" min="1" value={tenantFilter} onChange={e => filter(setTenantFilter, e.target.value)} /></label>
+        <TenantSearchSelect value={tenantFilter} onChange={tenant => { setTenantFilter(tenant); setPage(1); }} />
         <label>Sort <select className={inputClass} value={sort} onChange={e => filter(setSort, e.target.value)}>{['name', 'email', 'created_at', 'last_login_at'].map(s => <option key={s}>{s}</option>)}</select></label></>}
     </div>
     {error && <div><p role="alert">{error}</p><button onClick={() => { setError(''); setLoading(true); setRevision(n => n + 1); }}>Retry loading</button></div>}{notice && <p role="status">{notice}</p>}
@@ -115,9 +118,9 @@ function Lifecycle({ platform, scope, permission }: { platform: boolean; scope: 
           <form onSubmit={e => { e.preventDefault(); const data = new FormData(e.currentTarget); const codes = data.getAll('roles').map(String); const primary = String(data.get('primary')); const run = () => mutate(`/tenants/${m.tenant_id}/users/${uid}/roles`, 'PUT', { role_codes: codes, primary_role_code: primary, expected_version: m.role_assignment_version }, m.tenant_id); if (m.roles.some(r => !codes.includes(r))) confirm(`Remove roles for ${detail.display_name} in ${m.tenant_name}? Permissions will be removed immediately.`, run); else confirm(`Replace roles for ${detail.display_name} in ${m.tenant_name}? This changes this membership only.`, run); }}>
             <fieldset disabled={busy || (!platform && m.roles.includes('TENANT_ADMIN'))}><legend>Change tenant roles</legend>{roles.map(r => <label className="mr-3" key={r}><input type="checkbox" name="roles" value={r} defaultChecked={m.roles.includes(r)} /> {r}</label>)}<label>Primary role <select name="primary" className={inputClass} defaultValue={m.primary_role}>{roles.map(r => <option key={r}>{r}</option>)}</select></label><button>Save roles</button></fieldset>
           </form></>}
-        {canInvite && detail.account_status === 'PENDING_EMAIL_VERIFICATION' && detail.providers.includes('NATIVE') && <button disabled={busy} onClick={() => confirm(`Resend activation to ${detail.display_name} for ${m.tenant_name}? The previous activation link will stop working.`, () => mutate(`/tenants/${m.tenant_id}/native-users/${uid}/resend-activation`, 'POST', undefined, m.tenant_id))}>Resend activation</button>}
+        {canInvite && detail.account_status === 'PENDING_EMAIL_VERIFICATION' && detail.providers.includes('NATIVE') && <button disabled={busy} onClick={() => confirm(`Resend activation to ${detail.display_name} for ${m.tenant_name}? The previous activation link will stop working.`, () => mutate(`${platform ? '/platform' : ''}/tenants/${m.tenant_id}/native-users/${uid}/resend-activation`, 'POST', undefined, platform ? null : m.tenant_id))}>Resend activation</button>}
       </section>)}
-      {platform && canInvite && <form onSubmit={e => { e.preventDefault(); const data = new FormData(e.currentTarget); const tenant = Number(data.get('tenant')); void mutate(`/tenants/${tenant}/memberships`, 'POST', { user_id: uid, role_codes: data.getAll('roles') }, tenant); }}><h3>Add existing user to another tenant</h3><label>New tenant ID <input className={inputClass} name="tenant" type="number" min="1" required /></label>{roles.map(r => <label className="mr-3" key={r}><input type="checkbox" name="roles" value={r} defaultChecked={r === 'VIEWER'} /> {r}</label>)}<button disabled={busy}>Add membership</button></form>}
+      {platform && canInvite && <form onSubmit={e => { e.preventDefault(); if (!newTenant) return; const data = new FormData(e.currentTarget); const tenant = Number(newTenant.id); void mutate(`/tenants/${tenant}/memberships`, 'POST', { user_id: uid, role_codes: data.getAll('roles') }, tenant); }}><h3>Add existing user to another tenant</h3><TenantSearchSelect value={newTenant} onChange={setNewTenant} />{roles.map(r => <label className="mr-3" key={r}><input type="checkbox" name="roles" value={r} defaultChecked={r === 'VIEWER'} /> {r}</label>)}<button disabled={busy || !newTenant}>Add membership</button></form>}
       <h3 id="audit" className="font-semibold">Recent audit activity</h3><ol aria-label="Audit timeline" className="border-l-2 pl-4 space-y-3">{detail.activity?.items.map(a => <li key={a.id}><time>{a.timestamp}</time><p className="capitalize font-medium">{readable(a.action)} · {a.outcome}</p><p className="text-sm">Actor: {a.actor_user_id ?? 'System'}{a.tenant_id ? ` · Tenant ${a.tenant_id}` : ' · Account'}</p></li>)}</ol><p>{detail.activity?.total || 0} recorded events; showing the most recent 50.</p>
     </article>}
     <ConfirmationDialog open={Boolean(confirmation)} title="Confirm access change" description={confirmation?.text || ''} confirmLabel="Confirm" onClose={() => setConfirmation(null)} onConfirm={() => { const run = confirmation?.run; setConfirmation(null); if (run) void run(); }} />

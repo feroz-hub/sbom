@@ -93,6 +93,9 @@ export default function PlatformTenantsPage() {
   const queryClient = useQueryClient();
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState<CreateTenantRequest>(EMPTY_FORM);
+  const [adminMode, setAdminMode] = useState<'existing' | 'invite'>('existing');
+  const [tenantSearch, setTenantSearch] = useState('');
+  const [tenantPage, setTenantPage] = useState(1);
   const [selectedInitialAdmin, setSelectedInitialAdmin] = useState<UserSearchResult | null>(null);
   const [slugEdited, setSlugEdited] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof CreateTenantRequest, string>>>({});
@@ -100,8 +103,8 @@ export default function PlatformTenantsPage() {
   const [disableTarget, setDisableTarget] = useState<{ id: number | string; name: string } | null>(null);
 
   const tenants = useQuery({
-    queryKey: ['platform-tenants'],
-    queryFn: listPlatformTenants,
+    queryKey: ['platform-tenants', tenantSearch, tenantPage],
+    queryFn: () => listPlatformTenants(tenantSearch, tenantPage),
     enabled: !authLoading && canManage,
     retry: false,
   });
@@ -111,6 +114,7 @@ export default function PlatformTenantsPage() {
     onSuccess: async (tenant) => {
       showSuccess(`Tenant “${tenant.name}” was created successfully.`);
       setForm(EMPTY_FORM);
+      setAdminMode('existing');
       setSlugEdited(false);
       setSelectedInitialAdmin(null);
       setFieldErrors({});
@@ -140,7 +144,8 @@ export default function PlatformTenantsPage() {
     const normalized = {
       name: form.name.trim(),
       slug: form.slug.trim(),
-      initial_admin_user_id: form.initial_admin_user_id,
+      ...(adminMode === 'invite' ? { initial_admin_invitation: form.initial_admin_invitation }
+        : { initial_admin_user_id: form.initial_admin_user_id }),
     };
     const errors = validateTenantForm(normalized);
     setFieldErrors(errors);
@@ -186,7 +191,7 @@ export default function PlatformTenantsPage() {
           <div className="flex items-start justify-between gap-4">
             <div>
               <h2 id="create-tenant-heading" className="text-lg font-semibold">Create tenant</h2>
-              <p className="mt-1 text-sm text-hcl-muted">This creates the SBOM tenant and opens the management workspace to assign users.</p>
+              <p className="mt-1 text-sm text-hcl-muted">Create a tenant with its initial administrator. Invited administrators must activate their account before the tenant becomes active.</p>
             </div>
             <button type="button" onClick={() => { setFormOpen(false); setFieldErrors({}); }} className="text-sm text-hcl-muted hover:underline">Cancel</button>
           </div>
@@ -223,7 +228,16 @@ export default function PlatformTenantsPage() {
             </label>
             <div className="md:col-span-2">
               <label className="mb-1 block text-sm font-medium">Initial Tenant Administrator</label>
-              <UserSearchCombobox
+              <fieldset className="mb-4 flex gap-4"><legend className="sr-only">Administrator provisioning</legend>
+                {(['existing', 'invite'] as const).map(mode => <label key={mode}>
+                  <input type="radio" name="adminMode" checked={adminMode === mode} onChange={() => {
+                    setAdminMode(mode);
+                    setForm(current => ({ ...current, initial_admin_user_id: mode === 'existing' ? selectedInitialAdmin?.id ?? 0 : undefined,
+                      initial_admin_invitation: mode === 'invite' ? { first_name: '', last_name: '', email: '', phone: '' } : undefined }));
+                  }} /> {mode === 'existing' ? 'Select existing user' : 'Invite new user'}
+                </label>)}
+              </fieldset>
+              {adminMode === 'existing' ? <UserSearchCombobox
                 onSelect={(user) => {
                   setSelectedInitialAdmin(user);
                   setForm((current) => ({
@@ -234,7 +248,19 @@ export default function PlatformTenantsPage() {
                 selectedUser={selectedInitialAdmin}
                 placeholder="Search existing SBOM users by email, display name, or username…"
                 requireEligible
-              />
+              /> : <div className="grid gap-3 md:grid-cols-2">
+                {(['first_name', 'last_name', 'email', 'phone'] as const).map(field => <label key={field} className="capitalize">
+                  {field.replace('_', ' ')}{field === 'phone' ? ' (optional)' : ' *'}
+                  <input className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2"
+                    type={field === 'email' ? 'email' : 'text'} required={field !== 'phone'}
+                    maxLength={field === 'email' ? 320 : field === 'phone' ? 64 : 120}
+                    value={form.initial_admin_invitation?.[field] ?? ''}
+                    onChange={event => setForm(current => ({ ...current,
+                      initial_admin_invitation: { first_name: '', last_name: '', email: '', ...current.initial_admin_invitation, [field]: event.target.value },
+                    }))} />
+                </label>)}
+              </div>}
+              {fieldErrors.initial_admin_invitation && <p role="alert">{fieldErrors.initial_admin_invitation}</p>}
               {fieldErrors.initial_admin_user_id && (
                 <span className="mt-1 block text-xs text-red-600">{fieldErrors.initial_admin_user_id}</span>
               )}
@@ -246,10 +272,11 @@ export default function PlatformTenantsPage() {
                 <dt className="text-hcl-muted">Slug</dt><dd>{form.slug.trim() || '—'}</dd>
                 <dt className="text-hcl-muted">Initial Tenant Administrator</dt>
                 <dd>
-                  {selectedInitialAdmin
+                  {adminMode === 'invite' ? `${form.initial_admin_invitation?.first_name ?? ''} ${form.initial_admin_invitation?.last_name ?? ''} (${form.initial_admin_invitation?.email ?? ''})` : selectedInitialAdmin
                     ? `${selectedInitialAdmin.display_name || selectedInitialAdmin.username || 'Unnamed user'} (${selectedInitialAdmin.email || 'no email'})`
                     : '—'}
                 </dd>
+                <dt className="text-hcl-muted">Role</dt><dd>TENANT_ADMIN</dd>
               </dl>
             </div>
             <div className="md:col-span-2">
@@ -261,7 +288,7 @@ export default function PlatformTenantsPage() {
                 }
                 className="rounded-md bg-hcl-blue px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
               >
-                {createTenant.isPending ? 'Creating…' : 'Create Tenant'}
+                {createTenant.isPending ? 'Creating…' : adminMode === 'invite' ? 'Create Tenant & Invite Admin' : 'Create Tenant'}
               </button>
             </div>
           </form>
@@ -271,6 +298,8 @@ export default function PlatformTenantsPage() {
       <section aria-labelledby="tenant-list-heading" className="space-y-3">
         <div className="flex items-center justify-between gap-3">
           <h2 id="tenant-list-heading" className="text-lg font-semibold">Existing tenants</h2>
+          <label className="text-sm">Search tenants<input className="ml-2 rounded border bg-background px-3 py-2"
+            value={tenantSearch} onChange={event => { setTenantSearch(event.target.value); setTenantPage(1); }} /></label>
           <button type="button" onClick={() => void tenants.refetch().then((result) => {
             if (result.error) showError(getApiErrorMessage(result.error, 'Tenant refresh failed.'));
             else showInfo('Tenant list refreshed.');
@@ -349,6 +378,9 @@ export default function PlatformTenantsPage() {
           </div>
         )}
       </section>
+
+      <div className="flex gap-3"><button disabled={tenantPage === 1} onClick={() => setTenantPage(tenantPage - 1)}>Previous tenants</button>
+        <span>Page {tenantPage}</span><button disabled={(tenants.data?.length ?? 0) < 50} onClick={() => setTenantPage(tenantPage + 1)}>Next tenants</button></div>
 
       <ConfirmationDialog
         open={disableTarget !== null}

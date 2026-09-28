@@ -22,7 +22,12 @@ export function validateTenantForm(
   if (slug.length < 3 || slug.length > 128 || !SLUG_PATTERN.test(slug)) {
     errors.slug = 'Slug may contain lowercase letters, numbers, and single hyphens only.';
   }
-  if (!Number.isInteger(values.initial_admin_user_id) || values.initial_admin_user_id < 1) {
+  if (values.initial_admin_invitation) {
+    const profile = values.initial_admin_invitation;
+    if (!profile.first_name.trim() || !profile.last_name.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profile.email)) {
+      errors.initial_admin_invitation = 'Enter the administrator’s first name, last name, and valid email.';
+    }
+  } else if (!Number.isInteger(values.initial_admin_user_id) || (values.initial_admin_user_id ?? 0) < 1) {
     errors.initial_admin_user_id = 'Select an initial Tenant Administrator.';
   }
   return errors;

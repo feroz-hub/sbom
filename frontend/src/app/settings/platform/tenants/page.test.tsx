@@ -71,6 +71,23 @@ async function openAndFillForm() {
 }
 
 describe('PlatformTenantsPage', () => {
+  it('creates a tenant and invites a new initial administrator without raw identifiers', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(screen.getByRole('button', { name: 'Create Tenant' }));
+    await user.type(screen.getByLabelText('Name'), 'Olympus Healthcare');
+    await user.click(screen.getByRole('radio', { name: 'Invite new user' }));
+    await user.type(screen.getByLabelText(/First name/i), 'Ajmer');
+    await user.type(screen.getByLabelText(/Last name/i), 'Khan');
+    await user.type(screen.getByLabelText(/Email/i), 'ajmer@example.test');
+    expect(screen.getByText('TENANT_ADMIN')).toBeInTheDocument();
+    expect(screen.getByText('Ajmer Khan (ajmer@example.test)')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Create Tenant & Invite Admin' }));
+    await waitFor(() => expect(api.createPlatformTenant).toHaveBeenCalled());
+    expect(api.createPlatformTenant.mock.calls[0][0]).toEqual({ name: 'Olympus Healthcare', slug: 'olympus-healthcare',
+      initial_admin_invitation: { first_name: 'Ajmer', last_name: 'Khan', email: 'ajmer@example.test', phone: '' } });
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     auth.allowed = true;

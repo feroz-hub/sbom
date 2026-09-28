@@ -6,6 +6,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
+from .schemas_native_enrollment import NativeInviteProfile
+
 
 class TenantCreateRequest(BaseModel):
     """Syntax-only contract; domain normalization lives in tenant_service."""
@@ -18,6 +20,7 @@ class TenantCreateRequest(BaseModel):
     # Optional at schema level so the router can return the stable Phase 7
     # machine code instead of Pydantic's generic missing-field response.
     initial_admin_user_id: int | None = None
+    initial_admin_invitation: NativeInviteProfile | None = None
 
 
 class CreatedTenantResponse(BaseModel):

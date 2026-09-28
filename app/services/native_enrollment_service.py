@@ -40,7 +40,14 @@ def add_membership(
             raise HTTPException(404, "User not found")
         existing = db.scalar(select(TenantUser).where(TenantUser.tenant_id == tenant_id, TenantUser.user_id == user_id))
         if existing:
-            raise HTTPException(409, "Membership already exists; use role management")
+            current_roles = sorted(roles.effective_role_codes(db, existing))
+            raise HTTPException(409, {
+                "code": "MEMBERSHIP_ALREADY_EXISTS",
+                "message": f"{user.display_name or user.email} is already a member of {tenant.name}.",
+                "roles": current_roles,
+                "tenant_id": tenant.id,
+                "user_id": user.id,
+            })
         if not role_codes:
             raise HTTPException(422, "At least one role is required")
         now = datetime.now(UTC)
@@ -78,46 +85,55 @@ def add_membership(
     return member
 
 
-def create_user(db, context, payload):
+def provision_native_identity(db: Session, payload, *, actor_user_id: int) -> IAMUser:
+    """Resolve only the Native provider identifier; never link an HCL profile by email.
+
+    Caller owns the transaction and membership authorization. The unique Native
+    identifier index arbitrates concurrent attempts to create the same identity.
+    """
     if not get_settings().native_user_creation_enabled:
         raise HTTPException(404, "Native enrollment unavailable")
-    authorize(context, payload.tenant_id)
     email = normalize_email(payload.email)
     if not email:
         raise HTTPException(422, "A valid email address is required")
+    identity = db.scalar(select(UserIdentity).where(
+        UserIdentity.provider_type == "NATIVE", UserIdentity.provider_identifier == email,
+    ))
+    if identity:
+        user = db.scalar(select(IAMUser).where(IAMUser.id == identity.user_id).with_for_update()
+                         .execution_options(populate_existing=True))
+        if user.status not in {"ACTIVE", "PENDING_EMAIL_VERIFICATION"}:
+            raise HTTPException(409, "The existing Native account is not eligible for invitation")
+        if user.status == "ACTIVE" and (not user.email_verified or user.verification_required):
+            raise HTTPException(409, "The existing Native account requires email verification")
+        return user
+    now = datetime.now(UTC)
+    user = IAMUser(
+        first_name=payload.first_name, last_name=payload.last_name, email=email, phone=payload.phone,
+        display_name=f"{payload.first_name} {payload.last_name}", status="PENDING_EMAIL_VERIFICATION",
+        created_at=now, updated_at=now,
+    )
+    db.add(user)
+    db.flush()
+    db.add(UserIdentity(user_id=user.id, provider_type="NATIVE", provider_identifier=email,
+                        created_at=now, updated_at=now))
+    db.flush()
+    audit(db, "NATIVE_USER_CREATED", user.id, actor_user_id=actor_user_id)
+    return user
+
+
+def create_user(db, context, payload):
+    authorize(context, payload.tenant_id)
+    roles.validate_role_delegation(payload.role_codes, is_platform_admin=context.is_platform_admin)
     with db.begin_nested():
         # Serialize with tenant lifecycle operations before locking users.
         tenant = db.scalar(select(Tenant).where(Tenant.id == payload.tenant_id).with_for_update())
         if not tenant or tenant.status != "ACTIVE":
             raise HTTPException(404, "Active tenant not found")
-        if db.scalar(
-            select(UserIdentity.id).where(
-                UserIdentity.provider_type == "NATIVE", UserIdentity.provider_identifier == email
-            )
-        ):
-            raise HTTPException(409, "Native identity already exists; use the existing user ID")
-        now = datetime.now(UTC)
-        user = IAMUser(
-            first_name=payload.first_name,
-            last_name=payload.last_name,
-            email=email,
-            phone=payload.phone,
-            display_name=f"{payload.first_name} {payload.last_name}",
-            status="PENDING_EMAIL_VERIFICATION",
-            created_at=now,
-            updated_at=now,
-        )
-        db.add(user)
-        db.flush()
-        db.add(
-            UserIdentity(
-                user_id=user.id, provider_type="NATIVE", provider_identifier=email, created_at=now, updated_at=now
-            )
-        )
-        db.flush()
+        user = provision_native_identity(db, payload, actor_user_id=context.user_id)
         add_membership(db, context, payload.tenant_id, user.id, payload.role_codes)
-        issued = tokens.issue_activation_token(db, user.id, actor_user_id=context.user_id)
-        audit(db, "NATIVE_USER_CREATED", user.id, actor_user_id=context.user_id, tenant_id=payload.tenant_id)
+        issued = (tokens.issue_activation_token(db, user.id, actor_user_id=context.user_id)
+                  if user.status == "PENDING_EMAIL_VERIFICATION" else None)
         db.flush()
     return user, issued
 

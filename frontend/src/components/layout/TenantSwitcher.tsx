@@ -71,8 +71,8 @@ export function TenantSwitcher() {
   // Only while the dropdown is open, and only for platform administrators —
   // bootstrap never pays for this list.
   const platformTenants = useQuery({
-    queryKey: ['platform-tenants'],
-    queryFn: listPlatformTenants,
+    queryKey: ['platform-tenants', search],
+    queryFn: () => listPlatformTenants(search),
     enabled: open && isPlatformAdmin,
     staleTime: 60_000,
     retry: false,

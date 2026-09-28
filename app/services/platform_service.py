@@ -108,6 +108,8 @@ def _platform_user_conditions(
             or_(
                 IAMUser.email.ilike(pattern, escape="\\"),
                 IAMUser.display_name.ilike(pattern, escape="\\"),
+                IAMUser.first_name.ilike(pattern, escape="\\"),
+                IAMUser.last_name.ilike(pattern, escape="\\"),
                 IAMUser.user_principal_name.ilike(pattern, escape="\\"),
                 IAMUser.employee_id.ilike(pattern, escape="\\"),
             )
@@ -660,9 +662,15 @@ def update_tenant_status(
     status_value = status_value.strip().upper()
     if status_value not in TENANT_STATUSES:
         raise HTTPException(status_code=422, detail="Invalid tenant status")
-    tenant = db.get(Tenant, tenant_id)
+    tenant = db.scalar(select(Tenant).where(Tenant.id == tenant_id).with_for_update()
+                       .execution_options(populate_existing=True))
     if tenant is None:
         raise HTTPException(status_code=404, detail="Tenant not found")
+    if status_value == "ACTIVE":
+        from .tenant_service import _active_tenant_admin_count
+
+        if not _active_tenant_admin_count(db, tenant.id):
+            raise HTTPException(409, "An effective Tenant Administrator is required before activating this tenant")
     old_status = tenant.status
     tenant.status = status_value
     tenant.updated_at = datetime.now(UTC)

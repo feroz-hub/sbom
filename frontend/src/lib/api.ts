@@ -289,7 +289,8 @@ export interface TenantSummary {
 export interface CreateTenantRequest {
   name: string;
   slug: string;
-  initial_admin_user_id: number;
+  initial_admin_user_id?: number;
+  initial_admin_invitation?: { first_name: string; last_name: string; email: string; phone?: string };
 }
 
 // ─── Fetch with timeout + caller-signal support ───────────────────────────────
@@ -608,9 +609,14 @@ export function revokePlatformAdministrator(grantId: number): Promise<void> {
   });
 }
 
-export async function listPlatformTenants(): Promise<TenantSummary[]> {
-  const res = await request<TenantSummary[] | { items: TenantSummary[] }>('/api/platform/tenants', adminRequestOptions);
+export async function listPlatformTenants(query = '', page = 1): Promise<TenantSummary[]> {
+  const params = new URLSearchParams({ q: query, page: String(page), page_size: '50' });
+  const res = await request<TenantSummary[] | { items: TenantSummary[] }>(`/api/platform/tenants?${params}`, adminRequestOptions);
   return Array.isArray(res) ? res : res?.items ?? [];
+}
+
+export function getPlatformTenant(tenantId: number): Promise<TenantSummary> {
+  return request<TenantSummary>(`/api/platform/tenants/${tenantId}`, adminRequestOptions);
 }
 
 export async function createPlatformTenant(payload: CreateTenantRequest): Promise<TenantSummary> {

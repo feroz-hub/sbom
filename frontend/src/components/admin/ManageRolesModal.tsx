@@ -35,6 +35,7 @@ export function ManageRolesModal({
   tenantName,
   currentRoles,
   isMembershipActive = true,
+  assignableRoles = ALL_TENANT_ROLES.map(role => role.code),
   loading = false,
   errorMessage = null,
   onSave,
@@ -125,7 +126,7 @@ export function ManageRolesModal({
         )}
 
         <div className="space-y-3 pt-1">
-          {ALL_TENANT_ROLES.map(({ code, label }) => {
+          {ALL_TENANT_ROLES.filter(role => assignableRoles.includes(role.code)).map(({ code, label }) => {
             const isChecked = draftRoles.has(code);
             const description = ROLE_DESCRIPTIONS[code];
 

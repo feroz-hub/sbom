@@ -7,7 +7,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from ..core.context import CurrentContext
@@ -203,6 +203,8 @@ def _platform_tenant_dict(db: Session, tenant: Tenant) -> dict:
 def search_platform_users(
     q: str = Query(..., min_length=1, max_length=200),
     tenant_id: int | None = Query(default=None, ge=1),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=50),
     context: CurrentContext = Depends(
         require_platform_permission("platform:user:read")
     ),
@@ -215,11 +217,14 @@ def search_platform_users(
             or_(
                 IAMUser.email.ilike(pattern, escape="\\"),
                 IAMUser.display_name.ilike(pattern, escape="\\"),
+                IAMUser.first_name.ilike(pattern, escape="\\"),
+                IAMUser.last_name.ilike(pattern, escape="\\"),
                 IAMUser.user_principal_name.ilike(pattern, escape="\\"),
             )
         )
         .order_by(IAMUser.display_name.asc(), IAMUser.email.asc())
-        .limit(20)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
         .all()
     )
 
@@ -678,15 +683,35 @@ def update_iam_user_status_compatibility(
 
 @router.get("/tenants")
 def list_platform_tenants(
+    q: str | None = Query(default=None, max_length=200),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=100),
     _context: CurrentContext = Depends(
         require_platform_permission("platform:tenant:create")
     ),
     db: Session = Depends(get_db),
 ) -> list[dict]:
+    query = select(Tenant)
+    if q:
+        pattern = f"%{platform_service._escape_search(q.strip())}%"
+        query = query.where(or_(Tenant.name.ilike(pattern, escape="\\"), Tenant.slug.ilike(pattern, escape="\\")))
+    tenants = db.scalars(query.order_by(Tenant.name, Tenant.id).offset((page - 1) * page_size).limit(page_size))
     return [
         _platform_tenant_dict(db, tenant)
-        for tenant in platform_service.list_platform_tenants(db)
+        for tenant in tenants
     ]
+
+
+@router.get("/tenants/{tenant_id}")
+def get_platform_tenant(
+    tenant_id: int,
+    _context: CurrentContext = Depends(require_platform_permission("platform:tenant:create")),
+    db: Session = Depends(get_db),
+) -> dict:
+    tenant = db.get(Tenant, tenant_id)
+    if tenant is None:
+        raise HTTPException(404, "Tenant not found")
+    return _platform_tenant_dict(db, tenant)
 
 
 @router.patch("/tenants/{tenant_id}")

@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..core.native_identity import AccountActionPurpose, canonicalize_email
-from ..models import AccountActionToken, IAMUser, NativeUserCredential, UserIdentity
+from ..models import AccountActionToken, IAMUser, NativeUserCredential, Tenant, TenantUser, UserIdentity
 from ..settings import get_settings
 from . import account_action_token_service as tokens
 from . import audit_service, native_jwt_service, password_service
@@ -43,6 +43,12 @@ def activate(db: Session, raw_token: str, password: str) -> IAMUser:
             raise tokens.InvalidAccountActionToken()
         from .native_platform_bootstrap import finalize, lock_for_activation
 
+        # Tenant lifecycle/removal paths lock tenants before users. Hold the
+        # same locks through password activation and provisioning completion.
+        pending_tenants = list(db.scalars(select(Tenant).where(
+            Tenant.id.in_(select(TenantUser.tenant_id).where(TenantUser.user_id == row.user_id)),
+            Tenant.status == "PENDING",
+        ).order_by(Tenant.id).with_for_update().execution_options(populate_existing=True)))
         lock_for_activation(db, row.user_id)
         tokens.consume_action_token(db, raw_token, user_id=row.user_id, purpose=AccountActionPurpose.ACCOUNT_ACTIVATION)
         now = datetime.now(UTC)
@@ -63,6 +69,14 @@ def activate(db: Session, raw_token: str, password: str) -> IAMUser:
         audit(db, "PASSWORD_SET", user.id)
         transition_account(db, user.id, "ACTIVE", actor_user_id=None, activation_completed=True)
         finalize(db, user)
+        db.flush()
+        from .tenant_service import _active_tenant_admin_count
+
+        for tenant in pending_tenants:
+            if _active_tenant_admin_count(db, tenant.id):
+                tenant.status = "ACTIVE"
+                tenant.updated_at = now
+                audit(db, "TENANT_PROVISIONING_COMPLETED", user.id, tenant_id=tenant.id)
         db.flush()
     return user
 

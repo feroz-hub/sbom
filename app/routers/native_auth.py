@@ -1,7 +1,7 @@
 """Public native credentials and explicit administrator enrollment permissions."""
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -11,13 +11,13 @@ from ..core.native_identity import canonicalize_email
 from ..core.security import get_current_claims, require_permission, require_platform_permission
 from ..db import SessionLocal, get_db
 from ..models import IAMUser, UserIdentity
+from ..schemas_native_enrollment import NativeInviteProfile
 from ..services import native_abuse_service as abuse
 from ..services import native_auth_service as auth
 from ..services import native_enrollment_service as enrollment
 from ..services import native_jwt_service, native_security_delivery
 from ..services import native_password_service as passwords
 from ..services.account_action_token_service import InvalidAccountActionToken
-from ..services.identity_service import normalize_email
 from ..services.tenant_role_assignment_service import AssignmentProblem
 from ..settings import get_settings
 
@@ -34,21 +34,9 @@ class Activation(BaseModel):
     password: str = Field(min_length=1, max_length=1024, repr=False)
 
 
-class NewUser(BaseModel):
-    first_name: str = Field(min_length=1, max_length=120)
-    last_name: str = Field(min_length=1, max_length=120)
-    email: str = Field(min_length=1, max_length=320)
-    phone: str = Field(min_length=1, max_length=64)
+class NewUser(NativeInviteProfile):
     tenant_id: int = Field(gt=0)
     role_codes: list[str] = Field(min_length=1, max_length=32)
-
-    @field_validator("email")
-    @classmethod
-    def valid_email(cls, value):
-        result = normalize_email(value)
-        if not result:
-            raise ValueError("Valid email required")
-        return result
 
 
 class Membership(BaseModel):
@@ -109,7 +97,18 @@ def _create(payload, context, db):
     except AssignmentProblem as exc:
         db.rollback()
         raise HTTPException(exc.status_code, str(exc)) from None
-    return {"user_id": user.id, "status": user.status, "delivery": ({"status": "PENDING", "error_code": None} if get_settings().native_security_outbox_enabled else enrollment.deliver_activation(user, issued))}
+    except HTTPException as exc:
+        db.rollback()
+        if isinstance(exc.detail, dict) and exc.detail.get("code") == "MEMBERSHIP_ALREADY_EXISTS":
+            auth.audit(db, "TENANT_MEMBERSHIP_DUPLICATE_REJECTED", exc.detail["user_id"],
+                       actor_user_id=context.user_id, tenant_id=payload.tenant_id, outcome="DENIED")
+            db.commit()
+        raise
+    delivery = {"status": "NOT_REQUIRED", "error_code": None}
+    if issued is not None:
+        delivery = ({"status": "PENDING", "error_code": None} if get_settings().native_security_outbox_enabled
+                    else enrollment.deliver_activation(user, issued))
+    return {"user_id": user.id, "status": user.status, "delivery": delivery}
 
 
 @router.post("/platform/native-users", status_code=201)
@@ -150,6 +149,8 @@ def add_existing(
 
 
 @router.post("/tenants/{tenant_id}/native-users/{user_id}/resend-activation")
+@router.post("/platform/tenants/{tenant_id}/native-users/{user_id}/resend-activation",
+             dependencies=[Depends(require_platform_permission("platform:user:manage_status"))])
 def resend(
     request: Request,
     tenant_id: int,

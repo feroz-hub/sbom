@@ -326,6 +326,7 @@ export default function TenantUsersPage() {
           onClose={() => !actionLoading && setRolesModalMember(null)}
           displayName={rolesModalMember.display_name || rolesModalMember.email || `User #${rolesModalMember.user_id}`}
           tenantName={tenantName}
+          assignableRoles={(roles.data?.roles ?? []).map(role => getRoleCode(role)).filter((code): code is string => Boolean(code))}
           currentRoles={rolesModalMember.roles ?? [rolesModalMember.role]}
           membershipVersion={rolesModalMember.role_assignment_version}
           isMembershipActive={rolesModalMember.status === 'ACTIVE'}

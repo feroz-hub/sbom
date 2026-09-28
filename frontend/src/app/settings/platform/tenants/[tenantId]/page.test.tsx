@@ -21,7 +21,7 @@ const ACTIVE_TENANT_ID = 1;
 const refreshSession = vi.hoisted(() => vi.fn());
 const auth = vi.hoisted(() => ({ allowed: true }));
 const api = vi.hoisted(() => ({
-  listPlatformTenants: vi.fn(),
+  getPlatformTenant: vi.fn(),
   getTenantMembers: vi.fn(),
   getAssignableTenantRoles: vi.fn(),
   addTenantMember: vi.fn(),
@@ -122,7 +122,7 @@ describe('PlatformTenantDetailPage — member management UX', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     auth.allowed = true;
-    api.listPlatformTenants.mockResolvedValue([tenant]);
+    api.getPlatformTenant.mockResolvedValue(tenant);
     api.getTenantMembers.mockResolvedValue([member]);
     api.getAssignableTenantRoles.mockResolvedValue({ roles: ['TENANT_ADMIN', 'SECURITY_ANALYST', 'DEVELOPER', 'VIEWER'] });
     api.addTenantMember.mockResolvedValue(member);
@@ -284,7 +284,7 @@ describe('PlatformTenantDetailPage — preserved platform context', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     auth.allowed = true;
-    api.listPlatformTenants.mockResolvedValue([tenant]);
+    api.getPlatformTenant.mockResolvedValue(tenant);
     api.getTenantMembers.mockResolvedValue([member]);
     api.getAssignableTenantRoles.mockResolvedValue({ roles: ['VIEWER'] });
     api.updatePlatformTenantStatus.mockResolvedValue({ tenant_id: ROUTE_TENANT_ID, status: 'DISABLED' });
@@ -319,7 +319,7 @@ describe('PlatformTenantDetailPage — preserved platform context', () => {
 
       expect(await screen.findByRole('alert')).toHaveTextContent('Access denied.');
       expect(api.getTenantMembers).not.toHaveBeenCalled();
-      expect(api.listPlatformTenants).not.toHaveBeenCalled();
+      expect(api.getPlatformTenant).not.toHaveBeenCalled();
     } finally {
       auth.allowed = true;
     }

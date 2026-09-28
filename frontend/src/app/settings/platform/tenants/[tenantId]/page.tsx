@@ -13,7 +13,7 @@ import {
   deactivateTenantMember,
   getAssignableTenantRoles,
   getTenantMembers,
-  listPlatformTenants,
+  getPlatformTenant,
   removeTenantMember,
   replaceTenantMemberRoles,
   updatePlatformTenantStatus,
@@ -64,23 +64,23 @@ export default function PlatformTenantDetailPage({
   const [actionLoading, setActionLoading] = useState(false);
 
   const tenantsQuery = useQuery({
-    queryKey: ['platform-tenants'],
-    queryFn: listPlatformTenants,
+    queryKey: ['platform-tenant', numericTenantId],
+    queryFn: () => getPlatformTenant(numericTenantId),
     enabled: !authLoading && canManage,
   });
 
-  const tenant = tenantsQuery.data?.find((t) => String(t.id) === tenantIdStr);
+  const tenant = tenantsQuery.data;
 
   const members = useQuery({
     queryKey: ['tenant-users', numericTenantId],
     queryFn: () => getTenantMembers(numericTenantId),
-    enabled: !authLoading && canManage && !Number.isNaN(numericTenantId),
+    enabled: !authLoading && canManage && tenant?.status === 'ACTIVE' && !Number.isNaN(numericTenantId),
   });
 
   const roles = useQuery({
     queryKey: ['tenant-roles', numericTenantId],
     queryFn: () => getAssignableTenantRoles(numericTenantId),
-    enabled: !authLoading && canManage,
+    enabled: !authLoading && canManage && tenant?.status === 'ACTIVE',
   });
 
   const tenantName = tenant?.name || `Tenant #${tenantIdStr}`;
@@ -93,6 +93,7 @@ export default function PlatformTenantDetailPage({
     await qc.invalidateQueries({ queryKey: ['tenant-users', numericTenantId] });
     await qc.invalidateQueries({ queryKey: ['tenant-audit-history', numericTenantId] });
     await qc.invalidateQueries({ queryKey: ['platform-tenants'] });
+    await qc.invalidateQueries({ queryKey: ['platform-tenant', numericTenantId] });
   };
 
   const addMemberMutation = useMutation({
@@ -117,6 +118,7 @@ export default function PlatformTenantDetailPage({
     onSuccess: async (_result, status) => {
       showSuccess(`Tenant ${status === 'ACTIVE' ? 'enabled' : 'disabled'} successfully.`);
       await qc.invalidateQueries({ queryKey: ['platform-tenants'] });
+      await qc.invalidateQueries({ queryKey: ['platform-tenant', numericTenantId] });
     },
     onError: (error) => showError(getApiErrorMessage(error, 'The tenant status could not be changed.')),
   });
@@ -215,6 +217,17 @@ export default function PlatformTenantDetailPage({
 
   if (!canManage) {
     return <div role="alert" className="p-8 text-center text-red-700">Access denied.</div>;
+  }
+
+  if (tenant?.status === 'PENDING') {
+    return <main className="mx-auto max-w-4xl space-y-4 p-6">
+      <Link href="/settings/platform/tenants">Platform Tenants</Link>
+      <h1 className="text-2xl font-semibold">{tenant.name}</h1>
+      <p>{tenant.slug} · Pending administrator</p>
+      <p>The tenant becomes active when its initial Tenant Administrator activates their account.</p>
+      <p>{tenant.initial_administrator?.display_name} {tenant.initial_administrator?.email}</p>
+      <Link href="/settings/native-users">Manage users and resend activation</Link>
+    </main>;
   }
 
   return (

@@ -353,7 +353,9 @@ def create_tenant(
     ),
     db: Session = Depends(get_db),
 ) -> TenantCreationResponse:
-    if (
+    if payload.initial_admin_invitation is not None and payload.initial_admin_user_id is not None:
+        raise HTTPException(422, "Choose either an existing administrator or an invitation")
+    if payload.initial_admin_invitation is None and (
         payload.initial_admin_user_id is None
         or payload.initial_admin_user_id < 1
     ):
@@ -392,6 +394,7 @@ def create_tenant(
             slug=payload.slug,
             external_iam_tenant_id=payload.external_iam_tenant_id,
             initial_admin_user_id=payload.initial_admin_user_id,
+            initial_admin_invitation=payload.initial_admin_invitation,
             request=request,
         )
     except ts.TenantCreationError as exc:
@@ -436,6 +439,7 @@ def list_assignable_tenant_roles(
         "roles": [
             {"id": role.id, "code": role.code, "name": role.name}
             for role in roles
+            if _context.is_platform_admin or role.code != "TENANT_ADMIN"
         ]
     }
 
@@ -629,6 +633,8 @@ def tenant_user_role_history(
 def search_tenant_user_candidates(
     tenant_id: int,
     q: str = Query(..., min_length=1, max_length=200),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=50),
     context: CurrentContext = Depends(require_permission("tenant:user:invite")),
     db: Session = Depends(get_db),
 ) -> UserSearchResponse:
@@ -664,6 +670,8 @@ def search_tenant_user_candidates(
             or_(
                 IAMUser.email.ilike(pattern, escape="\\"),
                 IAMUser.display_name.ilike(pattern, escape="\\"),
+                IAMUser.first_name.ilike(pattern, escape="\\"),
+                IAMUser.last_name.ilike(pattern, escape="\\"),
                 IAMUser.user_principal_name.ilike(pattern, escape="\\"),
             ),
         )
@@ -672,7 +680,8 @@ def search_tenant_user_candidates(
             IAMUser.email.asc(),
             IAMUser.id.asc(),
         )
-        .limit(20)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
         .all()
     )
 

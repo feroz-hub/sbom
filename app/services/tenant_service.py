@@ -212,6 +212,12 @@ def _map_integrity_error(exc: IntegrityError) -> TenantCreationError:
             status_code=409,
             audit_event=IdentityAuditEvent.TENANT_INITIAL_ADMIN_ASSIGNMENT_FAILED,
         )
+    if constraint == "uq_user_identities_native_email":
+        return TenantCreationError(
+            IdentityErrorCode.TENANT_CREATION_FAILED,
+            "This Native identity was provisioned concurrently. Retry to reuse the existing user.",
+            status_code=409,
+        )
     return TenantCreationError(
         IdentityErrorCode.TENANT_CREATION_FAILED,
         "Tenant creation failed.",
@@ -265,11 +271,16 @@ def create_tenant_with_initial_admin(
     name: str,
     slug: str,
     external_iam_tenant_id: str | None,
-    initial_admin_user_id: int,
+    initial_admin_user_id: int | None,
+    initial_admin_invitation=None,
     request=None,
     failure_hook: Callable[[str], None] | None = None,
 ) -> TenantCreationResult:
-    """Atomically create an active tenant and its only initial membership.
+    """Atomically create a tenant and its only initial membership.
+
+    Existing eligible administrators produce ACTIVE tenants. Invited pending
+    Native administrators produce PENDING tenants until password activation;
+    token and encrypted outbox writes participate in this same transaction.
 
     Locking order is requester grant/user, initial administrator, uniqueness
     checks, tenant, membership, then audit rows. The platform dependency
@@ -316,15 +327,28 @@ def create_tenant_with_initial_admin(
                 new_value=safe_request,
             )
 
-            initial_admin = db.execute(
-                select(IAMUser)
-                .where(IAMUser.id == initial_admin_user_id)
-                .with_for_update()
-            ).scalar_one_or_none()
+            if initial_admin_invitation is not None:
+                from .native_enrollment_service import provision_native_identity
+
+                if not get_settings().native_security_outbox_enabled:
+                    raise TenantCreationError(
+                        IdentityErrorCode.TENANT_CREATION_FAILED,
+                        "Security email outbox must be enabled before inviting an initial administrator.",
+                        status_code=409,
+                    )
+                initial_admin = provision_native_identity(
+                    db, initial_admin_invitation, actor_user_id=actor_user_id,
+                )
+            else:
+                initial_admin = db.execute(
+                    select(IAMUser)
+                    .where(IAMUser.id == initial_admin_user_id)
+                    .with_for_update()
+                ).scalar_one_or_none()
+                initial_admin = _validate_initial_admin(initial_admin)
             audited_target_user_id = (
                 initial_admin.id if initial_admin is not None else None
             )
-            initial_admin = _validate_initial_admin(initial_admin)
             audit_service.write_authorization_audit(
                 db,
                 action=str(IdentityAuditEvent.TENANT_INITIAL_ADMIN_VALIDATED),
@@ -359,7 +383,7 @@ def create_tenant_with_initial_admin(
                 name=normalized_name,
                 slug=normalized_slug,
                 external_iam_tenant_id=normalized_external_id,
-                status="ACTIVE",
+                status="ACTIVE" if initial_admin.status == "ACTIVE" else "PENDING",
                 created_at=now,
                 updated_at=now,
             )
@@ -386,6 +410,16 @@ def create_tenant_with_initial_admin(
                 actor_user_id=actor_user_id,
                 source="TENANT_CREATION",
                 request=request,
+            )
+            if initial_admin_invitation is not None and initial_admin.status == "PENDING_EMAIL_VERIFICATION":
+                from .account_action_token_service import issue_activation_token
+
+                issue_activation_token(db, initial_admin.id, actor_user_id=actor_user_id)
+            audit_service.write_authorization_audit(
+                db,
+                action="TENANT_INITIAL_ADMIN_INVITED" if initial_admin_invitation is not None else "TENANT_INITIAL_ADMIN_SELECTED",
+                actor_user_id=actor_user_id, target_user_id=initial_admin.id,
+                target_membership_id=membership.id, tenant_id=tenant.id, request=request,
             )
             operation_stage = "audit"
             if failure_hook is not None:
@@ -426,6 +460,12 @@ def create_tenant_with_initial_admin(
     except TenantCreationError as exc:
         db.rollback()
         error = exc
+    except HTTPException as exc:
+        db.rollback()
+        error = TenantCreationError(
+            IdentityErrorCode.TENANT_CREATION_FAILED,
+            str(exc.detail), status_code=exc.status_code,
+        )
     except Exception as exc:
         db.rollback()
         unexpected_error = exc
