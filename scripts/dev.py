@@ -30,6 +30,8 @@ POSTGRES_PORT = 55439
 REDIS_PORT = 56379
 MAILPIT_SMTP_PORT = 1025
 MAILPIT_UI_PORT = 8025
+DEV_API_PORT = 18000
+DEV_FRONTEND_PORT = 13000
 BEAT_LOCK = ROOT / ".dev-beat.pid"
 VERBOSE = False
 
@@ -359,9 +361,173 @@ def provider_name(label: str) -> str:
 
 
 def default_database_url(provider: str, port: int) -> str:
-    user = "sbom" if provider == "docker" else getpass.getuser()
+    user = "sbom" if provider == "docker" else "postgres"
     password = "sbom" if provider == "docker" else ""
     return f"postgresql+psycopg://{quote(user, safe='')}:{quote(password, safe='')}@127.0.0.1:{port}/{DB_NAME}"
+
+
+def local_database_url(user: str, password: str, port: int) -> str:
+    return (
+        f"postgresql+psycopg://{quote(user, safe='')}:{quote(password, safe='')}"
+        f"@127.0.0.1:{port}/{DB_NAME}"
+    )
+
+
+def repository_database_candidate(path: Path, port: int) -> str | None:
+    """Reuse only credentials from a repository URL for this local server."""
+    if not path.exists():
+        return None
+    from dotenv import dotenv_values
+
+    raw = dotenv_values(path).get("DATABASE_URL")
+    if not isinstance(raw, str) or not raw:
+        return None
+    try:
+        parsed = urlsplit(raw)
+        source_port = parsed.port
+    except ValueError:
+        return None
+    if (
+        parsed.scheme not in {"postgresql", "postgresql+psycopg"}
+        or parsed.hostname not in {"localhost", "127.0.0.1"}
+        or source_port != port
+        or parsed.username is None
+        or parsed.query
+        or parsed.fragment
+    ):
+        return None
+    return local_database_url(unquote(parsed.username), unquote(parsed.password or ""), port)
+
+
+def default_pgpass_path(
+    *,
+    platform_name: str | None = None,
+    environment: dict[str, str] | None = None,
+    home: Path | None = None,
+) -> Path | None:
+    platform_name = platform_name or os.name
+    environment = environment if environment is not None else os.environ
+    if platform_name == "nt":
+        appdata = environment.get("APPDATA")
+        return Path(appdata) / "postgresql" / "pgpass.conf" if appdata else None
+    return (home or Path.home()) / ".pgpass"
+
+
+def split_pgpass_line(line: str) -> list[str]:
+    fields = [""]
+    escaped = False
+    for character in line:
+        if escaped:
+            fields[-1] += character
+            escaped = False
+        elif character == "\\":
+            escaped = True
+        elif character == ":":
+            fields.append("")
+        else:
+            fields[-1] += character
+    if escaped:
+        fields[-1] += "\\"
+    return fields
+
+
+def pgpass_database_candidates(path: Path | None, port: int) -> list[str]:
+    if path is None or not path.is_file():
+        return []
+    candidates = []
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return []
+    for raw_line in lines:
+        if not raw_line or raw_line.startswith("#"):
+            continue
+        fields = split_pgpass_line(raw_line)
+        if len(fields) != 5:
+            continue
+        host, saved_port, database, user, password = fields
+        if (
+            host not in {"localhost", "127.0.0.1", "*"}
+            or saved_port not in {str(port), "*"}
+            or database not in {DB_NAME, "*"}
+            or not user
+            or user == "*"
+        ):
+            continue
+        candidates.append(local_database_url(user, password, port))
+    return candidates
+
+
+def resolve_local_database_url(
+    saved_url: str | None,
+    port: int,
+    *,
+    repository_env: Path,
+    pgpass_path: Path | None,
+    interactive: bool,
+    input_fn=input,
+    password_fn=getpass.getpass,
+) -> str:
+    candidates = []
+    if saved_url:
+        validate_database_url(saved_url)
+        candidates.append(saved_url)
+    else:
+        repository_url = repository_database_candidate(repository_env, port)
+        if repository_url:
+            candidates.append(repository_url)
+        candidates.extend(pgpass_database_candidates(pgpass_path, port))
+        candidates.append(default_database_url("local", port))
+
+    for candidate in dict.fromkeys(candidates):
+        try:
+            ensure_database(candidate)
+            return candidate
+        except SetupError:
+            pass
+
+    if not interactive:
+        raise SetupError(
+            f"PostgreSQL credentials are required for {DB_NAME}. Run python scripts/dev.py in an interactive terminal."
+        )
+
+    print(f"[INFO] Local PostgreSQL detected at 127.0.0.1:{port}")
+    print(f"[INFO] PostgreSQL credentials are required for {DB_NAME}.")
+    while True:
+        user = input_fn("PostgreSQL user [postgres]: ").strip() or "postgres"
+        password = password_fn("PostgreSQL password: ")
+        candidate = local_database_url(user, password, port)
+        try:
+            ensure_database(candidate)
+            return candidate
+        except SetupError:
+            print("[ERROR] PostgreSQL credentials were not accepted or cannot create the development database. Try again.")
+
+
+def configure_local_database(
+    values: dict[str, str],
+    saved: dict[str, str],
+    port: int,
+    *,
+    config_path: Path = CONFIG,
+    repository_env: Path | None = None,
+    pgpass_path: Path | None = None,
+    interactive: bool,
+    input_fn=input,
+    password_fn=getpass.getpass,
+) -> None:
+    saved_url = saved.get("DATABASE_URL") if saved.get("DATABASE_URL") == values.get("DATABASE_URL") else None
+    values["DATABASE_URL"] = resolve_local_database_url(
+        saved_url,
+        port,
+        repository_env=repository_env or ROOT / ".env",
+        pgpass_path=pgpass_path if pgpass_path is not None else default_pgpass_path(),
+        interactive=interactive,
+        input_fn=input_fn,
+        password_fn=password_fn,
+    )
+    if values != saved:
+        write_config(values, config_path)
 
 
 def resolve_config(
@@ -388,6 +554,8 @@ def resolve_config(
     values["DEV_REDIS_PROVIDER"] = redis_provider
     # Local mode is explicit so a checked-in .env cannot turn on HCL or a remote mailer.
     fixed = {
+        "DEV_API_PORT": str(DEV_API_PORT),
+        "DEV_FRONTEND_PORT": str(DEV_FRONTEND_PORT),
         "AUTH_ENABLED": "true",
         "HCL_AUTH_ENABLED": "false",
         "NATIVE_AUTH_ENABLED": "true",
@@ -402,11 +570,11 @@ def resolve_config(
         "NATIVE_SECURITY_OUTBOX_ENABLED": "true",
         "NATIVE_AUTH_RATE_LIMIT_ENABLED": "true",
         "AUTH_SESSION_STORE": "redis",
-        "APP_ORIGIN": "https://localhost:3000",
-        "NATIVE_ACTIVATION_FRONTEND_URL": "https://localhost:3000/activate-account",
-        "NATIVE_PASSWORD_RESET_FRONTEND_URL": "https://localhost:3000/reset-password",
-        "EMAIL_VERIFICATION_FRONTEND_URL": "https://localhost:3000/verify-email",
-        "NATIVE_JWT_ISSUER": "https://localhost:3000/native",
+        "APP_ORIGIN": f"https://localhost:{DEV_FRONTEND_PORT}",
+        "NATIVE_ACTIVATION_FRONTEND_URL": f"https://localhost:{DEV_FRONTEND_PORT}/activate-account",
+        "NATIVE_PASSWORD_RESET_FRONTEND_URL": f"https://localhost:{DEV_FRONTEND_PORT}/reset-password",
+        "EMAIL_VERIFICATION_FRONTEND_URL": f"https://localhost:{DEV_FRONTEND_PORT}/verify-email",
+        "NATIVE_JWT_ISSUER": f"https://localhost:{DEV_FRONTEND_PORT}/native",
         "NATIVE_JWT_AUDIENCE": "sbom-analyser-api",
         "NATIVE_JWT_ACTIVE_KID": "native-dev",
         "NATIVE_JWT_ALGORITHM": "RS256",
@@ -420,11 +588,11 @@ def resolve_config(
         "SMTP_PASSWORD": "",
         "SMTP_USE_TLS": "false",
         "SMTP_USE_STARTTLS": "false",
-        "CORS_ORIGINS": "https://localhost:3000",
-        "SBOM_API_URL": "http://127.0.0.1:8000",
+        "CORS_ORIGINS": f"https://localhost:{DEV_FRONTEND_PORT}",
+        "SBOM_API_URL": f"http://127.0.0.1:{DEV_API_PORT}",
         "NEXT_PUBLIC_AUTH_ENABLED": "true",
         "NEXT_PUBLIC_HCL_AUTH_ENABLED": "false",
-        "NEXT_PUBLIC_API_URL": "http://127.0.0.1:8000",
+        "NEXT_PUBLIC_API_URL": f"http://127.0.0.1:{DEV_API_PORT}",
         "NEXT_PUBLIC_HCL_IAM_ISSUER": "",
         "NEXT_PUBLIC_HCL_IAM_CLIENT_ID": "",
         "REDIS_URL": f"redis://127.0.0.1:{redis_port}/0",
@@ -616,8 +784,12 @@ def http_ready(url: str, *, json_ready: bool = False) -> bool:
         return False
 
 
-def check_application_ports() -> None:
-    occupied = [str(port) for port in (8000, 3000) if any(reachable(host, port) for host in ("127.0.0.1", "::1"))]
+def check_application_ports(api_port: int, frontend_port: int) -> None:
+    occupied = [
+        str(port)
+        for port in (api_port, frontend_port)
+        if any(reachable(host, port) for host in ("127.0.0.1", "::1"))
+    ]
     if not occupied:
         return
     try:
@@ -627,22 +799,29 @@ def check_application_ports() -> None:
         owner = None
     if (
         owner
-        and http_ready("http://127.0.0.1:8000/health")
-        and http_ready("http://127.0.0.1:8000/ready/iam", json_ready=True)
+        and http_ready(f"http://127.0.0.1:{api_port}/health")
+        and http_ready(f"http://127.0.0.1:{api_port}/ready/iam", json_ready=True)
     ):
         raise SetupError(
             f"An SBOM dev launcher appears to be running (PID {owner}). Stop it with Ctrl+C in its terminal."
         )
     raise SetupError(
-        f"Port(s) {', '.join(occupied)} are occupied by another or unrecognized process. Stop that process, then rerun python scripts/dev.py. Nothing was killed."
+        f"Development port(s) {', '.join(occupied)} are unavailable because they are occupied by another or "
+        "unrecognized process. Stop that process, then rerun python scripts/dev.py. Nothing was killed."
     )
 
 
-def wait_for_ready(processes: list[subprocess.Popen], env: dict[str, str], timeout: int = 60) -> None:
+def wait_for_ready(
+    processes: list[subprocess.Popen],
+    env: dict[str, str],
+    api_port: int,
+    frontend_port: int,
+    timeout: int = 60,
+) -> None:
     checks = (
-        ("API", "http://127.0.0.1:8000/health", False),
-        ("API", "http://127.0.0.1:8000/ready/iam", True),
-        ("Frontend", "https://localhost:3000", False),
+        ("API", f"http://127.0.0.1:{api_port}/health", False),
+        ("API", f"http://127.0.0.1:{api_port}/ready/iam", True),
+        ("Frontend", f"https://localhost:{frontend_port}", False),
     )
     names = ("API", "Celery worker", "Celery Beat", "Frontend")
     deadline = time.monotonic() + timeout
@@ -769,11 +948,11 @@ def main() -> None:
     )
     if not args.check:
         generate_keys(values)
-        if values != saved:
-            write_config(values)
     env = os.environ.copy()
     env.update(values)
     env["PYTHONPATH"] = str(ROOT)
+    api_port = int(values["DEV_API_PORT"])
+    frontend_port = int(values["DEV_FRONTEND_PORT"])
     db_url = urlsplit(values["DATABASE_URL"])
     say("OK", "PostgreSQL", f"{postgres}, {db_url.hostname}:{db_url.port}")
     say("OK", "Redis", f"{redis}, 127.0.0.1:{redis_port}")
@@ -782,27 +961,19 @@ def main() -> None:
     if args.check:
         say("OK", "Check", "no services or processes started")
         return
-    check_application_ports()
-    try:
-        ensure_database(values["DATABASE_URL"])
-    except SetupError:
-        if postgres != "local" or not sys.stdin.isatty():
-            raise
-        print("Local PostgreSQL needs a login with database-create access (saved only in .env.dev.local).")
-        current_user = unquote(db_url.username or "")
-        user = input(f"PostgreSQL user [{current_user}]: ").strip() or current_user
-        password = getpass.getpass("PostgreSQL password: ")
-        values["DATABASE_URL"] = (
-            f"postgresql+psycopg://{quote(user, safe='')}:{quote(password, safe='')}@127.0.0.1:{pg_port}/{DB_NAME}"
-        )
-        ensure_database(values["DATABASE_URL"])
-        write_config(values)
+    check_application_ports(api_port, frontend_port)
+    if postgres == "local":
+        configure_local_database(values, saved, pg_port, interactive=sys.stdin.isatty())
         env["DATABASE_URL"] = values["DATABASE_URL"]
+    else:
+        ensure_database(values["DATABASE_URL"])
+        if values != saved:
+            write_config(values)
     validate_existing_schema(values["DATABASE_URL"])
     head = run_migrations(env)
     say("OK", "Schema", head)
     npm = ensure_frontend()
-    check_application_ports()
+    check_application_ports(api_port, frontend_port)
     acquire_beat_lock()
     processes = []
     try:
@@ -817,7 +988,7 @@ def main() -> None:
                     "--host",
                     "127.0.0.1",
                     "--port",
-                    "8000",
+                    str(api_port),
                     "--no-proxy-headers",
                 ],
                 env,
@@ -826,10 +997,18 @@ def main() -> None:
         celery = [str(venv_python()), "-m", "celery", "-A", "app.workers.celery_app"]
         processes.append(start_process("Celery worker", [*celery, "worker", "--loglevel=info"], env))
         processes.append(start_process("Celery Beat", [*celery, "beat", "--loglevel=info"], env))
-        processes.append(start_process("Frontend", [npm, "run", "dev:https"], env, ROOT / "frontend"))
-        wait_for_ready(processes, env)
+        processes.append(
+            start_process(
+                "Frontend",
+                [npm, "run", "dev:https", "--", "--port", str(frontend_port)],
+                env,
+                ROOT / "frontend",
+            )
+        )
+        wait_for_ready(processes, env, api_port, frontend_port)
         say("OK", "Native IAM", "enabled")
-        say("OK", "Frontend", "https://localhost:3000")
+        say("OK", "API", f"http://127.0.0.1:{api_port}")
+        say("OK", "Frontend", f"https://localhost:{frontend_port}")
         print("\nSBOM Analyzer is ready. Logs: .dev-logs/. Press Ctrl+C to stop.\n", flush=True)
         while all(process.poll() is None for process in processes):
             time.sleep(0.5)

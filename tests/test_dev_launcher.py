@@ -26,6 +26,8 @@ def test_config_roundtrip_and_secrets_persist(tmp_path: Path, capsys: pytest.Cap
     assert loaded["HCL_AUTH_ENABLED"] == "false"
     assert loaded["DEV_POSTGRES_PROVIDER"] == "docker"
     assert loaded["DEV_REDIS_PROVIDER"] == "docker"
+    assert loaded["DEV_API_PORT"] == "18000"
+    assert loaded["DEV_FRONTEND_PORT"] == "13000"
     assert loaded["NATIVE_JWT_PRIVATE_KEY"] not in capsys.readouterr().out
     if dev.os.name != "nt":
         assert path.stat().st_mode & 0o077 == 0
@@ -88,6 +90,154 @@ def test_saved_database_port_cannot_silently_change() -> None:
         )
 
 
+def test_windows_username_is_not_used_for_local_postgres(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(dev.getpass, "getuser", lambda: pytest.fail("Windows username was used"))
+    assert dev.default_database_url("local", 5432).startswith("postgresql+psycopg://postgres:@")
+
+
+def test_docker_database_credentials_are_unchanged() -> None:
+    assert (
+        dev.default_database_url("docker", dev.POSTGRES_PORT)
+        == "postgresql+psycopg://sbom:sbom@127.0.0.1:55439/sbom_analyser_dev"
+    )
+
+
+def test_saved_local_database_credentials_are_reused(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    saved_url = "postgresql+psycopg://saved:saved-secret@localhost:5432/sbom_analyser_dev"
+    checked = []
+    monkeypatch.setattr(dev, "ensure_database", lambda url: checked.append(url))
+    resolved = dev.resolve_local_database_url(
+        saved_url,
+        5432,
+        repository_env=tmp_path / "missing.env",
+        pgpass_path=tmp_path / "missing.pgpass",
+        interactive=False,
+    )
+    assert resolved == saved_url
+    assert checked == [saved_url]
+
+
+@pytest.mark.parametrize("host", ["localhost", "127.0.0.1"])
+def test_repository_local_credentials_are_reused_with_dev_database(tmp_path: Path, host: str) -> None:
+    path = tmp_path / ".env"
+    path.write_text(f"DATABASE_URL=postgresql://app-user:app-password@{host}:5432/sbom_analyser\n")
+    candidate = dev.repository_database_candidate(path, 5432)
+    assert candidate == "postgresql+psycopg://app-user:app-password@127.0.0.1:5432/sbom_analyser_dev"
+
+
+def test_repository_remote_database_url_is_not_a_candidate(tmp_path: Path) -> None:
+    path = tmp_path / ".env"
+    path.write_text("DATABASE_URL=postgresql://app-user:secret@database.example:5432/sbom_analyser\n")
+    assert dev.repository_database_candidate(path, 5432) is None
+
+
+def test_pgpass_local_credentials_are_parsed_without_exposing_password(tmp_path: Path) -> None:
+    path = tmp_path / ".pgpass"
+    path.write_text(
+        "# ignored\n"
+        "database.example:5432:*:remote:remote-secret\n"
+        "localhost:5432:sbom_analyser_dev:local-user:local\\:secret\n"
+    )
+    candidates = dev.pgpass_database_candidates(path, 5432)
+    assert candidates == [
+        "postgresql+psycopg://local-user:local%3Asecret@127.0.0.1:5432/sbom_analyser_dev"
+    ]
+
+
+def test_standard_pgpass_paths() -> None:
+    assert dev.default_pgpass_path(platform_name="nt", environment={"APPDATA": "C:/Users/dev/AppData/Roaming"}) == Path(
+        "C:/Users/dev/AppData/Roaming/postgresql/pgpass.conf"
+    )
+    assert dev.default_pgpass_path(platform_name="posix", home=Path("/Users/dev")) == Path("/Users/dev/.pgpass")
+
+
+def test_local_prompt_defaults_to_postgres_and_hides_password(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    prompts = []
+
+    def validate(url: str) -> None:
+        if dev.unquote(dev.urlsplit(url).password or "") != "prompt-secret":
+            raise dev.SetupError("invalid")
+
+    monkeypatch.setattr(dev, "ensure_database", validate)
+    resolved = dev.resolve_local_database_url(
+        None,
+        5432,
+        repository_env=tmp_path / "missing.env",
+        pgpass_path=tmp_path / "missing.pgpass",
+        interactive=True,
+        input_fn=lambda prompt: prompts.append(prompt) or "",
+        password_fn=lambda prompt: "prompt-secret",
+    )
+    assert dev.unquote(dev.urlsplit(resolved).username or "") == "postgres"
+    assert prompts == ["PostgreSQL user [postgres]: "]
+    assert "prompt-secret" not in capsys.readouterr().out
+
+
+def test_invalid_prompted_credentials_can_be_retried_without_password_output(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    passwords = iter(["wrong-secret", "right-secret"])
+
+    def validate(url: str) -> None:
+        if dev.unquote(dev.urlsplit(url).password or "") != "right-secret":
+            raise dev.SetupError("invalid")
+
+    monkeypatch.setattr(dev, "ensure_database", validate)
+    resolved = dev.resolve_local_database_url(
+        None,
+        5432,
+        repository_env=tmp_path / "missing.env",
+        pgpass_path=tmp_path / "missing.pgpass",
+        interactive=True,
+        input_fn=lambda prompt: "postgres",
+        password_fn=lambda prompt: next(passwords),
+    )
+    output = capsys.readouterr().out
+    assert dev.unquote(dev.urlsplit(resolved).password or "") == "right-secret"
+    assert "Try again" in output
+    assert "wrong-secret" not in output
+    assert "right-secret" not in output
+
+
+def test_invalid_local_credentials_are_not_persisted(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    config = tmp_path / ".env.dev.local"
+    monkeypatch.setattr(dev, "ensure_database", lambda url: (_ for _ in ()).throw(dev.SetupError("invalid")))
+    with pytest.raises(dev.SetupError, match="credentials are required"):
+        dev.configure_local_database(
+            {"DATABASE_URL": dev.default_database_url("local", 5432)},
+            {},
+            5432,
+            config_path=config,
+            repository_env=tmp_path / "missing.env",
+            pgpass_path=tmp_path / "missing.pgpass",
+            interactive=False,
+        )
+    assert not config.exists()
+
+
+def test_valid_local_credentials_are_persisted(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    repository_env = tmp_path / ".env"
+    repository_env.write_text("DATABASE_URL=postgresql://local:valid-secret@localhost:5432/production_name\n")
+    config = tmp_path / ".env.dev.local"
+    monkeypatch.setattr(dev, "ensure_database", lambda url: None)
+    values = {"DATABASE_URL": dev.default_database_url("local", 5432)}
+    dev.configure_local_database(
+        values,
+        {},
+        5432,
+        config_path=config,
+        repository_env=repository_env,
+        pgpass_path=tmp_path / "missing.pgpass",
+        interactive=False,
+    )
+    persisted = dev.read_config(config)
+    assert persisted["DATABASE_URL"] == (
+        "postgresql+psycopg://local:valid-secret@127.0.0.1:5432/sbom_analyser_dev"
+    )
+
+
 def test_provider_fallback_updates_only_development_urls() -> None:
     saved = dev.resolve_config({}, 55439, 56379, 1025)
     changed = dev.resolve_config(saved, 5432, 6379, 1025, pg_provider="local", redis_provider="local")
@@ -96,6 +246,18 @@ def test_provider_fallback_updates_only_development_urls() -> None:
     assert changed["DATABASE_URL"].endswith(":5432/sbom_analyser_dev")
     assert changed["REDIS_URL"].endswith(":6379/0")
     assert changed["AUTH_SESSION_REDIS_URL"].endswith(":6379/1")
+
+
+def test_generated_application_urls_use_development_ports() -> None:
+    values = dev.resolve_config({}, 55439, 56379, 1025)
+    assert values["SBOM_API_URL"] == "http://127.0.0.1:18000"
+    assert values["NEXT_PUBLIC_API_URL"] == "http://127.0.0.1:18000"
+    assert values["APP_ORIGIN"] == "https://localhost:13000"
+    assert values["CORS_ORIGINS"] == "https://localhost:13000"
+    assert values["NATIVE_ACTIVATION_FRONTEND_URL"] == "https://localhost:13000/activate-account"
+    assert values["NATIVE_PASSWORD_RESET_FRONTEND_URL"] == "https://localhost:13000/reset-password"
+    assert values["EMAIL_VERIFICATION_FRONTEND_URL"] == "https://localhost:13000/verify-email"
+    assert values["NATIVE_JWT_ISSUER"] == "https://localhost:13000/native"
 
 
 def test_docker_service_is_reused(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -257,11 +419,11 @@ def test_readiness_waits_for_all_three_checks(monkeypatch: pytest.MonkeyPatch) -
     requests = []
     monkeypatch.setattr(dev, "http_ready", lambda url, json_ready=False: requests.append((url, json_ready)) or True)
     processes = [SimpleNamespace(poll=lambda: None) for _ in range(4)]
-    dev.wait_for_ready(processes, {}, timeout=1)
+    dev.wait_for_ready(processes, {}, dev.DEV_API_PORT, dev.DEV_FRONTEND_PORT, timeout=1)
     assert requests == [
-        ("http://127.0.0.1:8000/health", False),
-        ("http://127.0.0.1:8000/ready/iam", True),
-        ("https://localhost:3000", False),
+        ("http://127.0.0.1:18000/health", False),
+        ("http://127.0.0.1:18000/ready/iam", True),
+        ("https://localhost:13000", False),
     ]
 
 
@@ -269,21 +431,26 @@ def test_readiness_failure_names_log(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(dev, "http_ready", lambda url, json_ready=False: False)
     processes = [SimpleNamespace(poll=lambda: None) for _ in range(4)]
     with pytest.raises(dev.SetupError, match=r"\.dev-logs/api\.log"):
-        dev.wait_for_ready(processes, {}, timeout=0)
+        dev.wait_for_ready(processes, {}, dev.DEV_API_PORT, dev.DEV_FRONTEND_PORT, timeout=0)
 
 
 def test_unrecognized_application_port_is_not_reused(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr(dev, "BEAT_LOCK", tmp_path / "absent.pid")
-    monkeypatch.setattr(dev, "reachable", lambda host, port: port == 8000)
-    with pytest.raises(dev.SetupError, match=r"Port\(s\) 8000 are occupied by another or unrecognized process"):
-        dev.check_application_ports()
+    monkeypatch.setattr(dev, "reachable", lambda host, port: port == dev.DEV_API_PORT)
+    with pytest.raises(dev.SetupError, match=r"Development port\(s\) 18000 are unavailable"):
+        dev.check_application_ports(dev.DEV_API_PORT, dev.DEV_FRONTEND_PORT)
+
+
+def test_production_application_ports_do_not_block_development(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(dev, "reachable", lambda host, port: port in {3000, 8000})
+    dev.check_application_ports(dev.DEV_API_PORT, dev.DEV_FRONTEND_PORT)
 
 
 def test_existing_sbom_launcher_is_identified(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     lock = tmp_path / "beat.pid"
     lock.write_text(str(dev.os.getpid()))
     monkeypatch.setattr(dev, "BEAT_LOCK", lock)
-    monkeypatch.setattr(dev, "reachable", lambda host, port: port == 8000)
+    monkeypatch.setattr(dev, "reachable", lambda host, port: port == dev.DEV_API_PORT)
     monkeypatch.setattr(dev, "http_ready", lambda url, json_ready=False: True)
     with pytest.raises(dev.SetupError, match="SBOM dev launcher appears to be running"):
-        dev.check_application_ports()
+        dev.check_application_ports(dev.DEV_API_PORT, dev.DEV_FRONTEND_PORT)
