@@ -52,7 +52,8 @@ def received_token(email):
     item = listing["messages"][0]
     message = httpx.get("http://127.0.0.1:8025/api/v1/message/" + item["ID"], timeout=10).json()
     body = message["Text"]
-    assert "SBOM Analyser" in body and "Support:" in body and "https://" in body
+    assert "SBOM Analyzer" in body and "https://" in body
+    assert "<html" in message["HTML"] and "#token=" in message["HTML"]
     assert "password_hash" not in body and "JWT" not in body
     return re.search(r"#token=([A-Za-z0-9_-]+)", body)[1]
 

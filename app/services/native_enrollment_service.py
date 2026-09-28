@@ -12,6 +12,7 @@ from ..models import AccountActionToken, IAMUser, Tenant, TenantUser, UserIdenti
 from ..settings import get_settings
 from . import account_action_token_service as tokens
 from . import tenant_role_assignment_service as roles
+from .email_templates import render_activation_email
 from .identity_service import normalize_email
 from .native_auth_service import audit
 from .native_security_delivery import send_security_email
@@ -170,9 +171,16 @@ def deliver_activation(user: IAMUser, issued: tokens.IssuedAccountActionToken) -
         return {"status": "FAILED", "error_code": "INVALID_ACTIVATION_URL"}
     # Fragment keeps the raw token out of HTTP request URLs and access logs.
     activation_url = f"{url}#token={issued.raw_token}"
-    text = (
-        f"Hello {user.first_name or ''},\nActivate your SBOM Analyser account:\n{activation_url}\n"
-        "This link is valid for five hours. If you did not expect this invitation, ignore it.\n"
-        f"Support: {s.platform_admin_contact_email or 'Contact your administrator'}"
+    rendered = render_activation_email(
+        first_name=user.first_name,
+        activation_url=activation_url,
+        ttl_seconds=s.native_account_activation_ttl_seconds,
+        support_email=s.platform_admin_contact_email or None,
     )
-    return send_security_email(issued.email_snapshot, "Activate your SBOM Analyser account", text, f"<security-{issued.id}@sbom.invalid>")
+    return send_security_email(
+        issued.email_snapshot,
+        rendered.subject,
+        rendered.text_body,
+        f"<security-{issued.id}@sbom.invalid>",
+        html_body=rendered.html_body,
+    )
