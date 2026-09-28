@@ -146,6 +146,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [tenants, setTenants] = useState<TenantInfo[]>([]);
   const [activeTenantIdState, setActiveTenantIdState] = useState<string | null>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const sessionProviderRef = useRef<string | null>(null);
 
   const setBootstrapState = useCallback((state: BootstrapState, error: string | null = null) => {
     setBootstrapStateInternal(state);
@@ -188,6 +189,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const sessionResponse = await fetch('/api/auth/session', { credentials: 'include', cache: 'no-store' });
       const session = await sessionResponse.json().catch(() => null);
+      sessionProviderRef.current = session?.provider ?? null;
 
       if (!sessionResponse.ok || session?.authenticated !== true) {
         clearActiveTenantId();
@@ -530,6 +532,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [config.enabled]);
 
   const logout = useCallback(() => {
+    const localLogout = sessionProviderRef.current === 'NATIVE' || process.env.NEXT_PUBLIC_HCL_AUTH_ENABLED === 'false'
+      ? '/logged-out?provider=native' : '/logged-out';
     clearActiveTenantId();
     setUser(null);
     setTenants([]);
@@ -557,9 +561,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         return response.json();
       })
-      .then((body) => followLogoutRedirect(body.redirectUrl || config.postLogoutRedirectUri))
-      .catch(() => followLogoutRedirect(config.postLogoutRedirectUri));
-  }, [config.enabled, config.postLogoutRedirectUri, queryClient, setBootstrapState]);
+      .then((body) => followLogoutRedirect(body.redirectUrl || localLogout))
+      .catch(() => followLogoutRedirect(localLogout));
+  }, [config.enabled, queryClient, setBootstrapState]);
 
   const reloadAuth = useCallback(() => {
     void checkAuth();

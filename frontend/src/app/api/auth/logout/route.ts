@@ -15,8 +15,12 @@ export async function POST(request: NextRequest) {
   if (session?.provider === 'NATIVE') {
     await fetch(`${config.apiUrl}/api/auth/native/logout`, { method: 'POST', headers: { Authorization: `Bearer ${session.accessToken}` }, cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(3000) }).catch(() => undefined);
   }
-  let redirectUrl = config.postLogoutRedirectUri;
-  if (session && session.provider !== 'NATIVE') {
+  const native = session?.provider === 'NATIVE' || process.env.NEXT_PUBLIC_HCL_AUTH_ENABLED === 'false';
+  // Relative navigation retains the application's actual origin/port. Native
+  // sessions must never inherit the separate HCL client's callback settings.
+  let redirectUrl = native ? '/logged-out?provider=native' : '/logged-out';
+  if (session && !native) {
+  redirectUrl = config.postLogoutRedirectUri;
   try {
     const discovery = await getDiscovery(config);
     if (session && discovery.revocation_endpoint) {

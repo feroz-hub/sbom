@@ -221,7 +221,19 @@ def ensure_virtualenv() -> None:
         if result.returncode:
             raise SetupError("Could not create .venv. Install Python 3.11+ with venv support.")
     if Path(sys.prefix).resolve() != VENV.resolve():
-        os.execv(str(venv_python()), [str(venv_python()), str(Path(__file__).resolve()), *sys.argv[1:]])
+        command = [str(venv_python()), str(Path(__file__).resolve()), *sys.argv[1:]]
+        if sys.platform == "win32":
+            # Windows execv can release the shell while the new Python still
+            # reads its console. Keep this parent alive, with inherited stdio
+            # and the same console group so Ctrl+C reaches the child directly.
+            # A Python handler (not SIG_IGN) avoids inheriting ignored Ctrl+C.
+            previous_handler = signal.signal(signal.SIGINT, lambda signum, frame: None)
+            try:
+                child = subprocess.Popen(command)
+                raise SystemExit(child.wait())
+            finally:
+                signal.signal(signal.SIGINT, previous_handler)
+        os.execv(command[0], command)
 
 
 def ensure_dependencies() -> None:
@@ -1037,7 +1049,10 @@ def main() -> None:
             )
         )
         celery = [str(venv_python()), "-m", "celery", "-A", "app.workers.celery_app"]
-        processes.append(start_process("Celery worker", [*celery, "worker", "--loglevel=info"], env))
+        worker_command = [*celery, "worker", "--loglevel=info"]
+        if sys.platform == "win32":
+            worker_command.append("--pool=solo")
+        processes.append(start_process("Celery worker", worker_command, env))
         processes.append(start_process("Celery Beat", [*celery, "beat", "--loglevel=info"], env))
         processes.append(
             start_process(
@@ -1068,6 +1083,9 @@ def main() -> None:
 if __name__ == "__main__":
     try:
         main()
+    except KeyboardInterrupt:
+        print("\n[INFO] Development setup cancelled.", file=sys.stderr)
+        sys.exit(130)
     except SetupError as error:
         if VERBOSE:
             raise

@@ -10,6 +10,70 @@ import pytest
 from scripts import dev
 
 
+def mock_virtualenv_handoff(monkeypatch, tmp_path, platform):
+    python = tmp_path / "venv" / "python.exe"
+    python.parent.mkdir()
+    python.touch()
+    monkeypatch.setattr(dev, "VENV", python.parent)
+    monkeypatch.setattr(dev, "venv_python", lambda: python)
+    monkeypatch.setattr(dev.sys, "prefix", str(tmp_path / "system-python"))
+    monkeypatch.setattr(dev.sys, "platform", platform)
+    monkeypatch.setattr(dev.sys, "argv", ["scripts/dev.py", "--verbose"])
+    return [str(python), str(Path(dev.__file__).resolve()), "--verbose"]
+
+
+@pytest.mark.parametrize("exit_code", [0, 1, 130])
+def test_windows_handoff_waits_with_inherited_console(monkeypatch, tmp_path, exit_code):
+    command = mock_virtualenv_handoff(monkeypatch, tmp_path, "win32")
+    handlers = []
+    original_handler = object()
+    monkeypatch.setattr(dev.signal, "signal", lambda sig, handler: handlers.append(handler) or original_handler)
+
+    def wait():
+        # Windows broadcasts Ctrl+C to both processes. The parent stays alive
+        # until the child has handled cancellation and completed cleanup.
+        assert callable(handlers[0])
+        handlers[0](dev.signal.SIGINT, None)
+        return exit_code
+
+    child = SimpleNamespace(wait=MagicMock(side_effect=wait))
+    popen = MagicMock(return_value=child)
+    monkeypatch.setattr(dev.subprocess, "Popen", popen)
+    monkeypatch.setattr(dev.os, "execv", lambda *args: pytest.fail("Windows must not execv"))
+    with pytest.raises(SystemExit) as result:
+        dev.ensure_virtualenv()
+    assert result.value.code == exit_code
+    popen.assert_called_once_with(command)  # No pipes, detached console, or new process group.
+    child.wait.assert_called_once_with()
+    assert handlers[-1] is original_handler
+
+
+def test_windows_handoff_restores_signal_handler_on_spawn_failure(monkeypatch, tmp_path):
+    mock_virtualenv_handoff(monkeypatch, tmp_path, "win32")
+    handler = MagicMock(return_value=dev.signal.default_int_handler)
+    monkeypatch.setattr(dev.signal, "signal", handler)
+    monkeypatch.setattr(dev.subprocess, "Popen", MagicMock(side_effect=OSError("spawn failed")))
+    with pytest.raises(OSError, match="spawn failed"):
+        dev.ensure_virtualenv()
+    assert handler.call_args.args == (dev.signal.SIGINT, dev.signal.default_int_handler)
+
+
+@pytest.mark.parametrize("platform", ["linux", "darwin"])
+def test_posix_handoff_keeps_execv(monkeypatch, tmp_path, platform):
+    command = mock_virtualenv_handoff(monkeypatch, tmp_path, platform)
+    execute = MagicMock()
+    monkeypatch.setattr(dev.os, "execv", execute)
+    dev.ensure_virtualenv()
+    execute.assert_called_once_with(command[0], command)
+
+
+def test_virtualenv_handoff_does_not_relaunch_inside_venv(monkeypatch, tmp_path):
+    mock_virtualenv_handoff(monkeypatch, tmp_path, "win32")
+    monkeypatch.setattr(dev.sys, "prefix", str(dev.VENV))
+    monkeypatch.setattr(dev.subprocess, "Popen", lambda *args: pytest.fail("Unexpected relaunch"))
+    dev.ensure_virtualenv()
+
+
 @pytest.mark.parametrize("keys,expected,masked", [
     ("Secret9!\r", "Secret9!", "********"),
     ("\bAb\bC\r", "AC", "**\b \b*"),
@@ -430,6 +494,39 @@ def test_check_mode_does_not_start_services_or_processes(
     output = capsys.readouterr().out
     assert "no services or processes started" in output
     assert "BEGIN PRIVATE KEY" not in output
+
+
+@pytest.mark.parametrize("platform", ["win32", "linux", "darwin"])
+def test_startup_commands_use_solo_only_for_windows_worker(monkeypatch, tmp_path, platform):
+    monkeypatch.setattr(dev.sys, "platform", platform)
+    monkeypatch.setattr(dev.sys, "argv", ["dev.py"])
+    monkeypatch.setattr(dev, "CONFIG", tmp_path / ".env.dev.local")
+    monkeypatch.setattr(dev, "BEAT_LOCK", tmp_path / "beat.lock")
+    monkeypatch.setattr(dev, "venv_python", lambda: tmp_path / "python")
+    monkeypatch.setattr(dev, "read_config", lambda: {})
+    monkeypatch.setattr(dev, "docker_available", lambda: False)
+    monkeypatch.setattr(dev, "select_service", lambda service, port, *args, **kwargs: ("Docker", port))
+    monkeypatch.setattr(dev, "mailpit_ready", lambda: True)
+    for name in ("ensure_virtualenv", "ensure_dependencies", "generate_keys", "check_application_ports",
+                 "ensure_database", "write_config", "validate_existing_schema", "acquire_beat_lock", "stop_processes"):
+        monkeypatch.setattr(dev, name, lambda *args, **kwargs: None)
+    monkeypatch.setattr(dev, "run_migrations", lambda env: "test-head")
+    monkeypatch.setattr(dev, "ensure_frontend", lambda: "npm")
+    started = {}
+    monkeypatch.setattr(dev, "start_process", lambda name, command, *args: started.setdefault(name, command))
+
+    def ready(*args):
+        raise KeyboardInterrupt  # End the simulated foreground run without launching anything.
+
+    monkeypatch.setattr(dev, "wait_for_ready", ready)
+    dev.main()
+    python = str(tmp_path / "python")
+    celery = [python, "-m", "celery", "-A", "app.workers.celery_app"]
+    assert started["Celery worker"] == [*celery, "worker", "--loglevel=info", *(["--pool=solo"] if platform == "win32" else [])]
+    assert started["Celery Beat"] == [*celery, "beat", "--loglevel=info"]
+    assert started["API"] == [python, "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1",
+                              "--port", "18000", "--no-proxy-headers"]
+    assert started["Frontend"] == ["npm", "run", "dev:https", "--", "--port", "13000"]
 
 
 def test_same_environment_passed_to_all_processes(monkeypatch: pytest.MonkeyPatch) -> None:

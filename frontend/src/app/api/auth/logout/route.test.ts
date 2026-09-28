@@ -3,17 +3,31 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { POST } from './route';
 import { getDiscovery, revokeToken } from '@/lib/auth/oidc';
 import { destroySession, getSession } from '@/lib/auth/session-store';
-vi.mock('@/lib/auth/server-config', () => ({ serverAuthConfig: () => ({ postLogoutRedirectUri: 'https://sbom.test/logged-out' }) }));
+vi.mock('@/lib/auth/server-config', () => ({ serverAuthConfig: () => ({ postLogoutRedirectUri: 'https://localhost:3000/logged-out', apiUrl: 'http://127.0.0.1:18000' }) }));
 vi.mock('@/lib/auth/oidc', () => ({ getDiscovery: vi.fn(), revokeToken: vi.fn() }));
 vi.mock('@/lib/auth/session-store', () => ({ SESSION_COOKIE: 'session', getSession: vi.fn(() => ({ provider: 'NATIVE' })), destroySession: vi.fn() }));
-afterEach(() => { vi.clearAllMocks(); vi.unstubAllEnvs(); });
+afterEach(() => { vi.clearAllMocks(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 it('native logout destroys the local session without contacting HCL', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ success: true })));
   vi.stubEnv('APP_ORIGIN', 'https://sbom.test');
   const response = await POST(new NextRequest('https://sbom.test/api/auth/logout', { method: 'POST', headers: { origin: 'https://sbom.test', cookie: 'session=opaque' } }));
   expect(response.status).toBe(200);
   expect(destroySession).toHaveBeenCalledWith('opaque');
   expect(getDiscovery).not.toHaveBeenCalled();
+  expect((await response.json()).redirectUrl).toBe('/logged-out?provider=native');
   expect(response.headers.get('set-cookie')).toContain('Max-Age=0');
+  expect(fetch).toHaveBeenCalledWith('http://127.0.0.1:18000/api/auth/native/logout', expect.any(Object));
+});
+
+it('keeps expired Native-only sessions on the current dev origin', async () => {
+  vi.stubEnv('APP_ORIGIN', 'https://localhost:13000');
+  vi.stubEnv('NEXT_PUBLIC_HCL_AUTH_ENABLED', 'false');
+  const response = await POST(new NextRequest('https://localhost:13000/api/auth/logout', {
+    method: 'POST', headers: { origin: 'https://localhost:13000' },
+  }));
+  const { redirectUrl } = await response.json();
+  expect(new URL(redirectUrl, 'https://localhost:13000').href).toBe('https://localhost:13000/logged-out?provider=native');
+  expect(getDiscovery).not.toHaveBeenCalled();
 });
 it('rejects cross-site logout', async () => {
   const response = await POST(new NextRequest('https://sbom.test/api/auth/logout', { method: 'POST', headers: { origin: 'https://evil.test' } }));

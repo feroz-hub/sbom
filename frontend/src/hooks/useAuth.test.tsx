@@ -359,6 +359,19 @@ describe('AuthProvider membership-based tenant context', () => {
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/auth/login'))).toBe(false);
   });
 
+  it.each(['missing-redirect', 'network-failure'])('keeps Native logout local on %s', async failure => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ authenticated: true, provider: 'NATIVE' }))
+      .mockResolvedValueOnce(jsonResponse(meBody('READY', [wellysis], 7)));
+    if (failure === 'network-failure') fetchMock.mockRejectedValueOnce(new Error('Unavailable'));
+    else fetchMock.mockResolvedValueOnce(jsonResponse({}));
+    render(wrap(<Probe />));
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('authenticated'));
+    act(() => latestAuth!.logout());
+    await waitFor(() => expect(followLogoutRedirect).toHaveBeenCalledWith('/logged-out?provider=native'));
+  });
+
   it('restores a valid persisted tenant on initial load', async () => {
     sessionStorage.setItem('sbom_active_tenant_id', '7');
     const tenant = {
