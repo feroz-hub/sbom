@@ -10,6 +10,84 @@ import pytest
 from scripts import dev
 
 
+@pytest.mark.parametrize("keys,expected,masked", [
+    ("Secret9!\r", "Secret9!", "********"),
+    ("\bAb\bC\r", "AC", "**\b \b*"),
+    ("A\x00KB\xe0MC\r", "ABC", "***"),
+])
+def test_windows_password_is_masked(monkeypatch, capsys, keys, expected, masked):
+    characters = iter(keys)
+    monkeypatch.setattr(dev.sys, "platform", "win32")
+    monkeypatch.setitem(dev.sys.modules, "msvcrt", SimpleNamespace(getwch=lambda: next(characters)))
+    assert dev.read_password("Password: ") == expected
+    output = capsys.readouterr().out
+    assert output == f"Password: {masked}\n"
+    assert expected not in output
+
+
+@pytest.mark.parametrize("key", ["\x03", "\x1a", ""])
+def test_windows_password_cancellation_is_safe(monkeypatch, capsys, key):
+    characters = iter([*"private-secret", key])
+    monkeypatch.setattr(dev.sys, "platform", "win32")
+    monkeypatch.setitem(dev.sys.modules, "msvcrt", SimpleNamespace(getwch=lambda: next(characters)))
+    with pytest.raises(dev.SetupError, match="credential entry cancelled") as error:
+        dev.read_postgres_credentials(input_fn=lambda prompt: "")
+    assert "private-secret" not in str(error.value)
+    assert "private-secret" not in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("exception", [KeyboardInterrupt, EOFError])
+def test_username_entry_cancellation_is_safe(exception):
+    def cancelled(prompt):
+        raise exception
+    with pytest.raises(dev.SetupError, match="credential entry cancelled"):
+        dev.read_postgres_credentials(input_fn=cancelled)
+
+
+@pytest.mark.parametrize("platform", ["linux", "darwin"])
+def test_non_windows_password_uses_getpass(monkeypatch, platform):
+    monkeypatch.setattr(dev.sys, "platform", platform)
+    read = MagicMock(return_value="private-secret")
+    monkeypatch.setattr(dev.getpass, "getpass", read)
+    assert dev.read_password("Password: ") == "private-secret"
+    read.assert_called_once_with("Password: ")
+
+
+@pytest.mark.parametrize("valid", [False, True])
+def test_interactive_credentials_validated_before_persistence(monkeypatch, tmp_path, capsys, valid):
+    config = tmp_path / ".env.dev.local"
+    prompts = []
+    attempts = []
+
+    def validate(url):
+        attempts.append(url)
+        assert not config.exists()
+        if not valid or dev.unquote(dev.urlsplit(url).password or "") != "private-secret":
+            raise dev.SetupError("invalid")
+
+    monkeypatch.setattr(dev, "ensure_database", validate)
+    kwargs = dict(
+        config_path=config, repository_env=tmp_path / "missing.env",
+        pgpass_path=tmp_path / "missing.pgpass", interactive=True,
+        input_fn=lambda prompt: prompts.append(prompt) or "  ",
+        password_fn=lambda prompt: "private-secret",
+    )
+    values = {"DATABASE_URL": dev.default_database_url("local", 5432)}
+    if valid:
+        dev.configure_local_database(values, {}, 5432, **kwargs)
+        persisted = dev.read_config(config)["DATABASE_URL"]
+        assert dev.unquote(dev.urlsplit(persisted).password) == "private-secret"
+        assert dev.urlsplit(persisted).username == "postgres"
+        assert persisted == attempts[-1]
+    else:
+        with pytest.raises(dev.SetupError, match="after 3 attempts") as error:
+            dev.configure_local_database(values, {}, 5432, **kwargs)
+        assert "private-secret" not in str(error.value)
+        assert not config.exists()
+    assert prompts == ["PostgreSQL user [postgres]: "] * (1 if valid else 3)
+    assert "private-secret" not in capsys.readouterr().out
+
+
 def test_config_roundtrip_and_secrets_persist(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     path = tmp_path / ".env.dev.local"
     values = dev.resolve_config({}, dev.POSTGRES_PORT, dev.REDIS_PORT, dev.MAILPIT_SMTP_PORT)

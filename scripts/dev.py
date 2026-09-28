@@ -458,6 +458,47 @@ def pgpass_database_candidates(path: Path | None, port: int) -> list[str]:
     return candidates
 
 
+def read_password(prompt: str) -> str:
+    if sys.platform != "win32":
+        return getpass.getpass(prompt)
+
+    import msvcrt
+
+    print(prompt, end="", flush=True)
+    characters: list[str] = []
+    try:
+        while True:
+            character = msvcrt.getwch()
+            if character in {"\x00", "\xe0"}:
+                msvcrt.getwch()  # Discard the scan code following a special key.
+            elif character in {"\r", "\n"}:
+                return "".join(characters)
+            elif character == "\x03":
+                raise KeyboardInterrupt
+            elif character in {"\x1a", ""}:
+                raise EOFError
+            elif character == "\b":
+                if characters:
+                    characters.pop()
+                    print("\b \b", end="", flush=True)
+            elif character.isprintable():
+                characters.append(character)
+                print("*", end="", flush=True)
+    finally:
+        print()
+
+
+def read_postgres_credentials(
+    default_user: str = "postgres", *, input_fn=input, password_fn=None,
+) -> tuple[str, str]:
+    try:
+        user = input_fn(f"PostgreSQL user [{default_user}]: ").strip() or default_user
+        password = (password_fn or read_password)("PostgreSQL password: ")
+        return user, password
+    except (KeyboardInterrupt, EOFError):
+        raise SetupError("PostgreSQL credential entry cancelled. Rerun the launcher to try again.") from None
+
+
 def resolve_local_database_url(
     saved_url: str | None,
     port: int,
@@ -466,7 +507,7 @@ def resolve_local_database_url(
     pgpass_path: Path | None,
     interactive: bool,
     input_fn=input,
-    password_fn=getpass.getpass,
+    password_fn=None,
 ) -> str:
     candidates = []
     if saved_url:
@@ -493,15 +534,16 @@ def resolve_local_database_url(
 
     print(f"[INFO] Local PostgreSQL detected at 127.0.0.1:{port}")
     print(f"[INFO] PostgreSQL credentials are required for {DB_NAME}.")
-    while True:
-        user = input_fn("PostgreSQL user [postgres]: ").strip() or "postgres"
-        password = password_fn("PostgreSQL password: ")
+    for attempt in range(3):
+        user, password = read_postgres_credentials(input_fn=input_fn, password_fn=password_fn)
         candidate = local_database_url(user, password, port)
         try:
             ensure_database(candidate)
             return candidate
         except SetupError:
-            print("[ERROR] PostgreSQL credentials were not accepted or cannot create the development database. Try again.")
+            if attempt < 2:
+                print("[ERROR] PostgreSQL credentials were not accepted or cannot create the development database. Try again.")
+    raise SetupError("PostgreSQL credentials were not accepted after 3 attempts. Check the local login and rerun.")
 
 
 def configure_local_database(
@@ -514,7 +556,7 @@ def configure_local_database(
     pgpass_path: Path | None = None,
     interactive: bool,
     input_fn=input,
-    password_fn=getpass.getpass,
+    password_fn=None,
 ) -> None:
     saved_url = saved.get("DATABASE_URL") if saved.get("DATABASE_URL") == values.get("DATABASE_URL") else None
     values["DATABASE_URL"] = resolve_local_database_url(
