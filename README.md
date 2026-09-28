@@ -169,7 +169,21 @@ docker-compose.yml      Local PostgreSQL 16 service
 - Redis when running Celery workers/Beat in the normal configuration. A PostgreSQL-backed Kombu broker is available for local development when Redis cannot be installed.
 - Docker Compose if using the provided local PostgreSQL service
 
-## Quick start: macOS/Linux
+## Quick start: Windows, macOS, Linux
+
+```bash
+git clone <repository-url>
+cd sbom
+python scripts/dev.py
+```
+
+The launcher creates `.venv` and the ignored `.env.dev.local`, installs dependencies when needed, and starts the Native IAM API, Celery worker, one Celery Beat, and HTTPS frontend. It uses this project's Docker PostgreSQL and Redis services when available, or local PostgreSQL and Redis if Docker is unavailable. Redis is required for the normal stack. It uses project Mailpit for local-only activation and reset email; open [Mailpit](http://127.0.0.1:8025) to receive test links. On first use, trust the generated `frontend/certificates/localhost.pem` certificate in your browser. The application is at [https://localhost:3000](https://localhost:3000). Process logs are in ignored `.dev-logs/`. Press Ctrl+C to stop the application processes; development data services remain running.
+
+The launcher saves its Docker/local PostgreSQL and Redis choices in `.env.dev.local` and reselects only if a saved provider is unavailable. It creates/reuses only the local `sbom_analyser_dev` database, checks an existing schema before migration, and runs `alembic upgrade head`. It never uses the database in `.env`, drops data, or sends mail to real recipients. It stores generated JWT, session, and outbox keys once in `.env.dev.local` (mode 600 where supported) and refuses invalid saved keys. Do not commit this file. It reports ready only after the API, IAM readiness, and HTTPS frontend respond. For the first Native Platform User, follow [the greenfield setup guide](docs/native-iam-greenfield-setup.md); set `NATIVE_PLATFORM_BOOTSTRAP_ENABLED=true` in `.env.dev.local` only during bootstrap, then set it back to `false`.
+
+Use `python scripts/dev.py --check` to inspect prerequisites without starting services or changing the database. Use `--verbose` for a technical error trace. A locally installed PostgreSQL may prompt once for a user/password with database-create access; these are saved only in `.env.dev.local`. Existing manual setup commands below remain available for advanced troubleshooting.
+
+## Manual quick start: macOS/Linux
 
 ### 1. Start PostgreSQL
 

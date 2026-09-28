@@ -5,6 +5,9 @@
 # ── Environment & secrets ─────────────────────────────────
 .env
 .env.*
+.env.dev.local
+.dev-beat.pid
+.dev-logs/
 !.env.example
 !.env.hcl-iam.example
 !.env.native-iam.example
