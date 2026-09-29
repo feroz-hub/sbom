@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 SortOrder = Literal["asc", "desc"]
 
@@ -61,6 +61,7 @@ class InvestigationRow(BaseModel):
     justification: str | None = None
 
     assigned_to: str | None = None
+    assigned_to_label: str | None = None
     reviewed_by: str | None = None
     last_seen_at: str | None = None
     updated_at: str | None = None
@@ -150,7 +151,7 @@ class InternalDecisionSection(BaseModel):
 
 class HistoryEntry(BaseModel):
     at: str | None = None
-    kind: Literal["import", "decision"]
+    kind: Literal["import", "decision", "assignment", "mapping"]
     actor: str | None = None
     summary: str | None = None
     previous_status: str | None = None
@@ -175,6 +176,7 @@ class InvestigationDetail(BaseModel):
     reconciliation_status: str
     effective_status: str
     history: list[HistoryEntry] = Field(default_factory=list)
+    capabilities: dict = Field(default_factory=dict)
     row_version: int = 1
 
 
@@ -198,7 +200,7 @@ class InvestigationDecisionRequest(BaseModel):
     mitigation: str | None = Field(default=None, max_length=2000)
     fixed_version: str | None = Field(default=None, max_length=255)
     evidence_url: str | None = Field(default=None, max_length=2000)
-    assigned_to: str | None = Field(default=None, max_length=255)
+    model_config = ConfigDict(extra="forbid")
 
 
 class InvestigationAssignmentRequest(BaseModel):
@@ -207,7 +209,7 @@ class InvestigationAssignmentRequest(BaseModel):
     row_version: int = Field(ge=1)
     reason: str = Field(min_length=1, max_length=2000)
     #: ``None`` unassigns. Distinct from omitting the field, which is invalid.
-    assigned_to: str | None = Field(default=None, max_length=255)
+    assigned_to: str | None = Field(..., max_length=255)
 
 
 class InvestigationMappingRequest(BaseModel):

@@ -685,6 +685,7 @@ def apply_vex_override(
     payload: dict[str, Any],
     *,
     changed_by: str | None = None,
+    commit: bool = True,
 ) -> VexStatement:
     vulnerability_id = vulnerability_id.strip().upper()
     if not vulnerability_id or any(char.isspace() for char in vulnerability_id) or any(char in vulnerability_id for char in ",/\\"):
@@ -767,7 +768,10 @@ def apply_vex_override(
     # Reconciliation trigger (spec section 11): a manual decision is the
     # highest-authority input, so the context must reflect it immediately.
     _reconcile_vex(db, tenant_id=component.tenant_id, sbom_id=component.sbom_id)
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
     db.refresh(statement)
     return statement
 

@@ -179,10 +179,10 @@ export function VexDecisionEditor({
     save.mutate();
   }
 
-  if (!canWrite) {
+  if (!(investigation ? investigation.capabilities?.can_update ?? false : canWrite)) {
     return (
       <p className="text-xs text-hcl-muted">
-        Read-only: recording a decision requires the vex:write permission.
+        {investigation?.capabilities?.read_only_reason ?? 'Read-only: you do not have permission to update this investigation.'}
       </p>
     );
   }

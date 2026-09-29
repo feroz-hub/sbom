@@ -5,8 +5,6 @@ resolution of an unresolved mapping (VEX-MAP-001).
 """
 
 import pytest
-from sqlalchemy import select, text
-
 from app.core.permissions import ROLE_PERMISSIONS, Role
 from app.db import SessionLocal
 from app.models import (
@@ -19,7 +17,11 @@ from app.models import (
     VexOverrideAudit,
     VexStatement,
 )
+from app.services.vex.authorization import membership_key
 from app.services.vex.reconciliation import recompute_for_sbom
+from sqlalchemy import select, text
+
+from tests.test_vex_scoped_authorization import make_member
 
 NOW = "2026-09-24T00:00:00Z"
 BASE = "/api/vex/investigations"
@@ -184,15 +186,16 @@ def test_every_mutation_requires_row_version__VEX_AUD_002(client, seeded, db):
 
 
 def test_assignment_conflicts_on_a_stale_version__VEX_AUD_002(client, seeded, db):
+    assignee = membership_key(make_member(db, "DEVELOPER"))
     context = context_for(db, "CVE-2026-5001")
     first = client.put(
         f"{BASE}/{context.id}/assignment",
-        json={"assigned_to": "alice", "row_version": context.row_version, "reason": "triage"},
+        json={"assigned_to": assignee, "row_version": context.row_version, "reason": "triage"},
     )
     assert first.status_code == 200, first.text
     stale = client.put(
         f"{BASE}/{context.id}/assignment",
-        json={"assigned_to": "bob", "row_version": 1, "reason": "triage"},
+        json={"assigned_to": assignee, "row_version": 1, "reason": "triage"},
     )
     assert stale.status_code == 409
 
@@ -229,25 +232,27 @@ def test_reconciliation_preserves_a_manual_decision__VEX_INV_004(client, seeded,
 
 
 def test_assignment_is_recorded_and_audited(client, seeded, db):
+    assignee = membership_key(make_member(db, "DEVELOPER"))
     context = context_for(db, "CVE-2026-5001")
     response = client.put(
         f"{BASE}/{context.id}/assignment",
-        json={"assigned_to": "alice", "row_version": context.row_version, "reason": "triage"},
+        json={"assigned_to": assignee, "row_version": context.row_version, "reason": "triage"},
     )
     assert response.status_code == 200, response.text
     db.refresh(context)
-    assert context.assigned_to == "alice"
+    assert context.assigned_to == assignee
 
     entry = [a for a in audits_for(db, context.id) if a.action == "ASSIGNMENT"][0]
     assert entry.old_value_json == {"assigned_to": None}
-    assert entry.new_value_json == {"assigned_to": "alice"}
+    assert entry.new_value_json == {"assigned_to": assignee}
 
 
 def test_unassignment_is_audited(client, seeded, db):
+    assignee = membership_key(make_member(db, "DEVELOPER"))
     context = context_for(db, "CVE-2026-5001")
     client.put(
         f"{BASE}/{context.id}/assignment",
-        json={"assigned_to": "alice", "row_version": context.row_version, "reason": "triage"},
+        json={"assigned_to": assignee, "row_version": context.row_version, "reason": "triage"},
     )
     db.refresh(context)
     response = client.put(
@@ -436,5 +441,6 @@ def test_every_investigation_route_maps_to_a_vex_permission__VEX_SEC_001():
 
     assert permission_for_request(_Request("GET", f"{BASE}")) == "vex:read"
     assert permission_for_request(_Request("GET", f"{BASE}/1")) == "vex:read"
-    for path in ("decision", "assignment", "component"):
+    assert permission_for_request(_Request("PUT", f"{BASE}/1/decision")) == "vex:read"
+    for path in ("assignment", "component"):
         assert permission_for_request(_Request("PUT", f"{BASE}/1/{path}")) == "vex:write"

@@ -123,3 +123,51 @@ The analysis findings APIs and table expose effective VEX independently of
 remediation status. Analysis CSV and SARIF exports include effective status and
 source. No VEX action writes component lifecycle fields. Unmatched imported
 statements remain evidence, not decisions for an arbitrarily chosen component.
+
+### Role-aware investigation ownership
+
+The investigation detail API (`GET /api/vex/investigations/{id}`, also returned
+by `resolve`) supplies authoritative `capabilities`, eligible assignment
+`candidates`, and a human-readable `owner`. The existing assignment endpoint
+(`PUT /api/vex/investigations/{id}/assignment`) accepts one candidate's opaque
+`id`, or explicit `null` to unassign, with `row_version` and a reason.
+No separate user directory permission or duplicate assignment API is needed.
+
+The existing `VexInvestigation.assigned_to` string stores `membership:<id>` for
+new assignments, referring to a tenant membership rather than an email or
+external identity. No new column or migration is required. Legacy free-text
+owners are not automatically resolved or reassigned and confer no write access;
+the UI flags them as inactive until an administrator or analyst assigns an
+eligible membership.
+
+| Actor | Assignment candidates | Investigation decisions |
+| --- | --- | --- |
+| Tenant Administrator | Active Security Analysts and Developers | Tenant records with existing VEX write permission |
+| Security Analyst | Active Developers | Tenant records with existing VEX write permission |
+| Developer | None | Own assigned record only |
+| Viewer | None | Read-only |
+
+Candidate and actor checks use database-authoritative active tenant roles and
+usable, verified accounts. Multi-role users with Tenant Administrator are never
+assignment candidates; a Security Analyst plus Developer is not a Developer-only
+delegation target. Analysts may remove Developer assignments and clear inactive
+owners, but may not remove an active Security Analyst assignment. They can
+reassign to an eligible Developer. Platform administrators retain the existing
+explicit database-grant override in a selected tenant, equivalent to Tenant
+Administrator here. A platform-only identity is not an assignment candidate.
+
+Developer retains `vex:read` and does **not** receive `vex:write` or a new catalog
+permission. Only the exact investigation decision route passes the read gate;
+the service then checks live tenant membership and current ownership on every
+mutation. Component mapping, direct component overrides, and imports retain
+broad write gates. Assignment fields in a decision request are rejected.
+Changing or removing ownership immediately revokes the previous Developer's
+access. Disabled, locked, removed, or role-ineligible assignees cannot mutate.
+
+Mutation routes lock the investigation row before authorization/version checks.
+Decision statement creation, reconciliation, and investigation audit updates
+commit together. Assignment only changes ownership, timestamp and version; it
+does not change VEX or reconciliation status. The existing append-only audit
+stores previous/new ownership, actor and time; the detail history distinguishes
+assignment, mapping and decision entries and limits history to the current
+investigation/vulnerability.

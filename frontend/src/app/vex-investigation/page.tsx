@@ -39,7 +39,6 @@ import {
   listVexInvestigations,
   resolveVexInvestigationComponent,
   setVexInvestigationAssignment,
-  setVexInvestigationDecision,
   type DashboardFilterScope,
 } from '@/lib/api';
 import { invalidateVexSurfaces } from '@/lib/queryInvalidation';
@@ -169,7 +168,6 @@ function VexInvestigationContent() {
   const { showToast } = useToast();
   // Backend remains the gate (VEX-SEC-001); this only shapes the UI.
   const canRead = usePermission('vex:read');
-  const canWrite = usePermission('vex:write');
 
   const [initial] = useState(() => initialState(searchParams));
   const [filters, setFilters] = useState<Filters>(initial.filters);
@@ -481,8 +479,7 @@ function VexInvestigationContent() {
           ) : detailQuery.data ? (
             <InvestigationDetailPanel
               detail={detailQuery.data}
-              canWrite={canWrite}
-              onSaved={() => showToast('Decision recorded', 'success')}
+              onSaved={() => showToast('Investigation updated', 'success')}
               onConflict={() => {
                 detailQuery.refetch();
                 showToast('Updated by someone else — reloaded the latest version', 'error');
@@ -534,7 +531,7 @@ function InvestigationTableRow({
           {row.reconciliation_status.replace(/_/g, ' ')}
         </span>
       </Td>
-      <Td>{row.assigned_to ?? row.reviewed_by ?? '—'}</Td>
+      <Td>{row.assigned_to_label ?? row.reviewed_by ?? 'Unassigned'}</Td>
       <Td>
         <Button variant="ghost" size="sm" onClick={() => onOpen(row.id)}>
           Open
@@ -546,26 +543,33 @@ function InvestigationTableRow({
 
 function InvestigationDetailPanel({
   detail,
-  canWrite,
   onSaved,
   onConflict,
 }: {
   detail: VexInvestigationDetail;
-  canWrite: boolean;
   onSaved: () => void;
   onConflict: () => void;
 }) {
   const [formError, setFormError] = useState<string | null>(null);
   const [assignee, setAssignee] = useState(detail.internal_decision.assigned_to ?? '');
   const [componentId, setComponentId] = useState('');
+  const [assigneeSearch, setAssigneeSearch] = useState('');
+  const access = detail.capabilities;
+  const ownerRole = access?.owner.roles.includes('SECURITY_ANALYST') ? 'Security Analyst' : access?.owner.roles.includes('DEVELOPER') ? 'Developer' : null;
+  const ownerLabel = access?.owner.is_self ? `${access.owner.label} (You)` : `${access?.owner.label ?? 'Unassigned'}${ownerRole ? ` — ${ownerRole}` : ''}`;
+  const analystCandidates = access?.eligible_roles.includes('SECURITY_ANALYST');
   const queryClient = useQueryClient();
+  useEffect(() => {
+    setAssignee(detail.internal_decision.assigned_to ?? '');
+    setFormError(null);
+  }, [detail.id, detail.row_version, detail.internal_decision.assigned_to]);
 
   const assignment = useMutation({
-    mutationFn: () =>
+    mutationFn: (selected: string | null) =>
       setVexInvestigationAssignment(detail.id, {
-        assigned_to: assignee.trim() || null,
+        assigned_to: selected,
         row_version: detail.row_version,
-        reason: assignee.trim() ? `Assigned to ${assignee.trim()}` : 'Unassigned',
+        reason: selected ? 'Assignment updated' : 'Assignment removed',
       }),
     onSuccess: () => {
       invalidateVexSurfaces(queryClient);
@@ -632,8 +636,12 @@ function InvestigationDetailPanel({
         <Section title="Internal Decision">
           <Row label="Status" value={detail.internal_decision.effective_status} />
           <Row label="Reviewer" value={detail.internal_decision.reviewer} />
-          <Row label="Assignee" value={detail.internal_decision.assigned_to} />
+          <Row label="Assignee" value={ownerLabel} />
           <Row label="Reason" value={detail.internal_decision.reason} />
+          <Row label="Justification" value={detail.internal_decision.justification} />
+          <Row label="Impact" value={detail.internal_decision.impact_statement} />
+          <Row label="Action" value={detail.internal_decision.action_statement} />
+          <Row label="Evidence" value={detail.internal_decision.evidence_url} />
           <Row label="Updated" value={detail.internal_decision.updated_at} />
         </Section>
       </div>
@@ -653,30 +661,34 @@ function InvestigationDetailPanel({
             detail.history.map((entry, index) => (
               <div key={`${entry.at}-${index}`} className="text-xs">
                 <span className="text-hcl-muted">{entry.at ?? '—'}</span> · {entry.kind} ·{' '}
-                {entry.summary ?? entry.new_status}
+                {entry.summary ?? entry.new_status}{entry.kind === 'decision' && entry.new_status ? ` · ${entry.previous_status ?? 'No decision'} → ${entry.new_status}` : ''}{entry.actor ? ` · by ${entry.actor}` : ''}
               </div>
             ))
           )}
         </Section>
       </div>
 
-      {canWrite ? (
-        <Section title="Ownership and mapping">
+      <Section title={access?.can_assign ? 'Ownership & assignment' : 'Ownership'}>
+          <Row label="Assigned to" value={ownerLabel} />
+          {access?.owner.id && !access.owner.active ? <p className="text-xs text-hcl-muted">Assigned user is no longer active</p> : null}
           <div className="grid gap-2 md:grid-cols-2">
-            <Input
-              value={assignee}
-              onChange={(e) => setAssignee(e.target.value)}
-              placeholder="Assign to (blank to unassign)"
-              aria-label="Assign to"
-            />
-            <Button
-              variant="ghost"
-              disabled={assignment.isPending}
-              onClick={() => assignment.mutate()}
-            >
-              {assignment.isPending ? 'Saving...' : 'Save assignment'}
-            </Button>
-            {detail.reconciliation_status === 'UNRESOLVED_MAPPING' ? (
+            {access?.can_assign ? <>
+              <Input label="Search assignees" value={assigneeSearch} onChange={(event) => setAssigneeSearch(event.target.value)} placeholder="Search by name" />
+              <Select label="Assignee" value={assignee} onChange={(event) => setAssignee(event.target.value)}>
+                <option value="">{analystCandidates ? 'Select Security Analyst or Developer' : 'Select Developer'}</option>
+                {['SECURITY_ANALYST', 'DEVELOPER'].filter(role => access.eligible_roles.includes(role)).map(role => (
+                  <optgroup key={role} label={role === 'SECURITY_ANALYST' ? 'Security Analysts' : 'Developers'}>
+                    {access.candidates.filter(candidate => (candidate.roles.includes('SECURITY_ANALYST') ? role === 'SECURITY_ANALYST' : role === 'DEVELOPER') && candidate.label.toLowerCase().includes(assigneeSearch.toLowerCase())).map(candidate => <option key={candidate.id} value={candidate.id}>{candidate.label}</option>)}
+                  </optgroup>
+                ))}
+              </Select>
+              <p className="text-xs text-hcl-muted">{analystCandidates ? 'Assign this investigation to a Security Analyst or Developer in this tenant.' : 'Delegate this investigation to a Developer in this tenant.'}</p>
+              <div className="flex gap-2">
+                <Button variant="ghost" disabled={assignment.isPending || !access.can_unassign || !access.owner.id} onClick={() => assignment.mutate(null)}>Unassign</Button>
+                <Button disabled={assignment.isPending || !assignee || !access.candidates.some(candidate => candidate.id === assignee)} onClick={() => assignment.mutate(assignee)}>{assignment.isPending ? 'Saving...' : 'Save assignment'}</Button>
+              </div>
+            </> : null}
+            {access?.can_map && detail.reconciliation_status === 'UNRESOLVED_MAPPING' ? (
               <>
                 <Input
                   value={componentId}
@@ -694,14 +706,14 @@ function InvestigationDetailPanel({
               </>
             ) : null}
           </div>
-          {detail.reconciliation_status === 'UNRESOLVED_MAPPING' ? (
+          {access?.can_map && detail.reconciliation_status === 'UNRESOLVED_MAPPING' ? (
             <p className="mt-2 text-[11px] text-hcl-muted">
               The matcher found several equally weak candidates and refused to guess.
               Binding re-runs reconciliation for this context.
             </p>
           ) : null}
+          {formError ? <Alert variant="error">{formError}</Alert> : null}
         </Section>
-      ) : null}
 
       <Section title="Record a decision">
         {/* The shared editor — the same component the SBOM page hosts, so the
@@ -717,7 +729,7 @@ function InvestigationDetailPanel({
           vulnerabilityId={detail.vulnerability.canonical_vulnerability_id}
           investigation={detail}
           mode="full"
-          canWrite={canWrite}
+          canWrite={access?.can_update ?? false}
           onSaved={onSaved}
           onConflict={onConflict}
         />

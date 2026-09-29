@@ -1820,6 +1820,7 @@ export interface VexInvestigationRow {
   reconciliation_status: VexReconciliationStatus;
   justification: string | null;
   assigned_to: string | null;
+  assigned_to_label?: string | null;
   reviewed_by: string | null;
   last_seen_at: string | null;
   updated_at: string | null;
@@ -1856,7 +1857,19 @@ export interface VexImportedAssertion {
   superseded: boolean;
 }
 
+export interface VexInvestigationCapabilities {
+  can_assign: boolean;
+  can_unassign: boolean;
+  can_update: boolean;
+  can_map: boolean;
+  eligible_roles: string[];
+  candidates: Array<{ id: string; label: string; roles: string[] }>;
+  owner: { id: string | null; label: string; active: boolean; is_self: boolean; roles: string[] };
+  read_only_reason: string | null;
+}
+
 export interface VexInvestigationDetail {
+  capabilities?: VexInvestigationCapabilities;
   id: number;
   sbom_id: number;
   project_name: string | null;
@@ -1905,7 +1918,7 @@ export interface VexInvestigationDetail {
   effective_status: VexEffectiveStatus;
   history: Array<{
     at: string | null;
-    kind: 'import' | 'decision';
+    kind: 'import' | 'decision' | 'assignment' | 'mapping';
     actor: string | null;
     summary: string | null;
     previous_status: string | null;
@@ -1944,5 +1957,4 @@ export interface VexInvestigationDecision {
   mitigation?: string;
   fixed_version?: string;
   evidence_url?: string;
-  assigned_to?: string;
 }

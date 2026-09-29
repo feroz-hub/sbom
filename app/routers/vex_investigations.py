@@ -4,9 +4,8 @@ The existing VEX endpoints in ``app/routers/vex.py`` are SBOM- and
 component-scoped and stay exactly as they are; this router adds the
 cross-SBOM queue the investigation workflow needs.
 
-Authorization: ``app/core/security.py:permission_for_request`` maps any path
-containing ``/vex`` to ``vex:read`` for GET and ``vex:write`` otherwise, so
-these routes inherit the correct gate without per-route decoration. Every
+Authorization: decisions have an assigned-only Developer exception at the
+request gate; every mutation also uses the database-authoritative service guard. Every
 query is additionally tenant-scoped in code — the ambient
 ``TenantOwnedMixin`` criteria are defence in depth, not the contract.
 """
@@ -25,19 +24,19 @@ from ..db import get_db
 from ..metrics.vex import vex_component_findings, vex_severity_filter_clause
 from ..models import (
     Product,
-    VexOverrideAudit,
     Projects,
     SBOMComponent,
     SBOMSource,
     VexInvestigation,
+    VexOverrideAudit,
     VexStatement,
 )
 from ..schemas_vex import (
     InvestigationAssignmentRequest,
     InvestigationDecisionRequest,
-    InvestigationMappingRequest,
     InvestigationDetail,
     InvestigationListResponse,
+    InvestigationMappingRequest,
     InvestigationSortField,
     SortOrder,
 )
@@ -47,6 +46,7 @@ from ..services.vex.audit import (
     record_assignment,
     record_mapping_resolution,
 )
+from ..services.vex.authorization import capabilities, owner, require_assignment, require_update
 from ..services.vex.enums import NEEDS_REVIEW_STATUSES
 from ..services.vex.identity import canonical_vulnerability, parse_alias_column
 
@@ -75,18 +75,17 @@ def _tenant_id(context: CurrentContext) -> int:
     return context.tenant_id
 
 
-def _investigation_or_404(db: Session, investigation_id: int, tenant_id: int) -> VexInvestigation:
+def _investigation_or_404(db: Session, investigation_id: int, tenant_id: int, *, lock: bool = False) -> VexInvestigation:
     """Load one context, or 404.
 
     A cross-tenant id returns 404 rather than 403 on purpose: 403 would
     confirm the row exists in someone else's tenant (VEX-SEC-002).
     """
-    row = db.scalar(
-        select(VexInvestigation).where(
-            VexInvestigation.id == investigation_id,
-            VexInvestigation.tenant_id == tenant_id,
-        )
-    )
+    query = select(VexInvestigation).where(
+        VexInvestigation.id == investigation_id,
+        VexInvestigation.tenant_id == tenant_id,
+    ).execution_options(populate_existing=True)
+    row = db.scalar(query.with_for_update() if lock else query)
     if row is None:
         raise HTTPException(status_code=404, detail="Investigation not found")
     return row
@@ -172,6 +171,7 @@ def _row_payload(
         "reconciliation_status": investigation.reconciliation_status,
         "justification": getattr(effective, "justification", None),
         "assigned_to": investigation.assigned_to,
+        "assigned_to_label": owner(db, investigation)["label"],
         "reviewed_by": investigation.reviewed_by,
         "last_seen_at": investigation.last_seen_at,
         "updated_at": investigation.updated_at,
@@ -391,7 +391,7 @@ def resolve_investigation(
 
     if row is None:
         raise HTTPException(status_code=404, detail="No investigation for this pair")
-    return _detail_payload(db, row)
+    return _detail_payload(db, row, context)
 
 
 @router.get("/api/vex/investigations/{investigation_id}", response_model=InvestigationDetail)
@@ -403,10 +403,10 @@ def get_investigation(
     """Full evidence for one context, in separate sections (VEX-UI-003)."""
     tenant_id = _tenant_id(context)
     investigation = _investigation_or_404(db, investigation_id, tenant_id)
-    return _detail_payload(db, investigation)
+    return _detail_payload(db, investigation, context)
 
 
-def _detail_payload(db: Session, investigation: VexInvestigation) -> dict[str, Any]:
+def _detail_payload(db: Session, investigation: VexInvestigation, context: CurrentContext | None = None) -> dict[str, Any]:
     component = (
         db.get(SBOMComponent, investigation.component_id)
         if investigation.component_id
@@ -466,10 +466,15 @@ def _detail_payload(db: Session, investigation: VexInvestigation) -> dict[str, A
         select(VexOverrideAudit)
         .where(
             VexOverrideAudit.tenant_id == investigation.tenant_id,
-            VexOverrideAudit.component_id == investigation.component_id,
+            or_(
+                VexOverrideAudit.investigation_id == investigation.id,
+                (VexOverrideAudit.investigation_id.is_(None)) &
+                (VexOverrideAudit.component_id == investigation.component_id) &
+                (VexOverrideAudit.vulnerability_id.in_([investigation.canonical_vulnerability_id, *parse_alias_column(investigation.aliases_json)])),
+            ),
         )
         .order_by(VexOverrideAudit.id)
-    ).all() if investigation.component_id else []
+    ).all()
 
     history = [
         {
@@ -488,11 +493,11 @@ def _detail_payload(db: Session, investigation: VexInvestigation) -> dict[str, A
         history.append(
             {
                 "at": audit.changed_at,
-                "kind": "decision",
+                "kind": "assignment" if audit.action == VexOverrideAudit.ACTION_ASSIGNMENT else "mapping" if audit.action == VexOverrideAudit.ACTION_MAPPING_RESOLUTION else "decision",
                 "actor": audit.changed_by,
-                "summary": f"manual decision on {audit.vulnerability_id}",
-                "previous_status": old.get("status"),
-                "new_status": new.get("status"),
+                "summary": audit.reason,
+                "previous_status": audit.previous_status or old.get("status"),
+                "new_status": audit.new_status or new.get("status"),
                 "reason": audit.reason,
             }
         )
@@ -543,6 +548,7 @@ def _detail_payload(db: Session, investigation: VexInvestigation) -> dict[str, A
             "last_seen_at": investigation.last_seen_at,
         },
         "imported_vex": imported,
+        "capabilities": capabilities(db, context, investigation),
         "internal_decision": {
             "effective_status": getattr(latest_manual, "normalized_status", None),
             "reviewer": investigation.reviewed_by,
@@ -571,7 +577,7 @@ def set_investigation_decision(
 ) -> Any:
     """Record a manual determination (VEX-INV-003, VEX-AUD-001/002).
 
-    Requires ``vex:write`` via the path rule in ``permission_for_request``.
+    Requires tenant administrator/analyst write authority or live Developer ownership.
     Reuses the existing component-scoped override service so that the manual
     statement, its validation and its audit row stay in one place rather than
     being reimplemented here.
@@ -579,7 +585,8 @@ def set_investigation_decision(
     from ..services.lifecycle.vex_provider import apply_vex_override
 
     tenant_id = _tenant_id(context)
-    investigation = _investigation_or_404(db, investigation_id, tenant_id)
+    investigation = _investigation_or_404(db, investigation_id, tenant_id, lock=True)
+    require_update(db, context, investigation)
 
     if investigation.component_id is None:
         raise HTTPException(
@@ -593,7 +600,7 @@ def set_investigation_decision(
     # Optimistic concurrency before any write (VEX-AUD-002).
     if not _check_row_version(investigation, payload.row_version):
         response.status_code = 409
-        return _detail_payload(db, investigation)
+        return _detail_payload(db, investigation, context)
 
     previous_status = investigation.effective_status
     previous_reconciliation = investigation.reconciliation_status
@@ -617,6 +624,7 @@ def set_investigation_decision(
             "evidence_url": payload.evidence_url,
         },
         changed_by=context.actor_label() if hasattr(context, "actor_label") else None,
+        commit=False,
     )
 
     db.refresh(investigation)
@@ -643,7 +651,6 @@ def set_investigation_decision(
         },
     )
 
-    investigation.assigned_to = payload.assigned_to or investigation.assigned_to
     investigation.reviewed_by = _actor(context)
     investigation.reviewed_at = now_iso()
     investigation.updated_at = now_iso()
@@ -651,7 +658,7 @@ def set_investigation_decision(
     db.commit()
     db.refresh(investigation)
 
-    return _detail_payload(db, investigation)
+    return _detail_payload(db, investigation, context)
 
 
 @router.put(
@@ -667,13 +674,15 @@ def set_investigation_assignment(
 ) -> Any:
     """Assign or unassign a context. Requires ``vex:write``; audited."""
     tenant_id = _tenant_id(context)
-    investigation = _investigation_or_404(db, investigation_id, tenant_id)
+    investigation = _investigation_or_404(db, investigation_id, tenant_id, lock=True)
+    require_assignment(db, context, investigation, payload.assigned_to)
 
     if not _check_row_version(investigation, payload.row_version):
         response.status_code = 409
-        return _detail_payload(db, investigation)
+        return _detail_payload(db, investigation, context)
 
     previous = investigation.assigned_to
+    previous_label = owner(db, investigation)["label"]
     investigation.assigned_to = payload.assigned_to
     investigation.updated_at = now_iso()
     investigation.row_version = (investigation.row_version or 1) + 1
@@ -682,12 +691,12 @@ def set_investigation_assignment(
         investigation,
         previous_assignee=previous,
         new_assignee=payload.assigned_to,
-        reason=payload.reason,
+        reason=f"{previous_label} → {owner(db, investigation)['label']}. {payload.reason}",
         changed_by=_actor(context),
     )
     db.commit()
     db.refresh(investigation)
-    return _detail_payload(db, investigation)
+    return _detail_payload(db, investigation, context)
 
 
 @router.put(
@@ -711,7 +720,8 @@ def resolve_investigation_mapping(
     from ..services.vex.reconciliation import recompute_for_sbom
 
     tenant_id = _tenant_id(context)
-    investigation = _investigation_or_404(db, investigation_id, tenant_id)
+    investigation = _investigation_or_404(db, investigation_id, tenant_id, lock=True)
+    require_update(db, context, investigation, mapping=True)
 
     if investigation.reconciliation_status != "UNRESOLVED_MAPPING":
         raise HTTPException(
@@ -720,7 +730,7 @@ def resolve_investigation_mapping(
         )
     if not _check_row_version(investigation, payload.row_version):
         response.status_code = 409
-        return _detail_payload(db, investigation)
+        return _detail_payload(db, investigation, context)
 
     component = db.scalar(
         select(SBOMComponent).where(
@@ -753,7 +763,7 @@ def resolve_investigation_mapping(
     recompute_for_sbom(db, tenant_id=tenant_id, sbom_id=investigation.sbom_id)
     db.commit()
     db.refresh(investigation)
-    return _detail_payload(db, investigation)
+    return _detail_payload(db, investigation, context)
 
 
 __all__ = ["router"]

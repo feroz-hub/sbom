@@ -144,6 +144,13 @@ const listResponse: VexInvestigationListResponse = {
 };
 
 const detail: VexInvestigationDetail = {
+  capabilities: {
+    can_assign: true, can_unassign: true, can_update: true, can_map: true,
+    eligible_roles: ['SECURITY_ANALYST', 'DEVELOPER'],
+    candidates: [{ id: 'membership:2', label: 'Alice', roles: ['DEVELOPER'] }, { id: 'membership:3', label: 'Analyst', roles: ['SECURITY_ANALYST'] }],
+    owner: { id: 'membership:2', label: 'Alice', active: true, is_self: false, roles: ['DEVELOPER'] },
+    read_only_reason: null,
+  },
   id: 1,
   sbom_id: 5,
   project_name: null,
@@ -368,11 +375,12 @@ describe('decision form', () => {
 describe('permissions', () => {
   it('renders read-only without vex:write__VEX_SEC_001', async () => {
     permissions.granted = new Set(['vex:read']);
+    api.getVexInvestigation.mockResolvedValue({ ...detail, capabilities: { ...detail.capabilities, can_update: false, can_assign: false, can_map: false, read_only_reason: 'Read-only investigation' } });
     renderPage();
     await screen.findByText('CVE-2026-4001');
     fireEvent.click(screen.getAllByText('Open')[0]);
     expect(
-      await screen.findByText(/Read-only: recording a decision requires the vex:write permission/),
+      await screen.findByText(/Read-only investigation/),
     ).toBeInTheDocument();
     expect(screen.queryByText('Save decision')).not.toBeInTheDocument();
   });
@@ -405,24 +413,24 @@ describe('ownership and mapping', () => {
     renderPage();
     await screen.findByText('CVE-2026-4001');
     fireEvent.click(screen.getAllByText('Open')[0]);
-    await screen.findByText('Ownership and mapping');
+    await screen.findByText('Ownership & assignment');
   }
 
   it('assigns an owner with the current row_version__VEX_AUD_002', async () => {
     await openDetail();
-    fireEvent.change(screen.getByLabelText('Assign to'), { target: { value: 'alice' } });
+    fireEvent.change(screen.getByLabelText('Assignee'), { target: { value: 'membership:2' } });
     fireEvent.click(screen.getByText('Save assignment'));
     await waitFor(() => {
       expect(api.setVexInvestigationAssignment).toHaveBeenCalledWith(
         1,
-        expect.objectContaining({ assigned_to: 'alice', row_version: 1 }),
+        expect.objectContaining({ assigned_to: 'membership:2', row_version: 1 }),
       );
     });
   });
 
-  it('unassigns by clearing the field', async () => {
+  it('unassigns through the explicit action', async () => {
     await openDetail();
-    fireEvent.click(screen.getByText('Save assignment'));
+    fireEvent.click(screen.getByText('Unassign'));
     await waitFor(() => {
       expect(api.setVexInvestigationAssignment).toHaveBeenCalledWith(
         1,
@@ -451,5 +459,53 @@ describe('ownership and mapping', () => {
         expect.objectContaining({ component_id: 42, row_version: 1 }),
       );
     });
+  });
+});
+
+
+describe('server-authoritative investigation capabilities', () => {
+  async function openWith(capabilities: VexInvestigationDetail['capabilities']) {
+    permissions.granted = new Set(['vex:read']);
+    api.getVexInvestigation.mockResolvedValue({ ...detail, capabilities });
+    renderPage();
+    await screen.findByText('CVE-2026-4001');
+    fireEvent.click(screen.getAllByText('Open')[0]);
+    await screen.findByText('Record a decision');
+  }
+
+  it('shows only eligible analyst and developer candidates for an administrator', async () => {
+    await openWith(detail.capabilities);
+    expect(screen.getByRole('option', { name: 'Alice' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Analyst' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /Viewer|Tenant Admin/ })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Search assignees'), { target: { value: 'Alice' } });
+    expect(screen.queryByRole('option', { name: 'Analyst' })).not.toBeInTheDocument();
+  });
+
+  it('shows only developer candidates for a security analyst', async () => {
+    await openWith({ ...detail.capabilities!, eligible_roles: ['DEVELOPER'], candidates: detail.capabilities!.candidates.slice(0, 1) });
+    expect(screen.getByRole('option', { name: 'Alice' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Analyst' })).not.toBeInTheDocument();
+    expect(screen.getByText('Delegate this investigation to a Developer in this tenant.')).toBeInTheDocument();
+  });
+
+  it('allows the assigned developer to save without broad vex:write', async () => {
+    await openWith({ ...detail.capabilities!, can_assign: false, can_unassign: false, can_map: false, candidates: [], owner: { ...detail.capabilities!.owner, is_self: true } });
+    expect(screen.getAllByText('Alice (You)').length).toBeGreaterThan(0);
+    expect(screen.queryByLabelText('Assignee')).not.toBeInTheDocument();
+    expect(screen.queryByText('Unassign')).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/Reason for this decision/), { target: { value: 'Verified evidence' } });
+    fireEvent.change(screen.getByLabelText(/^Status/), { target: { value: 'AFFECTED' } });
+    fireEvent.click(screen.getByText('Save decision'));
+    await waitFor(() => expect(api.setVexInvestigationDecision).toHaveBeenCalled());
+    expect(api.setVexInvestigationAssignment).not.toHaveBeenCalled();
+  });
+
+  it.each(['unassigned developer', 'other developer', 'viewer'])('keeps %s read-only', async () => {
+    await openWith({ ...detail.capabilities!, can_assign: false, can_unassign: false, can_map: false, can_update: false, candidates: [], read_only_reason: 'This investigation must be assigned to you before you can update it.' });
+    expect(screen.queryByLabelText('Assignee')).not.toBeInTheDocument();
+    expect(screen.queryByText('Save decision')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Status/)).not.toBeInTheDocument();
+    expect(screen.getByText('This investigation must be assigned to you before you can update it.')).toBeInTheDocument();
   });
 });
