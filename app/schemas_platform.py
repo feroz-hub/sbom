@@ -38,6 +38,7 @@ class TenantMembershipBrief(BaseModel):
 
 
 class UserSearchResult(BaseModel):
+    providers: list[str] = Field(default_factory=list)
     id: int
     email: str | None
     display_name: str | None
@@ -140,7 +141,7 @@ class PlatformAdministratorRevokeResponse(BaseModel):
 class PlatformUserStatusUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    status: Literal["ACTIVE", "DISABLED"]
+    status: Literal["ACTIVE", "DISABLED", "SUSPENDED"]
     reason: str | None = Field(default=None, max_length=500)
 
     @model_validator(mode="after")

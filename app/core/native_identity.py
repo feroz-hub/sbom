@@ -6,15 +6,17 @@ from enum import StrEnum
 class IdentityProvider(StrEnum):
     HCL_CS = "HCL_CS"
     NATIVE = "NATIVE"
+    MICROSOFT_ENTRA = "MICROSOFT_ENTRA"
 
 
 class AccountStatus(StrEnum):
-    # PENDING remains the legacy administrator-approval state. It is NOT
-    # reinterpreted as an unverified native account during migration.
+    # PENDING requires administrator approval; Native activation uses the
+    # separate PENDING_EMAIL_VERIFICATION state.
     PENDING = "PENDING"
     PENDING_EMAIL_VERIFICATION = "PENDING_EMAIL_VERIFICATION"
     ACTIVE = "ACTIVE"
     LOCKED = "LOCKED"
+    SUSPENDED = "SUSPENDED"
     DISABLED = "DISABLED"
     FORCE_PASSWORD_CHANGE = "FORCE_PASSWORD_CHANGE"
 

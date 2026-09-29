@@ -18,9 +18,10 @@ from . import audit_service
 _TRANSITIONS = {
     AccountStatus.PENDING: {AccountStatus.ACTIVE},
     AccountStatus.PENDING_EMAIL_VERIFICATION: {AccountStatus.ACTIVE, AccountStatus.DISABLED},
-    AccountStatus.ACTIVE: {AccountStatus.LOCKED, AccountStatus.DISABLED, AccountStatus.FORCE_PASSWORD_CHANGE},
+    AccountStatus.ACTIVE: {AccountStatus.SUSPENDED, AccountStatus.LOCKED, AccountStatus.DISABLED, AccountStatus.FORCE_PASSWORD_CHANGE},
     AccountStatus.LOCKED: {AccountStatus.ACTIVE, AccountStatus.DISABLED},
     AccountStatus.DISABLED: {AccountStatus.ACTIVE},
+    AccountStatus.SUSPENDED: {AccountStatus.ACTIVE, AccountStatus.DISABLED},
     AccountStatus.FORCE_PASSWORD_CHANGE: {AccountStatus.ACTIVE, AccountStatus.DISABLED},
 }
 
@@ -51,7 +52,7 @@ def validate_transition(
             raise InvalidAccountTransition("Account activation must complete before enabling the account.")
         if before == AccountStatus.FORCE_PASSWORD_CHANGE and not password_updated:
             raise InvalidAccountTransition("A successful password update is required.")
-        if before in {AccountStatus.DISABLED, AccountStatus.LOCKED} and not explicitly_authorized:
+        if before in {AccountStatus.DISABLED, AccountStatus.SUSPENDED, AccountStatus.LOCKED} and not explicitly_authorized:
             raise InvalidAccountTransition("Enabling or unlocking requires explicit authorization.")
 
 
@@ -71,7 +72,7 @@ def transition_account(
     No HTTP endpoint exposes this foundation primitive in Phase 1.
     """
     with db.begin_nested():
-        if target in {AccountStatus.DISABLED, AccountStatus.LOCKED, AccountStatus.FORCE_PASSWORD_CHANGE}:
+        if target in {AccountStatus.DISABLED, AccountStatus.SUSPENDED, AccountStatus.LOCKED, AccountStatus.FORCE_PASSWORD_CHANGE}:
             from .platform_service import update_user_status
 
             # Reuse the tenant->user->grant lock order and last-administrator
@@ -105,7 +106,7 @@ def transition_account(
             select(NativeUserCredential.id).where(NativeUserCredential.user_id == user_id)
         ):
             raise InvalidAccountTransition("An enrolled native account is required.")
-        if before == AccountStatus.DISABLED and target == AccountStatus.ACTIVE:
+        if before in {AccountStatus.DISABLED, AccountStatus.SUSPENDED} and target == AccountStatus.ACTIVE:
             from .platform_service import validate_native_reenable
             validate_native_reenable(db, user)
         user.status = target
@@ -115,7 +116,7 @@ def transition_account(
             select(NativeUserCredential).where(NativeUserCredential.user_id == user_id).with_for_update()
         )
         if credential is not None:
-            if target not in {AccountStatus.DISABLED, AccountStatus.LOCKED, AccountStatus.FORCE_PASSWORD_CHANGE}:
+            if target not in {AccountStatus.DISABLED, AccountStatus.SUSPENDED, AccountStatus.LOCKED, AccountStatus.FORCE_PASSWORD_CHANGE}:
                 credential.security_version += 1
             credential.updated_at = now
             if target == AccountStatus.LOCKED:
@@ -123,7 +124,7 @@ def transition_account(
             elif before == AccountStatus.LOCKED:
                 credential.locked_at = credential.locked_until = None
                 credential.failed_login_count = 0
-        if target in {AccountStatus.DISABLED, AccountStatus.LOCKED}:
+        if target in {AccountStatus.DISABLED, AccountStatus.SUSPENDED, AccountStatus.LOCKED}:
             db.execute(
                 update(AccountActionToken)
                 .where(
@@ -139,11 +140,13 @@ def transition_account(
                 AccountStatus.LOCKED: IdentityAuditEvent.USER_UNLOCKED,
                 AccountStatus.FORCE_PASSWORD_CHANGE: IdentityAuditEvent.PASSWORD_CHANGED,
                 AccountStatus.DISABLED: IdentityAuditEvent.USER_ENABLED,
+                AccountStatus.SUSPENDED: IdentityAuditEvent.USER_ENABLED,
             }[AccountStatus(before)]
         else:
             action = {
                 AccountStatus.LOCKED: IdentityAuditEvent.USER_LOCKED,
                 AccountStatus.DISABLED: IdentityAuditEvent.USER_DISABLED,
+                AccountStatus.SUSPENDED: IdentityAuditEvent.USER_SUSPENDED,
                 AccountStatus.FORCE_PASSWORD_CHANGE: IdentityAuditEvent.FORCE_PASSWORD_CHANGE_SET,
             }[AccountStatus(target)]
         audit_service.write_authorization_audit(

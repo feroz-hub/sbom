@@ -23,7 +23,7 @@ export class MemorySessionStore implements SessionStore {
   async delete(id: string) { this.values.delete(id); }
 }
 function retention(value: TokenSession) {
-  return value.expiresAt + (value.provider === 'NATIVE' ? 0 : 86_400_000);
+  return value.expiresAt + (['NATIVE', 'MICROSOFT_ENTRA'].includes(value.provider || '') ? 0 : 86_400_000);
 }
 export class RedisSessionStore implements SessionStore {
   constructor(private client: ReturnType<typeof createClient>, private key: Buffer, private prefix = 'sbom:bff:') {

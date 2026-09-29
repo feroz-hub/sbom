@@ -236,6 +236,7 @@ export interface PlatformAdministrator {
 }
 
 export interface UserSearchResult {
+  providers?: string[];
   id: number;
   email: string | null;
   display_name: string | null;

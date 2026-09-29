@@ -17,7 +17,7 @@ export interface LoginTransaction {
 }
 
 export interface TokenSession {
-  provider?: 'HCL_CS' | 'NATIVE';
+  provider?: 'HCL_CS' | 'NATIVE' | 'MICROSOFT_ENTRA';
   accessToken: string;
   refreshToken?: string;
   idToken?: string;

@@ -44,3 +44,13 @@ it('preserves HCL provider revocation and end-session redirect', async () => {
   expect(revokeToken).toHaveBeenCalledTimes(2); expect((await response.json()).redirectUrl).toContain('https://hcl.test/logout');
   expect(destroySession).toHaveBeenCalledWith('hcl-id');
 });
+
+it('Microsoft logout destroys its BFF session without calling HCL or Native', async () => {
+  vi.stubEnv('APP_ORIGIN', 'https://sbom.test');
+  vi.stubGlobal('fetch', vi.fn());
+  vi.mocked(getSession).mockResolvedValueOnce({ provider: 'MICROSOFT_ENTRA', accessToken: 'entra-access', expiresAt: Date.now()+10000, createdAt: Date.now() });
+  const response = await POST(new NextRequest('https://sbom.test/api/auth/logout', { method: 'POST', headers: { origin: 'https://sbom.test', cookie: 'session=entra-id' } }));
+  expect(destroySession).toHaveBeenCalledWith('entra-id');
+  expect((await response.json()).redirectUrl).toBe('/logged-out?provider=entra');
+  expect(getDiscovery).not.toHaveBeenCalled(); expect(revokeToken).not.toHaveBeenCalled(); expect(fetch).not.toHaveBeenCalled();
+});

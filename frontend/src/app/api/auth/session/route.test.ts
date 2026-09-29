@@ -23,3 +23,11 @@ it('leaves HCL sessions on their existing path', async () => {
   const response = await GET(new NextRequest('https://sbom.test/api/auth/session', { headers: { cookie: 'session=opaque' } }));
   expect((await response.json()).authenticated).toBe(true); expect(fetch).not.toHaveBeenCalled();
 });
+
+it('checks Microsoft API authority and preserves pending authentication', async () => {
+  vi.mocked(getSession).mockResolvedValue({ provider: 'MICROSOFT_ENTRA', accessToken: 'entra-private', expiresAt: Date.now()+60000, createdAt: Date.now() });
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ status: 'USER_ACCESS_PENDING' })));
+  const response = await GET(new NextRequest('https://sbom.test/api/auth/session', { headers: { cookie: 'session=opaque' } }));
+  expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/api/auth/entra/session'), expect.any(Object));
+  expect(await response.json()).toEqual({ authenticated: true, provider: 'MICROSOFT_ENTRA' });
+});

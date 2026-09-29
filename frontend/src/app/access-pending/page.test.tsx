@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const auth = vi.hoisted(() => ({
   refreshSession: vi.fn(),
   logout: vi.fn(),
+  localStatus: 'ACTIVE',
 }));
 const router = vi.hoisted(() => ({
   push: vi.fn(),
@@ -15,7 +16,7 @@ const router = vi.hoisted(() => ({
 
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({
-    user: { email: 'pending@example.test', userId: 9 },
+    user: { email: 'pending@example.test', userId: 9, localStatus: auth.localStatus },
     refreshSession: auth.refreshSession,
     logout: auth.logout,
   }),
@@ -29,6 +30,7 @@ import AccessPendingPage from './page';
 describe('AccessPendingPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    auth.localStatus = 'ACTIVE';
     auth.refreshSession.mockResolvedValue(undefined);
   });
 
@@ -51,4 +53,11 @@ describe('AccessPendingPage', () => {
     await user.click(screen.getByRole('button', { name: 'Sign Out' }));
     expect(auth.logout).toHaveBeenCalledTimes(1);
   });
+});
+
+it('explains successful Microsoft authentication awaiting local approval', () => {
+  auth.localStatus = 'PENDING';
+  render(<AccessPendingPage />);
+  expect(screen.getByRole('heading', { name: 'Authentication successful' })).toBeInTheDocument();
+  expect(screen.getByText('Your access to SBOM Analyzer is awaiting Platform Administrator approval.')).toBeInTheDocument();
 });

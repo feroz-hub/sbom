@@ -83,7 +83,7 @@ class IAMUser(Base):
         UniqueConstraint("external_issuer", "external_subject", name="uq_iam_users_external_identity"),
         Index("ix_iam_users_verification_status", "verification_required", "status"),
         CheckConstraint(
-            "status IN ('ACTIVE','PENDING','DISABLED','PENDING_EMAIL_VERIFICATION','LOCKED','FORCE_PASSWORD_CHANGE')",
+            "status IN ('ACTIVE','PENDING','DISABLED','PENDING_EMAIL_VERIFICATION','LOCKED','FORCE_PASSWORD_CHANGE','SUSPENDED')",
             name="iam_user_status",
         ),
         CheckConstraint(
@@ -134,9 +134,9 @@ class UserIdentity(Base):
         Index("uq_user_identities_native_email", "provider_identifier", unique=True,
               postgresql_where=sql_text("provider_type = 'NATIVE'"),
               sqlite_where=sql_text("provider_type = 'NATIVE'")),
-        CheckConstraint("provider_type IN ('HCL_CS','NATIVE')", name="identity_provider"),
+        CheckConstraint("provider_type IN ('HCL_CS','NATIVE','MICROSOFT_ENTRA')", name="identity_provider"),
         CheckConstraint(
-            "(provider_type = 'HCL_CS' AND issuer IS NOT NULL AND length(trim(issuer)) > 0 "
+            "(provider_type IN ('HCL_CS','MICROSOFT_ENTRA') AND issuer IS NOT NULL AND length(trim(issuer)) > 0 "
             "AND subject IS NOT NULL AND length(trim(subject)) > 0) OR "
             "(provider_type = 'NATIVE' AND issuer IS NULL AND subject IS NULL "
             "AND provider_identifier IS NOT NULL AND length(trim(provider_identifier)) > 0 "

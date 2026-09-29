@@ -644,3 +644,16 @@ describe('AuthProvider login() returnTo sanitization', () => {
     expect(assignSpy).toHaveBeenCalledWith('/api/auth/login?returnTo=%2Fsboms%2F42%3Ftab%3Dcomponents');
   });
 });
+
+it.each(['USER_ACCESS_PENDING', 'ACCOUNT_PENDING_APPROVAL'])('keeps %s authenticated without loading tenant data', async status => {
+  const fetcher = vi.fn(async (url: string) => url === '/api/auth/session'
+    ? jsonResponse({ authenticated: true, provider: 'MICROSOFT_ENTRA' })
+    : jsonResponse(meBody(status, [])));
+  vi.stubGlobal('fetch', fetcher);
+  render(wrap(<Probe />));
+  await waitFor(() => expect(screen.getByTestId('bootstrap-state')).toHaveTextContent('access-pending'));
+  expect(screen.getByTestId('session-authenticated')).toHaveTextContent('true');
+  expect(latestAuth?.user?.permissions).toEqual([]);
+  expect(latestAuth?.tenants).toEqual([]);
+  expect(fetcher.mock.calls.some(([url]) => url.endsWith('/api/tenants'))).toBe(false);
+});

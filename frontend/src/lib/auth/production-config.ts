@@ -1,6 +1,9 @@
+import { entraConfig } from './entra-config';
+
 /** Secret-safe validation, invoked by server startup, never the browser. */
 export function validateProductionAuth() {
-  if (process.env.NODE_ENV !== 'production' || process.env.NATIVE_AUTH_ENABLED !== 'true') return;
+  entraConfig();
+  if (process.env.NODE_ENV !== 'production' || (process.env.NATIVE_AUTH_ENABLED !== 'true' && process.env.ENTRA_ENABLED !== 'true')) return;
   const errors: string[] = [];
   if (process.env.NEXT_PUBLIC_AUTH_ENABLED !== 'true') errors.push('frontend_authentication');
   if (process.env.AUTH_SESSION_STORE !== 'redis') errors.push('shared_session_store');

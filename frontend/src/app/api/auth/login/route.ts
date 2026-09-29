@@ -8,6 +8,9 @@ export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest) {
   try {
+    if (process.env.ENTRA_ENABLED === 'true' && request.nextUrl.searchParams.get('provider') !== 'hcl') {
+      return NextResponse.redirect(new URL('/sign-in', request.url));
+    }
     if (process.env.NEXT_PUBLIC_HCL_AUTH_ENABLED === 'false') {
       return NextResponse.redirect(new URL('/native-sign-in', request.url));
     }

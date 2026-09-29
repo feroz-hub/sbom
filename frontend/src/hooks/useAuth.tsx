@@ -13,6 +13,7 @@ export interface AuthUser {
   userId: number | null; externalUserId: string; email: string | null; displayName: string | null;
   tenantId: number | null; externalTenantId: string | null; roles: string[]; permissions: string[];
   isPlatformAdmin: boolean;
+  localStatus?: string;
 }
 
 export interface TenantInfo {
@@ -42,6 +43,7 @@ export type BootstrapState =
   | 'verification-required'
   | 'tenant-selection-required'
   | 'access-pending'
+  | 'access-denied'
   | 'logging-out'
   | 'unauthenticated'
   | 'error';
@@ -171,6 +173,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAuthStatus('access-pending');
     } else if (state === 'unauthenticated') {
       setAuthStatus('unauthenticated');
+    } else if (state === 'access-denied') {
+      setAuthStatus('access-denied');
     } else if (state === 'error') {
       setAuthStatus('service-unavailable');
     }
@@ -247,7 +251,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        if (status === 'ACCOUNT_DISABLED' || status === 'DISABLED' || status === 'BLOCKED') {
+        if (status === 'ACCOUNT_DISABLED' || status === 'DISABLED' || status === 'BLOCKED' || status === 'USER_SUSPENDED') {
           setUser({
             userId: body.user_id ?? body.userId ?? null,
             externalUserId: body.external_user_id ?? body.externalUserId ?? '',
@@ -257,16 +261,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             externalTenantId: body.external_tenant_id ?? body.externalTenantId ?? null,
             roles: body.roles || [], permissions: body.permissions || [], isPlatformAdmin: Boolean(body.is_platform_admin),
           });
-          setBootstrapState('error', 'Your SBOM account has been disabled.');
+          setBootstrapState('access-denied', 'Your SBOM account is disabled or suspended. Contact an administrator.');
           return;
         }
 
-        if (status === 'NO_TENANT' || status === 'ACCESS_PENDING') {
+        if (['NO_TENANT', 'ACCESS_PENDING', 'USER_ACCESS_PENDING', 'ACCOUNT_PENDING_APPROVAL'].includes(status)) {
           setUser({
             userId: body.user_id ?? body.userId ?? contextUser.id ?? null,
             externalUserId: body.external_user_id ?? body.externalUserId ?? '',
             email: body.email ?? contextUser.email ?? null,
             displayName: body.display_name ?? body.displayName ?? contextUser.display_name ?? null,
+            localStatus: contextUser.local_status,
             tenantId: null,
             externalTenantId: null,
             roles: body.roles || [],
@@ -468,11 +473,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setBootstrapState('verification-required');
           return;
         }
-        if (code === 'IAM_ACCOUNT_DISABLED' || code === 'ACCOUNT_DISABLED' || code === 'ACCESS_DENIED') {
-          setBootstrapState('error', 'Your SBOM account has been disabled.');
+        if (code === 'IAM_ACCOUNT_DISABLED' || code === 'ACCOUNT_DISABLED' || code === 'USER_SUSPENDED' || code === 'ACCESS_DENIED') {
+          setBootstrapState('access-denied', 'Your SBOM account is disabled or suspended. Contact an administrator.');
           return;
         }
-        if (code === 'IAM_NO_ACTIVE_MEMBERSHIP' || code === 'NO_TENANT_MEMBERSHIP' || code === 'ACCESS_PENDING' || body?.email || body?.display_name) {
+        if (code === 'USER_ACCESS_PENDING' || code === 'IAM_ACCOUNT_PENDING_APPROVAL' || code === 'IAM_NO_ACTIVE_MEMBERSHIP' || code === 'NO_TENANT_MEMBERSHIP' || code === 'ACCESS_PENDING' || body?.email || body?.display_name) {
           setUser({
             userId: body?.user_id ?? body?.userId ?? null,
             externalUserId: body?.external_user_id ?? body?.externalUserId ?? '',
@@ -532,7 +537,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [config.enabled]);
 
   const logout = useCallback(() => {
-    const localLogout = sessionProviderRef.current === 'NATIVE' || process.env.NEXT_PUBLIC_HCL_AUTH_ENABLED === 'false'
+    const localLogout = sessionProviderRef.current === 'MICROSOFT_ENTRA' ? '/logged-out?provider=entra' : sessionProviderRef.current === 'NATIVE' || process.env.NEXT_PUBLIC_HCL_AUTH_ENABLED === 'false'
       ? '/logged-out?provider=native' : '/logged-out';
     clearActiveTenantId();
     setUser(null);

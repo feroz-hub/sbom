@@ -52,6 +52,7 @@ from ..services.auth_context_service import (
     resolve_authorization_state,
 )
 from ..services.authenticated_principal_service import resolve_principal
+from ..services.identity_verification_policy import verification_complete_clause
 from ..settings import get_settings
 
 router = APIRouter(prefix="/api", tags=["identity"])
@@ -233,6 +234,7 @@ def auth_me(
         state = resolve_authorization_state(
             db,
             provisioned.user,
+            provider=provisioned.provider,
             selected_tenant=x_tenant_id,
             allow_platform_context=True,
             request=request,
@@ -272,7 +274,7 @@ def auth_me(
             state.active_tenant.external_iam_tenant_id if state.active_tenant else None
         ),
         "roles": sorted(roles),
-        "identity_roles": sorted(_roles(_claim(claims, get_settings().hcl_iam_role_claim))),
+        "identity_roles": sorted(_roles(_claim(claims, get_settings().hcl_iam_role_claim))) if provisioned.provider == "HCL_CS" else [],
         "permissions": permissions,
         "is_platform_admin": state.is_platform_admin,
         "authenticated": True,
@@ -301,6 +303,7 @@ def auth_context(
         state = resolve_authorization_state(
             db,
             provisioned.user,
+            provider=provisioned.provider,
             selected_tenant=x_tenant_id,
             allow_platform_context=True,
             request=request,
@@ -664,8 +667,7 @@ def search_tenant_user_candidates(
         db.query(IAMUser)
         .filter(
             IAMUser.status == "ACTIVE",
-            IAMUser.email_verified.is_(True),
-            IAMUser.verification_required.is_(False),
+            verification_complete_clause(),
             existing_membership,
             or_(
                 IAMUser.email.ilike(pattern, escape="\\"),
@@ -687,6 +689,7 @@ def search_tenant_user_candidates(
 
     items = [
         UserSearchResult(
+            providers=ums.providers(db, user),
             id=user.id,
             email=user.email,
             display_name=user.display_name,

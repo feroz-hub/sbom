@@ -10,6 +10,8 @@ it('excludes logged-out and callback from session enforcement while protecting t
   const matcher = new RegExp(`^${config.matcher[0]}$`);
   expect(matcher.test('/logged-out')).toBe(false);
   expect(matcher.test('/auth/callback')).toBe(false);
+  expect(matcher.test('/sign-in')).toBe(false);
+  expect(matcher.test('/auth/entra-callback')).toBe(false);
   expect(matcher.test('/')).toBe(true);
 
   process.env.NEXT_PUBLIC_AUTH_ENABLED = 'true';

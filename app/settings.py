@@ -221,6 +221,12 @@ class Settings(BaseSettings):
     # and tests; production validation uses asymmetric JWTs from JWKS.
     auth_enabled: bool = Field(default=False, description="Require HCL IAM authentication")
     hcl_auth_enabled: bool = True
+    # One workforce directory; application tenants remain database-owned.
+    entra_enabled: bool = False
+    entra_tenant_id: str = ""
+    entra_frontend_client_id: str = ""
+    entra_api_client_id: str = ""
+    entra_api_scope: str = ""
     hcl_iam_issuer: str = Field(default="", description="Expected HCL IAM token issuer")
     hcl_iam_audience: str = Field(default="", description="Expected API audience")
     hcl_iam_discovery_url: str = Field(default="", description="OIDC discovery URL; derived from issuer when empty")

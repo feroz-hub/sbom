@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { isActiveMembership, useAuth } from '@/hooks/useAuth';
 import { getRoleLabel } from '@/lib/roles';
 
-const PUBLIC_PATHS = ['/forgot-password', '/reset-password', '/change-password', '/native-sign-in', '/activate-account', '/auth/callback', '/access-denied', '/verification-required', '/access-pending', '/logged-out'];
+const PUBLIC_PATHS = ['/sign-in', '/forgot-password', '/reset-password', '/change-password', '/native-sign-in', '/activate-account', '/auth/callback', '/access-denied', '/verification-required', '/access-pending', '/logged-out'];
 
 /** Where a platform administrator lands when signing in to platform context. */
 const PLATFORM_HOME = '/settings/platform/tenants';
@@ -60,6 +60,8 @@ export function AuthGuard({ children, requiredPermission, requiredRoles }: AuthG
       router.replace('/verification-required');
       return;
     }
+
+    if (authStatus === 'access-denied') { router.replace('/access-denied'); return; }
 
     if (
       (bootstrapState === 'access-pending' || authStatus === 'access-pending') &&
@@ -178,6 +180,8 @@ export function AuthGuard({ children, requiredPermission, requiredRoles }: AuthG
       </div>
     );
   }
+
+  if (['access-pending', 'access-denied', 'verification-required'].includes(authStatus)) return null;
 
   // Permission check
   if (requiredPermission && !hasPermission(requiredPermission)) {

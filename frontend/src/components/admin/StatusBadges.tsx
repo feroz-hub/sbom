@@ -10,7 +10,7 @@ export const ROLE_DESCRIPTIONS: Record<string, string> = {
   VIEWER: 'Has read-only tenant access according to backend authorization policy.',
 };
 
-export function VerificationBadge({ verified }: { verified: boolean }) {
+export function VerificationBadge({ verified, required = true }: { verified: boolean; required?: boolean }) {
   if (verified) {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50">
@@ -26,12 +26,14 @@ export function VerificationBadge({ verified }: { verified: boolean }) {
       <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m0 3.75h.008v.008H12v-.008z" />
       </svg>
-      Verification: Verification required
+      {required ? 'Verification: Verification required' : 'Email: not mailbox-verified'}
     </span>
   );
 }
 
 export const ACCOUNT_STATUS_HELP: Record<string, string> = {
+  PENDING: 'Authentication succeeded. Awaiting Platform Administrator approval.',
+  SUSPENDED: 'Account suspended by an administrator. Access to all tenants is blocked.',
   ACTIVE: 'Account is active. Tenant access depends on membership and roles.',
   PENDING_EMAIL_VERIFICATION: 'User must verify their email and activate their account.',
   LOCKED: 'Account temporarily locked after failed authentication attempts.',

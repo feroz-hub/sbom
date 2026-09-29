@@ -11,17 +11,18 @@ vi.mock('@/lib/api', () => ({ listPlatformTenants: async () => [{ id: 2, name: '
 const member = { membership_id: 12, tenant_id: 1, tenant_name: 'Olympus', membership_status: 'ACTIVE', roles: ['DEVELOPER', 'VIEWER'], primary_role: 'VIEWER', role_assignment_version: 4 };
 const second = { ...member, membership_id: 15, tenant_id: 2, tenant_name: 'Hospital B' };
 const user = { id: 42, user_id: 42, display_name: 'John Smith', first_name: 'John', last_name: 'Smith', email: 'john@example.test', phone: '+1234567', account_status: 'ACTIVE', providers: ['NATIVE'], email_verified: true, created_at: '2026-09-01', updated_at: '2026-09-01', last_login_at: null, activity: { items: [{ id: 1, action: 'USER_UPDATED', outcome: 'SUCCESS', timestamp: 'today' }], total: 1 } };
+let providers = ['NATIVE'];
 let account = 'ACTIVE';
 let failed = false;
 let pending = false;
 let fetchMock: ReturnType<typeof vi.fn>;
 beforeEach(() => {
-  platform = true; tenant = '1'; account = 'ACTIVE'; failed = false; pending = false;
+  platform = true; providers = ['NATIVE']; tenant = '1'; account = 'ACTIVE'; failed = false; pending = false;
   fetchMock = vi.fn(async (url: string, options: RequestInit) => {
     if (pending) return new Promise(() => {});
     if (failed) return Response.json({ detail: 'Access denied' }, { status: 403 });
     if (options.method !== 'GET') return Response.json(url.includes('resend') ? { delivery: { status: 'sent' } } : {});
-    const data = { ...user, account_status: account, ...(platform ? { tenant_memberships: [member, second] } : member) };
+    const data = { ...user, providers, account_status: account, ...(platform ? { tenant_memberships: [member, second] } : member) };
     return Response.json(url.includes('?') ? { items: [data], total: 1 } : data);
   });
   vi.stubGlobal('fetch', fetchMock);
@@ -122,4 +123,18 @@ describe('user lifecycle administration', () => {
     platform = false; const view = render(<UserLifecycle />); fireEvent.click(await screen.findByRole('button', { name: 'John Smith' })); await screen.findByText('Olympus · ACTIVE');
     tenant = '2'; pending = true; view.rerender(<UserLifecycle />); expect(screen.queryByText('Olympus · ACTIVE')).not.toBeInTheDocument();
   });
+});
+
+it('shows pending Microsoft identities with explicit approval and no native password actions', async () => {
+  providers = ['MICROSOFT_ENTRA']; account = 'PENDING';
+  await openUser();
+  expect(screen.getAllByText(/Microsoft Entra/).length).toBeGreaterThan(0);
+  expect(screen.queryByRole('button', { name: 'Force password change' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Logout all native sessions' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Approve account' }));
+  expect(writes()).toHaveLength(0);
+  expect(screen.getByRole('dialog')).toHaveTextContent('memberships and roles must still be assigned separately');
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+  await waitFor(() => expect(writes()).toHaveLength(1));
+  expect(JSON.parse(writes()[0][1].body as string)).toEqual({ status: 'ACTIVE' });
 });

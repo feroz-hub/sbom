@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 
 from ..models import IAMUser
-from . import native_jwt_service
+from . import entra_auth_service, native_jwt_service
 from .email_verification_service import ensure_initial_verification_delivery
 from .identity_service import provision_local_identity
 
@@ -27,6 +27,14 @@ def resolve_principal(db, claims, *, request=None):
     if s.native_auth_enabled and claims.get("iss") == s.native_jwt_issuer:
         user = native_jwt_service.resolve_user(db, claims)
         return AuthenticatedPrincipal("NATIVE", user, claims)
+    if s.entra_enabled and claims.get("iss") == entra_auth_service.issuer():
+        try:
+            user = entra_auth_service.provision_user(db, claims, request=request)
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        return AuthenticatedPrincipal(entra_auth_service.PROVIDER, user, claims)
     provisioned = provision_local_identity(db, claims, request=request)
     db.commit()
     ensure_initial_verification_delivery(db, provisioned.user, request=request)

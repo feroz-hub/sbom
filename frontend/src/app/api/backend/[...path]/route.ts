@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic';
 async function usableSession(id: string, force = false): Promise<TokenSession | null> {
   const current = await getSession(id);
   if (!current) return null;
-  if (current.provider === 'NATIVE') {
+  if (current.provider === 'NATIVE' || current.provider === 'MICROSOFT_ENTRA') {
     if (!force && current.expiresAt > Date.now()) return current;
     await destroySession(id);
     return null;

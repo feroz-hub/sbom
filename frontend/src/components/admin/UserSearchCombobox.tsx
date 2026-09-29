@@ -17,7 +17,7 @@ interface UserSearchComboboxProps {
 export function isEligibleAdministrator(user: UserSearchResult): boolean {
   return (
     user.status === 'ACTIVE'
-    && user.email_verified
+    && (user.email_verified || Boolean(user.providers?.includes('MICROSOFT_ENTRA')))
     && !user.verification_required
   );
 }
@@ -127,7 +127,7 @@ export function UserSearchCombobox({
 
         <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-border/50">
           <UserStatusBadge status={selectedUser.status} />
-          <VerificationBadge verified={selectedUser.email_verified} />
+          {selectedUser.providers?.includes('MICROSOFT_ENTRA') ? <span>Microsoft Entra identity</span> : <VerificationBadge verified={selectedUser.email_verified} />}
           {selectedUser.verification_required && (
             <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
               Verification required
@@ -239,7 +239,7 @@ export function UserSearchCombobox({
                 {user.username && <p className="text-xs text-hcl-muted truncate">@{user.username}</p>}
                 <div className="flex flex-wrap items-center gap-1.5 mt-1">
                   <UserStatusBadge status={user.status} />
-                  <VerificationBadge verified={user.email_verified} />
+                  {user.providers?.includes('MICROSOFT_ENTRA') ? <span>Microsoft Entra identity</span> : <VerificationBadge verified={user.email_verified} />}
                   {user.verification_required && (
                     <span className="text-[11px] font-medium text-amber-700">Verification required</span>
                   )}

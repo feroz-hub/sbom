@@ -8,7 +8,7 @@ import { GlobalAiBatchBanner } from '@/components/ai-fixes/GlobalAiBatchProgress
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
 
-const PUBLIC_PATHS = ['/forgot-password', '/reset-password', '/change-password', '/native-sign-in', '/activate-account', '/auth/callback', '/access-denied', '/verification-required', '/access-pending', '/logged-out'];
+const PUBLIC_PATHS = ['/sign-in', '/forgot-password', '/reset-password', '/change-password', '/native-sign-in', '/activate-account', '/auth/callback', '/access-denied', '/verification-required', '/access-pending', '/logged-out'];
 
 function FullScreenBrandedLoader({ message = 'Verifying authentication…' }: { message?: string }) {
   return (
@@ -121,6 +121,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    if (bootstrapState === 'access-denied') { router.replace('/access-denied'); return; }
+
     if (bootstrapState === 'access-pending' && pathname !== '/access-pending') {
       router.replace('/access-pending');
       return;
@@ -169,7 +171,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   // Intermediate transition states -> full-screen redirect loader
-  if (bootstrapState === 'verification-required' || bootstrapState === 'access-pending') {
+  if (bootstrapState === 'verification-required' || bootstrapState === 'access-pending' || bootstrapState === 'access-denied') {
     return <FullScreenBrandedLoader message="Redirecting to access assignment…" />;
   }
 

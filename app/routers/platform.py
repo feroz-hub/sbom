@@ -39,6 +39,7 @@ from ..services import audit_service, platform_service
 from ..services import tenant_role_assignment_service as tras
 from ..services import user_management_service as ums
 from ..services.email_verification_service import ensure_initial_verification_delivery
+from ..services.identity_verification_policy import verification_complete, verification_complete_clause
 
 router = APIRouter(prefix="/api/platform", tags=["platform-identity"])
 
@@ -180,8 +181,7 @@ def _platform_tenant_dict(db: Session, tenant: Tenant) -> dict:
             TenantUser.tenant_id == tenant.id,
             TenantUser.status == "ACTIVE",
             IAMUser.status == "ACTIVE",
-            IAMUser.email_verified.is_(True),
-            IAMUser.verification_required.is_(False),
+            verification_complete_clause(),
         )
         .order_by(IAMUser.display_name, IAMUser.email)
         .all()
@@ -277,6 +277,7 @@ def search_platform_users(
                 )
         items.append(
             UserSearchResult(
+                providers=ums.providers(db, user),
                 id=user.id,
                 email=user.email,
                 display_name=user.display_name,
@@ -302,7 +303,7 @@ def list_platform_users(
     search: str | None = Query(default=None, min_length=1, max_length=200),
     local_status: AccountStatus | None = None,
     role: str | None = Query(default=None, max_length=64),
-    provider: Literal["NATIVE", "HCL_CS"] | None = None,
+    provider: Literal["NATIVE", "HCL_CS", "MICROSOFT_ENTRA"] | None = None,
     sort_by: Literal["name", "email", "created_at", "last_login_at"] = "created_at",
     sort_order: Literal["asc", "desc"] = "desc",
     email_verified: bool | None = None,
@@ -562,7 +563,7 @@ def _change_user_status(
         with db.begin_nested():
             # Preserve legacy approval/idempotence, but centralize actual account
             # lifecycle transitions and required audit/token invalidation.
-            initial = platform_service.lock_account_for_administration(db, user_id, removing_access=payload.status == "DISABLED")
+            initial = platform_service.lock_account_for_administration(db, user_id, removing_access=payload.status in {"DISABLED", "SUSPENDED"})
             if initial is None:
                 raise HTTPException(404, "User not found")
             if initial.status == "PENDING" or initial.status == payload.status:
@@ -629,7 +630,7 @@ def _change_user_status(
     if (
         mutation.changed
         and mutation.user.status == "ACTIVE"
-        and (not mutation.user.email_verified or mutation.user.verification_required)
+        and (not verification_complete(mutation.user))
     ):
         delivery = ensure_initial_verification_delivery(
             db, mutation.user, request=request

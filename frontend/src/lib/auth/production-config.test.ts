@@ -1,3 +1,4 @@
+vi.mock('server-only', () => ({}));
 import { afterEach, expect, it, vi } from 'vitest';
 import { validateProductionAuth } from './production-config';
 afterEach(() => vi.unstubAllEnvs());

@@ -66,8 +66,10 @@ def _jwt_settings() -> tuple[str, str, str | None, str | None]:
 
 
 def validate_auth_setup() -> None:
+    from .services.entra_auth_service import validate_configuration
     from .settings import get_settings
 
+    validate_configuration()
     if get_settings().native_auth_enabled:
         from .services.native_jwt_service import signing_key
         signing_key()

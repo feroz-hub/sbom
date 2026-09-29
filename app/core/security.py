@@ -12,6 +12,8 @@ from collections.abc import AsyncIterator, Callable
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 
+from ..services.identity_verification_policy import verification_complete
+
 if TYPE_CHECKING:
     from ..models import IAMUser
 
@@ -194,6 +196,9 @@ def get_current_claims(
     if settings.native_auth_enabled and issuer == settings.native_jwt_issuer:
         from ..services.native_jwt_service import validate_token
         return validate_token(token)
+    from ..services import entra_auth_service
+    if settings.entra_enabled and issuer == entra_auth_service.issuer():
+        return entra_auth_service.validate_token(token)
     return validate_hcl_token(token)
 
 
@@ -268,9 +273,13 @@ def _block_user_access(
         event = IdentityAuditEvent.ACCESS_BLOCKED_DISABLED
         code = IdentityErrorCode.ACCOUNT_DISABLED
         message = "This SBOM Analyzer account is disabled. Contact support."
-    elif state == AuthorizationState.ACCOUNT_PENDING_APPROVAL:
+    elif state == AuthorizationState.USER_SUSPENDED:
+        event = IdentityAuditEvent.ACCESS_BLOCKED_DISABLED
+        code = IdentityErrorCode.USER_SUSPENDED
+        message = "This SBOM Analyzer account is suspended. Contact an administrator."
+    elif state in {AuthorizationState.ACCOUNT_PENDING_APPROVAL, AuthorizationState.USER_ACCESS_PENDING}:
         event = IdentityAuditEvent.ACCESS_BLOCKED_PENDING
-        code = IdentityErrorCode.ACCOUNT_PENDING_APPROVAL
+        code = IdentityErrorCode.USER_ACCESS_PENDING if state == AuthorizationState.USER_ACCESS_PENDING else IdentityErrorCode.ACCOUNT_PENDING_APPROVAL
         message = "This SBOM Analyzer account is awaiting administrator approval."
     else:
         event = IdentityAuditEvent.ACCESS_BLOCKED_UNVERIFIED
@@ -303,7 +312,7 @@ def require_verified_user(user: IAMUser) -> IAMUser:
             IdentityErrorCode.ACCOUNT_PENDING_APPROVAL,
             "This SBOM Analyzer account is awaiting administrator approval.",
         )
-    if user.status == "PENDING_EMAIL_VERIFICATION" or not user.email_verified or user.verification_required:
+    if user.status == "PENDING_EMAIL_VERIFICATION" or not verification_complete(user):
         raise identity_http_error(
             IdentityErrorCode.EMAIL_VERIFICATION_REQUIRED,
             "Email verification is required before accessing SBOM Analyzer.",
@@ -330,6 +339,7 @@ def _resolve_context(
     state = resolve_authorization_state(
         db,
         user,
+        provider=principal.provider,
         selected_tenant=selected_tenant,
         selector_hint=_claim(claims, settings.hcl_iam_tenant_claim),
         allow_platform_context=allow_platform_context,
@@ -338,6 +348,8 @@ def _resolve_context(
     if state.status in {
         AuthorizationState.ACCOUNT_DISABLED,
         AuthorizationState.ACCOUNT_PENDING_APPROVAL,
+        AuthorizationState.USER_ACCESS_PENDING,
+        AuthorizationState.USER_SUSPENDED,
         AuthorizationState.VERIFICATION_REQUIRED,
     }:
         _block_user_access(db, user, state=state.status, request=request)
@@ -644,8 +656,8 @@ def validate_hcl_auth_setup() -> None:
         log.warning("AUTH_ENABLED=false: using explicit local development identity")
         return
     if not settings.hcl_auth_enabled:
-        if not settings.native_auth_enabled or settings.dev_default_tenant:
-            raise RuntimeError("Native-only authentication requires Native IAM and no development tenant")
+        if not (settings.native_auth_enabled or settings.entra_enabled) or settings.dev_default_tenant:
+            raise RuntimeError("Authentication requires an enabled provider and no development tenant")
         return
     required = {
         "HCL_IAM_ISSUER": settings.hcl_iam_issuer,

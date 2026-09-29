@@ -2,7 +2,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { UserSearchCombobox } from './UserSearchCombobox';
+import { isEligibleAdministrator, UserSearchCombobox } from './UserSearchCombobox';
 import * as api from '@/lib/api';
 
 vi.mock('@/lib/api', async () => {
@@ -174,4 +174,11 @@ describe('UserSearchCombobox', () => {
     expect(option).toHaveTextContent('@disabled');
     expect(option).toHaveTextContent('Verification required');
   });
+});
+
+it('allows an approved directory identity without claiming mailbox verification', () => {
+  const candidate = { id: 123, email: 'directory@example.test', display_name: 'Directory member', status: 'ACTIVE', email_verified: false, verification_required: false, providers: ['MICROSOFT_ENTRA'] };
+  expect(isEligibleAdministrator(candidate)).toBe(true);
+  expect(isEligibleAdministrator({ ...candidate, status: 'PENDING' })).toBe(false);
+  expect(isEligibleAdministrator({ ...candidate, providers: ['HCL_CS'] })).toBe(false);
 });

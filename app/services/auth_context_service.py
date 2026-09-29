@@ -33,6 +33,7 @@ from . import (
     tenant_role_assignment_service,
     tenant_service,
 )
+from .identity_verification_policy import verification_complete
 
 log = logging.getLogger(__name__)
 
@@ -91,6 +92,7 @@ def resolve_authorization_state(
     db: Session,
     user: IAMUser,
     *,
+    provider: str | None = None,
     selected_tenant: str | None = None,
     selector_hint: str | None = None,
     allow_platform_context: bool = True,
@@ -110,16 +112,21 @@ def resolve_authorization_state(
             frozenset(),
             (),
         )
+    elif user.status == "SUSPENDED":
+        result = ResolvedAuthorizationState(
+            AuthorizationState.USER_SUSPENDED, NextAction.CONTACT_SUPPORT,
+            user, False, frozenset(), (),
+        )
     elif user.status == "PENDING":
         result = ResolvedAuthorizationState(
-            AuthorizationState.ACCOUNT_PENDING_APPROVAL,
+            AuthorizationState.USER_ACCESS_PENDING if provider == "MICROSOFT_ENTRA" else AuthorizationState.ACCOUNT_PENDING_APPROVAL,
             NextAction.WAIT_FOR_APPROVAL,
             user,
             False,
             frozenset(),
             (),
         )
-    elif user.status == "PENDING_EMAIL_VERIFICATION" or not user.email_verified or user.verification_required:
+    elif user.status == "PENDING_EMAIL_VERIFICATION" or not verification_complete(user):
         result = ResolvedAuthorizationState(
             AuthorizationState.VERIFICATION_REQUIRED,
             NextAction.VERIFY_EMAIL,

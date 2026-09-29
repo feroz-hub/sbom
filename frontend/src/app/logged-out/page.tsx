@@ -2,6 +2,7 @@ export default async function LoggedOutPage({ searchParams }: {
   searchParams?: Promise<{ provider?: string }>;
 }) {
   // This hint selects a login screen only; it grants no authentication authority.
+  const entra = (await searchParams)?.provider === 'entra';
   const native = (await searchParams)?.provider === 'native' || process.env.NEXT_PUBLIC_HCL_AUTH_ENABLED === 'false';
   return (
     <main className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -14,7 +15,7 @@ export default async function LoggedOutPage({ searchParams }: {
           <p className="text-sm text-hcl-muted">Your SBOM Analyzer session has ended.</p>
         </div>
         <a
-          href={native ? '/native-sign-in' : '/api/auth/login?returnTo=%2F'}
+          href={entra ? '/sign-in' : native ? '/native-sign-in' : '/api/auth/login?returnTo=%2F'}
           className="inline-flex w-full items-center justify-center rounded-lg bg-hcl-blue px-4 py-2.5 text-sm font-semibold text-white shadow-elev-1 transition-colors hover:bg-hcl-blue/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue focus-visible:ring-offset-2"
         >
           Sign in again

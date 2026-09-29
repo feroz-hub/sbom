@@ -50,7 +50,7 @@ describe('User State Pages & Copy Contracts', () => {
     expect(screen.getByText('Access assignment required')).toBeInTheDocument();
     expect(
       screen.getByText(
-        'Your HCL.CS identity is verified, but you have not been assigned a platform role or active tenant membership.',
+        'Your identity is authenticated, but you have not been assigned a platform role or active tenant membership.',
       ),
     ).toBeInTheDocument();
   });
@@ -62,7 +62,7 @@ describe('User State Pages & Copy Contracts', () => {
     expect(screen.getByText('Tenant access disabled')).toBeInTheDocument();
     expect(
       screen.getByText(
-        'Your HCL.CS sign-in is valid, but your membership in this tenant is currently disabled.',
+        'Your sign-in is valid, but your membership in this tenant is currently disabled.',
       ),
     ).toBeInTheDocument();
   });
@@ -71,10 +71,10 @@ describe('User State Pages & Copy Contracts', () => {
     mockActiveTenant = null;
     render(<AccessDeniedPage />);
 
-    expect(screen.getByText('SBOM account disabled')).toBeInTheDocument();
+    expect(screen.getByText('SBOM access denied')).toBeInTheDocument();
     expect(
       screen.getByText(
-        'Your HCL.CS identity is valid, but your SBOM account has been disabled.',
+        'Your identity is authenticated, but your SBOM account is disabled or suspended.',
       ),
     ).toBeInTheDocument();
   });

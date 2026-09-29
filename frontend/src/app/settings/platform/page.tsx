@@ -148,7 +148,7 @@ export default function PlatformAdministratorsPage() {
                       <div className="font-medium text-foreground">{administrator.display_name || administrator.email || 'Unnamed user'}</div>
                       <div className="text-xs text-hcl-muted">{administrator.email || 'No email'}</div>
                     </td>
-                    <td className="px-4 py-3"><VerificationBadge verified={administrator.email_verified} /></td>
+                    <td className="px-4 py-3"><VerificationBadge verified={administrator.email_verified} required={administrator.verification_required} /></td>
                     <td className="px-4 py-3"><RoleBadge role={administrator.role} /></td>
                     <td className="px-4 py-3">
                       <span className="inline-flex items-center rounded-full bg-hcl-blue/10 px-2 py-0.5 text-xs font-medium text-hcl-blue">

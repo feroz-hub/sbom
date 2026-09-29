@@ -90,7 +90,7 @@ export function TenantMembersTable({
                         <div className="text-xs text-hcl-muted">{member.email || 'No email'}</div>
                       </td>
                       <td className="px-4 py-3.5">
-                        <VerificationBadge verified={member.email_verified && !member.verification_required} />
+                        <VerificationBadge verified={member.email_verified && !member.verification_required} required={member.verification_required} />
                       </td>
                       <td className="px-4 py-3.5">
                         <div className="space-y-1">
@@ -171,7 +171,7 @@ export function TenantMembersTable({
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 pt-1">
-                      <VerificationBadge verified={member.email_verified && !member.verification_required} />
+                      <VerificationBadge verified={member.email_verified && !member.verification_required} required={member.verification_required} />
                       <span
                         className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border ${
                           isMemberActive

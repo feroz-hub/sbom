@@ -27,6 +27,7 @@ from ..models import (
 )
 from ..settings import get_settings
 from . import audit_service, authorization_catalog_service
+from .identity_verification_policy import verification_complete, verification_complete_clause
 
 log = logging.getLogger("sbom.tenant.roles")
 
@@ -130,8 +131,7 @@ def _eligible_user(db: Session, user_id: int, *, for_update: bool = False) -> IA
     if (
         user is None
         or user.status != "ACTIVE"
-        or not user.email_verified
-        or user.verification_required
+        or not verification_complete(user)
     ):
         raise _problem(
             IdentityErrorCode.USER_STATUS_INVALID,
@@ -572,8 +572,7 @@ def _protect_last_admin(
                 TenantUser.tenant_id == membership.tenant_id,
                 TenantUser.status == "ACTIVE",
                 IAMUser.status == "ACTIVE",
-                IAMUser.email_verified.is_(True),
-                IAMUser.verification_required.is_(False),
+                verification_complete_clause(),
                 TenantUserRoleAssignment.status == "ACTIVE",
                 AuthorizationRole.code == "TENANT_ADMIN",
                 AuthorizationRole.scope == "TENANT",

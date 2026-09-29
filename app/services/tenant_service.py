@@ -39,6 +39,7 @@ from . import (
     tenant_role_assignment_service,
 )
 from .identity_service import provision_local_identity
+from .identity_verification_policy import verification_complete, verification_complete_clause
 
 _TENANT_SLUG_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _CONTROL_CHAR_PATTERN = re.compile(r"[\x00-\x1f\x7f]")
@@ -139,7 +140,7 @@ def _validate_initial_admin(user: IAMUser | None) -> IAMUser:
             "The selected initial Tenant Administrator is not eligible.",
             status_code=422,
         )
-    if not user.email_verified or user.verification_required:
+    if not verification_complete(user):
         raise TenantCreationError(
             IdentityErrorCode.EMAIL_VERIFICATION_REQUIRED,
             "The selected initial Tenant Administrator must have a verified email.",
@@ -166,8 +167,7 @@ def _validate_platform_requester(db: Session, actor_user_id: int) -> None:
         grant is None
         or actor is None
         or actor.status != "ACTIVE"
-        or not actor.email_verified
-        or actor.verification_required
+        or not verification_complete(actor)
     ):
         raise TenantCreationError(
             IdentityErrorCode.PLATFORM_PERMISSION_DENIED,
@@ -825,8 +825,7 @@ def _active_tenant_admin_count(db: Session, tenant_id: int, *, excluding: int | 
             TenantUser.tenant_id == tenant_id,
             TenantUser.status == "ACTIVE",
             IAMUser.status == "ACTIVE",
-            IAMUser.email_verified.is_(True),
-            IAMUser.verification_required.is_(False),
+            verification_complete_clause(),
             TenantUserRoleAssignment.status == "ACTIVE",
             AuthorizationRole.code == "TENANT_ADMIN",
             AuthorizationRole.scope == "TENANT",

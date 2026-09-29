@@ -229,3 +229,10 @@ describe('AuthGuard public and logout routes', () => {
     expect(mockLogin).toHaveBeenCalledTimes(1);
   });
 });
+
+it.each(['access-pending', 'access-denied'])('keeps protected children unmounted for %s', state => {
+  mockAuthContext = contextFor(state, state);
+  render(<AuthGuard><div>Sensitive tenant content</div></AuthGuard>);
+  expect(screen.queryByText('Sensitive tenant content')).toBeNull();
+  expect(mockReplace).toHaveBeenCalledWith(state === 'access-pending' ? '/access-pending' : '/access-denied');
+});

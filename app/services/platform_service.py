@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from ..core.identity_states import IdentityErrorCode
 from ..core.permissions import TENANT_STATUSES
 from ..models import EmailVerificationToken, IAMUser, PlatformUserRole, Tenant, TenantUser
+from .identity_verification_policy import verification_complete, verification_complete_clause
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,8 +64,7 @@ def is_effective_platform_administrator(
         and grant.role == "PLATFORM_ADMIN"
         and grant.status == "ACTIVE"
         and user.status == "ACTIVE"
-        and user.email_verified
-        and not user.verification_required
+        and verification_complete(user)
     )
 
 
@@ -129,8 +129,7 @@ def _platform_user_conditions(
     )
     effective_condition = and_(
         IAMUser.status == "ACTIVE",
-        IAMUser.email_verified.is_(True),
-        IAMUser.verification_required.is_(False),
+        verification_complete_clause(),
         effective_grant_exists,
     )
     if is_platform_admin is True:
@@ -329,7 +328,7 @@ def _validate_grant_eligibility(user: IAMUser) -> None:
             "Only active users can receive platform authority.",
             status_code=409,
         )
-    if not user.email_verified or user.verification_required:
+    if not verification_complete(user):
         raise _error(
             IdentityErrorCode.EMAIL_VERIFICATION_REQUIRED,
             "Email verification is required before platform authority can be granted.",
@@ -403,8 +402,7 @@ def _effective_admin_count(db: Session) -> int:
                 PlatformUserRole.role == "PLATFORM_ADMIN",
                 PlatformUserRole.status == "ACTIVE",
                 IAMUser.status == "ACTIVE",
-                IAMUser.email_verified.is_(True),
-                IAMUser.verification_required.is_(False),
+                verification_complete_clause(),
             )
         )
         or 0
@@ -489,13 +487,13 @@ def update_user_status(
             status_code=404,
         )
     requested = status_value.strip().upper()
-    if requested not in {"ACTIVE", "DISABLED"}:
+    if requested not in {"ACTIVE", "DISABLED", "SUSPENDED"}:
         raise _error(
             IdentityErrorCode.USER_STATUS_INVALID,
-            "User status must be ACTIVE or DISABLED.",
+            "User status must be ACTIVE, DISABLED or SUSPENDED.",
             status_code=422,
         )
-    user = lock_account_for_administration(db, user_id, removing_access=requested == "DISABLED")
+    user = lock_account_for_administration(db, user_id, removing_access=requested in {"DISABLED", "SUSPENDED"})
     old_status = user.status
     if old_status == requested:
         return StatusMutation(user, old_status, False)
@@ -509,9 +507,9 @@ def update_user_status(
             f"Transition from {old_status} to {requested} is not allowed.",
             status_code=409,
         )
-    if old_status == "DISABLED" and requested == "ACTIVE":
+    if old_status in {"DISABLED", "SUSPENDED"} and requested == "ACTIVE":
         validate_native_reenable(db, user)
-    if requested == "DISABLED":
+    if requested in {"DISABLED", "SUSPENDED"}:
         from . import tenant_role_assignment_service, tenant_service
 
         grant = get_active_platform_grant(db, user.id)
