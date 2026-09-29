@@ -23,6 +23,14 @@ const path = ['api', 'tenants', '3', 'users', '6'];
 const context = () => ({ params: Promise.resolve({ path }) });
 
 describe('backend response proxy', () => {
+  it('does not forward stale platform tenant headers or reintroduce the tenant cookie', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ items: [] })));
+    await GET(new NextRequest('http://frontend.test/api/backend/api/platform/users', {
+      headers: { 'X-Tenant-ID': 'all', cookie: 'sbom_active_tenant_id=17' },
+    }), { params: Promise.resolve({ path: ['api', 'platform', 'users'] }) });
+    expect(vi.mocked(fetch).mock.calls[0][1]?.headers).toBeInstanceOf(Headers);
+    expect(new Headers(vi.mocked(fetch).mock.calls[0][1]?.headers).has('X-Tenant-ID')).toBe(false);
+  });
   it.each([204, 205, 304])('forwards status %s without a body even with JSON content type', async (status) => {
     const upstream = new Response(null, {
       status,

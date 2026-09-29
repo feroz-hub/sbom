@@ -205,6 +205,26 @@ def make_app():
     return app
 
 
+def test_platform_failure_logs_scope_actor_and_category_without_secrets(log_file):
+    from fastapi import HTTPException, Request
+
+    app = make_app()
+
+    @app.get("/api/platform/users")
+    async def directory(request: Request):
+        request.state.current_context = SimpleNamespace(user_id=42, tenant_id=None)
+        raise HTTPException(422, "Invalid filter")
+
+    response = TestClient(app).get("/api/platform/users", headers={"Authorization": "Bearer private-token"})
+    event = next(row for row in entries(log_file) if row.get("event") == "http_request_completed")
+    assert event["request_id"] == response.headers["X-Request-ID"]
+    assert event["user_id"] == 42
+    assert event["request_scope"] == "platform"
+    assert event["exception_category"] == "HTTPError"
+    assert event["status_code"] == 422
+    assert "private-token" not in log_file.read_text()
+
+
 @pytest.mark.parametrize("headers", [{}, {"X-Request-ID": "client-request-42"}, {"X-Correlation-ID": "legacy-id"}])
 def test_http_request_id_and_secrets(log_file, headers):
     response = TestClient(make_app()).get(

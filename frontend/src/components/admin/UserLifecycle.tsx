@@ -2,7 +2,7 @@
 import styles from './NativeUsers.module.css';
 import { useToast } from '@/hooks/useToast';
 import { UserActionsMenu } from './UserActionsMenu';
-import { Users } from 'lucide-react';
+import { AlertTriangle, Users } from 'lucide-react';
 import { RoleBadges } from './StatusBadges';
 import { FormEvent, useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
@@ -13,7 +13,7 @@ import { TenantSearchSelect } from './TenantSearchSelect';
 
 type Membership = { membership_id: number; tenant_id: number; tenant_name: string; membership_status: string; roles: string[]; primary_role: string; role_assignment_version: number };
 type Audit = { actor_user_id?: number | null; tenant_id?: number | null; id: number; action: string; outcome: string; timestamp: string };
-type User = Partial<Membership> & { active_tenant_count?: number; id?: number; user_id?: number; display_name: string; first_name: string | null; last_name: string | null; email: string; phone: string | null; account_status: string; providers: string[]; email_verified: boolean; last_login_at: string | null; created_at: string; updated_at: string; tenant_memberships?: Membership[]; security?: { password_changed_at?: string | null; failed_login_count: number; locked_until: string | null } | null; activity?: { items: Audit[]; total: number } };
+type User = Partial<Membership> & { is_platform_admin?: boolean; active_tenant_count?: number; id?: number; user_id?: number; display_name: string; first_name: string | null; last_name: string | null; email: string; phone: string | null; account_status: string; providers: string[]; email_verified: boolean; last_login_at: string | null; created_at: string; updated_at: string; tenant_memberships?: Membership[]; security?: { password_changed_at?: string | null; failed_login_count: number; locked_until: string | null } | null; activity?: { items: Audit[]; total: number } };
 const providerLabel = (value: string) => ({ NATIVE: 'Native', HCL_CS: 'HCL.CS', MICROSOFT_ENTRA: 'Microsoft Entra' }[value] || value);
 const statuses = ['PENDING', 'SUSPENDED', 'ACTIVE', 'PENDING_EMAIL_VERIFICATION', 'LOCKED', 'DISABLED', 'FORCE_PASSWORD_CHANGE'];
 const baseRoles = ['SECURITY_ANALYST', 'DEVELOPER', 'VIEWER'];
@@ -21,10 +21,14 @@ const inputClass = 'rounded-md border border-border-subtle px-3 py-2 bg-backgrou
 const readable = (value: string) => value.toLowerCase().replaceAll('_', ' ');
 const date = (value?: string | null) => value ? new Date(value).toLocaleString() : 'Never';
 
+class DirectoryRequestError extends Error {
+  constructor(public status: number, message: string) { super(message); }
+}
+
 async function api(path: string, tenant: string | number | null, method = 'GET', body?: unknown) {
-  const response = await fetch(`/api/backend/api${path}`, { method, headers: { 'Content-Type': 'application/json', ...(tenant ? { 'X-Tenant-ID': String(tenant) } : {}) }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
+  const response = await fetch(`/api/backend/api${path}`, { method, headers: { 'Content-Type': 'application/json', ...(!path.startsWith('/platform/') && tenant ? { 'X-Tenant-ID': String(tenant) } : {}) }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
   const data = await response.json();
-  if (!response.ok) throw new Error(response.status === 403 ? 'Access denied. Your permissions do not allow this action.' : response.status === 409 ? 'The account has changed or this action is unavailable. Refresh the user and review their access.' : 'Unable to complete the request. Please review the information and try again.');
+  if (!response.ok) throw new DirectoryRequestError(response.status, response.status === 403 ? 'Access denied. Your permissions do not allow this action.' : response.status === 409 ? 'The account has changed or this action is unavailable. Refresh the user and review their access.' : 'Unable to complete the request. Please review the information and try again.');
   return data;
 }
 
@@ -54,6 +58,7 @@ function Lifecycle({ platform, scope, permission, onAdd, refreshKey }: { platfor
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [directoryError, setDirectoryError] = useState('');
   const [revision, setRevision] = useState(0);
   const [confirmation, setConfirmation] = useState<{ text: string; run: () => Promise<void> } | null>(null);
   const canGlobal = platform && permission('platform:user:manage_status');
@@ -66,11 +71,18 @@ function Lifecycle({ platform, scope, permission, onAdd, refreshKey }: { platfor
   useEffect(() => {
     let current = true;
     setLoading(true);
-    const query = new URLSearchParams({ page: String(page), page_size: '20', search });
+    setDirectoryError('');
+    const query = new URLSearchParams({ page: String(page), page_size: '20' });
+    if (search.trim()) query.set('search', search.trim());
     if (status) query.set(platform ? 'local_status' : 'account_status', status);
-    if (role) query.set('role', role);
+    if (platform && role === 'PLATFORM_ADMIN') query.set('is_platform_admin', 'true');
+    else if (role) query.set('role', role);
     if (platform) { query.set('sort_by', sort); if (provider) query.set('provider', provider); if (tenantFilter) query.set('tenant_id', String(tenantFilter.id)); }
-    api(`${prefix}?${query}`, scope).then(data => { if (current) { setRows(data.items); setTotal(data.total); } }).catch(e => { if (current) setError(e.message); }).finally(() => { if (current) setLoading(false); });
+    api(`${prefix}?${query}`, platform ? null : scope).then(data => { if (current) { setRows(data.items); setTotal(data.total); } }).catch(e => {
+      if (current) setDirectoryError(e instanceof DirectoryRequestError && e.status === 403
+        ? "You don't have permission to view this user directory."
+        : `The ${platform ? 'platform' : 'tenant'} user directory could not be retrieved.`);
+    }).finally(() => { if (current) setLoading(false); });
     return () => { current = false; };
   }, [prefix, scope, platform, page, search, status, role, provider, tenantFilter, sort, revision, refreshKey]);
   useEffect(() => {
@@ -90,21 +102,24 @@ function Lifecycle({ platform, scope, permission, onAdd, refreshKey }: { platfor
   function confirm(text: string, run: () => Promise<void>) { setConfirmation({ text, run }); }
   const uid = detail?.id ?? detail?.user_id;
   const memberships = detail ? (platform ? detail.tenant_memberships || [] : [detail as Membership]) : [];
-  return <section className={`${styles.console} space-y-5`}>
-    <header className="flex flex-wrap items-start justify-between gap-4"><div><p className="mb-2 text-xs font-semibold uppercase tracking-widest text-hcl-muted">Identity & access</p><h1 className="text-3xl font-semibold tracking-tight">Native Users</h1><p className="mt-2 text-sm text-hcl-muted">Manage local SBOM Analyzer accounts, roles and access.</p></div>{onAdd && <button className="!bg-hcl-blue !text-white" onClick={onAdd}>+ Add User</button>}</header>
-    <div className="flex flex-wrap items-end gap-4 rounded-xl border border-border bg-surface p-5 shadow-sm">
+  return <section className={`${styles.console} space-y-3`}>
+    <header className="flex flex-wrap items-start justify-between gap-4"><div><p className="mb-1 text-xs font-semibold uppercase tracking-widest text-hcl-muted">Identity & access</p><h1 className="text-3xl font-semibold tracking-tight">Native Users</h1><p className="mt-1 text-sm text-hcl-muted">Manage local SBOM Analyzer accounts, roles and access.</p></div>{onAdd && <button className="!bg-hcl-blue !text-white" onClick={onAdd}>+ Add User</button>}</header>
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] items-end gap-3 rounded-xl border border-border bg-surface px-5 py-4 shadow-sm">
       <label>Search <input placeholder="Search name or email…" className={inputClass} value={search} onChange={e => filter(setSearch, e.target.value)} /></label>
       <label>Account status <select className={inputClass} value={status} onChange={e => filter(setStatus, e.target.value)}><option value="">All</option>{statuses.map(s => <option key={s}>{s}</option>)}</select></label>
-      <label>Role <select className={inputClass} value={role} onChange={e => filter(setRole, e.target.value)}><option value="">All</option>{roles.map(r => <option key={r}>{r}</option>)}</select></label>
+      <label>Role <select className={inputClass} value={role} onChange={e => filter(setRole, e.target.value)}><option value="">All</option>{(platform ? ['PLATFORM_ADMIN', ...roles] : roles).map(r => <option key={r}>{r}</option>)}</select></label>
       {platform && <><label>Provider <select className={inputClass} value={provider} onChange={e => filter(setProvider, e.target.value)}><option value="">All</option><option value="NATIVE">Native</option><option value="HCL_CS">HCL.CS</option><option value="MICROSOFT_ENTRA">Microsoft Entra</option></select></label>
-        <TenantSearchSelect value={tenantFilter} onChange={tenant => { setTenantFilter(tenant); setPage(1); }} />
+        <TenantSearchSelect allowAll value={tenantFilter} onChange={tenant => { setTenantFilter(tenant); setPage(1); }} />
         <label>Sort <select className={inputClass} value={sort} onChange={e => filter(setSort, e.target.value)}>{['name', 'email', 'created_at', 'last_login_at'].map(s => <option key={s}>{s}</option>)}</select></label></>}
       {(search || status || role || provider || tenantFilter) && <button onClick={() => { setSearch(''); setStatus(''); setRole(''); setProvider(''); setTenantFilter(null); setPage(1); }}>Clear filters</button>}
     </div>
-    {error && <div><p role="alert">{error}</p><button onClick={() => { setError(''); setLoading(true); setRevision(n => n + 1); }}>Retry loading</button></div>}
+    {error && <div className="flex items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm dark:border-amber-700 dark:bg-amber-950/30" role="alert"><AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" /><p className="flex-1 text-amber-800 dark:text-amber-200">{error}</p><button className="shrink-0 rounded-md border border-amber-300 bg-white px-3 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-50 dark:border-amber-600 dark:bg-amber-900/50 dark:text-amber-200" onClick={() => { setError(''); setLoading(true); setRevision(n => n + 1); }}>Retry</button></div>}
+    {directoryError && <div role="alert"><h2>Unable to load users</h2><p>{directoryError}</p><button onClick={() => { setLoading(true); setRevision(n => n + 1); }}>Retry</button></div>}
+    {!directoryError && <>
     <p className="text-xs text-hcl-muted">{platform ? 'Platform directory · All authorized tenants and identity providers' : 'Tenant directory · Selected tenant only'} · {total} matching users</p>
-    {loading ? <div className="animate-pulse rounded-lg border p-6" role="status">Loading users…</div> : <div className="rounded-xl border border-border-subtle shadow-sm"><table className={styles.directory}><caption className="sr-only">Users and global account status. Membership access is shown separately.</caption><thead className="bg-surface-muted"><tr>{['Name / Email', 'Provider', 'Account status', 'Tenant memberships / Roles', 'Last login', 'Created', 'Actions'].map(c => <th scope="col" className="p-3 font-semibold" key={c}>{c}</th>)}</tr></thead><tbody>{rows.map(u => <tr className="border-t hover:bg-surface-muted" key={identifier(u)}><td className="p-3"><span aria-hidden="true" className="mb-1 mr-2 inline-flex h-8 w-8 items-center justify-center rounded-full bg-surface-muted text-xs font-semibold text-hcl-blue">{(u.display_name || u.email).split(/\s+/).map(part => part[0]).slice(0, 2).join('').toUpperCase()}</span><button className="font-semibold text-hcl-navy hover:underline focus-visible:outline" onClick={() => { setDetail(null); setSelected(u); setError(''); }}>{u.display_name || u.email}</button><p className="text-hcl-muted">{u.email}</p></td><td className="p-3">{(u.providers || []).map(providerLabel).join(' + ')}</td><td className="p-3"><UserStatusBadge status={u.account_status} /></td><td className="p-3">{platform ? <span>{u.active_tenant_count ?? u.tenant_memberships?.length ?? '—'} active memberships · Open details for roles by tenant</span> : <><p>Membership: {u.membership_status}</p><RoleBadges roles={u.roles} membershipActive={u.membership_status === 'ACTIVE'} /></>}</td><td className="p-3">{date(u.last_login_at)}</td><td className="p-3">{date(u.created_at)}</td><td className="p-3"><UserActionsMenu name={u.display_name || u.email} onView={() => { setDetail(null); setSelected(u); }} /></td></tr>)}</tbody></table>{!rows.length && <div className="p-12 text-center"><Users className="mx-auto mb-4 h-10 w-10 text-hcl-muted" aria-hidden="true" /><p className="font-semibold">No users found.</p><p className="mt-2 text-sm text-hcl-muted">{search || status || role || provider || tenantFilter ? 'Try adjusting your search or filters.' : 'Create a native user to allow local access to SBOM Analyzer.'}</p>{onAdd && <button className="mt-4 text-link" onClick={onAdd}>+ Add User</button>}</div>}</div>}
+    {loading ? <div className="animate-pulse rounded-lg border p-6" role="status">Loading users…</div> : <div className="rounded-xl border border-border-subtle shadow-sm"><table className={styles.directory}><caption className="sr-only">Users and global account status. Membership access is shown separately.</caption><thead className="bg-surface-muted"><tr>{['Name / Email', 'Provider', 'Account status', 'Tenant memberships / Roles', 'Last login', 'Created', 'Actions'].map(c => <th scope="col" className="px-3 py-2 font-semibold" key={c}>{c}</th>)}</tr></thead><tbody>{rows.map(u => <tr className="border-t hover:bg-surface-muted" key={identifier(u)}><td className="px-3 py-2"><span aria-hidden="true" className="mb-1 mr-2 inline-flex h-8 w-8 items-center justify-center rounded-full bg-surface-muted text-xs font-semibold text-hcl-blue">{(u.display_name || u.email).split(/\s+/).map(part => part[0]).slice(0, 2).join('').toUpperCase()}</span><button className="font-semibold text-hcl-navy hover:underline focus-visible:outline" onClick={() => { setDetail(null); setSelected(u); setError(''); }}>{u.display_name || u.email}</button><p className="text-hcl-muted">{u.email}</p></td><td className="px-3 py-2">{(u.providers || []).map(providerLabel).join(' + ')}</td><td className="px-3 py-2"><UserStatusBadge status={u.account_status} /></td><td className="px-3 py-2">{platform ? <span>{u.active_tenant_count ?? u.tenant_memberships?.length ?? 0} active tenant memberships{u.is_platform_admin && <span className="block">Platform Administrator</span>} · Open details for roles by tenant</span> : <><p>Membership: {u.membership_status}</p><RoleBadges roles={u.roles} membershipActive={u.membership_status === 'ACTIVE'} /></>}</td><td className="px-3 py-2">{date(u.last_login_at)}</td><td className="px-3 py-2">{date(u.created_at)}</td><td className="px-3 py-2"><UserActionsMenu name={u.display_name || u.email} onView={() => { setDetail(null); setSelected(u); }} /></td></tr>)}</tbody></table>{!rows.length && <div className="py-10 px-6 text-center"><Users className="mx-auto mb-3 h-8 w-8 text-hcl-muted" aria-hidden="true" /><p className="font-semibold">No users found.</p><p className="mt-2 text-sm text-hcl-muted">{search || status || role || provider || tenantFilter ? 'Try adjusting your search or filters.' : 'Create a native user to allow local access to SBOM Analyzer.'}</p>{onAdd && <button className="mt-4 text-link" onClick={onAdd}>+ Add User</button>}</div>}</div>}
     <div className="flex flex-wrap items-center justify-end gap-3 text-sm"><span className="mr-auto text-hcl-muted">Showing {total ? (page - 1) * 20 + 1 : 0}–{Math.min(page * 20, total)} of {total} users</span><button disabled={page === 1 || loading} onClick={() => { setLoading(true); setPage(p => p - 1); }}>Previous</button><span>Page {page} · {total} users</span><button disabled={page * 20 >= total || loading} onClick={() => { setLoading(true); setPage(p => p + 1); }}>Next</button></div>
+    </>}
     {selected && !detail && !error && <p role="status">Loading user details…</p>}
     {detail && <article className="border rounded p-5 space-y-4" key={`${uid}:${revision}`}>
       <h2 tabIndex={-1} ref={node => { if (node && selected) node.focus(); }} className="text-xl font-semibold outline-none">{detail.display_name || detail.email}</h2><p>{detail.email} · {(detail.providers || []).map(providerLabel).join(' + ')}</p><UserStatusBadge status={detail.account_status} /><button className="float-right" onClick={() => { setSelected(null); setDetail(null); }}>Close details</button>

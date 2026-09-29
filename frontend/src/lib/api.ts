@@ -343,6 +343,7 @@ async function performRequest(
   const headers = new Headers(isFormData ? undefined : { 'Content-Type': 'application/json' });
   for (const [name, value] of Object.entries(authHeaders)) headers.set(name, value);
   new Headers(fetchOptions.headers).forEach((value, name) => headers.set(name, value));
+  if (path.startsWith('/api/platform/')) headers.delete('X-Tenant-ID');
   const res = await fetchWithTimeout(
     url,
     {

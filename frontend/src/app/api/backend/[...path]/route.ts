@@ -61,7 +61,7 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
   // cookie; authenticated same-origin streams reach this BFF, which derives
   // the normal header server-side. Backend membership checks remain the
   // authorization boundary. Bearer tokens are never placed in URLs.
-  applyServerDerivedTenantHeader(headers, request.cookies.get(ACTIVE_TENANT_COOKIE)?.value);
+  applyServerDerivedTenantHeader(headers, request.cookies.get(ACTIVE_TENANT_COOKIE)?.value, decodedTarget.pathname);
   const body = ['GET', 'HEAD'].includes(request.method) ? undefined : await request.arrayBuffer();
   const send = () => fetch(target, { method: request.method, headers, body, redirect: 'manual', cache: 'no-store' });
   let upstream = await send();

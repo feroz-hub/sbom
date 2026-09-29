@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { applyServerDerivedTenantHeader } from './tenantHeader';
 
 describe('authenticated BFF tenant derivation', () => {
+  it.each(['2', 'all'])('omits inherited header and cookie for platform routes (%s)', tenant => {
+    const headers = new Headers({ 'X-Tenant-ID': tenant });
+    applyServerDerivedTenantHeader(headers, '17', '/api/platform/users');
+    expect(headers.has('X-Tenant-ID')).toBe(false);
+  });
   it('adds a validated tenant id for native EventSource requests', () => {
     const headers = new Headers({ Accept: 'text/event-stream' });
     applyServerDerivedTenantHeader(headers, '17');

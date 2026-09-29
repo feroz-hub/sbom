@@ -28,6 +28,7 @@ describe('Native invitation', () => {
     render(<NativeUserInviteForm />);
     expect(screen.queryByLabelText(/Tenant ID/)).not.toBeInTheDocument();
     expect(screen.queryByRole('checkbox', { name: 'PLATFORM ADMIN' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Tenant' }));
     await user.type(screen.getByLabelText(/Search tenants/), 'oly');
     await user.click(await screen.findByRole('button', { name: 'Olympus Healthcare — olympus' }));
     await user.type(screen.getByLabelText(/first name/i), 'Ajmer');

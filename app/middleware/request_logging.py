@@ -31,7 +31,7 @@ class RequestLoggingMiddleware:
         status_code = 500
         completed = False
 
-        def emit(exc_info=False):
+        def emit(exc_info=False, exception_category=None):
             nonlocal completed
             if completed:
                 return
@@ -53,6 +53,8 @@ class RequestLoggingMiddleware:
                 method=scope["method"],
                 path=scope.get("path", ""),
                 status_code=status_code,
+                request_scope="platform" if scope.get("path", "").startswith("/api/platform/") else "tenant" if context is not None and context.tenant_id is not None else "unscoped",
+                exception_category=exception_category or ("HTTPError" if status_code >= 400 else None),
                 duration_ms=round((time.perf_counter() - started) * 1000, 3),
                 **ids,
             )
@@ -71,11 +73,11 @@ class RequestLoggingMiddleware:
         with log_context(request_id=request_id):
             try:
                 await self.app(scope, receive, send_logged)
-            except Exception:
+            except Exception as exc:
                 if completed:
                     log_event(log, "http_background_task_failed", level=logging.ERROR, exc_info=True)
                 else:
-                    emit(exc_info=True)
+                    emit(exc_info=True, exception_category=type(exc).__name__)
                 raise
             finally:
                 # Also record a disconnected/cancelled request; never consume

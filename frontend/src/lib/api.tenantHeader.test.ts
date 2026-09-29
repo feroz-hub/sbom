@@ -47,6 +47,12 @@ describe('shared request helper tenant scoping', () => {
     expect(requestHeaders(0).get('X-Tenant-ID')).toBeNull();
   });
 
+  it.each(['7', 'all'])('omits stale tenant selection for global platform reads (%s)', async tenant => {
+    sessionStorage.setItem('sbom_active_tenant_id', tenant);
+    await request('/api/platform/users?page=1&page_size=20');
+    expect(requestHeaders(0).has('X-Tenant-ID')).toBe(false);
+  });
+
   it('uses the newly selected tenant on the next request after a switch', async () => {
     sessionStorage.setItem('sbom_active_tenant_id', '7');
     await request('/api/sboms');
