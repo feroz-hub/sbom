@@ -620,6 +620,14 @@ export function getPlatformTenant(tenantId: number): Promise<TenantSummary> {
   return request<TenantSummary>(`/api/platform/tenants/${tenantId}`, adminRequestOptions);
 }
 
+/** Reuse the existing platform activation endpoint; token issuance stays on the server. */
+export function resendPlatformTenantActivation(tenantId: number, userId: number): Promise<{ delivery: { status: string } }> {
+  return request(`/api/platform/tenants/${tenantId}/native-users/${userId}/resend-activation`, {
+    ...adminRequestOptions,
+    method: 'POST',
+  });
+}
+
 export async function createPlatformTenant(payload: CreateTenantRequest): Promise<TenantSummary> {
   const response = await request<TenantSummary | { tenant: TenantSummary }>('/api/tenants', {
     ...adminRequestOptions,

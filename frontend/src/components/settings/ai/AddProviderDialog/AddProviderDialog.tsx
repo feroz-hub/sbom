@@ -13,6 +13,8 @@ import type {
 } from '@/types/ai';
 import { TestResultDisplay } from './TestResultDisplay';
 import { getApiErrorMessage } from '@/lib/notifications';
+import { usePermission } from '@/hooks/usePermission';
+import { verificationState } from '@/lib/aiVerification';
 import { customOpenAiBaseUrlError } from '@/lib/aiProviderValidation';
 
 interface AddProviderDialogProps {
@@ -24,8 +26,8 @@ interface AddProviderDialogProps {
  * Phase 3 §3.2 — single-form "Add provider" dialog.
  *
  * Three sections (provider type / configure / verify) presented as a
- * scrolling form (not a wizard). Test-connection is mandatory before
- * Save — the Save button is disabled until ``testResult.success``.
+ * scrolling form (not a wizard). Connectivity verification is optional.
+ * Local validation and explicit credential rejection are independent safeguards.
  *
  * Form fields adapt to provider type via ``ProviderFieldsRenderer``
  * (inlined here for compactness):
@@ -37,6 +39,7 @@ interface AddProviderDialogProps {
  *                       + optional rate / cost overrides
  */
 export function AddProviderDialog({ open, onClose }: AddProviderDialogProps) {
+  const canManage = usePermission('tenant:settings:update');
   const { data: catalog } = useProviderCatalog();
   const { unsaved: testMut } = useTestConnection();
   const createMut = useCreateAiCredential();
@@ -75,6 +78,14 @@ export function AddProviderDialog({ open, onClose }: AddProviderDialogProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entry?.name]);
 
+  // Clear outcomes when candidate values change; late results must not verify
+  // (or invalidate) a different candidate. Mutation reset detaches the observer.
+  useEffect(() => { testMut.reset(); }, [apiKey, baseUrl, defaultModel, tier, costIn, costOut, isLocal]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!open) { setApiKey(''); setShowKey(false); testMut.reset(); setSubmitError(null); }
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!open) return null;
 
   const baseUrlError = entry?.name === 'custom_openai'
@@ -86,17 +97,21 @@ export function AddProviderDialog({ open, onClose }: AddProviderDialogProps) {
     if (entry.requires_api_key && !apiKey.trim()) return false;
     if (entry.requires_base_url && !baseUrl.trim()) return false;
     if (baseUrlError) return false;
+    if (entry.requires_base_url) {
+      try { const url = new URL(baseUrl); if (!['http:', 'https:'].includes(url.protocol) || !url.hostname || url.username || url.password || url.search || url.hash) return false; } catch { return false; }
+    }
+    if ([costIn, costOut].some(value => !Number.isFinite(Number(value)) || Number(value) < 0)) return false;
     if (!defaultModel.trim() && entry.name !== 'custom_openai') return false;
     if (entry.name === 'custom_openai' && !defaultModel.trim()) return false;
     return true;
   })();
 
-  const canTest = formValid && !testMut.isPending;
+  const canTest = canManage && formValid && !testMut.isPending && !createMut.isPending;
   const canSave =
-    formValid && testMut.data?.success === true && !createMut.isPending;
+    canManage && formValid && verificationState(testMut.data) !== 'INVALID_CREDENTIALS' && !createMut.isPending;
 
   const handleTest = () => {
-    if (!entry) return;
+    if (!entry || !canTest) return;
     setSubmitError(null);
     testMut.mutate({
       provider_name: providerName,
@@ -131,7 +146,7 @@ export function AddProviderDialog({ open, onClose }: AddProviderDialogProps) {
         enabled: true,
       },
       {
-        onSuccess: () => onClose(),
+        onSuccess: () => { setApiKey(''); testMut.reset(); onClose(); },
         onError: (error) => setSubmitError(getApiErrorMessage(error, 'Provider configuration could not be saved.')),
       },
     );
@@ -385,9 +400,9 @@ export function AddProviderDialog({ open, onClose }: AddProviderDialogProps) {
         {/* 3. Verify */}
         <fieldset className="mb-4">
           <legend className="text-xs font-semibold uppercase tracking-wider text-hcl-muted">
-            3. Verify
+            3. Verify (optional)
           </legend>
-          <div className="mt-1 flex items-center gap-2">
+          <div className="mt-1 space-y-3">
             <button
               type="button"
               onClick={handleTest}
@@ -397,7 +412,7 @@ export function AddProviderDialog({ open, onClose }: AddProviderDialogProps) {
               {testMut.isPending ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
               ) : null}
-              Test connection
+              {testMut.isPending ? 'Testing…' : testMut.data || testMut.error ? 'Test again' : 'Test connection'}
             </button>
             <TestResultDisplay
               result={testMut.data ?? null}
@@ -429,8 +444,8 @@ export function AddProviderDialog({ open, onClose }: AddProviderDialogProps) {
             title={
               !formValid
                 ? 'Fill in the required fields first'
-                : !testMut.data?.success
-                  ? 'Test connection must pass before saving'
+                : verificationState(testMut.data) === 'INVALID_CREDENTIALS'
+                  ? 'Correct the rejected credentials before saving'
                   : undefined
             }
           >

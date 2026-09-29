@@ -625,3 +625,70 @@ def test_model_registry_api_refresh_test_and_explicit_select(client, monkeypatch
     assert selected.status_code == 200
     assert selected.json()["is_selected"] is True
     assert client.get(f"/api/v1/ai/credentials/{credential_id}").json()["default_model"] == "new-live-model"
+
+@pytest.mark.parametrize('kind,status', [('provider_unavailable', 503), ('rate_limit', 429), ('network', None)])
+def test_transient_probe_does_not_block_encrypted_save_or_retest(client, monkeypatch, caplog, kind, status):
+    from app.security.secrets import get_cipher
+    secret = 'sentinel-provider-key-never-return'
+    outcome = ConnectionTestResult(success=False, error_kind=kind, http_status=status, error_message=secret, provider='gemini')
+    class Provider:
+        name = 'gemini'
+        async def test_connection(self, **kwargs):
+            return outcome
+    monkeypatch.setattr('app.routers.ai_credentials._build_transient_provider', lambda body: Provider())
+    payload = {'provider_name': 'gemini', 'api_key': secret, 'default_model': 'gemini-2.5-flash', 'tier': 'free'}
+    result = client.post('/api/v1/ai/credentials/test', json=payload)
+    assert result.status_code == 200 and result.json()['error_kind'] == kind
+    assert secret not in result.text
+    # Persistence must not call any upstream probe.
+    monkeypatch.setattr(Provider, 'test_connection', lambda *a, **k: pytest.fail('Save contacted the provider'))
+    saved = client.post('/api/v1/ai/credentials', json=payload)
+    assert saved.status_code == 201, saved.text
+    row_id = saved.json()['id']
+    assert saved.json()['verification_status'] == 'UNVERIFIED'
+    assert saved.json()['enabled'] is True
+    with SessionLocal() as db:
+        row = db.get(AiProviderCredential, row_id)
+        assert row.api_key_encrypted != secret
+        assert get_cipher().decrypt(row.api_key_encrypted) == secret
+    async def transient(**kwargs):
+        return outcome
+    provider = Provider()
+    provider.test_connection = transient
+    monkeypatch.setattr('app.routers.ai_credentials._build_transient_provider', lambda body: provider)
+    client.post(f'/api/v1/ai/credentials/{row_id}/test')
+    row = client.get(f'/api/v1/ai/credentials/{row_id}').json()
+    assert row['enabled'] is True
+    # Runtime selection must remain eligible after transient verification failures.
+    from app.ai.config_loader import get_loader
+    assert any(config.credential_id == row_id and config.enabled for config in get_loader().resolve_configs())
+    assert row['verification_status'] == ('UNVERIFIED' if kind == 'network' else 'TEMPORARILY_UNAVAILABLE')
+    async def successful(**kwargs):
+        return ConnectionTestResult(success=True, provider='gemini')
+    provider.test_connection = successful
+    assert client.post(f'/api/v1/ai/credentials/{row_id}/test').json()['success']
+    assert client.get(f'/api/v1/ai/credentials/{row_id}').json()['verification_status'] == 'VERIFIED'
+    assert secret not in caplog.text
+    with SessionLocal() as db:
+        assert all(secret not in (a.detail or '') for a in db.query(AiCredentialAuditLog).all())
+
+
+def test_rejected_saved_key_requires_successful_retest_before_enable(client, monkeypatch):
+    outcome = ConnectionTestResult(success=False, error_kind='auth', http_status=401, error_message='private secret')
+    class Provider:
+        name = 'openai'
+        async def test_connection(self, **kwargs):
+            return outcome
+    monkeypatch.setattr('app.routers.ai_credentials._build_transient_provider', lambda body: Provider())
+    saved = client.post('/api/v1/ai/credentials', json={'provider_name': 'openai', 'api_key': 'private secret', 'default_model': 'gpt-4o-mini'}).json()
+    path = f"/api/v1/ai/credentials/{saved['id']}"
+    client.post(path + '/test')
+    rejected = client.get(path).json()
+    assert rejected['verification_status'] == 'INVALID_CREDENTIALS'
+    assert rejected['enabled'] is False
+    assert client.put(path, json={'enabled': True}).status_code == 409
+    assert client.put(path, json={'api_key': 'corrected-key'}).status_code == 200
+    assert client.put(path, json={'enabled': True}).status_code == 409
+    outcome = ConnectionTestResult(success=True, provider='openai')
+    assert client.post(path + '/test').json()['success']
+    assert client.put(path, json={'enabled': True}).status_code == 200

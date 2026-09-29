@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { request } from '@/lib/api';
+import { request, resendPlatformTenantActivation } from '@/lib/api';
 
 /**
  * Guards the single place every non-streaming API call gets its tenant scope
@@ -56,6 +56,14 @@ describe('shared request helper tenant scoping', () => {
 
     expect(requestHeaders(0).get('X-Tenant-ID')).toBe('7');
     expect(requestHeaders(1).get('X-Tenant-ID')).toBe('1');
+  });
+
+  it('resends using the explicit platform tenant and administrator without changing active tenant', async () => {
+    sessionStorage.setItem('sbom_active_tenant_id', '1');
+    await resendPlatformTenantActivation(7, 42);
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/platform/tenants/7/native-users/42/resend-activation');
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: 'POST' });
+    expect(sessionStorage.getItem('sbom_active_tenant_id')).toBe('1');
   });
 
   it('does not duplicate content-type when caller casing differs', async () => {

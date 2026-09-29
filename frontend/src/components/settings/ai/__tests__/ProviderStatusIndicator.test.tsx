@@ -40,7 +40,7 @@ describe('ProviderStatusIndicator', () => {
     );
     const el = screen.getByRole('status');
     expect(el).toHaveAttribute('data-status', 'failing');
-    expect(el).toHaveTextContent(/Failing/);
-    expect(el.getAttribute('title') ?? '').toMatch(/Bad API key/);
+    expect(el).toHaveTextContent(/Verification pending/);
+    expect(el.getAttribute('title') ?? '').not.toMatch(/Bad API key/);
   });
 });

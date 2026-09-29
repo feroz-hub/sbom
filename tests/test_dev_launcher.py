@@ -8,6 +8,14 @@ from unittest.mock import MagicMock
 
 import pytest
 from scripts import dev
+from scripts.dev_runtime import Runtime
+
+
+@pytest.fixture(autouse=True)
+def isolated_runtime(monkeypatch, tmp_path):
+    monkeypatch.setattr(dev, "ROOT", tmp_path)
+    monkeypatch.setattr(dev, "Runtime", lambda root: Runtime(tmp_path))
+    monkeypatch.setattr(dev, "ACTIVE_RUNTIME", None)
 
 
 def mock_virtualenv_handoff(monkeypatch, tmp_path, platform):
@@ -519,7 +527,7 @@ def test_startup_commands_use_solo_only_for_windows_worker(monkeypatch, tmp_path
         raise KeyboardInterrupt  # End the simulated foreground run without launching anything.
 
     monkeypatch.setattr(dev, "wait_for_ready", ready)
-    dev.main()
+    dev.start_application(SimpleNamespace(check=False))
     python = str(tmp_path / "python")
     celery = [python, "-m", "celery", "-A", "app.workers.celery_app"]
     assert started["Celery worker"] == [*celery, "worker", "--loglevel=info", *(["--pool=solo"] if platform == "win32" else [])]
@@ -527,6 +535,77 @@ def test_startup_commands_use_solo_only_for_windows_worker(monkeypatch, tmp_path
     assert started["API"] == [python, "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1",
                               "--port", "18000", "--no-proxy-headers"]
     assert started["Frontend"] == ["npm", "run", "dev:https", "--", "--port", "13000"]
+
+
+@pytest.fixture
+def frontend_install(monkeypatch, tmp_path):
+    frontend = tmp_path / "frontend"
+    frontend.mkdir()
+    (frontend / "package.json").write_text('{"name":"test"}')
+    (frontend / "package-lock.json").write_text('{"lockfileVersion":3}')
+    certificates = frontend / "certificates"
+    certificates.mkdir()
+    (certificates / "localhost.pem").write_text("existing certificate")
+    (certificates / "localhost-key.pem").write_text("existing key")
+    monkeypatch.setattr(dev, "ROOT", tmp_path)
+    monkeypatch.setattr(dev.shutil, "which", lambda name: "npm")
+
+    def install(command):
+        assert command == ["npm", "ci", "--prefix", "frontend"]
+        (frontend / "node_modules").mkdir(exist_ok=True)
+        return SimpleNamespace(returncode=0)
+
+    runner = MagicMock(side_effect=install)
+    monkeypatch.setattr(dev, "run", runner)
+    monkeypatch.setattr(dev, "create_local_certificate", lambda *args: pytest.fail("Certificate replaced"))
+    return frontend, runner
+
+
+@pytest.mark.parametrize("existing_modules", [False, True])
+def test_frontend_install_without_stamp_then_skip_unchanged(frontend_install, existing_modules):
+    frontend, runner = frontend_install
+    if existing_modules:
+        (frontend / "node_modules").mkdir()
+    assert dev.ensure_frontend() == "npm"
+    assert (frontend / "node_modules/.sbom-dependencies-sha256").is_file()
+    dev.ensure_frontend()
+    assert runner.call_count == 1
+
+
+@pytest.mark.parametrize("manifest", ["package.json", "package-lock.json"])
+def test_frontend_manifest_change_reinstalls(frontend_install, manifest):
+    frontend, runner = frontend_install
+    dev.ensure_frontend()
+    stamp = frontend / "node_modules/.sbom-dependencies-sha256"
+    previous = stamp.read_text()
+    (frontend / manifest).write_text('{"changed":true}')
+    dev.ensure_frontend()
+    assert runner.call_count == 2
+    assert stamp.read_text() != previous
+    dev.ensure_frontend()
+    assert runner.call_count == 2
+
+
+def test_failed_frontend_install_is_not_stamped_and_retries(frontend_install):
+    frontend, runner = frontend_install
+    dev.ensure_frontend()
+    (frontend / "package-lock.json").write_text('{"changed":true}')
+    install = runner.side_effect
+    runner.side_effect = lambda command: SimpleNamespace(returncode=1)
+    with pytest.raises(dev.SetupError, match="Frontend npm ci failed"):
+        dev.ensure_frontend()
+    assert not (frontend / "node_modules/.sbom-dependencies-sha256").exists()
+    runner.side_effect = install
+    dev.ensure_frontend()
+    assert runner.call_count == 3
+
+
+def test_missing_frontend_manifest_fails_clearly(frontend_install):
+    frontend, runner = frontend_install
+    (frontend / "package-lock.json").unlink()
+    with pytest.raises(dev.SetupError, match="Cannot read frontend"):
+        dev.ensure_frontend()
+    runner.assert_not_called()
 
 
 def test_same_environment_passed_to_all_processes(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -612,7 +691,7 @@ def test_readiness_failure_names_log(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_unrecognized_application_port_is_not_reused(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr(dev, "BEAT_LOCK", tmp_path / "absent.pid")
     monkeypatch.setattr(dev, "reachable", lambda host, port: port == dev.DEV_API_PORT)
-    with pytest.raises(dev.SetupError, match=r"Development port\(s\) 18000 are unavailable"):
+    with pytest.raises(dev.SetupError, match=r"API port 18000 is already in use"):
         dev.check_application_ports(dev.DEV_API_PORT, dev.DEV_FRONTEND_PORT)
 
 
@@ -627,5 +706,5 @@ def test_existing_sbom_launcher_is_identified(monkeypatch: pytest.MonkeyPatch, t
     monkeypatch.setattr(dev, "BEAT_LOCK", lock)
     monkeypatch.setattr(dev, "reachable", lambda host, port: port == dev.DEV_API_PORT)
     monkeypatch.setattr(dev, "http_ready", lambda url, json_ready=False: True)
-    with pytest.raises(dev.SetupError, match="SBOM dev launcher appears to be running"):
+    with pytest.raises(dev.SetupError, match="ownership: unrelated/unknown"):
         dev.check_application_ports(dev.DEV_API_PORT, dev.DEV_FRONTEND_PORT)

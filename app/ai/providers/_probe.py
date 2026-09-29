@@ -9,6 +9,7 @@ shape.
 
 from __future__ import annotations
 
+import json
 import time
 from typing import Any
 
@@ -17,7 +18,7 @@ import httpx
 from .base import ConnectionErrorKind, ConnectionTestResult
 
 
-def classify_http_error(status_code: int) -> ConnectionErrorKind:
+def classify_http_error(status_code: int, body_text: str = "") -> ConnectionErrorKind:
     """HTTP status → typed connection error kind.
 
     Used by every cloud provider's probe path. Local providers (Ollama)
@@ -25,6 +26,21 @@ def classify_http_error(status_code: int) -> ConnectionErrorKind:
     """
     if status_code in (401, 403):
         return "auth"
+    if status_code == 408:
+        return "network"
+    if status_code >= 500:
+        return "provider_unavailable"
+    if status_code == 400:
+        # Google can reject an invalid key with HTTP 400. Only explicit
+        # machine-readable reasons qualify; arbitrary 400s are not auth failures.
+        try:
+            error = json.loads(body_text).get("error", {})
+            details = error.get("details", []) if isinstance(error, dict) else []
+            if any(isinstance(item, dict) and item.get("reason") in {"API_KEY_INVALID", "API_KEY_EXPIRED"} for item in details):
+                return "auth"
+        except (ValueError, AttributeError, TypeError):
+            pass
+        return "configuration"
     if status_code == 404:
         return "model_not_found"
     if status_code == 429:
@@ -34,7 +50,7 @@ def classify_http_error(status_code: int) -> ConnectionErrorKind:
 
 def classify_request_error(exc: Exception) -> ConnectionErrorKind:
     """Network-layer exception → typed kind."""
-    if isinstance(exc, httpx.TimeoutException | httpx.ConnectError | httpx.NetworkError):
+    if isinstance(exc, httpx.RequestError):
         return "network"
     return "unknown"
 
@@ -45,8 +61,8 @@ async def probe_openai_compatible_models(
     base_url: str,
     headers: dict[str, str],
     timeout_s: float = 8.0,
-) -> tuple[list[str], int | None] | None:
-    """Hit ``GET {base_url}/models``. Return (models, status_code) or None on failure.
+) -> tuple[list[str], int | None, str] | None:
+    """Hit ``GET {base_url}/models``. Return (models, status_code, error_body) or None on failure.
 
     None indicates the endpoint doesn't exist (404) — caller should
     fall back to a chat-completion probe. Other failures bubble up via
@@ -57,7 +73,7 @@ async def probe_openai_compatible_models(
     if resp.status_code == 404:
         return None
     if resp.status_code >= 400:
-        return [], resp.status_code
+        return [], resp.status_code, resp.text
     body = resp.json()
     items = body.get("data") or body.get("models") or []
     names: list[str] = []
@@ -68,7 +84,7 @@ async def probe_openai_compatible_models(
                 names.append(name)
         elif isinstance(item, str):
             names.append(item)
-    return names, resp.status_code
+    return names, resp.status_code, ""
 
 
 def measure(start_perf: float) -> int:
@@ -81,7 +97,7 @@ def network_failure(*, provider: str, model: str | None, exc: Exception) -> Conn
         success=False,
         latency_ms=None,
         detected_models=[],
-        error_message=f"{type(exc).__name__}: {exc}"[:240],
+        error_message="The provider could not be reached. Verification can be retried later.",
         error_kind=classify_request_error(exc),
         provider=provider,
         model_tested=model,
@@ -101,8 +117,9 @@ def http_failure(
         success=False,
         latency_ms=latency_ms,
         detected_models=detected_models or [],
-        error_message=f"HTTP {status}: {body_text[:200]}",
-        error_kind=classify_http_error(status),
+        error_message=f"HTTP {status}: {classify_http_error(status, body_text)}",
+        error_kind=classify_http_error(status, body_text),
+        http_status=status,
         provider=provider,
         model_tested=model,
     )
@@ -145,3 +162,12 @@ __all__ = [
     "probe_openai_compatible_models",
     "success",
 ]
+
+
+def sanitized_result(result: ConnectionTestResult) -> ConnectionTestResult:
+    """Never return/store arbitrary adapter error text, even for older adapters."""
+    if result.success:
+        return result.model_copy(update={"error_message": None, "error_kind": None})
+    kind = result.error_kind or "unknown"
+    detail = f"{kind}" + (f" (HTTP {result.http_status})" if result.http_status else "")
+    return result.model_copy(update={"error_message": detail})

@@ -17,6 +17,7 @@ import {
   useUpdateAiCredential,
 } from '@/hooks/useAiCredentials';
 import type { AiCredential, AiProviderCatalogEntry } from '@/types/ai';
+import { TestResultDisplay } from '../AddProviderDialog/TestResultDisplay';
 import { ProviderStatusIndicator } from './ProviderStatusIndicator';
 import { ProviderTierBadge } from './ProviderTierBadge';
 import { ProviderModels } from './ProviderModels';
@@ -77,6 +78,8 @@ export function ProviderCard({ credential, catalog, onEdit }: ProviderCardProps)
             <ProviderTierBadge tier={credential.tier} catalog={catalog} />
             <ProviderStatusIndicator credential={credential} />
           </h3>
+          <p className="mt-1 text-xs text-hcl-muted">Credential: {credential.label}</p>
+          {credential.last_test_at && <p className="mt-1 text-xs text-hcl-muted">Last test: {new Date(credential.last_test_at).toLocaleString()}</p>}
           <p className="mt-1 text-xs text-hcl-muted">
             {credential.default_model ? (
               <>
@@ -90,7 +93,7 @@ export function ProviderCard({ credential, catalog, onEdit }: ProviderCardProps)
           {credential.api_key_preview ? (
             <p className="mt-1 text-xs text-hcl-muted">
               <span className="font-medium text-hcl-navy">Key:</span>{' '}
-              <span className="font-mono">{credential.api_key_preview}</span>
+              <span className="font-mono">{'••••••••••••••••'}</span>
             </p>
           ) : credential.base_url ? (
             <p className="mt-1 text-xs text-hcl-muted">
@@ -206,18 +209,7 @@ export function ProviderCard({ credential, catalog, onEdit }: ProviderCardProps)
       </header>
 
       {/* Inline test result — appears after a freshly-clicked Test. */}
-      {testSaved.data ? (
-        <p
-          className={`mt-3 text-xs ${
-            testSaved.data.success ? 'text-emerald-700' : 'text-red-700'
-          }`}
-          role="status"
-        >
-          {testSaved.data.success
-            ? `Connected. Latency ${testSaved.data.latency_ms ?? '—'}ms.`
-            : `Test failed (${testSaved.data.error_kind ?? 'unknown'}): ${testSaved.data.error_message ?? 'no detail'}`}
-        </p>
-      ) : null}
+      {(testSaved.data || testSaved.error || testSaved.isPending) && <div className="mt-3"><TestResultDisplay result={testSaved.data ?? null} testing={testSaved.isPending} error={testSaved.error} /></div>}
 
       <ProviderModels
         credentialId={credential.id}

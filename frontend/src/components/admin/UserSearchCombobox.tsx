@@ -185,6 +185,7 @@ export function UserSearchCombobox({
         <Search className="absolute left-3 top-2.5 h-4 w-4 text-hcl-muted" />
         <input
           type="text"
+          aria-label="Search users by email or name"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => {

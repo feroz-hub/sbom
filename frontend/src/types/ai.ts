@@ -363,11 +363,14 @@ export type AiConnectionErrorKind =
   | 'network'
   | 'auth'
   | 'rate_limit'
+  | 'provider_unavailable'
+  | 'configuration'
   | 'model_not_found'
   | 'invalid_response'
   | 'unknown';
 
 export interface AiConnectionTestResult {
+  http_status?: number | null;
   success: boolean;
   latency_ms: number | null;
   detected_models: string[];
@@ -378,6 +381,7 @@ export interface AiConnectionTestResult {
 }
 
 export interface AiCredential {
+  verification_status?: 'VERIFIED' | 'UNVERIFIED' | 'TEMPORARILY_UNAVAILABLE' | 'INVALID_CREDENTIALS';
   id: number;
   provider_name: string;
   label: string;

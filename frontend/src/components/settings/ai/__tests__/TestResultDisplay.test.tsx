@@ -36,9 +36,8 @@ describe('TestResultDisplay', () => {
     render(<TestResultDisplay result={null} testing={false} error={error} />);
 
     const alert = screen.getByTestId('test-result-request-error');
-    expect(alert).toHaveTextContent('Please correct the highlighted fields.');
-    expect(alert).toHaveTextContent('tier:');
-    expect(alert).toHaveTextContent('Input should be free or paid');
+    expect(alert).toHaveTextContent('Complete the required configuration');
+    expect(alert).not.toHaveTextContent('raw validation');
     expect(screen.queryByText(/not tested/i)).not.toBeInTheDocument();
   });
 
@@ -82,7 +81,7 @@ describe('TestResultDisplay', () => {
       />,
     );
     expect(screen.getByTestId('test-result-auth')).toBeInTheDocument();
-    expect(screen.getByText(/Invalid API key/i)).toBeInTheDocument();
+    expect(screen.getByText(/Authentication failed/i)).toBeInTheDocument();
   });
 
   it('renders network-error branch', () => {
@@ -99,7 +98,7 @@ describe('TestResultDisplay', () => {
       />,
     );
     expect(screen.getByTestId('test-result-network')).toBeInTheDocument();
-    expect(screen.getByText(/Couldn't reach the provider/i)).toBeInTheDocument();
+    expect(screen.getByText(/Connection could not be verified/i)).toBeInTheDocument();
   });
 
   it('renders rate-limit branch', () => {
@@ -133,8 +132,7 @@ describe('TestResultDisplay', () => {
       />,
     );
     expect(screen.getByTestId('test-result-model')).toBeInTheDocument();
-    expect(screen.getByText(/fake-model cannot generate for this account/i)).toBeInTheDocument();
-    expect(screen.getByText(/Models reported by the provider:.*gemini-2\.5-flash/)).toBeInTheDocument();
+    expect(screen.getByText(/Review the selected model/)).toBeInTheDocument();
   });
 
   it('renders unknown branch as the catch-all', () => {
@@ -151,6 +149,14 @@ describe('TestResultDisplay', () => {
       />,
     );
     expect(screen.getByTestId('test-result-unknown')).toBeInTheDocument();
-    expect(screen.getByText(/mystery/)).toBeInTheDocument();
+    expect(screen.queryByText(/mystery/)).not.toBeInTheDocument();
   });
+});
+
+it('shows safe Gemini high-demand guidance without raw provider JSON', () => {
+  render(<TestResultDisplay testing={false} result={makeTestResult({ success: false, provider: 'gemini', error_kind: 'provider_unavailable', http_status: 503, error_message: '{"secret":"PRIVATE_KEY"}' })} />);
+  expect(screen.getByText('Provider temporarily unavailable')).toBeInTheDocument();
+  expect(screen.getByText(/Gemini model may be experiencing high demand/)).toBeInTheDocument();
+  expect(screen.queryByText(/PRIVATE_KEY/)).not.toBeInTheDocument();
+  expect(screen.getByText('HTTP 503')).toBeInTheDocument();
 });

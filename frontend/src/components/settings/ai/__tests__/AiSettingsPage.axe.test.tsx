@@ -65,3 +65,5 @@ describe('AiSettingsPage accessibility', () => {
     expect(results.violations).toEqual([]);
   });
 });
+
+vi.mock('@/hooks/usePermission', () => ({ usePermission: () => true }));

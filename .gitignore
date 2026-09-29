@@ -7,6 +7,10 @@
 .env.*
 .env.dev.local
 .dev-beat.pid
+.dev-runtime.json
+.dev-runtime.lock
+.dev-runtime.stop
+.dev-runtime.*.tmp
 .dev-logs/
 !.env.example
 !.env.hcl-iam.example

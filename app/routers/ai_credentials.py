@@ -7,11 +7,8 @@ Hard rules, enforced here and in the response models:
   * **No raw API keys leave the server.** Read endpoints expose
     ``api_key_preview`` (first 6 + last 4 with ellipsis) and
     ``api_key_present`` only.
-  * **Test-connection is the gate**. Production deployments should
-    route the UI's "Save" through ``POST /test`` first; this layer
-    accepts saves without a prior test (admin tools may need the
-    bypass), but the audit log records ``test=skipped`` when the
-    last_test_at is empty.
+  * **Testing is optional.** Saves validate local configuration and encrypt
+    credentials without contacting upstream providers. New rows are unverified.
   * **Audit every mutation.** Single ``credential_audit.record`` call
     per write, never with the credential payload in the detail string.
   * **Cache invalidation.** Every successful write calls
@@ -26,6 +23,7 @@ model / tier without re-entering the key.
 from __future__ import annotations
 
 import logging
+import re
 from datetime import UTC, datetime
 from typing import Literal
 from urllib.parse import urlsplit
@@ -47,6 +45,7 @@ from ..ai.model_registry import (
     test_model,
 )
 from ..ai.provider_factory import build_provider, validate_provider_config
+from ..ai.providers._probe import network_failure, sanitized_result
 from ..ai.providers.base import ConnectionTestResult, ModelDiscoveryError, ProviderUnavailableError
 from ..db import get_db
 from ..models import AiProviderCredential, AiProviderModel, AiSettings
@@ -91,6 +90,7 @@ class CredentialResponse(BaseModel):
     last_test_at: str | None
     last_test_success: bool | None
     last_test_error: str | None
+    verification_status: str
 
 
 class CredentialCreateRequest(BaseModel):
@@ -100,7 +100,7 @@ class CredentialCreateRequest(BaseModel):
 
     provider_name: str = Field(..., min_length=1, max_length=32)
     label: str = Field(default="default", min_length=1, max_length=64)
-    api_key: str | None = Field(default=None, max_length=4096)
+    api_key: str | None = Field(default=None, max_length=4096, repr=False)
     base_url: str | None = Field(default=None, max_length=512)
     default_model: str | None = Field(default=None, max_length=256)
     tier: TierLiteral = "paid"
@@ -124,7 +124,7 @@ class CredentialUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     label: str | None = Field(default=None, min_length=1, max_length=64)
-    api_key: str | None = Field(default=None, max_length=4096)
+    api_key: str | None = Field(default=None, max_length=4096, repr=False)
     base_url: str | None = Field(default=None, max_length=512)
     default_model: str | None = Field(default=None, max_length=256)
     tier: TierLiteral | None = None
@@ -149,7 +149,7 @@ class TestConnectionRequest(BaseModel):
 
     credential_id: int | None = Field(default=None, gt=0)
     provider_name: str = Field(..., min_length=1, max_length=32)
-    api_key: str | None = Field(default=None, max_length=4096)
+    api_key: str | None = Field(default=None, max_length=4096, repr=False)
     base_url: str | None = Field(default=None, max_length=512)
     default_model: str | None = Field(default=None, max_length=256)
     tier: TierLiteral = "paid"
@@ -349,7 +349,8 @@ def _row_to_response(row: AiProviderCredential, *, decrypted_key: str | None = N
         updated_at=row.updated_at,
         last_test_at=row.last_test_at,
         last_test_success=row.last_test_success,
-        last_test_error=row.last_test_error,
+        last_test_error=_safe_stored_test_error(row),
+        verification_status=_verification_status(row),
     )
 
 
@@ -436,11 +437,46 @@ def _build_transient_provider(payload: TestConnectionRequest):
     return build_provider(config)
 
 
+def _verification_status(row: AiProviderCredential) -> str:
+    if row.last_test_success:
+        return "VERIFIED"
+    kind = (row.last_test_error or "").split(" ", 1)[0]
+    if kind == "auth":
+        return "INVALID_CREDENTIALS"
+    if kind in {"rate_limit", "provider_unavailable"}:
+        return "TEMPORARILY_UNAVAILABLE"
+    return "UNVERIFIED"
+
+
+def _safe_stored_test_error(row: AiProviderCredential) -> str | None:
+    # Legacy rows may contain raw provider JSON. Do not return it to clients.
+    value = row.last_test_error or ""
+    if not value:
+        return None
+    safe_pattern = (
+        r"(?:auth|network|rate_limit|provider_unavailable|configuration|"
+        r"model_not_found|invalid_response|unknown)(?: \(HTTP [1-5][0-9]{2}\))?"
+    )
+    if re.fullmatch(safe_pattern, value):
+        return value
+    return "Verification could not be completed. Test again for current status."
+
+
 def _stamp_test_result(row: AiProviderCredential, result: ConnectionTestResult) -> None:
     row.last_test_at = _now_iso()
     row.last_test_success = bool(result.success)
-    # Truncate at 240 chars — same cap the audit log uses.
-    row.last_test_error = (result.error_message or "")[:240] if not result.success else None
+    row.last_test_error = sanitized_result(result).error_message
+    if not result.success and result.error_kind == "auth":
+        # A rejected saved credential must not remain active. Successful retest
+        # permits an administrator to explicitly enable it again.
+        row.enabled = False
+
+
+async def _run_probe(provider, model: str | None) -> ConnectionTestResult:
+    try:
+        return sanitized_result(await provider.test_connection(model=model))
+    except Exception as exc:  # noqa: BLE001
+        return sanitized_result(network_failure(provider=provider.name, model=model, exc=exc))
 
 
 # ---------------------------------------------------------------------------
@@ -647,6 +683,9 @@ def update_credential(
         )
     )
 
+    if body.enabled and _verification_status(row) == "INVALID_CREDENTIALS":
+        raise HTTPException(status_code=409, detail="Verify the saved credential successfully before enabling it.")
+
     changes: list[str] = []
     if body.label is not None and body.label != row.label:
         row.label = body.label
@@ -684,6 +723,11 @@ def update_credential(
     if body.rate_per_minute is not None:
         row.rate_per_minute = float(body.rate_per_minute)
         changes.append("rate")
+
+    if _verification_status(row) != "INVALID_CREDENTIALS" and any(field in changes for field in ("api_key", "base_url", "default_model")):
+        row.last_test_at = None
+        row.last_test_success = None
+        row.last_test_error = None
 
     row.updated_at = _now_iso()
     try:
@@ -842,15 +886,15 @@ async def test_unsaved_credential(
         provider = _build_transient_provider(test_body)
     except HTTPException:
         raise
-    except Exception as exc:  # noqa: BLE001
+    except Exception:  # noqa: BLE001
         return ConnectionTestResult(
             success=False,
-            error_message=str(exc)[:240],
+            error_message="The connection test could not be completed.",
             error_kind="unknown",
             provider=test_body.provider_name,
             model_tested=test_body.default_model,
         )
-    result = await provider.test_connection(model=test_body.default_model)
+    result = await _run_probe(provider, test_body.default_model)
     credential_audit.record(
         db,
         user_id=_user_id(request),
@@ -858,7 +902,7 @@ async def test_unsaved_credential(
         target_kind="credential",
         target_id=target_id,
         provider_name=test_body.provider_name,
-        detail=f"candidate success={result.success} kind={result.error_kind or 'ok'}",
+        detail=f"candidate success={result.success} kind={result.error_kind or 'ok'} http_status={result.http_status}",
     )
     return result
 
@@ -897,9 +941,10 @@ async def test_saved_credential(
         rate_per_minute=row.rate_per_minute,
     )
     provider = _build_transient_provider(payload)
-    result = await provider.test_connection(model=row.default_model)
+    result = await _run_probe(provider, row.default_model)
     _stamp_test_result(row, result)
     db.commit()
+    get_loader().invalidate()
 
     credential_audit.record(
         db,
@@ -908,7 +953,7 @@ async def test_saved_credential(
         target_kind="credential",
         target_id=row.id,
         provider_name=row.provider_name,
-        detail=f"saved success={result.success} kind={result.error_kind or 'ok'}",
+        detail=f"saved success={result.success} kind={result.error_kind or 'ok'} http_status={result.http_status}",
     )
     return result
 

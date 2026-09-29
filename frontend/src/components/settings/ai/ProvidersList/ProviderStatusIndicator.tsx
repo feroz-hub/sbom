@@ -13,9 +13,9 @@ interface ProviderStatusIndicatorProps {
  *   * disabled (toggle off)            → grey
  *   * never tested                     → amber (warns the admin to test)
  *   * tested + last_test_success=true  → green
- *   * tested + last_test_success=false → red
+ *   * failed verification             → amber, or red for rejected credentials
  *
- * Tooltip carries the last test timestamp + error so the operator can
+ * Tooltip carries the last test timestamp + safe category so the operator can
  * spot stale state without opening the edit dialog.
  */
 export function ProviderStatusIndicator({ credential }: ProviderStatusIndicatorProps) {
@@ -47,7 +47,7 @@ function describeStatus(c: AiCredential): {
   if (!c.enabled) {
     return {
       state: 'disabled',
-      label: 'Disabled',
+      label: c.verification_status === 'INVALID_CREDENTIALS' ? 'Authentication failed · Disabled' : 'Disabled',
       className: 'bg-slate-100 text-slate-600',
       tooltip: 'This credential is disabled and will not be used.',
     };
@@ -55,7 +55,7 @@ function describeStatus(c: AiCredential): {
   if (!c.last_test_at) {
     return {
       state: 'untested',
-      label: 'Not tested',
+      label: 'Verification pending',
       className: 'bg-amber-50 text-amber-800 border border-amber-200',
       tooltip: 'Run "Test connection" to verify this credential works.',
     };
@@ -63,17 +63,17 @@ function describeStatus(c: AiCredential): {
   if (c.last_test_success) {
     return {
       state: 'ok',
-      label: 'OK',
+      label: 'Verified',
       className: 'bg-emerald-50 text-emerald-800 border border-emerald-200',
       tooltip: `Last test ${formatRelative(c.last_test_at)}`,
     };
   }
+  const invalid = c.verification_status === 'INVALID_CREDENTIALS';
   return {
     state: 'failing',
-    label: 'Failing',
-    className: 'bg-red-50 text-red-800 border border-red-200',
-    tooltip:
-      `Last test ${formatRelative(c.last_test_at)}: ${c.last_test_error ?? 'unknown error'}`,
+    label: invalid ? 'Authentication failed' : 'Verification pending',
+    className: invalid ? 'bg-red-50 text-red-800 border border-red-200' : 'bg-amber-50 text-amber-800 border border-amber-200',
+    tooltip: `Last test ${formatRelative(c.last_test_at)}. ${invalid ? 'Correct credentials and test again before enabling.' : c.verification_status === 'TEMPORARILY_UNAVAILABLE' ? 'Provider temporarily unavailable. Test again later.' : 'Connection could not be verified. Test again later.'}`,
   };
 }
 

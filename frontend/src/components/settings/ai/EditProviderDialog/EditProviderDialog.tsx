@@ -1,5 +1,6 @@
 'use client';
 
+import { verificationState } from '@/lib/aiVerification';
 import { Loader2, Pencil, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -67,6 +68,8 @@ export function EditProviderDialog({ credential, onClose }: EditProviderDialogPr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [credential?.id]);
 
+  useEffect(() => { testMut.reset(); }, [apiKey, baseUrl, defaultModel, tier]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!credential) return null;
 
   const baseUrlError = entry?.name === 'custom_openai'
@@ -97,6 +100,7 @@ export function EditProviderDialog({ credential, onClose }: EditProviderDialogPr
   };
 
   const handleSave = () => {
+    if (!formValid || updateMut.isPending || verificationState(testMut.data) === 'INVALID_CREDENTIALS') return;
     setSubmitError(null);
     const body: AiCredentialUpdateRequest = {
       label: label.trim(),
@@ -175,7 +179,7 @@ export function EditProviderDialog({ credential, onClose }: EditProviderDialogPr
                   onChange={(e) => setApiKey(e.target.value)}
                   autoComplete="off"
                   spellCheck={false}
-                  placeholder={`Leave blank to keep existing (${credential.api_key_preview ?? 'set'})`}
+                  placeholder={`Leave blank to keep existing (${credential.api_key_present ? '••••••••' : 'not set'})`}
                   className="flex-1 rounded-md border border-border-subtle bg-surface px-3 py-2 font-mono text-sm"
                 />
                 <button
@@ -188,7 +192,7 @@ export function EditProviderDialog({ credential, onClose }: EditProviderDialogPr
                 </button>
               </div>
               <p className="mt-1 text-xs text-hcl-muted">
-                Current key: <span className="font-mono">{credential.api_key_preview ?? '—'}</span>
+                Current key: <span className="font-mono">{credential.api_key_present ? '••••••••••••••••' : '—'}</span>
               </p>
             </div>
           ) : null}
@@ -274,7 +278,7 @@ export function EditProviderDialog({ credential, onClose }: EditProviderDialogPr
               Test connection (optional)
             </button>
             <div className="mt-2">
-              <TestResultDisplay result={testMut.data ?? null} testing={testMut.isPending} />
+              <TestResultDisplay result={testMut.data ?? null} testing={testMut.isPending} error={testMut.error} />
             </div>
           </div>
         </div>
@@ -296,7 +300,7 @@ export function EditProviderDialog({ credential, onClose }: EditProviderDialogPr
           <button
             type="button"
             onClick={handleSave}
-            disabled={updateMut.isPending || !formValid}
+            disabled={updateMut.isPending || !formValid || verificationState(testMut.data) === 'INVALID_CREDENTIALS'}
             className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white shadow-elev-1 hover:bg-hcl-dark disabled:cursor-not-allowed disabled:opacity-50"
           >
             {updateMut.isPending ? 'Saving…' : 'Save changes'}

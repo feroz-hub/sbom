@@ -4,7 +4,7 @@
  *
  * Three load-bearing checks:
  *
- *   1. Save button disabled until a successful test result.
+ *   1. Save eligibility independent of provider availability.
  *   2. Test → Save sequence creates a credential via the API.
  *   3. Provider switch resets the form (no stale API key from a
  *      prior provider attempt).
@@ -22,6 +22,7 @@ import {
 } from './test-utils';
 
 
+vi.mock('@/hooks/usePermission', () => ({ usePermission: () => true }));
 const listAiProviderCatalog = vi.fn();
 const testAiCredentialUnsaved = vi.fn();
 const createAiCredential = vi.fn();
@@ -56,14 +57,14 @@ describe('AddProviderDialog', () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it('disables Save until a successful test result lands', async () => {
+  it('allows Save before testing when local fields are valid', async () => {
     renderWithProviders(<AddProviderDialog open onClose={() => {}} />);
     // The API key label only renders after the catalog query resolves.
     const apiKey = await screen.findByLabelText('API key');
     await userEvent.type(apiKey, 'sk-ant-FAKE-TEST-KEY');
 
     const saveBtn = screen.getByRole('button', { name: /save provider/i });
-    expect(saveBtn).toBeDisabled();
+    expect(saveBtn).toBeEnabled();
   });
 
   it('test → success → save sends create payload', async () => {
@@ -160,7 +161,7 @@ describe('AddProviderDialog', () => {
       ),
     );
     expect(screen.queryByText(/not tested/i)).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /save provider/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /save provider/i })).toBeEnabled();
   });
 
   it('validates custom OpenAI URL/model and keeps its API key optional', async () => {
@@ -205,4 +206,56 @@ describe('AddProviderDialog', () => {
       default_model: 'custom-model',
     });
   });
+});
+
+it.each([
+  ['provider_unavailable', 503], ['rate_limit', 429], ['network', undefined], ['unknown', undefined],
+] as const)('allows saving after %s without leaking provider text', async (kind, status) => {
+  const secret = 'SENTINEL-PRIVATE-KEY';
+  testAiCredentialUnsaved.mockResolvedValue(makeTestResult({ success: false, error_kind: kind, http_status: status, error_message: `raw provider payload ${secret}` }));
+  createAiCredential.mockResolvedValue(makeCredential());
+  renderWithProviders(<AddProviderDialog open onClose={() => {}} />);
+  await userEvent.type(await screen.findByLabelText('API key'), secret);
+  await userEvent.click(screen.getByRole('button', { name: /test connection/i }));
+  await screen.findByRole('button', { name: 'Test again' });
+  expect(screen.queryByText(new RegExp(secret))).not.toBeInTheDocument();
+  const save = screen.getByRole('button', { name: /save provider/i });
+  expect(save).toBeEnabled(); await userEvent.click(save);
+  await waitFor(() => expect(createAiCredential).toHaveBeenCalledWith(expect.objectContaining({ api_key: secret })));
+});
+
+it('keeps Save enabled while testing and rejects missing keys', async () => {
+  testAiCredentialUnsaved.mockImplementation(() => new Promise(() => {}));
+  renderWithProviders(<AddProviderDialog open onClose={() => {}} />);
+  const key = await screen.findByLabelText('API key');
+  expect(screen.getByRole('button', { name: /save provider/i })).toBeDisabled();
+  await userEvent.type(key, 'example-key');
+  await userEvent.click(screen.getByRole('button', { name: /test connection/i }));
+  expect(screen.getByRole('button', { name: /save provider/i })).toBeEnabled();
+});
+
+it('clears rejected credential results when the key changes', async () => {
+  testAiCredentialUnsaved.mockResolvedValue(makeTestResult({ success: false, error_kind: 'auth' }));
+  renderWithProviders(<AddProviderDialog open onClose={() => {}} />);
+  const key = await screen.findByLabelText('API key');
+  await userEvent.type(key, 'bad-key');
+  await userEvent.click(screen.getByRole('button', { name: /test connection/i }));
+  await screen.findByText('Authentication failed');
+  expect(screen.getByRole('button', { name: /save provider/i })).toBeDisabled();
+  await userEvent.clear(key); await userEvent.type(key, 'corrected-key');
+  expect(screen.getByRole('button', { name: /save provider/i })).toBeEnabled();
+  expect(screen.queryByText('Authentication failed')).not.toBeInTheDocument();
+});
+
+it('ignores a late rejected result after the candidate key changes', async () => {
+  let resolve!: (result: ReturnType<typeof makeTestResult>) => void;
+  testAiCredentialUnsaved.mockImplementation(() => new Promise(r => { resolve = r; }));
+  renderWithProviders(<AddProviderDialog open onClose={() => {}} />);
+  const key = await screen.findByLabelText('API key');
+  await userEvent.type(key, 'old-key');
+  await userEvent.click(screen.getByRole('button', { name: /test connection/i }));
+  await userEvent.clear(key); await userEvent.type(key, 'new-key');
+  resolve(makeTestResult({ success: false, error_kind: 'auth' }));
+  await waitFor(() => expect(screen.getByRole('button', { name: /save provider/i })).toBeEnabled());
+  expect(screen.queryByText('Authentication failed')).not.toBeInTheDocument();
 });

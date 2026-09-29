@@ -228,3 +228,46 @@ async def test_custom_test_connection_labels_correctly():
     result = await provider.test_connection()
     assert result.provider == "custom_openai"
     assert result.success is True
+
+# Every adapter shares probe classification, including delegated OpenAI-compatible adapters.
+@pytest.mark.asyncio
+@pytest.mark.parametrize('name', ['anthropic', 'openai', 'gemini', 'grok', 'sarvam', 'ollama', 'vllm', 'custom_openai'])
+@pytest.mark.parametrize(('status', 'kind'), [(401, 'auth'), (403, 'auth'), (408, 'network'), (429, 'rate_limit'), (500, 'provider_unavailable'), (502, 'provider_unavailable'), (503, 'provider_unavailable'), (504, 'provider_unavailable'), (400, 'configuration')])
+async def test_all_adapters_classify_and_sanitize_failures(name, status, kind, caplog):
+    from app.ai.config_types import ProviderConfig
+    from app.ai.provider_factory import build_provider
+    secret = 'sentinel-private-api-key'
+    def handler(request):
+        return httpx.Response(status, json={'error': {'message': secret, 'status': 'UNAVAILABLE'}})
+    provider = build_provider(ProviderConfig(name=name, enabled=True, api_key=secret, base_url='http://localhost:8000/v1', default_model='test-model'), client_factory=lambda: _make_client(handler))
+    result = await provider.test_connection()
+    assert not result.success
+    assert result.error_kind == kind
+    assert result.http_status == status
+    assert secret not in result.model_dump_json()
+    assert secret not in caplog.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('exc_type', [httpx.ReadTimeout, httpx.ConnectTimeout, httpx.ConnectError])
+async def test_probe_network_exception_never_exposes_secrets(exc_type, caplog):
+    def handler(request):
+        raise exc_type('secret-key-in-url', request=request)
+    provider = OpenAiProvider(api_key='secret-key-in-url', client_factory=lambda: _make_client(handler))
+    result = await provider.test_connection()
+    assert result.error_kind == 'network'
+    assert 'secret-key-in-url' not in result.model_dump_json()
+    assert 'secret-key-in-url' not in caplog.text
+
+
+def test_gemini_400_requires_explicit_invalid_key_reason():
+    from app.ai.providers._probe import classify_http_error
+    assert classify_http_error(400, '{"error":{"details":[{"reason":"API_KEY_INVALID"}]}}') == 'auth'
+    assert classify_http_error(400, '{"error":{"message":"invalid model"}}') == 'configuration'
+
+@pytest.mark.asyncio
+async def test_gemini_invalid_key_on_models_endpoint_is_auth():
+    def handler(request):
+        return httpx.Response(400, json={'error': {'details': [{'reason': 'API_KEY_INVALID'}]}})
+    provider = GeminiProvider(api_key='bad-key', client_factory=lambda: _make_client(handler))
+    assert (await provider.test_connection()).error_kind == 'auth'

@@ -53,10 +53,12 @@ export function TenantStatusBadge({ status }: { status: string }) {
         'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border',
         isActive
           ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-800/50'
-          : 'bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700',
+          : status === 'PENDING'
+            ? 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/20 dark:text-amber-300 dark:border-amber-800/50'
+            : 'bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700',
       )}
     >
-      Tenant status: {isActive ? 'Active' : status === 'PENDING' ? 'Pending administrator' : 'Disabled'}
+      Tenant status: {isActive ? 'Active' : status === 'PENDING' ? 'Pending activation' : 'Disabled'}
     </span>
   );
 }

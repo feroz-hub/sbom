@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import {
+  ApiError,
   type TenantMember,
   type TenantRole,
   type UserSearchResult,
@@ -20,7 +21,10 @@ import {
 } from '@/lib/api';
 import { useNotifications } from '@/hooks/useNotifications';
 import { getApiErrorMessage } from '@/lib/notifications';
-import { TenantContextHeader } from '@/components/admin/TenantContextHeader';
+import { PlatformTenantOverview, TenantBreadcrumb, TenantDetailSkeleton } from '@/components/admin/PlatformTenantOverview';
+import { Alert } from '@/components/ui/Alert';
+import { Button } from '@/components/ui/Button';
+import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog';
 import { UserSearchCombobox } from '@/components/admin/UserSearchCombobox';
 import { TenantAuditHistory } from '@/components/admin/TenantAuditHistory';
 import { TenantMembersTable, memberDisplayName } from '@/components/admin/TenantMembersTable';
@@ -46,7 +50,8 @@ export default function PlatformTenantDetailPage({
   params: Promise<{ tenantId: string }>;
 }) {
   const { tenantId: tenantIdStr } = use(params);
-  const numericTenantId = Number.parseInt(tenantIdStr, 10);
+  const numericTenantId = /^\d+$/.test(tenantIdStr) ? Number(tenantIdStr) : NaN;
+  const validTenantId = Number.isSafeInteger(numericTenantId) && numericTenantId > 0;
   const { user, hasPermission, isLoading: authLoading, refreshSession } = useAuth();
   const canManage = hasPermission('platform:tenant:create');
   const qc = useQueryClient();
@@ -62,11 +67,13 @@ export default function PlatformTenantDetailPage({
   const [removeModalMember, setRemoveModalMember] = useState<TenantMember | null>(null);
 
   const [actionLoading, setActionLoading] = useState(false);
+  const [statusConfirm, setStatusConfirm] = useState(false);
 
   const tenantsQuery = useQuery({
     queryKey: ['platform-tenant', numericTenantId],
     queryFn: () => getPlatformTenant(numericTenantId),
-    enabled: !authLoading && canManage,
+    enabled: !authLoading && canManage && validTenantId,
+    retry: false,
   });
 
   const tenant = tenantsQuery.data;
@@ -83,7 +90,7 @@ export default function PlatformTenantDetailPage({
     enabled: !authLoading && canManage && tenant?.status === 'ACTIVE',
   });
 
-  const tenantName = tenant?.name || `Tenant #${tenantIdStr}`;
+  const tenantName = tenant?.name || 'Tenant';
 
   /**
    * Membership changes alter this tenant's member list, its audit trail and
@@ -117,6 +124,7 @@ export default function PlatformTenantDetailPage({
       updatePlatformTenantStatus(numericTenantId, status),
     onSuccess: async (_result, status) => {
       showSuccess(`Tenant ${status === 'ACTIVE' ? 'enabled' : 'disabled'} successfully.`);
+      setStatusConfirm(false);
       await qc.invalidateQueries({ queryKey: ['platform-tenants'] });
       await qc.invalidateQueries({ queryKey: ['platform-tenant', numericTenantId] });
     },
@@ -125,7 +133,7 @@ export default function PlatformTenantDetailPage({
 
   const submitMember = (event: FormEvent) => {
     event.preventDefault();
-    if (!selectedUser) return;
+    if (!selectedUser || addMemberMutation.isPending) return;
     addMemberMutation.mutate();
   };
 
@@ -211,63 +219,23 @@ export default function PlatformTenantDetailPage({
     }
   };
 
-  if (authLoading) {
-    return <div className="p-8 text-center text-hcl-muted">Verifying platform permission…</div>;
-  }
-
-  if (!canManage) {
-    return <div role="alert" className="p-8 text-center text-red-700">Access denied.</div>;
-  }
-
-  if (tenant?.status === 'PENDING') {
-    return <main className="mx-auto max-w-4xl space-y-4 p-6">
-      <Link href="/settings/platform/tenants">Platform Tenants</Link>
-      <h1 className="text-2xl font-semibold">{tenant.name}</h1>
-      <p>{tenant.slug} · Pending administrator</p>
-      <p>The tenant becomes active when its initial Tenant Administrator activates their account.</p>
-      <p>{tenant.initial_administrator?.display_name} {tenant.initial_administrator?.email}</p>
-      <Link href="/settings/native-users">Manage users and resend activation</Link>
-    </main>;
+  if (authLoading) return <TenantDetailSkeleton />;
+  if (!canManage) return <main className="mx-auto max-w-[1360px] p-4 sm:p-8"><Alert variant="error" title="Platform access required">Access denied. You do not have permission to manage platform tenants.</Alert></main>;
+  if (validTenantId && tenantsQuery.isPending) return <TenantDetailSkeleton />;
+  if (!validTenantId || tenantsQuery.isError || !tenant) {
+    const notFound = !validTenantId || (tenantsQuery.error instanceof ApiError && tenantsQuery.error.status === 404);
+    return <main className="mx-auto max-w-[1360px] space-y-6 p-4 sm:p-8"><TenantBreadcrumb /><section className="rounded-xl border border-border bg-surface p-8"><Alert variant="error" title={notFound ? 'Tenant not found' : 'Unable to load tenant'}>{notFound ? 'The requested tenant could not be found or may no longer be available.' : 'Tenant information could not be retrieved. Please try again.'}</Alert><div className="mt-5 flex flex-wrap items-center gap-4">{!notFound && <Button onClick={() => void tenantsQuery.refetch()} loading={tenantsQuery.isFetching}>Try again</Button>}<Link className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-link hover:bg-surface-muted focus-visible:ring-2 focus-visible:ring-primary" href="/settings/platform/tenants">Back to tenants</Link></div></section></main>;
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-6">
-      <nav aria-label="Breadcrumb" className="text-sm text-hcl-muted">
-        <Link href="/settings/platform/tenants" className="hover:underline text-hcl-blue">Platform Tenants</Link>
-        <span className="mx-2">/</span>
-        <span className="text-foreground font-medium">{tenantName}</span>
-      </nav>
+    <main className="mx-auto min-h-full max-w-[1360px] space-y-6 bg-dashboard-page p-4 sm:p-8">
+      <PlatformTenantOverview key={tenant.id} tenant={tenant} canResend={hasPermission('platform:user:manage_status') && hasPermission('tenant:user:invite')} canManageUsers={tenant.status !== 'PENDING' || hasPermission('platform:user:read') || hasPermission('tenant:user:read')} />
 
-      {tenant ? (
-        <TenantContextHeader
-          name={tenant.name}
-          slug={tenant.slug}
-          tenantStatus={tenant.status}
-          membershipStatus="ACTIVE"
-          memberCount={tenant.member_count ?? members.data?.length}
-          initialAdministrator={
-            tenant.initial_administrator
-              ? `${tenant.initial_administrator.display_name || 'Unnamed user'} (${tenant.initial_administrator.email || 'no email'})`
-              : undefined
-          }
-          currentAdministrators={(tenant.current_administrators ?? []).map(
-            (administrator) => administrator.display_name || administrator.email || `User #${administrator.user_id}`,
-          )}
-        />
-      ) : (
-        <div className="rounded-xl border border-border bg-surface p-5 text-center text-hcl-muted">
-          Loading tenant details…
-        </div>
-      )}
-
-      <section aria-labelledby="overview-heading" className="rounded-xl border border-border bg-surface p-5">
-        <h2 id="overview-heading" className="text-lg font-semibold">Overview</h2>
-        <p className="mt-1 text-sm text-hcl-muted">
-          You are managing {tenant?.name || `tenant #${tenantIdStr}`} in explicit platform context.
-          Access is controlled by SBOM tenant memberships and assigned roles.
-        </p>
+      {tenant.status !== 'PENDING' && <>
+      <section id="tenant-users" aria-labelledby="users-heading" className="scroll-mt-6 rounded-xl border border-border bg-surface p-6">
+        <h2 id="users-heading" className="text-lg font-semibold">Tenant users</h2>
+        <p className="mt-2 text-sm text-hcl-muted">Manage users and assigned roles for {tenant.name}. Changes apply to this tenant without switching your active workspace.</p>
       </section>
-
       {/* Add Member Section */}
       <section aria-labelledby="add-member-heading" className="rounded-xl border border-border bg-surface p-5 shadow-elev-1 space-y-4">
         <div>
@@ -315,13 +283,13 @@ export default function PlatformTenantDetailPage({
                   })}
                 </select>
               </label>
-              <button
+              <Button
                 type="submit"
                 disabled={addMemberMutation.isPending}
                 className="rounded-lg bg-[var(--btn-primary)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--btn-primary-hover)] disabled:opacity-50 transition-colors"
               >
                 {addMemberMutation.isPending ? 'Adding…' : 'Add Member'}
-              </button>
+              </Button>
             </div>
           )}
         </form>
@@ -345,10 +313,11 @@ export default function PlatformTenantDetailPage({
           Current status: <strong>{tenant?.status || 'Loading'}</strong>
         </p>
         {tenant && (
-          <button
+          <Button
+            variant="secondary"
             type="button"
             disabled={tenantStatus.isPending}
-            onClick={() => tenantStatus.mutate(tenant.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE')}
+            onClick={() => setStatusConfirm(true)}
             className="mt-3 rounded-md border border-border px-3 py-2 text-sm font-medium disabled:opacity-50"
           >
             {tenantStatus.isPending
@@ -356,10 +325,11 @@ export default function PlatformTenantDetailPage({
               : tenant.status === 'ACTIVE'
                 ? 'Disable Tenant'
                 : 'Enable Tenant'}
-          </button>
+          </Button>
         )}
       </section>
 
+      <ConfirmationDialog open={statusConfirm} title={tenant.status === 'ACTIVE' ? 'Disable tenant?' : 'Enable tenant?'} description={tenant.status === 'ACTIVE' ? `Users will no longer be able to access ${tenant.name}. Existing memberships and roles will be retained.` : `Active memberships will regain access to ${tenant.name}.`} confirmLabel={tenant.status === 'ACTIVE' ? 'Disable tenant' : 'Enable tenant'} danger={tenant.status === 'ACTIVE'} loading={tenantStatus.isPending} onClose={() => { if (!tenantStatus.isPending) setStatusConfirm(false); }} onConfirm={() => { if (!tenantStatus.isPending) tenantStatus.mutate(tenant.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE'); }} />
       {/* Modals & Dialogs */}
       {rolesModalMember && (
         <ManageRolesModal
@@ -412,6 +382,7 @@ export default function PlatformTenantDetailPage({
       )}
 
       <TenantAuditHistory tenantId={numericTenantId} />
-    </div>
+      </>}
+    </main>
   );
 }

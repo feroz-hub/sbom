@@ -1,4 +1,4 @@
-"""Start the complete local Native IAM stack with one command."""
+"""Safely manage the complete local Native IAM development stack."""
 
 from __future__ import annotations
 
@@ -22,6 +22,11 @@ from pathlib import Path
 from urllib.parse import quote, unquote, urlsplit
 from urllib.request import urlopen
 
+if __package__:
+    from .dev_runtime import OwnershipError, Runtime, atomic_json, process_info
+else:
+    from dev_runtime import OwnershipError, Runtime, atomic_json, process_info
+
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / ".env.dev.local"
 VENV = ROOT / ".venv"
@@ -34,6 +39,7 @@ DEV_API_PORT = 18000
 DEV_FRONTEND_PORT = 13000
 BEAT_LOCK = ROOT / ".dev-beat.pid"
 VERBOSE = False
+ACTIVE_RUNTIME: Runtime | None = None
 
 
 class SetupError(Exception):
@@ -45,7 +51,11 @@ def say(kind: str, name: str, value: str) -> None:
 
 
 def run(command: list[str], *, env: dict[str, str] | None = None, cwd: Path = ROOT) -> subprocess.CompletedProcess:
+    if ACTIVE_RUNTIME:
+        ACTIVE_RUNTIME.check_stop()
     result = subprocess.run(command, cwd=cwd, env=env, text=True, capture_output=True, check=False)
+    if ACTIVE_RUNTIME:
+        ACTIVE_RUNTIME.check_stop()
     if VERBOSE:
         print(redact(result.stdout, env), end="", flush=True)
         print(redact(result.stderr, env), end="", file=sys.stderr, flush=True)
@@ -743,14 +753,32 @@ def run_migrations(env: dict[str, str]) -> str:
 
 
 def ensure_frontend() -> str:
+    import hashlib
+
     npm = shutil.which("npm")
     if not npm:
         raise SetupError("Node.js/npm is missing. Install Node.js, then rerun python scripts/dev.py.")
-    if not (ROOT / "frontend/node_modules").exists():
+    frontend = ROOT / "frontend"
+    modules = frontend / "node_modules"
+    stamp = modules / ".sbom-dependencies-sha256"
+    try:
+        digest = hashlib.sha256(
+            (frontend / "package.json").read_bytes() + b"\0" + (frontend / "package-lock.json").read_bytes()
+        ).hexdigest()
+    except OSError:
+        raise SetupError("Cannot read frontend package.json/package-lock.json. Restore the manifests and rerun.") from None
+    try:
+        installed = modules.is_dir() and stamp.read_text().strip() == digest
+    except OSError:
+        installed = False
+    if not installed:
         say("...", "Frontend", "installing npm dependencies")
+        # An interrupted/failed clean install must never leave a trusted stamp.
+        stamp.unlink(missing_ok=True)
         result = run([npm, "ci", "--prefix", "frontend"])
         if result.returncode:
-            raise SetupError("Frontend npm ci failed. Check npm output above.")
+            raise SetupError("Frontend npm ci failed. Check network access and package manifests; rerun with --verbose for details.")
+        stamp.write_text(digest)
     cert = ROOT / "frontend/certificates/localhost.pem"
     key = ROOT / "frontend/certificates/localhost-key.pem"
     if not cert.exists() or not key.exists():
@@ -838,31 +866,46 @@ def http_ready(url: str, *, json_ready: bool = False) -> bool:
         return False
 
 
-def check_application_ports(api_port: int, frontend_port: int) -> None:
-    occupied = [
-        str(port)
-        for port in (api_port, frontend_port)
-        if any(reachable(host, port) for host in ("127.0.0.1", "::1"))
-    ]
-    if not occupied:
-        return
+def port_diagnostic(port: int) -> str:
+    """Best-effort Linux socket owner name; never print arbitrary command arguments."""
+    if not sys.platform.startswith("linux"):
+        return "PID: unavailable; ownership: unrelated/unknown"
     try:
-        owner = int(BEAT_LOCK.read_text())
-        os.kill(owner, 0)
-    except (FileNotFoundError, ValueError, ProcessLookupError, PermissionError):
-        owner = None
-    if (
-        owner
-        and http_ready(f"http://127.0.0.1:{api_port}/health")
-        and http_ready(f"http://127.0.0.1:{api_port}/ready/iam", json_ready=True)
-    ):
-        raise SetupError(
-            f"An SBOM dev launcher appears to be running (PID {owner}). Stop it with Ctrl+C in its terminal."
-        )
-    raise SetupError(
-        f"Development port(s) {', '.join(occupied)} are unavailable because they are occupied by another or "
-        "unrecognized process. Stop that process, then rerun python scripts/dev.py. Nothing was killed."
-    )
+        inodes = set()
+        for family in ("tcp", "tcp6"):
+            for line in Path(f"/proc/net/{family}").read_text().splitlines()[1:]:
+                fields = line.split()
+                if fields[3] == "0A" and int(fields[1].split(":")[1], 16) == port:
+                    inodes.add(f"socket:[{fields[9]}]")
+        for directory in Path("/proc").iterdir():
+            if not directory.name.isdigit():
+                continue
+            try:
+                if any(os.readlink(fd) in inodes for fd in (directory / "fd").iterdir()):
+                    info = process_info(int(directory.name))
+                    name = Path(info["exe"]).name if info else "exited"
+                    return f"PID: {directory.name}; process: {name}; ownership: unrelated/unknown"
+            except (OSError, OwnershipError):
+                continue
+    except OSError:
+        pass
+    return "PID: unavailable; ownership: unrelated/unknown"
+
+
+def check_application_ports(api_port: int, frontend_port: int) -> None:
+    conflicts = []
+    runtime = Runtime(ROOT)
+    state = runtime.load()
+    for name, port in (("API", api_port), ("Frontend", frontend_port)):
+        if not any(reachable(host, port) for host in ("127.0.0.1", "::1")):
+            continue
+        record = (state or {}).get("services", {}).get(name)
+        if record and record.get("port") == port and runtime.service_status(record) == "RUNNING":
+            conflicts.append(f"{name} port {port} belongs to the existing SBOM dev instance. Run python3 scripts/dev.py stop.")
+        else:
+            conflicts.append(f"{name} port {port} is already in use. {port_diagnostic(port)}. Nothing was killed.")
+    if conflicts:
+        raise SetupError("\n".join(conflicts))
 
 
 def wait_for_ready(
@@ -880,6 +923,8 @@ def wait_for_ready(
     names = ("API", "Celery worker", "Celery Beat", "Frontend")
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
+        if ACTIVE_RUNTIME:
+            ACTIVE_RUNTIME.refresh()
         for name, process in zip(names, processes, strict=True):
             if process.poll() is not None:
                 show_log(name, env)
@@ -894,6 +939,8 @@ def wait_for_ready(
 
 
 def start_process(name: str, command: list[str], env: dict[str, str], cwd: Path = ROOT) -> subprocess.Popen:
+    if ACTIVE_RUNTIME:
+        ACTIVE_RUNTIME.check_stop()
     path = log_path(name)
     path.parent.mkdir(exist_ok=True)
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
@@ -906,6 +953,13 @@ def start_process(name: str, command: list[str], env: dict[str, str], cwd: Path 
         process = subprocess.Popen(command, **kwargs)
     finally:
         os.close(fd)
+    if ACTIVE_RUNTIME:
+        try:
+            ACTIVE_RUNTIME.register(name, process.pid, {"API": DEV_API_PORT, "Frontend": DEV_FRONTEND_PORT}.get(name))
+        except BaseException:
+            # This handle was just spawned here, even if persistence failed.
+            stop_processes([process])
+            raise
     say("OK", name, f"running (pid {process.pid})")
     return process
 
@@ -917,24 +971,23 @@ def stop_processes(processes: list[subprocess.Popen]) -> None:
         if os.name == "nt":
             subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"], capture_output=True, check=False)
         else:
-            os.killpg(process.pid, signal.SIGTERM)
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
     for process in processes:
         try:
             process.wait(timeout=5)
         except subprocess.TimeoutExpired:
             if os.name != "nt":
-                os.killpg(process.pid, signal.SIGKILL)
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
 
 
-def main() -> None:
-    global VERBOSE
-    parser = argparse.ArgumentParser(description="Start local SBOM Analyzer development")
-    parser.add_argument("--check", action="store_true", help="inspect prerequisites without starting services")
-    parser.add_argument("--verbose", action="store_true", help="show technical errors")
-    args = parser.parse_args()
-    VERBOSE = args.verbose
+def start_application(args) -> None:
     if not args.check:
-        ensure_virtualenv()
         ensure_dependencies()
     print("SBOM Analyzer Development Setup\n", flush=True)
     say("OK", "Python", platform.python_version())
@@ -1068,6 +1121,8 @@ def main() -> None:
         say("OK", "Frontend", f"https://localhost:{frontend_port}")
         print("\nSBOM Analyzer is ready. Logs: .dev-logs/. Press Ctrl+C to stop.\n", flush=True)
         while all(process.poll() is None for process in processes):
+            if ACTIVE_RUNTIME:
+                ACTIVE_RUNTIME.refresh()
             time.sleep(0.5)
         for name, process in zip(("API", "Celery worker", "Celery Beat", "Frontend"), processes, strict=True):
             if process.poll() is not None:
@@ -1076,8 +1131,159 @@ def main() -> None:
     except KeyboardInterrupt:
         print("\nStopping application processes...", flush=True)
     finally:
-        stop_processes(processes)
+        if not ACTIVE_RUNTIME:
+            stop_processes(processes)
+        # The lifecycle owner performs registry-based cleanup, including children
+        # whose immediate parent exited. Never unlink another launcher's Beat lock.
+        if not ACTIVE_RUNTIME:
+            clean_beat_lock(os.getpid())
+
+
+def clean_beat_lock(owner: int | None = None) -> None:
+    try:
+        pid = int(BEAT_LOCK.read_text())
+        if pid == owner or process_info(pid) is None:
+            BEAT_LOCK.unlink(missing_ok=True)
+    except (FileNotFoundError, ValueError):
         BEAT_LOCK.unlink(missing_ok=True)
+    except OwnershipError:
+        pass  # A live/uninspectable legacy lock is not evidence of ownership.
+
+
+def application_status() -> None:
+    print("SBOM Analyzer Development Status\n", flush=True)
+    runtime = Runtime(ROOT)
+    state = runtime.load()
+    print(f"{'Service':<18} {'Status':<12} {'PID':<10} Port")
+    running = False
+    unverified = False
+    for name, port in (("API", DEV_API_PORT), ("Frontend", DEV_FRONTEND_PORT), ("Celery worker", None), ("Celery Beat", None)):
+        record = (state or {}).get("services", {}).get(name)
+        status = runtime.service_status(record) if record else "STOPPED"
+        if not record and port and any(reachable(host, port) for host in ("127.0.0.1", "::1")):
+            status = "UNOWNED"
+        running |= status in {"RUNNING", "PARTIAL"}
+        unverified |= status in {"UNOWNED", "UNKNOWN"}
+        print(f"{name:<18} {status:<12} {str(record['pid']) if record else '-':<10} {port or '-'}")
+        if port and status == "UNOWNED":
+            print(f"  {port_diagnostic(port)}")
+    saved = read_config()
+    pg_port = urlsplit(saved.get("DATABASE_URL", f"postgresql://localhost:{POSTGRES_PORT}")).port or POSTGRES_PORT
+    redis_port = urlsplit(saved.get("REDIS_URL", f"redis://localhost:{REDIS_PORT}")).port or REDIS_PORT
+    for name, available, port in (("PostgreSQL", service_available("postgres", pg_port), pg_port),
+                                  ("Redis", service_available("redis", redis_port), redis_port),
+                                  ("Mailpit", mailpit_ready() and reachable("127.0.0.1", MAILPIT_SMTP_PORT), MAILPIT_UI_PORT)):
+        print(f"{name:<18} {'RUNNING' if available else 'UNAVAILABLE':<12} {'-':<10} {port}")
+    print(f"\nAPI: http://127.0.0.1:{DEV_API_PORT}\nFrontend: https://localhost:{DEV_FRONTEND_PORT}\nLogs: .dev-logs/")
+    if not running:
+        if unverified:
+            print("No verified launcher-owned services are running. Unowned/unknown processes were not changed.")
+        else:
+            print("SBOM Analyzer application is not running." + (" Stale state detected; run stop to reconcile it." if state else ""))
+
+
+def stop_application(timeout: float = 30) -> None:
+    print("SBOM Analyzer Development Shutdown\n", flush=True)
+    runtime = Runtime(ROOT)
+    requested = None
+    if not runtime.acquire():
+        state = runtime.load()
+        if not state:
+            raise SetupError("Launcher is acquiring ownership; retry stop shortly.")
+        # Cooperative cancellation works on Windows too, without terminating a
+        # console or guessing which process owns a reused launcher PID.
+        requested = state
+        atomic_json(runtime.stop_path, {"instance": state["instance"]})
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if runtime.acquire():
+                break
+            time.sleep(0.2)
+        else:
+            raise SetupError("Stop requested; launcher is still finishing setup/shutdown. Check status and retry stop. Nothing unverified was killed.")
+    try:
+        state = runtime.load()
+        if not runtime.stop_services(say):
+            raise SetupError("Some processes could not be safely stopped. Runtime records were retained; inspect status.")
+        if requested and not state:
+            for name, record in reversed(list(requested["services"].items())):
+                if runtime.service_status(record) != "STOPPED":
+                    raise SetupError(f"{name} shutdown could not be verified; inspect status.")
+                say("OK", name, "stopped")
+        clean_beat_lock((state or requested or {}).get("launcher_pid"))
+        # Even without records an occupied port must be reported, never killed.
+        for port in (DEV_API_PORT, DEV_FRONTEND_PORT):
+            if any(reachable(host, port) for host in ("127.0.0.1", "::1")):
+                say("WARN", f"Port {port}", port_diagnostic(port) + "; it was not stopped.")
+        say("OK", "SBOM Analyzer", "development environment stopped." if state or requested else "development environment is already stopped.")
+    finally:
+        runtime.release()
+
+
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(description="Manage local SBOM Analyzer development",
+                                     epilog="No command defaults to start. Ctrl+C stops foreground application services; data services remain running.")
+    parser.add_argument("command", nargs="?", default="start", choices=("start", "stop", "restart", "status"),
+                        help="start services, stop owned services, restart, or show status")
+    parser.add_argument("--check", action="store_true", help="inspect prerequisites only; never start or stop processes")
+    parser.add_argument("--verbose", action="store_true", help="show redacted technical diagnostics")
+    return parser.parse_args(argv)
+
+
+def main() -> None:
+    global VERBOSE, ACTIVE_RUNTIME
+    args = parse_args()
+    VERBOSE = args.verbose
+    if args.check:
+        start_application(args)
+        return
+    if args.command == "status":
+        application_status()
+        return
+    if args.command in {"stop", "restart"}:
+        stop_application()
+        if args.command == "stop":
+            return
+    ensure_virtualenv()
+    runtime = Runtime(ROOT)
+    if not runtime.acquire():
+        state = runtime.load()
+        launcher = (state or {}).get("launcher_pid")
+        suffix = f" (launcher PID {launcher})" if isinstance(launcher, int) else ""
+        say("INFO", "SBOM Analyzer", f"development environment is already running or starting/stopping{suffix}.")
+        application_status()
+        print("Use python3 scripts/dev.py status or python3 scripts/dev.py stop.")
+        return
+    previous = {}
+    try:
+        # Reconcile surviving children of a crashed launcher before starting.
+        stale = runtime.load()
+        if not runtime.stop_services(say):
+            raise SetupError("Unverified processes remain in runtime state. Nothing else was started.")
+        clean_beat_lock((stale or {}).get("launcher_pid"))
+        runtime.begin()
+        ACTIVE_RUNTIME = runtime
+        def cancelled(signum, frame):
+            raise KeyboardInterrupt
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            previous[sig] = signal.signal(sig, cancelled)
+        start_application(args)
+    except KeyboardInterrupt:
+        print("\nStopping application processes...", flush=True)
+    finally:
+        # Ignore repeated signals until cleanup completes.
+        for sig in previous:
+            signal.signal(sig, signal.SIG_IGN)
+        try:
+            if ACTIVE_RUNTIME:
+                if not runtime.stop_services(say):
+                    raise SetupError("Some owned processes could not be stopped; runtime state retained.")
+                clean_beat_lock(os.getpid())
+        finally:
+            ACTIVE_RUNTIME = None
+            runtime.release()
+            for sig, handler in previous.items():
+                signal.signal(sig, handler)
 
 
 if __name__ == "__main__":
@@ -1086,7 +1292,7 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("\n[INFO] Development setup cancelled.", file=sys.stderr)
         sys.exit(130)
-    except SetupError as error:
+    except (SetupError, OwnershipError) as error:
         if VERBOSE:
             raise
         print(f"[ERROR] {error}", file=sys.stderr)
