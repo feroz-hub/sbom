@@ -42,7 +42,7 @@ export const ACCOUNT_STATUS_HELP: Record<string, string> = {
 };
 export function UserStatusBadge({ status }: { status: string }) {
   const label = (status || 'UNKNOWN').toLowerCase().replaceAll('_', ' ');
-  return <span title={ACCOUNT_STATUS_HELP[status] || 'Account awaiting administration.'} className={cn('inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold', status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-800 border-emerald-300' : status === 'DISABLED' ? 'bg-red-50 text-red-800 border-red-300' : 'bg-amber-50 text-amber-900 border-amber-300')}>User account: {label.charAt(0).toUpperCase() + label.slice(1)}</span>;
+  return <span title={ACCOUNT_STATUS_HELP[status] || 'Account awaiting administration.'} className={cn('inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold', status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-800 border-emerald-300' : ['LOCKED', 'SUSPENDED'].includes(status) ? 'bg-red-50 text-red-800 border-red-300' : ['DISABLED', 'INACTIVE'].includes(status) ? 'bg-zinc-100 text-zinc-700 border-zinc-300' : 'bg-amber-50 text-amber-900 border-amber-300')}>User account: {label.charAt(0).toUpperCase() + label.slice(1)}</span>;
 }
 
 export function TenantStatusBadge({ status }: { status: string }) {

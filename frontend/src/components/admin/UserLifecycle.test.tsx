@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { ToastProvider } from '@/hooks/useToast';
+import type { ReactElement } from 'react';
+import { cleanup, fireEvent, render as rtlRender, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import UserLifecycle from './UserLifecycle';
 import { axe } from 'vitest-axe';
@@ -138,3 +140,5 @@ it('shows pending Microsoft identities with explicit approval and no native pass
   await waitFor(() => expect(writes()).toHaveLength(1));
   expect(JSON.parse(writes()[0][1].body as string)).toEqual({ status: 'ACTIVE' });
 });
+
+function render(ui: ReactElement) { return rtlRender(ui, { wrapper: ToastProvider }); }

@@ -7,10 +7,10 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.history.replaceState(
 it('forgot response is generic and clears the email form', async () => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ success: true })));
   render(<PasswordLifecycleForm mode="forgot" />);
-  fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'person@example.test' } });
+  fireEvent.change(screen.getByRole('textbox', { name: 'Email' }), { target: { value: 'person@example.test' } });
   fireEvent.click(screen.getByRole('button', { name: 'Send reset instructions' }));
   await screen.findByText('If an eligible account exists, password reset instructions will be sent.');
-  expect(screen.getByLabelText('Email')).toHaveValue('');
+  expect(screen.getByRole('textbox', { name: 'Email' })).toHaveValue('');
 });
 it('reset uses fragment token only in POST and requires matching passwords', async () => {
   window.history.replaceState(null, '', '/reset-password#token=private-reset-proof');
@@ -48,7 +48,7 @@ it('offers native settings for native sessions', async () => {
 it('shows recoverable errors without echoing server diagnostics', async () => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ detail: 'secret diagnostic' }, { status: 400 })));
   render(<PasswordLifecycleForm mode="forgot" />);
-  fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'person@example.test' } });
+  fireEvent.change(screen.getByRole('textbox', { name: 'Email' }), { target: { value: 'person@example.test' } });
   fireEvent.click(screen.getByRole('button', { name: 'Send reset instructions' }));
   await screen.findByText(/Unable to complete the request/);
   expect(screen.queryByText(/secret diagnostic/)).not.toBeInTheDocument();

@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor } from '@testing-library/react';
+import { ToastProvider } from '@/hooks/useToast';
+import type { ReactElement } from 'react';
+import { render as rtlRender, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import NativeUserInviteForm from './NativeUserInviteForm';
@@ -67,3 +69,5 @@ describe('Native invitation', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Current roles: DEVELOPER');
   });
 });
+
+function render(ui: ReactElement) { return rtlRender(ui, { wrapper: ToastProvider }); }

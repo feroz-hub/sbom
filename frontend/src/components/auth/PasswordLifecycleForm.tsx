@@ -1,4 +1,8 @@
 'use client';
+import { NativeAuthLayout } from './NativeAuthLayout';
+import { PasswordField } from './PasswordField';
+import { Input } from '@/components/ui/Input';
+import { Button } from '@/components/ui/Button';
 import Link from 'next/link';
 import { FormEvent, useEffect, useState } from 'react';
 
@@ -13,6 +17,7 @@ export function PasswordLifecycleForm({ mode }: { mode: 'forgot' | 'reset' | 'ch
   }, [mode]);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
     const element = event.currentTarget;
     const data = new FormData(element);
     if (mode !== 'forgot' && data.get('new_password') !== data.get('confirm')) { setMessage('Passwords must match.'); return; }
@@ -29,13 +34,13 @@ export function PasswordLifecycleForm({ mode }: { mode: 'forgot' | 'reset' | 'ch
     finally { setBusy(false); }
   }
   if (mode === 'change' && !forced && !native) return <main className="p-8"><p>Native sign-in is required to change your password.</p><Link href="/native-sign-in">Native sign in</Link></main>;
-  return <main className="max-w-md mx-auto p-8 space-y-5"><h1 className="text-2xl">{mode === 'forgot' ? 'Forgot password' : mode === 'reset' ? 'Reset password' : 'Change password'}</h1>
+  return <NativeAuthLayout><div className="space-y-6"><h1 className="text-2xl">{mode === 'forgot' ? 'Forgot password' : mode === 'reset' ? 'Reset password' : 'Change password'}</h1>
     <p>{forced ? 'Your account requires a new password before application access can resume.' : 'Native SBOM Analyser accounts only.'}</p>
     <form onSubmit={submit} className="space-y-4">
-      {(mode === 'forgot' || forced) && <label className="block">Email<input className="block border rounded p-2 bg-background" name="email" type="email" autoComplete="username" required /></label>}
-      {mode === 'change' && <label className="block">Current password<input className="block border rounded p-2 bg-background" name="current_password" type="password" autoComplete="current-password" required /></label>}
-      {mode !== 'forgot' && <><p>Use at least 12 characters, or your deployment’s higher minimum. Choose a password different from your current password.</p><label className="block">New password<input className="block border rounded p-2 bg-background" name="new_password" type="password" autoComplete="new-password" minLength={12} required /></label><label className="block">Confirm new password<input className="block border rounded p-2 bg-background" name="confirm" type="password" autoComplete="new-password" required /></label></>}
-      <button disabled={busy}>{busy ? 'Please wait…' : mode === 'forgot' ? 'Send reset instructions' : 'Update password'}</button>
+      {(mode === 'forgot' || forced) && <Input label="Email" className="h-12" name="email" type="email" autoComplete="username" required />}
+      {mode === 'change' && <PasswordField label="Current password" name="current_password" type="password" autoComplete="current-password" required />}
+      {mode !== 'forgot' && <><p>Use at least 12 characters, or your deployment’s higher minimum. Choose a password different from your current password.</p><PasswordField label="New password" name="new_password" type="password" autoComplete="new-password" minLength={12} required /><PasswordField label="Confirm new password" name="confirm" type="password" autoComplete="new-password" required /></>}
+      <Button type="submit" className="h-12 w-full" loading={busy}>{busy ? 'Please wait…' : mode === 'forgot' ? 'Send reset instructions' : 'Update password'}</Button>
     </form><p role="status">{message}</p><Link className="underline" href="/native-sign-in">Native sign in</Link>
-  </main>;
+  </div></NativeAuthLayout>;
 }

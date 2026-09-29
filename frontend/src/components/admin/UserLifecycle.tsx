@@ -1,4 +1,9 @@
 'use client';
+import styles from './NativeUsers.module.css';
+import { useToast } from '@/hooks/useToast';
+import { UserActionsMenu } from './UserActionsMenu';
+import { Users } from 'lucide-react';
+import { RoleBadges } from './StatusBadges';
 import { FormEvent, useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { UserStatusBadge } from './StatusBadges';
@@ -19,20 +24,21 @@ const date = (value?: string | null) => value ? new Date(value).toLocaleString()
 async function api(path: string, tenant: string | number | null, method = 'GET', body?: unknown) {
   const response = await fetch(`/api/backend/api${path}`, { method, headers: { 'Content-Type': 'application/json', ...(tenant ? { 'X-Tenant-ID': String(tenant) } : {}) }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
   const data = await response.json();
-  if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : data.detail?.message || 'Request failed. Refresh the user and check your permissions.');
+  if (!response.ok) throw new Error(response.status === 403 ? 'Access denied. Your permissions do not allow this action.' : response.status === 409 ? 'The account has changed or this action is unavailable. Refresh the user and review their access.' : 'Unable to complete the request. Please review the information and try again.');
   return data;
 }
 
-export default function UserLifecycle() {
+export default function UserLifecycle({ onAdd, refreshKey = 0 }: { onAdd?: () => void; refreshKey?: number }) {
   const { user, activeTenantId, hasPermission } = useAuth();
   const platform = Boolean(user?.isPlatformAdmin && hasPermission('platform:user:read'));
   const scope = activeTenantId || (user?.tenantId ? String(user.tenantId) : null);
   const allowed = platform || Boolean(scope && hasPermission('tenant:user:read'));
   // Remount on scope changes so no prior tenant's data can remain visible.
-  return allowed ? <Lifecycle key={`${platform}:${scope}`} platform={platform} scope={scope} permission={hasPermission} /> : <p>Administrator permission and a selected tenant are required.</p>;
+  return allowed ? <Lifecycle key={`${platform}:${scope}`} platform={platform} scope={scope} permission={hasPermission} onAdd={onAdd} refreshKey={refreshKey} /> : <p>Administrator permission and a selected tenant are required.</p>;
 }
 
-function Lifecycle({ platform, scope, permission }: { platform: boolean; scope: string | null; permission: (code: string) => boolean }) {
+function Lifecycle({ platform, scope, permission, onAdd, refreshKey }: { platform: boolean; scope: string | null; permission: (code: string) => boolean; onAdd?: () => void; refreshKey: number }) {
+  const { showToast } = useToast();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [role, setRole] = useState('');
@@ -48,7 +54,6 @@ function Lifecycle({ platform, scope, permission }: { platform: boolean; scope: 
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
   const [revision, setRevision] = useState(0);
   const [confirmation, setConfirmation] = useState<{ text: string; run: () => Promise<void> } | null>(null);
   const canGlobal = platform && permission('platform:user:manage_status');
@@ -60,13 +65,14 @@ function Lifecycle({ platform, scope, permission }: { platform: boolean; scope: 
   const identifier = (u: User) => platform ? u.id : u.membership_id;
   useEffect(() => {
     let current = true;
+    setLoading(true);
     const query = new URLSearchParams({ page: String(page), page_size: '20', search });
     if (status) query.set(platform ? 'local_status' : 'account_status', status);
     if (role) query.set('role', role);
     if (platform) { query.set('sort_by', sort); if (provider) query.set('provider', provider); if (tenantFilter) query.set('tenant_id', String(tenantFilter.id)); }
     api(`${prefix}?${query}`, scope).then(data => { if (current) { setRows(data.items); setTotal(data.total); } }).catch(e => { if (current) setError(e.message); }).finally(() => { if (current) setLoading(false); });
     return () => { current = false; };
-  }, [prefix, scope, platform, page, search, status, role, provider, tenantFilter, sort, revision]);
+  }, [prefix, scope, platform, page, search, status, role, provider, tenantFilter, sort, revision, refreshKey]);
   useEffect(() => {
     if (!selected) return;
     let current = true;
@@ -75,37 +81,38 @@ function Lifecycle({ platform, scope, permission }: { platform: boolean; scope: 
   }, [selected, prefix, platform, scope, revision]);
   function filter(set: (value: string) => void, value: string) { set(value); setPage(1); setLoading(true); setError(''); }
   async function mutate(path: string, method: string, body?: unknown, tenant: string | number | null = scope) {
-    setBusy(true); setError(''); setNotice('');
-    try { const data = await api(path, tenant, method, body); setNotice(data.delivery ? `Activation delivery: ${data.delivery.status}.` : 'Changes saved.'); setDetail(null); setRevision(n => n + 1); }
+    if (busy) return;
+    setBusy(true); setError('');
+    try { const data = await api(path, tenant, method, body); showToast(data.delivery ? `Activation delivery: ${data.delivery.status}.` : 'User updated successfully.', 'success'); setDetail(null); setRevision(n => n + 1); }
     catch (e) { setError(e instanceof Error ? e.message : 'Request failed.'); }
     finally { setBusy(false); }
   }
   function confirm(text: string, run: () => Promise<void>) { setConfirmation({ text, run }); }
   const uid = detail?.id ?? detail?.user_id;
   const memberships = detail ? (platform ? detail.tenant_memberships || [] : [detail as Membership]) : [];
-  return <section className="space-y-5">
-    <h1 className="text-2xl font-semibold">User management</h1>
-    <p>{platform ? 'Platform users and all tenant memberships' : 'Users in the selected tenant'}</p>
-    <div className="flex flex-wrap gap-3">
-      <label>Search <input className={inputClass} value={search} onChange={e => filter(setSearch, e.target.value)} /></label>
+  return <section className={`${styles.console} space-y-5`}>
+    <header className="flex flex-wrap items-start justify-between gap-4"><div><p className="mb-2 text-xs font-semibold uppercase tracking-widest text-hcl-muted">Identity & access</p><h1 className="text-3xl font-semibold tracking-tight">Native Users</h1><p className="mt-2 text-sm text-hcl-muted">Manage local SBOM Analyzer accounts, roles and access.</p></div>{onAdd && <button className="!bg-hcl-blue !text-white" onClick={onAdd}>+ Add User</button>}</header>
+    <div className="flex flex-wrap items-end gap-4 rounded-xl border border-border bg-surface p-5 shadow-sm">
+      <label>Search <input placeholder="Search name or email…" className={inputClass} value={search} onChange={e => filter(setSearch, e.target.value)} /></label>
       <label>Account status <select className={inputClass} value={status} onChange={e => filter(setStatus, e.target.value)}><option value="">All</option>{statuses.map(s => <option key={s}>{s}</option>)}</select></label>
       <label>Role <select className={inputClass} value={role} onChange={e => filter(setRole, e.target.value)}><option value="">All</option>{roles.map(r => <option key={r}>{r}</option>)}</select></label>
       {platform && <><label>Provider <select className={inputClass} value={provider} onChange={e => filter(setProvider, e.target.value)}><option value="">All</option><option value="NATIVE">Native</option><option value="HCL_CS">HCL.CS</option><option value="MICROSOFT_ENTRA">Microsoft Entra</option></select></label>
         <TenantSearchSelect value={tenantFilter} onChange={tenant => { setTenantFilter(tenant); setPage(1); }} />
         <label>Sort <select className={inputClass} value={sort} onChange={e => filter(setSort, e.target.value)}>{['name', 'email', 'created_at', 'last_login_at'].map(s => <option key={s}>{s}</option>)}</select></label></>}
+      {(search || status || role || provider || tenantFilter) && <button onClick={() => { setSearch(''); setStatus(''); setRole(''); setProvider(''); setTenantFilter(null); setPage(1); }}>Clear filters</button>}
     </div>
-    {error && <div><p role="alert">{error}</p><button onClick={() => { setError(''); setLoading(true); setRevision(n => n + 1); }}>Retry loading</button></div>}{notice && <p role="status">{notice}</p>}
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3" aria-label="Directory summary"><div className="rounded-lg border p-4"><p className="text-sm">Matching users</p><strong className="text-2xl">{total}</strong></div><div className="rounded-lg border p-4"><p className="text-sm">Scope</p><strong>{platform ? 'All authorized tenants' : 'Selected tenant only'}</strong></div><div className="rounded-lg border p-4"><p className="text-sm">Account filter</p><strong>{status ? readable(status) : 'All statuses'}</strong></div></div>
-    {loading ? <div className="animate-pulse rounded-lg border p-6" role="status">Loading users…</div> : <div className="overflow-x-auto rounded-lg border border-border-subtle"><table className="w-full text-left text-sm"><caption className="sr-only">Users and global account status. Membership access is shown separately.</caption><thead className="bg-surface-muted"><tr>{['Name / Email', 'Provider', 'Account status', 'Tenant memberships / Roles', 'Last login', 'Created', 'Actions'].map(c => <th scope="col" className="p-3 font-semibold" key={c}>{c}</th>)}</tr></thead><tbody>{rows.map(u => <tr className="border-t hover:bg-surface-muted" key={identifier(u)}><td className="p-3"><button className="font-semibold underline focus-visible:outline" onClick={() => { setDetail(null); setSelected(u); setError(''); }}>{u.display_name || u.email}</button><p className="text-hcl-muted">{u.email}</p></td><td className="p-3">{(u.providers || []).map(providerLabel).join(' + ')}</td><td className="p-3"><UserStatusBadge status={u.account_status} /></td><td className="p-3">{platform ? <span>{u.active_tenant_count ?? u.tenant_memberships?.length ?? '—'} active memberships · Open details for roles by tenant</span> : <><p>Membership: {u.membership_status}</p><p>{u.roles?.join(', ')}</p></>}</td><td className="p-3">{date(u.last_login_at)}</td><td className="p-3">{date(u.created_at)}</td><td className="p-3"><button aria-label={`View details for ${u.display_name || u.email}`} onClick={() => { setDetail(null); setSelected(u); }}>View</button></td></tr>)}</tbody></table>{!rows.length && <p className="p-8 text-center">No users found.</p>}</div>}
-    <div className="flex gap-3"><button disabled={page === 1 || loading} onClick={() => { setLoading(true); setPage(p => p - 1); }}>Previous</button><span>Page {page} · {total} users</span><button disabled={page * 20 >= total || loading} onClick={() => { setLoading(true); setPage(p => p + 1); }}>Next</button></div>
+    {error && <div><p role="alert">{error}</p><button onClick={() => { setError(''); setLoading(true); setRevision(n => n + 1); }}>Retry loading</button></div>}
+    <p className="text-xs text-hcl-muted">{platform ? 'Platform directory · All authorized tenants and identity providers' : 'Tenant directory · Selected tenant only'} · {total} matching users</p>
+    {loading ? <div className="animate-pulse rounded-lg border p-6" role="status">Loading users…</div> : <div className="rounded-xl border border-border-subtle shadow-sm"><table className={styles.directory}><caption className="sr-only">Users and global account status. Membership access is shown separately.</caption><thead className="bg-surface-muted"><tr>{['Name / Email', 'Provider', 'Account status', 'Tenant memberships / Roles', 'Last login', 'Created', 'Actions'].map(c => <th scope="col" className="p-3 font-semibold" key={c}>{c}</th>)}</tr></thead><tbody>{rows.map(u => <tr className="border-t hover:bg-surface-muted" key={identifier(u)}><td className="p-3"><span aria-hidden="true" className="mb-1 mr-2 inline-flex h-8 w-8 items-center justify-center rounded-full bg-surface-muted text-xs font-semibold text-hcl-blue">{(u.display_name || u.email).split(/\s+/).map(part => part[0]).slice(0, 2).join('').toUpperCase()}</span><button className="font-semibold text-hcl-navy hover:underline focus-visible:outline" onClick={() => { setDetail(null); setSelected(u); setError(''); }}>{u.display_name || u.email}</button><p className="text-hcl-muted">{u.email}</p></td><td className="p-3">{(u.providers || []).map(providerLabel).join(' + ')}</td><td className="p-3"><UserStatusBadge status={u.account_status} /></td><td className="p-3">{platform ? <span>{u.active_tenant_count ?? u.tenant_memberships?.length ?? '—'} active memberships · Open details for roles by tenant</span> : <><p>Membership: {u.membership_status}</p><RoleBadges roles={u.roles} membershipActive={u.membership_status === 'ACTIVE'} /></>}</td><td className="p-3">{date(u.last_login_at)}</td><td className="p-3">{date(u.created_at)}</td><td className="p-3"><UserActionsMenu name={u.display_name || u.email} onView={() => { setDetail(null); setSelected(u); }} /></td></tr>)}</tbody></table>{!rows.length && <div className="p-12 text-center"><Users className="mx-auto mb-4 h-10 w-10 text-hcl-muted" aria-hidden="true" /><p className="font-semibold">No users found.</p><p className="mt-2 text-sm text-hcl-muted">{search || status || role || provider || tenantFilter ? 'Try adjusting your search or filters.' : 'Create a native user to allow local access to SBOM Analyzer.'}</p>{onAdd && <button className="mt-4 text-link" onClick={onAdd}>+ Add User</button>}</div>}</div>}
+    <div className="flex flex-wrap items-center justify-end gap-3 text-sm"><span className="mr-auto text-hcl-muted">Showing {total ? (page - 1) * 20 + 1 : 0}–{Math.min(page * 20, total)} of {total} users</span><button disabled={page === 1 || loading} onClick={() => { setLoading(true); setPage(p => p - 1); }}>Previous</button><span>Page {page} · {total} users</span><button disabled={page * 20 >= total || loading} onClick={() => { setLoading(true); setPage(p => p + 1); }}>Next</button></div>
     {selected && !detail && !error && <p role="status">Loading user details…</p>}
     {detail && <article className="border rounded p-5 space-y-4" key={`${uid}:${revision}`}>
-      <h2 tabIndex={-1} ref={node => { if (node && selected) node.focus(); }} className="text-xl font-semibold outline-none">{detail.display_name || detail.email}</h2><p>{detail.email} · Account: {detail.account_status} · {(detail.providers || []).map(providerLabel).join(' + ')}</p>
+      <h2 tabIndex={-1} ref={node => { if (node && selected) node.focus(); }} className="text-xl font-semibold outline-none">{detail.display_name || detail.email}</h2><p>{detail.email} · {(detail.providers || []).map(providerLabel).join(' + ')}</p><UserStatusBadge status={detail.account_status} /><button className="float-right" onClick={() => { setSelected(null); setDetail(null); }}>Close details</button>
       <h3 className="font-semibold">Account security & authentication activity</h3><p>Email verified: {detail.email_verified ? 'Yes' : 'No'} · Last login: {detail.last_login_at || 'Never'}</p><p>Created: {detail.created_at} · Updated: {detail.updated_at}</p>
       {platform && detail.security && <p>Password last changed: {date(detail.security.password_changed_at)} · Failed logins: {detail.security.failed_login_count} · Locked until: {detail.security.locked_until || 'Not locked'}</p>}
       <h3 className="font-semibold">Profile</h3><p>{detail.first_name} {detail.last_name} · {detail.phone || 'No phone recorded'}</p><h3 className="font-semibold">Identity providers</h3><p>{detail.providers.map(providerLabel).join(' + ')}</p>
       {canProfile && <form className="flex flex-wrap gap-3" onSubmit={(e: FormEvent<HTMLFormElement>) => { e.preventDefault(); const data = new FormData(e.currentTarget); void mutate(`${prefix}/${identifier(detail)}/profile`, 'PATCH', Object.fromEntries(['first_name', 'last_name', 'phone'].map(k => [k, data.get(k)]))); }}>
-        {['first_name', 'last_name', 'phone'].map(k => <label key={k}>{k.replace('_', ' ')} <input className={inputClass} name={k} defaultValue={detail[k as 'first_name'] || ''} maxLength={k === 'phone' ? 64 : 120} required={k !== 'phone'} /></label>)}<button disabled={busy}>Save profile</button><p>Profile changes apply to this user across tenants. Email cannot be edited here.</p>
+        {['first_name', 'last_name', 'phone'].map(k => <label key={k}>{k.replace('_', ' ')} <input className={inputClass} name={k} defaultValue={detail[k as 'first_name'] || ''} maxLength={k === 'phone' ? 64 : 120} required={k !== 'phone'} /></label>)}<button disabled={busy}>{busy ? 'Saving…' : 'Save profile'}</button><p>Profile changes apply to this user across tenants. Email cannot be edited here.</p>
       </form>}
       {canGlobal && <div className="flex gap-4 flex-wrap">
         {detail.account_status === 'PENDING' && <button disabled={busy} onClick={() => confirm(`Approve ${detail.display_name}? Tenant memberships and roles must still be assigned separately.`, () => mutate(`/platform/users/${uid}/status`, 'PATCH', { status: 'ACTIVE' }))}>Approve account</button>}
@@ -125,7 +132,7 @@ function Lifecycle({ platform, scope, permission }: { platform: boolean; scope: 
         {canInvite && detail.account_status === 'PENDING_EMAIL_VERIFICATION' && detail.providers.includes('NATIVE') && <button disabled={busy} onClick={() => confirm(`Resend activation to ${detail.display_name} for ${m.tenant_name}? The previous activation link will stop working.`, () => mutate(`${platform ? '/platform' : ''}/tenants/${m.tenant_id}/native-users/${uid}/resend-activation`, 'POST', undefined, platform ? null : m.tenant_id))}>Resend activation</button>}
       </section>)}
       {platform && canInvite && <form onSubmit={e => { e.preventDefault(); if (!newTenant) return; const data = new FormData(e.currentTarget); const tenant = Number(newTenant.id); void mutate(`/tenants/${tenant}/memberships`, 'POST', { user_id: uid, role_codes: data.getAll('roles') }, tenant); }}><h3>Add existing user to another tenant</h3><TenantSearchSelect value={newTenant} onChange={setNewTenant} />{roles.map(r => <label className="mr-3" key={r}><input type="checkbox" name="roles" value={r} defaultChecked={r === 'VIEWER'} /> {r}</label>)}<button disabled={busy || !newTenant}>Add membership</button></form>}
-      <h3 id="audit" className="font-semibold">Recent audit activity</h3><ol aria-label="Audit timeline" className="border-l-2 pl-4 space-y-3">{detail.activity?.items.map(a => <li key={a.id}><time>{a.timestamp}</time><p className="capitalize font-medium">{readable(a.action)} · {a.outcome}</p><p className="text-sm">Actor: {a.actor_user_id ?? 'System'}{a.tenant_id ? ` · Tenant ${a.tenant_id}` : ' · Account'}</p></li>)}</ol><p>{detail.activity?.total || 0} recorded events; showing the most recent 50.</p>
+      <h3 id="audit" className="font-semibold">Recent audit activity</h3><ol aria-label="Audit timeline" className="border-l-2 pl-4 space-y-3">{detail.activity?.items.map(a => <li key={a.id}><time>{a.timestamp}</time><p className="capitalize font-medium">{readable(a.action)} · {a.outcome}</p><p className="text-sm">{a.tenant_id ? 'Tenant activity' : 'Account activity'}</p></li>)}</ol><p>{detail.activity?.total || 0} recorded events; showing the most recent 50.</p>
     </article>}
     <ConfirmationDialog open={Boolean(confirmation)} title="Confirm access change" description={confirmation?.text || ''} confirmLabel="Confirm" onClose={() => setConfirmation(null)} onConfirm={() => { const run = confirmation?.run; setConfirmation(null); if (run) void run(); }} />
   </section>;
