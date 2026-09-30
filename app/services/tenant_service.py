@@ -675,7 +675,7 @@ def add_user_to_tenant(
     db: Session,
     tenant_id: int,
     *,
-    external_iam_user_id: str,
+    user_id: int,
     role: str,
     role_codes: list[str] | None = None,
     status: str = "ACTIVE",
@@ -692,7 +692,8 @@ def add_user_to_tenant(
         normalized_role_codes, is_platform_admin=assignment_source == "PLATFORM_ADMIN",
     )
     status = validate_membership_status(status)
-    user = db.execute(select(IAMUser).where(IAMUser.external_iam_user_id == external_iam_user_id)).scalar_one_or_none()
+    # Native accounts need no legacy HCL subject; membership references IAMUser.
+    user = db.execute(select(IAMUser).where(IAMUser.id == user_id)).scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=404, detail="IAM user not found; the user must sign in once before onboarding")
     if user.status == "DISABLED":

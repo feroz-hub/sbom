@@ -802,28 +802,30 @@ def add_tenant_user(
     db: Session = Depends(get_db),
 ) -> dict:
     _require_current_tenant(tenant_id, context)
-    ext_user_id = payload.external_user_id
-    if ext_user_id is None and payload.user_id is not None:
-        user_row = db.query(IAMUser).filter(IAMUser.id == payload.user_id).one_or_none()
-        if user_row:
-            ext_user_id = user_row.external_iam_user_id
-    if not ext_user_id:
+    if payload.user_id is None and not payload.external_user_id:
         raise HTTPException(status_code=422, detail="Provide user_id or external_user_id")
-
-    existing = None
-    previous_user_status = None
-    user_id = db.query(IAMUser.id).filter(IAMUser.external_iam_user_id == ext_user_id).scalar()
-    if user_id is not None:
-        previous_user_status = db.query(IAMUser.status).filter(IAMUser.id == user_id).scalar()
-        existing = db.query(TenantUser).filter(
-            TenantUser.tenant_id == tenant_id,
-            TenantUser.user_id == user_id,
-        ).one_or_none()
+    # Resolve legacy requests once, but never require an external identity for
+    # an account selected by its canonical IAM user ID.
+    identity_filter = (
+        IAMUser.id == payload.user_id
+        if payload.user_id is not None
+        else IAMUser.external_iam_user_id == payload.external_user_id
+    )
+    user_row = db.query(IAMUser).filter(identity_filter).one_or_none()
+    if user_row is None:
+        raise HTTPException(status_code=404, detail="IAM user not found")
+    if payload.external_user_id and user_row.external_iam_user_id != payload.external_user_id:
+        raise HTTPException(status_code=422, detail="User identity references do not match")
+    previous_user_status = user_row.status
+    existing = db.query(TenantUser).filter(
+        TenantUser.tenant_id == tenant_id,
+        TenantUser.user_id == user_row.id,
+    ).one_or_none()
     try:
         membership, user = ts.add_user_to_tenant(
             db,
             tenant_id,
-            external_iam_user_id=ext_user_id,
+            user_id=user_row.id,
             role=payload.role,
             role_codes=payload.roles,
             status=payload.status,
