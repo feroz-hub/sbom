@@ -33,8 +33,8 @@ from ..models import (
 )
 from ..schemas_identity import AuthContextResponse
 from ..schemas_platform import (
-    UserSearchResponse,
-    UserSearchResult,
+    TenantUserCandidate,
+    TenantUserCandidateResponse,
 )
 from ..schemas_tenants import (
     CreatedTenantResponse,
@@ -632,15 +632,15 @@ def tenant_user_role_history(
     }
 
 
-@router.get("/tenants/{tenant_id}/user-candidates", response_model=UserSearchResponse)
+@router.get("/tenants/{tenant_id}/user-candidates", response_model=TenantUserCandidateResponse)
 def search_tenant_user_candidates(
     tenant_id: int,
-    q: str = Query(..., min_length=1, max_length=200),
+    q: str = Query(..., min_length=2, max_length=200),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=50),
     context: CurrentContext = Depends(require_permission("tenant:user:invite")),
     db: Session = Depends(get_db),
-) -> UserSearchResponse:
+) -> TenantUserCandidateResponse:
     tenant = db.query(Tenant).filter(Tenant.id == tenant_id).one_or_none()
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found")
@@ -649,8 +649,8 @@ def search_tenant_user_candidates(
         raise HTTPException(status_code=403, detail="Cross-tenant request unauthorized")
 
     q_clean = q.strip()
-    if not q_clean:
-        raise HTTPException(status_code=422, detail="Query string cannot be empty or whitespace only")
+    if len(q_clean) < 2:
+        raise HTTPException(status_code=422, detail="Search by name or email using at least 2 characters")
 
     from sqlalchemy import exists
 
@@ -668,13 +668,12 @@ def search_tenant_user_candidates(
         .filter(
             IAMUser.status == "ACTIVE",
             verification_complete_clause(),
-            existing_membership,
+            ~existing_membership,
             or_(
                 IAMUser.email.ilike(pattern, escape="\\"),
                 IAMUser.display_name.ilike(pattern, escape="\\"),
                 IAMUser.first_name.ilike(pattern, escape="\\"),
                 IAMUser.last_name.ilike(pattern, escape="\\"),
-                IAMUser.user_principal_name.ilike(pattern, escape="\\"),
             ),
         )
         .order_by(
@@ -688,20 +687,18 @@ def search_tenant_user_candidates(
     )
 
     items = [
-        UserSearchResult(
+        TenantUserCandidate(
             providers=ums.providers(db, user),
             id=user.id,
             email=user.email,
             display_name=user.display_name,
-            username=user.user_principal_name,
             status=user.status,
             email_verified=bool(user.email_verified),
             verification_required=bool(user.verification_required),
-            tenant_membership=None,
         )
         for user in users
     ]
-    return UserSearchResponse(items=items)
+    return TenantUserCandidateResponse(items=items)
 
 
 

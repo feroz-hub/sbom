@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import pytest
+
 from app.core.security import get_current_user
 from app.db import SessionLocal
-from app.models import Tenant
+from app.models import Tenant, TenantUser
 
 from tests.phase6_helpers import identity_claims, now, seed_membership, seed_user
 
@@ -33,7 +35,6 @@ def test_tenant_admin_can_search_eligible_users_in_active_tenant(app, client):
         seed_membership(db, tenant_admin, tenant_id=wellysis.id, role="TENANT_ADMIN")
 
         candidate = seed_user(db, email="eligible.candidate@hcltech.com", display_name="Eligible Candidate")
-        seed_membership(db, candidate, tenant_id=wellysis.id, role="VIEWER")
         candidate_id = candidate.id
         claims = identity_claims(tenant_admin)
         db.commit()
@@ -53,7 +54,7 @@ def test_tenant_admin_can_search_eligible_users_in_active_tenant(app, client):
     assert len(data) == 1
     assert data[0]["id"] == candidate_id
     assert data[0]["email"] == "eligible.candidate@hcltech.com"
-    assert data[0]["external_issuer"] is None
+    assert set(data[0]) == {"id", "email", "display_name", "status", "email_verified", "verification_required", "providers"}
 
 
 def test_external_issuer_serialization_and_subject_regression(app, client):
@@ -71,7 +72,6 @@ def test_external_issuer_serialization_and_subject_regression(app, client):
         )
         aswini.external_issuer = "https://localhost:5180"
         aswini.external_subject = "aswini-subject-5180"
-        seed_membership(db, aswini, tenant_id=wellysis.id, role="VIEWER")
         aswini_id = aswini.id
 
         claims = identity_claims(tenant_admin)
@@ -94,14 +94,14 @@ def test_external_issuer_serialization_and_subject_regression(app, client):
     assert item["id"] == aswini_id
     assert item["email"] == "aswini.v@hcltech.com"
     assert item["display_name"] == "Aswini Venkatesh"
-    assert item["external_issuer"] is None
-    assert item["external_subject"] is None
+    assert "external_issuer" not in item
+    assert "external_subject" not in item
     assert "token" not in item
     assert "password" not in item
     assert "secret" not in item
 
 
-def test_user_in_another_tenant_is_hidden(app, client):
+def test_account_in_another_tenant_is_addable_without_exposing_memberships(app, client):
     with SessionLocal() as db:
         wellysis = _seed_tenant(db, name="Wellysis", slug="wellysis-2")
         medtronics = _seed_tenant(db, name="Medtronics", slug="medtronics")
@@ -128,10 +128,11 @@ def test_user_in_another_tenant_is_hidden(app, client):
 
     assert res.status_code == 200, res.text
     items = res.json()["items"]
-    assert not any(item["id"] == feroze_id for item in items)
+    assert any(item["id"] == feroze_id for item in items)
+    assert all("tenant_memberships" not in item for item in items)
 
 
-def test_user_already_in_selected_tenant_is_visible(app, client):
+def test_user_already_in_selected_tenant_is_excluded(app, client):
     with SessionLocal() as db:
         wellysis = _seed_tenant(db, name="Wellysis", slug="wellysis-3")
         wellysis_admin = seed_user(db, email="wadmin3@wellysis.test", display_name="Wellysis Admin 3")
@@ -151,15 +152,23 @@ def test_user_already_in_selected_tenant_is_visible(app, client):
             params={"q": "existing.member"},
             headers={"X-Tenant-ID": str(wellysis.id)},
         )
+        added = client.post(
+            f"/api/tenants/{wellysis.id}/users",
+            json={"user_id": existing_id, "roles": ["VIEWER"]},
+            headers={"X-Tenant-ID": str(wellysis.id)},
+        )
     finally:
         _clear_override(app)
 
     assert res.status_code == 200, res.text
     items = res.json()["items"]
-    assert any(item["id"] == existing_id for item in items)
+    assert not any(item["id"] == existing_id for item in items)
+    assert added.status_code in (201, 409), added.text
+    with SessionLocal() as db:
+        assert db.query(TenantUser).filter_by(tenant_id=wellysis.id, user_id=existing_id).count() == 1
 
 
-def test_disabled_membership_in_selected_tenant_is_visible_for_management(app, client):
+def test_disabled_membership_in_selected_tenant_is_excluded(app, client):
     with SessionLocal() as db:
         wellysis = _seed_tenant(db, name="Wellysis", slug="wellysis-4")
         wellysis_admin = seed_user(db, email="wadmin4@wellysis.test", display_name="Wellysis Admin 4")
@@ -185,7 +194,7 @@ def test_disabled_membership_in_selected_tenant_is_visible_for_management(app, c
 
     assert res.status_code == 200, res.text
     items = res.json()["items"]
-    assert any(item["id"] == disabled_id for item in items)
+    assert not any(item["id"] == disabled_id for item in items)
 
 
 def test_active_verified_user_is_returned(app, client):
@@ -201,7 +210,6 @@ def test_active_verified_user_is_returned(app, client):
             verified=True,
             status="ACTIVE",
         )
-        seed_membership(db, active_verified, tenant_id=wellysis.id, role="VIEWER")
         active_id = active_verified.id
 
         claims = identity_claims(wellysis_admin)
@@ -234,7 +242,6 @@ def test_unverified_user_is_excluded(app, client):
             display_name="Unverified User",
             verified=False,
         )
-        seed_membership(db, unverified, tenant_id=wellysis.id, role="VIEWER")
         unverified_id = unverified.id
 
         claims = identity_claims(wellysis_admin)
@@ -268,7 +275,6 @@ def test_verification_required_user_is_excluded(app, client):
             verified=True,
         )
         req_verif.verification_required = True
-        seed_membership(db, req_verif, tenant_id=wellysis.id, role="VIEWER")
         req_id = req_verif.id
 
         claims = identity_claims(wellysis_admin)
@@ -301,7 +307,6 @@ def test_disabled_user_is_excluded(app, client):
             display_name="Disabled Account User",
             status="DISABLED",
         )
-        seed_membership(db, disabled_user, tenant_id=wellysis.id, role="VIEWER")
         disabled_id = disabled_user.id
 
         claims = identity_claims(wellysis_admin)
@@ -329,7 +334,6 @@ def test_search_matches_email(app, client):
         seed_membership(db, wellysis_admin, tenant_id=wellysis.id, role="TENANT_ADMIN")
 
         target = seed_user(db, email="unique.email.match@hcltech.com", display_name="Random Name")
-        seed_membership(db, target, tenant_id=wellysis.id, role="VIEWER")
         target_id = target.id
 
         claims = identity_claims(wellysis_admin)
@@ -356,7 +360,6 @@ def test_search_matches_display_name(app, client):
         seed_membership(db, wellysis_admin, tenant_id=wellysis.id, role="TENANT_ADMIN")
 
         target = seed_user(db, email="random.email@hcltech.com", display_name="Unique Display Name")
-        seed_membership(db, target, tenant_id=wellysis.id, role="VIEWER")
         target_id = target.id
 
         claims = identity_claims(wellysis_admin)
@@ -376,7 +379,7 @@ def test_search_matches_display_name(app, client):
     assert any(item["id"] == target_id for item in res.json()["items"])
 
 
-def test_search_matches_username_user_principal_name(app, client):
+def test_external_username_is_not_a_search_field(app, client):
     with SessionLocal() as db:
         wellysis = _seed_tenant(db, name="Wellysis", slug="wellysis-11")
         wellysis_admin = seed_user(db, email="wadmin11@wellysis.test", display_name="Wellysis Admin 11")
@@ -384,7 +387,6 @@ def test_search_matches_username_user_principal_name(app, client):
 
         target = seed_user(db, email="principal.user@hcltech.com", display_name="Principal Person")
         target.user_principal_name = "unique_principal_username"
-        seed_membership(db, target, tenant_id=wellysis.id, role="VIEWER")
         target_id = target.id
 
         claims = identity_claims(wellysis_admin)
@@ -401,7 +403,7 @@ def test_search_matches_username_user_principal_name(app, client):
         _clear_override(app)
 
     assert res.status_code == 200
-    assert any(item["id"] == target_id for item in res.json()["items"])
+    assert not any(item["id"] == target_id for item in res.json()["items"])
 
 
 def test_unauthorized_user_receives_403(app, client):
@@ -508,7 +510,6 @@ def test_wildcard_characters_are_escaped_safely(app, client):
 
         seed_user(db, email="normaluser@hcltech.com", display_name="Normal User")
         special_user = seed_user(db, email="special_user%test@hcltech.com", display_name="Special % User")
-        seed_membership(db, special_user, tenant_id=tenant.id, role="VIEWER")
         special_id = special_user.id
 
         claims = identity_claims(admin)
@@ -537,12 +538,11 @@ def test_results_are_limited_and_deterministically_ordered(app, client):
         seed_membership(db, admin, tenant_id=tenant.id, role="TENANT_ADMIN")
 
         for i in range(30):
-            candidate = seed_user(
+            seed_user(
                 db,
                 email=f"candidate{i:02d}@limit.test",
                 display_name=f"Candidate {i:02d}",
             )
-            seed_membership(db, candidate, tenant_id=tenant.id, role="VIEWER")
 
         claims = identity_claims(admin)
         db.commit()
@@ -562,3 +562,62 @@ def test_results_are_limited_and_deterministically_ordered(app, client):
     assert len(items) == 20
     display_names = [item["display_name"] for item in items]
     assert display_names == sorted(display_names)
+
+
+@pytest.mark.parametrize("query", ["zara", "Singh", "zara.singh@example.test"])
+def test_nonmember_first_last_name_and_email_search(app, client, query):
+    with SessionLocal() as db:
+        tenant = _seed_tenant(db, name="Search Tenant", slug="human-search")
+        admin = seed_user(db, email="admin@human.test")
+        seed_membership(db, admin, tenant_id=tenant.id, role="TENANT_ADMIN")
+        candidate = seed_user(db, email="zara.singh@example.test", display_name="Unrelated Display")
+        candidate.first_name = "Zara"
+        candidate.last_name = "Singh"
+        candidate_id = candidate.id
+        claims = identity_claims(admin)
+        db.commit()
+    _override_user(app, claims)
+    try:
+        response = client.get(f"/api/tenants/{tenant.id}/user-candidates", params={"q": query},
+                              headers={"X-Tenant-ID": str(tenant.id)})
+        assert response.status_code == 200, response.text
+        assert [item["id"] for item in response.json()["items"]] == [candidate_id]
+        added = client.post(f"/api/tenants/{tenant.id}/users",
+                            json={"user_id": candidate_id, "roles": ["VIEWER"]},
+                            headers={"X-Tenant-ID": str(tenant.id)})
+        assert added.status_code == 201, added.text
+        assert added.json()["user_id"] == candidate_id
+        response = client.get(f"/api/tenants/{tenant.id}/user-candidates", params={"q": query},
+                              headers={"X-Tenant-ID": str(tenant.id)})
+        assert response.json()["items"] == []
+    finally:
+        _clear_override(app)
+
+
+def test_no_internal_or_external_id_lookup_and_minimum_search_length(app, client):
+    with SessionLocal() as db:
+        tenant = _seed_tenant(db, name="ID Search Tenant", slug="no-id-search")
+        admin = seed_user(db, email="admin@ids.test")
+        seed_membership(db, admin, tenant_id=tenant.id, role="TENANT_ADMIN")
+        candidate = seed_user(db, email="person@example.test", display_name="Person")
+        candidate.external_subject = "private-subject"
+        candidate_id = candidate.id
+        claims = identity_claims(admin)
+        db.commit()
+    _override_user(app, claims)
+    try:
+        for query in [str(candidate_id).zfill(2), "private-subject", candidate.external_iam_user_id]:
+            response = client.get(f"/api/tenants/{tenant.id}/user-candidates", params={"q": query},
+                                  headers={"X-Tenant-ID": str(tenant.id)})
+            assert response.status_code == 200, response.text
+            assert response.json()["items"] == []
+        for query in ["p", " p ", "  "]:
+            response = client.get(f"/api/tenants/{tenant.id}/user-candidates", params={"q": query},
+                                  headers={"X-Tenant-ID": str(tenant.id)})
+            assert response.status_code == 422
+        response = client.get(f"/api/tenants/{tenant.id}/user-candidates",
+                              params={"q": "person", "page_size": 51},
+                              headers={"X-Tenant-ID": str(tenant.id)})
+        assert response.status_code == 422
+    finally:
+        _clear_override(app)

@@ -41,7 +41,6 @@ export default function TenantUsersAccess() {
   const qc = useQueryClient();
   const { showSuccess, showError } = useNotifications();
 
-  const [existingUserId, setExistingUserId] = useState('');
   const [selectedUser, setSelectedUser] = useState<UserSearchResult | null>(null);
   const [initialRoles, setInitialRoles] = useState<TenantRole[]>(['VIEWER']);
 
@@ -69,16 +68,15 @@ export default function TenantUsersAccess() {
 
   const addMemberMutation = useMutation({
     mutationFn: async () => {
-      if ((!selectedUser && !existingUserId) || !currentTenantId) return;
+      if (!selectedUser || !currentTenantId) return;
       await addTenantMember(currentTenantId, {
-        user_id: selectedUser?.id ?? Number(existingUserId),
+        user_id: selectedUser.id,
         roles: initialRoles,
       });
     },
     onSuccess: async () => {
-      showSuccess(`User “${selectedUser?.display_name || selectedUser?.email || existingUserId}” was added to the tenant.`);
+      showSuccess(`User “${selectedUser?.display_name || selectedUser?.email}” was added to the tenant.`);
       setSelectedUser(null);
-      setExistingUserId('');
       await qc.invalidateQueries({ queryKey: ['tenant-users', currentTenantId] });
       await qc.invalidateQueries({ queryKey: ['tenant-audit-history', currentTenantId] });
     },
@@ -87,7 +85,7 @@ export default function TenantUsersAccess() {
 
   const submitMember = (event: FormEvent) => {
     event.preventDefault();
-    if ((!selectedUser && !existingUserId) || !currentTenantId) return;
+    if (!selectedUser || !currentTenantId) return;
     addMemberMutation.mutate();
   };
 
@@ -251,17 +249,16 @@ export default function TenantUsersAccess() {
 
           <form onSubmit={submitMember} className="space-y-4">
             <div>
-              {user?.isPlatformAdmin ? <><label className="block text-sm font-medium mb-1">Select User</label>
+              <p className="block text-sm font-medium mb-1">Search existing user</p>
               <UserSearchCombobox
-                onSelect={(u) => setSelectedUser(u)}
+                tenantId={currentTenantId}
+                onSelect={setSelectedUser}
                 selectedUser={selectedUser}
-                placeholder="Search existing SBOM users by email or name…"
-              /></> : <label className="block text-sm font-medium">Existing user ID
-                <input type="number" min="1" required value={existingUserId} onChange={event => setExistingUserId(event.target.value)} className="mt-1 block rounded border border-border bg-background p-2" />
-              </label>}
+                placeholder="Search by name or email…"
+              />
             </div>
 
-            {(selectedUser || existingUserId) && (
+            {selectedUser && (
               <div className="grid gap-3 sm:grid-cols-[1fr_auto] items-end pt-2">
                 <label className="text-sm font-medium">
                   Initial Roles

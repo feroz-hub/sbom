@@ -583,7 +583,7 @@ export async function searchPlatformUsers(query: string, tenantId?: number): Pro
 }
 
 export async function searchTenantUserCandidates(tenantId: number, query: string): Promise<UserSearchResult[]> {
-  if (!query.trim() || !tenantId) return [];
+  if (query.trim().length < 2 || !tenantId) return [];
   const res = await request<UserSearchResult[] | { items: UserSearchResult[] }>(
     `/api/tenants/${tenantId}/user-candidates?q=${encodeURIComponent(query.trim())}`,
     tenantRequestOptions(tenantId),

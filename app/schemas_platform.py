@@ -57,6 +57,22 @@ class UserSearchResponse(BaseModel):
     items: list[UserSearchResult]
 
 
+class TenantUserCandidate(BaseModel):
+    """Minimal identity projection for attaching an existing account."""
+
+    id: int
+    display_name: str | None
+    email: str | None
+    status: str
+    email_verified: bool
+    verification_required: bool
+    providers: list[str] = Field(default_factory=list)
+
+
+class TenantUserCandidateResponse(BaseModel):
+    items: list[TenantUserCandidate]
+
+
 class PlatformTenantMembershipSummary(BaseModel):
     membership_id: int
     roles: list[str] = Field(default_factory=list)
