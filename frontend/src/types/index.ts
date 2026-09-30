@@ -1863,8 +1863,8 @@ export interface VexInvestigationCapabilities {
   can_update: boolean;
   can_map: boolean;
   eligible_roles: string[];
-  candidates: Array<{ id: string; label: string; roles: string[] }>;
-  owner: { id: string | null; label: string; active: boolean; is_self: boolean; roles: string[] };
+  candidates: Array<{ id: string; label: string; email?: string | null; roles: string[] }>;
+  owner: { id: string | null; label: string; email?: string | null; active: boolean; is_self: boolean; roles: string[] };
   read_only_reason: string | null;
 }
 

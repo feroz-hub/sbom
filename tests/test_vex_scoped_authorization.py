@@ -162,6 +162,7 @@ def test_candidates_invalid_targets_and_payload_bypass(client, db, seeded, peopl
     locked = make_member(db, "DEVELOPER")
     locked.user.status = "LOCKED"
     multi = make_member(db, "SECURITY_ANALYST", roles=["SECURITY_ANALYST", "DEVELOPER"])
+    people["DEVELOPER"].user.email = "developer@assignment.example"
     db.commit()
     try:
         for role in ["TENANT_ADMIN", "SECURITY_ANALYST", "DEVELOPER", "VIEWER"]:
@@ -172,6 +173,9 @@ def test_candidates_invalid_targets_and_payload_bypass(client, db, seeded, peopl
             if role == "TENANT_ADMIN":
                 expected |= {membership_key(people["SECURITY_ANALYST"]), membership_key(multi)}
             assert candidates == expected
+            for candidate in detail["capabilities"]["candidates"]:
+                if candidate["id"] == membership_key(people["DEVELOPER"]):
+                    assert candidate["email"] == "developer@assignment.example"
             for target in [outside, inactive, locked]:
                 result = client.put(
                     f"{BASE}/{investigation.id}/assignment",

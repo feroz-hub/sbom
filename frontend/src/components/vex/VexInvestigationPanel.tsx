@@ -6,11 +6,11 @@ import { Alert } from '@/components/ui/Alert';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { Select } from '@/components/ui/Select';
 import { resolveVexInvestigationComponent, setVexInvestigationAssignment } from '@/lib/api';
 import { invalidateVexSurfaces } from '@/lib/queryInvalidation';
 import type { VexInvestigationDetail } from '@/types';
 import { VexDecisionEditor } from './VexDecisionEditor';
+import { AssigneeCombobox, AssigneeIdentity } from './AssigneeCombobox';
 
 export function VexInvestigationPanel({
   detail,
@@ -24,31 +24,35 @@ export function VexInvestigationPanel({
   const [formError, setFormError] = useState<string | null>(null);
   const [assignee, setAssignee] = useState(detail.internal_decision.assigned_to ?? '');
   const [componentId, setComponentId] = useState('');
-  const [assigneeSearch, setAssigneeSearch] = useState('');
-  const access = detail.capabilities;
+  const [savedDetail, setSavedDetail] = useState(detail);
+  const access = savedDetail.capabilities;
   const ownerRole = access?.owner.roles.includes('SECURITY_ANALYST') ? 'Security Analyst' : access?.owner.roles.includes('DEVELOPER') ? 'Developer' : null;
   const ownerLabel = access?.owner.is_self ? `${access.owner.label} (You)` : `${access?.owner.label ?? 'Unassigned'}${ownerRole ? ` — ${ownerRole}` : ''}`;
   const analystCandidates = access?.eligible_roles.includes('SECURITY_ANALYST');
   const queryClient = useQueryClient();
   useEffect(() => {
     setAssignee(detail.internal_decision.assigned_to ?? '');
+    setSavedDetail(detail);
     setFormError(null);
-  }, [detail.id, detail.row_version, detail.internal_decision.assigned_to]);
+  }, [detail]);
 
   const assignment = useMutation({
     mutationFn: (selected: string | null) =>
       setVexInvestigationAssignment(detail.id, {
         assigned_to: selected,
-        row_version: detail.row_version,
+        row_version: savedDetail.row_version,
         reason: selected ? 'Assignment updated' : 'Assignment removed',
       }),
-    onSuccess: () => {
+    onSuccess: (updated) => {
+      setSavedDetail(updated);
+      setAssignee(updated.internal_decision.assigned_to ?? '');
+      setFormError(null);
       invalidateVexSurfaces(queryClient);
       onSaved();
     },
     onError: (error: unknown) => {
       if ((error as { status?: number })?.status === 409) return onConflict();
-      setFormError(error instanceof Error ? error.message : 'Could not save the assignment.');
+      setFormError('Unable to update assignment. The current assignment was not changed. Try saving again.');
     },
   });
 
@@ -143,24 +147,19 @@ export function VexInvestigationPanel({
       </div>
 
       <Section title={access?.can_assign ? 'Ownership & assignment' : 'Ownership'}>
-          <Row label="Assigned to" value={ownerLabel} />
+          <p className="mb-2 text-xs text-hcl-muted">{access?.can_assign ? 'Current assignee' : 'Assigned to'}</p>
+          {access?.owner.id ? <AssigneeIdentity user={access.owner} isSelf={access.owner.is_self} /> : <p className="text-sm">Unassigned</p>}
+          {!access?.can_assign && !access?.owner.is_self ? <p className="mt-2 text-xs text-hcl-muted">You can view this investigation, but assignment changes are restricted.</p> : null}
           {access?.owner.id && !access.owner.active ? <p className="text-xs text-hcl-muted">Assigned user is no longer active</p> : null}
-          <div className="grid gap-2 md:grid-cols-2">
+          <div className="mt-4 space-y-3">
             {access?.can_assign ? <>
-              <Input label="Search assignees" value={assigneeSearch} onChange={(event) => setAssigneeSearch(event.target.value)} placeholder="Search by name" />
-              <Select label="Assignee" value={assignee} onChange={(event) => setAssignee(event.target.value)}>
-                <option value="">{analystCandidates ? 'Select Security Analyst or Developer' : 'Select Developer'}</option>
-                {['SECURITY_ANALYST', 'DEVELOPER'].filter(role => access.eligible_roles.includes(role)).map(role => (
-                  <optgroup key={role} label={role === 'SECURITY_ANALYST' ? 'Security Analysts' : 'Developers'}>
-                    {access.candidates.filter(candidate => (candidate.roles.includes('SECURITY_ANALYST') ? role === 'SECURITY_ANALYST' : role === 'DEVELOPER') && candidate.label.toLowerCase().includes(assigneeSearch.toLowerCase())).map(candidate => <option key={candidate.id} value={candidate.id}>{candidate.label}</option>)}
-                  </optgroup>
-                ))}
-              </Select>
+              <AssigneeCombobox candidates={access.candidates} selected={assignee} onSelect={setAssignee} disabled={assignment.isPending} />
               <p className="text-xs text-hcl-muted">{analystCandidates ? 'Assign this investigation to a Security Analyst or Developer in this tenant.' : 'Delegate this investigation to a Developer in this tenant.'}</p>
               <div className="flex gap-2">
-                <Button variant="ghost" disabled={assignment.isPending || !access.can_unassign || !access.owner.id} onClick={() => assignment.mutate(null)}>Unassign</Button>
-                <Button disabled={assignment.isPending || !assignee || !access.candidates.some(candidate => candidate.id === assignee)} onClick={() => assignment.mutate(assignee)}>{assignment.isPending ? 'Saving...' : 'Save assignment'}</Button>
+                {access.owner.id && access.can_unassign ? <Button variant="ghost" disabled={assignment.isPending} onClick={() => assignment.mutate(null)}>Unassign</Button> : null}
+                <Button disabled={assignment.isPending || !assignee || assignee === savedDetail.internal_decision.assigned_to || !access.candidates.some(candidate => candidate.id === assignee)} onClick={() => assignment.mutate(assignee)}>{assignment.isPending ? 'Saving...' : 'Save assignment'}</Button>
               </div>
+              {assignment.isSuccess ? <p role="status" className="text-sm text-green-700">Assignment updated successfully.</p> : null}
             </> : null}
             {access?.can_map && detail.reconciliation_status === 'UNRESOLVED_MAPPING' ? (
               <>

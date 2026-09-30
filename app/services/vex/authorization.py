@@ -80,6 +80,7 @@ def owner(db: Session, investigation: VexInvestigation, context: CurrentContext 
         if member
         else ("Assigned user is no longer active" if key else "Unassigned"),
         "active": active,
+        "email": member.user.email if member else None,
         "is_self": bool(active and context and member.user_id == context.user_id),
         "roles": sorted(roles),
     }
@@ -104,6 +105,7 @@ def capabilities(
                     {
                         "id": membership_key(member),
                         "label": member.user.display_name or member.user.email or "Tenant user",
+                        "email": member.user.email,
                         "roles": sorted(target_roles),
                     }
                 )

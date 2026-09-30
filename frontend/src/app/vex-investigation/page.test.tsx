@@ -422,12 +422,14 @@ describe('ownership and mapping', () => {
 
   it('assigns an owner with the current row_version__VEX_AUD_002', async () => {
     await openDetail();
-    fireEvent.change(screen.getByLabelText('Assignee'), { target: { value: 'membership:2' } });
+    expect(screen.getByText('Save assignment')).toBeDisabled();
+    fireEvent.focus(screen.getByRole('combobox', { name: 'Assignee' }));
+    fireEvent.click(screen.getByRole('option', { name: /Analyst/ }));
     fireEvent.click(screen.getByText('Save assignment'));
     await waitFor(() => {
       expect(api.setVexInvestigationAssignment).toHaveBeenCalledWith(
         1,
-        expect.objectContaining({ assigned_to: 'membership:2', row_version: 1 }),
+        expect.objectContaining({ assigned_to: 'membership:3', row_version: 1 }),
       );
     });
   });
@@ -441,6 +443,31 @@ describe('ownership and mapping', () => {
         expect.objectContaining({ assigned_to: null }),
       );
     });
+  });
+
+  it('updates current ownership from the saved response', async () => {
+    api.setVexInvestigationAssignment.mockResolvedValue({
+      ...detail, row_version: 2,
+      internal_decision: { ...detail.internal_decision, assigned_to: 'membership:3' },
+      capabilities: { ...detail.capabilities!, owner: { id: 'membership:3', label: 'Analyst', email: 'analyst@example.com', roles: ['SECURITY_ANALYST'], active: true, is_self: false } },
+    });
+    await openDetail();
+    fireEvent.focus(screen.getByRole('combobox', { name: 'Assignee' }));
+    fireEvent.click(screen.getByRole('option', { name: /Analyst/ }));
+    fireEvent.click(screen.getByText('Save assignment'));
+    expect(await screen.findByText('Assignment updated successfully.')).toBeInTheDocument();
+    expect(screen.getByText('analyst@example.com')).toBeInTheDocument();
+    expect(screen.getByText('Save assignment')).toBeDisabled();
+  });
+
+  it('keeps current ownership when saving fails', async () => {
+    api.setVexInvestigationAssignment.mockRejectedValue(new Error('offline'));
+    await openDetail();
+    fireEvent.focus(screen.getByRole('combobox', { name: 'Assignee' }));
+    fireEvent.click(screen.getByRole('option', { name: /Analyst/ }));
+    fireEvent.click(screen.getByText('Save assignment'));
+    expect(await screen.findByText(/The current assignment was not changed/)).toBeInTheDocument();
+    expect(screen.getAllByText('Alice').length).toBeGreaterThan(0);
   });
 
   it('offers component binding only for an unresolved mapping__VEX_MAP_001', async () => {
@@ -479,17 +506,19 @@ describe('server-authoritative investigation capabilities', () => {
 
   it('shows only eligible analyst and developer candidates for an administrator', async () => {
     await openWith(detail.capabilities);
-    expect(screen.getByRole('option', { name: 'Alice' })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: 'Analyst' })).toBeInTheDocument();
+    fireEvent.focus(screen.getByRole('combobox', { name: 'Assignee' }));
+    expect(screen.getByRole('option', { name: /Alice/ })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /Analyst/ })).toBeInTheDocument();
     expect(screen.queryByRole('option', { name: /Viewer|Tenant Admin/ })).not.toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('Search assignees'), { target: { value: 'Alice' } });
-    expect(screen.queryByRole('option', { name: 'Analyst' })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Assignee'), { target: { value: 'Alice' } });
+    expect(screen.queryByRole('option', { name: /Analyst/ })).not.toBeInTheDocument();
   });
 
   it('shows only developer candidates for a security analyst', async () => {
     await openWith({ ...detail.capabilities!, eligible_roles: ['DEVELOPER'], candidates: detail.capabilities!.candidates.slice(0, 1) });
-    expect(screen.getByRole('option', { name: 'Alice' })).toBeInTheDocument();
-    expect(screen.queryByRole('option', { name: 'Analyst' })).not.toBeInTheDocument();
+    fireEvent.focus(screen.getByRole('combobox', { name: 'Assignee' }));
+    expect(screen.getByRole('option', { name: /Alice/ })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /Analyst/ })).not.toBeInTheDocument();
     expect(screen.getByText('Delegate this investigation to a Developer in this tenant.')).toBeInTheDocument();
   });
 
