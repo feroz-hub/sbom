@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { request, resendPlatformTenantActivation } from '@/lib/api';
+import { listVexInvestigations, request, resendPlatformTenantActivation, searchVexAssignees } from '@/lib/api';
 
 /**
  * Guards the single place every non-streaming API call gets its tenant scope
@@ -39,6 +39,18 @@ describe('shared request helper tenant scoping', () => {
     await request('/api/sboms');
 
     expect(requestHeaders(0).get('X-Tenant-ID')).toBe('7');
+  });
+
+  it('serializes queue filters and preserves the selected tenant header', async () => {
+    sessionStorage.setItem('sbom_active_tenant_id', '7');
+    await listVexInvestigations({ my_work: 'me', assignee: 'membership:42', severity: 'CRITICAL', effective_status: 'UNDER_INVESTIGATION', needs_review: true, unresolved_component: true, limit: 25, offset: 25 });
+    const url = new URL(fetchMock.mock.calls[0][0], 'http://localhost');
+    expect(Object.fromEntries(url.searchParams)).toMatchObject({ my_work: 'me', assignee: 'membership:42', severity: 'CRITICAL', effective_status: 'UNDER_INVESTIGATION', needs_review: 'true', unresolved_component: 'true', limit: '25', offset: '25' });
+    expect(requestHeaders(0).get('X-Tenant-ID')).toBe('7');
+    await searchVexAssignees('analyst@example.com', 50);
+    expect(requestHeaders(1).get('X-Tenant-ID')).toBe('7');
+    const searchUrl = new URL(fetchMock.mock.calls[1][0], 'http://localhost');
+    expect(Object.fromEntries(searchUrl.searchParams)).toMatchObject({ q: 'analyst@example.com', limit: '50', offset: '50' });
   });
 
   it('omits the tenant header when no tenant is selected', async () => {

@@ -29,10 +29,13 @@ const api = vi.hoisted(() => ({
   setVexInvestigationDecision: vi.fn(),
   setVexInvestigationAssignment: vi.fn(),
   resolveVexInvestigationComponent: vi.fn(),
+  searchVexAssignees: vi.fn(),
 }));
 
 const navigation = vi.hoisted(() => ({ replace: vi.fn(), search: '' }));
 const permissions = vi.hoisted(() => ({ granted: new Set<string>() }));
+const auth = vi.hoisted(() => ({ roles: ['TENANT_ADMIN'] }));
+vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: { userId: 1, roles: auth.roles }, activeTenantId: '1', activeTenant: { roles: auth.roles } }) }));
 
 vi.mock('@/lib/api', () => api);
 vi.mock('next/navigation', () => ({
@@ -240,6 +243,7 @@ function renderPage() {
 beforeEach(() => {
   vi.clearAllMocks();
   navigation.search = '';
+  auth.roles = ['TENANT_ADMIN'];
   permissions.granted = new Set(['vex:read', 'vex:write']);
   api.getCveDetail.mockResolvedValue({ ...FULL_DETAIL, cve_id: detail.vulnerability.canonical_vulnerability_id });
   api.getDashboardVex.mockResolvedValue(summary);
@@ -248,6 +252,7 @@ beforeEach(() => {
   api.setVexInvestigationDecision.mockResolvedValue(detail);
   api.setVexInvestigationAssignment.mockResolvedValue(detail);
   api.resolveVexInvestigationComponent.mockResolvedValue(detail);
+  api.searchVexAssignees.mockResolvedValue({ items: detail.capabilities!.candidates, total: 2, limit: 50, offset: 0 });
 });
 
 describe('summary cards', () => {
@@ -261,7 +266,7 @@ describe('summary cards', () => {
 
   it('clicking a card filters the table__VEX_UI_002', async () => {
     renderPage();
-    fireEvent.click(await screen.findByText('Affected'));
+    fireEvent.click(await screen.findByRole('button', { name: /^Affected/ }));
     await waitFor(() => {
       const last = api.listVexInvestigations.mock.calls.at(-1)?.[0];
       expect(last).toMatchObject({ effective_status: 'AFFECTED' });
@@ -409,6 +414,152 @@ describe('scope selector', () => {
       const last = api.listVexInvestigations.mock.calls.at(-1)?.[0];
       expect(last).toMatchObject({ project_id: 7 });
     });
+  });
+});
+
+describe('work queue filters', () => {
+  it.each(['me', 'unassigned', 'assigned', 'attention', 'all'])('sends My work %s to the paginated API', async value => {
+    renderPage();
+    await screen.findByText('CVE-2026-4001');
+    fireEvent.change(screen.getByLabelText('My work'), { target: { value } });
+    await waitFor(() => expect(api.listVexInvestigations.mock.calls.at(-1)?.[0].my_work).toBe(value === 'all' ? undefined : value));
+  });
+
+  it('combines personal work, severity, status and scope in the URL and request', async () => {
+    navigation.search = 'my_work=me&severity=CRITICAL&effective_status=UNDER_INVESTIGATION&project_id=7&product_id=8&sbom_id=9';
+    renderPage();
+    await screen.findByText('CVE-2026-4001');
+    expect(api.listVexInvestigations.mock.calls.at(-1)?.[0]).toMatchObject({ my_work: 'me', severity: 'CRITICAL', effective_status: 'UNDER_INVESTIGATION', project_id: 7, product_id: 8, sbom_id: 9 });
+    expect(screen.getByLabelText('My work')).toHaveValue('me');
+    expect(screen.getByLabelText('Severity')).toHaveValue('CRITICAL');
+    expect(navigation.replace.mock.calls.at(-1)?.[0]).toContain('my_work=me');
+    fireEvent.click(screen.getAllByText('Investigate')[0]);
+    await screen.findByText('Record a decision');
+    fireEvent.click(screen.getByRole('button', { name: /Close dialog/ }));
+    expect(screen.getByLabelText('My work')).toHaveValue('me');
+    expect(screen.getByLabelText('Severity')).toHaveValue('CRITICAL');
+  });
+
+  it.each(['membership:2', 'membership:3'])('uses the existing searchable selector for %s', async selected => {
+    renderPage();
+    await screen.findByText('CVE-2026-4001');
+    fireEvent.focus(screen.getByRole('combobox', { name: 'Filter by assignee' }));
+    const name = selected === 'membership:2' ? /Alice/ : /Analyst/;
+    fireEvent.click(await screen.findByRole('option', { name }));
+    await waitFor(() => expect(api.listVexInvestigations.mock.calls.at(-1)?.[0]).toMatchObject({ assignee: selected }));
+    expect(navigation.replace.mock.calls.at(-1)?.[0]).toContain(`assignee=${encodeURIComponent(selected)}`);
+  });
+
+  it('debounces assignee email search and preserves investigations on metadata failure', async () => {
+    api.searchVexAssignees.mockRejectedValue(new Error('offline'));
+    renderPage();
+    await screen.findByText('CVE-2026-4001');
+    const input = screen.getByRole('combobox', { name: 'Filter by assignee' });
+    fireEvent.focus(input);
+    expect(await screen.findByText(/Unable to load assignees/)).toBeInTheDocument();
+    expect(screen.getByText('CVE-2026-4001')).toBeInTheDocument();
+    api.searchVexAssignees.mockResolvedValue({ items: detail.capabilities!.candidates, total: 2, limit: 50, offset: 0 });
+    fireEvent.change(input, { target: { value: 'developer@example.com' } });
+    await waitFor(() => expect(api.searchVexAssignees.mock.calls.at(-1)?.[0]).toBe('developer@example.com'));
+  });
+
+  it.each(['TENANT_ADMIN', 'SECURITY_ANALYST', 'DEVELOPER'])('shows quick personal work for %s while preserving All as default', async role => {
+    auth.roles = [role];
+    renderPage();
+    await screen.findByText('CVE-2026-4001');
+    expect(screen.getByLabelText('My work')).toHaveValue('all');
+    fireEvent.click(screen.getByRole('button', { name: 'Assigned to me' }));
+    await waitFor(() => expect(api.listVexInvestigations.mock.calls.at(-1)?.[0]).toMatchObject({ my_work: 'me' }));
+  });
+
+  it('keeps Viewer discovery read-only without personal work navigation', async () => {
+    auth.roles = ['VIEWER'];
+    renderPage();
+    await screen.findByText('CVE-2026-4001');
+    expect(screen.queryByLabelText('My work')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Assigned to me' })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Severity')).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Filter by assignee' })).toBeInTheDocument();
+  });
+
+  it('synchronizes quick filters, removable chips and Clear all', async () => {
+    navigation.search = 'project_id=7&product_id=8&sbom_id=9&q=CVE&component=openssl&my_work=me&assignee=membership%3A2&severity=HIGH&effective_status=AFFECTED&reconciliation_status=MATCHED&needs_review=true&unresolved_component=true';
+    renderPage();
+    await screen.findByText('CVE-2026-4001');
+    fireEvent.click(screen.getByRole('button', { name: 'Critical' }));
+    await waitFor(() => expect(screen.getByLabelText('Severity')).toHaveValue('CRITICAL'));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Severity: Critical filter' }));
+    expect(screen.getByLabelText('Severity')).toHaveValue('');
+    fireEvent.click(screen.getByRole('button', { name: 'Clear all filters' }));
+    await waitFor(() => expect(navigation.replace.mock.calls.at(-1)?.[0]).toBe('/vex-investigation'));
+    expect(screen.getByLabelText('My work')).toHaveValue('all');
+    expect(screen.getByLabelText('Component')).toHaveValue('');
+    expect(screen.getByLabelText('Needs review', { selector: 'input' })).not.toBeChecked();
+  });
+
+  it('distinguishes filtered empty results from an empty queue and request failure', async () => {
+    api.listVexInvestigations.mockResolvedValue({ ...listResponse, total: 0, items: [] });
+    navigation.search = 'my_work=me&severity=HIGH';
+    renderPage();
+    expect(await screen.findByText('No matching investigations')).toBeInTheDocument();
+    expect(screen.queryByText("You're all caught up")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Clear all filters' }));
+    expect(await screen.findByText('No investigations exist')).toBeInTheDocument();
+    api.listVexInvestigations.mockRejectedValue(new Error('offline'));
+    fireEvent.click(screen.getByRole('button', { name: 'Critical' }));
+    expect(await screen.findByText(/Unable to load investigations/)).toBeInTheDocument();
+    expect(screen.queryByText('No matching investigations')).not.toBeInTheDocument();
+  });
+
+  it('shows You in the Owner column from the server identity comparison', async () => {
+    api.listVexInvestigations.mockResolvedValue({ ...listResponse, items: [{ ...listResponse.items[0], assigned_to: 'membership:2', assigned_to_label: 'Alice', assigned_to_is_self: true, assigned_to_active: true }] });
+    renderPage();
+    expect(await screen.findByText('You')).toBeInTheDocument();
+  });
+
+  it('restores changed URL state on browser navigation', async () => {
+    renderPage();
+    await screen.findByText('CVE-2026-4001');
+    navigation.search = 'my_work=unassigned&severity=HIGH';
+    // A rerender represents useSearchParams receiving browser navigation.
+    fireEvent.click(screen.getByRole('button', { name: 'Critical' }));
+    await waitFor(() => expect(screen.getByLabelText('My work')).toHaveValue('unassigned'));
+    expect(screen.getByLabelText('Severity')).toHaveValue('HIGH');
+    expect(api.listVexInvestigations.mock.calls.at(-1)?.[0]).toMatchObject({ my_work: 'unassigned', severity: 'HIGH' });
+  });
+
+  it('opens the mobile filters sheet and applies the same filter state', async () => {
+    renderPage();
+    await screen.findByText('CVE-2026-4001');
+    fireEvent.click(screen.getByRole('button', { name: /^Filters \(/ }));
+    const sheet = screen.getByRole('dialog', { name: 'Investigation filters' });
+    fireEvent.change(within(sheet).getByLabelText('Severity'), { target: { value: 'HIGH' } });
+    fireEvent.click(within(sheet).getByText('Show investigations'));
+    expect(screen.queryByRole('dialog', { name: 'Investigation filters' })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Severity')).toHaveValue('HIGH');
+  });
+
+  it('keeps the same query filters when saving an investigation refreshes the queue', async () => {
+    navigation.search = 'my_work=me&severity=CRITICAL';
+    renderPage();
+    await screen.findByText('CVE-2026-4001');
+    fireEvent.click(screen.getAllByText('Investigate')[0]);
+    await screen.findByText('Record a decision');
+    const requests = api.listVexInvestigations.mock.calls.length;
+    fireEvent.change(screen.getByLabelText(/Reason for this decision/), { target: { value: 'Reviewed my case' } });
+    fireEvent.change(screen.getByLabelText(/^Status/), { target: { value: 'AFFECTED' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save decision' }));
+    await waitFor(() => expect(api.listVexInvestigations.mock.calls.length).toBeGreaterThan(requests));
+    expect(api.listVexInvestigations.mock.calls.at(-1)?.[0]).toMatchObject({ my_work: 'me', severity: 'CRITICAL' });
+  });
+
+  it('preserves bookmarked pagination on initial load', async () => {
+    navigation.search = 'my_work=me&page=2&limit=25';
+    api.listVexInvestigations.mockResolvedValue({ ...listResponse, total: 100, limit: 25, offset: 25 });
+    renderPage();
+    await screen.findByText('CVE-2026-4001');
+    await new Promise(resolve => setTimeout(resolve, 400));
+    expect(api.listVexInvestigations.mock.calls.at(-1)?.[0]).toMatchObject({ my_work: 'me', limit: 25, offset: 25 });
   });
 });
 

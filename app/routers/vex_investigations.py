@@ -12,10 +12,10 @@ query is additionally tenant-scoped in code — the ambient
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, false, func, or_, select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -23,10 +23,12 @@ from ..core.security import CurrentContext, get_current_tenant_context
 from ..db import get_db
 from ..metrics.vex import vex_component_findings, vex_severity_filter_clause
 from ..models import (
+    IAMUser,
     Product,
     Projects,
     SBOMComponent,
     SBOMSource,
+    TenantUser,
     VexInvestigation,
     VexOverrideAudit,
     VexStatement,
@@ -46,7 +48,17 @@ from ..services.vex.audit import (
     record_assignment,
     record_mapping_resolution,
 )
-from ..services.vex.authorization import capabilities, owner, require_assignment, require_update
+from ..services.vex.authorization import (
+    active_roles,
+    actor_roles,
+    capabilities,
+    eligible_members_query,
+    membership,
+    membership_key,
+    owner,
+    require_assignment,
+    require_update,
+)
 from ..services.vex.enums import NEEDS_REVIEW_STATUSES
 from ..services.vex.identity import canonical_vulnerability, parse_alias_column
 
@@ -144,11 +156,13 @@ def _row_payload(
     sbom: SBOMSource | None,
     project: Projects | None,
     product: Product | None,
+    context: CurrentContext | None = None,
 ) -> dict[str, Any]:
     statements = _statements_for(db, investigation)
     effective = next(
         (s for s in statements if s.id == investigation.effective_vex_statement_id), None
     )
+    assigned = owner(db, investigation, context)
     return {
         "id": investigation.id,
         "canonical_vulnerability_id": investigation.canonical_vulnerability_id,
@@ -171,7 +185,9 @@ def _row_payload(
         "reconciliation_status": investigation.reconciliation_status,
         "justification": getattr(effective, "justification", None),
         "assigned_to": investigation.assigned_to,
-        "assigned_to_label": owner(db, investigation)["label"],
+        "assigned_to_label": assigned["label"],
+        "assigned_to_is_self": assigned["is_self"],
+        "assigned_to_active": assigned["active"],
         "reviewed_by": investigation.reviewed_by,
         "last_seen_at": investigation.last_seen_at,
         "updated_at": investigation.updated_at,
@@ -193,6 +209,9 @@ def list_investigations(
     vex_source: str | None = Query(default=None, max_length=255),
     analyzer_source: str | None = Query(default=None, max_length=64),
     needs_review: bool | None = Query(default=None),
+    my_work: Literal["all", "me", "unassigned", "assigned", "attention"] = Query(default="all"),
+    assignee: str | None = Query(default=None, max_length=64),
+    unresolved_component: bool = Query(default=False),
     sort_by: InvestigationSortField = Query(default="last_seen_at"),
     sort_order: SortOrder = Query(default="desc"),
     limit: int = Query(default=50, ge=1, le=500),
@@ -220,6 +239,49 @@ def list_investigations(
         VexInvestigation.tenant_id == tenant_id,
         VexInvestigation.is_current.is_(True),
     ]
+    own_member = membership(db, tenant_id, user_id=context.user_id)
+    own_key = membership_key(own_member) if own_member else None
+    mine = VexInvestigation.assigned_to == own_key if own_key else false()
+    unassigned = or_(VexInvestigation.assigned_to.is_(None), VexInvestigation.assigned_to == "")
+    if my_work == "me":
+        conditions.append(mine)
+    elif my_work == "unassigned":
+        conditions.append(unassigned)
+    elif my_work == "assigned":
+        active_keys = eligible_members_query(tenant_id).with_only_columns(
+            func.concat("membership:", TenantUser.id)
+        )
+        conditions.append(VexInvestigation.assigned_to.in_(active_keys))
+    elif my_work == "attention":
+        roles = actor_roles(db, context)
+        pending = or_(
+            VexInvestigation.effective_status == "UNDER_INVESTIGATION",
+            VexInvestigation.reconciliation_status.in_(_NEEDS_REVIEW_VALUES),
+            VexInvestigation.reconciliation_status == "UNRESOLVED_MAPPING",
+        )
+        # Broad investigators triage the pending queue plus their own affected
+        # cases. Developers have work authority only on their live assignment.
+        own_affected = and_(mine, VexInvestigation.effective_status == "AFFECTED")
+        if roles & {"TENANT_ADMIN", "SECURITY_ANALYST"} and context.has_permission("vex:write"):
+            conditions.append(or_(pending, own_affected))
+        elif "DEVELOPER" in roles:
+            conditions.append(and_(mine, or_(pending, VexInvestigation.effective_status == "AFFECTED")))
+        else:
+            raise HTTPException(403, "Personal work queue is unavailable for this role.")
+    if assignee:
+        if assignee == "me":
+            conditions.append(mine)
+        elif assignee == "unassigned":
+            conditions.append(unassigned)
+        else:
+            target = membership(db, tenant_id, key=assignee)
+            if target is None:
+                raise HTTPException(404, "Assignee not found in this tenant.")
+            # Historical inactive/invalid owners remain discoverable by their
+            # tenant membership key; this never authorizes reassignment.
+            conditions.append(VexInvestigation.assigned_to == membership_key(target))
+    if unresolved_component:
+        conditions.append(VexInvestigation.component_id.is_(None))
     if sbom_id is not None:
         conditions.append(VexInvestigation.sbom_id == sbom_id)
     if project_id is not None:
@@ -235,7 +297,7 @@ def list_investigations(
     if severity and severity.strip():
         conditions.append(vex_severity_filter_clause(severity))
     if component and component.strip():
-        conditions.append(SBOMComponent.name.ilike(f"%{component.strip()}%"))
+        conditions.append(func.concat(SBOMComponent.name, " ", SBOMComponent.version).ilike(f"%{component.strip()}%"))
     if q and q.strip():
         term = f"%{q.strip().upper()}%"
         # Alias search matters: a context canonicalised to its CVE must still
@@ -331,10 +393,33 @@ def list_investigations(
                 sbom=sbom,
                 project=projects.get(getattr(sbom, "projectid", None)),
                 product=products.get(getattr(sbom, "product_id", None)),
+                context=context,
             )
         )
 
     return {"total": int(total), "limit": limit, "offset": offset, "items": items}
+
+
+@router.get("/api/vex/investigations/assignees")
+def investigation_assignees(
+    q: str = Query(default="", max_length=255),
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+    context: CurrentContext = Depends(get_current_tenant_context),
+) -> dict[str, Any]:
+    """Paged tenant-only owner discovery, independent of delegation rights."""
+    query = eligible_members_query(_tenant_id(context))
+    if q.strip():
+        term = f"%{q.strip()}%"
+        query = query.where(or_(IAMUser.display_name.ilike(term), IAMUser.email.ilike(term)))
+    total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
+    members = db.scalars(query.order_by(IAMUser.display_name, TenantUser.id).offset(offset).limit(limit)).all()
+    return {"total": total, "limit": limit, "offset": offset, "items": [
+        {"id": membership_key(member), "label": member.user.display_name or member.user.email or "Tenant user",
+         "email": member.user.email, "roles": sorted(active_roles(db, member))}
+        for member in members
+    ]}
 
 
 @router.get("/api/vex/investigations/resolve", response_model=InvestigationDetail)

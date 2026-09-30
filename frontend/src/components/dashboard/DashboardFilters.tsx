@@ -15,6 +15,7 @@ interface Props {
   scope: DashboardFilterScope;
   onChange: (scope: DashboardFilterScope) => void;
   isUpdating: boolean;
+  hideClear?: boolean;
 }
 
 const ALL: DashboardFilterScope = { projectId: null, applicationId: null, sbomId: null };
@@ -30,7 +31,7 @@ function optionElements(items: DashboardOption[], label: 'name' | 'display_name'
   ));
 }
 
-export function DashboardFilters({ scope, onChange, isUpdating }: Props) {
+export function DashboardFilters({ scope, onChange, isUpdating, hideClear = false }: Props) {
   const { activeTenant, activeTenantId } = useAuth();
   const tenantId = activeTenantId ?? '';
   const projects = useQuery({
@@ -84,14 +85,14 @@ export function DashboardFilters({ scope, onChange, isUpdating }: Props) {
             .filter(Boolean).join(' › ')}
           {isUpdating ? ' · Updating dashboard…' : ''}
         </p>
-        <button
+        {!hideClear ? <button
           type="button"
           onClick={() => onChange(ALL)}
           disabled={!scope.projectId && !scope.applicationId && !scope.sbomId}
           className="rounded-md border border-[var(--dashboard-border-strong)] px-2.5 py-1 text-xs font-medium text-hcl-blue transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/40 disabled:cursor-default disabled:opacity-50"
         >
           Clear all filters
-        </button>
+        </button> : null}
       </div>
       {scope.projectId && !applications.isPending && applications.data?.items.length === 0 &&
         <p className="mt-2 text-sm text-hcl-muted">No applications are available in this project.</p>}

@@ -1821,6 +1821,8 @@ export interface VexInvestigationRow {
   justification: string | null;
   assigned_to: string | null;
   assigned_to_label?: string | null;
+  assigned_to_is_self?: boolean;
+  assigned_to_active?: boolean;
   reviewed_by: string | null;
   last_seen_at: string | null;
   updated_at: string | null;
@@ -1931,6 +1933,9 @@ export interface VexInvestigationDetail {
 }
 
 export interface VexInvestigationListParams {
+  my_work?: 'all' | 'me' | 'unassigned' | 'assigned' | 'attention';
+  assignee?: string;
+  unresolved_component?: boolean;
   project_id?: number;
   product_id?: number;
   sbom_id?: number;

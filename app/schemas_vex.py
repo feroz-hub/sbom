@@ -62,6 +62,8 @@ class InvestigationRow(BaseModel):
 
     assigned_to: str | None = None
     assigned_to_label: str | None = None
+    assigned_to_is_self: bool = False
+    assigned_to_active: bool = False
     reviewed_by: str | None = None
     last_seen_at: str | None = None
     updated_at: str | None = None

@@ -2906,6 +2906,8 @@ export function listVexInvestigations(
     'analyzer_source',
     'sort_by',
     'sort_order',
+    'my_work',
+    'assignee',
   ];
   textParams.forEach((key) => {
     const value = args[key];
@@ -2916,6 +2918,7 @@ export function listVexInvestigations(
     if (typeof value === 'number') params.set(key, String(value));
   });
   if (typeof args.needs_review === 'boolean') params.set('needs_review', String(args.needs_review));
+  if (args.unresolved_component) params.set('unresolved_component', 'true');
   params.set('limit', String(args.limit ?? 50));
   params.set('offset', String(args.offset ?? 0));
   return request<VexInvestigationListResponse>(`/api/vex/investigations?${params.toString()}`, { signal });
@@ -2926,6 +2929,14 @@ export function getVexInvestigation(
   signal?: AbortSignal,
 ): Promise<VexInvestigationDetail> {
   return request<VexInvestigationDetail>(`/api/vex/investigations/${investigationId}`, { signal });
+}
+
+export function searchVexAssignees(q = '', offset = 0, signal?: AbortSignal): Promise<{
+  items: NonNullable<VexInvestigationDetail['capabilities']>['candidates'];
+  total: number; limit: number; offset: number;
+}> {
+  const params = new URLSearchParams({ q, limit: '50', offset: String(offset) });
+  return request(`/api/vex/investigations/assignees?${params}`, { signal });
 }
 
 /**

@@ -13,13 +13,15 @@
  * of empty table between pages.
  */
 
-import { Suspense, useEffect, useMemo, useState } from 'react';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { AlertTriangle, ShieldQuestion } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { DashboardFilters } from '@/components/dashboard/DashboardFilters';
 import { TopBar } from '@/components/layout/TopBar';
 import { VexInvestigationDialog } from '@/components/vex/VexInvestigationDialog';
+import { AssigneeCombobox } from '@/components/vex/AssigneeCombobox';
+import { Dialog } from '@/components/ui/Dialog';
 import { Alert } from '@/components/ui/Alert';
 import { Badge, SeverityBadge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -28,13 +30,15 @@ import { Input } from '@/components/ui/Input';
 import { Pagination } from '@/components/ui/Pagination';
 import { Select } from '@/components/ui/Select';
 import { SkeletonRow } from '@/components/ui/Spinner';
-import { EmptyRow, SortableTh, Table, TableBody, TableHead, Td, Th } from '@/components/ui/Table';
+import { SortableTh, Table, TableBody, TableHead, Td, Th } from '@/components/ui/Table';
 import { TableFilterBar, TableSearchInput } from '@/components/ui/TableFilterBar';
 import { usePermission } from '@/hooks/usePermission';
+import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/useToast';
 import {
   getDashboardVex,
   listVexInvestigations,
+  searchVexAssignees,
   type DashboardFilterScope,
 } from '@/lib/api';
 import type {
@@ -81,6 +85,9 @@ const FLAGGED_RECONCILIATION = new Set([
 ]);
 
 type Filters = {
+  myWork: 'all' | 'me' | 'unassigned' | 'assigned' | 'attention';
+  assignee: string;
+  unresolvedComponent: boolean;
   search: string;
   effectiveStatus: string;
   reconciliationStatus: string;
@@ -93,6 +100,9 @@ type Filters = {
 };
 
 const DEFAULT_FILTERS: Filters = {
+  myWork: 'all',
+  assignee: '',
+  unresolvedComponent: false,
   search: '',
   effectiveStatus: '',
   reconciliationStatus: '',
@@ -121,6 +131,10 @@ function initialState(searchParams: URLSearchParams | Readonly<URLSearchParams>)
   const sortBy = searchParams.get('sort_by');
   const sortOrder = searchParams.get('sort_order');
   const filters: Filters = {
+    myWork: ['me', 'unassigned', 'assigned', 'attention'].includes(searchParams.get('my_work') ?? '')
+      ? searchParams.get('my_work') as Filters['myWork'] : 'all',
+    assignee: searchParams.get('assignee')?.trim() ?? '',
+    unresolvedComponent: searchParams.get('unresolved_component') === 'true',
     search: searchParams.get('q')?.trim() ?? '',
     effectiveStatus: searchParams.get('effective_status')?.trim() ?? '',
     reconciliationStatus: searchParams.get('reconciliation_status')?.trim() ?? '',
@@ -138,6 +152,11 @@ function initialState(searchParams: URLSearchParams | Readonly<URLSearchParams>)
     page: positiveInteger(searchParams.get('page'), 1),
     pageSize: positiveInteger(searchParams.get('limit'), DEFAULT_PAGE_SIZE, 250),
   };
+}
+
+const WORK_LABELS = { all: 'All investigations', me: 'Assigned to me', unassigned: 'Unassigned', assigned: 'Assigned', attention: 'Needs my attention' };
+function readable(value: string) {
+  return value.toLowerCase().replaceAll('_', ' ').replace(/^./, first => first.toUpperCase());
 }
 
 function statusVariant(status: string): 'error' | 'success' | 'warning' | 'info' | 'gray' {
@@ -162,10 +181,21 @@ function VexInvestigationContent() {
   const { showToast } = useToast();
   // Backend remains the gate (VEX-SEC-001); this only shapes the UI.
   const canRead = usePermission('vex:read');
+  const { user, activeTenant, activeTenantId } = useAuth();
+  const workingRole = Boolean(user?.isPlatformAdmin || (activeTenant?.roles ?? user?.roles ?? []).some(role => ['TENANT_ADMIN', 'SECURITY_ANALYST', 'DEVELOPER'].includes(role)));
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [assigneeSearch, setAssigneeSearch] = useState('');
+  const [debouncedAssigneeSearch, setDebouncedAssigneeSearch] = useState('');
+  const [assigneeLabel, setAssigneeLabel] = useState('');
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedAssigneeSearch(assigneeSearch.trim()), 300);
+    return () => window.clearTimeout(timer);
+  }, [assigneeSearch]);
 
   const [initial] = useState(() => initialState(searchParams));
   const [filters, setFilters] = useState<Filters>(initial.filters);
   const [searchInput, setSearchInput] = useState(initial.filters.search);
+  const [componentInput, setComponentInput] = useState(initial.filters.component);
   const [page, setPage] = useState(initial.page);
   const [pageSize, setPageSize] = useState(initial.pageSize);
   const [selected, setSelected] = useState<{ row: VexInvestigationRow; tab: 'details' | 'investigation' } | null>(null);
@@ -178,15 +208,40 @@ function VexInvestigationContent() {
   }));
 
   useEffect(() => {
+    if (searchInput.trim() === filters.search) return;
     const timer = window.setTimeout(() => {
       const search = searchInput.trim();
       setFilters((current) => (current.search === search ? current : { ...current, search }));
       setPage(1);
     }, 350);
     return () => window.clearTimeout(timer);
-  }, [searchInput]);
+  }, [searchInput, filters.search]);
+  useEffect(() => {
+    if (componentInput.trim() === filters.component) return;
+    const timer = window.setTimeout(() => { setFilters(current => ({ ...current, component: componentInput.trim() })); setPage(1); }, 300);
+    return () => window.clearTimeout(timer);
+  }, [componentInput, filters.component]);
+
+  // Ignore our own URL writes, but restore state on browser back/forward.
+  const incomingUrl = searchParams.toString();
+  const observedUrl = useRef(incomingUrl);
+  const writtenUrl = useRef(incomingUrl);
+  const restoringUrl = useRef(false);
+  useEffect(() => {
+    if (incomingUrl === observedUrl.current) return;
+    observedUrl.current = incomingUrl;
+    if (incomingUrl === writtenUrl.current) return;
+    restoringUrl.current = true;
+    const restored = initialState(new URLSearchParams(incomingUrl));
+    setFilters(restored.filters); setSearchInput(restored.filters.search);
+    setComponentInput(restored.filters.component);
+    setPage(restored.page); setPageSize(restored.pageSize);
+    const params = new URLSearchParams(incomingUrl);
+    setScope({ projectId: positiveOrNull(params.get('project_id')), applicationId: positiveOrNull(params.get('product_id')), sbomId: positiveOrNull(params.get('sbom_id')) });
+  }, [incomingUrl]);
 
   useEffect(() => {
+    if (restoringUrl.current) { restoringUrl.current = false; return; }
     const params = new URLSearchParams();
     if (filters.search) params.set('q', filters.search);
     if (filters.effectiveStatus) params.set('effective_status', filters.effectiveStatus);
@@ -195,6 +250,9 @@ function VexInvestigationContent() {
     if (filters.component) params.set('component', filters.component);
     if (filters.vexSource) params.set('vex_source', filters.vexSource);
     if (filters.needsReview) params.set('needs_review', 'true');
+    if (filters.myWork !== 'all') params.set('my_work', filters.myWork);
+    if (filters.assignee) params.set('assignee', filters.assignee);
+    if (filters.unresolvedComponent) params.set('unresolved_component', 'true');
     if (filters.sortBy !== DEFAULT_FILTERS.sortBy) params.set('sort_by', filters.sortBy);
     if (filters.sortOrder !== DEFAULT_FILTERS.sortOrder) params.set('sort_order', filters.sortOrder);
     if (page !== 1) params.set('page', String(page));
@@ -203,22 +261,27 @@ function VexInvestigationContent() {
     if (scope.applicationId) params.set('product_id', String(scope.applicationId));
     if (scope.sbomId) params.set('sbom_id', String(scope.sbomId));
     const query = params.toString();
+    writtenUrl.current = query;
     router.replace(query ? `/vex-investigation?${query}` : '/vex-investigation', { scroll: false });
   }, [filters, page, pageSize, scope, router]);
 
   const offset = (page - 1) * pageSize;
 
   const summaryQuery = useQuery<DashboardVex>({
-    queryKey: ['dashboard-vex'],
+    queryKey: ['dashboard-vex', activeTenantId],
     queryFn: ({ signal }) => getDashboardVex(signal),
+    enabled: canRead,
   });
 
   const listQuery = useQuery({
-    queryKey: ['vex-investigations', filters, scope, page, pageSize],
+    queryKey: ['vex-investigations', activeTenantId, filters, scope, page, pageSize],
     queryFn: ({ signal }) =>
       listVexInvestigations(
         {
           q: filters.search || undefined,
+          my_work: filters.myWork === 'all' ? undefined : filters.myWork,
+          assignee: filters.assignee || undefined,
+          unresolved_component: filters.unresolvedComponent || undefined,
           effective_status: filters.effectiveStatus || undefined,
           reconciliation_status: filters.reconciliationStatus || undefined,
           severity: filters.severity || undefined,
@@ -235,15 +298,24 @@ function VexInvestigationContent() {
         },
         signal,
       ),
-    placeholderData: keepPreviousData,
+    placeholderData: (previous, previousQuery) => previousQuery?.queryKey[1] === activeTenantId ? previous : undefined,
     enabled: canRead,
   });
+
+  const assigneesQuery = useInfiniteQuery({
+    queryKey: ['vex-assignees', activeTenantId, debouncedAssigneeSearch],
+    queryFn: ({ pageParam, signal }) => searchVexAssignees(debouncedAssigneeSearch, pageParam, signal),
+    initialPageParam: 0,
+    getNextPageParam: last => last.offset + last.items.length < last.total ? last.offset + last.limit : undefined,
+    enabled: canRead,
+  });
+  const assignees = assigneesQuery.data?.pages.flatMap(part => part.items) ?? [];
 
   const total = listQuery.data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages]);
+    if (!listQuery.isFetching && !listQuery.isPlaceholderData && listQuery.data && page > totalPages) setPage(totalPages);
+  }, [page, totalPages, listQuery.isFetching, listQuery.isPlaceholderData, listQuery.data]);
 
   const rows = listQuery.data?.items ?? [];
   const summary = summaryQuery.data;
@@ -275,6 +347,7 @@ function VexInvestigationContent() {
   function applyCardFilter(patch: Partial<Filters>) {
     setFilters({ ...DEFAULT_FILTERS, search: '', ...patch });
     setSearchInput('');
+    setComponentInput('');
     setPage(1);
   }
 
@@ -282,6 +355,56 @@ function VexInvestigationContent() {
     setFilters((current) => ({ ...current, ...patch }));
     setPage(1);
   }
+
+  function clearFilters() {
+    setFilters(DEFAULT_FILTERS); setSearchInput(''); setAssigneeLabel('');
+    setComponentInput('');
+    setScope({ projectId: null, applicationId: null, sbomId: null }); setPage(1);
+  }
+
+  const personalWorkActive = filters.myWork === 'me' || filters.assignee === 'me';
+  const unassignedActive = filters.myWork === 'unassigned' || filters.assignee === 'unassigned';
+
+  const chips: Array<{ label: string; clear: () => void }> = [];
+  if (filters.myWork !== 'all') chips.push({ label: WORK_LABELS[filters.myWork], clear: () => updateFilter({ myWork: 'all' }) });
+  if (filters.assignee) chips.push({ label: `Assignee: ${filters.assignee === 'me' ? 'Me' : filters.assignee === 'unassigned' ? 'Unassigned' : assignees.find(item => item.id === filters.assignee)?.label || assigneeLabel || 'Selected tenant user'}`, clear: () => updateFilter({ assignee: '' }) });
+  for (const [key, label] of [['severity', 'Severity'], ['effectiveStatus', 'Effective'], ['reconciliationStatus', 'Reconciliation'], ['component', 'Component'], ['vexSource', 'VEX source']] as const) {
+    if (filters[key]) chips.push({ label: `${label}: ${readable(filters[key])}`, clear: () => { if (key === 'component') setComponentInput(''); updateFilter({ [key]: '' }); } });
+  }
+  if (filters.search) chips.push({ label: `Search: ${filters.search}`, clear: () => { setSearchInput(''); updateFilter({ search: '' }); } });
+  if (filters.needsReview) chips.push({ label: 'Needs review', clear: () => updateFilter({ needsReview: false }) });
+  if (filters.unresolvedComponent) chips.push({ label: 'Unresolved component', clear: () => updateFilter({ unresolvedComponent: false }) });
+  for (const [key, label] of [['projectId', 'Project'], ['applicationId', 'Application'], ['sbomId', 'SBOM']] as const) {
+    if (scope[key]) chips.push({ label: `${label} selected`, clear: () => { setScope(current => key === 'projectId' ? { projectId: null, applicationId: null, sbomId: null } : key === 'applicationId' ? { ...current, applicationId: null, sbomId: null } : { ...current, sbomId: null }); setPage(1); } });
+  }
+  const scopeControls = <DashboardFilters scope={scope} hideClear onChange={next => { setScope(next); setPage(1); }} isUpdating={listQuery.isFetching} />;
+  const filterControls = <div className="flex flex-wrap items-end gap-3">
+    {workingRole ? <Select label="My work" value={filters.myWork} onChange={event => updateFilter({ myWork: event.target.value as Filters['myWork'], assignee: '' })}>
+      {Object.entries(WORK_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+    </Select> : null}
+    <div className="min-w-[12rem] flex-1">
+      <AssigneeCombobox compact label="Filter by assignee" selected={filters.assignee}
+        selectedLabel={assigneeLabel || (filters.assignee ? 'Selected tenant user' : 'All assignees')}
+        candidates={[...(!assigneeSearch.trim() ? [{ id: '', label: 'All assignees', roles: [] }, ...(workingRole ? [{ id: 'me', label: 'Me', roles: [] }] : []), { id: 'unassigned', label: 'Unassigned', roles: [] }] : []), ...assignees]}
+        onSearch={setAssigneeSearch} loading={assigneesQuery.isFetching || assigneeSearch.trim() !== debouncedAssigneeSearch}
+        error={assigneesQuery.isError} onRetry={() => assigneesQuery.refetch()}
+        onLoadMore={assigneesQuery.hasNextPage ? () => assigneesQuery.fetchNextPage() : undefined}
+        onSelect={id => { setAssigneeLabel(assignees.find(item => item.id === id)?.label ?? (id === 'me' ? 'Me' : id === 'unassigned' ? 'Unassigned' : 'All assignees')); updateFilter({ assignee: id, myWork: 'all' }); }} />
+    </div>
+    <Select label="Severity" value={filters.severity} onChange={event => updateFilter({ severity: event.target.value })}>
+      <option value="">All severities</option>{['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'].map(value => <option key={value} value={value}>{readable(value)}</option>)}
+    </Select>
+    <Select label="Effective status" value={filters.effectiveStatus} onChange={event => updateFilter({ effectiveStatus: event.target.value })}>
+      <option value="">All effective statuses</option>{EFFECTIVE_STATUSES.map(value => <option key={value} value={value}>{readable(value)}</option>)}
+    </Select>
+    <Select label="Reconciliation status" value={filters.reconciliationStatus} onChange={event => updateFilter({ reconciliationStatus: event.target.value })}>
+      <option value="">All reconciliation states</option>{RECONCILIATION_STATUSES.map(value => <option key={value} value={value}>{readable(value)}</option>)}
+    </Select>
+    <Input label="Component" value={componentInput} onChange={event => setComponentInput(event.target.value)} placeholder="Name or version" />
+    {/* Review is the conflict/revalidation union, distinct from mapping. */}
+    <label className="flex items-center gap-2 rounded border border-border px-2 py-2 text-xs"><input type="checkbox" checked={filters.needsReview} onChange={event => updateFilter({ needsReview: event.target.checked })} />Needs review</label>
+    <label title="Contexts without a resolved component, including VEX-only records." className="flex items-center gap-2 rounded border border-border px-2 py-2 text-xs"><input type="checkbox" checked={filters.unresolvedComponent} onChange={event => updateFilter({ unresolvedComponent: event.target.checked })} />Unresolved component</label>
+  </div>;
 
   if (!canRead) {
     return (
@@ -298,6 +421,7 @@ function VexInvestigationContent() {
     <>
       <TopBar title="VEX Investigation" />
       <div className="space-y-4 p-6">
+        <p className="text-xs text-hcl-muted">Tenant overview · metrics below are independent of queue filters.</p>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
           {cards.map((card) => (
             <button
@@ -317,61 +441,40 @@ function VexInvestigationContent() {
         </div>
 
         <Card>
-          <div className="border-b border-gray-200 p-3 dark:border-gray-800">
-            <DashboardFilters
-              scope={scope}
-              onChange={(next) => {
-                setScope(next);
-                setPage(1);
-              }}
-              isUpdating={listQuery.isFetching}
-            />
+          <div className="hidden border-b border-gray-200 p-3 sm:block dark:border-gray-800">
+            {!mobileFiltersOpen ? scopeControls : null}
           </div>
           <TableFilterBar>
             <TableSearchInput
               value={searchInput}
               onChange={setSearchInput}
-              placeholder="Vulnerability ID or alias..."
+              label="Search vulnerability"
+              placeholder="Search CVE, alias or vulnerability..."
             />
-            <Select
-              value={filters.effectiveStatus}
-              onChange={(event) => updateFilter({ effectiveStatus: event.target.value })}
-              aria-label="Effective status"
-            >
-              <option value="">All effective statuses</option>
-              {EFFECTIVE_STATUSES.map((status) => (
-                <option key={status} value={status}>
-                  {status.replace(/_/g, ' ')}
-                </option>
-              ))}
-            </Select>
-            <Select
-              value={filters.reconciliationStatus}
-              onChange={(event) => updateFilter({ reconciliationStatus: event.target.value })}
-              aria-label="Reconciliation status"
-            >
-              <option value="">All reconciliation states</option>
-              {RECONCILIATION_STATUSES.map((status) => (
-                <option key={status} value={status}>
-                  {status.replace(/_/g, ' ')}
-                </option>
-              ))}
-            </Select>
-            <Input
-              value={filters.component}
-              onChange={(event) => updateFilter({ component: event.target.value })}
-              placeholder="Component"
-              aria-label="Component"
-            />
-            <label className="flex items-center gap-2 text-xs text-hcl-muted">
-              <input
-                type="checkbox"
-                checked={filters.needsReview}
-                onChange={(event) => updateFilter({ needsReview: event.target.checked })}
-              />
-              Needs review
-            </label>
+            <Button variant="outline" className="sm:hidden" onClick={() => setMobileFiltersOpen(true)}>Filters ({chips.length})</Button>
           </TableFilterBar>
+          <div className="hidden border-b border-border p-3 sm:block">{!mobileFiltersOpen ? filterControls : null}</div>
+          <Dialog open={mobileFiltersOpen} onClose={() => setMobileFiltersOpen(false)} title="Investigation filters">
+            <div className="space-y-3 p-4">{scopeControls}{filterControls}
+              {chips.length ? <Button variant="ghost" onClick={clearFilters}>Clear all filters</Button> : null}
+              <Button onClick={() => setMobileFiltersOpen(false)}>Show investigations</Button>
+            </div>
+          </Dialog>
+          <div className="space-y-2 border-b border-border px-4 py-3">
+            <div className="flex flex-wrap gap-2">
+              {workingRole ? <Button size="sm" variant={personalWorkActive ? 'primary' : 'outline'} aria-pressed={personalWorkActive} onClick={() => updateFilter({ myWork: personalWorkActive ? 'all' : 'me', assignee: '' })}>Assigned to me</Button> : null}
+              {workingRole ? <Button size="sm" variant="ghost" aria-pressed={unassignedActive} onClick={() => updateFilter({ myWork: unassignedActive ? 'all' : 'unassigned', assignee: '' })}>Unassigned</Button> : null}
+              <Button size="sm" variant="ghost" aria-pressed={filters.needsReview} onClick={() => updateFilter({ needsReview: !filters.needsReview })}>Needs review</Button>
+              <Button size="sm" variant="ghost" aria-pressed={filters.severity === 'CRITICAL'} onClick={() => updateFilter({ severity: filters.severity === 'CRITICAL' ? '' : 'CRITICAL' })}>Critical</Button>
+              <Button size="sm" variant="ghost" aria-pressed={filters.reconciliationStatus === 'UNRESOLVED_MAPPING'} onClick={() => updateFilter({ reconciliationStatus: filters.reconciliationStatus === 'UNRESOLVED_MAPPING' ? '' : 'UNRESOLVED_MAPPING' })}>Unresolved mapping</Button>
+            </div>
+            {chips.length ? <div className="flex flex-wrap items-center gap-2" aria-label="Active filters">
+              {chips.map(chip => <button key={chip.label} type="button" aria-label={`Remove ${chip.label} filter`} onClick={chip.clear} className="rounded-full border border-border px-2.5 py-1 text-xs focus-visible:ring-2 focus-visible:ring-hcl-blue">{chip.label} ×</button>)}
+              <Button size="sm" variant="ghost" onClick={clearFilters}>Clear all filters</Button>
+            </div> : null}
+            <p role="status" className="text-xs text-hcl-muted">{listQuery.isFetching ? 'Updating investigations…' : listQuery.isError ? 'Investigation results unavailable' : `${total} matching investigations`}</p>
+          </div>
+          {listQuery.isError ? <Alert variant="error">Unable to load investigations. <Button size="sm" variant="ghost" onClick={() => listQuery.refetch()}>Retry</Button></Alert> : null}
 
           <Table>
             <TableHead>
@@ -427,8 +530,12 @@ function VexInvestigationContent() {
             <TableBody>
               {listQuery.isLoading ? (
                 <SkeletonRow cols={10} />
-              ) : rows.length === 0 ? (
-                <EmptyRow cols={10} message="No VEX investigations match these filters." />
+              ) : listQuery.isError ? null : rows.length === 0 ? (
+                <tr><td colSpan={10} className="p-8 text-center text-sm">
+                  <p>{workingRole && chips.length === 1 && (filters.myWork === 'me' || filters.assignee === 'me') ? "You're all caught up" : chips.length ? 'No matching investigations' : 'No investigations exist'}</p>
+                  <p className="mt-1 text-xs text-hcl-muted">{filters.myWork === 'me' || filters.assignee === 'me' ? 'No VEX investigations match your personal work filters.' : chips.length ? 'Try changing or clearing some filters.' : 'Investigations will appear when analyzer or VEX evidence is available.'}</p>
+                  {chips.length ? <Button size="sm" variant="ghost" onClick={clearFilters}>Clear filters</Button> : null}
+                </td></tr>
               ) : (
                 rows.map((row) => <InvestigationTableRow key={row.id} row={row} onOpen={(row, tab) => setSelected({ row, tab })} />)
               )}
@@ -509,7 +616,7 @@ function InvestigationTableRow({
           {row.reconciliation_status.replace(/_/g, ' ')}
         </span>
       </Td>
-      <Td>{row.assigned_to_label ?? row.reviewed_by ?? 'Unassigned'}</Td>
+      <Td>{row.assigned_to ? <><span>{row.assigned_to_label ?? 'Legacy assignment'}</span>{row.assigned_to_is_self ? <Badge variant="info">You</Badge> : null}{row.assigned_to_active === false ? <span className="block text-[10px] text-hcl-muted">Inactive or legacy owner</span> : null}</> : <Badge variant="gray">Unassigned</Badge>}</Td>
       <Td>
         <Button variant="ghost" size="sm" onClick={() => onOpen(row, 'investigation')}>
           Investigate

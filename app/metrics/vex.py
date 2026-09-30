@@ -256,26 +256,33 @@ def vex_top_affected_components(
 
 
 def vex_severity_filter_clause(severity: str):
-    """EXISTS predicate matching contexts whose analyser finding has ``severity``.
+    """Predicate matching the newest analyser evidence's displayed severity.
 
     Severity lives on ``AnalysisFinding``, never on the context — VEX does not
     rewrite it (VEX-DATA-005) — so filtering needs a correlated subquery back
     to the findings. It belongs here rather than in the router because routers
     may not query AnalysisFinding directly (``docs/metric-conventions.md``).
 
-    A VEX-only context has no analyser finding and therefore no severity, so
-    it is correctly excluded whenever a severity filter is applied.
+    A VEX-only context has no analyser finding and is included in UNKNOWN.
     """
-    return (
-        select(AnalysisFinding.id)
+    latest_severity = (
+        select(AnalysisFinding.severity)
+        .join(AnalysisRun)
         .where(
             AnalysisFinding.component_id == VexInvestigation.component_id,
             AnalysisFinding.tenant_id == VexInvestigation.tenant_id,
             func.upper(AnalysisFinding.vuln_id) == VexInvestigation.canonical_vulnerability_id,
-            func.lower(AnalysisFinding.severity) == severity.strip().lower(),
+            AnalysisRun.tenant_id == VexInvestigation.tenant_id,
+            AnalysisRun.sbom_id == VexInvestigation.sbom_id,
         )
-        .exists()
+        .order_by(AnalysisFinding.id.desc())
+        .limit(1)
+        .correlate(VexInvestigation)
+        .scalar_subquery()
     )
+    # Match the newest evidence displayed by _severity_for, including VEX-only
+    # and unresolved contexts with no finding rather than losing UNKNOWN rows.
+    return func.coalesce(func.nullif(func.upper(func.trim(latest_severity)), ""), "UNKNOWN") == severity.strip().upper()
 
 
 __all__ = [

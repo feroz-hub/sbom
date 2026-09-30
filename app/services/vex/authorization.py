@@ -10,13 +10,14 @@ import re
 from typing import Any
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from ...core.context import CurrentContext
-from ...models import IAMUser, TenantUser, VexInvestigation
+from ...models import AuthorizationRole, IAMUser, TenantUser, TenantUserRoleAssignment, VexInvestigation
+from ...settings import get_settings
 from .. import platform_service, tenant_role_assignment_service
-from ..identity_verification_policy import verification_complete
+from ..identity_verification_policy import verification_complete, verification_complete_clause
 
 
 def membership_key(member: TenantUser) -> str:
@@ -66,6 +67,36 @@ def eligible_target(roles: frozenset[str], allowed: set[str]) -> bool:
         bool(roles & allowed)
         and "TENANT_ADMIN" not in roles
         and not ("SECURITY_ANALYST" in roles and "SECURITY_ANALYST" not in allowed)
+    )
+
+
+def eligible_members_query(tenant_id: int):
+    """SQL equivalent of active_roles + eligible_target for queue discovery.
+
+    This is read-only discovery of Analyst/Developer owners, not authority to
+    delegate to them. Assignment still runs require_assignment for the caller.
+    """
+    def has_role(codes: set[str]):
+        if get_settings().tenant_role_assignment_mode in {"LEGACY", "COMPARE"}:
+            normalized = func.replace(func.replace(func.upper(func.trim(TenantUser.role)), "-", "_"), " ", "_")
+            return normalized.in_(codes)
+        return select(TenantUserRoleAssignment.id).join(
+            AuthorizationRole, AuthorizationRole.id == TenantUserRoleAssignment.role_id
+        ).where(
+            TenantUserRoleAssignment.tenant_id == tenant_id,
+            TenantUserRoleAssignment.tenant_user_id == TenantUser.id,
+            TenantUserRoleAssignment.status == "ACTIVE",
+            AuthorizationRole.status == "ACTIVE",
+            AuthorizationRole.scope == "TENANT",
+            AuthorizationRole.code.in_(codes),
+        ).exists()
+
+    return select(TenantUser).join(IAMUser, IAMUser.id == TenantUser.user_id).where(
+        TenantUser.tenant_id == tenant_id,
+        TenantUser.status == "ACTIVE",
+        IAMUser.status == "ACTIVE",
+        verification_complete_clause(),
+        and_(has_role({"SECURITY_ANALYST", "DEVELOPER"}), ~has_role({"TENANT_ADMIN"})),
     )
 
 

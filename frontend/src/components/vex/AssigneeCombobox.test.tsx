@@ -15,7 +15,7 @@ describe('Assignee combobox', () => {
     const input = screen.getByRole('combobox', { name: 'Assignee' });
     fireEvent.focus(input);
     expect(screen.getAllByRole('option')).toHaveLength(2);
-    expect(screen.getByRole('listbox').parentElement).toBe(document.body);
+    expect(screen.getByRole('listbox').parentElement?.parentElement).toBe(document.body);
     fireEvent.change(input, { target: { value: 'DEVELOPER@' } });
     expect(screen.getAllByRole('option')).toHaveLength(1);
     fireEvent.keyDown(input, { key: 'Enter' });
@@ -50,5 +50,22 @@ describe('Assignee combobox', () => {
     render(<AssigneeCombobox candidates={[]} selected="" onSelect={vi.fn()} />);
     fireEvent.focus(screen.getByRole('combobox'));
     expect(screen.getByText('No eligible assignees')).toBeInTheDocument();
+  });
+
+  it('announces server-search loading and supports retry and paging from the keyboard', () => {
+    const retry = vi.fn();
+    const more = vi.fn();
+    const props = { candidates: candidates.slice(0, 1), selected: '', onSelect: vi.fn(), onSearch: vi.fn(), onRetry: retry, onLoadMore: more };
+    const view = render(<AssigneeCombobox {...props} loading />);
+    const input = screen.getByRole('combobox');
+    fireEvent.focus(input);
+    expect(screen.getByText('Loading assignees...')).toBeInTheDocument();
+    expect(input).toHaveAttribute('aria-busy', 'true');
+    view.rerender(<AssigneeCombobox {...props} error />);
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(retry).toHaveBeenCalledOnce();
+    view.rerender(<AssigneeCombobox {...props} />);
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    expect(more).toHaveBeenCalledOnce();
   });
 });
