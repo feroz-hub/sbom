@@ -16,8 +16,7 @@ import { TopBar } from '@/components/layout/TopBar';
 export default function SettingsPage() {
   const { hasPermission, user } = useAuth();
   const administration = [
-    { title: 'Users & audit history', href: '/settings/native-users', visible: hasPermission('tenant:user:read') || hasPermission('platform:user:read') },
-    { title: 'Roles, permissions & access management', href: '/settings/tenant', visible: hasPermission('tenant:user:read') },
+    { title: 'Users & Access', href: '/settings/users', visible: hasPermission('tenant:user:read') || hasPermission('platform:user:read') },
     { title: 'Tenants', href: '/settings/platform/tenants', visible: hasPermission('platform:tenant:create') },
     { title: 'Authentication, delivery & operational health', href: '/settings/iam', visible: user?.isPlatformAdmin && hasPermission('platform:user:read') },
     { title: 'Platform administrators', href: '/settings/platform', visible: hasPermission('platform:administrator:read') },

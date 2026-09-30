@@ -348,7 +348,7 @@ describe('Platform tenant onboarding and recovery', () => {
     expect(screen.getAllByText('Tenant status: Pending activation')).toHaveLength(2);
     expect(screen.getByRole('heading', { name: 'Initial Tenant Administrator' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Tenant activation' })).toBeInTheDocument();
-    expect(screen.getAllByRole('link', { name: 'Manage Users' })[0]).toHaveAttribute('href', '/settings/native-users');
+    expect(screen.getAllByRole('link', { name: 'Manage Users' })[0]).toHaveAttribute('href', '/settings/users');
     expect(screen.queryByText('Invitation status: Sent')).not.toBeInTheDocument();
     expect(screen.queryByText('Account status')).not.toBeInTheDocument();
     expect(api.getTenantMembers).not.toHaveBeenCalled();

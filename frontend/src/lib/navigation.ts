@@ -14,6 +14,7 @@ export interface SubNavItem {
   href: string;
   label: string;
   permission?: string;
+  permissionsAny?: string[];
 }
 
 export interface NavItem {
@@ -22,6 +23,7 @@ export interface NavItem {
   icon: LucideIcon;
   children?: SubNavItem[];
   permission?: string;
+  permissionsAny?: string[];
 }
 
 export const navigationItems: NavItem[] = [
@@ -48,9 +50,8 @@ export const navigationItems: NavItem[] = [
     children: [
       { href: '/settings/ai', label: 'AI configuration', permission: 'platform:user:read' },
       { href: '/settings/notifications', label: 'Notifications', permission: 'sbom:read' },
-      { href: '/settings/native-users', label: 'Administration · Users', permission: 'tenant:user:read' },
+      { href: '/settings/users', label: 'Users & Access', permissionsAny: ['platform:user:read', 'tenant:user:read'] },
       { href: '/settings/iam', label: 'Authentication & delivery health', permission: 'platform:user:read' },
-      { href: '/settings/tenant', label: 'Tenant users', permission: 'tenant:user:read' },
       { href: '/settings/platform/tenants', label: 'Platform tenants', permission: 'platform:tenant:create' },
       { href: '/settings/platform', label: 'Platform administrators', permission: 'platform:administrator:read' },
       { href: '/admin/ai-usage', label: 'AI usage', permission: 'platform:user:read' },

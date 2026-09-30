@@ -66,7 +66,7 @@ describe('Native invitation', () => {
     await user.type(screen.getByLabelText(/last name/i), 'Khan');
     await user.type(screen.getByLabelText(/email/i), 'ajmer@example.test');
     await user.click(screen.getByRole('button', { name: /Create and send/ }));
-    expect(await screen.findByRole('link', { name: 'Manage existing membership' })).toHaveAttribute('href', '/settings/tenant');
+    expect(await screen.findByRole('link', { name: 'Manage existing membership' })).toHaveAttribute('href', '/settings/users');
     expect(screen.getByRole('status')).toHaveTextContent('Current roles: DEVELOPER');
   });
 });

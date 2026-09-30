@@ -27,11 +27,11 @@ export function memberDisplayName(member: TenantMember): string {
  * The Tenant Members section — one implementation for both places tenant
  * memberships are managed:
  *
- *   * `/settings/tenant` — the acting user's own tenant.
+ *   * `/settings/users` — the acting user's own tenant.
  *   * `/settings/platform/tenants/[tenantId]` — an arbitrary tenant in
  *     explicit platform context, without switching the active tenant.
  *
- * Extracted from the `/settings/tenant` page verbatim so the two surfaces
+ * Shared with TenantUsersAccess so the two surfaces
  * cannot drift again: the platform page had kept an older inline
  * `<select multiple>` + text-button flow long after this one replaced it.
  * The component owns presentation only — every mutation, tenant id and
