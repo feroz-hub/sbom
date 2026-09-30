@@ -64,6 +64,51 @@ def tenant_actor(current, tenant_id=1):
     )
 
 
+@pytest.mark.parametrize("role", ["DEVELOPER", "SECURITY_ANALYST", "VIEWER"])
+def test_tenant_admin_can_readd_removed_native_account_without_external_id(setup, role):
+    client, current, uid, members, token = setup
+    tenant_actor(current)
+    with SessionLocal() as db:
+        user = db.get(IAMUser, uid)
+        assert user.external_iam_user_id is None
+        identity_count = db.scalar(select(func.count()).select_from(IAMUser))
+    removed = client.delete(f"/api/tenants/1/users/{members[1]}")
+    assert removed.status_code == 204, removed.text
+    candidates = client.get("/api/tenants/1/user-candidates?q=john")
+    assert candidates.status_code == 200, candidates.text
+    assert uid in [item["id"] for item in candidates.json()["items"]]
+    added = client.post("/api/tenants/1/users", json={"user_id": uid, "roles": [role]})
+    assert added.status_code == 201, added.text
+    assert added.json()["user_id"] == uid
+    assert added.json()["roles"] == [role]
+    with SessionLocal() as db:
+        assert db.scalar(select(func.count()).select_from(IAMUser)) == identity_count
+        assert db.query(TenantUser).filter_by(tenant_id=1, user_id=uid).count() == 1
+        assert db.query(TenantUser).filter_by(tenant_id=2, user_id=uid).one().role == "VIEWER"
+
+
+def test_add_member_identity_validation_and_tenant_scope(setup):
+    client, current, uid, members, token = setup
+    tenant_actor(current)
+    assert client.post("/api/tenants/1/users", json={"roles": ["VIEWER"]}).status_code == 422
+    assert client.post("/api/tenants/1/users", json={"user_id": 999999, "roles": ["VIEWER"]}).status_code == 404
+    assert client.post("/api/tenants/1/users", json={"user_id": uid, "external_user_id": "mismatched", "roles": ["VIEWER"]}).status_code == 422
+    assert client.post("/api/tenants/2/users", json={"user_id": uid, "roles": ["VIEWER"]}).status_code == 404
+    assert client.post("/api/tenants/1/users", json={"user_id": uid, "roles": ["TENANT_ADMIN"]}).status_code == 403
+
+
+def test_add_member_preserves_legacy_external_identity_requests(setup):
+    client, current, uid, members, token = setup
+    tenant_actor(current)
+    with SessionLocal() as db:
+        user = seed_user(db, email="legacy.member@example.test")
+        user_id, external_id = user.id, user.external_iam_user_id
+        db.commit()
+    response = client.post("/api/tenants/1/users", json={"external_user_id": external_id, "roles": ["DEVELOPER"]})
+    assert response.status_code == 201, response.text
+    assert response.json()["user_id"] == user_id
+
+
 def test_platform_list_filters_detail_and_redaction(setup):
     client, actor, uid, members, token = setup
     for query in [
