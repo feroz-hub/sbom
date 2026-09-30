@@ -35,7 +35,7 @@ import { getRoleCode, getRoleLabel } from '@/lib/roles';
 /**
  * Platform → Tenants → Manage.
  *
- * Member and role management is the SAME UX as `/settings/tenant`: the shared
+ * Member and role management is the SAME UX as `/settings/users`: the shared
  * {@link TenantMembersTable} (role badges + per-row action menu), the
  * {@link ManageRolesModal} and the membership confirm dialogs. What differs is
  * the context, and only the context: every operation targets
@@ -295,7 +295,7 @@ export default function PlatformTenantDetailPage({
         </form>
       </section>
 
-      {/* Members — identical to /settings/tenant, scoped to the route tenant. */}
+      {/* Members — identical to /settings/users, scoped to the route tenant. */}
       <TenantMembersTable
         members={members.data}
         isLoading={members.isLoading}

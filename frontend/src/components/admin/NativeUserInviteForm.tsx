@@ -62,6 +62,6 @@ export default function NativeUserInviteForm({ onCreated, onCancel, onBusyChange
       </fieldset>
       <div className="flex justify-end gap-3 border-t border-border pt-5">{onCancel && <Button variant="secondary" disabled={busy} onClick={onCancel}>Cancel</Button>}<Button type="submit" loading={busy} disabled={!(platform ? selectedTenant : activeTenantId)}>{busy ? 'Creating user…' : 'Create and send invitation'}</Button></div>
     </form>{message && <p role="status">{message}</p>}
-    {conflictTenant && <Link href={platform ? `/settings/platform/tenants/${conflictTenant}` : '/settings/tenant'}>Manage existing membership</Link>}
+    {conflictTenant && <Link href={platform ? `/settings/platform/tenants/${conflictTenant}` : '/settings/users'}>Manage existing membership</Link>}
   </section>;
 }

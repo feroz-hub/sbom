@@ -140,7 +140,7 @@ export function PlatformTenantOverview({
     pending &&
     Boolean(administrator?.user_id && administrator.email) &&
     canResend;
-  const manageHref = pending ? "/settings/native-users" : "#tenant-users";
+  const manageHref = pending ? "/settings/users" : "#tenant-users";
   const manageLink = (primary = false) =>
     canManageUsers && (
       <Link

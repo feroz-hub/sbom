@@ -7,6 +7,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from '@/hooks/useToast';
 
 let mockPlatform = true;
+let mockReadOnly = false;
+vi.mock('@/components/admin/NativeUserInviteForm', () => ({ default: ({ onCreated }: { onCreated: () => void }) => <button onClick={onCreated}>Complete invitation</button> }));
 
 const api = vi.hoisted(() => ({
   getTenantMembers: vi.fn(),
@@ -35,7 +37,7 @@ vi.mock('@/hooks/useAuth', () => ({
     activeTenantId: 1,
     activeTenant: { id: 1, name: 'Default Tenant', slug: 'default', externalIamTenantId: 'local-default', status: 'ACTIVE', role: 'TENANT_ADMIN', membershipStatus: 'ACTIVE' },
     tenants: [{ id: 1, name: 'Default Tenant', slug: 'default', externalIamTenantId: 'local-default', status: 'ACTIVE', role: 'TENANT_ADMIN', membershipStatus: 'ACTIVE' }],
-    hasPermission: () => true,
+    hasPermission: (permission: string) => !mockReadOnly || permission === 'tenant:user:read',
     isLoading: false,
     isTenantContextLoading: false,
     refreshSession: vi.fn(),
@@ -47,7 +49,7 @@ vi.mock('@/lib/api', async (importOriginal) => ({
   ...api,
 }));
 
-import TenantUsersPage from './page';
+import TenantUsersPage from '@/components/admin/TenantUsersAccess';
 
 const member = {
   membership_id: 9,
@@ -71,6 +73,7 @@ function renderPage() {
 
 describe('TenantUsersPage', () => {
   beforeEach(() => {
+    mockReadOnly = false;
   mockPlatform = true;
     vi.clearAllMocks();
     api.getTenantMembers.mockResolvedValue([member]);
@@ -103,6 +106,28 @@ describe('TenantUsersPage', () => {
     expect(screen.getAllByText('Managed in SBOM')[0]).toBeInTheDocument();
     expect(screen.queryByText(/External tenant mapping/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Technical identity details/i)).not.toBeInTheDocument();
+  });
+  it('invites from the tenant view and refreshes members and audit after success', async () => {
+    mockPlatform = false;
+    const invalidate = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(screen.getByRole('button', { name: '+ Invite new user' }));
+    expect(screen.getByRole('dialog', { name: 'Invite new user' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Complete invitation' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tenant-users', 1] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tenant-audit-history', 1] });
+    expect(screen.getByRole('heading', { name: 'Add existing member' })).toBeInTheDocument();
+    invalidate.mockRestore();
+  });
+  it('does not show mutation controls with tenant read permission alone', async () => {
+    mockReadOnly = true;
+    renderPage();
+    await screen.findAllByText('Example User');
+    expect(screen.queryByRole('button', { name: '+ Invite new user' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Add existing member' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Open actions for Example User' })).not.toBeInTheDocument();
   });
 
   it('allows tenant admins to add a known ID without global user discovery', async () => {
@@ -145,6 +170,7 @@ describe('TenantUsersPage', () => {
   });
 
   it('manages roles via Manage roles modal, deactivates via Disable membership dialog, and removes with strong confirmation', async () => {
+    const invalidate = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
     const user = userEvent.setup();
     renderPage();
 
@@ -168,6 +194,9 @@ describe('TenantUsersPage', () => {
     ));
 
     // 3. Disable Membership
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tenant-users', 1] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tenant-audit-history', 1] });
+    await waitFor(() => expect(api.getTenantMembers.mock.calls.length).toBeGreaterThan(1));
     await user.click(screen.getAllByRole('button', { name: 'Open actions for Example User' })[0]);
     await user.click(screen.getByRole('menuitem', { name: /Disable membership/i }));
     expect(screen.getByRole('heading', { name: 'Disable tenant membership?' })).toBeInTheDocument();
@@ -191,6 +220,7 @@ describe('TenantUsersPage', () => {
 
     await user.click(removeBtn);
     await waitFor(() => expect(api.removeTenantMember).toHaveBeenCalledWith(1, 9));
+    invalidate.mockRestore();
   });
 
   it('renders an explicit 403 message without initiating login', async () => {

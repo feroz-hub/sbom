@@ -72,6 +72,13 @@ function collapseSidebar() {
 }
 
 describe('Sidebar analysis navigation', () => {
+  it.each(['platform:user:read', 'tenant:user:read', 'neither'])('guards the single Users & Access entry with %s', permission => {
+    navigationState.permissions = new Set([permission]);
+    renderSidebar('/settings/users');
+    expect(screen.queryAllByRole('link', { name: 'Users & Access' })).toHaveLength(permission === 'neither' ? 0 : 1);
+    expect(screen.queryByText('Administration · Users')).not.toBeInTheDocument();
+    expect(screen.queryByText('Tenant users')).not.toBeInTheDocument();
+  });
   beforeEach(() => {
     navigationState.pathname = '/sboms';
     navigationState.search = '';
@@ -197,9 +204,9 @@ describe('Sidebar analysis navigation', () => {
       'tenant:user:read',
       'tenant:settings:update',
     ]);
-    renderSidebar('/settings/tenant');
+    renderSidebar('/settings/users');
     const nav = screen.getByRole('navigation', { name: 'Main' });
-    expect(within(nav).getByRole('link', { name: 'Tenant users' })).toBeInTheDocument();
+    expect(within(nav).getByRole('link', { name: 'Users & Access' })).toBeInTheDocument();
     expect(within(nav).queryByRole('link', { name: 'Platform tenants' })).not.toBeInTheDocument();
     expect(within(nav).queryByRole('link', { name: 'Platform administrators' })).not.toBeInTheDocument();
   });

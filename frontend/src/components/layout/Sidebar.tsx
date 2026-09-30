@@ -57,11 +57,15 @@ export function Sidebar() {
   const searchParams = useSearchParams();
   const { collapsed, toggleCollapsed, mobileOpen, closeMobile } = useSidebar();
   const { hasPermission } = useAuth();
+  const canSee = (item: { permission?: string; permissionsAny?: string[] }) =>
+    (!item.permission && !item.permissionsAny?.length)
+    || Boolean(item.permission && hasPermission(item.permission))
+    || Boolean(item.permissionsAny?.some(hasPermission));
   const navItems = navigationItems
-    .filter((item) => !item.permission || hasPermission(item.permission))
+    .filter(canSee)
     .map((item) => ({
       ...item,
-      children: item.children?.filter((child) => !child.permission || hasPermission(child.permission)),
+      children: item.children?.filter(canSee),
     }))
     .filter((item) => !item.children || item.children.length > 0);
 
