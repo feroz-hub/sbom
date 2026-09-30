@@ -61,15 +61,15 @@ export function UserSearchCombobox({
   }, [open]);
 
   useEffect(() => {
-    if (!query.trim()) {
+    const currentRequestId = ++requestIdRef.current;
+    let cancelled = false;
+    if (query.trim().length < 2) {
       setResults([]);
       setLoading(false);
       setSearchError(null);
       setOpen(false);
       return;
     }
-
-    const currentRequestId = ++requestIdRef.current;
 
     const timer = setTimeout(async () => {
       setLoading(true);
@@ -78,24 +78,24 @@ export function UserSearchCombobox({
         const data = tenantId
           ? await searchTenantUserCandidates(tenantId, query)
           : await searchPlatformUsers(query);
-        if (currentRequestId === requestIdRef.current) {
+        if (!cancelled && currentRequestId === requestIdRef.current) {
           setResults(data);
           setOpen(true);
         }
       } catch (err: unknown) {
-        if (currentRequestId === requestIdRef.current) {
+        if (!cancelled && currentRequestId === requestIdRef.current) {
           setResults([]);
           setSearchError(getSearchErrorMessage(err));
           setOpen(true);
         }
       } finally {
-        if (currentRequestId === requestIdRef.current) {
+        if (!cancelled && currentRequestId === requestIdRef.current) {
           setLoading(false);
         }
       }
     }, 250);
 
-    return () => clearTimeout(timer);
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [query, tenantId]);
 
   if (selectedUser) {
@@ -156,7 +156,7 @@ export function UserSearchCombobox({
           ))}
         </div>
 
-        {selectedUser.external_subject && (
+        {!tenantId && selectedUser.external_subject && (
           <div>
             <button
               type="button"
@@ -185,7 +185,7 @@ export function UserSearchCombobox({
         <Search className="absolute left-3 top-2.5 h-4 w-4 text-hcl-muted" />
         <input
           type="text"
-          aria-label="Search users by email or name"
+          aria-label={tenantId ? 'Search existing user' : 'Search users by email or name'}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => {

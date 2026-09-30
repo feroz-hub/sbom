@@ -115,7 +115,10 @@ def test_tenant_list_detail_search_and_audit_private(setup):
     assert client.get(f"/api/tenants/1/users/{members[2]}").status_code == 404
     assert client.get(f"/api/tenants/2/users/{members[2]}").status_code == 404
     assert client.get(f"/api/platform/users/{outsider_id}").status_code == 403
-    assert "outsider" not in client.get("/api/tenants/1/user-candidates?q=outsider").text
+    candidates = client.get("/api/tenants/1/user-candidates?q=outsider")
+    assert candidates.status_code == 200
+    assert candidates.json()["items"][0]["id"] == outsider_id
+    assert "tenant_memberships" not in candidates.text
 
 
 @pytest.mark.parametrize(

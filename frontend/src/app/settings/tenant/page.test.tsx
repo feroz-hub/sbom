@@ -130,22 +130,28 @@ describe('TenantUsersPage', () => {
     expect(screen.queryByRole('button', { name: 'Open actions for Example User' })).not.toBeInTheDocument();
   });
 
-  it('allows tenant admins to add a known ID without global user discovery', async () => {
+  it.each(['New User', 'new.user@hcltech.com'])('allows tenant admins to search by name/email (%s) and submit an internal ID', async query => {
     mockPlatform = false;
+    api.searchTenantUserCandidates.mockResolvedValue([{ id: 99, display_name: 'New User', email: 'new.user@hcltech.com', status: 'ACTIVE', email_verified: true, verification_required: false }]);
     const user = userEvent.setup();
     renderPage();
     await screen.findAllByText('Example User');
-    expect(screen.queryByPlaceholderText(/Search existing SBOM users/i)).not.toBeInTheDocument();
-    await user.type(screen.getByLabelText('Existing user ID'), '99');
+    expect(screen.queryByLabelText('Existing user ID')).not.toBeInTheDocument();
+    expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add Member' })).not.toBeInTheDocument();
+    await user.type(screen.getByRole('textbox', { name: 'Search existing user' }), query);
+    await user.click(await screen.findByText('New User'));
+    expect(screen.getByLabelText('Initial roles')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Add Member' }));
     await waitFor(() => expect(api.addTenantMember).toHaveBeenCalledWith(1, { user_id: 99, roles: ['VIEWER'] }));
     expect(api.searchPlatformUsers).not.toHaveBeenCalled();
-    expect(api.searchTenantUserCandidates).not.toHaveBeenCalled();
+    expect(api.searchTenantUserCandidates).toHaveBeenCalledWith(1, query);
+    expect(screen.queryByText(/User ID:/)).not.toBeInTheDocument();
   });
 
   it('adds a member with an initial tenant role', async () => {
     const user = userEvent.setup();
-    api.searchPlatformUsers.mockResolvedValue([
+    api.searchTenantUserCandidates.mockResolvedValue([
       {
         id: 99,
         email: 'new.user@hcltech.com',
@@ -158,10 +164,11 @@ describe('TenantUsersPage', () => {
     ]);
     renderPage();
     await screen.findAllByText('Example User');
-    const input = screen.getByPlaceholderText(/Search existing SBOM users/i);
+    const input = screen.getByPlaceholderText('Search by name or email…');
     await user.type(input, 'New');
     const foundUser = await screen.findByText('New User');
     await user.click(foundUser);
+    expect(screen.queryByText('Show technical details')).not.toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText('Initial roles'), 'SECURITY_ANALYST');
     await user.click(screen.getByRole('button', { name: 'Add Member' }));
     await waitFor(() => expect(api.addTenantMember).toHaveBeenCalledWith(1, {

@@ -15,6 +15,20 @@ vi.mock('@/lib/api', async () => {
 });
 
 describe('UserSearchCombobox', () => {
+  it('does not search tenant candidates before two trimmed characters', async () => {
+    render(<UserSearchCombobox tenantId={1} onSelect={() => {}} selectedUser={null} />);
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search existing user' }), { target: { value: ' a ' } });
+    await new Promise(resolve => setTimeout(resolve, 300));
+    expect(api.searchTenantUserCandidates).not.toHaveBeenCalled();
+    expect(api.searchPlatformUsers).not.toHaveBeenCalled();
+  });
+  it('does not expose technical IDs or subjects in the tenant workflow', () => {
+    render(<UserSearchCombobox tenantId={1} onSelect={() => {}} selectedUser={{ id: 987654, display_name: 'Human Name', email: 'human@example.test', status: 'ACTIVE', email_verified: true, verification_required: false, external_subject: 'private-subject', external_issuer: 'private-issuer' }} />);
+    expect(screen.getByText('Human Name')).toBeInTheDocument();
+    expect(screen.getByText('human@example.test')).toBeInTheDocument();
+    expect(screen.queryByText('Show technical details')).not.toBeInTheDocument();
+    expect(screen.queryByText(/987654|private-subject|private-issuer/)).not.toBeInTheDocument();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
   });
