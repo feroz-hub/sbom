@@ -557,6 +557,8 @@ def _detail_payload(db: Session, investigation: VexInvestigation, context: Curre
             "justification": getattr(latest_manual, "justification", None),
             "impact_statement": getattr(latest_manual, "impact_statement", None),
             "action_statement": getattr(latest_manual, "action_statement", None),
+            "mitigation": getattr(latest_manual, "mitigation", None),
+            "fixed_version": getattr(latest_manual, "fixed_version", None),
             "evidence_url": manual_evidence.get("evidence_url"),
             "updated_at": investigation.updated_at,
         },

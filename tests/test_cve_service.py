@@ -595,3 +595,38 @@ async def test_ghsa_input_without_cve_alias_skips_second_pass(db):
     # Net effect: KEV is never called.
     assert kev_calls == []
     assert detail.exploitation.cisa_kev_listed is False
+
+
+@pytest.mark.asyncio
+async def test_scan_context_selects_exact_component_and_never_falls_back(db):
+    sbom = SBOMSource(id=1, sbom_name="selected", tenant_id=1)
+    other_sbom = SBOMSource(id=2, sbom_name="other", tenant_id=1)
+    run = AnalysisRun(id=1, sbom_id=1, tenant_id=1, run_status="OK", started_on="2026-09-30", completed_on="2026-09-30")
+    components = [
+        SBOMComponent(id=1, sbom_id=1, tenant_id=1, name="first-package", version="1.0"),
+        SBOMComponent(id=2, sbom_id=1, tenant_id=1, name="selected-package", version="2.0"),
+        SBOMComponent(id=3, sbom_id=2, tenant_id=1, name="other-sbom", version="3.0"),
+        SBOMComponent(id=5, sbom_id=1, tenant_id=1, name="no-finding", version="5.0"),
+    ]
+    findings = [
+        AnalysisFinding(analysis_run_id=1, tenant_id=1, component_id=i, vuln_id="CVE-2024-12345", severity="HIGH")
+        for i in (1, 2)
+    ]
+    db.add_all([sbom, other_sbom, run, *components, *findings])
+    db.commit()
+    from app.core.context import minimal_background_context, tenant_scope
+
+    with tenant_scope(minimal_background_context(2)):
+        db.add(SBOMSource(id=3, tenant_id=2, sbom_name="foreign"))
+        db.add(SBOMComponent(id=4, sbom_id=3, tenant_id=2, name="other-tenant", version="4.0"))
+        db.commit()
+    service = _service(db)
+    selected = await service.get_with_scan_context("CVE-2024-12345", 1, component_id=2)
+    assert selected.component.name == "selected-package"
+    assert selected.component.version == "2.0"
+    for component_id in (3, 4, 5, 999):
+        result = await service.get_with_scan_context("CVE-2024-12345", 1, component_id=component_id)
+        assert result.component is None
+        assert result.recommended_upgrade is None
+    legacy = await service.get_with_scan_context("CVE-2024-12345", 1)
+    assert legacy.component.name == "first-package"

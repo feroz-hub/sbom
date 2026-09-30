@@ -8,7 +8,7 @@
  */
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from '@/hooks/useToast';
@@ -18,8 +18,11 @@ import type {
   VexInvestigationListResponse,
 } from '@/types';
 import VexInvestigationPage from './page';
+import userEvent from '@testing-library/user-event';
+import { FULL_DETAIL, PARTIAL_DETAIL } from '@/components/vulnerabilities/CveDetailDialog/__tests__/fixtures';
 
 const api = vi.hoisted(() => ({
+  getCveDetail: vi.fn(),
   getDashboardVex: vi.fn(),
   getVexInvestigation: vi.fn(),
   listVexInvestigations: vi.fn(),
@@ -238,6 +241,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   navigation.search = '';
   permissions.granted = new Set(['vex:read', 'vex:write']);
+  api.getCveDetail.mockResolvedValue({ ...FULL_DETAIL, cve_id: detail.vulnerability.canonical_vulnerability_id });
   api.getDashboardVex.mockResolvedValue(summary);
   api.listVexInvestigations.mockResolvedValue(listResponse);
   api.getVexInvestigation.mockResolvedValue(detail);
@@ -311,7 +315,7 @@ describe('decision form', () => {
   async function openDetail() {
     renderPage();
     await screen.findByText('CVE-2026-4001');
-    fireEvent.click(screen.getAllByText('Open')[0]);
+    fireEvent.click(screen.getAllByText('Investigate')[0]);
     await screen.findByText('Record a decision');
   }
 
@@ -378,7 +382,7 @@ describe('permissions', () => {
     api.getVexInvestigation.mockResolvedValue({ ...detail, capabilities: { ...detail.capabilities, can_update: false, can_assign: false, can_map: false, read_only_reason: 'Read-only investigation' } });
     renderPage();
     await screen.findByText('CVE-2026-4001');
-    fireEvent.click(screen.getAllByText('Open')[0]);
+    fireEvent.click(screen.getAllByText('Investigate')[0]);
     expect(
       await screen.findByText(/Read-only investigation/),
     ).toBeInTheDocument();
@@ -412,7 +416,7 @@ describe('ownership and mapping', () => {
   async function openDetail() {
     renderPage();
     await screen.findByText('CVE-2026-4001');
-    fireEvent.click(screen.getAllByText('Open')[0]);
+    fireEvent.click(screen.getAllByText('Investigate')[0]);
     await screen.findByText('Ownership & assignment');
   }
 
@@ -469,7 +473,7 @@ describe('server-authoritative investigation capabilities', () => {
     api.getVexInvestigation.mockResolvedValue({ ...detail, capabilities });
     renderPage();
     await screen.findByText('CVE-2026-4001');
-    fireEvent.click(screen.getAllByText('Open')[0]);
+    fireEvent.click(screen.getAllByText('Investigate')[0]);
     await screen.findByText('Record a decision');
   }
 
@@ -508,4 +512,146 @@ describe('server-authoritative investigation capabilities', () => {
     expect(screen.queryByLabelText(/^Status/)).not.toBeInTheDocument();
     expect(screen.getByText('This investigation must be assigned to you before you can update it.')).toBeInTheDocument();
   });
+});
+
+
+describe('shared CVE detail workflow', () => {
+  it('opens the Run Analysis details content from the CVE link and retains exact VEX context', async () => {
+    renderPage();
+    const trigger = await screen.findByRole('button', { name: 'View vulnerability CVE-2026-4001' });
+    await userEvent.click(trigger);
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('tab', { name: 'Vulnerability Details' })).toHaveAttribute('aria-selected', 'true');
+    expect(await within(dialog).findByText(FULL_DETAIL.summary)).toBeVisible();
+    expect(within(dialog).getByText('What is this CVE?')).toBeVisible();
+    expect(within(dialog).getByText('How is it exploited?')).toBeVisible();
+    expect(within(dialog).getByText('How do I fix it?')).toBeVisible();
+    expect(within(dialog).getByRole('link', { name: 'Open in NVD' })).toHaveAttribute('rel', 'noopener noreferrer');
+    const context = within(dialog).getByRole('region', { name: 'Selected investigation context' });
+    expect(within(context).getByText('rtos-1')).toBeVisible();
+    expect(within(context).getByText('openssl 1.1.1')).toBeVisible();
+    expect(within(context).getByText('NOT_DETECTED')).toBeVisible();
+    expect(within(context).getByText('false_positive')).toBeVisible();
+    expect(within(context).getByText('NOT_AFFECTED')).toBeVisible();
+    expect(within(context).getByText('VEX ONLY')).toBeVisible();
+    await waitFor(() => expect(api.getCveDetail).toHaveBeenCalledWith(
+      { cveId: 'CVE-2026-4001', scanId: 7, componentId: 11 }, expect.any(AbortSignal),
+    ));
+    const detailsTab = within(dialog).getByRole('tab', { name: 'Vulnerability Details' });
+    detailsTab.focus();
+    await userEvent.keyboard('{ArrowRight}');
+    expect(within(dialog).getByRole('tab', { name: 'VEX Investigation' })).toHaveFocus();
+    expect(within(dialog).getByText('Record a decision')).toBeVisible();
+    expect(within(dialog).getByText('Supplier A')).toBeVisible();
+    await userEvent.keyboard('{Home}');
+    expect(detailsTab).toHaveFocus();
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(trigger).toHaveFocus();
+  });
+
+  it('Investigate opens the same dialog directly on the VEX tab', async () => {
+    renderPage();
+    await screen.findByText('CVE-2026-4001');
+    await userEvent.click(screen.getAllByRole('button', { name: 'Investigate' })[0]);
+    expect(await screen.findByRole('tab', { name: 'VEX Investigation' })).toHaveAttribute('aria-selected', 'true');
+    await userEvent.click(screen.getByRole('tab', { name: 'Vulnerability Details' }));
+    expect(await screen.findByText(FULL_DETAIL.summary)).toBeVisible();
+    expect(screen.getAllByRole('dialog')).toHaveLength(1);
+    expect(api.getCveDetail).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps row context and investigation usable when enrichment fails, with retry', async () => {
+    api.getCveDetail.mockRejectedValueOnce(Object.assign(new Error('offline'), { status: 400 }));
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: 'View vulnerability CVE-2026-4001' }));
+    expect(await screen.findByText('Unable to load vulnerability details. Showing the known context.')).toBeVisible();
+    expect(within(screen.getByRole('region', { name: 'Selected investigation context' })).getByText('rtos-1')).toBeVisible();
+    await userEvent.click(screen.getByRole('button', { name: 'Retry CVE enrichment' }));
+    expect(await screen.findByText(FULL_DETAIL.summary)).toBeVisible();
+    await userEvent.click(screen.getByRole('tab', { name: 'VEX Investigation' }));
+    expect(screen.getByRole('button', { name: 'Save decision' })).toBeVisible();
+  });
+
+  it('retains known row context when investigation details fail and supports retry', async () => {
+    api.getVexInvestigation.mockRejectedValue(new Error('offline'));
+    renderPage();
+    await screen.findByText('CVE-2026-4001');
+    await userEvent.click(screen.getAllByRole('button', { name: 'Investigate' })[0]);
+    expect(await screen.findByText('Unable to load investigation details.')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Save decision' })).not.toBeInTheDocument();
+    api.getVexInvestigation.mockResolvedValue(detail);
+    await userEvent.click(screen.getByRole('button', { name: 'Retry investigation' }));
+    expect(await screen.findByRole('button', { name: 'Save decision' })).toBeVisible();
+  });
+
+  it('shows partial enrichment without blocking investigation', async () => {
+    api.getCveDetail.mockResolvedValue(PARTIAL_DETAIL);
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: 'View vulnerability CVE-2026-4001' }));
+    expect(await screen.findByText('Some sources were unavailable')).toBeVisible();
+    expect(screen.getByText(PARTIAL_DETAIL.summary)).toBeVisible();
+    await userEvent.click(screen.getByRole('tab', { name: 'VEX Investigation' }));
+    expect(screen.getByRole('button', { name: 'Save decision' })).toBeVisible();
+  });
+
+  it('does not use another component or allow a decision for unresolved mapping', async () => {
+    api.getVexInvestigation.mockResolvedValue({ ...detail, component: { ...detail.component, component_id: null, name: null }, reconciliation_status: 'UNRESOLVED_MAPPING' });
+    renderPage();
+    await screen.findByText('CVE-2026-4001');
+    await userEvent.click(screen.getAllByRole('button', { name: 'Investigate' })[0]);
+    expect(await screen.findByText(/Component mapping unresolved\./)).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Save decision' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Bind to component' })).toBeVisible();
+    await waitFor(() => expect(api.getCveDetail).toHaveBeenCalledWith(
+      { cveId: 'CVE-2026-4001', scanId: null }, expect.any(AbortSignal),
+    ));
+  });
+
+  it('preserves filters and URL state across opening, tab changes and closing', async () => {
+    navigation.search = 'q=CVE-2026&project_id=7&product_id=8&sbom_id=9&effective_status=NOT_AFFECTED&reconciliation_status=VEX_ONLY&component=openssl&needs_review=true&sort_by=component&sort_order=asc&limit=25';
+    renderPage();
+    await screen.findByRole('button', { name: 'View vulnerability CVE-2026-4001' });
+    await new Promise(resolve => setTimeout(resolve, 400));
+    const urlBefore = navigation.replace.mock.calls.at(-1)?.[0];
+    const filtersBefore = api.listVexInvestigations.mock.calls.at(-1)?.[0];
+    await userEvent.click(screen.getByRole('button', { name: 'View vulnerability CVE-2026-4001' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'VEX Investigation' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Close dialog' }));
+    expect(navigation.replace.mock.calls.at(-1)?.[0]).toBe(urlBefore);
+    expect(api.listVexInvestigations.mock.calls.at(-1)?.[0]).toEqual(filtersBefore);
+  });
+
+  it('refreshes the selected context, rows and dashboard after saving, without changing identity', async () => {
+    renderPage();
+    await screen.findByText('CVE-2026-4001');
+    await userEvent.click(screen.getAllByRole('button', { name: 'Investigate' })[0]);
+    await screen.findByRole('button', { name: 'Save decision' });
+    const counts = [api.getVexInvestigation.mock.calls.length, api.listVexInvestigations.mock.calls.length, api.getDashboardVex.mock.calls.length];
+    api.getVexInvestigation.mockResolvedValue({ ...detail, effective_status: 'AFFECTED', row_version: 2 });
+    api.listVexInvestigations.mockResolvedValue({ ...listResponse, items: listResponse.items.map(row => row.id === 1 ? { ...row, effective_status: 'AFFECTED' } : row) });
+    fireEvent.change(screen.getByLabelText(/^Status/), { target: { value: 'AFFECTED' } });
+    fireEvent.change(screen.getByLabelText(/Reason for this decision/), { target: { value: 'Confirmed' } });
+    await userEvent.click(screen.getByRole('button', { name: 'Save decision' }));
+    await waitFor(() => {
+      expect(api.getVexInvestigation.mock.calls.length).toBeGreaterThan(counts[0]);
+      expect(api.listVexInvestigations.mock.calls.length).toBeGreaterThan(counts[1]);
+      expect(api.getDashboardVex.mock.calls.length).toBeGreaterThan(counts[2]);
+    });
+    expect(api.setVexInvestigationDecision).toHaveBeenCalledWith(1, expect.objectContaining({ status: 'AFFECTED', row_version: 1 }));
+    expect(within(screen.getByRole('region', { name: 'Selected investigation context' })).getByText('AFFECTED')).toBeVisible();
+    expect(screen.getByRole('dialog')).toBeVisible();
+  });
+  it('retains saved fixed-version and mitigation fields when editing a decision', async () => {
+    api.getVexInvestigation.mockResolvedValue({ ...detail, internal_decision: {
+      ...detail.internal_decision, effective_status: 'FIXED', reason: 'Patched',
+      fixed_version: '3.2.1', mitigation: 'Updated deployment',
+    } });
+    renderPage();
+    await screen.findByText('CVE-2026-4001');
+    await userEvent.click(screen.getAllByRole('button', { name: 'Investigate' })[0]);
+    expect(await screen.findByLabelText(/^Fixed version/)).toHaveValue('3.2.1');
+    expect(screen.getByLabelText('Mitigation')).toHaveValue('Updated deployment');
+  });
+
 });

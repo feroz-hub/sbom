@@ -141,3 +141,19 @@ def test_post_batch_accepts_debian_alias(client, monkeypatch):
     body = resp.json()
     assert "CVE-2011-3374" in body["items"]
     assert body["not_found"] == []
+
+
+def test_scan_variant_forwards_component_constraint(client, monkeypatch):
+    from app.schemas_cve import CveDetailWithContext
+
+    calls = []
+
+    async def fake(self, cve_id, scan_id, *, component_id=None):
+        calls.append((cve_id, scan_id, component_id))
+        return CveDetailWithContext(**_stub_detail(cve_id).model_dump())
+
+    monkeypatch.setattr("app.services.cve_service.CveDetailService.get_with_scan_context", fake)
+    response = client.get("/api/v1/scans/123/cves/CVE-2024-12345?component_id=42")
+    assert response.status_code == 200
+    assert calls == [("CVE-2024-12345", 123, 42)]
+    assert client.get("/api/v1/scans/123/cves/CVE-2024-12345?component_id=0").status_code == 422

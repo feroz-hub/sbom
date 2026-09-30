@@ -19,10 +19,12 @@ const HOVER_PREFETCH_MS = 200;
 export function useCveDetail({
   cveId,
   scanId,
+  componentId,
   enabled,
 }: {
   cveId: string | null;
   scanId?: number | null;
+  componentId?: number | null;
   enabled: boolean;
 }) {
   // Suppress the network call for ids the frontend already knows the
@@ -30,8 +32,8 @@ export function useCveDetail({
   // makes the "no fetch for FOOBAR-123" test assertable.
   const isRecognised = cveId != null && classifyVulnId(cveId).kind !== 'unknown';
   return useQuery<CveDetail | CveDetailWithContext, Error>({
-    queryKey: cveQueryKey(scanId, cveId ?? ''),
-    queryFn: ({ signal }) => getCveDetail({ cveId: cveId ?? '', scanId: scanId ?? null }, signal),
+    queryKey: cveQueryKey(scanId, cveId ?? '', componentId),
+    queryFn: ({ signal }) => getCveDetail({ cveId: cveId ?? '', scanId: scanId ?? null, ...(componentId != null ? { componentId } : {}) }, signal),
     enabled: enabled && Boolean(cveId) && isRecognised,
     staleTime: 5 * 60 * 1000,
     gcTime: 30 * 60 * 1000,

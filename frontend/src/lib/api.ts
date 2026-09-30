@@ -2685,12 +2685,12 @@ import type { CveDetail, CveDetailWithContext } from '@/types';
  * call the global endpoint.
  */
 export function getCveDetail(
-  args: { cveId: string; scanId?: number | null },
+  args: { cveId: string; scanId?: number | null; componentId?: number | null },
   signal?: AbortSignal,
 ): Promise<CveDetail | CveDetailWithContext> {
   const id = encodeURIComponent(args.cveId.trim().toUpperCase());
   if (args.scanId != null) {
-    return request<CveDetailWithContext>(`/api/v1/scans/${args.scanId}/cves/${id}`, { signal });
+    return request<CveDetailWithContext>(`/api/v1/scans/${args.scanId}/cves/${id}${args.componentId != null ? `?component_id=${args.componentId}` : ''}`, { signal });
   }
   return request<CveDetail>(`/api/v1/cves/${id}`, { signal });
 }

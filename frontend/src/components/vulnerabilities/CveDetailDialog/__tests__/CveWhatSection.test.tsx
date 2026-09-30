@@ -11,7 +11,7 @@ describe('CveWhatSection', () => {
       <CveWhatSection seed={SEED} detail={FULL_DETAIL} scanName="vendor-app v1.2.0" />,
     );
     expect(screen.getByText(FULL_DETAIL.summary)).toBeInTheDocument();
-    expect(screen.getByText(/Detected in left-pad@1.2.0/)).toBeInTheDocument();
+    expect(screen.getByText(/Component: left-pad@1.2.0/)).toBeInTheDocument();
     expect(screen.getByText(/via vendor-app v1.2.0/)).toBeInTheDocument();
     expect(screen.getByText('Published')).toBeInTheDocument();
     expect(screen.getByText('Last modified')).toBeInTheDocument();

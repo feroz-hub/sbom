@@ -171,3 +171,29 @@ does not change VEX or reconciliation status. The existing append-only audit
 stores previous/new ownership, actor and time; the detail history distinguishes
 assignment, mapping and decision entries and limits history to the current
 investigation/vulnerability.
+
+## Shared investigation details
+
+The VEX Investigation CVE link and Investigate action open the same
+`CveDetailDialog` used by Run Analysis. Vulnerability Details reuses its
+cached enrichment, severity/CVSS, aliases, references, KEV/EPSS, and available
+fix information. A contextual VEX Investigation tab retains the existing
+assignment, decision, mapping, and history workflows. No second CVE API or
+VEX state model is introduced.
+
+The selected investigation ID remains the write identity. The dialog retains
+SBOM, component, project/application, analyzer, native VEX, effective status,
+and reconciliation context. Scan enrichment optionally accepts `component_id`
+and returns no component context when that component does not belong to the
+scan's tenant/SBOM or has no matching finding. Unresolved investigations use
+general advisory details and cannot save component-specific decisions; the
+existing authorized mapping action remains available.
+
+Existing server capabilities govern editing: administrators and analysts keep
+their existing authority, developers may update only their assigned items,
+and viewers remain read-only. Save invalidates investigation, table, and
+dashboard queries without resetting filters. Existing fixed-version and
+mitigation values are included in decision details and preserved when editing.
+Tabs support arrow/Home/End navigation inside the existing focus-trapped,
+Escape-dismissable dialog. CVE enrichment failure can be retried independently
+of the investigation panel.

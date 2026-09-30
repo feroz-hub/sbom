@@ -145,6 +145,8 @@ class InternalDecisionSection(BaseModel):
     justification: str | None = None
     impact_statement: str | None = None
     action_statement: str | None = None
+    mitigation: str | None = None
+    fixed_version: str | None = None
     evidence_url: str | None = None
     updated_at: str | None = None
 

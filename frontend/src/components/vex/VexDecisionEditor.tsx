@@ -72,8 +72,8 @@ function draftFromInvestigation(
     justification: decision.justification ?? '',
     impactStatement: decision.impact_statement ?? '',
     actionStatement: decision.action_statement ?? '',
-    mitigation: '',
-    fixedVersion: '',
+    mitigation: decision.mitigation ?? '',
+    fixedVersion: decision.fixed_version ?? '',
     evidenceUrl: decision.evidence_url ?? '',
   };
 }
@@ -177,6 +177,10 @@ export function VexDecisionEditor({
     if (hasErrors(found)) return;
     setSubmitError(null);
     save.mutate();
+  }
+
+  if (investigation && (investigation.component.component_id == null || investigation.reconciliation_status === 'UNRESOLVED_MAPPING')) {
+    return <p className="text-sm text-hcl-muted">A component must be mapped before a VEX decision can be saved. Ask a Tenant Administrator or Security Analyst to resolve the mapping.</p>;
   }
 
   if (!(investigation ? investigation.capabilities?.can_update ?? false : canWrite)) {

@@ -17,7 +17,7 @@ interface DialogProps {
    * Desktop max-width (≥640px). On mobile the dialog is always a bottom
    * sheet and ignores this. Default: ``md`` (max-w-md).
    */
-  maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
+  maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl';
   dismissOnBackdrop?: boolean;
   /** id of an element inside the dialog body that summarises its contents (WCAG 2.2 — pairs with aria-labelledby for screen-reader announcement). */
   describedBy?: string;
@@ -29,6 +29,7 @@ const maxWidthClasses: Record<string, string> = {
   lg: 'sm:max-w-lg',
   xl: 'sm:max-w-2xl',
   '2xl': 'sm:max-w-4xl',
+  '3xl': 'sm:max-w-5xl',
 };
 
 const FOCUSABLE = [

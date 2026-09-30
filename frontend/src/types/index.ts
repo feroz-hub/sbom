@@ -1911,6 +1911,8 @@ export interface VexInvestigationDetail {
     justification: string | null;
     impact_statement: string | null;
     action_statement: string | null;
+    mitigation?: string | null;
+    fixed_version?: string | null;
     evidence_url: string | null;
     updated_at: string | null;
   };

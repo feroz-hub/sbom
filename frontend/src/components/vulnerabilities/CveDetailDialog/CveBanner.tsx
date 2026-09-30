@@ -47,7 +47,7 @@ export function CveBanner({ state, onRetry, reportIssueHref }: CveBannerProps) {
     case 'unreachable':
       return (
         <Banner tone="amber" Icon={AlertCircle} headline="Couldn't reach the CVE database">
-          <p>Showing what your scan already knew.</p>
+          <p>Unable to load vulnerability details. Showing the known context.</p>
           {onRetry ? (
             <div className="mt-2">
               <Button variant="secondary" onClick={onRetry} aria-label="Retry CVE enrichment">

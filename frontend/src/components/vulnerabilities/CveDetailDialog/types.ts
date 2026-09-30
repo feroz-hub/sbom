@@ -24,16 +24,16 @@ import type { EnrichedFinding } from '@/types';
 export type CveRowSeed = Pick<
   EnrichedFinding,
   | 'vuln_id'
-  | 'severity'
   | 'score'
   | 'cvss_version'
   | 'in_kev'
-  | 'epss'
   | 'epss_percentile'
   | 'component_name'
   | 'component_version'
   | 'source'
 > & {
+  severity: string | null;
+  epss: number | null;
   /**
    * CVE aliases discovered on the row (`vuln_id` + parsed aliases). Lets the
    * modal resolve a source-specific advisory id (e.g. `DEBIAN-CVE-2011-3374`)

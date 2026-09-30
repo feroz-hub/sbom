@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useMemo } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { resolveVulnId } from '@/lib/vulnIds';
 import { Dialog } from '@/components/ui/Dialog';
 import { CveBanner } from './CveBanner';
@@ -26,9 +26,17 @@ export interface CveDetailDialogProps {
    * absent, the global variant (``/api/v1/cves/{cveId}``) is used.
    */
   scanId?: number | null;
+  /** Constrain scan enrichment to the selected component, never the first CVE match. */
+  componentId?: number | null;
+  /** Wait for the host to resolve the precise scan/component context. */
+  detailsEnabled?: boolean;
+  /** Optional contextual workflow, sharing this dialog's enrichment and accessibility. */
+  investigationPanel?: ReactNode;
+  contextPanel?: ReactNode;
+  initialTab?: 'details' | 'investigation';
   /**
    * Human-friendly scan label (typically the SBOM name) shown in the
-   * "Detected in X via Y" component-context line of section 1.
+   * "Component: X via Y" component-context line of section 1.
    */
   scanName?: string | null;
   /**
@@ -115,6 +123,11 @@ export interface CveDetailDialogProps {
 export function CveDetailDialog({
   cveId,
   scanId,
+  componentId,
+  detailsEnabled = true,
+  investigationPanel,
+  contextPanel,
+  initialTab = 'details',
   scanName,
   seed,
   open,
@@ -126,6 +139,10 @@ export function CveDetailDialog({
   aiProviderLabel,
 }: CveDetailDialogProps) {
   const summaryId = useId();
+  const [activeTab, setActiveTab] = useState(initialTab);
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const hasInvestigation = investigationPanel !== undefined;
+  useEffect(() => { setActiveTab(initialTab); }, [open, cveId, initialTab]);
 
   // Resolve the clicked id to its canonical form for the fetch/cache key — a
   // source-specific advisory alias (e.g. DEBIAN-CVE-2011-3374) resolves to its
@@ -137,7 +154,7 @@ export function CveDetailDialog({
   );
   const lookupId = resolved.supported ? resolved.canonical : null;
 
-  const query = useCveDetail({ cveId: lookupId, scanId, enabled: open });
+  const query = useCveDetail({ cveId: lookupId, scanId, componentId, enabled: open && detailsEnabled });
 
   const detail = query.data as CveDetail | CveDetailWithContext | undefined;
 
@@ -152,7 +169,7 @@ export function CveDetailDialog({
   const dialogState = selectDialogState({
     rawId: cveId,
     aliases: seed?.cve_aliases ?? null,
-    query: { data: detail, error: query.error, isLoading: open && query.isLoading },
+    query: { data: detail, error: query.error, isLoading: open && (!detailsEnabled || query.isLoading) },
   });
 
   const onRetry = () => {
@@ -163,7 +180,7 @@ export function CveDetailDialog({
   // payload — it surfaces "Open in upstream" links + sources used + the
   // partial-data chip. It stays visible no matter how far the user has
   // scrolled the section bodies.
-  const footer = detail
+  const footer = detail && (!hasInvestigation || activeTab === 'details')
     ? <CveReferences detail={detail} />
     : null;
 
@@ -172,7 +189,7 @@ export function CveDetailDialog({
       open={open}
       onClose={() => onOpenChange(false)}
       title={dialogTitle}
-      maxWidth="xl"
+      maxWidth={hasInvestigation ? "3xl" : "xl"}
       describedBy={summaryId}
       footer={footer}
     >
@@ -185,6 +202,41 @@ export function CveDetailDialog({
         />
       ) : null}
 
+      {contextPanel}
+      {hasInvestigation ? <>
+        <p id={summaryId} className="sr-only">Vulnerability details and VEX investigation for the selected SBOM and component.</p>
+        <div role="tablist" aria-label="Vulnerability workflow" className="flex border-b border-border px-6">
+          {(['details', 'investigation'] as const).map((tab, index) => (
+            <button
+              key={tab}
+              ref={(element) => { tabRefs.current[index] = element; }}
+              type="button"
+              role="tab"
+              id={`${summaryId}-${tab}-tab`}
+              aria-controls={`${summaryId}-${tab}-panel`}
+              aria-selected={activeTab === tab}
+              tabIndex={activeTab === tab ? 0 : -1}
+              className={`min-h-11 border-b-2 px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue ${activeTab === tab ? 'border-hcl-blue text-hcl-blue' : 'border-transparent text-hcl-muted'}`}
+              onClick={() => setActiveTab(tab)}
+              onKeyDown={(event) => {
+                if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+                event.preventDefault();
+                const next = event.key === 'Home' ? 0 : event.key === 'End' ? 1 : 1 - index;
+                setActiveTab(next === 0 ? 'details' : 'investigation');
+                tabRefs.current[next]?.focus();
+              }}
+            >{tab === 'details' ? 'Vulnerability Details' : 'VEX Investigation'}</button>
+          ))}
+        </div>
+      </> : null}
+      <div
+        role={hasInvestigation ? 'tabpanel' : undefined}
+        id={`${summaryId}-details-panel`}
+        aria-labelledby={hasInvestigation ? `${summaryId}-details-tab` : undefined}
+        hidden={hasInvestigation && activeTab !== 'details'}
+        tabIndex={hasInvestigation ? 0 : undefined}
+        className="min-w-0 break-words"
+      >
       {dialogState.kind !== 'ok' && dialogState.kind !== 'loading' ? (
         <div className="px-6 pt-3">
           <CveBanner state={dialogState} onRetry={onRetry} reportIssueHref={reportIssueHref} />
@@ -201,12 +253,21 @@ export function CveDetailDialog({
           seed={seed}
           detail={detail}
           scanName={scanName}
-          describedById={summaryId}
+          describedById={hasInvestigation ? undefined : summaryId}
           findingId={findingId ?? null}
           aiFixesEnabled={aiFixesEnabled}
           aiProviderLabel={aiProviderLabel}
         />
       ) : null}
+      </div>
+      {hasInvestigation ? <div
+        role="tabpanel"
+        id={`${summaryId}-investigation-panel`}
+        aria-labelledby={`${summaryId}-investigation-tab`}
+        hidden={activeTab !== 'investigation'}
+        tabIndex={0}
+        className="min-w-0 break-words px-6 py-4"
+      >{investigationPanel}</div> : null}
     </Dialog>
   );
 }

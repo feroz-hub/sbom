@@ -89,7 +89,7 @@ export function CveHeader({ seed, detail, isLoading: _isLoading, onSwitchCve }: 
           </span>
         ) : null}
 
-        <EpssChip epss={epssScore ?? 0} percentile={epssPercentile ?? null} />
+        {epssScore != null ? <EpssChip epss={epssScore} percentile={epssPercentile ?? null} /> : null}
       </div>
 
       {detail && detail.aliases.length > 0 ? (
