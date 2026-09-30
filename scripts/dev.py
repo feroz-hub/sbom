@@ -35,6 +35,7 @@ POSTGRES_PORT = 55439
 REDIS_PORT = 56379
 MAILPIT_SMTP_PORT = 1025
 MAILPIT_UI_PORT = 8025
+MAILPIT_READY_TIMEOUT = 15.0
 DEV_API_PORT = 18000
 DEV_FRONTEND_PORT = 13000
 BEAT_LOCK = ROOT / ".dev-beat.pid"
@@ -119,6 +120,44 @@ def mailpit_ready() -> bool:
             return response.status == 200 and "Version" in json.load(response)
     except (OSError, ValueError):
         return False
+
+
+def wait_for_mailpit_ready(
+    timeout: float = MAILPIT_READY_TIMEOUT,
+    poll_interval: float = 0.5,
+) -> bool:
+    """Wait until both Mailpit's SMTP listener and HTTP API are ready."""
+    deadline = time.monotonic() + timeout
+    while True:
+        if reachable("127.0.0.1", MAILPIT_SMTP_PORT) and mailpit_ready():
+            return True
+
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False
+        time.sleep(min(poll_interval, remaining))
+
+
+def ensure_mailpit_ready(timeout: float = MAILPIT_READY_TIMEOUT) -> None:
+    """Wait for a selected Mailpit service or raise a concise setup error."""
+    if reachable("127.0.0.1", MAILPIT_SMTP_PORT) and mailpit_ready():
+        return
+
+    say("...", "Mailpit", "waiting for HTTP API...")
+    if wait_for_mailpit_ready(timeout):
+        return
+
+    if reachable("127.0.0.1", MAILPIT_SMTP_PORT):
+        detail = "Mailpit SMTP is reachable, but its HTTP API did not become ready"
+    else:
+        detail = (
+            f"Mailpit did not become reachable on SMTP port {MAILPIT_SMTP_PORT} "
+            "or ready through its HTTP API"
+        )
+    raise SetupError(
+        f"{detail} on http://127.0.0.1:{MAILPIT_UI_PORT} within "
+        f"{timeout:g} seconds. Check the Mailpit container logs."
+    )
 
 
 def docker_available() -> bool:
@@ -219,6 +258,31 @@ def select_service(
     raise SetupError(
         f"{service.title()} is unavailable. Install/start it locally or install/start Docker Desktop, then rerun python scripts/dev.py."
     )
+
+
+def select_mailpit(*, check: bool, env: dict[str, str]) -> str:
+    """Select a compatible Mailpit service and wait for full startup when needed."""
+    old_mailpit = (
+        docker_available()
+        and run(["docker", "inspect", "-f", "{{.State.Running}}", "sbom-mailpit"]).stdout.strip() == "true"
+    )
+    if old_mailpit and reachable("127.0.0.1", MAILPIT_SMTP_PORT):
+        if not check:
+            ensure_mailpit_ready()
+            return "Docker (sbom-mailpit)"
+        if mailpit_ready():
+            return "Docker (sbom-mailpit)"
+
+    mailpit, _ = select_service(
+        "mailpit",
+        MAILPIT_SMTP_PORT,
+        MAILPIT_SMTP_PORT,
+        check=check,
+        env=env,
+    )
+    if not check:
+        ensure_mailpit_ready()
+    return mailpit
 
 
 def venv_python() -> Path:
@@ -1035,16 +1099,7 @@ def start_application(args) -> None:
         preferred=saved.get("DEV_REDIS_PROVIDER"),
     )
     # An older SBOM-specific Mailpit container is accepted, never an arbitrary SMTP server.
-    old_mailpit = (
-        docker_available()
-        and run(["docker", "inspect", "-f", "{{.State.Running}}", "sbom-mailpit"]).stdout.strip() == "true"
-    )
-    if old_mailpit and reachable("127.0.0.1", MAILPIT_SMTP_PORT) and mailpit_ready():
-        mailpit = "Docker (sbom-mailpit)"
-    else:
-        mailpit, _ = select_service("mailpit", MAILPIT_SMTP_PORT, MAILPIT_SMTP_PORT, check=args.check, env=docker_env)
-        if not args.check and not mailpit_ready():
-            raise SetupError("Mailpit could not be verified on port 8025. Check the project Mailpit service.")
+    mailpit = select_mailpit(check=args.check, env=docker_env)
     values = resolve_config(
         saved,
         pg_port,

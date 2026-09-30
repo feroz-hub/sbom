@@ -419,6 +419,89 @@ def test_docker_service_is_reused(monkeypatch: pytest.MonkeyPatch) -> None:
     assert dev.select_service("redis", 56379, 6379, check=False, env={}) == ("Docker", 56379)
 
 
+def test_mailpit_readiness_succeeds_immediately_without_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(dev, "reachable", lambda host, port: True)
+    monkeypatch.setattr(dev, "mailpit_ready", lambda: True)
+    monkeypatch.setattr(dev.time, "sleep", lambda seconds: pytest.fail("unexpected readiness delay"))
+    assert dev.wait_for_mailpit_ready()
+
+
+def test_mailpit_readiness_retries_until_http_api_is_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = SimpleNamespace(now=0.0)
+    sleeps = []
+    http_results = iter((False, False, False, True))
+    monkeypatch.setattr(dev, "reachable", lambda host, port: True)
+    monkeypatch.setattr(dev, "mailpit_ready", lambda: next(http_results))
+    monkeypatch.setattr(dev.time, "monotonic", lambda: clock.now)
+
+    def advance(seconds):
+        sleeps.append(seconds)
+        clock.now += seconds
+
+    monkeypatch.setattr(dev.time, "sleep", advance)
+    assert dev.wait_for_mailpit_ready(timeout=2.0)
+    assert sleeps == [0.5, 0.5, 0.5]
+
+
+def test_mailpit_startup_waits_after_transient_http_failure(monkeypatch, capsys) -> None:
+    http_results = iter((False, True))
+    monkeypatch.setattr(dev, "reachable", lambda host, port: True)
+    monkeypatch.setattr(dev, "mailpit_ready", lambda: next(http_results))
+    wait = MagicMock(return_value=True)
+    monkeypatch.setattr(dev, "wait_for_mailpit_ready", wait)
+    dev.ensure_mailpit_ready()
+    wait.assert_called_once_with(dev.MAILPIT_READY_TIMEOUT)
+    assert capsys.readouterr().out.count("waiting for HTTP API") == 1
+
+
+def test_mailpit_http_timeout_has_clear_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = SimpleNamespace(now=0.0)
+    monkeypatch.setattr(dev, "reachable", lambda host, port: True)
+    monkeypatch.setattr(dev, "mailpit_ready", lambda: False)
+    monkeypatch.setattr(dev.time, "monotonic", lambda: clock.now)
+    monkeypatch.setattr(dev.time, "sleep", lambda seconds: setattr(clock, "now", clock.now + seconds))
+    with pytest.raises(dev.SetupError, match="SMTP is reachable, but its HTTP API did not become ready.*1 seconds"):
+        dev.ensure_mailpit_ready(timeout=1.0)
+
+
+def test_mailpit_readiness_times_out_when_smtp_never_listens(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = SimpleNamespace(now=0.0)
+    monkeypatch.setattr(dev, "reachable", lambda host, port: False)
+    monkeypatch.setattr(dev, "mailpit_ready", lambda: pytest.fail("HTTP must not be probed before SMTP is reachable"))
+    monkeypatch.setattr(dev.time, "monotonic", lambda: clock.now)
+    monkeypatch.setattr(dev.time, "sleep", lambda seconds: setattr(clock, "now", clock.now + seconds))
+    assert not dev.wait_for_mailpit_ready(timeout=1.0)
+
+
+def test_current_compose_mailpit_selection_waits_for_readiness(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(dev, "docker_available", lambda: True)
+    monkeypatch.setattr(dev, "run", lambda command: SimpleNamespace(stdout="false\n"))
+    selected = MagicMock(return_value=("Docker", dev.MAILPIT_SMTP_PORT))
+    ready = MagicMock()
+    monkeypatch.setattr(dev, "select_service", selected)
+    monkeypatch.setattr(dev, "ensure_mailpit_ready", ready)
+    assert dev.select_mailpit(check=False, env={}) == "Docker"
+    selected.assert_called_once_with(
+        "mailpit",
+        dev.MAILPIT_SMTP_PORT,
+        dev.MAILPIT_SMTP_PORT,
+        check=False,
+        env={},
+    )
+    ready.assert_called_once_with()
+
+
+def test_legacy_mailpit_selection_keeps_compatibility(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(dev, "docker_available", lambda: True)
+    monkeypatch.setattr(dev, "run", lambda command: SimpleNamespace(stdout="true\n"))
+    monkeypatch.setattr(dev, "reachable", lambda host, port: True)
+    ready = MagicMock()
+    monkeypatch.setattr(dev, "ensure_mailpit_ready", ready)
+    monkeypatch.setattr(dev, "select_service", lambda *args, **kwargs: pytest.fail("Compose Mailpit was touched"))
+    assert dev.select_mailpit(check=False, env={}) == "Docker (sbom-mailpit)"
+    ready.assert_called_once_with()
+
+
 def test_docker_starts_project_service(monkeypatch: pytest.MonkeyPatch) -> None:
     started = []
     monkeypatch.setattr(dev, "docker_available", lambda: True)
@@ -498,6 +581,7 @@ def test_check_mode_does_not_start_services_or_processes(
     monkeypatch.setattr(dev, "ensure_virtualenv", lambda: pytest.fail("venv created"))
     monkeypatch.setattr(dev, "ensure_database", lambda url: pytest.fail("database touched"))
     monkeypatch.setattr(dev, "start_process", lambda *args: pytest.fail("process started"))
+    monkeypatch.setattr(dev, "wait_for_mailpit_ready", lambda *args: pytest.fail("readiness wait started"))
     dev.main()
     output = capsys.readouterr().out
     assert "no services or processes started" in output
