@@ -54,8 +54,8 @@ export const navigationItems: NavItem[] = [
       { href: '/settings/platform/tenants', label: 'Platform tenants', permission: 'platform:tenant:create' },
       { href: '/settings/platform', label: 'Platform administrators', permission: 'platform:administrator:read' },
       { href: '/admin/ai-usage', label: 'AI usage', permission: 'platform:user:read' },
-      { href: '/admin/lifecycle-providers', label: 'Lifecycle providers', permission: 'lifecycle:provider:read' },
-      { href: '/admin/lifecycle-vendor-records', label: 'Vendor records', permission: 'lifecycle:vendor-record:read' },
+      { href: '/admin/lifecycle-providers', label: 'Lifecycle providers', permission: 'platform:user:read' },
+      { href: '/admin/lifecycle-vendor-records', label: 'LifeCycle Vendor Records', permission: 'lifecycle:vendor-record:read' },
     ],
   },
 ];
