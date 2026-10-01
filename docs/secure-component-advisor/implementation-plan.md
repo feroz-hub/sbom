@@ -11,8 +11,8 @@ Branch: `feat/secure-component-advisor`. Test ids T1…T45 are the prompt §10 m
 | 1 | Phase 0 approved; branch; plan file; CLAUDE.md SCA section | ✅ 2026-10-01 |
 | 2 | Component intelligence foundation & risk semantics | ✅ 2026-10-01 |
 | 3 | Dashboard / filters / drill-down / search API | ✅ 2026-10-01 |
-| 4 | Accepted-risk / trust policy seam, purpose, adoption | ⏳ next |
-| 5 | Recommendation work item & safer-version discovery | ☐ |
+| 4 | Accepted-risk / trust policy seam, purpose, adoption | ✅ 2026-10-01 |
+| 5 | Recommendation work item & safer-version discovery | ⏳ next |
 | 6 | Alternative discovery & compatibility | ☐ |
 | 7 | History, scoring, confidence, freshness | ☐ |
 | 8 | Human review, audit, permissions | ☐ |
@@ -116,6 +116,47 @@ Decisions / assumptions:
 - Purpose/category facets return `INSUFFICIENT_PURPOSE_EVIDENCE` and never match on names.
 - Search lists versions per family without ranking them; ranking is Step 7.
 
+## Step 4 — Accepted-Risk / Trust Policy Seam, Purpose and Adoption Intelligence
+
+Requirements: FR-SCA-004, FR-SCA-005, FR-SCA-009, FR-SCA-010, NFR-SCA-007 · US-SCA-03, US-SCA-04, US-SCA-07, US-SCA-08.
+
+Delivered:
+- Migration `068_component_advisor_policies`:
+  - `advisor_policy` slots: platform default (`tenant_id IS NULL`) plus one tenant override per kind.
+  - Append-only `advisor_policy_version`, guarded by an ORM `before_flush` hook that rejects UPDATE/DELETE.
+  - `component_purpose_metadata`.
+  - `sbom_component.description`.
+  - `tenant:advisor-policy:read/update` permissions (frozen seed v4): Tenant Admin read+update, Security Analyst read.
+- `policy.py` (pure): validation and evaluation for accepted-risk and trust rules, with a per-criterion trace.
+  - Accepted risk is capped at MEDIUM and never applies with review reasons.
+  - Trust requires a classification and a lifecycle criterion, so adoption alone can never grant it (T9).
+- `policy_service.py`: tenant → platform resolution; ACTIVE / DISABLED / INHERIT versions; optimistic concurrency (409);
+  each publish is audited (`component_advisor.policy.version_published`).
+- `purpose.py` / `purpose_service.py`:
+  - Each purpose field is resolved by source priority SBOM → PACKAGE → CURATED → AI, with provenance.
+  - AI-sourced fields are flagged `ai_assisted`; AI rows require `provenance.model` + `generated_at`.
+  - Search matches only evidenced fields, so LOW-confidence AI never matches (T15/T16).
+- Parsers (CycloneDX JSON/XML, SPDX `description`/`summary`) now keep component descriptions;
+  `scripts/backfill_component_descriptions.py` fills existing rows (only NULLs, `--dry-run` / `--apply`).
+- API:
+  - `GET /components/{key}/classification` (decided-by rule + policy traces).
+  - `GET|POST /policies/{accepted-risk|trust}[/versions]`.
+  - `GET|PUT /purpose/{family_key}` (curated writes use the existing `component:update`).
+  - `adoption` block on component detail (products/projects by name, observed family versions, `CONTEXTUAL_EVIDENCE_NOT_PROOF`).
+  - `trusted` filter, and real values for the Accepted-Risk / Trusted KPIs once a policy exists.
+- Snapshot cache key now includes effective policy version ids and a purpose-row marker.
+
+Decisions / assumptions:
+- Every change is a new immutable version, including disable and reset: `INHERIT` withdraws a tenant override.
+- Accepted-risk rules: `max_actionable_severity` (MEDIUM|LOW, required), `max_cvss_score`,
+  `allowed_actionable_vex_statuses`, `max_actionable_vulnerabilities`, `allowed_lifecycle`, `max_analysis_age_days`.
+  "Explicit risk acceptance" (e.g. `VulnerabilityRemediation` = Accepted Risk) is **not** implemented; open item.
+- Trust rules: `allowed_classifications` (NKAV / ACCEPTED_RISK / LOW / MEDIUM only), `allowed_lifecycle` (both required),
+  `allowed_licenses`, `denied_licenses`, `max_evidence_age_days`, `min_tenant_products`, `require_no_review_reasons`.
+- Permission names use the scoped-configuration family form `tenant:advisor-policy:*` (the phase-0 table wrote
+  `tenant:advisor_policy:*`), so the existing `require_configuration_permission` helper applies unchanged.
+- "Typical development purpose" is carried by `primary_use_case`.
+
 ## Open questions / follow-ups
 - ~~Review Required vs Critical~~ — **resolved 2026-10-01**: the user decided Critical/High outrank review
   reasons. Implemented in Step 3 (`classification.py`); review reasons stay on the record and the
@@ -123,4 +164,11 @@ Decisions / assumptions:
 - `latest_run_per_sbom_as_of_subquery` skips the active-HEAD filter; irrelevant until historical
   `as_of` is in scope (D-11).
 - Stale-evidence thresholds (`ReviewReason.STALE_EVIDENCE`) are wired in Step 7.
-- Confirm the "Frequently Adopted" threshold (3 products) or make it a tenant policy setting in Step 4.
+- Confirm the "Frequently Adopted" threshold (3 products) or make it a tenant policy setting.
+- **Platform-default policy write API** is deferred. It needs `platform:advisor-policy:*`, which changes the frozen
+  Platform Admin V2 allowlist and the `/api/platform/configuration` mapping. Platform rows are already honoured
+  in resolution (tested by direct insert).
+- Explicit risk acceptance as an accepted-risk criterion (link to `VulnerabilityRemediation` "Accepted Risk").
+- **Cold snapshot cost:** about 14 s at the sign-off scale (200k occurrences); warm summary and drill-down are about 1 s.
+  TTL raised to 300 s. If cold rebuilds are unacceptable, add the per-SBOM incremental rollup (NFR-SCA-006).
+- Run `scripts/backfill_component_descriptions.py --apply` after deploying 068.

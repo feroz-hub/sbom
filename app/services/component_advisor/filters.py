@@ -26,7 +26,7 @@ from .lifecycle_mapping import END_OF_LIFE_BUCKETS, LifecycleBucket
 FREQUENT_ADOPTION_MIN_PRODUCTS = 3
 
 SEARCH_FACETS = ("all", "name", "purl", "supplier", "ecosystem", "category", "purpose")
-#: Facets backed by purpose metadata, which does not exist until Step 4 (FR-SCA-009).
+#: Facets answered only from evidenced purpose metadata (FR-SCA-009), never from names.
 PURPOSE_FACETS = frozenset({"category", "purpose"})
 
 SORT_FIELDS = ("name", "risk", "occurrences", "products", "actionable", "latest_analysis")
@@ -56,6 +56,7 @@ class AdvisorFilters:
     lifecycle: frozenset[LifecycleBucket] = field(default_factory=frozenset)
     needs_review: bool | None = None
     frequently_adopted: bool | None = None
+    trusted: bool | None = None
     q: str | None = None
     facet: str = "all"
 
@@ -67,6 +68,7 @@ class AdvisorFilters:
         lifecycle: Sequence[str] | None = None,
         needs_review: bool | None = None,
         frequently_adopted: bool | None = None,
+        trusted: bool | None = None,
         q: str | None = None,
         facet: str | None = None,
     ) -> AdvisorFilters:
@@ -75,6 +77,7 @@ class AdvisorFilters:
             lifecycle=frozenset(_parse_enum(LifecycleBucket, "lifecycle", lifecycle)),
             needs_review=needs_review,
             frequently_adopted=frequently_adopted,
+            trusted=trusted,
             q=(q or "").strip() or None,
             facet=_parse_facet(facet),
         )
@@ -85,8 +88,6 @@ class AdvisorFilters:
         out = []
         if RiskClassification.INFORMATIONAL in self.risk and not INFORMATIONAL_SUPPORTED:
             out.append("risk=INFORMATIONAL")
-        if self.q and self.facet in PURPOSE_FACETS:
-            out.append(f"facet={self.facet}")
         return out
 
     def normalized(self) -> dict[str, Any]:
@@ -96,6 +97,7 @@ class AdvisorFilters:
             "lifecycle": sorted(item.value for item in self.lifecycle),
             "needs_review": self.needs_review,
             "frequently_adopted": self.frequently_adopted,
+            "trusted": self.trusted,
             "q": self.q,
             "facet": self.facet,
         }
@@ -144,8 +146,8 @@ def _contains(haystack: str | None, needle: str) -> bool:
 def matches_search(version, q: str, facet: str) -> bool:
     needle = q.lower()
     if facet in PURPOSE_FACETS:
-        # No purpose evidence yet (Step 4). Never guess a match from the name.
-        return False
+        # Only sufficiently evidenced purpose fields; never inferred from the name (T15).
+        return version.purpose.matches(q, facet)
     checks = {
         "name": lambda: _contains(version.name, needle) or _contains(version.family_key, needle),
         "purl": lambda: _contains(version.purl, needle),
@@ -153,7 +155,7 @@ def matches_search(version, q: str, facet: str) -> bool:
         "ecosystem": lambda: (version.ecosystem or "").lower() == needle,
     }
     if facet == "all":
-        return any(check() for check in checks.values())
+        return any(check() for check in checks.values()) or version.purpose.matches(q, "all")
     return checks[facet]()
 
 
@@ -167,6 +169,8 @@ def apply_filters(versions: Iterable, filters: AdvisorFilters) -> list:
         if filters.needs_review is not None and needs_review(version) != filters.needs_review:
             continue
         if filters.frequently_adopted is not None and is_frequently_adopted(version) != filters.frequently_adopted:
+            continue
+        if filters.trusted is not None and version.trusted != filters.trusted:
             continue
         if filters.q and not matches_search(version, filters.q, filters.facet):
             continue
@@ -259,8 +263,8 @@ def kpis(
         _kpi(
             "trusted_by_policy",
             "Trusted-by-Policy Components",
-            None,
-            {},
+            count(lambda v: v.trusted) if trust_policy_configured else None,
+            {"trusted": True},
             status="OK" if trust_policy_configured else "POLICY_NOT_CONFIGURED",
             render=trust_policy_configured,
         ),
@@ -300,6 +304,7 @@ def search_families(versions: Sequence) -> list[dict[str, Any]]:
                 "ecosystem": version.ecosystem,
                 "suppliers": set(),
                 "versions": [],
+                "purpose": version.purpose.to_dict(),
             },
         )
         if version.supplier:

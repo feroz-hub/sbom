@@ -50,6 +50,8 @@ from ..services.component_advisor.classification import (
 )
 from ..services.component_advisor.identity import LOW, family_key, split_licenses, version_identity
 from ..services.component_advisor.lifecycle_mapping import END_OF_LIFE_BUCKETS, LifecycleView, lifecycle_view
+from ..services.component_advisor.policy import TrustOutcome
+from ..services.component_advisor.purpose import NOT_AVAILABLE, PurposeRecord, ResolvedPurpose, resolve_purpose
 from ..services.vex.identity import canonical_for_finding
 from .base import COMPLETED_RUN_STATUSES
 
@@ -84,6 +86,7 @@ _OCCURRENCE_COLUMNS = (
     SBOMComponent.lifecycle_is_stale,
     SBOMComponent.lifecycle_source,
     SBOMComponent.lifecycle_manual_override,
+    SBOMComponent.description,
     SBOMSource.sbom_name,
     SBOMSource.projectid.label("project_id"),
     SBOMSource.product_id,
@@ -102,11 +105,18 @@ class _VulnAccumulator:
     max_score: float | None = None
     vector: str | None = None
     cvss_version: str | None = None
+    vex_statuses: set[str] = field(default_factory=set)
 
-    def add(self, *, severity: str, actionable: bool, score: float | None, vector: str | None, cvss_version: str | None) -> None:
+    def add(
+        self, *, severity: str, actionable: bool, effective: str | None, score: float | None,
+        vector: str | None, cvss_version: str | None,
+    ) -> None:
         if SEVERITY_RANK[severity] > SEVERITY_RANK[self.severity]:
             self.severity = severity
         self.actionable = self.actionable or actionable
+        if actionable:
+            # No context yet means UNDER_INVESTIGATION (VEX-REC-002 A).
+            self.vex_statuses.add(effective or "UNDER_INVESTIGATION")
         if score is not None and (self.max_score is None or score > self.max_score):
             self.max_score, self.vector, self.cvss_version = score, vector, cvss_version
 
@@ -145,6 +155,21 @@ class ComponentVersionIntelligence:
     analysed_occurrence_count: int
     evidence: list[dict[str, int]]
     vex_only_context_count: int = 0
+    actionable_vex_statuses: frozenset[str] = frozenset()
+    #: ``(sbom_id, description)`` declared by each occurrence (purpose evidence).
+    sbom_descriptions: list[tuple[int, str | None]] = field(default_factory=list)
+    purpose: ResolvedPurpose = NOT_AVAILABLE
+    accepted_risk: AcceptedRiskOutcome | None = None
+    trust: TrustOutcome | None = None
+    trust_policy_configured: bool = False
+
+    @property
+    def max_actionable_cvss(self) -> float | None:
+        return self.cvss.get("max_score")
+
+    @property
+    def trusted(self) -> bool:
+        return bool(self.trust and self.trust.trusted)
 
     @property
     def is_end_of_life(self) -> bool:
@@ -165,7 +190,8 @@ class ComponentVersionIntelligence:
             "licenses": list(self.licenses),
             # Purpose metadata arrives in Step 4 (FR-SCA-009); exposed now so
             # the contract never implies purpose evidence that does not exist.
-            "purpose": {"status": "NOT_AVAILABLE", "value": None, "provenance": None},
+            "purpose": self.purpose.to_dict(),
+            "trust": _trust_dict(self),
             "usage": {
                 "active_sbom_occurrences": self.occurrence_count,
                 "sbom_count": len(self.sbom_ids),
@@ -177,6 +203,7 @@ class ComponentVersionIntelligence:
                 "classification": self.classification.value,
                 "review_reasons": list(self.review_reasons),
                 "accepted_risk_policy_version_id": self.accepted_risk_policy_version_id,
+                "accepted_risk": _accepted_risk_dict(self.accepted_risk),
                 "actionable_vulnerability_count": self.actionable_vulnerability_count,
                 "non_actionable_vulnerability_count": self.non_actionable_vulnerability_count,
                 "actionable_severity_counts": dict(self.actionable_severity_counts),
@@ -205,6 +232,27 @@ class ComponentVersionIntelligence:
         }
 
 
+def _accepted_risk_dict(outcome: AcceptedRiskOutcome | None) -> dict[str, Any] | None:
+    if outcome is None:
+        return None
+    return {
+        "policy_version_id": outcome.policy_version_id,
+        "satisfied": outcome.satisfied,
+        "criteria": [dict(item) for item in outcome.criteria],
+    }
+
+
+def _trust_dict(version: "ComponentVersionIntelligence") -> dict[str, Any]:
+    outcome = version.trust
+    if outcome is None:
+        return {"status": "POLICY_NOT_CONFIGURED", "policy_version_id": None, "criteria": []}
+    return {
+        "status": "TRUSTED_BY_POLICY" if outcome.trusted else "NOT_TRUSTED",
+        "policy_version_id": outcome.policy_version_id,
+        "criteria": [criterion.to_dict() for criterion in outcome.criteria],
+    }
+
+
 @dataclass
 class ComponentIntelligenceSnapshot:
     versions: list[ComponentVersionIntelligence] = field(default_factory=list)
@@ -214,6 +262,8 @@ class ComponentIntelligenceSnapshot:
     analysed_sbom_count: int = 0
     eligible_sbom_count: int = 0
     latest_analysis_at: str | None = None
+    #: Effective policies the snapshot was classified with (set by the service).
+    policies: Any = None
 
 
 # ---------------------------------------------------------------------------
@@ -334,13 +384,22 @@ def component_intelligence_snapshot(
     tenant_id: int,
     sbom_ids,
     accepted_risk_evaluator=None,
+    trust_evaluator=None,
+    purpose_records: dict[str, list[PurposeRecord]] | None = None,
 ) -> ComponentIntelligenceSnapshot:
-    """Unique component versions with risk, usage, lifecycle and freshness.
+    """Unique component versions with risk, usage, lifecycle, purpose and freshness.
 
-    ``accepted_risk_evaluator`` is the FR-SCA-004 seam: a callable taking a
-    :class:`ComponentVersionIntelligence`-in-progress dict and returning an
-    :class:`AcceptedRiskOutcome` or ``None``. Step 2 passes ``None`` — no
-    policy, so nothing is Accepted Risk.
+    Seams (supplied by the service layer, pure callables):
+
+    * ``accepted_risk_evaluator(record) -> AcceptedRiskOutcome | None``
+      (FR-SCA-004). Called before bucketing, with ``review_reasons`` set.
+    * ``trust_evaluator(record) -> TrustOutcome | None`` (FR-SCA-005). Called
+      after bucketing; trust is a flag, never a risk bucket.
+    * ``purpose_records`` — curated / package / AI purpose rows by family
+      key (FR-SCA-009). SBOM-declared descriptions are added here.
+
+    With no seams, nothing is Accepted Risk or Trusted and purpose comes from
+    SBOM descriptions only.
     """
     occurrences = advisor_component_occurrences(db, tenant_id=tenant_id, sbom_ids=sbom_ids)
     latest_runs = advisor_latest_runs(db, tenant_id=tenant_id, sbom_ids=sbom_ids)
@@ -355,8 +414,20 @@ def component_intelligence_snapshot(
     sbom_of_component: dict[int, int] = {}
     groups: dict[str, list[Any]] = defaultdict(list)
     identities: dict[str, Any] = {}
+    # Versions recur across SBOMs (adoption), so derive each distinct identity
+    # once. Occurrence-level fallbacks embed the row id and are never shared.
+    identity_cache: dict[tuple, Any] = {}
     for row in occurrences:
-        identity = version_identity(row)
+        fields = (
+            row.dedupe_canonical_id, row.normalized_purl, row.primary_cpe, row.normalized_ecosystem,
+            row.normalized_name, row.normalized_version, row.normalized_supplier,
+            row.canonical_identity_confidence,
+        )
+        identity = identity_cache.get(fields)
+        if identity is None:
+            identity = version_identity(row)
+            if identity.basis != "occurrence":
+                identity_cache[fields] = identity
         key_of_component[row.id] = identity.key
         sbom_of_component[row.id] = row.sbom_id
         groups[identity.key].append(row)
@@ -386,6 +457,7 @@ def component_intelligence_snapshot(
         vulns[key].setdefault(canonical, _VulnAccumulator()).add(
             severity=normalize_severity(finding.severity),
             actionable=actionable,
+            effective=effective,
             score=finding.score,
             vector=finding.vector,
             cvss_version=finding.cvss_version,
@@ -483,10 +555,18 @@ def component_intelligence_snapshot(
             analysed_occurrence_count=len(analysed),
             evidence=evidence,
             vex_only_context_count=vex_only.get(key, 0),
+            actionable_vex_statuses=frozenset().union(*(v.vex_statuses for v in actionable_vulns)),
+            sbom_descriptions=[(row.sbom_id, row.description) for row in primary_rows],
         )
+        record.purpose = resolve_purpose(
+            sbom_descriptions=record.sbom_descriptions,
+            records=(purpose_records or {}).get(record.family_key or "", ()),
+        )
+        record.review_reasons = sorted(reason.value for reason in reasons)
         accepted: AcceptedRiskOutcome | None = (
             accepted_risk_evaluator(record) if accepted_risk_evaluator is not None else None
         )
+        record.accepted_risk = accepted
         result = classify(
             ClassificationInput(
                 has_vulnerability_evidence=bool(analysed),
@@ -499,6 +579,9 @@ def component_intelligence_snapshot(
         record.highest_actionable_severity = result.highest_actionable_severity
         record.review_reasons = list(result.review_reasons)
         record.accepted_risk_policy_version_id = result.accepted_risk_policy_version_id
+        if trust_evaluator is not None:
+            record.trust = trust_evaluator(record)
+            record.trust_policy_configured = record.trust is not None
         snapshot.versions.append(record)
 
     snapshot.versions.sort(key=lambda v: (str(v.name).lower(), str(v.version or ""), v.canonical_key))

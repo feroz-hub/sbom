@@ -20,6 +20,7 @@ from sqlalchemy import (
 from sqlalchemy import (
     text as sql_text,
 )
+from sqlalchemy.orm import Session as _AdvisorSession
 from sqlalchemy.orm import relationship, synonym
 from sqlalchemy.sql import expression
 
@@ -1037,6 +1038,9 @@ class SBOMComponent(Base, SoftDeleteMixin, TenantOwnedMixin):
     lifecycle_evidence_json = Column(JSON, nullable=True)
     lifecycle_is_stale = Column(Boolean, nullable=False, default=False)
     lifecycle_manual_override = Column(Boolean, nullable=False, default=False)
+    #: Functional description declared by the SBOM itself (CycloneDX / SPDX
+    #: ``description``). Purpose evidence of source SBOM (FR-SCA-009, migration 068).
+    description = Column(Text, nullable=True)
 
     normalized_component_key = Column(String, nullable=True, index=True)
     dedupe_canonical_id = Column(String, nullable=True, index=True)
@@ -2334,6 +2338,114 @@ Index("ix_sbom_component_duplicate_of_component_id", SBOMComponent.duplicate_of_
 Index("ix_sbom_source_converted_from_format", SBOMSource.converted_from_format)
 Index("ix_sbom_source_parent_id", SBOMSource.parent_id)
 Index("ix_sbom_source_sbom_type", SBOMSource.sbom_type)
+
+# ---------------------------------------------------------------------------
+# Secure Component Advisor (migration 068)
+# ---------------------------------------------------------------------------
+
+
+class AdvisorPolicy(Base):
+    """One advisor policy slot: platform default (NULL tenant) or tenant override.
+
+    FR-SCA-004 (accepted risk), FR-SCA-005 (trust), FR-SCA-017 (scoring).
+    Follows the scoped-configuration shape (``docs/scoped-configuration.md``):
+    one platform row per kind, at most one tenant row per kind. The slot holds
+    no rules — every change, including enable/disable, is a new immutable
+    :class:`AdvisorPolicyVersion`, so classifications stay traceable to the
+    exact version that produced them (NFR-SCA-007). ``row_version`` gives
+    optimistic concurrency for publishing a new version.
+    """
+
+    __tablename__ = "advisor_policy"
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True, index=True)
+    kind = Column(String(32), nullable=False)
+    row_version = Column(Integer, nullable=False, default=1, server_default="1")
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    updated_at = Column(DateTime(timezone=True), nullable=False)
+    created_by = Column(String(128), nullable=True)
+    updated_by = Column(String(128), nullable=True)
+
+    versions = relationship("AdvisorPolicyVersion", back_populates="policy", order_by="AdvisorPolicyVersion.version")
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "kind", name="uq_advisor_policy_tenant_kind"),
+        Index(
+            "uq_advisor_policy_platform_kind", "kind", unique=True,
+            postgresql_where=sql_text("tenant_id IS NULL"), sqlite_where=sql_text("tenant_id IS NULL"),
+        ),
+    )
+
+
+class AdvisorPolicyVersion(Base):
+    """Immutable policy version. Append-only: updates and deletes are rejected."""
+
+    __tablename__ = "advisor_policy_version"
+
+    id = Column(Integer, primary_key=True)
+    policy_id = Column(Integer, ForeignKey("advisor_policy.id"), nullable=False, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True, index=True)
+    kind = Column(String(32), nullable=False)
+    version = Column(Integer, nullable=False)
+    #: ACTIVE or DISABLED. A DISABLED latest version means "no policy" for the
+    #: slot; a tenant DISABLED version also stops the platform default applying.
+    status = Column(String(16), nullable=False)
+    rules_json = Column(JSON, nullable=False)
+    reason = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    created_by = Column(String(128), nullable=True)
+    correlation_id = Column(String(128), nullable=True)
+
+    policy = relationship("AdvisorPolicy", back_populates="versions")
+
+    __table_args__ = (UniqueConstraint("policy_id", "version", name="uq_advisor_policy_version_number"),)
+
+
+class ComponentPurposeMetadata(Base):
+    """Functional purpose for a component family, with provenance (FR-SCA-009).
+
+    NULL tenant = platform-curated; a tenant row overrides it for that tenant
+    only. ``source`` is PACKAGE, CURATED or AI. AI rows always carry
+    ``confidence`` and ``provenance_json`` and are never presented as
+    authoritative structured metadata.
+    """
+
+    __tablename__ = "component_purpose_metadata"
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True, index=True)
+    family_key = Column(String(512), nullable=False, index=True)
+    source = Column(String(16), nullable=False)
+    purpose = Column(Text, nullable=True)
+    primary_use_case = Column(String(255), nullable=True)
+    category = Column(String(128), nullable=True, index=True)
+    confidence = Column(String(16), nullable=False)
+    provenance_json = Column(JSON, nullable=True)
+    row_version = Column(Integer, nullable=False, default=1, server_default="1")
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    updated_at = Column(DateTime(timezone=True), nullable=False)
+    created_by = Column(String(128), nullable=True)
+    updated_by = Column(String(128), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "family_key", "source", name="uq_component_purpose_tenant_family_source"),
+        Index(
+            "uq_component_purpose_platform_family_source", "family_key", "source", unique=True,
+            postgresql_where=sql_text("tenant_id IS NULL"), sqlite_where=sql_text("tenant_id IS NULL"),
+        ),
+    )
+
+
+@event.listens_for(_AdvisorSession, "before_flush")
+def _advisor_policy_versions_are_append_only(session, _flush_context, _instances) -> None:
+    """NFR-SCA-007: policy versions are append-only, enforced, not just documented."""
+    for instance in session.dirty | session.deleted:
+        if isinstance(instance, AdvisorPolicyVersion) and (
+            instance in session.deleted or session.is_modified(instance, include_collections=False)
+        ):
+            raise RuntimeError("advisor_policy_version rows are append-only")
+
 
 # Register report tables for Alembic and metadata-based test databases.
 from .models_reports import ReportArtifact, ReportDelivery, ReportSubscription  # noqa: E402,F401

@@ -562,6 +562,11 @@ def permission_for_request(request: Request) -> str:
         return "platform:tenant:create"
     if _platform_configuration_path(path):
         return "platform:admin"
+    if path.startswith("/api/component-advisor/policies"):
+        return "tenant:advisor-policy:read" if method == "GET" else "tenant:advisor-policy:update"
+    if path.startswith("/api/component-advisor/purpose") and method != "GET":
+        # Curated purpose metadata reuses the existing component edit right.
+        return "component:update"
     if path.startswith("/api/component-advisor"):
         # Coarse gate only. Write routes (Step 5+) re-check the specific
         # create / review / accept permission at the route.

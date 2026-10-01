@@ -134,7 +134,11 @@ class AcceptedRiskOutcome:
 
     satisfied: bool
     policy_version_id: int | None = None
+    #: Criteria that passed / failed, by name.
     reasons: tuple[str, ...] = ()
+    failures: tuple[str, ...] = ()
+    #: Full per-criterion trace (``{"criterion", "passed", "detail"}``) for the UI.
+    criteria: tuple[dict, ...] = ()
 
 
 @dataclass(frozen=True)

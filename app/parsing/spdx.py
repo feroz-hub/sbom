@@ -67,6 +67,7 @@ def parse_spdx_dict(doc: dict[str, Any]) -> list[dict[str, Any]]:
                 "bom_ref": norm(pkg.get("SPDXID")),
                 "license": license_str,
                 "hashes": hashes_str,
+                "description": norm(pkg.get("description") or pkg.get("summary")),
             }
         )
     # SPDX-Lite or other representations

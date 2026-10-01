@@ -7,6 +7,7 @@ from ..authorization_catalog_seed_v3 import (
     COMPONENT_ADVISOR_PERMISSIONS_V3,
     COMPONENT_ADVISOR_ROLE_PERMISSIONS_V3,
 )
+from ..authorization_catalog_seed_v4 import ADVISOR_POLICY_PERMISSIONS_V4, ADVISOR_POLICY_ROLE_PERMISSIONS_V4
 from .native_identity import AccountStatus
 
 TENANT_ROLES = frozenset({"TENANT_ADMIN", "SECURITY_ANALYST", "DEVELOPER", "VIEWER"})
@@ -92,7 +93,7 @@ ALL_PERMISSIONS = frozenset(
         "platform:authorization:read",
         "platform:authorization:manage",
     }
-) | COMPONENT_ADVISOR_PERMISSIONS_V3
+) | COMPONENT_ADVISOR_PERMISSIONS_V3 | ADVISOR_POLICY_PERMISSIONS_V4
 
 ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
     "PLATFORM_ADMIN": PLATFORM_ADMIN_PERMISSIONS_V2,
@@ -147,7 +148,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             "analysis:read",
             "analysis:run",
         }
-    ) | COMPONENT_ADVISOR_ROLE_PERMISSIONS_V3["TENANT_ADMIN"],
+    ) | COMPONENT_ADVISOR_ROLE_PERMISSIONS_V3["TENANT_ADMIN"] | ADVISOR_POLICY_ROLE_PERMISSIONS_V4["TENANT_ADMIN"],
     "SECURITY_ANALYST": frozenset(
         {
             "sbom:read",
@@ -183,7 +184,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             "analysis:read",
             "analysis:run",
         }
-    ) | COMPONENT_ADVISOR_ROLE_PERMISSIONS_V3["SECURITY_ANALYST"],
+    ) | COMPONENT_ADVISOR_ROLE_PERMISSIONS_V3["SECURITY_ANALYST"] | ADVISOR_POLICY_ROLE_PERMISSIONS_V4["SECURITY_ANALYST"],
     "DEVELOPER": frozenset(
         {
             "sbom:read",

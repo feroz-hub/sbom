@@ -235,6 +235,12 @@ def _reset_authorization_catalog(database_url: str) -> None:
             advisor_module = importlib.util.module_from_spec(advisor_spec)
             advisor_spec.loader.exec_module(advisor_module)
             advisor_module._seed(connection)
+            policy_spec = importlib.util.spec_from_file_location(
+                "_component_advisor_policy_permissions", migration_path.with_name("068_component_advisor_policies.py")
+            )
+            policy_module = importlib.util.module_from_spec(policy_spec)
+            policy_spec.loader.exec_module(policy_module)
+            policy_module._seed(connection)
     finally:
         engine.dispose()
 
