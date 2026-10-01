@@ -2532,6 +2532,35 @@ class ComponentRecommendationCandidate(Base, TenantOwnedMixin):
     created_at = Column(DateTime(timezone=True), nullable=False)
 
     recommendation = relationship("ComponentRecommendation", back_populates="candidates")
+    compatibility_checks = relationship(
+        "ComponentRecommendationCompatibilityCheck", back_populates="candidate",
+        cascade="all, delete-orphan", order_by="ComponentRecommendationCompatibilityCheck.id",
+    )
+
+
+class ComponentRecommendationCompatibilityCheck(Base, TenantOwnedMixin):
+    """One compatibility check result for a candidate (FR-SCA-014).
+
+    ``result`` is PASS | FAIL | REVIEW_REQUIRED | UNKNOWN; ``blocking`` FAILs
+    prevent any "approved replacement" representation and cannot be
+    overridden by a score (FR-SCA-015).
+    """
+
+    __tablename__ = "component_recommendation_compatibility_check"
+
+    id = Column(Integer, primary_key=True)
+    candidate_id = Column(
+        Integer, ForeignKey("component_recommendation_candidate.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    check_type = Column(String(32), nullable=False)
+    result = Column(String(16), nullable=False)
+    blocking = Column(Boolean, nullable=False, default=False, server_default=sql_text("false"))
+    reason = Column(Text, nullable=False)
+    limitation = Column(String(64), nullable=True)
+    evidence_json = Column(JSON, nullable=False)
+    evaluated_at = Column(DateTime(timezone=True), nullable=False)
+
+    candidate = relationship("ComponentRecommendationCandidate", back_populates="compatibility_checks")
 
 
 Index("ix_component_recommendation_tenant_identity", ComponentRecommendation.tenant_id, ComponentRecommendation.id)
@@ -2539,6 +2568,11 @@ Index(
     "ix_component_recommendation_candidate_tenant_identity",
     ComponentRecommendationCandidate.tenant_id,
     ComponentRecommendationCandidate.id,
+)
+Index(
+    "ix_component_recommendation_compatibility_check_tenant_identity",
+    ComponentRecommendationCompatibilityCheck.tenant_id,
+    ComponentRecommendationCompatibilityCheck.id,
 )
 
 

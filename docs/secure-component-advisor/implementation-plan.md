@@ -13,8 +13,8 @@ Branch: `feat/secure-component-advisor`. Test ids T1…T45 are the prompt §10 m
 | 3 | Dashboard / filters / drill-down / search API | ✅ 2026-10-01 |
 | 4 | Accepted-risk / trust policy seam, purpose, adoption | ✅ 2026-10-01 |
 | 5 | Recommendation work item & safer-version discovery | ✅ 2026-10-01 |
-| 6 | Alternative discovery & compatibility | ⏳ next |
-| 7 | History, scoring, confidence, freshness | ☐ |
+| 6 | Alternative discovery & compatibility | ✅ 2026-10-01 |
+| 7 | History, scoring, confidence, freshness | ⏳ next |
 | 8 | Human review, audit, permissions | ☐ |
 | 9 | Frontend | ☐ |
 | 10 | Tests, performance, observability, analytics, docs | ☐ |
@@ -207,6 +207,58 @@ Decisions / assumptions:
 - Deviation from phase-0 §5: factor, compatibility-check and event tables are deferred to the migrations for
   Steps 6–8, so each migration only adds what its step uses.
 
+## Step 6 — Tenant-First / External Alternative Discovery & Compatibility Evaluation
+
+Requirements: FR-SCA-012, FR-SCA-014, FR-SCA-015, NFR-SCA-003 · US-SCA-10.
+
+Delivered:
+- `recommendations/alternative_discovery.py`:
+  - Gate: discovery runs only with an established ecosystem (not generic), an evidenced `technology_category`
+    and product constraints. Otherwise it returns `INSUFFICIENT_ECOSYSTEM_EVIDENCE` / `INSUFFICIENT_PURPOSE_EVIDENCE` /
+    `PRODUCT_CONSTRAINTS_UNAVAILABLE`.
+  - Order: tenant-observed families (same category + ecosystem; the safest observed version per family; adoption
+    evidence, T22) → configured external adapters → manual reviewer candidates.
+  - Purpose mismatches (T23) and not-safer families are excluded with reasons.
+- `sources.py`: `PackageMetadataSource` adapter contract.
+  - **No production adapter is registered.**
+  - Each adapter call has a timeout and a per-source `CircuitBreaker` (threshold 3, reset 15 min).
+  - Failures surface as `*_EXTERNAL_SOURCE_DEGRADED` plus per-source outcomes, never as errors (NFR-SCA-003).
+- `recommendations/compatibility.py` (pure):
+  - All 14 spec check types, each PASS / FAIL / REVIEW_REQUIRED / UNKNOWN with evidence, reason, limitation,
+    blocking flag and evaluated time.
+  - Blocking: different ecosystem or language, no or mismatched purpose for an alternative, outside product
+    constraints, denied or unlisted license (T24), known API/ABI break, unsupported OS/runtime/architecture that the
+    product needs (T25), regulatory block, lifecycle forbidden by policy (EOL forbidden by default) (T26).
+  - Missing evidence is UNKNOWN and never PASS.
+  - `drop_in_representable` is false unless every check passes.
+- Migration `070_component_recommendation_compatibility`: `component_recommendation_compatibility_check`.
+- Service:
+  - Every candidate (same-family, alternative, manual) runs through the gates.
+  - Ranking: same-family before alternatives (T21); blocked candidates last within each kind.
+  - Manual candidates are rebuilt from their stored input on re-evaluation.
+  - `add_manual_candidate` is audited.
+- API:
+  - `POST /recommendations/{id}/candidates` (manual; requires `component_advisor:recommendation:review`;
+    REVIEW_REQUIRED items only).
+  - `GET /recommendations/{id}/candidates/{cid}` and `/compatibility`.
+  - The discovery summary now includes alternatives status, category, product constraints, external source
+    outcomes and the blocked count.
+
+Decisions / assumptions:
+- **Product constraints baseline:** the ecosystems present in the products that use the source (tenant-wide items
+  use the source's SBOMs). There is no product platform/runtime model, so OS/runtime/architecture are UNKNOWN unless
+  adapter or reviewer evidence plus product needs exist.
+- **License policy:** the trust policy's `allowed_licenses` / `denied_licenses` lists act as the license policy.
+  Without them, a license change is REVIEW_REQUIRED.
+- **Lifecycle:** a trust policy's `allowed_lifecycle` decides when it is configured. Otherwise EOL is a blocking FAIL
+  and EOS is REVIEW_REQUIRED.
+- Alternative purpose similarity = equal evidenced `technology_category` (case-insensitive). Finer similarity (use
+  case) is not scored yet.
+- Manual purpose statements are recorded as reviewer-provenanced CURATED evidence, and a reviewer cannot bypass a
+  blocking check.
+- One Step 5 test expectation changed: alternatives are now evaluated, so a scenario without purpose data reports
+  `INSUFFICIENT_PURPOSE_EVIDENCE`.
+
 ## Open questions / follow-ups
 - ~~Review Required vs Critical~~ — **resolved 2026-10-01**: the user decided Critical/High outrank review
   reasons. Implemented in Step 3 (`classification.py`); review reasons stay on the record and the
@@ -223,5 +275,8 @@ Decisions / assumptions:
   TTL raised to 300 s. If cold rebuilds are unacceptable, add the per-SBOM incremental rollup (NFR-SCA-006).
 - Run `scripts/backfill_component_descriptions.py --apply` after deploying 068.
 - Confirm the POLICY_VIOLATION trigger definition (Step 5 baseline: trust policy says "not trusted").
+- Product platform/runtime constraints model (would turn many OS/RUNTIME/ARCH UNKNOWNs into PASS/FAIL).
+- A dedicated license policy, separate from the trust policy, if the business wants license gating without trust.
+- Approved external package-metadata sources (spec §12) before any adapter is registered.
 - Regression runs must use a frozen worktree: twice, a migration added mid-run made later app-startup tests fail
   with "schema not at head", which invalidated those runs.

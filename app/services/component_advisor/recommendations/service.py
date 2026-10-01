@@ -26,11 +26,17 @@ from sqlalchemy.orm import Session
 
 from ....logger import get_logger, log_event
 from ....metrics.component_advisor import advisor_remediation_hints
-from ....models import ComponentRecommendation, ComponentRecommendationCandidate
+from ....models import (
+    ComponentRecommendation,
+    ComponentRecommendationCandidate,
+    ComponentRecommendationCompatibilityCheck,
+)
 from ...audit_service import write_audit_log
 from ...dashboard_scope import DashboardScope, dashboard_scope
 from ..intelligence_service import cached_snapshot, get_component_version
-from .version_discovery import discover_same_family
+from .alternative_discovery import discover_alternatives, manual_candidate, product_constraints
+from .compatibility import evaluate_compatibility, summarize
+from .version_discovery import CandidateEvaluation, discover_same_family
 from .workflow import (
     OPEN_STATUSES,
     RecommendationStatus,
@@ -165,6 +171,7 @@ def evaluate_recommendation(
         with db.begin_nested(), dashboard_scope(db, tenant_scope):
             snapshot = cached_snapshot(db, tenant_scope)
             source = next((v for v in snapshot.versions if v.canonical_key == item.source_canonical_key), None)
+            manual_inputs = _manual_inputs(db, tenant_id, item.id)
             db.query(ComponentRecommendationCandidate).filter(
                 ComponentRecommendationCandidate.recommendation_id == item.id,
                 ComponentRecommendationCandidate.tenant_id == tenant_id,
@@ -184,20 +191,31 @@ def evaluate_recommendation(
                     lifecycle_hints=hints["lifecycle"],
                     fixed_versions={k: v for k, v in hints["fixed_versions"].items() if k in actionable},
                 )
+                constraints = product_constraints(source, snapshot.versions)
+                alternatives = discover_alternatives(source, snapshot.versions, constraints=constraints)
+                manual = [manual_candidate(source, payload, snapshot.versions, actor=actor) for payload, actor in manual_inputs]
+                trust = snapshot.policies.trust if snapshot.policies else None
+                persisted = _persist_candidates(
+                    db, item=item, tenant_id=tenant_id, source=source, constraints=constraints, trust=trust,
+                    candidates=[*result.candidates, *alternatives.candidates, *manual],
+                )
                 summary = result.summary()
+                summary.update({
+                    "alternative_candidates": len(alternatives.candidates),
+                    "alternatives_status": alternatives.status,
+                    "alternative_category": alternatives.category,
+                    "external_sources": alternatives.external_sources,
+                    "manual_candidates": len(manual),
+                    "excluded": [*summary["excluded"], *alternatives.excluded],
+                    "product_constraints": constraints.to_dict(),
+                    "blocked_candidates": sum(1 for c in persisted if c.blocked),
+                })
+                if not persisted:
+                    summary["status"] = "NO_CANDIDATES_FOUND"
+                elif summary["status"] == "NO_CANDIDATES_FOUND":
+                    summary["status"] = "CANDIDATES_FOUND"
                 if not source.family_key:
                     summary["status"] = "INSUFFICIENT_IDENTITY_EVIDENCE"
-                now = _now()
-                for candidate in result.candidates:
-                    db.add(ComponentRecommendationCandidate(
-                        tenant_id=tenant_id, recommendation_id=item.id,
-                        candidate_kind=candidate.kind.value, source_type=candidate.source_type.value,
-                        candidate_canonical_key=candidate.canonical_key, name=candidate.name,
-                        version=candidate.version, purl=candidate.purl, ecosystem=candidate.ecosystem,
-                        rank=candidate.rank, evidence_sources_json=candidate.evidence_sources,
-                        reasons_json=candidate.reasons, limitations_json=candidate.limitations,
-                        evaluation_json=candidate.evaluation, created_at=now,
-                    ))
                 summary["source_posture"] = {
                     "classification": source.classification.value,
                     "highest_actionable_severity": source.highest_actionable_severity,
@@ -233,6 +251,123 @@ def evaluate_recommendation(
               status=summary["status"], candidates=summary.get("same_family_candidates", 0),
               duration_ms=duration_ms, correlation_id=correlation_id)
     return item
+
+
+_KIND_ORDER = {"SAME_FAMILY_VERSION": 0, "ALTERNATIVE": 1}
+
+
+def _manual_inputs(db: Session, tenant_id: int, recommendation_id: int) -> list[tuple[dict, str]]:
+    """Reviewer-proposed candidates, kept across re-evaluation by re-running them from their input."""
+    rows = db.scalars(
+        select(ComponentRecommendationCandidate).where(
+            ComponentRecommendationCandidate.recommendation_id == recommendation_id,
+            ComponentRecommendationCandidate.tenant_id == tenant_id,
+            ComponentRecommendationCandidate.source_type == "MANUAL",
+        ).order_by(ComponentRecommendationCandidate.id)
+    ).all()
+    out = []
+    for row in rows:
+        evaluation = row.evaluation_json or {}
+        if evaluation.get("manual_input"):
+            out.append((dict(evaluation["manual_input"]), (evaluation.get("manual_provenance") or {}).get("recorded_by", "unknown")))
+    return out
+
+
+def _persist_candidates(
+    db: Session, *, item, tenant_id: int, source, constraints, trust, candidates: list[CandidateEvaluation],
+) -> list[ComponentRecommendationCandidate]:
+    """Run the compatibility gates on every candidate, rank, and write candidates + checks.
+
+    Ranking (review order, no score yet): same-family versions before
+    alternatives (T21); within each kind, blocked candidates last; otherwise
+    discovery order.
+    """
+    evaluated = []
+    for order, candidate in enumerate(candidates):
+        checks = evaluate_compatibility(source, candidate.facts, constraints=constraints, trust_policy=trust)
+        compat = summarize(checks)
+        candidate.evaluation = {**candidate.evaluation, "compatibility": compat}
+        evaluated.append((candidate, checks, compat, order))
+    evaluated.sort(key=lambda entry: (_KIND_ORDER[entry[0].kind.value], entry[2]["blocked"], entry[3]))
+    now = _now()
+    rows = []
+    for rank, (candidate, checks, compat, _order) in enumerate(evaluated, start=1):
+        row = ComponentRecommendationCandidate(
+            tenant_id=tenant_id, recommendation_id=item.id,
+            candidate_kind=candidate.kind.value, source_type=candidate.source_type.value,
+            candidate_canonical_key=candidate.canonical_key, name=candidate.name,
+            version=candidate.version, purl=candidate.purl, ecosystem=candidate.ecosystem,
+            rank=rank, evidence_sources_json=candidate.evidence_sources,
+            reasons_json=candidate.reasons, limitations_json=candidate.limitations,
+            evaluation_json=candidate.evaluation, blocked=compat["blocked"], created_at=now,
+        )
+        row.compatibility_checks = [
+            ComponentRecommendationCompatibilityCheck(
+                tenant_id=tenant_id, check_type=check.check_type, result=check.result.value, blocking=check.blocking,
+                reason=check.reason, limitation=check.limitation, evidence_json=check.evidence,
+                evaluated_at=datetime.fromisoformat(check.evaluated_at),
+            )
+            for check in checks
+        ]
+        db.add(row)
+        rows.append(row)
+    db.flush()
+    return rows
+
+
+def add_manual_candidate(
+    db: Session, *, context, recommendation_id: int, payload: dict, request=None,
+) -> ComponentRecommendation:
+    """Append a reviewer-proposed candidate (spec Step 6). REVIEW_REQUIRED items only."""
+    tenant_id = context.tenant_id
+    item = get_recommendation(db, tenant_id, recommendation_id, lock=True)
+    if item.status != RecommendationStatus.REVIEW_REQUIRED.value:
+        raise InvalidState(f"Candidates can only be added while REVIEW_REQUIRED (is {item.status})")
+    tenant_scope = DashboardScope(tenant_id)
+    with dashboard_scope(db, tenant_scope):
+        snapshot = cached_snapshot(db, tenant_scope)
+    source = next((v for v in snapshot.versions if v.canonical_key == item.source_canonical_key), None)
+    if source is None:
+        raise InvalidState("The source component is no longer in the current dataset; re-evaluate first")
+    actor = context.actor_label()
+    candidate = manual_candidate(source, payload, snapshot.versions, actor=actor)
+    constraints = product_constraints(source, snapshot.versions)
+    trust = snapshot.policies.trust if snapshot.policies else None
+    checks = evaluate_compatibility(source, candidate.facts, constraints=constraints, trust_policy=trust)
+    compat = summarize(checks)
+    candidate.evaluation = {**candidate.evaluation, "compatibility": compat}
+    rank = (db.scalar(select(func.max(ComponentRecommendationCandidate.rank)).where(
+        ComponentRecommendationCandidate.recommendation_id == item.id)) or 0) + 1
+    row = ComponentRecommendationCandidate(
+        tenant_id=tenant_id, recommendation_id=item.id, candidate_kind=candidate.kind.value,
+        source_type=candidate.source_type.value, candidate_canonical_key=candidate.canonical_key, name=candidate.name,
+        version=candidate.version, purl=candidate.purl, ecosystem=candidate.ecosystem, rank=rank,
+        evidence_sources_json=candidate.evidence_sources, reasons_json=candidate.reasons,
+        limitations_json=candidate.limitations, evaluation_json=candidate.evaluation, blocked=compat["blocked"],
+        created_at=_now(),
+    )
+    row.compatibility_checks = [
+        ComponentRecommendationCompatibilityCheck(
+            tenant_id=tenant_id, check_type=c.check_type, result=c.result.value, blocking=c.blocking, reason=c.reason,
+            limitation=c.limitation, evidence_json=c.evidence, evaluated_at=datetime.fromisoformat(c.evaluated_at),
+        )
+        for c in checks
+    ]
+    db.add(row)
+    item.row_version = (item.row_version or 1) + 1
+    item.updated_at = _now()
+    db.flush()
+    write_audit_log(
+        db, context, "component_advisor.recommendation.candidate_added", entity_type="component_recommendation",
+        entity_id=item.id, new_value={"candidate_id": row.id, "name": row.name, "version": row.version,
+                                      "blocked": row.blocked, "rationale": payload.get("rationale")},
+        request=request, detail=f"Manual candidate {row.name} {row.version or ''}".strip()[:240],
+    )
+    return item
+
+
+class InvalidState(RuntimeError):
+    """The work item is not in a state that allows the operation (HTTP 409)."""
 
 
 def list_recommendations(
@@ -297,8 +432,37 @@ def serialize_candidate(candidate: ComponentRecommendationCandidate) -> dict[str
         "score": candidate.score,
         "confidence": candidate.confidence or "NOT_EVALUATED",
         "blocked": bool(candidate.blocked),
+        "compatibility": (candidate.evaluation_json or {}).get("compatibility", {"status": "NOT_EVALUATED"}),
+        # A blocked candidate can never be represented as an approved replacement
+        # (FR-SCA-015); until confidence exists (Step 7) none can.
         "approved_replacement": False,
     }
+
+
+def serialize_check(check: ComponentRecommendationCompatibilityCheck) -> dict[str, Any]:
+    return {
+        "id": check.id,
+        "check_type": check.check_type,
+        "result": check.result,
+        "blocking": bool(check.blocking),
+        "reason": check.reason,
+        "limitation": check.limitation,
+        "evidence": dict(check.evidence_json or {}),
+        "evaluated_at": check.evaluated_at.isoformat() if check.evaluated_at else None,
+    }
+
+
+def get_candidate(db: Session, tenant_id: int, recommendation_id: int, candidate_id: int) -> ComponentRecommendationCandidate:
+    candidate = db.scalars(
+        select(ComponentRecommendationCandidate).where(
+            ComponentRecommendationCandidate.id == candidate_id,
+            ComponentRecommendationCandidate.recommendation_id == recommendation_id,
+            ComponentRecommendationCandidate.tenant_id == tenant_id,
+        )
+    ).first()
+    if candidate is None:
+        raise RecommendationNotFound("Candidate not found")
+    return candidate
 
 
 def serialize(item: ComponentRecommendation, *, candidates: bool = False, capabilities: dict | None = None) -> dict[str, Any]:
@@ -346,7 +510,11 @@ def capabilities_for(item: ComponentRecommendation, context) -> dict[str, Any]:
 
 
 __all__ = [
+    "InvalidState",
     "RecommendationNotFound",
+    "add_manual_candidate",
+    "get_candidate",
+    "serialize_check",
     "capabilities_for",
     "create_recommendation",
     "eligible_triggers",

@@ -199,7 +199,8 @@ def test_T21_same_family_candidates_with_evidence__FR_SCA_013(client, seeded):
     versions = [c["version"] for c in candidates["items"]]
     assert versions == ["2.17.1", "2.15.0", "2.24.1"]
     assert all(c["candidate_kind"] == "SAME_FAMILY_VERSION" for c in candidates["items"])
-    assert candidates["discovery"]["alternatives_status"] == "NOT_EVALUATED"
+    # No purpose metadata in this scenario, so alternatives cannot be established (Step 6).
+    assert candidates["discovery"]["alternatives_status"] == "INSUFFICIENT_PURPOSE_EVIDENCE"
     top = candidates["items"][0]
     assert top["source_type"] == "TENANT_OBSERVED"
     assert top["evaluation"]["fix_coverage"]["fixed"] == ["CVE-2021-44228"]

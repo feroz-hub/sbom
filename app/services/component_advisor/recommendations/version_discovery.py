@@ -31,6 +31,7 @@ from ....sources.version_range import InvalidVersion, compare_versions
 from ..classification import RiskClassification
 from ..filters import RISK_SORT_RANK
 from ..lifecycle_mapping import END_OF_LIFE_BUCKETS, LifecycleBucket
+from .compatibility import CandidateFacts
 from .workflow import CandidateKind, CandidateSourceType
 
 HINT_SOURCES = ("LIFECYCLE_RECOMMENDED", "LIFECYCLE_LATEST_SUPPORTED", "LIFECYCLE_LATEST")
@@ -59,6 +60,8 @@ class CandidateEvaluation:
     limitations: list[dict[str, Any]] = field(default_factory=list)
     evaluation: dict[str, Any] = field(default_factory=dict)
     rank: int = 0
+    #: Inputs for the compatibility gates (``compatibility.CandidateFacts``); not serialized.
+    facts: Any = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -285,6 +288,18 @@ def _evaluate(source, version, record, evidence, direction, coverage) -> Candida
         "release_cadence": {"status": "NOT_EVALUATED"},
         "compatibility": {"status": "NOT_EVALUATED"},
     }
+    candidate.facts = CandidateFacts(
+        kind=CandidateKind.SAME_FAMILY_VERSION,
+        name=candidate.name,
+        version=version,
+        ecosystem=source.ecosystem,
+        family_key=source.family_key,
+        observed=record is not None,
+        purpose=source.purpose,
+        licenses=tuple(record.licenses) if record is not None else None,
+        lifecycle=record.lifecycle.bucket if record is not None else None,
+        major_version_change=major_change,
+    )
     return candidate
 
 

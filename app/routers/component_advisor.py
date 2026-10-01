@@ -584,3 +584,86 @@ def evaluate_recommendation(
     db.commit()
     db.refresh(item)
     return recommendations.serialize(item, candidates=True, capabilities=recommendations.capabilities_for(item, context))
+
+
+REVIEW_PERMISSION = "component_advisor:recommendation:review"
+
+
+class ManualCandidateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=512)
+    version: str | None = Field(default=None, max_length=255)
+    ecosystem: str | None = Field(default=None, max_length=64)
+    purl: str | None = Field(default=None, max_length=1024)
+    rationale: str = Field(min_length=1, max_length=2000)
+    technology_category: str | None = Field(default=None, max_length=128)
+    primary_use_case: str | None = Field(default=None, max_length=255)
+    licenses: list[str] | None = None
+    lifecycle_status: str | None = Field(default=None, max_length=64)
+    compatibility_evidence: dict[str, Any] | None = Field(
+        default=None,
+        description="known_breaking_api, known_breaking_abi, unsupported_runtimes, unsupported_operating_systems, "
+        "unsupported_architectures, regulatory_block, transitive_dependencies_reviewed",
+    )
+
+
+@router.post("/recommendations/{recommendation_id}/candidates", status_code=201)
+def add_manual_candidate(
+    recommendation_id: int,
+    request: Request,
+    body: ManualCandidateRequest = Body(...),
+    db: Session = Depends(get_db),
+    context=Depends(require_permission(REVIEW_PERMISSION)),
+) -> dict[str, Any]:
+    """Propose a manual candidate (spec Step 6). It passes the same purpose and
+    compatibility gates as discovered candidates; a reviewer's statement never
+    bypasses a blocking check."""
+    try:
+        item = recommendations.add_manual_candidate(
+            db, context=context, recommendation_id=recommendation_id, payload=body.model_dump(), request=request,
+        )
+    except recommendations.RecommendationNotFound as exc:
+        db.rollback()
+        _not_found(exc)
+    except recommendations.InvalidState as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail={"code": "INVALID_STATE", "message": str(exc)}) from exc
+    db.commit()
+    db.refresh(item)
+    return recommendations.serialize(item, candidates=True, capabilities=recommendations.capabilities_for(item, context))
+
+
+@router.get("/recommendations/{recommendation_id}/candidates/{candidate_id}")
+def get_candidate(
+    recommendation_id: int,
+    candidate_id: int,
+    db: Session = Depends(get_db),
+    context=Depends(require_permission(READ_PERMISSION)),
+) -> dict[str, Any]:
+    """One candidate with its evidence and every compatibility check (FR-SCA-014/018)."""
+    try:
+        candidate = recommendations.get_candidate(db, context.tenant_id, recommendation_id, candidate_id)
+    except recommendations.RecommendationNotFound as exc:
+        _not_found(exc)
+    return {
+        **recommendations.serialize_candidate(candidate),
+        "compatibility_checks": [recommendations.serialize_check(c) for c in candidate.compatibility_checks],
+    }
+
+
+@router.get("/recommendations/{recommendation_id}/candidates/{candidate_id}/compatibility")
+def get_candidate_compatibility(
+    recommendation_id: int,
+    candidate_id: int,
+    db: Session = Depends(get_db),
+    context=Depends(require_permission(READ_PERMISSION)),
+) -> dict[str, Any]:
+    """Per-check PASS / FAIL / REVIEW_REQUIRED / UNKNOWN with evidence (FR-SCA-014)."""
+    try:
+        candidate = recommendations.get_candidate(db, context.tenant_id, recommendation_id, candidate_id)
+    except recommendations.RecommendationNotFound as exc:
+        _not_found(exc)
+    return {
+        "candidate_id": candidate.id,
+        "summary": (candidate.evaluation_json or {}).get("compatibility", {"status": "NOT_EVALUATED"}),
+        "items": [recommendations.serialize_check(c) for c in candidate.compatibility_checks],
+    }
