@@ -1,5 +1,6 @@
 from app.authorization_catalog_seed_v1 import ROLE_PERMISSIONS_V1
 from app.authorization_catalog_seed_v2 import PLATFORM_ADMIN_PERMISSIONS_V2, TENANT_CONFIGURATION_PERMISSIONS_V2
+from app.authorization_catalog_seed_v3 import COMPONENT_ADVISOR_ROLE_PERMISSIONS_V3
 from app.core.permissions import ROLE_PERMISSIONS
 from app.db import SessionLocal
 from app.models import AuthorizationRole, AuthorizationRolePermission
@@ -28,6 +29,8 @@ def test_database_seed_contains_every_legacy_mapping():
     expected = {key: set(value) for key, value in ROLE_PERMISSIONS_V1.items()}
     expected['PLATFORM_ADMIN'] = set(PLATFORM_ADMIN_PERMISSIONS_V2)
     expected['TENANT_ADMIN'].update(TENANT_CONFIGURATION_PERMISSIONS_V2)
+    for role, codes in COMPONENT_ADVISOR_ROLE_PERMISSIONS_V3.items():
+        expected[role].update(codes)
     assert actual == expected
 
 

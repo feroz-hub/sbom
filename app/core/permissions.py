@@ -3,6 +3,10 @@ from __future__ import annotations
 from enum import Enum
 
 from ..authorization_catalog_seed_v2 import PLATFORM_ADMIN_PERMISSIONS_V2
+from ..authorization_catalog_seed_v3 import (
+    COMPONENT_ADVISOR_PERMISSIONS_V3,
+    COMPONENT_ADVISOR_ROLE_PERMISSIONS_V3,
+)
 from .native_identity import AccountStatus
 
 TENANT_ROLES = frozenset({"TENANT_ADMIN", "SECURITY_ANALYST", "DEVELOPER", "VIEWER"})
@@ -88,7 +92,7 @@ ALL_PERMISSIONS = frozenset(
         "platform:authorization:read",
         "platform:authorization:manage",
     }
-)
+) | COMPONENT_ADVISOR_PERMISSIONS_V3
 
 ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
     "PLATFORM_ADMIN": PLATFORM_ADMIN_PERMISSIONS_V2,
@@ -143,7 +147,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             "analysis:read",
             "analysis:run",
         }
-    ),
+    ) | COMPONENT_ADVISOR_ROLE_PERMISSIONS_V3["TENANT_ADMIN"],
     "SECURITY_ANALYST": frozenset(
         {
             "sbom:read",
@@ -179,7 +183,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             "analysis:read",
             "analysis:run",
         }
-    ),
+    ) | COMPONENT_ADVISOR_ROLE_PERMISSIONS_V3["SECURITY_ANALYST"],
     "DEVELOPER": frozenset(
         {
             "sbom:read",
@@ -196,7 +200,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             "schedule:read",
             "analysis:read",
         }
-    ),
+    ) | COMPONENT_ADVISOR_ROLE_PERMISSIONS_V3["DEVELOPER"],
     "VIEWER": frozenset(
         {
             "sbom:read",
@@ -212,7 +216,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             "schedule:read",
             "analysis:read",
         }
-    ),
+    ) | COMPONENT_ADVISOR_ROLE_PERMISSIONS_V3["VIEWER"],
 }
 
 ROLE_SCOPES = {

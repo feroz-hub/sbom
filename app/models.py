@@ -1071,6 +1071,9 @@ class SBOMComponent(Base, SoftDeleteMixin, TenantOwnedMixin):
         Index("ix_sbom_component_lifecycle", "lifecycle_status", "ecosystem"),
         Index("ix_sbom_component_sbom_normalized_key", "sbom_id", "normalized_component_key"),
         Index("ix_sbom_component_sbom_is_duplicate", "sbom_id", "is_duplicate"),
+        # Secure Component Advisor grouping (migration 067, FR-SCA-001).
+        Index("ix_sbom_component_tenant_canonical", "tenant_id", "dedupe_canonical_id"),
+        Index("ix_sbom_component_tenant_package_key", "tenant_id", "normalized_package_key"),
         Index(
             "ix_sbom_component_normalized_identity",
             "normalized_ecosystem",

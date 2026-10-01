@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.authorization_catalog_seed_v1 import ROLE_PERMISSIONS_V1, ROLE_SCOPES_V1
 from app.authorization_catalog_seed_v2 import PLATFORM_ADMIN_PERMISSIONS_V2, TENANT_CONFIGURATION_PERMISSIONS_V2
+from app.authorization_catalog_seed_v3 import COMPONENT_ADVISOR_ROLE_PERMISSIONS_V3
 from app.db import SessionLocal
 from app.models import AuthorizationRole
 
@@ -31,7 +32,8 @@ def comparison() -> dict[str, dict[str, object]]:
             if code == 'PLATFORM_ADMIN':
                 legacy_codes = PLATFORM_ADMIN_PERMISSIONS_V2
             elif code == 'TENANT_ADMIN':
-                legacy_codes = legacy_codes | TENANT_CONFIGURATION_PERMISSIONS_V2
+                legacy_codes = frozenset(legacy_codes) | TENANT_CONFIGURATION_PERMISSIONS_V2
+            legacy_codes = frozenset(legacy_codes) | COMPONENT_ADVISOR_ROLE_PERMISSIONS_V3.get(code, frozenset())
             role = roles.get(code)
             if role is None:
                 report[code] = {
