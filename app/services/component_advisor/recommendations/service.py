@@ -25,17 +25,29 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ....logger import get_logger, log_event
-from ....metrics.component_advisor import advisor_remediation_hints
+from ....metrics.component_advisor import (
+    advisor_remediation_hints,
+    advisor_version_history,
+    advisor_vulnerability_source_freshness,
+)
 from ....models import (
     ComponentRecommendation,
     ComponentRecommendationCandidate,
     ComponentRecommendationCompatibilityCheck,
+    ComponentRecommendationFactor,
 )
+from ..policy import PolicyKind
+from ..policy_service import effective_policy
 from ...audit_service import write_audit_log
 from ...dashboard_scope import DashboardScope, dashboard_scope
 from ..intelligence_service import cached_snapshot, get_component_version
 from .alternative_discovery import discover_alternatives, manual_candidate, product_constraints
 from .compatibility import evaluate_compatibility, summarize
+from .confidence import confidence as confidence_for
+from .confidence import freshness_view
+from .explanation import explain
+from .history import build_history, candidate_cpe, to_observations, window_start
+from .scoring import ScoringPolicy, score_candidate
 from .version_discovery import CandidateEvaluation, discover_same_family
 from .workflow import (
     OPEN_STATUSES,
@@ -194,10 +206,9 @@ def evaluate_recommendation(
                 constraints = product_constraints(source, snapshot.versions)
                 alternatives = discover_alternatives(source, snapshot.versions, constraints=constraints)
                 manual = [manual_candidate(source, payload, snapshot.versions, actor=actor) for payload, actor in manual_inputs]
-                trust = snapshot.policies.trust if snapshot.policies else None
+                ctx = _EvaluationContext.create(db, tenant_id, tenant_scope, snapshot, source, constraints)
                 persisted = _persist_candidates(
-                    db, item=item, tenant_id=tenant_id, source=source, constraints=constraints, trust=trust,
-                    candidates=[*result.candidates, *alternatives.candidates, *manual],
+                    db, item=item, ctx=ctx, candidates=[*result.candidates, *alternatives.candidates, *manual],
                 )
                 summary = result.summary()
                 summary.update({
@@ -209,6 +220,9 @@ def evaluate_recommendation(
                     "excluded": [*summary["excluded"], *alternatives.excluded],
                     "product_constraints": constraints.to_dict(),
                     "blocked_candidates": sum(1 for c in persisted if c.blocked),
+                    "source_history": ctx.history_for(source.canonical_key, source.version, same_family=True),
+                    "scoring_policy": ctx.scoring.to_dict(),
+                    "vulnerability_source_freshness": ctx.source_freshness,
                 })
                 if not persisted:
                     summary["status"] = "NO_CANDIDATES_FOUND"
@@ -273,46 +287,135 @@ def _manual_inputs(db: Session, tenant_id: int, recommendation_id: int) -> list[
     return out
 
 
-def _persist_candidates(
-    db: Session, *, item, tenant_id: int, source, constraints, trust, candidates: list[CandidateEvaluation],
-) -> list[ComponentRecommendationCandidate]:
-    """Run the compatibility gates on every candidate, rank, and write candidates + checks.
+class _EvaluationContext:
+    """Per-evaluation evidence shared by every candidate (Steps 6–7)."""
 
-    Ranking (review order, no score yet): same-family versions before
-    alternatives (T21); within each kind, blocked candidates last; otherwise
-    discovery order.
-    """
-    evaluated = []
-    for order, candidate in enumerate(candidates):
-        checks = evaluate_compatibility(source, candidate.facts, constraints=constraints, trust_policy=trust)
-        compat = summarize(checks)
-        candidate.evaluation = {**candidate.evaluation, "compatibility": compat}
-        evaluated.append((candidate, checks, compat, order))
-    evaluated.sort(key=lambda entry: (_KIND_ORDER[entry[0].kind.value], entry[2]["blocked"], entry[3]))
-    now = _now()
-    rows = []
-    for rank, (candidate, checks, compat, _order) in enumerate(evaluated, start=1):
-        row = ComponentRecommendationCandidate(
-            tenant_id=tenant_id, recommendation_id=item.id,
-            candidate_kind=candidate.kind.value, source_type=candidate.source_type.value,
-            candidate_canonical_key=candidate.canonical_key, name=candidate.name,
-            version=candidate.version, purl=candidate.purl, ecosystem=candidate.ecosystem,
-            rank=rank, evidence_sources_json=candidate.evidence_sources,
-            reasons_json=candidate.reasons, limitations_json=candidate.limitations,
-            evaluation_json=candidate.evaluation, blocked=compat["blocked"], created_at=now,
-        )
-        row.compatibility_checks = [
-            ComponentRecommendationCompatibilityCheck(
-                tenant_id=tenant_id, check_type=check.check_type, result=check.result.value, blocking=check.blocking,
-                reason=check.reason, limitation=check.limitation, evidence_json=check.evidence,
-                evaluated_at=datetime.fromisoformat(check.evaluated_at),
+    def __init__(self, db, tenant_id, scope, snapshot, source, constraints, trust, scoring, source_freshness):
+        self.db, self.tenant_id, self.scope, self.source = db, tenant_id, scope, source
+        self.constraints, self.trust, self.scoring, self.source_freshness = constraints, trust, scoring, source_freshness
+        self.versions = {v.canonical_key: v for v in snapshot.versions}
+        self.now = _now()
+        self.window_months = scoring.rules["history_window_months"]
+        self.since = window_start(self.now, self.window_months).isoformat()
+        from ....nvd_mirror.settings import load_mirror_settings_from_env
+
+        self.nvd_enabled = load_mirror_settings_from_env().enabled
+
+    @classmethod
+    def create(cls, db, tenant_id, scope, snapshot, source, constraints):
+        trust = snapshot.policies.trust if snapshot.policies else None
+        scoring = ScoringPolicy.resolve(effective_policy(db, tenant_id, PolicyKind.SCORING))
+        return cls(db, tenant_id, scope, snapshot, source, constraints, trust, scoring,
+                   advisor_vulnerability_source_freshness(db))
+
+    def history_for(self, canonical_key: str | None, version: str | None, *, same_family: bool) -> dict[str, Any]:
+        """FR-SCA-016 history for a version: tenant analyses + NVD mirror, with coverage."""
+        record = self.versions.get(canonical_key) if canonical_key else None
+        tenant = None
+        if record is not None:
+            tenant = advisor_version_history(
+                self.db, tenant_id=self.tenant_id, sbom_ids=self.scope.eligible_sbom_ids(),
+                component_ids=[ref["component_id"] for ref in record.references], since_iso=self.since,
             )
-            for check in checks
-        ]
+        cpe = (record.cpe if record is not None and record.cpe else None) or (
+            candidate_cpe(self.source.cpe, version) if same_family else None
+        )
+        observations, status = [], "DISABLED"
+        if self.nvd_enabled:
+            if not cpe:
+                status = "NO_CPE"
+            else:
+                try:
+                    from ....nvd_mirror.adapters.cve_repository import SqlAlchemyCveRepository
+
+                    with self.db.begin_nested():
+                        observations = to_observations(SqlAlchemyCveRepository(self.db).find_by_cpe(cpe))
+                    status = "AVAILABLE"
+                except Exception:  # noqa: BLE001 - mirror failure is a coverage gap, not an error
+                    status, observations = "ERROR", []
+        return build_history(tenant=tenant, nvd=observations, nvd_status=status, window_months=self.window_months,
+                             now=self.now)
+
+
+def _build_row(ctx: _EvaluationContext, candidate: CandidateEvaluation, rank: int) -> ComponentRecommendationCandidate:
+    """Gate, historize, score, explain and materialize one candidate (FR-SCA-014..020)."""
+    checks = evaluate_compatibility(ctx.source, candidate.facts, constraints=ctx.constraints, trust_policy=ctx.trust)
+    compat = summarize(checks)
+    history = ctx.history_for(candidate.canonical_key, candidate.version,
+                              same_family=candidate.kind.value == "SAME_FAMILY_VERSION")
+    limitations = [item for item in candidate.limitations if item["code"] != "HISTORY_NOT_EVALUATED"]
+    if history["status"] == "NO_HISTORY_COVERAGE":
+        limitations.append({"code": "HISTORY_COVERAGE_UNAVAILABLE",
+                            "detail": "No source covers the observation window for this version"})
+    evaluation = {
+        **candidate.evaluation,
+        "compatibility": compat,
+        "compatibility_checks": [c.to_dict() for c in checks],
+        "history": history,
+        "historical_trend": {"status": history["status"]},
+    }
+    score, factors = score_candidate(evaluation, ctx.scoring, now=ctx.now)
+    freshness = freshness_view(evaluation, source_freshness=ctx.source_freshness,
+                               stale_after_days=ctx.scoring.rules["stale_after_days"], now=ctx.now)
+    conf = confidence_for(evaluation, factors, freshness, weights=ctx.scoring.rules["weights"])
+    if freshness["stale_flags"]:
+        limitations.append({"code": "STALE_EVIDENCE", "detail": ", ".join(freshness["stale_flags"])})
+    evaluation.update({
+        "scoring": {"score": score, "policy": ctx.scoring.to_dict(), "orders_candidates_only": True,
+                    "rank_eligible": not compat["blocked"]},
+        "confidence_basis": conf,
+        "freshness_view": freshness,
+        "explanation": explain(candidate.name, candidate.version, reasons=candidate.reasons, limitations=limitations,
+                               confidence_level=conf["level"], blocked=compat["blocked"],
+                               blocking_checks=compat["blocking_checks"], history=history),
+    })
+    row = ComponentRecommendationCandidate(
+        tenant_id=ctx.tenant_id, candidate_kind=candidate.kind.value, source_type=candidate.source_type.value,
+        candidate_canonical_key=candidate.canonical_key, name=candidate.name, version=candidate.version,
+        purl=candidate.purl, ecosystem=candidate.ecosystem, rank=rank,
+        evidence_sources_json=candidate.evidence_sources, reasons_json=candidate.reasons,
+        limitations_json=limitations, evaluation_json=evaluation, score=score, confidence=conf["level"],
+        blocked=compat["blocked"], created_at=ctx.now,
+    )
+    row.compatibility_checks = [
+        ComponentRecommendationCompatibilityCheck(
+            tenant_id=ctx.tenant_id, check_type=c.check_type, result=c.result.value, blocking=c.blocking,
+            reason=c.reason, limitation=c.limitation, evidence_json=c.evidence,
+            evaluated_at=datetime.fromisoformat(c.evaluated_at),
+        )
+        for c in checks
+    ]
+    row.factors = [
+        ComponentRecommendationFactor(
+            tenant_id=ctx.tenant_id, factor=f.factor, raw_value_json=f.raw_value, normalized_value=f.normalized_value,
+            weight=f.weight, contribution=round(f.contribution, 6), missing_data_treatment=f.missing_data_treatment,
+            evidence_source=f.evidence_source, evidence_at=f.evidence_at,
+            policy_version_id=ctx.scoring.policy_version_id, policy_version_label=ctx.scoring.label,
+        )
+        for f in factors
+    ]
+    return row
+
+
+def _persist_candidates(
+    db: Session, *, item, ctx: _EvaluationContext, candidates: list[CandidateEvaluation],
+) -> list[ComponentRecommendationCandidate]:
+    """Build every candidate and rank them.
+
+    Ranking: same-family versions before alternatives (T21); within each
+    kind, blocked candidates last whatever their score (FR-SCA-015); then
+    score descending; then discovery order. The score orders, it never gates.
+    """
+    rows = [(_build_row(ctx, candidate, 0), order) for order, candidate in enumerate(candidates)]
+    rows.sort(key=lambda entry: (_KIND_ORDER[entry[0].candidate_kind], entry[0].blocked, -(entry[0].score or 0), entry[1]))
+    out = []
+    for rank, (row, _order) in enumerate(rows, start=1):
+        row.rank = rank
+        row.recommendation_id = item.id
         db.add(row)
-        rows.append(row)
+        out.append(row)
     db.flush()
-    return rows
+    return out
 
 
 def add_manual_candidate(
@@ -332,27 +435,11 @@ def add_manual_candidate(
     actor = context.actor_label()
     candidate = manual_candidate(source, payload, snapshot.versions, actor=actor)
     constraints = product_constraints(source, snapshot.versions)
-    trust = snapshot.policies.trust if snapshot.policies else None
-    checks = evaluate_compatibility(source, candidate.facts, constraints=constraints, trust_policy=trust)
-    compat = summarize(checks)
-    candidate.evaluation = {**candidate.evaluation, "compatibility": compat}
+    ctx = _EvaluationContext.create(db, tenant_id, tenant_scope, snapshot, source, constraints)
     rank = (db.scalar(select(func.max(ComponentRecommendationCandidate.rank)).where(
         ComponentRecommendationCandidate.recommendation_id == item.id)) or 0) + 1
-    row = ComponentRecommendationCandidate(
-        tenant_id=tenant_id, recommendation_id=item.id, candidate_kind=candidate.kind.value,
-        source_type=candidate.source_type.value, candidate_canonical_key=candidate.canonical_key, name=candidate.name,
-        version=candidate.version, purl=candidate.purl, ecosystem=candidate.ecosystem, rank=rank,
-        evidence_sources_json=candidate.evidence_sources, reasons_json=candidate.reasons,
-        limitations_json=candidate.limitations, evaluation_json=candidate.evaluation, blocked=compat["blocked"],
-        created_at=_now(),
-    )
-    row.compatibility_checks = [
-        ComponentRecommendationCompatibilityCheck(
-            tenant_id=tenant_id, check_type=c.check_type, result=c.result.value, blocking=c.blocking, reason=c.reason,
-            limitation=c.limitation, evidence_json=c.evidence, evaluated_at=datetime.fromisoformat(c.evaluated_at),
-        )
-        for c in checks
-    ]
+    row = _build_row(ctx, candidate, rank)
+    row.recommendation_id = item.id
     db.add(row)
     item.row_version = (item.row_version or 1) + 1
     item.updated_at = _now()
@@ -429,8 +516,12 @@ def serialize_candidate(candidate: ComponentRecommendationCandidate) -> dict[str
         "evaluation": dict(candidate.evaluation_json or {}),
         # Scoring, confidence and compatibility gates arrive in Steps 6–7; until
         # then no candidate can be represented as an approved replacement.
+        # Orders candidates only — never a safety score (FR-SCA-017).
         "score": candidate.score,
         "confidence": candidate.confidence or "NOT_EVALUATED",
+        "explanation": (candidate.evaluation_json or {}).get("explanation"),
+        "history": (candidate.evaluation_json or {}).get("history"),
+        "freshness": (candidate.evaluation_json or {}).get("freshness_view"),
         "blocked": bool(candidate.blocked),
         "compatibility": (candidate.evaluation_json or {}).get("compatibility", {"status": "NOT_EVALUATED"}),
         # A blocked candidate can never be represented as an approved replacement
@@ -449,6 +540,21 @@ def serialize_check(check: ComponentRecommendationCompatibilityCheck) -> dict[st
         "limitation": check.limitation,
         "evidence": dict(check.evidence_json or {}),
         "evaluated_at": check.evaluated_at.isoformat() if check.evaluated_at else None,
+    }
+
+
+def serialize_factor(factor: ComponentRecommendationFactor) -> dict[str, Any]:
+    return {
+        "factor": factor.factor,
+        "raw_value": factor.raw_value_json,
+        "normalized_value": factor.normalized_value,
+        "weight": factor.weight,
+        "contribution": factor.contribution,
+        "missing_data_treatment": factor.missing_data_treatment,
+        "evidence_source": factor.evidence_source,
+        "evidence_at": factor.evidence_at,
+        "policy_version_id": factor.policy_version_id,
+        "policy_version_label": factor.policy_version_label,
     }
 
 
@@ -515,6 +621,7 @@ __all__ = [
     "add_manual_candidate",
     "get_candidate",
     "serialize_check",
+    "serialize_factor",
     "capabilities_for",
     "create_recommendation",
     "eligible_triggers",

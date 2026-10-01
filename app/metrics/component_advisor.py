@@ -641,6 +641,76 @@ def advisor_remediation_hints(
     return {"lifecycle": lifecycle, "fixed_versions": fixed}
 
 
+def advisor_version_history(
+    db: Session, *, tenant_id: int, sbom_ids, component_ids: list[int], since_iso: str
+) -> dict[str, Any]:
+    """Vulnerability observations for one version over a window (FR-SCA-016).
+
+    **Convention C** (every successful run, not just the latest) because
+    history needs every past detection — but only runs of the caller's
+    eligible SBOMs, so inactive / superseded SBOMs never contribute (spec §1.3).
+    Returns the finding rows and the run coverage actually available.
+    """
+    if not component_ids:
+        return {"findings": [], "runs": 0, "earliest_run_at": None, "latest_run_at": None}
+    runs = select(AnalysisRun.id).where(
+        AnalysisRun.tenant_id == tenant_id,
+        AnalysisRun.is_active.is_(True),
+        AnalysisRun.run_status.in_(COMPLETED_RUN_STATUSES),
+        AnalysisRun.sbom_id.in_(sbom_ids),
+        AnalysisRun.sbom_id.in_(select(SBOMComponent.sbom_id).where(SBOMComponent.id.in_(component_ids))),
+        AnalysisRun.completed_on >= since_iso,
+    )
+    coverage = db.execute(
+        select(func.count(AnalysisRun.id), func.min(AnalysisRun.completed_on), func.max(AnalysisRun.completed_on))
+        .where(AnalysisRun.id.in_(runs))
+    ).one()
+    rows = db.execute(
+        select(
+            AnalysisFinding.vuln_id, AnalysisFinding.aliases, AnalysisFinding.severity,
+            AnalysisFinding.published_on, AnalysisRun.completed_on,
+        )
+        .join(AnalysisRun, AnalysisRun.id == AnalysisFinding.analysis_run_id)
+        .where(
+            AnalysisFinding.tenant_id == tenant_id,
+            AnalysisFinding.is_active.is_(True),
+            AnalysisFinding.component_id.in_(component_ids),
+            AnalysisFinding.analysis_run_id.in_(runs),
+        )
+    ).all()
+    findings = [
+        {
+            "canonical_id": canonical_for_finding(row).canonical_id,
+            "severity": normalize_severity(row.severity),
+            "published_on": row.published_on,
+            "observed_at": row.completed_on,
+        }
+        for row in rows
+    ]
+    return {"findings": findings, "runs": int(coverage[0] or 0), "earliest_run_at": coverage[1], "latest_run_at": coverage[2]}
+
+
+def advisor_vulnerability_source_freshness(db: Session) -> dict[str, Any]:
+    """When vulnerability data was last refreshed (FR-SCA-020).
+
+    The NVD mirror's latest successful sync, when the mirror is in use.
+    Per-analysis source outcomes stay on each run; this is the platform-level
+    refresh signal shown beside every recommendation.
+    """
+    from ..nvd_mirror.db.models import NvdSyncRunRow
+
+    finished = None
+    try:
+        # Savepoint: a missing mirror table must not abort the caller's transaction.
+        with db.begin_nested():
+            finished = db.execute(
+                select(func.max(NvdSyncRunRow.finished_at)).where(NvdSyncRunRow.status == "success")
+            ).scalar()
+    except Exception:  # noqa: BLE001 - absent mirror tables mean "not tracked", never an error
+        finished = None
+    return {"nvd_mirror_last_success_at": finished.isoformat() if finished else None}
+
+
 def advisor_invalidation_key(db: Session, *, tenant_id: int) -> tuple:
     """Change markers for a tenant's advisor inputs that the shared metrics key misses.
 
@@ -709,6 +779,8 @@ def component_advisor_bucket_counts(snapshot: ComponentIntelligenceSnapshot) -> 
 
 __all__ = [
     "advisor_invalidation_key",
+    "advisor_version_history",
+    "advisor_vulnerability_source_freshness",
     "advisor_remediation_hints",
     "ComponentIntelligenceSnapshot",
     "ComponentVersionIntelligence",

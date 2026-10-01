@@ -2536,6 +2536,10 @@ class ComponentRecommendationCandidate(Base, TenantOwnedMixin):
         "ComponentRecommendationCompatibilityCheck", back_populates="candidate",
         cascade="all, delete-orphan", order_by="ComponentRecommendationCompatibilityCheck.id",
     )
+    factors = relationship(
+        "ComponentRecommendationFactor", back_populates="candidate",
+        cascade="all, delete-orphan", order_by="ComponentRecommendationFactor.id",
+    )
 
 
 class ComponentRecommendationCompatibilityCheck(Base, TenantOwnedMixin):
@@ -2563,11 +2567,45 @@ class ComponentRecommendationCompatibilityCheck(Base, TenantOwnedMixin):
     candidate = relationship("ComponentRecommendationCandidate", back_populates="compatibility_checks")
 
 
+class ComponentRecommendationFactor(Base, TenantOwnedMixin):
+    """One scoring factor for a candidate (FR-SCA-017).
+
+    Persists what the score was made of — policy version, raw and normalized
+    values, weight, weighted contribution, missing-data treatment, evidence
+    source and time — so a ranking can be explained and re-derived later.
+    The score orders candidates only; it is never a safety score.
+    """
+
+    __tablename__ = "component_recommendation_factor"
+
+    id = Column(Integer, primary_key=True)
+    candidate_id = Column(
+        Integer, ForeignKey("component_recommendation_candidate.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    factor = Column(String(32), nullable=False)
+    raw_value_json = Column(JSON, nullable=True)
+    normalized_value = Column(Float, nullable=True)
+    weight = Column(Float, nullable=False)
+    contribution = Column(Float, nullable=False)
+    missing_data_treatment = Column(String(16), nullable=True)
+    evidence_source = Column(String(128), nullable=False)
+    evidence_at = Column(String(64), nullable=True)
+    policy_version_id = Column(Integer, ForeignKey("advisor_policy_version.id"), nullable=True)
+    policy_version_label = Column(String(64), nullable=False)
+
+    candidate = relationship("ComponentRecommendationCandidate", back_populates="factors")
+
+
 Index("ix_component_recommendation_tenant_identity", ComponentRecommendation.tenant_id, ComponentRecommendation.id)
 Index(
     "ix_component_recommendation_candidate_tenant_identity",
     ComponentRecommendationCandidate.tenant_id,
     ComponentRecommendationCandidate.id,
+)
+Index(
+    "ix_component_recommendation_factor_tenant_identity",
+    ComponentRecommendationFactor.tenant_id,
+    ComponentRecommendationFactor.id,
 )
 Index(
     "ix_component_recommendation_compatibility_check_tenant_identity",

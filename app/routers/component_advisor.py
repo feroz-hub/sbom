@@ -314,7 +314,7 @@ def _stable(payload: dict[str, Any]) -> dict[str, Any]:
 # Policies (FR-SCA-004 / FR-SCA-005)
 # ---------------------------------------------------------------------------
 
-_POLICY_KINDS = {"accepted-risk": PolicyKind.ACCEPTED_RISK, "trust": PolicyKind.TRUST}
+_POLICY_KINDS = {"accepted-risk": PolicyKind.ACCEPTED_RISK, "trust": PolicyKind.TRUST, "scoring": PolicyKind.SCORING}
 
 
 def _policy_kind(kind: str) -> PolicyKind:
@@ -666,4 +666,44 @@ def get_candidate_compatibility(
         "candidate_id": candidate.id,
         "summary": (candidate.evaluation_json or {}).get("compatibility", {"status": "NOT_EVALUATED"}),
         "items": [recommendations.serialize_check(c) for c in candidate.compatibility_checks],
+    }
+
+
+@router.get("/recommendations/{recommendation_id}/candidates/{candidate_id}/evidence")
+def get_candidate_evidence(
+    recommendation_id: int,
+    candidate_id: int,
+    db: Session = Depends(get_db),
+    context=Depends(require_permission(READ_PERMISSION)),
+) -> dict[str, Any]:
+    """Why a candidate ranks where it does (FR-SCA-016..020, US-SCA-11..13).
+
+    Structured reasons and limitations, the factor breakdown with its scoring
+    policy version, vulnerability history with actual coverage, confidence
+    basis, freshness and the generated explanation. The score orders
+    candidates only; it is never a safety score.
+    """
+    try:
+        candidate = recommendations.get_candidate(db, context.tenant_id, recommendation_id, candidate_id)
+    except recommendations.RecommendationNotFound as exc:
+        _not_found(exc)
+    evaluation = candidate.evaluation_json or {}
+    return {
+        "candidate_id": candidate.id,
+        "name": candidate.name,
+        "version": candidate.version,
+        "score": candidate.score,
+        "score_semantics": "ORDERS_CANDIDATES_ONLY",
+        "confidence": candidate.confidence,
+        "confidence_basis": evaluation.get("confidence_basis"),
+        "scoring_policy": (evaluation.get("scoring") or {}).get("policy"),
+        "factors": [recommendations.serialize_factor(f) for f in candidate.factors],
+        "reasons": list(candidate.reasons_json or []),
+        "limitations": list(candidate.limitations_json or []),
+        "history": evaluation.get("history"),
+        "freshness": evaluation.get("freshness_view"),
+        "compatibility": evaluation.get("compatibility"),
+        "explanation": evaluation.get("explanation"),
+        "blocked": bool(candidate.blocked),
+        "approved_replacement": False,
     }

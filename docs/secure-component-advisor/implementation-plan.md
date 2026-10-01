@@ -14,8 +14,8 @@ Branch: `feat/secure-component-advisor`. Test ids T1…T45 are the prompt §10 m
 | 4 | Accepted-risk / trust policy seam, purpose, adoption | ✅ 2026-10-01 |
 | 5 | Recommendation work item & safer-version discovery | ✅ 2026-10-01 |
 | 6 | Alternative discovery & compatibility | ✅ 2026-10-01 |
-| 7 | History, scoring, confidence, freshness | ⏳ next |
-| 8 | Human review, audit, permissions | ☐ |
+| 7 | History, scoring, confidence, freshness | ✅ 2026-10-01 |
+| 8 | Human review, audit, permissions | ⏳ next |
 | 9 | Frontend | ☐ |
 | 10 | Tests, performance, observability, analytics, docs | ☐ |
 
@@ -259,6 +259,56 @@ Decisions / assumptions:
 - One Step 5 test expectation changed: alternatives are now evaluated, so a scenario without purpose data reports
   `INSUFFICIENT_PURPOSE_EVIDENCE`.
 
+## Step 7 — Vulnerability History, Transparent Scoring, Confidence & Freshness
+
+Requirements: FR-SCA-016, FR-SCA-017, FR-SCA-018, FR-SCA-019, FR-SCA-020 · US-SCA-11, US-SCA-12, US-SCA-13.
+
+Delivered:
+- `recommendations/history.py` + `advisor_version_history` (metrics, **Convention C** over runs of eligible SBOMs only):
+  - The window comes from the scoring policy (default 24 months).
+  - Sources: TENANT_ANALYSIS, and the NVD_MIRROR `find_by_cpe` per version when the mirror is enabled and a CPE
+    exists (same-family candidates use the source CPE with their version).
+  - Output: disclosed count, severity distribution, Critical/High count, first/last observed, exposure days, and
+    `coverage` {covered_months, sources, gaps}.
+  - `NO_VULNERABILITIES_IN_COVERED_WINDOW` always carries the "not proof of security" note; no coverage is
+    `NO_HISTORY_COVERAGE` (T28/T30).
+- `recommendations/scoring.py`:
+  - New versioned `SCORING` policy kind at `/policies/scoring`. With none configured, the documented built-in
+    default `builtin-default-2026-10-01` applies.
+  - Eight factors, each persisted with raw value, normalized value, weight, contribution, missing-data treatment
+    (PENALIZE | EXCLUDE), evidence source / time and policy version id + label (T29).
+  - The score orders candidates only (`score_semantics: ORDERS_CANDIDATES_ONLY`).
+- `recommendations/confidence.py`:
+  - HIGH / MEDIUM / LOW / INSUFFICIENT_EVIDENCE from completeness (policy-weight share with evidence), observed
+    posture / history, UNKNOWN material checks (LICENSE, LIFECYCLE, FUNCTIONAL_PURPOSE, PRODUCT_CONSTRAINTS,
+    API_COMPATIBILITY) and freshness.
+  - Stale evidence lowers confidence one level. Missing material evidence lowers confidence and rules out drop-in (T27).
+  - `freshness_view`: SBOM analysis, tenant observation, vulnerability source (NVD mirror last success), package
+    metadata, lifecycle, observation window, stale flags.
+- `recommendations/explanation.py`: rationale sentences rendered from reason / limitation / confidence codes
+  (`generated_from: STRUCTURED_EVIDENCE`); a vocabulary test forbids "safe" / "secure" / "vulnerability free".
+- Migration `071_component_recommendation_factors`.
+- Service: one `_build_row` path (gates → history → score → freshness → confidence → explanation) for discovered and
+  manual candidates. Ranking = kind, then blocked last, then score desc. Discovery summary adds `source_history`,
+  `scoring_policy`, `vulnerability_source_freshness`.
+- API: `GET /recommendations/{id}/candidates/{cid}/evidence`; candidates now expose score, confidence, explanation,
+  history and freshness; `meta.freshness.vulnerability_source_refreshed_at` is filled.
+
+Decisions / assumptions:
+- Factor normalizations (documented in `scoring.py`):
+  - risk: NKAV 1.0 … CRITICAL 0.
+  - lifecycle: SUPPORTED 1, MAINTENANCE 0.6, EOS 0.2, EOL 0.
+  - trend: 1 / (1 + critical/high + 0.25 × others).
+  - compatibility: (PASS + 0.5 × REVIEW) / known checks; 0 when blocked.
+  - license: from the LICENSE check.
+  - adoption: min(products / 5, 1).
+  - freshness: ≤30 d 1, ≤90 d 0.6, ≤180 d 0.3.
+  - maintenance: no source yet, so always missing.
+- `stale_after_days` (default 90) lowers confidence and flags staleness, but **does not** change a component's
+  risk bucket. Stale evidence "reduces confidence" per FR-SCA-020; `ReviewReason.STALE_EVIDENCE` stays unused so
+  KPIs stay stable. **Product decision pending** on whether stale analysis should push a component into Review Required.
+- Same-family candidates still rank before alternatives regardless of score (T21); the score orders within a kind.
+
 ## Open questions / follow-ups
 - ~~Review Required vs Critical~~ — **resolved 2026-10-01**: the user decided Critical/High outrank review
   reasons. Implemented in Step 3 (`classification.py`); review reasons stay on the record and the
@@ -278,5 +328,9 @@ Decisions / assumptions:
 - Product platform/runtime constraints model (would turn many OS/RUNTIME/ARCH UNKNOWNs into PASS/FAIL).
 - A dedicated license policy, separate from the trust policy, if the business wants license gating without trust.
 - Approved external package-metadata sources (spec §12) before any adapter is registered.
+- Should stale analysis evidence (older than the scoring policy's `stale_after_days`) put a component into Review Required?
+  Currently it only lowers recommendation confidence.
+- Review the proposed default scoring weights and normalizations.
+- Windows: a stopped background pytest leaves orphan processes on the test DB. Kill them before the next run.
 - Regression runs must use a frozen worktree: twice, a migration added mid-run made later app-startup tests fail
   with "schema not at head", which invalidated those runs.

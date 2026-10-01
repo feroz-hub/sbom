@@ -32,6 +32,8 @@ from .lifecycle_mapping import LifecycleBucket
 class PolicyKind(str, Enum):
     ACCEPTED_RISK = "ACCEPTED_RISK"
     TRUST = "TRUST"
+    #: Candidate scoring weights (FR-SCA-017); see recommendations/scoring.py.
+    SCORING = "SCORING"
 
 
 class PolicyStatus(str, Enum):
@@ -226,6 +228,10 @@ def validate_trust_rules(rules: dict[str, Any]) -> dict[str, Any]:
 def validate_rules(kind: PolicyKind, rules: dict[str, Any]) -> dict[str, Any]:
     if kind is PolicyKind.ACCEPTED_RISK:
         return validate_accepted_risk_rules(rules)
+    if kind is PolicyKind.SCORING:
+        from .recommendations.scoring import validate_scoring_rules
+
+        return validate_scoring_rules(rules)
     return validate_trust_rules(rules)
 
 

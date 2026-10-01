@@ -24,6 +24,7 @@ from ...metrics.component_advisor import (
     ComponentIntelligenceSnapshot,
     ComponentVersionIntelligence,
     advisor_invalidation_key,
+    advisor_vulnerability_source_freshness,
     component_intelligence_snapshot,
 )
 from ..dashboard_scope import DashboardScope, scope_metadata
@@ -235,8 +236,10 @@ def response_meta(
         "freshness": {
             "latest_analysis_at": snapshot.latest_analysis_at,
             "lifecycle_checked_at": _max_iso(version.lifecycle.checked_at for version in versions),
-            # Source refresh tracking (NVD/OSV/GHSA, package metadata) is wired in Step 7.
-            "vulnerability_source_refreshed_at": None,
+            # Platform-level vulnerability data refresh (NVD mirror). Per-run
+            # source outcomes stay on each analysis run.
+            "vulnerability_source_refreshed_at": advisor_vulnerability_source_freshness(db)["nvd_mirror_last_success_at"],
+            # No package-metadata source is configured (Step 6); lifecycle checks stand in.
             "package_metadata_refreshed_at": None,
             "coverage": {
                 "eligible_sboms": snapshot.eligible_sbom_count,
