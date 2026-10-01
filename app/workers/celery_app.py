@@ -131,6 +131,7 @@ celery_app = Celery(
         "app.workers.kev_sync",
         "app.workers.report_notifications",
         "app.workers.ai_model_discovery",
+        "app.workers.component_advisor_tasks",
     ],
 )
 

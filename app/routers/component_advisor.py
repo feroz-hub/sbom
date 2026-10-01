@@ -12,6 +12,8 @@ FR-SCA-001/002/006/007/008, FR-SCA-023, NFR-SCA-001, NFR-SCA-005.
   accepted-risk / trust policies (FR-SCA-004/005).
 * ``GET|PUT /api/component-advisor/purpose/{family_key}`` — curated purpose
   metadata with provenance (FR-SCA-009).
+* ``POST|GET /api/component-advisor/recommendations[/{id}[/evaluate|/candidates]]``
+  — recommendation work items and same-family candidates (FR-SCA-011/013).
 
 Scope: the tenant is the authenticated tenant; ``project_id`` / ``product_id``
 / ``sbom_id`` are validated by ``dashboard_scope_dependency`` (child without
@@ -61,6 +63,13 @@ from ..services.component_advisor.intelligence_service import (
 from ..services.component_advisor.policy import PolicyKind, PolicyStatus, PolicyValidationError
 from ..services.component_advisor.policy_service import PolicyConflict, list_versions, policy_state, publish_version
 from ..services.component_advisor.purpose_service import PurposeConflict, save_tenant_purpose, tenant_purpose_rows
+from ..services.component_advisor.recommendations import service as recommendations
+from ..services.component_advisor.recommendations.workflow import (
+    TriggerNotSupported,
+    TriggerType,
+    can_evaluate,
+    eligible_triggers,
+)
 from ..services.configuration_scope import require_configuration_permission
 from ..services.dashboard_scope import DashboardScope, dashboard_scope_dependency
 
@@ -161,7 +170,7 @@ def advisor_components(
         "offset": offset,
         "sort_by": sort_by,
         "sort_order": sort_order,
-        "items": [version.to_dict() for version in versions[offset : offset + limit]],
+        "items": _with_recommendations(db, scope, versions[offset : offset + limit]),
         "meta": response_meta(db, scope, snapshot, filters, as_of),
     }
     _log_query("components", scope, filters, len(versions))
@@ -185,8 +194,11 @@ def advisor_component_detail(
     if version is None:
         raise HTTPException(status_code=404, detail="Component not found")
     snapshot = cached_snapshot(db, scope)
+    open_items = recommendations.open_recommendations_by_key(db, scope.tenant_id)
     return {
         **version.to_dict(),
+        "recommendation": open_items.get(version.canonical_key) or {"status": "NOT_EVALUATED"},
+        "eligible_triggers": eligible_triggers(version),
         "adoption": adoption_view(db, scope, snapshot, version),
         "meta": response_meta(db, scope, snapshot, AdvisorFilters(), as_of),
     }
@@ -279,6 +291,17 @@ def advisor_search(
         "items": families[offset : offset + limit],
         "meta": response_meta(db, scope, snapshot, filters, as_of),
     }
+
+
+def _with_recommendations(db: Session, scope: DashboardScope, versions) -> list[dict[str, Any]]:
+    """Serialize a page, replacing the placeholder with the open work item, if any."""
+    open_items = recommendations.open_recommendations_by_key(db, scope.tenant_id)
+    out = []
+    for version in versions:
+        item = version.to_dict()
+        item["recommendation"] = open_items.get(version.canonical_key) or {"status": "NOT_EVALUATED"}
+        out.append(item)
+    return out
 
 
 def _stable(payload: dict[str, Any]) -> dict[str, Any]:
@@ -422,3 +445,142 @@ def put_purpose(
         raise HTTPException(status_code=422, detail={"code": "INVALID_PURPOSE", "message": str(exc)}) from exc
     db.commit()
     return saved
+
+
+# ---------------------------------------------------------------------------
+# Recommendation work items (FR-SCA-011 / FR-SCA-013)
+# ---------------------------------------------------------------------------
+
+CREATE_PERMISSION = "component_advisor:recommendation:create"
+
+
+class RecommendationRequest(BaseModel):
+    canonical_key: str = Field(min_length=1, max_length=80)
+    trigger_type: Literal["CRITICAL_FINDING", "HIGH_FINDING", "EOL", "EOS", "POLICY_VIOLATION", "MANUAL"]
+    evaluate: bool = Field(default=True, description="Run same-family discovery immediately")
+
+
+def _not_found(exc: Exception):
+    raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/recommendations")
+def create_recommendation(
+    request: Request,
+    response: Response,
+    body: RecommendationRequest = Body(...),
+    scope: DashboardScope = Depends(dashboard_scope_dependency),
+    db: Session = Depends(get_db),
+    context=Depends(require_permission(CREATE_PERMISSION)),
+) -> dict[str, Any]:
+    """Create (or return the existing open) recommendation work item.
+
+    Idempotent (T20): an equivalent open item — same tenant, source version,
+    SBOM-or-tenant context and trigger — is returned with ``created: false``
+    and HTTP 200; a new item is HTTP 201. The trigger must match the
+    version's current evidence (422 otherwise). Context is the validated
+    scope: pass ``project_id`` / ``product_id`` / ``sbom_id`` for an
+    SBOM-level item, nothing for tenant-wide. Nothing outside recommendation
+    state and audit is written (spec §1.1).
+    """
+    correlation_id = getattr(request.state, "correlation_id", None)
+    try:
+        item, created = recommendations.create_recommendation(
+            db, context=context, scope=scope, canonical_key=body.canonical_key,
+            trigger=TriggerType(body.trigger_type), correlation_id=correlation_id, request=request,
+        )
+        if created and body.evaluate:
+            item = recommendations.evaluate_recommendation(
+                db, tenant_id=scope.tenant_id, recommendation_id=item.id, context=context,
+                correlation_id=correlation_id, request=request,
+            )
+    except recommendations.RecommendationNotFound as exc:
+        db.rollback()
+        _not_found(exc)
+    except TriggerNotSupported as exc:
+        db.rollback()
+        raise HTTPException(status_code=422, detail={"code": "TRIGGER_NOT_SUPPORTED_BY_EVIDENCE", "message": str(exc)}) from exc
+    db.commit()
+    db.refresh(item)
+    response.status_code = 201 if created else 200
+    return {
+        "created": created,
+        **recommendations.serialize(item, candidates=True, capabilities=recommendations.capabilities_for(item, context)),
+    }
+
+
+@router.get("/recommendations")
+def list_recommendations(
+    status: list[str] | None = Query(default=None),
+    trigger_type: str | None = Query(default=None, max_length=32),
+    canonical_key: str | None = Query(default=None, max_length=80),
+    sbom_id: int | None = Query(default=None, ge=1),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+    context=Depends(require_permission(READ_PERMISSION)),
+) -> dict[str, Any]:
+    """The tenant's recommendation work items, newest first."""
+    try:
+        return recommendations.list_recommendations(
+            db, tenant_id=context.tenant_id, status=status, trigger_type=trigger_type,
+            canonical_key=canonical_key, sbom_id=sbom_id, limit=limit, offset=offset,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail={"code": "INVALID_FILTER", "message": str(exc)}) from exc
+
+
+@router.get("/recommendations/{recommendation_id}")
+def get_recommendation(
+    recommendation_id: int,
+    db: Session = Depends(get_db),
+    context=Depends(require_permission(READ_PERMISSION)),
+) -> dict[str, Any]:
+    """One work item with its candidates; another tenant's id is a plain 404."""
+    try:
+        item = recommendations.get_recommendation(db, context.tenant_id, recommendation_id)
+    except recommendations.RecommendationNotFound as exc:
+        _not_found(exc)
+    return recommendations.serialize(item, candidates=True, capabilities=recommendations.capabilities_for(item, context))
+
+
+@router.get("/recommendations/{recommendation_id}/candidates")
+def get_recommendation_candidates(
+    recommendation_id: int,
+    db: Session = Depends(get_db),
+    context=Depends(require_permission(READ_PERMISSION)),
+) -> dict[str, Any]:
+    """Candidates in review order: same-family versions before alternatives (T21)."""
+    try:
+        item = recommendations.get_recommendation(db, context.tenant_id, recommendation_id)
+    except recommendations.RecommendationNotFound as exc:
+        _not_found(exc)
+    payload = recommendations.serialize(item, candidates=True)
+    return {"recommendation_id": item.id, "discovery": payload["discovery"], "items": payload["candidates"]}
+
+
+@router.post("/recommendations/{recommendation_id}/evaluate")
+def evaluate_recommendation(
+    recommendation_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    context=Depends(require_permission(CREATE_PERMISSION)),
+) -> dict[str, Any]:
+    """Re-run discovery for an OPEN / REVIEW_REQUIRED item (409 for any other state)."""
+    correlation_id = getattr(request.state, "correlation_id", None)
+    try:
+        current = recommendations.get_recommendation(db, context.tenant_id, recommendation_id)
+    except recommendations.RecommendationNotFound as exc:
+        _not_found(exc)
+    if not can_evaluate(current.status):
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "INVALID_STATE", "message": f"A {current.status} recommendation cannot be re-evaluated"},
+        )
+    item = recommendations.evaluate_recommendation(
+        db, tenant_id=context.tenant_id, recommendation_id=recommendation_id, context=context,
+        correlation_id=correlation_id, request=request,
+    )
+    db.commit()
+    db.refresh(item)
+    return recommendations.serialize(item, candidates=True, capabilities=recommendations.capabilities_for(item, context))

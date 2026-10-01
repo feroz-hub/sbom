@@ -2437,6 +2437,111 @@ class ComponentPurposeMetadata(Base):
     )
 
 
+class ComponentRecommendation(Base, TenantOwnedMixin):
+    """Recommendation work item for one source component version (FR-SCA-011).
+
+    Advisory only: a work item never changes the source SBOM, component,
+    manifest or package — accepting one changes recommendation state and
+    audit records only (spec §1.1).
+
+    Context: tenant + source canonical version + SBOM (``scope_key`` =
+    ``sbom_id`` or 0 for tenant-wide) + trigger. The partial unique index
+    ``uq_component_recommendation_open`` allows one *open* item per context,
+    so a re-run returns the existing item instead of duplicating it (T20,
+    decision D-10).
+    """
+
+    __tablename__ = "component_recommendation"
+
+    id = Column(Integer, primary_key=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="SET NULL"), nullable=True, index=True)
+    sbom_id = Column(Integer, ForeignKey("sbom_source.id", ondelete="SET NULL"), nullable=True, index=True)
+    #: ``sbom_id`` with NULL collapsed to 0 so the open-item unique key fires
+    #: for tenant-wide items (NULL is never equal to NULL in SQL).
+    scope_key = Column(Integer, nullable=False, default=0, server_default="0")
+    source_component_id = Column(Integer, ForeignKey("sbom_component.id", ondelete="SET NULL"), nullable=True)
+    source_canonical_key = Column(String(80), nullable=False, index=True)
+    source_family_key = Column(String(512), nullable=True, index=True)
+    source_name = Column(String(512), nullable=False)
+    source_version = Column(String(255), nullable=True)
+    source_ecosystem = Column(String(64), nullable=True)
+    trigger_type = Column(String(32), nullable=False)
+    #: Evidence that justified the trigger when it was raised (severity,
+    #: lifecycle, failed policy criteria, policy version) — NFR-SCA-002.
+    trigger_evidence_json = Column(JSON, nullable=True)
+    status = Column(String(32), nullable=False, index=True)
+    discovery_summary_json = Column(JSON, nullable=True)
+    evaluation_error = Column(Text, nullable=True)
+    correlation_id = Column(String(128), nullable=True, index=True)
+    created_by = Column(String(128), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    updated_at = Column(DateTime(timezone=True), nullable=False)
+    evaluated_at = Column(DateTime(timezone=True), nullable=True)
+    row_version = Column(Integer, nullable=False, default=1, server_default="1")
+
+    candidates = relationship(
+        "ComponentRecommendationCandidate", back_populates="recommendation",
+        order_by="ComponentRecommendationCandidate.rank", cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        Index(
+            "uq_component_recommendation_open",
+            "tenant_id", "source_canonical_key", "scope_key", "trigger_type",
+            unique=True,
+            postgresql_where=sql_text("status IN ('OPEN','EVALUATING','REVIEW_REQUIRED','RECOMMENDED')"),
+            sqlite_where=sql_text("status IN ('OPEN','EVALUATING','REVIEW_REQUIRED','RECOMMENDED')"),
+        ),
+        Index("ix_component_recommendation_tenant_status", "tenant_id", "status"),
+    )
+
+
+class ComponentRecommendationCandidate(Base, TenantOwnedMixin):
+    """One candidate for a recommendation (FR-SCA-012/013).
+
+    ``candidate_kind`` SAME_FAMILY_VERSION is always evaluated before
+    ALTERNATIVE (FR-SCA-013, T21). Score, confidence and compatibility arrive
+    in Steps 6–7; until then they are NULL and the candidate cannot be
+    represented as an approved replacement.
+    """
+
+    __tablename__ = "component_recommendation_candidate"
+
+    id = Column(Integer, primary_key=True)
+    recommendation_id = Column(
+        Integer, ForeignKey("component_recommendation.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    candidate_kind = Column(String(32), nullable=False)
+    source_type = Column(String(32), nullable=False)
+    candidate_canonical_key = Column(String(80), nullable=True)
+    name = Column(String(512), nullable=False)
+    version = Column(String(255), nullable=True)
+    purl = Column(String(1024), nullable=True)
+    ecosystem = Column(String(64), nullable=True)
+    rank = Column(Integer, nullable=False)
+    #: Where the candidate came from: TENANT_OBSERVED, LIFECYCLE_LATEST,
+    #: LIFECYCLE_LATEST_SUPPORTED, LIFECYCLE_RECOMMENDED, FINDING_FIXED_VERSION.
+    evidence_sources_json = Column(JSON, nullable=False)
+    reasons_json = Column(JSON, nullable=False)
+    limitations_json = Column(JSON, nullable=False)
+    evaluation_json = Column(JSON, nullable=False)
+    score = Column(Float, nullable=True)
+    confidence = Column(String(32), nullable=True)
+    blocked = Column(Boolean, nullable=False, default=False, server_default=sql_text("false"))
+    created_at = Column(DateTime(timezone=True), nullable=False)
+
+    recommendation = relationship("ComponentRecommendation", back_populates="candidates")
+
+
+Index("ix_component_recommendation_tenant_identity", ComponentRecommendation.tenant_id, ComponentRecommendation.id)
+Index(
+    "ix_component_recommendation_candidate_tenant_identity",
+    ComponentRecommendationCandidate.tenant_id,
+    ComponentRecommendationCandidate.id,
+)
+
+
 @event.listens_for(_AdvisorSession, "before_flush")
 def _advisor_policy_versions_are_append_only(session, _flush_context, _instances) -> None:
     """NFR-SCA-007: policy versions are append-only, enforced, not just documented."""

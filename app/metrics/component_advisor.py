@@ -156,6 +156,8 @@ class ComponentVersionIntelligence:
     evidence: list[dict[str, int]]
     vex_only_context_count: int = 0
     actionable_vex_statuses: frozenset[str] = frozenset()
+    #: Canonical ids of the actionable vulnerabilities (remediation evidence).
+    actionable_vulnerability_ids: list[str] = field(default_factory=list)
     #: ``(sbom_id, description)`` declared by each occurrence (purpose evidence).
     sbom_descriptions: list[tuple[int, str | None]] = field(default_factory=list)
     purpose: ResolvedPurpose = NOT_AVAILABLE
@@ -556,6 +558,7 @@ def component_intelligence_snapshot(
             evidence=evidence,
             vex_only_context_count=vex_only.get(key, 0),
             actionable_vex_statuses=frozenset().union(*(v.vex_statuses for v in actionable_vulns)),
+            actionable_vulnerability_ids=sorted(cid for cid, v in version_vulns.items() if v.actionable),
             sbom_descriptions=[(row.sbom_id, row.description) for row in primary_rows],
         )
         record.purpose = resolve_purpose(
@@ -586,6 +589,56 @@ def component_intelligence_snapshot(
 
     snapshot.versions.sort(key=lambda v: (str(v.name).lower(), str(v.version or ""), v.canonical_key))
     return snapshot
+
+
+def advisor_remediation_hints(
+    db: Session, *, tenant_id: int, sbom_ids, component_ids: list[int]
+) -> dict[str, Any]:
+    """Version hints for same-family discovery (FR-SCA-013).
+
+    * ``lifecycle``: latest / latest-supported / recommended versions named by
+      lifecycle enrichment on the given occurrences — the most recently
+      checked occurrence wins per field.
+    * ``fixed_versions``: ``{canonical_vuln_id: [versions]}`` declared by the
+      findings of each SBOM's latest successful run (Convention A) on those
+      occurrences.
+    """
+    from ..services.finding_metrics import parse_json_list
+
+    if not component_ids:
+        return {"lifecycle": {}, "fixed_versions": {}}
+    rows = db.execute(
+        select(
+            SBOMComponent.latest_version,
+            SBOMComponent.latest_supported_version,
+            SBOMComponent.recommended_version,
+            SBOMComponent.lifecycle_checked_at,
+        ).where(SBOMComponent.tenant_id == tenant_id, SBOMComponent.id.in_(component_ids))
+    ).all()
+    lifecycle: dict[str, str] = {}
+    for latest, supported, recommended, _checked in sorted(rows, key=lambda r: r.lifecycle_checked_at or "", reverse=True):
+        for name, value in (("LIFECYCLE_LATEST", latest), ("LIFECYCLE_LATEST_SUPPORTED", supported),
+                            ("LIFECYCLE_RECOMMENDED", recommended)):
+            if value and name not in lifecycle:
+                lifecycle[name] = value
+
+    findings = db.execute(
+        select(AnalysisFinding.vuln_id, AnalysisFinding.aliases, AnalysisFinding.fixed_versions).where(
+            AnalysisFinding.tenant_id == tenant_id,
+            AnalysisFinding.is_active.is_(True),
+            AnalysisFinding.component_id.in_(component_ids),
+            AnalysisFinding.analysis_run_id.in_(_latest_run_ids(tenant_id, sbom_ids)),
+        )
+    ).all()
+    fixed: dict[str, list[str]] = {}
+    for finding in findings:
+        versions = parse_json_list(finding.fixed_versions)
+        if not versions:
+            continue
+        canonical = canonical_for_finding(finding).canonical_id
+        bucket = fixed.setdefault(canonical, [])
+        bucket.extend(v for v in versions if v not in bucket)
+    return {"lifecycle": lifecycle, "fixed_versions": fixed}
 
 
 def advisor_invalidation_key(db: Session, *, tenant_id: int) -> tuple:
@@ -656,6 +709,7 @@ def component_advisor_bucket_counts(snapshot: ComponentIntelligenceSnapshot) -> 
 
 __all__ = [
     "advisor_invalidation_key",
+    "advisor_remediation_hints",
     "ComponentIntelligenceSnapshot",
     "ComponentVersionIntelligence",
     "advisor_component_occurrences",

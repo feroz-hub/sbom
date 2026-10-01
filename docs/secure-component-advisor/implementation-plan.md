@@ -12,8 +12,8 @@ Branch: `feat/secure-component-advisor`. Test ids T1…T45 are the prompt §10 m
 | 2 | Component intelligence foundation & risk semantics | ✅ 2026-10-01 |
 | 3 | Dashboard / filters / drill-down / search API | ✅ 2026-10-01 |
 | 4 | Accepted-risk / trust policy seam, purpose, adoption | ✅ 2026-10-01 |
-| 5 | Recommendation work item & safer-version discovery | ⏳ next |
-| 6 | Alternative discovery & compatibility | ☐ |
+| 5 | Recommendation work item & safer-version discovery | ✅ 2026-10-01 |
+| 6 | Alternative discovery & compatibility | ⏳ next |
 | 7 | History, scoring, confidence, freshness | ☐ |
 | 8 | Human review, audit, permissions | ☐ |
 | 9 | Frontend | ☐ |
@@ -157,6 +157,56 @@ Decisions / assumptions:
   `tenant:advisor_policy:*`), so the existing `require_configuration_permission` helper applies unchanged.
 - "Typical development purpose" is carried by `primary_use_case`.
 
+## Step 5 — Recommendation Work Item & Same-Family Safer-Version Discovery
+
+Requirements: FR-SCA-011, FR-SCA-013, NFR-SCA-004 · US-SCA-09.
+
+Delivered:
+- Migration `069_component_recommendations`:
+  - `component_recommendation` (TenantOwnedMixin, `row_version`).
+  - Partial unique index `uq_component_recommendation_open` on (tenant, source canonical key,
+    `scope_key` = sbom_id or 0, trigger) WHERE status is open. This is the DB guard for T20 / D-10.
+  - `component_recommendation_candidate`.
+- `recommendations/workflow.py` (pure):
+  - States OPEN → EVALUATING → REVIEW_REQUIRED → RECOMMENDED → ACCEPTED | REJECTED | DEFERRED → CLOSED,
+    with an explicit transition table. Only RECOMMENDED can reach ACCEPTED, so there are no shortcuts past review.
+  - Triggers are validated against current evidence (422 `TRIGGER_NOT_SUPPORTED_BY_EVIDENCE`).
+- `recommendations/version_discovery.py` (pure):
+  - Same-family candidates come from tenant-observed versions, lifecycle hints (latest / latest supported /
+    recommended) and finding fix versions.
+  - Each candidate carries posture, fix coverage, lifecycle, license change, version direction / major change,
+    freshness and adoption.
+  - Missing dimensions are explicit limitations: history, cadence, platform, transitive dependencies,
+    regression testing.
+  - Versions that are not safer, and unobserved downgrades, are excluded with a reason.
+- `recommendations/service.py`:
+  - Idempotent create (existing open item → 200 `created:false`; a race is caught by the unique index).
+  - Evaluation runs under the **tenant-wide** scope; the session scope is swapped so a narrower request scope
+    can never poison the tenant snapshot cache.
+  - Candidate writes run in a savepoint; a failure is recorded as `DISCOVERY_FAILED`, never a silent pass.
+  - Audit (`component_advisor.recommendation.created/evaluated`); structured events
+    `recommendation.created`, `recommendation.discovery.started/completed/failed` with correlation id and duration.
+- Celery task `component_advisor.evaluate_recommendation` (`app/workers/component_advisor_tasks.py`):
+  acks_late, retries on OperationalError, tenant-bound, idempotent.
+- API:
+  - `POST /recommendations` (scope via `project_id`/`product_id`/`sbom_id`; `evaluate` default true).
+  - `GET /recommendations` (status / trigger / key / sbom filters), `GET /recommendations/{id}`,
+    `GET /recommendations/{id}/candidates`, `POST /recommendations/{id}/evaluate` (409 if not OPEN/REVIEW_REQUIRED).
+  - Component detail and list now show the open work item and `eligible_triggers`.
+
+Decisions / assumptions:
+- Evaluation always ends in REVIEW_REQUIRED. RECOMMENDED needs a reviewer (Step 8).
+- POLICY_VIOLATION baseline: a configured trust policy evaluates the version as *not trusted*; the failed criteria
+  are stored as trigger evidence. Accepted-risk "not satisfied" is not treated as a violation. **Needs product confirmation.**
+- Fix coverage is conservative: a candidate fixes a vulnerability only if a declared fix version is on the same major
+  line and the candidate is not older. Anything else is "unknown", never "fixed".
+- Candidates are ordered for review only: observed + lower risk first, then fix coverage, then upgrades.
+  There is no score until Step 7, and `approved_replacement` is always false.
+- Re-evaluation replaces the candidate set; the audit log keeps each evaluation's summary.
+  The decision/event table arrives in Step 8.
+- Deviation from phase-0 §5: factor, compatibility-check and event tables are deferred to the migrations for
+  Steps 6–8, so each migration only adds what its step uses.
+
 ## Open questions / follow-ups
 - ~~Review Required vs Critical~~ — **resolved 2026-10-01**: the user decided Critical/High outrank review
   reasons. Implemented in Step 3 (`classification.py`); review reasons stay on the record and the
@@ -172,3 +222,6 @@ Decisions / assumptions:
 - **Cold snapshot cost:** about 14 s at the sign-off scale (200k occurrences); warm summary and drill-down are about 1 s.
   TTL raised to 300 s. If cold rebuilds are unacceptable, add the per-SBOM incremental rollup (NFR-SCA-006).
 - Run `scripts/backfill_component_descriptions.py --apply` after deploying 068.
+- Confirm the POLICY_VIOLATION trigger definition (Step 5 baseline: trust policy says "not trusted").
+- Regression runs must use a frozen worktree: twice, a migration added mid-run made later app-startup tests fail
+  with "schema not at head", which invalidated those runs.
