@@ -66,6 +66,13 @@ def make_cache_key(
             (prompt_version or "").strip().lower(),
         ]
     )
+    from ..services.configuration_scope import current_configuration_tenant
+
+    tenant_id = current_configuration_tenant()
+    if tenant_id is not None:
+        from .config_loader import get_loader
+
+        payload = f"tenant:{tenant_id}:config:{get_loader().result_cache_namespace()}:{payload}"
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 

@@ -47,6 +47,10 @@ def record(
     target_id: int | None = None,
     provider_name: str | None = None,
     detail: str | None = None,
+    request=None,
+    old_value=None,
+    new_value=None,
+    override_created: bool = False,
 ) -> None:
     """Append one audit row. Errors are swallowed (logged, not raised).
 
@@ -57,8 +61,36 @@ def record(
     """
     safe_detail = _redact(detail or "")[:240]
     try:
+        from ..core.context import get_bound_context
+        from ..services.audit_service import write_authorization_audit
+        from ..services.configuration_scope import current_configuration_tenant
+
+        tenant_id = current_configuration_tenant()
+        event = (
+            ("PLATFORM_AI_CONFIGURATION_TESTED" if action.endswith("test") else "PLATFORM_AI_CONFIGURATION_UPDATED")
+            if tenant_id is None
+            else (
+                "TENANT_AI_OVERRIDE_TESTED"
+                if action.endswith("test")
+                else "TENANT_AI_OVERRIDE_CREATED"
+                if override_created
+                else "TENANT_AI_OVERRIDE_UPDATED"
+            )
+        )
+        write_authorization_audit(
+            db,
+            action=event,
+            outcome="FAILED" if action.endswith("test") and "success=False" in safe_detail else "SUCCESS",
+            context=get_bound_context(),
+            tenant_id=tenant_id,
+            request=request,
+            old_value=old_value,
+            new_value=new_value
+            or {"provider": provider_name, "operation": action, "scope": "TENANT" if tenant_id else "PLATFORM"},
+        )
         db.add(
             AiCredentialAuditLog(
+                tenant_id=tenant_id,
                 user_id=user_id,
                 action=action,
                 target_kind=target_kind,
@@ -70,7 +102,7 @@ def record(
         )
         db.commit()
     except Exception as exc:  # noqa: BLE001
-        log.warning("ai.audit.write_failed: action=%s err=%s", action, exc)
+        log.warning("ai.audit.write_failed: action=%s error_type=%s", action, type(exc).__name__)
         try:
             db.rollback()
         except SQLAlchemyError:

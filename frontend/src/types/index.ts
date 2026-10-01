@@ -560,6 +560,8 @@ export interface DashboardLifecycle {
 }
 
 export interface LifecycleProviderConfig {
+  source?: 'PLATFORM_DEFAULT' | 'TENANT_OVERRIDE';
+  override_enabled?: boolean;
   provider_key: string;
   display_name: string;
   provider_type: string;

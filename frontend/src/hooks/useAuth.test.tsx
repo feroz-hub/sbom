@@ -115,15 +115,16 @@ function platformAdminMeBody({
     email: identity.email,
     display_name: identity.display_name,
     tenant_id: active ? active.id : null,
-    roles: active ? ['PLATFORM_ADMIN', 'TENANT_ADMIN'] : ['PLATFORM_ADMIN'],
+    roles: active ? ['VIEWER'] : ['PLATFORM_ADMIN'],
     permissions: active
-      ? ['platform:admin', 'platform:tenant:create', 'tenant:user:read']
+      ? ['sbom:read', 'dashboard:read']
       : ['platform:admin', 'platform:tenant:create'],
     is_platform_admin: true,
     auth_context: {
       status: 'READY',
       user: identity,
-      tenant_context: { active_tenant: active, available_tenants: available },
+      platform: { is_platform_admin: true, permissions: ['platform:tenant:read', 'platform:tenant:create'] },
+      tenant_context: { active_tenant: active, available_tenants: active ? [...available, active] : available },
     },
   };
 }
@@ -447,6 +448,8 @@ describe('AuthProvider platform administrator context', () => {
     expect(latestAuth?.user?.isPlatformAdmin).toBe(true);
     expect(latestAuth?.user?.roles).toContain('PLATFORM_ADMIN');
     expect(latestAuth?.hasPermission('platform:tenant:create')).toBe(true);
+    expect(latestAuth?.hasPermission('platform:tenant:read')).toBe(true);
+    expect(latestAuth?.hasPermission('tenant:user:read')).toBe(false);
     expect(fetchMock.mock.calls.every(([url]) => !String(url).endsWith('/api/tenants'))).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
@@ -490,9 +493,9 @@ describe('AuthProvider platform administrator context', () => {
       name: 'Nova',
       slug: 'nova',
       status: 'ACTIVE',
-      membership_status: null,
-      current_role: 'PLATFORM_ADMIN',
-      roles: ['PLATFORM_ADMIN'],
+      membership_status: 'ACTIVE',
+      current_role: 'VIEWER',
+      roles: ['VIEWER'],
     };
     const fetchMock = vi.spyOn(globalThis, 'fetch');
     fetchMock
@@ -516,7 +519,8 @@ describe('AuthProvider platform administrator context', () => {
     // A tenant reached by platform authority is named in the switcher without
     // becoming a membership.
     expect(screen.getByTestId('tenant-names')).toHaveTextContent('Nova');
-    expect(latestAuth?.activeTenant?.membershipStatus).toBeNull();
+    expect(latestAuth?.activeTenant?.membershipStatus).toBe('ACTIVE');
+    expect(latestAuth?.hasPermission('platform:tenant:create')).toBe(false);
   });
 
   it('clears the active tenant when a platform admin switches back to Platform', async () => {
@@ -526,9 +530,9 @@ describe('AuthProvider platform administrator context', () => {
       name: 'Nova',
       slug: 'nova',
       status: 'ACTIVE',
-      membership_status: null,
-      current_role: 'PLATFORM_ADMIN',
-      roles: ['PLATFORM_ADMIN'],
+      membership_status: 'ACTIVE',
+      current_role: 'VIEWER',
+      roles: ['VIEWER'],
     };
     const fetchMock = vi.spyOn(globalThis, 'fetch');
     fetchMock
@@ -653,7 +657,7 @@ it.each(['USER_ACCESS_PENDING', 'ACCOUNT_PENDING_APPROVAL'])('keeps %s authentic
   render(wrap(<Probe />));
   await waitFor(() => expect(screen.getByTestId('bootstrap-state')).toHaveTextContent('access-pending'));
   expect(screen.getByTestId('session-authenticated')).toHaveTextContent('true');
-  expect(latestAuth?.user?.permissions).toEqual([]);
+  await waitFor(() => expect(latestAuth?.user?.permissions).toEqual([]));
   expect(latestAuth?.tenants).toEqual([]);
   expect(fetcher.mock.calls.some(([url]) => url.endsWith('/api/tenants'))).toBe(false);
 });

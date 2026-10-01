@@ -198,6 +198,10 @@ def analyze_sbom_async(
         if sched is None or sbom is not None and sbom.tenant_id != sched.tenant_id:
             return {"status": "SKIPPED", "reason": "schedule_scope_invalid"}
         tenant_id = sched.tenant_id
+        from ..models import Tenant
+        tenant = db.get(Tenant, tenant_id)
+        if tenant is None or tenant.status != "ACTIVE":
+            return {"status": "SKIPPED", "reason": "tenant_disabled"}
         context_token = bind_context(minimal_background_context(tenant_id))
 
         if sbom is None:

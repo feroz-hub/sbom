@@ -7,6 +7,7 @@ import { SidebarProvider, useSidebar } from './SidebarContext';
 import { GlobalAiBatchBanner } from '@/components/ai-fixes/GlobalAiBatchProgress';
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
+import { ApplicationHeader, ApplicationHeaderContext } from './ApplicationHeader';
 
 const PUBLIC_PATHS = ['/sign-in', '/forgot-password', '/reset-password', '/change-password', '/native-sign-in', '/activate-account', '/auth/callback', '/access-denied', '/verification-required', '/access-pending', '/logged-out'];
 
@@ -81,7 +82,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         id="main-content"
         tabIndex={-1}
         className={cn(
-          'flex-1 flex flex-col min-h-screen w-full',
+          'flex-1 flex flex-col min-h-screen w-full min-w-0',
           isDashboard && 'bg-dashboard-page',
           'transition-[margin-left] duration-300 ease-in-out motion-reduce:transition-none',
           // Mobile: sidebar is overlay, no margin offset
@@ -91,10 +92,13 @@ function Shell({ children }: { children: React.ReactNode }) {
           'focus-visible:outline-none',
         )}
       >
+        <ApplicationHeaderContext.Provider value={true}>
+        <ApplicationHeader />
         <div className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col min-h-0">
           <GlobalAiBatchBanner />
           {children}
         </div>
+        </ApplicationHeaderContext.Provider>
       </main>
     </div>
   );

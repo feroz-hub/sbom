@@ -153,6 +153,22 @@ beforeEach(() => {
 });
 
 describe('dashboard hero — severity drill-down', () => {
+  it('renders first-use guidance for a successfully loaded empty tenant', async () => {
+    getDashboardSummary.mockResolvedValue({ posture: { total_sboms: 0 } });
+    render(wrap(<DashboardPage />));
+    expect(await screen.findByText('No SBOMs uploaded yet')).toBeInTheDocument();
+    expect(screen.queryByText('No data matches the current filters')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Inventory' })).toBeInTheDocument();
+  });
+  it('renders filter-specific guidance and clears the URL when a scope is empty', async () => {
+    queryString = 'project=1&application=2';
+    getDashboardSummary.mockResolvedValue({ posture: { total_sboms: 0 } });
+    render(wrap(<DashboardPage />));
+    expect(await screen.findByText('No data matches the current filters')).toBeInTheDocument();
+    expect(screen.queryByText('No SBOMs uploaded yet')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+    expect(push).toHaveBeenCalledWith('/', { scroll: false });
+  });
   it('clears the URL hierarchy without switching tenants', () => {
     queryString = 'project=1&application=2&sbom=3';
     render(wrap(<DashboardPage />));

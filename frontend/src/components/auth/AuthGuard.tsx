@@ -8,7 +8,7 @@ import { getRoleLabel } from '@/lib/roles';
 const PUBLIC_PATHS = ['/sign-in', '/forgot-password', '/reset-password', '/change-password', '/native-sign-in', '/activate-account', '/auth/callback', '/access-denied', '/verification-required', '/access-pending', '/logged-out'];
 
 /** Where a platform administrator lands when signing in to platform context. */
-const PLATFORM_HOME = '/settings/platform/tenants';
+const PLATFORM_HOME = '/platform';
 
 interface AuthGuardProps {
   children: ReactNode;
@@ -90,6 +90,9 @@ export function AuthGuard({ children, requiredPermission, requiredRoles }: AuthG
 
   if (isPublicPath) {
     return <>{children}</>;
+  }
+  if (bootstrapState === 'ready' && isPlatformContext && pathname === '/') {
+    return <p className="p-8">Opening Platform Dashboard…</p>;
   }
 
   // Loading state

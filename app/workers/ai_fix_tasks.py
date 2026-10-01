@@ -93,7 +93,8 @@ def generate_run_fixes(
         store.write(prog)
         return prog.model_dump(mode="json")
 
-    access = evaluate_access(rollout_key=f"run:{run_id}")
+    with tenant_scope(minimal_background_context(tenant_id)):
+        access = evaluate_access(rollout_key=f"run:{run_id}")
     if not access.allowed:
         store = get_progress_store()
         prog = BatchProgress(

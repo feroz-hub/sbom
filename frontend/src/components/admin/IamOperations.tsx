@@ -4,7 +4,7 @@ import { useAuth } from '@/hooks/useAuth';
 type Snapshot = { readiness: { ready: boolean; checks: Record<string, boolean> }; delivery: { counts: Record<string, number>; recent: { id: number; purpose: string; status: string; attempts: number; created_at: string }[] } };
 export default function IamOperations() {
   const { user, hasPermission } = useAuth();
-  const allowed = Boolean(user?.isPlatformAdmin && hasPermission('platform:user:read'));
+  const allowed = Boolean(user?.isPlatformAdmin && hasPermission('platform:health:read'));
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [error, setError] = useState(false);
   const [revision, setRevision] = useState(0);

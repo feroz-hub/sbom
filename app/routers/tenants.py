@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request
@@ -25,7 +26,6 @@ from ..core.security import (
 )
 from ..db import get_db
 from ..models import (
-    AuthorizationAuditLog,
     AuthorizationRole,
     IAMUser,
     Tenant,
@@ -257,7 +257,7 @@ def auth_me(
         if membership
         else set()
     )
-    if state.is_platform_admin:
+    if state.is_platform_admin and state.active_tenant is None:
         roles.add("PLATFORM_ADMIN")
     permissions = (
         auth_context.tenant_context.active_tenant.effective_permissions
@@ -342,7 +342,7 @@ def list_my_tenants(
             if membership is not None
             else []
         )
-        item["platform_context_available"] = bool(context.is_platform_admin)
+        item["platform_context_available"] = False
         result.append(item)
     return result
 
@@ -356,6 +356,8 @@ def create_tenant(
     ),
     db: Session = Depends(get_db),
 ) -> TenantCreationResponse:
+    if not context.has_permission("platform:tenant:bootstrap_admin"):
+        raise HTTPException(403, "Initial administrator provisioning permission is required")
     if payload.initial_admin_invitation is not None and payload.initial_admin_user_id is not None:
         raise HTTPException(422, "Choose either an existing administrator or an invitation")
     if payload.initial_admin_invitation is None and (
@@ -726,57 +728,27 @@ def list_tenant_users(
 @router.get("/tenants/{tenant_id}/audit-history")
 def tenant_audit_history(
     tenant_id: int,
-    limit: int = Query(default=100, ge=1, le=500),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=25, ge=1, le=100),
+    q: str | None = Query(default=None, max_length=200),
+    category: Literal["membership", "role", "invitation", "tenant"] | None = None,
+    outcome: Literal["SUCCESS", "DENIED", "FAILED"] | None = None,
+    from_time: datetime | None = None,
+    to_time: datetime | None = None,
+    administrative_only: bool = False,
     context: CurrentContext = Depends(require_permission("tenant:user:read")),
     db: Session = Depends(get_db),
 ) -> dict:
+    from ..services import tenant_audit_service
+
     _require_current_tenant(tenant_id, context)
-    rows = (
-        db.query(AuthorizationAuditLog)
-        .filter(AuthorizationAuditLog.tenant_id == tenant_id)
-        .order_by(
-            AuthorizationAuditLog.created_at.desc(),
-            AuthorizationAuditLog.id.desc(),
-        )
-        .limit(limit)
-        .all()
-    )
-    user_ids = {
-        user_id
-        for row in rows
-        for user_id in (row.actor_user_id, row.target_user_id)
-        if user_id is not None
-    }
-    users = {
-        user.id: user
-        for user in db.query(IAMUser).filter(IAMUser.id.in_(user_ids)).all()
-    } if user_ids else {}
-    return {
-        "items": [
-            {
-                "id": row.id,
-                "action": row.action,
-                "outcome": row.outcome,
-                "actor_user_id": row.actor_user_id,
-                "actor_email": (
-                    users[row.actor_user_id].email
-                    if row.actor_user_id in users
-                    else None
-                ),
-                "target_user_id": row.target_user_id,
-                "target_email": (
-                    users[row.target_user_id].email
-                    if row.target_user_id in users
-                    else None
-                ),
-                "old_state": row.old_value,
-                "new_state": row.new_value,
-                "correlation_id": row.correlation_id,
-                "timestamp": row.created_at,
-            }
-            for row in rows
-        ]
-    }
+    if (from_time and from_time.tzinfo is None) or (to_time and to_time.tzinfo is None):
+        raise HTTPException(422, "Audit dates must include a timezone")
+    if from_time and to_time and from_time > to_time:
+        raise HTTPException(422, "Date range is invalid")
+    return tenant_audit_service.page(db, tenant_id, page=page, page_size=page_size, q=q,
+        category=category, outcome=outcome, from_time=from_time, to_time=to_time,
+        administrative_only=administrative_only)
 
 
 @router.get("/tenants/{tenant_id}/users/{membership_id}")
@@ -804,6 +776,10 @@ def add_tenant_user(
     _require_current_tenant(tenant_id, context)
     if payload.user_id is None and not payload.external_user_id:
         raise HTTPException(status_code=422, detail="Provide user_id or external_user_id")
+    try:
+        tras.validate_role_delegation(payload.roles or [payload.role], is_platform_admin=context.is_platform_admin)
+    except tras.AssignmentProblem as exc:
+        raise _assignment_http_error(exc) from exc
     # Resolve legacy requests once, but never require an external identity for
     # an account selected by its canonical IAM user ID.
     identity_filter = (
@@ -811,7 +787,9 @@ def add_tenant_user(
         if payload.user_id is not None
         else IAMUser.external_iam_user_id == payload.external_user_id
     )
-    user_row = db.query(IAMUser).filter(identity_filter).one_or_none()
+    # Serialize adds and governance operations using the same tenant lock.
+    db.scalar(select(Tenant).where(Tenant.id == tenant_id).with_for_update())
+    user_row = db.query(IAMUser).filter(identity_filter).with_for_update().one_or_none()
     if user_row is None:
         raise HTTPException(status_code=404, detail="IAM user not found")
     if payload.external_user_id and user_row.external_iam_user_id != payload.external_user_id:
@@ -821,6 +799,8 @@ def add_tenant_user(
         TenantUser.tenant_id == tenant_id,
         TenantUser.user_id == user_row.id,
     ).one_or_none()
+    if existing is not None:
+        raise HTTPException(409, detail={"code": "MEMBERSHIP_ALREADY_EXISTS", "message": "This account is already a member of the selected tenant."})
     try:
         membership, user = ts.add_user_to_tenant(
             db,

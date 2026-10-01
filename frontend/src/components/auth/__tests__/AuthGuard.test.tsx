@@ -161,7 +161,7 @@ describe('AuthGuard platform context', () => {
       </AuthGuard>,
     );
 
-    expect(mockReplace).toHaveBeenCalledWith('/settings/platform/tenants');
+    expect(mockReplace).toHaveBeenCalledWith('/platform');
     expect(mockLogin).not.toHaveBeenCalled();
   });
 

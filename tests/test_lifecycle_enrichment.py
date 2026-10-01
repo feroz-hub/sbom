@@ -176,24 +176,26 @@ def test_endoflife_date_provider_marks_eol_from_matching_cycle():
 
 def test_endoflife_date_provider_uses_debian_distro_qualifier_for_package_rows():
     provider = EndOfLifeDateProvider(
-        http_get=lambda url: [
-            {
-                "cycle": "13",
-                "codename": "Trixie",
-                "eol": "2028-08-09",
-                "extendedSupport": "2030-06-30",
-                "latest": "13.5",
-            },
-            {
-                "cycle": "12",
-                "codename": "Bookworm",
-                "eol": "2026-07-11",
-                "extendedSupport": "2028-06-30",
-                "latest": "12.14",
-            },
-        ]
-        if "debian" in url
-        else [],
+        http_get=lambda url: (
+            [
+                {
+                    "cycle": "13",
+                    "codename": "Trixie",
+                    "eol": "2028-08-09",
+                    "extendedSupport": "2030-06-30",
+                    "latest": "13.5",
+                },
+                {
+                    "cycle": "12",
+                    "codename": "Bookworm",
+                    "eol": "2026-07-11",
+                    "extendedSupport": "2028-06-30",
+                    "latest": "12.14",
+                },
+            ]
+            if "debian" in url
+            else []
+        ),
         today=date(2026, 7, 2),
     )
     component = NormalizedComponent(
@@ -607,6 +609,11 @@ def test_apply_manual_lifecycle_override_does_not_call_external_providers(db, mo
 
 
 def test_lifecycle_refresh_override_report_and_dashboard_endpoints(client, db):
+    from app.core.context import minimal_background_context, tenant_scope
+    from app.services.lifecycle.provider_config_service import configuration_cache_namespace
+
+    with tenant_scope(minimal_background_context(1)):
+        namespace = configuration_cache_namespace(db)
     sbom = SBOMSource(sbom_name="api-lifecycle", sbom_data="{}", status="validated")
     db.add(sbom)
     db.flush()
@@ -614,6 +621,7 @@ def test_lifecycle_refresh_override_report_and_dashboard_endpoints(client, db):
     db.add(component)
     db.add(
         ComponentLifecycleCache(
+            configuration_namespace=namespace,
             normalized_name="api-package",
             normalized_version="1.0.0",
             ecosystem="generic",

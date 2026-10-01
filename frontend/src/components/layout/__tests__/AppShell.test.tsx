@@ -5,6 +5,7 @@ import { render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BootstrapState } from '@/hooks/useAuth';
+import { ThemeProvider } from '@/components/theme/ThemeProvider';
 
 const mockPathname = vi.hoisted(() => ({ current: '/' }));
 const mockAuth = vi.hoisted(() => ({
@@ -38,7 +39,7 @@ function wrap(children: ReactNode) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      {children}
+      <ThemeProvider>{children}</ThemeProvider>
     </QueryClientProvider>,
   );
 }

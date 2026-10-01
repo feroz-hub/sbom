@@ -4,12 +4,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+vi.mock('next/navigation', () => ({ usePathname: () => '/settings/platform', useRouter: () => ({ replace: vi.fn() }) }));
 import { ToastProvider } from '@/hooks/useToast';
 import { ThemeProvider } from '@/components/theme/ThemeProvider';
 
 const api = vi.hoisted(() => ({
   getPlatformAdministrators: vi.fn(),
-  searchPlatformUsers: vi.fn(),
+  searchPlatformTenantAdminCandidates: vi.fn(),
   grantPlatformAdministrator: vi.fn(),
   revokePlatformAdministrator: vi.fn(),
   getTenantAuditHistory: vi.fn(),
@@ -18,7 +19,7 @@ const logout = vi.hoisted(() => vi.fn());
 
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({
-    user: { tenantId: 1, externalUserId: 'subject-1', roles: ['PLATFORM_ADMIN'], isPlatformAdmin: true },
+    user: { tenantId: null, displayName: 'Platform Admin', email: 'admin@example.test', externalUserId: 'subject-1', roles: ['PLATFORM_ADMIN'], isPlatformAdmin: true },
     tenants: [{ id: 1, name: 'Default Tenant', slug: 'default' }],
     hasPermission: () => true,
     isLoading: false,
@@ -68,7 +69,7 @@ describe('PlatformAdminsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     api.getPlatformAdministrators.mockResolvedValue([adminItem]);
-    api.searchPlatformUsers.mockResolvedValue([
+    api.searchPlatformTenantAdminCandidates.mockResolvedValue([
       {
         id: 3,
         email: 'candidate@localhost.test',
@@ -100,7 +101,7 @@ describe('PlatformAdminsPage', () => {
     const user = userEvent.setup();
     renderPage();
     expect(screen.getByRole('heading', { name: 'Platform Administrators' })).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /subject-1/i }));
+    await user.click(screen.getByRole('button', { name: /Account menu for Platform Admin/i }));
     await user.click(screen.getByRole('menuitem', { name: 'Sign Out' }));
     expect(logout).toHaveBeenCalledTimes(1);
   });

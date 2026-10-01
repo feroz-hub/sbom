@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import runpy
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -99,6 +100,36 @@ def test_real_run_creates_rows():
     assert anthropic.is_default is True
     assert anthropic.api_key_encrypted  # encrypted, not plaintext
     assert "sk-ant-" not in anthropic.api_key_encrypted  # ciphertext, not the key
+
+
+def test_force_migration_never_overwrites_matching_tenant_credential():
+    with SessionLocal() as db:
+        now = datetime.now(UTC).isoformat()
+        tenant = AiProviderCredential(
+            tenant_id=1,
+            provider_name="anthropic",
+            label="default",
+            api_key_encrypted="tenant-owned-ciphertext",
+            default_model="tenant-model",
+            enabled=True,
+            is_default=True,
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(tenant)
+        db.commit()
+        tenant_id = tenant.id
+    assert _run_script(["--force", "--i-know-what-i-am-doing"]) == 0
+    with SessionLocal() as db:
+        tenant = db.get(AiProviderCredential, tenant_id)
+        assert tenant.api_key_encrypted == "tenant-owned-ciphertext"
+        assert tenant.default_model == "tenant-model"
+        assert (
+            db.query(AiProviderCredential)
+            .filter(AiProviderCredential.provider_name == "anthropic", AiProviderCredential.tenant_id.is_(None))
+            .count()
+            == 1
+        )
 
 
 def test_idempotent_second_run(capsys):

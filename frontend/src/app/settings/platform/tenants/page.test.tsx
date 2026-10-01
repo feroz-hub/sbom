@@ -13,7 +13,7 @@ const api = vi.hoisted(() => ({
   listPlatformTenants: vi.fn(),
   createPlatformTenant: vi.fn(),
   updatePlatformTenantStatus: vi.fn(),
-  searchPlatformUsers: vi.fn(),
+  searchPlatformTenantAdminCandidates: vi.fn(),
 }));
 
 vi.mock('next/navigation', () => ({
@@ -27,7 +27,7 @@ vi.mock('next/navigation', () => ({
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({
     isLoading: auth.loading,
-    hasPermission: (permission: string) => auth.allowed && permission === 'platform:tenant:create',
+    hasPermission: (permission: string) => auth.allowed && permission.startsWith('platform:tenant:'),
     switchTenant: vi.fn(),
     user: { displayName: 'Platform Admin', email: 'admin@example.test', roles: ['PLATFORM_ADMIN'], isPlatformAdmin: true },
     config: { enabled: true },
@@ -90,6 +90,7 @@ describe('PlatformTenantsPage', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    window.history.replaceState(null, '', '/settings/platform/tenants');
     auth.allowed = true;
     auth.loading = false;
     api.listPlatformTenants.mockResolvedValue([tenant]);
@@ -101,7 +102,7 @@ describe('PlatformTenantsPage', () => {
       external_iam_tenant_id: null,
     });
     api.updatePlatformTenantStatus.mockResolvedValue({ tenant_id: 7, status: 'DISABLED' });
-    api.searchPlatformUsers.mockResolvedValue([{
+    api.searchPlatformTenantAdminCandidates.mockResolvedValue([{
       id: 3,
       display_name: 'Feroze Basha',
       email: 'ferozebasha.s@hcltech.com',
@@ -111,6 +112,13 @@ describe('PlatformTenantsPage', () => {
       verification_required: false,
     }]);
     vi.spyOn(window, 'confirm').mockReturnValue(true);
+  });
+
+  it('opens the existing creation form from the dashboard anchor', async () => {
+    window.history.replaceState(null, '', '/settings/platform/tenants#create-tenant');
+    renderPage();
+    expect(await screen.findByRole('heading', { name: 'Create tenant' })).toBeInTheDocument();
+    expect(api.createPlatformTenant).not.toHaveBeenCalled();
   });
 
   it('renders the tenant list and platform navigation without external mapping column', async () => {

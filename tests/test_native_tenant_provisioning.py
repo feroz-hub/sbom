@@ -102,8 +102,8 @@ def test_reuse_native_identity_across_tenants_without_hcl_linking(provisioning):
     duplicate = client.post("/api/platform/native-users", json={
         **payload()["initial_admin_invitation"], "tenant_id": second["tenant"]["id"], "role_codes": ["VIEWER"],
     })
-    assert duplicate.status_code == 409
-    assert duplicate.json()["detail"]["roles"] == ["TENANT_ADMIN"]
+    # Ordinary Platform Admin is no longer a generic tenant-user administrator.
+    assert duplicate.status_code == 403
 
 
 def test_pending_tenant_cannot_be_enabled_without_effective_admin(provisioning):
@@ -143,8 +143,13 @@ def test_platform_tenant_search(provisioning, query):
 @pytest.mark.parametrize("query", ["ajmer@example.test", "Ajmer", "Khan"])
 def test_platform_user_search_business_fields(provisioning, query):
     client, _ = provisioning
-    assert client.post("/api/tenants", json=payload()).status_code == 201
-    result = client.get("/api/platform/users/search", params={"q": query, "page_size": 1})
+    created = client.post("/api/tenants", json=payload())
+    assert created.status_code == 201
+    with SessionLocal() as db:
+        uid = created.json()['initial_administrator']['user_id']
+        native_auth_service.activate(db, activation_secret(db, uid), "a long native test passphrase")
+        db.commit()
+    result = client.get("/api/platform/tenant-admin-candidates", params={"q": query, "page_size": 1})
     assert result.status_code == 200
     assert result.json()["items"][0]["email"] == "ajmer@example.test"
 

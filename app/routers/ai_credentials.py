@@ -35,7 +35,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..ai import credential_audit
-from ..ai.config_loader import get_loader, preview_api_key
+from ..ai.config_loader import get_loader
 from ..ai.config_types import ProviderConfig
 from ..ai.model_registry import (
     ensure_legacy_model,
@@ -54,6 +54,16 @@ from ..security.secrets import encryption_config_diagnostic, get_cipher
 log = logging.getLogger("sbom.routers.ai_credentials")
 
 router = APIRouter(prefix="/api/v1/ai", tags=["ai-credentials"])
+
+
+def get_ai_configuration_db(db: Session = Depends(get_db)):
+    from ..services.configuration_scope import current_configuration_tenant
+
+    db.info["ai_configuration_tenant"] = current_configuration_tenant()
+    try:
+        yield db
+    finally:
+        db.info.pop("ai_configuration_tenant", None)
 
 
 # ---------------------------------------------------------------------------
@@ -201,6 +211,8 @@ class EffectiveProviderDiagnostic(BaseModel):
 
 
 class EffectiveConfigDiagnostic(BaseModel):
+    source: str = "PLATFORM_DEFAULT"
+    override_enabled: bool = False
     feature_enabled: bool
     kill_switch_active: bool
     settings_source: str
@@ -314,27 +326,29 @@ def _sanitized_base_url(value: str) -> str | None:
     return f"{parsed.scheme}://{host}{port}{path}"
 
 
+def _credential_metadata(row: AiProviderCredential) -> dict:
+    return {
+        "provider": row.provider_name,
+        "model": row.default_model,
+        "enabled": bool(row.enabled),
+        "is_default": bool(row.is_default),
+        "is_fallback": bool(row.is_fallback),
+        "credential_configured": bool(row.api_key_encrypted),
+    }
+
+
 def _row_to_response(row: AiProviderCredential, *, decrypted_key: str | None = None) -> CredentialResponse:
     """Build a CredentialResponse from a row.
 
-    ``decrypted_key`` is optional — when present we use it for the
-    preview computation; when omitted we decrypt here (best-effort).
-    Either way, the raw key never appears in the response.
+    GET responses never decrypt secrets or expose key fragments.
     """
-    plaintext: str | None = decrypted_key
-    if plaintext is None and row.api_key_encrypted:
-        try:
-            plaintext = get_cipher().decrypt(row.api_key_encrypted)
-        except Exception:  # noqa: BLE001
-            plaintext = None
-    preview, present = preview_api_key(plaintext)
     return CredentialResponse(
         id=row.id,
         provider_name=row.provider_name,
         label=row.label,
-        api_key_present=bool(row.api_key_encrypted) or present,
-        api_key_preview=preview,
-        base_url=row.base_url,
+        api_key_present=bool(row.api_key_encrypted),
+        api_key_preview=None,
+        base_url=_sanitized_base_url(row.base_url or ""),
         default_model=row.default_model,
         tier=row.tier or "paid",
         is_default=bool(row.is_default),
@@ -408,6 +422,9 @@ def _provider_config(
 
 def _validate_catalog_compat(config: ProviderConfig) -> None:
     """Apply the exact same validation used by runtime construction."""
+    parsed = urlsplit(config.base_url or "")
+    if parsed.username or parsed.password or parsed.query or parsed.fragment:
+        raise HTTPException(400, "Store endpoint credentials in encrypted credential storage, not the URL.")
     try:
         validate_provider_config(config)
     except ProviderUnavailableError as exc:
@@ -485,13 +502,13 @@ async def _run_probe(provider, model: str | None) -> ConnectionTestResult:
 
 
 @router.get("/credentials", response_model=list[CredentialResponse])
-def list_credentials(db: Session = Depends(get_db)) -> list[CredentialResponse]:
+def list_credentials(db: Session = Depends(get_ai_configuration_db)) -> list[CredentialResponse]:
     rows = db.execute(select(AiProviderCredential).order_by(AiProviderCredential.id)).scalars().all()
     return [_row_to_response(r) for r in rows]
 
 
 @router.get("/credentials/{cred_id}", response_model=CredentialResponse)
-def get_credential(cred_id: int, db: Session = Depends(get_db)) -> CredentialResponse:
+def get_credential(cred_id: int, db: Session = Depends(get_ai_configuration_db)) -> CredentialResponse:
     row = db.execute(select(AiProviderCredential).where(AiProviderCredential.id == cred_id)).scalar_one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail=f"Credential {cred_id} not found.")
@@ -499,16 +516,13 @@ def get_credential(cred_id: int, db: Session = Depends(get_db)) -> CredentialRes
 
 
 @router.get("/effective-config", response_model=EffectiveConfigDiagnostic)
-def get_effective_config_diagnostic(db: Session = Depends(get_db)) -> EffectiveConfigDiagnostic:
+def get_effective_config_diagnostic(db: Session = Depends(get_ai_configuration_db)) -> EffectiveConfigDiagnostic:
     """Safe administrator/smoke-check view of the exact runtime snapshot."""
     from ..settings import get_settings
 
     loader = get_loader()
     configs, effective = loader.resolve()
-    rows = {
-        row.id: row
-        for row in db.execute(select(AiProviderCredential).order_by(AiProviderCredential.id)).scalars()
-    }
+    rows = {row.id: row for row in db.execute(select(AiProviderCredential).order_by(AiProviderCredential.id)).scalars()}
     default = next((cfg for cfg in configs if cfg.is_default), None)
     if default is None:
         try:
@@ -540,7 +554,14 @@ def get_effective_config_diagnostic(db: Session = Depends(get_db)) -> EffectiveC
                 last_test_success=row.last_test_success if row is not None else None,
             )
         )
+    from ..services.configuration_scope import current_configuration_tenant
+
+    overridden = current_configuration_tenant() is not None and bool(
+        db.scalar(select(AiProviderCredential.id).limit(1)) or db.scalar(select(AiSettings.id).limit(1))
+    )
     return EffectiveConfigDiagnostic(
+        source="TENANT_OVERRIDE" if overridden else "PLATFORM_DEFAULT",
+        override_enabled=overridden,
         feature_enabled=effective.feature_enabled,
         kill_switch_active=effective.kill_switch_active,
         settings_source=effective.source,
@@ -568,8 +589,11 @@ def get_effective_config_diagnostic(db: Session = Depends(get_db)) -> EffectiveC
 def create_credential(
     body: CredentialCreateRequest,
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_ai_configuration_db),
 ) -> CredentialResponse:
+    override_created = db.info.get("ai_configuration_tenant") is not None and not (
+        db.scalar(select(AiProviderCredential.id).limit(1)) or db.scalar(select(AiSettings.id).limit(1))
+    )
     if body.is_default and body.is_fallback:
         raise HTTPException(status_code=400, detail="Default and fallback must be different credentials.")
     _validate_catalog_compat(
@@ -596,6 +620,23 @@ def create_credential(
     if body.is_fallback:
         for existing in db.execute(select(AiProviderCredential)).scalars():
             existing.is_fallback = False
+    tenant_id = db.info.get("ai_configuration_tenant")
+    if tenant_id is not None and db.scalar(select(AiSettings.id).limit(1)) is None:
+        # Opting into provider ownership also establishes independent controls;
+        # later platform budget/enable changes must not alter this override.
+        effective = get_loader().resolve_settings()
+        db.add(
+            AiSettings(
+                id=tenant_id + 1,
+                feature_enabled=effective.feature_enabled,
+                kill_switch_active=effective.kill_switch_active,
+                budget_per_request_usd=effective.budget_per_request_usd,
+                budget_per_scan_usd=effective.budget_per_scan_usd,
+                budget_daily_usd=effective.budget_daily_usd,
+                updated_at=_now_iso(),
+                updated_by_user_id=_user_id(request),
+            )
+        )
     row = AiProviderCredential(
         provider_name=body.provider_name.strip().lower(),
         label=body.label.strip(),
@@ -630,7 +671,10 @@ def create_credential(
     credential_audit.record(
         db,
         user_id=_user_id(request),
+        request=request,
         action="credential.create",
+        override_created=override_created,
+        new_value=_credential_metadata(row),
         target_kind="credential",
         target_id=row.id,
         provider_name=row.provider_name,
@@ -645,11 +689,13 @@ def update_credential(
     cred_id: int,
     body: CredentialUpdateRequest,
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_ai_configuration_db),
 ) -> CredentialResponse:
     row = db.execute(select(AiProviderCredential).where(AiProviderCredential.id == cred_id)).scalar_one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail=f"Credential {cred_id} not found.")
+
+    old_metadata = _credential_metadata(row)
 
     # Validate the complete post-update configuration before mutating the
     # row. ``PRESENT`` represents an existing encrypted key for validation
@@ -659,9 +705,7 @@ def update_credential(
             provider_name=row.provider_name,
             api_key=body.api_key or ("PRESENT" if row.api_key_encrypted else None),
             base_url=body.base_url if body.base_url is not None else row.base_url,
-            default_model=(
-                body.default_model if body.default_model is not None else row.default_model
-            ),
+            default_model=(body.default_model if body.default_model is not None else row.default_model),
             tier=body.tier if body.tier is not None else (row.tier or "paid"),
             cost_per_1k_input_usd=(
                 body.cost_per_1k_input_usd
@@ -674,12 +718,8 @@ def update_credential(
                 else float(row.cost_per_1k_output_usd or 0.0)
             ),
             is_local=body.is_local if body.is_local is not None else bool(row.is_local),
-            max_concurrent=(
-                body.max_concurrent if body.max_concurrent is not None else row.max_concurrent
-            ),
-            rate_per_minute=(
-                body.rate_per_minute if body.rate_per_minute is not None else row.rate_per_minute
-            ),
+            max_concurrent=(body.max_concurrent if body.max_concurrent is not None else row.max_concurrent),
+            rate_per_minute=(body.rate_per_minute if body.rate_per_minute is not None else row.rate_per_minute),
         )
     )
 
@@ -724,7 +764,9 @@ def update_credential(
         row.rate_per_minute = float(body.rate_per_minute)
         changes.append("rate")
 
-    if _verification_status(row) != "INVALID_CREDENTIALS" and any(field in changes for field in ("api_key", "base_url", "default_model")):
+    if _verification_status(row) != "INVALID_CREDENTIALS" and any(
+        field in changes for field in ("api_key", "base_url", "default_model")
+    ):
         row.last_test_at = None
         row.last_test_success = None
         row.last_test_error = None
@@ -743,7 +785,10 @@ def update_credential(
     credential_audit.record(
         db,
         user_id=_user_id(request),
+        request=request,
         action="credential.update",
+        old_value=old_metadata,
+        new_value=_credential_metadata(row),
         target_kind="credential",
         target_id=row.id,
         provider_name=row.provider_name,
@@ -757,18 +802,22 @@ def update_credential(
 def delete_credential(
     cred_id: int,
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_ai_configuration_db),
 ) -> None:
     row = db.execute(select(AiProviderCredential).where(AiProviderCredential.id == cred_id)).scalar_one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail=f"Credential {cred_id} not found.")
     provider_name = row.provider_name
+    old_metadata = _credential_metadata(row)
     db.delete(row)
     db.commit()
     credential_audit.record(
         db,
         user_id=_user_id(request),
+        request=request,
         action="credential.delete",
+        old_value=old_metadata,
+        new_value={"removed": True},
         target_kind="credential",
         target_id=cred_id,
         provider_name=provider_name,
@@ -786,15 +835,18 @@ def delete_credential(
 def set_default_credential(
     cred_id: int,
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_ai_configuration_db),
 ) -> CredentialResponse:
     row = db.execute(select(AiProviderCredential).where(AiProviderCredential.id == cred_id)).scalar_one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail=f"Credential {cred_id} not found.")
-    # Atomic swap: clear all, set the chosen, single flush. The partial
-    # unique index would otherwise reject the intermediate state.
+    # Clear the old flag before setting the new one, in one transaction.
+    # A single ORM flush can otherwise update a lower-ID target first and
+    # violate the partial unique index before clearing the previous default.
+    old_metadata = _credential_metadata(row)
     for other in db.execute(select(AiProviderCredential).where(AiProviderCredential.id != cred_id)).scalars():
         other.is_default = False
+    db.flush()
     row.is_default = True
     row.is_fallback = False
     row.updated_at = _now_iso()
@@ -803,7 +855,10 @@ def set_default_credential(
     credential_audit.record(
         db,
         user_id=_user_id(request),
+        request=request,
         action="credential.set_default",
+        old_value=old_metadata,
+        new_value=_credential_metadata(row),
         target_kind="credential",
         target_id=row.id,
         provider_name=row.provider_name,
@@ -817,15 +872,17 @@ def set_default_credential(
 def set_fallback_credential(
     cred_id: int,
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_ai_configuration_db),
 ) -> CredentialResponse:
     row = db.execute(select(AiProviderCredential).where(AiProviderCredential.id == cred_id)).scalar_one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail=f"Credential {cred_id} not found.")
     if row.is_default:
         raise HTTPException(status_code=400, detail="Default and fallback must be different credentials.")
+    old_metadata = _credential_metadata(row)
     for other in db.execute(select(AiProviderCredential).where(AiProviderCredential.id != cred_id)).scalars():
         other.is_fallback = False
+    db.flush()
     row.is_fallback = True
     row.updated_at = _now_iso()
     db.commit()
@@ -833,7 +890,10 @@ def set_fallback_credential(
     credential_audit.record(
         db,
         user_id=_user_id(request),
+        request=request,
         action="credential.set_fallback",
+        old_value=old_metadata,
+        new_value=_credential_metadata(row),
         target_kind="credential",
         target_id=row.id,
         provider_name=row.provider_name,
@@ -852,7 +912,7 @@ def set_fallback_credential(
 async def test_unsaved_credential(
     body: TestConnectionRequest,
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_ai_configuration_db),
 ) -> ConnectionTestResult:
     """Probe candidate values without persisting them.
 
@@ -898,6 +958,7 @@ async def test_unsaved_credential(
     credential_audit.record(
         db,
         user_id=_user_id(request),
+        request=request,
         action="credential.test",
         target_kind="credential",
         target_id=target_id,
@@ -911,7 +972,7 @@ async def test_unsaved_credential(
 async def test_saved_credential(
     cred_id: int,
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_ai_configuration_db),
 ) -> ConnectionTestResult:
     """Re-test a saved row. Decrypts the stored key in-memory only."""
     row = db.execute(select(AiProviderCredential).where(AiProviderCredential.id == cred_id)).scalar_one_or_none()
@@ -949,6 +1010,7 @@ async def test_saved_credential(
     credential_audit.record(
         db,
         user_id=_user_id(request),
+        request=request,
         action="credential.test",
         target_kind="credential",
         target_id=row.id,
@@ -964,21 +1026,25 @@ async def test_saved_credential(
 
 
 @router.get("/credentials/{cred_id}/models", response_model=list[ProviderModelResponse])
-def list_provider_models(cred_id: int, db: Session = Depends(get_db)) -> list[ProviderModelResponse]:
+def list_provider_models(cred_id: int, db: Session = Depends(get_ai_configuration_db)) -> list[ProviderModelResponse]:
     _credential_or_404(db, cred_id)
-    rows = db.execute(
-        select(AiProviderModel)
-        .where(AiProviderModel.provider_credential_id == cred_id)
-        .order_by(
-            AiProviderModel.is_selected.desc(),
-            case(
-                (AiProviderModel.is_available.is_(True), 0),
-                (AiProviderModel.is_available.is_(None), 1),
-                else_=2,
-            ),
-            AiProviderModel.provider_model_id,
+    rows = (
+        db.execute(
+            select(AiProviderModel)
+            .where(AiProviderModel.provider_credential_id == cred_id)
+            .order_by(
+                AiProviderModel.is_selected.desc(),
+                case(
+                    (AiProviderModel.is_available.is_(True), 0),
+                    (AiProviderModel.is_available.is_(None), 1),
+                    else_=2,
+                ),
+                AiProviderModel.provider_model_id,
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return [_model_response(row) for row in rows]
 
 
@@ -986,7 +1052,7 @@ def list_provider_models(cred_id: int, db: Session = Depends(get_db)) -> list[Pr
 async def refresh_provider_models(
     cred_id: int,
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_ai_configuration_db),
 ) -> ModelRefreshResponse:
     credential = _credential_or_404(db, cred_id)
     if not credential.enabled:
@@ -1003,11 +1069,17 @@ async def refresh_provider_models(
         }.get(exc.kind, 502)
         raise HTTPException(status_code=status, detail={"kind": exc.kind, "message": str(exc)}) from exc
     except Exception as exc:  # noqa: BLE001
-        log.warning("ai.model_refresh.failed provider=%s credential_id=%s error_type=%s", credential.provider_name, credential.id, type(exc).__name__)
+        log.warning(
+            "ai.model_refresh.failed provider=%s credential_id=%s error_type=%s",
+            credential.provider_name,
+            credential.id,
+            type(exc).__name__,
+        )
         raise HTTPException(status_code=502, detail={"kind": "unknown", "message": "Model discovery failed."}) from exc
     credential_audit.record(
         db,
         user_id=_user_id(request),
+        request=request,
         action="model.refresh",
         target_kind="credential",
         target_id=credential.id,
@@ -1022,10 +1094,11 @@ def select_provider_model(
     cred_id: int,
     model_id: int,
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_ai_configuration_db),
 ) -> ProviderModelResponse:
     credential = _credential_or_404(db, cred_id)
     model = _model_or_404(db, cred_id, model_id)
+    old_metadata = _credential_metadata(credential)
     try:
         select_model(db, credential, model)
     except ValueError as exc:
@@ -1034,7 +1107,10 @@ def select_provider_model(
     credential_audit.record(
         db,
         user_id=_user_id(request),
+        request=request,
         action="model.select",
+        old_value=old_metadata,
+        new_value=_credential_metadata(credential),
         target_kind="model",
         target_id=model.id,
         provider_name=credential.provider_name,
@@ -1048,7 +1124,7 @@ async def test_provider_model(
     cred_id: int,
     model_id: int,
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_ai_configuration_db),
 ) -> ModelTestResponse:
     credential = _credential_or_404(db, cred_id)
     model = _model_or_404(db, cred_id, model_id)
@@ -1056,6 +1132,7 @@ async def test_provider_model(
     credential_audit.record(
         db,
         user_id=_user_id(request),
+        request=request,
         action="model.test",
         target_kind="model",
         target_id=model.id,
@@ -1071,8 +1148,8 @@ async def test_provider_model(
 
 
 @router.get("/settings", response_model=SettingsResponse)
-def get_singleton_settings(db: Session = Depends(get_db)) -> SettingsResponse:
-    row = db.execute(select(AiSettings).where(AiSettings.id == 1)).scalar_one_or_none()
+def get_singleton_settings(db: Session = Depends(get_ai_configuration_db)) -> SettingsResponse:
+    row = db.execute(select(AiSettings)).scalar_one_or_none()
     if row is None:
         # Migration/startup compatibility: surface the exact env fallback
         # runtime is enforcing until the first DB write establishes an
@@ -1104,15 +1181,18 @@ def get_singleton_settings(db: Session = Depends(get_db)) -> SettingsResponse:
 def update_singleton_settings(
     body: SettingsUpdateRequest,
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_ai_configuration_db),
 ) -> SettingsResponse:
-    row = db.execute(select(AiSettings).where(AiSettings.id == 1)).scalar_one_or_none()
+    row = db.execute(select(AiSettings)).scalar_one_or_none()
+    created = row is None
+    override_created = created and not db.scalar(select(AiProviderCredential.id).limit(1))
+    old_settings = get_singleton_settings(db).model_dump()
     if row is None:
         # First write promotes the current effective env fallback into an
         # authoritative DB row, then applies the caller's overrides.
         effective = get_loader().resolve_settings()
         row = AiSettings(
-            id=1,
+            id=(db.info["ai_configuration_tenant"] + 1) if db.info.get("ai_configuration_tenant") is not None else 1,
             feature_enabled=effective.feature_enabled,
             kill_switch_active=effective.kill_switch_active,
             budget_per_request_usd=effective.budget_per_request_usd,
@@ -1157,11 +1237,80 @@ def update_singleton_settings(
     credential_audit.record(
         db,
         user_id=user,
+        request=request,
         action="settings.update",
+        old_value=old_settings,
+        new_value=get_singleton_settings(db).model_dump(),
+        override_created=override_created,
         target_kind="settings",
-        target_id=1,
+        target_id=row.id,
         provider_name=None,
         detail=f"changed={','.join(changes) or 'none'}",
     )
     get_loader().invalidate()
     return get_singleton_settings(db)
+
+
+@router.post("/override", response_model=SettingsResponse)
+def create_tenant_override(request: Request, db: Session = Depends(get_ai_configuration_db)):
+    from ..services.configuration_scope import current_configuration_tenant
+
+    if current_configuration_tenant() is None:
+        raise HTTPException(403, "Tenant context is required to create an override")
+    # An explicit settings row owns this tenant's complete provider selection.
+    # No platform secret is cloned; the tenant supplies its own credentials.
+    return update_singleton_settings(SettingsUpdateRequest(), request, db)
+
+
+@router.delete("/override", status_code=204)
+def reset_tenant_override(request: Request, db: Session = Depends(get_ai_configuration_db)):
+    from ..core.context import get_bound_context
+    from ..services.audit_service import write_authorization_audit
+    from ..services.configuration_scope import current_configuration_tenant
+
+    if current_configuration_tenant() is None:
+        raise HTTPException(403, "Tenant context is required to reset an override")
+    old_metadata = {
+        "source": "TENANT_OVERRIDE",
+        "providers": [_credential_metadata(row) for row in db.scalars(select(AiProviderCredential))],
+    }
+    for model in (AiProviderCredential, AiSettings):
+        for row in db.scalars(select(model)):
+            db.delete(row)
+    write_authorization_audit(
+        db,
+        action="TENANT_AI_OVERRIDE_REMOVED",
+        context=get_bound_context(),
+        request=request,
+        old_value=old_metadata,
+        new_value={"source": "PLATFORM_DEFAULT"},
+    )
+    db.commit()
+    get_loader().invalidate()
+
+
+@router.get("/providers/available")
+def configuration_provider_catalog():
+    from ..ai.catalog import list_catalog
+
+    return list_catalog()
+
+
+@router.get("/providers/available/{name}")
+def configuration_provider_catalog_entry(name: str):
+    from .ai_usage import get_provider_catalog_entry
+
+    return get_provider_catalog_entry(name)
+
+
+# Alias the same endpoints, not a second configuration implementation. Platform
+# requests resolve platform context independently of any inherited tenant header.
+platform_router = APIRouter(tags=["platform-ai-configuration"])
+for configuration_route in router.routes:
+    platform_router.add_api_route(
+        configuration_route.path.replace("/api/v1/ai", "/api/platform/configuration/ai"),
+        configuration_route.endpoint,
+        methods=list(configuration_route.methods),
+        response_model=configuration_route.response_model,
+        status_code=configuration_route.status_code,
+    )

@@ -14,6 +14,7 @@ import type {
 import { TestResultDisplay } from './TestResultDisplay';
 import { getApiErrorMessage } from '@/lib/notifications';
 import { usePermission } from '@/hooks/usePermission';
+import { useAiConfigurationScope } from '../ConfigurationScope';
 import { verificationState } from '@/lib/aiVerification';
 import { customOpenAiBaseUrlError } from '@/lib/aiProviderValidation';
 
@@ -39,7 +40,8 @@ interface AddProviderDialogProps {
  *                       + optional rate / cost overrides
  */
 export function AddProviderDialog({ open, onClose }: AddProviderDialogProps) {
-  const canManage = usePermission('tenant:settings:update');
+  const configurationScope = useAiConfigurationScope();
+  const canManage = usePermission(`${configurationScope.scope}:ai:update`);
   const { data: catalog } = useProviderCatalog();
   const { unsaved: testMut } = useTestConnection();
   const createMut = useCreateAiCredential();
@@ -106,7 +108,7 @@ export function AddProviderDialog({ open, onClose }: AddProviderDialogProps) {
     return true;
   })();
 
-  const canTest = canManage && formValid && !testMut.isPending && !createMut.isPending;
+  const canTest = configurationScope.canTest && canManage && formValid && !testMut.isPending && !createMut.isPending;
   const canSave =
     canManage && formValid && verificationState(testMut.data) !== 'INVALID_CREDENTIALS' && !createMut.isPending;
 

@@ -143,7 +143,14 @@ def resend(
 ) -> tuple[IAMUser, tokens.IssuedAccountActionToken]:
     if not get_settings().native_user_creation_enabled:
         raise HTTPException(404, "Native enrollment unavailable")
-    authorize(context, tenant_id)
+    if context.is_platform_admin:
+        if not context.has_permission("platform:tenant:bootstrap_admin"):
+            raise HTTPException(403, "Initial administrator provisioning permission is required")
+        membership = db.scalar(select(TenantUser).where(TenantUser.tenant_id == tenant_id, TenantUser.user_id == user_id))
+        if not membership or "TENANT_ADMIN" not in roles.effective_role_codes(db, membership):
+            raise HTTPException(404, "Pending Tenant Administrator not found")
+    else:
+        authorize(context, tenant_id)
     with db.begin_nested():
         user = db.scalar(select(IAMUser).where(IAMUser.id == user_id).with_for_update())
         member = db.scalar(

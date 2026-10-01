@@ -14,12 +14,15 @@ import { TopBar } from '@/components/layout/TopBar';
  * superseded by the editable ``AiSettingsPage`` at ``/settings/ai``.
  */
 export default function SettingsPage() {
-  const { hasPermission, user } = useAuth();
+  const { hasPermission } = useAuth();
   const administration = [
-    { title: 'Users & Access', href: '/settings/users', visible: hasPermission('tenant:user:read') || hasPermission('platform:user:read') },
-    { title: 'Tenants', href: '/settings/platform/tenants', visible: hasPermission('platform:tenant:create') },
-    { title: 'Authentication, delivery & operational health', href: '/settings/iam', visible: user?.isPlatformAdmin && hasPermission('platform:user:read') },
+    { title: 'Users & Access', href: '/settings/users', visible: hasPermission('tenant:user:read') },
+    { title: 'Tenants', href: '/settings/platform/tenants', visible: hasPermission('platform:tenant:read') },
+    { title: 'Authentication, delivery & operational health', href: '/settings/iam', visible: hasPermission('platform:health:read') },
     { title: 'Platform administrators', href: '/settings/platform', visible: hasPermission('platform:administrator:read') },
+    { title: 'Platform AI Configuration', href: '/platform/configuration/ai', visible: hasPermission('platform:ai:read') },
+    { title: 'Platform Lifecycle Providers', href: '/platform/configuration/lifecycle', visible: hasPermission('platform:lifecycle-provider:read') },
+    { title: 'Lifecycle Providers', href: '/admin/lifecycle-providers', visible: hasPermission('tenant:lifecycle-provider:read') },
   ].filter(item => item.visible);
   return (
     <div className="flex flex-col flex-1">
@@ -28,7 +31,7 @@ export default function SettingsPage() {
         <h1 className="text-xl font-semibold text-hcl-navy">Settings</h1>
         <NativePasswordSettings />
         {administration.length > 0 && <section className="space-y-3"><h2 className="text-lg font-semibold">Administration</h2><p>Manage people, tenant access and authentication operations.</p><ul className="grid gap-3 sm:grid-cols-2">{administration.map(item => <li key={item.href}><Link className="block rounded-lg border border-border-subtle p-4 font-medium hover:bg-surface-muted focus-visible:outline" href={item.href}>{item.title}</Link></li>)}</ul></section>}
-        <ul className="space-y-2">
+        {hasPermission('tenant:ai:read') && <ul className="space-y-2">
           <li>
             <Link
               href="/settings/ai"
@@ -48,7 +51,7 @@ export default function SettingsPage() {
               <ChevronRight className="h-4 w-4 text-hcl-muted" aria-hidden />
             </Link>
           </li>
-        </ul>
+        </ul>}
       </main>
     </div>
   );

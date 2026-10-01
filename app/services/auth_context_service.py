@@ -6,7 +6,6 @@ import logging
 from dataclasses import dataclass
 
 from fastapi import Request
-from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from ..core.identity_states import (
@@ -166,17 +165,6 @@ def resolve_authorization_state(
                 if _tenant_matches(tenant, requested):
                     selected, membership = tenant, member
                     break
-            if selected is None and is_platform_admin:
-                selected = db.execute(
-                    select(Tenant).where(
-                        Tenant.status == "ACTIVE",
-                        or_(
-                            Tenant.slug == requested,
-                            Tenant.external_iam_tenant_id == requested,
-                            Tenant.id == int(requested) if requested.isdigit() else False,
-                        ),
-                    )
-                ).scalar_one_or_none()
             if selected is None:
                 _audit_state(
                     db,
@@ -192,9 +180,6 @@ def resolve_authorization_state(
                 )
             selection_source = "HEADER"
         if selected is not None:
-            roles = {membership.role} if membership else set()
-            if is_platform_admin:
-                roles.add("PLATFORM_ADMIN")
             result = ResolvedAuthorizationState(
                 AuthorizationState.READY,
                 NextAction.OPEN_DASHBOARD,
@@ -290,9 +275,9 @@ def _available_tenant(
     db: Session,
     tenant: Tenant,
     membership: TenantUser | None,
-    *,
-    is_platform_admin: bool,
 ) -> AvailableTenant:
+    if membership is None:
+        raise ValueError("A tenant projection requires explicit membership")
     roles = (
         set(
             tenant_role_assignment_service.effective_role_codes(
@@ -315,14 +300,6 @@ def _available_tenant(
         if membership
         else set()
     )
-    if is_platform_admin:
-        permissions.update(
-            authorization_catalog_service.resolve_permissions_for_roles(
-                db,
-                frozenset({"PLATFORM_ADMIN"}),
-                actor_user_id=membership.user_id if membership else None,
-            )
-        )
     from .identity_mapping_service import build_identity_mapping
 
     return AvailableTenant(
@@ -335,9 +312,9 @@ def _available_tenant(
             is_legacy=getattr(tenant, "is_legacy", False),
         ),
         membership_status=membership.status if membership else None,
-        current_role=membership.role if membership else "PLATFORM_ADMIN",
-        primary_role=membership.role if membership else "PLATFORM_ADMIN",
-        roles=sorted(roles | ({"PLATFORM_ADMIN"} if is_platform_admin else set())),
+        current_role=membership.role,
+        primary_role=membership.role,
+        roles=sorted(roles),
         role_assignment_version=(
             membership.role_assignment_version if membership else None
         ),
@@ -358,7 +335,6 @@ def build_auth_context_response(
             db,
             tenant,
             membership,
-            is_platform_admin=state.is_platform_admin,
         )
         for membership, tenant in state.memberships
     ]
@@ -367,7 +343,6 @@ def build_auth_context_response(
             db,
             state.active_tenant,
             state.active_membership,
-            is_platform_admin=state.is_platform_admin,
         )
         if state.active_tenant
         else None

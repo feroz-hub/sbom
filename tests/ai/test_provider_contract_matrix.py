@@ -159,7 +159,9 @@ def test_complete_provider_contract_matrix(
     assert saved_test.json()["success"] is True, saved_test.text
     assert client.put(f"/api/v1/ai/credentials/{credential_id}/set-default").status_code == 200
 
-    configs = get_loader().resolve_configs()
+    from app.core.context import minimal_background_context, tenant_scope
+    with tenant_scope(minimal_background_context(1)):
+        configs = get_loader().resolve_configs()
     selected = next(config for config in configs if config.credential_id == credential_id)
     assert selected.default_model == model
     assert selected.base_url == (base_url or "")
@@ -169,7 +171,8 @@ def test_complete_provider_contract_matrix(
     assert selected.is_local is is_local
 
     reset_registry()
-    registry = get_registry()
+    with tenant_scope(minimal_background_context(1)):
+        registry = get_registry()
     assert registry.get_default_config().credential_id == credential_id
     import anyio
 

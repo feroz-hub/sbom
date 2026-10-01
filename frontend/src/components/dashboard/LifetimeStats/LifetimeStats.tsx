@@ -6,6 +6,7 @@ import { Surface } from '@/components/ui/Surface';
 import { pluralize } from '@/lib/pluralize';
 import type { LifetimeMetrics } from '@/types';
 import { LifetimeStatTile } from './LifetimeStatTile';
+import { useAuth } from '@/hooks/useAuth';
 
 interface LifetimeStatsProps {
   data: LifetimeMetrics | undefined;
@@ -28,7 +29,7 @@ interface LifetimeStatsProps {
  *
  * Answers the user's implicit question "has the tool been working for me?"
  * without surfacing deltas — the story is the steadiness, not the wobble.
- * Renders with no section heading; the tile labels carry the meaning.
+ * The containing dashboard provides the Security & Analysis section heading.
  *
  * SBOM count deliberately lives in `CounterTiles` only — it appeared in both
  * panels and the duplicate read as a discrepancy whenever the two were
@@ -37,10 +38,11 @@ interface LifetimeStatsProps {
  * Layout / copy originally from `docs/dashboard-redesign.md` §6.
  */
 export function LifetimeStats({ data, findingsTotal, isLoading }: LifetimeStatsProps) {
+  const { hasPermission } = useAuth();
   if (isLoading) {
     return (
       <section aria-label="Lifetime totals" className="space-y-3">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {[0, 1, 2].map((i) => (
             <Surface key={i} variant="elevated" className="p-0">
               <div className="flex w-full items-center gap-4 rounded-xl px-5 py-4">
@@ -66,7 +68,7 @@ export function LifetimeStats({ data, findingsTotal, isLoading }: LifetimeStatsP
 
   // Format the "since" line — short month / day for the firstRun, or a
   // calm fallback when nothing has run yet.
-  let sinceLine = 'ready when you are';
+  let sinceLine = 'No completed analysis yet';
   if (firstRun) {
     const dt = new Date(firstRun);
     if (!Number.isNaN(dt.getTime())) {
@@ -77,13 +79,13 @@ export function LifetimeStats({ data, findingsTotal, isLoading }: LifetimeStatsP
 
   return (
     <section aria-label="Lifetime totals" className="space-y-3">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         <LifetimeStatTile
           label="Vulnerabilities found so far"
           value={findings.toLocaleString()}
           icon={ShieldAlert}
           caption={
-            findings === 0 ? 'no vulnerabilities yet' : 'across all SBOMs, latest scan of each'
+            findings === 0 ? 'No vulnerability findings in current scope' : 'Latest scan of each SBOM in current scope'
           }
           tooltip={
             'Every vulnerability in the most recent completed scan of each SBOM. ' +
@@ -99,15 +101,17 @@ export function LifetimeStats({ data, findingsTotal, isLoading }: LifetimeStatsP
           caption={
             runsThisWeek > 0
               ? `${runsThisWeek.toLocaleString()} this week`
-              : 'none this week'
+              : runsTotal === 0 ? 'No completed analysis runs' : 'None this week'
           }
           tooltip="Every analysis run recorded, across all SBOMs and projects."
+          href={hasPermission('analysis:read') ? '/analysis' : undefined}
+          actionLabel="View Analysis"
         />
         <LifetimeStatTile
           label="Monitoring for"
           value={
             days === 0 && !firstRun
-              ? '—'
+              ? 'Not started'
               : `${days.toLocaleString()} ${pluralize(days, 'day', 'days').replace(/^\d[\d,]*\s/, '')}`
           }
           icon={CalendarClock}

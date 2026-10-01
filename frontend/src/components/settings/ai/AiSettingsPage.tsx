@@ -8,12 +8,14 @@ import { BudgetCapsForm } from './BudgetCapsForm';
 import { EditProviderDialog } from './EditProviderDialog';
 import { ProvidersList } from './ProvidersList';
 import { UsageSummary } from './UsageSummary';
+import { useAiConfigurationScope } from './ConfigurationScope';
 
 /**
  * Phase 3 §3.1 container — three sections (providers / caps / usage)
  * stacked vertically with a kill-switch banner at the top when active.
  */
 export function AiSettingsPage() {
+  const { scope } = useAiConfigurationScope();
   const { data: settings } = useAiCredentialSettings();
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState<AiCredential | null>(null);
@@ -44,7 +46,7 @@ export function AiSettingsPage() {
 
       <BudgetCapsForm />
 
-      <UsageSummary />
+      {scope === 'tenant' && <UsageSummary />}
 
       <AddProviderDialog open={showAdd} onClose={() => setShowAdd(false)} />
       <EditProviderDialog

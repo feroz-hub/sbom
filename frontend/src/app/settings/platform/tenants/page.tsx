@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import {
@@ -88,10 +88,15 @@ function formatDate(value?: string): string {
 
 export default function PlatformTenantsPage() {
   const router = useRouter();
-  const { hasPermission, isLoading: authLoading, selectTenant, switchTenant } = useAuth();
+  const { hasPermission, isLoading: authLoading } = useAuth();
   const canManage = hasPermission('platform:tenant:create');
+  const canRead = hasPermission('platform:tenant:read');
+  const canStatus = hasPermission('platform:tenant:update_status');
   const queryClient = useQueryClient();
   const [formOpen, setFormOpen] = useState(false);
+  useEffect(() => {
+    if (canManage && window.location.hash === '#create-tenant') setFormOpen(true);
+  }, [canManage]);
   const [form, setForm] = useState<CreateTenantRequest>(EMPTY_FORM);
   const [adminMode, setAdminMode] = useState<'existing' | 'invite'>('existing');
   const [tenantSearch, setTenantSearch] = useState('');
@@ -105,7 +110,7 @@ export default function PlatformTenantsPage() {
   const tenants = useQuery({
     queryKey: ['platform-tenants', tenantSearch, tenantPage],
     queryFn: () => listPlatformTenants(tenantSearch, tenantPage),
-    enabled: !authLoading && canManage,
+    enabled: !authLoading && canRead,
     retry: false,
   });
 
@@ -158,7 +163,7 @@ export default function PlatformTenantsPage() {
   if (authLoading) {
     return <div className="p-8 text-center text-hcl-muted">Verifying platform permission…</div>;
   }
-  if (!canManage) {
+  if (!canRead) {
     return (
       <div role="alert" className="p-8 text-center text-red-700">
         You do not have permission to create or manage tenants.
@@ -170,14 +175,14 @@ export default function PlatformTenantsPage() {
     <>
       <TopBar
         title="Platform Tenants"
-        subtitle="Create and manage SBOM tenants, memberships, and local authorization."
-        action={<button
+        subtitle="Manage tenant provisioning, availability and administrator governance."
+        action={canManage ? <button
           type="button"
           onClick={() => setFormOpen(true)}
           className="rounded-md bg-hcl-blue px-4 py-2 text-sm font-medium text-white hover:bg-hcl-blue/90 transition-colors"
         >
           Create Tenant
-        </button>}
+        </button> : undefined}
       />
     <div className="mx-auto w-full max-w-6xl space-y-6 p-6">
 
@@ -187,7 +192,7 @@ export default function PlatformTenantsPage() {
       </nav>
 
       {formOpen && (
-        <section aria-labelledby="create-tenant-heading" className="rounded-xl border border-border bg-surface p-5 shadow-elev-1">
+        <section id="create-tenant" aria-labelledby="create-tenant-heading" className="scroll-mt-24 rounded-xl border border-border bg-surface p-5 shadow-elev-1">
           <div className="flex items-start justify-between gap-4">
             <div>
               <h2 id="create-tenant-heading" className="text-lg font-semibold">Create tenant</h2>
@@ -237,7 +242,7 @@ export default function PlatformTenantsPage() {
                   }} /> {mode === 'existing' ? 'Select existing user' : 'Invite new user'}
                 </label>)}
               </fieldset>
-              {adminMode === 'existing' ? <UserSearchCombobox
+              {adminMode === 'existing' ? <UserSearchCombobox governance
                 onSelect={(user) => {
                   setSelectedInitialAdmin(user);
                   setForm((current) => ({
@@ -332,27 +337,13 @@ export default function PlatformTenantsPage() {
                     <td className="px-4 py-3">{tenant.member_count ?? '—'}</td>
                     <td className="px-4 py-3 text-xs text-hcl-muted">{formatDate(tenant.created_at)}</td>
                     <td className="px-4 py-3 text-right space-x-3">
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          if (selectTenant) {
-                            await selectTenant(String(tenant.id));
-                          } else {
-                            switchTenant(String(tenant.id));
-                          }
-                          router.push('/');
-                        }}
-                        className="font-medium text-hcl-blue hover:underline"
-                      >
-                        Open
-                      </button>
                       <Link
                         href={`/settings/platform/tenants/${tenant.id}`}
                         className="font-medium text-foreground hover:underline"
                       >
                         Manage
                       </Link>
-                      {tenant.status === 'ACTIVE' ? (
+                      {canStatus && (tenant.status === 'ACTIVE' ? (
                         <button
                           type="button"
                           className="text-red-700 hover:underline"
@@ -369,7 +360,7 @@ export default function PlatformTenantsPage() {
                         >
                           Enable
                         </button>
-                      )}
+                      ))}
                     </td>
                   </tr>
                 ))}

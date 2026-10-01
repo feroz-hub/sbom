@@ -328,7 +328,6 @@ def _resolve_context(
     allow_platform_context: bool = False,
     request: Request | None = None,
 ) -> CurrentContext:
-    from ..services import audit_service
     from ..services.auth_context_service import resolve_authorization_state
     from ..services.authenticated_principal_service import resolve_principal
 
@@ -366,17 +365,6 @@ def _resolve_context(
             "Select an authorized tenant before accessing SBOM Analyzer.",
         )
 
-    if state.is_platform_admin and state.active_membership is None and state.active_tenant is not None:
-        audit_service.write_authorization_audit(
-            db,
-            action="platform.cross_tenant_access",
-            outcome="SUCCESS",
-            actor_user_id=user.id,
-            target_user_id=user.id,
-            tenant_id=state.active_tenant.id,
-            request=request,
-            detail="Explicit platform administrator selected a tenant without local membership",
-        )
     from ..services import tenant_role_assignment_service
 
     roles = (
@@ -403,11 +391,11 @@ def _resolve_context(
         if state.active_membership
         else set()
     )
-    if state.is_platform_admin:
+    if state.is_platform_admin and state.active_tenant is None:
         roles.add("PLATFORM_ADMIN")
     from ..services.authorization_catalog_service import resolve_permissions_for_roles
 
-    if state.is_platform_admin:
+    if state.is_platform_admin and state.active_tenant is None:
         permissions.update(
             resolve_permissions_for_roles(
                 db,
@@ -430,9 +418,13 @@ def _resolve_context(
         ),
         roles=frozenset(roles),
         permissions=frozenset(permissions),
-        is_platform_admin=state.is_platform_admin,
+        is_platform_admin=state.is_platform_admin and state.active_tenant is None,
         identity_roles=identity_roles,
     )
+
+
+def _platform_configuration_path(path: str) -> bool:
+    return path.startswith("/api/nvd-mirror")
 
 
 async def get_current_tenant_context(
@@ -445,6 +437,7 @@ async def get_current_tenant_context(
     method = request.method.upper() if request is not None else "GET"
     allow_platform_context = (
         path.startswith("/api/platform/")
+        or _platform_configuration_path(path)
         or path in {"/api/auth/me", "/api/v1/auth/me", "/api/tenants"}
         or (path == "/api/tenants" and method == "POST")
     )
@@ -453,7 +446,7 @@ async def get_current_tenant_context(
     context = _resolve_context(
         db,
         claims,
-        x_tenant_id,
+        None if path.startswith("/api/platform/") or _platform_configuration_path(path) or (path == "/api/tenants" and method == "POST") else x_tenant_id,
         allow_platform_context=allow_platform_context,
         request=request,
     )
@@ -526,6 +519,15 @@ def require_role(*roles: str) -> Callable:
 def permission_for_request(request: Request) -> str:
     path = request.url.path
     method = request.method.upper()
+    platform_config = path.startswith("/api/platform/configuration/")
+    ai_config = path.startswith("/api/v1/ai/") and any(
+        path.startswith(f"/api/v1/ai/{part}") for part in ("credentials", "settings", "effective-config", "override", "providers/available")
+    )
+    lifecycle_config = path.startswith("/api/admin/lifecycle-providers")
+    if platform_config or ai_config or lifecycle_config:
+        family = "ai" if ai_config or "/configuration/ai" in path else "lifecycle-provider"
+        action = "read" if method == "GET" else "test" if path.endswith(("/test", "/refresh")) else "sync" if path.endswith("/sync") else "update"
+        return f"{'platform' if platform_config else 'tenant'}:{family}:{action}"
     if path.startswith("/api/platform/authorization"):
         return (
             "platform:authorization:read"
@@ -547,10 +549,18 @@ def permission_for_request(request: Request) -> str:
             else "platform:user:manage_status"
         )
     if path.startswith("/api/platform/tenants"):
-        return "platform:admin"
+        if path.endswith("/recover-admin"):
+            return "platform:tenant:recover_admin"
+        if "/native-users/" in path:
+            return "platform:tenant:bootstrap_admin"
+        return "platform:tenant:read" if method == "GET" else "platform:tenant:update_status"
+    if path in {"/api/platform/summary", "/api/platform/tenant-admin-candidates"}:
+        return "platform:tenant:read" if path.endswith("/summary") else "platform:tenant:bootstrap_admin"
+    if path == "/api/platform/iam/operations":
+        return "platform:health:read"
     if path == "/api/tenants" and method == "POST":
         return "platform:tenant:create"
-    if path.startswith("/api/nvd-mirror"):
+    if _platform_configuration_path(path):
         return "platform:admin"
     if path.startswith("/dashboard"):
         return "dashboard:read"

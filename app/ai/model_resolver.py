@@ -58,11 +58,14 @@ def resolve_model(
     feature: AiFeature = "provider_default",
 ) -> ResolvedModel | None:
     """Resolve the default configured credential for a provider name."""
+    from .config_loader import get_loader
+    credential_ids = [config.credential_id for config in get_loader().resolve_configs() if config.name == provider_name.strip().lower() and config.enabled]
     rows = session.execute(
         select(AiProviderCredential)
         .where(
             AiProviderCredential.provider_name == provider_name.strip().lower(),
             AiProviderCredential.enabled.is_(True),
+            AiProviderCredential.id.in_(credential_ids),
         )
         .order_by(AiProviderCredential.is_default.desc(), AiProviderCredential.id)
     ).scalars().all()

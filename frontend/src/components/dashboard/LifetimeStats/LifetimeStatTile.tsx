@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
+import Link from 'next/link';
 import { Surface } from '@/components/ui/Surface';
 import { cn } from '@/lib/utils';
 
@@ -20,6 +21,8 @@ interface LifetimeStatTileProps {
   /** Hover text spelling out exactly what the number counts. */
   tooltip?: string;
   className?: string;
+  href?: string;
+  actionLabel?: string;
 }
 
 /**
@@ -30,9 +33,8 @@ interface LifetimeStatTileProps {
  * directly on top of each other on the dashboard and any difference in
  * padding or number size reads as a mistake rather than a distinction.
  *
- * Deliberately *not* interactive: these are growth metrics, not actionable
- * ones. See `docs/dashboard-redesign.md` §13 for the anti-patterns this tile
- * rejects (no deltas, no comparisons).
+ * The metric itself is informational. An optional permission-gated footer
+ * links to the existing list view without changing the metric definition.
  */
 export function LifetimeStatTile({
   label,
@@ -41,11 +43,13 @@ export function LifetimeStatTile({
   icon: Icon,
   tooltip,
   className,
+  href,
+  actionLabel,
 }: LifetimeStatTileProps) {
   return (
-    <Surface variant="elevated" className={cn('p-0', className)}>
+    <Surface variant="elevated" elevation={1} className={cn('min-w-0 rounded-2xl p-0 hover:shadow-elev-2', className)}>
       <div
-        className="flex w-full items-center gap-4 rounded-xl px-5 py-4 text-left"
+        className="flex min-h-32 w-full items-center gap-4 rounded-2xl px-5 py-4 text-left"
         title={tooltip}
       >
         {Icon ? (
@@ -57,14 +61,15 @@ export function LifetimeStatTile({
           <span className="block text-[11px] font-semibold uppercase tracking-wider text-hcl-muted">
             {label}
           </span>
-          <span className="block font-metric text-2xl font-bold tabular-nums text-hcl-navy">
+          <span className="block font-metric text-3xl font-bold tabular-nums text-hcl-navy">
             {value}
           </span>
           {caption ? (
-            <span className="mt-0.5 block text-[10px] text-hcl-muted">{caption}</span>
+            <span className="mt-1 block text-xs text-hcl-muted">{caption}</span>
           ) : null}
         </span>
       </div>
+      {href && <Link href={href} className="mx-5 mb-4 inline-block rounded text-xs font-medium text-hcl-blue hover:underline focus-visible:ring-2 focus-visible:ring-hcl-blue">{actionLabel} →</Link>}
     </Surface>
   );
 }

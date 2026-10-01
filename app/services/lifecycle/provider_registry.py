@@ -52,19 +52,31 @@ class LifecycleProviderRegistry:
         self.config_service = config_service or LifecycleProviderConfigService()
         self.secret_service = secret_service or LifecycleProviderSecretService()
 
-    def build_provider_chain(self, db: Session | None, *, fallback_timeout_seconds: float = 5.0) -> list[LifecycleProvider]:
+    def build_provider_chain(
+        self, db: Session | None, *, fallback_timeout_seconds: float = 5.0
+    ) -> list[LifecycleProvider]:
         settings = get_settings()
         if db is None:
+            from ...services.configuration_scope import current_configuration_tenant
+
+            if current_configuration_tenant() is not None:
+                raise RuntimeError("Tenant lifecycle configuration requires a database session")
             return self.default_static_providers(settings, timeout_seconds=fallback_timeout_seconds)
         try:
             snapshots = self.config_service.list_snapshots(db)
             providers = self._providers_from_snapshots(db, settings, snapshots)
             return sorted(providers, key=lambda provider: (provider.priority, provider.name))
         except Exception as exc:  # noqa: BLE001
-            log.warning("lifecycle.provider_config_fallback: %s", exc)
+            from ...services.configuration_scope import current_configuration_tenant
+
+            if current_configuration_tenant() is not None:
+                raise RuntimeError("Tenant lifecycle configuration is unavailable") from None
+            log.warning("lifecycle.provider_config_fallback: %s", type(exc).__name__)
             return self.default_static_providers(settings, timeout_seconds=fallback_timeout_seconds)
 
-    def default_static_providers(self, settings: Any | None = None, *, timeout_seconds: float = 5.0) -> list[LifecycleProvider]:
+    def default_static_providers(
+        self, settings: Any | None = None, *, timeout_seconds: float = 5.0
+    ) -> list[LifecycleProvider]:
         settings = settings or get_settings()
         providers: list[LifecycleProvider] = []
         vendor = VendorLifecycleProvider.from_json(getattr(settings, "lifecycle_vendor_records_json", "[]"))
@@ -73,9 +85,7 @@ class LifecycleProviderRegistry:
         providers.extend([RedHatLifecycleProvider(timeout_seconds=timeout_seconds), OfficialVendorLifecycleProvider()])
         if bool(getattr(settings, "openeox_enabled", False)):
             feed_urls = [
-                url.strip()
-                for url in str(getattr(settings, "openeox_feed_urls", "") or "").split(",")
-                if url.strip()
+                url.strip() for url in str(getattr(settings, "openeox_feed_urls", "") or "").split(",") if url.strip()
             ]
             providers.append(OpenEoXProvider(feed_urls=feed_urls, timeout_seconds=timeout_seconds))
         providers.append(EndOfLifeDateProvider(timeout_seconds=timeout_seconds))
@@ -139,16 +149,25 @@ class LifecycleProviderRegistry:
                 return None
             return OpenEoXProvider(feed_urls=config.feed_urls, timeout_seconds=timeout)
         if config.provider_key == "xeol_api":
-            api_key = self.secret_service.get_secret(db, config.provider_key, "api_key") or getattr(
-                settings, "lifecycle_xeol_api_key", None
-            )
+            if config.tenant_id is not None and not config.base_url:
+                raise RuntimeError("Tenant Xeol API endpoint is not configured")
+            secret_service = LifecycleProviderSecretService(tenant_id=config.tenant_id)
+            api_key = secret_service.get_secret(db, config.provider_key, "api_key")
+            if config.tenant_id is None and not api_key:
+                api_key = getattr(settings, "lifecycle_xeol_api_key", None)
             return XeolProvider(
-                api_url=config.base_url or getattr(settings, "lifecycle_xeol_api_url", "https://edb-prod.xeol.io/eol/check"),
+                api_url=config.base_url
+                or getattr(settings, "lifecycle_xeol_api_url", "https://edb-prod.xeol.io/eol/check"),
                 api_key=api_key,
                 timeout_seconds=timeout,
             )
         if config.provider_key == "xeol_db":
-            db_path = str(config.config.get("db_path") or getattr(settings, "xeol_db_path", "") or "") or None
+            db_path = config.config.get("db_path")
+            if config.tenant_id is not None and not db_path:
+                raise RuntimeError("Tenant Xeol DB path is not configured")
+            if config.tenant_id is None and not db_path:
+                db_path = getattr(settings, "xeol_db_path", "")
+            db_path = str(db_path or "") or None
             return XeolDbProvider(db_path=db_path)
         if config.provider_key == "package_registry":
             return PackageRegistryProvider(timeout_seconds=timeout)

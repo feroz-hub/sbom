@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Search, UserCheck, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
-import { type UserSearchResult, searchPlatformUsers, searchTenantUserCandidates } from '@/lib/api';
+import { type UserSearchResult, searchPlatformUsers, searchTenantUserCandidates, searchPlatformTenantAdminCandidates } from '@/lib/api';
 import { VerificationBadge, UserStatusBadge } from './StatusBadges';
 import { getRoleLabel } from '@/lib/roles';
 
@@ -12,6 +12,7 @@ interface UserSearchComboboxProps {
   selectedUser: UserSearchResult | null;
   placeholder?: string;
   requireEligible?: boolean;
+  governance?: boolean;
 }
 
 export function isEligibleAdministrator(user: UserSearchResult): boolean {
@@ -38,6 +39,7 @@ export function UserSearchCombobox({
   selectedUser,
   placeholder = 'Search existing SBOM users by email or name…',
   requireEligible = false,
+  governance = false,
 }: UserSearchComboboxProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<UserSearchResult[]>([]);
@@ -77,7 +79,7 @@ export function UserSearchCombobox({
       try {
         const data = tenantId
           ? await searchTenantUserCandidates(tenantId, query)
-          : await searchPlatformUsers(query);
+          : governance ? await searchPlatformTenantAdminCandidates(query) : await searchPlatformUsers(query);
         if (!cancelled && currentRequestId === requestIdRef.current) {
           setResults(data);
           setOpen(true);
@@ -96,7 +98,7 @@ export function UserSearchCombobox({
     }, 250);
 
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [query, tenantId]);
+  }, [query, tenantId, governance]);
 
   if (selectedUser) {
     return (
@@ -156,7 +158,7 @@ export function UserSearchCombobox({
           ))}
         </div>
 
-        {!tenantId && selectedUser.external_subject && (
+        {!tenantId && !governance && selectedUser.external_subject && (
           <div>
             <button
               type="button"

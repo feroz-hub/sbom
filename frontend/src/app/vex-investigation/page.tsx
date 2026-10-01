@@ -182,7 +182,7 @@ function VexInvestigationContent() {
   // Backend remains the gate (VEX-SEC-001); this only shapes the UI.
   const canRead = usePermission('vex:read');
   const { user, activeTenant, activeTenantId } = useAuth();
-  const workingRole = Boolean(user?.isPlatformAdmin || (activeTenant?.roles ?? user?.roles ?? []).some(role => ['TENANT_ADMIN', 'SECURITY_ANALYST', 'DEVELOPER'].includes(role)));
+  const workingRole = (activeTenant?.roles ?? user?.roles ?? []).some(role => ['TENANT_ADMIN', 'SECURITY_ANALYST', 'DEVELOPER'].includes(role));
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [assigneeSearch, setAssigneeSearch] = useState('');
   const [debouncedAssigneeSearch, setDebouncedAssigneeSearch] = useState('');

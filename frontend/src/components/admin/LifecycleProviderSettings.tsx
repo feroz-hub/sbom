@@ -11,6 +11,8 @@ import { useToast } from '@/hooks/useToast';
 import { getApiErrorMessage, normalizeNotificationMessage } from '@/lib/notifications';
 import {
   deleteLifecycleProviderSecret,
+  resetLifecycleProviderOverride,
+  type ConfigurationScope,
   listLifecycleProviders,
   setLifecycleProviderSecret,
   syncLifecycleProvider,
@@ -20,25 +22,25 @@ import {
 import { formatDate } from '@/lib/utils';
 import type { LifecycleProviderConfig, LifecycleProviderTestResult, LifecycleProviderUpdatePayload } from '@/types';
 
-export function LifecycleProviderSettings() {
+export function LifecycleProviderSettings({ scope = 'tenant', scopeKey = 'tenant', tenantName = 'this tenant', canUpdate = true, canTest = true, canSync = true }: { scope?: ConfigurationScope; scopeKey?: string; tenantName?: string; canUpdate?: boolean; canTest?: boolean; canSync?: boolean }) {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
   const [editing, setEditing] = useState<LifecycleProviderConfig | null>(null);
   const [testResult, setTestResult] = useState<Record<string, LifecycleProviderTestResult>>({});
 
   const providersQuery = useQuery({
-    queryKey: ['lifecycle-providers'],
-    queryFn: ({ signal }) => listLifecycleProviders(signal),
+    queryKey: ['lifecycle-providers', scopeKey],
+    queryFn: ({ signal }) => listLifecycleProviders(signal, scope),
     staleTime: 30_000,
   });
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['lifecycle-providers'] });
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['lifecycle-providers', scopeKey] });
 
   const updateMutation = useMutation({
     mutationFn: ({ key, payload }: { key: string; payload: LifecycleProviderUpdatePayload }) =>
-      updateLifecycleProvider(key, payload),
+      updateLifecycleProvider(key, payload, undefined, scope),
     onSuccess: (updatedProvider) => {
-      queryClient.setQueryData<LifecycleProviderConfig[]>(['lifecycle-providers'], (current) =>
+      queryClient.setQueryData<LifecycleProviderConfig[]>(['lifecycle-providers', scopeKey], (current) =>
         current?.map((provider) =>
           provider.provider_key === updatedProvider.provider_key ? updatedProvider : provider,
         ) ?? current,
@@ -50,7 +52,7 @@ export function LifecycleProviderSettings() {
   });
 
   const testMutation = useMutation({
-    mutationFn: (key: string) => testLifecycleProvider(key),
+    mutationFn: (key: string) => testLifecycleProvider(key, undefined, scope),
     onSuccess: (result, key) => {
       setTestResult((prev) => ({ ...prev, [key]: result }));
       void invalidate();
@@ -60,7 +62,7 @@ export function LifecycleProviderSettings() {
   });
 
   const syncMutation = useMutation({
-    mutationFn: (key: string) => syncLifecycleProvider(key),
+    mutationFn: (key: string) => syncLifecycleProvider(key, undefined, scope),
     onSuccess: (result) => {
       void invalidate();
       showToast(normalizeNotificationMessage(result.message, 'Provider synchronization was queued successfully.'), 'success');
@@ -70,7 +72,7 @@ export function LifecycleProviderSettings() {
 
   const secretMutation = useMutation({
     mutationFn: ({ key, name, value }: { key: string; name: string; value: string }) =>
-      setLifecycleProviderSecret(key, { secret_name: name, secret_value: value }),
+      setLifecycleProviderSecret(key, { secret_name: name, secret_value: value }, undefined, scope),
     onSuccess: () => {
       void invalidate();
       showToast('Secret saved', 'success');
@@ -79,7 +81,7 @@ export function LifecycleProviderSettings() {
   });
 
   const deleteSecretMutation = useMutation({
-    mutationFn: ({ key, name }: { key: string; name: string }) => deleteLifecycleProviderSecret(key, name),
+    mutationFn: ({ key, name }: { key: string; name: string }) => deleteLifecycleProviderSecret(key, name, undefined, scope),
     onSuccess: () => {
       void invalidate();
       showToast('Secret deleted', 'success');
@@ -87,6 +89,7 @@ export function LifecycleProviderSettings() {
     onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Provider secret could not be deleted.'), 'error'),
   });
 
+  const reset = useMutation({ mutationFn: resetLifecycleProviderOverride, onSuccess: () => queryClient.invalidateQueries({ queryKey: ['lifecycle-providers', scopeKey] }) });
   const providers = providersQuery.data ?? [];
 
   return (
@@ -121,12 +124,14 @@ export function LifecycleProviderSettings() {
                   <td className="px-4 py-3">
                     <div className="font-medium text-hcl-navy">{provider.display_name}</div>
                     <div className="text-xs text-hcl-muted">{provider.provider_key}</div>
+                    <p className="text-xs">{provider.override_enabled ? `Tenant override · ${tenantName}` : 'Platform default'}</p>
                   </td>
                   <td className="px-4 py-3 text-hcl-muted">{provider.provider_type}</td>
                   <td className="px-4 py-3">
                     <input
                       type="checkbox"
                       checked={provider.enabled}
+                      disabled={!canUpdate || (scope === 'tenant' && !provider.override_enabled)}
                       onChange={(e) =>
                         updateMutation.mutate({
                           key: provider.provider_key,
@@ -143,17 +148,19 @@ export function LifecycleProviderSettings() {
                     <span title={provider.last_failure_message ?? undefined}>{formatDate(provider.last_failure_at)}</span>
                   </td>
                   <td className="px-4 py-3">
-                    {provider.has_secret ? <Badge variant="success">{provider.secret_preview}</Badge> : <Badge variant="gray">None</Badge>}
+                    {provider.has_secret ? <Badge variant="success">{scope === 'tenant' && !provider.override_enabled ? 'Credential managed by platform' : 'Credential configured ✓'}</Badge> : <Badge variant="gray">None</Badge>}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-2">
-                      <Button variant="ghost" size="sm" onClick={() => setEditing(provider)}>
+                      {canUpdate && <Button variant="ghost" size="sm" onClick={() => setEditing(scope === 'tenant' && !provider.override_enabled ? { ...provider, has_secret: false, secret_preview: null } : provider)}>
                         <Settings className="h-3.5 w-3.5" />
-                        Edit
-                      </Button>
+                        {scope === 'tenant' && !provider.override_enabled ? `Override for ${tenantName}` : 'Edit'}
+                      </Button>}
+                      {scope === 'tenant' && provider.override_enabled && canUpdate && <Button variant="ghost" size="sm" loading={reset.isPending} onClick={() => reset.mutate(provider.provider_key)}>Reset to Platform Default</Button>}
                       <Button
                         variant="ghost"
                         size="sm"
+                        disabled={!canTest}
                         loading={testMutation.isPending && testMutation.variables === provider.provider_key}
                         onClick={() => testMutation.mutate(provider.provider_key)}
                       >
@@ -163,6 +170,7 @@ export function LifecycleProviderSettings() {
                       <Button
                         variant="ghost"
                         size="sm"
+                        disabled={!canSync}
                         loading={syncMutation.isPending && syncMutation.variables === provider.provider_key}
                         onClick={() => syncMutation.mutate(provider.provider_key)}
                       >
@@ -196,7 +204,8 @@ export function LifecycleProviderSettings() {
         </div>
       )}
 
-      {editing && (
+      {reset.error && <p role="alert">Unable to reset this override. Please retry.</p>}
+      {editing && canUpdate && (
         <LifecycleProviderForm
           provider={editing}
           onClose={() => setEditing(null)}

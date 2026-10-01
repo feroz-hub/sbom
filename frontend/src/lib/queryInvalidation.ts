@@ -286,6 +286,7 @@ export function invalidateAnalysisCompletion(
  * credential exists.
  */
 export function invalidateAiCredentialSurfaces(qc: QueryClient): void {
+  qc.invalidateQueries({ queryKey: ['ai', 'effective-config'] });
   qc.invalidateQueries({ queryKey: ['ai', 'credentials'] });
   qc.invalidateQueries({ queryKey: ['ai', 'credential-settings'] });
   qc.invalidateQueries({ queryKey: ['ai-settings'] });

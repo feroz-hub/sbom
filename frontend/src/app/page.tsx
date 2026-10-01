@@ -19,6 +19,7 @@ import { LifetimeStats } from '@/components/dashboard/LifetimeStats/LifetimeStat
 import { TopVulnerableSboms } from '@/components/dashboard/TopVulnerableSboms';
 import { ActivityFeed } from '@/components/dashboard/ActivityFeed';
 import { DashboardFilters } from '@/components/dashboard/DashboardFilters';
+import { DashboardEmptyState } from '@/components/dashboard/DashboardEmptyState';
 import { AiConfigBanner } from '@/components/dashboard/AiConfigBanner';
 import { CopilotPanel } from '@/components/dashboard/advanced/CopilotPanel';
 import { ForecastCard } from '@/components/dashboard/advanced/ForecastCard';
@@ -184,9 +185,10 @@ function DashboardContent() {
         title="Dashboard"
         subtitle="Real-time security posture across your SBOM portfolio"
       />
-      <div className="space-y-6 p-6">
+      <div className="min-w-0 space-y-6 p-4 md:p-6">
         <DashboardFilters scope={scope} onChange={changeScope} isUpdating={summaryQuery.isFetching} />
-        {summaryQuery.isError && <p role="alert" className="text-sm text-red-700">Unable to load this dashboard scope. Check the selected filters.</p>}
+        {summaryQuery.isError && <div role="alert" className="rounded-xl border border-border bg-surface p-4 text-sm text-hcl-muted">Unable to load this dashboard scope. <button className="rounded px-2 font-medium text-hcl-blue focus-visible:ring-2 focus-visible:ring-hcl-blue" onClick={() => void summaryQuery.refetch()} disabled={summaryQuery.isFetching}>Retry</button></div>}
+        {summaryQuery.isSuccess && summary?.posture?.total_sboms === 0 && <DashboardEmptyState filtered={!!(scope.projectId || scope.applicationId || scope.sbomId)} onClear={() => changeScope({ projectId: null, applicationId: null, sbomId: null })} />}
         {!summaryQuery.isPending && scope.sbomId && summary?.posture?.total_sboms_analysed === 0 &&
           <p className="rounded-lg border border-border bg-surface p-4 text-sm text-hcl-muted">No successful analysis is available for this SBOM.</p>}
         {!summaryQuery.isPending && summary?.posture?.total_sboms_analysed > 0 && summary?.posture?.total_findings === 0 &&
@@ -195,17 +197,19 @@ function DashboardContent() {
 
         {/* Counter tiles — stored / scanned / analysed */}
         <Motion preset="rise">
-          <CounterTiles posture={summary?.posture ?? null} isLoading={summaryQuery.isLoading} scope={scope} />
+          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-hcl-muted">Inventory</h2>
+          <CounterTiles posture={summary?.posture ?? null} isLoading={summaryQuery.isLoading || (summaryQuery.isError && !summary)} scope={scope} />
         </Motion>
 
         {/* Lifetime growth — sits directly above the lifecycle box so the
             portfolio-wide vulnerability total reads before the per-component
             lifecycle breakdown. */}
         <Motion preset="rise" delay={10}>
+          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-hcl-muted">Security &amp; Analysis</h2>
           <LifetimeStats
             data={summary?.lifetime}
             findingsTotal={summary?.posture?.total_findings}
-            isLoading={summaryQuery.isLoading}
+            isLoading={summaryQuery.isLoading || (summaryQuery.isError && !summary)}
           />
         </Motion>
 
@@ -214,7 +218,8 @@ function DashboardContent() {
             lifecycle={summary?.lifecycle ?? null}
             health={summary?.health ?? null}
             vex={summary?.vex ?? null}
-            isLoading={summaryQuery.isLoading}
+            hasInventory={(summary?.posture?.total_sboms ?? 0) > 0}
+            isLoading={summaryQuery.isLoading || (summaryQuery.isError && !summary)}
           />
         </Motion>
 

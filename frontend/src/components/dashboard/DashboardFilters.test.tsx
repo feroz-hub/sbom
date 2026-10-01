@@ -41,7 +41,9 @@ describe('DashboardFilters', () => {
     renderFilters();
     expect(screen.queryByLabelText('Tenant')).not.toBeInTheDocument();
     expect(screen.getAllByRole('combobox')).toHaveLength(3);
-    expect(screen.getByText('Viewing: Tenant One')).toBeInTheDocument();
+    expect(screen.getByText(/Viewing: Tenant One/)).toBeInTheDocument();
+    expect(screen.getByText('Scope')).toBeInTheDocument();
+    expect(screen.getByText('Tenant One')).toBeInTheDocument();
     expect(screen.getByLabelText('Application')).toBeDisabled();
     expect(screen.getByLabelText('SBOM')).toBeDisabled();
     await screen.findByRole('option', { name: 'Project A' });
@@ -55,7 +57,7 @@ describe('DashboardFilters', () => {
     expect(clear).toBeEnabled();
     fireEvent.click(clear);
     expect(onChange).toHaveBeenCalledWith({ projectId: null, applicationId: null, sbomId: null });
-    expect(screen.getByText('Viewing: Tenant One')).toBeInTheDocument();
+    expect(screen.getByText(/Viewing: Tenant One/)).toBeInTheDocument();
   });
 
   it('resets descendants when a parent changes', async () => {

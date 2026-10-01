@@ -293,3 +293,37 @@ def _enforce_tenant_on_writes(session, _flush_context, _instances) -> None:
     for instance in session.dirty | session.deleted:
         if isinstance(instance, TenantOwnedMixin) and instance.tenant_id != context.tenant_id:
             raise RuntimeError("Cross-tenant mutation blocked")
+
+
+@event.listens_for(_OrmSession, "do_orm_execute")
+def _scope_ai_configuration(execute_state):
+    """CRUD sessions can only load their exact AI configuration owner.
+
+    Runtime inheritance uses a separate session and explicit scope predicates;
+    it never broadens the tenant data loader criteria above.
+    """
+    if not execute_state.is_select or "ai_configuration_tenant" not in execute_state.session.info:
+        return
+    from .models import AiCredentialAuditLog, AiProviderCredential, AiSettings
+
+    tenant_id = execute_state.session.info["ai_configuration_tenant"]
+    for model in (AiProviderCredential, AiSettings, AiCredentialAuditLog):
+        clause = model.tenant_id.is_(None) if tenant_id is None else model.tenant_id == tenant_id
+        execute_state.statement = execute_state.statement.options(with_loader_criteria(model, clause, include_aliases=True))
+
+
+@event.listens_for(_OrmSession, "before_flush")
+def _guard_ai_configuration_writes(session, _flush_context, _instances):
+    if "ai_configuration_tenant" not in session.info:
+        return
+    from .models import AiCredentialAuditLog, AiProviderCredential, AiSettings
+
+    owner = session.info["ai_configuration_tenant"]
+    for row in session.new:
+        if isinstance(row, (AiProviderCredential, AiSettings, AiCredentialAuditLog)):
+            if row.tenant_id is not None and row.tenant_id != owner:
+                raise RuntimeError("Cross-scope configuration insert blocked")
+            row.tenant_id = owner
+    for row in session.dirty | session.deleted:
+        if isinstance(row, (AiProviderCredential, AiSettings, AiCredentialAuditLog)) and row.tenant_id != owner:
+            raise RuntimeError("Cross-scope configuration mutation blocked")

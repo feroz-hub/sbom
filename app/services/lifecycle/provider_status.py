@@ -109,10 +109,22 @@ class LifecycleProviderStatusTracker:
 
 
 _provider_status_tracker = LifecycleProviderStatusTracker()
+_scope_lock = Lock()
+_tenant_status_trackers: dict[int, tuple[str | None, LifecycleProviderStatusTracker]] = {}
 
 
-def get_provider_status_tracker() -> LifecycleProviderStatusTracker:
-    return _provider_status_tracker
+def get_provider_status_tracker(configuration_namespace: str | None = None) -> LifecycleProviderStatusTracker:
+    from ...services.configuration_scope import current_configuration_tenant
+
+    tenant_id = current_configuration_tenant()
+    if tenant_id is None:
+        return _provider_status_tracker
+    with _scope_lock:
+        cached = _tenant_status_trackers.get(tenant_id)
+        if cached is None or (configuration_namespace is not None and cached[0] != configuration_namespace):
+            cached = (configuration_namespace, LifecycleProviderStatusTracker())
+            _tenant_status_trackers[tenant_id] = cached
+        return cached[1]
 
 
 __all__ = ["LifecycleProviderStatusTracker", "ProviderHealthRecord", "get_provider_status_tracker"]

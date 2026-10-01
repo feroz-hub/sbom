@@ -1086,6 +1086,7 @@ class ComponentLifecycleCache(Base):
     __tablename__ = "component_lifecycle_cache"
 
     id = Column(Integer, primary_key=True, index=True)
+    configuration_namespace = Column(String(128), nullable=False, default="legacy", server_default="legacy")
     lookup_key = Column(String, nullable=True, index=True)
     normalized_name = Column(String, nullable=False, index=True)
     normalized_version = Column(String, nullable=True, index=True)
@@ -1113,6 +1114,7 @@ class ComponentLifecycleCache(Base):
 
     __table_args__ = (
         UniqueConstraint(
+            "configuration_namespace",
             "normalized_name",
             "normalized_version",
             "ecosystem",
@@ -1129,7 +1131,8 @@ class LifecycleProviderConfig(Base):
     __tablename__ = "lifecycle_provider_configs"
 
     id = Column(Integer, primary_key=True, index=True)
-    provider_key = Column(String(64), nullable=False, unique=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True, index=True)
+    provider_key = Column(String(64), nullable=False, index=True)
     display_name = Column(String(128), nullable=False)
     provider_type = Column(String(64), nullable=False, index=True)
     enabled = Column(Boolean, nullable=False, default=True)
@@ -1153,6 +1156,8 @@ class LifecycleProviderConfig(Base):
     updated_by_user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="SET NULL"), nullable=True)
 
     __table_args__ = (
+        Index("uq_lifecycle_provider_platform", "provider_key", unique=True, postgresql_where=sql_text("tenant_id IS NULL"), sqlite_where=sql_text("tenant_id IS NULL")),
+        UniqueConstraint("tenant_id", "provider_key", name="uq_lifecycle_provider_tenant"),
         CheckConstraint("priority BETWEEN 1 AND 1000", name="ck_lifecycle_provider_config_priority"),
         CheckConstraint("timeout_seconds BETWEEN 1 AND 60", name="ck_lifecycle_provider_config_timeout"),
         CheckConstraint("max_retries BETWEEN 0 AND 10", name="ck_lifecycle_provider_config_retries"),
@@ -1170,6 +1175,7 @@ class LifecycleProviderSecret(Base):
     __tablename__ = "lifecycle_provider_secrets"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True, index=True)
     provider_key = Column(String(64), nullable=False, index=True)
     secret_name = Column(String(64), nullable=False)
     encrypted_value = Column(Text, nullable=False)
@@ -1179,7 +1185,8 @@ class LifecycleProviderSecret(Base):
     updated_by_user_id = Column(Integer, ForeignKey("iam_users.id", ondelete="SET NULL"), nullable=True)
 
     __table_args__ = (
-        UniqueConstraint("provider_key", "secret_name", name="uq_lifecycle_provider_secret_provider_name"),
+        Index("uq_lifecycle_secret_platform", "provider_key", "secret_name", unique=True, postgresql_where=sql_text("tenant_id IS NULL"), sqlite_where=sql_text("tenant_id IS NULL")),
+        UniqueConstraint("tenant_id", "provider_key", "secret_name", name="uq_lifecycle_secret_tenant"),
         Index("ix_lifecycle_provider_secrets_provider", "provider_key"),
     )
 
@@ -2001,6 +2008,7 @@ class AiProviderCredential(Base):
     __tablename__ = "ai_provider_credential"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True, index=True)
     provider_name = Column(String(32), nullable=False, index=True)
     label = Column(String(64), nullable=False, default="default")
     api_key_encrypted = Column(Text, nullable=True)
@@ -2021,7 +2029,14 @@ class AiProviderCredential(Base):
     last_test_success = Column(Boolean, nullable=True)
     last_test_error = Column(Text, nullable=True)
 
-    __table_args__ = (UniqueConstraint("provider_name", "label", name="uq_ai_provider_credential_provider_label"),)
+    __table_args__ = (
+        Index("uq_ai_credential_platform", "provider_name", "label", unique=True, postgresql_where=sql_text("tenant_id IS NULL"), sqlite_where=sql_text("tenant_id IS NULL")),
+        UniqueConstraint("tenant_id", "provider_name", "label", name="uq_ai_credential_tenant"),
+        Index("ix_ai_only_one_default", "is_default", unique=True, postgresql_where=sql_text("is_default = TRUE AND tenant_id IS NULL"), sqlite_where=sql_text("is_default = 1 AND tenant_id IS NULL")),
+        Index("ix_ai_only_one_fallback", "is_fallback", unique=True, postgresql_where=sql_text("is_fallback = TRUE AND tenant_id IS NULL"), sqlite_where=sql_text("is_fallback = 1 AND tenant_id IS NULL")),
+        Index("ix_ai_tenant_default", "tenant_id", unique=True, postgresql_where=sql_text("is_default = TRUE AND tenant_id IS NOT NULL"), sqlite_where=sql_text("is_default = 1 AND tenant_id IS NOT NULL")),
+        Index("ix_ai_tenant_fallback", "tenant_id", unique=True, postgresql_where=sql_text("is_fallback = TRUE AND tenant_id IS NOT NULL"), sqlite_where=sql_text("is_fallback = 1 AND tenant_id IS NOT NULL")),
+    )
 
 
 class AiProviderModel(Base):
@@ -2096,16 +2111,14 @@ class AiProviderModel(Base):
 
 class AiSettings(Base):
     """
-    Singleton AI settings row (Phase 2 §2.3).
-
-    Enforced via ``CHECK (id = 1)`` and the migration's ``INSERT`` of
-    the seed row. Reads always succeed; writes update the singleton in
-    place.
+    One settings row per owner. NULL tenant is the platform default;
+    explicit tenant rows override it without modifying the platform row.
     """
 
     __tablename__ = "ai_settings"
 
-    id = Column(Integer, primary_key=True, default=1)
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True, unique=True)
     feature_enabled = Column(Boolean, nullable=False, default=True)
     kill_switch_active = Column(Boolean, nullable=False, default=False)
     budget_per_request_usd = Column(Float, nullable=False, default=0.10)
@@ -2114,7 +2127,7 @@ class AiSettings(Base):
     updated_at = Column(String, nullable=False)
     updated_by_user_id = Column(String, nullable=True)
 
-    __table_args__ = (CheckConstraint("id = 1", name="ck_ai_settings_singleton"),)
+    __table_args__ = (Index("uq_ai_settings_platform", sql_text("(1)"), unique=True, postgresql_where=sql_text("tenant_id IS NULL"), sqlite_where=sql_text("tenant_id IS NULL")),)
 
 
 class AiCredentialAuditLog(Base):
@@ -2129,6 +2142,7 @@ class AiCredentialAuditLog(Base):
     __tablename__ = "ai_credential_audit_log"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="SET NULL"), nullable=True, index=True)
     user_id = Column(String(128), nullable=True)
     action = Column(String(48), nullable=False)
     target_kind = Column(String(24), nullable=False)  # "credential" | "settings"
@@ -2317,20 +2331,6 @@ Index("ix_sbom_component_duplicate_of_component_id", SBOMComponent.duplicate_of_
 Index("ix_sbom_source_converted_from_format", SBOMSource.converted_from_format)
 Index("ix_sbom_source_parent_id", SBOMSource.parent_id)
 Index("ix_sbom_source_sbom_type", SBOMSource.sbom_type)
-Index(
-    "ix_ai_only_one_default",
-    AiProviderCredential.is_default,
-    unique=True,
-    postgresql_where=sql_text("is_default = true"),
-    sqlite_where=sql_text("is_default = 1"),
-)
-Index(
-    "ix_ai_only_one_fallback",
-    AiProviderCredential.is_fallback,
-    unique=True,
-    postgresql_where=sql_text("is_fallback = true"),
-    sqlite_where=sql_text("is_fallback = 1"),
-)
 
 # Register report tables for Alembic and metadata-based test databases.
 from .models_reports import ReportArtifact, ReportDelivery, ReportSubscription  # noqa: E402,F401
