@@ -85,12 +85,33 @@ def test_no_vulnerability_evidence_is_unknown_not_no_known_actionable__spec_s2()
     assert _classify(evidence=False).classification is RiskClassification.UNKNOWN
 
 
-def test_review_reason_takes_precedence__D3():
-    result = _classify("CRITICAL", reasons={ReviewReason.VEX_CONFLICT})
-    assert result.classification is RiskClassification.REVIEW_REQUIRED
-    # The severity stays visible so review never hides how bad it is.
-    assert result.highest_actionable_severity == "CRITICAL"
+@pytest.mark.parametrize("severity", ["CRITICAL", "HIGH"])
+def test_critical_and_high_outrank_review_reasons__D3_amended(severity):
+    """Critical/High KPIs must never understate known risk (decision 2026-10-01)."""
+    result = _classify(severity, "LOW", reasons={ReviewReason.VEX_CONFLICT})
+    assert result.classification is RiskClassification(severity)
+    # The review reason is still reported so the version stays in the review queue.
     assert result.review_reasons == (ReviewReason.VEX_CONFLICT.value,)
+
+
+@pytest.mark.parametrize("severities", [("MEDIUM",), ("LOW",), ()])
+def test_review_reason_outranks_medium_low_and_none__D3(severities):
+    result = _classify(*severities, reasons={ReviewReason.VEX_CONFLICT})
+    assert result.classification is RiskClassification.REVIEW_REQUIRED
+    assert result.review_reasons == (ReviewReason.VEX_CONFLICT.value,)
+
+
+def test_review_reason_outranks_unknown_when_no_evidence__D3():
+    result = _classify(evidence=False, reasons={ReviewReason.LOW_IDENTITY_CONFIDENCE})
+    assert result.classification is RiskClassification.REVIEW_REQUIRED
+
+
+def test_accepted_risk_never_overrides_critical_high_or_review():
+    satisfied = AcceptedRiskOutcome(satisfied=True, policy_version_id=7)
+    assert _classify("HIGH", accepted=satisfied).classification is RiskClassification.HIGH
+    assert _classify("CRITICAL", accepted=satisfied).classification is RiskClassification.CRITICAL
+    reviewed = _classify("MEDIUM", accepted=satisfied, reasons={ReviewReason.VEX_REVALIDATION})
+    assert reviewed.classification is RiskClassification.REVIEW_REQUIRED
 
 
 def test_accepted_risk_requires_a_satisfied_policy__FR_SCA_004():

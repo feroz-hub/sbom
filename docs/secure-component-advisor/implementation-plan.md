@@ -9,9 +9,9 @@ Branch: `feat/secure-component-advisor`. Test ids T1…T45 are the prompt §10 m
 | Step | Scope | Status |
 |---|---|---|
 | 1 | Phase 0 approved; branch; plan file; CLAUDE.md SCA section | ✅ 2026-10-01 |
-| 2 | Component intelligence foundation & risk semantics | ✅ 2026-10-01 (this log) |
-| 3 | Dashboard / filters / drill-down / search API | ⏳ next |
-| 4 | Accepted-risk / trust policy seam, purpose, adoption | ☐ |
+| 2 | Component intelligence foundation & risk semantics | ✅ 2026-10-01 |
+| 3 | Dashboard / filters / drill-down / search API | ✅ 2026-10-01 |
+| 4 | Accepted-risk / trust policy seam, purpose, adoption | ⏳ next |
 | 5 | Recommendation work item & safer-version discovery | ☐ |
 | 6 | Alternative discovery & compatibility | ☐ |
 | 7 | History, scoring, confidence, freshness | ☐ |
@@ -80,12 +80,47 @@ Test results (Postgres on 5432, isolated DB `sbom_analyser_test_sca`):
   truncation). A clean-`HEAD` baseline is running in a scratch worktree; the full before/after comparison
   is recorded at Step 10 (T45).
 
+## Step 3 — Dashboard, Filters, Drill-down and Search
+
+Requirements: FR-SCA-002, FR-SCA-006, FR-SCA-007, FR-SCA-008, NFR-SCA-001, NFR-SCA-005 ·
+US-SCA-01, US-SCA-05, US-SCA-06, US-SCA-07.
+
+Delivered:
+- Precedence amendment: CRITICAL/HIGH outrank review reasons; accepted risk never applies to
+  Critical/High or to a version with review reasons.
+- `app/services/component_advisor/filters.py` (pure): risk / lifecycle / needs-review /
+  frequently-adopted / search filters, sorting, the nine KPI cards (each with the `/components` filter
+  that reproduces it) and family-grouped search results.
+- `intelligence_service.py`: memoized snapshot (TTL 60 s; key = scope + shared metrics key +
+  `advisor_invalidation_key`, which also tracks VEX decisions, lifecycle checks and SBOM / product /
+  project activation), `resolve_as_of` (D-11), and the shared `meta` envelope.
+- `app/routers/component_advisor.py`: `GET /api/component-advisor/{summary,components,components/{key},search}`;
+  `permission_for_request` branch; `component_advisor:read` re-checked per route; ETag on summary/list.
+- `scope_metadata` moved from `dashboard_main.py` into `app/services/dashboard_scope.py` so both routers share it.
+- Benchmark `tests/test_component_advisor_bench.py` (`-m bench`, scale via env).
+
+API contract (all GET, scope via `project_id` / `product_id` / `sbom_id`):
+- Filters: `risk` (repeat or comma; the nine spec values), `lifecycle`, `needs_review`, `frequently_adopted`,
+  `q` + `facet` (`all|name|purl|supplier|ecosystem|category|purpose`), `as_of` (now only).
+- Errors: 400 `INVALID_FILTER`, 400 `AS_OF_NOT_SUPPORTED`, 400 child-without-parent, 404 foreign/unknown
+  scope or component key, 403 missing `component_advisor:read`.
+- `meta`: `applied_filters`, `unsupported_filters`, `scope`, `as_of`, `generated_at`, `historical_view`,
+  `freshness` (latest analysis, lifecycle check, coverage, stale flags), `policy_versions`, `thresholds`,
+  `capabilities`.
+
+Decisions / assumptions:
+- "Frequently Adopted" = used by ≥ 3 distinct products in scope (`FREQUENT_ADOPTION_MIN_PRODUCTS`). The spec gives no
+  number, so it is returned in `meta.thresholds` for review.
+- Accepted-Risk and Trusted KPIs return `value: null, status: POLICY_NOT_CONFIGURED` (Trusted also `render: false`)
+  rather than a misleading 0.
+- Purpose/category facets return `INSUFFICIENT_PURPOSE_EVIDENCE` and never match on names.
+- Search lists versions per family without ranking them; ranking is Step 7.
+
 ## Open questions / follow-ups
-- **Review Required vs Critical (D-3 side effect):** with the approved precedence, a version with a
-  known CRITICAL finding *and* a VEX conflict on another vulnerability lands in Review Required, so it
-  is not in the Critical KPI. Its `highest_actionable_severity` stays CRITICAL on the row. If the
-  Critical/High KPIs should count it as well, the fix is to let CRITICAL/HIGH outrank review reasons.
-  Needs a product decision before Step 3 ships the KPIs.
+- ~~Review Required vs Critical~~ — **resolved 2026-10-01**: the user decided Critical/High outrank review
+  reasons. Implemented in Step 3 (`classification.py`); review reasons stay on the record and the
+  "Components Requiring Review" KPI counts every version with a reason, whatever its bucket.
 - `latest_run_per_sbom_as_of_subquery` skips the active-HEAD filter; irrelevant until historical
   `as_of` is in scope (D-11).
 - Stale-evidence thresholds (`ReviewReason.STALE_EVIDENCE`) are wired in Step 7.
+- Confirm the "Frequently Adopted" threshold (3 products) or make it a tenant policy setting in Step 4.

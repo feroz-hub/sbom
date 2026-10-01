@@ -505,6 +505,61 @@ def component_intelligence_snapshot(
     return snapshot
 
 
+def advisor_invalidation_key(db: Session, *, tenant_id: int) -> tuple:
+    """Change markers for a tenant's advisor inputs that the shared metrics key misses.
+
+    ``app.metrics.cache.invalidation_key`` tracks runs, SBOM count and
+    findings. The advisor also depends on VEX decisions (a manual NOT_AFFECTED
+    must leave the Critical KPI immediately), component lifecycle data, SBOM /
+    product / project activation and lineage. Each marker is a single
+    aggregate over an indexed tenant column.
+    """
+    from ..models import Product, Projects
+
+    vex = db.execute(
+        select(
+            func.count(VexInvestigation.id),
+            func.max(VexInvestigation.id),
+            func.max(VexInvestigation.updated_at),
+            func.coalesce(func.sum(VexInvestigation.row_version), 0),
+            func.max(VexInvestigation.last_seen_at),
+            # Reconciliation can change status without touching updated_at.
+            func.count(VexInvestigation.id).filter(VexInvestigation.is_current.is_(True)),
+            func.count(VexInvestigation.id).filter(
+                VexInvestigation.effective_status.in_(("AFFECTED", "UNDER_INVESTIGATION"))
+            ),
+            func.count(VexInvestigation.id).filter(
+                VexInvestigation.reconciliation_status.in_(("CONFLICT_REVIEW_REQUIRED", "REVALIDATION_REQUIRED"))
+            ),
+        ).where(VexInvestigation.tenant_id == tenant_id)
+    ).one()
+    components = db.execute(
+        select(
+            func.count(SBOMComponent.id),
+            func.max(SBOMComponent.id),
+            func.max(SBOMComponent.lifecycle_checked_at),
+        ).where(SBOMComponent.tenant_id == tenant_id)
+    ).one()
+    s = SBOMSource.__table__.c
+    sboms = db.execute(
+        select(
+            func.count(s.id),
+            func.count(s.id).filter(s.is_active.is_(True)),
+            func.count(s.parent_id),
+            func.max(s.modified_on),
+        ).where(s.tenant_id == tenant_id)
+    ).one()
+    p = Product.__table__.c
+    products = db.execute(
+        select(func.count(p.id).filter(p.is_active.is_(True) & p.deleted_at.is_(None))).where(p.tenant_id == tenant_id)
+    ).scalar()
+    j = Projects.__table__.c
+    projects = db.execute(
+        select(func.count(j.id).filter(j.is_active.is_(True))).where(j.tenant_id == tenant_id)
+    ).scalar()
+    return (tuple(vex), tuple(components), tuple(sboms), products, projects)
+
+
 def component_advisor_bucket_counts(snapshot: ComponentIntelligenceSnapshot) -> dict[str, Any]:
     """Bucket counts that sum to the unique version count (spec §2, T7)."""
     counts = bucket_counts(version.classification for version in snapshot.versions)
@@ -517,6 +572,7 @@ def component_advisor_bucket_counts(snapshot: ComponentIntelligenceSnapshot) -> 
 
 
 __all__ = [
+    "advisor_invalidation_key",
     "ComponentIntelligenceSnapshot",
     "ComponentVersionIntelligence",
     "advisor_component_occurrences",

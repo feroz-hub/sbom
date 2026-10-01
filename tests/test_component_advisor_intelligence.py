@@ -10,7 +10,6 @@ depending on reconciliation timing. One test runs the real
 ``recompute_for_sbom`` to pin the canonical (CVE-preferred) join.
 """
 
-import hashlib
 from datetime import UTC, datetime
 
 import pytest
@@ -21,106 +20,10 @@ from sqlalchemy.pool import StaticPool
 from app.core.context import minimal_background_context, tenant_scope
 from app.db import Base
 from app.metrics.component_advisor import component_advisor_bucket_counts
-from app.models import (
-    AnalysisFinding,
-    AnalysisRun,
-    Product,
-    Projects,
-    SBOMComponent,
-    SBOMSource,
-    Tenant,
-    VexInvestigation,
-)
+from app.models import AnalysisFinding, Tenant, VexInvestigation
 from app.services.component_advisor.intelligence_service import build_snapshot, get_component_version
 from app.services.dashboard_scope import DashboardScope
-
-NOW = "2026-09-30T00:00:00Z"
-
-
-def purl_key(purl):
-    return hashlib.sha256(f"purl:{purl}".encode()).hexdigest()
-
-
-class World:
-    """Tiny builder for tenant → project → product → SBOM → component → finding."""
-
-    def __init__(self, db):
-        self.db = db
-        self._ids = iter(range(1, 10_000))
-
-    def _add(self, tenant_id, *rows):
-        with tenant_scope(minimal_background_context(tenant_id)):
-            self.db.add_all(rows)
-            self.db.flush()
-        return rows[0] if len(rows) == 1 else rows
-
-    def product(self, tenant_id=1, name=None):
-        name = name or f"p{next(self._ids)}"
-        project = self._add(tenant_id, Projects(tenant_id=tenant_id, project_name=f"proj-{name}", project_status=1))
-        product = self._add(
-            tenant_id,
-            Product(tenant_id=tenant_id, project_id=project.id, name=name, normalized_name=name, slug=name, created_at=NOW),
-        )
-        return product
-
-    def sbom(self, product, *, active=True, parent=None, analysed=True, run_status="FINDINGS"):
-        sbom = self._add(
-            product.tenant_id,
-            SBOMSource(
-                tenant_id=product.tenant_id, projectid=product.project_id, product_id=product.id,
-                sbom_name=f"sbom-{next(self._ids)}", is_active=active,
-                parent_id=parent.id if parent else None,
-            ),
-        )
-        sbom.run = self.run(sbom) if analysed else None
-        if analysed and run_status != "FINDINGS":
-            sbom.run.run_status = run_status
-        return sbom
-
-    def run(self, sbom, status="FINDINGS"):
-        return self._add(
-            sbom.tenant_id,
-            AnalysisRun(
-                tenant_id=sbom.tenant_id, sbom_id=sbom.id, project_id=sbom.projectid, product_id=sbom.product_id,
-                run_status=status, started_on=NOW, completed_on=NOW,
-            ),
-        )
-
-    def component(self, sbom, name, version, *, ecosystem="npm", purl=True, duplicate_of=None, **extra):
-        normalized_purl = f"pkg:{ecosystem}/{name}@{version}" if purl and version else None
-        return self._add(
-            sbom.tenant_id,
-            SBOMComponent(
-                tenant_id=sbom.tenant_id, sbom_id=sbom.id, name=name, version=version,
-                bom_ref=f"ref-{next(self._ids)}", normalized_name=name, normalized_version=version,
-                normalized_ecosystem=ecosystem, normalized_purl=normalized_purl, purl=normalized_purl,
-                normalized_package_key=f"{ecosystem}:{name}", is_duplicate=duplicate_of is not None,
-                duplicate_of_component_id=duplicate_of.id if duplicate_of else None, **extra,
-            ),
-        )
-
-    def finding(self, component, vuln_id, severity, *, run=None, aliases=None, score=None):
-        sbom = self.db.get(SBOMSource, component.sbom_id)
-        run = run or sbom.run
-        return self._add(
-            component.tenant_id,
-            AnalysisFinding(
-                tenant_id=component.tenant_id, analysis_run_id=run.id, component_id=component.id,
-                vuln_id=vuln_id, severity=severity, aliases=aliases, score=score,
-                cpe=f"cpe-{next(self._ids)}",
-            ),
-        )
-
-    def vex(self, component, vuln_id, effective, reconciliation="MATCHED", *, current=True):
-        return self._add(
-            component.tenant_id,
-            VexInvestigation(
-                tenant_id=component.tenant_id, sbom_id=component.sbom_id, component_id=component.id,
-                component_key=component.id, canonical_vulnerability_id=vuln_id,
-                effective_status=effective, reconciliation_status=reconciliation, is_current=current,
-                first_seen_at=NOW, last_seen_at=NOW, created_at=NOW,
-            ),
-        )
+from tests.component_advisor_support import NOW, World, purl_key
 
 
 @pytest.fixture
@@ -304,13 +207,23 @@ def test_unattributed_actionable_findings_are_surfaced_not_dropped(world):
 )
 def test_vex_review_states_require_review__D3(world, reconciliation, reason):
     sbom = world.sbom(world.product())
-    c = world.component(sbom, "log4j-core", "2.14.1", ecosystem="maven")
-    world.finding(c, "CVE-2021-44228", "CRITICAL")
-    world.vex(c, "CVE-2021-44228", "UNDER_INVESTIGATION", reconciliation)
-    version = by_name(snapshot(world))[("log4j-core", "2.14.1")]
+    c = world.component(sbom, "commons-io", "2.6", ecosystem="maven")
+    world.finding(c, "CVE-2024-47554", "MEDIUM")
+    world.vex(c, "CVE-2024-47554", "UNDER_INVESTIGATION", reconciliation)
+    version = by_name(snapshot(world))[("commons-io", "2.6")]
     assert version.classification.value == "REVIEW_REQUIRED"
     assert reason in version.review_reasons
-    assert version.highest_actionable_severity == "CRITICAL"
+    assert version.highest_actionable_severity == "MEDIUM"
+
+
+def test_critical_with_vex_conflict_stays_critical_and_keeps_reason__D3_amended(world):
+    sbom = world.sbom(world.product())
+    c = world.component(sbom, "log4j-core", "2.14.1", ecosystem="maven")
+    world.finding(c, "CVE-2021-44228", "CRITICAL")
+    world.vex(c, "CVE-2021-44228", "UNDER_INVESTIGATION", "CONFLICT_REVIEW_REQUIRED")
+    version = by_name(snapshot(world))[("log4j-core", "2.14.1")]
+    assert version.classification.value == "CRITICAL"
+    assert "VEX_CONFLICT_REVIEW_REQUIRED" in version.review_reasons
 
 
 def test_vex_only_affected_requires_review_without_fabricating_a_finding__D5_VEX_DATA_003(world):

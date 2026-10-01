@@ -11,18 +11,24 @@ Actionability follows the VEX effective status (spec §2):
   but never make a component actionable.
 
 Buckets are mutually exclusive. Precedence (phase0-analysis.md §4, decisions
-D-3/D-4/D-5):
+D-3/D-4/D-5, amended 2026-10-01 so Critical/High are never hidden):
 
-1. **Review Required** — a review reason is present (VEX conflict or
+1. **Critical / High** — the highest actionable severity is CRITICAL or HIGH.
+   These outrank review reasons so the Critical/High KPIs never understate
+   known risk; any review reasons stay attached to the result.
+2. **Review Required** — a review reason is present (VEX conflict or
    revalidation, VEX-only AFFECTED assertion, LOW identity confidence,
-   stale evidence).
-2. **Unknown** — no occurrence of the version has a successful analysis in
+   stale evidence, or an actionable finding whose highest severity is
+   UNKNOWN).
+3. **Unknown** — no occurrence of the version has a successful analysis in
    the eligible snapshot, so there is no vulnerability evidence at all.
-3. Actionable findings present:
+4. Remaining actionable findings (Medium / Low):
    a. an active accepted-risk policy is satisfied → **Accepted Risk**;
-   b. otherwise the highest actionable severity → Critical / High / Medium /
-      Low; if that highest severity is UNKNOWN → **Review Required**.
-4. No actionable findings → **No Known Actionable Vulnerabilities**.
+   b. otherwise **Medium** / **Low**.
+5. No actionable findings → **No Known Actionable Vulnerabilities**.
+
+An accepted-risk policy is never applied to Critical/High or to a version
+with review reasons: unreliable evidence cannot be accepted.
 
 INFORMATIONAL exists in the vocabulary because the spec lists it, but the
 severity model has no such level (D-4), so nothing is ever classified as
@@ -84,6 +90,10 @@ _SEVERITY_BUCKETS = {
     "MEDIUM": RiskClassification.MEDIUM,
     "LOW": RiskClassification.LOW,
 }
+
+
+#: Severities that set the bucket even when review reasons exist.
+_OUTRANKS_REVIEW = frozenset({"CRITICAL", "HIGH"})
 
 
 def normalize_severity(value: object) -> str:
@@ -157,6 +167,8 @@ def classify(data: ClassificationInput) -> ClassificationResult:
         reasons.add(ReviewReason.UNKNOWN_ACTIONABLE_SEVERITY)
     ordered_reasons = tuple(sorted(reason.value for reason in reasons))
 
+    if highest in _OUTRANKS_REVIEW:
+        return ClassificationResult(_SEVERITY_BUCKETS[highest], highest, ordered_reasons)
     if reasons:
         return ClassificationResult(RiskClassification.REVIEW_REQUIRED, highest, ordered_reasons)
     if not data.has_vulnerability_evidence:

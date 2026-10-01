@@ -562,6 +562,10 @@ def permission_for_request(request: Request) -> str:
         return "platform:tenant:create"
     if _platform_configuration_path(path):
         return "platform:admin"
+    if path.startswith("/api/component-advisor"):
+        # Coarse gate only. Write routes (Step 5+) re-check the specific
+        # create / review / accept permission at the route.
+        return "component_advisor:read" if method == "GET" else "component_advisor:recommendation:create"
     if path.startswith("/dashboard"):
         return "dashboard:read"
     if path.startswith(("/api/report-subscriptions", "/api/report-deliveries", "/api/report-notifications")):
