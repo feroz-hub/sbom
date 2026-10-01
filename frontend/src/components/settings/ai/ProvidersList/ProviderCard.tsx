@@ -21,6 +21,7 @@ import { TestResultDisplay } from '../AddProviderDialog/TestResultDisplay';
 import { ProviderStatusIndicator } from './ProviderStatusIndicator';
 import { ProviderTierBadge } from './ProviderTierBadge';
 import { ProviderModels } from './ProviderModels';
+import { useAiConfigurationScope } from '../ConfigurationScope';
 
 interface ProviderCardProps {
   credential: AiCredential;
@@ -38,6 +39,7 @@ interface ProviderCardProps {
  * Destructive actions confirm before firing — Phase 3 §4.1 hard rule.
  */
 export function ProviderCard({ credential, catalog, onEdit }: ProviderCardProps) {
+  const { canTest } = useAiConfigurationScope();
   const setDefault = useSetDefaultCredential();
   const setFallback = useSetFallbackCredential();
   const updateMut = useUpdateAiCredential();
@@ -90,10 +92,9 @@ export function ProviderCard({ credential, catalog, onEdit }: ProviderCardProps)
               <span className="italic">No default model selected</span>
             )}
           </p>
-          {credential.api_key_preview ? (
+          {credential.api_key_present ? (
             <p className="mt-1 text-xs text-hcl-muted">
-              <span className="font-medium text-hcl-navy">Key:</span>{' '}
-              <span className="font-mono">{'••••••••••••••••'}</span>
+              Credential configured ✓
             </p>
           ) : credential.base_url ? (
             <p className="mt-1 text-xs text-hcl-muted">
@@ -107,7 +108,7 @@ export function ProviderCard({ credential, catalog, onEdit }: ProviderCardProps)
           <button
             type="button"
             onClick={() => testSaved.mutate(credential.id)}
-            disabled={testSaved.isPending}
+            disabled={!canTest || testSaved.isPending}
             className="inline-flex items-center gap-1 rounded-md border border-border-subtle bg-surface px-2.5 py-1 text-xs font-medium text-hcl-navy hover:bg-surface-muted disabled:cursor-progress disabled:opacity-60"
             aria-label={`Test connection for ${displayName}`}
           >

@@ -15,6 +15,8 @@ class CacheTtlResponse(BaseModel):
 
 
 class LifecycleProviderConfigResponse(BaseModel):
+    source: Literal["PLATFORM_DEFAULT", "TENANT_OVERRIDE"] = "PLATFORM_DEFAULT"
+    override_enabled: bool = False
     provider_key: str
     display_name: str
     provider_type: str

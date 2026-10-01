@@ -55,7 +55,11 @@ export function DashboardFilters({ scope, onChange, isUpdating, hideClear = fals
   const sbom = sboms.data?.items.find((item) => item.id === scope.sbomId);
 
   return (
-    <section className="dashboard-filter-card p-4" aria-label="Dashboard filters">
+    <section className="grid gap-3 rounded-2xl border border-border bg-surface px-4 py-3 lg:grid-cols-[auto_minmax(0,1fr)]" aria-label="Dashboard filters">
+      <div className="flex flex-wrap items-center gap-2 self-center text-xs">
+        <span className="text-hcl-muted">Scope</span>
+        <span className="max-w-48 truncate rounded-full bg-hcl-light px-2.5 py-1 font-medium text-hcl-blue" title={activeTenant?.name}>{activeTenant?.name || 'Active tenant'}</span>
+      </div>
       <div className="grid gap-3 md:grid-cols-3">
         <Select variant="filter" label="Project" value={scope.projectId ?? ''} disabled={!tenantId || projects.isPending} onChange={(event) => {
           onChange({ projectId: idOrNull(event.target.value), applicationId: null, sbomId: null });
@@ -65,7 +69,6 @@ export function DashboardFilters({ scope, onChange, isUpdating, hideClear = fals
         </Select>
         <Select variant="filter" label="Application" value={scope.applicationId ?? ''}
           disabled={!scope.projectId || applications.isPending}
-          hint={!scope.projectId ? 'Select a project to filter by application.' : undefined}
           onChange={(event) => {
             onChange({ ...scope, applicationId: idOrNull(event.target.value), sbomId: null });
           }}>
@@ -79,11 +82,12 @@ export function DashboardFilters({ scope, onChange, isUpdating, hideClear = fals
           {optionElements(sboms.data?.items ?? [], 'display_name')}
         </Select>
       </div>
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-hcl-muted" aria-live="polite">
+      <div className="flex flex-wrap items-center justify-between gap-2 lg:col-span-2">
+        <p className="min-w-0 max-w-full break-words text-xs text-hcl-muted" aria-live="polite">
           Viewing: {[activeTenant?.name || 'Tenant', project?.name, application?.name, sbom?.version ? `v${sbom.version}` : sbom?.name]
             .filter(Boolean).join(' › ')}
           {isUpdating ? ' · Updating dashboard…' : ''}
+          {scope.projectId ? ' · Filters active' : ''}
         </p>
         {!hideClear ? <button
           type="button"

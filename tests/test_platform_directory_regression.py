@@ -1,4 +1,4 @@
-"""Platform directory reads stay global without synthesizing membership."""
+"""V2 ordinary Platform Admin cannot read a global customer directory."""
 
 import pytest
 from app.core.security import get_current_claims
@@ -39,28 +39,19 @@ def directory(client):
 def test_exact_directory_query_omits_empty_search(directory):
     client, ids, _ = directory
     failed = client.get("/api/platform/users?page=1&page_size=20&search=&sort_by=name")
-    assert failed.status_code == 422
-    assert failed.json()["detail"][0]["loc"] == ["query", "search"]
+    assert failed.status_code == 403
     response = client.get("/api/platform/users?page=1&page_size=20&sort_by=name")
-    assert response.status_code == 200, response.text
-    users = {user["id"]: user for user in response.json()["items"]}
-    assert users[ids["admin"]]["is_platform_admin"]
-    assert [users[ids[key]]["active_tenant_count"] for key in ("admin", "one", "two")] == [0, 1, 2]
-    details = client.get(f'/api/platform/users/{ids["two"]}').json()
-    assert {member["tenant_id"] for member in details["tenant_memberships"]} == {1, ids["tenant"]}
+    assert response.status_code == 403, response.text
+    assert client.get(f'/api/platform/users/{ids["two"]}').status_code == 403
 
 
 def test_platform_filters_remain_authorized(directory):
     client, ids, _ = directory
     result = client.get("/api/platform/users", params={"tenant_id": ids["tenant"]})
-    assert result.status_code == 200
-    assert [user["id"] for user in result.json()["items"]] == [ids["two"]]
-    native = client.get("/api/platform/users?provider=NATIVE").json()
-    assert [user["id"] for user in native["items"]] == [ids["one"]]
-    hcl = client.get("/api/platform/users?provider=HCL_CS").json()
-    assert ids["two"] in {user["id"] for user in hcl["items"]}
-    assert ids["one"] not in {user["id"] for user in hcl["items"]}
-    assert client.get("/api/platform/users?search=no-such-user").json()["total"] == 0
+    assert result.status_code == 403
+    assert client.get("/api/platform/users?provider=NATIVE").status_code == 403
+    assert client.get("/api/platform/users?provider=HCL_CS").status_code == 403
+    assert client.get("/api/platform/users?search=no-such-user").status_code == 403
 
 
 def test_tenant_admin_cannot_read_global_or_unrelated_projection(directory):

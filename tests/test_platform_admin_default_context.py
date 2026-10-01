@@ -1,13 +1,12 @@
 """Platform administrators sign in to PLATFORM context, not tenant context.
 
-A platform administrator can reach every tenant in the deployment. That reach
-is authority, not membership: it must never turn sign-in into a mandatory
+Platform authority is not tenant membership: it must never turn sign-in into a mandatory
 "pick one of N tenants" step (which does not scale past a handful of tenants),
 and it must never silently widen a tenant-scoped API into a cross-tenant one.
 
 These tests pin the API contract the frontend bootstrap depends on:
   * no explicit tenant  -> READY, ``tenant_id`` null, no selection required
-  * explicit tenant     -> tenant context, without creating a membership
+  * explicit tenant     -> requires explicit active membership
   * platform endpoints  -> usable with no X-Tenant-ID
   * tenant endpoints    -> still require explicit tenant context
 """
@@ -148,7 +147,7 @@ def test_a_hundred_reachable_tenants_never_require_platform_admin_selection(clie
             db.commit()
 
 
-def test_explicit_tenant_selection_enters_tenant_context_without_a_membership(client, app):
+def test_explicit_tenant_selection_rejected_without_a_membership(client, app):
     from app.db import SessionLocal
 
     with SessionLocal() as db:
@@ -158,15 +157,8 @@ def test_explicit_tenant_selection_enters_tenant_context_without_a_membership(cl
         db.commit()
     _as(app, claims)
     try:
-        body = client.get("/api/auth/me", headers={"X-Tenant-ID": str(target_id)}).json()
-        context = body["auth_context"]
-        assert body["tenant_id"] == target_id
-        assert context["status"] == "READY"
-        assert context["tenant_context"]["selection_source"] == "HEADER"
-        assert context["tenant_context"]["active_tenant"]["id"] == target_id
-        # Platform authority granted the context; no membership was created.
-        assert context["tenant_context"]["active_tenant"]["membership_status"] is None
-        assert context["tenant_context"]["available_tenants"] == []
+        response = client.get("/api/auth/me", headers={"X-Tenant-ID": str(target_id)})
+        assert response.status_code == 403
         with SessionLocal() as db:
             assert (
                 db.scalar(
@@ -190,7 +182,7 @@ def test_platform_apis_work_without_tenant_context(client, app):
         for path in (
             "/api/platform/tenants",
             "/api/platform/administrators",
-            "/api/platform/users",
+            "/api/platform/summary",
         ):
             response = client.get(path)
             assert response.status_code == 200, f"{path}: {response.text}"
@@ -213,7 +205,7 @@ def test_tenant_scoped_api_still_requires_explicit_tenant_context(client, app):
         assert unscoped.json()["detail"]["code"] == "IAM_NO_TENANT"
 
         scoped = client.get("/api/projects", headers={"X-Tenant-ID": str(target_id)})
-        assert scoped.status_code == 200, scoped.text
+        assert scoped.status_code == 403, scoped.text
     finally:
         app.dependency_overrides.pop(get_current_user, None)
 

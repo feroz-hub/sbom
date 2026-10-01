@@ -78,6 +78,7 @@ class LifecycleEnrichmentService:
             int(provider_max_concurrent or getattr(settings, "lifecycle_provider_max_concurrent", 3)),
         )
         self._explicit_providers = providers is not None
+        self._configuration_namespace = "legacy"
         self.providers = providers if providers is not None else self._default_providers(settings)
         self._provider_registry = LifecycleProviderRegistry()
         self.cache_ttl_days = cache_ttl_days
@@ -92,9 +93,7 @@ class LifecycleEnrichmentService:
         providers.extend(build_vendor_providers(timeout_seconds=self.provider_timeout_seconds))
         if bool(getattr(settings, "openeox_enabled", False)):
             feed_urls = [
-                url.strip()
-                for url in str(getattr(settings, "openeox_feed_urls", "") or "").split(",")
-                if url.strip()
+                url.strip() for url in str(getattr(settings, "openeox_feed_urls", "") or "").split(",") if url.strip()
             ]
             providers.append(
                 OpenEoXProvider(
@@ -199,7 +198,11 @@ class LifecycleEnrichmentService:
             if cache_entry is not None:
                 cache_confidence = cache_entry.confidence or "Unknown"
                 cache_status = cache_entry.lifecycle_status or UNKNOWN
-                if cache_status != UNKNOWN and cache_confidence in {HIGH, MEDIUM} and result.lifecycle_status == UNKNOWN:
+                if (
+                    cache_status != UNKNOWN
+                    and cache_confidence in {HIGH, MEDIUM}
+                    and result.lifecycle_status == UNKNOWN
+                ):
                     stale = self._cache_expired(cache_entry)
                     result = self._result_from_cache(cache_entry, normalized, stale=stale)
                     summary["cache_hits"] += 1
@@ -207,7 +210,14 @@ class LifecycleEnrichmentService:
                         summary["stale_components"] += len(group)
 
             if not result.manual_override:
-                cache_rows.append(lifecycle_cache_row_from_result(normalized, result, cache_ttl_days=self.cache_ttl_days))
+                cache_rows.append(
+                    lifecycle_cache_row_from_result(
+                        normalized,
+                        result,
+                        cache_ttl_days=self.cache_ttl_days,
+                        configuration_namespace=self._configuration_namespace,
+                    )
+                )
 
             for component in group:
                 self._apply_result(component, result, normalized)
@@ -407,6 +417,12 @@ class LifecycleEnrichmentService:
         }
 
     def _providers_for_run(self, db: Session) -> list[LifecycleProvider]:
+        from .provider_config_service import configuration_cache_namespace
+
+        self._configuration_namespace = configuration_cache_namespace(db)
+        # Circuit breakers must not let a failing override suppress another
+        # tenant's provider, and must reset when this effective config changes.
+        self._status_tracker = get_provider_status_tracker(self._configuration_namespace)
         providers = (
             self.providers
             if self._explicit_providers
@@ -443,7 +459,12 @@ class LifecycleEnrichmentService:
     def _read_cache(self, db: Session, component: NormalizedComponent) -> ComponentLifecycleCache | None:
         lookup_key = build_lifecycle_lookup_key(component)
         cached = (
-            db.execute(select(ComponentLifecycleCache).where(ComponentLifecycleCache.lookup_key == lookup_key))
+            db.execute(
+                select(ComponentLifecycleCache).where(
+                    ComponentLifecycleCache.lookup_key == lookup_key,
+                    ComponentLifecycleCache.configuration_namespace == self._configuration_namespace,
+                )
+            )
             .scalars()
             .first()
         )
@@ -451,6 +472,7 @@ class LifecycleEnrichmentService:
             return cached
         name, version, ecosystem, purl, _cpe = component.cache_identity
         statement = select(ComponentLifecycleCache).where(
+            ComponentLifecycleCache.configuration_namespace == self._configuration_namespace,
             ComponentLifecycleCache.normalized_name == name,
             ComponentLifecycleCache.normalized_version == version,
             ComponentLifecycleCache.ecosystem == ecosystem,
@@ -463,7 +485,14 @@ class LifecycleEnrichmentService:
             return
         upsert_lifecycle_cache_entries(
             db,
-            [lifecycle_cache_row_from_result(component, result, cache_ttl_days=self.cache_ttl_days)],
+            [
+                lifecycle_cache_row_from_result(
+                    component,
+                    result,
+                    cache_ttl_days=self.cache_ttl_days,
+                    configuration_namespace=self._configuration_namespace,
+                )
+            ],
         )
 
     def _cache_expired(self, cache_entry: ComponentLifecycleCache) -> bool:

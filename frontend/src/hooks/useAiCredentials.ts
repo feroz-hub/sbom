@@ -15,6 +15,7 @@
  * runs a fresh probe, which is the §3.3 contract.
  */
 
+import { useAiConfigurationScope } from '@/components/settings/ai/ConfigurationScope';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   createAiCredential,
@@ -66,9 +67,10 @@ export const aiProviderModelsQueryKey = (credentialId: number) => ['ai', 'provid
 
 
 export function useAiCredentials(args: { enabled?: boolean } = {}) {
+  const { scope, key } = useAiConfigurationScope();
   return useQuery<AiCredential[]>({
-    queryKey: aiCredentialsQueryKey,
-    queryFn: ({ signal }) => listAiCredentials(signal),
+    queryKey: [...aiCredentialsQueryKey, key],
+    queryFn: ({ signal }) => listAiCredentials(signal, scope),
     enabled: args.enabled ?? true,
     staleTime: 30_000,
   });
@@ -76,9 +78,10 @@ export function useAiCredentials(args: { enabled?: boolean } = {}) {
 
 
 export function useCreateAiCredential() {
+  const { scope } = useAiConfigurationScope();
   const qc = useQueryClient();
   return useMutation<AiCredential, Error, AiCredentialCreateRequest>({
-    mutationFn: (body) => createAiCredential(body),
+    mutationFn: (body) => createAiCredential(body, undefined, scope),
     onSuccess: () => {
       invalidateAiCredentialSurfaces(qc);
     },
@@ -87,13 +90,14 @@ export function useCreateAiCredential() {
 
 
 export function useUpdateAiCredential() {
+  const { scope } = useAiConfigurationScope();
   const qc = useQueryClient();
   return useMutation<
     AiCredential,
     Error,
     { id: number; body: AiCredentialUpdateRequest }
   >({
-    mutationFn: ({ id, body }) => updateAiCredential(id, body),
+    mutationFn: ({ id, body }) => updateAiCredential(id, body, undefined, scope),
     onSuccess: () => {
       invalidateAiCredentialSurfaces(qc);
     },
@@ -102,9 +106,10 @@ export function useUpdateAiCredential() {
 
 
 export function useDeleteAiCredential() {
+  const { scope } = useAiConfigurationScope();
   const qc = useQueryClient();
   return useMutation<void, Error, number>({
-    mutationFn: (id) => deleteAiCredential(id),
+    mutationFn: (id) => deleteAiCredential(id, undefined, scope),
     onSuccess: () => {
       invalidateAiCredentialSurfaces(qc);
       // Cached per-finding fixes reference the deleted provider's name.
@@ -115,9 +120,10 @@ export function useDeleteAiCredential() {
 
 
 export function useSetDefaultCredential() {
+  const { scope } = useAiConfigurationScope();
   const qc = useQueryClient();
   return useMutation<AiCredential, Error, number>({
-    mutationFn: (id) => setAiCredentialDefault(id),
+    mutationFn: (id) => setAiCredentialDefault(id, undefined, scope),
     onSuccess: () => {
       invalidateAiCredentialSurfaces(qc);
     },
@@ -126,9 +132,10 @@ export function useSetDefaultCredential() {
 
 
 export function useSetFallbackCredential() {
+  const { scope } = useAiConfigurationScope();
   const qc = useQueryClient();
   return useMutation<AiCredential, Error, number>({
-    mutationFn: (id) => setAiCredentialFallback(id),
+    mutationFn: (id) => setAiCredentialFallback(id, undefined, scope),
     onSuccess: () => {
       invalidateAiCredentialSurfaces(qc);
     },
@@ -148,6 +155,7 @@ export interface TestConnectionState {
 
 /** Hook used inside the Add dialog's "Test connection" button. */
 export function useTestConnection() {
+  const { scope } = useAiConfigurationScope();
   const qc = useQueryClient();
 
   // @no-invalidation-needed — probes a candidate config; the saved-credentials
@@ -157,11 +165,11 @@ export function useTestConnection() {
     Error,
     AiTestConnectionRequest
   >({
-    mutationFn: (body) => testAiCredentialUnsaved(body),
+    mutationFn: (body) => testAiCredentialUnsaved(body, undefined, scope),
   });
 
   const saved = useMutation<AiConnectionTestResult, Error, number>({
-    mutationFn: (id) => testAiCredentialSaved(id),
+    mutationFn: (id) => testAiCredentialSaved(id, undefined, scope),
     onSuccess: () => {
       // last_test_at / last_test_success on the row just changed — refresh
       // the list so the status badge updates without F5.
@@ -174,29 +182,32 @@ export function useTestConnection() {
 
 
 export function useAiProviderModels(credentialId: number) {
+  const { scope, key } = useAiConfigurationScope();
   return useQuery<AiProviderModel[]>({
-    queryKey: aiProviderModelsQueryKey(credentialId),
-    queryFn: ({ signal }) => listAiProviderModels(credentialId, signal),
+    queryKey: [...aiProviderModelsQueryKey(credentialId), key],
+    queryFn: ({ signal }) => listAiProviderModels(credentialId, signal, scope),
     staleTime: 30_000,
   });
 }
 
 
 export function useRefreshAiProviderModels(credentialId: number) {
+  const { scope, key } = useAiConfigurationScope();
   const qc = useQueryClient();
   return useMutation<AiModelRefreshResult, Error>({
-    mutationFn: () => refreshAiProviderModels(credentialId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: aiProviderModelsQueryKey(credentialId) }),
+    mutationFn: () => refreshAiProviderModels(credentialId, undefined, scope),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [...aiProviderModelsQueryKey(credentialId), key] }),
   });
 }
 
 
 export function useSelectAiProviderModel(credentialId: number) {
+  const { scope, key } = useAiConfigurationScope();
   const qc = useQueryClient();
   return useMutation<AiProviderModel, Error, number>({
-    mutationFn: (modelId) => selectAiProviderModel(credentialId, modelId),
+    mutationFn: (modelId) => selectAiProviderModel(credentialId, modelId, undefined, scope),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: aiProviderModelsQueryKey(credentialId) });
+      qc.invalidateQueries({ queryKey: [...aiProviderModelsQueryKey(credentialId), key] });
       invalidateAiCredentialSurfaces(qc);
       invalidateAiFixCaches(qc);
     },
@@ -205,10 +216,11 @@ export function useSelectAiProviderModel(credentialId: number) {
 
 
 export function useTestAiProviderModel(credentialId: number) {
+  const { scope, key } = useAiConfigurationScope();
   const qc = useQueryClient();
   return useMutation<AiModelTestResult, Error, number>({
-    mutationFn: (modelId) => testAiProviderModel(credentialId, modelId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: aiProviderModelsQueryKey(credentialId) }),
+    mutationFn: (modelId) => testAiProviderModel(credentialId, modelId, undefined, scope),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [...aiProviderModelsQueryKey(credentialId), key] }),
   });
 }
 
@@ -217,9 +229,10 @@ export function useTestAiProviderModel(credentialId: number) {
 
 
 export function useAiCredentialSettings(args: { enabled?: boolean } = {}) {
+  const { scope, key } = useAiConfigurationScope();
   return useQuery<AiCredentialSettings>({
-    queryKey: aiCredentialSettingsQueryKey,
-    queryFn: ({ signal }) => getAiCredentialSettings(signal),
+    queryKey: [...aiCredentialSettingsQueryKey, key],
+    queryFn: ({ signal }) => getAiCredentialSettings(signal, scope),
     enabled: args.enabled ?? true,
     staleTime: 30_000,
   });
@@ -229,15 +242,16 @@ export function useAiCredentialSettings(args: { enabled?: boolean } = {}) {
 // Prime the direct settings query, then invalidate every runtime-derived
 // surface (analysis config, usage caps, Copilot visibility, fix estimates).
 export function useUpdateAiCredentialSettings() {
+  const { scope, key } = useAiConfigurationScope();
   const qc = useQueryClient();
   return useMutation<
     AiCredentialSettings,
     Error,
     AiCredentialSettingsUpdateRequest
   >({
-    mutationFn: (body) => updateAiCredentialSettings(body),
+    mutationFn: (body) => updateAiCredentialSettings(body, undefined, scope),
     onSuccess: (data) => {
-      qc.setQueryData(aiCredentialSettingsQueryKey, data);
+      qc.setQueryData([...aiCredentialSettingsQueryKey, key], data);
       invalidateAiCredentialSurfaces(qc);
       invalidateAiFixCaches(qc);
     },
@@ -249,9 +263,10 @@ export function useUpdateAiCredentialSettings() {
 
 
 export function useProviderCatalog() {
+  const { scope, key } = useAiConfigurationScope();
   return useQuery<AiProviderCatalogEntry[]>({
-    queryKey: aiProviderCatalogQueryKey,
-    queryFn: ({ signal }) => listAiProviderCatalog(signal),
+    queryKey: [...aiProviderCatalogQueryKey, key],
+    queryFn: ({ signal }) => listAiProviderCatalog(signal, scope),
     staleTime: 60 * 60_000, // catalog is essentially static within a session
   });
 }

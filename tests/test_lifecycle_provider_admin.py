@@ -5,7 +5,7 @@ import sqlite3
 import pytest
 from app.db import Base, SessionLocal, engine
 from app.models import (
-    AuditLog,
+    AuthorizationAuditLog,
     LifecycleProviderConfig,
     LifecycleProviderSecret,
     LifecycleVendorRecord,
@@ -201,14 +201,14 @@ def test_xeol_db_valid_sqlite_can_be_enabled_and_tested(client, db_session, tmp_
     assert body["message"] == "Local Xeol DB path is readable."
 
     db_session.expire_all()
-    row = db_session.query(LifecycleProviderConfig).filter_by(provider_key="xeol_db").one()
+    row = db_session.query(LifecycleProviderConfig).filter_by(provider_key="xeol_db", tenant_id=1).one()
     assert row.enabled is True
     assert row.health_status == "healthy"
     assert row.last_success_at is not None
     assert row.last_failure_at is None
 
 
-def test_xeol_db_test_failure_sets_failure_fields(client, db_session, tmp_path):
+def test_inherited_probe_does_not_mutate_platform_failure_fields(client, db_session, tmp_path):
     invalid = tmp_path / "xeol.db"
     invalid.write_text("invalid", encoding="utf-8")
     service = LifecycleProviderConfigService()
@@ -228,8 +228,8 @@ def test_xeol_db_test_failure_sets_failure_fields(client, db_session, tmp_path):
     assert body["status"] == "degraded"
     db_session.expire_all()
     row = db_session.query(LifecycleProviderConfig).filter_by(provider_key="xeol_db").one()
-    assert row.last_failure_at is not None
-    assert row.last_failure_message
+    assert row.last_failure_at is None
+    assert row.last_failure_message is None
 
 
 def test_secret_is_encrypted_and_not_returned(client, db_session):
@@ -238,7 +238,7 @@ def test_secret_is_encrypted_and_not_returned(client, db_session):
         json={"secret_name": "api_key", "secret_value": "sk_live_123456abcd"},
     )
     assert response.status_code == 200, response.text
-    assert response.json()["value_preview"] == "sk_liv****abcd"
+    assert response.json()["value_preview"] is None
 
     list_response = client.get("/api/admin/lifecycle-providers")
     assert "sk_live_123456abcd" not in list_response.text
@@ -313,7 +313,7 @@ def test_xeol_sync_clears_cache_and_retests(client, db_session, tmp_path, monkey
     assert response.json()["status"] == "completed"
     assert called is True
     db_session.expire_all()
-    row = db_session.query(LifecycleProviderConfig).filter_by(provider_key="xeol_db").one()
+    row = db_session.query(LifecycleProviderConfig).filter_by(provider_key="xeol_db", tenant_id=1).one()
     assert row.health_status == "healthy"
     assert row.last_success_at is not None
 
@@ -373,7 +373,9 @@ def test_custom_vendor_record_crud_and_lookup_participation(client, db_session):
     assert list_response.json()["total"] >= 1
 
     client.put("/api/admin/lifecycle-providers/custom_vendor_records", json={"enabled": True})
-    providers = LifecycleProviderRegistry().build_provider_chain(db_session)
+    from app.core.context import minimal_background_context, tenant_scope
+    with tenant_scope(minimal_background_context(1)):
+        providers = LifecycleProviderRegistry().build_provider_chain(db_session)
     assert "Vendor Lifecycle" in [provider.name for provider in providers]
 
     delete = client.delete(f"/api/admin/lifecycle-vendor-records/{record_id}")
@@ -386,9 +388,9 @@ def test_audit_logs_written_for_provider_changes(client, db_session):
     response = client.put("/api/admin/lifecycle-providers/osv", json={"priority": 75})
     assert response.status_code == 200
     audit = (
-        db_session.query(AuditLog)
-        .filter(AuditLog.action == "lifecycle.provider_config.update", AuditLog.entity_id == "osv")
-        .order_by(AuditLog.id.desc())
+        db_session.query(AuthorizationAuditLog)
+        .filter(AuthorizationAuditLog.action == "TENANT_LIFECYCLE_PROVIDER_OVERRIDE_CREATED", AuthorizationAuditLog.tenant_id == 1)
+        .order_by(AuthorizationAuditLog.id.desc())
         .first()
     )
     assert audit is not None

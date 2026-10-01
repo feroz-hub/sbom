@@ -13,6 +13,9 @@ from sqlalchemy.orm import Session
 
 from ...models import LifecycleProviderSecret
 from ...security.secrets import SecretCipher
+from ...services.configuration_scope import current_configuration_tenant, scope_clause
+
+_BOUND_SCOPE = object()
 
 SECRET_ENV_CANDIDATES = (
     "APP_SECRET_KEY",
@@ -53,10 +56,15 @@ def _cipher_from_environment() -> SecretCipher:
 
 
 class LifecycleProviderSecretService:
-    """Store provider secrets encrypted at rest and expose preview-only metadata."""
+    """Store scoped secrets encrypted at rest; expose presence-only metadata."""
 
-    def __init__(self, cipher: SecretCipher | None = None) -> None:
+    def __init__(self, cipher: SecretCipher | None = None, *, tenant_id=_BOUND_SCOPE) -> None:
         self._cipher = cipher
+        self._tenant_id = tenant_id
+
+    @property
+    def tenant_id(self):
+        return current_configuration_tenant() if self._tenant_id is _BOUND_SCOPE else self._tenant_id
 
     @property
     def cipher(self) -> SecretCipher:
@@ -69,6 +77,7 @@ class LifecycleProviderSecretService:
             select(LifecycleProviderSecret).where(
                 LifecycleProviderSecret.provider_key == provider_key,
                 LifecycleProviderSecret.secret_name == secret_name,
+                scope_clause(LifecycleProviderSecret, self.tenant_id),
             )
         ).scalar_one_or_none()
 
@@ -92,10 +101,11 @@ class LifecycleProviderSecretService:
         encrypted = self.cipher.encrypt(secret_value)
         if row is None:
             row = LifecycleProviderSecret(
+                tenant_id=self.tenant_id,
                 provider_key=provider_key,
                 secret_name=secret_name,
                 encrypted_value=encrypted,
-                value_preview=preview_secret(secret_value),
+                value_preview=None,
                 created_at=now,
                 updated_at=now,
                 updated_by_user_id=updated_by_user_id,
@@ -103,7 +113,7 @@ class LifecycleProviderSecretService:
             db.add(row)
         else:
             row.encrypted_value = encrypted
-            row.value_preview = preview_secret(secret_value)
+            row.value_preview = None
             row.updated_at = now
             row.updated_by_user_id = updated_by_user_id
         return row
@@ -116,12 +126,17 @@ class LifecycleProviderSecretService:
         return True
 
     def metadata_for_provider(self, db: Session, provider_key: str) -> tuple[bool, str | None]:
-        row = db.execute(
-            select(LifecycleProviderSecret)
-            .where(LifecycleProviderSecret.provider_key == provider_key)
-            .order_by(LifecycleProviderSecret.secret_name.asc())
-        ).scalars().first()
-        return (row is not None, row.value_preview if row else None)
+        row = (
+            db.execute(
+                select(LifecycleProviderSecret)
+                .where(LifecycleProviderSecret.provider_key == provider_key)
+                .where(scope_clause(LifecycleProviderSecret, self.tenant_id))
+                .order_by(LifecycleProviderSecret.secret_name.asc())
+            )
+            .scalars()
+            .first()
+        )
+        return (row is not None, None)
 
 
 __all__ = ["LifecycleProviderSecretService", "preview_secret"]

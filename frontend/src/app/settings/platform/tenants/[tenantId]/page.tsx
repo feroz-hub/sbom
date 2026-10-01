@@ -1,388 +1,69 @@
 'use client';
 
-import { use, useState, FormEvent } from 'react';
-import Link from 'next/link';
+import { use, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
-import {
-  ApiError,
-  type TenantMember,
-  type TenantRole,
-  type UserSearchResult,
-  activateTenantMember,
-  addTenantMember,
-  deactivateTenantMember,
-  getAssignableTenantRoles,
-  getTenantMembers,
-  getPlatformTenant,
-  removeTenantMember,
-  replaceTenantMemberRoles,
-  updatePlatformTenantStatus,
-} from '@/lib/api';
-import { useNotifications } from '@/hooks/useNotifications';
-import { getApiErrorMessage } from '@/lib/notifications';
-import { PlatformTenantOverview, TenantBreadcrumb, TenantDetailSkeleton } from '@/components/admin/PlatformTenantOverview';
-import { Alert } from '@/components/ui/Alert';
-import { Button } from '@/components/ui/Button';
-import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog';
+import { getPlatformTenant, recoverPlatformTenantAdmin, updatePlatformTenantStatus, type UserSearchResult } from '@/lib/api';
+import { PlatformTenantOverview } from '@/components/admin/PlatformTenantOverview';
+import { Breadcrumb } from '@/components/layout/Breadcrumb';
 import { UserSearchCombobox } from '@/components/admin/UserSearchCombobox';
-import { TenantAuditHistory } from '@/components/admin/TenantAuditHistory';
-import { TenantMembersTable, memberDisplayName } from '@/components/admin/TenantMembersTable';
-import { ManageRolesModal } from '@/components/admin/ManageRolesModal';
-import { DisableMembershipDialog, EnableMembershipDialog, RemoveMemberDialog } from '@/components/admin/MembershipConfirmDialogs';
-import { getRoleCode, getRoleLabel } from '@/lib/roles';
+import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog';
+import { getApiErrorMessage } from '@/lib/notifications';
+import { useNotifications } from '@/hooks/useNotifications';
 
-/**
- * Platform → Tenants → Manage.
- *
- * Member and role management is the SAME UX as `/settings/users`: the shared
- * {@link TenantMembersTable} (role badges + per-row action menu), the
- * {@link ManageRolesModal} and the membership confirm dialogs. What differs is
- * the context, and only the context: every operation targets
- * `numericTenantId` from the route, so a
- * platform admin manages a tenant WITHOUT switching their active tenant, and
- * the platform-only affordances (breadcrumb, tenant overview, tenant
- * enable/disable) stay on this page.
- */
-export default function PlatformTenantDetailPage({
-  params,
-}: {
-  params: Promise<{ tenantId: string }>;
-}) {
-  const { tenantId: tenantIdStr } = use(params);
-  const numericTenantId = /^\d+$/.test(tenantIdStr) ? Number(tenantIdStr) : NaN;
-  const validTenantId = Number.isSafeInteger(numericTenantId) && numericTenantId > 0;
-  const { user, hasPermission, isLoading: authLoading, refreshSession } = useAuth();
-  const canManage = hasPermission('platform:tenant:create');
+export default function PlatformTenantDetailPage({ params }: { params: Promise<{ tenantId: string }> }) {
+  const { tenantId } = use(params);
+  const id = Number(tenantId);
+  const valid = /^\d+$/.test(tenantId) && Number.isSafeInteger(id) && id > 0;
+  const { hasPermission, isLoading } = useAuth();
+  const canRead = hasPermission('platform:tenant:read');
+  const canStatus = hasPermission('platform:tenant:update_status');
+  const canRecover = hasPermission('platform:tenant:recover_admin');
   const qc = useQueryClient();
   const { showSuccess, showError } = useNotifications();
-
-  const [selectedUser, setSelectedUser] = useState<UserSearchResult | null>(null);
-  const [initialRoles, setInitialRoles] = useState<TenantRole[]>(['VIEWER']);
-
-  // Modal states — same set the tenant page drives.
-  const [rolesModalMember, setRolesModalMember] = useState<TenantMember | null>(null);
-  const [disableModalMember, setDisableModalMember] = useState<TenantMember | null>(null);
-  const [enableModalMember, setEnableModalMember] = useState<TenantMember | null>(null);
-  const [removeModalMember, setRemoveModalMember] = useState<TenantMember | null>(null);
-
-  const [actionLoading, setActionLoading] = useState(false);
-  const [statusConfirm, setStatusConfirm] = useState(false);
-
-  const tenantsQuery = useQuery({
-    queryKey: ['platform-tenant', numericTenantId],
-    queryFn: () => getPlatformTenant(numericTenantId),
-    enabled: !authLoading && canManage && validTenantId,
-    retry: false,
-  });
-
-  const tenant = tenantsQuery.data;
-
-  const members = useQuery({
-    queryKey: ['tenant-users', numericTenantId],
-    queryFn: () => getTenantMembers(numericTenantId),
-    enabled: !authLoading && canManage && tenant?.status === 'ACTIVE' && !Number.isNaN(numericTenantId),
-  });
-
-  const roles = useQuery({
-    queryKey: ['tenant-roles', numericTenantId],
-    queryFn: () => getAssignableTenantRoles(numericTenantId),
-    enabled: !authLoading && canManage && tenant?.status === 'ACTIVE',
-  });
-
-  const tenantName = tenant?.name || 'Tenant';
-
-  /**
-   * Membership changes alter this tenant's member list, its audit trail and
-   * the member counts the platform tenant list renders.
-   */
-  const invalidateMembershipCaches = async () => {
-    await qc.invalidateQueries({ queryKey: ['tenant-users', numericTenantId] });
-    await qc.invalidateQueries({ queryKey: ['tenant-audit-history', numericTenantId] });
+  const [candidate, setCandidate] = useState<UserSearchResult | null>(null);
+  const [confirm, setConfirm] = useState(false);
+  const tenant = useQuery({ queryKey: ['platform-tenant', id], queryFn: () => getPlatformTenant(id), enabled: !isLoading && canRead && valid, retry: false });
+  const invalidateTenantSummary = async () => {
+    await qc.invalidateQueries({ queryKey: ['platform-tenant', id] });
     await qc.invalidateQueries({ queryKey: ['platform-tenants'] });
-    await qc.invalidateQueries({ queryKey: ['platform-tenant', numericTenantId] });
+    await qc.invalidateQueries({ queryKey: ['platform-summary'] });
   };
-
-  const addMemberMutation = useMutation({
-    mutationFn: async () => {
-      if (!selectedUser) return;
-      await addTenantMember(numericTenantId, {
-        user_id: selectedUser.id,
-        roles: initialRoles,
-      });
-    },
-    onSuccess: async () => {
-      showSuccess(`User “${selectedUser?.display_name || selectedUser?.email}” was added to ${tenantName}.`);
-      setSelectedUser(null);
-      await invalidateMembershipCaches();
-    },
-    onError: (error) => showError(getApiErrorMessage(error, 'Failed to add member to tenant.')),
+  const recovery = useMutation({
+    mutationFn: () => recoverPlatformTenantAdmin(id, candidate!.id),
+    onSuccess: async () => { setCandidate(null); showSuccess('Tenant Administrator recovery completed.'); await invalidateTenantSummary(); },
+    onError: error => showError(getApiErrorMessage(error, 'Administrator recovery failed.')),
   });
-
-  const tenantStatus = useMutation({
-    mutationFn: (status: 'ACTIVE' | 'DISABLED') =>
-      updatePlatformTenantStatus(numericTenantId, status),
-    onSuccess: async (_result, status) => {
-      showSuccess(`Tenant ${status === 'ACTIVE' ? 'enabled' : 'disabled'} successfully.`);
-      setStatusConfirm(false);
-      await qc.invalidateQueries({ queryKey: ['platform-tenants'] });
-      await qc.invalidateQueries({ queryKey: ['platform-tenant', numericTenantId] });
-    },
-    onError: (error) => showError(getApiErrorMessage(error, 'The tenant status could not be changed.')),
+  const status = useMutation({
+    mutationFn: () => updatePlatformTenantStatus(id, tenant.data?.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE'),
+    onSuccess: async () => { setConfirm(false); await invalidateTenantSummary(); },
+    onError: error => showError(getApiErrorMessage(error, 'Tenant status could not be updated.')),
   });
-
-  const submitMember = (event: FormEvent) => {
-    event.preventDefault();
-    if (!selectedUser || addMemberMutation.isPending) return;
-    addMemberMutation.mutate();
-  };
-
-  /** A platform admin may be editing their own membership in this tenant —
-   *  refresh the session so their permissions stay accurate. No redirect:
-   *  platform context does not depend on membership in the managed tenant. */
-  const refreshSessionIfSelf = async (member: TenantMember) => {
-    if (user?.userId === member.user_id) {
-      await refreshSession();
-    }
-  };
-
-  const handleSaveRoles = async (selectedRoles: TenantRole[]) => {
-    if (!rolesModalMember) return;
-    setActionLoading(true);
-    try {
-      await replaceTenantMemberRoles(
-        numericTenantId,
-        rolesModalMember.user_id,
-        selectedRoles,
-        rolesModalMember.role_assignment_version,
-      );
-      showSuccess('Roles updated successfully.');
-      await invalidateMembershipCaches();
-      await refreshSessionIfSelf(rolesModalMember);
-      setRolesModalMember(null);
-    } catch (err: unknown) {
-      showError(getApiErrorMessage(err, 'Failed to update roles.'));
-      throw err;
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleConfirmDisable = async () => {
-    if (!disableModalMember) return;
-    setActionLoading(true);
-    try {
-      await deactivateTenantMember(numericTenantId, disableModalMember.membership_id);
-      showSuccess('Membership disabled.');
-      await invalidateMembershipCaches();
-      await refreshSessionIfSelf(disableModalMember);
-      setDisableModalMember(null);
-    } catch (err: unknown) {
-      showError(getApiErrorMessage(err, 'Failed to disable membership.'));
-      throw err;
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleConfirmEnable = async () => {
-    if (!enableModalMember) return;
-    setActionLoading(true);
-    try {
-      await activateTenantMember(numericTenantId, enableModalMember.membership_id);
-      showSuccess('Membership enabled.');
-      await invalidateMembershipCaches();
-      await refreshSessionIfSelf(enableModalMember);
-      setEnableModalMember(null);
-    } catch (err: unknown) {
-      showError(getApiErrorMessage(err, 'Failed to enable membership.'));
-      throw err;
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleConfirmRemove = async () => {
-    if (!removeModalMember) return;
-    setActionLoading(true);
-    try {
-      await removeTenantMember(numericTenantId, removeModalMember.membership_id);
-      showSuccess('User removed from tenant.');
-      await invalidateMembershipCaches();
-      await refreshSessionIfSelf(removeModalMember);
-      setRemoveModalMember(null);
-    } catch (err: unknown) {
-      showError(getApiErrorMessage(err, 'Failed to remove member.'));
-      throw err;
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  if (authLoading) return <TenantDetailSkeleton />;
-  if (!canManage) return <main className="mx-auto max-w-[1360px] p-4 sm:p-8"><Alert variant="error" title="Platform access required">Access denied. You do not have permission to manage platform tenants.</Alert></main>;
-  if (validTenantId && tenantsQuery.isPending) return <TenantDetailSkeleton />;
-  if (!validTenantId || tenantsQuery.isError || !tenant) {
-    const notFound = !validTenantId || (tenantsQuery.error instanceof ApiError && tenantsQuery.error.status === 404);
-    return <main className="mx-auto max-w-[1360px] space-y-6 p-4 sm:p-8"><TenantBreadcrumb /><section className="rounded-xl border border-border bg-surface p-8"><Alert variant="error" title={notFound ? 'Tenant not found' : 'Unable to load tenant'}>{notFound ? 'The requested tenant could not be found or may no longer be available.' : 'Tenant information could not be retrieved. Please try again.'}</Alert><div className="mt-5 flex flex-wrap items-center gap-4">{!notFound && <Button onClick={() => void tenantsQuery.refetch()} loading={tenantsQuery.isFetching}>Try again</Button>}<Link className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-link hover:bg-surface-muted focus-visible:ring-2 focus-visible:ring-primary" href="/settings/platform/tenants">Back to tenants</Link></div></section></main>;
-  }
-
-  return (
-    <main className="mx-auto min-h-full max-w-[1360px] space-y-6 bg-dashboard-page p-4 sm:p-8">
-      <PlatformTenantOverview key={tenant.id} tenant={tenant} canResend={hasPermission('platform:user:manage_status') && hasPermission('tenant:user:invite')} canManageUsers={tenant.status !== 'PENDING' || hasPermission('platform:user:read') || hasPermission('tenant:user:read')} />
-
-      {tenant.status !== 'PENDING' && <>
-      <section id="tenant-users" aria-labelledby="users-heading" className="scroll-mt-6 rounded-xl border border-border bg-surface p-6">
-        <h2 id="users-heading" className="text-lg font-semibold">Tenant users</h2>
-        <p className="mt-2 text-sm text-hcl-muted">Manage users and assigned roles for {tenant.name}. Changes apply to this tenant without switching your active workspace.</p>
-      </section>
-      {/* Add Member Section */}
-      <section aria-labelledby="add-member-heading" className="rounded-xl border border-border bg-surface p-5 shadow-elev-1 space-y-4">
-        <div>
-          <h2 id="add-member-heading" className="text-lg font-semibold text-foreground">Add tenant member</h2>
-          <p className="mt-1 text-xs text-hcl-muted">Search existing authenticated SBOM users to assign membership.</p>
-        </div>
-
-        <form onSubmit={submitMember} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">Select User</label>
-            <UserSearchCombobox
-              tenantId={numericTenantId}
-              onSelect={(candidate) => setSelectedUser(candidate)}
-              selectedUser={selectedUser}
-              placeholder="Search existing SBOM users by email or name…"
-            />
-          </div>
-
-          {selectedUser && (
-            <div className="grid gap-3 sm:grid-cols-[1fr_auto] items-end pt-2">
-              <label className="text-sm font-medium">
-                Initial Roles
-                <select
-                  aria-label="Initial roles"
-                  multiple
-                  value={initialRoles.map(getRoleCode)}
-                  onChange={(event) => {
-                    const selected = Array.from(
-                      event.target.selectedOptions,
-                      (option) => option.value as TenantRole,
-                    );
-                    if (selected.length > 0) setInitialRoles(selected);
-                  }}
-                  className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2"
-                >
-                  {(roles.data?.roles ?? ['VIEWER']).map((role) => {
-                    const code = getRoleCode(role);
-                    const label = getRoleLabel(role);
-                    const key = code || (role && typeof role === 'object' ? String(role.id ?? '') : String(role));
-                    return (
-                      <option key={key} value={code}>
-                        {label}
-                      </option>
-                    );
-                  })}
-                </select>
-              </label>
-              <Button
-                type="submit"
-                disabled={addMemberMutation.isPending}
-                className="rounded-lg bg-[var(--btn-primary)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--btn-primary-hover)] disabled:opacity-50 transition-colors"
-              >
-                {addMemberMutation.isPending ? 'Adding…' : 'Add Member'}
-              </Button>
-            </div>
-          )}
-        </form>
-      </section>
-
-      {/* Members — identical to /settings/users, scoped to the route tenant. */}
-      <TenantMembersTable
-        members={members.data}
-        isLoading={members.isLoading}
-        error={members.error}
-        canUpdate={canManage}
-        onManageRoles={setRolesModalMember}
-        onDisableMembership={setDisableModalMember}
-        onEnableMembership={setEnableModalMember}
-        onRemoveFromTenant={setRemoveModalMember}
-      />
-
-      <section aria-labelledby="tenant-settings-heading" className="rounded-xl border border-border bg-surface p-5">
-        <h2 id="tenant-settings-heading" className="text-lg font-semibold">Tenant Settings</h2>
-        <p className="mt-1 text-sm text-hcl-muted">
-          Current status: <strong>{tenant?.status || 'Loading'}</strong>
-        </p>
-        {tenant && (
-          <Button
-            variant="secondary"
-            type="button"
-            disabled={tenantStatus.isPending}
-            onClick={() => setStatusConfirm(true)}
-            className="mt-3 rounded-md border border-border px-3 py-2 text-sm font-medium disabled:opacity-50"
-          >
-            {tenantStatus.isPending
-              ? 'Updating…'
-              : tenant.status === 'ACTIVE'
-                ? 'Disable Tenant'
-                : 'Enable Tenant'}
-          </Button>
-        )}
-      </section>
-
-      <ConfirmationDialog open={statusConfirm} title={tenant.status === 'ACTIVE' ? 'Disable tenant?' : 'Enable tenant?'} description={tenant.status === 'ACTIVE' ? `Users will no longer be able to access ${tenant.name}. Existing memberships and roles will be retained.` : `Active memberships will regain access to ${tenant.name}.`} confirmLabel={tenant.status === 'ACTIVE' ? 'Disable tenant' : 'Enable tenant'} danger={tenant.status === 'ACTIVE'} loading={tenantStatus.isPending} onClose={() => { if (!tenantStatus.isPending) setStatusConfirm(false); }} onConfirm={() => { if (!tenantStatus.isPending) tenantStatus.mutate(tenant.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE'); }} />
-      {/* Modals & Dialogs */}
-      {rolesModalMember && (
-        <ManageRolesModal
-          open={rolesModalMember !== null}
-          onClose={() => !actionLoading && setRolesModalMember(null)}
-          displayName={memberDisplayName(rolesModalMember)}
-          tenantName={tenantName}
-          currentRoles={rolesModalMember.roles ?? [rolesModalMember.role]}
-          membershipVersion={rolesModalMember.role_assignment_version}
-          isMembershipActive={rolesModalMember.status === 'ACTIVE'}
-          loading={actionLoading}
-          onSave={handleSaveRoles}
-        />
-      )}
-
-      {disableModalMember && (
-        <DisableMembershipDialog
-          open={disableModalMember !== null}
-          onClose={() => !actionLoading && setDisableModalMember(null)}
-          displayName={memberDisplayName(disableModalMember)}
-          tenantName={tenantName}
-          isSelf={user?.userId === disableModalMember.user_id}
-          loading={actionLoading}
-          onConfirm={handleConfirmDisable}
-        />
-      )}
-
-      {enableModalMember && (
-        <EnableMembershipDialog
-          open={enableModalMember !== null}
-          onClose={() => !actionLoading && setEnableModalMember(null)}
-          displayName={memberDisplayName(enableModalMember)}
-          tenantName={tenantName}
-          isSelf={user?.userId === enableModalMember.user_id}
-          loading={actionLoading}
-          onConfirm={handleConfirmEnable}
-        />
-      )}
-
-      {removeModalMember && (
-        <RemoveMemberDialog
-          open={removeModalMember !== null}
-          onClose={() => !actionLoading && setRemoveModalMember(null)}
-          displayName={memberDisplayName(removeModalMember)}
-          tenantName={tenantName}
-          isSelf={user?.userId === removeModalMember.user_id}
-          loading={actionLoading}
-          onConfirm={handleConfirmRemove}
-        />
-      )}
-
-      <TenantAuditHistory tenantId={numericTenantId} />
-      </>}
-    </main>
-  );
+  if (!valid) return <p role="alert">Invalid tenant.</p>;
+  if (isLoading) return <p>Verifying platform access…</p>;
+  if (!canRead) return <p role="alert">Platform tenant read permission is required.</p>;
+  if (tenant.isLoading) return <p>Loading tenant summary…</p>;
+  if (tenant.error || !tenant.data) return <p role="alert">Unable to load tenant summary.</p>;
+  const value = tenant.data;
+  return <main className="mx-auto max-w-6xl space-y-6 p-6">
+    <Breadcrumb items={[
+      { label: 'Platform', href: '/platform' },
+      { label: 'Tenants', href: '/settings/platform/tenants' },
+      { label: value.name },
+    ]} />
+    <PlatformTenantOverview tenant={value} canManageUsers={false} canResend={hasPermission('platform:tenant:bootstrap_admin')} />
+    <section className="rounded-xl border p-5">
+      <h2 className="text-lg font-semibold">Tenant Administrator governance</h2>
+      <p>{value.member_count ?? 0} memberships · {value.current_administrators?.length ?? 0} active Tenant Administrators</p>
+      <ul>{value.current_administrators?.map(admin => <li key={admin.user_id}>{admin.display_name} — {admin.email}</li>)}</ul>
+      {canRecover && value.status !== 'DISABLED' && <div className="mt-4 space-y-3">
+        <h3 className="font-medium">Recover Tenant Administrator access</h3>
+        <p className="text-sm text-hcl-muted">Add a new active administrator. This does not grant you tenant access or provide a generic tenant-user editor.</p>
+        <UserSearchCombobox governance requireEligible selectedUser={candidate} onSelect={setCandidate} placeholder="Search administrator by name or email…" />
+        <button disabled={!candidate || recovery.isPending} onClick={() => recovery.mutate()} className="rounded bg-hcl-blue px-4 py-2 text-white disabled:opacity-50">{recovery.isPending ? 'Recovering…' : 'Assign Tenant Administrator'}</button>
+      </div>}
+    </section>
+    {canStatus && <button onClick={() => setConfirm(true)}>{value.status === 'ACTIVE' ? 'Disable tenant' : 'Enable tenant'}</button>}
+    <ConfirmationDialog open={confirm} onClose={() => setConfirm(false)} onConfirm={() => status.mutate()} title="Change tenant status?" description="This changes tenant availability, not global accounts." confirmLabel="Confirm" loading={status.isPending} />
+  </main>;
 }

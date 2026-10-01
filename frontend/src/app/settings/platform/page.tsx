@@ -76,7 +76,6 @@ export default function PlatformAdministratorsPage() {
       />
     <div className="mx-auto w-full max-w-6xl space-y-6 p-6">
 
-      {hasPermission('platform:user:manage_status') && <Link className="underline" href="/settings/users">Manage users</Link>}
       <nav aria-label="Platform administration" className="flex gap-2 border-b border-border pb-3 text-sm">
         <Link href="/settings/platform" aria-current="page" className="rounded-md bg-hcl-blue px-3 py-2 font-medium text-white">Administrators</Link>
         <Link href="/settings/platform/tenants" className="rounded-md px-3 py-2 font-medium text-hcl-blue hover:bg-surface-elevated">Tenants</Link>
@@ -92,7 +91,7 @@ export default function PlatformAdministratorsPage() {
           <form onSubmit={submitGrant} className="space-y-4">
             <div>
               <label className="block text-sm font-medium mb-1">Select User</label>
-              <UserSearchCombobox
+              <UserSearchCombobox governance
                 onSelect={(u) => setSelectedUser(u)}
                 selectedUser={selectedUser}
                 placeholder="Search existing SBOM users by email or name…"

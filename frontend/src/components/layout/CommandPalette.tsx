@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { getRecentSboms, getRuns } from '@/lib/api';
+import { useAuth } from '@/hooks/useAuth';
 import { canonicalRunStatus } from '@/lib/analysisRunStatusLabels';
 import { cn, formatDate } from '@/lib/utils';
 
@@ -97,19 +98,22 @@ function fuzzyScore(haystack: string, needle: string): number {
 function useCommands(query: string, isOpen: boolean, onClose: () => void): CommandItem[] {
   const router = useRouter();
   const { resolvedTheme, setTheme } = useTheme();
+  const { hasPermission, activeTenantId } = useAuth();
+  const canSboms = hasPermission('sbom:read');
+  const canRuns = hasPermission('analysis:read');
 
   // Recent SBOMs and runs — only fetch while palette is open.
   const sbomsQuery = useQuery({
-    queryKey: ['palette-recent-sboms'],
+    queryKey: ['palette-recent-sboms', activeTenantId],
     queryFn: ({ signal }) => getRecentSboms(8, signal),
-    enabled: isOpen,
+    enabled: isOpen && canSboms && Boolean(activeTenantId),
     staleTime: 30_000,
   });
 
   const runsQuery = useQuery({
-    queryKey: ['palette-recent-runs'],
+    queryKey: ['palette-recent-runs', activeTenantId],
     queryFn: ({ signal }) => getRuns({ page: 1, page_size: 8 }, signal),
-    enabled: isOpen,
+    enabled: isOpen && canRuns && Boolean(activeTenantId),
     staleTime: 30_000,
   });
 
@@ -125,7 +129,18 @@ function useCommands(query: string, isOpen: boolean, onClose: () => void): Comma
   // Static nav + actions.
   const staticCommands = useMemo<CommandItem[]>(() => {
     const isDark = resolvedTheme === 'dark';
-    return [
+    const requirements: Record<string, string> = {
+      'nav.dashboard': 'dashboard:read', 'nav.projects': 'project:read', 'nav.sboms': 'sbom:read',
+      'nav.runs': 'analysis:read', 'nav.compare': 'analysis:read', 'nav.consolidated': 'analysis:run',
+      'action.upload': 'sbom:upload', 'action.failing-runs': 'analysis:read',
+      'nav.platform': 'platform:tenant:read', 'nav.tenants': 'platform:tenant:read',
+      'nav.administrators': 'platform:administrator:read', 'nav.health': 'platform:health:read',
+    };
+    const commands: CommandItem[] = [
+      { id: 'nav.platform', group: 'nav', title: 'Platform Dashboard', Icon: LayoutDashboard, run: () => goto('/platform') },
+      { id: 'nav.tenants', group: 'nav', title: 'Tenants', Icon: FolderOpen, run: () => goto('/settings/platform/tenants') },
+      { id: 'nav.administrators', group: 'nav', title: 'Platform Administration', Icon: ShieldAlert, run: () => goto('/settings/platform') },
+      { id: 'nav.health', group: 'nav', title: 'Platform Health', Icon: Activity, run: () => goto('/settings/iam') },
       // Navigation
       {
         id: 'nav.dashboard',
@@ -254,11 +269,12 @@ function useCommands(query: string, isOpen: boolean, onClose: () => void): Comma
         },
       },
     ];
-  }, [goto, close, resolvedTheme, setTheme]);
+    return commands.filter(command => !requirements[command.id] || hasPermission(requirements[command.id]));
+  }, [goto, close, resolvedTheme, setTheme, hasPermission]);
 
   // Recent SBOMs.
   const sbomCommands = useMemo<CommandItem[]>(() => {
-    const data = sbomsQuery.data ?? [];
+    const data = canSboms ? sbomsQuery.data ?? [] : [];
     return data.map((s) => ({
       id: `sbom.${s.id}`,
       group: 'sboms' as const,
@@ -270,11 +286,11 @@ function useCommands(query: string, isOpen: boolean, onClose: () => void): Comma
       keywords: `sbom #${s.id}`,
       run: () => goto(`/sboms/${s.id}`),
     }));
-  }, [sbomsQuery.data, goto]);
+  }, [sbomsQuery.data, goto, canSboms]);
 
   // Recent runs.
   const runCommands = useMemo<CommandItem[]>(() => {
-    const data = runsQuery.data ?? [];
+    const data = canRuns ? runsQuery.data ?? [] : [];
     return data.slice(0, 8).map((r) => {
       const status = canonicalRunStatus(r.run_status);
       return {
@@ -294,7 +310,7 @@ function useCommands(query: string, isOpen: boolean, onClose: () => void): Comma
         run: () => goto(`/analysis/${r.id}`),
       };
     });
-  }, [runsQuery.data, goto]);
+  }, [runsQuery.data, goto, canRuns]);
 
   // Filter + score.
   const all = useMemo(

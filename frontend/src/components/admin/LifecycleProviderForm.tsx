@@ -165,7 +165,7 @@ export function LifecycleProviderForm({
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h3 className="text-sm font-semibold text-hcl-navy">Secret</h3>
-                <p className="text-xs text-hcl-muted">{provider.secret_preview ?? 'No secret saved'}</p>
+                <p className="text-xs text-hcl-muted">{provider.has_secret ? 'Credential configured ✓' : 'No credential saved'}</p>
               </div>
               {provider.has_secret && (
                 <Button variant="ghost" size="sm" onClick={() => onDeleteSecret(provider.provider_key, secretName)}>

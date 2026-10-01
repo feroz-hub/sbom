@@ -21,6 +21,7 @@ from ..schemas_lifecycle_admin import (
     LifecycleVendorRecordRequest,
     LifecycleVendorRecordResponse,
 )
+from ..services.configuration_scope import require_configuration_permission
 from ..services.lifecycle.provider_config_service import (
     LifecycleProviderConfigService,
     LifecycleVendorRecordService,
@@ -37,13 +38,24 @@ def _record_response(service: LifecycleVendorRecordService, row) -> LifecycleVen
     return LifecycleVendorRecordResponse.model_validate(service.to_dict(row))
 
 
+@router.delete("/api/admin/lifecycle-providers/{provider_key}/override", status_code=204)
+def reset_provider_override(
+    provider_key: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    context=Depends(require_configuration_permission("lifecycle-provider", "update")),
+):
+    LifecycleProviderConfigService().reset_override(db, provider_key, context=context, request=request)
+    db.commit()
+
+
 @router.get(
     "/api/admin/lifecycle-providers",
     response_model=list[LifecycleProviderConfigResponse],
 )
 def list_lifecycle_providers(
     db: Session = Depends(get_db),
-    _context: CurrentContext = Depends(require_permission("lifecycle:provider:read")),
+    _context: CurrentContext = Depends(require_configuration_permission("lifecycle-provider", "read")),
 ):
     service = LifecycleProviderConfigService()
     rows = service.list_configs(db)
@@ -59,7 +71,7 @@ def update_lifecycle_provider(
     payload: LifecycleProviderUpdateRequest,
     request: Request,
     db: Session = Depends(get_db),
-    context: CurrentContext = Depends(require_permission("lifecycle:provider:update")),
+    context: CurrentContext = Depends(require_configuration_permission("lifecycle-provider", "update")),
 ):
     service = LifecycleProviderConfigService()
     row = service.update_config(
@@ -83,7 +95,7 @@ def put_lifecycle_provider_secret(
     payload: LifecycleProviderSecretRequest,
     request: Request,
     db: Session = Depends(get_db),
-    context: CurrentContext = Depends(require_permission("lifecycle:provider:update")),
+    context: CurrentContext = Depends(require_configuration_permission("lifecycle-provider", "update")),
 ):
     row = LifecycleProviderConfigService().set_secret(
         db,
@@ -98,7 +110,7 @@ def put_lifecycle_provider_secret(
     return LifecycleProviderSecretResponse(
         provider_key=row.provider_key,
         secret_name=row.secret_name,
-        value_preview=row.value_preview,
+        value_preview=None,
         updated_at=row.updated_at,
     )
 
@@ -112,7 +124,7 @@ def delete_lifecycle_provider_secret(
     secret_name: str,
     request: Request,
     db: Session = Depends(get_db),
-    context: CurrentContext = Depends(require_permission("lifecycle:provider:update")),
+    context: CurrentContext = Depends(require_configuration_permission("lifecycle-provider", "update")),
 ):
     LifecycleProviderConfigService().delete_secret(
         db,
@@ -133,7 +145,7 @@ def test_lifecycle_provider(
     provider_key: str,
     request: Request,
     db: Session = Depends(get_db),
-    context: CurrentContext = Depends(require_permission("lifecycle:provider:test")),
+    context: CurrentContext = Depends(require_configuration_permission("lifecycle-provider", "test")),
 ):
     result = LifecycleProviderConfigService().test_provider(db, provider_key, context=context, request=request)
     db.commit()
@@ -148,7 +160,7 @@ def sync_lifecycle_provider(
     provider_key: str,
     request: Request,
     db: Session = Depends(get_db),
-    context: CurrentContext = Depends(require_permission("lifecycle:provider:sync")),
+    context: CurrentContext = Depends(require_configuration_permission("lifecycle-provider", "sync")),
 ):
     result = LifecycleProviderConfigService().sync_provider(db, provider_key, context=context, request=request)
     db.commit()
@@ -169,7 +181,9 @@ def list_lifecycle_vendor_records(
     _context: CurrentContext = Depends(require_permission("lifecycle:vendor-record:read")),
 ):
     service = LifecycleVendorRecordService()
-    rows, total = service.list_records(db, search=search, status=status_filter, ecosystem=ecosystem, limit=limit, offset=offset)
+    rows, total = service.list_records(
+        db, search=search, status=status_filter, ecosystem=ecosystem, limit=limit, offset=offset
+    )
     return LifecycleVendorRecordListResponse(
         items=[_record_response(service, row) for row in rows],
         total=total,
@@ -250,3 +264,15 @@ def export_lifecycle_vendor_records(
     _context: CurrentContext = Depends(require_permission("lifecycle:vendor-record:read")),
 ):
     return {"records": LifecycleVendorRecordService().export_records(db)}
+
+
+platform_router = APIRouter(tags=["platform-lifecycle-configuration"])
+for configuration_route in router.routes:
+    if configuration_route.path.startswith("/api/admin/lifecycle-providers"):
+        platform_router.add_api_route(
+            configuration_route.path.replace("/api/admin/lifecycle-providers", "/api/platform/configuration/lifecycle"),
+            configuration_route.endpoint,
+            methods=list(configuration_route.methods),
+            response_model=configuration_route.response_model,
+            status_code=configuration_route.status_code,
+        )

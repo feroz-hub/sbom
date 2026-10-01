@@ -55,43 +55,6 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-export function TenantBreadcrumb({ name }: { name?: string }) {
-  return (
-    <nav aria-label="Breadcrumb">
-      <ol className="flex flex-wrap items-center gap-2 text-sm text-foreground opacity-70">
-        <li>
-          <Link
-            className="rounded hover:text-link focus-visible:outline-primary"
-            href="/settings/platform"
-          >
-            Platform
-          </Link>
-        </li>
-        <li aria-hidden="true">/</li>
-        <li>
-          <Link
-            className="rounded hover:text-link focus-visible:outline-primary"
-            href="/settings/platform/tenants"
-          >
-            Tenants
-          </Link>
-        </li>
-        {name && (
-          <>
-            <li aria-hidden="true">/</li>
-            <li
-              aria-current="page"
-              className="min-w-0 break-words font-medium text-foreground"
-            >
-              {name}
-            </li>
-          </>
-        )}
-      </ol>
-    </nav>
-  );
-}
-
 export function PlatformTenantOverview({
   tenant,
   canResend,
@@ -166,7 +129,6 @@ export function PlatformTenantOverview({
 
   return (
     <>
-      <TenantBreadcrumb name={tenant.name} />
       <header className="flex flex-col justify-between gap-6 rounded-xl border border-border bg-surface p-5 shadow-elev-1 sm:p-6 xl:flex-row xl:items-center">
         <div className="min-w-0 flex-1">
           <div className="flex items-start gap-4">

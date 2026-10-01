@@ -153,8 +153,6 @@ def add_existing(
 
 
 @router.post("/tenants/{tenant_id}/native-users/{user_id}/resend-activation")
-@router.post("/platform/tenants/{tenant_id}/native-users/{user_id}/resend-activation",
-             dependencies=[Depends(require_platform_permission("platform:user:manage_status"))])
 def resend(
     request: Request,
     tenant_id: int,
@@ -170,6 +168,15 @@ def resend(
         db.rollback()
         raise HTTPException(400, "Activation unavailable") from None
     return {"user_id": user.id, "delivery": ({"status": "PENDING", "error_code": None} if get_settings().native_security_outbox_enabled else enrollment.deliver_activation(user, issued))}
+
+
+@router.post("/platform/tenants/{tenant_id}/native-users/{user_id}/resend-activation")
+def resend_initial_administrator(
+    request: Request, tenant_id: int, user_id: int,
+    context: CurrentContext = Depends(require_platform_permission("platform:tenant:bootstrap_admin")),
+    db: Session = Depends(get_db),
+):
+    return resend(request, tenant_id, user_id, context, db)
 
 
 class ForgotPassword(BaseModel):

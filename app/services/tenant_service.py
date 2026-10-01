@@ -573,10 +573,8 @@ def resolve_active_tenant(
             if requested in {str(tenant.id), tenant.slug, tenant.external_iam_tenant_id}:
                 membership, selected = member, tenant
                 break
-        if selected is None and is_platform_admin:
-            selected = db.execute(
-                select(Tenant).where(Tenant.status == "ACTIVE", _tenant_identity_filter(Tenant, requested))
-            ).scalar_one_or_none()
+    elif is_platform_admin and allow_platform_context:
+        pass  # Platform context never implicitly enters a customer's tenant.
     elif len(memberships) == 1:
         membership, selected = memberships[0]
     elif not auth_enabled and settings.dev_default_tenant:
@@ -592,7 +590,7 @@ def resolve_active_tenant(
                 )
             ).scalar_one_or_none()
 
-    if selected is None and is_platform_admin and allow_platform_context:
+    if not requested and selected is None and is_platform_admin and allow_platform_context:
         roles = frozenset({"PLATFORM_ADMIN"})
         return (
             None,
@@ -604,7 +602,7 @@ def resolve_active_tenant(
             True,
         )
 
-    if selected is None or (membership is None and not is_platform_admin):
+    if selected is None or membership is None:
         raise HTTPException(status_code=403, detail="Tenant access denied")
 
     effective_roles: set[str] = (
@@ -625,28 +623,16 @@ def resolve_active_tenant(
         if membership
         else set()
     )
-    if is_platform_admin:
-        effective_roles.add("PLATFORM_ADMIN")
-        permissions.update(
-            authorization_catalog_service.resolve_permissions_for_roles(
-                db,
-                frozenset({"PLATFORM_ADMIN"}),
-                actor_user_id=user.id,
-            )
-        )
     return (
         selected,
         membership,
         frozenset(effective_roles),
         frozenset(permissions),
-        is_platform_admin,
+        False,
     )
 
 
 def get_available_tenants_for_user(db: Session, user_id: int, is_platform_admin: bool) -> list[tuple[Tenant, str | None]]:
-    if is_platform_admin:
-        tenants = db.execute(select(Tenant).where(Tenant.status == "ACTIVE").order_by(Tenant.name)).scalars()
-        return [(t, "PLATFORM_ADMIN") for t in tenants]
     rows = db.execute(
         select(Tenant, TenantUser.role)
         .join(TenantUser, TenantUser.tenant_id == Tenant.id)
@@ -696,18 +682,8 @@ def add_user_to_tenant(
     user = db.execute(select(IAMUser).where(IAMUser.id == user_id)).scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=404, detail="IAM user not found; the user must sign in once before onboarding")
-    if user.status == "DISABLED":
-        raise HTTPException(status_code=422, detail="Disabled IAM user cannot receive an active membership")
-    if user.status not in {"ACTIVE", "PENDING"}:
-        raise HTTPException(status_code=422, detail="IAM user is not eligible for membership onboarding")
-    if status == "ACTIVE" and user.status == "PENDING":
-        # Adding an active membership is the tenant administrator's explicit
-        # onboarding approval for this discovered identity.
-        from .account_state_service import validate_transition
-
-        validate_transition(user.status, "ACTIVE", legacy_approval=True)
-        user.status = "ACTIVE"
-        user.updated_at = now
+    if user.status != "ACTIVE" or not verification_complete(user):
+        raise HTTPException(status_code=422, detail="Select an active, eligible account; tenant membership cannot change global account state")
     membership = db.execute(
         select(TenantUser).where(TenantUser.tenant_id == tenant_id, TenantUser.user_id == user.id)
     ).scalar_one_or_none()

@@ -495,6 +495,8 @@ export interface TenantRoleState {
 }
 
 export interface TenantAuditEvent {
+  label?: string;
+  category?: string;
   id: number;
   action: string;
   outcome: string;
@@ -512,10 +514,37 @@ export async function getTenantAuditHistory(
   tenantId: number,
 ): Promise<TenantAuditEvent[]> {
   const response = await request<{ items: TenantAuditEvent[] }>(
-    `/api/tenants/${tenantId}/audit-history`,
+    `/api/tenants/${tenantId}/audit-history?page=1&page_size=5&administrative_only=true`,
     tenantRequestOptions(tenantId),
   );
   return response.items ?? [];
+}
+
+export interface TenantAuditPage {
+  items: TenantAuditEvent[]; page: number; page_size: number; total: number; total_pages: number;
+}
+
+export function getTenantAuditPage(tenantId: number, filters: {
+  page: number; page_size: number; q?: string; category?: string; outcome?: string;
+  from_time?: string; to_time?: string;
+}): Promise<TenantAuditPage> {
+  const params = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => { if (value !== '' && value !== undefined) params.set(key, String(value)); });
+  return request(`/api/tenants/${tenantId}/audit-history?${params}`, tenantRequestOptions(tenantId));
+}
+
+export function getPlatformSummary(): Promise<Record<string, number>> {
+  return request('/api/platform/summary', adminRequestOptions);
+}
+
+export async function searchPlatformTenantAdminCandidates(query: string): Promise<UserSearchResult[]> {
+  if (query.trim().length < 2) return [];
+  const result = await request<{ items: UserSearchResult[] }>(`/api/platform/tenant-admin-candidates?q=${encodeURIComponent(query.trim())}`, adminRequestOptions);
+  return result.items;
+}
+
+export function recoverPlatformTenantAdmin(tenantId: number, userId: number) {
+  return request(`/api/platform/tenants/${tenantId}/recover-admin`, { ...adminRequestOptions, method: 'POST', body: JSON.stringify({ user_id: userId }) });
 }
 
 export function replaceTenantMemberRoles(
@@ -611,8 +640,8 @@ export function revokePlatformAdministrator(grantId: number): Promise<void> {
   });
 }
 
-export async function listPlatformTenants(query = '', page = 1): Promise<TenantSummary[]> {
-  const params = new URLSearchParams({ q: query, page: String(page), page_size: '50' });
+export async function listPlatformTenants(query = '', page = 1, pageSize = 50): Promise<TenantSummary[]> {
+  const params = new URLSearchParams({ q: query, page: String(page), page_size: String(pageSize) });
   const res = await request<TenantSummary[] | { items: TenantSummary[] }>(`/api/platform/tenants?${params}`, adminRequestOptions);
   return Array.isArray(res) ? res : res?.items ?? [];
 }
@@ -2526,19 +2555,35 @@ export function getAiTopCachedFixes(
 // ─── Phase 3 — credential CRUD + settings ────────────────────────────────
 
 /** List every saved AI provider credential. */
-export function listAiCredentials(signal?: AbortSignal): Promise<AiCredential[]> {
-  return request<AiCredential[]>(`/api/v1/ai/credentials`, { signal });
+export type ConfigurationScope = 'platform' | 'tenant';
+export const aiConfigurationBase = (scope: ConfigurationScope) => scope === 'platform' ? '/api/platform/configuration/ai' : '/api/v1/ai';
+export const lifecycleConfigurationBase = (scope: ConfigurationScope) => scope === 'platform' ? '/api/platform/configuration/lifecycle' : '/api/admin/lifecycle-providers';
+export interface EffectiveAiConfiguration {
+  source: 'PLATFORM_DEFAULT' | 'TENANT_OVERRIDE'; override_enabled: boolean;
+  feature_enabled: boolean; configured_providers: { provider_name: string; model: string; enabled: boolean; credential_present: boolean }[];
+}
+export function getEffectiveAiConfiguration(scope: ConfigurationScope, signal?: AbortSignal) {
+  return request<EffectiveAiConfiguration>(`${aiConfigurationBase(scope)}/effective-config`, { signal });
+}
+export function createTenantAiOverride() { return request(`${aiConfigurationBase('tenant')}/override`, { method: 'POST' }); }
+export function resetTenantAiOverride() { return requestVoid(`${aiConfigurationBase('tenant')}/override`, { method: 'DELETE' }); }
+export function resetLifecycleProviderOverride(key: string) {
+  return requestVoid(`${lifecycleConfigurationBase('tenant')}/${encodeURIComponent(key)}/override`, { method: 'DELETE' });
 }
 
-export function getAiCredential(id: number, signal?: AbortSignal): Promise<AiCredential> {
-  return request<AiCredential>(`/api/v1/ai/credentials/${id}`, { signal });
+export function listAiCredentials(signal?: AbortSignal, scope: ConfigurationScope = 'tenant'): Promise<AiCredential[]> {
+  return request<AiCredential[]>(`${aiConfigurationBase(scope)}/credentials`, { signal });
+}
+
+export function getAiCredential(id: number, signal?: AbortSignal, scope: ConfigurationScope = 'tenant'): Promise<AiCredential> {
+  return request<AiCredential>(`${aiConfigurationBase(scope)}/credentials/${id}`, { signal });
 }
 
 export function createAiCredential(
   body: AiCredentialCreateRequest,
-  signal?: AbortSignal,
+  signal?: AbortSignal, scope: ConfigurationScope = 'tenant',
 ): Promise<AiCredential> {
-  return request<AiCredential>(`/api/v1/ai/credentials`, {
+  return request<AiCredential>(`${aiConfigurationBase(scope)}/credentials`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
@@ -2549,9 +2594,9 @@ export function createAiCredential(
 export function updateAiCredential(
   id: number,
   body: AiCredentialUpdateRequest,
-  signal?: AbortSignal,
+  signal?: AbortSignal, scope: ConfigurationScope = 'tenant',
 ): Promise<AiCredential> {
-  return request<AiCredential>(`/api/v1/ai/credentials/${id}`, {
+  return request<AiCredential>(`${aiConfigurationBase(scope)}/credentials/${id}`, {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
@@ -2559,15 +2604,15 @@ export function updateAiCredential(
   });
 }
 
-export function deleteAiCredential(id: number, signal?: AbortSignal): Promise<void> {
-  return requestVoid(`/api/v1/ai/credentials/${id}`, { method: 'DELETE', signal });
+export function deleteAiCredential(id: number, signal?: AbortSignal, scope: ConfigurationScope = 'tenant'): Promise<void> {
+  return requestVoid(`${aiConfigurationBase(scope)}/credentials/${id}`, { method: 'DELETE', signal });
 }
 
 export function setAiCredentialDefault(
   id: number,
-  signal?: AbortSignal,
+  signal?: AbortSignal, scope: ConfigurationScope = 'tenant',
 ): Promise<AiCredential> {
-  return request<AiCredential>(`/api/v1/ai/credentials/${id}/set-default`, {
+  return request<AiCredential>(`${aiConfigurationBase(scope)}/credentials/${id}/set-default`, {
     method: 'PUT',
     signal,
   });
@@ -2575,9 +2620,9 @@ export function setAiCredentialDefault(
 
 export function setAiCredentialFallback(
   id: number,
-  signal?: AbortSignal,
+  signal?: AbortSignal, scope: ConfigurationScope = 'tenant',
 ): Promise<AiCredential> {
-  return request<AiCredential>(`/api/v1/ai/credentials/${id}/set-fallback`, {
+  return request<AiCredential>(`${aiConfigurationBase(scope)}/credentials/${id}/set-fallback`, {
     method: 'PUT',
     signal,
   });
@@ -2586,9 +2631,9 @@ export function setAiCredentialFallback(
 /** Test an unsaved credential — used by the AddProviderDialog before Save. */
 export function testAiCredentialUnsaved(
   body: AiTestConnectionRequest,
-  signal?: AbortSignal,
+  signal?: AbortSignal, scope: ConfigurationScope = 'tenant',
 ): Promise<AiConnectionTestResult> {
-  return request<AiConnectionTestResult>(`/api/v1/ai/credentials/test`, {
+  return request<AiConnectionTestResult>(`${aiConfigurationBase(scope)}/credentials/test`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
@@ -2599,48 +2644,48 @@ export function testAiCredentialUnsaved(
 /** Re-test a saved credential — used by the ProviderCard "Test" button. */
 export function testAiCredentialSaved(
   id: number,
-  signal?: AbortSignal,
+  signal?: AbortSignal, scope: ConfigurationScope = 'tenant',
 ): Promise<AiConnectionTestResult> {
-  return request<AiConnectionTestResult>(`/api/v1/ai/credentials/${id}/test`, {
+  return request<AiConnectionTestResult>(`${aiConfigurationBase(scope)}/credentials/${id}/test`, {
     method: 'POST',
     signal,
   });
 }
 
-export function listAiProviderModels(id: number, signal?: AbortSignal): Promise<AiProviderModel[]> {
-  return request<AiProviderModel[]>(`/api/v1/ai/credentials/${id}/models`, { signal });
+export function listAiProviderModels(id: number, signal?: AbortSignal, scope: ConfigurationScope = 'tenant'): Promise<AiProviderModel[]> {
+  return request<AiProviderModel[]>(`${aiConfigurationBase(scope)}/credentials/${id}/models`, { signal });
 }
 
-export function refreshAiProviderModels(id: number, signal?: AbortSignal): Promise<AiModelRefreshResult> {
-  return request<AiModelRefreshResult>(`/api/v1/ai/credentials/${id}/models/refresh`, {
+export function refreshAiProviderModels(id: number, signal?: AbortSignal, scope: ConfigurationScope = 'tenant'): Promise<AiModelRefreshResult> {
+  return request<AiModelRefreshResult>(`${aiConfigurationBase(scope)}/credentials/${id}/models/refresh`, {
     method: 'POST',
     signal,
   });
 }
 
-export function selectAiProviderModel(credentialId: number, modelId: number, signal?: AbortSignal): Promise<AiProviderModel> {
-  return request<AiProviderModel>(`/api/v1/ai/credentials/${credentialId}/models/${modelId}/select`, {
+export function selectAiProviderModel(credentialId: number, modelId: number, signal?: AbortSignal, scope: ConfigurationScope = 'tenant'): Promise<AiProviderModel> {
+  return request<AiProviderModel>(`${aiConfigurationBase(scope)}/credentials/${credentialId}/models/${modelId}/select`, {
     method: 'POST',
     signal,
   });
 }
 
-export function testAiProviderModel(credentialId: number, modelId: number, signal?: AbortSignal): Promise<AiModelTestResult> {
-  return request<AiModelTestResult>(`/api/v1/ai/credentials/${credentialId}/models/${modelId}/test`, {
+export function testAiProviderModel(credentialId: number, modelId: number, signal?: AbortSignal, scope: ConfigurationScope = 'tenant'): Promise<AiModelTestResult> {
+  return request<AiModelTestResult>(`${aiConfigurationBase(scope)}/credentials/${credentialId}/models/${modelId}/test`, {
     method: 'POST',
     signal,
   });
 }
 
-export function getAiCredentialSettings(signal?: AbortSignal): Promise<AiCredentialSettings> {
-  return request<AiCredentialSettings>(`/api/v1/ai/settings`, { signal });
+export function getAiCredentialSettings(signal?: AbortSignal, scope: ConfigurationScope = 'tenant'): Promise<AiCredentialSettings> {
+  return request<AiCredentialSettings>(`${aiConfigurationBase(scope)}/settings`, { signal });
 }
 
 export function updateAiCredentialSettings(
   body: AiCredentialSettingsUpdateRequest,
-  signal?: AbortSignal,
+  signal?: AbortSignal, scope: ConfigurationScope = 'tenant',
 ): Promise<AiCredentialSettings> {
-  return request<AiCredentialSettings>(`/api/v1/ai/settings`, {
+  return request<AiCredentialSettings>(`${aiConfigurationBase(scope)}/settings`, {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
@@ -2649,16 +2694,16 @@ export function updateAiCredentialSettings(
 }
 
 /** Provider/bootstrap catalog driving the unsaved AddProviderDialog only. */
-export function listAiProviderCatalog(signal?: AbortSignal): Promise<AiProviderCatalogEntry[]> {
-  return request<AiProviderCatalogEntry[]>(`/api/v1/ai/providers/available`, { signal });
+export function listAiProviderCatalog(signal?: AbortSignal, scope: ConfigurationScope = 'tenant'): Promise<AiProviderCatalogEntry[]> {
+  return request<AiProviderCatalogEntry[]>(`${aiConfigurationBase(scope)}/providers/available`, { signal });
 }
 
 export function getAiProviderCatalogEntry(
   name: string,
-  signal?: AbortSignal,
+  signal?: AbortSignal, scope: ConfigurationScope = 'tenant',
 ): Promise<AiProviderCatalogEntry> {
   return request<AiProviderCatalogEntry>(
-    `/api/v1/ai/providers/available/${encodeURIComponent(name)}`,
+    `${aiConfigurationBase(scope)}/providers/available/${encodeURIComponent(name)}`,
     { signal },
   );
 }
@@ -2766,16 +2811,16 @@ export function upsertRemediation(projectId: number, payload: any, signal?: Abor
 
 // ─── Lifecycle provider admin ────────────────────────────────────────────────
 
-export function listLifecycleProviders(signal?: AbortSignal): Promise<LifecycleProviderConfig[]> {
-  return request<LifecycleProviderConfig[]>('/api/admin/lifecycle-providers', { signal });
+export function listLifecycleProviders(signal?: AbortSignal, scope: ConfigurationScope = 'tenant'): Promise<LifecycleProviderConfig[]> {
+  return request<LifecycleProviderConfig[]>(`${lifecycleConfigurationBase(scope)}`, { signal });
 }
 
 export function updateLifecycleProvider(
   providerKey: string,
   body: LifecycleProviderUpdatePayload,
-  signal?: AbortSignal,
+  signal?: AbortSignal, scope: ConfigurationScope = 'tenant',
 ): Promise<LifecycleProviderConfig> {
-  return request<LifecycleProviderConfig>(`/api/admin/lifecycle-providers/${encodeURIComponent(providerKey)}`, {
+  return request<LifecycleProviderConfig>(`${lifecycleConfigurationBase(scope)}/${encodeURIComponent(providerKey)}`, {
     method: 'PUT',
     body: JSON.stringify(body),
     signal,
@@ -2785,10 +2830,10 @@ export function updateLifecycleProvider(
 export function setLifecycleProviderSecret(
   providerKey: string,
   body: { secret_name: string; secret_value: string },
-  signal?: AbortSignal,
+  signal?: AbortSignal, scope: ConfigurationScope = 'tenant',
 ): Promise<LifecycleProviderSecretResult> {
   return request<LifecycleProviderSecretResult>(
-    `/api/admin/lifecycle-providers/${encodeURIComponent(providerKey)}/secret`,
+    `${lifecycleConfigurationBase(scope)}/${encodeURIComponent(providerKey)}/secret`,
     {
       method: 'PUT',
       body: JSON.stringify(body),
@@ -2800,20 +2845,20 @@ export function setLifecycleProviderSecret(
 export function deleteLifecycleProviderSecret(
   providerKey: string,
   secretName: string,
-  signal?: AbortSignal,
+  signal?: AbortSignal, scope: ConfigurationScope = 'tenant',
 ): Promise<void> {
   return requestVoid(
-    `/api/admin/lifecycle-providers/${encodeURIComponent(providerKey)}/secret/${encodeURIComponent(secretName)}`,
+    `${lifecycleConfigurationBase(scope)}/${encodeURIComponent(providerKey)}/secret/${encodeURIComponent(secretName)}`,
     { method: 'DELETE', signal },
   );
 }
 
 export function testLifecycleProvider(
   providerKey: string,
-  signal?: AbortSignal,
+  signal?: AbortSignal, scope: ConfigurationScope = 'tenant',
 ): Promise<LifecycleProviderTestResult> {
   return request<LifecycleProviderTestResult>(
-    `/api/admin/lifecycle-providers/${encodeURIComponent(providerKey)}/test`,
+    `${lifecycleConfigurationBase(scope)}/${encodeURIComponent(providerKey)}/test`,
     { method: 'POST', signal },
     65_000,
   );
@@ -2821,10 +2866,10 @@ export function testLifecycleProvider(
 
 export function syncLifecycleProvider(
   providerKey: string,
-  signal?: AbortSignal,
+  signal?: AbortSignal, scope: ConfigurationScope = 'tenant',
 ): Promise<LifecycleProviderSyncResult> {
   return request<LifecycleProviderSyncResult>(
-    `/api/admin/lifecycle-providers/${encodeURIComponent(providerKey)}/sync`,
+    `${lifecycleConfigurationBase(scope)}/${encodeURIComponent(providerKey)}/sync`,
     { method: 'POST', signal },
     65_000,
   );

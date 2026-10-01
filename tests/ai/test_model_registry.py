@@ -253,13 +253,13 @@ async def test_discovery_metadata_is_sanitized_before_persistence(session_factor
 @pytest.mark.parametrize(
     ("method", "path", "expected"),
     [
-        ("GET", "/api/v1/ai/credentials/4/models", "dashboard:read"),
-        ("POST", "/api/v1/ai/credentials/4/models/refresh", "tenant:settings:update"),
-        ("POST", "/api/v1/ai/credentials/4/models/9/select", "tenant:settings:update"),
-        ("POST", "/api/v1/ai/credentials/4/models/9/test", "tenant:settings:update"),
+        ("GET", "/api/v1/ai/credentials/4/models", "tenant:ai:read"),
+        ("POST", "/api/v1/ai/credentials/4/models/refresh", "tenant:ai:test"),
+        ("POST", "/api/v1/ai/credentials/4/models/9/select", "tenant:ai:update"),
+        ("POST", "/api/v1/ai/credentials/4/models/9/test", "tenant:ai:test"),
     ],
 )
-def test_model_administration_uses_existing_settings_permission_boundary(method, path, expected):
+def test_model_administration_uses_scoped_ai_permission_boundary(method, path, expected):
     request = Request({"type": "http", "method": method, "path": path, "headers": []})
     assert permission_for_request(request) == expected
 

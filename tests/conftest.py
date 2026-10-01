@@ -195,7 +195,7 @@ def _seed_postgres_test_tenant(database_url: str) -> None:
 
 
 def _reset_authorization_catalog(database_url: str) -> None:
-    """Restore the immutable Phase 8 catalogue after test table truncation."""
+    """Restore the versioned catalogue through V2 after test truncation."""
     _assert_safe_test_database(database_url)
     engine = create_engine(database_url)
     migration_path = (
@@ -218,6 +218,17 @@ def _reset_authorization_catalog(database_url: str) -> None:
             connection.execute(text("DELETE FROM authorization_roles"))
             connection.execute(text("DELETE FROM authorization_permissions"))
             module._seed(connection)
+            v2_path = migration_path.with_name("064_platform_tenant_segregation_v2.py")
+            v2_spec = importlib.util.spec_from_file_location("_catalog_v2_migration", v2_path)
+            if v2_spec is None or v2_spec.loader is None:
+                raise RuntimeError("Unable to load V2 authorization seed")
+            v2_module = importlib.util.module_from_spec(v2_spec)
+            v2_spec.loader.exec_module(v2_module)
+            v2_module._seed(connection)
+            scoped_spec = importlib.util.spec_from_file_location("_configuration_permissions", migration_path.with_name("065_scoped_configuration.py"))
+            scoped_module = importlib.util.module_from_spec(scoped_spec)
+            scoped_spec.loader.exec_module(scoped_module)
+            scoped_module._permissions(connection)
     finally:
         engine.dispose()
 

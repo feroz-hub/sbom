@@ -10,6 +10,7 @@ import { LifecycleVendorRecordsPage } from './LifecycleVendorRecordsPage';
 
 const api = vi.hoisted(() => ({
   listLifecycleProviders: vi.fn(),
+  resetLifecycleProviderOverride: vi.fn(),
   updateLifecycleProvider: vi.fn(),
   setLifecycleProviderSecret: vi.fn(),
   deleteLifecycleProviderSecret: vi.fn(),
@@ -27,6 +28,8 @@ vi.mock('@/lib/api', () => api);
 
 const provider = {
   provider_key: 'openeox',
+  override_enabled: true,
+  source: 'TENANT_OVERRIDE' as const,
   display_name: 'OpenEoX',
   provider_type: 'openeox',
   enabled: false,
@@ -62,6 +65,28 @@ function renderWithProviders(ui: React.ReactElement) {
 }
 
 describe('LifecycleProviderSettings', () => {
+  it('inherited provider offers an explicit tenant override and configured credential marker', async () => {
+    api.listLifecycleProviders.mockResolvedValue([{ ...provider, override_enabled: false, source: 'PLATFORM_DEFAULT', has_secret: true }]);
+    renderWithProviders(<LifecycleProviderSettings tenantName="Olympus" />);
+    expect(await screen.findByRole('button', { name: 'Override for Olympus' })).toBeInTheDocument();
+    expect(screen.getByText('Credential managed by platform')).toBeInTheDocument();
+    expect(screen.getByLabelText('Toggle OpenEoX')).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Reset to Platform Default' })).not.toBeInTheDocument();
+  });
+
+  it('reset uses the existing provider-specific override endpoint', async () => {
+    api.resetLifecycleProviderOverride.mockResolvedValue(undefined);
+    renderWithProviders(<LifecycleProviderSettings tenantName="Olympus" />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Reset to Platform Default' }));
+    await waitFor(() => expect(api.resetLifecycleProviderOverride).toHaveBeenCalledWith('openeox', expect.anything()));
+  });
+
+  it('platform provider operations explicitly use platform scope', async () => {
+    renderWithProviders(<LifecycleProviderSettings scope="platform" scopeKey="platform" />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Test' }));
+    await waitFor(() => expect(api.testLifecycleProvider).toHaveBeenCalledWith('openeox', undefined, 'platform'));
+    expect(screen.queryByRole('button', { name: 'Reset to Platform Default' })).not.toBeInTheDocument();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     api.listLifecycleProviders.mockResolvedValue([provider]);
@@ -92,7 +117,7 @@ describe('LifecycleProviderSettings', () => {
     const checkbox = await screen.findByLabelText('Toggle OpenEoX');
     await userEvent.click(checkbox);
     await waitFor(() => {
-      expect(api.updateLifecycleProvider).toHaveBeenCalledWith('openeox', { enabled: true });
+      expect(api.updateLifecycleProvider).toHaveBeenCalledWith('openeox', { enabled: true }, undefined, 'tenant');
     });
   });
 

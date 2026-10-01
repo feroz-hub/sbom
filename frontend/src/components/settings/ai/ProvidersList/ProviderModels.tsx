@@ -1,6 +1,7 @@
 'use client';
 
 import { FlaskConical, RefreshCw } from 'lucide-react';
+import { useAiConfigurationScope } from '../ConfigurationScope';
 import {
   useAiProviderModels,
   useRefreshAiProviderModels,
@@ -28,6 +29,7 @@ function capability(label: string, value: boolean | null) {
 }
 
 export function ProviderModels({ credentialId, providerName, enabled }: Props) {
+  const { canTest } = useAiConfigurationScope();
   const models = useAiProviderModels(credentialId);
   const refresh = useRefreshAiProviderModels(credentialId);
   const select = useSelectAiProviderModel(credentialId);
@@ -39,7 +41,7 @@ export function ProviderModels({ credentialId, providerName, enabled }: Props) {
         <h4 className="text-xs font-semibold uppercase tracking-wide text-hcl-muted">Available models</h4>
         <button
           type="button"
-          disabled={!enabled || refresh.isPending}
+          disabled={!canTest || !enabled || refresh.isPending}
           onClick={() => refresh.mutate()}
           className="inline-flex items-center gap-1 rounded-md border border-border-subtle px-2 py-1 text-xs text-hcl-navy hover:bg-surface-muted disabled:opacity-50"
         >
@@ -98,7 +100,7 @@ export function ProviderModels({ credentialId, providerName, enabled }: Props) {
                   </td>
                   <td className="py-2">
                     <div className="flex flex-wrap gap-1">
-                      <button type="button" disabled={test.isPending} onClick={() => test.mutate(model.id)} className="inline-flex items-center gap-1 rounded border border-border-subtle px-1.5 py-1 hover:bg-surface-muted disabled:opacity-50">
+                      <button type="button" disabled={!canTest || test.isPending} onClick={() => test.mutate(model.id)} className="inline-flex items-center gap-1 rounded border border-border-subtle px-1.5 py-1 hover:bg-surface-muted disabled:opacity-50">
                         <FlaskConical className="h-3 w-3" aria-hidden /> Test
                       </button>
                       <button type="button" disabled={model.is_selected || model.is_available !== true || select.isPending} onClick={() => select.mutate(model.id)} className="rounded bg-primary px-1.5 py-1 font-medium text-white disabled:opacity-40">Set active</button>

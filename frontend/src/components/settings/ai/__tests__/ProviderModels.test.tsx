@@ -58,14 +58,14 @@ describe('ProviderModels', () => {
     expect(screen.queryByText(/JSON:/)).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Set active' }));
-    await waitFor(() => expect(selectAiProviderModel).toHaveBeenCalledWith(3, 7));
+    await waitFor(() => expect(selectAiProviderModel).toHaveBeenCalledWith(3, 7, undefined, 'tenant'));
   });
 
   it('refreshes without selecting a newly discovered model', async () => {
     renderWithProviders(<ProviderModels credentialId={3} providerName="Gemini" enabled />);
     await screen.findByText('gemini-new');
     await userEvent.click(screen.getByRole('button', { name: /refresh models/i }));
-    await waitFor(() => expect(refreshAiProviderModels).toHaveBeenCalledWith(3));
+    await waitFor(() => expect(refreshAiProviderModels).toHaveBeenCalledWith(3, undefined, 'tenant'));
     expect(selectAiProviderModel).not.toHaveBeenCalled();
   });
 });

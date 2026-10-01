@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils';
 import { dashboardDrilldownUrl } from '@/lib/dashboardScopeUrl';
 import type { DashboardFilterScope } from '@/lib/api';
 import type { PrimaryAction } from '@/types';
+import { useAuth } from '@/hooks/useAuth';
 
 interface QuickActionsV2Props {
   /** Server-decided primary action, from `/dashboard/posture`. */
@@ -84,6 +85,8 @@ const linkBase = cn(
  * Mapping locked in `docs/dashboard-redesign.md` §4.
  */
 export function QuickActionsV2({ primaryAction = 'upload', scope }: QuickActionsV2Props) {
+  const { hasPermission } = useAuth();
+  const allowed = (key: ActionConfig['key']) => hasPermission(key === 'upload' ? 'sbom:upload' : key === 'projects' ? 'project:read' : 'analysis:read');
   const primary = ACTIONS[primaryAction] ?? ACTIONS.upload;
   // Outline actions = the four canonical secondary aids, minus whichever
   // one is currently primary so we don't duplicate it.
@@ -98,14 +101,14 @@ export function QuickActionsV2({ primaryAction = 'upload', scope }: QuickActions
 
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-      <Link
+      {allowed(primary.key) && <Link
         href={dashboardDrilldownUrl(primary.href, scope)}
         className={cn(linkBase, 'bg-primary text-white shadow-sm hover:bg-hcl-dark')}
       >
         <primary.Icon className="h-4 w-4" aria-hidden />
         {primary.label}
-      </Link>
-      {secondaryKeys.map((key) => {
+      </Link>}
+      {secondaryKeys.filter(allowed).map((key) => {
         const a = ACTIONS[key];
         const dashed = key === 'projects';
         return (

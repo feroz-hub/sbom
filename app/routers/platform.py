@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
@@ -18,7 +18,7 @@ from ..core.identity_states import (
 from ..core.native_identity import AccountStatus
 from ..core.security import invalidate_user_contexts, require_platform_permission
 from ..db import get_db
-from ..models import AuthorizationAuditLog, IAMUser, Tenant, TenantUser
+from ..models import AuthorizationAuditLog, IAMUser, PlatformUserRole, Tenant, TenantUser
 from ..schemas_platform import (
     PlatformAdministratorGrantRequest,
     PlatformAdministratorGrantResponse,
@@ -31,6 +31,8 @@ from ..schemas_platform import (
     PlatformUserStatusUpdate,
     PlatformUserSummary,
     TenantMembershipBrief,
+    TenantUserCandidate,
+    TenantUserCandidateResponse,
     UserSearchResponse,
     UserSearchResult,
 )
@@ -197,6 +199,95 @@ def _platform_tenant_dict(db: Session, tenant: Tenant) -> dict:
             )
     item["current_administrators"] = current_administrators
     return item
+
+
+@router.get("/summary")
+def platform_summary(
+    context: CurrentContext = Depends(require_platform_permission("platform:tenant:read")),
+    db: Session = Depends(get_db),
+):
+    from ..services.tenant_service import _active_tenant_admin_count
+
+    # Control-plane aggregates only: never retrieve SBOM or investigation data.
+    statuses = dict(db.query(Tenant.status, func.count(Tenant.id)).group_by(Tenant.status).all())
+    tenant_ids = db.scalars(select(Tenant.id)).all()
+    result = {
+        "total_tenants": sum(statuses.values()),
+        "active_tenants": statuses.get("ACTIVE", 0),
+        "disabled_tenants": statuses.get("DISABLED", 0),
+        "pending_tenants": statuses.get("PENDING", 0),
+        "total_memberships": db.query(func.count(TenantUser.id)).scalar() or 0,
+        "tenants_without_admin": sum(_active_tenant_admin_count(db, tid) == 0 for tid in tenant_ids),
+    }
+    if context.has_permission("platform:administrator:read"):
+        result["platform_admins"] = db.query(func.count(PlatformUserRole.id)).join(IAMUser, IAMUser.id == PlatformUserRole.user_id).filter(
+            PlatformUserRole.status == "ACTIVE", IAMUser.status == "ACTIVE", verification_complete_clause(),
+        ).scalar() or 0
+    return result
+
+
+@router.get("/tenant-admin-candidates", response_model=TenantUserCandidateResponse)
+def tenant_admin_candidates(
+    q: str = Query(min_length=2, max_length=200),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=50),
+    _context: CurrentContext = Depends(require_platform_permission("platform:tenant:bootstrap_admin")),
+    db: Session = Depends(get_db),
+):
+    """Purpose-limited initial/recovery administrator lookup, not a directory."""
+    if len(q.strip()) < 2:
+        raise HTTPException(422, "Search by name or email using at least 2 characters")
+    pattern = f"%{platform_service._escape_search(q.strip())}%"
+    users = db.scalars(select(IAMUser).where(
+        IAMUser.status == "ACTIVE", verification_complete_clause(),
+        or_(*(column.ilike(pattern, escape="\\") for column in
+              (IAMUser.email, IAMUser.display_name, IAMUser.first_name, IAMUser.last_name))),
+    ).order_by(IAMUser.display_name, IAMUser.id).offset((page - 1) * page_size).limit(page_size))
+    return TenantUserCandidateResponse(items=[TenantUserCandidate(
+        id=user.id, email=user.email, display_name=user.display_name, status=user.status,
+        email_verified=bool(user.email_verified), verification_required=bool(user.verification_required),
+        providers=ums.providers(db, user),
+    ) for user in users])
+
+
+class RecoverTenantAdmin(BaseModel):
+    user_id: int = Field(ge=1)
+
+
+@router.post("/tenants/{tenant_id}/recover-admin")
+def recover_tenant_admin(
+    tenant_id: int, payload: RecoverTenantAdmin, request: Request,
+    context: CurrentContext = Depends(require_platform_permission("platform:tenant:recover_admin")),
+    db: Session = Depends(get_db),
+):
+    """Dedicated governance: grant TENANT_ADMIN only, never edit generic users."""
+    from datetime import UTC
+
+    from ..services import tenant_service
+
+    tenant = db.scalar(select(Tenant).where(Tenant.id == tenant_id).with_for_update())
+    if tenant is None or tenant.status not in {"ACTIVE", "PENDING"}:
+        raise HTTPException(404, "Active or pending tenant not found")
+    user = db.scalar(select(IAMUser).where(IAMUser.id == payload.user_id).with_for_update())
+    if user is None or user.status != "ACTIVE" or not verification_complete(user):
+        raise HTTPException(422, "Select an active, eligible Tenant Administrator")
+    membership = db.scalar(select(TenantUser).where(TenantUser.tenant_id == tenant_id, TenantUser.user_id == user.id).with_for_update())
+    if membership is None:
+        membership, _ = tenant_service.add_user_to_tenant(db, tenant_id, user_id=user.id,
+            role="TENANT_ADMIN", actor_user_id=context.user_id, assignment_source="PLATFORM_ADMIN", request=request)
+    else:
+        if membership.status != "ACTIVE":
+            raise HTTPException(409, "Select an active member or a new eligible account; existing membership is disabled")
+        if "TENANT_ADMIN" not in tras.effective_role_codes(db, membership):
+            raise HTTPException(409, "Recovery requires a new administrator account, not generic editing of an existing membership")
+    if tenant.status == "PENDING":
+        tenant.status = "ACTIVE"
+        tenant.updated_at = datetime.now(UTC)
+    audit_service.write_authorization_audit(db, action="TENANT_ADMIN_RECOVERED", context=context,
+        tenant_id=tenant_id, target_user_id=user.id, target_membership_id=membership.id, request=request)
+    db.commit()
+    invalidate_user_contexts(user.id)
+    return {"tenant_id": tenant_id, "administrator": {"display_name": user.display_name, "email": user.email}}
 
 
 @router.get("/users/search", response_model=UserSearchResponse)
@@ -688,7 +779,7 @@ def list_platform_tenants(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=100),
     _context: CurrentContext = Depends(
-        require_platform_permission("platform:tenant:create")
+        require_platform_permission("platform:tenant:read")
     ),
     db: Session = Depends(get_db),
 ) -> list[dict]:
@@ -706,7 +797,7 @@ def list_platform_tenants(
 @router.get("/tenants/{tenant_id}")
 def get_platform_tenant(
     tenant_id: int,
-    _context: CurrentContext = Depends(require_platform_permission("platform:tenant:create")),
+    _context: CurrentContext = Depends(require_platform_permission("platform:tenant:read")),
     db: Session = Depends(get_db),
 ) -> dict:
     tenant = db.get(Tenant, tenant_id)
@@ -721,7 +812,7 @@ def update_tenant_status(
     payload: TenantStatusUpdate,
     request: Request,
     context: CurrentContext = Depends(
-        require_platform_permission("platform:admin")
+        require_platform_permission("platform:tenant:update_status")
     ),
     db: Session = Depends(get_db),
 ) -> dict:
@@ -812,7 +903,7 @@ def _security_action(db, context, user_id, action):
 
 
 @router.get("/iam/operations")
-def iam_operations(context: CurrentContext = Depends(require_platform_permission("platform:user:read")), db: Session = Depends(get_db)):
+def iam_operations(context: CurrentContext = Depends(require_platform_permission("platform:health:read")), db: Session = Depends(get_db)):
     from ..services.native_operations import delivery_health, readiness
     return {"delivery": delivery_health(db), "readiness": readiness(db)}
 

@@ -17,6 +17,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, selectinload
 
+from ..authorization_catalog_seed_v2 import PLATFORM_ADMIN_PERMISSIONS_V2
 from ..core.context import CurrentContext
 from ..core.identity_states import IdentityErrorCode
 from ..core.permissions import (
@@ -98,10 +99,9 @@ def database_permissions_for_roles(
             AuthorizationRole.code.in_(normalized),
             AuthorizationRole.status == "ACTIVE",
             AuthorizationPermission.status == "ACTIVE",
-            or_(
-                AuthorizationRole.scope == AuthorizationPermission.scope,
-                AuthorizationRole.code == "PLATFORM_ADMIN",
-            ),
+            AuthorizationRole.scope == AuthorizationPermission.scope,
+            or_(AuthorizationRole.code != "PLATFORM_ADMIN",
+                AuthorizationPermission.code.in_(PLATFORM_ADMIN_PERMISSIONS_V2)),
         )
         .distinct()
     ).scalars()
@@ -122,6 +122,12 @@ def resolve_permissions_for_roles(
     if settings.authorization_catalog_mode == "LEGACY":
         return legacy
     try:
+        if "PLATFORM_ADMIN" in normalized:
+            # V1's broad grant cannot serve as a partial V2 catalogue. Until
+            # migration installs the protected V2 boundary, fail closed.
+            installed = database_permissions_for_roles(db, {"PLATFORM_ADMIN"})
+            if not PLATFORM_ADMIN_PERMISSIONS_V2.issubset(installed):
+                return frozenset()
         database = database_permissions_for_roles(db, normalized)
         found_roles = set(
             db.execute(
@@ -172,7 +178,7 @@ def resolve_permissions_for_roles(
             detail="CATALOG_RESOLUTION_FAILED",
             request=request,
         )
-        if settings.authorization_catalog_fail_closed:
+        if settings.authorization_catalog_mode == "DATABASE" or settings.authorization_catalog_fail_closed:
             return frozenset()
         return legacy
 
@@ -314,14 +320,14 @@ def replace_role_permissions(
             409,
         )
     cross_scope = sorted(code for code, permission in by_code.items() if permission.scope != role.scope)
-    # The legacy PLATFORM_ADMIN role intentionally contains tenant permissions
-    # to support its separately audited cross-tenant administrative override.
-    if cross_scope and role.code != "PLATFORM_ADMIN":
+    if cross_scope:
         raise CatalogProblem(
             str(IdentityErrorCode.ROLE_PERMISSION_SCOPE_MISMATCH),
             f"Permissions outside the role scope: {', '.join(cross_scope)}",
             409,
         )
+    if role.code == "PLATFORM_ADMIN" and set(normalized) - PLATFORM_ADMIN_PERMISSIONS_V2:
+        raise CatalogProblem("PLATFORM_CONTROL_PLANE_ONLY", "Platform Admin may only hold control-plane permissions.", 409)
     protected = PROTECTED_ROLE_PERMISSIONS.get(role.code, frozenset())
     removed_protected = sorted(set(protected) - set(normalized))
     if removed_protected:
