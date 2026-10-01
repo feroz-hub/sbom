@@ -205,8 +205,9 @@ def test_T21_same_family_candidates_with_evidence__FR_SCA_013(client, seeded):
     assert top["source_type"] == "TENANT_OBSERVED"
     assert top["evaluation"]["fix_coverage"]["fixed"] == ["CVE-2021-44228"]
     assert {"FOUND_IN_N_ACTIVE_TENANT_SBOMS", "USED_BY_N_TENANT_PRODUCTS"} <= {r["code"] for r in top["reasons"]}
-    # No candidate can be represented as an approved replacement yet.
-    assert all(c["approved_replacement"] is False and c["confidence"] == "NOT_EVALUATED" for c in candidates["items"])
+    # No candidate is an approved replacement before human review; confidence is set from Step 7.
+    assert all(c["approved_replacement"] is False for c in candidates["items"])
+    assert {c["confidence"] for c in candidates["items"]} <= {"HIGH", "MEDIUM", "LOW", "INSUFFICIENT_EVIDENCE"}
 
 
 def test_other_tenants_versions_are_never_candidates__FR_SCA_023(client, seeded):
