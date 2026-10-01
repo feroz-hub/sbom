@@ -4,7 +4,37 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
 import { NativeAuthForm } from './NativeAuthForm';
 vi.mock('./MicrosoftSignIn', () => ({ MicrosoftSignIn: () => null }));
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
+const { replace } = vi.hoisted(() => ({ replace: vi.fn() }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ replace }) }));
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.clearAllMocks(); window.history.replaceState(null, '', '/'); });
+
+it('redirects successful activation to login with the email and removes the invitation token', async () => {
+  window.history.replaceState(null, '', '/activate-account#token=invitation-token');
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ success: true, email: 'user+invite@example.test' })));
+  render(<NativeAuthForm activation />);
+  fireEvent.change(screen.getByLabelText('Password', { exact: true }), { target: { value: 'new-password-123' } });
+  fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: 'new-password-123' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Activate account' }));
+  await waitFor(() => expect(replace).toHaveBeenCalledWith('/native-sign-in?email=user%2Binvite%40example.test&activated=1'));
+  expect(window.location.hash).toBe('');
+});
+
+it('prefills the activated email while leaving the password empty', () => {
+  render(<NativeAuthForm initialEmail="user@example.test" activated />);
+  expect(screen.getByRole('textbox', { name: 'Email address' })).toHaveValue('user@example.test');
+  expect(screen.getByLabelText('Password', { exact: true })).toHaveValue('');
+  expect(screen.getByRole('status')).toHaveTextContent('Account activated. Sign in with your new password.');
+});
+
+it('keeps failed activation on the form', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({}, { status: 400 })));
+  render(<NativeAuthForm activation />);
+  fireEvent.change(screen.getByLabelText('Password', { exact: true }), { target: { value: 'new-password-123' } });
+  fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: 'new-password-123' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Activate account' }));
+  await screen.findByText(/Unable to activate account/);
+  expect(replace).not.toHaveBeenCalled();
+});
 
 it('keeps credentials accessible and lets users reveal only the entered password', async () => {
   const { container } = render(<NativeAuthForm />);

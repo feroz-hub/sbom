@@ -1019,6 +1019,7 @@ def start_process(name: str, command: list[str], env: dict[str, str], cwd: Path 
         os.close(fd)
     if ACTIVE_RUNTIME:
         try:
+            ACTIVE_RUNTIME.processes[process.pid] = process
             ACTIVE_RUNTIME.register(name, process.pid, {"API": DEV_API_PORT, "Frontend": DEV_FRONTEND_PORT}.get(name))
         except BaseException:
             # This handle was just spawned here, even if persistence failed.

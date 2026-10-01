@@ -76,15 +76,19 @@ def login(payload: Login, response: Response, request: Request, db: Session = De
 
 
 @router.post("/auth/native/activate")
-def activate(payload: Activation, request: Request, db: Session = Depends(get_db)):
+def activate(payload: Activation, request: Request, response: Response, db: Session = Depends(get_db)):
     abuse.check(request, "activation", payload.token)
     try:
-        auth.activate(db, payload.token, payload.password)
+        user = auth.activate(db, payload.token, payload.password)
+        email = db.scalar(select(UserIdentity.provider_identifier).where(
+            UserIdentity.user_id == user.id, UserIdentity.provider_type == "NATIVE"
+        ))
         db.commit()
     except InvalidAccountActionToken:
         db.rollback()
         raise HTTPException(400, "Activation link is invalid or unavailable") from None
-    return {"status": "ACTIVE"}
+    response.headers["Cache-Control"] = "no-store"
+    return {"status": "ACTIVE", "email": email}
 
 
 def _create(payload, context, db):

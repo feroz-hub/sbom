@@ -97,6 +97,30 @@ def test_owned_group_gracefully_stopped(monkeypatch, tmp_path):
     assert signals == [(100, lifecycle.signal.SIGTERM)]
 
 
+def test_shutdown_reaps_exited_child_before_inspection(monkeypatch, tmp_path):
+    runtime = lifecycle.Runtime(tmp_path)
+    record = identity()
+    state(runtime, {"API": record})
+    status = {"alive": True, "reaped": False}
+    def inspect(pid):
+        if status["alive"]:
+            return record
+        if not status["reaped"]:
+            raise lifecycle.OwnershipError("Exited child not reaped")
+        return None
+    def poll():
+        if not status["alive"]:
+            status["reaped"] = True
+            return 0
+        return None
+    runtime.processes[100] = SimpleNamespace(poll=poll)
+    monkeypatch.setattr(lifecycle, "process_info", inspect)
+    monkeypatch.setattr(lifecycle.os, "killpg", lambda *args: status.update(alive=False))
+    assert runtime.stop_services(lambda *args: None)
+    assert status["reaped"]
+    assert not runtime.path.exists()
+
+
 def test_owned_surviving_member_allows_orphan_group_cleanup(monkeypatch, tmp_path):
     runtime = lifecycle.Runtime(tmp_path)
     child = identity(101, pgid=100, sid=100)
@@ -362,6 +386,40 @@ def test_npm_env_to_node_exec_retains_ownership(tmp_path):
     recorded = identity(exe='/usr/bin/env', cwd=str(tmp_path / 'frontend'))
     current = {**recorded, 'exe': '/opt/node/bin/node', 'ppid': 1}
     assert lifecycle.matches(recorded, current)
+
+
+def test_macos_npm_exec_without_cwd_can_be_stopped(monkeypatch, tmp_path):
+    monkeypatch.setattr(lifecycle.sys, 'platform', 'darwin')
+    recorded = identity(exe='/usr/bin/env')
+    current = {100: {**recorded, 'exe': '/opt/node/bin/node', 'ppid': 1}}
+    monkeypatch.setattr(lifecycle, 'process_info', current.get)
+    runtime = lifecycle.Runtime(tmp_path)
+    assert runtime.service_status(recorded) == 'RUNNING'
+    signals = []
+    def terminate(pid, sig):
+        signals.append((pid, sig))
+        current.clear()
+    monkeypatch.setattr(lifecycle.os, 'killpg', terminate)
+    assert runtime.terminate(recorded)
+    assert signals == [(100, lifecycle.signal.SIGTERM)]
+
+
+@pytest.mark.parametrize('platform', ['darwin', 'linux'])
+@pytest.mark.parametrize('changed', [
+    {'pid': 200}, {'birth': 'reused-pid'}, {'uid': 2000}, {'pgid': 200},
+    {'sid': 200}, {'cwd': '/another/repository'}, {'exe': '/usr/bin/python3'},
+])
+def test_npm_exec_without_cwd_rejects_unrelated_identity(monkeypatch, platform, changed):
+    monkeypatch.setattr(lifecycle.sys, 'platform', platform)
+    recorded = identity(exe='/usr/bin/env')
+    current = {**recorded, 'exe': '/opt/node/bin/node', **changed}
+    assert not lifecycle.matches(recorded, current)
+
+
+def test_linux_npm_exec_still_requires_cwd(monkeypatch):
+    monkeypatch.setattr(lifecycle.sys, 'platform', 'linux')
+    recorded = identity(exe='/usr/bin/env')
+    assert not lifecycle.matches(recorded, {**recorded, 'exe': '/opt/node/bin/node'})
 
 
 @pytest.mark.parametrize('changed', [

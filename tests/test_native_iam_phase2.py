@@ -554,6 +554,7 @@ def test_http_activation_login_and_shared_context():
     with TestClient(api) as client:
         activated = client.post("/api/auth/native/activate", json={"token": issued.raw_token, "password": PASSWORD})
         assert activated.status_code == 200, activated.text
+        assert activated.json() == {"status": "ACTIVE", "email": "john@example.test"}
         login = client.post("/api/auth/native/login", json={"email": "john@example.test", "password": PASSWORD})
         assert login.status_code == 200, login.text
         assert login.headers["cache-control"] == "no-store"

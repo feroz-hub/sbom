@@ -101,7 +101,11 @@ def matches(record: dict, current: dict | None) -> bool:
     npm_exec = bool(
         current and Path(record.get("exe", "")).name == "env"
         and Path(current.get("exe", "")).name in {"node", "nodejs"}
-        and all(key in record and record[key] == current.get(key) for key in ("uid", "pgid", "sid", "cwd"))
+        and all(key in record and record[key] == current.get(key) for key in ("uid", "pgid", "sid"))
+        # libproc does not supply cwd on macOS. Keep requiring it elsewhere,
+        # and compare it whenever either identity includes it.
+        and ((sys.platform == "darwin" and "cwd" not in record and "cwd" not in current)
+             or ("cwd" in record and record["cwd"] == current.get("cwd")))
     )
     return bool(current and all(record.get(key) == current.get(key) for key in ("pid", "birth"))
                 and record.get("birth") and record.get("exe")
@@ -184,6 +188,7 @@ class Runtime:
         self.stop_path = self.root / ".dev-runtime.stop"
         self.lock = None
         self.state = None
+        self.processes: dict[int, subprocess.Popen] = {}
 
     def acquire(self) -> bool:
         # Keep this inode permanently. Unlinking a lock allows two independent
@@ -265,6 +270,11 @@ class Runtime:
 
     def service_status(self, record: dict) -> str:
         try:
+            # Reap children spawned by this launcher before inspecting them.
+            # macOS libproc cannot inspect an exited, unreaped child, while
+            # kill(pid, 0) still succeeds and would otherwise imply UNKNOWN.
+            if child := self.processes.get(record["pid"]):
+                child.poll()
             current = process_info(record["pid"])
             if matches(record, current):
                 return "RUNNING"

@@ -29,9 +29,10 @@ describe('native BFF', () => {
     expect(await (await POST(request(), context())).text()).not.toContain('private password');
   });
   it('activation does not create a session', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ status: 'ACTIVE' })));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ status: 'ACTIVE', email: 'a@b.test', access_token: 'must-not-forward' })));
     const response = await POST(request(), context('activate'));
     expect(response.status).toBe(200); expect(createSession).not.toHaveBeenCalled();
+    expect(await response.json()).toEqual({ success: true, email: 'a@b.test' });
   });
 });
 it('forced login grants no normal BFF session', async () => {

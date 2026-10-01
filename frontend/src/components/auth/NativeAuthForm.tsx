@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { FormEvent, useState } from 'react';
 import { Mail } from 'lucide-react';
 import { Input } from '@/components/ui/Input';
@@ -8,8 +9,9 @@ import { NativeAuthLayout } from './NativeAuthLayout';
 import { PasswordField } from './PasswordField';
 import { MicrosoftSignIn } from './MicrosoftSignIn';
 
-export function NativeAuthForm({ activation = false }: { activation?: boolean }) {
-  const [message, setMessage] = useState('');
+export function NativeAuthForm({ activation = false, initialEmail = '', activated = false }: { activation?: boolean; initialEmail?: string; activated?: boolean }) {
+  const router = useRouter();
+  const [message, setMessage] = useState(activated ? 'Account activated. Sign in with your new password.' : '');
   const [busy, setBusy] = useState(false);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -29,7 +31,7 @@ export function NativeAuthForm({ activation = false }: { activation?: boolean })
       if (!response.ok) { setMessage(activation ? 'Unable to activate account. Check your invitation link and password requirements.' : response.status === 401 ? 'The email address or password you entered is incorrect.' : 'Unable to sign in. Please try again later or contact your administrator.'); return; }
       if (activation) {
         window.history.replaceState(null, '', window.location.pathname);
-        setMessage('Account activated. You can now sign in.');
+        router.replace(`/native-sign-in?${new URLSearchParams({ email: data.email, activated: '1' })}`);
       } else window.location.assign(data.password_change_required ? '/change-password?forced=1' : '/');
     } catch { setMessage('Unable to reach the authentication service.'); }
     finally { setBusy(false); }
@@ -40,7 +42,7 @@ export function NativeAuthForm({ activation = false }: { activation?: boolean })
     <h1 className="mt-4 text-3xl font-semibold tracking-tight">{activation ? 'Activate account' : 'Welcome back'}</h1>
     <p className="mb-8 mt-3 text-sm leading-6 text-hcl-muted">{activation ? 'Set a password of at least 12 characters. Your invitation is valid for five hours.' : 'Sign in to continue to your secure SBOM workspace.'}</p>
     <form onSubmit={submit} className="space-y-5" aria-busy={busy}>
-      {!activation && <div className="relative"><Input label="Email address" className="h-12 pl-10" name="email" type="email" placeholder="Enter your email address" autoComplete="username" required /><Mail aria-hidden="true" className="pointer-events-none absolute bottom-4 left-3 h-4 w-4 text-hcl-muted" /></div>}
+      {!activation && <div className="relative"><Input label="Email address" className="h-12 pl-10" name="email" type="email" defaultValue={initialEmail} placeholder="Enter your email address" autoComplete="username" required /><Mail aria-hidden="true" className="pointer-events-none absolute bottom-4 left-3 h-4 w-4 text-hcl-muted" /></div>}
       <div className="relative">{!activation && <Link className="absolute right-0 top-0 text-xs font-medium text-link hover:underline" href="/forgot-password">Forgot password?</Link>}<PasswordField label="Password" name="password" placeholder="Enter your password" autoComplete={activation ? 'new-password' : 'current-password'} minLength={activation ? 12 : 1} required /></div>
       {activation && <PasswordField label="Confirm password" name="confirm" autoComplete="new-password" required />}
       {message && <div role="status" className="rounded-lg border border-border bg-surface-muted p-4 text-sm leading-6">{message}</div>}

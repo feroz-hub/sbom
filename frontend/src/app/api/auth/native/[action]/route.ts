@@ -20,6 +20,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ ac
     });
     // Never forward validation input, tokens, or upstream diagnostics to the browser.
     if (!upstream.ok) return NextResponse.json({ detail: action === 'login' ? 'Invalid email or password' : 'Password operation failed. Check your credential, link, and password requirements.' }, { status: upstream.status, headers: { 'Cache-Control': 'no-store' } });
+    if (action === 'activate') {
+      const data = await upstream.json();
+      if (typeof data.email !== 'string' || !data.email) throw new Error('Invalid response');
+      return NextResponse.json({ success: true, email: data.email }, { headers: { 'Cache-Control': 'no-store' } });
+    }
     const response = NextResponse.json({ success: true }, { headers: { 'Cache-Control': 'no-store' } });
     if (action === 'login') {
       const data = await upstream.json();
