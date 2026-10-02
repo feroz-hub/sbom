@@ -1967,3 +1967,5 @@ export interface VexInvestigationDecision {
   fixed_version?: string;
   evidence_url?: string;
 }
+
+export * from './componentAdvisor';

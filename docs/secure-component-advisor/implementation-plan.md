@@ -16,8 +16,8 @@ Branch: `feat/secure-component-advisor`. Test ids T1…T45 are the prompt §10 m
 | 6 | Alternative discovery & compatibility | ✅ 2026-10-01 |
 | 7 | History, scoring, confidence, freshness | ✅ 2026-10-01 |
 | 8 | Human review, audit, permissions | ✅ 2026-10-02 |
-| 9 | Frontend | ⏳ next |
-| 10 | Tests, performance, observability, analytics, docs | ☐ |
+| 9 | Frontend | ✅ 2026-10-02 |
+| 10 | Tests, performance, observability, analytics, docs | ⏳ next |
 
 ## Decisions (approved 2026-10-01)
 
@@ -345,6 +345,50 @@ Decisions / assumptions:
 - No separation of duties: the same user may RECOMMEND and ACCEPT. Spec §9 makes acceptance "policy dependent";
   open item.
 - Export endpoints do not exist yet, so NFR-SCA-001's "export" isolation is not applicable until one is added.
+
+## Step 9 — Frontend Workflow, Accessibility and Degraded States
+
+Requirements: FR-SCA-002, FR-SCA-006..010, FR-SCA-018..021, NFR-SCA-008 · US-SCA-01..14.
+
+Delivered (Next.js 16 App Router, existing design system, hand-written API client):
+- `app/component-advisor/page.tsx` — dashboard:
+  - Tenant default scope with the shared `DashboardFilters` cascade.
+  - The nine risk filters (Informational shown as "not supported", D-4), lifecycle, review / adoption / trust toggles
+    (trust only when a policy exists), faceted search and sort. State lives in the URL.
+  - KPI cards apply the backend-supplied drill-down filter and move focus to the results heading. Policy cards show
+    "Policy not configured".
+  - Table with the spec's five column groups (Identity / Risk / Usage / Lifecycle / Decision support).
+  - Applied-scope, as-of and freshness line.
+- `app/component-advisor/components/[key]/page.tsx` — identity, purpose with provenance badges (AI-assisted flagged as
+  not authoritative), risk with review reasons and the accepted-risk trace, lifecycle and freshness, adoption
+  (contextual evidence, observed versions table), and "Find safer options" (create permission + evidenced trigger;
+  an open item is linked, not duplicated).
+- `app/component-advisor/recommendations/[id]/page.tsx`:
+  - Source posture and history.
+  - Same-family and alternative candidate sections: type, rank, score labelled "orders candidates only", confidence,
+    adoption, history, lifecycle, license, compatibility summary, freshness, explanation reasons / limitations.
+  - Evidence dialog: factors and policy label, the 14 compatibility checks, confidence basis.
+  - Decision bar and per-candidate Recommend driven only by backend `capabilities`. Blocked or insufficient-evidence
+    candidates never offer Recommend. The decision dialog requires a reason, sends `row_version`, and handles 409.
+- `components/component-advisor/`:
+  - `AdvisorBadges` (risk / lifecycle / confidence / check result / provenance — icon + text + aria-label, never
+    colour alone).
+  - `AdvisorNotice`, with the spec's 11 explicit empty / degraded states.
+  - `labels.ts`, which contains no "safe" / "secure" / "safety score".
+- `hooks/useComponentAdvisorMutations.ts` + `invalidateComponentAdvisorSurfaces` (mutation-invalidation test passes);
+  nav entry (Security Operations); `DEV_USER` permissions.
+- Shared fix: `Table` column-resize separator now exposes `aria-valuenow/min/max/valuetext`. It was an axe
+  `aria-required-attr` violation on every resizable table. `Th` also supports `colSpan` + `scope="colgroup"`.
+
+Tests: `app/component-advisor/componentAdvisor.test.tsx` — 32 tests covering T35–T43 (including axe on the dashboard and the
+recommendation view, all 11 states, vocabulary). Full frontend suite: 159/160 files pass. The one failure,
+`src/lib/auth/shared-session-store.test.ts`, needs a local `redis-server` binary (environmental, pre-existing).
+`tsc --noEmit` is clean; ESLint is clean on the changed files.
+
+Notes:
+- `node_modules` was installed with `npm ci` (user-approved, 2026-10-02). npm left some packages' postinstall scripts
+  pending approval; this did not affect tests.
+- No browser E2E (D-9); page tests mock `@/lib/api` with the exact backend response shapes.
 
 ## Open questions / follow-ups
 - ~~Review Required vs Critical~~ — **resolved 2026-10-01**: the user decided Critical/High outrank review

@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   ShieldCheck,
   ShieldQuestion,
+  PackageSearch,
   Settings as SettingsIcon,
   type LucideIcon,
 } from 'lucide-react';
@@ -66,6 +67,7 @@ export const navigationItems: NavItem[] = [
   },
   { href: '/kev', label: 'CISA KEV', icon: ShieldCheck, permission: 'analysis:read', group: 'Security Operations' },
   { href: '/vex-investigation', label: 'VEX Investigation', icon: ShieldQuestion, permission: 'vex:read', group: 'Security Operations' },
+  { href: '/component-advisor', label: 'Secure Component Advisor', icon: PackageSearch, permission: 'component_advisor:read', group: 'Security Operations' },
   { href: '/schedules', label: 'Schedules', icon: CalendarClock, permission: 'schedule:read', group: 'Security Operations' },
   {
     href: '/settings',

@@ -127,7 +127,21 @@ function applyWidth(
   target.table.style.width = `${startTableWidth + (clamped - startWidth)}px`;
 }
 
+/** Upper bound reported to assistive tech for a focusable column separator. */
+const MAX_COLUMN_WIDTH = 2000;
+
 function ColumnResizeHandle({ columnLabel }: { columnLabel?: string }) {
+  // A focusable separator is a widget: it must expose its current value
+  // (WCAG 4.1.2 / axe aria-required-attr). Track the column width so screen
+  // readers announce it as it changes.
+  const handleRef = React.useRef<HTMLSpanElement>(null);
+  const [width, setWidth] = React.useState(MIN_COLUMN_WIDTH);
+  const syncWidth = React.useCallback(() => {
+    const th = handleRef.current?.closest('th');
+    if (th) setWidth(Math.min(MAX_COLUMN_WIDTH, Math.max(MIN_COLUMN_WIDTH, Math.round(th.getBoundingClientRect().width))));
+  }, []);
+  React.useEffect(() => { syncWidth(); }, [syncWidth]);
+
   const onPointerDown = (event: React.PointerEvent<HTMLSpanElement>) => {
     if (event.button !== 0) return;
     // Keep the gesture off the sort button this handle sits next to.
@@ -151,6 +165,7 @@ function ColumnResizeHandle({ columnLabel }: { columnLabel?: string }) {
       window.removeEventListener('pointercancel', onUp);
       document.body.style.removeProperty('cursor');
       document.body.style.removeProperty('user-select');
+      syncWidth();
     };
 
     window.addEventListener('pointermove', onMove);
@@ -175,6 +190,7 @@ function ColumnResizeHandle({ columnLabel }: { columnLabel?: string }) {
     const startWidth = target.th.getBoundingClientRect().width;
     const startTableWidth = target.table.getBoundingClientRect().width;
     applyWidth(target, startWidth + delta, startWidth, startTableWidth);
+    syncWidth();
   };
 
   const onDoubleClick = (event: React.MouseEvent<HTMLSpanElement>) => {
@@ -184,13 +200,19 @@ function ColumnResizeHandle({ columnLabel }: { columnLabel?: string }) {
     if (!target) return;
     // Hand the column back to the browser's content-driven sizing.
     target.th.style.removeProperty('width');
+    syncWidth();
   };
 
   return (
     <span
+      ref={handleRef}
       role="separator"
       aria-orientation="vertical"
       aria-label={columnLabel ? `Resize ${columnLabel} column` : 'Resize column'}
+      aria-valuenow={width}
+      aria-valuemin={MIN_COLUMN_WIDTH}
+      aria-valuemax={MAX_COLUMN_WIDTH}
+      aria-valuetext={`${width} pixels wide`}
       tabIndex={0}
       onPointerDown={onPointerDown}
       onKeyDown={onKeyDown}
@@ -211,16 +233,20 @@ export function Th({
   className,
   scope = 'col',
   resizable = true,
+  colSpan,
 }: {
   children: ReactNode;
   className?: string;
-  scope?: 'col' | 'row';
+  scope?: 'col' | 'row' | 'colgroup';
   /** Set false for columns that must keep a fixed width (e.g. a checkbox gutter). */
   resizable?: boolean;
+  /** Group header spanning several columns (use with scope="colgroup"). */
+  colSpan?: number;
 }) {
   return (
     <th
       scope={scope}
+      colSpan={colSpan}
       className={cn(
         'group/th relative px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-white',
         className,

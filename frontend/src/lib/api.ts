@@ -3055,3 +3055,102 @@ export async function getVexInvestigationByTriple(
     throw error;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Secure Component Advisor (app/routers/component_advisor.py)
+// ---------------------------------------------------------------------------
+
+import type {
+  AdvisorCandidateEvidence,
+  AdvisorCompatibilityChecks,
+  AdvisorComponentDetail,
+  AdvisorComponentList,
+  AdvisorFilterParams,
+  AdvisorRecommendation,
+  AdvisorSearchResult,
+  AdvisorSummary,
+  RecommendationDecision,
+  RecommendationTrigger,
+} from '@/types/componentAdvisor';
+
+const ADVISOR = '/api/component-advisor';
+
+/** Query string for advisor reads. Arrays repeat the key, like the backend expects. */
+export function advisorParams(args: AdvisorFilterParams = {}): string {
+  const params = new URLSearchParams();
+  args.risk?.forEach((value) => params.append('risk', value));
+  args.lifecycle?.forEach((value) => params.append('lifecycle', value));
+  for (const key of ['needs_review', 'frequently_adopted', 'trusted'] as const) {
+    if (typeof args[key] === 'boolean') params.set(key, String(args[key]));
+  }
+  if (args.q?.trim()) params.set('q', args.q.trim());
+  if (args.facet && args.facet !== 'all') params.set('facet', args.facet);
+  for (const key of ['project_id', 'product_id', 'sbom_id'] as const) {
+    const value = args[key];
+    if (typeof value === 'number') params.set(key, String(value));
+  }
+  if (args.sort_by) params.set('sort_by', args.sort_by);
+  if (args.sort_order) params.set('sort_order', args.sort_order);
+  if (typeof args.limit === 'number') params.set('limit', String(args.limit));
+  if (typeof args.offset === 'number') params.set('offset', String(args.offset));
+  const query = params.toString();
+  return query ? `?${query}` : '';
+}
+
+export function getAdvisorSummary(args: AdvisorFilterParams = {}, signal?: AbortSignal): Promise<AdvisorSummary> {
+  return request<AdvisorSummary>(`${ADVISOR}/summary${advisorParams(args)}`, { signal });
+}
+
+export function listAdvisorComponents(args: AdvisorFilterParams = {}, signal?: AbortSignal): Promise<AdvisorComponentList> {
+  return request<AdvisorComponentList>(`${ADVISOR}/components${advisorParams(args)}`, { signal });
+}
+
+export function getAdvisorComponent(
+  canonicalKey: string,
+  scope: Pick<AdvisorFilterParams, 'project_id' | 'product_id' | 'sbom_id'> = {},
+  signal?: AbortSignal,
+): Promise<AdvisorComponentDetail> {
+  return request<AdvisorComponentDetail>(
+    `${ADVISOR}/components/${encodeURIComponent(canonicalKey)}${advisorParams(scope)}`, { signal },
+  );
+}
+
+export function searchAdvisor(args: AdvisorFilterParams & { q: string }, signal?: AbortSignal): Promise<AdvisorSearchResult> {
+  return request<AdvisorSearchResult>(`${ADVISOR}/search${advisorParams(args)}`, { signal });
+}
+
+export function createAdvisorRecommendation(
+  body: { canonical_key: string; trigger_type: RecommendationTrigger; evaluate?: boolean },
+  scope: Pick<AdvisorFilterParams, 'project_id' | 'product_id' | 'sbom_id'> = {},
+): Promise<AdvisorRecommendation> {
+  return request<AdvisorRecommendation>(`${ADVISOR}/recommendations${advisorParams(scope)}`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export function getAdvisorRecommendation(id: number, signal?: AbortSignal): Promise<AdvisorRecommendation> {
+  return request<AdvisorRecommendation>(`${ADVISOR}/recommendations/${id}`, { signal });
+}
+
+export function evaluateAdvisorRecommendation(id: number): Promise<AdvisorRecommendation> {
+  return request<AdvisorRecommendation>(`${ADVISOR}/recommendations/${id}/evaluate`, { method: 'POST' });
+}
+
+export function decideAdvisorRecommendation(
+  id: number,
+  body: { decision: RecommendationDecision; reason: string; row_version: number; candidate_id?: number },
+): Promise<AdvisorRecommendation> {
+  return request<AdvisorRecommendation>(`${ADVISOR}/recommendations/${id}/decisions`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export function getAdvisorCandidateEvidence(id: number, candidateId: number, signal?: AbortSignal): Promise<AdvisorCandidateEvidence> {
+  return request<AdvisorCandidateEvidence>(`${ADVISOR}/recommendations/${id}/candidates/${candidateId}/evidence`, { signal });
+}
+
+export function getAdvisorCandidateCompatibility(id: number, candidateId: number, signal?: AbortSignal): Promise<AdvisorCompatibilityChecks> {
+  return request<AdvisorCompatibilityChecks>(`${ADVISOR}/recommendations/${id}/candidates/${candidateId}/compatibility`, { signal });
+}
