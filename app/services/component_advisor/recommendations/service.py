@@ -17,6 +17,7 @@ Advisory only: these functions write ``component_recommendation`` /
 from __future__ import annotations
 
 import time
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
@@ -69,6 +70,26 @@ _OPEN_VALUES = sorted(status.value for status in OPEN_STATUSES)
 
 class RecommendationNotFound(LookupError):
     pass
+
+
+@dataclass(frozen=True)
+class _SystemActor:
+    """Audit attribution for work done without a request (Celery task)."""
+
+    tenant_id: int
+    user_id: None = None
+    external_user_id: str = "system"
+
+
+def _audit_context(context, tenant_id: int):
+    """The context ``write_audit_log`` attributes a row to.
+
+    Without a request context the audit writer would default the row to
+    tenant 1, which the ORM tenant guard rightly blocks for every other
+    tenant. Attribute it to the work item's own tenant as the system actor
+    (no IAM user reference, which ``audit_log.user_ref_id`` would reject).
+    """
+    return context if context is not None else _SystemActor(tenant_id)
 
 
 def _now() -> datetime:
@@ -142,7 +163,8 @@ def create_recommendation(
             raise
         return existing, False
     write_audit_log(
-        db, context, "component_advisor.recommendation.created", entity_type="component_recommendation",
+        db, _audit_context(context, scope.tenant_id), "component_advisor.recommendation.created",
+        entity_type="component_recommendation",
         entity_id=item.id, new_value=_audit_view(item), request=request,
         detail=f"{trigger.value} for {version.name} {version.version or ''}".strip()[:240],
     )
@@ -268,7 +290,8 @@ def evaluate_recommendation(
     db.flush()
     duration_ms = round((time.perf_counter() - started) * 1000, 1)
     write_audit_log(
-        db, context, "component_advisor.recommendation.evaluated", entity_type="component_recommendation",
+        db, _audit_context(context, tenant_id), "component_advisor.recommendation.evaluated",
+        entity_type="component_recommendation",
         entity_id=item.id, old_value={"status": previous_status}, new_value={**_audit_view(item), "duration_ms": duration_ms},
         request=request, detail=summary["status"],
     )
@@ -429,7 +452,17 @@ def _persist_candidates(
     kind, blocked candidates last whatever their score (FR-SCA-015); then
     score descending; then discovery order. The score orders, it never gates.
     """
+    started = time.perf_counter()
     rows = [(_build_row(ctx, candidate, 0), order) for order, candidate in enumerate(candidates)]
+    elapsed_ms = round((time.perf_counter() - started) * 1000, 1)
+    # NFR-SCA-004: compatibility and scoring run together per candidate in
+    # _build_row; both events share the measured duration.
+    log_event(logger, "recommendation.compatibility.completed", tenant_id=ctx.tenant_id, recommendation_id=item.id,
+              candidates=len(rows), blocked=sum(1 for row, _ in rows if row.blocked), duration_ms=elapsed_ms,
+              correlation_id=item.correlation_id)
+    log_event(logger, "recommendation.scoring.completed", tenant_id=ctx.tenant_id, recommendation_id=item.id,
+              candidates=len(rows), scoring_policy=ctx.scoring.label, duration_ms=elapsed_ms,
+              correlation_id=item.correlation_id)
     rows.sort(key=lambda entry: (_KIND_ORDER[entry[0].candidate_kind], entry[0].blocked, -(entry[0].score or 0), entry[1]))
     out = []
     for rank, (row, _order) in enumerate(rows, start=1):
@@ -592,6 +625,8 @@ def decide(
                                                                          "candidate_id": candidate.id if candidate else None},
         request=request, detail=f"{decision.value}: {reason.strip()}"[:240],
     )
+    log_event(logger, "recommendation.reviewed", tenant_id=tenant_id, recommendation_id=item.id,
+              decision=decision.value, correlation_id=correlation_id)
     log_event(logger, f"recommendation.{_DECISION_EVENTS[decision].value.lower()}", tenant_id=tenant_id,
               recommendation_id=item.id, decision=decision.value, old_status=old_status, new_status=item.status,
               correlation_id=correlation_id)

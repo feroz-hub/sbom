@@ -256,6 +256,26 @@ def test_background_task_evaluates_once_and_is_retry_safe__NFR_SCA_004(client, s
     assert evaluate_recommendation_task(item["id"], 2, "task-corr") == "NOT_FOUND"  # wrong tenant
 
 
+def test_background_task_evaluates_a_non_default_tenant__NFR_SCA_004(client, seeded, db):
+    """Regression (found by the Step 10 migration smoke on real data): with no
+    request context, audit rows must belong to the item's tenant, not tenant 1."""
+    from app.core.context import minimal_background_context, tenant_scope
+    from app.services.component_advisor.recommendations.service import create_recommendation
+    from app.services.dashboard_scope import DashboardScope
+
+    with tenant_scope(minimal_background_context(2)):
+        item, created = create_recommendation(db, context=None, scope=DashboardScope(2),
+                                              canonical_key=THEIRS, trigger="MANUAL", correlation_id="task-tenant-2")
+        db.commit()
+        item_id = item.id
+    assert created
+    assert evaluate_recommendation_task(item_id, 2, "task-tenant-2") == "REVIEW_REQUIRED"
+    rows = db.execute(text(
+        "SELECT DISTINCT tenant_id, user_id FROM audit_log WHERE entity_type = 'component_recommendation' AND entity_id = :id"
+    ), {"id": str(item_id)}).all()
+    assert [tuple(r) for r in rows] == [(2, "system")]
+
+
 # ---------------------------------------------------------------------------
 # Isolation and roles
 # ---------------------------------------------------------------------------

@@ -17,7 +17,8 @@ The proposed sign-off dataset (phase0-analysis.md §10) is
 A second tenant carries noise data that must never be read.
 
 Targets: summary ≤ 2 s p95 warm; drill-down / search ≤ 3 s p95 warm.
-Cold (first, uncached) timings are reported, not asserted.
+Cold (first, uncached) timings and recommendation create + evaluate timings
+are reported, not asserted (the spec sets no recommendation target).
 """
 
 import os
@@ -162,6 +163,18 @@ def test_T44_component_advisor_benchmark__NFR_SCA_005(client):
         "components_filtered": _time(client, "/components", {"lifecycle": "EOL", "sort_by": "products"}, iterations),
         "search": _time(client, "/search", {"q": "pkg1"}, iterations),
     }
+    # Recommendation operations (create + same-family / alternative discovery,
+    # compatibility, history, scoring) on distinct Critical/High versions.
+    risky = client.get(f"{BASE}/components", params={"risk": "CRITICAL,HIGH", "limit": max(3, iterations // 2)}).json()["items"]
+    recommendation_samples = []
+    for row in risky:
+        trigger = "CRITICAL_FINDING" if row["risk"]["classification"] == "CRITICAL" else "HIGH_FINDING"
+        start = time.perf_counter()
+        response = client.post(f"{BASE}/recommendations", json={"canonical_key": row["canonical_key"], "trigger_type": trigger})
+        recommendation_samples.append(time.perf_counter() - start)
+        assert response.status_code == 201, response.text
+    if recommendation_samples:
+        results["recommendation_create_evaluate"] = recommendation_samples
     report = {name: round(_p95(samples), 3) for name, samples in results.items()}
     print(
         f"\nSCA benchmark: sboms={sboms} occurrences={occurrences} unique_versions={unique} findings={findings} "

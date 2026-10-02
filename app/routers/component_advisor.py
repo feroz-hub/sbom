@@ -42,6 +42,7 @@ from ..core.security import require_permission
 from ..db import get_db
 from ..etag import maybe_not_modified
 from ..logger import get_logger, log_event
+from ..services.component_advisor.analytics import recommendation_analytics
 from ..services.component_advisor.filters import (
     SORT_FIELDS,
     AdvisorFilters,
@@ -797,4 +798,22 @@ def get_audit_events(
         return recommendations.list_events(db, tenant_id=context.tenant_id, action=action, limit=limit, offset=offset)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail={"code": "INVALID_FILTER", "message": str(exc)}) from exc
+
+
+# ---------------------------------------------------------------------------
+# Effectiveness analytics (FR-SCA-024)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/analytics")
+def get_analytics(
+    months: int = Query(default=12, ge=1, le=36),
+    scope: DashboardScope = Depends(dashboard_scope_dependency),
+    db: Session = Depends(get_db),
+    _context=Depends(require_permission(READ_PERMISSION)),
+) -> dict[str, Any]:
+    """Recommendation outcomes, tenant-observed reuse and newly introduced
+    High/Critical components (US-SCA-17). Analytical only: these numbers never
+    change any classification, trust or ranking."""
+    return recommendation_analytics(db, scope, months=months)
 

@@ -17,7 +17,7 @@ Branch: `feat/secure-component-advisor`. Test ids T1…T45 are the prompt §10 m
 | 7 | History, scoring, confidence, freshness | ✅ 2026-10-01 |
 | 8 | Human review, audit, permissions | ✅ 2026-10-02 |
 | 9 | Frontend | ✅ 2026-10-02 |
-| 10 | Tests, performance, observability, analytics, docs | ⏳ next |
+| 10 | Tests, performance, observability, analytics, docs | ✅ 2026-10-02 (T45 full-suite comparison pending: ~29 h runs) |
 
 ## Decisions (approved 2026-10-01)
 
@@ -389,6 +389,70 @@ Notes:
 - `node_modules` was installed with `npm ci` (user-approved, 2026-10-02). npm left some packages' postinstall scripts
   pending approval; this did not affect tests.
 - No browser E2E (D-9); page tests mock `@/lib/api` with the exact backend response shapes.
+
+## Step 10 — Tests, Performance, Migrations, Observability, Analytics, Documentation
+
+Requirements: FR-SCA-024, NFR-SCA-003..009, Definition of Done · US-SCA-17.
+
+Delivered:
+- **Analytics (FR-SCA-024):**
+  - `GET /api/component-advisor/analytics?months=`: outcome counts from the append-only event log, by-trigger counts,
+    tenant-observed reuse share of accepted items, and new High/Critical versions per month (first eligible occurrence).
+  - `analytical_only: true`; a test proves analytics never change classification.
+- **Observability (NFR-SCA-004):** added `recommendation.compatibility.completed`, `recommendation.scoring.completed`
+  (both with `duration_ms`) and `recommendation.reviewed`. The full event list is in the runbook. No metrics/tracing
+  library exists in the codebase, so durations are log fields.
+- **Migrations:** 067–072 verified on a template clone of the real development database (059 → 072 → 066 → 072); see
+  [migration-notes.md](./migration-notes.md).
+- **Bug found and fixed by the real-data smoke test:** with no request context (Celery task), recommendation audit rows
+  were attributed to tenant 1, and the ORM tenant guard blocked evaluation for every other tenant. Rows are now
+  attributed to the item's tenant as a `system` actor. Regression test:
+  `test_background_task_evaluates_a_non_default_tenant__NFR_SCA_004`.
+- **Docs:** [api.md](./api.md), [configuration.md](./configuration.md), [migration-notes.md](./migration-notes.md),
+  [runbook.md](./runbook.md), [traceability.md](./traceability.md).
+- **Benchmark (T44):** adds recommendation create+evaluate timing.
+
+### T44 — performance (NFR-SCA-005)
+
+Measured on this workstation (Windows, local Postgres 5432) while two full pytest suites ran concurrently, so these are
+pessimistic:
+
+_Pending — the sign-off-scale run (500 SBOMs × 400 components, ~200k occurrences) is in progress. Step 3 measured on the same scale: warm p95 summary 1.06 s, drill-down 0.87 s (targets 2 s / 3 s); cold build about 14 s after the identity memo._
+
+### T45 — regression
+
+- Clean `HEAD` baseline (`6425f3e` + spec docs) and the branch (`4096ee8`, Steps 2–9) each run the **full** backend suite
+  from a frozen worktree on their own database. One run takes about 29 h locally, because per-test truncation dominates.
+- Pre-existing failures already identified on clean `HEAD`, all outside the advisor:
+  - `test_rbac_permissions.py::test_platform_admin_has_all_permissions`
+  - `test_rbac_permissions.py::test_high_value_permission_separation`
+  - `test_vex_scoped_authorization.py::test_platform_override_stays_tenant_bound`
+  - (the fourth, `test_phase8_authorization_catalog_seed.py::test_operator_comparison_reports_zero_mismatches`, was
+    fixed on this branch).
+- Frontend full suite: 159/160 files pass. The failure, `src/lib/auth/shared-session-store.test.ts`, needs a
+  `redis-server` binary and is environmental.
+
+_Pending — both full runs are in progress; the comparison will be recorded here._
+
+## Definition of Done (spec §13)
+
+| # | Item | Status |
+|---|---|---|
+| 1 | Dashboard on the authoritative active dataset, tenant default | ✅ Steps 2–3, 9 |
+| 2 | NKAV follows VEX actionability and active-only rules; reconciles with drill-down | ✅ T1–T7, T10, T13, T36 |
+| 3 | Accepted-risk / trust policy versioned and explainable | ✅ Step 4 (platform-default write API deferred) |
+| 4 | Search and purpose discovery with provenance | ✅ Step 4, T14–T16, T38 |
+| 5 | Tenant usage correct, never crosses tenants | ✅ FR-010, T11/T12 sweep |
+| 6 | Safer versions and alternatives evidence-based | ✅ Steps 5–6 |
+| 7 | Compatibility gates prevent invalid approved representation | ✅ T24–T26, blocked ranking, decision gates |
+| 8 | Trend, scoring, confidence, freshness transparent | ✅ Step 7 |
+| 9 | Human review mandatory; decisions audited | ✅ Step 8 |
+| 10 | No automatic dependency / source / SBOM replacement | ✅ T33 and no-write tests; the advisor writes only its own tables |
+| 11 | Unit / integration / API / E2E / regression / performance pass | ✅ advisor suites; E2E = Vitest page tests (D-9); ⏳ full-suite comparison pending |
+| 12 | Existing functionality does not regress | ⏳ pending the T45 comparison (targeted related suites pass) |
+| 13 | Migrations succeed on representative data; rollback / forward documented | ✅ migration-notes.md |
+| 14 | Logging, metrics, error states, runbooks, documentation | ✅ (metrics as log fields; no metrics library in the codebase) |
+| 15 | Traceability to FR / NFR / US | ✅ traceability.md |
 
 ## Open questions / follow-ups
 - ~~Review Required vs Critical~~ — **resolved 2026-10-01**: the user decided Critical/High outrank review

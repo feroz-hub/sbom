@@ -30,6 +30,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import func, select
@@ -711,6 +712,49 @@ def advisor_vulnerability_source_freshness(db: Session) -> dict[str, Any]:
     return {"nvd_mirror_last_success_at": finished.isoformat() if finished else None}
 
 
+def advisor_recommendation_analytics(db: Session, *, tenant_id: int, since: datetime) -> dict[str, Any]:
+    """Recommendation outcome counts for a tenant since ``since`` (FR-SCA-024).
+
+    Read from the append-only event log, so counts are the decisions actually
+    taken, not the current state of each item. Analytical only — nothing here
+    feeds classification, trust or ranking.
+    """
+    from ..models import ComponentRecommendation, ComponentRecommendationCandidate, ComponentRecommendationEvent
+
+    actions = dict(db.execute(
+        select(ComponentRecommendationEvent.action, func.count(ComponentRecommendationEvent.id))
+        .where(ComponentRecommendationEvent.tenant_id == tenant_id, ComponentRecommendationEvent.created_at >= since,
+               ComponentRecommendationEvent.recommendation_id.is_not(None))
+        .group_by(ComponentRecommendationEvent.action)
+    ).all())
+    by_trigger = dict(db.execute(
+        select(ComponentRecommendation.trigger_type, func.count(ComponentRecommendation.id))
+        .where(ComponentRecommendation.tenant_id == tenant_id, ComponentRecommendation.created_at >= since)
+        .group_by(ComponentRecommendation.trigger_type)
+    ).all())
+    reuse = dict(db.execute(
+        select(ComponentRecommendationCandidate.source_type, func.count(ComponentRecommendation.id))
+        .join(ComponentRecommendationCandidate, ComponentRecommendationCandidate.id == ComponentRecommendation.accepted_candidate_id)
+        .where(ComponentRecommendation.tenant_id == tenant_id, ComponentRecommendation.decided_at >= since,
+               ComponentRecommendationCandidate.tenant_id == tenant_id)
+        .group_by(ComponentRecommendationCandidate.source_type)
+    ).all())
+    return {"actions": {str(k): int(v) for k, v in actions.items()},
+            "by_trigger": {str(k): int(v) for k, v in by_trigger.items()},
+            "accepted_by_candidate_source": {str(k): int(v) for k, v in reuse.items()}}
+
+
+def advisor_first_seen(db: Session, *, tenant_id: int, component_ids: list[int]) -> dict[int, str | None]:
+    """``{component_id: created_on}`` — when each occurrence was first recorded."""
+    if not component_ids:
+        return {}
+    rows = db.execute(
+        select(SBOMComponent.id, SBOMComponent.created_on)
+        .where(SBOMComponent.tenant_id == tenant_id, SBOMComponent.id.in_(component_ids))
+    ).all()
+    return {int(cid): created for cid, created in rows}
+
+
 def advisor_invalidation_key(db: Session, *, tenant_id: int) -> tuple:
     """Change markers for a tenant's advisor inputs that the shared metrics key misses.
 
@@ -778,7 +822,9 @@ def component_advisor_bucket_counts(snapshot: ComponentIntelligenceSnapshot) -> 
 
 
 __all__ = [
+    "advisor_first_seen",
     "advisor_invalidation_key",
+    "advisor_recommendation_analytics",
     "advisor_version_history",
     "advisor_vulnerability_source_freshness",
     "advisor_remediation_hints",
