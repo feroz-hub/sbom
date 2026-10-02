@@ -34,6 +34,7 @@ from ....models import (
     ComponentRecommendation,
     ComponentRecommendationCandidate,
     ComponentRecommendationCompatibilityCheck,
+    ComponentRecommendationEvent,
     ComponentRecommendationFactor,
 )
 from ..policy import PolicyKind
@@ -42,6 +43,8 @@ from ...audit_service import write_audit_log
 from ...dashboard_scope import DashboardScope, dashboard_scope
 from ..intelligence_service import cached_snapshot, get_component_version
 from .alternative_discovery import discover_alternatives, manual_candidate, product_constraints
+from .audit import EventAction, record_event, serialize_event
+from .decisions import PERMISSION, Decision, InvalidDecision, allowed, check_candidate, next_status
 from .compatibility import evaluate_compatibility, summarize
 from .confidence import confidence as confidence_for
 from .confidence import freshness_view
@@ -143,6 +146,12 @@ def create_recommendation(
         entity_id=item.id, new_value=_audit_view(item), request=request,
         detail=f"{trigger.value} for {version.name} {version.version or ''}".strip()[:240],
     )
+    record_event(
+        db, tenant_id=scope.tenant_id, action=EventAction.CREATED, context=context, recommendation=item,
+        new_status=item.status, reason=f"Trigger {trigger.value}", evidence_refs=evidence.get("evidence"),
+        details={"trigger_type": trigger.value, "trigger_evidence": evidence, "scope_level": scope.level},
+        correlation_id=correlation_id,
+    )
     log_event(logger, "recommendation.created", tenant_id=scope.tenant_id, recommendation_id=item.id,
               trigger_type=trigger.value, correlation_id=correlation_id)
     return item, True
@@ -210,6 +219,7 @@ def evaluate_recommendation(
                 persisted = _persist_candidates(
                     db, item=item, ctx=ctx, candidates=[*result.candidates, *alternatives.candidates, *manual],
                 )
+                _candidate_events(db, item, persisted, ctx, context=context, correlation_id=correlation_id)
                 summary = result.summary()
                 summary.update({
                     "alternative_candidates": len(alternatives.candidates),
@@ -247,6 +257,7 @@ def evaluate_recommendation(
 
     now = _now()
     item.status = require_transition(item.status, RecommendationStatus.REVIEW_REQUIRED).value
+    item.recommended_candidate_id = None
     item.discovery_summary_json = summary
     item.evaluation_error = error
     item.evaluated_at = now
@@ -260,6 +271,18 @@ def evaluate_recommendation(
         db, context, "component_advisor.recommendation.evaluated", entity_type="component_recommendation",
         entity_id=item.id, old_value={"status": previous_status}, new_value={**_audit_view(item), "duration_ms": duration_ms},
         request=request, detail=summary["status"],
+    )
+    record_event(
+        db, tenant_id=tenant_id, action=EventAction.DISCOVERY_COMPLETED, context=context, recommendation=item,
+        reason=summary["status"], details={k: summary.get(k) for k in (
+            "status", "same_family_candidates", "alternative_candidates", "alternatives_status",
+            "manual_candidates", "blocked_candidates")} | {"duration_ms": duration_ms, "error": error},
+        policy_versions=(summary.get("scoring_policy") and {"scoring": summary["scoring_policy"]}) or None,
+        correlation_id=correlation_id,
+    )
+    record_event(
+        db, tenant_id=tenant_id, action=EventAction.MOVED_TO_REVIEW, context=context, recommendation=item,
+        old_status=RecommendationStatus.EVALUATING.value, new_status=item.status, correlation_id=correlation_id,
     )
     log_event(logger, "recommendation.discovery.completed", tenant_id=tenant_id, recommendation_id=item.id,
               status=summary["status"], candidates=summary.get("same_family_candidates", 0),
@@ -441,6 +464,10 @@ def add_manual_candidate(
     row = _build_row(ctx, candidate, rank)
     row.recommendation_id = item.id
     db.add(row)
+    db.flush()
+    record_event(db, tenant_id=tenant_id, action=EventAction.CANDIDATE_ADDED, context=context, recommendation=item,
+                 candidate=row, reason=payload.get("rationale"), details={"input": dict(payload)})
+    _candidate_events(db, item, [row], ctx, context=context, correlation_id=None)
     item.row_version = (item.row_version or 1) + 1
     item.updated_at = _now()
     db.flush()
@@ -455,6 +482,133 @@ def add_manual_candidate(
 
 class InvalidState(RuntimeError):
     """The work item is not in a state that allows the operation (HTTP 409)."""
+
+
+def _policy_versions(ctx) -> dict[str, Any]:
+    return {
+        "scoring": {"policy_version_id": ctx.scoring.policy_version_id, "label": ctx.scoring.label},
+        "trust": ctx.trust.id if ctx.trust else None,
+    }
+
+
+def _candidate_events(db, item, rows, ctx, *, context, correlation_id) -> None:
+    """FR-SCA-022: candidate discovered, compatibility evaluated, candidate scored."""
+    versions = _policy_versions(ctx)
+    for row in rows:
+        evaluation = row.evaluation_json or {}
+        record_event(db, tenant_id=ctx.tenant_id, action=EventAction.CANDIDATE_DISCOVERED, context=context,
+                     recommendation=item, candidate=row, correlation_id=correlation_id,
+                     details={"evidence_sources": list(row.evidence_sources_json or []),
+                              "reasons": [r.get("code") for r in row.reasons_json or []]})
+        record_event(db, tenant_id=ctx.tenant_id, action=EventAction.COMPATIBILITY_EVALUATED, context=context,
+                     recommendation=item, candidate=row, correlation_id=correlation_id,
+                     policy_versions=versions, details=evaluation.get("compatibility"))
+        record_event(db, tenant_id=ctx.tenant_id, action=EventAction.CANDIDATE_SCORED, context=context,
+                     recommendation=item, candidate=row, correlation_id=correlation_id, policy_versions=versions,
+                     score=row.score, confidence=row.confidence,
+                     evidence_refs=(evaluation.get("history") or {}).get("coverage", {}).get("sources"),
+                     details={"completeness": (evaluation.get("confidence_basis") or {}).get("completeness")})
+
+
+class DecisionPermissionDenied(PermissionError):
+    pass
+
+
+class DecisionConflict(RuntimeError):
+    def __init__(self, current_row_version: int):
+        super().__init__("Recommendation changed since it was read")
+        self.current_row_version = current_row_version
+
+
+_DECISION_EVENTS = {
+    Decision.RECOMMEND: EventAction.RECOMMENDED,
+    Decision.ACCEPT: EventAction.ACCEPTED,
+    Decision.REJECT: EventAction.REJECTED,
+    Decision.DEFER: EventAction.DEFERRED,
+    Decision.REQUEST_MORE_EVIDENCE: EventAction.MORE_EVIDENCE_REQUESTED,
+    Decision.CLOSE: EventAction.CLOSED,
+}
+
+
+def decide(
+    db: Session, *, context, recommendation_id: int, decision: Decision | str, reason: str, row_version: int,
+    candidate_id: int | None = None, correlation_id: str | None = None, request=None,
+) -> ComponentRecommendation:
+    """Apply one human decision (FR-SCA-021). Does not commit.
+
+    Changes recommendation state and audit records only — never a dependency,
+    manifest, source file, component or SBOM (spec §1.1, T33).
+    """
+    decision = Decision(decision)
+    if not context.has_permission(PERMISSION[decision]):
+        raise DecisionPermissionDenied(f"{decision.value} requires {PERMISSION[decision]}")
+    if not (reason or "").strip():
+        raise InvalidDecision("A reason is required", code="REASON_REQUIRED")
+    tenant_id = context.tenant_id
+    item = get_recommendation(db, tenant_id, recommendation_id, lock=True)
+    if item.row_version != row_version:
+        raise DecisionConflict(item.row_version)
+    target = next_status(item.status, decision)
+
+    candidate = None
+    if decision is Decision.RECOMMEND:
+        if candidate_id is None:
+            raise InvalidDecision("RECOMMEND needs candidate_id", code="CANDIDATE_REQUIRED")
+        candidate = get_candidate(db, tenant_id, item.id, candidate_id)
+    elif decision is Decision.ACCEPT:
+        if item.recommended_candidate_id is None:
+            raise InvalidDecision("No candidate has been recommended", code="CANDIDATE_REQUIRED")
+        if candidate_id is not None and candidate_id != item.recommended_candidate_id:
+            raise InvalidDecision("Only the recommended candidate can be accepted", code="NOT_RECOMMENDED_CANDIDATE")
+        candidate = get_candidate(db, tenant_id, item.id, item.recommended_candidate_id)
+    check_candidate(decision, candidate)
+
+    old_status, now = item.status, _now()
+    item.status = target.value
+    if decision is Decision.RECOMMEND:
+        item.recommended_candidate_id = candidate.id
+    elif decision is Decision.ACCEPT:
+        item.accepted_candidate_id = candidate.id
+    elif decision is Decision.REQUEST_MORE_EVIDENCE:
+        item.recommended_candidate_id = None
+    item.last_decision = decision.value
+    item.last_decision_reason = reason.strip()
+    item.decided_by = context.actor_label()
+    item.decided_at = now
+    item.updated_at = now
+    item.row_version = item.row_version + 1
+    db.flush()
+    record_event(
+        db, tenant_id=tenant_id, action=_DECISION_EVENTS[decision], context=context, recommendation=item,
+        candidate=candidate, decision=decision.value, reason=reason.strip(), old_status=old_status,
+        new_status=item.status, score=candidate.score if candidate else None,
+        confidence=candidate.confidence if candidate else None,
+        policy_versions=((candidate.evaluation_json or {}).get("scoring") or {}).get("policy") if candidate else None,
+        evidence_refs=(item.trigger_evidence_json or {}).get("evidence"), correlation_id=correlation_id,
+    )
+    write_audit_log(
+        db, context, f"component_advisor.recommendation.{decision.value.lower()}", entity_type="component_recommendation",
+        entity_id=item.id, old_value={"status": old_status}, new_value={**_audit_view(item), "reason": reason.strip(),
+                                                                         "candidate_id": candidate.id if candidate else None},
+        request=request, detail=f"{decision.value}: {reason.strip()}"[:240],
+    )
+    log_event(logger, f"recommendation.{_DECISION_EVENTS[decision].value.lower()}", tenant_id=tenant_id,
+              recommendation_id=item.id, decision=decision.value, old_status=old_status, new_status=item.status,
+              correlation_id=correlation_id)
+    return item
+
+
+def list_events(db: Session, *, tenant_id: int, recommendation_id: int | None = None, action: str | None = None,
+                limit: int = 100, offset: int = 0) -> dict[str, Any]:
+    conditions = [ComponentRecommendationEvent.tenant_id == tenant_id]
+    if recommendation_id is not None:
+        conditions.append(ComponentRecommendationEvent.recommendation_id == recommendation_id)
+    if action:
+        conditions.append(ComponentRecommendationEvent.action == EventAction(action.upper()).value)
+    total = db.scalar(select(func.count(ComponentRecommendationEvent.id)).where(*conditions)) or 0
+    rows = db.scalars(select(ComponentRecommendationEvent).where(*conditions)
+                      .order_by(ComponentRecommendationEvent.id).limit(limit).offset(offset)).all()
+    return {"total": int(total), "limit": limit, "offset": offset, "items": [serialize_event(e) for e in rows]}
 
 
 def list_recommendations(
@@ -499,7 +653,7 @@ def _audit_view(item: ComponentRecommendation) -> dict[str, Any]:
     }
 
 
-def serialize_candidate(candidate: ComponentRecommendationCandidate) -> dict[str, Any]:
+def serialize_candidate(candidate: ComponentRecommendationCandidate, *, item: ComponentRecommendation | None = None) -> dict[str, Any]:
     return {
         "id": candidate.id,
         "candidate_kind": candidate.candidate_kind,
@@ -524,9 +678,13 @@ def serialize_candidate(candidate: ComponentRecommendationCandidate) -> dict[str
         "freshness": (candidate.evaluation_json or {}).get("freshness_view"),
         "blocked": bool(candidate.blocked),
         "compatibility": (candidate.evaluation_json or {}).get("compatibility", {"status": "NOT_EVALUATED"}),
-        # A blocked candidate can never be represented as an approved replacement
-        # (FR-SCA-015); until confidence exists (Step 7) none can.
-        "approved_replacement": False,
+        # Only a human ACCEPT of an unblocked candidate is an approved replacement
+        # (FR-SCA-015/021); the advisor itself never approves anything.
+        "approved_replacement": bool(
+            item is not None and item.accepted_candidate_id == candidate.id
+            and item.status in ("ACCEPTED", "CLOSED") and not candidate.blocked
+        ),
+        "recommended": bool(item is not None and item.recommended_candidate_id == candidate.id),
     }
 
 
@@ -595,28 +753,59 @@ def serialize(item: ComponentRecommendation, *, candidates: bool = False, capabi
         "updated_at": item.updated_at.isoformat() if item.updated_at else None,
         "evaluated_at": item.evaluated_at.isoformat() if item.evaluated_at else None,
         "row_version": item.row_version,
+        # Visible to every reader: the "limited" audit view for roles without
+        # component_advisor:audit:read (spec §9).
+        "review": {
+            "recommended_candidate_id": item.recommended_candidate_id,
+            "accepted_candidate_id": item.accepted_candidate_id,
+            "last_decision": item.last_decision,
+            "last_decision_reason": item.last_decision_reason,
+            "decided_by": item.decided_by,
+            "decided_at": item.decided_at.isoformat() if item.decided_at else None,
+        },
         # Spec §1.1: the advisor never changes dependencies; surfaced so no UI implies otherwise.
         "advisory_only": True,
     }
     if candidates:
-        payload["candidates"] = [serialize_candidate(c) for c in sorted(item.candidates, key=lambda c: c.rank)]
+        payload["candidates"] = [serialize_candidate(c, item=item) for c in sorted(item.candidates, key=lambda c: c.rank)]
     if capabilities is not None:
         payload["capabilities"] = capabilities
     return payload
 
 
 def capabilities_for(item: ComponentRecommendation, context) -> dict[str, Any]:
-    can_create = bool(context and context.has_permission("component_advisor:recommendation:create"))
-    return {
-        "can_evaluate": can_create and can_evaluate(item.status),
-        # Decisions (Accept / Reject / Defer / Request evidence) arrive in Step 8.
-        "can_decide": False,
-        "read_only_reason": None if can_create else "Requires component_advisor:recommendation:create",
+    """Server-driven action flags (the UI hides/disables; the API still enforces)."""
+    def has(permission: str) -> bool:
+        return bool(context and context.has_permission(permission))
+
+    flags = {
+        "can_evaluate": has("component_advisor:recommendation:create") and can_evaluate(item.status),
+        "can_recommend": has(PERMISSION[Decision.RECOMMEND]) and allowed(item.status, Decision.RECOMMEND),
+        "can_accept": has(PERMISSION[Decision.ACCEPT]) and allowed(item.status, Decision.ACCEPT)
+        and item.recommended_candidate_id is not None,
+        "can_reject": has(PERMISSION[Decision.REJECT]) and allowed(item.status, Decision.REJECT),
+        "can_defer": has(PERMISSION[Decision.DEFER]) and allowed(item.status, Decision.DEFER),
+        "can_request_evidence": has(PERMISSION[Decision.REQUEST_MORE_EVIDENCE])
+        and allowed(item.status, Decision.REQUEST_MORE_EVIDENCE),
+        "can_close": has(PERMISSION[Decision.CLOSE]) and allowed(item.status, Decision.CLOSE),
+        "can_add_candidate": has("component_advisor:recommendation:review") and item.status == "REVIEW_REQUIRED",
+        "can_view_audit": has("component_advisor:audit:read"),
     }
+    flags["can_decide"] = any(flags[k] for k in ("can_recommend", "can_accept", "can_reject", "can_defer",
+                                                  "can_request_evidence", "can_close"))
+    flags["read_only_reason"] = None if flags["can_decide"] or flags["can_evaluate"] else (
+        "Your role cannot act on this recommendation in its current state"
+    )
+    return flags
 
 
 __all__ = [
+    "DecisionConflict",
+    "DecisionPermissionDenied",
+    "InvalidDecision",
     "InvalidState",
+    "decide",
+    "list_events",
     "RecommendationNotFound",
     "add_manual_candidate",
     "get_candidate",

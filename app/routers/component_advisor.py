@@ -645,7 +645,7 @@ def get_candidate(
     except recommendations.RecommendationNotFound as exc:
         _not_found(exc)
     return {
-        **recommendations.serialize_candidate(candidate),
+        **recommendations.serialize_candidate(candidate, item=candidate.recommendation),
         "compatibility_checks": [recommendations.serialize_check(c) for c in candidate.compatibility_checks],
     }
 
@@ -705,5 +705,96 @@ def get_candidate_evidence(
         "compatibility": evaluation.get("compatibility"),
         "explanation": evaluation.get("explanation"),
         "blocked": bool(candidate.blocked),
-        "approved_replacement": False,
+        "approved_replacement": recommendations.serialize_candidate(candidate, item=candidate.recommendation)["approved_replacement"],
     }
+
+
+# ---------------------------------------------------------------------------
+# Human review and audit (FR-SCA-021 / FR-SCA-022)
+# ---------------------------------------------------------------------------
+
+AUDIT_PERMISSION = "component_advisor:audit:read"
+
+
+class DecisionRequest(BaseModel):
+    decision: Literal["RECOMMEND", "ACCEPT", "REJECT", "DEFER", "REQUEST_MORE_EVIDENCE", "CLOSE"]
+    reason: str = Field(min_length=1, max_length=4000)
+    row_version: int = Field(ge=1)
+    candidate_id: int | None = Field(default=None, ge=1, description="Required for RECOMMEND; optional check for ACCEPT")
+
+
+@router.post("/recommendations/{recommendation_id}/decisions")
+def post_decision(
+    recommendation_id: int,
+    request: Request,
+    body: DecisionRequest = Body(...),
+    db: Session = Depends(get_db),
+    context=Depends(require_permission(READ_PERMISSION)),
+) -> dict[str, Any]:
+    """Record a human decision (FR-SCA-021, US-SCA-14).
+
+    Per-decision permissions (spec §9): RECOMMEND / REJECT / DEFER /
+    REQUEST_MORE_EVIDENCE / CLOSE need ``component_advisor:recommendation:review``;
+    ACCEPT needs ``component_advisor:recommendation:accept``. 403 without it,
+    404 for another tenant's item, 409 on a stale ``row_version`` or invalid
+    state, 422 for a blocked / insufficient-evidence candidate or missing reason.
+    Accepting changes recommendation state and audit records only — never a
+    dependency, manifest, source file or SBOM (spec §1.1).
+    """
+    correlation_id = getattr(request.state, "correlation_id", None)
+    try:
+        item = recommendations.decide(
+            db, context=context, recommendation_id=recommendation_id, decision=body.decision, reason=body.reason,
+            row_version=body.row_version, candidate_id=body.candidate_id, correlation_id=correlation_id,
+            request=request,
+        )
+    except recommendations.DecisionPermissionDenied as exc:
+        db.rollback()
+        raise HTTPException(status_code=403, detail="Insufficient permission") from exc
+    except recommendations.RecommendationNotFound as exc:
+        db.rollback()
+        _not_found(exc)
+    except recommendations.DecisionConflict as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail={"code": "RECOMMENDATION_CONFLICT", "message": str(exc),
+                                                     "row_version": exc.current_row_version}) from exc
+    except recommendations.InvalidDecision as exc:
+        db.rollback()
+        status = 409 if exc.code == "INVALID_STATE" else 422
+        raise HTTPException(status_code=status, detail={"code": exc.code, "message": str(exc)}) from exc
+    db.commit()
+    db.refresh(item)
+    return recommendations.serialize(item, candidates=True, capabilities=recommendations.capabilities_for(item, context))
+
+
+@router.get("/recommendations/{recommendation_id}/events")
+def get_recommendation_events(
+    recommendation_id: int,
+    limit: int = Query(default=200, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+    context=Depends(require_permission(AUDIT_PERMISSION)),
+) -> dict[str, Any]:
+    """Append-only audit trail of one work item (FR-SCA-022, US-SCA-15)."""
+    try:
+        recommendations.get_recommendation(db, context.tenant_id, recommendation_id)
+    except recommendations.RecommendationNotFound as exc:
+        _not_found(exc)
+    return recommendations.list_events(db, tenant_id=context.tenant_id, recommendation_id=recommendation_id,
+                                       limit=limit, offset=offset)
+
+
+@router.get("/audit/events")
+def get_audit_events(
+    action: str | None = Query(default=None, max_length=48),
+    limit: int = Query(default=100, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+    context=Depends(require_permission(AUDIT_PERMISSION)),
+) -> dict[str, Any]:
+    """The tenant's advisor audit history, including policy version publishes."""
+    try:
+        return recommendations.list_events(db, tenant_id=context.tenant_id, action=action, limit=limit, offset=offset)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail={"code": "INVALID_FILTER", "message": str(exc)}) from exc
+

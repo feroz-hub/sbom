@@ -564,6 +564,10 @@ def permission_for_request(request: Request) -> str:
         return "platform:admin"
     if path.startswith("/api/component-advisor/policies"):
         return "tenant:advisor-policy:read" if method == "GET" else "tenant:advisor-policy:update"
+    if path.startswith("/api/component-advisor/recommendations/") and path.endswith(("/decisions", "/candidates")) and method == "POST":
+        # Decisions and manual candidates are permission-checked per action at the
+        # route (review / accept), so a role holding only "accept" is not refused here.
+        return "component_advisor:read"
     if path.startswith("/api/component-advisor/purpose") and method != "GET":
         # Curated purpose metadata reuses the existing component edit right.
         return "component:update"

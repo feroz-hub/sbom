@@ -206,6 +206,15 @@ def publish_version(
         request=request,
         detail=f"{kind.value} v{number} {status.value}",
     )
+    from .recommendations.audit import EventAction, record_event
+
+    record_event(
+        db, tenant_id=tenant_id, action=EventAction.POLICY_VERSION_PUBLISHED, context=context,
+        reason=row.reason, old_status=previous.status if previous else None, new_status=status.value,
+        policy_versions={"kind": kind.value, "policy_version_id": row.id, "version": number,
+                         "previous_policy_version_id": previous.id if previous else None},
+        details={"rules": normalized}, correlation_id=correlation_id,
+    )
     return _ref(row)
 
 

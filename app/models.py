@@ -2479,6 +2479,14 @@ class ComponentRecommendation(Base, TenantOwnedMixin):
     updated_at = Column(DateTime(timezone=True), nullable=False)
     evaluated_at = Column(DateTime(timezone=True), nullable=True)
     row_version = Column(Integer, nullable=False, default=1, server_default="1")
+    # Human review state (FR-SCA-021, migration 072). Candidate ids are plain
+    # integers: candidates of a RECOMMENDED / decided item are never replaced.
+    recommended_candidate_id = Column(Integer, nullable=True)
+    accepted_candidate_id = Column(Integer, nullable=True)
+    last_decision = Column(String(32), nullable=True)
+    last_decision_reason = Column(Text, nullable=True)
+    decided_by = Column(String(128), nullable=True)
+    decided_at = Column(DateTime(timezone=True), nullable=True)
 
     candidates = relationship(
         "ComponentRecommendationCandidate", back_populates="recommendation",
@@ -2596,6 +2604,42 @@ class ComponentRecommendationFactor(Base, TenantOwnedMixin):
     candidate = relationship("ComponentRecommendationCandidate", back_populates="factors")
 
 
+class ComponentRecommendationEvent(Base, TenantOwnedMixin):
+    """Append-only audit trail for Secure Component Advisor (FR-SCA-022, NFR-SCA-007).
+
+    One row per lifecycle event: creation, candidate discovery, compatibility
+    evaluation, scoring, moves to review, every human decision and policy
+    version publishes. Rows are never updated or deleted (ORM guard below).
+    ``candidate_id`` is deliberately not a foreign key — candidates can be
+    replaced by re-evaluation and an append-only row must never be rewritten
+    by ``ON DELETE SET NULL``; ``candidate_json`` keeps what the event saw.
+    """
+
+    __tablename__ = "component_recommendation_event"
+
+    id = Column(Integer, primary_key=True)
+    recommendation_id = Column(Integer, ForeignKey("component_recommendation.id"), nullable=True, index=True)
+    candidate_id = Column(Integer, nullable=True)
+    candidate_json = Column(JSON, nullable=True)
+    action = Column(String(48), nullable=False, index=True)
+    decision = Column(String(32), nullable=True)
+    actor = Column(String(128), nullable=False)
+    actor_user_id = Column(Integer, nullable=True)
+    reason = Column(Text, nullable=True)
+    old_status = Column(String(32), nullable=True)
+    new_status = Column(String(32), nullable=True)
+    policy_versions_json = Column(JSON, nullable=True)
+    score = Column(Float, nullable=True)
+    confidence = Column(String(32), nullable=True)
+    evidence_refs_json = Column(JSON, nullable=True)
+    details_json = Column(JSON, nullable=True)
+    correlation_id = Column(String(128), nullable=True, index=True)
+    source = Column(String(32), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+
+
+Index("ix_component_recommendation_event_tenant_identity", ComponentRecommendationEvent.tenant_id, ComponentRecommendationEvent.id)
+Index("ix_component_recommendation_event_tenant_created", ComponentRecommendationEvent.tenant_id, ComponentRecommendationEvent.created_at)
 Index("ix_component_recommendation_tenant_identity", ComponentRecommendation.tenant_id, ComponentRecommendation.id)
 Index(
     "ix_component_recommendation_candidate_tenant_identity",
@@ -2618,10 +2662,10 @@ Index(
 def _advisor_policy_versions_are_append_only(session, _flush_context, _instances) -> None:
     """NFR-SCA-007: policy versions are append-only, enforced, not just documented."""
     for instance in session.dirty | session.deleted:
-        if isinstance(instance, AdvisorPolicyVersion) and (
+        if isinstance(instance, (AdvisorPolicyVersion, ComponentRecommendationEvent)) and (
             instance in session.deleted or session.is_modified(instance, include_collections=False)
         ):
-            raise RuntimeError("advisor_policy_version rows are append-only")
+            raise RuntimeError(f"{instance.__tablename__} rows are append-only")
 
 
 # Register report tables for Alembic and metadata-based test databases.

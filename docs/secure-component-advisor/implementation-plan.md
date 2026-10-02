@@ -15,8 +15,8 @@ Branch: `feat/secure-component-advisor`. Test ids T1…T45 are the prompt §10 m
 | 5 | Recommendation work item & safer-version discovery | ✅ 2026-10-01 |
 | 6 | Alternative discovery & compatibility | ✅ 2026-10-01 |
 | 7 | History, scoring, confidence, freshness | ✅ 2026-10-01 |
-| 8 | Human review, audit, permissions | ⏳ next |
-| 9 | Frontend | ☐ |
+| 8 | Human review, audit, permissions | ✅ 2026-10-02 |
+| 9 | Frontend | ⏳ next |
 | 10 | Tests, performance, observability, analytics, docs | ☐ |
 
 ## Decisions (approved 2026-10-01)
@@ -309,6 +309,43 @@ Decisions / assumptions:
   KPIs stay stable. **Product decision pending** on whether stale analysis should push a component into Review Required.
 - Same-family candidates still rank before alternatives regardless of score (T21); the score orders within a kind.
 
+## Step 8 — Human Review, Audit and Permissions
+
+Requirements: FR-SCA-021, FR-SCA-022, FR-SCA-023, NFR-SCA-001, NFR-SCA-007 · US-SCA-14, US-SCA-15, US-SCA-16.
+
+Delivered:
+- `recommendations/decisions.py` (pure): RECOMMEND / ACCEPT / REJECT / DEFER / REQUEST_MORE_EVIDENCE / CLOSE on top of
+  the workflow transition table, one permission per decision (review vs accept).
+  - REQUEST_MORE_EVIDENCE returns RECOMMENDED / DEFERRED items to REVIEW_REQUIRED and clears the recommended candidate.
+  - Blocked candidates and INSUFFICIENT_EVIDENCE candidates can never be recommended or accepted.
+  - ACCEPT applies only to the recommended candidate.
+- Migration `072_component_recommendation_review`: append-only `component_recommendation_event` (ORM guard extended)
+  and review-state columns (`recommended_candidate_id`, `accepted_candidate_id`, `last_decision`,
+  `last_decision_reason`, `decided_by`, `decided_at`).
+- Events: CREATED, CANDIDATE_DISCOVERED, COMPATIBILITY_EVALUATED, CANDIDATE_SCORED (per candidate), DISCOVERY_COMPLETED,
+  MOVED_TO_REVIEW, CANDIDATE_ADDED, every decision, POLICY_VERSION_PUBLISHED.
+  - Each carries actor + user id, reason, old/new status, candidate snapshot, score/confidence, policy versions,
+    evidence refs, correlation id and source (API / TASK).
+  - `candidate_id` is deliberately not a FK, so ON DELETE never rewrites an append-only row.
+  - Decisions are also mirrored to `AuditLog` (`component_advisor.recommendation.<decision>`).
+- API:
+  - `POST /recommendations/{id}/decisions` (403 / 404 / 409 stale or invalid state / 422 blocked, insufficient,
+    no reason).
+  - `GET /recommendations/{id}/events` and `GET /audit/events`, both `component_advisor:audit:read`.
+  - Every reader sees the `review` summary, the "limited" audit view.
+  - Capabilities: `can_recommend / can_accept / can_reject / can_defer / can_request_evidence / can_close /
+    can_add_candidate / can_view_audit / can_decide`.
+  - `approved_replacement` is true only for the accepted, unblocked candidate of an ACCEPTED / CLOSED item.
+- `permission_for_request`: decision and manual-candidate POSTs gate on `component_advisor:read`, and the route then
+  enforces review / accept, so a role holding only "accept" is not refused at the gate.
+- Isolation sweep test: every advisor endpoint with another tenant's ids returns 404 with no data in the body, lists
+  are tenant-only, and no foreign data appears in that request's logs.
+
+Decisions / assumptions:
+- No separation of duties: the same user may RECOMMEND and ACCEPT. Spec §9 makes acceptance "policy dependent";
+  open item.
+- Export endpoints do not exist yet, so NFR-SCA-001's "export" isolation is not applicable until one is added.
+
 ## Open questions / follow-ups
 - ~~Review Required vs Critical~~ — **resolved 2026-10-01**: the user decided Critical/High outrank review
   reasons. Implemented in Step 3 (`classification.py`); review reasons stay on the record and the
@@ -331,6 +368,7 @@ Decisions / assumptions:
 - Should stale analysis evidence (older than the scoring policy's `stale_after_days`) put a component into Review Required?
   Currently it only lowers recommendation confidence.
 - Review the proposed default scoring weights and normalizations.
+- Separation of duties for ACCEPT (e.g. the recommender cannot accept), if required by policy.
 - Windows: a stopped background pytest leaves orphan processes on the test DB. Kill them before the next run.
 - Regression runs must use a frozen worktree: twice, a migration added mid-run made later app-startup tests fail
   with "schema not at head", which invalidated those runs.
