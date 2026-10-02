@@ -417,7 +417,22 @@ Delivered:
 Measured on this workstation (Windows, local Postgres 5432) while two full pytest suites ran concurrently, so these are
 pessimistic:
 
-_Pending — the sign-off-scale run (500 SBOMs × 400 components, ~200k occurrences) is in progress. Step 3 measured on the same scale: warm p95 summary 1.06 s, drill-down 0.87 s (targets 2 s / 3 s); cold build about 14 s after the identity memo._
+Run on 2026-10-02 against the final code: 500 SBOMs × 400 components = 200,000 occurrences, 24,993 unique versions,
+59,989 findings, plus a noise tenant. 10 warm iterations per endpoint.
+
+| Measure | p95 | Target | Result |
+|---|---|---|---|
+| Summary (warm) | 1.71 s | ≤ 2 s | ✅ |
+| Summary, filtered (warm) | 1.58 s | ≤ 2 s | ✅ |
+| Drill-down (warm) | 1.25 s | ≤ 3 s | ✅ |
+| Drill-down, filtered and sorted (warm) | 1.14 s | ≤ 3 s | ✅ |
+| Search (warm) | 1.20 s | ≤ 3 s | ✅ |
+| Recommendation create + evaluate | 2.29 s | (none set) | reported |
+| Cold summary (first, uncached) | 24.1 s | (not asserted) | ⚠ |
+
+Uncontended, the same scale measured about 1.06 s summary, 0.87 s drill-down and about 14 s cold (Step 3/4). The
+cold build is the remaining risk: if a ~15–25 s first load after a cache bust is unacceptable at this scale,
+implement the per-SBOM incremental rollup (NFR-SCA-006 follow-up).
 
 ### T45 — regression
 
