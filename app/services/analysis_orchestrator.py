@@ -9,6 +9,7 @@ import time
 from dataclasses import dataclass, replace
 from typing import Any
 
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -32,6 +33,7 @@ from .analysis_service import (
     persist_analysis_run,
 )
 from .finding_metrics import component_identity_from_dict
+from .sbom_lifecycle import analysis_fingerprint, lock_sbom, require_processing
 from .sbom_service import (
     MISSING_SBOM_CONTENT_REASON,
     UNPARSEABLE_SBOM_CONTENT_REASON,
@@ -206,7 +208,14 @@ class AnalysisOrchestrator:
         started_on: str,
         sbom_name: str | None = None,
     ) -> AnalysisRun:
+        sbom = lock_sbom(self.db, sbom.id, sbom.tenant_id)
+        require_processing(sbom)
+        fingerprint = analysis_fingerprint(self.db, sbom)
+        fingerprint["lifecycle_revision"] = sbom.lifecycle_revision
         run = AnalysisRun(
+            tenant_id=sbom.tenant_id,
+            analysis_input_fingerprint=fingerprint,
+            is_current=True,
             sbom_id=sbom.id,
             project_id=sbom.projectid,
             product_id=sbom.product_id,
@@ -230,6 +239,11 @@ class AnalysisOrchestrator:
         return run
 
     def mark_running(self, run: AnalysisRun, *, sources: list[str], components: list[dict] | None = None) -> None:
+        sbom = lock_sbom(self.db, run.sbom_id, run.tenant_id)
+        require_processing(sbom)
+        self.db.refresh(run)
+        if not run.is_current or run.run_status == "CANCELLED":
+            raise HTTPException(409, detail={"code": "SBOM_LIFECYCLE_OBSOLETE", "message": "This queued analysis is obsolete. Start a new analysis."})
         run.run_status = "RUNNING"
         run.source = ",".join(sources)
         payload: dict[str, Any] = {"status": "running", "sources": sources}
@@ -456,6 +470,7 @@ class AnalysisOrchestrator:
         correlation_id: str | None = None,
         progress_queue: asyncio.Queue | None = None,
     ) -> tuple[AnalysisRun, AnalysisExecution | None] | None:
+        require_processing(sbom)
         existing = self.active_run(int(sbom.id))
         if existing is not None:
             return existing, None
@@ -490,6 +505,9 @@ class AnalysisOrchestrator:
                 correlation_id=correlation_id,
             )
             return persisted, execution
+        except HTTPException:
+            self.db.rollback()
+            raise
         except Exception as exc:
             self.fail_run(
                 run,

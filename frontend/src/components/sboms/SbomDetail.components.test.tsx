@@ -8,6 +8,8 @@ import type { SBOMComponent, SBOMSource } from '@/types';
 
 const back = vi.fn();
 const push = vi.fn();
+vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: { roles: ['VIEWER'], isPlatformAdmin: false }, hasPermission: () => false, isLoading: false }) }));
+
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ back, push, replace: vi.fn() }),
 }));

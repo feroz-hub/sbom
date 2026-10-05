@@ -54,6 +54,7 @@ def write_audit_log(
     target_kind: str | None = None,
     target_id: int | None = None,
     metadata_json: dict[str, Any] | None = None,
+    strict: bool = False,
 ) -> None:
     """Append one audit row without committing."""
     try:
@@ -87,6 +88,8 @@ def write_audit_log(
             )
         )
     except Exception as exc:  # noqa: BLE001
+        if strict:
+            raise
         log.warning("audit.write_failed: action=%s err=%s", action, exc)
 
 

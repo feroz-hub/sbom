@@ -232,6 +232,10 @@ class CompareService:
         return run
 
     def _guard_status(self, run: AnalysisRun) -> None:
+        from .sbom_lifecycle import require_processing
+        require_processing(self._db.get(SBOMSource, run.sbom_id), operation="Comparison")
+        if not run.is_current:
+            raise RunNotReadyError(run.id, "OBSOLETE")
         status = (run.run_status or "").upper()
         if status not in COMPARABLE_RUN_STATUSES:
             raise RunNotReadyError(run.id, status)

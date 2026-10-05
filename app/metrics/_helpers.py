@@ -22,7 +22,7 @@ def active_head_sbom_ids_subquery() -> ScalarSelect:
 
     return (
         select(SBOMSource.id)
-        .where(SBOMSource.is_active.is_(True))
+        .where(SBOMSource.is_active.is_(True), SBOMSource.lifecycle_status == "ACTIVE")
         .where(
             ~SBOMSource.id.in_(select(SBOMSource.parent_id).where(SBOMSource.parent_id.is_not(None)).scalar_subquery())
         )
@@ -39,7 +39,7 @@ def latest_run_per_sbom_subquery() -> ScalarSelect:
     """
     return (
         select(func.max(AnalysisRun.id))
-        .where(AnalysisRun.run_status.in_(COMPLETED_RUN_STATUSES))
+        .where(AnalysisRun.run_status.in_(COMPLETED_RUN_STATUSES), AnalysisRun.is_current.is_(True))
         .where(AnalysisRun.sbom_id.in_(active_head_sbom_ids_subquery()))
         .group_by(AnalysisRun.sbom_id)
         .scalar_subquery()
@@ -55,7 +55,7 @@ def latest_run_per_sbom_as_of_subquery(as_of_iso: str) -> ScalarSelect:
     """
     return (
         select(func.max(AnalysisRun.id))
-        .where(AnalysisRun.run_status.in_(COMPLETED_RUN_STATUSES))
+        .where(AnalysisRun.run_status.in_(COMPLETED_RUN_STATUSES), AnalysisRun.is_current.is_(True))
         .where(AnalysisRun.completed_on <= as_of_iso)
         .group_by(AnalysisRun.sbom_id)
         .scalar_subquery()

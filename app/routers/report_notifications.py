@@ -361,8 +361,8 @@ def download(
     authorize_preferences(db, preferences_for(sub), context)
     if not is_report_admin(context):
         authorize_preferences(db, preferences_for(sub), recipient_context(db, sub))
-    current_ids = {s.id for s in scope_sboms(db, preferences_for(sub), context.tenant_id)}
-    if not set(row.payload.get("sbom_ids", [])) <= current_ids:
+    historical_ids = {s.id for s in scope_sboms(db, preferences_for(sub), context.tenant_id, historical=True)}
+    if not set(row.payload.get("sbom_ids", [])) <= historical_ids:
         raise report_error("REPORT_SCOPE_CHANGED", "Report scope has changed. Generate a new report.")
     artifact = db.scalar(
         select(ReportArtifact).where(

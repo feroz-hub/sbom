@@ -156,7 +156,7 @@ beforeEach(() => {
 describe('Secure Component Advisor dashboard', () => {
   it('T35 loads the tenant-default dashboard and filters by risk (FR-SCA-002/007)', async () => {
     await renderPage(<ComponentAdvisorPage />);
-    expect(await screen.findByText('log4j-core')).toBeInTheDocument();
+    expect((await screen.findAllByText('log4j-core'))[0]).toBeInTheDocument();
     expect(screen.getByTestId('applied-filters')).toHaveTextContent('Scope: tenant');
     expect(api.listAdvisorComponents.mock.calls[0][0]).toMatchObject({ project_id: null, product_id: null, sbom_id: null });
 
@@ -199,7 +199,7 @@ describe('Secure Component Advisor dashboard', () => {
 
   it('T38 purpose search sends the facet and explains missing purpose evidence (FR-SCA-008/009)', async () => {
     await renderPage(<ComponentAdvisorPage />);
-    await screen.findByText('log4j-core');
+    await screen.findAllByText('log4j-core');
     api.listAdvisorComponents.mockResolvedValue(list([]));
     fireEvent.change(screen.getByLabelText('Search in'), { target: { value: 'purpose' } });
     await userEvent.type(screen.getByLabelText('Search components'), 'logging');
@@ -210,12 +210,12 @@ describe('Secure Component Advisor dashboard', () => {
 
   it('shows the table column groups and an unsupported Informational filter (FR-SCA-001, D-4)', async () => {
     await renderPage(<ComponentAdvisorPage />);
-    await screen.findByText('log4j-core');
-    for (const group of ['Identity', 'Risk', 'Usage', 'Lifecycle', 'Decision support']) {
+    await screen.findAllByText('log4j-core');
+    for (const group of ['Identity', 'Risk', 'Usage', 'Lifecycle', 'Decision']) {
       expect(screen.getAllByRole('columnheader', { name: group }).length).toBeGreaterThan(0);
     }
     expect(screen.getByRole('button', { name: 'Informational (not supported)' })).toBeDisabled();
-    expect(screen.getByLabelText('Risk: Critical')).toBeInTheDocument();
+    expect(screen.getAllByLabelText('Risk: Critical')[0]).toBeInTheDocument();
   });
 
   it('T42 a foreign or unknown scope shows the unauthorized-scope state (FR-SCA-023)', async () => {
@@ -233,9 +233,46 @@ describe('Secure Component Advisor dashboard', () => {
     expect(api.getAdvisorSummary).not.toHaveBeenCalled();
   });
 
+  it('sorts through the existing API and announces the active direction', async () => {
+    await renderPage(<ComponentAdvisorPage />);
+    await screen.findAllByText('log4j-core');
+    fireEvent.click(screen.getByRole('button', { name: 'Sort by Component' }));
+    await waitFor(() => expect(api.listAdvisorComponents).toHaveBeenLastCalledWith(expect.objectContaining({ sort_by: 'name', sort_order: 'desc' }), expect.anything()));
+    fireEvent.click(screen.getByRole('button', { name: 'Sort by Component' }));
+    await waitFor(() => expect(api.listAdvisorComponents).toHaveBeenLastCalledWith(expect.objectContaining({ sort_by: 'name', sort_order: 'asc' }), expect.anything()));
+    expect(screen.getByRole('columnheader', { name: 'Component' })).toHaveAttribute('aria-sort', 'ascending');
+  });
+
+  it('opens the details drawer, preserves scope and restores keyboard focus', async () => {
+    const showModal = vi.fn(function (this: HTMLDialogElement) { this.setAttribute('open', ''); });
+    Object.defineProperty(HTMLDialogElement.prototype, 'showModal', { configurable: true, value: showModal });
+    const close = vi.fn(function (this: HTMLDialogElement) { this.removeAttribute('open'); });
+    Object.defineProperty(HTMLDialogElement.prototype, 'close', { configurable: true, value: close });
+    navigation.search = 'project_id=7';
+    await renderPage(<ComponentAdvisorPage />);
+    const trigger = await screen.findByRole('button', { name: 'View details for log4j-core 2.14.1' });
+    fireEvent.click(trigger);
+    const drawer = await screen.findByRole('dialog', { name: 'Component details' });
+    expect(within(drawer).getByRole('link', { name: /Open full component details/ })).toHaveAttribute('href', '/component-advisor/components/k-log4j?project_id=7');
+    expect(within(drawer).getByText(/2 active SBOM occurrences/)).toBeInTheDocument();
+    fireEvent.click(within(drawer).getByRole('button', { name: 'Close component details' }));
+    expect(trigger).toHaveFocus();
+    Reflect.deleteProperty(HTMLDialogElement.prototype, 'showModal');
+    Reflect.deleteProperty(HTMLDialogElement.prototype, 'close');
+  });
+
+  it('offers clear filters for empty results', async () => {
+    api.listAdvisorComponents.mockResolvedValue(list([]));
+    navigation.search = 'risk=CRITICAL';
+    await renderPage(<ComponentAdvisorPage />);
+    await screen.findAllByText('No components match the current filters.');
+    fireEvent.click(screen.getAllByRole('button', { name: 'Clear filters' })[0]);
+    await waitFor(() => expect(api.listAdvisorComponents).toHaveBeenLastCalledWith(expect.objectContaining({ risk: undefined }), expect.anything()));
+  });
+
   it('T43 dashboard has zero axe violations (NFR-SCA-008)', async () => {
     const { container } = await renderPage(<ComponentAdvisorPage />);
-    await screen.findByText('log4j-core');
+    await screen.findAllByText('log4j-core');
     const results = await axe(container, { rules: { 'heading-order': { enabled: false } } });
     expect(results.violations).toEqual([]);
   }, 15_000);
@@ -412,7 +449,10 @@ describe('Recommendation view', () => {
     const dialog = await screen.findByRole('dialog');
     const confirm = within(dialog).getByRole('button', { name: 'Confirm' });
     expect(confirm).toBeDisabled();
-    await userEvent.type(within(dialog).getByRole('textbox'), 'lowest current risk');
+    const reason = within(dialog).getByRole('textbox');
+    // Wait for the existing dialog's animation-frame focus setup before typing.
+    await waitFor(() => expect(dialog).toHaveFocus());
+    await userEvent.type(reason, 'lowest current risk');
     fireEvent.click(confirm);
     await waitFor(() => expect(api.decideAdvisorRecommendation).toHaveBeenCalledWith(41, {
       decision: 'RECOMMEND', reason: 'lowest current risk', row_version: 3, candidate_id: 7,

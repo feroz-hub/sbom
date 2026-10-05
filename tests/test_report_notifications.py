@@ -285,6 +285,11 @@ def test_successful_delivery_once_and_authenticated_download(fixture):
     response = f.client.get(f"/api/report-deliveries/{identifier}/artifacts/{artifact['id']}")
     assert response.status_code == 200, response.text
     assert response.content.startswith(b"%PDF")
+    # Lifecycle deactivation removes current metrics, never stored artifacts.
+    f.sbom.lifecycle_status = "INACTIVE"
+    f.db.commit()
+    response = f.client.get(f"/api/report-deliveries/{identifier}/artifacts/{artifact['id']}")
+    assert response.status_code == 200 and response.content.startswith(b"%PDF")
     f.db.expire_all()
     assert f.db.get(ReportSubscription, sub.id).last_delivered_at == f.now.isoformat()
 

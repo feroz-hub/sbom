@@ -7,6 +7,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { SbomsTable } from '@/components/sboms/SbomsTable';
 import type { LatestAnalysis, SBOMSource } from '@/types';
 
+vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: { roles: ['VIEWER'], isPlatformAdmin: false }, hasPermission: () => false, isLoading: false }) }));
+
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn() }),
 }));

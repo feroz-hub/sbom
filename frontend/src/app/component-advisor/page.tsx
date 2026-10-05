@@ -13,20 +13,18 @@
  * The backend enforces every permission; this page only shapes the UI.
  */
 
-import Link from 'next/link';
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { DashboardFilters } from '@/components/dashboard/DashboardFilters';
 import { TopBar } from '@/components/layout/TopBar';
 import { AdvisorNotice } from '@/components/component-advisor/AdvisorNotice';
-import { LifecycleBadge, ProvenanceBadge, RiskBadge } from '@/components/component-advisor/AdvisorBadges';
+import { ComponentGrid } from '@/components/component-advisor/ComponentGrid';
 import {
   FACET_LABELS,
   LIFECYCLE_LABELS,
   RISK_FILTERS,
   RISK_LABELS,
-  STATUS_LABELS,
   formatTimestamp,
 } from '@/components/component-advisor/labels';
 import { Alert } from '@/components/ui/Alert';
@@ -34,8 +32,6 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Pagination } from '@/components/ui/Pagination';
 import { Select } from '@/components/ui/Select';
-import { SkeletonRow } from '@/components/ui/Spinner';
-import { Table, TableBody, TableHead, Td, Th } from '@/components/ui/Table';
 import { TableFilterBar, TableSearchInput } from '@/components/ui/TableFilterBar';
 import { useAuth } from '@/hooks/useAuth';
 import { usePermission } from '@/hooks/usePermission';
@@ -46,7 +42,6 @@ import {
   type DashboardFilterScope,
 } from '@/lib/api';
 import type {
-  AdvisorComponent,
   AdvisorFacet,
   AdvisorFilterParams,
   AdvisorKpi,
@@ -184,7 +179,7 @@ function ComponentAdvisorContent() {
     enabled: canRead,
   });
   const listQuery = useQuery({
-    queryKey: ['component-advisor-components', activeTenantId, params, page, pageSize],
+    queryKey: ['component-advisor-components', activeTenantId, params, page, pageSize, filters.sortBy, filters.sortOrder],
     queryFn: ({ signal }) =>
       listAdvisorComponents({ ...params, sort_by: filters.sortBy, sort_order: filters.sortOrder, limit: pageSize, offset }, signal),
     placeholderData: (previous, previousQuery) => (previousQuery?.queryKey[1] === activeTenantId ? previous : undefined),
@@ -347,29 +342,10 @@ function ComponentAdvisorContent() {
             <div className="px-4 py-2"><AdvisorNotice kind="INSUFFICIENT_PURPOSE_EVIDENCE" /></div>
           ) : null}
 
-          <Table ariaLabel="Component versions">
-            <TableHead>
-              <tr>
-                <Th scope="colgroup" colSpan={3} resizable={false}>Identity</Th>
-                <Th scope="colgroup" colSpan={3} resizable={false}>Risk</Th>
-                <Th scope="colgroup" colSpan={3} resizable={false}>Usage</Th>
-                <Th scope="colgroup" colSpan={1} resizable={false}>Lifecycle</Th>
-                <Th scope="colgroup" colSpan={3} resizable={false}>Decision support</Th>
-              </tr>
-              <tr>
-                <Th>Component</Th><Th>Version</Th><Th>Supplier / ecosystem</Th>
-                <Th>Classification</Th><Th>Actionable</Th><Th>Severity / CVSS</Th>
-                <Th>SBOMs</Th><Th>Projects</Th><Th>Products</Th>
-                <Th>Status</Th>
-                <Th>Purpose</Th><Th>Recommendation</Th><Th>Evidence freshness</Th>
-              </tr>
-            </TableHead>
-            <TableBody>
-              {listQuery.isLoading ? <SkeletonRow cols={13} /> : listQuery.isError ? null : rows.length === 0 ? (
-                <tr><td colSpan={13} className="p-6"><AdvisorNotice kind="NO_MATCHING_COMPONENTS" /></td></tr>
-              ) : rows.map((row) => <ComponentRow key={row.canonical_key} row={row} scope={scope} />)}
-            </TableBody>
-          </Table>
+          <ComponentGrid rows={rows} loading={listQuery.isLoading} error={listQuery.isError}
+            scopeQuery={scopeQuery(scope)} sortBy={filters.sortBy} sortOrder={filters.sortOrder}
+            onSort={(field) => update({ sortBy: field, sortOrder: filters.sortBy === field && filters.sortOrder === 'desc' ? 'asc' : 'desc' })}
+            onClear={clearAll} />
 
           <Pagination
             page={page} pageSize={pageSize} total={total} totalPages={totalPages}
@@ -381,47 +357,5 @@ function ComponentAdvisorContent() {
         </Card>
       </div>
     </>
-  );
-}
-
-function ComponentRow({ row, scope }: { row: AdvisorComponent; scope: DashboardFilterScope }) {
-  const counts = row.risk.actionable_severity_counts;
-  const severity = `Critical ${counts.critical}, High ${counts.high}, Medium ${counts.medium}, Low ${counts.low}`;
-  const category = row.purpose.technology_category;
-  return (
-    <tr>
-      <Td>
-        <Link href={`/component-advisor/components/${row.canonical_key}${scopeQuery(scope)}`}
-          className="font-medium text-hcl-blue underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue">
-          {row.name}
-        </Link>
-      </Td>
-      <Td>{row.version ?? '—'}</Td>
-      <Td>
-        <span className="block">{row.supplier ?? '—'}</span>
-        <span className="block text-[10px] text-hcl-muted">{row.ecosystem ?? 'unknown ecosystem'}{row.purl ? ` · ${row.purl}` : ''}</span>
-      </Td>
-      <Td>
-        <RiskBadge classification={row.risk.classification} />
-        {row.risk.review_reasons.length ? <span className="block text-[10px] text-hcl-muted">Needs review: {row.risk.review_reasons.length} reason(s)</span> : null}
-      </Td>
-      <Td>{row.risk.actionable_vulnerability_count}</Td>
-      <Td>
-        <span aria-label={severity} className="block text-xs">C{counts.critical} H{counts.high} M{counts.medium} L{counts.low}</span>
-        <span className="block text-[10px] text-hcl-muted">CVSS max {row.risk.cvss.max_score ?? '—'}</span>
-      </Td>
-      <Td>{row.usage.active_sbom_occurrences}</Td>
-      <Td>{row.usage.project_count}</Td>
-      <Td>{row.usage.product_count}</Td>
-      <Td>
-        <LifecycleBadge bucket={row.lifecycle.bucket} />
-        {row.lifecycle.effective_date ? <span className="block text-[10px] text-hcl-muted">{row.lifecycle.effective_date}</span> : null}
-      </Td>
-      <Td>
-        {category ? <><span className="block text-xs">{category.value}</span><ProvenanceBadge field={category} /></> : <span className="text-xs text-hcl-muted">Not available</span>}
-      </Td>
-      <Td>{STATUS_LABELS[row.recommendation.status] ?? row.recommendation.status}</Td>
-      <Td><span className="text-xs">{formatTimestamp(row.freshness.latest_analysis_at)}</span></Td>
-    </tr>
   );
 }

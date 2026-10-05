@@ -159,7 +159,9 @@ def runs_aggregate(
       * ``other``           — ``RUNNING``/``PENDING``/``NO_DATA`` and any
         future status. Keeps the sum-equals-total invariant unconditional.
     """
-    scope_clauses = []
+    from ..models import SBOMSource
+    active_sboms = select(SBOMSource.id).where(SBOMSource.lifecycle_status == "ACTIVE")
+    scope_clauses = [AnalysisRun.sbom_id.in_(active_sboms), AnalysisRun.is_current.is_(True)]
     if sbom_id is not None:
         scope_clauses.append(AnalysisRun.sbom_id == sbom_id)
     if project_id is not None:

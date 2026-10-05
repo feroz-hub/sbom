@@ -82,8 +82,8 @@ def _stub_celery(monkeypatch):
 
     class _FakeTask:
         @staticmethod
-        def delay(sbom_id, schedule_id, report_cycle=None):  # noqa: ARG004
-            captured.append((sbom_id, schedule_id))
+        def apply_async(kwargs, task_id=None):  # noqa: ARG004
+            captured.append((kwargs["sbom_id"], kwargs["schedule_id"]))
             return None
 
     from app.workers import scheduled_analysis

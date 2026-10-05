@@ -15,9 +15,9 @@ from ..core.context import CurrentContext
 from ..core.security import get_current_tenant_context
 from ..db import get_db
 from ..metrics._helpers import cves_for_finding
-from ..services.lifecycle.vex_provider import effective_vex_for_sbom
 from ..models import AnalysisFinding, AnalysisRun, SBOMComponent
 from ..schemas_compare import COMPARABLE_RUN_STATUSES
+from ..services.lifecycle.vex_provider import effective_vex_for_sbom
 
 log = logging.getLogger("sbom.api.analysis")
 
@@ -119,6 +119,11 @@ def compare_analysis_runs(
                 "retryable": False,
             },
         )
+
+    from ..models import SBOMSource
+    from ..services.sbom_lifecycle import require_processing
+    for run in (run_a_obj, run_b_obj):
+        require_processing(db.get(SBOMSource, run.sbom_id), operation="Comparison")
 
     # B7 patch — both runs must be in a comparable status. Pre-fix v1 happily
     # diffed RUNNING runs and returned nonsense. v2 returns the same envelope.

@@ -956,6 +956,10 @@ def run_schedule_now(
     if row.scope == "TENANT":
         _tenant_schedule(db, row.tenant_id, context)
 
+    from ..services.sbom_lifecycle import analysis_task_id, require_processing
+    if row.scope == "SBOM":
+        require_processing(db.get(SBOMSource, row.sbom_id), operation="Scheduled analysis")
+
     from ..services.schedule_resolver import preview_targets_for_schedule
     preview = preview_targets_for_schedule(db, row)
     target_sbom_ids = [int(item.sbom_id) for item in preview if item.included and item.sbom_id is not None]
@@ -978,7 +982,13 @@ def run_schedule_now(
     last_error: str | None = None
     for sid in target_sbom_ids:
         try:
-            analyze_sbom_async.delay(sbom_id=sid, schedule_id=row.id, **({"report_cycle": report_cycle} if report_cycle else {}))
+            target = db.get(SBOMSource, sid)
+            require_processing(target, operation="Scheduled analysis")
+            analyze_sbom_async.apply_async(
+                kwargs={"sbom_id": sid, "schedule_id": row.id, "lifecycle_revision": target.lifecycle_revision,
+                        **({"report_cycle": report_cycle} if report_cycle else {})},
+                task_id=analysis_task_id(target.tenant_id, sid, target.lifecycle_revision),
+            )
             enqueued.append(sid)
         except Exception as exc:
             last_error = f"{type(exc).__name__}: {exc}"

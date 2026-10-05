@@ -590,6 +590,8 @@ def permission_for_request(request: Request) -> str:
         return "vex:read" if method == "GET" else "vex:write"
     if path.startswith("/api/remediation"):
         return "remediation:read" if method == "GET" else "remediation:write"
+    if re.fullmatch(r"/api/sboms/[0-9]+/lifecycle(?:-history)?", path):
+        return "sbom:read" if method == "GET" else "sbom:delete"
     if "lifecycle" in path:
         return "lifecycle:read" if method == "GET" else "lifecycle:override"
     if "schedule" in path:

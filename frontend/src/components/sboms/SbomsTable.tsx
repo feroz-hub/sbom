@@ -13,6 +13,8 @@ import { TableFilterBar, TableSearchInput } from '@/components/ui/TableFilterBar
 import { DeleteConfirmDialog } from '@/components/ui/DeleteConfirmDialog';
 import { SkeletonRow } from '@/components/ui/Spinner';
 import { Pagination } from '@/components/ui/Pagination';
+import { SbomLifecycleControls } from './SbomLifecycleControls';
+import { sbomEligibility } from '@/lib/sbomEligibility';
 import { SbomStatusBadge } from '@/components/sboms/SbomStatusBadge';
 import { PinButton } from '@/components/ui/PinButton';
 import { SelectionCheckbox } from '@/components/ui/SelectionCheckbox';
@@ -383,9 +385,11 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
               variant="secondary"
               size="sm"
               onClick={() => setFdaDialogOpen(true)}
-              disabled={!selectionProjectValid}
+              disabled={!selectionProjectValid || selectedSboms.some(sbom => !sbomEligibility(sbom).eligible || sbom.analysis_requires_reanalysis)}
               title={
-                selectedSboms.length === 0
+                selectedSboms.some(sbom => sbom.lifecycle_status === 'INACTIVE')
+                  ? 'Report generation unavailable because a selected SBOM is inactive.'
+                  : selectedSboms.length === 0
                   ? 'Select one or more SBOMs'
                   : !selectionProjectValid
                     ? 'Select SBOMs from one assigned project'
@@ -529,7 +533,8 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
                   <Td className="text-hcl-muted">{sbom.created_by || '—'}</Td>
                   <Td className="whitespace-nowrap text-hcl-muted">{formatDate(sbom.created_on)}</Td>
                   <Td className="text-center">
-                    <div className="flex items-center justify-center gap-2">
+                    <SbomLifecycleControls sbom={sbom} />
+                    <div className="mt-2 flex items-center justify-center gap-2">
                       {canOpenRepairWorkspace(sbom) && getRepairWorkspaceUrl(sbom) ? (
                         <button
                           onClick={() => router.push(getRepairWorkspaceUrl(sbom)!)}

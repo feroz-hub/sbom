@@ -85,6 +85,10 @@ def get_vex_report(
     """Return detailed VEX statement evidence for export/UI reports."""
 
     _require_sbom(db, sbom_id, context.tenant_id)
+    if format != "json":
+        from ..models import SBOMSource
+        from ..services.sbom_lifecycle import require_processing
+        require_processing(db.get(SBOMSource, sbom_id), operation="Report generation")
     status_filter = _report_status_filter(report_type)
     if format == "csv":
         content = vex_report_csv(db, sbom_id, status_filter=status_filter)
@@ -107,6 +111,9 @@ def get_vex_report_pack(
     """Download a ZIP pack of VEX JSON and focused CSV reports."""
 
     _require_sbom(db, sbom_id, context.tenant_id)
+    from ..models import SBOMSource
+    from ..services.sbom_lifecycle import require_processing
+    require_processing(db.get(SBOMSource, sbom_id), operation="Report generation")
     buffer = BytesIO()
     with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("vex.json", json.dumps(vex_report(db, sbom_id), indent=2))

@@ -328,3 +328,17 @@ export function invalidateComponentAdvisorSurfaces(qc: QueryClient, recommendati
     qc.invalidateQueries({ queryKey: ['component-advisor-candidate-evidence'] });
   }
 }
+
+/** Lifecycle affects current metrics across inventory, advisor and reports. */
+export function invalidateSbomLifecycle(qc: QueryClient, sbom: { id: number; projectid: number | null; product_id?: number | null }): void {
+  invalidateSbomSurfaces(qc, sbom.id);
+  invalidateProjectSurfaces(qc, sbom.projectid);
+  invalidateProductSurfaces(qc, sbom.product_id);
+  invalidateRunLists(qc);
+  invalidateScheduleLists(qc);
+  invalidateDashboardTiles(qc);
+  invalidateReportSurfaces(qc);
+  for (const key of ['sbom-lifecycle-history', 'compare', 'component-advisor-summary', 'component-advisor-components', 'report-subscriptions', 'report-notifications-targets']) {
+    qc.invalidateQueries({ queryKey: [key] });
+  }
+}

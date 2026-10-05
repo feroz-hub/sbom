@@ -7,6 +7,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const back = vi.fn();
 const push = vi.fn();
+vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: { roles: ['VIEWER'], isPlatformAdmin: false }, hasPermission: () => false, isLoading: false }) }));
+
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ back, push, replace: vi.fn() }),
 }));
@@ -658,5 +660,25 @@ describe('SbomDetail lifecycle management', () => {
       expect(await screen.findByText('Backend Error: Internal Server Error')).toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: /Cancel/i }));
     }, 15000);
+  });
+});
+
+describe('Operational lifecycle processing restrictions', () => {
+  it('keeps inactive historical detail visible and disables analysis and reports', async () => {
+    render(wrap(<SbomDetail sbom={{ ...SBOM, lifecycle_status: 'INACTIVE' }} />));
+    expect(screen.getByText('INACTIVE')).toBeVisible();
+    expect(screen.getByRole('button', { name: /Run Analysis/i })).toBeDisabled();
+    expect(screen.getByText(/Analysis unavailable because this SBOM is inactive/)).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Mark Active' })).not.toBeInTheDocument();
+    const exports = screen.getAllByRole('button').filter(button => /Export|Report/i.test(button.textContent || ''));
+    expect(exports.length).toBeGreaterThan(0);
+    exports.forEach(button => expect(button).toBeDisabled());
+  });
+
+  it('allows reanalysis while previous reports remain stale', () => {
+    render(wrap(<SbomDetail sbom={{ ...SBOM, lifecycle_status: 'ACTIVE', analysis_requires_reanalysis: true }} />));
+    expect(screen.getByRole('button', { name: /Run Analysis/i })).toBeEnabled();
+    const exports = screen.getAllByRole('button').filter(button => /Export|Report/i.test(button.textContent || ''));
+    exports.forEach(button => expect(button).toBeDisabled());
   });
 });

@@ -62,7 +62,7 @@ def _recent_run_exists(db: Session, sbom_id: int, gap_minutes: int) -> bool:
     """
     cutoff = (_now() - timedelta(minutes=gap_minutes)).isoformat()
     found = db.execute(
-        select(AnalysisRun.id).where(AnalysisRun.sbom_id == sbom_id).where(AnalysisRun.completed_on >= cutoff).limit(1)
+        select(AnalysisRun.id).where(AnalysisRun.sbom_id == sbom_id, AnalysisRun.is_current.is_(True)).where(AnalysisRun.completed_on >= cutoff).limit(1)
     ).scalar_one_or_none()
     return found is not None
 
@@ -117,10 +117,15 @@ def tick_scheduled_analyses(self) -> dict:
         enqueued = 0
         for tgt in targets:
             try:
-                analyze_sbom_async.delay(
-                    sbom_id=tgt.sbom_id,
-                    schedule_id=tgt.schedule_id,
-                    **({"report_cycle": report_cycle} if report_cycle else {}),
+                from ..services.sbom_lifecycle import analysis_task_id, processing_eligibility
+                sbom = db.get(SBOMSource, tgt.sbom_id)
+                if sbom is None or not processing_eligibility(sbom)["eligible"]:
+                    continue
+                analyze_sbom_async.apply_async(
+                    kwargs={"sbom_id": tgt.sbom_id, "schedule_id": tgt.schedule_id,
+                            "lifecycle_revision": sbom.lifecycle_revision,
+                            **({"report_cycle": report_cycle} if report_cycle else {})},
+                    task_id=analysis_task_id(sbom.tenant_id, sbom.id, sbom.lifecycle_revision),
                 )
                 enqueued += 1
             except Exception:
@@ -176,6 +181,7 @@ def analyze_sbom_async(
     schedule_id: int,
     force_refresh: bool = False,
     report_cycle: str | None = None,
+    lifecycle_revision: int | None = None,
 ) -> dict:
     """Run create_auto_report for one SBOM and write back to the schedule row.
 
@@ -211,6 +217,15 @@ def analyze_sbom_async(
                 sched.last_run_at = to_iso(_now())
                 db.commit()
             completion = {"status": "SKIPPED", "reason": "sbom_not_found"}
+            return completion
+
+        from ..services.sbom_lifecycle import processing_eligibility
+        verdict = processing_eligibility(sbom)
+        if not verdict["eligible"] or (sbom.lifecycle_revision != (lifecycle_revision if lifecycle_revision is not None else 0)):
+            completion = {"status": "SKIPPED", "reason": verdict["reason_code"] or "SBOM_LIFECYCLE_OBSOLETE"}
+            sched.last_run_status = "SKIPPED"
+            sched.last_run_at = to_iso(_now())
+            db.commit()
             return completion
 
         # Resolve again immediately before the external analysis begins.
@@ -257,6 +272,10 @@ def analyze_sbom_async(
             )
             run = outcome[0] if outcome is not None else None
         except Exception as exc:
+            from fastapi import HTTPException
+            if isinstance(exc, HTTPException) and exc.status_code == 409:
+                completion = {"status": "SKIPPED", "reason": exc.detail.get("code")}
+                return completion
             log.exception(
                 "scheduled_analysis_run_failed",
                 extra={"sbom_id": sbom_id, "schedule_id": schedule_id},

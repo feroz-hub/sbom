@@ -46,7 +46,7 @@ class DashboardScope:
     def eligible_sbom_ids(self):
         """SQL subquery, not a Python list; usable by every metric query."""
         s = SBOMSource.__table__.c
-        statement = select(s.id).where(s.tenant_id == self.tenant_id, s.is_active.is_(True))
+        statement = select(s.id).where(s.tenant_id == self.tenant_id, s.is_active.is_(True), s.lifecycle_status == "ACTIVE")
         # Core subqueries need the same parent visibility rules that ORM
         # queries receive from SoftDeleteMixin and Product's deleted_at field.
         # Nullable links remain eligible for older uploads without a Product.

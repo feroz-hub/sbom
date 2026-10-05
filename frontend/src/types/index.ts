@@ -94,7 +94,16 @@ export interface LatestAnalysisSummary {
 
 export type LatestAnalysis = LatestAnalysisSummary;
 
+export interface SbomLifecycleEvent {
+  id: number; sbom_id: number; tenant_id: number; actor: string | null; actor_id: number | null;
+  timestamp: string; old_status: 'ACTIVE' | 'INACTIVE'; new_status: 'ACTIVE' | 'INACTIVE'; reason: string;
+}
+
 export interface SBOMSource {
+  lifecycle_status?: 'ACTIVE' | 'INACTIVE';
+  lifecycle_revision?: number;
+  analysis_requires_reanalysis?: boolean;
+  processing_eligibility?: { eligible: boolean; reason_code: string | null; reason: string | null };
   id: number;
   sbom_name: string;
   sbom_type: number | null;       // FK integer to SBOMType
@@ -899,6 +908,8 @@ export interface VulnerabilityRemediation {
 }
 
 export interface AnalysisRun {
+  is_current?: boolean;
+  processing_eligibility?: { eligible: boolean; reason_code: string | null; reason: string | null };
   id: number;
   sbom_id: number | null;
   sbom_name?: string | null;

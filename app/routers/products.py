@@ -51,6 +51,7 @@ def _summary(db: Session, product: Product) -> ProductSummary:
             SBOMSource.tenant_id == product.tenant_id,
             SBOMSource.product_id == product.id,
             SBOMSource.is_active.is_(True),
+                SBOMSource.lifecycle_status == "ACTIVE",
         )
         .order_by(SBOMSource.id.desc())
         .limit(1)
@@ -60,6 +61,7 @@ def _summary(db: Session, product: Product) -> ProductSummary:
             SBOMSource.tenant_id == product.tenant_id,
             SBOMSource.product_id == product.id,
             SBOMSource.is_active.is_(True),
+                SBOMSource.lifecycle_status == "ACTIVE",
         )
     ).scalar_one()
     current = None
@@ -70,6 +72,7 @@ def _summary(db: Session, product: Product) -> ProductSummary:
                 SBOMSource.tenant_id == product.tenant_id,
                 SBOMSource.product_id == product.id,
                 SBOMSource.is_active.is_(True),
+                SBOMSource.lifecycle_status == "ACTIVE",
             )
         ).scalar_one_or_none()
     return ProductSummary(

@@ -26,7 +26,7 @@ _cache_lock = threading.Lock()
 _MAX_ENTRIES = 256  # bounded so a runaway test session doesn't grow forever
 
 
-def invalidation_key(db: Session) -> tuple[int, int, int, int, int]:
+def invalidation_key(db: Session) -> tuple[int, ...]:
     """Cheap O(1) invalidation tuple — any new run / SBOM bumps it.
 
     ``(max(analysis_run.id), count(analysis_run), count(sbom_source),
@@ -39,7 +39,11 @@ def invalidation_key(db: Session) -> tuple[int, int, int, int, int]:
     sbom_count = db.execute(select(func.count(SBOMSource.id))).scalar() or 0
     max_finding_id = db.execute(select(func.max(AnalysisFinding.id))).scalar() or 0
     finding_count = db.execute(select(func.count(AnalysisFinding.id))).scalar() or 0
-    return (int(max_run_id), int(run_count), int(sbom_count), int(max_finding_id), int(finding_count))
+    # Read core rows outside the effective scope so transitions always change
+    # the key, even when equal-sized SBOM datasets are swapped across workers.
+    s = SBOMSource.__table__.c
+    revision = db.execute(select(func.coalesce(func.sum(s.lifecycle_revision), 0))).scalar() or 0
+    return (int(max_run_id), int(run_count), int(sbom_count), int(max_finding_id), int(finding_count), int(revision))
 
 
 def memoize_with_ttl(

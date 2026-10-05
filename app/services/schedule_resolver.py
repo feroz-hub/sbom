@@ -100,6 +100,9 @@ def _eligible_sboms(db) -> list[SBOMSource]:
         db.scalars(
             select(SBOMSource).where(
                 SBOMSource.is_active.is_(True),
+                SBOMSource.lifecycle_status == "ACTIVE",
+                SBOMSource.status == "validated",
+                SBOMSource.error_count == 0,
                 SBOMSource.projectid.in_(active_project_ids),
                 SBOMSource.product_id.in_(active_product_ids),
             )

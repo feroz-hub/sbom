@@ -74,3 +74,13 @@ describe('RunsTable status classification', () => {
     expect(screen.queryByText('#1')).not.toBeInTheDocument();
   });
 });
+
+it('preserves historical rows while disabling comparison and new PDFs', () => {
+  const reason = 'Analysis unavailable because this SBOM is inactive.';
+  render(wrap(<RunsTable runs={[run({ run_status: 'FINDINGS', processing_eligibility: { eligible: false, reason_code: 'SBOM_INACTIVE', reason } })]} isLoading={false} error={null} selectedIds={new Set()} onToggleSelect={vi.fn()} />));
+  expect(screen.getByText('#1')).toBeVisible();
+  expect(screen.getByRole('checkbox', { name: 'Select run #1 for comparison' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Download PDF' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Download PDF' })).toHaveAttribute('title', reason);
+  expect(screen.getByRole('button', { name: 'View run' })).toBeEnabled();
+});

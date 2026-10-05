@@ -18,11 +18,11 @@ import logging
 import re
 import time
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Path, Query, Request, Response, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -84,6 +84,7 @@ from ..services.sbom_document_service import (
     read_raw_chunk,
 )
 from ..services.sbom_enrichment_service import mark_enrichment_pending, run_post_upload_enrichment
+from ..services.sbom_lifecycle import lifecycle_history, require_processing, transition_lifecycle
 from ..services.sbom_service import (
     MISSING_SBOM_CONTENT_REASON,
     UNPARSEABLE_SBOM_CONTENT_REASON,
@@ -360,6 +361,7 @@ def _serialize_latest_analysis(
     medium_count = int(run.medium_count or 0)
     low_count = int(run.low_count or 0)
     return LatestAnalysisOut(
+        is_current=run.is_current,
         run_id=int(run.id),
         status=_analysis_result(run.run_status),
         result=_analysis_outcome(run.run_status),
@@ -1473,6 +1475,33 @@ def delete_sbom(
         )
 
 
+class SbomLifecycleChange(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    status: Literal["ACTIVE", "INACTIVE"]
+    reason: str = Field(min_length=1, max_length=2000)
+
+
+@router.post("/sboms/{sbom_id}/lifecycle", response_model=SBOMSourceOut)
+def change_sbom_lifecycle(
+    payload: SbomLifecycleChange,
+    request: Request,
+    sbom_id: int = Path(..., ge=1),
+    context: CurrentContext = Depends(require_permission("sbom:delete")),
+    db: Session = Depends(get_db),
+):
+    sbom = transition_lifecycle(db, context, sbom_id, payload.status, payload.reason, request)
+    return _serialize_sbom_out(sbom, db=db)
+
+
+@router.get("/sboms/{sbom_id}/lifecycle-history")
+def get_sbom_lifecycle_history(
+    sbom_id: int = Path(..., ge=1),
+    context: CurrentContext = Depends(require_permission("sbom:read")),
+    db: Session = Depends(get_db),
+):
+    return lifecycle_history(db, context.tenant_id, sbom_id)
+
+
 @router.post("/sboms/{sbom_id}/restore", status_code=status.HTTP_200_OK)
 @workflow_event("sbom_activation", result_kind="activation", completed_event="sbom_activated")
 def restore_sbom(
@@ -1591,6 +1620,8 @@ async def run_analysis_for_sbom(
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     db: Session = Depends(get_db),
 ):
+    require_processing(db.get(SBOMSource, sbom_id))
+
     async def _execute() -> dict:
         log.info(
             "Manual analysis triggered for SBOM id=%d (force_refresh=%s)",
@@ -1601,6 +1632,7 @@ async def run_analysis_for_sbom(
         if not sbom:
             log.warning("Analysis requested for unknown SBOM id=%d", sbom_id)
             raise HTTPException(status_code=404, detail="SBOM not found")
+        require_processing(sbom)
         existing = get_active_analysis_run(db, sbom_id)
         if existing:
             response.status_code = status.HTTP_200_OK
@@ -1613,6 +1645,9 @@ async def run_analysis_for_sbom(
             return analysis_run_to_dict(existing)
         try:
             report = await create_auto_report(db, sbom, force_refresh=force_refresh, trigger_source="manual")
+        except HTTPException:
+            db.rollback()
+            raise
         except Exception as exc:
             db.rollback()
             log.error("Analysis run failed for SBOM id=%d: %s", sbom_id, exc, exc_info=True)
@@ -1668,6 +1703,7 @@ async def analyze_sbom_stream(
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
+    require_processing(sbom_row)
     existing = get_active_analysis_run(db, sbom_id)
     if existing:
 

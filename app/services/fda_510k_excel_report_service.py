@@ -763,6 +763,9 @@ class Fda510kExcelReportService:
         sboms = list(
             self.db.execute(select(SBOMSource).where(SBOMSource.id.in_(unique_ids)).order_by(SBOMSource.id.asc())).scalars()
         )
+        from .sbom_lifecycle import require_processing
+        for sbom in sboms:
+            require_processing(sbom, operation="Report generation")
         by_id = {sbom.id: sbom for sbom in sboms}
         missing = [sbom_id for sbom_id in unique_ids if sbom_id not in by_id]
         if missing:
@@ -779,7 +782,7 @@ class Fda510kExcelReportService:
             run = self._resolve_findings_run(sbom, selection.findings_analysis_run_id)
             if run is None:
                 blockers.append(self._blocker(sbom, "findings", self._latest_findings_status(sbom)))
-            elif run.run_status not in COMPLETED_RUN_STATUSES:
+            elif not run.is_current or run.run_status not in COMPLETED_RUN_STATUSES:
                 blockers.append(self._blocker(sbom, "findings", run.run_status or "unknown"))
             else:
                 runs[sbom.id] = run

@@ -283,3 +283,13 @@ describe('ScheduleCard hierarchy sources and previews', () => {
     expect(await screen.findByText(/controller\.cdx 2\.0/i)).toBeInTheDocument();
   });
 });
+
+it('disables scheduled Run Now for an inactive SBOM and explains why', async () => {
+  api.getSbomSchedule.mockResolvedValue({ inherited: false, schedule: { ...schedule, scope: 'SBOM', sbom_id: 81 }, state: 'CUSTOM', included: true });
+  render(wrap(<ScheduleCard scope="SBOM" targetId={81} processingReason="Analysis unavailable because this SBOM is inactive." />));
+  const button = await screen.findByRole('button', { name: /Run now/i });
+  expect(button).toBeDisabled();
+  expect(button).toHaveAttribute('title', 'Analysis unavailable because this SBOM is inactive.');
+  fireEvent.click(button);
+  expect(api.runScheduleNow).not.toHaveBeenCalled();
+});

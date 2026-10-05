@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { sbomEligibility } from '@/lib/sbomEligibility';
 import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
 import { Dialog, DialogBody, DialogFooter } from '@/components/ui/Dialog';
@@ -83,7 +84,9 @@ export function Fda510kReportDialog({ open, onClose, sboms }: Fda510kReportDialo
 
   const projectId = useMemo(() => sameProjectId(sboms), [sboms]);
   const requiredMissing = REQUIRED_FIELDS.some((field) => !String(metadata[field] ?? '').trim());
-  const canExport = projectId !== null && sboms.length > 0 && !requiredMissing && !submitting;
+  const processingReason = sboms.find(sbom => !sbomEligibility(sbom).eligible);
+  const unavailableReason = processingReason ? sbomEligibility(processingReason).reason : sboms.some(sbom => sbom.analysis_requires_reanalysis) ? 'Run a new analysis before generating a current report.' : null;
+  const canExport = sboms.every(sbom => sbomEligibility(sbom).eligible && !sbom.analysis_requires_reanalysis) && projectId !== null && sboms.length > 0 && !requiredMissing && !submitting;
 
   const setField = (field: keyof Fda510kReportMetadata, value: string) => {
     setMetadata((current) => ({ ...current, [field]: value }));
@@ -137,6 +140,7 @@ export function Fda510kReportDialog({ open, onClose, sboms }: Fda510kReportDialo
       }
     >
       <DialogBody className="space-y-4">
+        {unavailableReason && <Alert variant="warning">{unavailableReason}</Alert>}
         <div className="rounded-lg border border-border bg-surface-muted/50 px-3 py-2 text-sm text-hcl-muted">
           {sboms.length} selected SBOM{sboms.length === 1 ? '' : 's'}
           {projectId === null ? ' across multiple or unassigned projects' : ''}

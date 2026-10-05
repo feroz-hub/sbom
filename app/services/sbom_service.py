@@ -542,6 +542,9 @@ def load_sbom_from_ref(
     if sbom_id is not None and sbom_name and sbom_row and sbom_row.sbom_name != sbom_name.strip():
         raise ValueError(f"SBOM mismatch: id={sbom_id} does not match name='{sbom_name}'.")
 
+    from .sbom_lifecycle import require_processing
+    require_processing(sbom_row)
+
     # Ensure content present
     if not sbom_row or not sbom_row.sbom_data:
         raise ValueError("SBOM has no sbom_data stored")

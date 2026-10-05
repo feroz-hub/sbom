@@ -1,6 +1,6 @@
 # schemas.py
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -144,6 +144,7 @@ class SBOMSourceCreate(BaseModel):
 
 
 class LatestAnalysisOut(BaseModel):
+    is_current: bool = True
     run_id: int
     status: str
     result: str
@@ -160,6 +161,10 @@ class LatestAnalysisOut(BaseModel):
 
 
 class SBOMSourceOut(ORMModel):
+    lifecycle_status: Literal["ACTIVE", "INACTIVE"] = "ACTIVE"
+    lifecycle_revision: int = 0
+    analysis_requires_reanalysis: bool = False
+    processing_eligibility: dict[str, Any] = Field(default_factory=dict)
     id: int
     sbom_name: str
     sbom_data: str | None = None
@@ -411,6 +416,8 @@ class SBOMComponentListResponse(BaseModel):
 
 
 class AnalysisRunOut(ORMModel):
+    processing_eligibility: dict[str, Any] = Field(default_factory=dict)
+    is_current: bool = True
     id: int
     sbom_id: int
     project_id: int | None = None

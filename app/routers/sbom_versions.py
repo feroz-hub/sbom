@@ -362,6 +362,9 @@ def get_sbom_lifecycle_report(
 ):
     """Return a detailed lifecycle report suitable for export or UI evidence views."""
 
+    if format != "json":
+        from ..services.sbom_lifecycle import require_processing
+        require_processing(db.get(SBOMSource, id), operation="Report generation")
     if format == "csv":
         content = lifecycle_report_csv(db, id, report_type=report_type)
         suffix = f"_{report_type}" if report_type else ""
@@ -387,6 +390,8 @@ def get_lifecycle_report_pack(
 ):
     """Download a ZIP pack of lifecycle JSON and focused CSV reports."""
 
+    from ..services.sbom_lifecycle import require_processing
+    require_processing(db.get(SBOMSource, id), operation="Report generation")
     report = LifecycleEnrichmentService().lifecycle_report(db, id)
     buffer = BytesIO()
     with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:

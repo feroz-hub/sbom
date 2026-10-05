@@ -748,6 +748,16 @@ class SBOMSource(Base, SoftDeleteMixin, TenantOwnedMixin):
     product_name = Column(String, nullable=True)
     description = Column(String, nullable=True)
 
+    # Operational lifecycle is independent of validation and soft deletion.
+    lifecycle_status = Column(String(8), nullable=False, default="ACTIVE", server_default="ACTIVE", index=True)
+    lifecycle_revision = Column(Integer, nullable=False, default=0, server_default="0")
+    analysis_requires_reanalysis = Column(Boolean, nullable=False, default=False, server_default=sql_text("false"))
+
+    @property
+    def processing_eligibility(self) -> dict:
+        from .services.sbom_lifecycle import processing_eligibility
+        return processing_eligibility(self)
+
     # 8-stage validation outcome — see migration 012.
     # ``server_default`` mirrors migration 012's literals so test-path
     # schemas built via ``Base.metadata.create_all`` carry the same
@@ -802,6 +812,7 @@ class SBOMSource(Base, SoftDeleteMixin, TenantOwnedMixin):
     )
 
     __table_args__ = (
+        CheckConstraint("lifecycle_status IN ('ACTIVE','INACTIVE')", name="sbom_operational_lifecycle"),
         UniqueConstraint(
             "tenant_id",
             "sbom_name",
@@ -1521,6 +1532,10 @@ class AnalysisRun(Base, SoftDeleteMixin, TenantOwnedMixin):
 
     raw_report = Column(Text, nullable=True)
 
+    # Obsolete/stale runs remain readable, but cannot enter current metrics.
+    is_current = Column(Boolean, nullable=False, default=True, server_default=sql_text("true"), index=True)
+    analysis_input_fingerprint = Column(JSON, nullable=True)
+
     sbom = relationship("SBOMSource", back_populates="analysis_runs")
     project = relationship("Projects", back_populates="analysis_runs")
     product = relationship("Product", back_populates="analysis_runs")
@@ -1530,6 +1545,19 @@ class AnalysisRun(Base, SoftDeleteMixin, TenantOwnedMixin):
         primaryjoin="AnalysisRun.id == foreign(AiFixBatch.run_id)",
         viewonly=True,
     )
+
+    @property
+    def processing_eligibility(self) -> dict:
+        from .services.sbom_lifecycle import processing_eligibility
+        if not self.sbom:
+            return {"eligible": False, "reason_code": "SBOM_NOT_FOUND", "reason": "SBOM no longer available."}
+        verdict = processing_eligibility(self.sbom)
+        if not verdict["eligible"]:
+            return verdict
+        if not self.is_current or self.sbom.analysis_requires_reanalysis:
+            return {"eligible": False, "reason_code": "SBOM_ANALYSIS_OBSOLETE",
+                    "reason": "This analysis is historical. Run a new analysis before generating comparisons or reports."}
+        return verdict
 
     @property
     def product_name(self) -> str | None:

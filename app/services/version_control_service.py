@@ -343,6 +343,9 @@ def compare_versions(db: Session, sbom_a_id: int, sbom_b_id: int) -> dict[str, A
     """
     Compare two SBOM versions and identify added, removed, and modified components.
     """
+    from .sbom_lifecycle import require_processing
+    require_processing(db.get(SBOMSource, sbom_a_id), operation="Comparison")
+    require_processing(db.get(SBOMSource, sbom_b_id), operation="Comparison")
     comps_a = db.execute(select(SBOMComponent).where(SBOMComponent.sbom_id == sbom_a_id)).scalars().all()
     comps_b = db.execute(select(SBOMComponent).where(SBOMComponent.sbom_id == sbom_b_id)).scalars().all()
 

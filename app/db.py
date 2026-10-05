@@ -230,11 +230,12 @@ def _filter_soft_deleted(execute_state) -> None:
         run_ids = select(r.id).where(
             r.tenant_id == scope.tenant_id,
             r.is_active.is_(True),
+            r.is_current.is_(True),
             r.sbom_id.in_(sbom_ids),
         )
         criteria = [
             (SBOMSource, SBOMSource.id.in_(sbom_ids)),
-            (AnalysisRun, AnalysisRun.sbom_id.in_(sbom_ids)),
+            (AnalysisRun, AnalysisRun.sbom_id.in_(sbom_ids) & AnalysisRun.is_current.is_(True)),
             (AnalysisFinding, AnalysisFinding.analysis_run_id.in_(run_ids)),
             (SBOMComponent, SBOMComponent.sbom_id.in_(sbom_ids)),
             (VexStatement, VexStatement.sbom_id.in_(sbom_ids)),

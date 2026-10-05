@@ -78,6 +78,7 @@ export function RunsTable({ runs, isLoading, error, selectedIds, onToggleSelect 
   const [sourceFilter, setSourceFilter] = useState('');
 
   const handleDownloadPdf = async (run: AnalysisRun) => {
+    if (run.processing_eligibility?.eligible === false) return;
     setDownloadingId(run.id);
     try {
       const blob = await downloadPdfReport({
@@ -332,6 +333,8 @@ export function RunsTable({ runs, isLoading, error, selectedIds, onToggleSelect 
                       type="checkbox"
                       aria-label={`Select run #${run.id} for comparison`}
                       checked={selectedIds?.has(run.id) ?? false}
+                      disabled={run.processing_eligibility?.eligible === false}
+                      title={run.processing_eligibility?.reason ?? undefined}
                       onChange={() => onToggleSelect?.(run.id)}
                       className="h-4 w-4 rounded border-hcl-border text-hcl-blue focus:ring-hcl-blue"
                     />
@@ -423,7 +426,8 @@ export function RunsTable({ runs, isLoading, error, selectedIds, onToggleSelect 
                     </button>
                     <button
                       onClick={() => handleDownloadPdf(run)}
-                      disabled={downloadingId === run.id}
+                      disabled={downloadingId === run.id || run.processing_eligibility?.eligible === false}
+                      title={run.processing_eligibility?.reason ?? undefined}
                       className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-hcl-muted transition-colors hover:bg-green-50 hover:text-green-600 disabled:opacity-50 dark:hover:bg-emerald-950/40"
                       aria-label="Download PDF"
                     >

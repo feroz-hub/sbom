@@ -44,6 +44,7 @@ import type { AnalysisSchedule, SbomScheduleResolved, ScheduleCadence } from '@/
 interface ScheduleCardProps {
   scope: 'PROJECT' | 'PRODUCT' | 'SBOM';
   targetId: number;
+  processingReason?: string | null;
 }
 
 const cadenceLabel = (s: AnalysisSchedule): string => {
@@ -79,7 +80,7 @@ const CADENCE_BADGE: Record<ScheduleCadence, string> = {
   CUSTOM: 'bg-purple-50 text-purple-700 border-purple-200',
 };
 
-export function ScheduleCard({ scope, targetId }: ScheduleCardProps) {
+export function ScheduleCard({ scope, targetId, processingReason }: ScheduleCardProps) {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
   const [showEditor, setShowEditor] = useState(false);
@@ -132,7 +133,10 @@ export function ScheduleCard({ scope, targetId }: ScheduleCardProps) {
   });
 
   const runNowMutation = useMutation({
-    mutationFn: (id: number) => runScheduleNow(id),
+    mutationFn: (id: number) => {
+      if (processingReason) throw new Error(processingReason);
+      return runScheduleNow(id);
+    },
     onSuccess: (res) => {
       showToast(
         `Enqueued ${res.sbom_ids.length} SBOM analysis${res.sbom_ids.length === 1 ? '' : 'es'}`,
@@ -338,8 +342,9 @@ export function ScheduleCard({ scope, targetId }: ScheduleCardProps) {
                   size="sm"
                   variant="secondary"
                   loading={runNowMutation.isPending}
+                  disabled={Boolean(processingReason)}
                   onClick={() => runNowMutation.mutate(sched.id)}
-                  title="Trigger an analysis immediately. The cadence cursor is unchanged."
+                  title={processingReason || "Trigger an analysis immediately. The cadence cursor is unchanged."}
                 >
                   <Zap className="h-4 w-4" /> Run now
                 </Button>

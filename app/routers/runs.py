@@ -21,10 +21,10 @@ from ..metrics import runs_aggregate
 from ..metrics._helpers import cves_for_finding
 from ..metrics.findings import canonical_finding_metrics_for_run, canonical_findings_for_run
 from ..models import AnalysisFinding, AnalysisRun, EpssScore, Product, SBOMSource
-from ..services.lifecycle.vex_provider import effective_vex_for_sbom, _statement_dict
 from ..schemas import AnalysisFindingOut, AnalysisRunOut, RunsAggregateOut
 from ..services.finding_metrics import canonicalize_finding_rows, metrics_to_dict, normalize_severity
 from ..services.kev_enrichment import EMPTY_KEV_ENRICHMENT, enrich_findings_with_kev
+from ..services.lifecycle.vex_provider import _statement_dict, effective_vex_for_sbom
 from ..services.risk_score import (
     EPSS_AMPLIFIER,
     KEV_MULTIPLIER,
@@ -145,6 +145,7 @@ def list_analysis_runs(
     items = []
     for run, sbom_name in rows:
         run_dict = {k: v for k, v in run.__dict__.items() if not k.startswith("_")}
+        run_dict["processing_eligibility"] = run.processing_eligibility
         run_dict["sbom_name"] = sbom_name or run_dict.get("sbom_name")
         items.append(run_dict)
 
@@ -219,6 +220,8 @@ def list_recent_runs(
     product_subq = db.query(Product.id.label("product_id"), Product.name.label("product_name")).subquery()
     stmt = (
         select(AnalysisRun, sbom_subq.c.sbom_name, proj_subq.c.project_name, product_subq.c.product_name)
+        .where(AnalysisRun.is_current.is_(True), AnalysisRun.sbom_id.in_(select(SBOMSource.id).where(
+            SBOMSource.lifecycle_status == "ACTIVE", SBOMSource.status == "validated", SBOMSource.error_count == 0)))
         .outerjoin(sbom_subq, AnalysisRun.sbom_id == sbom_subq.c.sbom_id)
         .outerjoin(proj_subq, AnalysisRun.project_id == proj_subq.c.project_id)
         .outerjoin(product_subq, AnalysisRun.product_id == product_subq.c.product_id)
@@ -263,6 +266,8 @@ def search_runs(
     product_subq = db.query(Product.id.label("product_id"), Product.name.label("product_name")).subquery()
     stmt = (
         select(AnalysisRun, sbom_subq.c.sbom_name, proj_subq.c.project_name, product_subq.c.product_name)
+        .where(AnalysisRun.is_current.is_(True), AnalysisRun.sbom_id.in_(select(SBOMSource.id).where(
+            SBOMSource.lifecycle_status == "ACTIVE", SBOMSource.status == "validated", SBOMSource.error_count == 0)))
         .outerjoin(sbom_subq, AnalysisRun.sbom_id == sbom_subq.c.sbom_id)
         .outerjoin(proj_subq, AnalysisRun.project_id == proj_subq.c.project_id)
         .outerjoin(product_subq, AnalysisRun.product_id == product_subq.c.product_id)
@@ -317,6 +322,7 @@ def get_analysis_run(
         raise HTTPException(status_code=404, detail="Analysis run not found")
     metrics = canonical_finding_metrics_for_run(db, run=run)
     payload = {k: v for k, v in run.__dict__.items() if not k.startswith("_")}
+    payload["processing_eligibility"] = run.processing_eligibility
     payload["metrics"] = metrics_to_dict(metrics)
     return payload
 

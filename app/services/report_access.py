@@ -66,7 +66,7 @@ def authorize_preferences(db, preferences, context):
             raise report_error("REPORT_SCOPE_NOT_FOUND", "Report scope is unavailable in this tenant.", 404)
 
 
-def scope_sboms(db, preferences, tenant_id):
+def scope_sboms(db, preferences, tenant_id, *, historical=False):
     """Latest-state broad scopes include active heads, not historical versions twice."""
     project_ids = select(Projects.id).where(Projects.tenant_id == tenant_id, Projects.is_active.is_(True))
     product_ids = select(Product.id).where(
@@ -79,13 +79,20 @@ def scope_sboms(db, preferences, tenant_id):
         or_(SBOMSource.projectid.is_(None), SBOMSource.projectid.in_(project_ids)),
         or_(SBOMSource.product_id.is_(None), SBOMSource.product_id.in_(product_ids)),
     )
+    if not historical:
+        query = query.where(SBOMSource.lifecycle_status == "ACTIVE")
     if preferences.scope == "SBOM":
+        from .sbom_lifecycle import require_processing
+        target = db.scalar(select(SBOMSource).where(SBOMSource.id == preferences.sbom_id, SBOMSource.tenant_id == tenant_id))
+        if not historical:
+            require_processing(target, operation="Report generation")
         query = query.where(SBOMSource.id == preferences.sbom_id)
     else:
         child_parents = select(SBOMSource.parent_id).where(
             SBOMSource.tenant_id == tenant_id, SBOMSource.is_active.is_(True), SBOMSource.parent_id.is_not(None)
         )
-        query = query.where(SBOMSource.id.not_in(child_parents))
+        if not historical:
+            query = query.where(SBOMSource.id.not_in(child_parents))
         if preferences.scope == "PROJECT":
             query = query.where(SBOMSource.projectid == preferences.project_id)
         if preferences.scope == "PRODUCT":

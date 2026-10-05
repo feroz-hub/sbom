@@ -797,6 +797,7 @@ def advisor_invalidation_key(db: Session, *, tenant_id: int) -> tuple:
             func.count(s.id).filter(s.is_active.is_(True)),
             func.count(s.parent_id),
             func.max(s.modified_on),
+            func.coalesce(func.sum(s.lifecycle_revision), 0),
         ).where(s.tenant_id == tenant_id)
     ).one()
     p = Product.__table__.c

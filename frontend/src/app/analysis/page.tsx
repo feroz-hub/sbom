@@ -78,7 +78,7 @@ function AnalysisPageInner() {
   }, []);
 
   const handleCompare = () => {
-    if (selectedForCompare.size !== 2) return;
+    if (selectedForCompare.size !== 2 || runs?.some(run => selectedForCompare.has(run.id) && run.processing_eligibility?.eligible === false)) return;
     const [a, b] = Array.from(selectedForCompare);
     router.push(`/analysis/compare?run_a=${a}&run_b=${b}`);
   };
@@ -178,11 +178,12 @@ function AnalysisPageInner() {
               variant="secondary"
               size="sm"
               onClick={handleCompare}
-              disabled={selectedForCompare.size !== 2}
+              disabled={selectedForCompare.size !== 2 || runs?.some(run => selectedForCompare.has(run.id) && run.processing_eligibility?.eligible === false)}
               title={
-                selectedForCompare.size === 2
+                runs?.find(run => selectedForCompare.has(run.id) && run.processing_eligibility?.eligible === false)?.processing_eligibility?.reason
+                ?? (selectedForCompare.size === 2
                   ? 'Compare the two selected runs'
-                  : `Select exactly 2 runs to compare (${selectedForCompare.size}/2)`
+                  : `Select exactly 2 runs to compare (${selectedForCompare.size}/2)`)
               }
             >
               <GitCompareArrows className="h-4 w-4" />

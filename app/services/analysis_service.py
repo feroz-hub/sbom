@@ -538,6 +538,7 @@ def get_active_analysis_run(db: Session, sbom_id: int) -> AnalysisRun | None:
         .where(
             AnalysisRun.sbom_id == sbom_id,
             AnalysisRun.run_status.in_(ACTIVE_ANALYSIS_RUN_STATUSES),
+            AnalysisRun.is_current.is_(True),
         )
         .order_by(AnalysisRun.id.desc())
         .limit(1)
@@ -581,7 +582,22 @@ def persist_analysis_run(
         Newly created AnalysisRun object
     """
     from ..models import AnalysisFinding
-
+    from .sbom_lifecycle import analysis_fingerprint, lock_sbom, processing_eligibility
+    sbom_obj = lock_sbom(db, sbom_obj.id, sbom_obj.tenant_id)
+    if sbom_obj is None:
+        raise ValueError("SBOM no longer available")
+    original_fingerprint = None
+    if existing_run is not None:
+        db.refresh(existing_run)
+        original_fingerprint = existing_run.analysis_input_fingerprint
+    current_fingerprint = analysis_fingerprint(db, sbom_obj)
+    revision_matches = original_fingerprint is None or original_fingerprint.get("lifecycle_revision") == sbom_obj.lifecycle_revision
+    inputs_match = original_fingerprint is None or all(
+        original_fingerprint.get(key) == current_fingerprint.get(key) for key in ("checksum", "validation_rules", "validated_at")
+    )
+    result_is_current = processing_eligibility(sbom_obj)["eligible"] and revision_matches and inputs_match
+    if existing_run is not None and not existing_run.is_current:
+        result_is_current = False
     component_maps = _upsert_components(db, sbom_obj, components)
     details = filter_unconfirmed_provider_findings(details, components)
     details["findings"] = deduplicate_finding_dicts(details.get("findings") or [])
@@ -596,6 +612,10 @@ def persist_analysis_run(
         details["analysis_metadata"]["raw_observation_count"] = raw_observation_count
 
     run = existing_run or AnalysisRun(sbom_id=sbom_obj.id, project_id=sbom_obj.projectid, product_id=sbom_obj.product_id)
+    run.is_current = result_is_current
+    run.analysis_input_fingerprint = current_fingerprint if existing_run is not None else None
+    if not result_is_current:
+        details["current_state"] = {"is_current": False, "reason_code": "SBOM_LIFECYCLE_OBSOLETE"}
     run.sbom_id = sbom_obj.id
     run.project_id = sbom_obj.projectid
     run.product_id = sbom_obj.product_id
@@ -604,6 +624,8 @@ def persist_analysis_run(
     if normalized_status == RUN_STATUS_FINDINGS and safe_int(details.get("total_findings")) == 0:
         normalized_status = compute_report_status(0, details.get("query_errors") or [], run_source_summary)
     run.run_status = normalized_status
+    if result_is_current and normalized_status in SUCCESSFUL_RUN_STATUSES and existing_run is not None:
+        sbom_obj.analysis_requires_reanalysis = False
     run.source = source
     run.trigger_source = trigger_source
     run.started_on = started_on
@@ -823,7 +845,7 @@ def _reconcile_vex_after_run(db: Session, run: AnalysisRun) -> None:
     contexts in place, because a failed scan is not evidence that anything
     stopped being detected (VEX-REC-004).
     """
-    if run.run_status not in SUCCESSFUL_RUN_STATUSES:
+    if not run.is_current or run.run_status not in SUCCESSFUL_RUN_STATUSES:
         return
     from .vex.reconciliation import recompute_for_sbom
 

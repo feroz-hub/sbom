@@ -896,6 +896,14 @@ export function getSboms(page = 1, pageSize = 50, signal?: AbortSignal, scope?: 
   return request<SBOMSource[]>(withDashboardScope(path, scope), { signal });
 }
 
+export function changeSbomLifecycle(id: number, status: 'ACTIVE' | 'INACTIVE', reason: string) {
+  return request<SBOMSource>(`/api/sboms/${id}/lifecycle`, { method: 'POST', body: JSON.stringify({ status, reason }) });
+}
+
+export function getSbomLifecycleHistory(id: number, signal?: AbortSignal) {
+  return request<import('@/types').SbomLifecycleEvent[]>(`/api/sboms/${id}/lifecycle-history`, { signal });
+}
+
 export function getSbom(id: number, signal?: AbortSignal, includeRaw = false) {
   const qs = includeRaw ? '?include_raw=true' : '';
   return request<SBOMSource>(`/api/sboms/${id}${qs}`, { signal });

@@ -7,6 +7,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { Play, ArrowLeft, ExternalLink, Edit2, GitBranch, History, Layers, Download, Check, RefreshCw, Eye, ArrowRight, X } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { SbomLifecycleControls } from './SbomLifecycleControls';
+import { Alert } from '@/components/ui/Alert';
+import { sbomEligibility } from '@/lib/sbomEligibility';
 import { Dialog, DialogBody } from '@/components/ui/Dialog';
 import { StatusBadge } from '@/components/ui/Badge';
 import { Input, Textarea } from '@/components/ui/Input';
@@ -229,6 +232,9 @@ function canManageEvidenceFromClient() {
 }
 
 export function SbomDetail({ sbom }: SbomDetailProps) {
+  const eligibility = sbomEligibility(sbom);
+  const processingUnavailable = !eligibility.eligible;
+  const reportUnavailable = processingUnavailable || Boolean(sbom.analysis_requires_reanalysis);
   const router = useRouter();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
@@ -646,6 +652,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
   }, [runs?.length]);
 
   const handleRunAnalysis = () => {
+    if (processingUnavailable) return;
     startAnalysis({ sources: ['NVD', 'OSV', 'GITHUB'] });
   };
 
@@ -786,6 +793,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
 
   // Perform version comparison
   const handleCompare = async () => {
+    if (reportUnavailable || versions?.some(version => selectedVersions.includes(version.id) && (!sbomEligibility(version).eligible || version.analysis_requires_reanalysis))) return;
     if (selectedVersions.length !== 2) return;
     setIsComparing(true);
     setCompareData(null);
@@ -921,6 +929,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
   };
 
   const handleDownload = async (label: string, loader: () => Promise<{ blob: Blob; filename: string }>) => {
+    if (reportUnavailable) return;
     setDownloadMessage(`Preparing ${label}…`);
     try {
       const { blob, filename } = await loader();
@@ -988,7 +997,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
         <div className="space-y-6">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>SBOM Details</CardTitle>
+              <div className="space-y-2"><CardTitle>SBOM Details</CardTitle><SbomLifecycleControls sbom={sbom} showHistory /></div>
               <div className="flex gap-2">
                 {canUseWorkspace ? (
                   <Button
@@ -1032,6 +1041,8 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                   onClick={() =>
                     handleDownload('vulnerability Excel', () => exportSbomVulnerabilityExcel(sbom.id))
                   }
+                  disabled={reportUnavailable}
+                  title={reportUnavailable ? 'Report generation unavailable for this SBOM.' : undefined}
                   variant="outline"
                   size="sm"
                 >
@@ -1040,7 +1051,8 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                 <Button
                   onClick={handleRunAnalysis}
                   loading={isAnalyzing}
-                  disabled={isAnalyzing}
+                  disabled={isAnalyzing || processingUnavailable}
+                  title={eligibility.reason ?? undefined}
                   size="sm"
                 >
                   <Play className="h-4 w-4" />
@@ -1049,6 +1061,8 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
               </div>
             </CardHeader>
             <CardContent>
+              {processingUnavailable && <div id="sbom-processing-unavailable" className="mb-4"><Alert variant="warning">{eligibility.reason} Comparison and new report generation are also unavailable. Historical data remains readable.</Alert></div>}
+              {sbom.analysis_requires_reanalysis && <div className="mb-4"><Alert variant="warning">Previous analysis is stale or cannot be verified. Run a new analysis before trusting current findings.</Alert></div>}
               <dl className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {[
                   { label: 'Name', value: sbom.sbom_name },
@@ -1091,7 +1105,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
             </CardContent>
           </Card>
 
-          <ScheduleCard scope="SBOM" targetId={sbom.id} />
+          <ScheduleCard scope="SBOM" targetId={sbom.id} processingReason={eligibility.reason} />
           <NotifyMeLink scope="SBOM" targetId={sbom.id} />
 
           <SbomConversionCard sbom={sbom} formatLabel={info?.format} />
@@ -1227,6 +1241,8 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                   size="sm"
                   variant="outline"
                   onClick={() => handleDownload('VEX JSON', () => exportSbomVexReportJson(sbom.id))}
+                  disabled={reportUnavailable}
+                  title={reportUnavailable ? "Report generation unavailable for this SBOM." : undefined}
                 >
                   <Download className="h-3.5 w-3.5" /> JSON
                 </Button>
@@ -1234,6 +1250,8 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                   size="sm"
                   variant="outline"
                   onClick={() => handleDownload('VEX CSV', () => exportSbomVexReportCsv(sbom.id))}
+                  disabled={reportUnavailable}
+                  title={reportUnavailable ? "Report generation unavailable for this SBOM." : undefined}
                 >
                   <Download className="h-3.5 w-3.5" /> CSV
                 </Button>
@@ -1241,6 +1259,8 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                   size="sm"
                   variant="outline"
                   onClick={() => handleDownload('VEX report pack', () => exportSbomVexReportPack(sbom.id))}
+                  disabled={reportUnavailable}
+                  title={reportUnavailable ? "Report generation unavailable for this SBOM." : undefined}
                 >
                   <Download className="h-3.5 w-3.5" /> Pack
                 </Button>
@@ -1420,6 +1440,8 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                 size="sm"
                 variant="outline"
                 onClick={() => handleDownload('lifecycle CSV', () => exportSbomLifecycleReportCsv(sbom.id))}
+                  disabled={reportUnavailable}
+                  title={reportUnavailable ? "Report generation unavailable for this SBOM." : undefined}
               >
                 <Download className="h-3.5 w-3.5" /> Lifecycle CSV
               </Button>
@@ -1427,6 +1449,8 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                 size="sm"
                 variant="outline"
                 onClick={() => handleDownload('lifecycle report pack', () => exportSbomLifecycleReportPack(sbom.id))}
+                  disabled={reportUnavailable}
+                  title={reportUnavailable ? "Report generation unavailable for this SBOM." : undefined}
               >
                 <Download className="h-3.5 w-3.5" /> Lifecycle Pack
               </Button>
@@ -1693,7 +1717,8 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
               <div className="flex gap-2">
                 <Button
                   onClick={handleCompare}
-                  disabled={selectedVersions.length !== 2 || isComparing}
+                  disabled={selectedVersions.length !== 2 || isComparing || reportUnavailable || versions?.some(version => selectedVersions.includes(version.id) && (!sbomEligibility(version).eligible || version.analysis_requires_reanalysis))}
+                  title={processingUnavailable ? "Comparison unavailable for this SBOM." : undefined}
                   size="sm"
                   variant="outline"
                 >
