@@ -308,3 +308,23 @@ export function invalidateAiFixCaches(qc: QueryClient): void {
   qc.invalidateQueries({ queryKey: ['ai-fix-list'] });
   qc.invalidateQueries({ queryKey: ['ai-batch-progress'] });
 }
+
+/**
+ * Secure Component Advisor surfaces. A recommendation create / evaluate /
+ * decision changes the open-item badge on every component row and detail,
+ * and the work item itself; tenant-scoped keys are invalidated unscoped so a
+ * decision taken from any page refreshes every list (see CLAUDE.md).
+ */
+export function invalidateComponentAdvisorSurfaces(qc: QueryClient, recommendationId?: number): void {
+  qc.invalidateQueries({ queryKey: ['component-advisor-summary'] });
+  qc.invalidateQueries({ queryKey: ['component-advisor-components'] });
+  qc.invalidateQueries({ queryKey: ['component-advisor-component'] });
+  qc.invalidateQueries({ queryKey: ['component-advisor-search'] });
+  if (recommendationId !== undefined) {
+    qc.invalidateQueries({ queryKey: ['component-advisor-recommendation', recommendationId] });
+    qc.invalidateQueries({ queryKey: ['component-advisor-candidate-evidence', recommendationId] });
+  } else {
+    qc.invalidateQueries({ queryKey: ['component-advisor-recommendation'] });
+    qc.invalidateQueries({ queryKey: ['component-advisor-candidate-evidence'] });
+  }
+}

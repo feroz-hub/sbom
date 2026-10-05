@@ -562,6 +562,19 @@ def permission_for_request(request: Request) -> str:
         return "platform:tenant:create"
     if _platform_configuration_path(path):
         return "platform:admin"
+    if path.startswith("/api/component-advisor/policies"):
+        return "tenant:advisor-policy:read" if method == "GET" else "tenant:advisor-policy:update"
+    if path.startswith("/api/component-advisor/recommendations/") and path.endswith(("/decisions", "/candidates")) and method == "POST":
+        # Decisions and manual candidates are permission-checked per action at the
+        # route (review / accept), so a role holding only "accept" is not refused here.
+        return "component_advisor:read"
+    if path.startswith("/api/component-advisor/purpose") and method != "GET":
+        # Curated purpose metadata reuses the existing component edit right.
+        return "component:update"
+    if path.startswith("/api/component-advisor"):
+        # Coarse gate only. Write routes (Step 5+) re-check the specific
+        # create / review / accept permission at the route.
+        return "component_advisor:read" if method == "GET" else "component_advisor:recommendation:create"
     if path.startswith("/dashboard"):
         return "dashboard:read"
     if path.startswith(("/api/report-subscriptions", "/api/report-deliveries", "/api/report-notifications")):

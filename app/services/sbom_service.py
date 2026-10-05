@@ -334,6 +334,7 @@ def _upsert_components(
             "scope": (comp.get("scope") or "").strip() or None,
             "license": (comp.get("license") or "").strip() or None,
             "hashes": (comp.get("hashes") or "").strip() or None,
+            "description": (comp.get("description") or "").strip() or None,
             "ecosystem": (comp.get("ecosystem") or comp.get("normalized_ecosystem") or "").strip() or None,
             "original_name": comp.get("original_name"),
             "normalized_name": comp.get("normalized_name"),

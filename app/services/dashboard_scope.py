@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from ..core.context import CurrentContext
 from ..core.security import get_current_tenant_context
 from ..db import get_db
-from ..models import Product, Projects, SBOMSource
+from ..models import Product, Projects, SBOMSource, Tenant
 
 
 @dataclass(frozen=True)
@@ -120,6 +120,21 @@ def resolve_dashboard_scope(
     if sbom_id is not None and db.execute(scope.eligible_sbom_ids()).scalar_one_or_none() is None:
         raise HTTPException(status_code=404, detail="Dashboard scope not found")
     return scope
+
+
+def scope_metadata(db: Session, scope: DashboardScope) -> dict:
+    """Names for the applied scope, echoed by dashboard responses."""
+    tenant_name = db.execute(select(Tenant.name).where(Tenant.id == scope.tenant_id)).scalar_one_or_none()
+    project_name = db.execute(select(Projects.project_name).where(Projects.id == scope.project_id)).scalar_one_or_none() if scope.project_id else None
+    product_name = db.execute(select(Product.name).where(Product.id == scope.product_id)).scalar_one_or_none() if scope.product_id else None
+    sbom = db.execute(select(SBOMSource.sbom_name, SBOMSource.sbom_version, SBOMSource.productver).where(SBOMSource.id == scope.sbom_id)).first() if scope.sbom_id else None
+    return {
+        "level": scope.level,
+        "tenant": {"id": scope.tenant_id, "name": tenant_name},
+        "project": {"id": scope.project_id, "name": project_name} if scope.project_id else None,
+        "application": {"id": scope.product_id, "name": product_name} if scope.product_id else None,
+        "sbom": {"id": scope.sbom_id, "name": sbom.sbom_name, "version": sbom.sbom_version or sbom.productver} if sbom else None,
+    }
 
 
 @contextmanager

@@ -96,6 +96,10 @@ const DEV_USER: AuthUser = {
     'component:read', 'component:update', 'analysis:read', 'analysis:run',
     'remediation:read', 'remediation:write', 'remediation:close', 'schedule:read', 'schedule:write',
     'lifecycle:read', 'lifecycle:override', 'lifecycle:vendor-record:read', 'lifecycle:vendor-record:write', 'lifecycle:vendor-record:delete',
+    // Secure Component Advisor (migrations 067/068).
+    'component_advisor:read', 'component_advisor:recommendation:create', 'component_advisor:recommendation:review',
+    'component_advisor:recommendation:accept', 'component_advisor:audit:read',
+    'tenant:advisor-policy:read', 'tenant:advisor-policy:update',
   ],
   isPlatformAdmin: false,
 };
