@@ -97,3 +97,25 @@ def test_to_dict_shape() -> None:
     assert payload["truncated"] is False
     entry = payload["entries"][0]
     assert set(entry.keys()) == {"code", "severity", "stage", "path", "message", "remediation", "spec_reference"}
+
+
+def test_report_cap_cannot_hide_later_security_error():
+    report = ErrorReport()
+    for i in range(E.MAX_ENTRIES):
+        report.add(E.I075_ORPHAN_COMPONENT, stage='integrity', path=str(i), message='orphan', remediation='')
+    report.add(E.E087_PROTOTYPE_POLLUTION_KEY, stage='security', path='__proto__', message='unsafe', remediation='')
+    assert len(report.entries) == E.MAX_ENTRIES
+    assert report.truncated
+    assert report.has_errors()
+    assert report.error_count == 1
+    assert report.first_error_stage == 'security'
+    assert report.http_status == 400
+
+
+def test_report_cap_preserves_higher_http_priority():
+    report = ErrorReport()
+    for i in range(E.MAX_ENTRIES):
+        report.add(E.E025_SCHEMA_VIOLATION, stage='schema', path=str(i), message='invalid', remediation='')
+    report.add(E.E001_SIZE_EXCEEDED, stage='ingress', path='', message='oversized', remediation='')
+    assert report.http_status == 413
+    assert len(report.entries) == E.MAX_ENTRIES

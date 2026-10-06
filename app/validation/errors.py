@@ -255,7 +255,8 @@ class ErrorReport(BaseModel):
     Mutated only by the orchestrator and stages — never by callers. The
     orchestrator passes ``self`` into each stage's ``run()`` method which may
     append entries via :meth:`add`. Once ``MAX_ENTRIES`` is reached, further
-    ``add`` calls flip ``truncated=True`` and silently drop the entry.
+    ``add`` calls flip ``truncated=True``. Higher-severity entries replace
+    lower-severity entries so response truncation cannot hide validation failure.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -275,10 +276,20 @@ class ErrorReport(BaseModel):
         severity: Severity | None = None,
     ) -> None:
         """Append a new entry. Honours ``MAX_ENTRIES`` truncation."""
+        sev = severity if severity is not None else default_severity_for(code)
         if len(self.entries) >= MAX_ENTRIES:
             self.truncated = True
-            return
-        sev = severity if severity is not None else default_severity_for(code)
+            # Informational/warning noise must never suppress a later blocking
+            # error or turn a failed validation into a success. Retain the
+            # highest severity/status while keeping the response cap unchanged.
+            ranks = {Severity.INFO: 0, Severity.WARNING: 1, Severity.ERROR: 2}
+            incoming = (ranks[sev], _STATUS_PRIORITY.get(status_for(code), 0))
+            victim = next((i for i in range(len(self.entries) - 1, -1, -1)
+                           if (ranks[self.entries[i].severity],
+                               _STATUS_PRIORITY.get(status_for(self.entries[i].code), 0)) < incoming), None)
+            if victim is None:
+                return
+            self.entries.pop(victim)
         self.entries.append(
             ValidationError(
                 code=code,
