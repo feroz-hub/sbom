@@ -39,6 +39,13 @@ class Settings(BaseSettings):
     sensible defaults and validation.
     """
 
+    # Deterministic SBOM repair. AI extensions remain disabled in Phase 1.
+    sbom_auto_repair_enabled: bool = Field(default=True)
+    sbom_repair_max_passes: int = Field(default=3, ge=1, le=10)
+    sbom_repair_auto_apply_confidence: float = Field(default=1.0, ge=0, le=1)
+    sbom_repair_max_bytes: int = Field(default=5 * 1024 * 1024, ge=1024, le=50 * 1024 * 1024)
+    sbom_repair_max_seconds: float = Field(default=30.0, ge=1, le=120)
+
     # API Keys and Credentials
     nvd_api_key: str = Field(default="", description="NVD API key for enhanced rate limits")
     nvd_enabled: bool = Field(default=True, description="Enable optional NVD enrichment")
