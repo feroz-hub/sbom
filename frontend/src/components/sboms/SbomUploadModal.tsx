@@ -20,6 +20,7 @@ import { getApiErrorMessage } from '@/lib/notifications';
 import { useSbomsList } from '@/hooks/useSbomsList';
 import { useUploadSbom } from '@/hooks/useSbomMutations';
 import { invalidateProductSurfaces, invalidateUploadSurfaces } from '@/lib/queryInvalidation';
+import { SbomAutoRepairPanel } from './SbomAutoRepairPanel';
 import { stageLabel, stageNumber } from '@/lib/sbomValidation';
 import {
   isUnsupportedUploadStatus,
@@ -510,6 +511,9 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
                         {validationFailure.entries[0].message}
                       </p>
                     </div>
+                  )}
+                  {validationFailure.session_id && validationFailure.can_edit !== false && (
+                    <div className="mt-3"><SbomAutoRepairPanel sessionId={validationFailure.session_id} /></div>
                   )}
                   <div className="mt-3 flex flex-wrap items-center gap-3">
                     {validationFailureRepairUrl && validationFailure.can_edit !== false ? (

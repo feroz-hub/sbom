@@ -3162,3 +3162,20 @@ export function getAdvisorCandidateEvidence(id: number, candidateId: number, sig
 export function getAdvisorCandidateCompatibility(id: number, candidateId: number, signal?: AbortSignal): Promise<AdvisorCompatibilityChecks> {
   return request<AdvisorCompatibilityChecks>(`${ADVISOR}/recommendations/${id}/candidates/${candidateId}/compatibility`, { signal });
 }
+
+// Deterministic repairs reuse the existing quarantine workspace and authenticated BFF.
+export function analyzeSbomRepair(sessionId: string, signal?: AbortSignal) {
+  return request<import('@/types/sbomAutoRepair').RepairAnalysis>(`/api/sbom-validation-sessions/${sessionId}/repair/analyze`, { method: 'POST', signal });
+}
+export function getLatestSbomRepair(sessionId: string, signal?: AbortSignal) {
+  return request<import('@/types/sbomAutoRepair').DeterministicRepairJob | null>(`/api/sbom-validation-sessions/${sessionId}/repair`, { signal });
+}
+export function runSbomRepair(sessionId: string) {
+  return request<import('@/types/sbomAutoRepair').DeterministicRepairJob>(`/api/sbom-validation-sessions/${sessionId}/repair`, { method: 'POST' });
+}
+export function decideSbomRepair(sessionId: string, jobId: string, decision: 'approve' | 'reject', candidateHash?: string) {
+  return request<import('@/types/sbomAutoRepair').DeterministicRepairJob>(`/api/sbom-validation-sessions/${sessionId}/repair/${jobId}/${decision}`, { method: 'POST', ...(decision === 'approve' ? { body: JSON.stringify({ candidate_sha256: candidateHash }) } : {}) });
+}
+export function downloadSbomRepair(sessionId: string, jobId: string, kind: 'download' | 'report') {
+  return downloadBinary(`/api/sbom-validation-sessions/${sessionId}/repair/${jobId}/${kind}`, `repair-${jobId}.json`);
+}
