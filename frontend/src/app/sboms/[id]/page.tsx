@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { TopBar } from '@/components/layout/TopBar';
 import { Alert } from '@/components/ui/Alert';
 import { PageSpinner } from '@/components/ui/Spinner';
+import { SbomQualityPanel } from '@/components/sboms/SbomQualityPanel';
 import { SbomDetail } from '@/components/sboms/SbomDetail';
 import { getSbom } from '@/lib/api';
 
@@ -50,6 +51,7 @@ export default function SbomDetailPage({ params }: SbomDetailPageProps) {
     <div className="flex flex-col flex-1">
       <TopBar title={sbom.sbom_name} breadcrumbs={[{ label: 'SBOMs', href: '/sboms' }]} />
       <div className="p-6">
+        <div className="mb-4"><SbomQualityPanel sbomId={id} /></div>
         <SbomDetail sbom={sbom} />
       </div>
     </div>

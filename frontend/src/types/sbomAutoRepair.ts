@@ -18,6 +18,7 @@ export interface DeterministicRepairChange {
 }
 export interface RepairAnalysis {
   enabled: boolean;
+  quality_issue_count?: number;
   source_sha256?: string;
   validation_status: 'FAILED' | 'PASSED';
   total_errors: number;
@@ -32,6 +33,7 @@ export interface RepairAnalysis {
 }
 export interface DeterministicRepairJob {
   repair_job_id: string;
+  quality?: import('./sbomQuality').QualityComparison;
   status: string;
   candidate_sha256: string;
   source_sha256?: string;

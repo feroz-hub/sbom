@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { Bot, CheckCircle, Download, FileInput, RefreshCw, Save, ShieldAlert, Wand2 } from 'lucide-react';
+import { SbomQualityPanel } from './SbomQualityPanel';
 import { SbomAutoRepairPanel } from './SbomAutoRepairPanel';
 import { Alert } from '@/components/ui/Alert';
 import { Badge } from '@/components/ui/Badge';
@@ -87,6 +88,7 @@ function invalidateValidationRepairHistory(queryClient: QueryClient, sessionId: 
 }
 
 function invalidateValidationRepairDraftQueries(queryClient: QueryClient, sessionId: string) {
+  queryClient.invalidateQueries({ queryKey: ['sbom-quality', 'session', sessionId] });
   queryClient.invalidateQueries({ queryKey: ['sbom-auto-repair-analysis', sessionId] });
   queryClient.invalidateQueries({ queryKey: ['sbom-auto-repair-job', sessionId] });
   queryClient.invalidateQueries({ queryKey: ['validation-repair-content', sessionId] });
@@ -541,7 +543,10 @@ export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspa
   if (session.full_editor_allowed === false) {
     return (
       <div className="flex h-[calc(100vh-96px)] min-h-0 flex-col gap-3 overflow-hidden">
-        <SbomAutoRepairPanel sessionId={sessionId} onApproved={() => { initialContentQuery.refetch().then(() => setContentLoaded(false)); }} />
+        <div className="max-h-[40vh] shrink-0 space-y-3 overflow-y-auto">
+          <SbomQualityPanel sessionId={sessionId} />
+          <SbomAutoRepairPanel sessionId={sessionId} onApproved={() => { initialContentQuery.refetch().then(() => setContentLoaded(false)); }} />
+        </div>
         {localMessage && <Alert variant="info" title="Workspace updated">{localMessage}</Alert>}
         {!focusMode && (
           <Card className="shrink-0">
@@ -655,7 +660,10 @@ export function ValidationRepairWorkspace({ sessionId }: ValidationRepairWorkspa
 
   return (
     <div className="flex h-[calc(100vh-96px)] min-h-0 flex-col gap-3 overflow-hidden">
-        <SbomAutoRepairPanel sessionId={sessionId} onApproved={() => { initialContentQuery.refetch().then(() => setContentLoaded(false)); }} />
+        <div className="max-h-[40vh] shrink-0 space-y-3 overflow-y-auto">
+          <SbomQualityPanel sessionId={sessionId} />
+          <SbomAutoRepairPanel sessionId={sessionId} onApproved={() => { initialContentQuery.refetch().then(() => setContentLoaded(false)); }} />
+        </div>
       {localMessage && (
         <Alert variant={canImport ? 'success' : 'info'} title="Workspace updated">
           {localMessage}
