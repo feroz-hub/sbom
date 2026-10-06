@@ -22,6 +22,8 @@ from app.settings import get_settings
 from fastapi import HTTPException
 from sqlalchemy import select
 
+from ..quality.engine import QualityEngine, comparison
+from ..quality.service import persist_snapshot
 from .engine import RepairEngine
 from .policy import RepairPolicy
 
@@ -83,7 +85,7 @@ class AutoRepairService:
         result["source_sha256"] = content_hash(source)
         result["status"] = (
             "NOT_REQUIRED"
-            if not result["total_errors"] and not result["truncated"]
+            if not result["total_errors"] and not result["truncated"] and not result["auto_fixable"]
             else "REPAIR_AVAILABLE"
             if result["auto_fixable"]
             else "MANUAL_REVIEW_REQUIRED"
@@ -178,6 +180,20 @@ class AutoRepairService:
                 created_at=now_iso(),
                 actor_user_id=self.context.actor_label(),
             )
+            if get_settings().sbom_quality_enabled:
+                from app.validation.errors import ErrorReport
+                quality = QualityEngine(repair_enabled=policy.enabled)
+                before_score = quality.calculate(source.encode(), ErrorReport.model_validate(result.report['before_validation'])).model_dump(mode='json')
+                after_score = quality.calculate(result.candidate, ErrorReport.model_validate(result.report['after_validation'])).model_dump(mode='json')
+                job.report_json['quality'] = comparison(before_score, after_score)
+                persist_snapshot(self.db, session, source.encode(), role='REPAIR_SOURCE', job_id=job_id,
+                                 assessment=before_score, context=self.context)
+                persist_snapshot(self.db, session, result.candidate, role='CANDIDATE', job_id=job_id,
+                                 assessment=after_score, context=self.context)
+                if job.report_json['quality']['improvement'] and job.report_json['quality']['improvement'] > 0:
+                    self.event(session, 'SBOM_QUALITY_IMPROVED', job,
+                               session_id=session.id, before_score=before_score['overall_score'], after_score=after_score['overall_score'],
+                               artifact_hash=job.candidate_sha256, engine_version=after_score['engine_version'])
             self.db.add(job)
             for change in result.report["changes"]:
                 self.event(
@@ -243,6 +259,13 @@ class AutoRepairService:
         }
 
     def serialize(self, job):
+        quality = job.report_json.get("quality")
+        if quality and (
+            content_hash(job.candidate_content) != job.candidate_sha256
+            or quality["before"]["artifact_hash"] != job.source_sha256
+            or quality["after"]["artifact_hash"] != job.candidate_sha256
+        ):
+            raise HTTPException(409, "Repair quality evidence artifact hash mismatch")
         return {
             **job.report_json,
             "repair_job_id": job.id,
@@ -333,6 +356,8 @@ class AutoRepairService:
             job.decided_at = now_iso()
             job.decided_by = self.context.actor_label()
             job.imported_sbom_id = imported.id
+            persist_snapshot(self.db, session, job.candidate_content.encode(), role='ACCEPTED', job_id=job.id,
+                             sbom_id=imported.id, context=self.context)
             self.event(session, "SBOM_REPAIR_APPROVED", job, imported_sbom_id=imported.id)
             self.db.commit()
         except Exception:

@@ -104,7 +104,9 @@ def test_get_patch_and_history_records_manual_edit(client):
     history = client.get(f"/api/sbom-validation-sessions/{session_id}/history")
     assert history.status_code == 200
     event_types = [event["event_type"] for event in history.json()]
-    assert event_types == ["created", "manual_edit"]
+    assert event_types == ["created", "SBOM_QUALITY_CALCULATED", "manual_edit"]
+    # Quality appends evidence; the existing manual edit event stays ordered last.
+    assert history.json()[1]["after_hash"] == sha256(json.dumps(BAD_PURL_CYCLONEDX).encode()).hexdigest()
 
 
 def test_revalidate_session_updates_report(client):

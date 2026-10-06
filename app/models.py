@@ -2733,3 +2733,14 @@ def _repair_candidate_is_immutable(session, _flush_context, _instances):
 
 # Register report tables for Alembic and metadata-based test databases.
 from .models_reports import ReportArtifact, ReportDelivery, ReportSubscription  # noqa: E402,F401
+
+
+@event.listens_for(_AdvisorSession, 'before_flush')
+def _quality_history_is_immutable(session, _flush_context, _instances):
+    from sqlalchemy import inspect
+    for instance in session.dirty:
+        if isinstance(instance, SBOMValidationSessionEvent):
+            state = inspect(instance)
+            original = state.attrs.event_type.history.deleted
+            if instance.event_type == 'SBOM_QUALITY_CALCULATED' or 'SBOM_QUALITY_CALCULATED' in original:
+                raise RuntimeError('Quality assessments are immutable; append a new hash-bound snapshot')
