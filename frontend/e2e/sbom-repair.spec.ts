@@ -33,7 +33,10 @@ async function login(page: Page, role='admin') {
     await expect(page.getByRole('heading',{name:'Select tenant', exact:true})).not.toBeVisible();
   }
   await page.waitForURL(manifest.origin + '/');
-  await page.goto('/sboms');
+  // The tenant chooser disappears while auth is still loading. Wait for
+  // protected content before navigating, so bootstrap cannot race this test.
+  await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'SBOMs', exact: true }).click();
   await expect(page.getByRole('heading',{name:'SBOMs',exact:true})).toBeVisible();
 }
 async function upload(page: Page, doc: object | string, valid=false, filename="release-fixture.cdx.json") {
@@ -158,6 +161,9 @@ test('ambiguous dependency is not guessed or changed', async ({page}) => {
   await expect(page.getByRole('button',{name:'Auto-Repair Safe Issues',exact:true})).toHaveCount(0);
   const run = await page.request.post(api(`/api/sbom-validation-sessions/${session}/repair`),{headers:tenantHeaders});
   const job = await run.json();
+  const quality = page.getByRole('region', { name: 'SBOM Quality', exact: true });
+  await quality.getByRole('button', { name: 'View Quality Findings' }).click();
+  await expect(quality).toContainText('manual review');
   expect(job.repairs_applied).toBe(0);
   expect(job.validation_status).toBe('FAILED');
   const candidate = await page.request.get(api(`/api/sbom-validation-sessions/${session}/repair/${job.repair_job_id}/download`),{headers:tenantHeaders});
@@ -226,6 +232,10 @@ test('signed SBOM gives manual-review reason and is not rewritten', async ({ pag
   const { session, raw } = await upload(page, signed);
   const panel = page.getByRole('region', { name: 'Deterministic SBOM auto-repair' });
   await expect(panel).toContainText('Signed');
+  const quality = page.getByRole('region', { name: 'SBOM Quality', exact: true });
+  await expect(quality).toContainText('/ 100');
+  await quality.getByRole('button', { name: 'View Quality Findings' }).click();
+  await expect(quality).not.toContainText('Available for review');
   await expect(panel.getByRole('button', { name: 'Auto-Repair Safe Issues', exact: true })).toHaveCount(0);
   const result = await page.request.post(api(`/api/sbom-validation-sessions/${session}/repair`), { headers: tenantHeaders });
   const job = await result.json();
@@ -277,6 +287,7 @@ test('saved draft edits automatically disable stale approval and enable a new re
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
   const panel = page.getByRole('region', { name: 'Deterministic SBOM auto-repair' });
   await expect(panel).toContainText('Source draft changed');
+  await expect(panel).toContainText('quality comparison belongs to an earlier draft');
   await expect(panel.getByRole('button', { name: 'Accept Repairs', exact: true })).toBeDisabled();
   const stale = await page.request.post(api(`/api/sbom-validation-sessions/${session}/repair/${old.repair_job_id}/approve`), { headers: tenantHeaders });
   expect(stale.status()).toBe(409);
@@ -305,4 +316,75 @@ test('SPDX JSON retains validation errors and clearly declines automatic repair'
   await expect(panel).toContainText('unsupported for this format');
   await expect(panel.getByRole('button', { name: 'Auto-Repair Safe Issues', exact: true })).toHaveCount(0);
   expect(await original(page.request, session)).toEqual(raw);
+});
+
+test('Phase 2 valid incomplete upload keeps validation PASS and shows advisory quality', async ({ page }) => {
+  await login(page);
+  const { session } = await upload(page, validSbom(), true);
+  await page.goto(`/repair/${session}`);
+  const quality = page.getByRole('region', { name: 'SBOM Quality', exact: true });
+  await expect(quality).toContainText('Validation: PASSED');
+  await expect(quality).toContainText('/ 100');
+  await quality.getByRole('button', { name: 'View Quality Findings' }).click();
+  await expect(quality).toContainText('missing licenses');
+  await expect(page.getByRole('button', { name: 'Auto-Repair Safe Issues', exact: true })).toHaveCount(0);
+  const response = await page.request.get(api(`/api/sbom-validation-sessions/${session}/quality`), { headers: tenantHeaders });
+  expect(response.status()).toBe(200);
+  const data = await response.json();
+  expect(data.assessment.overall_score).toBeLessThan(100);
+  expect(data.assessment.validation_status).toBe('PASSED');
+});
+
+test('Phase 2 actual candidate quality improves and accepted artifact retains its score', async ({ page }) => {
+  await login(page);
+  const { session } = await upload(page, repairableSbom());
+  const job = await createJob(page, session);
+  expect(job.quality.improvement).toBeGreaterThan(0);
+  expect(job.quality.before.artifact_hash).toBe(job.source_sha256);
+  expect(job.quality.after.artifact_hash).toBe(job.candidate_sha256);
+  const panel = page.getByRole('region', { name: 'Deterministic SBOM auto-repair' });
+  await expect(panel.getByRole('group', { name: 'Quality Improvement' })).toBeVisible();
+  await expect(panel).toContainText(`Change: +${job.quality.improvement} points`);
+  await panel.getByRole('button', { name: 'Accept Repairs', exact: true }).click();
+  await expect(panel).toContainText('Approval: APPROVED');
+  const approved = await page.request.get(api(`/api/sbom-validation-sessions/${session}/repair`), { headers: tenantHeaders });
+  const accepted = await approved.json();
+  const quality = await page.request.get(api(`/api/sboms/${accepted.imported_sbom_id}/quality`), { headers: tenantHeaders });
+  expect(quality.status()).toBe(200);
+  const acceptedQuality = (await quality.json()).assessment;
+  expect(acceptedQuality.artifact_hash).toBe(job.candidate_sha256);
+  expect(acceptedQuality.overall_score).toBe(job.quality.after.overall_score);
+  await page.setViewportSize({ width: 768, height: 1024 });
+  await expect.poll(() => panel.evaluate(el => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(() => panel.evaluate(el => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1);
+});
+
+test('Phase 2 missing license has no fabricated deterministic fix', async ({ page }) => {
+  await login(page);
+  const { session } = await upload(page, validSbom(), true);
+  await page.goto(`/repair/${session}`);
+  const quality = page.getByRole('region', { name: 'SBOM Quality', exact: true });
+  await quality.getByRole('button', { name: 'View Quality Findings' }).click();
+  const finding = quality.locator('article').filter({ hasText: 'missing licenses' }).first();
+  await expect(finding).toContainText('Not available — manual review');
+  await expect(finding).toContainText('unknown values cannot be invented');
+  const analysis = await page.request.post(api(`/api/sbom-validation-sessions/${session}/repair/analyze`), { headers: tenantHeaders });
+  expect((await analysis.json()).auto_fixable).toBe(0);
+});
+
+test('Phase 2 quality snapshots and findings cannot be read by another tenant', async ({ page, browser }) => {
+  await login(page);
+  const { session, sbomId } = await upload(page, validSbom(), true);
+  const context = await browser.newContext({ baseURL: manifest.origin, ignoreHTTPSErrors: true });
+  try {
+    const foreign = await context.newPage();
+    await login(foreign, 'foreign');
+    const headers = { ...tenantHeaders, 'X-Tenant-ID': String(manifest.tenant_b) };
+    for (const route of [`/api/sbom-validation-sessions/${session}/quality`, `/api/sboms/${sbomId}/quality`]) {
+      const response = await foreign.request.get(api(route), { headers });
+      expect(response.status()).toBe(404);
+      expect(await response.text()).not.toMatch(/overall_score|artifact_hash|QUALITY_LICENSES|dimension_scores/);
+    }
+  } finally { await context.close(); }
 });
