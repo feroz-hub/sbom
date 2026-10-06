@@ -619,7 +619,13 @@ def permission_for_request(request: Request) -> str:
         or path.startswith("/api/validation-sessions")
         or path.startswith("/api/sbom-workspaces")
     ):
+        if path.endswith("/repair/analyze"):
+            return "sbom:repair:read"
+        if "/repair/" in path and path.endswith("/approve"):
+            return "sbom:repair:revalidate"
         if method == "GET":
+            if "/repair/" in path and path.endswith(("/download", "/report")):
+                return "sbom:repair:download"
             if path.endswith("/download-original") or path.endswith("/download-repair-draft"):
                 return "sbom:repair:download"
             if path.endswith("/search"):

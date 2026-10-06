@@ -260,6 +260,11 @@ async def upload_sbom(
             project_id=project_id,
             sbom_type=sbom_type,
             user_id=actor,
+            product_id=product.id if product else None,
+            upload_options={"sbom_version": manual_sbom_version, "product_version": manual_product_version,
+                "parent_sbom_id": parent_sbom.id if parent_sbom else None, "set_as_current": set_as_current},
+            strict_ntia=strict_ntia,
+            verify_signature=bool(getattr(settings, "SBOM_SIGNATURE_VERIFICATION", False)),
         )
         if session is not None:
             audit_service.write_audit_log(
@@ -299,6 +304,11 @@ async def upload_sbom(
         project_id=project_id,
         sbom_type=sbom_type,
         user_id=actor,
+        product_id=product.id if product else None,
+        upload_options={"sbom_version": manual_sbom_version, "product_version": manual_product_version,
+            "parent_sbom_id": parent_sbom.id if parent_sbom else None, "set_as_current": set_as_current},
+        strict_ntia=strict_ntia,
+        verify_signature=bool(getattr(settings, "SBOM_SIGNATURE_VERIFICATION", False)),
         validation_status=validation_status,
     )
     if session is None:

@@ -138,8 +138,18 @@ def session_repair_text(session: SBOMValidationSession) -> str:
     return session.current_content if session.current_content is not None else session_original_text(session)
 
 
-def set_session_repair_text(session: SBOMValidationSession, content: str) -> None:
-    stored = SbomWorkspaceStorage().write_repair_draft(session.id, content)
+def session_upload_metadata(db: Session, session: SBOMValidationSession) -> dict[str, Any]:
+    """Original validated upload scope/options, from the creation audit event."""
+    entry = db.execute(select(SBOMValidationSessionEvent).where(
+        SBOMValidationSessionEvent.session_id == session.id,
+        SBOMValidationSessionEvent.tenant_id == session.tenant_id,
+        SBOMValidationSessionEvent.event_type == "created",
+    ).order_by(SBOMValidationSessionEvent.id)).scalars().first()
+    return entry.metadata_json or {} if entry else {}
+
+
+def set_session_repair_text(session: SBOMValidationSession, content: str, *, _storage_id: str | None = None) -> None:
+    stored = SbomWorkspaceStorage().write_repair_draft(_storage_id or session.id, content)
     session.storage_backend = stored.storage_backend
     session.repair_storage_path = stored.storage_path
     session.repair_content_text = stored.inline_text
@@ -351,6 +361,10 @@ class ValidationRepairService:
         sbom_type: int | None = None,
         user_id: str | None = None,
         expires_days: int = 7,
+        product_id: int | None = None,
+        upload_options: dict[str, Any] | None = None,
+        strict_ntia: bool = False,
+        verify_signature: bool = False,
     ) -> tuple[SBOMValidationSession | None, str | None]:
         return self.create_upload_session(
             raw_text=raw_text,
@@ -363,6 +377,10 @@ class ValidationRepairService:
             sbom_type=sbom_type,
             user_id=user_id,
             expires_days=expires_days,
+            product_id=product_id,
+            upload_options=upload_options,
+            strict_ntia=strict_ntia,
+            verify_signature=verify_signature,
         )
 
     def create_upload_session(
@@ -380,6 +398,10 @@ class ValidationRepairService:
         validation_status: str | None = None,
         imported_sbom_id: int | None = None,
         expires_days: int = 30,
+        product_id: int | None = None,
+        upload_options: dict[str, Any] | None = None,
+        strict_ntia: bool = False,
+        verify_signature: bool = False,
     ) -> tuple[SBOMValidationSession | None, str | None]:
         safe, reason = payload_is_safe_to_stage(report)
         if not safe:
@@ -453,6 +475,11 @@ class ValidationRepairService:
                 "detected_format": detection.format,
                 "detected_spec_version": detection.spec_version,
                 "is_large_file": stored_original.is_large_file,
+                "strict_ntia": strict_ntia,
+                "verify_signature": verify_signature,
+                "product_id": product_id,
+                "project_id": project_id,
+                "upload_options": upload_options or {},
             },
         )
         self.db.commit()
@@ -460,7 +487,9 @@ class ValidationRepairService:
         return session, None
 
     def get_session(self, session_id: str) -> SBOMValidationSession:
-        session = self.db.get(SBOMValidationSession, session_id)
+        session = self.db.execute(select(SBOMValidationSession).where(
+            SBOMValidationSession.id == session_id
+        ).with_for_update()).scalar_one_or_none()
         if not session or (self.tenant_id is not None and session.tenant_id != self.tenant_id):
             raise HTTPException(status_code=404, detail="Validation session not found")
         return session
@@ -521,9 +550,11 @@ class ValidationRepairService:
         strict_ntia: bool = False,
         verify_signature: bool = False,
         actor_user_id: str | None = None,
+        _content: str | None = None,
+        _commit: bool = True,
     ) -> SBOMValidationSession:
         session = self.get_session(session_id)
-        content = session_repair_text(session)
+        content = session_repair_text(session) if _content is None else _content
         with log_context(tenant_id=session.tenant_id, project_id=session.project_id, sbom_id=session.imported_sbom_id):
             report = run_validation(
                 content.encode("utf-8", errors="replace"),
@@ -564,7 +595,7 @@ class ValidationRepairService:
                 "verify_signature": verify_signature,
             },
         )
-        self.db.commit()
+        self.db.commit() if _commit else self.db.flush()
         self.db.refresh(session)
         return session
 
@@ -576,17 +607,25 @@ class ValidationRepairService:
         actor_user_id: str | None = None,
         strict_ntia: bool = False,
         verify_signature: bool = False,
+        _content: str | None = None,
+        _commit: bool = True,
+        _product_id: int | None = None,
+        _upload_options: dict[str, Any] | None = None,
     ) -> SBOMSource:
         session = self.validate_session(
             session_id,
             strict_ntia=strict_ntia,
             verify_signature=verify_signature,
             actor_user_id=actor_user_id,
+            _content=_content,
+            _commit=_commit,
         )
         report = _report_from_serialized(session.latest_error_report_json or {})
         if (session.latest_error_report_json or {}).get("error_count", 0) != 0:
             raise HTTPException(status_code=422, detail="Cannot import until validation passes")
-        repaired_content = session_repair_text(session)
+        if _content is not None and (session.latest_error_report_json or {}).get("truncated"):
+            raise HTTPException(status_code=422, detail="Cannot approve a candidate with an incomplete validation report")
+        repaired_content = session_repair_text(session) if _content is None else _content
         if session.imported_sbom_id:
             existing = self.db.get(SBOMSource, session.imported_sbom_id)
             if existing:
@@ -623,7 +662,7 @@ class ValidationRepairService:
                     after_hash=session.content_sha256,
                     metadata={"imported_sbom_id": existing.id, "warning_count": report.get("warning_count", 0)},
                 )
-                self.db.commit()
+                self.db.commit() if _commit else self.db.flush()
                 self.db.refresh(existing)
                 return existing
         if session.project_id is not None and self.db.get(Projects, session.project_id) is None:
@@ -631,13 +670,29 @@ class ValidationRepairService:
         if session.sbom_type is not None and self.db.get(SBOMType, session.sbom_type) is None:
             raise HTTPException(status_code=404, detail="SBOM type not found")
         product = None
-        if session.project_id is not None:
+        if _product_id is not None:
+            from .tenant_access import get_product_for_tenant
+            product = get_product_for_tenant(self.db, _product_id, session.tenant_id)
+            if product is None or product.project_id != session.project_id:
+                raise HTTPException(status_code=404, detail="Selected application not found")
+        elif session.project_id is not None:
             product = get_or_create_default_product(
                 self.db,
                 tenant_id=session.tenant_id,
                 project_id=session.project_id,
                 actor=actor_user_id or session.user_id or "repair",
             )
+        options = _upload_options or {}
+        parent = None
+        if options.get("parent_sbom_id") is not None:
+            from .sbom_version_lineage import VersionLineageError, head_of_lineage, resolve_parent_sbom
+            try:
+                requested_parent = resolve_parent_sbom(self.db, parent_sbom_id=options["parent_sbom_id"],
+                    tenant_id=session.tenant_id, project_id=session.project_id,
+                    product_id=product.id if product else None, new_version=options.get("sbom_version"))
+                parent = head_of_lineage(self.db, requested_parent)
+            except VersionLineageError as exc:
+                raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
         name = (session.sbom_name or session.original_filename or f"repaired-{session.id}").strip()
         exists = self.db.execute(select(SBOMSource.id).where(SBOMSource.sbom_name == name)).first()
         if exists:
@@ -653,6 +708,9 @@ class ValidationRepairService:
             projectid=session.project_id,
             product_id=product.id if product else None,
             product_name=product.name if product else None,
+            sbom_version=options.get("sbom_version"),
+            productver=options.get("product_version"),
+            parent_id=parent.id if parent else None,
             created_by=actor_user_id or session.user_id,
             created_on=now_iso(),
             status="validated",
@@ -679,7 +737,7 @@ class ValidationRepairService:
                 after_hash=session.content_sha256,
                 metadata={"imported_sbom_id": obj.id, "warning_count": report.get("warning_count", 0)},
             )
-            self.db.commit()
+            self.db.commit() if _commit else self.db.flush()
             self.db.refresh(obj)
             return obj
         except IntegrityError as exc:

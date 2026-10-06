@@ -758,6 +758,8 @@ def create_sbom(
             project_id=payload.projectid,
             sbom_type=payload.sbom_type,
             user_id=payload.created_by or context.actor_label(),
+            product_id=product.id if product else None,
+            upload_options={"sbom_version": payload.sbom_version, "product_version": payload.productver},
         )
         if session is not None:
             audit_service.write_audit_log(

@@ -74,6 +74,7 @@ from .routers import (
     remediation,
     reports,
     runs,
+    sbom_auto_repair,
     sbom_upload,
     sbom_validation_sessions,
     sbom_versions,
@@ -716,6 +717,7 @@ app.include_router(sboms_crud.router, dependencies=_protected)
 # New multipart upload route running the eight-stage validation pipeline.
 # Path /api/sboms/upload — see ADR-0007.
 app.include_router(sbom_upload.router, dependencies=_protected)
+app.include_router(sbom_auto_repair.router, dependencies=_protected)
 app.include_router(sbom_validation_sessions.router, dependencies=_protected)
 app.include_router(sbom_validation_sessions.compat_router, dependencies=_protected)
 app.include_router(sbom_validation_sessions.workspace_router, dependencies=_protected)

@@ -28,6 +28,7 @@ from ..models import (
     RunCache,
     SBOMAnalysisReport,
     SBOMComponent,
+    SBOMRepairJob,
     SBOMSource,
     SBOMValidationSession,
     SBOMValidationSessionEvent,
@@ -78,6 +79,9 @@ class SBOMDeleteService:
             ("sbom_source", "source_sbom_id", "sbom_source"),
             ("sbom_validation_session_events", "session_id", "sbom_validation_sessions"),
             ("sbom_validation_sessions", "imported_sbom_id", "sbom_source"),
+            ("sbom_repair_jobs", "session_id", "sbom_validation_sessions"),
+            ("sbom_repair_jobs", "source_sbom_id", "sbom_source"),
+            ("sbom_repair_jobs", "imported_sbom_id", "sbom_source"),
             ("vex_documents", "sbom_id", "sbom_source"),
             ("vex_override_audit", "component_id", "sbom_component"),
             ("vex_statements", "component_id", "sbom_component"),
@@ -87,6 +91,7 @@ class SBOMDeleteService:
     )
 
     DELETE_ORDER = [
+        "repair_jobs",
         "validation_session_events",
         "vex_statements",
         "lifecycle_override_audits",
@@ -145,6 +150,9 @@ class SBOMDeleteService:
                 SBOMAnalysisReport.id,
                 SBOMAnalysisReport.sbom_ref_id.in_(tree_ids),
             ),
+            "repair_jobs": self._count(SBOMRepairJob.id, or_(
+                SBOMRepairJob.session_id.in_(session_ids), SBOMRepairJob.source_sbom_id.in_(tree_ids),
+                SBOMRepairJob.imported_sbom_id.in_(tree_ids))),
             "validation_sessions": len(session_ids),
             "validation_events": self._count(
                 SBOMValidationSessionEvent.id,
@@ -218,6 +226,7 @@ class SBOMDeleteService:
             "sbom_source": len(tree_ids - {sbom_id}),
             "sbom_validation_session_events": counts["validation_events"],
             "sbom_validation_sessions": counts["validation_sessions"],
+            "sbom_repair_jobs": counts["repair_jobs"],
             "vex_documents": counts["vex_documents"],
             "vex_override_audit": counts["vex_override_audits"],
             "vex_statements": counts["vex_statements"],
@@ -353,6 +362,9 @@ class SBOMDeleteService:
                 .values(current_sbom_id=None, updated_at=datetime.now(UTC).isoformat())
                 .execution_options(synchronize_session=False)
             )
+            # Repair jobs precede every referenced workspace and SBOM artifact.
+            self._delete(SBOMRepairJob, or_(SBOMRepairJob.session_id.in_(session_ids),
+                SBOMRepairJob.source_sbom_id.in_(tree_ids), SBOMRepairJob.imported_sbom_id.in_(tree_ids)))
             # Repair workspaces and VEX/component-owned audit data.
             self._delete(
                 SBOMValidationSessionEvent, SBOMValidationSessionEvent.session_id.in_(session_ids), session_ids

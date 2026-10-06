@@ -975,6 +975,28 @@ class SBOMValidationSessionEvent(Base, TenantOwnedMixin):
     session = relationship("SBOMValidationSession", back_populates="events")
 
 
+class SBOMRepairJob(Base, TenantOwnedMixin):
+    """Immutable candidate and reports; approval/rejection is a separate decision."""
+    __tablename__ = "sbom_repair_jobs"
+    id = Column(String(36), primary_key=True)
+    session_id = Column(String(36), ForeignKey("sbom_validation_sessions.id", ondelete="CASCADE"), nullable=False, index=True)
+    source_sha256 = Column(String(64), nullable=False)
+    original_sha256 = Column(String(64), nullable=False)
+    source_sbom_sha256 = Column(String(64), nullable=True)
+    source_sbom_id = Column(Integer, ForeignKey("sbom_source.id"), nullable=True)
+    candidate_sha256 = Column(String(64), nullable=False)
+    candidate_content = Column(Text, nullable=False)
+    report_json = Column(JSON, nullable=False)
+    validation_options_json = Column(JSON, nullable=False)
+    status = Column(String(32), nullable=False)
+    approval_status = Column(String(16), nullable=False, default="PENDING", server_default="PENDING")
+    created_at = Column(String, nullable=False)
+    decided_at = Column(String, nullable=True)
+    actor_user_id = Column(String(128), nullable=True)
+    decided_by = Column(String(128), nullable=True)
+    imported_sbom_id = Column(Integer, ForeignKey("sbom_source.id"), nullable=True)
+
+
 class SBOMAnalysisReport(Base, SoftDeleteMixin, TenantOwnedMixin):
     __tablename__ = "sbom_analysis_report"
 
@@ -2694,6 +2716,19 @@ def _advisor_policy_versions_are_append_only(session, _flush_context, _instances
             instance in session.deleted or session.is_modified(instance, include_collections=False)
         ):
             raise RuntimeError(f"{instance.__tablename__} rows are append-only")
+
+
+@event.listens_for(_AdvisorSession, "before_flush")
+def _repair_candidate_is_immutable(session, _flush_context, _instances):
+    from sqlalchemy import inspect
+    immutable = ("tenant_id", "session_id", "source_sha256", "original_sha256", "source_sbom_sha256",
+                 "source_sbom_id", "candidate_sha256", "candidate_content", "report_json",
+                 "validation_options_json", "created_at", "actor_user_id")
+    for instance in session.dirty:
+        if isinstance(instance, SBOMRepairJob):
+            state = inspect(instance)
+            if any(state.attrs[key].history.has_changes() for key in immutable):
+                raise RuntimeError("Repair candidates and evidence are immutable")
 
 
 # Register report tables for Alembic and metadata-based test databases.
