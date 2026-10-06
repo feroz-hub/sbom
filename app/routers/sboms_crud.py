@@ -2093,3 +2093,9 @@ def list_sbom_analysis_runs(
         .scalars()
         .all()
     )
+
+
+@router.get('/sboms/{sbom_id}/quality')
+def sbom_quality(sbom_id: int, context: CurrentContext = Depends(require_permission('sbom:read')), db: Session = Depends(get_db)):
+    from app.services.sbom.quality.service import QualityService
+    return QualityService(db, context).sbom_quality(sbom_id)

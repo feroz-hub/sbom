@@ -482,6 +482,8 @@ class ValidationRepairService:
                 "upload_options": upload_options or {},
             },
         )
+        from .sbom.quality.service import persist_snapshot
+        persist_snapshot(self.db, session, original_bytes, role='ORIGINAL', sbom_id=imported_sbom_id, report=report)
         self.db.commit()
         self.db.refresh(session)
         return session, None

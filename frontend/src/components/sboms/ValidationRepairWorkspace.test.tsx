@@ -32,6 +32,7 @@ vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api');
   return {
     ...actual,
+    getSessionQuality: vi.fn().mockResolvedValue({ enabled: false, assessment: null }),
     getProject: (...args: unknown[]) => getProject(...args),
     getProjects: (...args: unknown[]) => getProjects(...args),
     getValidationSession: (...args: unknown[]) => getValidationRepairSession(...args),

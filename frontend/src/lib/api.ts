@@ -3179,3 +3179,10 @@ export function decideSbomRepair(sessionId: string, jobId: string, decision: 'ap
 export function downloadSbomRepair(sessionId: string, jobId: string, kind: 'download' | 'report') {
   return downloadBinary(`/api/sbom-validation-sessions/${sessionId}/repair/${jobId}/${kind}`, `repair-${jobId}.json`);
 }
+
+export function getSessionQuality(sessionId: string, signal?: AbortSignal) {
+  return request<import('@/types/sbomQuality').QualityResponse>(`/api/sbom-validation-sessions/${sessionId}/quality`, { signal });
+}
+export function getSbomQuality(sbomId: number, signal?: AbortSignal) {
+  return request<import('@/types/sbomQuality').QualityResponse>(`/api/sboms/${sbomId}/quality`, { signal });
+}

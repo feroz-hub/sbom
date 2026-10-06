@@ -157,3 +157,9 @@ def reject(
     db: Session = Depends(get_db),
 ):
     return AutoRepairService(db, context).reject(session_id, job_id)
+
+
+@router.get('/{session_id}/quality')
+def session_quality(session_id: str, context: CurrentContext = Depends(require_permission('sbom:repair:read')), db: Session = Depends(get_db)):
+    from app.services.sbom.quality.service import QualityService
+    return QualityService(db, context).session_quality(session_id)

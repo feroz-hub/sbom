@@ -12,6 +12,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
 
+from app.core.sbom_quality_policy import DEFAULT_THRESHOLDS, DEFAULT_WEIGHTS, QualityPolicy
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 # Detect and import BaseSettings
@@ -45,6 +47,16 @@ class Settings(BaseSettings):
     sbom_repair_auto_apply_confidence: float = Field(default=1.0, ge=0, le=1)
     sbom_repair_max_bytes: int = Field(default=5 * 1024 * 1024, ge=1024, le=50 * 1024 * 1024)
     sbom_repair_max_seconds: float = Field(default=30.0, ge=1, le=120)
+
+    # Advisory quality defaults are centralized and validated independently of upload gates.
+    sbom_quality_enabled: bool = True
+    sbom_quality_weights: dict[str, float] = Field(default_factory=lambda: dict(DEFAULT_WEIGHTS))
+    sbom_quality_thresholds: dict[str, float] = Field(default_factory=lambda: dict(DEFAULT_THRESHOLDS))
+
+    @model_validator(mode='after')
+    def validate_quality_configuration(self):
+        QualityPolicy(weights=self.sbom_quality_weights, thresholds=self.sbom_quality_thresholds)
+        return self
 
     # API Keys and Credentials
     nvd_api_key: str = Field(default="", description="NVD API key for enhanced rate limits")

@@ -106,3 +106,11 @@ describe('repair release state integrity', () => {
     expect(screen.queryByRole('button', { name: 'Auto-Repair Safe Issues' })).not.toBeInTheDocument();
   });
 });
+
+it('offers optional deterministic quality repair without claiming valid input failed', async () => {
+  vi.mocked(analyzeSbomRepair).mockResolvedValue({ ...analysis, validation_status: 'PASSED', total_errors: 0, auto_fixable: 1, suggested: 0, manual_only: 0, quality_issue_count: 1 });
+  show();
+  expect(await screen.findByText('SBOM Quality Improvements Available')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Auto-Repair Safe Issues' })).toBeInTheDocument();
+  expect(screen.queryByText('SBOM Validation Failed')).not.toBeInTheDocument();
+});

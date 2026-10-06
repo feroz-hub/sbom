@@ -1,6 +1,7 @@
 from app.validation import errors as E
 from app.validation.normalize import iter_declared_bom_refs
 
+from ...quality.inspection import canonical_cpe, canonical_purl
 from ..diff import pointer, proposal, value_at
 from .base import RepairRule
 
@@ -26,6 +27,18 @@ class DanglingDependencyRefRule(RepairRule):
         refs = [r for r, _ in declarations]
         if len(refs) != len(set(refs)):
             return []
+        # Exact bom-ref is authoritative. A PURL/CPE string, however, must not
+        # select one of several declarations with the same canonical identity.
+        if missing in refs:
+            return [missing]
+        normalized_purl = canonical_purl(missing)
+        normalized_cpe = canonical_cpe(missing)
+        for normalized, field, canonical in ((normalized_purl, "purl", canonical_purl),
+                                              (normalized_cpe, "cpe", canonical_cpe)):
+            if normalized is not None:
+                equivalent = [r for r, c in declarations if canonical(c.get(field)) == normalized]
+                if len(equivalent) > 1:
+                    return equivalent
         tiers = [
             lambda r, c: missing == r,
             lambda r, c: missing == c.get("purl"),
@@ -36,6 +49,8 @@ class DanglingDependencyRefRule(RepairRule):
                 and missing == c["name"] + "@" + c["version"]
             ),
             lambda r, c: missing.strip() == r.strip(),
+            lambda r, c: normalized_purl is not None and normalized_purl == canonical_purl(c.get('purl')),
+            lambda r, c: normalized_cpe is not None and normalized_cpe == canonical_cpe(c.get('cpe')),
         ]
         for match in tiers:
             results = [r for r, c in declarations if match(r, c)]

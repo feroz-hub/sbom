@@ -6,10 +6,12 @@ from dataclasses import dataclass
 from hashlib import sha256
 from time import monotonic
 
+from app.parsing.strict_json import require_unambiguous_json
 from app.validation import run as validate
 from app.validation.context import ValidationContext
 from app.validation.stages import STAGE_NUMBERS, detect, ingress, security
 
+from ..quality.inspection import repair_quality_issues
 from .classifier import classify
 from .diff import pointer
 from .models import RepairStatus as S
@@ -57,19 +59,8 @@ class RepairEngine:
         if ctx.report.has_errors():
             return self._unsupported("Security validation blocks automatic repair; use manual review.")
 
-        def unique_pairs(pairs):
-            result = {}
-            for key, value in pairs:
-                if key in result:
-                    raise ValueError("Ambiguous duplicate JSON key")
-                result[key] = value
-            return result
-
-        def reject_constant(_):
-            raise ValueError("Non-JSON number")
-
         try:
-            json.loads(ctx.text, object_pairs_hook=unique_pairs, parse_constant=reject_constant)
+            require_unambiguous_json(ctx.text)
         except (ValueError, TypeError):
             return self._unsupported("Ambiguous JSON keys or non-JSON numbers require manual handling.")
         doc = ctx.parsed_dict
@@ -91,15 +82,18 @@ class RepairEngine:
         self._blocked_reason = "Auto-repair is disabled."
         doc = self._document(raw) if self.policy.enabled else None
         entries, changes = [], []
-        for entry in report.errors:
-            error = entry.model_dump(mode="json")
+        diagnostics = [entry.model_dump(mode="json") for entry in report.errors]
+        quality_issues = repair_quality_issues(doc) if doc is not None else []
+        diagnostics.extend(quality_issues)
+        for error in diagnostics:
             kind, change = classify(doc, error, self.rules, self.policy.enabled)
             error["classification"] = kind.value
             entries.append(error)
             if change and change.confidence >= self.policy.confidence:
                 changes.append(change)
         result = summary(entries, report, changes)
-        result.update(repair_supported=doc is not None, manual_review_reason=self._blocked_reason)
+        result.update(repair_supported=doc is not None, manual_review_reason=self._blocked_reason,
+                      quality_issue_count=len(quality_issues), rule_metadata=[r.metadata() for r in self.rules])
         return result, doc, changes
 
     def analyze(self, raw):
@@ -145,6 +139,10 @@ class RepairEngine:
                     (e.code, e.stage) for e in checked.warnings if STAGE_NUMBERS.get(e.stage, 99) <= cutoff
                 )
                 remaining = any(e.code == change.error_code and pointer(e.path) == change.path for e in checked.errors)
+                if change.error_code.startswith('QUALITY_'):
+                    candidate_doc = self._document(candidate)
+                    remaining = candidate_doc is None or any(e['code'] == change.error_code and pointer(e['path']) == change.path
+                                                            for e in repair_quality_issues(candidate_doc))
                 reduced = sum(e.code == change.error_code for e in checked.errors) < sum(
                     e.code == change.error_code for e in after.errors
                 )
@@ -181,7 +179,7 @@ class RepairEngine:
         limit_reached = bool(final["auto_fixable"] and (passes == self.policy.max_passes or monotonic() >= deadline))
         status = (
             S.NOT_REQUIRED
-            if not before.has_errors() and not before.truncated
+            if not applied and not before.has_errors() and not before.truncated
             else S.REPAIR_FAILED
             if rolled_back and not applied
             else S.REPAIRED

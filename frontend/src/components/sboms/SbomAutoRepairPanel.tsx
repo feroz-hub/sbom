@@ -7,6 +7,7 @@ import { analyzeSbomRepair, getLatestSbomRepair, runSbomRepair, decideSbomRepair
 import { invalidateSbomSurfaces, invalidateDashboardTiles, invalidateProjectSurfaces, invalidateProductSurfaces } from '@/lib/queryInvalidation';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
+import { SbomQualityCard } from './SbomQualityPanel';
 import type { DeterministicRepairJob } from '@/types/sbomAutoRepair';
 
 function saveDownload(result: { blob: Blob; filename: string }) {
@@ -27,6 +28,7 @@ export function SbomAutoRepairPanel({ sessionId, onApproved }: { sessionId: stri
   const invalidateRepairJob = (job: DeterministicRepairJob) => {
     client.setQueryData(['sbom-auto-repair-job', sessionId], job);
     client.invalidateQueries({ queryKey: ['validation-repair-history', sessionId] });
+    client.invalidateQueries({ queryKey: ['sbom-quality'] });
   };
   const repair = useMutation({ mutationFn: () => runSbomRepair(sessionId), onSuccess: (job) => invalidateRepairJob(job) });
   const decide = useMutation({ mutationFn: (decision: 'approve' | 'reject') => decision === 'approve' ? decideSbomRepair(sessionId, latest.data!.repair_job_id, decision, latest.data!.candidate_sha256) : decideSbomRepair(sessionId, latest.data!.repair_job_id, decision), onSuccess: (job) => {
@@ -54,18 +56,19 @@ export function SbomAutoRepairPanel({ sessionId, onApproved }: { sessionId: stri
   if (!data.enabled) return null;
   const job = latest.data;
   const caps = job?.capabilities ?? data.capabilities;
-  if (!job && data.validation_status === 'PASSED' && data.total_errors === 0) return null;
+  if (!job && data.validation_status === 'PASSED' && data.total_errors === 0 && data.auto_fixable === 0) return null;
   const expectedSource = job?.approval_status === 'APPROVED' ? job.candidate_sha256 : job?.source_sha256;
   const stale = !!(job && expectedSource && data.source_sha256 && expectedSource !== data.source_sha256);
   const displayedIssues = (!stale && job?.analysis?.issues) || data.issues;
   const autoFixable = !stale && job?.analysis && job.approval_status !== 'REJECTED' ? job.analysis.auto_fixable : data.auto_fixable;
   const busy = repair.isPending || decide.isPending;
   return <section aria-label="Deterministic SBOM auto-repair" className="shrink-0 rounded-lg border border-border bg-white p-4 dark:bg-slate-900">
-    <h2 className="font-semibold">{job ? job.status === 'REPAIRED' ? 'Auto-Repair Completed' : job.status === 'PARTIALLY_REPAIRED' ? 'Partial Repair — Manual Review Required' : job.status === 'REPAIR_FAILED' ? 'Auto-Repair Failed' : job.status === 'REJECTED' ? 'Repairs Rejected' : 'Manual Review Required' : data.total_errors ? 'SBOM Validation Failed' : 'No Repair Required'}</h2>
+    <h2 className="font-semibold">{job ? job.status === 'REPAIRED' ? 'Auto-Repair Completed' : job.status === 'PARTIALLY_REPAIRED' ? 'Partial Repair — Manual Review Required' : job.status === 'REPAIR_FAILED' ? 'Auto-Repair Failed' : job.status === 'REJECTED' ? 'Repairs Rejected' : 'Manual Review Required' : data.total_errors ? 'SBOM Validation Failed' : data.auto_fixable ? 'SBOM Quality Improvements Available' : 'No Repair Required'}</h2>
     {(job?.manual_review_reason || data.manual_review_reason) && <p className="text-sm">{job?.manual_review_reason || data.manual_review_reason}</p>}
     {stale && <Alert variant="warning">Source draft changed. This result belongs to an earlier draft. Run repair again before accepting changes.</Alert>}
     {error && <Alert variant="error">{error instanceof Error ? error.message : 'Repair action failed'}</Alert>}
     {job ? <>
+      {job.quality && <SbomQualityCard assessment={job.quality.after} comparison={job.quality} stale={stale} />}
       <p className="text-sm">Original Issues: {job.errors_before} · Repairs Applied: {job.repairs_applied} · Remaining Issues: {job.errors_after}</p>
       <p className="text-sm">{job.status.replaceAll('_', ' ')} · Validation: {job.validation_status} · Approval: {job.approval_status}</p>
       {job.analysis && <p className="text-sm">{job.suggested_repairs ?? job.analysis.suggested} have suggested fixes · {job.manual_errors ?? job.analysis.manual_only} require manual review</p>}
@@ -98,7 +101,7 @@ export function SbomAutoRepairPanel({ sessionId, onApproved }: { sessionId: stri
         </article>)}
         {!job.changes.length && <p>No deterministic changes applied.</p>}
       </div>}
-    </> : <p className="text-sm">{data.total_errors} issues detected · {data.auto_fixable} can be safely repaired · {data.suggested} have suggested fixes · {data.manual_only} require manual review</p>}
+    </> : <p className="text-sm">{data.total_errors} validation issues · {data.quality_issue_count ?? 0} quality improvement opportunities · {data.auto_fixable} can be safely repaired · {data.suggested} have suggested fixes · {data.manual_only} require manual review</p>}
     {data.truncated && <p className="text-sm">The validator capped this report. Additional issues may appear after revalidation.</p>}
     <div className="mt-2 flex flex-wrap gap-2">
       <Button size="sm" variant="secondary" onClick={() => setShowErrors(!showErrors)}>View Errors</Button>
