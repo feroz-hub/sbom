@@ -348,3 +348,17 @@ for exact evidence, every baseline failure, defects fixed, security/concurrency
 results, branch assessment and recommended commit groupings. Phase 1 is ready
 for review; the full application backend remains non-green due to those existing
 failures. The initial release-validation pass made no commits. The subsequent authorized commit-separation handoff is recorded in the release report. No production migrations, deployment or Phase 2 work were performed.
+
+## Phase 2 extension
+
+Phase 2 extends this framework with advisory quality scoring, immutable hash-bound
+quality history, candidate before/after comparison and deterministic PURL/CPE/
+dependency cleanup. The existing five rules, complete validation, original
+retention, tenant authorization and hash-bound explicit approval remain in place.
+Valid but incomplete SBOMs remain accepted; quality is separate from validation
+and vulnerability severity. Signed documents, ambiguous references and unknown
+facts remain manual. AI repair is disabled. See [SBOM quality scoring](sbom-quality-scoring.md)
+for dimensions, weights, eligibility, rules, APIs, configuration and verification.
+No new migration is required: snapshots reuse existing validation history.
+
+Final Phase 2 test counts, defect fixes, clean-base comparison and limitations: [Phase 2 release validation](sbom-auto-repair-phase2-release-validation.md). No deployment or production migration was performed.
