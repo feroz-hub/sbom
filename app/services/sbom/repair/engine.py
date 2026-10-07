@@ -51,9 +51,9 @@ class RepairEngine:
         ctx = detect.run(ctx)
         if ctx.report.has_errors():
             return self._unsupported("Input cannot be parsed safely in a supported repair format; use manual handling.")
-        if ctx.spec != "cyclonedx" or ctx.encoding != "json":
+        if ctx.spec not in {"cyclonedx", "spdx"} or ctx.encoding != "json":
             return self._unsupported(
-                "Automatic repair is unsupported for this format; Phase 1 supports CycloneDX JSON only."
+                "Automatic repair is unsupported for this format; supported formats are CycloneDX JSON 1.4–1.6 and SPDX JSON 2.2/2.3."
             )
         ctx = security.run(ctx)
         if ctx.report.has_errors():
@@ -83,17 +83,22 @@ class RepairEngine:
         doc = self._document(raw) if self.policy.enabled else None
         entries, changes = [], []
         diagnostics = [entry.model_dump(mode="json") for entry in report.errors]
-        quality_issues = repair_quality_issues(doc) if doc is not None else []
-        diagnostics.extend(quality_issues)
-        for error in diagnostics:
-            kind, change = classify(doc, error, self.rules, self.policy.enabled)
-            error["classification"] = kind.value
-            entries.append(error)
-            if change and change.confidence >= self.policy.confidence:
-                changes.append(change)
+        from ..quality.spdx_inspection import prepared_spdx
+        with prepared_spdx(doc):
+            quality_issues = repair_quality_issues(doc) if doc is not None else []
+            diagnostics.extend(quality_issues)
+            for error in diagnostics:
+                kind, change = classify(doc, error, self.rules, self.policy.enabled)
+                error["classification"] = kind.value
+                entries.append(error)
+                if change and change.confidence >= self.policy.confidence:
+                    changes.append(change)
         result = summary(entries, report, changes)
         result.update(repair_supported=doc is not None, manual_review_reason=self._blocked_reason,
-                      quality_issue_count=len(quality_issues), rule_metadata=[r.metadata() for r in self.rules])
+                      quality_issue_count=len(quality_issues),
+                      format="SPDX_JSON" if doc and doc.get("spdxVersion") else "CYCLONEDX_JSON" if doc else None,
+                      spec_version=doc.get("spdxVersion", doc.get("specVersion", "")).removeprefix("SPDX-") if doc else None,
+                      rule_metadata=[r.metadata() for r in self.rules if doc is None or r.supports(doc)])
         return result, doc, changes
 
     def analyze(self, raw):
@@ -192,6 +197,9 @@ class RepairEngine:
             current,
             dict(
                 status=status.value,
+                format=final["format"],
+                spec_version=final["spec_version"],
+                rule_metadata=final["rule_metadata"],
                 errors_before=before.error_count,
                 errors_after=after.error_count,
                 repairs_applied=len(applied),

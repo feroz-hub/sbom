@@ -19,7 +19,8 @@ component limit and stack depth is real).
 
 from __future__ import annotations
 
-from collections import defaultdict
+import re
+from collections import Counter, defaultdict
 
 from .. import errors as E
 from ..context import ValidationContext
@@ -37,6 +38,11 @@ def run(ctx: ValidationContext) -> ValidationContext:
         declared.update(sbom.document_refs)
         declared.add("SPDXRef-DOCUMENT")
 
+    external_refs = Counter()
+    if sbom.spec == "spdx":
+        for record in (ctx.parsed_dict or {}).get("externalDocumentRefs") or []:
+            if isinstance(record, dict) and isinstance(record.get("externalDocumentId"), str):
+                external_refs[record["externalDocumentId"]] += 1
     edges_by_source: dict[str, list[str]] = defaultdict(list)
     # CycloneDX dependency nodes are retained separately from their edges so
     # entries with an empty dependsOn list are still validated. Hand-built
@@ -45,7 +51,7 @@ def run(ctx: ValidationContext) -> ValidationContext:
     for node in sbom.dependency_nodes:
         reported_sources.add((node.path, node.ref))
         if node.ref not in declared:
-            _emit_dangling(ctx, sbom.spec, sbom.spec_version, node.path, node.ref)
+            _emit_dangling(ctx, sbom.spec, sbom.spec_version, node.path, node.ref, external_refs)
     for index, dep in enumerate(sbom.dependencies):
         source_path = dep.source_path or f"dependencies[{index}].ref"
         target_path = dep.target_path or f"dependencies[{index}].dependsOn"
@@ -58,11 +64,11 @@ def run(ctx: ValidationContext) -> ValidationContext:
                 remediation="Self-edges are never legitimate. Remove the entry.",
                 spec_reference=f"CycloneDX {sbom.spec_version} §6" if sbom.spec == "cyclonedx" else "SPDX 2.3 §11",
             )
-        if dep.source not in declared and (source_path, dep.source) not in reported_sources:
+        if (dep.source not in declared or (sbom.spec == "spdx" and dep.source.startswith("DocumentRef-"))) and (source_path, dep.source) not in reported_sources:
             reported_sources.add((source_path, dep.source))
-            _emit_dangling(ctx, sbom.spec, sbom.spec_version, source_path, dep.source)
-        if dep.target not in declared:
-            _emit_dangling(ctx, sbom.spec, sbom.spec_version, target_path, dep.target)
+            _emit_dangling(ctx, sbom.spec, sbom.spec_version, source_path, dep.source, external_refs)
+        if dep.target not in declared or (sbom.spec == "spdx" and dep.target.startswith("DocumentRef-")):
+            _emit_dangling(ctx, sbom.spec, sbom.spec_version, target_path, dep.target, external_refs, allow_sentinel=True)
         edges_by_source[dep.source].append(dep.target)
 
     cycles = _tarjan_scc(declared, edges_by_source)
@@ -95,10 +101,18 @@ def run(ctx: ValidationContext) -> ValidationContext:
     return ctx
 
 
-def _emit_dangling(ctx: ValidationContext, spec: str, spec_version: str, path: str, ref: str) -> None:
+def _emit_dangling(ctx: ValidationContext, spec: str, spec_version: str, path: str, ref: str, external_refs=None, allow_sentinel=False) -> None:
     if spec == "spdx":
+        if allow_sentinel and ref in {"NONE", "NOASSERTION"}:
+            return
         if ref.startswith("DocumentRef-"):
-            return  # documentRefs are valid by spec, even if not declared in this doc
+            match = re.fullmatch(r"(DocumentRef-[a-zA-Z0-9.\-]+):SPDXRef-[a-zA-Z0-9.\-]+", ref)
+            if match and external_refs and external_refs[match[1]] == 1:
+                return
+            ctx.report.add(E.E073_EXTERNAL_DOC_REF_INVALID, stage=_STAGE, path=path,
+                           message="External relationship reference is malformed, undeclared or ambiguous.",
+                           remediation="Retain external semantics and provide a valid unique externalDocumentRefs declaration.")
+            return
         ctx.report.add(
             E.E072_RELATIONSHIP_ELEMENT_DANGLING,
             stage=_STAGE,

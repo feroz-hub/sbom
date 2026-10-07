@@ -253,6 +253,10 @@ def normalize_spdx(doc: dict[str, Any], spec_version: str) -> InternalSbom:
         if isinstance(file_block, dict) and isinstance(file_block.get("SPDXID"), str):
             declared_refs.add(file_block["SPDXID"])
 
+    for snippet in doc.get("snippets") or []:
+        if isinstance(snippet, dict) and isinstance(snippet.get("SPDXID"), str):
+            declared_refs.add(snippet["SPDXID"])
+
     dependencies: list[DependencyEdge] = []
     for rel_index, rel in enumerate(doc.get("relationships") or []):
         if not isinstance(rel, dict):

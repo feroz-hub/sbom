@@ -119,6 +119,16 @@ def _detect_json(ctx: ValidationContext, text: str) -> ValidationContext:
     bom_format = doc.get("bomFormat")
     has_cdx = (isinstance(bom_format, str) and bom_format.lower() == "cyclonedx") or "specVersion" in doc
 
+    if has_spdx:
+        from app.parsing.strict_json import require_unambiguous_json
+        try:
+            require_unambiguous_json(text)
+        except (ValueError, TypeError):
+            ctx.report.add(E.E020_JSON_PARSE_FAILED, stage=_STAGE, path="",
+                           message="SPDX JSON has ambiguous duplicate keys or non-JSON numbers.",
+                           remediation="Provide unambiguous standards-compliant JSON; no automatic interpretation is safe.")
+            return ctx
+
     if has_spdx and has_cdx:
         ctx.report.add(
             E.E011_FORMAT_AMBIGUOUS,

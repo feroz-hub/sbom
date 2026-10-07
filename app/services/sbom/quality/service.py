@@ -37,6 +37,12 @@ def persist_snapshot(
             raise HTTPException(409, "Quality assessment configuration binding mismatch") from exc
         if bound_policy.fingerprint() != assessment["configuration_hash"]:
             raise HTTPException(409, "Quality assessment configuration binding mismatch")
+    from app.validation.context import ValidationContext
+    from app.validation.stages import detect, ingress
+    detected = detect.run(ingress.run(ValidationContext(raw_bytes=raw)))
+    engine_version = "3.0.0" if detected.spec == "spdx" else "2.0.0"
+    if assessment and assessment["engine_version"] != engine_version:
+        raise HTTPException(409, "Quality assessment engine binding mismatch")
     configuration_hash = assessment["configuration_hash"] if assessment else QualityPolicy.configured().fingerprint()
     history = db.scalars(
         select(SBOMValidationSessionEvent).where(
@@ -52,7 +58,7 @@ def persist_snapshot(
             and meta.get("repair_job_id") == job_id
             and meta.get("sbom_id") == sbom_id
             and meta.get("artifact_hash") == artifact_hash
-            and meta.get("engine_version") == "2.0.0"
+            and meta.get("engine_version") == engine_version
             and meta.get("configuration_hash") == configuration_hash
         ):
             retained = meta.get("assessment", {})
@@ -98,6 +104,8 @@ def persist_snapshot(
         "artifact_hash": score["artifact_hash"],
         "overall_score": score["overall_score"],
         "engine_version": score["engine_version"],
+        "format": score["format"],
+        "spec_version": score["spec_version"],
     }
     with log_context(tenant_id=session.tenant_id, user_id=context.user_id if context else session.user_id):
         log_event(log, "SBOM_QUALITY_RECALCULATED" if history else EVENT, **fields)
