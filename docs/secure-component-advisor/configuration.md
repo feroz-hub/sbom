@@ -24,8 +24,13 @@ tenant override slot. For a tenant:
 2. Otherwise the platform slot's latest ACTIVE version.
 3. Otherwise there is no policy: nothing is Accepted Risk or Trusted, and scoring uses the built-in default.
 
-The platform-default write API is **not implemented yet** (see the plan's open items). Platform rows are honoured when
-they are present, for example when inserted by an operator script.
+Platform Admins manage defaults at **Configuration → Component Advisor Policies**
+(`/platform/configuration/advisor-policies`). The platform API is
+`GET /api/platform/configuration/advisor-policies/{kind}` and
+`GET|POST /api/platform/configuration/advisor-policies/{kind}/versions`.
+It requires `platform:advisor-policy:read` / `update` (migration 075).
+Platform versions can be ACTIVE or DISABLED; they cannot INHERIT. Publishing a platform default preserves tenant
+overrides and disabled slots. Platform publishes are recorded in the platform authorization audit, with no tenant owner.
 
 ## Accepted-risk policy (`kind = accepted-risk`, FR-SCA-004)
 

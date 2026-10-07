@@ -33,6 +33,12 @@ never taken from the request.
 
 ## Policies (`tenant:advisor-policy:read` / `update`)
 
+Platform Admin equivalents use `/api/platform/configuration/advisor-policies/{kind}` and
+`/{kind}/versions`, with `platform:advisor-policy:read` / `update`. They ignore selected-tenant headers and manage
+platform defaults. Platform statuses are ACTIVE or DISABLED; INHERIT is invalid. The same concurrency token,
+validation and append-only history apply. Platform state returns `tenant_override: null`, the platform slot's
+`row_version`, and `platform_default`. Tenant overrides retain precedence.
+
 | Method & path | Purpose |
 |---|---|
 | `GET /policies/{kind}` | Effective policy, tenant override and platform default. `kind` = `accepted-risk`, `trust` or `scoring`. |

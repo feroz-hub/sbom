@@ -99,6 +99,7 @@ const metrics: Array<{
   },
 ];
 const governance = [
+  { title: 'Component Advisor Policies', description: 'Manage inherited risk, trust and scoring defaults', action: 'Configure', href: '/platform/configuration/advisor-policies', icon: ShieldCheck, permission: 'platform:advisor-policy:read' },
   {
     title: 'Tenant Administration',
     description: 'Create and manage tenant lifecycle',

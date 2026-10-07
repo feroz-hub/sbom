@@ -39,6 +39,7 @@ export const navigationItems: NavItem[] = [
   {
     href: '/platform/configuration', label: 'Configuration', icon: SettingsIcon, section: true,
     children: [
+      { href: '/platform/configuration/advisor-policies', label: 'Component Advisor Policies', icon: ShieldCheck, permission: 'platform:advisor-policy:read' },
       { href: '/platform/configuration/ai', label: 'AI Configuration', icon: Cpu, permission: 'platform:ai:read' },
       { href: '/platform/configuration/lifecycle', label: 'Lifecycle Providers', icon: CalendarClock, permission: 'platform:lifecycle-provider:read' },
     ],

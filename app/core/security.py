@@ -524,6 +524,8 @@ def permission_for_request(request: Request) -> str:
         path.startswith(f"/api/v1/ai/{part}") for part in ("credentials", "settings", "effective-config", "override", "providers/available")
     )
     lifecycle_config = path.startswith("/api/admin/lifecycle-providers")
+    if path.startswith("/api/platform/configuration/advisor-policies"):
+        return "platform:advisor-policy:read" if method == "GET" else "platform:advisor-policy:update"
     if platform_config or ai_config or lifecycle_config:
         family = "ai" if ai_config or "/configuration/ai" in path else "lifecycle-provider"
         action = "read" if method == "GET" else "test" if path.endswith(("/test", "/refresh")) else "sync" if path.endswith("/sync") else "update"

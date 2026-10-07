@@ -455,7 +455,7 @@ _Pending — both full runs are in progress; the comparison will be recorded her
 |---|---|---|
 | 1 | Dashboard on the authoritative active dataset, tenant default | ✅ Steps 2–3, 9 |
 | 2 | NKAV follows VEX actionability and active-only rules; reconciles with drill-down | ✅ T1–T7, T10, T13, T36 |
-| 3 | Accepted-risk / trust policy versioned and explainable | ✅ Step 4 (platform-default write API deferred) |
+| 3 | Accepted-risk / trust policy versioned and explainable | ✅ Step 4; platform-default API and settings added with migration 075 |
 | 4 | Search and purpose discovery with provenance | ✅ Step 4, T14–T16, T38 |
 | 5 | Tenant usage correct, never crosses tenants | ✅ FR-010, T11/T12 sweep |
 | 6 | Safer versions and alternatives evidence-based | ✅ Steps 5–6 |
@@ -477,9 +477,7 @@ _Pending — both full runs are in progress; the comparison will be recorded her
   `as_of` is in scope (D-11).
 - Stale-evidence thresholds (`ReviewReason.STALE_EVIDENCE`) are wired in Step 7.
 - Confirm the "Frequently Adopted" threshold (3 products) or make it a tenant policy setting.
-- **Platform-default policy write API** is deferred. It needs `platform:advisor-policy:*`, which changes the frozen
-  Platform Admin V2 allowlist and the `/api/platform/configuration` mapping. Platform rows are already honoured
-  in resolution (tested by direct insert).
+- **Platform-default policies** are available through `/api/platform/configuration/advisor-policies` and the Platform Admin settings page. Migration 075 adds protected `platform:advisor-policy:read` / `update` grants through the V5 catalogue; frozen V2 remains unchanged.
 - Explicit risk acceptance as an accepted-risk criterion (link to `VulnerabilityRemediation` "Accepted Risk").
 - **Cold snapshot cost:** about 14 s at the sign-off scale (200k occurrences); warm summary and drill-down are about 1 s.
   TTL raised to 300 s. If cold rebuilds are unacceptable, add the per-SBOM incremental rollup (NFR-SCA-006).

@@ -745,6 +745,7 @@ app.include_router(lifecycle_admin.platform_router, dependencies=_protected)
 app.include_router(vex.router, dependencies=_protected)
 app.include_router(vex_investigations.router, dependencies=_protected)
 app.include_router(component_advisor.router, dependencies=_protected)
+app.include_router(component_advisor.platform_policy_router, dependencies=_protected)
 app.include_router(remediation.router, dependencies=_protected)
 # Identity onboarding routes in this router perform JWT validation and local
 # state resolution themselves; its application routes retain explicit

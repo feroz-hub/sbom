@@ -12,8 +12,8 @@ export interface AdvisorPolicyState {
   tenant_override: AdvisorPolicyVersion | null;
   platform_default: AdvisorPolicyVersion | null;
 }
-const base = '/api/component-advisor/policies';
-const options = (tenantId: number) => ({ headers: { 'X-Tenant-ID': String(tenantId) }, authErrorMode: 'throw' as const });
-export const getAdvisorPolicy = (tenantId: number, kind: AdvisorPolicyKind) => request<AdvisorPolicyState>(`${base}/${kind}`, options(tenantId));
-export const getAdvisorPolicyHistory = (tenantId: number, kind: AdvisorPolicyKind) => request<{ items: AdvisorPolicyVersion[] }>(`${base}/${kind}/versions`, options(tenantId));
-export const publishAdvisorPolicy = (tenantId: number, kind: AdvisorPolicyKind, body: { status: AdvisorPolicyStatus; rules: Record<string, unknown> | null; reason: string; row_version: number }) => request<AdvisorPolicyState>(`${base}/${kind}/versions`, { ...options(tenantId), method: 'POST', body: JSON.stringify(body) });
+const base = (tenantId: number | null) => tenantId === null ? '/api/platform/configuration/advisor-policies' : '/api/component-advisor/policies';
+const options = (tenantId: number | null) => ({ ...(tenantId !== null ? { headers: { 'X-Tenant-ID': String(tenantId) } } : {}), authErrorMode: 'throw' as const });
+export const getAdvisorPolicy = (tenantId: number | null, kind: AdvisorPolicyKind) => request<AdvisorPolicyState>(`${base(tenantId)}/${kind}`, options(tenantId));
+export const getAdvisorPolicyHistory = (tenantId: number | null, kind: AdvisorPolicyKind) => request<{ items: AdvisorPolicyVersion[] }>(`${base(tenantId)}/${kind}/versions`, options(tenantId));
+export const publishAdvisorPolicy = (tenantId: number | null, kind: AdvisorPolicyKind, body: { status: AdvisorPolicyStatus; rules: Record<string, unknown> | null; reason: string; row_version: number }) => request<AdvisorPolicyState>(`${base(tenantId)}/${kind}/versions`, { ...options(tenantId), method: 'POST', body: JSON.stringify(body) });

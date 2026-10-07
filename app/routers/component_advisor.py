@@ -817,3 +817,10 @@ def get_analytics(
     change any classification, trust or ranking."""
     return recommendation_analytics(db, scope, months=months)
 
+
+
+# Dedicated control-plane routes resolve platform context even when a tenant is selected.
+platform_policy_router = APIRouter(prefix="/api/platform/configuration/advisor-policies", tags=["component-advisor-policies"])
+platform_policy_router.add_api_route("/{kind}", get_policy, methods=["GET"])
+platform_policy_router.add_api_route("/{kind}/versions", get_policy_versions, methods=["GET"])
+platform_policy_router.add_api_route("/{kind}/versions", post_policy_version, methods=["POST"], status_code=201)

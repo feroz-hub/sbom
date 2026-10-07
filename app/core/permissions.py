@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from enum import Enum
 
-from ..authorization_catalog_seed_v2 import PLATFORM_ADMIN_PERMISSIONS_V2
+from ..authorization_catalog_seed_v5 import PLATFORM_ADMIN_PERMISSIONS_V5
 from ..authorization_catalog_seed_v3 import (
     COMPONENT_ADVISOR_PERMISSIONS_V3,
     COMPONENT_ADVISOR_ROLE_PERMISSIONS_V3,
@@ -93,10 +93,10 @@ ALL_PERMISSIONS = frozenset(
         "platform:authorization:read",
         "platform:authorization:manage",
     }
-) | COMPONENT_ADVISOR_PERMISSIONS_V3 | ADVISOR_POLICY_PERMISSIONS_V4
+) | COMPONENT_ADVISOR_PERMISSIONS_V3 | ADVISOR_POLICY_PERMISSIONS_V4 | PLATFORM_ADMIN_PERMISSIONS_V5
 
 ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
-    "PLATFORM_ADMIN": PLATFORM_ADMIN_PERMISSIONS_V2,
+    "PLATFORM_ADMIN": PLATFORM_ADMIN_PERMISSIONS_V5,
     "TENANT_ADMIN": frozenset(
         {
             "sbom:read",
@@ -234,7 +234,7 @@ PERMISSION_SCOPES = {
 }
 
 PROTECTED_ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
-    "PLATFORM_ADMIN": PLATFORM_ADMIN_PERMISSIONS_V2,
+    "PLATFORM_ADMIN": PLATFORM_ADMIN_PERMISSIONS_V5,
     "TENANT_ADMIN": frozenset(
         {
             "tenant:user:read",

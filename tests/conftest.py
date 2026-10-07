@@ -241,6 +241,12 @@ def _reset_authorization_catalog(database_url: str) -> None:
             policy_module = importlib.util.module_from_spec(policy_spec)
             policy_spec.loader.exec_module(policy_module)
             policy_module._seed(connection)
+            platform_policy_spec = importlib.util.spec_from_file_location(
+                "_platform_advisor_policy_permissions", migration_path.with_name("075_platform_advisor_policies.py")
+            )
+            platform_policy_module = importlib.util.module_from_spec(platform_policy_spec)
+            platform_policy_spec.loader.exec_module(platform_policy_module)
+            platform_policy_module._seed(connection)
     finally:
         engine.dispose()
 

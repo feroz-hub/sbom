@@ -27,7 +27,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ...models import AdvisorPolicy, AdvisorPolicyVersion
-from ..audit_service import write_audit_log
+from ..audit_service import write_audit_log, write_authorization_audit
 from ..configuration_scope import scope_clause
 from .policy import PolicyKind, PolicyStatus, PolicyValidationError, PolicyVersionRef, validate_rules
 
@@ -93,7 +93,7 @@ def _ref(row: AdvisorPolicyVersion) -> PolicyVersionRef:
     )
 
 
-def effective_policy(db: Session, tenant_id: int, kind: PolicyKind) -> PolicyVersionRef | None:
+def effective_policy(db: Session, tenant_id: int | None, kind: PolicyKind) -> PolicyVersionRef | None:
     """The version that applies to ``tenant_id`` now, or ``None``."""
     tenant_slot = _slot(db, tenant_id, kind)
     if tenant_slot is not None:
@@ -115,7 +115,7 @@ def effective_policies(db: Session, tenant_id: int) -> EffectivePolicies:
     )
 
 
-def policy_state(db: Session, tenant_id: int, kind: PolicyKind) -> dict[str, Any]:
+def policy_state(db: Session, tenant_id: int | None, kind: PolicyKind) -> dict[str, Any]:
     """What GET /policies/{kind} returns: effective, tenant override and platform default."""
     tenant_slot = _slot(db, tenant_id, kind)
     platform_slot = _slot(db, None, kind)
@@ -126,20 +126,20 @@ def policy_state(db: Session, tenant_id: int, kind: PolicyKind) -> dict[str, Any
         "kind": kind.value,
         "configured": effective is not None,
         "effective": effective.to_dict() if effective else None,
-        "tenant_override": _ref(tenant_latest).to_dict() if tenant_latest else None,
+        "tenant_override": _ref(tenant_latest).to_dict() if tenant_latest and tenant_id is not None else None,
         "platform_default": _ref(platform_latest).to_dict() if platform_latest else None,
         "row_version": tenant_slot.row_version if tenant_slot else 0,
     }
 
 
-def list_versions(db: Session, tenant_id: int, kind: PolicyKind) -> list[dict[str, Any]]:
-    """The tenant's version history for ``kind``, newest first (US-SCA-03)."""
+def list_versions(db: Session, tenant_id: int | None, kind: PolicyKind) -> list[dict[str, Any]]:
+    """The owning scope's version history for ``kind``, newest first (US-SCA-03)."""
     slot = _slot(db, tenant_id, kind)
     if slot is None:
         return []
     rows = db.scalars(
         select(AdvisorPolicyVersion)
-        .where(AdvisorPolicyVersion.policy_id == slot.id, AdvisorPolicyVersion.tenant_id == tenant_id)
+        .where(AdvisorPolicyVersion.policy_id == slot.id, scope_clause(AdvisorPolicyVersion, tenant_id))
         .order_by(AdvisorPolicyVersion.version.desc())
     ).all()
     return [{**_ref(row).to_dict(), "reason": row.reason, "created_by": row.created_by} for row in rows]
@@ -157,14 +157,17 @@ def publish_version(
     correlation_id: str | None = None,
     request=None,
 ) -> PolicyVersionRef:
-    """Append a new tenant policy version. Does not commit.
+    """Append a new policy version in the authenticated scope. Does not commit.
 
-    ``expected_row_version`` is 0 for a tenant with no override yet.
+    ``expected_row_version`` is 0 when the owning scope has no slot yet.
     ACTIVE requires valid rules; DISABLED / INHERIT store no rules.
     """
     tenant_id = context.tenant_id
-    if tenant_id is None:
-        raise PolicyValidationError("A tenant context is required to publish a tenant policy")
+    scope = "platform" if tenant_id is None else "tenant"
+    if not context.has_permission(f"{scope}:advisor-policy:update"):
+        raise PolicyValidationError("Policy update permission is required")
+    if tenant_id is None and status is PolicyStatus.INHERIT:
+        raise PolicyValidationError("Platform policies cannot inherit")
     if not (reason or "").strip():
         raise PolicyValidationError("reason is required")
     normalized = validate_rules(kind, rules or {}) if status is PolicyStatus.ACTIVE else {}
@@ -195,26 +198,35 @@ def publish_version(
     )
     db.add(row)
     db.flush()
-    write_audit_log(
-        db,
-        context,
-        "component_advisor.policy.version_published",
-        entity_type="advisor_policy_version",
-        entity_id=row.id,
-        old_value=_ref(previous).to_dict() if previous else None,
-        new_value={**_ref(row).to_dict(), "reason": row.reason, "correlation_id": correlation_id},
-        request=request,
-        detail=f"{kind.value} v{number} {status.value}",
-    )
+    if tenant_id is None:
+        write_authorization_audit(
+            db, context=context, action="component_advisor.policy.version_published", platform_global=True,
+            old_value=_ref(previous).to_dict() if previous else None,
+            new_value={**_ref(row).to_dict(), "reason": row.reason}, request=request,
+            correlation_id=correlation_id, detail=f"{kind.value} v{number} {status.value}",
+        )
+    else:
+        write_audit_log(
+            db,
+            context,
+            "component_advisor.policy.version_published",
+            entity_type="advisor_policy_version",
+            entity_id=row.id,
+            old_value=_ref(previous).to_dict() if previous else None,
+            new_value={**_ref(row).to_dict(), "reason": row.reason, "correlation_id": correlation_id},
+            request=request,
+            detail=f"{kind.value} v{number} {status.value}",
+        )
     from .recommendations.audit import EventAction, record_event
 
-    record_event(
-        db, tenant_id=tenant_id, action=EventAction.POLICY_VERSION_PUBLISHED, context=context,
-        reason=row.reason, old_status=previous.status if previous else None, new_status=status.value,
-        policy_versions={"kind": kind.value, "policy_version_id": row.id, "version": number,
-                         "previous_policy_version_id": previous.id if previous else None},
-        details={"rules": normalized}, correlation_id=correlation_id,
-    )
+    if tenant_id is not None:
+        record_event(
+            db, tenant_id=tenant_id, action=EventAction.POLICY_VERSION_PUBLISHED, context=context,
+            reason=row.reason, old_status=previous.status if previous else None, new_status=status.value,
+            policy_versions={"kind": kind.value, "policy_version_id": row.id, "version": number,
+                             "previous_policy_version_id": previous.id if previous else None},
+            details={"rules": normalized}, correlation_id=correlation_id,
+        )
     return _ref(row)
 
 
