@@ -64,6 +64,8 @@ class AutoRepairService:
         job_id = job.id if job else fields.pop("repair_job_id", None)
         sbom_id = (job.imported_sbom_id or job.source_sbom_id) if job else session.imported_sbom_id
         status = fields.pop("status", job.status if job else session.validation_status)
+        fields.setdefault("format", job.report_json.get("format") if job else session.detected_format)
+        fields.setdefault("spec_version", job.report_json.get("spec_version") if job else session.detected_version)
         with log_context(tenant_id=self.context.tenant_id, user_id=self.context.user_id, sbom_id=sbom_id):
             log_event(log, name, repair_job_id=job_id, status=status, repair_rule=fields.get("rule_name"), **fields)
         metadata = {"repair_job_id": job_id, "sbom_id": sbom_id, "status": status, **fields}
@@ -139,6 +141,10 @@ class AutoRepairService:
             "max_seconds": policy.max_seconds,
         }
         for job in jobs:
+            # Phase 2 retained unsupported SPDX jobs remain readable, but must
+            # not suppress a new native SPDX run after this capability is added.
+            if "spdx" in (session.detected_format or "").lower() and job.report_json.get("format") != "SPDX_JSON":
+                continue
             if (
                 job.approval_status != "REJECTED"
                 and job.validation_options_json == options

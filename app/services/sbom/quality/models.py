@@ -44,6 +44,7 @@ class SbomQualityScore(BaseModel):
     artifact_hash: str
     configuration_hash: str
     configuration: dict[str, Any] = Field(default_factory=dict)
+    format: str = "CYCLONEDX_JSON"
     spec_version: str | None = None
     validation_status: str
     validation_report_truncated: bool = False

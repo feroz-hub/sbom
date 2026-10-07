@@ -362,3 +362,19 @@ for dimensions, weights, eligibility, rules, APIs, configuration and verificatio
 No new migration is required: snapshots reuse existing validation history.
 
 Final Phase 2 test counts, defect fixes, clean-base comparison and limitations: [Phase 2 release validation](sbom-auto-repair-phase2-release-validation.md). No deployment or production migration was performed.
+
+## Phase 3: SPDX JSON extension
+
+[Native SPDX quality and repair](sbom-spdx-auto-repair.md) adds SPDX JSON 2.2/2.3
+to the existing engine, registry, tenant-scoped APIs and review UI. It preserves
+SPDX bytes/version rather than invoking conversion. Exact duplicate cleanup,
+unambiguous reference repair, conservative PURL/CPE/checksum formatting and
+unreferenced-ID normalization run through full native validation and rollback.
+Signed documents, ambiguous identities and unknown facts remain manual. XML,
+Tag/Value, YAML and AI-assisted repair remain outside scope. No new migration.
+
+Final application release validation: [Phase 3 release report](sbom-auto-repair-phase3-release-validation.md).
+The configured backend suite has 3,697 passes, 58 clean-base-confirmed failures
+and 10 skips; no Phase 3 regression remains. Browser E2E: 27 passes; consolidated
+repair/quality/security/migration checks: 297 passes. The release-validation task
+performed no commit or deployment; commit preparation is a subsequent authorized task.

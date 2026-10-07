@@ -77,6 +77,7 @@ This document is the **authoritative source** for every error / warning / info c
 | `SBOM_VAL_E045_CREATED_TIMESTAMP_INVALID` | 422 | error | created '{value}' is not ISO-8601 UTC ending in 'Z'. | Emit timestamps as `2026-04-30T12:34:56Z`. | SPDX 2.3 §6.9 |
 | `SBOM_VAL_E046_DESCRIBES_RELATIONSHIP_MISSING` | 422 | error | No `DESCRIBES` relationship from `SPDXRef-DOCUMENT` was found. | Add a relationship `{ "spdxElementId": "SPDXRef-DOCUMENT", "relationshipType": "DESCRIBES", "relatedSpdxElement": "..." }`. | SPDX 2.3 §11 |
 | `SBOM_VAL_E047_SPDX_VERSION_FIELD_INCONSISTENT` | 422 | error | spdxVersion '{value}' does not match the schema vendored for that version. | Re-emit with a consistent version, or use a different vendored schema PR. | — |
+| `SBOM_VAL_E048_SPDXID_DUPLICATE` | 422 | error | SPDXID is declared by multiple objects. | Disambiguate identities without guessing relationship targets. | SPDX 2.3 §3.2 |
 
 ## Stage 4 — Semantic validation, CycloneDX (E050–E069)
 
@@ -98,7 +99,7 @@ This document is the **authoritative source** for every error / warning / info c
 | `SBOM_VAL_E070_DEPENDENCY_REF_DANGLING` | 422 | error | dependencies[{i}].ref '{value}' does not match any declared bom-ref. | Either declare a component with that bom-ref, or remove the dependency entry. | CycloneDX 1.6 §6 |
 | `SBOM_VAL_E071_DEPENDENCY_REF_SELF` | 422 | error | Dependency entry '{value}' depends on itself. | Self-edges are never legitimate. Remove the entry. | CycloneDX 1.6 §6 |
 | `SBOM_VAL_E072_RELATIONSHIP_ELEMENT_DANGLING` | 422 | error | relationships[{i}] references SPDXID '{value}' that is not declared in this document or via DocumentRef-*. | Declare the element, or use a valid DocumentRef-* form. | SPDX 2.3 §11 |
-| `SBOM_VAL_E073_EXTERNAL_DOC_REF_INVALID` | 422 | error | externalDocumentRef '{name}' has invalid checksum or URI. | Provide a valid SHA1/SHA256 checksum and an absolute URI. | SPDX 2.3 §6.6 |
+| `SBOM_VAL_E073_EXTERNAL_DOC_REF_INVALID` | 422 | error | External relationship reference is malformed, undeclared or ambiguous. | Provide a unique externalDocumentRefs declaration and DocumentRef-id:SPDXRef-id reference; never guess external targets. | SPDX 2.3 §6.6 / §11 |
 | `SBOM_VAL_W074_DEPENDENCY_CYCLE_DETECTED` | — | warning | Dependency cycle detected: {ref_chain}. | Cycles are common in real BOMs and are reported for visibility, not rejected. | — |
 | `SBOM_VAL_I075_ORPHAN_COMPONENT` | — | info | Component '{ref}' has no inbound or outbound dependency edges. | Informational. Consider declaring the relationship that brought this component in. | — |
 
@@ -231,6 +232,7 @@ but must not be fake-fixed by generating new trust/signature material.
 | `SBOM_VAL_E045_CREATED_TIMESTAMP_INVALID` | 422 | `error` | 4 semantic |
 | `SBOM_VAL_E046_DESCRIBES_RELATIONSHIP_MISSING` | 422 | `error` | 4 semantic |
 | `SBOM_VAL_E047_SPDX_VERSION_FIELD_INCONSISTENT` | 422 | `error` | 4 semantic |
+| `SBOM_VAL_E048_SPDXID_DUPLICATE` | 422 | `error` | 4 semantic |
 | `SBOM_VAL_E050_SERIAL_NUMBER_INVALID` | 422 | `error` | 4 semantic |
 | `SBOM_VAL_E051_BOM_REF_DUPLICATE` | 422 | `error` | 4 semantic |
 | `SBOM_VAL_E052_PURL_INVALID` | 422 | `error` | 4 semantic |

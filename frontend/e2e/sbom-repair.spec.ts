@@ -307,13 +307,13 @@ test('CycloneDX XML retains validation errors and clearly declines automatic rep
   expect(await original(page.request, session)).toEqual(raw);
 });
 
-test('SPDX JSON retains validation errors and clearly declines automatic repair', async ({ page }) => {
+test('SPDX JSON unsupported structural repairs remain manual', async ({ page }) => {
   await login(page);
-  const spdx = JSON.parse(readFileSync('../../tests/fixtures/sboms/wild/spdx-2.3-tools-python-example.json', 'utf8'));
+  const spdx = spdxSbom();
   delete spdx.dataLicense;
   const { session, raw } = await upload(page, spdx, false, 'release.spdx.json');
   const panel = page.getByRole('region', { name: 'Deterministic SBOM auto-repair' });
-  await expect(panel).toContainText('unsupported for this format');
+  await expect(page.getByRole('region', { name: 'SBOM Quality', exact: true })).toContainText('SPDX 2.3 JSON');
   await expect(panel.getByRole('button', { name: 'Auto-Repair Safe Issues', exact: true })).toHaveCount(0);
   expect(await original(page.request, session)).toEqual(raw);
 });
@@ -388,3 +388,135 @@ test('Phase 2 quality snapshots and findings cannot be read by another tenant', 
     }
   } finally { await context.close(); }
 });
+
+
+function spdxSbom() {
+  return JSON.parse(readFileSync('../../tests/fixtures/sboms/valid/spdx_2_3_minimal.json', 'utf8'));
+}
+
+test('Phase 3 valid SPDX upload continues native processing with quality', async ({ page }) => {
+  await login(page);
+  const { session, raw, sbomId } = await upload(page, spdxSbom(), true, 'phase3.spdx.json');
+  const response = await page.request.get(api(`/api/sboms/${sbomId}?include_raw=true`), { headers: tenantHeaders });
+  expect((await response.json()).sbom_data).toBe(raw.toString());
+  await page.goto(`/repair/${session}`);
+  const quality = page.getByRole('region', { name: 'SBOM Quality', exact: true });
+  await expect(quality).toContainText('SPDX 2.3 JSON');
+  await expect(quality).toContainText('Validation: PASSED');
+  await expect(quality).toContainText('Relationship Integrity');
+  await quality.getByRole('button', { name: 'View Quality Findings' }).click();
+  await expect(quality).toContainText('/packages/0/checksums');
+  expect(await original(page.request, session)).toEqual(raw);
+});
+
+test('Phase 3 SPDX native repair shows actual quality gain and approves SPDX bytes', async ({ page }) => {
+  await login(page);
+  const doc = spdxSbom();
+  doc.relationships[0].relatedSpdxElement = 'pkg:npm/foo@1.0.0';
+  doc.packages[0].externalRefs[0].referenceLocator = ' pkg:npm/foo@1.0.0 ';
+  const { session, raw } = await upload(page, doc, false, 'phase3-repair.spdx.json');
+  const job = await createJob(page, session);
+  expect(job.format).toBe('SPDX_JSON');
+  expect(job.status).toBe('REPAIRED');
+  expect(job.quality.improvement).toBeGreaterThan(0);
+  await page.getByRole('button', { name: 'View Changes', exact: true }).click();
+  const panel = page.getByRole('region', { name: 'Deterministic SBOM auto-repair' });
+  await expect(panel).toContainText('spdx_reference');
+  await expect(panel).toContainText('referenceLocator');
+  await expect(page.getByRole('group', { name: 'Quality Improvement' })).toContainText('Before:');
+  const approved = page.waitForResponse(r => r.url().endsWith(`/${job.repair_job_id}/approve`));
+  await panel.getByRole('button', { name: 'Accept Repairs', exact: true }).click();
+  expect((await approved).status()).toBe(200);
+  await expect(panel).toContainText('Approval: APPROVED');
+  const link = panel.getByRole('link', { name: 'Open Accepted SBOM', exact: true });
+  const id = Number((await link.getAttribute('href'))!.split('/').pop());
+  const accepted = await page.request.get(api(`/api/sboms/${id}?include_raw=true`), { headers: tenantHeaders });
+  const content = JSON.parse((await accepted.json()).sbom_data);
+  expect(content.spdxVersion).toBe('SPDX-2.3');
+  expect(content.bomFormat).toBeUndefined();
+  expect(await original(page.request, session)).toEqual(raw);
+});
+
+test('Phase 3 duplicate SPDX relationships repair without replacing inverse forms', async ({ page }) => {
+  await login(page);
+  const doc = spdxSbom();
+  doc.relationships.push({ ...doc.relationships[0] });
+  const { session } = await upload(page, doc, true, 'phase3-duplicate.spdx.json');
+  await page.goto(`/repair/${session}`);
+  const job = await createJob(page, session);
+  expect(job.status).toBe('REPAIRED');
+  const candidate = await page.request.get(api(`/api/sbom-validation-sessions/${session}/repair/${job.repair_job_id}/download`), { headers: tenantHeaders });
+  expect((await candidate.json()).relationships).toHaveLength(1);
+});
+
+test('Phase 3 ambiguous SPDX relationship stays manual', async ({ page }) => {
+  await login(page);
+  const doc = spdxSbom();
+  doc.packages.push({ ...doc.packages[0], SPDXID: 'SPDXRef-other', supplier: 'Organization: Other' });
+  doc.relationships[0].relatedSpdxElement = 'pkg:npm/foo@1.0.0';
+  const { session, raw } = await upload(page, doc, false, 'phase3-ambiguous.spdx.json');
+  const panel = page.getByRole('region', { name: 'Deterministic SBOM auto-repair' });
+  await expect(panel).toContainText('require manual review');
+  await expect(panel.getByRole('button', { name: 'Auto-Repair Safe Issues', exact: true })).toHaveCount(0);
+  expect(await original(page.request, session)).toEqual(raw);
+});
+
+test('Phase 3 NOASSERTION is a manual quality finding and no license is invented', async ({ page }) => {
+  await login(page);
+  const doc = spdxSbom();
+  doc.packages[0].licenseDeclared = doc.packages[0].licenseConcluded = 'NOASSERTION';
+  const { session } = await upload(page, doc, true, 'phase3-license.spdx.json');
+  await page.goto(`/repair/${session}`);
+  const quality = page.getByRole('region', { name: 'SBOM Quality', exact: true });
+  await quality.getByRole('button', { name: 'View Quality Findings' }).click();
+  await expect(quality).toContainText('NOASSERTION');
+  await expect(quality).toContainText('Not available — manual review');
+  await expect(page.getByRole('button', { name: 'Auto-Repair Safe Issues', exact: true })).toHaveCount(0);
+});
+
+test('Phase 3 SPDX quality and candidate remain tenant scoped', async ({ page }) => {
+  await login(page);
+  const doc = spdxSbom();
+  doc.relationships[0].relatedSpdxElement = 'pkg:npm/foo@1.0.0';
+  const { session } = await upload(page, doc, false, 'phase3-tenant.spdx.json');
+  const job = await createJob(page, session);
+  const foreignHeaders = { ...tenantHeaders, 'X-Tenant-ID': String(manifest.tenant_b) };
+  for (const suffix of ['quality', `repair/${job.repair_job_id}`, `repair/${job.repair_job_id}/download`]) {
+    const response = await page.request.get(api(`/api/sbom-validation-sessions/${session}/${suffix}`), { headers: foreignHeaders });
+    expect(response.status()).toBe(404);
+    const text = await response.text();
+    expect(text).not.toContain('SPDXRef');
+    expect(text).not.toContain('overall_score');
+  }
+});
+
+for (const [name, text, mimeType] of [
+  ['SPDX YAML', 'spdxVersion: SPDX-2.3\nSPDXID: SPDXRef-DOCUMENT\nname: unsupported-format\n', 'application/yaml'],
+  ['SPDX 3 JSON-LD', JSON.stringify({'@context': 'https://spdx.org/rdf/3.0.1/spdx-context.jsonld', type: 'SpdxDocument'}), 'application/ld+json'],
+]) {
+  test(`unsupported ${name} offers no quality or automatic repair`, async ({page}) => {
+    await login(page);
+    const response = await page.request.post(api('/api/sboms/upload'), {
+      headers: tenantHeaders,
+      multipart: {
+        file: {name: name.includes('YAML') ? 'unsupported.spdx.yaml' : 'unsupported.spdx.json', mimeType, buffer: Buffer.from(text)},
+        sbom_name: `unsupported-${randomUUID()}`,
+        project_id: String(manifest.project_id), product_id: String(manifest.product_id),
+      },
+    });
+    expect(name.includes('YAML') ? [422] : [400, 415]).toContain(response.status());
+    const body = await response.json();
+    expect(JSON.stringify(body)).toMatch(name.includes('YAML') ? /SBOM_VAL_E014_SPEC_VERSION_MISSING/ : /SBOM_VAL_E010_FORMAT_INDETERMINATE|SBOM_VAL_E013_SPEC_VERSION_UNSUPPORTED/);
+    const session = body.detail?.validation_session_id;
+    if (session) {
+      await page.goto(`/sboms/repair/${session}`);
+      const quality = await page.request.get(api(`/api/sbom-validation-sessions/${session}/quality`), {headers: tenantHeaders});
+      expect(quality.status()).toBe(200);
+      expect((await quality.json()).assessment.supported).toBe(false);
+      const analysis = await page.request.post(api(`/api/sbom-validation-sessions/${session}/repair/analyze`), {headers: tenantHeaders});
+      expect(analysis.status()).toBe(200);
+      expect((await analysis.json()).repair_supported).toBe(false);
+    }
+    await expect(page.getByRole('button', {name:'Auto-Repair Safe Issues', exact:true})).toHaveCount(0);
+  });
+}
