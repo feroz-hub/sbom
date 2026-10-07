@@ -955,6 +955,8 @@ export async function uploadSbom(payload: CreateSBOMPayload, signal?: AbortSigna
   const productVersion = payload.product_version ?? payload.productver;
   if (productVersion) form.set('product_version', productVersion);
   if (payload.created_by) form.set('created_by', payload.created_by);
+  if (payload.logical_sbom_id != null) form.set('logical_sbom_id', String(payload.logical_sbom_id));
+  if (payload.create_new_logical_sbom != null) form.set('create_new_logical_sbom', String(payload.create_new_logical_sbom));
   if (payload.parent_sbom_id != null) form.set('parent_sbom_id', String(payload.parent_sbom_id));
   if (payload.set_as_current != null) form.set('set_as_current', String(payload.set_as_current));
 
@@ -3185,4 +3187,27 @@ export function getSessionQuality(sessionId: string, signal?: AbortSignal) {
 }
 export function getSbomQuality(sbomId: number, signal?: AbortSignal) {
   return request<import('@/types/sbomQuality').QualityResponse>(`/api/sboms/${sbomId}/quality`, { signal });
+}
+
+export function getLogicalSboms(productId: number, signal?: AbortSignal, page = 1, pageSize = 50) {
+  return request<import('@/types').LogicalSBOMListResponse>(`/api/products/${productId}/logical-sboms?page=${page}&page_size=${pageSize}`, { signal });
+}
+export async function getLogicalSbomChoices(productId: number, signal?: AbortSignal) {
+  const first = await getLogicalSboms(productId, signal, 1, 500);
+  const items = [...first.items];
+  for (let page = 2; items.length < first.total; page++) {
+    const next = await getLogicalSboms(productId, signal, page, 500);
+    if (!next.items.length) break;
+    items.push(...next.items);
+  }
+  return items;
+}
+export function getLogicalSbom(id: number, signal?: AbortSignal) {
+  return request<import('@/types').LogicalSBOM>(`/api/logical-sboms/${id}`, { signal });
+}
+export function getLogicalSbomVersions(id: number, signal?: AbortSignal) {
+  return request<SBOMSource[]>(`/api/logical-sboms/${id}/versions`, { signal });
+}
+export function createLogicalSbom(productId: number, payload: { name: string; description?: string }) {
+  return request<import('@/types').LogicalSBOM>(`/api/products/${productId}/logical-sboms`, { method: 'POST', body: JSON.stringify(payload) });
 }

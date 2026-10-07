@@ -564,6 +564,8 @@ def permission_for_request(request: Request) -> str:
         return "platform:tenant:create"
     if _platform_configuration_path(path):
         return "platform:admin"
+    if path.startswith("/api/logical-sboms"):
+        return "sbom:read" if method == "GET" else "sbom:upload"
     if path.startswith("/api/component-advisor/policies"):
         return "tenant:advisor-policy:read" if method == "GET" else "tenant:advisor-policy:update"
     if path.startswith("/api/component-advisor/recommendations/") and path.endswith(("/decisions", "/candidates")) and method == "POST":
@@ -606,6 +608,8 @@ def permission_for_request(request: Request) -> str:
             "PUT": "project:update",
             "DELETE": "project:delete",
         }.get(method, "project:read")
+    if path.startswith("/api/products/") and path.endswith("/logical-sboms"):
+        return "product:read" if method == "GET" else "sbom:upload"
     if path.startswith("/api/products"):
         return {
             "GET": "product:read",

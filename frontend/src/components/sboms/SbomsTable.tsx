@@ -507,6 +507,7 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
                         hoverOnly
                       />
                     </div>
+                    {sbom.logical_sbom_id && <Link className="text-xs text-hcl-blue hover:underline" href={`/sboms/logical/${sbom.logical_sbom_id}`}>Version history</Link>}
                   </Td>
 	                  <Td className="text-hcl-muted">{displayProject(sbom)}</Td>
 	                  <Td className="text-hcl-muted">{displayProduct(sbom)}</Td>

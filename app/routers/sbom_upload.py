@@ -34,6 +34,7 @@ from fastapi import (
     status,
 )
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -76,6 +77,8 @@ _UPLOAD_FORM_FIELDS = {
     "productver",
     "created_by",
     "parent_sbom_id",
+    "logical_sbom_id",
+    "create_new_logical_sbom",
     "set_as_current",
 }
 
@@ -88,6 +91,7 @@ class SbomAcceptedResponse(BaseModel):
     validation_session_id: str
     repair_workspace_url: str
     sbom_id: int
+    logical_sbom_id: int | None = None
     sbom_name: str
     sbom_version: str | None = None
     product_version: str | None = None
@@ -140,6 +144,8 @@ async def upload_sbom(
     product_version: str | None = Form(None),
     productver: str | None = Form(None),
     created_by: str | None = Form(None),
+    logical_sbom_id: int | None = Form(None, ge=1),
+    create_new_logical_sbom: bool = Form(False),
     parent_sbom_id: int | None = Form(
         None,
         description=(
@@ -211,6 +217,30 @@ async def upload_sbom(
         # extends the chain instead of forking it.
         parent_sbom = head_of_lineage(db, requested_parent)
 
+    if create_new_logical_sbom and (logical_sbom_id is not None or parent_sbom_id is not None):
+        raise HTTPException(422, detail="Choose either an existing logical SBOM or create a new one")
+    if not create_new_logical_sbom and logical_sbom_id is None and parent_sbom is None:
+        duplicate = db.scalar(select(SBOMSource.id).where(SBOMSource.tenant_id == context.tenant_id,
+            SBOMSource.product_id == product.id, SBOMSource.sbom_name == sbom_name.strip(),
+            SBOMSource.sbom_version == manual_sbom_version))
+        if duplicate:
+            raise HTTPException(409, detail={"code": "duplicate_sbom_version", "message": "This name and version already exist in this application. Select its logical SBOM or create a new logical SBOM explicitly."})
+
+    from ..services.logical_sbom_service import ensure_version_available, get_logical_sbom, versions_for
+    master = None
+    if logical_sbom_id is not None:
+        master = get_logical_sbom(db, logical_sbom_id, context.tenant_id, product_id=product.id, lock=True)
+        if parent_sbom and parent_sbom.logical_sbom_id != master.id:
+            raise HTTPException(422, detail="Previous version belongs to a different logical SBOM")
+        sbom_name = master.name
+        existing_versions = versions_for(db, master)
+        parent_sbom = max(existing_versions, key=lambda row: row.id, default=None)
+    elif parent_sbom is not None:
+        master = parent_sbom.logical_sbom
+    if master is not None:
+        ensure_version_available(db, master, manual_sbom_version)
+        logical_sbom_id = master.id
+
     raw = await file.read()
     if len(raw) > max_bytes:
         # The middleware should have caught this; if not, return the same
@@ -262,7 +292,7 @@ async def upload_sbom(
             user_id=actor,
             product_id=product.id if product else None,
             upload_options={"sbom_version": manual_sbom_version, "product_version": manual_product_version,
-                "parent_sbom_id": parent_sbom.id if parent_sbom else None, "set_as_current": set_as_current},
+                "create_new_logical_sbom": create_new_logical_sbom, "logical_sbom_id": logical_sbom_id, "parent_sbom_id": parent_sbom.id if parent_sbom else None, "set_as_current": set_as_current},
             strict_ntia=strict_ntia,
             verify_signature=bool(getattr(settings, "SBOM_SIGNATURE_VERIFICATION", False)),
         )
@@ -306,7 +336,7 @@ async def upload_sbom(
         user_id=actor,
         product_id=product.id if product else None,
         upload_options={"sbom_version": manual_sbom_version, "product_version": manual_product_version,
-            "parent_sbom_id": parent_sbom.id if parent_sbom else None, "set_as_current": set_as_current},
+            "create_new_logical_sbom": create_new_logical_sbom, "logical_sbom_id": logical_sbom_id, "parent_sbom_id": parent_sbom.id if parent_sbom else None, "set_as_current": set_as_current},
         strict_ntia=strict_ntia,
         verify_signature=bool(getattr(settings, "SBOM_SIGNATURE_VERIFICATION", False)),
         validation_status=validation_status,
@@ -348,6 +378,7 @@ async def upload_sbom(
         log_event(log, "sbom_upload_metadata_preview_failed", level=logging.DEBUG, exc_info=True)
 
     obj = SBOMSource(
+        logical_sbom_id=logical_sbom_id,
         sbom_name=sbom_name.strip(),
         sbom_data=body_text,
         sbom_type=sbom_type,
@@ -406,6 +437,7 @@ async def upload_sbom(
             entity_id=obj.id,
             new_value={
                 "sbom_name": obj.sbom_name,
+                "logical_sbom_id": obj.logical_sbom_id,
                 "project_id": obj.projectid,
                 "product_id": obj.product_id,
                 "product_name": obj.product_name,
@@ -419,7 +451,7 @@ async def upload_sbom(
         # uq_sbom_source_tenant_name_version — the same (name, version) pair
         # already exists. That is a user-correctable conflict, not a server
         # fault, so it must not surface as a generic 500.
-        if "uq_sbom_source_tenant_name_version" in str(getattr(exc, "orig", exc)):
+        if any(key in str(getattr(exc, "orig", exc)) for key in ("uq_sbom_source_logical_version", "uq_sbom_source_logical_unversioned")):
             version_label = manual_sbom_version or "(no version)"
             raise HTTPException(
                 status_code=409,
@@ -459,6 +491,7 @@ async def upload_sbom(
         validation_session_id=session.id,
         repair_workspace_url=f"/repair/{session.id}",
         sbom_id=obj.id,
+        logical_sbom_id=obj.logical_sbom_id,
         sbom_name=obj.sbom_name,
         sbom_version=obj.sbom_version,
         product_version=obj.productver,

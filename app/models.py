@@ -702,6 +702,7 @@ class Product(Base, SoftDeleteMixin, TenantOwnedMixin):
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "project_id", "slug", name="uq_products_tenant_project_slug"),
+        UniqueConstraint("id", "tenant_id", name="uq_products_id_tenant"),
         Index("ix_products_tenant_project_name", "tenant_id", "project_id", "normalized_name"),
         Index("ix_products_tenant_project", "tenant_id", "project_id"),
     )
@@ -725,10 +726,32 @@ class SBOMType(Base):
     sboms = relationship("SBOMSource", back_populates="sbom_type_rel")
 
 
+class LogicalSBOM(Base, TenantOwnedMixin):
+    """A named SBOM identity; uploaded evidence lives on SBOMSource versions."""
+    __tablename__ = "logical_sbom"
+    id = Column(Integer, primary_key=True)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=True, index=True)
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    created_by = Column(String, nullable=True)
+    created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=False)
+    product = relationship("Product", foreign_keys=[product_id])
+    versions = relationship("SBOMSource", back_populates="logical_sbom", foreign_keys="SBOMSource.logical_sbom_id")
+    __table_args__ = (
+        UniqueConstraint("id", "tenant_id", name="uq_logical_sbom_id_tenant"),
+        UniqueConstraint("id", "tenant_id", "product_id", name="uq_logical_sbom_id_tenant_product"),
+        ForeignKeyConstraint(["product_id", "tenant_id"], ["products.id", "products.tenant_id"], name="fk_logical_sbom_product_tenant", ondelete="CASCADE"),
+        Index("ix_logical_sbom_tenant_product", "tenant_id", "product_id"),
+    )
+
+
 class SBOMSource(Base, SoftDeleteMixin, TenantOwnedMixin):
     __tablename__ = "sbom_source"
 
     id = Column(Integer, primary_key=True, index=True)
+    logical_sbom_id = Column(Integer, ForeignKey("logical_sbom.id"), nullable=False, index=True)
+    logical_sbom = relationship("LogicalSBOM", back_populates="versions", foreign_keys=[logical_sbom_id])
     sbom_name = Column(String, nullable=False, index=True)
     sbom_data = Column(Text, nullable=True)
     sbom_type = Column(Integer, ForeignKey("sbom_type.id"), nullable=True)
@@ -813,12 +836,11 @@ class SBOMSource(Base, SoftDeleteMixin, TenantOwnedMixin):
 
     __table_args__ = (
         CheckConstraint("lifecycle_status IN ('ACTIVE','INACTIVE')", name="sbom_operational_lifecycle"),
-        UniqueConstraint(
-            "tenant_id",
-            "sbom_name",
-            "sbom_version",
-            name="uq_sbom_source_tenant_name_version",
-        ),
+        UniqueConstraint("logical_sbom_id", "sbom_version", name="uq_sbom_source_logical_version"),
+        ForeignKeyConstraint(["logical_sbom_id", "tenant_id"], ["logical_sbom.id", "logical_sbom.tenant_id"], name="fk_sbom_source_logical_tenant"),
+        ForeignKeyConstraint(["logical_sbom_id", "tenant_id", "product_id"], ["logical_sbom.id", "logical_sbom.tenant_id", "logical_sbom.product_id"], name="fk_sbom_source_logical_product"),
+        Index("uq_sbom_source_logical_unversioned", "logical_sbom_id", unique=True,
+              postgresql_where=sql_text("sbom_version IS NULL"), sqlite_where=sql_text("sbom_version IS NULL")),
         Index("ix_sbom_source_tenant_project", "tenant_id", "projectid"),
         Index("ix_sbom_source_tenant_product", "tenant_id", "product_id"),
         Index("ix_sbom_source_tenant_created", "tenant_id", "created_on"),
@@ -2744,3 +2766,12 @@ def _quality_history_is_immutable(session, _flush_context, _instances):
             original = state.attrs.event_type.history.deleted
             if instance.event_type == 'SBOM_QUALITY_CALCULATED' or 'SBOM_QUALITY_CALCULATED' in original:
                 raise RuntimeError('Quality assessments are immutable; append a new hash-bound snapshot')
+
+
+@event.listens_for(_AdvisorSession, "before_flush")
+def _assign_logical_sbom_identity(session, _flush_context, _instances):
+    # Covers upload, legacy creation, edit, restore and direct ORM import paths.
+    from .services.logical_sbom_service import assign_logical_identity
+    for row in list(session.new | session.dirty):
+        if isinstance(row, SBOMSource):
+            assign_logical_identity(session, row)

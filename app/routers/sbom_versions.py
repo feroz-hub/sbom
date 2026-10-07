@@ -267,6 +267,8 @@ def get_sbom_versions(id: int, db: Session = Depends(get_db)):
     if not sbom:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"SBOM with ID {id} not found.")
 
+    if sbom.logical_sbom_id is not None:
+        return list(db.scalars(select(SBOMSource).where(SBOMSource.logical_sbom_id == sbom.logical_sbom_id, SBOMSource.tenant_id == sbom.tenant_id).order_by(SBOMSource.id.asc())))
     root = _root_for_lineage(db, sbom)
     ids = _lineage_ids(db, root.id)
     versions = (

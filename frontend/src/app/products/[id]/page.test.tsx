@@ -10,6 +10,7 @@ import { ToastProvider } from '@/hooks/useToast';
 const api = vi.hoisted(() => ({
   getProduct: vi.fn(),
   getProductSboms: vi.fn(),
+  getLogicalSboms: vi.fn(),
   updateProduct: vi.fn(),
 }));
 
@@ -82,8 +83,11 @@ describe('ProductDetailPage scheduler hierarchy', () => {
     vi.clearAllMocks();
     api.getProduct.mockResolvedValue(product);
     api.getProductSboms.mockResolvedValue(sboms);
+    api.getLogicalSboms.mockResolvedValue({ items: [{ id: 11, name: 'Backend SBOM', version_count: 2, latest_version: sboms[0] }], total: 1, page: 1, page_size: 50 });
     api.updateProduct.mockResolvedValue(product);
   });
+
+  it('groups logical SBOMs and links to their version history', async () => { await renderPage(); expect(await screen.findByRole('link', { name: 'Backend SBOM' })).toHaveAttribute('href', '/sboms/logical/11'); expect(screen.getByRole('link', { name: 'Version history' })).toHaveAttribute('href', '/sboms/logical/11'); });
 
   it('shows the explicit current SBOM and Product schedule controls', async () => {
     await renderPage();

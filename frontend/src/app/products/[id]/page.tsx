@@ -14,22 +14,23 @@ import { Table, TableBody, TableHead, Td, Th, EmptyRow } from '@/components/ui/T
 import { SbomStatusBadge } from '@/components/sboms/SbomStatusBadge';
 import { SbomUploadModal } from '@/components/sboms/SbomUploadModal';
 import { useAnalysisStream } from '@/hooks/useAnalysisStream';
-import { getProduct, getProductSboms, updateProduct } from '@/lib/api';
+import { getProduct, getProductSboms, getLogicalSboms, updateProduct } from '@/lib/api';
 import { NotifyMeLink } from '@/components/reports/NotifyMeLink';
 import { ScheduleCard } from '@/components/schedules/ScheduleCard';
 import { useToast } from '@/hooks/useToast';
 import { getApiErrorMessage } from '@/lib/notifications';
 import { invalidateProductSurfaces } from '@/lib/queryInvalidation';
 import { formatDate } from '@/lib/utils';
+import { sbomEligibility } from '@/lib/sbomEligibility';
 import type { AnalysisStatus } from '@/hooks/useBackgroundAnalysis';
-import type { SBOMSource } from '@/types';
+import type { SBOMSource, LogicalSBOM } from '@/types';
 
 /**
  * One SBOM row, owning its own analysis stream so Run Analysis works here the
  * same way it does on the SBOM detail screen. The hook stays inert until
  * `startAnalysis` is called, so an idle row costs nothing.
  */
-function ProductSbomRow({ sbom }: { sbom: SBOMSource }) {
+function ProductSbomRow({ sbom, master }: { sbom: SBOMSource; master: LogicalSBOM }) {
   const { state, startAnalysis } = useAnalysisStream(sbom.id);
   const isAnalyzing =
     state.phase === 'connecting' || state.phase === 'parsing' || state.phase === 'running';
@@ -44,16 +45,17 @@ function ProductSbomRow({ sbom }: { sbom: SBOMSource }) {
 
   return (
     <tr>
-      <Td className="font-mono text-xs text-hcl-muted">#{sbom.id}</Td>
+      <Td className="font-mono text-xs text-hcl-muted">#{master.id}</Td>
       <Td>
         <Link
-          href={`/sboms/${sbom.id}`}
+          href={`/sboms/logical/${master.id}`}
           className="font-medium text-hcl-navy hover:text-hcl-blue hover:underline"
         >
-          {sbom.sbom_name}
+          {master.name}
         </Link>
       </Td>
-      <Td className="text-hcl-muted">{sbom.sbom_version || sbom.productver || '—'}</Td>
+      <Td className="text-hcl-muted"><Link href={`/sboms/${sbom.id}`}>{sbom.sbom_version || 'Unversioned'}</Link></Td>
+      <Td>{master.version_count} · <Link className="text-hcl-blue hover:underline" href={`/sboms/logical/${master.id}`}>Version history</Link></Td>
       <Td>
         <SbomStatusBadge
           sbomId={sbom.id}
@@ -77,7 +79,7 @@ function ProductSbomRow({ sbom }: { sbom: SBOMSource }) {
           <Button
             onClick={() => startAnalysis({ sources: ['NVD', 'OSV', 'GITHUB'] })}
             loading={isAnalyzing}
-            disabled={isAnalyzing}
+            disabled={isAnalyzing || !sbomEligibility(sbom).eligible}
             size="sm"
           >
             <Play className="h-4 w-4" />
@@ -98,6 +100,7 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
   const id = Number(idParam);
   const queryClient = useQueryClient();
   const { showToast } = useToast();
+  const [masterPage, setMasterPage] = useState(1);
   const [showUpload, setShowUpload] = useState(false);
 
   const productQuery = useQuery({
@@ -111,6 +114,8 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
     queryFn: ({ signal }) => getProductSboms(id, signal),
     enabled: Number.isFinite(id),
   });
+
+  const logicalSbomsQuery = useQuery({ queryKey: ['logical-sboms', id, masterPage], queryFn: ({ signal }) => getLogicalSboms(id, signal, masterPage), enabled: Number.isFinite(id) });
 
   const currentSbomMutation = useMutation({
     mutationFn: (currentSbomId: number) => updateProduct(id, { current_sbom_id: currentSbomId }),
@@ -182,7 +187,7 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
                   <option value="" disabled>Select current SBOM…</option>
                   {sboms.map((sbom) => (
                     <option key={sbom.id} value={sbom.id}>
-                      {sbom.sbom_name} — {sbom.sbom_version || sbom.productver || 'unversioned'}
+                      {sbom.sbom_name} — {sbom.sbom_version || 'unversioned'} (Product {sbom.product_version || sbom.productver || '—'})
                     </option>
                   ))}
                 </Select>
@@ -204,11 +209,11 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
               </div>
               <div>
                 <dt className="text-xs font-medium uppercase text-hcl-muted">SBOMs</dt>
-                <dd className="mt-1 text-hcl-navy">{product.sbom_count ?? sboms.length}</dd>
+                <dd className="mt-1 text-hcl-navy">{logicalSbomsQuery.data?.total ?? "—"}</dd>
               </div>
               <div>
-                <dt className="text-xs font-medium uppercase text-hcl-muted">Latest Version</dt>
-                <dd className="mt-1 text-hcl-navy">{product.latest_sbom_version || product.latest_version || '—'}</dd>
+                <dt className="text-xs font-medium uppercase text-hcl-muted">Product Version</dt>
+                <dd className="mt-1 text-hcl-navy">{product.latest_version || '—'}</dd>
               </div>
               <div>
                 <dt className="text-xs font-medium uppercase text-hcl-muted">Status</dt>
@@ -232,7 +237,8 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
                 <tr>
                   <Th>ID</Th>
                   <Th>Name</Th>
-                  <Th>Version</Th>
+                  <Th>Latest SBOM Version</Th>
+                  <Th>Versions</Th>
                   <Th>Analysis</Th>
                   <Th>Created By</Th>
                   <Th>Created On</Th>
@@ -240,15 +246,18 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
                 </tr>
               </TableHead>
               <TableBody>
-                {sbomsQuery.isLoading ? (
-                  <EmptyRow cols={7} message="Loading SBOMs..." />
-                ) : sboms.length === 0 ? (
-                  <EmptyRow cols={7} message="No SBOMs are linked to this application yet." />
+                {logicalSbomsQuery.isLoading ? (
+                  <EmptyRow cols={8} message="Loading SBOMs..." />
+                ) : logicalSbomsQuery.isError ? (
+                  <EmptyRow cols={8} message="Could not load logical SBOMs." />
+                ) : !logicalSbomsQuery.data?.items.length ? (
+                  <EmptyRow cols={8} message="No SBOMs are linked to this application yet." />
                 ) : (
-                  sboms.map((sbom) => <ProductSbomRow key={sbom.id} sbom={sbom} />)
+                  logicalSbomsQuery.data.items.map(master => master.latest_version ? <ProductSbomRow key={master.id} sbom={master.latest_version} master={master} /> : <tr key={master.id}><Td>#{master.id}</Td><Td><Link href={`/sboms/logical/${master.id}`}>{master.name}</Link></Td><td colSpan={6} className="p-3 text-hcl-muted">No versions uploaded</td></tr>)
                 )}
               </TableBody>
             </Table>
+            <div className="mt-3 flex items-center gap-3"><Button variant="secondary" disabled={masterPage === 1} onClick={() => setMasterPage(page => page - 1)}>Previous</Button><span>Page {masterPage}</span><Button variant="secondary" disabled={!logicalSbomsQuery.data || masterPage * 50 >= logicalSbomsQuery.data.total} onClick={() => setMasterPage(page => page + 1)}>Next</Button></div>
           </CardContent>
         </Card>
       </div>

@@ -121,6 +121,7 @@ class SBOMTypeOut(ORMModel):
 
 
 class SBOMSourceCreate(BaseModel):
+    logical_sbom_id: int | None = Field(default=None, ge=1)
     sbom_name: str
     sbom_data: str | None = None
     sbom_type: int | None = None
@@ -161,6 +162,7 @@ class LatestAnalysisOut(BaseModel):
 
 
 class SBOMSourceOut(ORMModel):
+    logical_sbom_id: int | None = None
     lifecycle_status: Literal["ACTIVE", "INACTIVE"] = "ACTIVE"
     lifecycle_revision: int = 0
     analysis_requires_reanalysis: bool = False
@@ -815,3 +817,29 @@ class SbomConversionReportResponse(BaseModel):
     component_mapping: dict[str, str] = Field(default_factory=dict)
     relationship_mapping: list[dict[str, Any]] = Field(default_factory=list)
     conversion_report: dict[str, Any] = Field(default_factory=dict)
+
+
+class LogicalSBOMCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    description: str | None = None
+
+
+class LogicalSBOMOut(ORMModel):
+    id: int
+    tenant_id: int
+    product_id: int | None
+    name: str
+    description: str | None = None
+    created_by: str | None = None
+    created_at: str
+    updated_at: str
+    version_count: int = 0
+    latest_version: SBOMSourceOut | None = None
+    version_ordering: str = "numeric_or_upload_order"
+
+
+class LogicalSBOMListResponse(BaseModel):
+    items: list[LogicalSBOMOut]
+    total: int
+    page: int
+    page_size: int

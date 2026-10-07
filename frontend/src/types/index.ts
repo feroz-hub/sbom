@@ -100,6 +100,7 @@ export interface SbomLifecycleEvent {
 }
 
 export interface SBOMSource {
+  logical_sbom_id?: number | null;
   lifecycle_status?: 'ACTIVE' | 'INACTIVE';
   lifecycle_revision?: number;
   analysis_requires_reanalysis?: boolean;
@@ -1343,6 +1344,8 @@ export interface UpdateProjectPayload {
 }
 
 export interface CreateSBOMPayload {
+  logical_sbom_id?: number;
+  create_new_logical_sbom?: boolean;
   sbom_name: string;
   sbom_data: string;
   sbom_file?: File;
@@ -1980,3 +1983,10 @@ export interface VexInvestigationDecision {
 }
 
 export * from './componentAdvisor';
+
+export interface LogicalSBOM {
+  id: number; tenant_id: number; product_id: number | null; name: string;
+  description: string | null; created_by: string | null; created_at: string; updated_at: string;
+  version_count: number; latest_version: SBOMSource | null; version_ordering: string;
+}
+export interface LogicalSBOMListResponse { items: LogicalSBOM[]; total: number; page: number; page_size: number; }

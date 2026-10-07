@@ -671,6 +671,10 @@ class ValidationRepairService:
             raise HTTPException(status_code=404, detail="Project not found")
         if session.sbom_type is not None and self.db.get(SBOMType, session.sbom_type) is None:
             raise HTTPException(status_code=404, detail="SBOM type not found")
+        metadata = session_upload_metadata(self.db, session)
+        options = _upload_options if _upload_options is not None else metadata.get("upload_options", {})
+        if _product_id is None and options and not options.get("used_default_product"):
+            _product_id = metadata.get("product_id")
         product = None
         if _product_id is not None:
             from .tenant_access import get_product_for_tenant
@@ -684,9 +688,8 @@ class ValidationRepairService:
                 project_id=session.project_id,
                 actor=actor_user_id or session.user_id or "repair",
             )
-        options = _upload_options or {}
         parent = None
-        if options.get("parent_sbom_id") is not None:
+        if options.get("parent_sbom_id") is not None and options.get("logical_sbom_id") is None:
             from .sbom_version_lineage import VersionLineageError, head_of_lineage, resolve_parent_sbom
             try:
                 requested_parent = resolve_parent_sbom(self.db, parent_sbom_id=options["parent_sbom_id"],
@@ -696,7 +699,18 @@ class ValidationRepairService:
             except VersionLineageError as exc:
                 raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
         name = (session.sbom_name or session.original_filename or f"repaired-{session.id}").strip()
-        exists = self.db.execute(select(SBOMSource.id).where(SBOMSource.sbom_name == name)).first()
+        master = None
+        if options.get("logical_sbom_id") is not None:
+            from .logical_sbom_service import ensure_version_available, get_logical_sbom, versions_for
+            master = get_logical_sbom(self.db, options["logical_sbom_id"], session.tenant_id, product_id=product.id, lock=True)
+            name = master.name
+            parent = max(versions_for(self.db, master), key=lambda row: row.id, default=None)
+            ensure_version_available(self.db, master, options.get("sbom_version"))
+        elif parent:
+            master = parent.logical_sbom
+            from .logical_sbom_service import ensure_version_available
+            ensure_version_available(self.db, master, options.get("sbom_version"))
+        exists = None if master or options.get("create_new_logical_sbom") else self.db.execute(select(SBOMSource.id).where(SBOMSource.sbom_name == name, SBOMSource.product_id == product.id if product else SBOMSource.product_id.is_(None))).first()
         if exists:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -704,6 +718,7 @@ class ValidationRepairService:
             )
 
         obj = SBOMSource(
+            logical_sbom_id=master.id if master else None,
             sbom_name=name,
             sbom_data=repaired_content,
             sbom_type=session.sbom_type,

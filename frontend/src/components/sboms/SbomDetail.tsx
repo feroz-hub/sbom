@@ -814,7 +814,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
     setRestoreMessage('');
     try {
       const restoredVersion = await restoreSbomVersion(sbom.id, versionId, sbom.created_by ?? undefined);
-      setRestoreMessage('Version restored successfully as new HEAD! Refreshing...');
+      setRestoreMessage('Version restored successfully as a new revision. Refreshing...');
       invalidateSbomVersionSurfaces(queryClient, sbom.id);
       setTimeout(() => {
         setRestoreMessage('');
@@ -1713,7 +1713,8 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
           {/* Versions Table */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Linage &amp; Versions History</CardTitle>
+              <CardTitle>SBOM Version History</CardTitle>
+              {sbom.logical_sbom_id && <Link className="text-sm text-hcl-blue hover:underline" href={`/sboms/logical/${sbom.logical_sbom_id}`}>Open logical SBOM history</Link>}
               <div className="flex gap-2">
                 <Button
                   onClick={handleCompare}
@@ -1732,7 +1733,8 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                 <TableHead>
                   <tr>
                     <Th className="w-12" resizable={false}><span className="sr-only">Select</span></Th>
-                    <Th>Version</Th>
+                    <Th>SBOM Version</Th>
+                    <Th>Product Version</Th>
                     <Th>Change Summary</Th>
                     <Th>Created By</Th>
                     <Th>Date Created</Th>
@@ -1741,7 +1743,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                 </TableHead>
                 <TableBody>
                   {!versions?.length ? (
-                    <EmptyRow cols={6} message="No versions found" />
+                    <EmptyRow cols={7} message="No versions found" />
                   ) : (
                     versions.map((v) => {
                       const isCurrent = v.id === sbom.id;
@@ -1759,10 +1761,11 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                             {v.sbom_version}
                             {isCurrent && (
                               <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-hcl-blue/10 text-hcl-blue border border-hcl-blue/20">
-                                Current (HEAD)
+                                Viewing this version
                               </span>
                             )}
                           </Td>
+                          <Td className="font-mono text-xs">{v.product_version || v.productver || '—'}</Td>
                           <Td className="max-w-[250px] truncate text-xs text-hcl-navy">{v.change_summary || 'Initial creation'}</Td>
                           <Td className="text-xs text-hcl-muted">{v.created_by || '—'}</Td>
                           <Td className="text-xs text-hcl-muted whitespace-nowrap">{formatDate(v.created_on)}</Td>

@@ -71,12 +71,14 @@ describe('uploadSbom', () => {
       sbom_name: 'manual-metadata',
       sbom_data: '{"bomFormat":"CycloneDX","specVersion":"1.5","components":[]}',
       project_id: 42,
+      logical_sbom_id: 7,
       sbom_version: '1.1.1',
       product_version: '1.0.0',
       created_by: 'Feroze',
     });
 
     const form = fetchMock.mock.calls[0][1].body as FormData;
+    expect(form.get('logical_sbom_id')).toBe('7');
     expect(form.get('sbom_version')).toBe('1.1.1');
     expect(form.get('product_version')).toBe('1.0.0');
     expect(form.get('created_by')).toBe('Feroze');

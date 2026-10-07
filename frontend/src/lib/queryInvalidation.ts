@@ -18,6 +18,9 @@ export function invalidateReportSurfaces(qc: QueryClient): void {
 }
 
 export function invalidateSbomLists(qc: QueryClient): void {
+  qc.invalidateQueries({ queryKey: ['logical-sboms'] });
+  qc.invalidateQueries({ queryKey: ['logical-sbom'] });
+  qc.invalidateQueries({ queryKey: ['logical-sbom-versions'] });
   qc.invalidateQueries({ queryKey: ['sboms'] });
   qc.invalidateQueries({ queryKey: ['dashboard-sboms'] });
   qc.invalidateQueries({ queryKey: ['sidebar-recent-sboms'] });
@@ -48,6 +51,9 @@ export function invalidateProjectSurfaces(qc: QueryClient, projectId?: number | 
  * (analysis completion) that know an SBOM changed but not which product owns it.
  */
 export function invalidateProductSurfaces(qc: QueryClient, productId?: number | null): void {
+  qc.invalidateQueries({ queryKey: ['logical-sboms'] });
+  qc.invalidateQueries({ queryKey: ['logical-sbom'] });
+  qc.invalidateQueries({ queryKey: ['logical-sbom-versions'] });
   qc.invalidateQueries({ queryKey: ['dashboard-applications'] });
   qc.invalidateQueries({ queryKey: ['dashboard-sboms'] });
   qc.invalidateQueries({ queryKey: ['dashboard-summary'] });
@@ -73,6 +79,7 @@ export function invalidateLifecycleSummary(qc: QueryClient): void {
 }
 
 export function invalidateUploadSurfaces(qc: QueryClient, projectId?: number | null): void {
+  invalidateProductSurfaces(qc);
   invalidateSbomLists(qc);
   if (projectId != null) {
     qc.invalidateQueries({ queryKey: ['project', projectId] });

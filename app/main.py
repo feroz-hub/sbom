@@ -67,6 +67,7 @@ from .routers import (
     kev,
     lifecycle,
     lifecycle_admin,
+    logical_sboms,
     pdf,
     platform,
     products,
@@ -744,6 +745,7 @@ app.include_router(lifecycle_admin.router, dependencies=_protected)
 app.include_router(lifecycle_admin.platform_router, dependencies=_protected)
 app.include_router(vex.router, dependencies=_protected)
 app.include_router(vex_investigations.router, dependencies=_protected)
+app.include_router(logical_sboms.router, dependencies=_protected)
 app.include_router(component_advisor.router, dependencies=_protected)
 app.include_router(component_advisor.platform_policy_router, dependencies=_protected)
 app.include_router(remediation.router, dependencies=_protected)

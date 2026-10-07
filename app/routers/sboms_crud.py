@@ -729,9 +729,15 @@ def create_sbom(
     if payload.sbom_type is not None and db.get(SBOMType, payload.sbom_type) is None:
         raise HTTPException(status_code=404, detail="SBOM type not found")
 
+    if payload.logical_sbom_id is not None:
+        from ..services.logical_sbom_service import ensure_version_available, get_logical_sbom
+        master = get_logical_sbom(db, payload.logical_sbom_id, context.tenant_id, product_id=product.id, lock=True)
+        ensure_version_available(db, master, payload.sbom_version)
+        payload.sbom_name = master.name
+
     # --- Preflight duplicate check on name (global uniqueness) ---
-    if payload.sbom_name:
-        exists = db.execute(select(SBOMSource.id).where(SBOMSource.sbom_name == payload.sbom_name.strip())).first()
+    if payload.sbom_name and payload.logical_sbom_id is None:
+        exists = db.execute(select(SBOMSource.id).where(SBOMSource.sbom_name == payload.sbom_name.strip(), SBOMSource.product_id == product.id)).first()
         if exists:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -759,7 +765,7 @@ def create_sbom(
             sbom_type=payload.sbom_type,
             user_id=payload.created_by or context.actor_label(),
             product_id=product.id if product else None,
-            upload_options={"sbom_version": payload.sbom_version, "product_version": payload.productver},
+            upload_options={"logical_sbom_id": payload.logical_sbom_id, "sbom_version": payload.sbom_version, "product_version": payload.productver, "used_default_product": _used_default_product},
         )
         if session is not None:
             audit_service.write_audit_log(
@@ -1354,6 +1360,10 @@ def update_sbom(
     if "description" in data:
         sbom.description = data["description"]
 
+    if "sbom_version" in data and sbom.logical_sbom_id and old_product_id == sbom.product_id:
+        from ..services.logical_sbom_service import ensure_version_available
+        ensure_version_available(db, sbom.logical_sbom, sbom.sbom_version, exclude_id=sbom.id)
+
     sbom.modified_on = now_iso()
     sbom.modified_by = actor
 
@@ -1387,6 +1397,12 @@ def update_sbom(
             },
         )
         return sbom
+    except HTTPException:
+        db.rollback()
+        raise
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(409, detail={"code": "duplicate_sbom_version", "message": "This logical SBOM already has that revision."}) from exc
     except Exception:
         db.rollback()
         log.exception("update_sbom failed: sbom_id=%s user=%s", sbom_id, actor)
