@@ -5,6 +5,13 @@ from .rules.duplicate_dependency import DuplicateDependencyRule
 from .rules.enum_normalization import EnumNormalizationRule
 from .rules.identifier_canonicalization import CpeNormalizationRule, PurlCanonicalizationRule
 from .rules.purl_normalization import PurlNormalizationRule
+from .rules.spdx import (
+    SpdxChecksumRule,
+    SpdxDeduplicationRule,
+    SpdxExternalReferenceRule,
+    SpdxIdentifierRule,
+    SpdxReferenceRule,
+)
 
 
 def default_rules():
@@ -17,4 +24,9 @@ def default_rules():
         PurlCanonicalizationRule(),
         CpeNormalizationRule(),
         DependencyCleanupRule(),
+        SpdxIdentifierRule(),
+        SpdxReferenceRule(),
+        SpdxDeduplicationRule(),
+        SpdxExternalReferenceRule(),
+        SpdxChecksumRule(),
     )
