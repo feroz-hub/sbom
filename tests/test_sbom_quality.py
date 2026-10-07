@@ -198,6 +198,9 @@ def test_rule_registry_declares_actual_supported_versions(version):
 
     doc = rich_document(version)
     for rule in default_rules():
+        if "CYCLONEDX_JSON" not in rule.metadata()["supported_formats"]:
+            assert not rule.supports(doc)
+            continue
         assert rule.supports(doc)
         metadata = rule.metadata()
         assert version in metadata["supported_versions"]

@@ -255,13 +255,13 @@ def test_signed_document_has_explicit_manual_reason_without_mutation():
 
 
 @pytest.mark.parametrize("path", ["tests/fixtures/sboms/wild/spdx-2.3-tools-python-example.json"])
-def test_accepted_non_cyclonedx_json_formats_are_explicitly_unsupported_for_repair(path):
+def test_accepted_spdx_json_formats_are_supported_for_repair(path):
     raw = Path(path).read_bytes()
     engine = RepairEngine()
     result = engine.analyze(raw)
-    assert not result["repair_supported"]
-    assert "unsupported" in result["manual_review_reason"]
-    assert engine.run(raw).candidate == raw
+    assert result["repair_supported"]
+    assert result["format"] == "SPDX_JSON"
+    assert result["manual_review_reason"] is None
 
 
 def test_xml_repair_is_explicitly_unsupported_and_never_rewrites_bytes():
