@@ -331,3 +331,19 @@ remains authoritative.
 ## Final release validation
 
 See [Phase 2 release validation](sbom-auto-repair-phase2-release-validation.md) for the complete application-suite baseline comparison, release guards, browser coverage and stable performance profiling. Earlier results above describe implementation-stage checks, not the final release decision.
+
+## Phase 3: native SPDX JSON
+
+[SPDX Phase 3](sbom-spdx-auto-repair.md) extends the same engine with a native
+SPDX 2.2/2.3 evaluator, the same weights/thresholds and format-specific eligibility.
+QD-03 is displayed as Relationship Integrity, QD-04 as Package / File Completeness
+and QD-08 as Checksum Coverage. Quality remains advisory and separate from
+validation and vulnerabilities. SPDX evidence uses engine 3.0.0; CycloneDX retains
+engine 2.0.0 and historical evidence is not reinterpreted. Formats share a 0–100
+indicator, not a guarantee of equivalent semantic completeness.
+
+Final application release validation: [Phase 3 release report](sbom-auto-repair-phase3-release-validation.md).
+The configured backend suite has 3,697 passes, 58 clean-base-confirmed failures
+and 10 skips; no Phase 3 regression remains. Browser E2E: 27 passes; consolidated
+repair/quality/security/migration checks: 297 passes. The release-validation task
+performed no commit or deployment; commit preparation is a subsequent authorized task.
