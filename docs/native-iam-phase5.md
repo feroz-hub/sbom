@@ -48,7 +48,7 @@ Real isolated Redis tests use two adapters with independent clients, encrypted r
 
 Current-session logout remains Option A: delete shared BFF record and clear cookie; a separately copied access JWT can remain valid until its short expiry. Logout-all remains security_version-based global native revocation. No JTI denylist/permanent token records were added. This retains the approved short-lived JWT threat model; choose a denylist in a separately reviewed change if enterprise policy requires copied bearer revocation on current logout.
 
-Native session lifetime remains 900 seconds by default, with re-login and no refresh credentials. Settings explicitly explains expiry. Security operations require fresh login. HCL OIDC, PKCE, token validation/refresh, provisioning, logout, tenant context and RBAC are retained.
+Native session lifetime is 86400 seconds (24 hours) by default, with re-login and no refresh credentials. Settings explicitly explains expiry. Security operations require fresh login. HCL OIDC, PKCE, token validation/refresh, provisioning, logout, tenant context and RBAC are retained.
 
 ## Rate limits and trusted ingress
 
@@ -132,7 +132,7 @@ Recommended Prompt 7: execute and record the staging operational acceptance chec
 | 11–13 Outbox, encryption, retry/idempotency | PostgreSQL encrypted security-mail outbox |
 | 14 Delivery health | Delivery and dependency health |
 | 15–17 Redis, replica tests, recovery | Shared sessions, recovery and logout policy |
-| 18–19 Current logout/JWT decision, expiry UX | Option A and 900-second re-login retained |
+| 18–19 Current logout/JWT decision, expiry UX | Option A and 24-hour re-login retained |
 | 20 Trusted proxy/rate controls | Rate limits and trusted ingress |
 | 21–22 Rotation and production configuration | JWT rotation and production validation |
 | 23 Readiness | Separate API/BFF readiness; liveness preserved |

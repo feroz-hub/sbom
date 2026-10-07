@@ -77,6 +77,7 @@ export const navigationItems: NavItem[] = [
     children: [
       { href: '/settings/users', label: 'Users & Access', icon: UsersRound, permission: 'tenant:user:read' },
       { href: '/settings/ai', label: 'AI Configuration', icon: Cpu, permission: 'tenant:ai:read' },
+      { href: '/settings/advisor-policies', label: 'Component Advisor Policies', icon: ShieldCheck, permission: 'tenant:advisor-policy:read' },
       { href: '/admin/lifecycle-providers', label: 'Lifecycle Providers', icon: CalendarClock, permission: 'tenant:lifecycle-provider:read' },
       { href: '/settings/notifications', label: 'Notifications', icon: Activity, permission: 'sbom:read' },
       { href: '/admin/lifecycle-vendor-records', label: 'LifeCycle Vendor Records', icon: Building2, permission: 'lifecycle:vendor-record:read' },

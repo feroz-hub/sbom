@@ -284,7 +284,7 @@ class Settings(BaseSettings):
     native_jwt_algorithm: str = "RS256"
     native_jwt_public_key: str = Field(default="", repr=False)
     native_jwt_private_key: str = Field(default="", repr=False)
-    native_jwt_access_token_ttl_seconds: int = Field(default=900, ge=60, le=3600)
+    native_jwt_access_token_ttl_seconds: int = Field(default=86400, ge=60, le=86400)
     native_login_max_failed_attempts: int = Field(default=5, ge=1, le=100)
     native_login_lockout_seconds: int = Field(default=900, ge=60, le=86400)
     native_password_reset_ttl_seconds: int = Field(default=3600, ge=300, le=86400)

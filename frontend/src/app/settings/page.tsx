@@ -16,6 +16,7 @@ import { TopBar } from '@/components/layout/TopBar';
 export default function SettingsPage() {
   const { hasPermission } = useAuth();
   const administration = [
+    { title: 'Component Advisor Policies', href: '/settings/advisor-policies', visible: hasPermission('tenant:advisor-policy:read') },
     { title: 'Users & Access', href: '/settings/users', visible: hasPermission('tenant:user:read') },
     { title: 'Tenants', href: '/settings/platform/tenants', visible: hasPermission('platform:tenant:read') },
     { title: 'Authentication, delivery & operational health', href: '/settings/iam', visible: hasPermission('platform:health:read') },

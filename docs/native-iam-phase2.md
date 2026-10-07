@@ -12,7 +12,7 @@ activate accounts; enable `NATIVE_AUTH_ENABLED` in both API and BFF for login.
 and fail-closed resolution are required. Inject a >=2048-bit RSA PEM private key
 as `NATIVE_JWT_PRIVATE_KEY` through the deployment secret manager. No key is supplied
 or committed by this implementation. Keep the native issuer distinct from HCL.
-Only RS256 is accepted. TTL defaults to 900 seconds (60–3600 permitted).
+Only RS256 is accepted. TTL defaults to 86400 seconds (24 hours; 60–86400 permitted).
 
 The BFF requires HTTPS and `APP_ORIGIN` set to its canonical origin. It falls back
 to the configured HCL redirect origin, then https://localhost:3000. POST login,

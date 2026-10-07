@@ -64,7 +64,7 @@ Phase 4/5 drills test ephemeral A/B keys, separately configured validators, over
 
 ## 13. Native expiry UX
 
-The approved default remains 900 seconds with no native refresh credential. The operational harness uses the existing configurable minimum (60 seconds) for an accelerated real HTTP expiry/denied-mutation check. This does not prove a human 15-minute interactive session, stakeholder acceptance, browser return-navigation or absence of every redirect loop.
+The configured default is 86400 seconds (24 hours) with no native refresh credential. The operational harness uses the existing configurable minimum (60 seconds) for an accelerated real HTTP expiry/denied-mutation check. This does not prove a human 24-hour interactive session, stakeholder acceptance, browser return-navigation or absence of every redirect loop.
 
 **Product acceptance: MISSING.** A product owner must explicitly accept 15-minute native re-login after a human desktop/mobile test, or request a separately reviewed session-renewal design. HCL refresh remains separate. No long-lived Native refresh credential was added.
 
@@ -196,7 +196,7 @@ FAIL below includes **required evidence missing**, not an assertion that an unte
 
 ## 29–32. Tests, missing evidence, risks and Prompt 8
 
-Final commands/counts are appended after verification. Missing manual evidence is exactly the staging items above: environment/account/mailbox approval, migration backup/restore, real SMTP and Celery/broker outages, two replicas behind actual TLS ingress, Redis failover/partition, live JWT rotation/skew, full 900-second human UX, live HCL roles/refresh, tenant lifecycle, lockout, secret rotation, orchestrator behavior, human accessibility and owner signoff.
+Final commands/counts are appended after verification. Missing manual evidence is exactly the staging items above: environment/account/mailbox approval, migration backup/restore, real SMTP and Celery/broker outages, two replicas behind actual TLS ingress, Redis failover/partition, live JWT rotation/skew, full 24-hour human UX, live HCL roles/refresh, tenant lifecycle, lockout, secret rotation, orchestrator behavior, human accessibility and owner signoff.
 
 Remaining risks: at-least-once email duplication after SMTP acceptance/commit gap; historical ciphertext in backups; session encryption changes logging users out; outbox key changes stranding pending delivery; copied current-session JWT validity until short expiry (logout-all remains security_version); aggregate BFF source throttling; deployed 055→061 migration not yet rehearsed on an approved staging clone; required new active public-key configuration; no automatic provider linking.
 

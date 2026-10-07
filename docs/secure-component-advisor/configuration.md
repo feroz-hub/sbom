@@ -3,6 +3,15 @@
 All configuration is **versioned and append-only**. Changes are published as new policy versions through
 `POST /api/component-advisor/policies/{kind}/versions` (see [api.md](./api.md)) and never edit an earlier version.
 
+## Tenant Admin settings
+
+Open **Settings → Component Advisor Policies** (`/settings/advisor-policies`) in the active tenant.
+Tenant Admins can configure accepted-risk, trust and recommendation-scoring rules, publish a new version with a
+required change reason, inspect effective rules and view version history. Choose a tenant policy, inherit the platform
+default, or disable the tenant policy. Rules are edited as JSON and validated by the API before publishing.
+Security Analysts have read-only access. The page uses `tenant:advisor-policy:read` / `update` permissions and the
+active tenant context. A concurrent edit requires reloading the latest policy before another publish.
+
 ## Policy scope and resolution
 
 This follows `docs/scoped-configuration.md`. Each kind has a platform default slot (`tenant_id IS NULL`) and at most one
