@@ -97,6 +97,9 @@ class DocumentIndex:
 
 
 def repair_quality_issues(document, index=None):
+    if document.get("spdxVersion"):
+        from .spdx_inspection import repair_issues
+        return repair_issues(document, index)
     index = index or DocumentIndex(document)
     issues = []
     for component, path in index.components:

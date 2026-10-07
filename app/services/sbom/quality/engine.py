@@ -60,7 +60,7 @@ class QualityEngine:
         supported = (
             len(raw) <= self.policy.max_bytes
             and not context.report.has_errors()
-            and context.spec == "cyclonedx"
+            and context.spec in {"cyclonedx", "spdx"}
             and context.encoding == "json"
         )
         if supported:
@@ -73,7 +73,9 @@ class QualityEngine:
             artifact_hash=sha256(raw).hexdigest(),
             configuration_hash=self.policy.fingerprint(),
             configuration=self.policy.model_dump(mode="json"),
-            spec_version=context.spec_version,
+            format="SPDX_JSON" if context.spec == "spdx" else "CYCLONEDX_JSON",
+            engine_version="3.0.0" if context.spec == "spdx" else "2.0.0",
+            spec_version=context.spec_version.removeprefix("SPDX-") if context.spec_version else None,
             validation_status="FAILED" if report.has_errors() else "PASSED",
             validation_report_truncated=report.truncated,
         )
@@ -84,9 +86,14 @@ class QualityEngine:
                 dimensions=[],
                 findings=[],
                 supported=False,
-                reason="Quality scoring requires safely parsed CycloneDX JSON within the configured size limit.",
+                reason="Quality scoring requires safely parsed CycloneDX or SPDX JSON within the configured size limit.",
                 **common,
             )
+        if context.spec == "spdx":
+            from .spdx_evaluator import evaluate
+            from .spdx_inspection import prepared_spdx
+            with prepared_spdx(context.parsed_dict):
+                return evaluate(self, context.parsed_dict, report, common)
         return self._score(context.parsed_dict, report, common)
 
     def _score(self, document, report, common):
@@ -561,6 +568,7 @@ def comparison(before, after):
         and before["engine_version"] == after["engine_version"]
         and before["configuration_hash"] == after["configuration_hash"]
         and before["spec_version"] == after["spec_version"]
+        and before.get("format", "CYCLONEDX_JSON") == after.get("format", "CYCLONEDX_JSON")
     )
     return {
         "before": before,
