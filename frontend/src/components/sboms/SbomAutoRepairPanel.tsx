@@ -19,7 +19,7 @@ function saveDownload(result: { blob: Blob; filename: string }) {
   URL.revokeObjectURL(url);
 }
 
-export function SbomAutoRepairPanel({ sessionId, onApproved }: { sessionId: string; onApproved?: () => void }) {
+export function SbomAutoRepairPanel({ sessionId, onApproved, disabled = false }: { sessionId: string; onApproved?: () => void; disabled?: boolean }) {
   const client = useQueryClient();
   const [showChanges, setShowChanges] = useState(false);
   const [showErrors, setShowErrors] = useState(false);
@@ -61,7 +61,7 @@ export function SbomAutoRepairPanel({ sessionId, onApproved }: { sessionId: stri
   const stale = !!(job && expectedSource && data.source_sha256 && expectedSource !== data.source_sha256);
   const displayedIssues = (!stale && job?.analysis?.issues) || data.issues;
   const autoFixable = !stale && job?.analysis && job.approval_status !== 'REJECTED' ? job.analysis.auto_fixable : data.auto_fixable;
-  const busy = repair.isPending || decide.isPending;
+  const busy = repair.isPending || decide.isPending || disabled;
   return <section aria-label="Deterministic SBOM auto-repair" className="shrink-0 rounded-lg border border-border bg-white p-4 dark:bg-slate-900">
     <h2 className="font-semibold">{job ? job.status === 'REPAIRED' ? 'Auto-Repair Completed' : job.status === 'PARTIALLY_REPAIRED' ? 'Partial Repair — Manual Review Required' : job.status === 'REPAIR_FAILED' ? 'Auto-Repair Failed' : job.status === 'REJECTED' ? 'Repairs Rejected' : 'Manual Review Required' : data.total_errors ? 'SBOM Validation Failed' : data.auto_fixable ? 'SBOM Quality Improvements Available' : 'No Repair Required'}</h2>
     {(job?.manual_review_reason || data.manual_review_reason) && <p className="text-sm">{job?.manual_review_reason || data.manual_review_reason}</p>}
