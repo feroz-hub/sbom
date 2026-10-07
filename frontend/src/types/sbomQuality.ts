@@ -10,6 +10,7 @@ export interface QualityDimension {
 export interface QualityAssessment {
   overall_score: number; grade: string; dimensions: QualityDimension[]; findings: QualityFinding[];
   calculated_at: string; engine_version: string; artifact_hash: string; configuration_hash: string; configuration?: Record<string, unknown>;
+  format?: 'CYCLONEDX_JSON' | 'SPDX_JSON';
   spec_version: string | null; validation_status: string; validation_report_truncated?: boolean; supported: boolean; reason: string | null;
   findings_truncated: boolean;
 }

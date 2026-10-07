@@ -17,6 +17,7 @@ export function SbomQualityCard({ assessment, comparison, stale = false }: {
   const grade = assessment.grade.toLowerCase().replaceAll('_', ' ');
   return <section aria-label="SBOM Quality" className="min-w-0 shrink-0 rounded-lg border border-border bg-white p-4 dark:bg-slate-900">
     <h2 className="font-semibold">SBOM Quality</h2>
+    {assessment.format && <p className="text-sm">SBOM Format: {assessment.format === 'SPDX_JSON' ? 'SPDX' : 'CycloneDX'} {assessment.spec_version?.replace('SPDX-', '')} JSON</p>}
     <p className="text-2xl font-semibold">{Math.round(assessment.overall_score)} / 100 <span className="text-base capitalize">{grade}</span></p>
     <p className="text-sm">Validation: {assessment.validation_status} · Quality measures data completeness and integrity, separately from vulnerability severity.</p>
     {assessment.validation_report_truncated && <p className="text-sm">Displayed validation results are limited. Existing candidate approval completeness checks still apply.</p>}

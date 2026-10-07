@@ -111,3 +111,22 @@ it.each([[89.9, 'GOOD', 'good'], [79.9, 'FAIR', 'fair'], [49.9, 'CRITICAL_QUALIT
     expect(screen.getByText(String(label))).toBeInTheDocument();
   }
 );
+
+
+it('renders SPDX terminology and preserves separation from validation and vulnerabilities', () => {
+  const spdx = { ...assessment, format: 'SPDX_JSON' as const, spec_version: 'SPDX-2.3', engine_version: '3.0.0',
+    dimensions: [
+      { ...assessment.dimensions[0], code: 'QD-03', name: 'Relationship Integrity' },
+      { ...assessment.dimensions[0], code: 'QD-04', name: 'Package / File Completeness' },
+      { ...assessment.dimensions[0], code: 'QD-08', name: 'Checksum Coverage' },
+    ], findings: [{ ...assessment.findings[0], message: 'SPDX license is NOASSERTION.', path: '/packages/0/licenseDeclared', repairable: false }] };
+  render(<SbomQualityCard assessment={spdx} />);
+  expect(screen.getByText('SBOM Format: SPDX 2.3 JSON')).toBeInTheDocument();
+  expect(screen.getByText('Relationship Integrity')).toBeInTheDocument();
+  expect(screen.getByText('Package / File Completeness')).toBeInTheDocument();
+  expect(screen.getByText('Checksum Coverage')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'View Quality Findings' }));
+  expect(screen.getByText(/SPDX license is NOASSERTION/)).toBeInTheDocument();
+  expect(screen.getByText(/Not available — manual review/)).toBeInTheDocument();
+  expect(screen.getByText(/separately from vulnerability severity/)).toBeInTheDocument();
+});
