@@ -80,17 +80,19 @@ describe('ProjectsTable list/grid toggle', () => {
   it('offers the same actions per project in both views', () => {
     render(wrap(<ProjectsTable projects={PROJECTS} isLoading={false} error={null} />));
 
-    const listActions = screen.getAllByRole('button', { name: /^Edit / }).length;
+    const checkActions = () => {
+      expect(screen.getAllByRole('button', { name: /^Actions for project/ })).toHaveLength(PROJECTS.length);
+      fireEvent.click(screen.getByRole('button', { name: 'Actions for project Hospital Software Security' }));
+      const menu = screen.getByRole('menu');
+      expect(within(menu).getByRole('menuitem', { name: 'Edit Hospital Software Security' })).toBeInTheDocument();
+      expect(within(menu).getByRole('menuitem', { name: 'Delete Hospital Software Security' })).toBeInTheDocument();
+      expect(within(menu).getByRole('menuitem', { name: /^Configure periodic analysis schedule/ })).toBeInTheDocument();
+      expect(within(menu).getByRole('menuitem', { name: 'Notification settings' })).toHaveAttribute('href', '/settings/notifications?scope=PROJECT&target=3');
+      fireEvent.keyDown(menu, { key: 'Escape' });
+    };
+    checkActions();
     fireEvent.click(toggle('Grid'));
-    const gridActions = screen.getAllByRole('button', { name: /^Edit / }).length;
-
-    expect(gridActions).toBe(listActions);
-    expect(gridActions).toBe(PROJECTS.length);
-    // Schedule and Delete travel with Edit.
-    expect(screen.getAllByRole('button', { name: /^Delete / })).toHaveLength(PROJECTS.length);
-    expect(screen.getAllByRole('button', { name: /^Configure periodic analysis schedule/ })).toHaveLength(
-      PROJECTS.length,
-    );
+    checkActions();
   });
 
   it('applies the search filter to the grid, not just the table', () => {
@@ -128,8 +130,8 @@ describe('ProjectsTable list/grid toggle', () => {
     fireEvent.click(toggle('Grid'));
 
     // Two active, one inactive — same as the source data.
-    expect(screen.getAllByText('Active')).toHaveLength(2);
-    expect(screen.getAllByText('Inactive')).toHaveLength(1);
+    expect(screen.getAllByText('ACTIVE')).toHaveLength(2);
+    expect(screen.getAllByText('INACTIVE')).toHaveLength(1);
   });
 
   it('hides the toggle while there are no projects to view', () => {
