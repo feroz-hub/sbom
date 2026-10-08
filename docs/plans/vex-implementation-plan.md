@@ -435,12 +435,21 @@ endpoint that carries `row_version`.
 **Q4 (PR-5).** §27 requires a Reviewer/Owner column, but `assigned_to`/`reviewed_by` only arrive in
 PR-6. Render them read-only/empty in PR-5 and wire the assignment action in PR-6.
 
+**Q5 (lifecycle audit, 2026-10-08).** Which SBOM is "current" for posture: the lineage HEAD
+(what every dashboard uses today) or `Product.current_sbom_id` (the designated current, which no
+dashboard reads)? Blocks B6 and the version-scope selector (M2). See
+[`docs/vex/lifecycle-audit-2026-10-08.md`](../vex/lifecycle-audit-2026-10-08.md).
+
+**Q6 (lifecycle audit).** Approve the additive API proposals M1 (version comparison via Compare
+v2), M2 (`version_scope=current|all`) and M3 (prior decisions as read-only evidence)?
+
 ---
 
 ## 14. Session log
 
 | Date | Session | Outcome |
 |---|---|---|
+| 2026-10-08 | Lifecycle audit | Fixed B1 (queue ignored eligible-SBOM scope: superseded and inactive versions leaked into the queue), B2 (VEX run selection ignored `AnalysisRun.is_current`), B3 (GHSA-alias severity lost), B4 (new filtered `GET /api/vex/investigations/summary` + Current view / Tenant overview UI). No migration. Report: `docs/vex/lifecycle-audit-2026-10-08.md`; tests: `tests/test_vex_version_lifecycle.py`. Open: Q5, Q6. |
 | 2026-09-24 | PR-5 | Portfolio investigation UI, `d96a4e7`. Architectural test caught invalidation living outside the useMutation block. |
 | 2026-09-24 | PR-4 | Portfolio API, `cef1380`. Severity sort refused rather than faked; severity filter implemented via EXISTS in the metric layer. |
 | 2026-09-24 | PR-3 | Dashboard over contexts, `f3294b6`. Fixed two PR-2 defects: the non-rollback trigger guard and unvalidated `normalized_status`. |

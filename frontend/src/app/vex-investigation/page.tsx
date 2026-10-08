@@ -37,6 +37,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/useToast';
 import {
   getDashboardVex,
+  getVexInvestigationSummary,
   listVexInvestigations,
   searchVexAssignees,
   type DashboardFilterScope,
@@ -44,8 +45,10 @@ import {
 import type {
   DashboardVex,
   VexEffectiveStatus,
+  VexInvestigationListParams,
   VexInvestigationRow,
   VexInvestigationSortField,
+  VexInvestigationSummary,
 } from '@/types';
 
 const DEFAULT_PAGE_SIZE = 50;
@@ -273,29 +276,37 @@ function VexInvestigationContent() {
     enabled: canRead,
   });
 
+  // One filter object feeds the table, its total and the Current view cards,
+  // so the three can never disagree (VEX-DASH-004). Sort and paging are
+  // deliberately absent: they reorder rows but must never move a total.
+  const filterArgs = useMemo<VexInvestigationListParams>(() => ({
+    q: filters.search || undefined,
+    my_work: filters.myWork === 'all' ? undefined : filters.myWork,
+    assignee: filters.assignee || undefined,
+    unresolved_component: filters.unresolvedComponent || undefined,
+    effective_status: filters.effectiveStatus || undefined,
+    reconciliation_status: filters.reconciliationStatus || undefined,
+    severity: filters.severity || undefined,
+    component: filters.component || undefined,
+    vex_source: filters.vexSource || undefined,
+    needs_review: filters.needsReview ? true : undefined,
+    project_id: scope.projectId ?? undefined,
+    product_id: scope.applicationId ?? undefined,
+    sbom_id: scope.sbomId ?? undefined,
+  }), [filters, scope]);
+
+  const currentViewQuery = useQuery<VexInvestigationSummary>({
+    queryKey: ['vex-investigations', activeTenantId, 'summary', filterArgs],
+    queryFn: ({ signal }) => getVexInvestigationSummary(filterArgs, signal),
+    placeholderData: (previous, previousQuery) => previousQuery?.queryKey[1] === activeTenantId ? previous : undefined,
+    enabled: canRead,
+  });
+
   const listQuery = useQuery({
     queryKey: ['vex-investigations', activeTenantId, filters, scope, page, pageSize],
     queryFn: ({ signal }) =>
       listVexInvestigations(
-        {
-          q: filters.search || undefined,
-          my_work: filters.myWork === 'all' ? undefined : filters.myWork,
-          assignee: filters.assignee || undefined,
-          unresolved_component: filters.unresolvedComponent || undefined,
-          effective_status: filters.effectiveStatus || undefined,
-          reconciliation_status: filters.reconciliationStatus || undefined,
-          severity: filters.severity || undefined,
-          component: filters.component || undefined,
-          vex_source: filters.vexSource || undefined,
-          needs_review: filters.needsReview ? true : undefined,
-          project_id: scope.projectId ?? undefined,
-          product_id: scope.applicationId ?? undefined,
-          sbom_id: scope.sbomId ?? undefined,
-          sort_by: filters.sortBy,
-          sort_order: filters.sortOrder,
-          limit: pageSize,
-          offset,
-        },
+        { ...filterArgs, sort_by: filters.sortBy, sort_order: filters.sortOrder, limit: pageSize, offset },
         signal,
       ),
     placeholderData: (previous, previousQuery) => previousQuery?.queryKey[1] === activeTenantId ? previous : undefined,
@@ -320,36 +331,34 @@ function VexInvestigationContent() {
   const rows = listQuery.data?.items ?? [];
   const summary = summaryQuery.data;
 
-  const cards = useMemo(
+  const currentView = currentViewQuery.data;
+  const currentCards = useMemo(
     () => [
-      { label: 'Total Contexts', value: summary?.total_contexts, filter: {} },
-      { label: 'Affected', value: summary?.affected_count, filter: { effectiveStatus: 'AFFECTED' } },
-      { label: 'Not Affected', value: summary?.not_affected_count, filter: { effectiveStatus: 'NOT_AFFECTED' } },
-      { label: 'Fixed', value: summary?.fixed_count, filter: { effectiveStatus: 'FIXED' } },
-      {
-        label: 'Under Investigation',
-        value: summary?.under_investigation_count,
-        filter: { effectiveStatus: 'UNDER_INVESTIGATION' },
-      },
-      { label: 'Analyzer Only', value: summary?.analyzer_only_count, filter: { reconciliationStatus: 'ANALYZER_ONLY' } },
-      { label: 'VEX Only', value: summary?.vex_only_count, filter: { reconciliationStatus: 'VEX_ONLY' } },
-      { label: 'Matched', value: summary?.matched_count, filter: { reconciliationStatus: 'MATCHED' } },
-      { label: 'Needs Review', value: summary?.needs_review_count, filter: { needsReview: true } },
-      {
-        label: 'Unresolved Mapping',
-        value: summary?.unresolved_mapping_count,
-        filter: { reconciliationStatus: 'UNRESOLVED_MAPPING' },
-      },
+      { label: 'Total investigations', value: currentView?.total, filter: null },
+      { label: 'Under Investigation', value: currentView?.under_investigation_count, filter: { effectiveStatus: 'UNDER_INVESTIGATION' } },
+      { label: 'Affected', value: currentView?.affected_count, filter: { effectiveStatus: 'AFFECTED' } },
+      { label: 'Not Affected', value: currentView?.not_affected_count, filter: { effectiveStatus: 'NOT_AFFECTED' } },
+      { label: 'Fixed', value: currentView?.fixed_count, filter: { effectiveStatus: 'FIXED' } },
+      { label: 'Needs Review', value: currentView?.needs_review_count, filter: { needsReview: true } },
+    ] satisfies Array<{ label: string; value: number | undefined; filter: Partial<Filters> | null }>,
+    [currentView],
+  );
+
+  const tenantCards = useMemo(
+    () => [
+      { label: 'Total contexts', value: summary?.total_contexts },
+      { label: 'Under Investigation', value: summary?.under_investigation_count },
+      { label: 'Affected', value: summary?.affected_count },
+      { label: 'Not Affected', value: summary?.not_affected_count },
+      { label: 'Fixed', value: summary?.fixed_count },
+      { label: 'Analyzer Only', value: summary?.analyzer_only_count },
+      { label: 'VEX Only', value: summary?.vex_only_count },
+      { label: 'Matched', value: summary?.matched_count },
+      { label: 'Needs Review', value: summary?.needs_review_count },
+      { label: 'Unresolved Mapping', value: summary?.unresolved_mapping_count },
     ],
     [summary],
   );
-
-  function applyCardFilter(patch: Partial<Filters>) {
-    setFilters({ ...DEFAULT_FILTERS, search: '', ...patch });
-    setSearchInput('');
-    setComponentInput('');
-    setPage(1);
-  }
 
   function updateFilter(patch: Partial<Filters>) {
     setFilters((current) => ({ ...current, ...patch }));
@@ -421,24 +430,55 @@ function VexInvestigationContent() {
     <>
       <TopBar title="VEX Investigation" />
       <div className="space-y-4 p-6">
-        <p className="text-xs text-hcl-muted">Tenant overview · metrics below are independent of queue filters.</p>
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-          {cards.map((card) => (
-            <button
-              key={card.label}
-              type="button"
-              onClick={() => applyCardFilter(card.filter as Partial<Filters>)}
-              className="rounded-lg border border-gray-200 bg-white p-3 text-left transition hover:border-hcl-blue dark:border-gray-800 dark:bg-gray-900"
-            >
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-hcl-muted">
-                {card.label}
+        <section aria-labelledby="vex-current-view-heading" className="space-y-2">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 id="vex-current-view-heading" className="text-sm font-semibold text-hcl-navy dark:text-gray-100">Current view</h2>
+            <p role="status" className="text-xs text-hcl-muted">
+              {currentViewQuery.isError
+                ? 'Current view metrics unavailable'
+                : chips.length
+                  ? `Counts for the ${chips.length} active filter${chips.length === 1 ? '' : 's'} below · current SBOM versions, latest successful analysis`
+                  : 'All current SBOM versions in this tenant · latest successful analysis'}
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
+            {currentCards.map((card) => {
+              const content = (
+                <>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-hcl-muted">{card.label}</div>
+                  <div className="mt-1 text-xl font-semibold text-hcl-navy dark:text-gray-100">{card.value ?? '—'}</div>
+                </>
+              );
+              const base = 'rounded-lg border border-gray-200 bg-white p-3 text-left dark:border-gray-800 dark:bg-gray-900';
+              return card.filter ? (
+                <button key={card.label} type="button" onClick={() => updateFilter(card.filter)} className={`${base} transition hover:border-hcl-blue`}>
+                  {content}
+                </button>
+              ) : (
+                <div key={card.label} className={base}>{content}</div>
+              );
+            })}
+          </div>
+          {currentView?.unresolved_mapping_count ? (
+            <p className="text-xs text-hcl-muted">
+              {currentView.unresolved_mapping_count} unresolved component mapping{currentView.unresolved_mapping_count === 1 ? '' : 's'} included in the total and reported separately from the status counts.
+            </p>
+          ) : null}
+        </section>
+
+        <details className="rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
+          <summary className="cursor-pointer text-sm font-semibold text-hcl-navy dark:text-gray-100">
+            Tenant overview <span className="font-normal text-hcl-muted">· all current SBOM versions in the tenant, ignores the filters below</span>
+          </summary>
+          <dl className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-5">
+            {tenantCards.map((card) => (
+              <div key={card.label}>
+                <dt className="text-[10px] font-semibold uppercase tracking-wider text-hcl-muted">{card.label}</dt>
+                <dd className="mt-1 text-lg font-semibold text-hcl-navy dark:text-gray-100">{card.value ?? '—'}</dd>
               </div>
-              <div className="mt-1 text-xl font-semibold text-hcl-navy dark:text-gray-100">
-                {card.value ?? '—'}
-              </div>
-            </button>
-          ))}
-        </div>
+            ))}
+          </dl>
+        </details>
 
         <Card>
           <div className="hidden border-b border-gray-200 p-3 sm:block dark:border-gray-800">

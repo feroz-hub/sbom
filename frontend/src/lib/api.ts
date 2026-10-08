@@ -3,6 +3,7 @@ import type {
   VexInvestigationDecision,
   VexInvestigationListParams,
   VexInvestigationListResponse,
+  VexInvestigationSummary,
   Project,
   Product,
   ProductListResponse,
@@ -2963,10 +2964,8 @@ export function exportLifecycleVendorRecords(signal?: AbortSignal): Promise<{ re
 
 // --- VEX investigation (portfolio) -----------------------------------------
 
-export function listVexInvestigations(
-  args: VexInvestigationListParams = {},
-  signal?: AbortSignal,
-): Promise<VexInvestigationListResponse> {
+/** Filter params shared by the queue and its metrics, so both read one predicate. */
+function vexInvestigationFilterParams(args: VexInvestigationListParams): URLSearchParams {
   const params = new URLSearchParams();
   const textParams: Array<keyof VexInvestigationListParams> = [
     'effective_status',
@@ -2976,8 +2975,6 @@ export function listVexInvestigations(
     'q',
     'vex_source',
     'analyzer_source',
-    'sort_by',
-    'sort_order',
     'my_work',
     'assignee',
   ];
@@ -2991,9 +2988,29 @@ export function listVexInvestigations(
   });
   if (typeof args.needs_review === 'boolean') params.set('needs_review', String(args.needs_review));
   if (args.unresolved_component) params.set('unresolved_component', 'true');
+  return params;
+}
+
+export function listVexInvestigations(
+  args: VexInvestigationListParams = {},
+  signal?: AbortSignal,
+): Promise<VexInvestigationListResponse> {
+  const params = vexInvestigationFilterParams(args);
+  if (args.sort_by) params.set('sort_by', args.sort_by);
+  if (args.sort_order) params.set('sort_order', args.sort_order);
   params.set('limit', String(args.limit ?? 50));
   params.set('offset', String(args.offset ?? 0));
   return request<VexInvestigationListResponse>(`/api/vex/investigations?${params.toString()}`, { signal });
+}
+
+/** Metric cards for exactly the rows the queue matches (VEX-DASH-004). */
+export function getVexInvestigationSummary(
+  args: VexInvestigationListParams = {},
+  signal?: AbortSignal,
+): Promise<VexInvestigationSummary> {
+  const params = vexInvestigationFilterParams(args);
+  const query = params.toString();
+  return request<VexInvestigationSummary>(`/api/vex/investigations/summary${query ? `?${query}` : ''}`, { signal });
 }
 
 export function getVexInvestigation(

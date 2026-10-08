@@ -80,6 +80,31 @@ class InvestigationListResponse(BaseModel):
     items: list[InvestigationRow] = Field(default_factory=list)
 
 
+class InvestigationSummaryResponse(BaseModel):
+    """Metrics for exactly the contexts the queue matches (VEX-DASH-004).
+
+    ``total`` equals the list endpoint's ``total`` for the same filters.
+    ``mapped_total`` excludes unresolved mappings and always equals
+    ``affected + not_affected + fixed + under_investigation`` (VEX-DASH-002);
+    ``unresolved_mapping_count`` reports the rest separately.
+    """
+
+    scope: Literal["filtered"] = "filtered"
+    total: int
+    mapped_total: int
+    affected_count: int
+    not_affected_count: int
+    fixed_count: int
+    under_investigation_count: int
+    needs_review_count: int
+    unresolved_mapping_count: int
+    matched_count: int
+    analyzer_only_count: int
+    vex_only_count: int
+    conflict_review_count: int
+    revalidation_required_count: int
+
+
 class VulnerabilitySection(BaseModel):
     canonical_vulnerability_id: str
     aliases: list[str] = Field(default_factory=list)

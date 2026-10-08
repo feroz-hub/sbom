@@ -12,6 +12,7 @@ query is additionally tenant-scoped in code — the ambient
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -21,7 +22,11 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from ..core.security import CurrentContext, get_current_tenant_context
 from ..db import get_db
-from ..metrics.vex import vex_component_findings, vex_severity_filter_clause
+from ..metrics.vex import (
+    vex_component_findings,
+    vex_context_counts_where,
+    vex_severity_filter_clause,
+)
 from ..models import (
     IAMUser,
     Product,
@@ -40,6 +45,7 @@ from ..schemas_vex import (
     InvestigationListResponse,
     InvestigationMappingRequest,
     InvestigationSortField,
+    InvestigationSummaryResponse,
     SortOrder,
 )
 from ..services.lifecycle.types import now_iso
@@ -59,6 +65,7 @@ from ..services.vex.authorization import (
     require_assignment,
     require_update,
 )
+from ..services.dashboard_scope import DashboardScope
 from ..services.vex.enums import NEEDS_REVIEW_STATUSES
 from ..services.vex.identity import canonical_vulnerability, parse_alias_column
 
@@ -134,16 +141,25 @@ def _statements_for(db: Session, investigation: VexInvestigation) -> list[VexSta
 
 
 def _severity_for(db: Session, investigation: VexInvestigation) -> str | None:
-    """Severity comes from the vulnerability, never from VEX (VEX-DATA-005)."""
+    """Severity comes from the vulnerability, never from VEX (VEX-DATA-005).
+
+    The finding may be reported under an alias of the canonical id — a GHSA
+    for a context keyed on its CVE (VEX-CTX-002) — so aliases match too, in
+    step with :func:`app.metrics.vex.vex_severity_filter_clause`.
+    """
     if investigation.component_id is None:
         return None
+    ids = {
+        investigation.canonical_vulnerability_id,
+        *(alias.upper() for alias in parse_alias_column(investigation.aliases_json)),
+    }
     for finding in vex_component_findings(
         db,
         tenant_id=investigation.tenant_id,
         sbom_id=investigation.sbom_id,
         component_id=investigation.component_id,
     ):
-        if (finding.vuln_id or "").strip().upper() == investigation.canonical_vulnerability_id:
+        if (finding.vuln_id or "").strip().upper() in ids:
             return finding.severity
     return None
 
@@ -196,8 +212,27 @@ def _row_payload(
     }
 
 
-@router.get("/api/vex/investigations", response_model=InvestigationListResponse)
-def list_investigations(
+@dataclass(frozen=True)
+class QueueFilters:
+    """Every filter the queue accepts — shared by the rows and their metrics."""
+
+    project_id: int | None
+    product_id: int | None
+    sbom_id: int | None
+    effective_status: str | None
+    reconciliation_status: str | None
+    severity: str | None
+    component: str | None
+    q: str | None
+    vex_source: str | None
+    analyzer_source: str | None
+    needs_review: bool | None
+    my_work: str
+    assignee: str | None
+    unresolved_component: bool
+
+
+def queue_filters(
     project_id: int | None = Query(default=None, ge=1),
     product_id: int | None = Query(default=None, ge=1),
     sbom_id: int | None = Query(default=None, ge=1),
@@ -212,6 +247,124 @@ def list_investigations(
     my_work: Literal["all", "me", "unassigned", "assigned", "attention"] = Query(default="all"),
     assignee: str | None = Query(default=None, max_length=64),
     unresolved_component: bool = Query(default=False),
+) -> QueueFilters:
+    return QueueFilters(
+        project_id, product_id, sbom_id, effective_status, reconciliation_status, severity,
+        component, q, vex_source, analyzer_source, needs_review, my_work, assignee,
+        unresolved_component,
+    )
+
+
+def _queue_from_clause():
+    """The joins every queue predicate is written against."""
+    return (
+        VexInvestigation.__table__
+        .outerjoin(SBOMComponent.__table__, SBOMComponent.id == VexInvestigation.component_id)
+        .outerjoin(SBOMSource.__table__, SBOMSource.id == VexInvestigation.sbom_id)
+        .outerjoin(
+            VexStatement.__table__, VexStatement.id == VexInvestigation.effective_vex_statement_id
+        )
+    )
+
+
+def _queue_conditions(db: Session, context: CurrentContext, f: QueueFilters) -> list[ColumnElement[bool]]:
+    """Build the queue predicate once, for rows, the total and metrics alike.
+
+    Scope is the dashboard's eligible-SBOM set — active tenant, project,
+    application and SBOM, HEAD versions only (VEX-DASH-004/005, VEX-INV-002).
+    Without it a superseded version's contexts stayed in the queue beside its
+    successor's, and an inactive SBOM's contexts stayed visible, while the
+    tiles (which always used this scope) excluded both. The project /
+    application / SBOM filters narrow that same set and cannot widen it.
+    """
+    tenant_id = _tenant_id(context)
+    scope = DashboardScope(tenant_id, f.project_id, f.product_id, f.sbom_id)
+
+    conditions: list[ColumnElement[bool]] = [
+        VexInvestigation.tenant_id == tenant_id,
+        VexInvestigation.is_current.is_(True),
+        VexInvestigation.sbom_id.in_(scope.eligible_sbom_ids()),
+    ]
+    own_member = membership(db, tenant_id, user_id=context.user_id)
+    own_key = membership_key(own_member) if own_member else None
+    mine = VexInvestigation.assigned_to == own_key if own_key else false()
+    unassigned = or_(VexInvestigation.assigned_to.is_(None), VexInvestigation.assigned_to == "")
+    if f.my_work == "me":
+        conditions.append(mine)
+    elif f.my_work == "unassigned":
+        conditions.append(unassigned)
+    elif f.my_work == "assigned":
+        active_keys = eligible_members_query(tenant_id).with_only_columns(
+            func.concat("membership:", TenantUser.id)
+        )
+        conditions.append(VexInvestigation.assigned_to.in_(active_keys))
+    elif f.my_work == "attention":
+        roles = actor_roles(db, context)
+        pending = or_(
+            VexInvestigation.effective_status == "UNDER_INVESTIGATION",
+            VexInvestigation.reconciliation_status.in_(_NEEDS_REVIEW_VALUES),
+            VexInvestigation.reconciliation_status == "UNRESOLVED_MAPPING",
+        )
+        # Broad investigators triage the pending queue plus their own affected
+        # cases. Developers have work authority only on their live assignment.
+        own_affected = and_(mine, VexInvestigation.effective_status == "AFFECTED")
+        if roles & {"TENANT_ADMIN", "SECURITY_ANALYST"} and context.has_permission("vex:write"):
+            conditions.append(or_(pending, own_affected))
+        elif "DEVELOPER" in roles:
+            conditions.append(and_(mine, or_(pending, VexInvestigation.effective_status == "AFFECTED")))
+        else:
+            raise HTTPException(403, "Personal work queue is unavailable for this role.")
+    if f.assignee:
+        if f.assignee == "me":
+            conditions.append(mine)
+        elif f.assignee == "unassigned":
+            conditions.append(unassigned)
+        else:
+            target = membership(db, tenant_id, key=f.assignee)
+            if target is None:
+                raise HTTPException(404, "Assignee not found in this tenant.")
+            # Historical inactive/invalid owners remain discoverable by their
+            # tenant membership key; this never authorizes reassignment.
+            conditions.append(VexInvestigation.assigned_to == membership_key(target))
+    if f.unresolved_component:
+        conditions.append(VexInvestigation.component_id.is_(None))
+    if f.effective_status:
+        conditions.append(VexInvestigation.effective_status == f.effective_status.strip().upper())
+    if f.reconciliation_status:
+        conditions.append(
+            VexInvestigation.reconciliation_status == f.reconciliation_status.strip().upper()
+        )
+    if f.severity and f.severity.strip():
+        conditions.append(vex_severity_filter_clause(f.severity))
+    if f.component and f.component.strip():
+        conditions.append(func.concat(SBOMComponent.name, " ", SBOMComponent.version).ilike(f"%{f.component.strip()}%"))
+    if f.q and f.q.strip():
+        term = f"%{f.q.strip().upper()}%"
+        # Alias search matters: a context canonicalised to its CVE must still
+        # be findable by the GHSA the scanner reported (VEX-CTX-002).
+        conditions.append(
+            or_(
+                VexInvestigation.canonical_vulnerability_id.ilike(term),
+                func.upper(VexInvestigation.aliases_json).ilike(term),
+            )
+        )
+    if f.vex_source and f.vex_source.strip():
+        conditions.append(VexStatement.source_name.ilike(f"%{f.vex_source.strip()}%"))
+    if f.analyzer_source and f.analyzer_source.strip():
+        conditions.append(
+            VexInvestigation.analyzer_detection_state == f.analyzer_source.strip().upper()
+        )
+    if f.needs_review is True:
+        conditions.append(VexInvestigation.reconciliation_status.in_(_NEEDS_REVIEW_VALUES))
+    elif f.needs_review is False:
+        conditions.append(VexInvestigation.reconciliation_status.notin_(_NEEDS_REVIEW_VALUES))
+
+    return conditions
+
+
+@router.get("/api/vex/investigations", response_model=InvestigationListResponse)
+def list_investigations(
+    filters: QueueFilters = Depends(queue_filters),
     sort_by: InvestigationSortField = Query(default="last_seen_at"),
     sort_order: SortOrder = Query(default="desc"),
     limit: int = Query(default=50, ge=1, le=500),
@@ -233,109 +386,11 @@ def list_investigations(
                 "from analyser findings and has no column on the investigation"
             ),
         )
-    tenant_id = _tenant_id(context)
-
-    conditions: list[ColumnElement[bool]] = [
-        VexInvestigation.tenant_id == tenant_id,
-        VexInvestigation.is_current.is_(True),
-    ]
-    own_member = membership(db, tenant_id, user_id=context.user_id)
-    own_key = membership_key(own_member) if own_member else None
-    mine = VexInvestigation.assigned_to == own_key if own_key else false()
-    unassigned = or_(VexInvestigation.assigned_to.is_(None), VexInvestigation.assigned_to == "")
-    if my_work == "me":
-        conditions.append(mine)
-    elif my_work == "unassigned":
-        conditions.append(unassigned)
-    elif my_work == "assigned":
-        active_keys = eligible_members_query(tenant_id).with_only_columns(
-            func.concat("membership:", TenantUser.id)
-        )
-        conditions.append(VexInvestigation.assigned_to.in_(active_keys))
-    elif my_work == "attention":
-        roles = actor_roles(db, context)
-        pending = or_(
-            VexInvestigation.effective_status == "UNDER_INVESTIGATION",
-            VexInvestigation.reconciliation_status.in_(_NEEDS_REVIEW_VALUES),
-            VexInvestigation.reconciliation_status == "UNRESOLVED_MAPPING",
-        )
-        # Broad investigators triage the pending queue plus their own affected
-        # cases. Developers have work authority only on their live assignment.
-        own_affected = and_(mine, VexInvestigation.effective_status == "AFFECTED")
-        if roles & {"TENANT_ADMIN", "SECURITY_ANALYST"} and context.has_permission("vex:write"):
-            conditions.append(or_(pending, own_affected))
-        elif "DEVELOPER" in roles:
-            conditions.append(and_(mine, or_(pending, VexInvestigation.effective_status == "AFFECTED")))
-        else:
-            raise HTTPException(403, "Personal work queue is unavailable for this role.")
-    if assignee:
-        if assignee == "me":
-            conditions.append(mine)
-        elif assignee == "unassigned":
-            conditions.append(unassigned)
-        else:
-            target = membership(db, tenant_id, key=assignee)
-            if target is None:
-                raise HTTPException(404, "Assignee not found in this tenant.")
-            # Historical inactive/invalid owners remain discoverable by their
-            # tenant membership key; this never authorizes reassignment.
-            conditions.append(VexInvestigation.assigned_to == membership_key(target))
-    if unresolved_component:
-        conditions.append(VexInvestigation.component_id.is_(None))
-    if sbom_id is not None:
-        conditions.append(VexInvestigation.sbom_id == sbom_id)
-    if project_id is not None:
-        conditions.append(SBOMSource.projectid == project_id)
-    if product_id is not None:
-        conditions.append(SBOMSource.product_id == product_id)
-    if effective_status:
-        conditions.append(VexInvestigation.effective_status == effective_status.strip().upper())
-    if reconciliation_status:
-        conditions.append(
-            VexInvestigation.reconciliation_status == reconciliation_status.strip().upper()
-        )
-    if severity and severity.strip():
-        conditions.append(vex_severity_filter_clause(severity))
-    if component and component.strip():
-        conditions.append(func.concat(SBOMComponent.name, " ", SBOMComponent.version).ilike(f"%{component.strip()}%"))
-    if q and q.strip():
-        term = f"%{q.strip().upper()}%"
-        # Alias search matters: a context canonicalised to its CVE must still
-        # be findable by the GHSA the scanner reported (VEX-CTX-002).
-        conditions.append(
-            or_(
-                VexInvestigation.canonical_vulnerability_id.ilike(term),
-                func.upper(VexInvestigation.aliases_json).ilike(term),
-            )
-        )
-    if vex_source and vex_source.strip():
-        conditions.append(VexStatement.source_name.ilike(f"%{vex_source.strip()}%"))
-    if analyzer_source and analyzer_source.strip():
-        conditions.append(
-            VexInvestigation.analyzer_detection_state == analyzer_source.strip().upper()
-        )
-    if needs_review is True:
-        conditions.append(VexInvestigation.reconciliation_status.in_(_NEEDS_REVIEW_VALUES))
-    elif needs_review is False:
-        conditions.append(VexInvestigation.reconciliation_status.notin_(_NEEDS_REVIEW_VALUES))
-
-    base = (
-        select(VexInvestigation)
-        .outerjoin(SBOMComponent, SBOMComponent.id == VexInvestigation.component_id)
-        .outerjoin(SBOMSource, SBOMSource.id == VexInvestigation.sbom_id)
-    )
-    if vex_source and vex_source.strip():
-        base = base.outerjoin(
-            VexStatement, VexStatement.id == VexInvestigation.effective_vex_statement_id
-        )
+    conditions = _queue_conditions(db, context, filters)
+    from_clause = _queue_from_clause()
 
     total = db.scalar(
-        select(func.count())
-        .select_from(VexInvestigation)
-        .outerjoin(SBOMComponent, SBOMComponent.id == VexInvestigation.component_id)
-        .outerjoin(SBOMSource, SBOMSource.id == VexInvestigation.sbom_id)
-        .outerjoin(VexStatement, VexStatement.id == VexInvestigation.effective_vex_statement_id)
-        .where(*conditions)
+        select(func.count(VexInvestigation.id)).select_from(from_clause).where(*conditions)
     ) or 0
 
     sort_column = SORT_COLUMNS[sort_by]
@@ -344,13 +399,14 @@ def list_investigations(
     # and a row is silently skipped or repeated while paging.
     rows = list(
         db.scalars(
-            base.where(*conditions)
+            select(VexInvestigation)
+            .select_from(from_clause)
+            .where(*conditions)
             .order_by(primary, VexInvestigation.id.asc())
             .offset(offset)
             .limit(limit)
         ).all()
     )
-
     sboms = {
         s.id: s
         for s in db.scalars(
@@ -398,6 +454,41 @@ def list_investigations(
         )
 
     return {"total": int(total), "limit": limit, "offset": offset, "items": items}
+
+
+@router.get("/api/vex/investigations/summary", response_model=InvestigationSummaryResponse)
+def investigation_summary(
+    filters: QueueFilters = Depends(queue_filters),
+    db: Session = Depends(get_db),
+    context: CurrentContext = Depends(get_current_tenant_context),
+) -> dict[str, Any]:
+    """Metric cards for the current filtered view (VEX-DASH-004).
+
+    Accepts exactly the list endpoint's filters and evaluates the same
+    predicate in SQL over every match, so the cards, "N matching
+    investigations" and the table cannot disagree, and paging never moves a
+    total. The tenant-wide overview stays at ``GET /dashboard/vex``.
+
+    Declared before ``/{investigation_id}`` so "summary" is not captured as an
+    id by the path converter.
+    """
+    conditions = _queue_conditions(db, context, filters)
+    from_clause = _queue_from_clause()
+    counts = vex_context_counts_where(db, from_clause=from_clause, conditions=conditions)
+    total = db.scalar(
+        select(func.count(VexInvestigation.id)).select_from(from_clause).where(*conditions)
+    ) or 0
+    return {
+        "scope": "filtered",
+        "total": int(total),
+        "mapped_total": counts["total_contexts"],
+        **{key: counts[key] for key in (
+            "affected_count", "not_affected_count", "fixed_count", "under_investigation_count",
+            "needs_review_count", "unresolved_mapping_count", "matched_count",
+            "analyzer_only_count", "vex_only_count", "conflict_review_count",
+            "revalidation_required_count",
+        )},
+    }
 
 
 @router.get("/api/vex/investigations/assignees")

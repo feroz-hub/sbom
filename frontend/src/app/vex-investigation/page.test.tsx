@@ -16,6 +16,7 @@ import type {
   DashboardVex,
   VexInvestigationDetail,
   VexInvestigationListResponse,
+  VexInvestigationSummary,
 } from '@/types';
 import VexInvestigationPage from './page';
 import userEvent from '@testing-library/user-event';
@@ -25,6 +26,7 @@ const api = vi.hoisted(() => ({
   getCveDetail: vi.fn(),
   getDashboardVex: vi.fn(),
   getVexInvestigation: vi.fn(),
+  getVexInvestigationSummary: vi.fn(),
   listVexInvestigations: vi.fn(),
   setVexInvestigationDecision: vi.fn(),
   setVexInvestigationAssignment: vi.fn(),
@@ -66,6 +68,23 @@ vi.mock('@/components/dashboard/DashboardFilters', () => ({
     </button>
   ),
 }));
+
+const currentView: VexInvestigationSummary = {
+  scope: 'filtered',
+  total: 13,
+  mapped_total: 12,
+  affected_count: 1,
+  not_affected_count: 2,
+  fixed_count: 0,
+  under_investigation_count: 9,
+  needs_review_count: 3,
+  unresolved_mapping_count: 1,
+  matched_count: 3,
+  analyzer_only_count: 8,
+  vex_only_count: 1,
+  conflict_review_count: 2,
+  revalidation_required_count: 1,
+};
 
 const summary: DashboardVex = {
   affected_count: 2,
@@ -249,6 +268,7 @@ beforeEach(() => {
   api.getCveDetail.mockResolvedValue({ ...FULL_DETAIL, cve_id: detail.vulnerability.canonical_vulnerability_id });
   api.getDashboardVex.mockResolvedValue(summary);
   api.listVexInvestigations.mockResolvedValue(listResponse);
+  api.getVexInvestigationSummary.mockResolvedValue(currentView);
   api.getVexInvestigation.mockResolvedValue(detail);
   api.setVexInvestigationDecision.mockResolvedValue(detail);
   api.setVexInvestigationAssignment.mockResolvedValue(detail);
@@ -257,12 +277,32 @@ beforeEach(() => {
 });
 
 describe('summary cards', () => {
-  it('renders counts from the dashboard endpoint__VEX_DASH_003', async () => {
+  it('renders Current view counts from the filtered summary endpoint__VEX_DASH_004', async () => {
     renderPage();
-    expect(await screen.findByText('Total Contexts')).toBeInTheDocument();
+    const section = await screen.findByRole('region', { name: 'Current view' });
+    expect(await within(section).findByText('13')).toBeInTheDocument();
+    expect(within(section).getByText('Total investigations')).toBeInTheDocument();
+    expect(within(section).getByText('9')).toBeInTheDocument();
+    expect(screen.getByText(/1 unresolved component mapping included/)).toBeInTheDocument();
+  });
+
+  it('labels the tenant overview separately from the filtered view__VEX_DASH_003', async () => {
+    renderPage();
+    expect(await screen.findByText(/ignores the filters below/)).toBeInTheDocument();
     expect(await screen.findByText('10')).toBeInTheDocument();
-    expect(screen.getByText('Needs Review')).toBeInTheDocument();
     expect(screen.getByText('Unresolved Mapping')).toBeInTheDocument();
+  });
+
+  it('sends the table filters to the metrics, without sort or paging__VEX_DASH_004', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /pick-project-7/ }));
+    await waitFor(() => {
+      const list = api.listVexInvestigations.mock.calls.at(-1)?.[0];
+      const metrics = api.getVexInvestigationSummary.mock.calls.at(-1)?.[0];
+      expect(metrics).toMatchObject({ project_id: 7 });
+      const { sort_by: _s, sort_order: _o, limit: _l, offset: _f, ...listFilters } = list;
+      expect(metrics).toEqual(listFilters);
+    });
   });
 
   it('clicking a card filters the table__VEX_UI_002', async () => {

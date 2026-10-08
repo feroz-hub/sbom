@@ -1853,6 +1853,26 @@ export interface VexInvestigationListResponse {
   items: VexInvestigationRow[];
 }
 
+/** `GET /api/vex/investigations/summary` — same filters as the list. */
+export interface VexInvestigationSummary {
+  scope: 'filtered';
+  /** Equals the list `total` for the same filters. */
+  total: number;
+  /** Excludes unresolved mappings; equals the four effective-status buckets. */
+  mapped_total: number;
+  affected_count: number;
+  not_affected_count: number;
+  fixed_count: number;
+  under_investigation_count: number;
+  needs_review_count: number;
+  unresolved_mapping_count: number;
+  matched_count: number;
+  analyzer_only_count: number;
+  vex_only_count: number;
+  conflict_review_count: number;
+  revalidation_required_count: number;
+}
+
 export interface VexImportedAssertion {
   statement_id: number;
   source_format: string | null;

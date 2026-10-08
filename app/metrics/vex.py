@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import json
 
-from sqlalchemy import func, select
+from sqlalchemy import func, literal, or_, select
 from sqlalchemy.orm import Session
 
 from ..models import AnalysisFinding, AnalysisRun, SBOMComponent, VexInvestigation
@@ -78,12 +78,20 @@ def latest_successful_run_id_for_sbom(db: Session, *, tenant_id: int, sbom_id: i
     :func:`app.metrics._helpers.latest_run_per_sbom_subquery` and ADR-0001:
     ``id`` is monotonic with the writer's serialisation and NOT NULL, while
     ``completed_on`` can drift for long-running scans.
+
+    Applies the same run rule as that helper — successful status *and*
+    ``is_current`` — so an obsolete run (one analysed against SBOM content
+    that has since changed) can never become the current VEX posture
+    (VEX-INV-002). The helper's active-HEAD SBOM rule is deliberately not
+    applied: a historical version's contexts must still reconcile against its
+    own latest run, or recomputing one would retire all of its history.
     """
     return db.execute(
         select(func.max(AnalysisRun.id)).where(
             AnalysisRun.tenant_id == tenant_id,
             AnalysisRun.sbom_id == sbom_id,
             AnalysisRun.run_status.in_(COMPLETED_RUN_STATUSES),
+            AnalysisRun.is_current.is_(True),
         )
     ).scalar()
 
@@ -193,17 +201,35 @@ def vex_context_counts(db: Session, *, tenant_id: int, sbom_ids) -> dict[str, in
     are counted separately and excluded from the total so they cannot deflate
     a disposition count and make risk look smaller than it is.
     """
-    predicate = _current_contexts(tenant_id, sbom_ids)
+    return vex_context_counts_where(
+        db, from_clause=VexInvestigation, conditions=_current_contexts(tenant_id, sbom_ids)
+    )
+
+
+def vex_context_counts_where(db: Session, *, from_clause, conditions) -> dict[str, int]:
+    """:func:`vex_context_counts` over an arbitrary, already-built predicate.
+
+    The investigation queue builds its filter set once and passes it here, so
+    the filtered metric cards, the "N matching investigations" count and the
+    table rows are three reads of one predicate and cannot drift apart
+    (VEX-DASH-004). Aggregated in SQL over the whole match — never over the
+    page the table happens to show.
+
+    ``from_clause`` is the selectable the conditions were written against
+    (the queue joins SBOM and component for its scope and component filters).
+    """
     unresolved_predicate = VexInvestigation.reconciliation_status == "UNRESOLVED_MAPPING"
 
     status_rows = db.execute(
-        select(VexInvestigation.effective_status, func.count())
-        .where(*predicate, ~unresolved_predicate)
+        select(VexInvestigation.effective_status, func.count(VexInvestigation.id))
+        .select_from(from_clause)
+        .where(*conditions, ~unresolved_predicate)
         .group_by(VexInvestigation.effective_status)
     ).all()
     reconciliation_rows = db.execute(
-        select(VexInvestigation.reconciliation_status, func.count())
-        .where(*predicate)
+        select(VexInvestigation.reconciliation_status, func.count(VexInvestigation.id))
+        .select_from(from_clause)
+        .where(*conditions)
         .group_by(VexInvestigation.reconciliation_status)
     ).all()
 
@@ -264,14 +290,25 @@ def vex_severity_filter_clause(severity: str):
     may not query AnalysisFinding directly (``docs/metric-conventions.md``).
 
     A VEX-only context has no analyser finding and is included in UNKNOWN.
+
+    The finding may carry an alias of the context's canonical id — a scanner
+    reporting ``GHSA-…`` for a context canonicalised to its CVE (VEX-CTX-002)
+    — so the match also accepts any id listed in ``aliases_json``. Matching
+    the canonical id alone dropped those contexts into UNKNOWN.
     """
+    finding_id = func.upper(AnalysisFinding.vuln_id)
     latest_severity = (
         select(AnalysisFinding.severity)
         .join(AnalysisRun)
         .where(
             AnalysisFinding.component_id == VexInvestigation.component_id,
             AnalysisFinding.tenant_id == VexInvestigation.tenant_id,
-            func.upper(AnalysisFinding.vuln_id) == VexInvestigation.canonical_vulnerability_id,
+            or_(
+                finding_id == VexInvestigation.canonical_vulnerability_id,
+                func.upper(func.coalesce(VexInvestigation.aliases_json, "")).contains(
+                    literal('"') + finding_id + literal('"')
+                ),
+            ),
             AnalysisRun.tenant_id == VexInvestigation.tenant_id,
             AnalysisRun.sbom_id == VexInvestigation.sbom_id,
         )
@@ -289,6 +326,7 @@ __all__ = [
     "latest_successful_run_id_for_sbom",
     "vex_severity_filter_clause",
     "vex_context_counts",
+    "vex_context_counts_where",
     "vex_top_affected_components",
     "vex_component_findings",
     "vex_current_findings_for_sbom",
