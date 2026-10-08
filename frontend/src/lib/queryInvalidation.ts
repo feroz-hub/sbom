@@ -289,8 +289,8 @@ export function invalidateAnalysisCompletion(
  * 60-second staleTime expires.
  *
  * `['analysis-config']` is included because `AiConfigBanner`'s
- * configured-vs-empty branch ultimately depends on whether any
- * credential exists.
+ * status is a projection of the effective execution configuration and
+ * stored verification metadata.
  */
 export function invalidateAiCredentialSurfaces(qc: QueryClient): void {
   qc.invalidateQueries({ queryKey: ['ai', 'effective-config'] });

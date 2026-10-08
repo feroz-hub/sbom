@@ -47,6 +47,7 @@ from ..ai.model_registry import (
 from ..ai.provider_factory import build_provider, validate_provider_config
 from ..ai.providers._probe import network_failure, sanitized_result
 from ..ai.providers.base import ConnectionTestResult, ModelDiscoveryError, ProviderUnavailableError
+from ..ai.verification import verification_status as _verification_status
 from ..db import get_db
 from ..models import AiProviderCredential, AiProviderModel, AiSettings
 from ..security.secrets import encryption_config_diagnostic, get_cipher
@@ -452,17 +453,6 @@ def _build_transient_provider(payload: TestConnectionRequest):
     )
     _validate_catalog_compat(config)
     return build_provider(config)
-
-
-def _verification_status(row: AiProviderCredential) -> str:
-    if row.last_test_success:
-        return "VERIFIED"
-    kind = (row.last_test_error or "").split(" ", 1)[0]
-    if kind == "auth":
-        return "INVALID_CREDENTIALS"
-    if kind in {"rate_limit", "provider_unavailable"}:
-        return "TEMPORARILY_UNAVAILABLE"
-    return "UNVERIFIED"
 
 
 def _safe_stored_test_error(row: AiProviderCredential) -> str | None:

@@ -1,6 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { invalidateAiCredentialSurfaces } from '@/lib/queryInvalidation';
 import { useAuth } from '@/hooks/useAuth';
 import { TopBar } from '@/components/layout/TopBar';
 import { Button } from '@/components/ui/Button';
@@ -32,11 +33,11 @@ function ConfigurationContent({ scope }: { scope: ConfigurationScope }) {
   });
   const override = useMutation({
     mutationFn: createTenantAiOverride,
-    onSuccess: () => client.invalidateQueries({ queryKey: ['ai'] }),
+    onSuccess: () => { client.invalidateQueries({ queryKey: ['ai'] }); invalidateAiCredentialSurfaces(client); },
   });
   const reset = useMutation({
     mutationFn: resetTenantAiOverride,
-    onSuccess: () => client.invalidateQueries({ queryKey: ['ai'] }),
+    onSuccess: () => { client.invalidateQueries({ queryKey: ['ai'] }); invalidateAiCredentialSurfaces(client); },
   });
   if (isLoading) return <p>Verifying configuration access…</p>;
   if (!allowed) return <p role="alert">Configuration access is not permitted in this context.</p>;

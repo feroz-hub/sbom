@@ -452,3 +452,167 @@ def test_disabled_tenant_workload_cannot_resolve_configuration(configured_actors
         resolve_effective_ai_configuration(2)
     with SessionLocal() as db, pytest.raises(Exception, match="active tenant"):
         resolve_effective_lifecycle_provider(db, 2, "osv")
+
+
+def _set_verification(credential_id, success, error=None):
+    with SessionLocal() as db:
+        row = db.get(AiProviderCredential, credential_id)
+        row.last_test_success = success
+        row.last_test_error = error
+        db.commit()
+    from app.ai.config_loader import get_loader
+
+    get_loader().invalidate()
+
+
+def _dashboard_ai(call, actor):
+    response = call(actor, "GET", "/api/analysis/config")
+    assert response.status_code == 200, response.text
+    return response.json()["ai_status"]
+
+
+def test_dashboard_effective_inheritance_override_reset_and_isolation(configured_actors):
+    call = configured_actors
+    pid = add_provider(call, model="platform-model")
+    _set_verification(pid, True)
+    inherited = _dashboard_ai(call, "olympus")
+    assert inherited["source"] == "PLATFORM"
+    assert inherited["state"] == "AVAILABLE"
+    assert inherited["model"] == "platform-model"
+    assert inherited["available_for_tenant"] is True
+    aid = add_provider(call, "astra", model="tenant-model")
+    _set_verification(aid, True)
+    assert _dashboard_ai(call, "astra")["source"] == "TENANT"
+    assert _dashboard_ai(call, "astra")["model"] == "tenant-model"
+    assert _dashboard_ai(call, "olympus")["model"] == "platform-model"
+    update = call(
+        "platform",
+        "PUT",
+        f"/api/platform/configuration/ai/credentials/{pid}",
+        json={"default_model": "new-platform-model"},
+    )
+    assert update.status_code == 200, update.text
+    assert _dashboard_ai(call, "olympus")["model"] == "new-platform-model"
+    assert _dashboard_ai(call, "astra")["model"] == "tenant-model"
+    assert call("astra", "DELETE", "/api/v1/ai/override").status_code == 204
+    assert _dashboard_ai(call, "astra")["source"] == "PLATFORM"
+    assert _dashboard_ai(call, "olympus")["state"] == "VERIFICATION_PENDING"
+    _set_verification(pid, True)
+    viewer = _dashboard_ai(call, "viewer")
+    assert viewer["state"] == "AVAILABLE"
+    assert not viewer["can_configure"] and not viewer["can_view_settings"]
+    platform = _dashboard_ai(call, "platform")
+    assert platform["settings_scope"] == "platform"
+    assert platform["can_view_settings"]
+    assert set(inherited) == {
+        "configured",
+        "source",
+        "provider",
+        "model",
+        "verification_status",
+        "feature_enabled",
+        "available_for_tenant",
+        "state",
+        "can_view_settings",
+        "can_configure",
+        "settings_scope",
+    }
+
+
+@pytest.mark.parametrize(
+    "success,error,state",
+    [
+        (None, None, "VERIFICATION_PENDING"),
+        (False, "provider_unavailable (HTTP 503)", "TEMPORARILY_UNAVAILABLE"),
+        (False, "rate_limit (HTTP 429)", "TEMPORARILY_UNAVAILABLE"),
+        (False, "network", "TEMPORARILY_UNAVAILABLE"),
+        (False, "auth (HTTP 401)", "CONFIGURATION_UNAVAILABLE"),
+    ],
+)
+def test_dashboard_stored_verification(configured_actors, success, error, state):
+    call = configured_actors
+    pid = add_provider(call)
+    _set_verification(pid, success, error)
+    if error and error.startswith("auth"):
+        assert (
+            call(
+                "platform", "PUT", f"/api/platform/configuration/ai/credentials/{pid}", json={"enabled": False}
+            ).status_code
+            == 200
+        )
+    status = _dashboard_ai(call, "olympus")
+    assert status["configured"]
+    assert status["state"] == state
+    assert not status["available_for_tenant"]
+
+
+def test_dashboard_empty_disabled_and_invalid_override(configured_actors, monkeypatch):
+    call = configured_actors
+    assert _dashboard_ai(call, "olympus")["state"] == "CONFIGURATION_REQUIRED"
+    monkeypatch.setenv("AI_FIXES_ENABLED", "false")
+    reset_settings()
+    reset_loader()
+    reset_registry()
+    assert _dashboard_ai(call, "olympus")["state"] == "DISABLED"
+    monkeypatch.setenv("AI_FIXES_ENABLED", "true")
+    reset_settings()
+    reset_loader()
+    reset_registry()
+    pid = add_provider(call)
+    _set_verification(pid, True)
+    aid = add_provider(call, "astra", enabled=True)
+    _set_verification(aid, False, "auth (HTTP 401)")
+    status = _dashboard_ai(call, "astra")
+    assert status["source"] == "TENANT"
+    assert status["state"] == "CONFIGURATION_UNAVAILABLE"
+    assert _dashboard_ai(call, "olympus")["state"] == "AVAILABLE"
+    disabled = call("platform", "PUT", "/api/platform/configuration/ai/settings", json={"feature_enabled": False})
+    assert disabled.status_code == 200, disabled.text
+    status = _dashboard_ai(call, "olympus")
+    assert status["configured"] and status["state"] == "DISABLED"
+
+
+def test_dashboard_gemini_openai_and_env_disabled_without_probes(configured_actors, monkeypatch):
+    call = configured_actors
+    pid = add_provider(
+        call, model="gemini-2.5-flash", provider_name="gemini", api_key="fixture-platform-secret", is_local=False
+    )
+    _set_verification(pid, True)
+    from app.ai import registry
+
+    monkeypatch.setattr(
+        registry,
+        "build_provider",
+        lambda *args, **kwargs: pytest.fail("Dashboard must not instantiate/probe a provider"),
+    )
+    assert _dashboard_ai(call, "olympus")["provider"] == "gemini"
+    assert _dashboard_ai(call, "olympus")["state"] == "AVAILABLE"
+    monkeypatch.setenv("AI_FIXES_ENABLED", "false")
+    reset_settings()
+    reset_loader()
+    reset_registry()
+    disabled = _dashboard_ai(call, "olympus")
+    assert disabled["configured"] and disabled["state"] == "DISABLED"
+    monkeypatch.setenv("AI_FIXES_ENABLED", "true")
+    reset_settings()
+    reset_loader()
+    reset_registry()
+    aid = add_provider(
+        call, "astra", model="gpt-4o-mini", provider_name="openai", api_key="fixture-tenant-secret", is_local=False
+    )
+    _set_verification(aid, True)
+    override = _dashboard_ai(call, "astra")
+    assert override["provider"] == "openai" and override["source"] == "TENANT"
+    assert "fixture-tenant-secret" not in str(override)
+    assert "fixture-platform-secret" not in str(_dashboard_ai(call, "olympus"))
+    replacement = add_provider(
+        call,
+        model="platform-openai-model",
+        provider_name="openai",
+        api_key="fixture-replacement-secret",
+        is_local=False,
+    )
+    _set_verification(replacement, True)
+    assert _dashboard_ai(call, "olympus")["provider"] == "openai"
+    assert _dashboard_ai(call, "olympus")["model"] == "platform-openai-model"
+    assert _dashboard_ai(call, "astra")["model"] == "gpt-4o-mini"

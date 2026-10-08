@@ -173,7 +173,7 @@ export function useTestConnection() {
     onSuccess: () => {
       // last_test_at / last_test_success on the row just changed — refresh
       // the list so the status badge updates without F5.
-      qc.invalidateQueries({ queryKey: aiCredentialsQueryKey });
+      invalidateAiCredentialSurfaces(qc);
     },
   });
 

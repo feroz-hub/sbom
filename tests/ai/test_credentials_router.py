@@ -324,7 +324,8 @@ def test_settings_write_updates_runtime_surfaces_without_restart(client):
 
     analysis = client.get("/api/analysis/config").json()
     usage = client.get("/api/v1/ai/usage").json()
-    assert analysis["ai_fixes_enabled"] is True  # Public deployment metadata does not expose tenant controls.
+    assert analysis["ai_fixes_enabled"] is False  # Analysis config now reflects the authenticated tenant runtime.
+    assert analysis["ai_status"]["state"] == "DISABLED"
     assert analysis["ai_settings_source"] in {"env", "db"}
     assert usage["budget_caps_usd"] == {
         "per_request_usd": 0.03,
@@ -672,7 +673,7 @@ def test_transient_probe_does_not_block_encrypted_save_or_retest(client, monkeyp
     assert row['enabled'] is True
     # Runtime selection must remain eligible after transient verification failures.
     assert any(config.credential_id == row_id and config.enabled for config in _tenant_configs())
-    assert row['verification_status'] == ('UNVERIFIED' if kind == 'network' else 'TEMPORARILY_UNAVAILABLE')
+    assert row['verification_status'] == 'TEMPORARILY_UNAVAILABLE'
     async def successful(**kwargs):
         return ConnectionTestResult(success=True, provider='gemini')
     provider.test_connection = successful

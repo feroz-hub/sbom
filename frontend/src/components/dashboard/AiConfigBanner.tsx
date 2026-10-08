@@ -1,92 +1,41 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowRight, Sparkles, XOctagon } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { useAiCredentialSettings, useAiCredentials } from '@/hooks/useAiCredentials';
-import { getAnalysisConfig } from '@/lib/api';
+import { getAnalysisConfig, type EffectiveAiStatus } from '@/lib/api';
+import { useAuth } from '@/hooks/useAuth';
 
-/**
- * Drives the user toward configuring AI providers when the feature is
- * enabled but no credentials exist. Three states:
- *
- *   - kill switch active        → red banner, link to settings to re-enable
- *   - feature on, no providers  → primary CTA banner
- *   - configured                → renders nothing
- *
- * Hidden entirely when ``ai_fixes_enabled`` or ``ai_ui_config_enabled``
- * are off — non-admin deployments shouldn't see the prompt at all.
- */
+const providerNames: Record<string, string> = { gemini: 'Google Gemini', google_gemini: 'Google Gemini', openai: 'OpenAI', anthropic: 'Anthropic', ollama: 'Ollama', vllm: 'vLLM', custom_openai: 'Custom OpenAI-compatible', sarvam: 'Sarvam' };
+
+export function aiStatusCopy(status: EffectiveAiStatus): [string, string] {
+  switch (status.state) {
+    case 'AVAILABLE': return ['AI Fix Generation available', status.source === 'TENANT' ? 'Using your tenant-managed AI provider.' : "Using HCLTech’s platform-managed AI configuration."];
+    case 'DISABLED': return ['AI Fix Generation is disabled for this deployment.', 'Configuration may already exist, but this feature is currently unavailable.'];
+    case 'CONFIGURATION_REQUIRED': return ['AI configuration required', 'An AI provider must be configured before AI Fix Generation can be used.'];
+    case 'VERIFICATION_PENDING': return ['AI provider configured', 'Connection verification pending.'];
+    case 'TEMPORARILY_UNAVAILABLE': return ['AI provider temporarily unavailable', 'The configured provider could not complete the latest connection check. Configuration remains saved.'];
+    case 'CONFIGURATION_UNAVAILABLE': return ['AI configuration needs attention', 'The selected provider configuration cannot currently be used. Review its settings and verification results.'];
+    default: return ['AI status unavailable', 'Effective AI configuration could not be checked. Try again later.'];
+  }
+}
+
 export function AiConfigBanner() {
-  const { data: config, isLoading: configLoading } = useQuery({
-    queryKey: ['analysis-config'],
+  const { activeTenantId, isPlatformContext } = useAuth();
+  const { data: config, isLoading, isError } = useQuery({
+    queryKey: ['analysis-config', isPlatformContext ? 'platform' : activeTenantId],
     queryFn: ({ signal }) => getAnalysisConfig(signal),
-    staleTime: 60_000,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
   });
-
-  const featureOn = Boolean(config?.ai_fixes_enabled && config?.ai_ui_config_enabled);
-
-  const credentialsQuery = useAiCredentials({ enabled: featureOn });
-  const settingsQuery = useAiCredentialSettings({ enabled: featureOn });
-
-  if (configLoading || !featureOn) return null;
-
-  // Silent fail for non-admin — credentials endpoint is protected; if it
-  // 403s we don't render anything rather than show a half-loaded banner.
-  if (credentialsQuery.isError || settingsQuery.isError) return null;
-  if (credentialsQuery.isLoading || settingsQuery.isLoading) return null;
-
-  const credentials = credentialsQuery.data ?? [];
-  const killSwitch = settingsQuery.data?.kill_switch_active ?? false;
-
-  if (killSwitch) {
-    return (
-      <div
-        role="alert"
-        className="flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm dark:border-red-900 dark:bg-red-950/40"
-        data-testid="ai-config-banner-kill-switch"
-      >
-        <div className="flex items-center gap-2 text-red-800 dark:text-red-200">
-          <XOctagon className="h-4 w-4 shrink-0" aria-hidden />
-          <span>
-            <strong className="font-semibold">AI features disabled by kill switch.</strong>{' '}
-            Cached fixes remain readable; new generation is paused.
-          </span>
-        </div>
-        <Link
-          href="/settings/ai"
-          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-800 hover:bg-red-50 dark:border-red-800 dark:bg-red-950 dark:text-red-100 dark:hover:bg-red-900"
-        >
-          Re-enable <ArrowRight className="h-3 w-3" aria-hidden />
-        </Link>
-      </div>
-    );
-  }
-
-  if (credentials.length === 0) {
-    return (
-      <div
-        role="region"
-        aria-label="AI configuration"
-        className="flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm dark:border-primary/40 dark:bg-primary/10"
-        data-testid="ai-config-banner-empty"
-      >
-        <div className="flex items-center gap-2 text-hcl-navy">
-          <Sparkles className="h-4 w-4 shrink-0 text-primary" aria-hidden />
-          <span>
-            <strong className="font-semibold">AI fixes aren&rsquo;t configured yet.</strong>{' '}
-            Add a provider — Gemini&rsquo;s free tier takes about a minute.
-          </span>
-        </div>
-        <Link
-          href="/settings/ai"
-          className="inline-flex shrink-0 items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-white shadow-elev-1 hover:bg-hcl-dark"
-        >
-          Set up a provider <ArrowRight className="h-3 w-3" aria-hidden />
-        </Link>
-      </div>
-    );
-  }
-
-  return null;
+  if (isLoading) return null;
+  const status = config?.ai_status;
+  if (isError || !status) return <div role="status" className="rounded-lg border border-border px-4 py-3 text-sm text-hcl-muted">AI availability could not be checked. Try again later.</div>;
+  const [title, description] = aiStatusCopy(status);
+  const configure = status.state === 'CONFIGURATION_REQUIRED' && status.can_configure;
+  const action = configure ? 'Configure AI' : status.can_view_settings ? 'View AI Settings' : null;
+  return <section aria-label="AI availability" className="flex flex-col gap-3 rounded-lg border border-border bg-white px-4 py-3 text-sm dark:bg-background sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex min-w-0 items-start gap-2"><Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-hcl-blue" aria-hidden /><div><p className="font-semibold text-hcl-navy">{title}</p><p className="mt-1 text-hcl-muted">{description}</p>{status.configured && <p className="mt-1 text-xs text-hcl-muted">{status.source === 'TENANT' ? 'Tenant managed' : 'Platform managed'}{status.provider && ` · ${providerNames[status.provider] || status.provider}`}{status.available_for_tenant && ' · Available'}</p>}</div></div>
+    {action && <Link className="shrink-0 rounded-md px-2 py-1 text-sm font-medium text-hcl-blue hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-hcl-blue" href={status.settings_scope === 'platform' ? '/platform/configuration/ai' : '/settings/ai'}>{action}</Link>}
+  </section>;
 }

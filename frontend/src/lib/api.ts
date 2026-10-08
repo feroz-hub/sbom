@@ -679,7 +679,22 @@ export function updatePlatformTenantStatus(
 }
 
 // ─── Analysis config ──────────────────────────────────────────────────────────
+export interface EffectiveAiStatus {
+  configured: boolean;
+  source: 'PLATFORM' | 'TENANT' | null;
+  provider: string | null;
+  model: string | null;
+  verification_status: string;
+  feature_enabled: boolean;
+  available_for_tenant: boolean;
+  state: 'AVAILABLE' | 'DISABLED' | 'CONFIGURATION_REQUIRED' | 'VERIFICATION_PENDING' | 'TEMPORARILY_UNAVAILABLE' | 'CONFIGURATION_UNAVAILABLE' | 'STATUS_UNAVAILABLE';
+  can_view_settings: boolean;
+  can_configure: boolean;
+  settings_scope: 'tenant' | 'platform';
+}
+
 export interface AnalysisConfig {
+  ai_status?: EffectiveAiStatus;
   github_configured: boolean;
   nvd_key_configured: boolean;
   max_concurrency: number;

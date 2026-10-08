@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from ..analysis import get_analysis_settings_multi
 from ..auth import require_auth
+from ..core.security import get_current_tenant_context
 from ..db import get_db
 from ..models import SBOMType
 from ..schemas import SBOMTypeOut
@@ -71,7 +72,10 @@ def public_analysis_config() -> dict:
         )
         ai_enabled = False
         ai_settings_source = "unavailable"
+    from ..ai.availability import effective_ai_status
+
     return {
+        "ai_status": effective_ai_status(),
         # Legacy-ish keys still useful in UI
         "source_name": getattr(s, "source_name", "NVD"),
         "http_user_agent": getattr(s, "http_user_agent", "SBOM-Analyzer/enterprise-2.0"),
@@ -201,7 +205,7 @@ def _nvd_mirror_health(db: Session) -> dict:
 # Finding A: `/api/analysis/config` and `/api/types` carry route-level
 # auth so they are protected while the sibling `/` and `/health` routes
 # in this same router stay open for liveness probes and FastAPI `/docs`.
-@router.get("/api/analysis/config", dependencies=[Depends(require_auth)])
+@router.get("/api/analysis/config", dependencies=[Depends(require_auth), Depends(get_current_tenant_context)])
 def get_analysis_config() -> dict:
     return public_analysis_config()
 

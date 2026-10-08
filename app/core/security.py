@@ -438,7 +438,7 @@ async def get_current_tenant_context(
     allow_platform_context = (
         path.startswith("/api/platform/")
         or _platform_configuration_path(path)
-        or path in {"/api/auth/me", "/api/v1/auth/me", "/api/tenants"}
+        or path in {"/api/auth/me", "/api/v1/auth/me", "/api/tenants", "/api/analysis/config"}
         or (path == "/api/tenants" and method == "POST")
     )
     # Authorization is deliberately resolved from the database on every
