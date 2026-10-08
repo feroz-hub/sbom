@@ -20,7 +20,7 @@ import { AdvisorNotice } from '@/components/component-advisor/AdvisorNotice';
 import { LifecycleBadge, ProvenanceBadge, RiskBadge } from '@/components/component-advisor/AdvisorBadges';
 import { STATUS_LABELS, TRIGGER_LABELS, formatTimestamp, readableCode } from '@/components/component-advisor/labels';
 import { Alert } from '@/components/ui/Alert';
-import { Button } from '@/components/ui/Button';
+import { PermissionButton as Button } from '@/components/ui/PermissionButton';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Select } from '@/components/ui/Select';
 import { PageSpinner } from '@/components/ui/Spinner';
@@ -119,7 +119,7 @@ function ComponentDetail({ canonicalKey }: { canonicalKey: string }) {
                 <Select label="Reason" value={chosen} onChange={(event) => setTrigger(event.target.value as RecommendationTrigger)}>
                   {triggers.map((t) => <option key={t} value={t}>{TRIGGER_LABELS[t]}</option>)}
                 </Select>
-                <Button onClick={findSaferOptions} disabled={create.isPending}>
+                <Button permission={"component_advisor:recommendation:create"} onClick={findSaferOptions} disabled={create.isPending}>
                   {create.isPending ? 'Evaluating…' : 'Find safer options'}
                 </Button>
               </div>

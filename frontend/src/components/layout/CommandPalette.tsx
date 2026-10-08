@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { getRecentSboms, getRuns } from '@/lib/api';
+import { usePermissions } from '@/hooks/usePermission';
 import { useAuth } from '@/hooks/useAuth';
 import { canonicalRunStatus } from '@/lib/analysisRunStatusLabels';
 import { cn, formatDate } from '@/lib/utils';
@@ -98,7 +99,8 @@ function fuzzyScore(haystack: string, needle: string): number {
 function useCommands(query: string, isOpen: boolean, onClose: () => void): CommandItem[] {
   const router = useRouter();
   const { resolvedTheme, setTheme } = useTheme();
-  const { hasPermission, activeTenantId } = useAuth();
+  const { activeTenantId } = useAuth();
+  const { can: hasPermission } = usePermissions();
   const canSboms = hasPermission('sbom:read');
   const canRuns = hasPermission('analysis:read');
 

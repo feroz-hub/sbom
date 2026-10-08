@@ -156,3 +156,5 @@ describe('ProjectsTable list/grid toggle', () => {
     expect(within(group).getAllByRole('radio')).toHaveLength(2);
   });
 });
+
+vi.mock('@/hooks/useAuth', async () => ({ useAuth: (await import('@/test/authorizedAuth')).authorizedAuth }));

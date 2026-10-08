@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { Button } from '@/components/ui/Button';
+import { PermissionButton as Button } from '@/components/ui/PermissionButton';
 import { Dialog, DialogBody, DialogFooter } from '@/components/ui/Dialog';
 import { DeleteConfirmDialog } from '@/components/ui/DeleteConfirmDialog';
 import { useToast } from '@/hooks/useToast';
@@ -29,7 +29,7 @@ function TenantAnalysisSchedule({ tenantId }: { tenantId: number }) {
   const [open, setOpen] = useState(false);
   const schedule = useQuery({ queryKey: ['schedule', 'TENANT', tenantId], queryFn: () => getTenantSchedule(tenantId) });
   return <div className="mt-4 border-t border-border-subtle pt-4"><p className="mb-2 text-sm text-hcl-muted">Tenant-wide analysis schedule: {schedule.data ? `${schedule.data.cadence} · ${schedule.data.enabled ? 'enabled' : 'paused'}` : 'not configured'}. Child schedules, including paused overrides, take priority.</p>
-    {schedule.isError ? <p role="alert">Tenant schedule could not be loaded.</p> : <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>Configure tenant analysis schedule</Button>}
+    {schedule.isError ? <p role="alert">Tenant schedule could not be loaded.</p> : <Button size="sm" variant="secondary" permission={["schedule:write", "product:manage_schedule"]} onClick={() => setOpen(true)}>Configure tenant analysis schedule</Button>}
     <ScheduleEditor open={open} onClose={() => setOpen(false)} scope="TENANT" targetId={tenantId} existing={schedule.data} />
   </div>;
 }

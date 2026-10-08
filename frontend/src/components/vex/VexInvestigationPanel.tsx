@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Alert } from '@/components/ui/Alert';
 import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
+import { PermissionButton as Button } from '@/components/ui/PermissionButton';
 import { Input } from '@/components/ui/Input';
 import { resolveVexInvestigationComponent, setVexInvestigationAssignment } from '@/lib/api';
 import { invalidateVexSurfaces } from '@/lib/queryInvalidation';
@@ -156,8 +156,8 @@ export function VexInvestigationPanel({
               <AssigneeCombobox candidates={access.candidates} selected={assignee} onSelect={setAssignee} disabled={assignment.isPending} />
               <p className="text-xs text-hcl-muted">{analystCandidates ? 'Assign this investigation to a Security Analyst or Developer in this tenant.' : 'Delegate this investigation to a Developer in this tenant.'}</p>
               <div className="flex gap-2">
-                {access.owner.id && access.can_unassign ? <Button variant="ghost" disabled={assignment.isPending} onClick={() => assignment.mutate(null)}>Unassign</Button> : null}
-                <Button disabled={assignment.isPending || !assignee || assignee === savedDetail.internal_decision.assigned_to || !access.candidates.some(candidate => candidate.id === assignee)} onClick={() => assignment.mutate(assignee)}>{assignment.isPending ? 'Saving...' : 'Save assignment'}</Button>
+                {access.owner.id && access.can_unassign ? <Button variant="ghost" disabled={assignment.isPending} resourceAllowed={access.can_unassign} disabledReason={access.read_only_reason ?? undefined} onClick={() => assignment.mutate(null)}>Unassign</Button> : null}
+                <Button disabled={assignment.isPending || !assignee || assignee === savedDetail.internal_decision.assigned_to || !access.candidates.some(candidate => candidate.id === assignee)} resourceAllowed={access.can_assign} disabledReason={access.read_only_reason ?? undefined} onClick={() => assignment.mutate(assignee)}>{assignment.isPending ? 'Saving...' : 'Save assignment'}</Button>
               </div>
               {assignment.isSuccess ? <p role="status" className="text-sm text-green-700">Assignment updated successfully.</p> : null}
             </> : null}
@@ -172,7 +172,7 @@ export function VexInvestigationPanel({
                 <Button
                   variant="ghost"
                   disabled={mapping.isPending || !componentId.trim()}
-                  onClick={() => mapping.mutate()}
+                  resourceAllowed={access.can_map} disabledReason={access.read_only_reason ?? undefined} onClick={() => mapping.mutate()}
                 >
                   {mapping.isPending ? 'Binding...' : 'Bind to component'}
                 </Button>

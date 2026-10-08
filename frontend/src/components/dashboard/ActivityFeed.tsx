@@ -1,5 +1,6 @@
 'use client';
 
+import { PermissionLink } from '@/components/ui/PermissionLink';
 import Link from 'next/link';
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -136,12 +137,12 @@ export function ActivityFeed({ scope, tenantId }: { scope?: DashboardFilterScope
             title="No activity yet"
             description="Uploaded SBOMs and analysis runs will appear here."
             action={
-              <Link
+              <PermissionLink permission="sbom:upload"
                 href={dashboardDrilldownUrl('/sboms', scope)}
                 className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-white transition-all duration-base ease-spring hover:-translate-y-px hover:bg-hcl-dark hover:shadow-glow-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/40"
               >
                 Upload SBOM
-              </Link>
+              </PermissionLink>
             }
             compact
           />

@@ -2,10 +2,10 @@
 
 import Link from 'next/link';
 import { FileUp } from 'lucide-react';
-import { useAuth } from '@/hooks/useAuth';
+import { usePermissions } from '@/hooks/usePermission';
 
 export function DashboardEmptyState({ filtered, onClear }: { filtered: boolean; onClear: () => void }) {
-  const { hasPermission } = useAuth();
+  const { can: hasPermission } = usePermissions();
   return (
     <section aria-label="Dashboard guidance" className="flex flex-wrap items-center gap-4 rounded-2xl border border-border bg-surface-muted p-5">
       <FileUp className="h-6 w-6 shrink-0 text-hcl-blue" aria-hidden="true" />

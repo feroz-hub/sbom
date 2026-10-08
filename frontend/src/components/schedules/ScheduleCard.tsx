@@ -1,10 +1,12 @@
 'use client';
 
+import { PermissionButton } from '@/components/ui/PermissionButton';
+
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ban, CalendarClock, Pause, Pencil, Play, RotateCcw, Trash2, Zap } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
+import { PermissionButton as Button } from '@/components/ui/PermissionButton';
 import { Badge } from '@/components/ui/Badge';
 import { DeleteConfirmDialog } from '@/components/ui/DeleteConfirmDialog';
 import {
@@ -239,7 +241,7 @@ export function ScheduleCard({ scope, targetId, processingReason }: ScheduleCard
             <CardTitle className="flex items-center gap-2">
               <CalendarClock className="h-4 w-4" /> Periodic analysis
             </CardTitle>
-            <Button size="sm" onClick={() => setShowEditor(true)}>
+            <Button permission={["schedule:write","product:manage_schedule"]} size="sm" onClick={() => setShowEditor(true)}>
               <Pencil className="h-4 w-4" /> Set up schedule
             </Button>
           </CardHeader>
@@ -293,12 +295,12 @@ export function ScheduleCard({ scope, targetId, processingReason }: ScheduleCard
             {!excluded && !sched.enabled && <Badge variant="gray">paused</Badge>}
           </CardTitle>
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="secondary" onClick={() => setShowEditor(true)}>
+            <Button permission={["schedule:write","product:manage_schedule"]} size="sm" variant="secondary" onClick={() => setShowEditor(true)}>
               <Pencil className="h-4 w-4" />
               {inherited || excluded ? 'Create override' : 'Edit'}
             </Button>
             {(scope === 'PRODUCT' || scope === 'SBOM') && inherited && (
-              <Button
+              <Button permission={["schedule:write","product:manage_schedule"]}
                 size="sm"
                 variant="secondary"
                 loading={excludeMutation.isPending}
@@ -308,7 +310,7 @@ export function ScheduleCard({ scope, targetId, processingReason }: ScheduleCard
               </Button>
             )}
             {(scope === 'PRODUCT' || scope === 'SBOM') && excluded && (
-              <Button
+              <Button permission={["schedule:write","product:manage_schedule"]}
                 size="sm"
                 variant="secondary"
                 loading={inheritMutation.isPending}
@@ -320,7 +322,7 @@ export function ScheduleCard({ scope, targetId, processingReason }: ScheduleCard
             {!inherited && !excluded && (
               <>
                 {sched.enabled ? (
-                  <Button
+                  <Button permission={["schedule:write","product:manage_schedule"]}
                     size="sm"
                     variant="secondary"
                     loading={pauseMutation.isPending}
@@ -329,7 +331,7 @@ export function ScheduleCard({ scope, targetId, processingReason }: ScheduleCard
                     <Pause className="h-4 w-4" /> Pause
                   </Button>
                 ) : (
-                  <Button
+                  <Button permission={["schedule:write","product:manage_schedule"]}
                     size="sm"
                     variant="secondary"
                     loading={resumeMutation.isPending}
@@ -338,7 +340,7 @@ export function ScheduleCard({ scope, targetId, processingReason }: ScheduleCard
                     <Play className="h-4 w-4" /> Resume
                   </Button>
                 )}
-                <Button
+                <Button permission={["schedule:write","product:manage_schedule"]}
                   size="sm"
                   variant="secondary"
                   loading={runNowMutation.isPending}
@@ -348,13 +350,13 @@ export function ScheduleCard({ scope, targetId, processingReason }: ScheduleCard
                 >
                   <Zap className="h-4 w-4" /> Run now
                 </Button>
-                <button
+                <PermissionButton size="sm" variant="ghost" permission={["schedule:write","product:manage_schedule"]}
                   onClick={() => setConfirmDelete(true)}
                   className="rounded-lg p-1.5 text-hcl-muted transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
                   aria-label={scope === 'PROJECT' ? 'Remove schedule' : 'Remove override'}
                 >
                   <Trash2 className="h-4 w-4" />
-                </button>
+                </PermissionButton>
               </>
             )}
           </div>

@@ -18,6 +18,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Alert } from '@/components/ui/Alert';
+import { usePermission } from '@/hooks/usePermission';
+import { PermissionFields } from '@/components/ui/PermissionGate';
 import { Button } from '@/components/ui/Button';
 import { Input, Textarea } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
@@ -91,6 +93,7 @@ export function VexDecisionEditor({
   onCancel,
 }: VexDecisionEditorProps) {
   const queryClient = useQueryClient();
+  const canLegacyWrite = usePermission("vex:write");
   const [draft, setDraft] = useState<VexDecisionDraft>(() => draftFromInvestigation(investigation));
   const [errors, setErrors] = useState<VexDecisionErrors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -183,7 +186,7 @@ export function VexDecisionEditor({
     return <p className="text-sm text-hcl-muted">A component must be mapped before a VEX decision can be saved. Ask a Tenant Administrator or Security Analyst to resolve the mapping.</p>;
   }
 
-  if (!(investigation ? investigation.capabilities?.can_update ?? false : canWrite)) {
+  if (!(investigation ? investigation.capabilities?.can_update ?? false : canWrite && canLegacyWrite)) {
     return (
       <p className="text-xs text-hcl-muted">
         {investigation?.capabilities?.read_only_reason ?? 'Read-only: you do not have permission to update this investigation.'}
@@ -192,7 +195,7 @@ export function VexDecisionEditor({
   }
 
   return (
-    <form onSubmit={submit} noValidate className="space-y-3">
+    <PermissionFields resourceAllowed={investigation ? investigation.capabilities?.can_update ?? false : canWrite && canLegacyWrite} reason={investigation?.capabilities?.read_only_reason ?? undefined}><form onSubmit={submit} noValidate className="space-y-3">
       {/* Read-only context: what this decision is about, never re-pickable. */}
       <div className="rounded-lg bg-hcl-light/60 p-3 text-xs dark:bg-gray-900/40">
         <div className="flex flex-wrap gap-x-6 gap-y-1">
@@ -293,6 +296,6 @@ export function VexDecisionEditor({
           {save.isPending ? 'Saving...' : 'Save decision'}
         </Button>
       </div>
-    </form>
+    </form></PermissionFields>
   );
 }

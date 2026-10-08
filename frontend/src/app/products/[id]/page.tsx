@@ -6,7 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Eye, Play, Upload } from 'lucide-react';
 import { TopBar } from '@/components/layout/TopBar';
 import { Alert } from '@/components/ui/Alert';
-import { Button } from '@/components/ui/Button';
+import { PermissionButton as Button } from '@/components/ui/PermissionButton';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Select } from '@/components/ui/Select';
 import { PageSpinner } from '@/components/ui/Spinner';
@@ -76,7 +76,7 @@ function ProductSbomRow({ sbom, master }: { sbom: SBOMSource; master: LogicalSBO
             <Eye className="h-4 w-4" />
             View SBOM
           </Link>
-          <Button
+          <Button permission="analysis:run" disabledReason={sbomEligibility(sbom).reason || "Analysis is already running."}
             onClick={() => startAnalysis({ sources: ['NVD', 'OSV', 'GITHUB'] })}
             loading={isAnalyzing}
             disabled={isAnalyzing || !sbomEligibility(sbom).eligible}
@@ -161,7 +161,7 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
         title={product.name}
         breadcrumbs={[{ label: 'Projects', href: '/projects' }]}
         action={
-          <Button onClick={() => setShowUpload(true)}>
+          <Button permission={["sbom:upload", "product:assign_sbom"]} onClick={() => setShowUpload(true)}>
             <Upload className="h-4 w-4" />
             Upload SBOM
           </Button>

@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HttpError } from '@/lib/api';
 
+const access = vi.hoisted(() => ({ allowed: true }));
 const push = vi.fn();
 const useUploadSbomMutate = vi.fn();
 const showToast = vi.fn();
@@ -63,6 +64,7 @@ function wrap(children: ReactNode) {
 }
 
 beforeEach(() => {
+  access.allowed = true;
   push.mockReset();
   useUploadSbomMutate.mockReset();
   showToast.mockReset();
@@ -552,5 +554,65 @@ describe('Logical SBOM upload selection', () => {
     expect(screen.getByRole('button', { name: /Upload SBOM/i })).toBeDisabled();
     fireEvent.change(screen.getByRole('combobox', { name: /^SBOM$/ }), { target: { value: '10' } });
     await waitFor(() => expect(screen.queryByText('This SBOM version already exists. Choose a different revision.')).not.toBeInTheDocument());
+  });
+});
+
+vi.mock('@/hooks/useAuth', async () => {
+  const { authorizedAuth } = await import('@/test/authorizedAuth');
+  return { useAuth: () => ({ ...authorizedAuth(), hasPermission: (permission: string) => access.allowed && authorizedAuth().hasPermission(permission) }) };
+});
+
+describe('SBOM drag and drop', () => {
+  function sbomFile(name = 'dropped-sbom.json') {
+    const contents = '{"bomFormat":"CycloneDX","specVersion":"1.6","components":[]}';
+    const file = new File([contents], name, { type: 'application/json' });
+    const read = vi.fn().mockResolvedValue(contents);
+    vi.spyOn(file, 'slice').mockReturnValue({ text: read } as unknown as Blob);
+    return { file, read, contents };
+  }
+
+  it('previews a dropped file and submits the original file through the existing upload flow', async () => {
+    const { file, contents } = sbomFile();
+    render(wrap(<SbomUploadModal open onClose={vi.fn()} initialProjectId={42} initialProductId={77} />));
+    await screen.findByRole('option', { name: 'Payments API' });
+    fireEvent.drop(screen.getByRole('region', { name: 'SBOM file drop zone' }), { dataTransfer: { files: [file] } });
+    await waitFor(() => expect(screen.getByLabelText(/SBOM Name/i)).toHaveValue('dropped-sbom'));
+    expect(screen.getByPlaceholderText('Paste a small SPDX, CycloneDX, or XML SBOM preview')).toHaveValue(contents);
+    expect(screen.getByRole('status')).toHaveTextContent('Selected: dropped-sbom.json');
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Upload SBOM$/i })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: /^Upload SBOM$/i }));
+    await waitFor(() => expect(useUploadSbomMutate).toHaveBeenCalled());
+    expect(useUploadSbomMutate.mock.calls[0][0]).toMatchObject({ sbom_file: file, sbom_data: '' });
+  });
+
+  it('highlights the drop zone and clears it when the file leaves', () => {
+    render(wrap(<SbomUploadModal open onClose={vi.fn()} />));
+    const zone = screen.getByRole('region', { name: 'SBOM file drop zone' });
+    fireEvent.dragEnter(zone, { dataTransfer: { types: ['Files'] } });
+    expect(zone).toHaveClass('border-hcl-blue');
+    fireEvent.dragLeave(zone);
+    expect(zone).not.toHaveClass('border-hcl-blue');
+  });
+
+  it('explains multiple files and unsupported dropped file extensions without starting an upload', () => {
+    render(wrap(<SbomUploadModal open onClose={vi.fn()} />));
+    const zone = screen.getByRole('region', { name: 'SBOM file drop zone' });
+    fireEvent.drop(zone, { dataTransfer: { files: [sbomFile().file, sbomFile().file] } });
+    expect(screen.getByText('Drop one SBOM file at a time.')).toBeInTheDocument();
+    fireEvent.drop(zone, { dataTransfer: { files: [sbomFile('notes.txt').file] } });
+    expect(screen.getByText('Choose an SBOM file in JSON, XML, or SPDX format.')).toBeInTheDocument();
+    expect(useUploadSbomMutate).not.toHaveBeenCalled();
+  });
+
+  it('does not accept drops when upload permissions are missing', async () => {
+    access.allowed = false;
+    const { file, read } = sbomFile();
+    render(wrap(<SbomUploadModal open onClose={vi.fn()} />));
+    const zone = screen.getByRole('region', { name: 'SBOM file drop zone' });
+    fireEvent.drop(zone, { dataTransfer: { files: [file] } });
+    expect(read).not.toHaveBeenCalled();
+    expect(screen.getByLabelText(/SBOM Name/i)).toHaveValue('');
+    expect(screen.getByRole('button', { name: 'Upload from file' })).toBeDisabled();
+    expect(useUploadSbomMutate).not.toHaveBeenCalled();
   });
 });

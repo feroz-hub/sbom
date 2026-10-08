@@ -1,5 +1,7 @@
 'use client';
 
+import { PermissionButton } from '@/components/ui/PermissionButton';
+
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useContext } from 'react';
@@ -140,13 +142,13 @@ function GlobalBatchRow({ entry, compact = false }: RowProps) {
         ) : null}
       </div>
       {inFlight && !compact ? (
-        <button
+        <PermissionButton size="sm" variant="ghost" permission={"tenant:settings:update"}
           type="button"
           onClick={onCancel}
           className="shrink-0 rounded-md border border-border-subtle bg-surface px-2 py-1 text-[11px] font-medium text-hcl-navy hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/30"
         >
           Cancel
-        </button>
+        </PermissionButton>
       ) : null}
     </div>
   );

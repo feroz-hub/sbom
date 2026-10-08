@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ScopedLifecycleConfiguration } from './ScopedLifecycleConfiguration';
 
 const state = vi.hoisted(() => ({ permissions: [] as string[], tenantId: null as string | null }));
-vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({
+vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: { userId: 1, permissions: [] },
   isLoading: false,
   activeTenantId: state.tenantId,
   activeTenant: state.tenantId ? { name: 'Olympus' } : null,

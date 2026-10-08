@@ -8,6 +8,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Dialog, DialogBody, DialogFooter } from '@/components/ui/Dialog';
 import { Input, Textarea } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
+import { PermissionFields } from '@/components/ui/PermissionGate';
 import { Button } from '@/components/ui/Button';
 import { createProject, updateProject } from '@/lib/api';
 import { useNotifications } from '@/hooks/useNotifications';
@@ -111,7 +112,7 @@ export function ProjectModal({ open, onClose, project }: ProjectModalProps) {
       title={isEdit ? 'Edit Project' : 'New Project'}
       maxWidth="md"
     >
-      <form onSubmit={handleSubmit(onSubmit)}>
+      <PermissionFields permission={project ? 'project:update' : 'project:create'}><form onSubmit={handleSubmit(onSubmit)}>
         <DialogBody className="space-y-4">
           <Input
             label="Project Name"
@@ -144,7 +145,7 @@ export function ProjectModal({ open, onClose, project }: ProjectModalProps) {
             {isEdit ? 'Save Changes' : 'Create Project'}
           </Button>
         </DialogFooter>
-      </form>
+      </form></PermissionFields>
     </Dialog>
   );
 }

@@ -6,6 +6,7 @@ import { Sidebar } from './Sidebar';
 import { SidebarProvider, useSidebar } from './SidebarContext';
 import { GlobalAiBatchBanner } from '@/components/ai-fixes/GlobalAiBatchProgress';
 import { useAuth } from '@/hooks/useAuth';
+import { PermissionRouteGuard } from '@/components/ui/PermissionGate';
 import { cn } from '@/lib/utils';
 import { ApplicationHeader, ApplicationHeaderContext } from './ApplicationHeader';
 
@@ -96,7 +97,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         <ApplicationHeader />
         <div className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col min-h-0">
           <GlobalAiBatchBanner />
-          {children}
+          <PermissionRouteGuard>{children}</PermissionRouteGuard>
         </div>
         </ApplicationHeaderContext.Provider>
       </main>

@@ -18,6 +18,7 @@ import { SidebarStatus } from './SidebarStatus';
 import { TenantSwitcher } from './TenantSwitcher';
 import { usePinned, unpin } from '@/lib/pinned';
 import { getRecentSboms, getRuns } from '@/lib/api';
+import { usePermissions } from '@/hooks/usePermission';
 import { useAuth } from '@/hooks/useAuth';
 import { navigationItems, type NavItem } from '@/lib/navigation';
 
@@ -58,7 +59,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { collapsed, toggleCollapsed, mobileOpen, closeMobile } = useSidebar();
-  const { hasPermission } = useAuth();
+  const { can: hasPermission } = usePermissions();
   const canSee = (item: { permission?: string; permissionsAny?: string[] }) =>
     (!item.permission && !item.permissionsAny?.length)
     || Boolean(item.permission && hasPermission(item.permission))
@@ -496,7 +497,7 @@ function CollapsedNavFlyout({
 }
 
 function PinnedSection() {
-  const { hasPermission } = useAuth();
+  const { can: hasPermission } = usePermissions();
   const sboms = usePinned('sbom');
   const runs = usePinned('run');
   const all = [
@@ -524,7 +525,8 @@ function PinnedSection() {
 // ─── Section: Recent ─────────────────────────────────────────────────────────
 
 function RecentSection() {
-  const { activeTenantId, hasPermission } = useAuth();
+  const { activeTenantId } = useAuth();
+  const { can: hasPermission } = usePermissions();
   const canSboms = hasPermission('sbom:read');
   const canRuns = hasPermission('analysis:read');
   const sbomsQuery = useQuery({

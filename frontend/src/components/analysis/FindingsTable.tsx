@@ -1,5 +1,7 @@
 'use client';
 
+import { PermissionButton } from '@/components/ui/PermissionButton';
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -15,7 +17,7 @@ import {
   X,
 } from 'lucide-react';
 import { Alert } from '@/components/ui/Alert';
-import { Button } from '@/components/ui/Button';
+import { PermissionButton as Button } from '@/components/ui/PermissionButton';
 import {
   CveDetailDialog,
   useCveHoverPrefetch,
@@ -1204,14 +1206,14 @@ export function FindingsTable({
               >
                 Cancel
               </button>
-              <button
+              <PermissionButton size="sm" variant="ghost" permission={"remediation:write"}
                 type="button"
                 onClick={handleSaveRemediation}
                 disabled={isSavingRem}
                 className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary/95 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5"
               >
                 {isSavingRem ? 'Saving...' : 'Save Remediation'}
-              </button>
+              </PermissionButton>
             </div>
           </div>
         </div>
@@ -1382,13 +1384,13 @@ function ExpandedDetail({ finding: f, aliases, cwes, fixedVersions, onAliasOpen,
               Remediation
             </p>
             {onManageRemediation && (
-              <button
+              <PermissionButton size="sm" variant="ghost" permission={"remediation:write"}
                 type="button"
                 onClick={onManageRemediation}
                 className="text-[10px] text-hcl-blue hover:text-hcl-navy hover:underline font-bold"
               >
                 Manage status
-              </button>
+              </PermissionButton>
             )}
           </div>
           <div className="flex items-center justify-between">

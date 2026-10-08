@@ -10,7 +10,7 @@ let canRead = true;
 let platformRead = true;
 let canUpdate = true;
 vi.mock('@/lib/advisorPolicyApi', () => api);
-vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ activeTenantId: tenantId, activeTenant: { name: `Tenant ${tenantId}` }, hasPermission: (p: string) => p.startsWith('platform:') && !platformRead ? false : p.endsWith(':read') ? canRead : canUpdate, isLoading: false }) }));
+vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: { userId: 1, permissions: [] }, activeTenantId: tenantId, activeTenant: { name: `Tenant ${tenantId}` }, hasPermission: (p: string) => p.startsWith('platform:') && !platformRead ? false : p.endsWith(':read') ? canRead : canUpdate, isLoading: false }) }));
 vi.mock('@/components/layout/TopBar', () => ({ TopBar: () => null }));
 import Page from './page';
 import PlatformPage from '../../platform/configuration/advisor-policies/page';

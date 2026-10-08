@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { Alert } from '@/components/ui/Alert';
 import { Surface, SurfaceContent, SurfaceFooter, SurfaceHeader } from '@/components/ui/Surface';
-import { Button } from '@/components/ui/Button';
+import { PermissionButton as Button } from '@/components/ui/PermissionButton';
 import { AnimatedSeverityBar } from '@/components/ui/AnimatedSeverityBar';
 import { cn, formatDuration } from '@/lib/utils';
 import type {
@@ -265,7 +265,7 @@ export function LiveAnalysisCard({ state, onCancel, onReset }: LiveAnalysisCardP
             </p>
           </div>
           {isRunning && onCancel && (
-            <Button variant="ghost" size="sm" onClick={onCancel}>
+            <Button permission={"analysis:run"} variant="ghost" size="sm" onClick={onCancel}>
               <X className="h-3.5 w-3.5" aria-hidden /> Cancel
             </Button>
           )}
@@ -373,7 +373,7 @@ export function LiveAnalysisCard({ state, onCancel, onReset }: LiveAnalysisCardP
         </span>
         <div className="flex items-center gap-2">
           {(isDone || isError) && onReset && (
-            <Button variant="secondary" size="sm" onClick={onReset}>
+            <Button permission={"analysis:run"} variant="secondary" size="sm" onClick={onReset}>
               Run again
             </Button>
           )}

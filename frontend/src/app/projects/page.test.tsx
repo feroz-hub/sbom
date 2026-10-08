@@ -6,6 +6,7 @@ import { ToastProvider } from '@/hooks/useToast';
 import ProjectsPage from './page';
 import type { Product, Project } from '@/types';
 
+const access = vi.hoisted(() => ({ readOnly: false }));
 const mocks = vi.hoisted(() => ({ url: '', push: vi.fn(), getProjects: vi.fn(), getProducts: vi.fn(), deleteProduct: vi.fn(), deleteProject: vi.fn(), impact: vi.fn(), scanned: vi.fn(), schedule: vi.fn() }));
 vi.mock('@/components/layout/TopBar', () => ({ TopBar: ({ title, action }: { title: string; action: React.ReactNode }) => <header><h1>{title}</h1>{action}</header> }));
 vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams(mocks.url), useRouter: () => ({ push: mocks.push }) }));
@@ -29,6 +30,7 @@ function setup() {
 function appTable() { return screen.getByRole('region', { name: / applications$/ }); }
 function projectMenu(name = 'Pump Security') { fireEvent.click(screen.getByRole('button', { name: `Actions for project ${name}` })); return screen.getByRole('menu'); }
 beforeEach(() => {
+  access.readOnly = false;
   window.localStorage.clear(); mocks.url = ''; vi.clearAllMocks();
   mocks.push.mockImplementation((url: string) => { mocks.url = url.split('?')[1] || ''; });
   mocks.getProjects.mockResolvedValue(projects);
@@ -149,4 +151,29 @@ it('updates application status filters and keeps mobile inventory cards availabl
   expect(within(appTable()).queryByText('Pump Controller')).not.toBeInTheDocument();
   expect(within(appTable()).getByText('Other application')).toBeInTheDocument();
   expect(screen.getByRole('article', { name: 'Other application' })).toBeInTheDocument();
+});
+
+vi.mock('@/hooks/useAuth', async () => { const { authorizedAuth } = await import('@/test/authorizedAuth'); return { useAuth: () => ({ ...authorizedAuth(), hasPermission: (p: string) => access.readOnly ? p.endsWith(':read') : authorizedAuth().hasPermission(p) }) }; });
+
+it('Viewer can select and view projects but cannot open creation or mutation dialogs', async () => {
+  access.readOnly = true; setup();
+  await screen.findByRole('button', { name: 'Select project Pump Security' });
+  expect(screen.getByRole('button', { name: 'New Project' })).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', { name: 'New Project' }));
+  expect(screen.queryByRole('dialog', { name: 'New project' })).not.toBeInTheDocument();
+  await screen.findByRole('button', { name: 'Create Application' });
+  expect(screen.getByRole('button', { name: 'Create Application' })).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Create Application' }));
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  projectMenu();
+  const edit = screen.getByRole('menuitem', { name: 'Edit Pump Security' });
+  expect(edit).toHaveAttribute('aria-disabled', 'true'); fireEvent.click(edit);
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument(); expect(mocks.deleteProject).not.toHaveBeenCalled();
+  expect(screen.getByRole('menuitem', { name: 'View project' })).not.toHaveAttribute('aria-disabled', 'true');
+});
+it('Viewer empty applications retain read-only guidance without an actionable empty-state CTA', async () => {
+  access.readOnly = true; mocks.getProducts.mockResolvedValue({ items: [], total: 0 }); setup();
+  await screen.findByText('No applications in this project');
+  expect(screen.getAllByRole('button', { name: 'Create Application' })).toHaveLength(1);
+  expect(screen.getByRole('button', { name: 'Create Application' })).toBeDisabled();
 });

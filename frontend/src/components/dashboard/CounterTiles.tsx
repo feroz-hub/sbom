@@ -7,7 +7,7 @@ import { Surface } from '@/components/ui/Surface';
 import { Skeleton } from '@/components/ui/Spinner';
 import { getDashboardPosture, type DashboardFilterScope } from '@/lib/api';
 import { dashboardDrilldownUrl } from '@/lib/dashboardScopeUrl';
-import { useAuth } from '@/hooks/useAuth';
+import { usePermissions } from '@/hooks/usePermission';
 
 interface TileSpec {
   label: string;
@@ -34,7 +34,7 @@ export interface CounterTilesProps {
 
 export function CounterTiles({ posture, isLoading: propsIsLoading, scope }: CounterTilesProps = {}) {
   const router = useRouter();
-  const { hasPermission } = useAuth();
+  const { can: hasPermission } = usePermissions();
   const hasProps = posture !== undefined;
 
   const queryResult = useQuery({

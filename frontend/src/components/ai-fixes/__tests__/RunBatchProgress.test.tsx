@@ -668,3 +668,5 @@ describe('RunBatchProgress — trigger payload', () => {
     await waitFor(() => expect(triggerRunAiFixes).toHaveBeenCalledTimes(1));
   });
 });
+
+vi.mock('@/hooks/useAuth', async () => ({ useAuth: (await import('@/test/authorizedAuth')).authorizedAuth }));

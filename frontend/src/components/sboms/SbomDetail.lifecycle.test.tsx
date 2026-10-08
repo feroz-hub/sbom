@@ -7,7 +7,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const back = vi.fn();
 const push = vi.fn();
-vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: { roles: ['VIEWER'], isPlatformAdmin: false }, hasPermission: () => false, isLoading: false }) }));
+const access = vi.hoisted(() => ({ readOnly: false, excludedPermission: null as string | null }));
+vi.mock('@/hooks/useAuth', async () => { const { authorizedAuth } = await import('@/test/authorizedAuth'); return { useAuth: () => ({ ...authorizedAuth(), hasPermission: (p: string) => !access.readOnly && p !== access.excludedPermission && authorizedAuth().hasPermission(p) }) }; });
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ back, push, replace: vi.fn() }),
@@ -152,6 +153,8 @@ function wrap(children: ReactNode) {
 }
 
 beforeEach(() => {
+  access.readOnly = false;
+  access.excludedPermission = null;
   window.localStorage.clear();
   Object.defineProperty(URL, 'createObjectURL', {
     configurable: true,
@@ -295,6 +298,18 @@ describe('SbomDetail lifecycle management', () => {
     expect(screen.getByText('Evidence URL')).toBeInTheDocument();
     expect(screen.getByText('Override Reason')).toBeInTheDocument();
   }, 15000);
+
+  it('requires lifecycle override rather than generic component editing', async () => {
+    access.excludedPermission = 'lifecycle:override';
+    render(wrap(<SbomDetail sbom={SBOM} />));
+    fireEvent.click(screen.getByRole('button', { name: /Components List/i }));
+    expect(await screen.findByText('demo')).toBeInTheDocument();
+    const edit = screen.getByRole('button', { name: /^Edit$/i });
+    expect(edit).toBeDisabled();
+    fireEvent.click(edit);
+    expect(screen.queryByText('Lifecycle Management Parameters')).not.toBeInTheDocument();
+    expect(overrideComponentLifecycle).not.toHaveBeenCalled();
+  });
 
   it('keeps registry upgrade metadata separate from EOL and EOS status', async () => {
     getSbomComponents.mockResolvedValueOnce({
@@ -545,7 +560,7 @@ describe('SbomDetail lifecycle management', () => {
   }, 15000);
 
   it('hides sensitive VEX controls for viewer role', async () => {
-    window.localStorage.setItem('sbom-role', 'viewer');
+    access.readOnly = true;
     render(wrap(<SbomDetail sbom={SBOM} />));
 
     expect(await screen.findByText('VEX Statements')).toBeInTheDocument();
@@ -665,10 +680,11 @@ describe('SbomDetail lifecycle management', () => {
 
 describe('Operational lifecycle processing restrictions', () => {
   it('keeps inactive historical detail visible and disables analysis and reports', async () => {
+    access.readOnly = true;
     render(wrap(<SbomDetail sbom={{ ...SBOM, lifecycle_status: 'INACTIVE' }} />));
     expect(screen.getByText('INACTIVE')).toBeVisible();
     expect(screen.getByRole('button', { name: /Run Analysis/i })).toBeDisabled();
-    expect(screen.getByText(/Analysis unavailable because this SBOM is inactive/)).toBeVisible();
+    expect(screen.getAllByText(/Analysis unavailable because this SBOM is inactive/).some(element => element.closest('#sbom-processing-unavailable'))).toBe(true);
     expect(screen.queryByRole('button', { name: 'Mark Active' })).not.toBeInTheDocument();
     const exports = screen.getAllByRole('button').filter(button => /Export|Report/i.test(button.textContent || ''));
     expect(exports.length).toBeGreaterThan(0);

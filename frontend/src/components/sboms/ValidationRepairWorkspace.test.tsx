@@ -410,7 +410,7 @@ describe('ValidationRepairWorkspace', () => {
     render(wrap(<ValidationRepairWorkspace sessionId="session-1" />));
 
     const importButton = await screen.findByRole('button', { name: /^Import SBOM$/i });
-    expect(importButton).toBeEnabled();
+    await waitFor(() => expect(importButton).toBeEnabled());
     fireEvent.click(importButton);
 
     await waitFor(() => expect(importRepairSession).toHaveBeenCalledWith('session-1', true));
@@ -575,3 +575,5 @@ it('hides and restores the mounted navigator without losing investigation state 
   expect(saveValidationRepairDraft).not.toHaveBeenCalled();
   expect(validateRepairSession).not.toHaveBeenCalled();
 });
+
+vi.mock('@/hooks/useAuth', async () => ({ useAuth: (await import('@/test/authorizedAuth')).authorizedAuth }));

@@ -362,3 +362,5 @@ describe('CISA KEV catalog page', () => {
     expect(screen.getByText('CWE-502')).toBeInTheDocument();
   });
 });
+
+vi.mock('@/hooks/useAuth', async () => ({ useAuth: (await import('@/test/authorizedAuth')).authorizedAuth }));

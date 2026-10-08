@@ -9,6 +9,7 @@ import NativeUserInviteForm from './NativeUserInviteForm';
 const state = vi.hoisted(() => ({ platform: true }));
 const list = vi.hoisted(() => vi.fn());
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({
+  user: { userId: 1, permissions: [] },
   activeTenantId: '12', activeTenant: { id: 12, name: 'Olympus Healthcare' },
   hasPermission: (permission: string) => permission === 'tenant:user:invite' || state.platform,
 }) }));

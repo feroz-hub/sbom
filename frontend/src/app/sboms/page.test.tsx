@@ -72,3 +72,5 @@ describe('SbomsPage upload success', () => {
     expect(triggerBackgroundAnalysis).not.toHaveBeenCalled();
   });
 });
+
+vi.mock('@/hooks/useAuth', async () => ({ useAuth: (await import('@/test/authorizedAuth')).authorizedAuth }));

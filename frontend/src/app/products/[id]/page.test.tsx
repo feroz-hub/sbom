@@ -108,3 +108,5 @@ describe('ProductDetailPage scheduler hierarchy', () => {
     await waitFor(() => expect(api.updateProduct).toHaveBeenCalledWith(22, { current_sbom_id: 80 }));
   });
 });
+
+vi.mock('@/hooks/useAuth', async () => ({ useAuth: (await import('@/test/authorizedAuth')).authorizedAuth }));

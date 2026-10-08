@@ -7,7 +7,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import Page from './page';
 
 const state = vi.hoisted(() => ({ allowed: true, get: vi.fn(), recover: vi.fn(), status: vi.fn(), candidate: { id: 8, email: 'admin@example.test', display_name: 'New Admin' } }));
-vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ isLoading: false, hasPermission: () => state.allowed }) }));
+vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: { userId: 1, permissions: [] }, isLoading: false, hasPermission: () => state.allowed }) }));
 vi.mock('@/hooks/useNotifications', () => ({ useNotifications: () => ({ showSuccess: vi.fn(), showError: vi.fn() }) }));
 vi.mock('@/lib/api', () => ({ getPlatformTenant: (...args: unknown[]) => state.get(...args), recoverPlatformTenantAdmin: (...args: unknown[]) => state.recover(...args), updatePlatformTenantStatus: (...args: unknown[]) => state.status(...args) }));
 vi.mock('@/components/admin/UserSearchCombobox', () => ({ UserSearchCombobox: ({ onSelect }: { onSelect: (user: typeof state.candidate) => void }) => <button onClick={() => onSelect(state.candidate)}>Select New Admin</button> }));

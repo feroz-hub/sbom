@@ -318,7 +318,7 @@ def test_platform_override_stays_tenant_bound(client, db, seeded, people):
         actor(people["TENANT_ADMIN"]),
         user_id=user.id,
         is_platform_admin=True,
-        permissions=ROLE_PERMISSIONS["PLATFORM_ADMIN"],
+        permissions=ROLE_PERMISSIONS["PLATFORM_ADMIN"] | ROLE_PERMISSIONS["TENANT_ADMIN"],
     )
     try:
         client.app.dependency_overrides[get_current_tenant_context] = lambda: ctx

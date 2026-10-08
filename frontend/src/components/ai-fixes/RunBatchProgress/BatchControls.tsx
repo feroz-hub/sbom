@@ -1,5 +1,7 @@
 'use client';
 
+import { PermissionButton } from '@/components/ui/PermissionButton';
+
 import { CircleX, Sparkles } from 'lucide-react';
 import type { AiBatchProgress } from '@/types/ai';
 
@@ -56,7 +58,7 @@ export function BatchControls({
 
   if (isRunning) {
     return (
-      <button
+      <PermissionButton size="sm" variant="ghost" permission={"tenant:settings:update"}
         type="button"
         onClick={onCancel}
         disabled={cancelling}
@@ -64,12 +66,12 @@ export function BatchControls({
       >
         <CircleX className="h-3.5 w-3.5" aria-hidden />
         {cancelling ? 'Cancelling…' : 'Cancel'}
-      </button>
+      </PermissionButton>
     );
   }
 
   return (
-    <button
+    <PermissionButton size="sm" variant="ghost" permission={"tenant:settings:update"}
       type="button"
       onClick={onTrigger}
       disabled={triggering || Boolean(disabledReason) || (isTerminal && progress.total === 0)}
@@ -78,6 +80,6 @@ export function BatchControls({
     >
       <Sparkles className="h-3.5 w-3.5" aria-hidden />
       {triggering ? 'Starting…' : 'Generate AI fixes'}
-    </button>
+    </PermissionButton>
   );
 }

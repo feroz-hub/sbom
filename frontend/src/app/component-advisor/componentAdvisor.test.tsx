@@ -56,6 +56,7 @@ vi.mock('next/navigation', () => ({
 }));
 vi.mock('next/link', () => ({ default: ({ href, children, ...rest }: { href: string; children: ReactNode }) => <a href={href} {...rest}>{children}</a> }));
 vi.mock('@/hooks/usePermission', () => ({
+  usePermissions: () => ({ can: (p: string) => permissions.granted.has(p), permissionsLoaded: true, effectivePermissions: [...permissions.granted], pendingReason: 'Checking your permissions…' }),
   usePermission: (permission: string) => permissions.granted.has(permission),
   useAnyPermission: (...values: string[]) => values.some((v) => permissions.granted.has(v)),
 }));

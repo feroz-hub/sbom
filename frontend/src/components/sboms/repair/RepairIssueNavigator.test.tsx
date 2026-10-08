@@ -78,3 +78,5 @@ it('allows mobile Escape to hide issues', () => {
     expect(onHide).toHaveBeenCalledOnce();
   } finally { window.matchMedia = previous; }
 });
+
+vi.mock('@/hooks/useAuth', async () => ({ useAuth: (await import('@/test/authorizedAuth')).authorizedAuth }));

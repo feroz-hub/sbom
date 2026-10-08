@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { PermissionGate } from '@/components/ui/PermissionGate';
 import { InventoryActionMenu } from './InventoryActionMenu';
 import { Alert } from '@/components/ui/Alert';
 import { Select } from '@/components/ui/Select';
@@ -51,11 +52,11 @@ function ProjectRowActions({
   onDelete: (project: Project) => void;
 }) {
   return <InventoryActionMenu label={`Actions for project ${project.project_name}`} actions={[
-    { label: 'View project', ...(onSelect ? { onClick: () => onSelect(project) } : { href: `/projects?project=${project.id}` }) },
-    { label: 'Edit project', accessibleName: `Edit ${project.project_name}`, onClick: () => onEdit(project) },
-    { label: 'Schedule', accessibleName: `Configure periodic analysis schedule for ${project.project_name}`, onClick: () => onSchedule(project) },
-    { label: 'Notification settings', href: `/settings/notifications?scope=PROJECT&target=${project.id}` },
-    { label: 'Delete project', accessibleName: `Delete ${project.project_name}`, onClick: () => onDelete(project), destructive: true },
+    { label: 'View project', permission: 'project:read', ...(onSelect ? { onClick: () => onSelect(project) } : { href: `/projects?project=${project.id}` }) },
+    { label: 'Edit project', permission: 'project:update', accessibleName: `Edit ${project.project_name}`, onClick: () => onEdit(project) },
+    { label: 'Schedule', permission: ['schedule:write', 'product:manage_schedule'], accessibleName: `Configure periodic analysis schedule for ${project.project_name}`, onClick: () => onSchedule(project) },
+    { label: 'Notification settings', permission: 'sbom:read', href: `/settings/notifications?scope=PROJECT&target=${project.id}` },
+    { label: 'Delete project', permission: 'project:delete', accessibleName: `Delete ${project.project_name}`, onClick: () => onDelete(project), destructive: true },
   ]} />;
 }
 
@@ -299,7 +300,7 @@ export function ProjectsTable({ projects, isLoading, error, initialProjectId, se
             ) : !projects?.length ? (
               <p className="py-10 text-center text-sm text-hcl-muted">
                 No projects yet. Projects organize applications and their SBOMs.
-                {onCreate && <button className="mt-3 block w-full font-medium text-hcl-blue" onClick={onCreate}>Create Project</button>}
+                {onCreate && <PermissionGate permission="project:create"><button className="mt-3 block w-full font-medium text-hcl-blue" onClick={onCreate}>Create Project</button></PermissionGate>}
               </p>
             ) : !filteredProjects.length ? (
               <p className="py-10 text-center text-sm text-hcl-muted">
@@ -376,7 +377,7 @@ export function ProjectsTable({ projects, isLoading, error, initialProjectId, se
               {isLoading ? (
                 Array.from({ length: 4 }).map((_, i) => <SkeletonRow key={i} cols={7} />)
               ) : !projects?.length ? (
-                <EmptyRow cols={7} message="No projects found. Create your first project!" />
+                <EmptyRow cols={7} message="No projects yet. Projects organize applications and their SBOMs." />
               ) : !filteredProjects.length ? (
                 <EmptyRow
                   cols={7}

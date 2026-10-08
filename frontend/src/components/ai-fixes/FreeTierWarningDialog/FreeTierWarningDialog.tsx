@@ -1,5 +1,7 @@
 'use client';
 
+import { PermissionButton } from '@/components/ui/PermissionButton';
+
 import { AlertTriangle, X } from 'lucide-react';
 import type { AiBatchDurationEstimate } from '@/types/ai';
 import { EstimatedTimeline } from './EstimatedTimeline';
@@ -90,13 +92,13 @@ export function FreeTierWarningDialog({
           >
             Switch provider
           </a>
-          <button
+          <PermissionButton size="sm" variant="ghost" permission={"tenant:settings:update"}
             type="button"
             onClick={onContinue}
             className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white shadow-elev-1 hover:bg-hcl-dark"
           >
             Continue with {estimate.provider}
-          </button>
+          </PermissionButton>
         </footer>
       </div>
     </div>

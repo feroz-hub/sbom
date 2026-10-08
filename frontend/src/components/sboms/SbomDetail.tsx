@@ -1,12 +1,16 @@
 'use client';
 
+import { usePermissions } from '@/hooks/usePermission';
+import { PermissionFields } from '@/components/ui/PermissionGate';
+import { PermissionButton } from '@/components/ui/PermissionButton';
+
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { Play, ArrowLeft, ExternalLink, Edit2, GitBranch, History, Layers, Download, Check, RefreshCw, Eye, ArrowRight, X } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
+import { PermissionButton as Button } from '@/components/ui/PermissionButton';
 import { SbomLifecycleControls } from './SbomLifecycleControls';
 import { Alert } from '@/components/ui/Alert';
 import { sbomEligibility } from '@/lib/sbomEligibility';
@@ -221,16 +225,6 @@ function triggerDownload(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-function canManageEvidenceFromClient() {
-  if (typeof window === 'undefined') return true;
-  const configured = window.localStorage.getItem('sbom-role') || window.localStorage.getItem('sbom:user-role');
-  if (!configured) return true;
-  return configured
-    .split(/[,\s]+/)
-    .map((role) => role.trim().toLowerCase())
-    .some((role) => role === 'admin' || role === 'security');
-}
-
 export function SbomDetail({ sbom }: SbomDetailProps) {
   const eligibility = sbomEligibility(sbom);
   const processingUnavailable = !eligibility.eligible;
@@ -288,7 +282,8 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
   const [isSavingVexOverride, setIsSavingVexOverride] = useState(false);
   const [vexOverrideHistory, setVexOverrideHistory] = useState<VexOverrideAuditEntry[]>([]);
   const [isLoadingVexHistory, setIsLoadingVexHistory] = useState(false);
-  const [canManageEvidence] = useState(canManageEvidenceFromClient);
+  const { can } = usePermissions();
+  const canManageEvidence = can("vex:write");
 
   // Version Comparison State
   const [selectedVersions, setSelectedVersions] = useState<number[]>([]);
@@ -1000,7 +995,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
               <div className="space-y-2"><CardTitle>SBOM Details</CardTitle><SbomLifecycleControls sbom={sbom} showHistory /></div>
               <div className="flex gap-2">
                 {canUseWorkspace ? (
-                  <Button
+                  <Button permission={canBackfillWorkspace ? "sbom:repair:update" : "sbom:repair:read"}
                     onClick={() => void handleOpenRepairWorkspace()}
                     loading={isOpeningWorkspace}
                     disabled={isOpeningWorkspace}
@@ -1010,7 +1005,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                     {workspaceButtonLabel}
                   </Button>
                 ) : null}
-                <Button
+                <Button permission={"sbom:update"}
 	                  onClick={() => {
 	                    setDetailName(sbom.sbom_name || '');
 	                    setDetailProductId(sbom.product_id || null);
@@ -1037,7 +1032,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                     ? 'Export Original SPDX'
                     : 'Export CycloneDX'}
                 </a>
-                <Button
+                <Button permission={"sbom:export"}
                   onClick={() =>
                     handleDownload('vulnerability Excel', () => exportSbomVulnerabilityExcel(sbom.id))
                   }
@@ -1048,7 +1043,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                 >
                   <Download className="h-3.5 w-3.5" /> Export Vulnerability Excel
                 </Button>
-                <Button
+                <Button permission="analysis:run" disabledReason={eligibility.reason || "Analysis is already running."}
                   onClick={handleRunAnalysis}
                   loading={isAnalyzing}
                   disabled={isAnalyzing || processingUnavailable}
@@ -1075,7 +1070,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                     value: (
                       <div className="flex items-center gap-2">
                         <span>{sbom.project_name || (sbom.projectid ? `Project #${sbom.projectid}` : '—')}</span>
-                        <button
+                        <PermissionButton size="sm" variant="ghost" permission={["sbom:update","product:assign_sbom"]}
                           type="button"
 	                          onClick={() => {
 	                            setSelectedProjectId(sbom.projectid || null);
@@ -1087,7 +1082,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                           className="text-xs text-hcl-blue hover:underline font-semibold"
                         >
                           {sbom.projectid ? 'Change' : 'Assign'}
-                        </button>
+                        </PermissionButton>
                       </div>
                     ),
                   },
@@ -1116,7 +1111,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
             workspaceUnavailableReason={workspaceUnavailableReason}
             workspaceAction={
               canUseWorkspace ? (
-                <Button
+                <Button permission={canBackfillWorkspace ? "sbom:repair:update" : "sbom:repair:read"}
                   size="sm"
                   variant="outline"
                   onClick={() => void handleOpenRepairWorkspace()}
@@ -1237,7 +1232,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                 {downloadMessage ? <p className="mt-1 text-xs text-hcl-muted">{downloadMessage}</p> : null}
               </div>
               <div className="flex flex-wrap justify-end gap-2">
-                <Button
+                <Button permission={"vex:read"}
                   size="sm"
                   variant="outline"
                   onClick={() => handleDownload('VEX JSON', () => exportSbomVexReportJson(sbom.id))}
@@ -1246,7 +1241,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                 >
                   <Download className="h-3.5 w-3.5" /> JSON
                 </Button>
-                <Button
+                <Button permission={"vex:read"}
                   size="sm"
                   variant="outline"
                   onClick={() => handleDownload('VEX CSV', () => exportSbomVexReportCsv(sbom.id))}
@@ -1255,7 +1250,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                 >
                   <Download className="h-3.5 w-3.5" /> CSV
                 </Button>
-                <Button
+                <Button permission={"vex:read"}
                   size="sm"
                   variant="outline"
                   onClick={() => handleDownload('VEX report pack', () => exportSbomVexReportPack(sbom.id))}
@@ -1266,10 +1261,10 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                 </Button>
                 {canManageEvidence ? (
                   <>
-                    <Button size="sm" variant="outline" onClick={handleDiscoverVexDocuments} loading={isDiscoveringVex}>
+                    <Button permission={"vex:write"} size="sm" variant="outline" onClick={handleDiscoverVexDocuments} loading={isDiscoveringVex}>
                       <RefreshCw className="h-3.5 w-3.5" /> Discover
                     </Button>
-                    <Button size="sm" onClick={() => openVexOverrideModal()}>
+                    <Button permission={"vex:write"} size="sm" onClick={() => openVexOverrideModal()}>
                       <Edit2 className="h-3.5 w-3.5" /> Manage VEX
                     </Button>
                   </>
@@ -1351,13 +1346,13 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                               <Eye className="h-3 w-3" /> Evidence
                             </button>
                             {canManageEvidence ? (
-                              <button
+                              <PermissionButton size="sm" variant="ghost" permission={"vex:write"}
                                 type="button"
                                 onClick={() => openVexOverrideModal(statement)}
                                 className="inline-flex items-center gap-1 text-xs font-medium text-hcl-blue transition-colors hover:text-hcl-navy"
                               >
                                 <Edit2 className="h-3 w-3" /> Manage VEX
-                              </button>
+                              </PermissionButton>
                             ) : null}
                           </Td>
                         </tr>
@@ -1436,7 +1431,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                   {showDuplicates ? 'Hide Duplicates' : 'Show Duplicates'}
                 </Button>
               ) : null}
-              <Button
+              <Button permission={"lifecycle:read"}
                 size="sm"
                 variant="outline"
                 onClick={() => handleDownload('lifecycle CSV', () => exportSbomLifecycleReportCsv(sbom.id))}
@@ -1445,7 +1440,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
               >
                 <Download className="h-3.5 w-3.5" /> Lifecycle CSV
               </Button>
-              <Button
+              <Button permission={"lifecycle:read"}
                 size="sm"
                 variant="outline"
                 onClick={() => handleDownload('lifecycle report pack', () => exportSbomLifecycleReportPack(sbom.id))}
@@ -1454,7 +1449,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
               >
                 <Download className="h-3.5 w-3.5" /> Lifecycle Pack
               </Button>
-              <Button size="sm" variant="outline" onClick={handleRefreshLifecycle} loading={isRefreshingLifecycle}>
+              <Button permission={"lifecycle:override"} size="sm" variant="outline" onClick={handleRefreshLifecycle} loading={isRefreshingLifecycle}>
                 <RefreshCw className="h-3.5 w-3.5" /> Refresh EOL / EOS Details
               </Button>
             </div>
@@ -1589,25 +1584,25 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                             >
                               <Eye className="h-3 w-3" /> Evidence
                             </button>
-                            <button
+                            <PermissionButton size="sm" variant="ghost" permission={"lifecycle:override"}
                               onClick={() => handleRefreshComponentLifecycle(c)}
                               disabled={refreshingComponentId === c.id}
                               className="inline-flex items-center gap-1 text-xs font-medium text-hcl-muted transition-colors hover:text-hcl-navy disabled:opacity-60"
                             >
                               <RefreshCw className={`h-3 w-3 ${refreshingComponentId === c.id ? 'animate-spin' : ''}`} /> Refresh
-                            </button>
-                            <button
+                            </PermissionButton>
+                            <PermissionButton size="sm" variant="ghost" permission={"vex:write"}
                               onClick={() => setManagedVexComponent(c)}
                               className="inline-flex items-center gap-1 text-xs font-medium text-hcl-blue"
                             >
                               Manage VEX
-                            </button>
-                            <button
+                            </PermissionButton>
+                            <PermissionButton size="sm" variant="ghost" permission={"lifecycle:override"}
                               onClick={() => openEditModal(c)}
                               className="inline-flex items-center gap-1 text-xs text-hcl-blue hover:text-hcl-navy transition-colors font-medium"
                             >
                               <Edit2 className="h-3 w-3" /> Edit
-                            </button>
+                            </PermissionButton>
                           </div>
                         </Td>
                     </tr>
@@ -1779,12 +1774,12 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                               Export CycloneDX
                             </a>
                             {!isCurrent && (
-                              <button
+                              <PermissionButton size="sm" variant="ghost" permission={"sbom:update"}
                                 onClick={() => handleRestore(v.id)}
                                 className="inline-flex items-center gap-1 text-xs text-hcl-blue hover:underline font-semibold"
                               >
                                 Restore
-                              </button>
+                              </PermissionButton>
                             )}
                           </Td>
                         </tr>
@@ -1959,7 +1954,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
             <div className="flex items-center justify-end gap-2 px-6 py-4">
               {canManageEvidence ? (
                 <>
-                  <Button
+                  <Button permission={"lifecycle:override"}
                     size="sm"
                     variant="outline"
                     onClick={() => evidenceModal && handleRefreshComponentLifecycle(evidenceModal.component)}
@@ -1967,7 +1962,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                   >
                     <RefreshCw className="h-3.5 w-3.5" /> Refresh
                   </Button>
-                  <Button
+                  <Button permission={"lifecycle:override"}
                     size="sm"
                     onClick={() => {
                       if (evidenceModal?.kind === 'lifecycle') {
@@ -1984,7 +1979,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
           ) : evidenceModal?.kind === 'vex' ? (
             <div className="flex items-center justify-end gap-2 px-6 py-4">
               {canManageEvidence ? (
-                <Button
+                <Button permission={"vex:write"}
                   size="sm"
                   onClick={() => {
                     if (evidenceModal?.kind === 'vex') {
@@ -2213,6 +2208,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
               </button>
             </CardHeader>
             <CardContent className="p-6 space-y-4">
+              <PermissionFields permission="lifecycle:override">
               {editError && (
                 <div className="p-3 bg-red-50 text-red-800 text-xs rounded border border-red-200">
                   {editError}
@@ -2393,11 +2389,12 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
                 </div>
               </div>
 
+              </PermissionFields>
               <div className="flex justify-end gap-2 pt-4 border-t">
                 <Button variant="outline" onClick={() => setEditingComp(null)} size="sm">
                   Cancel
                 </Button>
-                <Button onClick={saveComponentEdits} loading={isSavingEdit} size="sm">
+                <Button permission={"lifecycle:override"} onClick={saveComponentEdits} loading={isSavingEdit} size="sm">
                   Save Override
                 </Button>
               </div>
@@ -2544,13 +2541,14 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
             <Button size="sm" variant="ghost" onClick={() => setIsAssignModalOpen(false)}>
               Cancel
             </Button>
-	            <Button size="sm" onClick={handleAssignProjectSubmit} loading={isSavingAssign} disabled={!selectedProjectId || !selectedProductId}>
+	            <Button permission={["sbom:update","product:assign_sbom"]} size="sm" onClick={handleAssignProjectSubmit} loading={isSavingAssign} disabled={!selectedProjectId || !selectedProductId}>
 	              Save Assignment
             </Button>
           </div>
         }
       >
         <DialogBody className="space-y-4">
+          <PermissionFields permission={["sbom:update", "product:assign_sbom"]}>
           {assignError && (
             <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs font-medium text-red-800">
               {assignError}
@@ -2595,6 +2593,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
             value={assignChangeReason}
             onChange={(e) => setAssignChangeReason(e.target.value)}
           />
+                  </PermissionFields>
         </DialogBody>
       </Dialog>
 
@@ -2609,13 +2608,14 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
             <Button size="sm" variant="ghost" onClick={() => setIsEditDetailsModalOpen(false)}>
               Cancel
             </Button>
-            <Button size="sm" onClick={handleEditDetailsSubmit} loading={isSavingDetails}>
+            <Button permission={"sbom:update"} size="sm" onClick={handleEditDetailsSubmit} loading={isSavingDetails}>
               Save Details
             </Button>
           </div>
         }
       >
         <DialogBody className="space-y-4">
+          <PermissionFields permission={"sbom:update"}>
           {detailsError && (
             <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs font-medium text-red-800">
               {detailsError}
@@ -2685,6 +2685,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
             value={detailChangeReason}
             onChange={(e) => setDetailChangeReason(e.target.value)}
           />
+                  </PermissionFields>
         </DialogBody>
       </Dialog>
     </div>

@@ -1,5 +1,7 @@
 'use client';
 
+import { PermissionButton } from '@/components/ui/PermissionButton';
+
 import { Sparkles } from 'lucide-react';
 
 interface AiFixGenerateButtonProps {
@@ -41,7 +43,7 @@ export function AiFixGenerateButton({
   const isDisabled = Boolean(loading) || disabledByError;
   return (
     <div className="flex flex-col items-start gap-2 rounded-lg border border-dashed border-border bg-surface-muted p-4">
-      <button
+      <PermissionButton size="sm" variant="ghost" permission={"tenant:settings:update"}
         type="button"
         onClick={onGenerate}
         disabled={isDisabled}
@@ -52,7 +54,7 @@ export function AiFixGenerateButton({
         {loading
           ? `Asking ${providerLabel ?? 'provider'}…`
           : 'Generate AI remediation'}
-      </button>
+      </PermissionButton>
       <p className="text-xs text-hcl-muted">
         {providerLabel ? <>Provider: {providerLabel}. </> : null}
         {costEstimate ? <>Estimated cost {costEstimate}. </> : null}

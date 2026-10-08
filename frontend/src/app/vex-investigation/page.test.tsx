@@ -43,6 +43,7 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(navigation.search),
 }));
 vi.mock('@/hooks/usePermission', () => ({
+  usePermissions: () => ({ can: (p: string) => permissions.granted.has(p), permissionsLoaded: true, effectivePermissions: [...permissions.granted], pendingReason: 'Checking your permissions…' }),
   usePermission: (permission: string) => permissions.granted.has(permission),
   useAnyPermission: (...values: string[]) => values.some((v) => permissions.granted.has(v)),
 }));

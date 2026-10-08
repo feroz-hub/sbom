@@ -293,3 +293,5 @@ it('disables scheduled Run Now for an inactive SBOM and explains why', async () 
   fireEvent.click(button);
   expect(api.runScheduleNow).not.toHaveBeenCalled();
 });
+
+vi.mock('@/hooks/useAuth', async () => ({ useAuth: (await import('@/test/authorizedAuth')).authorizedAuth }));

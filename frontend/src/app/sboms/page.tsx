@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
 import { Upload } from 'lucide-react';
 import { TopBar } from '@/components/layout/TopBar';
-import { Button } from '@/components/ui/Button';
+import { PermissionButton as Button } from '@/components/ui/PermissionButton';
 import { SbomsTable } from '@/components/sboms/SbomsTable';
 import { SbomUploadModal } from '@/components/sboms/SbomUploadModal';
 import { useSbomsList } from '@/hooks/useSbomsList';
@@ -52,7 +52,7 @@ function SbomsContent() {
       <TopBar
         title="SBOMs"
         action={
-          <Button onClick={() => setShowUpload(true)}>
+          <Button permission={["sbom:upload", "product:assign_sbom"]} onClick={() => setShowUpload(true)}>
             <Upload className="h-4 w-4" />
             Upload SBOM
           </Button>

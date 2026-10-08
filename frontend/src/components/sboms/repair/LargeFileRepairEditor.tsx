@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Save } from 'lucide-react';
 import { Alert } from '@/components/ui/Alert';
-import { Button } from '@/components/ui/Button';
+import { usePermission } from '@/hooks/usePermission';
+import { PermissionButton as Button } from '@/components/ui/PermissionButton';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Select } from '@/components/ui/Select';
 import { Textarea } from '@/components/ui/Input';
@@ -32,6 +33,8 @@ export function LargeFileRepairEditor({
   navigation: { line?: number; query?: string; token: number } | null;
   onBusyChange: (busy: boolean) => void;
 }) {
+  const canSearch = usePermission("sbom:repair:search");
+  const canEdit = usePermission("sbom:repair:update");
   const queryClient = useQueryClient();
   const [startLine, setStartLine] = useState(1);
   const [jumpLine, setJumpLine] = useState('1');
@@ -53,7 +56,7 @@ export function LargeFileRepairEditor({
   const searchQuery = useQuery({
     queryKey: ['validation-repair-search', sessionId, query],
     queryFn: ({ signal }) => searchValidationSession(sessionId, query, 'repair_draft', 100, signal),
-    enabled: query.trim().length > 0,
+    enabled: canSearch && query.trim().length > 0,
   });
 
   const patchMutation = useMutation({
@@ -105,7 +108,7 @@ export function LargeFileRepairEditor({
             className="h-9 rounded-md border border-border bg-surface px-3 text-sm"
           />
           <input
-            aria-label="Search repair draft"
+            aria-label="Search repair draft" disabled={!canSearch}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search"
@@ -156,7 +159,7 @@ export function LargeFileRepairEditor({
           <div className="mt-3 grid gap-3 md:grid-cols-3">
             <Select
               aria-label="Patch operation"
-              disabled={!session.can_edit || patchMutation.isPending}
+              disabled={!canEdit || !session.can_edit || patchMutation.isPending}
               value={patch.operation}
               onChange={(event) => setPatch((old) => ({ ...old, operation: event.target.value as LineRepairPatch['operation'] }))}
             >
@@ -166,14 +169,14 @@ export function LargeFileRepairEditor({
             </Select>
             <input
               aria-label="Patch start line"
-              disabled={!session.can_edit || patchMutation.isPending}
+              disabled={!canEdit || !session.can_edit || patchMutation.isPending}
               value={patch.start_line}
               onChange={(event) => setPatch((old) => ({ ...old, start_line: Number(event.target.value) || 1 }))}
               className="h-9 rounded-md border border-border bg-surface px-3 text-sm"
             />
             <input
               aria-label="Patch end line"
-              disabled={!session.can_edit || patchMutation.isPending}
+              disabled={!canEdit || !session.can_edit || patchMutation.isPending}
               value={patch.end_line ?? patch.start_line}
               onChange={(event) => setPatch((old) => ({ ...old, end_line: Number(event.target.value) || old.start_line }))}
               className="h-9 rounded-md border border-border bg-surface px-3 text-sm"
@@ -182,13 +185,13 @@ export function LargeFileRepairEditor({
           {patch.operation !== 'delete_lines' && (
             <Textarea
               aria-label="Patch replacement text"
-              disabled={!session.can_edit || patchMutation.isPending}
+              disabled={!canEdit || !session.can_edit || patchMutation.isPending}
               value={patch.replacement_text ?? ''}
               onChange={(event) => setPatch((old) => ({ ...old, replacement_text: event.target.value }))}
               className="mt-3 min-h-[140px] font-mono text-xs"
             />
           )}
-          <Button className="mt-3" size="sm" onClick={() => patchMutation.mutate()} loading={patchMutation.isPending} disabled={!session.can_edit}>
+          <Button permission={"sbom:repair:update"} className="mt-3" size="sm" onClick={() => patchMutation.mutate()} loading={patchMutation.isPending} disabled={!canEdit || !session.can_edit}>
             <Save className="h-4 w-4" />
             Save patch
           </Button>

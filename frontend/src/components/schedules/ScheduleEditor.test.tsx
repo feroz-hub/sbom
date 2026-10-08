@@ -61,3 +61,5 @@ describe('ScheduleEditor hierarchical scopes', () => {
     );
   });
 });
+
+vi.mock('@/hooks/useAuth', async () => ({ useAuth: (await import('@/test/authorizedAuth')).authorizedAuth }));

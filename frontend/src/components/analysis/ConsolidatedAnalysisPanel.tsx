@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef } from 'react';
 import { Layers, Play, Sparkles } from 'lucide-react';
-import { Button } from '@/components/ui/Button';
+import { PermissionButton as Button } from '@/components/ui/PermissionButton';
 import { Select } from '@/components/ui/Select';
 import { Surface, SurfaceContent, SurfaceHeader } from '@/components/ui/Surface';
 import { Motion } from '@/components/ui/Motion';
@@ -119,7 +119,7 @@ export function ConsolidatedAnalysisPanel({
                   </Select>
                 </div>
               </div>
-              <Button
+              <Button permission="analysis:run" disabledReason="Select an eligible SBOM and wait for any current analysis to finish."
                 onClick={startNew}
                 disabled={runDisabled}
                 glow

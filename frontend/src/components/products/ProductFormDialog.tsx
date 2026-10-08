@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { PermissionFields } from '@/components/ui/PermissionGate';
 import { Button } from '@/components/ui/Button';
 import { Dialog, DialogBody, DialogFooter } from '@/components/ui/Dialog';
 import { Input, Textarea } from '@/components/ui/Input';
@@ -109,7 +110,7 @@ export function ProductFormDialog({ open, project, product, onClose }: ProductFo
 
   return (
     <Dialog open={open} onClose={resetAndClose} title={product ? 'Edit Application' : 'Create Application'} maxWidth="lg">
-      <form onSubmit={handleSubmit} noValidate>
+      <PermissionFields permission={product ? 'product:update' : 'product:create'}><form onSubmit={handleSubmit} noValidate>
         <DialogBody className="space-y-4">
           <Input
             label="Name"
@@ -180,7 +181,7 @@ export function ProductFormDialog({ open, project, product, onClose }: ProductFo
             {product ? 'Save Application' : 'Create Application'}
           </Button>
         </DialogFooter>
-      </form>
+      </form></PermissionFields>
     </Dialog>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { usePermissions } from '@/hooks/usePermission';
 import { useAuth } from '@/hooks/useAuth';
 import { TopBar } from '@/components/layout/TopBar';
 import { ApiError } from '@/lib/api';
@@ -76,7 +77,8 @@ function PolicyCard({ tenantId, definition, canUpdate }: { tenantId: number | nu
   return <section className="space-y-3 rounded-lg border border-border-subtle bg-surface p-5"><h2 className="text-lg font-semibold">{definition.title}</h2><p>{definition.description}</p>{query.isPending ? <p>Loading policy…</p> : query.isError ? <><p role="alert">Unable to load policy: {query.error.message}</p><button onClick={() => query.refetch()}>Retry</button></> : <PolicyEditor tenantId={tenantId} definition={definition} state={query.data} canUpdate={canUpdate} />}</section>;
 }
 export function ScopedAdvisorPolicies({ scope }: { scope: 'platform' | 'tenant' }) {
-  const { activeTenantId, activeTenant, hasPermission, isLoading, isTenantContextLoading } = useAuth();
+  const { activeTenantId, activeTenant,  isLoading, isTenantContextLoading } = useAuth();
+  const { can: hasPermission } = usePermissions();
   if (isLoading || isTenantContextLoading) return <p>Verifying configuration access…</p>;
   if ((scope === 'tenant' && !activeTenantId) || !hasPermission(`${scope}:advisor-policy:read`)) return <p role="alert">Policy configuration access is not permitted in this context.</p>;
   const tenantId = scope === 'platform' ? null : Number(activeTenantId);

@@ -10,7 +10,7 @@ import { navigationItems } from '@/lib/navigation';
 const state = vi.hoisted(() => ({ permissions: [] as string[], activeTenantId: null as string | null, overridden: false }));
 const api = vi.hoisted(() => ({ getEffectiveAiConfiguration: vi.fn(), createTenantAiOverride: vi.fn(), resetTenantAiOverride: vi.fn() }));
 vi.mock('@/lib/api', () => api);
-vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ isLoading: false, activeTenantId: state.activeTenantId, activeTenant: state.activeTenantId ? { name: 'Olympus' } : null, hasPermission: (permission: string) => state.permissions.includes(permission) }) }));
+vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: { userId: 1, permissions: [] }, isLoading: false, activeTenantId: state.activeTenantId, activeTenant: state.activeTenantId ? { name: 'Olympus' } : null, hasPermission: (permission: string) => state.permissions.includes(permission) }) }));
 vi.mock('@/components/layout/TopBar', () => ({ TopBar: ({ title, subtitle }: { title: string; subtitle: string }) => <header>{title} · {subtitle}</header> }));
 vi.mock('../AiSettingsPage', () => ({ AiSettingsPage: () => <p>Owned configuration editor</p> }));
 

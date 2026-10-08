@@ -8,7 +8,8 @@ import type { SBOMComponent, SBOMSource } from '@/types';
 
 const back = vi.fn();
 const push = vi.fn();
-vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: { roles: ['VIEWER'], isPlatformAdmin: false }, hasPermission: () => false, isLoading: false }) }));
+const access = vi.hoisted(() => ({ readOnly: false }));
+vi.mock('@/hooks/useAuth', async () => { const { authorizedAuth } = await import('@/test/authorizedAuth'); return { useAuth: () => ({ ...authorizedAuth(), hasPermission: (p: string) => !access.readOnly && authorizedAuth().hasPermission(p) }) }; });
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ back, push, replace: vi.fn() }),
@@ -145,6 +146,7 @@ function listResponse(
 }
 
 beforeEach(() => {
+  access.readOnly = false;
   getSbomDedupeReport.mockResolvedValue({
     duplicates_found: 1,
     duplicates_merged: 1,

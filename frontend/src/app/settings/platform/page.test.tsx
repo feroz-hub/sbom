@@ -27,7 +27,7 @@ vi.mock('@/hooks/useAuth', () => ({
     logout,
   }),
 }));
-vi.mock('@/hooks/usePermission', () => ({ usePermission: () => true }));
+vi.mock('@/hooks/usePermission', async original => ({ ...(await original<typeof import('@/hooks/usePermission')>()), usePermission: () => true }));
 vi.mock('@/lib/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/api')>()),
   ...api,

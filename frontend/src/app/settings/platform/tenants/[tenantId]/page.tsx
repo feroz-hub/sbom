@@ -2,6 +2,7 @@
 
 import { use, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { usePermissions } from '@/hooks/usePermission';
 import { useAuth } from '@/hooks/useAuth';
 import { getPlatformTenant, recoverPlatformTenantAdmin, updatePlatformTenantStatus, type UserSearchResult } from '@/lib/api';
 import { PlatformTenantOverview } from '@/components/admin/PlatformTenantOverview';
@@ -15,7 +16,8 @@ export default function PlatformTenantDetailPage({ params }: { params: Promise<{
   const { tenantId } = use(params);
   const id = Number(tenantId);
   const valid = /^\d+$/.test(tenantId) && Number.isSafeInteger(id) && id > 0;
-  const { hasPermission, isLoading } = useAuth();
+  const {  isLoading } = useAuth();
+  const { can: hasPermission } = usePermissions();
   const canRead = hasPermission('platform:tenant:read');
   const canStatus = hasPermission('platform:tenant:update_status');
   const canRecover = hasPermission('platform:tenant:recover_admin');

@@ -11,12 +11,14 @@ import { Upload, AlertCircle, AlertOctagon, ArrowRight } from 'lucide-react';
 import { Dialog, DialogBody, DialogFooter } from '@/components/ui/Dialog';
 import { Input, Textarea } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
-import { Button } from '@/components/ui/Button';
+import { PermissionFields } from '@/components/ui/PermissionGate';
+import { PermissionButton as Button } from '@/components/ui/PermissionButton';
 import { createProduct, getProducts, getProjects, getSbomTypes, getLogicalSbomChoices, getLogicalSbomVersions, HttpError } from '@/lib/api';
 import { getRepairWorkspaceUrl, repairWorkspaceLabel } from '@/lib/repairWorkspace';
 import { detectSbomFormatFromText, formatFamily, formatSbomFormatLabel, type SbomFormatDetection } from '@/lib/sbomFormat';
 import { useToast } from '@/hooks/useToast';
 import { getApiErrorMessage } from '@/lib/notifications';
+import { usePermissions } from '@/hooks/usePermission';
 import { useUploadSbom } from '@/hooks/useSbomMutations';
 import { invalidateProductSurfaces, invalidateUploadSurfaces } from '@/lib/queryInvalidation';
 import { SbomAutoRepairPanel } from './SbomAutoRepairPanel';
@@ -115,6 +117,9 @@ interface SbomUploadModalProps {
 
 export function SbomUploadModal({ open, onClose, initialProjectId, initialProductId, onSuccess }: SbomUploadModalProps) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const dragDepth = useRef(0);
+  const [draggingFile, setDraggingFile] = useState(false);
+  const { can } = usePermissions();
   const handledUploadResultRef = useRef(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [validationFailure, setValidationFailure] = useState<SbomValidationFailureDetail | null>(null);
@@ -133,6 +138,7 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
   const { showToast } = useToast();
   const uploadMutation = useUploadSbom();
   const uploading = uploadMutation.isPending;
+  const canSelectFile = !uploading && can('sbom:upload') && can('product:assign_sbom');
 
   const { data: projects } = useQuery({
     queryKey: ['projects'],
@@ -233,9 +239,9 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
     return detection;
   };
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const selectFile = async (file: File) => {
+    if (!canSelectFile) return;
+    setUploadError(null);
     setSelectedFile(file);
     const preview = await file.slice(0, FILE_PREVIEW_BYTES).text();
     const previewLines = preview ? preview.split(/\r?\n/).length : 0;
@@ -245,6 +251,30 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
     if (!watch('sbom_name')) {
       setValue('sbom_name', file.name.replace(/\.[^/.]+$/, ''));
     }
+  };
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) void selectFile(file);
+    event.target.value = '';
+  };
+
+  const handleFileDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dragDepth.current = 0;
+    setDraggingFile(false);
+    if (!canSelectFile || !event.dataTransfer.files.length) return;
+    if (event.dataTransfer.files.length !== 1) {
+      setUploadError('Drop one SBOM file at a time.');
+      return;
+    }
+    const file = event.dataTransfer.files[0];
+    if (!/\.(json|xml|spdx)$/i.test(file.name)) {
+      setUploadError('Choose an SBOM file in JSON, XML, or SPDX format.');
+      return;
+    }
+    void selectFile(file);
   };
 
   const handlePaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
@@ -382,6 +412,8 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
     setValidationFailure(null);
     setUploadResult(null);
     setSelectedFile(null);
+    dragDepth.current = 0;
+    setDraggingFile(false);
     setNewProductName('');
     setDocumentPreviewMeta(null);
     setFormatDetection(null);
@@ -418,7 +450,7 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
 
   return (
     <Dialog open={open} onClose={handleClose} title="Upload SBOM" maxWidth="lg">
-      <form onSubmit={handleSubmit(onSubmit)}>
+      <PermissionFields permission={["sbom:upload", "product:assign_sbom"]}><form onSubmit={handleSubmit(onSubmit)}>
         <DialogBody className="space-y-4">
 
           {/* Structured validation failure — surfaces the persisted report
@@ -582,7 +614,7 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
                 onChange={(event) => setNewProductName(event.target.value)}
                 disabled={uploading || createProductMutation.isPending}
               />
-              <Button
+              <Button permission="product:create"
                 type="button"
                 variant="secondary"
                 loading={createProductMutation.isPending}
@@ -626,25 +658,53 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
             <label className="text-sm font-medium text-hcl-navy">
               SBOM Content (JSON / XML) <span className="text-red-500">*</span>
             </label>
-            <div className="flex items-center gap-2 mb-2">
-              <button
+            <div
+              role="region"
+              aria-label="SBOM file drop zone"
+              onDragEnter={event => {
+                event.preventDefault();
+                if (!canSelectFile || !Array.from(event.dataTransfer.types).includes('Files')) return;
+                dragDepth.current += 1;
+                setDraggingFile(true);
+              }}
+              onDragOver={event => {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = canSelectFile ? 'copy' : 'none';
+              }}
+              onDragLeave={event => {
+                event.preventDefault();
+                dragDepth.current = Math.max(0, dragDepth.current - 1);
+                if (!dragDepth.current) setDraggingFile(false);
+              }}
+              onDrop={handleFileDrop}
+              className={`mb-2 rounded-xl border-2 border-dashed px-4 py-5 text-center transition-colors ${draggingFile && canSelectFile ? 'border-hcl-blue bg-hcl-light' : 'border-hcl-border bg-surface'} ${!canSelectFile ? 'text-hcl-muted' : ''}`}
+            >
+              <Upload className="mx-auto mb-2 h-6 w-6 text-hcl-muted" aria-hidden />
+              <p className="text-sm font-medium text-hcl-navy">{draggingFile && canSelectFile ? 'Drop your SBOM file here' : 'Drag and drop your SBOM file here'}</p>
+              <p className="mt-1 text-xs text-hcl-muted">JSON, XML, or SPDX · One file at a time</p>
+              <Button
                 type="button"
+                permission={['sbom:upload', 'product:assign_sbom']}
+                variant="outline"
+                size="sm"
                 onClick={() => fileRef.current?.click()}
                 disabled={uploading}
-                className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-hcl-navy bg-surface border border-hcl-border rounded-lg hover:bg-hcl-light transition-colors disabled:opacity-50"
+                className="mt-3"
               >
-                <Upload className="h-3.5 w-3.5" />
-                Upload from file
-              </button>
-              <span className="text-xs text-hcl-muted">or paste small JSON / XML below</span>
+                {selectedFile ? 'Choose another file' : 'Upload from file'}
+              </Button>
+              {selectedFile && <p role="status" className="mt-2 break-all text-xs text-hcl-navy">Selected: {selectedFile.name}</p>}
               <input
                 ref={fileRef}
                 type="file"
+                aria-label="Choose SBOM file"
                 accept=".json,.xml,.spdx"
+                disabled={!canSelectFile}
                 onChange={handleFileChange}
                 className="hidden"
               />
             </div>
+            <p className="mb-2 text-xs text-hcl-muted">Or paste small JSON / XML below.</p>
             {documentPreviewMeta ? (
               <p className="mb-2 text-xs text-hcl-muted">
                 Preview only. Validation uses full backend-stored file. {documentPreviewMeta.filename} · preview{' '}
@@ -727,7 +787,7 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
             {uploading ? 'Uploading…' : 'Upload SBOM'}
           </Button>
         </DialogFooter>
-      </form>
+      </form></PermissionFields>
     </Dialog>
   );
 }

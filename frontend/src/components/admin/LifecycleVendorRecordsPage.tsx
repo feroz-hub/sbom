@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Download, Pencil, Plus, Trash2, Upload } from 'lucide-react';
-import { Button } from '@/components/ui/Button';
+import { PermissionButton as Button } from '@/components/ui/PermissionButton';
 import { Badge } from '@/components/ui/Badge';
 import { useToast } from '@/hooks/useToast';
 import { getApiErrorMessage } from '@/lib/notifications';
@@ -126,7 +126,7 @@ export function LifecycleVendorRecordsPage() {
             <Download className="h-4 w-4" />
             Export
           </Button>
-          <Button onClick={() => setCreating(true)}>
+          <Button permission={"lifecycle:vendor-record:write"} onClick={() => setCreating(true)}>
             <Plus className="h-4 w-4" />
             Add
           </Button>
@@ -166,11 +166,11 @@ export function LifecycleVendorRecordsPage() {
                   <td className="px-4 py-3 text-xs text-hcl-muted">{formatDate(record.updated_at)}</td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-2">
-                      <Button variant="ghost" size="sm" onClick={() => setEditing(record)}>
+                      <Button permission={"lifecycle:vendor-record:write"} variant="ghost" size="sm" onClick={() => setEditing(record)}>
                         <Pencil className="h-3.5 w-3.5" />
                         Edit
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => deleteMutation.mutate(record.id)}>
+                      <Button permission={"lifecycle:vendor-record:delete"} variant="ghost" size="sm" onClick={() => deleteMutation.mutate(record.id)}>
                         <Trash2 className="h-3.5 w-3.5" />
                         Disable
                       </Button>
@@ -186,7 +186,7 @@ export function LifecycleVendorRecordsPage() {
       <div className="rounded-lg border border-border bg-surface p-4">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-sm font-semibold text-hcl-navy">Import</h2>
-          <Button
+          <Button permission={"lifecycle:vendor-record:write"}
             variant="secondary"
             size="sm"
             disabled={!Array.isArray(parsedImport)}
@@ -294,7 +294,7 @@ function VendorRecordDialog({
         </div>
         <div className="flex justify-end gap-2 border-t border-border px-5 py-4">
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button loading={saving} onClick={() => onSave(form)}>Save</Button>
+          <Button permission={"lifecycle:vendor-record:write"} loading={saving} onClick={() => onSave(form)}>Save</Button>
         </div>
       </div>
     </div>

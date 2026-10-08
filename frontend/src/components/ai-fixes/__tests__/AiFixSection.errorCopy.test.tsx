@@ -235,3 +235,5 @@ describe('AiFixSection — Generate button disable rules', () => {
     });
   });
 });
+
+vi.mock('@/hooks/useAuth', async () => ({ useAuth: (await import('@/test/authorizedAuth')).authorizedAuth }));

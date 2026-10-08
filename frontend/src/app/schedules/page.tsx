@@ -1,5 +1,7 @@
 'use client';
 
+import { PermissionButton } from '@/components/ui/PermissionButton';
+
 import { useCallback, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
@@ -15,7 +17,7 @@ import {
 import { TopBar } from '@/components/layout/TopBar';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
+import { PermissionButton as Button } from '@/components/ui/PermissionButton';
 import { Select } from '@/components/ui/Select';
 import { Alert } from '@/components/ui/Alert';
 import { DeleteConfirmDialog } from '@/components/ui/DeleteConfirmDialog';
@@ -404,7 +406,7 @@ export default function SchedulesPage() {
                           <Eye className="h-4 w-4" />
                           Preview
                         </Button>
-                        <Button
+                        <Button permission={["schedule:write","product:manage_schedule"]}
                           size="sm"
                           variant="secondary"
                           disabled={s.state === 'EXCLUDED'}
@@ -415,7 +417,7 @@ export default function SchedulesPage() {
                           Run now
                         </Button>
                         {s.state === 'EXCLUDED' ? null : s.enabled ? (
-                          <Button
+                          <Button permission={["schedule:write","product:manage_schedule"]}
                             size="sm"
                             variant="secondary"
                             loading={pauseM.isPending && pauseM.variables === s.id}
@@ -425,7 +427,7 @@ export default function SchedulesPage() {
                             Pause
                           </Button>
                         ) : (
-                          <Button
+                          <Button permission={["schedule:write","product:manage_schedule"]}
                             size="sm"
                             variant="secondary"
                             loading={resumeM.isPending && resumeM.variables === s.id}
@@ -435,22 +437,22 @@ export default function SchedulesPage() {
                             Resume
                           </Button>
                         )}
-                        <button
+                        <PermissionButton size="sm" variant="ghost" permission={["schedule:write","product:manage_schedule"]}
                           onClick={() => setEditing(s)}
                           aria-label="Edit"
                           className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-hcl-muted transition-colors hover:bg-hcl-light hover:text-hcl-blue"
                         >
                           <Pencil className="h-4 w-4" />
                           Edit
-                        </button>
-                        <button
+                        </PermissionButton>
+                        <PermissionButton size="sm" variant="ghost" permission={["schedule:write","product:manage_schedule"]}
                           onClick={() => setConfirmDelete(s)}
                           aria-label="Remove"
                           className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-hcl-muted transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
                         >
                           <Trash2 className="h-4 w-4" />
                           Remove
-                        </button>
+                        </PermissionButton>
                       </div>
                     </Td>
                   </tr>

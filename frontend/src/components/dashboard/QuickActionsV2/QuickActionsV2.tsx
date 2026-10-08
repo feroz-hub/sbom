@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils';
 import { dashboardDrilldownUrl } from '@/lib/dashboardScopeUrl';
 import type { DashboardFilterScope } from '@/lib/api';
 import type { PrimaryAction } from '@/types';
-import { useAuth } from '@/hooks/useAuth';
+import { usePermissions } from '@/hooks/usePermission';
 
 interface QuickActionsV2Props {
   /** Server-decided primary action, from `/dashboard/posture`. */
@@ -85,7 +85,7 @@ const linkBase = cn(
  * Mapping locked in `docs/dashboard-redesign.md` §4.
  */
 export function QuickActionsV2({ primaryAction = 'upload', scope }: QuickActionsV2Props) {
-  const { hasPermission } = useAuth();
+  const { can: hasPermission } = usePermissions();
   const allowed = (key: ActionConfig['key']) => hasPermission(key === 'upload' ? 'sbom:upload' : key === 'projects' ? 'project:read' : 'analysis:read');
   const primary = ACTIONS[primaryAction] ?? ACTIONS.upload;
   // Outline actions = the four canonical secondary aids, minus whichever

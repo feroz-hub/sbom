@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { invalidateAiCredentialSurfaces } from '@/lib/queryInvalidation';
+import { usePermissions } from '@/hooks/usePermission';
 import { useAuth } from '@/hooks/useAuth';
 import { TopBar } from '@/components/layout/TopBar';
 import { Button } from '@/components/ui/Button';
@@ -20,7 +21,8 @@ export function ScopedAiConfiguration({ scope }: { scope: ConfigurationScope }) 
 }
 
 function ConfigurationContent({ scope }: { scope: ConfigurationScope }) {
-  const { hasPermission, activeTenant, activeTenantId, isLoading } = useAuth();
+  const {  activeTenant, activeTenantId, isLoading } = useAuth();
+  const { can: hasPermission } = usePermissions();
   const key = scope === 'platform' ? 'platform' : `tenant:${activeTenantId}`;
   const allowed = hasPermission(`${scope}:ai:read`) && (scope === 'platform' || Boolean(activeTenantId));
   const canUpdate = hasPermission(`${scope}:ai:update`);

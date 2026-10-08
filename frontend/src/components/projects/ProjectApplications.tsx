@@ -4,7 +4,9 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
-import { Button } from '@/components/ui/Button';
+import { usePermission } from '@/hooks/usePermission';
+import { PermissionGate } from '@/components/ui/PermissionGate';
+import { PermissionButton as Button } from '@/components/ui/PermissionButton';
 import { Badge } from '@/components/ui/Badge';
 import { ProductFormDialog } from '@/components/products/ProductFormDialog';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
@@ -24,10 +26,13 @@ import { InventoryActionMenu } from './InventoryActionMenu';
 import { usePagination } from '@/hooks/usePagination';
 import { Pagination } from '@/components/ui/Pagination';
 function ProductScheduleStatus({ productId }: { productId: number }) {
+  const canRead = usePermission("schedule:read");
   const query = useQuery({
     queryKey: ['schedule', 'PRODUCT', productId],
+    enabled: canRead,
     queryFn: ({ signal }) => getEffectiveProductSchedule(productId, signal),
   });
+  if (!canRead) return <span className="text-xs text-hcl-muted">Schedule access restricted</span>;
   if (query.isLoading) return <span className="text-xs text-hcl-muted">Loading…</span>;
   if (query.error || !query.data?.schedule) return <span className="text-xs text-hcl-muted">No schedule</span>;
   const state = query.data.state;
@@ -82,11 +87,11 @@ export function ProjectApplications({ project }: { project: Project }) {
 
   function applicationActions(product: Product) {
     return <InventoryActionMenu label={`Actions for application ${product.name}`} actions={[
-      { label: 'View application', href: `/products/${product.id}` },
-      { label: 'Edit application', onClick: () => setEditingProduct(product) },
-      { label: 'Upload SBOM', onClick: () => setUploadProduct(product) },
-      { label: 'Schedule', href: `/products/${product.id}` },
-      { label: 'Delete application', onClick: () => setDeleteProductTarget(product), destructive: true, disabled: deleteMutation.isPending },
+      { label: 'View application', permission: 'product:read', href: `/products/${product.id}` },
+      { label: 'Edit application', permission: 'product:update', onClick: () => setEditingProduct(product) },
+      { label: 'Upload SBOM', permission: ['sbom:upload', 'product:assign_sbom'], onClick: () => setUploadProduct(product) },
+      { label: 'Schedule', permission: 'schedule:read', href: `/products/${product.id}` },
+      { label: 'Delete application', permission: 'product:delete', onClick: () => setDeleteProductTarget(product), destructive: true, disabled: deleteMutation.isPending },
     ]} />;
   }
   function status(product: Product) { const value = product.status || 'active'; return <Badge variant={value === 'active' ? 'success' : 'gray'}>{value.toUpperCase()}</Badge>; }
@@ -96,11 +101,11 @@ export function ProjectApplications({ project }: { project: Project }) {
     <Card>
       <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0"><h2 className="text-base font-semibold text-hcl-navy">Applications</h2><p className="mt-1 truncate text-sm font-medium text-foreground" title={project.project_name}>{project.project_name}</p><p className="mt-1 text-xs text-hcl-muted" aria-live="polite">{isLoading ? 'Loading applications…' : `${data?.total ?? 0} ${(data?.total ?? 0) === 1 ? 'application' : 'applications'}`}</p></div>
-        <Button size="sm" onClick={() => setFormOpen(true)}><Plus className="h-4 w-4" />Create Application</Button>
+        <Button permission={"product:create"} size="sm" onClick={() => setFormOpen(true)}><Plus className="h-4 w-4" />Create Application</Button>
       </CardHeader>
       <CardContent>
         {!isLoading && !error && products.length > 0 && <div className="mb-4 flex flex-col gap-3 sm:flex-row"><Input aria-label="Search applications" placeholder="Search applications…" value={search} onChange={event => changeSearch(event.target.value)} className="sm:max-w-sm" /><Select aria-label="Application status" value={statusFilter} onChange={event => changeStatus(event.target.value)} className="sm:max-w-[180px]"><option value="all">All statuses</option>{statuses.map(value => <option key={value} value={value}>{value}</option>)}</Select></div>}
-        {error ? <Alert variant="error" title="Could not load applications">{getApiErrorMessage(error, 'Applications could not be loaded. Please try again.')}</Alert> : isLoading ? <p role="status" className="py-6 text-sm text-hcl-muted">Loading applications…</p> : products.length === 0 ? <div className="py-8 text-center"><h3 className="font-semibold text-hcl-navy">No applications in this project</h3><p className="mt-2 text-sm text-hcl-muted">Create an application to organize the project’s SBOMs.</p><Button className="mt-4" size="sm" variant="secondary" onClick={() => setFormOpen(true)}>Create Application</Button></div> : <>
+        {error ? <Alert variant="error" title="Could not load applications">{getApiErrorMessage(error, 'Applications could not be loaded. Please try again.')}</Alert> : isLoading ? <p role="status" className="py-6 text-sm text-hcl-muted">Loading applications…</p> : products.length === 0 ? <div className="py-8 text-center"><h3 className="font-semibold text-hcl-navy">No applications in this project</h3><p className="mt-2 text-sm text-hcl-muted">Applications organize this project’s SBOMs.</p><PermissionGate permission="product:create"><Button permission={"product:create"} className="mt-4" size="sm" variant="secondary" onClick={() => setFormOpen(true)}>Create Application</Button></PermissionGate></div> : <>
           <div className="hidden md:block"><Table ariaLabel={`${project.project_name} applications`}><TableHead><tr><Th>Application</Th><Th>SBOMs</Th><Th>Latest</Th><Th>Current</Th><Th>Schedule</Th><Th>Status</Th><Th className="text-right">Actions</Th></tr></TableHead><TableBody>{pagination.pageItems.length === 0 ? <EmptyRow cols={7} message="No matching applications. Adjust or clear your filters." /> : pagination.pageItems.map(product => <tr key={product.id}><Td className="min-w-[200px] max-w-sm"><Link href={`/products/${product.id}`} className="font-semibold text-hcl-navy hover:text-hcl-blue hover:underline">{product.name}</Link><p title={product.description || undefined} className="mt-1 line-clamp-2 text-xs leading-relaxed text-hcl-muted">{product.description || 'No description provided.'}</p></Td><Td>{product.sbom_count ?? 0}</Td><Td>{latest(product)}</Td><Td>{current(product)}</Td><Td><ProductScheduleStatus productId={product.id} /></Td><Td>{status(product)}</Td><Td><div className="flex justify-end">{applicationActions(product)}</div></Td></tr>)}</TableBody></Table></div>
           <div className="space-y-3 md:hidden">{pagination.pageItems.length === 0 && <p className="text-sm text-hcl-muted">No matching applications. Adjust or clear your filters.</p>}{pagination.pageItems.map(product => <article key={product.id} aria-label={product.name} className="min-w-0 rounded-lg border border-border p-3"><div className="flex items-start justify-between gap-2"><Link href={`/products/${product.id}`} className="min-w-0 break-words text-sm font-semibold text-hcl-navy">{product.name}</Link>{status(product)}</div><p className="mt-2 break-words text-xs text-hcl-muted">{product.description || 'No description provided.'}</p><dl className="mt-3 grid grid-cols-2 gap-3 text-xs"><div><dt className="text-hcl-muted">SBOMs</dt><dd>{product.sbom_count ?? 0}</dd></div><div><dt className="text-hcl-muted">Current</dt><dd>{current(product)}</dd></div><div><dt className="text-hcl-muted">Latest</dt><dd>{latest(product)}</dd></div><div><dt className="text-hcl-muted">Schedule</dt><dd><ProductScheduleStatus productId={product.id} /></dd></div></dl><div className="mt-3 flex items-center justify-between"><Link href={`/products/${product.id}`} className="text-sm font-medium text-hcl-blue">View application</Link>{applicationActions(product)}</div></article>)}</div>
           {(search || statusFilter !== 'all') && <Button size="sm" variant="ghost" className="mt-3" onClick={() => { changeSearch(''); changeStatus('all'); }}>Clear application filters</Button>}

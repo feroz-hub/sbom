@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useAuth } from '@/hooks/useAuth';
+import { usePermissions } from '@/hooks/usePermission';
 import { NativePasswordSettings } from '@/components/auth/NativePasswordSettings';
 import { ChevronRight, Sparkles } from 'lucide-react';
 import { TopBar } from '@/components/layout/TopBar';
@@ -14,7 +14,7 @@ import { TopBar } from '@/components/layout/TopBar';
  * superseded by the editable ``AiSettingsPage`` at ``/settings/ai``.
  */
 export default function SettingsPage() {
-  const { hasPermission } = useAuth();
+  const { can: hasPermission } = usePermissions();
   const administration = [
     { title: 'Platform Component Advisor Policies', href: '/platform/configuration/advisor-policies', visible: hasPermission('platform:advisor-policy:read') },
     { title: 'Component Advisor Policies', href: '/settings/advisor-policies', visible: hasPermission('tenant:advisor-policy:read') },

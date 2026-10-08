@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import { Download } from 'lucide-react';
-import { Button } from '@/components/ui/Button';
+import { PermissionButton as Button } from '@/components/ui/PermissionButton';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Pagination } from '@/components/ui/Pagination';
 import { PageSpinner } from '@/components/ui/Spinner';
@@ -70,7 +70,7 @@ export function SbomRawViewer({ sbomId, stats, workspaceAction, workspaceUnavail
           </p>
         </div>
         <div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={() => void handleDownload()}>
+          <Button permission="sbom:read" size="sm" variant="outline" onClick={() => void handleDownload()}>
             <Download className="h-3.5 w-3.5" /> Download original
           </Button>
           {workspaceAction}

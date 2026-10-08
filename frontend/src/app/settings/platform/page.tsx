@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { FormEvent, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { usePermissions } from '@/hooks/usePermission';
 import { useAuth } from '@/hooks/useAuth';
 import {
   type UserSearchResult,
@@ -18,7 +19,8 @@ import { VerificationBadge, UserStatusBadge, RoleBadge } from '@/components/admi
 import { TopBar } from '@/components/layout/TopBar';
 
 export default function PlatformAdministratorsPage() {
-  const { hasPermission, isLoading: authLoading } = useAuth();
+  const {  isLoading: authLoading } = useAuth();
+  const { can: hasPermission } = usePermissions();
   const canRead = hasPermission('platform:administrator:read');
   const canGrant = hasPermission('platform:administrator:grant');
   const canRevoke = hasPermission('platform:administrator:revoke');

@@ -81,3 +81,5 @@ describe('ProjectModal notifications', () => {
     queryClient.clear();
   });
 });
+
+vi.mock('@/hooks/useAuth', async () => ({ useAuth: (await import('@/test/authorizedAuth')).authorizedAuth }));

@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getComponentVulnerabilities, getVexOverrideHistory } from '@/lib/api';
 import type { SBOMComponent, VexStatement } from '@/types';
 import { Dialog, DialogBody } from '@/components/ui/Dialog';
-import { Button } from '@/components/ui/Button';
+import { PermissionButton as Button } from '@/components/ui/PermissionButton';
 
 export function ComponentVexManager({ sbomId, component, canEdit, onClose, onDecision }: {
   sbomId: number; component: SBOMComponent; canEdit: boolean; onClose: () => void;
@@ -31,7 +31,7 @@ export function ComponentVexManager({ sbomId, component, canEdit, onClose, onDec
         <div className="mb-4 flex items-center gap-3">
           <input aria-label="Search vulnerabilities" placeholder="Search CVE, GHSA or vendor identifier" value={search}
             onChange={event => setSearch(event.target.value)} className="w-full rounded border p-2" />
-          {canEdit && <Button onClick={() => onDecision('', undefined, true)}>Add Vulnerability Manually</Button>}
+          {canEdit && <Button permission={"vex:write"} onClick={() => onDecision('', undefined, true)}>Add Vulnerability Manually</Button>}
         </div>
         {list.isPending ? <p>Loading component vulnerabilities…</p> : list.isError ?
           <p role="alert">Could not load vulnerabilities. <button onClick={() => list.refetch()}>Retry</button></p> :
@@ -45,7 +45,7 @@ export function ComponentVexManager({ sbomId, component, canEdit, onClose, onDec
               <td className="p-2">{row.current_decision?.status ?? 'No decision'}</td>
               <td className="p-2">{row.current_decision?.source_name ?? '—'}</td>
               <td className="p-2">{row.current_decision?.created_at ?? '—'}</td>
-              <td className="p-2">{canEdit && <Button size="sm" onClick={() => onDecision(row.vulnerability_id, row.current_decision ?? undefined)}>
+              <td className="p-2">{canEdit && <Button permission={"vex:write"} size="sm" onClick={() => onDecision(row.vulnerability_id, row.current_decision ?? undefined)}>
                 {!row.current_decision ? 'Add Decision' : row.current_decision.source_name === 'Manual VEX Override' ? 'Edit' : 'Override'}
               </Button>} <Button size="sm" variant="ghost" onClick={() => setHistoryPair(row.vulnerability_id)}>History</Button>{' '}
                 {/* Cross-link to the portfolio queue, filtered to this

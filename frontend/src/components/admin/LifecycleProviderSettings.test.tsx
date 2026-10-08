@@ -267,3 +267,5 @@ describe('LifecycleVendorRecordsPage', () => {
     expect(await screen.findByText('Add Vendor Record')).toBeInTheDocument();
   });
 });
+
+vi.mock('@/hooks/useAuth', async () => ({ useAuth: (await import('@/test/authorizedAuth')).authorizedAuth }));

@@ -15,7 +15,7 @@ const mockAuth = vi.hoisted(() => ({
   login: vi.fn(),
   retryBootstrap: vi.fn(),
   hasPermission: () => true,
-  user: null,
+  user: null as { permissions: string[]; roles: string[]; displayName: string; email: string } | null,
   tenants: [],
 }));
 
@@ -111,6 +111,7 @@ describe('AppShell route isolation & bootstrap loader UX', () => {
   });
 
   it('renders protected app shell with sidebar when bootstrap state is ready', () => {
+    mockAuth.user = { permissions: ['dashboard:read'], roles: [], displayName: 'Test user', email: 'user@test.local' };
     mockPathname.current = '/';
     mockAuth.bootstrapState = 'ready';
 

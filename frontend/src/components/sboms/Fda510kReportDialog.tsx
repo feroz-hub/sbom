@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { sbomEligibility } from '@/lib/sbomEligibility';
 import { Alert } from '@/components/ui/Alert';
-import { Button } from '@/components/ui/Button';
+import { PermissionButton as Button } from '@/components/ui/PermissionButton';
 import { Dialog, DialogBody, DialogFooter } from '@/components/ui/Dialog';
 import { Input } from '@/components/ui/Input';
 import { exportFda510kSbomReport, HttpError } from '@/lib/api';
@@ -133,7 +133,7 @@ export function Fda510kReportDialog({ open, onClose, sboms }: Fda510kReportDialo
           <Button variant="secondary" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} loading={submitting} disabled={!canExport}>
+          <Button permission={"sbom:export"} onClick={handleSubmit} loading={submitting} disabled={!canExport}>
             Export workbook
           </Button>
         </DialogFooter>

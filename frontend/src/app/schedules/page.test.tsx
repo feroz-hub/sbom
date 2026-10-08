@@ -86,3 +86,5 @@ it('renders Product schedules by name and sends the PRODUCT scope filter', async
     ),
   );
 });
+
+vi.mock('@/hooks/useAuth', async () => ({ useAuth: (await import('@/test/authorizedAuth')).authorizedAuth }));

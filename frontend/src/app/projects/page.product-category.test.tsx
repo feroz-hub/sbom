@@ -194,3 +194,5 @@ describe('ProductFormDialog category behavior', () => {
     expect(screen.queryByRole('textbox', { name: 'Specify Category' })).not.toBeInTheDocument();
   });
 });
+
+vi.mock('@/hooks/useAuth', async () => ({ useAuth: (await import('@/test/authorizedAuth')).authorizedAuth }));

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { FormEvent, useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { usePermissions } from '@/hooks/usePermission';
 import { useAuth } from '@/hooks/useAuth';
 import {
   type CreateTenantRequest,
@@ -88,7 +89,8 @@ function formatDate(value?: string): string {
 
 export default function PlatformTenantsPage() {
   const router = useRouter();
-  const { hasPermission, isLoading: authLoading } = useAuth();
+  const {  isLoading: authLoading } = useAuth();
+  const { can: hasPermission } = usePermissions();
   const canManage = hasPermission('platform:tenant:create');
   const canRead = hasPermission('platform:tenant:read');
   const canStatus = hasPermission('platform:tenant:update_status');

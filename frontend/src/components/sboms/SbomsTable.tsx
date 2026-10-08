@@ -1,5 +1,7 @@
 'use client';
 
+import { PermissionButton } from '@/components/ui/PermissionButton';
+
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Eye, FileSpreadsheet, Wrench, Trash2 } from 'lucide-react';
@@ -7,7 +9,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Alert } from '@/components/ui/Alert';
 import { Select } from '@/components/ui/Select';
-import { Button } from '@/components/ui/Button';
+import { PermissionButton as Button } from '@/components/ui/PermissionButton';
 import { Table, TableHead, TableBody, Th, SortableTh, Td, EmptyRow } from '@/components/ui/Table';
 import { TableFilterBar, TableSearchInput } from '@/components/ui/TableFilterBar';
 import { DeleteConfirmDialog } from '@/components/ui/DeleteConfirmDialog';
@@ -381,7 +383,7 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
                 ))}
               </Select>
             </div>
-            <Button
+            <Button permission={"sbom:export"}
               variant="secondary"
               size="sm"
               onClick={() => setFdaDialogOpen(true)}
@@ -537,14 +539,14 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
                     <SbomLifecycleControls sbom={sbom} />
                     <div className="mt-2 flex items-center justify-center gap-2">
                       {canOpenRepairWorkspace(sbom) && getRepairWorkspaceUrl(sbom) ? (
-                        <button
+                        <PermissionButton size="sm" variant="ghost" permission={"sbom:repair:read"}
                           onClick={() => router.push(getRepairWorkspaceUrl(sbom)!)}
                           className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-hcl-muted transition-colors hover:bg-row-hover hover:text-hcl-blue"
                           aria-label="Open Repair Workspace"
                         >
                           <Wrench className="h-4 w-4" />
                           Workspace
-                        </button>
+                        </PermissionButton>
                       ) : null}
                       <button
                         onClick={() => router.push(`/sboms/${sbom.id}`)}
@@ -554,14 +556,14 @@ export function SbomsTable({ sboms, isLoading, error }: SbomsTableProps) {
                         <Eye className="h-4 w-4" />
                         View SBOM
                       </button>
-                      <button
+                      <PermissionButton size="sm" variant="ghost" permission={"sbom:delete"}
                         onClick={() => setDeleteTarget(sbom)}
                         className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-hcl-muted transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-300"
                         aria-label="Delete SBOM"
                       >
                         <Trash2 className="h-4 w-4" />
                         Delete SBOM
-                      </button>
+                      </PermissionButton>
                     </div>
                   </Td>
                 </tr>

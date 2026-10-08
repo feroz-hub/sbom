@@ -5,6 +5,7 @@ import { useToast } from '@/hooks/useToast';
 import styles from './NativeUsers.module.css';
 import Link from 'next/link';
 import { FormEvent, useState } from 'react';
+import { usePermissions } from '@/hooks/usePermission';
 import { useAuth } from '@/hooks/useAuth';
 import { getActiveTenantId } from '@/lib/auth';
 import { type TenantSummary } from '@/lib/api';
@@ -12,7 +13,8 @@ import { TenantSearchSelect } from './TenantSearchSelect';
 
 export default function NativeUserInviteForm({ onCreated, onCancel, onBusyChange }: { onCreated?: () => void; onCancel?: () => void; onBusyChange?: (busy: boolean) => void }) {
   const { showToast } = useToast();
-  const { hasPermission, activeTenantId, activeTenant } = useAuth();
+  const {  activeTenantId, activeTenant } = useAuth();
+  const { can: hasPermission } = usePermissions();
   const platform = hasPermission('platform:user:manage_status');
   const allowed = platform || hasPermission('tenant:user:invite');
   const [message, setMessage] = useState('');

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { RefreshCw, Settings, TestTube2 } from 'lucide-react';
-import { Button } from '@/components/ui/Button';
+import { PermissionButton as Button } from '@/components/ui/PermissionButton';
 import { Badge } from '@/components/ui/Badge';
 import { ProviderHealthBadge } from './ProviderHealthBadge';
 import { LifecycleProviderForm } from './LifecycleProviderForm';
@@ -162,7 +162,7 @@ export function LifecycleProviderSettings({ scope = 'tenant', scopeKey = 'tenant
                         size="sm"
                         disabled={!canTest}
                         loading={testMutation.isPending && testMutation.variables === provider.provider_key}
-                        onClick={() => testMutation.mutate(provider.provider_key)}
+                        permission={`${scope}:lifecycle-provider:test`} onClick={() => testMutation.mutate(provider.provider_key)}
                       >
                         <TestTube2 className="h-3.5 w-3.5" />
                         Test
@@ -172,7 +172,7 @@ export function LifecycleProviderSettings({ scope = 'tenant', scopeKey = 'tenant
                         size="sm"
                         disabled={!canSync}
                         loading={syncMutation.isPending && syncMutation.variables === provider.provider_key}
-                        onClick={() => syncMutation.mutate(provider.provider_key)}
+                        permission={`${scope}:lifecycle-provider:sync`} onClick={() => syncMutation.mutate(provider.provider_key)}
                       >
                         <RefreshCw className="h-3.5 w-3.5" />
                         Sync

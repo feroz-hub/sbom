@@ -3,6 +3,7 @@
 import { useState, FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
+import { usePermissions } from '@/hooks/usePermission';
 import { useAuth } from '@/hooks/useAuth';
 import NativeUserInviteForm from './NativeUserInviteForm';
 import { Dialog, DialogBody } from '@/components/ui/Dialog';
@@ -30,7 +31,8 @@ import { DisableMembershipDialog, EnableMembershipDialog, RemoveMemberDialog } f
 type MemberItem = Awaited<ReturnType<typeof getTenantMembers>>[number];
 
 export default function TenantUsersAccess() {
-  const { user, tenants, activeTenant, activeTenantId, isTenantContextLoading, isLoading: authLoading, hasPermission, refreshSession } = useAuth();
+  const { user, tenants, activeTenant, activeTenantId, isTenantContextLoading, isLoading: authLoading,  refreshSession } = useAuth();
+  const { can: hasPermission } = usePermissions();
   const router = useRouter();
   const currentTenantId = activeTenantId ? Number(activeTenantId) : (user?.tenantId ? Number(user.tenantId) : null);
   const tenantsList = Array.isArray(tenants) ? tenants : [];

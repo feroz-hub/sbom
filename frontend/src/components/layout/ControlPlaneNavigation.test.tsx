@@ -6,7 +6,7 @@ import { CommandPalette } from './CommandPalette';
 import { KeyboardCheatsheet } from './KeyboardCheatsheet';
 const state = vi.hoisted(() => ({ permissions: new Set<string>(), push: vi.fn(), sboms: vi.fn(), runs: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: state.push }) }));
-vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ activeTenantId: null, hasPermission: (p: string) => state.permissions.has(p) }) }));
+vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: { userId: 1, permissions: [] }, activeTenantId: null, hasPermission: (p: string) => state.permissions.has(p) }) }));
 vi.mock('@/components/theme/ThemeProvider', () => ({ useTheme: () => ({ resolvedTheme: 'light', setTheme: vi.fn() }) }));
 vi.mock('@/lib/api', () => ({ getRecentSboms: () => state.sboms(), getRuns: () => state.runs() }));
 beforeEach(() => {

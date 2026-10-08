@@ -5,7 +5,8 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import { TopBar } from '@/components/layout/TopBar';
-import { Button } from '@/components/ui/Button';
+import { PermissionGate } from '@/components/ui/PermissionGate';
+import { PermissionButton as Button } from '@/components/ui/PermissionButton';
 import { ProjectsTable } from '@/components/projects/ProjectsTable';
 import { ProjectModal } from '@/components/projects/ProjectModal';
 import { ProjectApplications } from '@/components/projects/ProjectApplications';
@@ -48,11 +49,11 @@ function ProjectsContent() {
   }
 
   return <div className="flex min-w-0 flex-1 flex-col">
-    <TopBar title="Projects" action={<Button onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" />New Project</Button>} />
+    <TopBar title="Projects" action={<Button permission={"project:create"} onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" />New Project</Button>} />
     <div className="min-w-0 space-y-5 p-3 md:p-6">
       <p className="text-sm text-hcl-muted">Select a project to manage its applications and SBOMs.</p>
       <ProjectsTable projects={visibleProjects} isLoading={pageLoading} error={pageError} initialProjectId={requestedId} selectedId={selected?.id} onSelect={selectProject} onVisibleIdsChange={onVisibleIdsChange} onCreate={() => setShowCreate(true)} />
-      {!pageLoading && !pageError && selected ? <section aria-label="Application inventory"><ProjectApplications key={selected.id} project={selected} /></section> : !pageLoading && !pageError && visibleProjects?.length ? <p className="text-sm text-hcl-muted">Select a matching project to view its applications.</p> : null}
+      {!pageLoading && !pageError && selected ? <section aria-label="Application inventory"><PermissionGate permission="product:read" fallback={<p className="text-sm text-hcl-muted">You don’t have permission to view applications.</p>}><ProjectApplications key={selected.id} project={selected} /></PermissionGate></section> : !pageLoading && !pageError && visibleProjects?.length ? <p className="text-sm text-hcl-muted">Select a matching project to view its applications.</p> : null}
     </div>
     <ProjectModal open={showCreate} onClose={() => setShowCreate(false)} />
   </div>;

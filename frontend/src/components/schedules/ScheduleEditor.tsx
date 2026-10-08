@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Dialog, DialogBody, DialogFooter } from '@/components/ui/Dialog';
+import { PermissionFields } from '@/components/ui/PermissionGate';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
 import { Input } from '@/components/ui/Input';
@@ -146,7 +147,7 @@ export function ScheduleEditor({
       title={existing ? 'Edit schedule' : 'Create schedule'}
       maxWidth="lg"
     >
-      <form onSubmit={handleSubmit}>
+      <PermissionFields permission={["schedule:write", "product:manage_schedule"]}><form onSubmit={handleSubmit}>
         <DialogBody className="space-y-5">
           {/* Cadence preset chips */}
           <div>
@@ -322,7 +323,7 @@ export function ScheduleEditor({
             {existing ? 'Save changes' : 'Create schedule'}
           </Button>
         </DialogFooter>
-      </form>
+      </form></PermissionFields>
     </Dialog>
   );
 }

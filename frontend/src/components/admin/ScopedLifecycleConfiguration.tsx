@@ -1,12 +1,14 @@
 'use client';
 
+import { usePermissions } from '@/hooks/usePermission';
 import { useAuth } from '@/hooks/useAuth';
 import { TopBar } from '@/components/layout/TopBar';
 import { LifecycleProviderSettings } from './LifecycleProviderSettings';
 import type { ConfigurationScope } from '@/lib/api';
 
 export function ScopedLifecycleConfiguration({ scope }: { scope: ConfigurationScope }) {
-  const { activeTenantId, activeTenant, hasPermission, isLoading } = useAuth();
+  const { activeTenantId, activeTenant, isLoading } = useAuth();
+  const { can: hasPermission } = usePermissions();
   const key = scope === 'platform' ? 'platform' : `tenant:${activeTenantId}`;
   if (isLoading) return <p>Verifying configuration access…</p>;
   if (!hasPermission(`${scope}:lifecycle-provider:read`) || (scope === 'tenant' && !activeTenantId)) return <p role="alert">Configuration access is not permitted in this context.</p>;
