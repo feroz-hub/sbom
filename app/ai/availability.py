@@ -5,8 +5,10 @@ for that exact selected owner; do not probe providers or return credential IDs.
 """
 
 from sqlalchemy import select
+from starlette.requests import Request
 
 from ..core.context import get_bound_context
+from ..core.security import permission_for_request
 from ..db import SessionLocal
 from ..models import AiProviderCredential, AiSettings
 from ..services.configuration_scope import current_configuration_tenant, scope_clause
@@ -35,6 +37,18 @@ def effective_ai_status() -> dict:
         "can_view_settings": bool(ui_enabled and context and context.has_permission(f"{permission_scope}:ai:read")),
         "can_configure": bool(ui_enabled and context and context.has_permission(f"{permission_scope}:ai:update")),
         "settings_scope": permission_scope,
+        # Mirror the existing generation-route RBAC gate; this is permission
+        # metadata, separate from provider health, budgets and SBOM eligibility.
+        "can_invoke_ai": bool(
+            context
+            and tenant_id is not None
+            and context.has_permission(
+                permission_for_request(
+                    Request({"type": "http", "path": "/api/v1/findings/0/ai-fix", "method": "POST", "headers": []})
+                )
+            )
+        ),
+        "configuration_issue": None,
     }
     # The loader enforces active-tenant use and its existing all-or-nothing
     # tenant override policy. Resolution failures never imply missing setup.
@@ -86,6 +100,8 @@ def effective_ai_status() -> dict:
                     status["state"] = "VERIFICATION_PENDING"
             else:
                 status["state"] = "CONFIGURATION_REQUIRED" if status["feature_enabled"] else "DISABLED"
+        if status["state"] == "CONFIGURATION_REQUIRED" and override:
+            status["configuration_issue"] = "TENANT_OVERRIDE_WITHOUT_EFFECTIVE_PROVIDER"
     except Exception:
         # Never return resolver/decryption exception text to the dashboard.
         status["state"] = "STATUS_UNAVAILABLE"

@@ -691,6 +691,8 @@ export interface EffectiveAiStatus {
   can_view_settings: boolean;
   can_configure: boolean;
   settings_scope: 'tenant' | 'platform';
+  can_invoke_ai?: boolean;
+  configuration_issue?: 'TENANT_OVERRIDE_WITHOUT_EFFECTIVE_PROVIDER' | null;
 }
 
 export interface AnalysisConfig {

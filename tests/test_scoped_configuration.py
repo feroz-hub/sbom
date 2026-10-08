@@ -43,14 +43,20 @@ def configured_actors(app, client, monkeypatch):
         olympus = seed_user(db)
         astra = seed_user(db)
         viewer = seed_user(db)
+        analyst = seed_user(db)
+        developer = seed_user(db)
         seed_membership(db, olympus, tenant_id=1, role="TENANT_ADMIN")
         seed_membership(db, astra, tenant_id=2, role="TENANT_ADMIN")
         seed_membership(db, viewer, tenant_id=1, role="VIEWER")
+        seed_membership(db, analyst, tenant_id=1, role="SECURITY_ANALYST")
+        seed_membership(db, developer, tenant_id=1, role="DEVELOPER")
         identities = {
             "platform": identity_claims(platform),
             "olympus": identity_claims(olympus),
             "astra": identity_claims(astra),
             "viewer": identity_claims(viewer),
+            "analyst": identity_claims(analyst),
+            "developer": identity_claims(developer),
         }
         db.commit()
 
@@ -516,6 +522,8 @@ def test_dashboard_effective_inheritance_override_reset_and_isolation(configured
         "can_view_settings",
         "can_configure",
         "settings_scope",
+        "can_invoke_ai",
+        "configuration_issue",
     }
 
 
@@ -616,3 +624,72 @@ def test_dashboard_gemini_openai_and_env_disabled_without_probes(configured_acto
     assert _dashboard_ai(call, "olympus")["provider"] == "openai"
     assert _dashboard_ai(call, "olympus")["model"] == "platform-openai-model"
     assert _dashboard_ai(call, "astra")["model"] == "gpt-4o-mini"
+
+
+@pytest.mark.parametrize("role_actor", ["analyst", "developer", "viewer"])
+def test_read_only_roles_share_effective_status_without_configuration_authority(configured_actors, role_actor):
+    call = configured_actors
+    pid = add_provider(
+        call, provider_name="gemini", model="gemini-2.5-flash", api_key="platform-fixture-secret", is_local=False
+    )
+    _set_verification(pid, True)
+    admin = _dashboard_ai(call, "olympus")
+    status = _dashboard_ai(call, role_actor)
+    for key in (
+        "configured",
+        "source",
+        "provider",
+        "verification_status",
+        "feature_enabled",
+        "available_for_tenant",
+        "state",
+    ):
+        assert status[key] == admin[key]
+    assert status["state"] == "AVAILABLE" and status["source"] == "PLATFORM"
+    assert not status["can_configure"] and not status["can_view_settings"]
+    assert "platform-fixture-secret" not in str(status)
+    assert call(role_actor, "GET", "/api/v1/ai/credentials").status_code == 403
+    assert call(role_actor, "GET", "/api/v1/ai/effective-config").status_code == 403
+    assert call(role_actor, "POST", "/api/v1/ai/credentials", json={"provider_name": "openai"}).status_code == 403
+    assert call(role_actor, "PUT", f"/api/v1/ai/credentials/{pid}", json={"enabled": False}).status_code == 403
+    assert call(role_actor, "DELETE", f"/api/v1/ai/credentials/{pid}").status_code == 403
+    assert call(role_actor, "POST", "/api/v1/ai/override").status_code == 403
+    assert call(role_actor, "DELETE", "/api/v1/ai/override").status_code == 403
+    assert call(role_actor, "GET", "/api/platform/configuration/ai/credentials").status_code == 403
+    assert call(role_actor, "GET", "/api/analysis/config", headers={"X-Tenant-ID": "2"}).status_code == 403
+    assert call(role_actor, "POST", "/api/v1/findings/0/ai-fix", json={}).status_code == 403
+    assert not status["can_invoke_ai"]
+
+
+def test_settings_only_override_explains_actual_aegismed_state_without_bypassing_policy(configured_actors):
+    call = configured_actors
+    pid = add_provider(
+        call, provider_name="gemini", model="gemini-2.5-flash", api_key="platform-fixture-secret", is_local=False
+    )
+    _set_verification(pid, True)
+    assert call("olympus", "PUT", "/api/v1/ai/settings", json={"feature_enabled": True}).status_code == 200
+    admin = _dashboard_ai(call, "olympus")
+    analyst = _dashboard_ai(call, "analyst")
+    assert admin["state"] == analyst["state"] == "CONFIGURATION_REQUIRED"
+    assert admin["source"] == analyst["source"] == "TENANT"
+    assert analyst["configuration_issue"] == "TENANT_OVERRIDE_WITHOUT_EFFECTIVE_PROVIDER"
+    assert not analyst["can_configure"]
+    # Only an explicit, authorized reset restores provider inheritance.
+    assert call("olympus", "DELETE", "/api/v1/ai/override").status_code == 204
+    assert _dashboard_ai(call, "analyst")["state"] == "AVAILABLE"
+    assert _dashboard_ai(call, "analyst")["source"] == "PLATFORM"
+
+
+def test_analyst_override_pending_transient_and_disabled_are_not_missing_configuration(configured_actors):
+    call = configured_actors
+    aid = add_provider(
+        call, "olympus", provider_name="openai", model="gpt-4o-mini", api_key="tenant-fixture-secret", is_local=False
+    )
+    status = _dashboard_ai(call, "analyst")
+    assert status["source"] == "TENANT" and status["state"] == "VERIFICATION_PENDING"
+    _set_verification(aid, False, "provider_unavailable (HTTP 503)")
+    assert _dashboard_ai(call, "analyst")["state"] == "TEMPORARILY_UNAVAILABLE"
+    _set_verification(aid, True)
+    assert _dashboard_ai(call, "analyst")["state"] == "AVAILABLE"
+    assert call("olympus", "PUT", "/api/v1/ai/settings", json={"feature_enabled": False}).status_code == 200
+    assert _dashboard_ai(call, "analyst")["state"] == "DISABLED"
