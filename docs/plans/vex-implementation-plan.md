@@ -457,3 +457,11 @@ v2), M2 (`version_scope=current|all`) and M3 (prior decisions as read-only evide
 | 2026-09-24 | PR-1 | Data foundation, `5a12d0e`. D1 corrected (see above); `resolve()` turned out not to prefer CVE. |
 | 2026-09-24 | PR-0 | `app/metrics/vex.py` added; `vex_provider.py` off direct finding queries. Corrected a Session-0 error: only one architectural test was failing, not two. |
 | 2026-09-24 | Session 0 | Discovery + this plan. Spec vendored to `docs/requirements/`, CLAUDE.md addendum appended. Decided: synchronous reconciliation, plan-only session. Found two pre-existing red architectural tests → added PR-0. |
+
+## 2026-10-09 — Version lifecycle completion
+
+B5/B6 shared posture resolution, pending-upload last-known evidence, M1 Compare v2 adapter, M2 historical browsing, M3 read-only prior decisions and investigation page batching are implemented. Existing designation is honored; manual Current SBOM selection remains the established contract. No assignment/decision inheritance, new statuses, migration or deployment. See [completion and verification](../vex/lifecycle-completion-2026-10-09.md).
+
+## 2026-10-09 — Complete lifecycle selection and historical run evidence
+
+The earlier manual-only selection decision is superseded by the requested persisted AUTO/MANUAL_PIN policy. Migration 077 preserves legacy pins and adds immutable run-context snapshots. Successful eligible analysis promotes only within an unambiguous selected lineage; uploads do not promote. Current/list/summary and historical authorization share obsolete-evidence checks. Product policy controls, historical-run browsing and prior assertion evidence are implemented, with batched list enrichment preserved. See [the final report](../vex/lifecycle-implementation-2026-10-09.md) for requirement mapping, migration rollback, executed checks and limitations.

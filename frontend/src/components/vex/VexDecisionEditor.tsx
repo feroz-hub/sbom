@@ -159,9 +159,9 @@ export function VexDecisionEditor({
         sbomId,
       );
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       setSubmitError(null);
-      invalidateVexSurfaces(queryClient, sbomId);
+      await invalidateVexSurfaces(queryClient, sbomId, { investigationId: investigation?.id });
       onSaved?.();
     },
     onError: (error: unknown) => {

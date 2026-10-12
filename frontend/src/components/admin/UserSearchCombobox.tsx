@@ -13,6 +13,7 @@ interface UserSearchComboboxProps {
   placeholder?: string;
   requireEligible?: boolean;
   governance?: boolean;
+  revision?: number;
 }
 
 export function isEligibleAdministrator(user: UserSearchResult): boolean {
@@ -40,6 +41,7 @@ export function UserSearchCombobox({
   placeholder = 'Search existing SBOM users by email or name…',
   requireEligible = false,
   governance = false,
+  revision = 0,
 }: UserSearchComboboxProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<UserSearchResult[]>([]);
@@ -98,7 +100,7 @@ export function UserSearchCombobox({
     }, 250);
 
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [query, tenantId, governance]);
+  }, [query, tenantId, governance, revision]);
 
   if (selectedUser) {
     return (

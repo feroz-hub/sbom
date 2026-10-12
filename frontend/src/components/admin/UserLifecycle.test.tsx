@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider, QueryObserver } from '@tanstack/react-query';
 // @vitest-environment jsdom
 import { ToastProvider } from '@/hooks/useToast';
 import type { ReactElement } from 'react';
@@ -6,9 +7,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import UserLifecycle from './UserLifecycle';
 import { axe } from 'vitest-axe';
 let platform = true;
+let testClient: QueryClient;
+let self = false;
+const refreshSession = vi.fn();
 let tenant = '1';
 const permission = (p: string) => platform || p.startsWith('tenant:');
-vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: { isPlatformAdmin: platform, tenantId: Number(tenant) }, activeTenantId: tenant, hasPermission: permission }) }));
+vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: { userId: self ? 42 : 999, isPlatformAdmin: platform, tenantId: Number(tenant) }, refreshSession, activeTenantId: tenant, hasPermission: permission }) }));
 const listTenants = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/api', () => ({ listPlatformTenants: listTenants }));
 const member = { membership_id: 12, tenant_id: 1, tenant_name: 'Olympus', membership_status: 'ACTIVE', roles: ['DEVELOPER', 'VIEWER'], primary_role: 'VIEWER', role_assignment_version: 4 };
@@ -21,6 +25,7 @@ let pending = false;
 let fetchMock: ReturnType<typeof vi.fn>;
 beforeEach(() => {
   listTenants.mockReset().mockResolvedValue([{ id: 2, name: 'Hospital B', slug: 'hospital-b', status: 'ACTIVE' }]);
+  self = false; refreshSession.mockReset().mockResolvedValue(undefined);
   platform = true; providers = ['NATIVE']; tenant = '1'; account = 'ACTIVE'; failed = false; pending = false;
   fetchMock = vi.fn(async (url: string, options: RequestInit) => {
     if (pending) return new Promise(() => {});
@@ -198,4 +203,40 @@ it('shows pending Microsoft identities with explicit approval and no native pass
   expect(JSON.parse(writes()[0][1].body as string)).toEqual({ status: 'ACTIVE' });
 });
 
-function render(ui: ReactElement) { return rtlRender(ui, { wrapper: ToastProvider }); }
+it.each(['profile', 'disable', 'roles', 'membership'])('successful %s bridges the local directory to authoritative cache data', async action => {
+  await openUser();
+  const key = action === 'profile' ? ['platform-administrators'] : ['platform-summary'];
+  testClient.setQueryData(key, { value: 'old' });
+  const fetcher = vi.fn().mockResolvedValue({ value: 'server' });
+  const stop = new QueryObserver(testClient, { queryKey: key, queryFn: fetcher }).subscribe(() => {});
+  if (action === 'profile') fireEvent.click(screen.getByRole('button', { name: 'Save profile' }));
+  else {
+    fireEvent.click(screen.getAllByRole('button', { name: action === 'disable' ? 'Disable account globally' : action === 'roles' ? 'Save roles' : 'Deactivate access to Olympus' })[0]);
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+  }
+  await waitFor(() => expect(testClient.getQueryData(key)).toEqual({ value: 'server' }));
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  expect(screen.getByLabelText('Search')).toHaveValue('');
+  stop();
+});
+it.each([403, 409, 500])('failed profile update HTTP %s preserves drafts and fresh metrics', async status => {
+  await openUser(); testClient.setQueryData(['platform-summary'], { active: 1 });
+  fireEvent.change(screen.getByLabelText('first name'), { target: { value: 'Unsaved draft' } });
+  fetchMock.mockImplementation(async () => Response.json({ detail: 'failure' }, { status }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save profile' }));
+  await screen.findByRole('alert');
+  expect(screen.getByLabelText('first name')).toHaveValue('Unsaved draft');
+  expect(testClient.getQueryState(['platform-summary'])?.isInvalidated).toBe(false);
+  expect(screen.queryByText('User updated successfully.')).not.toBeInTheDocument();
+});
+it('refreshes the authenticated context after a confirmed self role update', async () => {
+  self = true; await openUser(); fireEvent.click(screen.getAllByRole('button', { name: 'Save roles' })[0]);
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+  await waitFor(() => expect(refreshSession).toHaveBeenCalledTimes(1));
+});
+
+function render(ui: ReactElement) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 300000, refetchOnWindowFocus: false } } });
+  testClient = qc;
+  return rtlRender(ui, { wrapper: ({ children }) => <QueryClientProvider client={qc}><ToastProvider>{children}</ToastProvider></QueryClientProvider> });
+}

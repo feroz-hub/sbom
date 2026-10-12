@@ -61,6 +61,7 @@ class ProductUpdate(BaseModel):
     latest_version: str | None = None
     metadata_json: dict[str, Any] | None = None
     current_sbom_id: int | None = Field(None, ge=1)
+    current_sbom_mode: Literal["AUTO", "MANUAL_PIN"] | None = None
 
 
 class ProductRead(ORMModel):
@@ -87,6 +88,7 @@ class ProductRead(ORMModel):
     latest_sbom_version: str | None = None
     current_sbom_id: int | None = None
     current_sbom_version: str | None = None
+    current_sbom_mode: Literal["AUTO", "MANUAL_PIN"] = "AUTO"
 
 
 class ProductSummary(BaseModel):
@@ -103,6 +105,7 @@ class ProductSummary(BaseModel):
     latest_sbom_version: str | None = None
     current_sbom_id: int | None = None
     current_sbom_version: str | None = None
+    current_sbom_mode: Literal["AUTO", "MANUAL_PIN"] = "AUTO"
 
 
 class ProductListResponse(BaseModel):

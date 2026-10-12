@@ -1,7 +1,9 @@
 'use client';
 
 import { useContext, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutationScope } from '@/hooks/useMutationScope';
+import { isAiBatchTerminal, reconcileAiBatchTerminal } from '@/lib/aiBatchSync';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getRunAiBatch, getRunAiFixProgress } from '@/lib/api';
 import type { AiBatchProgress } from '@/types/ai';
 import {
@@ -59,7 +61,9 @@ export function useGlobalAiBatchProgress(
   // re-registered — an infinite ~9s poll loop. ``register`` is a
   // ``useCallback([])``, so this effect now fires on real state changes only.
   const register = ctx?.register;
-  const active = enabled && runId != null;
+  const { key: scopeKey, ready: scopeReady, capture } = useMutationScope();
+  const qc = useQueryClient();
+  const active = enabled && runId != null && scopeReady;
 
   const query = useQuery<AiBatchProgress | null>({
     queryKey: batchProgressQueryKey(runId ?? -1, batchId),
@@ -79,7 +83,7 @@ export function useGlobalAiBatchProgress(
   // registers, so there's no background polling when nothing is happening.
   // A freshly triggered batch seeds this cache key with a live status (see
   // useTriggerScopedAiFixes), which flips ``shouldTrack`` and subscribes.
-  const shouldTrack = active && isTrackableStatus(query.data?.status);
+  const shouldTrack = active && isTrackableStatus(query.data?.status) && !(query.data && isAiBatchTerminal(query.data));
   useEffect(() => {
     if (!shouldTrack || !register) return;
     register({
@@ -93,6 +97,10 @@ export function useGlobalAiBatchProgress(
     // event) + provider linger timer.
   }, [shouldTrack, register, runId, batchId, scopeLabel]);
 
+  useEffect(() => {
+    if (!active || !query.data) return;
+    void reconcileAiBatchTerminal(qc, { progress: query.data, batchId, scope: scopeKey, isCurrent: capture() });
+  }, [active, query.data, batchId, qc, scopeKey, capture]);
   return query;
 }
 

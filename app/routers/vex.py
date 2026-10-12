@@ -9,13 +9,13 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
-from sqlalchemy import func
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from ..core.context import CurrentContext
 from ..core.security import get_current_tenant_context
 from ..db import get_db
-from ..models import VexOverrideAudit
+from ..models import SBOMSource, VexInvestigation, VexOverrideAudit
 from ..services.lifecycle.vex_discovery import discover_and_import_vex_documents
 from ..services.lifecycle.vex_provider import (
     apply_vex_override,
@@ -169,6 +169,20 @@ def patch_vex_override(
     component = get_component_for_tenant(db, component_id, context.tenant_id)
     if component is None or (sbom_id is not None and component.sbom_id != sbom_id):
         raise HTTPException(status_code=404, detail="Component not found")
+    from ..services.dashboard_scope import DashboardScope
+    if db.scalar(select(SBOMSource.id).where(SBOMSource.id == component.sbom_id,
+                                           SBOMSource.tenant_id == context.tenant_id,
+                                           SBOMSource.id.in_(DashboardScope(context.tenant_id).eligible_sbom_ids()))) is None:
+        raise HTTPException(403, 'Historical investigation evidence is read-only.')
+    from ..services.vex.identity import canonical_vulnerability
+    previous_context = db.scalar(select(VexInvestigation).where(
+        VexInvestigation.tenant_id == context.tenant_id, VexInvestigation.sbom_id == component.sbom_id,
+        VexInvestigation.component_id == component.id,
+        or_(VexInvestigation.canonical_vulnerability_id == canonical_vulnerability(vulnerability_id).canonical_id,
+            func.upper(func.coalesce(VexInvestigation.aliases_json, '')).contains('"' + vulnerability_id.strip().upper() + '"')),
+    ))
+    if previous_context is not None and not previous_context.is_current:
+        raise HTTPException(403, 'Historical investigation evidence is read-only.')
     statement = apply_vex_override(
         db,
         component_id,

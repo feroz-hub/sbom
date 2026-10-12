@@ -7,6 +7,7 @@ import type { LifecycleProviderConfig, LifecycleProviderUpdatePayload } from '@/
 
 interface Props {
   provider: LifecycleProviderConfig;
+  credentialConfigured?: boolean;
   onClose: () => void;
   onSave: (providerKey: string, payload: LifecycleProviderUpdatePayload) => Promise<void>;
   onSaveSecret: (providerKey: string, secretName: string, secretValue: string) => Promise<void>;
@@ -26,6 +27,7 @@ export function LifecycleProviderForm({
   onSaveSecret,
   onDeleteSecret,
   saving = false,
+  credentialConfigured = provider.has_secret,
 }: Props) {
   const [enabled, setEnabled] = useState(provider.enabled);
   const [priority, setPriority] = useState(String(provider.priority));
@@ -165,9 +167,9 @@ export function LifecycleProviderForm({
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h3 className="text-sm font-semibold text-hcl-navy">Secret</h3>
-                <p className="text-xs text-hcl-muted">{provider.has_secret ? 'Credential configured ✓' : 'No credential saved'}</p>
+                <p className="text-xs text-hcl-muted">{credentialConfigured ? 'Credential configured ✓' : 'No credential saved'}</p>
               </div>
-              {provider.has_secret && (
+              {credentialConfigured && (
                 <Button variant="ghost" size="sm" onClick={() => onDeleteSecret(provider.provider_key, secretName)}>
                   <Trash2 className="h-3.5 w-3.5" />
                   Delete

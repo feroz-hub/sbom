@@ -1,5 +1,8 @@
 'use client';
 
+import { useAnalysisScope } from '@/hooks/useAnalysisScope';
+import { addPendingAnalysis } from '@/lib/pendingAnalysis';
+import { invalidateScheduleLists, invalidateAnalysisSubmission } from '@/lib/queryInvalidation';
 import { PermissionButton } from '@/components/ui/PermissionButton';
 
 import { useCallback, useMemo, useState } from 'react';
@@ -49,11 +52,6 @@ import { getApiErrorMessage } from '@/lib/notifications';
 import { formatRelative } from '@/lib/utils';
 import { matchesMultiField } from '@/lib/tableFilters';
 import { canonicalRunStatus } from '@/lib/analysisRunStatusLabels';
-import {
-  invalidateDashboardTiles,
-  invalidateRunLists,
-  invalidateSbomLists,
-} from '@/lib/queryInvalidation';
 import type { AnalysisSchedule, Project, SBOMSource } from '@/types';
 
 type ScopeFilter = 'all' | 'TENANT' | 'PROJECT' | 'PRODUCT' | 'SBOM';
@@ -81,6 +79,7 @@ const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 export default function SchedulesPage() {
   const queryClient = useQueryClient();
+  const analysisScope = useAnalysisScope();
   const { showToast } = useToast();
 
   const [scope, setScope] = useState<ScopeFilter>('all');
@@ -154,16 +153,13 @@ export default function SchedulesPage() {
   // canonical source for this page; the per-target schedule queries (used
   // by the project/SBOM cards) are also keyed under "schedule" so they
   // refresh together.
-  const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['schedules'] });
-    queryClient.invalidateQueries({ queryKey: ['schedule'] });
-  };
+  const invalidate = () => invalidateScheduleLists(queryClient);
 
   const pauseM = useMutation({
     mutationFn: (id: number) => pauseSchedule(id),
     onSuccess: () => {
       showToast('Paused', 'success');
-      invalidate();
+      return invalidate();
     },
     onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Schedule pause failed.'), 'error'),
   });
@@ -171,13 +167,16 @@ export default function SchedulesPage() {
     mutationFn: (id: number) => resumeSchedule(id),
     onSuccess: () => {
       showToast('Resumed', 'success');
-      invalidate();
+      return invalidate();
     },
     onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Schedule resume failed.'), 'error'),
   });
   const runNowM = useMutation({
+    onMutate: () => ({ isCurrent: analysisScope.capture(), scopeKey: analysisScope.key }),
     mutationFn: (id: number) => runScheduleNow(id),
-    onSuccess: (res) => {
+    onSuccess: (res, _variables, context) => {
+      if (!context?.isCurrent()) return;
+      for (const id of res.sbom_ids) addPendingAnalysis(id, `SBOM #${id}`, context.scopeKey);
       showToast(
         `Enqueued ${res.sbom_ids.length} SBOM analysis${res.sbom_ids.length === 1 ? '' : 'es'}`,
         'success',
@@ -185,9 +184,7 @@ export default function SchedulesPage() {
       // Enqueuing creates new runs and flips affected SBOMs into RUNNING —
       // refresh runs list, SBOM analysis badges, and dashboard counts so
       // every surface reflects the in-flight work.
-      invalidateRunLists(queryClient);
-      invalidateSbomLists(queryClient);
-      invalidateDashboardTiles(queryClient);
+      return invalidateAnalysisSubmission(queryClient);
     },
     onError: (error: unknown) => showToast(getApiErrorMessage(error, 'The scheduled analysis could not be queued.'), 'error'),
   });
@@ -212,7 +209,7 @@ export default function SchedulesPage() {
         'success',
       );
       setConfirmDelete(null);
-      invalidate();
+      return invalidate();
     },
     onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Schedule deletion failed.'), 'error'),
   });

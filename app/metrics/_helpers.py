@@ -9,25 +9,18 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from sqlalchemy import ScalarSelect, func, select
+from sqlalchemy import ScalarSelect, and_, func, select
 
-from ..models import AnalysisRun
+from ..models import AnalysisRun, SBOMSource
 from ..services.vulnerability_ids import cves_for_finding
 from .base import COMPLETED_RUN_STATUSES
 
 
 def active_head_sbom_ids_subquery() -> ScalarSelect:
-    """Scalar subquery of active HEAD version sbom_source.ids."""
-    from ..models import SBOMSource
+    """Resolved posture SBOM ids; legacy helper name retained for callers."""
+    from .posture import posture_sbom_ids
+    return posture_sbom_ids().scalar_subquery()
 
-    return (
-        select(SBOMSource.id)
-        .where(SBOMSource.is_active.is_(True), SBOMSource.lifecycle_status == "ACTIVE")
-        .where(
-            ~SBOMSource.id.in_(select(SBOMSource.parent_id).where(SBOMSource.parent_id.is_not(None)).scalar_subquery())
-        )
-        .scalar_subquery()
-    )
 
 
 def latest_run_per_sbom_subquery() -> ScalarSelect:
@@ -39,7 +32,8 @@ def latest_run_per_sbom_subquery() -> ScalarSelect:
     """
     return (
         select(func.max(AnalysisRun.id))
-        .where(AnalysisRun.run_status.in_(COMPLETED_RUN_STATUSES), AnalysisRun.is_current.is_(True))
+        .join(SBOMSource, and_(AnalysisRun.sbom_id == SBOMSource.id, AnalysisRun.tenant_id == SBOMSource.tenant_id))
+        .where(AnalysisRun.run_status.in_(COMPLETED_RUN_STATUSES), AnalysisRun.is_current.is_(True), AnalysisRun.is_active.is_(True))
         .where(AnalysisRun.sbom_id.in_(active_head_sbom_ids_subquery()))
         .group_by(AnalysisRun.sbom_id)
         .scalar_subquery()
@@ -55,7 +49,7 @@ def latest_run_per_sbom_as_of_subquery(as_of_iso: str) -> ScalarSelect:
     """
     return (
         select(func.max(AnalysisRun.id))
-        .where(AnalysisRun.run_status.in_(COMPLETED_RUN_STATUSES), AnalysisRun.is_current.is_(True))
+        .where(AnalysisRun.run_status.in_(COMPLETED_RUN_STATUSES), AnalysisRun.is_current.is_(True), AnalysisRun.is_active.is_(True))
         .where(AnalysisRun.completed_on <= as_of_iso)
         .group_by(AnalysisRun.sbom_id)
         .scalar_subquery()

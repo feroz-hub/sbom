@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { invalidateTenantMembershipSurfaces } from '@/lib/queryInvalidation';
 import { useRef, useState, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -74,10 +75,8 @@ export function PlatformTenantOverview({
   const resend = useMutation({
     mutationFn: () =>
       resendPlatformTenantActivation(Number(tenant.id), administrator!.user_id),
-    onSuccess: (result) => {
-      void queryClient.invalidateQueries({ queryKey: ["platform-tenant", Number(tenant.id)] });
-      void queryClient.invalidateQueries({ queryKey: ["tenant-users", Number(tenant.id)] });
-      void queryClient.invalidateQueries({ queryKey: ["tenant-audit-history", Number(tenant.id)] });
+    onSuccess: async (result) => {
+      await invalidateTenantMembershipSurfaces(queryClient, Number(tenant.id), { affectsMetrics: false });
       setDeliveryStatus(result.delivery.status);
       setConfirmOpen(false);
       if (result.delivery.status === "SENT")

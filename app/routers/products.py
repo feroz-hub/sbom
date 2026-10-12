@@ -87,7 +87,8 @@ def _summary(db: Session, product: Product) -> ProductSummary:
         sbom_count=int(count or 0),
         latest_sbom_id=latest[0] if latest else None,
         latest_sbom_version=(latest[1] or latest[2]) if latest else None,
-        current_sbom_id=current.id if current else None,
+        current_sbom_id=product.current_sbom_id,
+        current_sbom_mode=product.current_sbom_mode,
         current_sbom_version=(current.sbom_version or current.productver) if current else None,
     )
 
@@ -117,6 +118,7 @@ def _read(db: Session, product: Product) -> ProductRead:
         latest_sbom_id=summary.latest_sbom_id,
         latest_sbom_version=summary.latest_sbom_version,
         current_sbom_id=summary.current_sbom_id,
+        current_sbom_mode=product.current_sbom_mode,
         current_sbom_version=summary.current_sbom_version,
     )
 
@@ -207,7 +209,9 @@ def update_product(
     product = get_product_for_tenant(db, product_id, context.tenant_id)
     if product is None:
         raise HTTPException(status_code=404, detail="Product not found")
+    product = db.scalar(select(Product).where(Product.id == product.id, Product.tenant_id == context.tenant_id).with_for_update().execution_options(populate_existing=True))
     old_value = {
+        "current_sbom_mode": product.current_sbom_mode,
         "project_id": product.project_id,
         "product_id": product.id,
         "name": product.name,
@@ -216,6 +220,7 @@ def update_product(
     }
     data = payload.model_dump(exclude_unset=True)
     current_changed = False
+    mode = data.pop("current_sbom_mode", None)
     if "current_sbom_id" in data:
         current_sbom_id = data.pop("current_sbom_id")
         if current_sbom_id is not None:
@@ -224,6 +229,8 @@ def update_product(
                     SBOMSource.id == current_sbom_id,
                     SBOMSource.tenant_id == context.tenant_id,
                     SBOMSource.product_id == product.id,
+                    SBOMSource.projectid == product.project_id,
+                    SBOMSource.lifecycle_status == "ACTIVE",
                     SBOMSource.is_active.is_(True),
                 )
             ).scalar_one_or_none()
@@ -237,6 +244,18 @@ def update_product(
                 )
         current_changed = product.current_sbom_id != current_sbom_id
         product.current_sbom_id = current_sbom_id
+        product.current_sbom_mode = mode or ("MANUAL_PIN" if current_sbom_id is not None else "AUTO")
+    elif mode is not None:
+        product.current_sbom_mode = mode
+    if product.current_sbom_mode == "MANUAL_PIN" and product.current_sbom_id is None:
+        raise HTTPException(422, "MANUAL_PIN requires a current SBOM selection")
+    if mode == "MANUAL_PIN" and db.scalar(select(SBOMSource.id).where(
+        SBOMSource.id == product.current_sbom_id, SBOMSource.tenant_id == context.tenant_id,
+        SBOMSource.product_id == product.id, SBOMSource.projectid == product.project_id,
+        SBOMSource.is_active.is_(True), SBOMSource.lifecycle_status == "ACTIVE",
+    )) is None:
+        raise HTTPException(422, "MANUAL_PIN requires an eligible SBOM in this application")
+    current_changed = current_changed or product.current_sbom_mode != old_value["current_sbom_mode"]
     if "name" in data and data["name"] is not None:
         name = data["name"].strip()
         _ensure_name_available(
@@ -281,8 +300,8 @@ def update_product(
             "product.current_sbom.changed",
             entity_type="product",
             entity_id=product.id,
-            old_value={"current_sbom_id": old_value["current_sbom_id"]},
-            new_value={"current_sbom_id": product.current_sbom_id, "source": "product.update"},
+            old_value={"current_sbom_id": old_value["current_sbom_id"], "mode": old_value["current_sbom_mode"]},
+            new_value={"current_sbom_id": product.current_sbom_id, "mode": product.current_sbom_mode, "source": "product.update"},
         )
     db.commit()
     db.refresh(product)

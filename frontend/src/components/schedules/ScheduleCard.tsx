@@ -1,5 +1,8 @@
 'use client';
 
+import { useAnalysisScope } from '@/hooks/useAnalysisScope';
+import { addPendingAnalysis } from '@/lib/pendingAnalysis';
+import { invalidateScheduleLists, invalidateAnalysisSubmission } from '@/lib/queryInvalidation';
 import { PermissionButton } from '@/components/ui/PermissionButton';
 
 import { useState } from 'react';
@@ -27,11 +30,6 @@ import { useToast } from '@/hooks/useToast';
 import { getApiErrorMessage } from '@/lib/notifications';
 import { formatRelative } from '@/lib/utils';
 import { HttpError } from '@/lib/api';
-import {
-  invalidateDashboardTiles,
-  invalidateRunLists,
-  invalidateSbomLists,
-} from '@/lib/queryInvalidation';
 import { ScheduleEditor } from './ScheduleEditor';
 import type { AnalysisSchedule, SbomScheduleResolved, ScheduleCadence } from '@/types';
 
@@ -84,6 +82,7 @@ const CADENCE_BADGE: Record<ScheduleCadence, string> = {
 
 export function ScheduleCard({ scope, targetId, processingReason }: ScheduleCardProps) {
   const queryClient = useQueryClient();
+  const analysisScope = useAnalysisScope();
   const { showToast } = useToast();
   const [showEditor, setShowEditor] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -111,16 +110,13 @@ export function ScheduleCard({ scope, targetId, processingReason }: ScheduleCard
       err instanceof HttpError && err.status === 404 ? false : failureCount < 2,
   });
 
-  const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['schedule'] });
-    queryClient.invalidateQueries({ queryKey: ['schedule-targets'] });
-  };
+  const invalidate = () => invalidateScheduleLists(queryClient);
 
   const pauseMutation = useMutation({
     mutationFn: (id: number) => pauseSchedule(id),
     onSuccess: () => {
       showToast('Schedule paused', 'success');
-      invalidate();
+      return invalidate();
     },
     onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Schedule pause failed.'), 'error'),
   });
@@ -129,24 +125,25 @@ export function ScheduleCard({ scope, targetId, processingReason }: ScheduleCard
     mutationFn: (id: number) => resumeSchedule(id),
     onSuccess: () => {
       showToast('Schedule resumed', 'success');
-      invalidate();
+      return invalidate();
     },
     onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Schedule resume failed.'), 'error'),
   });
 
   const runNowMutation = useMutation({
+    onMutate: () => ({ isCurrent: analysisScope.capture(), scopeKey: analysisScope.key }),
     mutationFn: (id: number) => {
       if (processingReason) throw new Error(processingReason);
       return runScheduleNow(id);
     },
-    onSuccess: (res) => {
+    onSuccess: (res, _variables, context) => {
+      if (!context?.isCurrent()) return;
+      for (const id of res.sbom_ids) addPendingAnalysis(id, `SBOM #${id}`, context.scopeKey);
       showToast(
         `Enqueued ${res.sbom_ids.length} SBOM analysis${res.sbom_ids.length === 1 ? '' : 'es'}`,
         'success',
       );
-      invalidateRunLists(queryClient);
-      invalidateSbomLists(queryClient);
-      invalidateDashboardTiles(queryClient);
+      return invalidateAnalysisSubmission(queryClient);
     },
     onError: (error: unknown) => showToast(getApiErrorMessage(error, 'The scheduled analysis could not be queued.'), 'error'),
   });
@@ -165,7 +162,7 @@ export function ScheduleCard({ scope, targetId, processingReason }: ScheduleCard
         'success',
       );
       setConfirmDelete(false);
-      invalidate();
+      return invalidate();
     },
     onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Schedule deletion failed.'), 'error'),
   });
@@ -174,7 +171,7 @@ export function ScheduleCard({ scope, targetId, processingReason }: ScheduleCard
     mutationFn: () => excludeFromParentSchedule(scope as 'PRODUCT' | 'SBOM', targetId),
     onSuccess: () => {
       showToast(`${scope === 'PRODUCT' ? 'Product' : 'SBOM'} excluded from parent schedules`, 'success');
-      invalidate();
+      return invalidate();
     },
     onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Schedule exclusion failed.'), 'error'),
   });
@@ -183,7 +180,7 @@ export function ScheduleCard({ scope, targetId, processingReason }: ScheduleCard
     mutationFn: () => restoreScheduleInheritance(scope as 'PRODUCT' | 'SBOM', targetId),
     onSuccess: () => {
       showToast('Parent schedule inheritance restored', 'success');
-      invalidate();
+      return invalidate();
     },
     onError: (error: unknown) => showToast(getApiErrorMessage(error, 'Could not restore inheritance.'), 'error'),
   });

@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { usePermissions } from '@/hooks/usePermission';
+import { useMutationScope } from '@/hooks/useMutationScope';
+import { invalidateAdvisorPolicySurfaces } from '@/lib/queryInvalidation';
 import { useAuth } from '@/hooks/useAuth';
 import { TopBar } from '@/components/layout/TopBar';
 import { ApiError } from '@/lib/api';
@@ -17,6 +19,7 @@ const inputClass = 'w-full rounded border border-border-subtle bg-surface p-2';
 
 function PolicyEditor({ tenantId, definition, state, canUpdate }: { tenantId: number | null; definition: typeof definitions[number]; state: AdvisorPolicyState; canUpdate: boolean }) {
   const client = useQueryClient();
+  const mutationScope = useMutationScope();
   const owned = tenantId === null ? state.platform_default : state.tenant_override;
   const initialStatus = owned?.status ?? (tenantId === null ? 'DISABLED' : 'INHERIT');
   const [status, setStatus] = useState<AdvisorPolicyStatus>(initialStatus);
@@ -33,6 +36,7 @@ function PolicyEditor({ tenantId, definition, state, canUpdate }: { tenantId: nu
   }, [state, definition, initialStatus, owned]);
   const history = useQuery({ queryKey: ['advisor-policy-history', tenantId, definition.kind], queryFn: () => getAdvisorPolicyHistory(tenantId, definition.kind), retry: false });
   async function publish(event: React.FormEvent) {
+    const isCurrent = mutationScope.capture();
     event.preventDefault(); setError(''); setSaved(false);
     let parsed: Record<string, unknown> | null = null;
     try {
@@ -45,10 +49,13 @@ function PolicyEditor({ tenantId, definition, state, canUpdate }: { tenantId: nu
     setSaving(true);
     try {
       const result = await publishAdvisorPolicy(tenantId, definition.kind, { status, rules: parsed, reason: reason.trim(), row_version: state.row_version });
+      if (!isCurrent()) return;
       setReason(''); setSaved(true);
       client.setQueryData(['advisor-policy', tenantId, definition.kind], result);
-      await client.invalidateQueries({ queryKey: ['advisor-policy-history', tenantId, definition.kind] });
-      await client.invalidateQueries({ predicate: query => String(query.queryKey[0]).startsWith('component-advisor-') });
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ['advisor-policy-history', tenantId, definition.kind] }),
+        invalidateAdvisorPolicySurfaces(client, tenantId),
+      ]);
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) { setConflict(true); setError('Another administrator changed this policy. Reload the latest policy before publishing again.'); }
       else setError(err instanceof Error ? err.message : 'Unable to publish policy.');

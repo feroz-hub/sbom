@@ -834,6 +834,8 @@ def persist_analysis_run(
     # transaction so contexts land with the run rather than beside it. Never
     # fatal: a reconciliation failure must not lose a completed analysis.
     _reconcile_vex_after_run(db, run)
+    from .sbom_selection import promote_successful_analysis
+    promote_successful_analysis(db, run)
 
     return run
 
@@ -857,6 +859,8 @@ def _reconcile_vex_after_run(db: Session, run: AnalysisRun) -> None:
     try:
         with db.begin_nested():
             recompute_for_sbom(db, tenant_id=run.tenant_id, sbom_id=run.sbom_id)
+            from .vex.run_history import capture_run_snapshot
+            capture_run_snapshot(db, run)
     except Exception:  # noqa: BLE001 — never fail an analysis over reconciliation
         log.exception(
             "vex.reconciliation.failed",

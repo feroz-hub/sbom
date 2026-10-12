@@ -29,6 +29,7 @@ export interface Product {
   latest_sbom_version?: string | null;
   current_sbom_id?: number | null;
   current_sbom_version?: string | null;
+  current_sbom_mode?: 'AUTO' | 'MANUAL_PIN';
   created_at?: string | null;
   updated_at?: string | null;
   is_active?: boolean;
@@ -1815,6 +1816,9 @@ export type VexInvestigationSortField =
   | 'updated_at';
 
 export interface VexInvestigationRow {
+  sbom_version?: string | null;
+  analysis_run_id?: number | null;
+  historical?: boolean;
   id: number;
   canonical_vulnerability_id: string;
   aliases: string[];
@@ -1847,6 +1851,8 @@ export interface VexInvestigationRow {
 }
 
 export interface VexInvestigationListResponse {
+  posture?: SbomPosture[];
+  version_scope?: string;
   total: number;
   limit: number;
   offset: number;
@@ -1907,6 +1913,8 @@ export interface VexInvestigationCapabilities {
 }
 
 export interface VexInvestigationDetail {
+  sbom_version?: string | null;
+  previous_decisions?: Array<{ source_name?: string | null; impact_statement?: string | null; action_statement?: string | null; evidence?: Record<string, unknown> | null; investigation_id: number; statement_id: number; sbom_id: number; sbom_version: string; decision: string; justification: string | null; reviewer: string | null; decided_at: string | null; component_name: string; component_version: string; analysis_run_id: number | null; applicability: string; component_version_changed: boolean }>;
   capabilities?: VexInvestigationCapabilities;
   id: number;
   sbom_id: number;
@@ -1969,6 +1977,7 @@ export interface VexInvestigationDetail {
 }
 
 export interface VexInvestigationListParams {
+  version_scope?: 'current' | 'all' | 'historical';
   my_work?: 'all' | 'me' | 'unassigned' | 'assigned' | 'attention';
   assignee?: string;
   unresolved_component?: boolean;
@@ -2010,3 +2019,39 @@ export interface LogicalSBOM {
   version_count: number; latest_version: SBOMSource | null; version_ordering: string;
 }
 export interface LogicalSBOMListResponse { items: LogicalSBOM[]; total: number; page: number; page_size: number; }
+
+
+export interface SbomPosture {
+  application_name?: string | null;
+  target_sbom_id: number | null; posture_sbom_id: number | null; product_id: number | null;
+  current_sbom: {id: number; name: string; version: string | null} | null;
+  effective_current_sbom?: {id: number; name: string; version: string | null} | null;
+  selection_mode?: 'AUTO' | 'MANUAL_PIN';
+  latest_analyzed?: {id: number; name: string; version: string | null} | null;
+  latest_uploaded: {id: number; name: string; version: string | null} | null;
+  posture_sbom: {id: number; name: string; version: string | null} | null;
+  analysis_run_id: number | null; analysis_status: string; analysis_finding_rows?: number | null;
+  last_known_posture: boolean; coverage_incomplete: boolean; warning: string | null;
+  designation_required: boolean;
+}
+export interface VexVersionComparison {
+  previous_run_id: number; current_run_id: number; previous_sbom_id: number; current_sbom_id: number;
+  previous_version: string | null; current_version: string | null;
+  previous_findings: number; current_findings: number; still_detected: number; new: number;
+  no_longer_observed: number; unresolved_comparison: number; limitations: string[];
+  items: Array<{category: string; reason: string; current_component?: {id: number; name: string; version: string; purl: string | null; sbom_id: number} | null; previous: VexComparisonContext | null; current: VexComparisonContext | null}>;
+}
+export interface VexComparisonContext {
+  vulnerability_id: string; component_id: number | null; component_name: string | null;
+  component_version: string | null; sbom_id: number; analysis_run_id: number; purl: string | null;
+}
+
+
+export interface SbomPostureSummary {
+  evidence_status: 'AVAILABLE' | 'PARTIAL' | 'UNAVAILABLE' | 'EMPTY';
+  total_targets: number; available_targets: number; missing_targets: number; coverage_incomplete_targets: number;
+}
+export interface SbomPostureResponse {
+  items: SbomPosture[]; summary?: SbomPostureSummary;
+  scope?: {tenant_id: number; project_id: number | null; product_id: number | null; sbom_id: number | null};
+}

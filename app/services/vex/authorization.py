@@ -140,16 +140,19 @@ def capabilities(
                         "roles": sorted(target_roles),
                     }
                 )
+    from ..sbom_posture import investigation_is_historical
+    historical = investigation_is_historical(db, investigation)
     return {
-        "can_assign": broad,
-        "can_unassign": broad
+        "historical": historical,
+        "can_assign": broad and not historical,
+        "can_unassign": broad and not historical
         and ("TENANT_ADMIN" in roles or not assigned["active"] or "SECURITY_ANALYST" not in assigned["roles"]),
-        "can_update": can_update,
-        "can_map": broad,
+        "can_update": can_update and not historical,
+        "can_map": broad and not historical,
         "eligible_roles": sorted(allowed) if broad else [],
         "candidates": sorted(candidates, key=lambda item: item["label"].casefold()),
         "owner": assigned,
-        "read_only_reason": None
+        "read_only_reason": "Historical investigation evidence is read-only." if historical else None
         if can_update
         else (
             "This investigation must be assigned to you before you can update it. This investigation must be assigned by a Tenant Administrator or Security Analyst before you can update it."
@@ -187,3 +190,34 @@ def require_assignment(db: Session, context: CurrentContext, investigation: VexI
         raise HTTPException(403, "The selected user is not eligible for this tenant investigation.")
     if not eligible_target(active_roles(db, member), set(access["eligible_roles"])):
         raise HTTPException(403, "This user cannot be assigned to VEX investigations.")
+
+
+def page_owners(db, tenant_id, rows, context):
+    """Batch membership/user/role evidence without weakening assignment checks."""
+    from sqlalchemy.orm import joinedload
+    keys = {row.assigned_to for row in rows if row.assigned_to and re.fullmatch(r'membership:[1-9][0-9]{0,9}', row.assigned_to)}
+    ids = {int(key[11:]) for key in keys if int(key[11:]) <= 2147483647}
+    members = db.scalars(select(TenantUser).options(joinedload(TenantUser.user)).where(
+        TenantUser.tenant_id == tenant_id, TenantUser.id.in_(ids or {0}),
+    )).all()
+    codes = {}
+    if get_settings().tenant_role_assignment_mode not in {'LEGACY', 'COMPARE'}:
+        for member_id, code in db.execute(select(TenantUserRoleAssignment.tenant_user_id, AuthorizationRole.code).join(
+            AuthorizationRole, AuthorizationRole.id == TenantUserRoleAssignment.role_id
+        ).where(TenantUserRoleAssignment.tenant_id == tenant_id,
+                TenantUserRoleAssignment.tenant_user_id.in_(ids or {0}),
+                TenantUserRoleAssignment.status == 'ACTIVE', AuthorizationRole.status == 'ACTIVE',
+                AuthorizationRole.scope == 'TENANT')):
+            codes.setdefault(member_id, set()).add(code)
+    by_key = {membership_key(m): m for m in members}
+    result = {}
+    for row in rows:
+        m = by_key.get(row.assigned_to)
+        roles = frozenset()
+        if m and m.status == 'ACTIVE' and m.user and m.user.status == 'ACTIVE' and verification_complete(m.user):
+            roles = frozenset({(m.role or '').strip().upper().replace('-', '_').replace(' ', '_')}) if get_settings().tenant_role_assignment_mode in {'LEGACY', 'COMPARE'} else frozenset(codes.get(m.id, ()))
+        active = eligible_target(roles, {'SECURITY_ANALYST', 'DEVELOPER'})
+        result[row.id] = {'id': row.assigned_to, 'label': (m.user.display_name or m.user.email or 'Tenant user') if m and m.user else ('Assigned user is no longer active' if row.assigned_to else 'Unassigned'),
+                          'active': active, 'is_self': bool(active and context and m.user_id == context.user_id),
+                          'roles': sorted(roles), 'email': m.user.email if m and m.user else None}
+    return result

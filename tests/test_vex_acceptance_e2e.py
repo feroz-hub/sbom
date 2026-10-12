@@ -407,8 +407,8 @@ def test_inactive_sbom_is_excluded_from_current_counts__VEX_DASH_005(db, project
     db.commit()
 
 
-def test_superseded_sbom_version_is_excluded__VEX_DASH_005(db, project):
-    """A superseded (non-HEAD) SBOM version drops out of current counts."""
+def test_pending_successor_preserves_last_known_posture__VEX_DASH_005(db, project):
+    """An unanalysed upload cannot erase its predecessor's known posture."""
     add_finding(db, project, "openssl", "CVE-2026-9401")
     db.commit()
     reconcile(db, project)
@@ -426,10 +426,10 @@ def test_superseded_sbom_version_is_excluded__VEX_DASH_005(db, project):
     eligible = [row[0] for row in db.execute(select(SBOMSource.id).where(
         SBOMSource.id.in_(scope.eligible_sbom_ids())
     )).all()]
-    assert project["sbom"].id not in eligible, "the parent is no longer HEAD"
+    assert project["sbom"].id in eligible, "the pending child has no replacement analysis"
 
     payload = vex_dashboard_summary(db, tenant_id=1, sbom_ids=scope.eligible_sbom_ids())
-    assert payload["total_contexts"] == 0
+    assert payload["total_contexts"] == 1
 
     db.query(SBOMSource).filter_by(id=successor.id).delete()
     db.commit()

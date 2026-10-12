@@ -43,11 +43,11 @@ export function VexInvestigationPanel({
         row_version: savedDetail.row_version,
         reason: selected ? 'Assignment updated' : 'Assignment removed',
       }),
-    onSuccess: (updated) => {
+    onSuccess: async (updated) => {
       setSavedDetail(updated);
       setAssignee(updated.internal_decision.assigned_to ?? '');
       setFormError(null);
-      invalidateVexSurfaces(queryClient);
+      await invalidateVexSurfaces(queryClient, detail.sbom_id, { change: 'assignment', investigationId: detail.id });
       onSaved();
     },
     onError: (error: unknown) => {
@@ -63,8 +63,8 @@ export function VexInvestigationPanel({
         row_version: detail.row_version,
         reason: `Bound to component ${componentId} by analyst review`,
       }),
-    onSuccess: () => {
-      invalidateVexSurfaces(queryClient);
+    onSuccess: async () => {
+      await invalidateVexSurfaces(queryClient, detail.sbom_id, { investigationId: detail.id });
       onSaved();
     },
     onError: (error: unknown) => {
@@ -116,6 +116,19 @@ export function VexInvestigationPanel({
           )}
         </Section>
 
+        <Section title="Previous Version Decisions">
+          <p className="text-xs text-hcl-muted">Read-only evidence. Previous conclusions require a new applicability review; nothing is automatically inherited.</p>
+          {detail.previous_decisions?.length ? detail.previous_decisions.map(prior => <div key={prior.statement_id} className="rounded border border-border p-2 text-sm">
+            <p>{prior.sbom_version} · {prior.component_name} {prior.component_version} · {prior.decision}</p>
+            {prior.source_name && <Row label="Source assertion" value={prior.source_name} />}
+            <Row label="Justification" value={prior.justification} />
+            <Row label="Impact" value={prior.impact_statement} /><Row label="Action" value={prior.action_statement} />
+            {prior.evidence && <pre className="whitespace-pre-wrap text-xs">{JSON.stringify(prior.evidence, null, 2)}</pre>}
+            <Row label="Reviewer" value={prior.reviewer} /><Row label="Decision date" value={prior.decided_at} />
+            <p>Statement {prior.statement_id} · Analysis run {prior.analysis_run_id ?? 'not recorded'} · Applicability review required{prior.component_version_changed ? ' · Component version changed' : ''}</p>
+            <a className="text-hcl-blue underline" href={`/vex-investigation?version_scope=all&sbom_id=${prior.sbom_id}&q=${encodeURIComponent(detail.vulnerability.canonical_vulnerability_id)}`}>View historical investigation</a>
+          </div>) : <p className="text-xs">No unambiguous previous-version decision evidence.</p>}
+        </Section>
         <Section title="Internal Decision">
           <Row label="Status" value={detail.internal_decision.effective_status} />
           <Row label="Reviewer" value={detail.internal_decision.reviewer} />

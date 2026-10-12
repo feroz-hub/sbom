@@ -8,7 +8,7 @@ from app.core.context import CurrentContext
 from app.core.security import get_current_tenant_context
 from app.db import Base, get_db
 from app.main import app
-from app.models import AnalysisFinding, AnalysisRun, Product, Projects, SBOMSource, Tenant
+from app.models import AnalysisFinding, AnalysisRun, LogicalSBOM, Product, Projects, SBOMSource, Tenant
 from app.services.dashboard_scope import dashboard_scope, resolve_dashboard_scope
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
@@ -39,7 +39,8 @@ def scoped_db():
         # production ORM's cross-tenant write guard for application writes.
         db.execute(Projects.__table__.insert().values(id=3, tenant_id=2, project_name="Other tenant", project_status=1))
         db.execute(Product.__table__.insert().values(id=3, tenant_id=2, project_id=3, name="T2", normalized_name="t2", slug="t2", created_at="2026-01-01"))
-        db.execute(SBOMSource.__table__.insert().values(id=4, tenant_id=2, projectid=3, product_id=3, sbom_name="other-tenant", is_active=True))
+        db.execute(LogicalSBOM.__table__.insert().values(id=4, tenant_id=2, product_id=3, name="Other tenant", created_at="2026-01-01", updated_at="2026-01-01"))
+        db.execute(SBOMSource.__table__.insert().values(id=4, tenant_id=2, projectid=3, product_id=3, logical_sbom_id=4, sbom_name="other-tenant", is_active=True))
         for run_id, sbom_id, project_id, product_id, tenant_id in [
             (1, 1, 1, 1, 1), (2, 2, 1, 1, 1), (3, 3, 2, 2, 1), (4, 4, 3, 3, 2),
         ]:

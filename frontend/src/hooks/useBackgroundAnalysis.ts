@@ -6,7 +6,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import { analyzeSbom } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
 import { addPendingAnalysis, removePendingAnalysis } from '@/lib/pendingAnalysis';
-import { invalidateAnalysisCompletion } from '@/lib/queryInvalidation';
+import { invalidateAnalysisSubmission } from '@/lib/queryInvalidation';
+import { reconcileAnalysisTerminal, isTerminalAnalysis, isActiveAnalysis } from '@/lib/analysisSync';
+import { useAnalysisScope } from './useAnalysisScope';
 import type { SBOMSource } from '@/types';
 
 // ADR-0001 — canonical names + legacy aliases (deprecation window).
@@ -37,12 +39,17 @@ export function useBackgroundAnalysis() {
   const { showToast, updateToast } = useToast();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const scope = useAnalysisScope();
 
   const triggerRef = useRef<((sbomId: number, sbomName: string) => void) | null>(null);
 
   const triggerBackgroundAnalysis = useCallback(
     (sbomId: number, sbomName: string) => {
-      queryClient.setQueryData<SBOMSource[]>(['sboms'], (old) =>
+      if (!scope.ready) return;
+      const isCurrent = scope.capture();
+      removePendingAnalysis(sbomId, scope.key);
+      addPendingAnalysis(sbomId, sbomName, scope.key);
+      queryClient.setQueriesData<SBOMSource[]>({ queryKey: ['sboms'] }, (old) =>
         old?.map((s) =>
           s.id === sbomId
             ? {
@@ -53,13 +60,13 @@ export function useBackgroundAnalysis() {
                   run_id: s.latest_analysis?.run_id ?? 0,
                   status: 'RUNNING',
                   result: 'running',
-                  finding_count: 0,
-                  critical_count: 0,
-                  high_count: 0,
-                  medium_count: 0,
-                  low_count: 0,
-                  risk_score: null,
-                  risk_level: null,
+                  finding_count: s.latest_analysis?.finding_count ?? 0,
+                  critical_count: s.latest_analysis?.critical_count ?? 0,
+                  high_count: s.latest_analysis?.high_count ?? 0,
+                  medium_count: s.latest_analysis?.medium_count ?? 0,
+                  low_count: s.latest_analysis?.low_count ?? 0,
+                  risk_score: s.latest_analysis?.risk_score ?? null,
+                  risk_level: s.latest_analysis?.risk_level ?? null,
                   started_at: new Date().toISOString(),
                   completed_at: null,
                   error_message: null,
@@ -69,7 +76,6 @@ export function useBackgroundAnalysis() {
         ) ?? [],
       );
 
-      addPendingAnalysis(sbomId, sbomName);
 
       const toastId = showToast(`Analysing "${sbomName}"…`, 'loading', {
         id: `analysis-${sbomId}`,
@@ -78,51 +84,24 @@ export function useBackgroundAnalysis() {
 
       analyzeSbom(sbomId)
         .then((result) => {
-          removePendingAnalysis(sbomId);
-
+          if (!isCurrent()) return;
+          const status = result.run_status;
           const raw = result as unknown as Record<string, unknown>;
-          const total: number =
-            (raw.summary as Record<string, unknown> | undefined)?.findings != null
-              ? ((raw.summary as Record<string, Record<string, unknown>>).findings.total as number) ?? 0
-              : (result.total_findings ?? 0);
-
-          const status = ((result.run_status as string) ?? 'UNKNOWN').toUpperCase() as AnalysisStatus;
-
-          queryClient.setQueryData<SBOMSource[]>(['sboms'], (old) =>
-            old?.map((s) =>
-              s.id === sbomId
-                ? {
-                    ...s,
-                    _analysisStatus: status,
-                    _findingsCount: total,
-                    latest_analysis: {
-                      run_id: Number(raw.run_id ?? raw.id ?? s.latest_analysis?.run_id ?? 0),
-                      status,
-                      result: status === 'ERROR' ? 'failed' : 'completed',
-                      finding_count: total,
-                      critical_count: Number(raw.critical_count ?? raw.critical ?? s.latest_analysis?.critical_count ?? 0),
-                      high_count: Number(raw.high_count ?? raw.high ?? s.latest_analysis?.high_count ?? 0),
-                      medium_count: Number(raw.medium_count ?? raw.medium ?? s.latest_analysis?.medium_count ?? 0),
-                      low_count: Number(raw.low_count ?? raw.low ?? s.latest_analysis?.low_count ?? 0),
-                      risk_score: s.latest_analysis?.risk_score ?? null,
-                      risk_level: s.latest_analysis?.risk_level ?? null,
-                      started_at: String(raw.started_on ?? raw.started_at ?? s.latest_analysis?.started_at ?? ''),
-                      completed_at: String(raw.completed_on ?? raw.completed_at ?? new Date().toISOString()),
-                      error_message: null,
-                    },
-                  }
-                : s,
-            ) ?? [],
-          );
-
-          // Run lists, dashboard tiles, recents, per-SBOM detail — every
-          // surface whose numbers just changed.
-          invalidateAnalysisCompletion(queryClient, { sbomId });
+          const runId = Number(raw.runId ?? raw.run_id ?? raw.id);
+          const total = result.total_findings ?? Number((raw.summary as { findings?: { total?: number } })?.findings?.total ?? 0);
+          if (isActiveAnalysis(status)) {
+            addPendingAnalysis(sbomId, sbomName, scope.key, runId || undefined);
+            void invalidateAnalysisSubmission(queryClient);
+            return;
+          }
+          if (!isTerminalAnalysis(status) || !runId) return;
+          removePendingAnalysis(sbomId, scope.key);
+          void reconcileAnalysisTerminal(queryClient, { scope: scope.key, sbomId, runId, status, isCurrent });
 
           updateToast(
             toastId,
-            `Analysis complete · ${total} finding${total !== 1 ? 's' : ''}`,
-            'success',
+            ['ERROR', 'INTERRUPTED', 'CANCELLED'].includes(status) ? `Analysis stopped · ${status}` : `Analysis complete · ${total} finding${total !== 1 ? 's' : ''}`,
+            ['ERROR', 'INTERRUPTED', 'CANCELLED'].includes(status) ? 'error' : 'success',
             {
               duration: 8000,
               action: {
@@ -133,34 +112,9 @@ export function useBackgroundAnalysis() {
           );
         })
         .catch(() => {
-          removePendingAnalysis(sbomId);
-
-          queryClient.setQueryData<SBOMSource[]>(['sboms'], (old) =>
-            old?.map((s) =>
-              s.id === sbomId
-                ? {
-                    ...s,
-                    _analysisStatus: 'ERROR',
-                    _findingsCount: undefined,
-                    latest_analysis: {
-                      run_id: s.latest_analysis?.run_id ?? 0,
-                      status: 'ERROR',
-                      result: 'failed',
-                      finding_count: s.latest_analysis?.finding_count ?? 0,
-                      critical_count: s.latest_analysis?.critical_count ?? 0,
-                      high_count: s.latest_analysis?.high_count ?? 0,
-                      medium_count: s.latest_analysis?.medium_count ?? 0,
-                      low_count: s.latest_analysis?.low_count ?? 0,
-                      risk_score: s.latest_analysis?.risk_score ?? null,
-                      risk_level: s.latest_analysis?.risk_level ?? null,
-                      started_at: s.latest_analysis?.started_at ?? null,
-                      completed_at: new Date().toISOString(),
-                      error_message: 'Analysis failed.',
-                    },
-                  }
-                : s,
-            ) ?? [],
-          );
+          if (!isCurrent()) return;
+          // A transport failure does not prove the server job failed. Recovery retains its marker.
+          void invalidateAnalysisSubmission(queryClient);
 
           updateToast(toastId, `Analysis failed for "${sbomName}"`, 'error', {
             duration: 0,
@@ -171,7 +125,7 @@ export function useBackgroundAnalysis() {
           });
         });
     },
-    [showToast, updateToast, router, queryClient],
+    [showToast, updateToast, router, queryClient, scope],
   );
 
   triggerRef.current = triggerBackgroundAnalysis;

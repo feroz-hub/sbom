@@ -60,7 +60,7 @@ def write_audit_log(
     try:
         tenant_id = context.tenant_id if context else None
         user_str = context.external_user_id if context else None
-        user_ref = context.user_id if context else None
+        user_ref = (context.user_id or None) if context else None
         entity_id_str = str(entity_id) if entity_id is not None else None
         target_id_val = target_id
         if target_id_val is None and entity_id is not None:

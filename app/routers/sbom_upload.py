@@ -166,6 +166,8 @@ async def upload_sbom(
     case the upstream :class:`MaxBodySizeMiddleware` was bypassed (e.g. a
     direct connection to the worker).
     """
+    if set_as_current and not context.has_permission("product:update"):
+        raise HTTPException(403, "Current SBOM pinning requires product:update")
     settings = get_settings()
     max_bytes = int(getattr(settings, "MAX_UPLOAD_BYTES", 50 * 1024 * 1024))
 
@@ -409,9 +411,11 @@ async def upload_sbom(
     try:
         db.add(obj)
         db.flush()
-        make_current = bool(product and (set_as_current or product.current_sbom_id is None))
+        make_current = bool(product and set_as_current)
         if make_current:
+            db.refresh(product, with_for_update=True)
             previous_current_id = product.current_sbom_id
+            product.current_sbom_mode = "MANUAL_PIN"
             product.current_sbom_id = obj.id
             product.updated_at = _now_iso()
             audit_service.write_audit_log(
@@ -421,7 +425,7 @@ async def upload_sbom(
                 entity_type="product",
                 entity_id=product.id,
                 old_value={"current_sbom_id": previous_current_id},
-                new_value={"current_sbom_id": obj.id, "source": "sbom.upload"},
+                new_value={"current_sbom_id": obj.id, "source": "sbom.upload", "mode": "MANUAL_PIN"},
             )
         db.commit()
         db.refresh(obj)

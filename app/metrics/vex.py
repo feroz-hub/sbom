@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import json
 
-from sqlalchemy import func, literal, or_, select
+from sqlalchemy import and_, func, literal, or_, select
 from sqlalchemy.orm import Session
 
 from ..models import AnalysisFinding, AnalysisRun, SBOMComponent, VexInvestigation
@@ -92,6 +92,7 @@ def latest_successful_run_id_for_sbom(db: Session, *, tenant_id: int, sbom_id: i
             AnalysisRun.sbom_id == sbom_id,
             AnalysisRun.run_status.in_(COMPLETED_RUN_STATUSES),
             AnalysisRun.is_current.is_(True),
+            AnalysisRun.is_active.is_(True),
         )
     ).scalar()
 
@@ -185,6 +186,22 @@ def _current_contexts(tenant_id: int, sbom_ids):
         VexInvestigation.tenant_id == tenant_id,
         VexInvestigation.is_current.is_(True),
         VexInvestigation.sbom_id.in_(sbom_ids),
+        current_investigation_evidence_clause(),
+    )
+
+
+def current_investigation_evidence_clause():
+    """An obsolete analyzer-only context is history, never current evidence."""
+    latest = select(func.max(AnalysisRun.id)).where(
+        AnalysisRun.tenant_id == VexInvestigation.tenant_id,
+        AnalysisRun.sbom_id == VexInvestigation.sbom_id,
+        AnalysisRun.is_current.is_(True), AnalysisRun.is_active.is_(True),
+        AnalysisRun.run_status.in_(COMPLETED_RUN_STATUSES),
+    ).correlate(VexInvestigation).scalar_subquery()
+    return or_(
+        VexInvestigation.reconciliation_status != "ANALYZER_ONLY",
+        VexInvestigation.last_analysis_run_id.is_(None),
+        VexInvestigation.last_analysis_run_id == func.coalesce(latest, 0),
     )
 
 
@@ -302,6 +319,7 @@ def vex_severity_filter_clause(severity: str):
         .join(AnalysisRun)
         .where(
             AnalysisFinding.component_id == VexInvestigation.component_id,
+            AnalysisFinding.analysis_run_id == VexInvestigation.last_analysis_run_id,
             AnalysisFinding.tenant_id == VexInvestigation.tenant_id,
             or_(
                 finding_id == VexInvestigation.canonical_vulnerability_id,
@@ -334,3 +352,60 @@ __all__ = [
     "vex_run_source_summary",
     "vex_sbom_finding_pairs",
 ]
+
+
+def investigation_findings(db, *, tenant_id, investigations):
+    """One page's recorded run evidence, never all historical runs per row."""
+    run_ids = {row.last_analysis_run_id for row in investigations if row.last_analysis_run_id}
+    components = {row.component_id for row in investigations if row.component_id}
+    return list(db.scalars(select(AnalysisFinding).join(AnalysisRun).where(
+        AnalysisFinding.tenant_id == tenant_id, AnalysisRun.tenant_id == tenant_id,
+        AnalysisFinding.analysis_run_id.in_(run_ids or {0}),
+        AnalysisFinding.component_id.in_(components or {0}),
+    ).order_by(AnalysisFinding.id.desc())).all())
+
+
+def version_comparison_evidence(db, tenant_id, run_ids):
+    """Tenant-bound snapshot inputs for the Compare v2 VEX adapter."""
+    runs = list(db.scalars(select(AnalysisRun).where(AnalysisRun.tenant_id == tenant_id,
+                                                   AnalysisRun.id.in_(run_ids))).all())
+    findings = list(db.execute(select(AnalysisFinding, SBOMComponent).outerjoin(
+        SBOMComponent, SBOMComponent.id == AnalysisFinding.component_id
+    ).where(AnalysisFinding.tenant_id == tenant_id, AnalysisFinding.analysis_run_id.in_(run_ids))).all())
+    components = list(db.scalars(select(SBOMComponent).where(SBOMComponent.tenant_id == tenant_id,
+                                                            SBOMComponent.sbom_id.in_({r.sbom_id for r in runs}))).all())
+    return runs, findings, components
+
+
+def historical_analysis_runs(db, tenant_id, sbom_id):
+    """Run discovery is evidence, including obsolete/failed attempts."""
+    return list(db.execute(select(
+        AnalysisRun.id, AnalysisRun.run_status, AnalysisRun.completed_on, AnalysisRun.is_current,
+    ).where(AnalysisRun.tenant_id == tenant_id, AnalysisRun.sbom_id == sbom_id)
+      .execution_options(include_deleted=True).order_by(AnalysisRun.id.desc())).mappings())
+
+
+def historical_run_snapshot(db, tenant_id, sbom_id, run_id, limit=50, offset=0):
+    from ..models import VexInvestigationSnapshot
+    run = db.scalar(select(AnalysisRun).where(
+        AnalysisRun.tenant_id == tenant_id, AnalysisRun.sbom_id == sbom_id, AnalysisRun.id == run_id,
+    ).execution_options(include_deleted=True))
+    if run is None:
+        return None
+    predicate = (
+        VexInvestigationSnapshot.tenant_id == tenant_id,
+        VexInvestigationSnapshot.sbom_id == sbom_id,
+        VexInvestigationSnapshot.analysis_run_id == run_id,
+    )
+    total = db.scalar(select(func.count()).select_from(VexInvestigationSnapshot).where(*predicate))
+    rows = db.execute(select(VexInvestigationSnapshot, SBOMComponent.name, SBOMComponent.version)
+        .outerjoin(SBOMComponent, and_(SBOMComponent.id == VexInvestigationSnapshot.payload_json["component_id"].as_integer(),
+                                    SBOMComponent.tenant_id == tenant_id))
+        .where(*predicate).order_by(VexInvestigationSnapshot.id).limit(limit).offset(offset)
+        .execution_options(include_deleted=True)).all()
+    return {"analysis_run_id": run.id, "analysis_status": run.run_status, "completed_on": run.completed_on,
+            "obsolete": not run.is_current, "historical": True, "read_only": True,
+            "total": total, "limit": limit, "offset": offset,
+            "snapshot_available": bool(total) or bool(json.loads(run.raw_report or "{}").get("vex_snapshot_captured")),
+            "items": [{**row.payload_json, "investigation_id": row.investigation_id,
+                       "component_name": name, "component_version": version} for row, name, version in rows]}

@@ -1,7 +1,7 @@
 'use client';
 
 import { Suspense, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
 import { Upload } from 'lucide-react';
 import { TopBar } from '@/components/layout/TopBar';
@@ -9,7 +9,7 @@ import { PermissionButton as Button } from '@/components/ui/PermissionButton';
 import { SbomsTable } from '@/components/sboms/SbomsTable';
 import { SbomUploadModal } from '@/components/sboms/SbomUploadModal';
 import { useSbomsList } from '@/hooks/useSbomsList';
-import { getSboms, type DashboardFilterScope } from '@/lib/api';
+import { type DashboardFilterScope } from '@/lib/api';
 import type { SBOMSource } from '@/types';
 
 export default function SbomsPage() {
@@ -27,13 +27,7 @@ function SbomsContent() {
   const scope: DashboardFilterScope = { projectId, applicationId, sbomId };
   const isScoped = projectId != null || analysed;
 
-  const allSboms = useSbomsList({ enabled: !isScoped });
-  const scopedSboms = useQuery({
-    queryKey: ['sboms', 'dashboard-scope', projectId, applicationId, sbomId, analysed],
-    queryFn: ({ signal }) => getSboms(1, 500, signal, scope, analysed),
-    enabled: isScoped,
-  });
-  const { data: sboms, isLoading, error } = isScoped ? scopedSboms : allSboms;
+  const { data: sboms, isLoading, error } = useSbomsList({ scope: isScoped ? scope : undefined, analysed });
 
   /**
    * Called when the upload modal successfully creates an SBOM.

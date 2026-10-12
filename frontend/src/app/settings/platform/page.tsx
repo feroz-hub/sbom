@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { FormEvent, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { usePermissions } from '@/hooks/usePermission';
+import { useMutationScope } from '@/hooks/useMutationScope';
 import { useAuth } from '@/hooks/useAuth';
 import {
   type UserSearchResult,
@@ -17,16 +18,19 @@ import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog';
 import { UserSearchCombobox } from '@/components/admin/UserSearchCombobox';
 import { VerificationBadge, UserStatusBadge, RoleBadge } from '@/components/admin/StatusBadges';
 import { TopBar } from '@/components/layout/TopBar';
+import { invalidatePlatformAdministratorSurfaces } from '@/lib/queryInvalidation';
 
 export default function PlatformAdministratorsPage() {
-  const {  isLoading: authLoading } = useAuth();
+  const { user, refreshSession, isLoading: authLoading } = useAuth();
   const { can: hasPermission } = usePermissions();
   const canRead = hasPermission('platform:administrator:read');
   const canGrant = hasPermission('platform:administrator:grant');
   const canRevoke = hasPermission('platform:administrator:revoke');
   const qc = useQueryClient();
+  const scope = useMutationScope();
   const { showSuccess, showError } = useNotifications();
 
+  const [directoryRevision, setDirectoryRevision] = useState(0);
   const [selectedUser, setSelectedUser] = useState<UserSearchResult | null>(null);
   const [revokeTarget, setRevokeTarget] = useState<{ id: number; name: string } | null>(null);
 
@@ -38,20 +42,28 @@ export default function PlatformAdministratorsPage() {
 
   const grantAdmin = useMutation({
     mutationFn: (userId: number) => grantPlatformAdministrator(userId),
-    onSuccess: async (_res) => {
+    onMutate: () => scope.capture(),
+    onSuccess: async (_res, userId, isCurrent) => {
+      if (!isCurrent?.()) return;
+      if (user?.userId === userId) await refreshSession({ authorizationChanged: true });
       showSuccess(`Platform Administrator authority granted to “${selectedUser?.display_name || selectedUser?.email}”.`);
       setSelectedUser(null);
-      await qc.invalidateQueries({ queryKey: ['platform-administrators'] });
+      await invalidatePlatformAdministratorSurfaces(qc);
+      setDirectoryRevision(n => n + 1);
     },
     onError: (error) => showError(getApiErrorMessage(error, 'Could not grant Platform Administrator.')),
   });
 
   const revokeAdmin = useMutation({
     mutationFn: (grantId: number) => revokePlatformAdministrator(grantId),
-    onSuccess: async () => {
+    onMutate: () => scope.capture(),
+    onSuccess: async (_res, grantId, isCurrent) => {
+      if (!isCurrent?.()) return;
+      if (administrators.data?.some(admin => admin.grant_id === grantId && admin.user_id === user?.userId)) await refreshSession({ authorizationChanged: true });
       showSuccess(`Platform Administrator authority revoked.`);
       setRevokeTarget(null);
-      await qc.invalidateQueries({ queryKey: ['platform-administrators'] });
+      await invalidatePlatformAdministratorSurfaces(qc);
+      setDirectoryRevision(n => n + 1);
     },
     onError: (error) => showError(getApiErrorMessage(error, 'Could not revoke Platform Administrator authority.')),
   });
@@ -93,7 +105,7 @@ export default function PlatformAdministratorsPage() {
           <form onSubmit={submitGrant} className="space-y-4">
             <div>
               <label className="block text-sm font-medium mb-1">Select User</label>
-              <UserSearchCombobox governance
+              <UserSearchCombobox revision={directoryRevision} governance
                 onSelect={(u) => setSelectedUser(u)}
                 selectedUser={selectedUser}
                 placeholder="Search existing SBOM users by email or name…"

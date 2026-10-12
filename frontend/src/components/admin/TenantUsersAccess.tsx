@@ -4,6 +4,8 @@ import { useState, FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { usePermissions } from '@/hooks/usePermission';
+import { invalidateTenantMembershipSurfaces } from '@/lib/queryInvalidation';
+import { useMutationScope } from '@/hooks/useMutationScope';
 import { useAuth } from '@/hooks/useAuth';
 import NativeUserInviteForm from './NativeUserInviteForm';
 import { Dialog, DialogBody } from '@/components/ui/Dialog';
@@ -41,8 +43,10 @@ export default function TenantUsersAccess() {
   const canUpdate = hasPermission('tenant:user:update');
   const canInvite = hasPermission('tenant:user:invite');
   const qc = useQueryClient();
+  const mutationScope = useMutationScope();
   const { showSuccess, showError } = useNotifications();
 
+  const [directoryRevision, setDirectoryRevision] = useState(0);
   const [selectedUser, setSelectedUser] = useState<UserSearchResult | null>(null);
   const [initialRoles, setInitialRoles] = useState<TenantRole[]>(['VIEWER']);
 
@@ -76,11 +80,14 @@ export default function TenantUsersAccess() {
         roles: initialRoles,
       });
     },
-    onSuccess: async () => {
+    onMutate: () => mutationScope.capture(),
+    onSuccess: async (_result, _variables, isCurrent) => {
+      if (!isCurrent?.()) return;
       showSuccess(`User “${selectedUser?.display_name || selectedUser?.email}” was added to the tenant.`);
+      if (user?.userId === selectedUser?.id) await refreshSession({ authorizationChanged: true });
       setSelectedUser(null);
-      await qc.invalidateQueries({ queryKey: ['tenant-users', currentTenantId] });
-      await qc.invalidateQueries({ queryKey: ['tenant-audit-history', currentTenantId] });
+      await invalidateTenantMembershipSurfaces(qc, currentTenantId!);
+      setDirectoryRevision(n => n + 1);
     },
     onError: (error) => showError(getApiErrorMessage(error, 'Failed to add member to tenant.')),
   });
@@ -93,6 +100,7 @@ export default function TenantUsersAccess() {
 
   const handleSaveRoles = async (selectedRoles: TenantRole[]) => {
     if (!rolesModalMember || !currentTenantId) return;
+    const isCurrent = mutationScope.capture();
     setActionLoading(true);
     try {
       await replaceTenantMemberRoles(
@@ -101,13 +109,11 @@ export default function TenantUsersAccess() {
         selectedRoles,
         rolesModalMember.role_assignment_version,
       );
+      if (!isCurrent()) return;
       showSuccess('Roles updated successfully.');
-      await qc.invalidateQueries({ queryKey: ['tenant-users', currentTenantId] });
-      await qc.invalidateQueries({ queryKey: ['tenant-audit-history', currentTenantId] });
-
-      if (user?.userId === rolesModalMember.user_id) {
-        await refreshSession();
-      }
+      if (user?.userId === rolesModalMember.user_id) await refreshSession({ authorizationChanged: true });
+      await invalidateTenantMembershipSurfaces(qc, currentTenantId!);
+      setDirectoryRevision(n => n + 1);
       setRolesModalMember(null);
     } catch (err: unknown) {
       showError(getApiErrorMessage(err, 'Failed to update roles.'));
@@ -119,18 +125,19 @@ export default function TenantUsersAccess() {
 
   const handleConfirmDisable = async () => {
     if (!disableModalMember || !currentTenantId) return;
+    const isCurrent = mutationScope.capture();
     setActionLoading(true);
     try {
       await deactivateTenantMember(currentTenantId, disableModalMember.membership_id);
+      if (!isCurrent()) return;
       showSuccess('Membership disabled.');
-      await qc.invalidateQueries({ queryKey: ['tenant-users', currentTenantId] });
-      await qc.invalidateQueries({ queryKey: ['tenant-audit-history', currentTenantId] });
-
       if (user?.userId === disableModalMember.user_id) {
-        await refreshSession();
+        await refreshSession({ authorizationChanged: true });
         router.push('/access-pending');
         return;
       }
+      await invalidateTenantMembershipSurfaces(qc, currentTenantId!);
+      setDirectoryRevision(n => n + 1);
       setDisableModalMember(null);
     } catch (err: unknown) {
       showError(getApiErrorMessage(err, 'Failed to disable membership.'));
@@ -142,12 +149,15 @@ export default function TenantUsersAccess() {
 
   const handleConfirmEnable = async () => {
     if (!enableModalMember || !currentTenantId) return;
+    const isCurrent = mutationScope.capture();
     setActionLoading(true);
     try {
       await activateTenantMember(currentTenantId, enableModalMember.membership_id);
+      if (!isCurrent()) return;
       showSuccess('Membership enabled.');
-      await qc.invalidateQueries({ queryKey: ['tenant-users', currentTenantId] });
-      await qc.invalidateQueries({ queryKey: ['tenant-audit-history', currentTenantId] });
+      if (user?.userId === enableModalMember.user_id) await refreshSession({ authorizationChanged: true });
+      await invalidateTenantMembershipSurfaces(qc, currentTenantId!);
+      setDirectoryRevision(n => n + 1);
       setEnableModalMember(null);
     } catch (err: unknown) {
       showError(getApiErrorMessage(err, 'Failed to enable membership.'));
@@ -159,18 +169,19 @@ export default function TenantUsersAccess() {
 
   const handleConfirmRemove = async () => {
     if (!removeModalMember || !currentTenantId) return;
+    const isCurrent = mutationScope.capture();
     setActionLoading(true);
     try {
       await removeTenantMember(currentTenantId, removeModalMember.membership_id);
+      if (!isCurrent()) return;
       showSuccess('User removed from tenant.');
-      await qc.invalidateQueries({ queryKey: ['tenant-users', currentTenantId] });
-      await qc.invalidateQueries({ queryKey: ['tenant-audit-history', currentTenantId] });
-
       if (user?.userId === removeModalMember.user_id) {
-        await refreshSession();
+        await refreshSession({ authorizationChanged: true });
         router.push('/access-pending');
         return;
       }
+      await invalidateTenantMembershipSurfaces(qc, currentTenantId!);
+      setDirectoryRevision(n => n + 1);
       setRemoveModalMember(null);
     } catch (err: unknown) {
       showError(getApiErrorMessage(err, 'Failed to remove member.'));
@@ -237,8 +248,7 @@ export default function TenantUsersAccess() {
         <Dialog open={inviteOpen} title="Invite new user" maxWidth="xl" dismissOnBackdrop={!inviteBusy} onClose={() => { if (!inviteBusy) setInviteOpen(false); }}><DialogBody>
           <NativeUserInviteForm onBusyChange={setInviteBusy} onCancel={() => setInviteOpen(false)} onCreated={() => {
             setInviteOpen(false);
-            void qc.invalidateQueries({ queryKey: ['tenant-users', currentTenantId] });
-            void qc.invalidateQueries({ queryKey: ['tenant-audit-history', currentTenantId] });
+            setDirectoryRevision(n => n + 1);
           }} />
         </DialogBody></Dialog>
       </>}
@@ -254,6 +264,7 @@ export default function TenantUsersAccess() {
               <p className="block text-sm font-medium mb-1">Search existing user</p>
               <UserSearchCombobox
                 tenantId={currentTenantId}
+                revision={directoryRevision}
                 onSelect={setSelectedUser}
                 selectedUser={selectedUser}
                 placeholder="Search by name or email…"

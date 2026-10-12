@@ -49,7 +49,7 @@ export function AiConfigBanner() {
   const [title, description] = aiStatusCopy(status);
   const configure = status.state === 'CONFIGURATION_REQUIRED' && status.source !== 'TENANT' && status.can_configure;
   const action = configure ? 'Configure AI' : status.can_view_settings ? 'View AI Settings' : null;
-  return <section aria-label="AI availability" className="flex flex-col gap-3 rounded-lg border border-border bg-white px-4 py-3 text-sm dark:bg-background sm:flex-row sm:items-center sm:justify-between">
+  return <section aria-label="AI availability" className="flex flex-col gap-2 rounded-lg border border-border bg-surface px-4 py-2.5 text-sm sm:flex-row sm:items-center sm:justify-between">
     <div className="flex min-w-0 items-start gap-2"><Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-hcl-blue" aria-hidden /><div><p className="font-semibold text-hcl-navy">{title}</p><p className="mt-1 text-hcl-muted">{description}</p>{status.configured && <p className="mt-1 text-xs text-hcl-muted">{status.source === 'TENANT' ? 'Tenant managed' : 'Platform managed'}{status.provider && ` · ${providerNames[status.provider] || status.provider}`}{status.available_for_tenant && ' · Available'}</p>}{status.available_for_tenant && status.can_invoke_ai === false && <p className="mt-1 text-xs text-hcl-muted">AI availability is shown for this tenant. Your current permissions do not allow AI Fix Generation.</p>}</div></div>
     {action && <Link className="shrink-0 rounded-md px-2 py-1 text-sm font-medium text-hcl-blue hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-hcl-blue" href={status.settings_scope === 'platform' ? '/platform/configuration/ai' : '/settings/ai'}>{action}</Link>}
   </section>;

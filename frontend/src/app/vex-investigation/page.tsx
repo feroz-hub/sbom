@@ -20,6 +20,9 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { DashboardFilters } from '@/components/dashboard/DashboardFilters';
 import { TopBar } from '@/components/layout/TopBar';
 import { VexInvestigationDialog } from '@/components/vex/VexInvestigationDialog';
+import { VexVersionComparisonPanel } from '@/components/vex/VexVersionComparisonPanel';
+import { VexRunHistoryPanel } from '@/components/vex/VexRunHistoryPanel';
+import { PostureEvidence } from '@/components/sboms/SbomPostureNotice';
 import { AssigneeCombobox } from '@/components/vex/AssigneeCombobox';
 import { Dialog } from '@/components/ui/Dialog';
 import { Alert } from '@/components/ui/Alert';
@@ -88,6 +91,7 @@ const FLAGGED_RECONCILIATION = new Set([
 ]);
 
 type Filters = {
+  versionScope: 'current' | 'all' | 'historical';
   myWork: 'all' | 'me' | 'unassigned' | 'assigned' | 'attention';
   assignee: string;
   unresolvedComponent: boolean;
@@ -103,6 +107,7 @@ type Filters = {
 };
 
 const DEFAULT_FILTERS: Filters = {
+  versionScope: 'current',
   myWork: 'all',
   assignee: '',
   unresolvedComponent: false,
@@ -134,6 +139,7 @@ function initialState(searchParams: URLSearchParams | Readonly<URLSearchParams>)
   const sortBy = searchParams.get('sort_by');
   const sortOrder = searchParams.get('sort_order');
   const filters: Filters = {
+    versionScope: ['all', 'historical'].includes(searchParams.get('version_scope') ?? '') ? searchParams.get('version_scope') as Filters['versionScope'] : 'current',
     myWork: ['me', 'unassigned', 'assigned', 'attention'].includes(searchParams.get('my_work') ?? '')
       ? searchParams.get('my_work') as Filters['myWork'] : 'all',
     assignee: searchParams.get('assignee')?.trim() ?? '',
@@ -246,6 +252,7 @@ function VexInvestigationContent() {
   useEffect(() => {
     if (restoringUrl.current) { restoringUrl.current = false; return; }
     const params = new URLSearchParams();
+    if (filters.versionScope !== 'current') params.set('version_scope', filters.versionScope);
     if (filters.search) params.set('q', filters.search);
     if (filters.effectiveStatus) params.set('effective_status', filters.effectiveStatus);
     if (filters.reconciliationStatus) params.set('reconciliation_status', filters.reconciliationStatus);
@@ -280,6 +287,7 @@ function VexInvestigationContent() {
   // so the three can never disagree (VEX-DASH-004). Sort and paging are
   // deliberately absent: they reorder rows but must never move a total.
   const filterArgs = useMemo<VexInvestigationListParams>(() => ({
+    version_scope: filters.versionScope,
     q: filters.search || undefined,
     my_work: filters.myWork === 'all' ? undefined : filters.myWork,
     assignee: filters.assignee || undefined,
@@ -298,7 +306,7 @@ function VexInvestigationContent() {
   const currentViewQuery = useQuery<VexInvestigationSummary>({
     queryKey: ['vex-investigations', activeTenantId, 'summary', filterArgs],
     queryFn: ({ signal }) => getVexInvestigationSummary(filterArgs, signal),
-    placeholderData: (previous, previousQuery) => previousQuery?.queryKey[1] === activeTenantId ? previous : undefined,
+    placeholderData: undefined,
     enabled: canRead,
   });
 
@@ -309,7 +317,7 @@ function VexInvestigationContent() {
         { ...filterArgs, sort_by: filters.sortBy, sort_order: filters.sortOrder, limit: pageSize, offset },
         signal,
       ),
-    placeholderData: (previous, previousQuery) => previousQuery?.queryKey[1] === activeTenantId ? previous : undefined,
+    placeholderData: (previous, previousQuery) => previousQuery?.queryKey[1] === activeTenantId && JSON.stringify(previousQuery.queryKey[2]) === JSON.stringify(filters) && JSON.stringify(previousQuery.queryKey[3]) === JSON.stringify(scope) ? previous : undefined,
     enabled: canRead,
   });
 
@@ -386,8 +394,11 @@ function VexInvestigationContent() {
   for (const [key, label] of [['projectId', 'Project'], ['applicationId', 'Application'], ['sbomId', 'SBOM']] as const) {
     if (scope[key]) chips.push({ label: `${label} selected`, clear: () => { setScope(current => key === 'projectId' ? { projectId: null, applicationId: null, sbomId: null } : key === 'applicationId' ? { ...current, applicationId: null, sbomId: null } : { ...current, sbomId: null }); setPage(1); } });
   }
-  const scopeControls = <DashboardFilters scope={scope} hideClear onChange={next => { setScope(next); setPage(1); }} isUpdating={listQuery.isFetching} />;
+  const scopeControls = <DashboardFilters scope={scope} historicalVersions={filters.versionScope !== 'current'} hideClear onChange={next => { setScope(next); setPage(1); }} isUpdating={listQuery.isFetching} />;
   const filterControls = <div className="flex flex-wrap items-end gap-3">
+    <Select label="Version scope" value={filters.versionScope} onChange={event => { updateFilter({versionScope: event.target.value as Filters['versionScope']}); setScope(current => ({...current, sbomId: null})); }}>
+      <option value="current">Current posture</option><option value="all">All versions</option><option value="historical">Historical investigations</option>
+    </Select>
     {workingRole ? <Select label="My work" value={filters.myWork} onChange={event => updateFilter({ myWork: event.target.value as Filters['myWork'], assignee: '' })}>
       {Object.entries(WORK_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
     </Select> : null}
@@ -430,15 +441,19 @@ function VexInvestigationContent() {
     <>
       <TopBar title="VEX Investigation" />
       <div className="space-y-4 p-6">
+        {filters.versionScope !== 'current' && <Alert variant="info">Historical investigation evidence is read-only. Historical assignments do not grant authority on a new version.</Alert>}
+        {filters.versionScope !== 'current' && scope.sbomId && <VexRunHistoryPanel key={scope.sbomId} sbomId={scope.sbomId} />}
+        {listQuery.data?.posture && filters.versionScope === 'current' && <PostureEvidence items={listQuery.data.posture} />}
+        {(scope.sbomId || scope.applicationId && listQuery.data?.posture?.length === 1 && listQuery.data.posture[0].current_sbom) && <VexVersionComparisonPanel sbomId={scope.sbomId ?? listQuery.data!.posture![0].current_sbom!.id} />}
         <section aria-labelledby="vex-current-view-heading" className="space-y-2">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 id="vex-current-view-heading" className="text-sm font-semibold text-hcl-navy dark:text-gray-100">Current view</h2>
+            <h2 id="vex-current-view-heading" className="text-sm font-semibold text-hcl-navy dark:text-gray-100">{filters.versionScope === 'current' ? 'Current view' : filters.versionScope === 'historical' ? 'Historical view' : 'All versions view'}</h2>
             <p role="status" className="text-xs text-hcl-muted">
               {currentViewQuery.isError
                 ? 'Current view metrics unavailable'
                 : chips.length
-                  ? `Counts for the ${chips.length} active filter${chips.length === 1 ? '' : 's'} below · current SBOM versions, latest successful analysis`
-                  : 'All current SBOM versions in this tenant · latest successful analysis'}
+                  ? `Counts for the ${chips.length} active filter${chips.length === 1 ? '' : 's'} below · ${filters.versionScope === 'current' ? 'current posture versions, latest successful analysis' : 'explicit historical/version scope'}`
+                  : filters.versionScope === 'current' ? 'All current posture versions in this tenant · latest successful analysis' : 'Explicit version/history scope · independent of current posture'}
             </p>
           </div>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
@@ -643,7 +658,7 @@ function InvestigationTableRow({
           <span className="text-hcl-muted"> {row.component_version}</span>
         ) : null}
       </Td>
-      <Td>{row.sbom_name ?? '—'}</Td>
+      <Td>{row.sbom_name ?? '—'}{row.sbom_version && <div className="text-xs">Version {row.sbom_version}</div>}{row.historical && <Badge variant="gray">Historical · read-only</Badge>}</Td>
       <Td>{row.analyzer_detection_state ?? '—'}</Td>
       <Td>{row.native_vex_status ?? '—'}</Td>
       <Td>

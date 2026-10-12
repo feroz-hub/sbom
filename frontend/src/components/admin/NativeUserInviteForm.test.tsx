@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider, QueryObserver } from '@tanstack/react-query';
 // @vitest-environment jsdom
 import { ToastProvider } from '@/hooks/useToast';
 import type { ReactElement } from 'react';
@@ -6,6 +7,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import NativeUserInviteForm from './NativeUserInviteForm';
 
+let testClient: QueryClient;
 const state = vi.hoisted(() => ({ platform: true }));
 const list = vi.hoisted(() => vi.fn());
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({
@@ -72,4 +74,34 @@ describe('Native invitation', () => {
   });
 });
 
-function render(ui: ReactElement) { return rtlRender(ui, { wrapper: ToastProvider }); }
+it.each([true, false])('invitation refreshes authoritative tenant membership/counts (platform=%s)', async platform => {
+  state.platform = platform;
+  list.mockResolvedValue([{ id: 12, name: 'Olympus Healthcare', slug: 'olympus', status: 'ACTIVE' }]);
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ user_id: 55, status: 'PENDING_EMAIL_VERIFICATION', delivery: { status: 'PENDING' } })));
+  const user = userEvent.setup(); render(<NativeUserInviteForm />);
+  testClient.setQueryData(['platform-summary'], { total_memberships: 1 });
+  testClient.setQueryData(['tenant-users', 12], []);
+  const summary = vi.fn().mockResolvedValue({ total_memberships: 2 });
+  const members = vi.fn().mockResolvedValue([{ user_id: 55, status: 'PENDING_EMAIL_VERIFICATION' }]);
+  const stops = [new QueryObserver(testClient, { queryKey: ['platform-summary'], queryFn: summary }).subscribe(() => {}), new QueryObserver(testClient, { queryKey: ['tenant-users', 12], queryFn: members }).subscribe(() => {})];
+  if (platform) { await user.click(screen.getByRole('button', { name: 'Tenant' })); await user.click(await screen.findByRole('button', { name: 'Olympus Healthcare — olympus' })); }
+  for (const [label, value] of [['first name', 'New'], ['last name', 'User'], ['email', 'new@example.test']]) await user.type(screen.getByLabelText(new RegExp(label, 'i')), value);
+  await user.click(screen.getByRole('button', { name: /Create and send/ }));
+  await waitFor(() => expect(testClient.getQueryData(['platform-summary'])).toEqual({ total_memberships: 2 }));
+  expect(testClient.getQueryData(['tenant-users', 12])).toEqual([{ user_id: 55, status: 'PENDING_EMAIL_VERIFICATION' }]);
+  expect(summary).toHaveBeenCalledTimes(1); expect(members).toHaveBeenCalledTimes(1); stops.forEach(stop => stop());
+});
+it('failed invitation preserves the form and leaves cached metrics fresh', async () => {
+  state.platform = false; vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ detail: 'denied' }, { status: 403 })));
+  const user = userEvent.setup(); render(<NativeUserInviteForm />); testClient.setQueryData(['platform-summary'], { total_memberships: 1 });
+  for (const [label, value] of [['first name', 'Draft'], ['last name', 'User'], ['email', 'new@example.test']]) await user.type(screen.getByLabelText(new RegExp(label, 'i')), value);
+  await user.click(screen.getByRole('button', { name: /Create and send/ }));
+  expect(await screen.findByRole('status')).toHaveTextContent('Unable to create user'); expect(screen.getByLabelText(/first name/i)).toHaveValue('Draft');
+  expect(testClient.getQueryState(['platform-summary'])?.isInvalidated).toBe(false);
+});
+
+function render(ui: ReactElement) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 300000, refetchOnWindowFocus: false } } });
+  testClient = qc;
+  return rtlRender(ui, { wrapper: ({ children }) => <QueryClientProvider client={qc}><ToastProvider>{children}</ToastProvider></QueryClientProvider> });
+}

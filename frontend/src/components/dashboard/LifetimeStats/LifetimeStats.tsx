@@ -22,6 +22,7 @@ interface LifetimeStatsProps {
    */
   findingsTotal: number | undefined;
   isLoading: boolean;
+  completedOnly?: boolean;
 }
 
 /**
@@ -37,7 +38,7 @@ interface LifetimeStatsProps {
  *
  * Layout / copy originally from `docs/dashboard-redesign.md` §6.
  */
-export function LifetimeStats({ data, findingsTotal, isLoading }: LifetimeStatsProps) {
+export function LifetimeStats({ data, findingsTotal, isLoading, completedOnly = false }: LifetimeStatsProps) {
   const { hasPermission } = useAuth();
   if (isLoading) {
     return (
@@ -60,7 +61,7 @@ export function LifetimeStats({ data, findingsTotal, isLoading }: LifetimeStatsP
     );
   }
 
-  const runsTotal = data?.runs_executed_total ?? 0;
+  const runsTotal = completedOnly ? data?.runs_completed_total : data?.runs_executed_total ?? 0;
   const runsThisWeek = data?.runs_executed_this_week ?? 0;
   const findings = findingsTotal ?? 0;
   const days = data?.days_monitoring ?? 0;
@@ -96,14 +97,14 @@ export function LifetimeStats({ data, findingsTotal, isLoading }: LifetimeStatsP
         />
         <LifetimeStatTile
           label="Analysis runs completed"
-          value={runsTotal.toLocaleString()}
+          value={runsTotal?.toLocaleString() ?? "—"}
           icon={Waypoints}
           caption={
-            runsThisWeek > 0
+            !completedOnly && runsThisWeek > 0
               ? `${runsThisWeek.toLocaleString()} this week`
-              : runsTotal === 0 ? 'No completed analysis runs' : 'None this week'
+              : completedOnly ? 'Successful completed analyses' : runsTotal === 0 ? 'No completed analysis runs' : 'None this week'
           }
-          tooltip="Every analysis run recorded, across all SBOMs and projects."
+          tooltip={completedOnly ? "Successful completed runs: OK, FINDINGS and PARTIAL. Partial runs have incomplete coverage." : "Every analysis run recorded, across all SBOMs and projects."}
           href={hasPermission('analysis:read') ? '/analysis' : undefined}
           actionLabel="View Analysis"
         />

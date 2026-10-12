@@ -44,7 +44,7 @@ export function useUploadSbom() {
   return useMutation<SBOMSource, Error, CreateSBOMPayload>({
     mutationFn: (payload) => uploadSbom(payload),
     onSuccess: (sbom) => {
-      invalidateUploadSurfaces(qc, sbom.project_id ?? sbom.projectid);
+      return invalidateUploadSurfaces(qc, sbom.project_id ?? sbom.projectid, sbom.product_id);
     },
   });
 }

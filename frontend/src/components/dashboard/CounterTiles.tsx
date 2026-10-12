@@ -78,24 +78,24 @@ export function CounterTiles({ posture, isLoading: propsIsLoading, scope }: Coun
       {tiles.map((t) => {
         const Icon = t.icon;
         return (
-          <Surface key={t.label} variant="elevated" elevation={1} className="min-w-0 rounded-2xl p-0 hover:shadow-elev-2">
+          <Surface key={t.label} variant="elevated" elevation={1} className="min-w-0 h-full rounded-2xl p-0">
             <button
               type="button"
               disabled={!hasPermission(t.permission)}
               onClick={() => router.push(dashboardDrilldownUrl(t.href, scope))}
-              className="flex min-h-32 w-full items-center gap-4 rounded-2xl px-5 py-4 text-left transition-colors enabled:hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/40 disabled:cursor-default"
+              className="flex min-h-32 h-full w-full items-center gap-4 rounded-2xl px-5 py-4 text-left transition-colors enabled:hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue/40 disabled:cursor-default"
             >
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-hcl-light text-hcl-blue">
                 <Icon className="h-5 w-5" aria-hidden />
               </span>
               <span className="min-w-0">
-                <span className="block text-[11px] font-semibold uppercase tracking-wider text-hcl-muted">
+                <span className="block text-[11px] font-semibold uppercase tracking-wider text-foreground/75">
                   {t.label}
                 </span>
                 {isLoading || t.value == null ? (
                   <Skeleton className="mt-1 h-7 w-16" />
                 ) : (
-                  <span className="block font-metric text-3xl font-bold tabular-nums text-hcl-navy">
+                  <span className="block font-metric text-3xl font-bold leading-tight tabular-nums text-hcl-navy">
                     {t.value.toLocaleString()}
                   </span>
                 )}

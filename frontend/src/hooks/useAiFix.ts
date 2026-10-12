@@ -16,6 +16,9 @@
  *     into one shape the Settings page consumes.
  */
 
+import { useMutationScope } from './useMutationScope';
+import { isAiBatchTerminal, reconcileAiBatchTerminal, invalidateAiBatchCancellation } from '@/lib/aiBatchSync';
+import { invalidateAiBatchSurfaces } from '@/lib/queryInvalidation';
 import { useEffect, useState } from 'react';
 import {
   type QueryClient,
@@ -113,10 +116,6 @@ export function useAiFix(
 type SSEAvailable = boolean | null;
 
 
-function isTerminal(status: AiBatchProgress['status']): boolean {
-  return status === 'complete' || status === 'failed' || status === 'cancelled';
-}
-
 
 /** Polling fallback factor. */
 const POLL_INTERVAL_MS = 2_000;
@@ -133,7 +132,8 @@ export function useAiBatchProgress(
   args: { enabled?: boolean } = {},
 ) {
   const { enabled = true } = args;
-  const active = enabled && runId != null;
+  const { key: scopeKey, ready: scopeReady, capture } = useMutationScope();
+  const active = enabled && runId != null && scopeReady;
   const qc = useQueryClient();
   const [sseAvailable, setSseAvailable] = useState<SSEAvailable>(null);
 
@@ -151,7 +151,7 @@ export function useAiBatchProgress(
       // ``null`` = backend 204 (run exists, no batch — idle). Stop, same as
       // a terminal status; don't poll a dead/idle endpoint forever.
       if (data === null) return false;
-      if (data && isTerminal(data.status)) return false;
+      if (data && isAiBatchTerminal(data)) return false;
       return POLL_INTERVAL_MS;
     },
   });
@@ -159,6 +159,9 @@ export function useAiBatchProgress(
   // SSE subscription.
   useEffect(() => {
     if (!active) return;
+    const isCurrent = capture();
+    let disposed = false;
+    setSseAvailable(null);
     if (typeof window === 'undefined' || typeof EventSource === 'undefined') {
       setSseAvailable(false);
       return;
@@ -174,24 +177,32 @@ export function useAiBatchProgress(
     es.addEventListener('progress', (event: MessageEvent) => {
       try {
         const parsed = JSON.parse(event.data) as AiBatchProgress;
+        if (disposed || !isCurrent() || parsed.run_id !== runId) return;
         qc.setQueryData(['ai-batch-progress', runId], parsed);
         setSseAvailable(true);
+        if (isAiBatchTerminal(parsed)) es?.close();
       } catch {
         // Ignore malformed events; the polling fallback will catch up.
       }
     });
     es.addEventListener('end', () => {
       es?.close();
+      if (!disposed && isCurrent()) setSseAvailable(false);
     });
     es.onerror = () => {
       // Server unavailable → fall back to polling.
-      setSseAvailable(false);
+      if (!disposed && isCurrent()) setSseAvailable(false);
       es?.close();
     };
     return () => {
-      es?.close();
+      disposed = true; es?.close();
     };
-  }, [active, runId, qc]);
+  }, [active, runId, qc, scopeKey, capture]);
+
+  useEffect(() => {
+    if (!active || !query.data) return;
+    void reconcileAiBatchTerminal(qc, { progress: query.data, scope: scopeKey, isCurrent: capture() });
+  }, [active, query.data, qc, scopeKey, capture]);
 
   return query;
 }
@@ -202,16 +213,17 @@ export function useAiBatchProgress(
 
 export function useTriggerAiFixes(runId: number) {
   const qc = useQueryClient();
+  const { key: scopeKey, capture } = useMutationScope();
   return useMutation({
     mutationFn: (body: AiTriggerBatchRequest = {}) => triggerRunAiFixes(runId, body),
-    onSuccess: (resp) => {
+    onMutate: () => ({ isCurrent: capture(), scope: scopeKey }),
+    onSuccess: async (resp, _body, context) => {
+      if (!context?.isCurrent()) return;
       qc.setQueryData(['ai-batch-progress', runId], resp.progress);
-      // The list of cached fixes will change as the batch completes —
-      // invalidate so the run-detail table re-fetches when the user
-      // opens it next.
-      qc.invalidateQueries({ queryKey: ['ai-fix-list', runId] });
-      // Multi-batch history table picks up the new batch row.
-      qc.invalidateQueries({ queryKey: ['ai-batch-list', runId] });
+      if (resp.batch_id) qc.setQueryData(['ai-batch-progress', runId, resp.batch_id], resp.progress);
+      // Only progress/history at enqueue. Cached fixes change on server completion.
+      await invalidateAiBatchSurfaces(qc, runId);
+      await reconcileAiBatchTerminal(qc, { progress: resp.progress, scope: context.scope, isCurrent: context.isCurrent });
     },
   });
 }
@@ -219,14 +231,13 @@ export function useTriggerAiFixes(runId: number) {
 
 export function useCancelAiFixes(runId: number) {
   const qc = useQueryClient();
+  const { key: scopeKey, capture } = useMutationScope();
   return useMutation({
     mutationFn: () => cancelRunAiFixes(runId),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['ai-batch-progress', runId] });
-      // Partial fixes were cached as they came in; show them.
-      qc.invalidateQueries({ queryKey: ['ai-fix-list', runId] });
-      // Batch status flips to cancelled.
-      qc.invalidateQueries({ queryKey: ['ai-batch-list', runId] });
+    onMutate: () => ({ isCurrent: capture(), scope: scopeKey }),
+    onSuccess: async (_resp, _variables, context) => {
+      if (!context) return;
+      await invalidateAiBatchCancellation(qc, { runId, batchId: qc.getQueryData<AiBatchProgress>(['ai-batch-progress', runId])?.batch_id ?? null, scope: context.scope, isCurrent: context.isCurrent });
     },
   });
 }
@@ -293,18 +304,17 @@ export function useScopedRunBatchEstimate(
  */
 export function useTriggerScopedAiFixes(runId: number) {
   const qc = useQueryClient();
+  const { key: scopeKey, capture } = useMutationScope();
   return useMutation({
     mutationFn: (body: AiTriggerBatchRequest = {}) => triggerRunAiFixes(runId, body),
-    onSuccess: (resp) => {
-      // Seed both the batch-keyed and the legacy run-keyed cache so
-      // any consumer that hasn't migrated to the multi-batch keys
-      // still sees fresh data.
+    onMutate: () => ({ isCurrent: capture(), scope: scopeKey }),
+    onSuccess: async (resp, _body, context) => {
+      if (!context?.isCurrent()) return;
       qc.setQueryData(['ai-batch-progress', runId], resp.progress);
-      if (resp.batch_id) {
-        qc.setQueryData(['ai-batch-progress', runId, resp.batch_id], resp.progress);
-      }
-      qc.invalidateQueries({ queryKey: ['ai-fix-list', runId] });
-      qc.invalidateQueries({ queryKey: ['ai-batch-list', runId] });
+      if (resp.batch_id) qc.setQueryData(['ai-batch-progress', runId, resp.batch_id], resp.progress);
+      // Only progress/history at enqueue. Cached fixes change on server completion.
+      await invalidateAiBatchSurfaces(qc, runId);
+      await reconcileAiBatchTerminal(qc, { progress: resp.progress, scope: context.scope, isCurrent: context.isCurrent });
     },
   });
 }
@@ -328,15 +338,13 @@ export function useRunAiBatches(
 /** Cancel one specific batch. */
 export function useCancelAiBatch(runId: number) {
   const qc = useQueryClient();
+  const { key: scopeKey, capture } = useMutationScope();
   return useMutation({
     mutationFn: (batchId: string) => cancelRunAiBatch(runId, batchId),
-    onSuccess: (_resp, batchId) => {
-      qc.invalidateQueries({ queryKey: ['ai-batch-progress', runId, batchId] });
-      qc.invalidateQueries({ queryKey: ['ai-batch-list', runId] });
-      // Partial fixes were cached during the batch.
-      qc.invalidateQueries({ queryKey: ['ai-fix-list', runId] });
-      // Legacy banner consumers read the no-batchId key — refresh them too.
-      qc.invalidateQueries({ queryKey: ['ai-batch-progress', runId] });
+    onMutate: () => ({ isCurrent: capture(), scope: scopeKey }),
+    onSuccess: async (_resp, batchId, context) => {
+      if (!context) return;
+      await invalidateAiBatchCancellation(qc, { runId, batchId: batchId, scope: context.scope, isCurrent: context.isCurrent });
     },
   });
 }

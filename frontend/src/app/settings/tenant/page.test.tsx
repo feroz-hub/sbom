@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { invalidateTenantMembershipSurfaces } from '@/lib/queryInvalidation';
+import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -8,7 +9,7 @@ import { ToastProvider } from '@/hooks/useToast';
 
 let mockPlatform = true;
 let mockReadOnly = false;
-vi.mock('@/components/admin/NativeUserInviteForm', () => ({ default: ({ onCreated }: { onCreated: () => void }) => <button onClick={onCreated}>Complete invitation</button> }));
+vi.mock('@/components/admin/NativeUserInviteForm', () => ({ default: ({ onCreated }: { onCreated: () => void }) => { const qc = useQueryClient(); return <button onClick={async () => { await invalidateTenantMembershipSurfaces(qc, 1); onCreated(); }}>Complete invitation</button>; } }));
 
 const api = vi.hoisted(() => ({
   getTenantMembers: vi.fn(),

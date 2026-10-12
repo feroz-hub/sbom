@@ -65,6 +65,11 @@ vi.mock('@/lib/api', async () => {
   return {
     ...actual,
     BASE_URL: 'http://test.local',
+    getProjects: async () => [],
+    getProducts: async () => ({ items: [], total: 0 }),
+    updateSbom: (...args: unknown[]) => editSbom(...args),
+    // These legacy override scenarios have no investigation context; keep resolver refetches local.
+    getVexInvestigationByTriple: async () => null,
     getSbomComponents: (...args: unknown[]) => getSbomComponents(...args),
     getRuns: (...args: unknown[]) => getRuns(...args),
     getSbomInfo: (...args: unknown[]) => getSbomInfo(...args),
@@ -486,6 +491,37 @@ describe('SbomDetail lifecycle management', () => {
     await waitFor(() => expect(overrideVexStatement).toHaveBeenCalledWith(99, 'VENDOR-42',
       expect.objectContaining({ status: 'under_investigation', reason: 'External advisory' }), undefined, 42));
     expect(overrideComponentLifecycle).not.toHaveBeenCalled();
+  }, 15000);
+
+  it('restores a new revision, refreshes inventory choices and preserves navigation and snapshots', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { staleTime: 300_000, retry: false } } });
+    getSbomVersions.mockResolvedValue([SBOM, { ...SBOM, id: 40, sbom_version: '0.9' }]);
+    restoreSbomVersion.mockResolvedValue({ ...SBOM, id: 43, parent_id: 42, projectid: 7, product_id: 8 });
+    const keys = [['sboms'], ['product-sboms', 8], ['logical-sbom-versions', 4], ['reports', 'targets', 'SBOM', 'search']];
+    keys.forEach(key => client.setQueryData(key, 'before'));
+    client.setQueryData(['vex-run-snapshot', 'tenant', 42, 1], 'immutable');
+    render(<QueryClientProvider client={client}><SbomDetail sbom={SBOM} /></QueryClientProvider>);
+    fireEvent.click(screen.getByRole('button', { name: /Version History/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Restore' }));
+    expect(await screen.findByText(/Version restored successfully as a new revision/)).toBeInTheDocument();
+    await waitFor(() => keys.forEach(key => expect(client.getQueryState(key)?.isInvalidated).toBe(true)));
+    expect(client.getQueryState(['vex-run-snapshot', 'tenant', 42, 1])?.isInvalidated).toBe(false);
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/sboms/43'), { timeout: 4000 });
+    client.clear();
+  }, 15000);
+
+  it('metadata edit uses returned owners rather than assuming form owners are unchanged', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { staleTime: 300_000, retry: false } } });
+    const owned = { ...SBOM, projectid: 1, product_id: 10 };
+    editSbom.mockResolvedValue({ ...owned, sbom_name: 'Renamed', projectid: 2, product_id: 20 });
+    const keys = [['product-sboms', 10], ['product-sboms', 20], ['project', 1], ['project', 2]];
+    keys.forEach(key => client.setQueryData(key, 'before')); client.setQueryData(['project', 99], 'other');
+    render(<QueryClientProvider client={client}><SbomDetail sbom={owned} /></QueryClientProvider>);
+    fireEvent.click(screen.getByRole('button', { name: /Edit Details/i }));
+    fireEvent.change(screen.getByLabelText(/^SBOM Name/), { target: { value: 'Renamed' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save Details/i }));
+    await waitFor(() => keys.forEach(key => expect(client.getQueryState(key)?.isInvalidated).toBe(true)));
+    expect(client.getQueryState(['project', 99])?.isInvalidated).toBe(false); client.clear();
   }, 15000);
 
   it('submits a decision and shows audit history', async () => {

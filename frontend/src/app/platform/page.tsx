@@ -390,7 +390,10 @@ export default function PlatformDashboard() {
                         <th
                           key={label}
                           scope="col"
-                          className="px-5 py-3 font-medium"
+                          className={cn(
+                            'px-5 py-3.5 font-semibold tracking-wide',
+                            label === 'Actions' && 'text-center',
+                          )}
                         >
                           {label}
                         </th>
@@ -399,8 +402,8 @@ export default function PlatformDashboard() {
                   </thead>
                   <tbody className="divide-y divide-border">
                     {tenants.data.map((tenant) => (
-                      <tr key={tenant.id} className="hover:bg-surface-muted/50">
-                        <td className="px-5 py-4">
+                      <tr key={tenant.id} className="hover:bg-surface-muted/40">
+                        <td className="px-5 py-4 align-middle">
                           <p
                             className="max-w-64 truncate font-semibold text-foreground"
                             title={tenant.name}
@@ -411,29 +414,29 @@ export default function PlatformDashboard() {
                             {tenant.slug}
                           </p>
                         </td>
-                        <td className="px-5 py-4">
+                        <td className="px-5 py-4 align-middle">
                           <TenantStatusBadge status={tenant.status} />
                         </td>
-                        <td className="px-5 py-4 tabular-nums">
+                        <td className="px-5 py-4 align-middle tabular-nums">
                           {tenant.member_count ?? '—'}
                         </td>
-                        <td className="px-5 py-4 tabular-nums">
+                        <td className="px-5 py-4 align-middle tabular-nums">
                           {tenant.current_administrators?.length ?? '—'}
                         </td>
-                        <td className="whitespace-nowrap px-5 py-4 text-xs text-foreground/70">
+                        <td className="whitespace-nowrap px-5 py-4 align-middle text-xs text-foreground/70">
                           {dateLabel(tenant.created_at)}
                         </td>
-                        <td className="px-5 py-4">
+                        <td className="px-5 py-4 align-middle text-center">
                           <Link
                             href={`${tenantsHref}/${tenant.id}`}
-                            aria-label={`View ${tenant.name}`}
+                            aria-label={`Open ${tenant.name} tenant`}
+                            title="Open tenant details"
                             className={cn(
-                              'inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-muted',
+                              'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-surface text-foreground/70 hover:bg-primary/10 hover:text-primary dark:hover:text-primary-300',
                               focus,
                             )}
                           >
-                            View
-                            <ArrowRight className="h-3 w-3" aria-hidden />
+                            <ArrowRight className="h-4 w-4" aria-hidden />
                           </Link>
                         </td>
                       </tr>

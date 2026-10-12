@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { use, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Eye, Play, Upload } from 'lucide-react';
+import { SbomPostureNotice } from '@/components/sboms/SbomPostureNotice';
 import { TopBar } from '@/components/layout/TopBar';
 import { Alert } from '@/components/ui/Alert';
 import { PermissionButton as Button } from '@/components/ui/PermissionButton';
@@ -17,6 +18,7 @@ import { useAnalysisStream } from '@/hooks/useAnalysisStream';
 import { getProduct, getProductSboms, getLogicalSboms, updateProduct } from '@/lib/api';
 import { NotifyMeLink } from '@/components/reports/NotifyMeLink';
 import { ScheduleCard } from '@/components/schedules/ScheduleCard';
+import { usePermission } from '@/hooks/usePermission';
 import { useToast } from '@/hooks/useToast';
 import { getApiErrorMessage } from '@/lib/notifications';
 import { invalidateProductSurfaces } from '@/lib/queryInvalidation';
@@ -100,6 +102,7 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
   const id = Number(idParam);
   const queryClient = useQueryClient();
   const { showToast } = useToast();
+  const canSelectCurrent = usePermission('product:update');
   const [masterPage, setMasterPage] = useState(1);
   const [showUpload, setShowUpload] = useState(false);
 
@@ -117,9 +120,16 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
 
   const logicalSbomsQuery = useQuery({ queryKey: ['logical-sboms', id, masterPage], queryFn: ({ signal }) => getLogicalSboms(id, signal, masterPage), enabled: Number.isFinite(id) });
 
+  const selectionModeMutation = useMutation({
+    mutationFn: (mode: 'AUTO' | 'MANUAL_PIN') => updateProduct(id, { current_sbom_mode: mode }),
+    onSuccess: () => { invalidateProductSurfaces(queryClient, id); showToast('Selection policy updated', 'success'); },
+    onError: error => showToast(getApiErrorMessage(error, 'Selection policy update failed.'), 'error'),
+  });
+
   const currentSbomMutation = useMutation({
     mutationFn: (currentSbomId: number) => updateProduct(id, { current_sbom_id: currentSbomId }),
     onSuccess: () => {
+      invalidateProductSurfaces(queryClient, id);
       queryClient.invalidateQueries({ queryKey: ['product', id] });
       queryClient.invalidateQueries({ queryKey: ['schedule-targets'] });
       queryClient.invalidateQueries({ queryKey: ['schedule'] });
@@ -168,6 +178,7 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
         }
       />
       <div className="space-y-6 p-6">
+        <SbomPostureNotice scope={{projectId: product.project_id, applicationId: product.id, sbomId: null}} />
         <NotifyMeLink scope="PRODUCT" targetId={product.id} />
         <ScheduleCard scope="PRODUCT" targetId={product.id} />
         <Card>
@@ -175,14 +186,19 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
             <CardTitle>Current SBOM</CardTitle>
           </CardHeader>
           <CardContent>
+            <Select label="Current SBOM selection policy" value={product.current_sbom_mode ?? 'MANUAL_PIN'} disabled={!canSelectCurrent || selectionModeMutation.isPending}
+              onChange={event => selectionModeMutation.mutate(event.target.value as 'AUTO' | 'MANUAL_PIN')}
+              hint="AUTO promotes eligible successful analyses in the selected lineage. MANUAL_PIN retains your selected version.">
+              <option value="AUTO">AUTO</option><option value="MANUAL_PIN" disabled={!product.current_sbom_id}>MANUAL_PIN</option>
+            </Select>
             {sboms.length ? (
               <div className="max-w-xl">
                 <Select
                   label="Current version used by CURRENT_ONLY schedules"
                   value={product.current_sbom_id ? String(product.current_sbom_id) : ''}
-                  disabled={currentSbomMutation.isPending}
+                  disabled={!canSelectCurrent || currentSbomMutation.isPending}
                   onChange={(event) => currentSbomMutation.mutate(Number(event.target.value))}
-                  hint="This selection is explicit; version text is never used to guess the current SBOM."
+                  hint="Selecting a version creates a manual pin. New uploads and analyses cannot override it."
                 >
                   <option value="" disabled>Select current SBOM…</option>
                   {sboms.map((sbom) => (

@@ -107,6 +107,12 @@ describe('ProductDetailPage scheduler hierarchy', () => {
 
     await waitFor(() => expect(api.updateProduct).toHaveBeenCalledWith(22, { current_sbom_id: 80 }));
   });
+
+  it('changes selection mode through the authorized Product API', async () => {
+    await renderPage();
+    await userEvent.selectOptions(await screen.findByLabelText('Current SBOM selection policy'), 'AUTO');
+    await waitFor(() => expect(api.updateProduct).toHaveBeenCalledWith(22, {current_sbom_mode: 'AUTO'}));
+  });
 });
 
 vi.mock('@/hooks/useAuth', async () => ({ useAuth: (await import('@/test/authorizedAuth')).authorizedAuth }));

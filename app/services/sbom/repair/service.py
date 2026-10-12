@@ -343,9 +343,13 @@ class AutoRepairService:
                 else None
             )
             if product and (
-                (job.report_json.get("upload_options") or {}).get("set_as_current") or product.current_sbom_id is None
+                (job.report_json.get("upload_options") or {}).get("set_as_current")
             ):
+                if not self.context.has_permission("product:update"):
+                    raise HTTPException(403, "Current SBOM pinning requires product:update")
+                self.db.refresh(product, with_for_update=True)
                 previous = product.current_sbom_id
+                product.current_sbom_mode = "MANUAL_PIN"
                 product.current_sbom_id, product.updated_at = imported.id, now_iso()
                 audit_service.write_audit_log(
                     self.db,
@@ -354,7 +358,7 @@ class AutoRepairService:
                     entity_type="product",
                     entity_id=product.id,
                     old_value={"current_sbom_id": previous},
-                    new_value={"current_sbom_id": imported.id, "source": "sbom.repair.approve"},
+                    new_value={"current_sbom_id": imported.id, "source": "sbom.repair.approve", "mode": "MANUAL_PIN"},
                 )
             # Publish a new draft path atomically; the previous file stays intact.
             set_session_repair_text(session, job.candidate_content, _storage_id=job.id)

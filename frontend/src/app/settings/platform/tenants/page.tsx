@@ -21,6 +21,7 @@ import { slugFromName, validateTenantForm } from '@/lib/tenantForm';
 import { TenantStatusBadge } from '@/components/admin/StatusBadges';
 import { UserSearchCombobox } from '@/components/admin/UserSearchCombobox';
 import { TopBar } from '@/components/layout/TopBar';
+import { invalidatePlatformTenantSurfaces } from '@/lib/queryInvalidation';
 
 const EMPTY_FORM: CreateTenantRequest = {
   name: '',
@@ -126,7 +127,7 @@ export default function PlatformTenantsPage() {
       setSelectedInitialAdmin(null);
       setFieldErrors({});
       setFormOpen(false);
-      await queryClient.invalidateQueries({ queryKey: ['platform-tenants'] });
+      await invalidatePlatformTenantSurfaces(queryClient, Number(tenant.id));
       router.push(`/settings/platform/tenants/${tenant.id}`);
     },
     onError: (error) => {
@@ -141,7 +142,7 @@ export default function PlatformTenantsPage() {
     onSuccess: async (_result, variables) => {
       showSuccess(`Tenant “${variables.name}” was ${variables.status === 'ACTIVE' ? 'activated' : 'disabled'} successfully.`);
       setDisableTarget(null);
-      await queryClient.invalidateQueries({ queryKey: ['platform-tenants'] });
+      await invalidatePlatformTenantSurfaces(queryClient, Number(variables.id));
     },
     onError: (error) => showError(getApiErrorMessage(error, 'The tenant status could not be changed.')),
   });

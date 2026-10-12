@@ -1,4 +1,7 @@
 'use client';
+import { useQueryClient } from '@tanstack/react-query';
+import { invalidateTenantMembershipSurfaces } from '@/lib/queryInvalidation';
+import { useMutationScope } from '@/hooks/useMutationScope';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/hooks/useToast';
@@ -12,8 +15,10 @@ import { type TenantSummary } from '@/lib/api';
 import { TenantSearchSelect } from './TenantSearchSelect';
 
 export default function NativeUserInviteForm({ onCreated, onCancel, onBusyChange }: { onCreated?: () => void; onCancel?: () => void; onBusyChange?: (busy: boolean) => void }) {
+  const qc = useQueryClient();
+  const mutationScope = useMutationScope();
   const { showToast } = useToast();
-  const {  activeTenantId, activeTenant } = useAuth();
+  const { user, refreshSession, activeTenantId, activeTenant } = useAuth();
   const { can: hasPermission } = usePermissions();
   const platform = hasPermission('platform:user:manage_status');
   const allowed = platform || hasPermission('tenant:user:invite');
@@ -28,6 +33,7 @@ export default function NativeUserInviteForm({ onCreated, onCancel, onBusyChange
     const data = new FormData(event.currentTarget);
     const tenantId = Number(platform ? selectedTenant?.id : activeTenantId);
     if (!tenantId) { setMessage('Select an active tenant.'); return; }
+    const isCurrent = mutationScope.capture();
     setConflictTenant(null);
     setBusy(true); onBusyChange?.(true);
     try {
@@ -38,6 +44,7 @@ export default function NativeUserInviteForm({ onCreated, onCancel, onBusyChange
           email: data.get('email'), phone: data.get('phone'), tenant_id: tenantId, role_codes: data.getAll('role_codes') }),
       });
       const result = await response.json();
+      if (!isCurrent()) return;
       if (result.detail?.code === 'MEMBERSHIP_ALREADY_EXISTS') {
         setConflictTenant(tenantId);
         setMessage(`This account already belongs to the selected tenant. Current roles: ${result.detail.roles.join(', ')}.`);
@@ -45,7 +52,9 @@ export default function NativeUserInviteForm({ onCreated, onCancel, onBusyChange
         if (response.ok) {
           const delivery = result.delivery?.status;
           showToast(delivery === 'NOT_REQUIRED' ? 'Existing account added to the tenant.' : delivery === 'FAILED' ? 'User created, but activation email could not be delivered. Use resend activation to try again.' : 'Invitation created. The user will receive activation instructions.', delivery === 'FAILED' ? 'warning' : 'success');
-          onCreated?.();
+          if (result.user_id === user?.userId) await refreshSession({ authorizationChanged: true });
+          else await invalidateTenantMembershipSurfaces(qc, tenantId);
+          if (isCurrent()) onCreated?.();
         } else setMessage('Unable to create user. Please review the information and selected tenant, then try again.');
       }
     } catch { setMessage('Unable to reach the server.'); }

@@ -23,7 +23,7 @@ from sqlalchemy.sql.elements import ColumnElement
 from ..core.security import CurrentContext, get_current_tenant_context
 from ..db import get_db
 from ..metrics.vex import (
-    vex_component_findings,
+    investigation_findings,
     vex_context_counts_where,
     vex_severity_filter_clause,
 )
@@ -48,7 +48,9 @@ from ..schemas_vex import (
     InvestigationSummaryResponse,
     SortOrder,
 )
+from ..services.dashboard_scope import DashboardScope
 from ..services.lifecycle.types import now_iso
+from ..services.sbom_posture import investigation_is_historical
 from ..services.vex.audit import (
     record_action,
     record_assignment,
@@ -62,10 +64,10 @@ from ..services.vex.authorization import (
     membership,
     membership_key,
     owner,
+    page_owners,
     require_assignment,
     require_update,
 )
-from ..services.dashboard_scope import DashboardScope
 from ..services.vex.enums import NEEDS_REVIEW_STATUSES
 from ..services.vex.identity import canonical_vulnerability, parse_alias_column
 
@@ -103,7 +105,7 @@ def _investigation_or_404(db: Session, investigation_id: int, tenant_id: int, *,
     query = select(VexInvestigation).where(
         VexInvestigation.id == investigation_id,
         VexInvestigation.tenant_id == tenant_id,
-    ).execution_options(populate_existing=True)
+    ).execution_options(populate_existing=True, include_deleted=True)
     row = db.scalar(query.with_for_update() if lock else query)
     if row is None:
         raise HTTPException(status_code=404, detail="Investigation not found")
@@ -153,12 +155,7 @@ def _severity_for(db: Session, investigation: VexInvestigation) -> str | None:
         investigation.canonical_vulnerability_id,
         *(alias.upper() for alias in parse_alias_column(investigation.aliases_json)),
     }
-    for finding in vex_component_findings(
-        db,
-        tenant_id=investigation.tenant_id,
-        sbom_id=investigation.sbom_id,
-        component_id=investigation.component_id,
-    ):
+    for finding in investigation_findings(db, tenant_id=investigation.tenant_id, investigations=[investigation]):
         if (finding.vuln_id or "").strip().upper() in ids:
             return finding.severity
     return None
@@ -173,17 +170,18 @@ def _row_payload(
     project: Projects | None,
     product: Product | None,
     context: CurrentContext | None = None,
+    prefetched: dict | None = None,
 ) -> dict[str, Any]:
-    statements = _statements_for(db, investigation)
+    statements = prefetched['statements'].get(investigation.id, []) if prefetched else _statements_for(db, investigation)
     effective = next(
         (s for s in statements if s.id == investigation.effective_vex_statement_id), None
     )
-    assigned = owner(db, investigation, context)
+    assigned = prefetched["owners"][investigation.id] if prefetched else owner(db, investigation, context)
     return {
         "id": investigation.id,
         "canonical_vulnerability_id": investigation.canonical_vulnerability_id,
         "aliases": parse_alias_column(investigation.aliases_json),
-        "severity": _severity_for(db, investigation),
+        "severity": prefetched["severity"].get(investigation.id) if prefetched else _severity_for(db, investigation),
         "component_id": investigation.component_id,
         "component_name": getattr(component, "name", None),
         "component_version": getattr(component, "version", None),
@@ -193,6 +191,9 @@ def _row_payload(
         "product_name": getattr(product, "name", None),
         "sbom_id": investigation.sbom_id,
         "sbom_name": getattr(sbom, "sbom_name", None),
+        "sbom_version": getattr(sbom, "sbom_version", None) or getattr(sbom, "productver", None),
+        "analysis_run_id": investigation.last_analysis_run_id,
+        "historical": investigation.id in prefetched['historical'] if prefetched else investigation_is_historical(db, investigation),
         "analyzer_detection_state": investigation.analyzer_detection_state,
         "analyzer_sources": parse_alias_column(investigation.analyzer_sources_json),
         "vex_source": getattr(effective, "source_name", None),
@@ -210,6 +211,43 @@ def _row_payload(
         "row_version": investigation.row_version or 1,
         "needs_review": investigation.reconciliation_status in _NEEDS_REVIEW_VALUES,
     }
+
+
+def _page_evidence(db, rows, context):
+    tenant_id = _tenant_id(context)
+    statements = db.scalars(select(VexStatement).where(
+        VexStatement.tenant_id == tenant_id,
+        VexStatement.sbom_id.in_({row.sbom_id for row in rows} or {0}),
+        or_(VexStatement.component_id.in_({row.component_id for row in rows if row.component_id} or {0}),
+            VexStatement.component_id.is_(None)),
+    ).order_by(VexStatement.id)).all()
+    statement_index, finding_index = {}, {}
+    for statement in statements:
+        statement_index.setdefault((statement.sbom_id, statement.component_id), []).append(statement)
+    for finding in investigation_findings(db, tenant_id=tenant_id, investigations=rows):
+        finding_index.setdefault((finding.analysis_run_id, finding.component_id), []).append(finding)
+    matching, severity = {}, {}
+    for row in rows:
+        ids = {row.canonical_vulnerability_id, *(a.upper() for a in parse_alias_column(row.aliases_json))}
+        matching[row.id] = [v for v in statement_index.get((row.sbom_id, row.component_id), [])
+                            if (v.vulnerability_id or '').upper() in ids or (v.cve_id or '').upper() in ids]
+        severity[row.id] = next((f.severity for f in finding_index.get((row.last_analysis_run_id, row.component_id), [])
+                                 if (f.vuln_id or '').upper() in ids), None)
+    current = set(db.scalars(DashboardScope(tenant_id).eligible_sbom_ids()).all())
+    from ..metrics.vex import current_investigation_evidence_clause
+    obsolete = set(db.scalars(select(VexInvestigation.id).where(
+        VexInvestigation.tenant_id == tenant_id, VexInvestigation.id.in_({row.id for row in rows} or {0}),
+        ~current_investigation_evidence_clause(),
+    )).all())
+    return {'statements': matching, 'severity': severity, 'owners': page_owners(db, tenant_id, rows, context),
+            'historical': obsolete | {row.id for row in rows if not row.is_current or row.sbom_id not in current}}
+
+
+def _previous_decisions(db, investigation, sbom, component):
+    if not sbom or not component:
+        return []
+    from ..services.vex.version_evidence import previous_decisions
+    return previous_decisions(db, investigation, sbom, component)
 
 
 @dataclass(frozen=True)
@@ -230,6 +268,7 @@ class QueueFilters:
     my_work: str
     assignee: str | None
     unresolved_component: bool
+    version_scope: str = "current"
 
 
 def queue_filters(
@@ -247,11 +286,12 @@ def queue_filters(
     my_work: Literal["all", "me", "unassigned", "assigned", "attention"] = Query(default="all"),
     assignee: str | None = Query(default=None, max_length=64),
     unresolved_component: bool = Query(default=False),
+    version_scope: Literal["current", "all", "historical"] = Query(default="current"),
 ) -> QueueFilters:
     return QueueFilters(
         project_id, product_id, sbom_id, effective_status, reconciliation_status, severity,
         component, q, vex_source, analyzer_source, needs_review, my_work, assignee,
-        unresolved_component,
+        unresolved_component, version_scope,
     )
 
 
@@ -271,7 +311,7 @@ def _queue_conditions(db: Session, context: CurrentContext, f: QueueFilters) -> 
     """Build the queue predicate once, for rows, the total and metrics alike.
 
     Scope is the dashboard's eligible-SBOM set — active tenant, project,
-    application and SBOM, HEAD versions only (VEX-DASH-004/005, VEX-INV-002).
+    application and SBOM, designated/fallback posture versions (VEX-DASH-004/005, VEX-INV-002).
     Without it a superseded version's contexts stayed in the queue beside its
     successor's, and an inactive SBOM's contexts stayed visible, while the
     tiles (which always used this scope) excluded both. The project /
@@ -280,11 +320,27 @@ def _queue_conditions(db: Session, context: CurrentContext, f: QueueFilters) -> 
     tenant_id = _tenant_id(context)
     scope = DashboardScope(tenant_id, f.project_id, f.product_id, f.sbom_id)
 
-    conditions: list[ColumnElement[bool]] = [
-        VexInvestigation.tenant_id == tenant_id,
-        VexInvestigation.is_current.is_(True),
-        VexInvestigation.sbom_id.in_(scope.eligible_sbom_ids()),
-    ]
+    eligible = DashboardScope(tenant_id, f.project_id, f.product_id).eligible_sbom_ids()
+    if f.sbom_id is not None and f.version_scope != 'current':
+        valid = select(SBOMSource.id).where(SBOMSource.id == f.sbom_id, SBOMSource.tenant_id == tenant_id)
+        if f.product_id is not None:
+            valid = valid.where(SBOMSource.product_id == f.product_id)
+        if f.project_id is not None:
+            valid = valid.where(SBOMSource.projectid == f.project_id)
+        if db.scalar(valid.execution_options(include_deleted=True)) is None:
+            raise HTTPException(404, 'SBOM version not found in this scope')
+    conditions: list[ColumnElement[bool]] = [VexInvestigation.tenant_id == tenant_id, SBOMSource.tenant_id == tenant_id]
+    if f.version_scope == 'current':
+        from ..metrics.vex import current_investigation_evidence_clause
+        conditions.append(current_investigation_evidence_clause())
+        conditions.extend([VexInvestigation.is_current.is_(True), VexInvestigation.sbom_id.in_(scope.eligible_sbom_ids())])
+    elif f.version_scope == 'historical':
+        from ..metrics.vex import current_investigation_evidence_clause
+        conditions.append(or_(VexInvestigation.is_current.is_(False), VexInvestigation.sbom_id.notin_(eligible),
+                              ~current_investigation_evidence_clause()))
+    for value, column in [(f.project_id, SBOMSource.projectid), (f.product_id, SBOMSource.product_id), (f.sbom_id if f.version_scope != 'current' else None, SBOMSource.id)]:
+        if value is not None:
+            conditions.append(column == value)
     own_member = membership(db, tenant_id, user_id=context.user_id)
     own_key = membership_key(own_member) if own_member else None
     mine = VexInvestigation.assigned_to == own_key if own_key else false()
@@ -399,7 +455,7 @@ def list_investigations(
     # and a row is silently skipped or repeated while paging.
     rows = list(
         db.scalars(
-            select(VexInvestigation)
+            select(VexInvestigation).execution_options(include_deleted=filters.version_scope != "current")
             .select_from(from_clause)
             .where(*conditions)
             .order_by(primary, VexInvestigation.id.asc())
@@ -410,13 +466,13 @@ def list_investigations(
     sboms = {
         s.id: s
         for s in db.scalars(
-            select(SBOMSource).where(SBOMSource.id.in_({r.sbom_id for r in rows} or {0}))
+            select(SBOMSource).execution_options(include_deleted=True).where(SBOMSource.tenant_id == _tenant_id(context), SBOMSource.id.in_({r.sbom_id for r in rows} or {0}))
         ).all()
     }
     components = {
         c.id: c
         for c in db.scalars(
-            select(SBOMComponent).where(
+            select(SBOMComponent).execution_options(include_deleted=True).where(SBOMComponent.tenant_id == _tenant_id(context),
                 SBOMComponent.id.in_({r.component_id for r in rows if r.component_id} or {0})
             )
         ).all()
@@ -424,7 +480,7 @@ def list_investigations(
     projects = {
         p.id: p
         for p in db.scalars(
-            select(Projects).where(
+            select(Projects).execution_options(include_deleted=True).where(Projects.tenant_id == _tenant_id(context),
                 Projects.id.in_({s.projectid for s in sboms.values() if s.projectid} or {0})
             )
         ).all()
@@ -432,12 +488,13 @@ def list_investigations(
     products = {
         p.id: p
         for p in db.scalars(
-            select(Product).where(
+            select(Product).execution_options(include_deleted=True).where(Product.tenant_id == _tenant_id(context),
                 Product.id.in_({s.product_id for s in sboms.values() if s.product_id} or {0})
             )
         ).all()
     }
 
+    prefetched = _page_evidence(db, rows, context)
     items = []
     for row in rows:
         sbom = sboms.get(row.sbom_id)
@@ -449,11 +506,13 @@ def list_investigations(
                 sbom=sbom,
                 project=projects.get(getattr(sbom, "projectid", None)),
                 product=products.get(getattr(sbom, "product_id", None)),
-                context=context,
+                context=context, prefetched=prefetched,
             )
         )
 
-    return {"total": int(total), "limit": limit, "offset": offset, "items": items}
+    from ..services.sbom_posture import posture_metadata
+    return {"total": int(total), "limit": limit, "offset": offset, "items": items,
+            "version_scope": filters.version_scope, "posture": posture_metadata(db, _tenant_id(context), filters.project_id, filters.product_id)}
 
 
 @router.get("/api/vex/investigations/summary", response_model=InvestigationSummaryResponse)
@@ -480,6 +539,7 @@ def investigation_summary(
     ) or 0
     return {
         "scope": "filtered",
+        "version_scope": filters.version_scope,
         "total": int(total),
         "mapped_total": counts["total_contexts"],
         **{key: counts[key] for key in (
@@ -489,6 +549,80 @@ def investigation_summary(
             "revalidation_required_count",
         )},
     }
+
+
+@router.get('/api/vex/investigations/versions')
+def investigation_versions(project_id: int | None = None, product_id: int | None = None,
+                           db: Session = Depends(get_db), context: CurrentContext = Depends(get_current_tenant_context)):
+    tenant_id = _tenant_id(context)
+    query = select(SBOMSource).where(SBOMSource.tenant_id == tenant_id)
+    if project_id is not None:
+        query = query.where(SBOMSource.projectid == project_id)
+    if product_id is not None:
+        query = query.where(SBOMSource.product_id == product_id)
+    rows = db.scalars(query.execution_options(include_deleted=True).order_by(SBOMSource.id.desc())).all()
+    current = set(db.scalars(DashboardScope(tenant_id).eligible_sbom_ids()).all())
+    return {'items': [{'id': row.id, 'name': row.sbom_name, 'version': row.sbom_version or row.productver,
+                       'historical': row.id not in current, 'active': row.is_active and row.lifecycle_status == 'ACTIVE'} for row in rows]}
+
+
+@router.get('/api/vex/investigations/analysis-runs')
+def investigation_analysis_runs(sbom_id: int = Query(ge=1), db: Session = Depends(get_db),
+                                context: CurrentContext = Depends(get_current_tenant_context)):
+    from ..metrics.vex import historical_analysis_runs
+    if db.scalar(select(SBOMSource.id).where(SBOMSource.id == sbom_id, SBOMSource.tenant_id == _tenant_id(context))
+                 .execution_options(include_deleted=True)) is None:
+        raise HTTPException(404, 'SBOM not found')
+    return {'items': historical_analysis_runs(db, _tenant_id(context), sbom_id)}
+
+
+@router.get('/api/vex/investigations/run-snapshot')
+def investigation_run_snapshot(sbom_id: int = Query(ge=1), analysis_run_id: int = Query(ge=1),
+                               limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0),
+                               db: Session = Depends(get_db), context: CurrentContext = Depends(get_current_tenant_context)):
+    from ..metrics.vex import historical_run_snapshot
+    if db.scalar(select(SBOMSource.id).where(SBOMSource.id == sbom_id, SBOMSource.tenant_id == _tenant_id(context))
+                 .execution_options(include_deleted=True)) is None:
+        raise HTTPException(404, 'SBOM not found')
+    result = historical_run_snapshot(db, _tenant_id(context), sbom_id, analysis_run_id, limit, offset)
+    if result is None:
+        raise HTTPException(404, 'Analysis run not found for this SBOM')
+    return result
+
+
+@router.get('/api/vex/investigations/comparison')
+def investigation_comparison(sbom_id: int = Query(ge=1), previous_sbom_id: int | None = Query(None, ge=1),
+                             db: Session = Depends(get_db), context: CurrentContext = Depends(get_current_tenant_context)):
+    from ..metrics.vex import latest_successful_run_id_for_sbom
+    from ..services.compare_service import CompareError, CompareService
+    from ..services.vex.version_evidence import ancestors
+    tenant_id = _tenant_id(context)
+    sbom = db.scalar(select(SBOMSource).where(SBOMSource.id == sbom_id, SBOMSource.tenant_id == tenant_id))
+    if sbom is None:
+        raise HTTPException(404, 'SBOM not found')
+    candidates = ancestors(db, sbom)
+    previous = None
+    previous_run = None
+    for row in candidates:
+        if previous_sbom_id is not None and row['id'] != previous_sbom_id:
+            continue
+        if not row['is_active'] or row['lifecycle_status'] != 'ACTIVE':
+            continue
+        run = latest_successful_run_id_for_sbom(db, tenant_id=tenant_id, sbom_id=row['id'])
+        if run:
+            previous, previous_run = row, run
+            break
+    current_run = latest_successful_run_id_for_sbom(db, tenant_id=tenant_id, sbom_id=sbom.id)
+    if previous_sbom_id is not None and not any(row['id'] == previous_sbom_id for row in candidates):
+        raise HTTPException(404, 'Previous SBOM not found in this tenant/application lineage')
+    if not current_run or not previous_run:
+        raise HTTPException(409, 'Both versions require a non-obsolete successful analysis before comparison')
+    try:
+        result = CompareService(db).compare_vex_versions(tenant_id, previous_run, current_run)
+    except CompareError as exc:
+        raise HTTPException(exc.http_status, str(exc)) from exc
+    return {**result, 'previous_version': previous['sbom_version'] or previous['productver'],
+            'current_version': sbom.sbom_version or sbom.productver}
 
 
 @router.get("/api/vex/investigations/assignees")
@@ -584,11 +718,11 @@ def get_investigation(
 
 def _detail_payload(db: Session, investigation: VexInvestigation, context: CurrentContext | None = None) -> dict[str, Any]:
     component = (
-        db.get(SBOMComponent, investigation.component_id)
+        db.scalar(select(SBOMComponent).where(SBOMComponent.id == investigation.component_id, SBOMComponent.tenant_id == investigation.tenant_id).execution_options(include_deleted=True))
         if investigation.component_id
         else None
     )
-    sbom = db.get(SBOMSource, investigation.sbom_id)
+    sbom = db.scalar(select(SBOMSource).where(SBOMSource.id == investigation.sbom_id, SBOMSource.tenant_id == investigation.tenant_id).execution_options(include_deleted=True))
     project = db.get(Projects, sbom.projectid) if sbom and sbom.projectid else None
     product = db.get(Product, sbom.product_id) if sbom and sbom.product_id else None
 
@@ -598,13 +732,8 @@ def _detail_payload(db: Session, investigation: VexInvestigation, context: Curre
 
     finding = None
     if investigation.component_id is not None:
-        for candidate in vex_component_findings(
-            db,
-            tenant_id=investigation.tenant_id,
-            sbom_id=investigation.sbom_id,
-            component_id=investigation.component_id,
-        ):
-            if (candidate.vuln_id or "").strip().upper() == investigation.canonical_vulnerability_id:
+        for candidate in investigation_findings(db, tenant_id=investigation.tenant_id, investigations=[investigation]):
+            if canonical_vulnerability(candidate.vuln_id, aliases=parse_alias_column(candidate.aliases)).canonical_id == investigation.canonical_vulnerability_id:
                 finding = candidate
                 break
 
@@ -725,6 +854,10 @@ def _detail_payload(db: Session, investigation: VexInvestigation, context: Curre
         },
         "imported_vex": imported,
         "capabilities": capabilities(db, context, investigation),
+        "sbom_version": getattr(sbom, 'sbom_version', None) or getattr(sbom, 'productver', None),
+        "previous_decisions": _previous_decisions(db, investigation, sbom, component),
+        "historical": investigation_is_historical(db, investigation),
+        "analysis_run_id": investigation.last_analysis_run_id,
         "internal_decision": {
             "effective_status": getattr(latest_manual, "normalized_status", None),
             "reviewer": investigation.reviewed_by,

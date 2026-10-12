@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -295,3 +295,23 @@ it('disables scheduled Run Now for an inactive SBOM and explains why', async () 
 });
 
 vi.mock('@/hooks/useAuth', async () => ({ useAuth: (await import('@/test/authorizedAuth')).authorizedAuth }));
+
+function ScheduleListProbe() {
+  const query = useQuery({ queryKey: ['schedules', { scope: 'PROJECT', enabled: 'all' }], queryFn: () => api.getProjectSchedule(3) });
+  return <output>Cached list: {query.data?.enabled ? 'enabled' : 'paused'}</output>;
+}
+it('card pause and resume refresh a fresh cached schedules list and target previews', async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { staleTime: 300_000, retry: false } } });
+  let current = schedule;
+  api.getProjectSchedule.mockImplementation(async () => current);
+  api.pauseSchedule.mockImplementation(async () => { current = { ...schedule, enabled: false }; return current; });
+  api.resumeSchedule.mockImplementation(async () => { current = schedule; return current; });
+  client.setQueryData(['schedules', { scope: 'PROJECT', enabled: 'all' }], schedule);
+  client.setQueryData(['schedule-targets', 7], 'cached preview');
+  render(<QueryClientProvider client={client}><ToastProvider><ScheduleListProbe /><ScheduleCard scope="PROJECT" targetId={3} /></ToastProvider></QueryClientProvider>);
+  fireEvent.click(await screen.findByRole('button', { name: 'Pause' }));
+  expect(await screen.findByText('Cached list: paused')).toBeInTheDocument();
+  await waitFor(() => expect(api.previewScheduleTargets).toHaveBeenCalledTimes(1));
+  fireEvent.click(await screen.findByRole('button', { name: 'Resume' }));
+  expect(await screen.findByText('Cached list: enabled')).toBeInTheDocument(); client.clear();
+});

@@ -14,8 +14,7 @@ import { createProject, updateProject } from '@/lib/api';
 import { useNotifications } from '@/hooks/useNotifications';
 import { toUserFacingApiError } from '@/lib/notifications';
 import {
-  invalidateProjectLists,
-  invalidateSbomLists,
+  invalidateProjectMetadata,
 } from '@/lib/queryInvalidation';
 import type { Project } from '@/types';
 
@@ -83,11 +82,8 @@ export function ProjectModal({ open, onClose, project }: ProjectModalProps) {
         project_status: toStatusInt(values.project_status),
       });
     },
-    onSuccess: () => {
-      invalidateProjectLists(queryClient);
-      // SBOM rows render project_name; a rename leaves them stale until
-      // staleTime expires. Bust the SBOM list surfaces too.
-      invalidateSbomLists(queryClient);
+    onSuccess: async (updatedProject) => {
+      await invalidateProjectMetadata(queryClient, updatedProject, project);
       showSuccess(isEdit ? 'Project updated successfully.' : 'Project created successfully.');
       onClose();
     },

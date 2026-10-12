@@ -1,4 +1,7 @@
 'use client';
+import { useQueryClient } from '@tanstack/react-query';
+import { invalidateUserSurfaces } from '@/lib/queryInvalidation';
+import { useMutationScope } from '@/hooks/useMutationScope';
 import styles from './NativeUsers.module.css';
 import { useToast } from '@/hooks/useToast';
 import { UserActionsMenu } from './UserActionsMenu';
@@ -45,6 +48,9 @@ export default function UserLifecycle({ onAdd, refreshKey = 0 }: { onAdd?: () =>
 
 function Lifecycle({ platform, scope, permission, onAdd, refreshKey }: { platform: boolean; scope: string | null; permission: (code: string) => boolean; onAdd?: () => void; refreshKey: number }) {
   const { showToast } = useToast();
+  const qc = useQueryClient();
+  const { user: currentUser, refreshSession } = useAuth();
+  const mutationScope = useMutationScope();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [role, setRole] = useState('');
@@ -97,7 +103,24 @@ function Lifecycle({ platform, scope, permission, onAdd, refreshKey }: { platfor
   async function mutate(path: string, method: string, body?: unknown, tenant: string | number | null = scope) {
     if (busy) return;
     setBusy(true); setError('');
-    try { const data = await api(path, tenant, method, body); showToast(data.delivery ? `Activation delivery: ${data.delivery.status}.` : 'User updated successfully.', 'success'); setDetail(null); setRevision(n => n + 1); }
+    const isCurrent = mutationScope.capture();
+    try {
+      const data = await api(path, tenant, method, body);
+      if (!isCurrent()) return;
+      const tenantMatch = path.match(/\/tenants\/(\d+)\//);
+      const profileChanged = path.endsWith('/profile');
+      const accountChanged = profileChanged || path.startsWith('/platform/users/');
+      const tenantIds = accountChanged ? (platform ? detail?.tenant_memberships?.map(m => m.tenant_id) ?? [] : [Number(scope)])
+        : tenantMatch ? [Number(tenantMatch[1])] : [];
+      const selfChange = (detail?.id ?? detail?.user_id) === currentUser?.userId && !path.endsWith('/resend-activation');
+      if (!selfChange || profileChanged) {
+        await invalidateUserSurfaces(qc, { tenantIds, userId: detail?.id ?? detail?.user_id, accountChanged,
+          affectsMetrics: !profileChanged && !path.endsWith('/resend-activation') && !path.endsWith('/logout-all') });
+      }
+      if (selfChange) await refreshSession({ authorizationChanged: !profileChanged });
+      showToast(data.delivery ? `Activation delivery: ${data.delivery.status}.` : 'User updated successfully.', 'success');
+      setDetail(null); setRevision(n => n + 1);
+    }
     catch (e) { setError(e instanceof Error ? e.message : 'Request failed.'); }
     finally { setBusy(false); }
   }

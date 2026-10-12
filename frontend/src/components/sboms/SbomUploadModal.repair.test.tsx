@@ -616,3 +616,15 @@ describe('SBOM drag and drop', () => {
     expect(useUploadSbomMutate).not.toHaveBeenCalled();
   });
 });
+
+it('preserves an existing designation by default and requires explicit upload opt-in', async () => {
+  render(wrap(<SbomUploadModal open onClose={vi.fn()} initialProjectId={42} initialProductId={77} />));
+  await screen.findByRole('option', {name:'Payments API'});
+  const checkbox = screen.getByRole('checkbox', {name:/Set as current SBOM/i});
+  expect(checkbox).not.toBeChecked();
+  await fillRequiredFieldsAndSubmit('Preserve designated version');
+  await waitFor(() => expect(useUploadSbomMutate).toHaveBeenCalled());
+  expect(useUploadSbomMutate.mock.calls.at(-1)?.[0].set_as_current).toBe(false);
+  fireEvent.click(checkbox);
+  expect(checkbox).toBeChecked();
+});

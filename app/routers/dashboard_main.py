@@ -31,6 +31,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from .. import metrics
+from ..core.security import require_permission
 from ..db import get_db
 from ..etag import maybe_not_modified
 from ..models import Product, Projects, SBOMSource
@@ -58,6 +59,24 @@ router = APIRouter(
     prefix="/dashboard", tags=["dashboard"],
     dependencies=[Depends(dashboard_scope_dependency)],
 )
+
+
+@router.get("/posture-versions")
+def dashboard_posture_versions(request: Request, db: Session = Depends(get_db)):
+    from ..services.sbom_posture import posture_evidence_summary, posture_metadata
+
+    scope = request.state.dashboard_scope
+    items = posture_metadata(db, *scope.key)
+    return {
+        "items": items,
+        "summary": posture_evidence_summary(items),
+        "scope": {
+            "tenant_id": scope.tenant_id,
+            "project_id": scope.project_id,
+            "product_id": scope.product_id,
+            "sbom_id": scope.sbom_id,
+        },
+    }
 
 
 @router.get("/filter-options/projects")
@@ -115,6 +134,16 @@ def dashboard_scoped_runs(
 ):
     """Run-list representation over the dashboard's eligible set."""
     return metrics.dashboard_runs(db, limit=limit, latest_only=latest_only, run_status=run_status)
+
+
+@router.get("/priority-findings", dependencies=[Depends(require_permission("analysis:read"))])
+def dashboard_priority_findings(
+    limit: int = Query(5, ge=1, le=20),
+    db: Session = Depends(get_db),
+):
+    """Read-only, tenant-scoped current finding instances for the overview."""
+    from ..metrics.findings import dashboard_priority_findings as priority_findings
+    return {"items": priority_findings(db, limit=limit)}
 
 
 @router.get("/stats")

@@ -26,7 +26,7 @@ describe('TenantContextHeader identity & access model UX', () => {
     expect(screen.getByText('Managed in SBOM')).toBeInTheDocument();
     expect(screen.getByText('Controlled by memberships and tenant roles.')).toBeInTheDocument();
 
-    expect(screen.getByText('Tenant status: Active')).toBeInTheDocument();
+    expect(screen.getByText('Active')).toBeInTheDocument();
     expect(screen.getByText('Current membership: Active')).toBeInTheDocument();
 
     expect(screen.queryByText(/External tenant mapping/i)).not.toBeInTheDocument();
@@ -68,7 +68,7 @@ describe('TenantContextHeader identity & access model UX', () => {
       />,
     );
 
-    expect(screen.getByText('Tenant status: Active')).toBeInTheDocument();
+    expect(screen.getByText('Active')).toBeInTheDocument();
     expect(screen.getByText('Current membership: Disabled')).toBeInTheDocument();
   });
 

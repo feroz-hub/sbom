@@ -111,17 +111,17 @@ def test_upload_requires_matching_project_product_and_returns_product(client):
     assert mismatch.status_code == 409
 
 
-def test_upload_current_sbom_selection_is_explicit_and_first_upload_is_safe_default(client):
+def test_upload_does_not_promote_until_analysis_or_explicit_pin(client):
     project = _project(client)
     product = _product(client, project["id"], "Versioned Controller")
 
     first = _upload(client, project_id=project["id"], product_id=product["id"], set_as_current=False)
-    assert first["is_current"] is True
-    assert client.get(f"/api/products/{product['id']}").json()["current_sbom_id"] == first["sbom_id"]
+    assert first["is_current"] is False
+    assert client.get(f"/api/products/{product['id']}").json()["current_sbom_id"] is None
 
     historical = _upload(client, project_id=project["id"], product_id=product["id"], set_as_current=False)
     assert historical["is_current"] is False
-    assert client.get(f"/api/products/{product['id']}").json()["current_sbom_id"] == first["sbom_id"]
+    assert client.get(f"/api/products/{product['id']}").json()["current_sbom_id"] is None
 
     replacement = _upload(client, project_id=project["id"], product_id=product["id"], set_as_current=True)
     assert replacement["is_current"] is True
@@ -132,7 +132,7 @@ def test_upload_current_sbom_selection_is_explicit_and_first_upload_is_safe_defa
 def test_soft_deleting_current_sbom_clears_product_pointer(client):
     project = _project(client)
     product = _product(client, project["id"], "Delete Current")
-    uploaded = _upload(client, project_id=project["id"], product_id=product["id"])
+    uploaded = _upload(client, project_id=project["id"], product_id=product["id"], set_as_current=True)
     assert client.get(f"/api/products/{product['id']}").json()["current_sbom_id"] == uploaded["sbom_id"]
 
     deleted = client.delete(f"/api/sboms/{uploaded['sbom_id']}?confirm=yes")

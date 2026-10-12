@@ -682,6 +682,8 @@ class Product(Base, SoftDeleteMixin, TenantOwnedMixin):
         index=True,
     )
 
+    current_sbom_mode = Column(String(16), nullable=False, default="AUTO", server_default="AUTO")
+
     project = relationship("Projects", back_populates="products")
     sboms = relationship(
         "SBOMSource",
@@ -701,6 +703,7 @@ class Product(Base, SoftDeleteMixin, TenantOwnedMixin):
     )
 
     __table_args__ = (
+        CheckConstraint("current_sbom_mode IN ('AUTO','MANUAL_PIN')", name="ck_products_current_sbom_mode"),
         UniqueConstraint("tenant_id", "project_id", "slug", name="uq_products_tenant_project_slug"),
         UniqueConstraint("id", "tenant_id", name="uq_products_id_tenant"),
         Index("ix_products_tenant_project_name", "tenant_id", "project_id", "normalized_name"),
@@ -1500,6 +1503,18 @@ class ComponentLifecycleOverrideAudit(Base, TenantOwnedMixin):
     evidence_url = Column(String, nullable=True)
     changed_by = Column(String, nullable=True, index=True)
     changed_at = Column(String, nullable=False, index=True)
+
+
+class VexInvestigationSnapshot(Base, TenantOwnedMixin):
+    """Immutable reconciliation/assignment evidence at analysis completion."""
+    __tablename__ = "vex_investigation_snapshot"
+    id = Column(Integer, primary_key=True)
+    sbom_id = Column(Integer, ForeignKey("sbom_source.id", ondelete="CASCADE"), nullable=False, index=True)
+    analysis_run_id = Column(Integer, ForeignKey("analysis_run.id", ondelete="CASCADE"), nullable=False, index=True)
+    investigation_id = Column(Integer, ForeignKey("vex_investigation.id", ondelete="CASCADE"), nullable=False)
+    payload_json = Column(JSON, nullable=False)
+    captured_at = Column(String, nullable=False)
+    __table_args__ = (UniqueConstraint("analysis_run_id", "investigation_id", name="uq_vex_run_context_snapshot"),)
 
 
 class VexOverrideAudit(Base, TenantOwnedMixin):
@@ -2775,3 +2790,10 @@ def _assign_logical_sbom_identity(session, _flush_context, _instances):
     for row in list(session.new | session.dirty):
         if isinstance(row, SBOMSource):
             assign_logical_identity(session, row)
+
+
+@event.listens_for(_AdvisorSession, "before_flush")
+def _vex_run_snapshots_are_immutable(session, _flush_context, _instances):
+    for row in session.dirty:
+        if isinstance(row, VexInvestigationSnapshot) and session.is_modified(row):
+            raise RuntimeError("VEX analysis snapshots are immutable")

@@ -125,7 +125,7 @@ describe('PlatformTenantsPage', () => {
     renderPage();
     expect(await screen.findByText('Default Tenant')).toBeInTheDocument();
     expect(screen.getByText('default')).toBeInTheDocument();
-    expect(screen.getByText('Tenant status: Active')).toBeInTheDocument();
+    expect(screen.getByText('Active')).toBeInTheDocument();
     expect(screen.queryByText(/External tenant mapping/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Connected to HCL.CS tenant/i)).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Administrators' })).toHaveAttribute('href', '/settings/platform');

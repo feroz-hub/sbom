@@ -20,7 +20,7 @@ import { useToast } from '@/hooks/useToast';
 import { getApiErrorMessage } from '@/lib/notifications';
 import { usePermissions } from '@/hooks/usePermission';
 import { useUploadSbom } from '@/hooks/useSbomMutations';
-import { invalidateProductSurfaces, invalidateUploadSurfaces } from '@/lib/queryInvalidation';
+import { invalidateUploadSurfaces } from '@/lib/queryInvalidation';
 import { SbomAutoRepairPanel } from './SbomAutoRepairPanel';
 import { stageLabel, stageNumber } from '@/lib/sbomValidation';
 import {
@@ -82,7 +82,7 @@ const schema = z.object({
   sbom_version: z.string().optional(),
   product_version: z.string().optional(),
   logical_sbom_id: z.string().optional(),
-  set_as_current: z.boolean().default(true),
+  set_as_current: z.boolean().default(false),
 });
 
 type FormInput = z.input<typeof schema>;
@@ -166,7 +166,7 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
     defaultValues: {
       sbom_name: '', sbom_data: '', sbom_type_id: '',
       projectid: '', productid: '', sbom_version: '', product_version: '', logical_sbom_id: '',
-      set_as_current: true,
+      set_as_current: false,
     },
   });
   const selectedProjectId = watch('projectid');
@@ -326,8 +326,7 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
           });
           const status = sbom.validation_status ?? sbom.upload_status ?? sbom.status;
           const repairUrl = getRepairWorkspaceUrl(sbom);
-          invalidateUploadSurfaces(queryClient, sbom.project_id ?? sbom.projectid);
-          invalidateProductSurfaces(queryClient, sbom.product_id);
+          void invalidateUploadSurfaces(queryClient, sbom.project_id ?? sbom.projectid, sbom.product_id);
           queryClient.invalidateQueries({ queryKey: ['schedule-targets'] });
           queryClient.invalidateQueries({ queryKey: ['schedule'] });
 
@@ -772,7 +771,7 @@ export function SbomUploadModal({ open, onClose, initialProjectId, initialProduc
             <span>
               <span className="block text-sm font-medium text-hcl-navy">Set as current SBOM</span>
               <span className="block text-xs text-hcl-muted">
-                CURRENT_ONLY parent schedules will target this version on future runs.
+                Leave unchecked to preserve the designated Current SBOM. Selecting this version also changes CURRENT_ONLY schedules; pending analysis retains the last known posture.
               </span>
             </span>
           </label>

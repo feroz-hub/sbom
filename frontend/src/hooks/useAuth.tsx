@@ -68,7 +68,7 @@ interface AuthContextValue {
   logout: () => void;
   reloadAuth: () => void;
   retryBootstrap: () => void;
-  refreshSession: () => Promise<void>;
+  refreshSession: (options?: { authorizationChanged?: boolean }) => Promise<void>;
   setBootstrapState: (state: BootstrapState, error?: string | null) => void;
   selectTenant: (tenantId: string) => Promise<void>;
   clearTenantSelection: () => void;
@@ -560,6 +560,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .catch(() => followLogoutRedirect(localLogout));
   }, [config.enabled, queryClient, setBootstrapState]);
 
+  // Authority changes must discard privileged results before resolving /auth/me.
+  const refreshSession = useCallback(async (options: { authorizationChanged?: boolean } = {}) => {
+    if (options.authorizationChanged) {
+      setBootstrapState('loading-auth-context');
+      await queryClient.cancelQueries();
+      queryClient.clear();
+    }
+    await checkAuth();
+  }, [checkAuth, queryClient, setBootstrapState]);
+
   const reloadAuth = useCallback(() => {
     void checkAuth();
   }, [checkAuth]);
@@ -629,7 +639,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     logout,
     reloadAuth,
     retryBootstrap,
-    refreshSession: checkAuth,
+    refreshSession,
     setBootstrapState,
     selectTenant,
     clearTenantSelection,
@@ -650,7 +660,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     logout,
     reloadAuth,
     retryBootstrap,
-    checkAuth,
+    refreshSession,
     setBootstrapState,
     selectTenant,
     clearTenantSelection,

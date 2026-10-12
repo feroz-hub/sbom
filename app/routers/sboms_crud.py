@@ -797,6 +797,8 @@ def create_sbom(
     try:
         data = payload.model_dump()
         set_as_current = bool(data.pop("set_as_current", False))
+        if set_as_current and not context.has_permission("product:update"):
+            raise HTTPException(403, "Current SBOM pinning requires product:update")
         data["sbom_data"] = raw_text or None
         data["created_by"] = data.get("created_by") or context.actor_label()
         data["product_id"] = product.id if product else None
@@ -814,8 +816,10 @@ def create_sbom(
         mark_enrichment_pending(obj)
         db.add(obj)
         db.flush()
-        if product and (set_as_current or product.current_sbom_id is None):
+        if product and set_as_current:
+            db.refresh(product, with_for_update=True)
             previous_current_id = product.current_sbom_id
+            product.current_sbom_mode = "MANUAL_PIN"
             product.current_sbom_id = obj.id
             product.updated_at = now_iso()
             audit_service.write_audit_log(
@@ -825,7 +829,7 @@ def create_sbom(
                 entity_type="product",
                 entity_id=product.id,
                 old_value={"current_sbom_id": previous_current_id},
-                new_value={"current_sbom_id": obj.id, "source": "legacy_sbom_create"},
+                new_value={"current_sbom_id": obj.id, "source": "legacy_sbom_create", "mode": "MANUAL_PIN"},
             )
         db.commit()
         db.refresh(obj)

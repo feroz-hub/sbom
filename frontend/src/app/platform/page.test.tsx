@@ -114,8 +114,13 @@ it('links creation to the existing form and tenant overview to governance detail
     screen.getAllByRole('link', { name: 'Create Tenant' })[0],
   ).toHaveAttribute('href', '/settings/platform/tenants#create-tenant');
   expect(
-    await screen.findByRole('link', { name: 'View Olympus' }),
+    await screen.findByRole('link', { name: 'Open Olympus tenant' }),
   ).toHaveAttribute('href', '/settings/platform/tenants/1');
+  const tenantLink = screen.getByRole('link', { name: 'Open Olympus tenant' });
+  expect(tenantLink).toHaveAttribute('title', 'Open tenant details');
+  expect(tenantLink).not.toHaveTextContent('View');
+  tenantLink.focus();
+  expect(tenantLink).toHaveFocus();
   expect(
     screen.getByRole('link', { name: 'View all tenants' }),
   ).toHaveAttribute('href', '/settings/platform/tenants');

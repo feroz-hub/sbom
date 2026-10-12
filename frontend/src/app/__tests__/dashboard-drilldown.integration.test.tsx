@@ -19,13 +19,22 @@
  */
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ToastProvider } from '@/hooks/useToast';
 import { AuthProvider } from '@/hooks/useAuth';
 import { ThemeProvider } from '@/components/theme/ThemeProvider';
 import type { AnalysisRun } from '@/types';
+
+const tenantContext = vi.hoisted(() => ({id: null as string | null}));
+vi.mock('@/hooks/useAuth', async () => {
+  const actual = await vi.importActual<typeof import('@/hooks/useAuth')>('@/hooks/useAuth');
+  return {...actual, useAuth: () => {
+    const auth = actual.useAuth();
+    return tenantContext.id ? {...auth, activeTenantId: tenantContext.id} : auth;
+  }};
+});
 
 const push = vi.fn();
 let queryString = '';
@@ -134,6 +143,7 @@ function wrap(children: ReactNode) {
 }
 
 beforeEach(() => {
+  tenantContext.id = null;
   queryString = '';
   push.mockReset();
   getDashboardSummary.mockReset();
@@ -158,7 +168,7 @@ describe('dashboard hero — severity drill-down', () => {
     render(wrap(<DashboardPage />));
     expect(await screen.findByText('No SBOMs uploaded yet')).toBeInTheDocument();
     expect(screen.queryByText('No data matches the current filters')).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Inventory' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Portfolio metrics' })).toBeInTheDocument();
   });
   it('renders filter-specific guidance and clears the URL when a scope is empty', async () => {
     queryString = 'project=1&application=2';
@@ -172,7 +182,7 @@ describe('dashboard hero — severity drill-down', () => {
   it('clears the URL hierarchy without switching tenants', () => {
     queryString = 'project=1&application=2&sbom=3';
     render(wrap(<DashboardPage />));
-    fireEvent.click(screen.getByRole('button', { name: 'Clear all filters' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
     expect(push).toHaveBeenCalledWith('/', { scroll: false });
   });
 
@@ -308,4 +318,24 @@ describe('dashboard hero — Phase 2 gated signals (EPSS tile + needs-review chi
     expect(screen.queryByRole('button', { name: /Likely exploited/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /need review/i })).toBeNull();
   });
+});
+
+
+it('does not show previous-tenant metrics while new tenant data loads', async () => {
+  tenantContext.id = 'tenant-a';
+  const summary = (total: number) => ({posture:{total_sboms:total,total_applications_scanned:total,total_sboms_analysed:total,severity:{critical:0,high:0,medium:0,low:0,unknown:0}}});
+  let resolveSecond: (value: ReturnType<typeof summary>) => void = () => {};
+  getDashboardSummary.mockImplementation(() => tenantContext.id === 'tenant-a'
+    ? Promise.resolve(summary(2))
+    : new Promise(resolve => {resolveSecond=resolve;}));
+  const qc = new QueryClient({defaultOptions:{queries:{retry:false,gcTime:Infinity}}});
+  const element = () => <QueryClientProvider client={qc}><AuthProvider><ThemeProvider><ToastProvider><DashboardPage/></ToastProvider></ThemeProvider></AuthProvider></QueryClientProvider>;
+  const view = render(element());
+  await waitFor(() => expect(screen.getByRole('button',{name:/Total SBOMs Stored/i})).toHaveTextContent('2'),{timeout:5000});
+  tenantContext.id='tenant-b';view.rerender(element());
+  expect(screen.getByRole('button',{name:/Total SBOMs Stored/i})).not.toHaveTextContent('2');
+  resolveSecond(summary(7));
+  await waitFor(() => expect(screen.getByRole('button',{name:/Total SBOMs Stored/i})).toHaveTextContent('7'),{timeout:5000});
+  expect(qc.getQueryData(['dashboard-summary','tenant-a',null,null,null])).toEqual(summary(2));
+  expect(qc.getQueryData(['dashboard-summary','tenant-b',null,null,null])).toEqual(summary(7));
 });

@@ -47,9 +47,9 @@ export function LifetimeStatTile({
   actionLabel,
 }: LifetimeStatTileProps) {
   return (
-    <Surface variant="elevated" elevation={1} className={cn('min-w-0 rounded-2xl p-0 hover:shadow-elev-2', className)}>
+    <Surface variant="elevated" elevation={1} className={cn('min-w-0 h-full rounded-2xl p-0', className)}>
       <div
-        className="flex min-h-32 w-full items-center gap-4 rounded-2xl px-5 py-4 text-left"
+        className="flex min-h-32 h-full w-full items-center gap-4 rounded-2xl px-5 py-4 text-left"
         title={tooltip}
       >
         {Icon ? (
@@ -58,18 +58,19 @@ export function LifetimeStatTile({
           </span>
         ) : null}
         <span className="min-w-0">
-          <span className="block text-[11px] font-semibold uppercase tracking-wider text-hcl-muted">
+          <span className="block text-[11px] font-semibold uppercase tracking-wider text-foreground/75">
             {label}
           </span>
-          <span className="block font-metric text-3xl font-bold tabular-nums text-hcl-navy">
+          <span className="block font-metric text-3xl font-bold leading-tight tabular-nums text-hcl-navy">
             {value}
           </span>
           {caption ? (
             <span className="mt-1 block text-xs text-hcl-muted">{caption}</span>
           ) : null}
+          {href && <Link href={href} className="mt-2 inline-block rounded text-xs font-medium text-hcl-blue hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hcl-blue">{actionLabel} →</Link>}
         </span>
       </div>
-      {href && <Link href={href} className="mx-5 mb-4 inline-block rounded text-xs font-medium text-hcl-blue hover:underline focus-visible:ring-2 focus-visible:ring-hcl-blue">{actionLabel} →</Link>}
+
     </Surface>
   );
 }

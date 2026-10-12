@@ -2,6 +2,8 @@
 
 import { Suspense, use, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useAnalysisTerminal } from '@/hooks/useAnalysisTerminal';
+import { ANALYSIS_POLL_MS, isActiveAnalysis } from '@/lib/analysisSync';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft,
@@ -40,7 +42,6 @@ interface AnalysisDetailPageProps {
   params: Promise<{ id: string }>;
 }
 
-const ACTIVE_RUN_STATUSES = new Set(['PENDING', 'QUEUED', 'RUNNING', 'ANALYSING', 'ANALYZING']);
 
 function AnalysisDetailContent({ params }: AnalysisDetailPageProps) {
   const { id: idParam } = use(params);
@@ -110,7 +111,7 @@ function AnalysisDetailContent({ params }: AnalysisDetailPageProps) {
     enabled: !isNaN(id),
     refetchInterval: (query) => {
       const status = String(query.state.data?.run_status ?? '').toUpperCase();
-      return ACTIVE_RUN_STATUSES.has(status) ? 3000 : false;
+      return isActiveAnalysis(status) ? ANALYSIS_POLL_MS : false;
     },
     refetchOnWindowFocus: true,
   });
@@ -121,6 +122,7 @@ function AnalysisDetailContent({ params }: AnalysisDetailPageProps) {
       getAllEnrichedRunFindings(id, { severity: severityFilter || undefined }, signal),
     enabled: !isNaN(id),
   });
+  useAnalysisTerminal(run);
   const findings = findingsData?.findings;
   const findingsTotalCount = findingsData?.totalCount;
   const canonicalTotalFindings = run?.metrics?.total_findings ?? run?.total_findings ?? 0;

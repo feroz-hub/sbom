@@ -24,6 +24,7 @@ import { FULL_DETAIL, PARTIAL_DETAIL } from '@/components/vulnerabilities/CveDet
 
 const api = vi.hoisted(() => ({
   getCveDetail: vi.fn(),
+  getVexVersionComparison: vi.fn(),
   getDashboardVex: vi.fn(),
   getVexInvestigation: vi.fn(),
   getVexInvestigationSummary: vi.fn(),
@@ -875,4 +876,22 @@ describe('shared CVE detail workflow', () => {
     expect(screen.getByLabelText('Mitigation')).toHaveValue('Updated deployment');
   });
 
+});
+
+it('version scope updates summary and rows together and labels historical evidence read-only', async () => {
+  renderPage();
+  fireEvent.change(await screen.findByLabelText('Version scope'), {target:{value:'historical'}});
+  await waitFor(() => {
+    expect(api.listVexInvestigations.mock.calls.at(-1)?.[0].version_scope).toBe('historical');
+    expect(api.getVexInvestigationSummary.mock.calls.at(-1)?.[0].version_scope).toBe('historical');
+  });
+  expect(screen.getByText('Historical view')).toBeInTheDocument();
+  expect(screen.getByText(/Historical investigation evidence is read-only/)).toBeInTheDocument();
+  expect(navigation.replace.mock.calls.at(-1)?.[0]).toContain('version_scope=historical');
+});
+
+it('reads historical version scope directly from a URL', async () => {
+  navigation.search='version_scope=all&sbom_id=5';renderPage();
+  await waitFor(() => expect(api.listVexInvestigations.mock.calls.at(-1)?.[0]).toMatchObject({version_scope:'all',sbom_id:5}));
+  expect(screen.getByText('All versions view')).toBeInTheDocument();
 });

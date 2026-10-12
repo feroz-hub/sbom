@@ -1,5 +1,6 @@
 'use client';
 
+import { invalidateScheduleLists } from '@/lib/queryInvalidation';
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Dialog, DialogBody, DialogFooter } from '@/components/ui/Dialog';
@@ -122,11 +123,10 @@ export function ScheduleEditor({
       scope === 'TENANT' || scope === 'PRODUCT' ? upsertScopedSchedule(scope, targetId, payload) : scope === 'PROJECT'
         ? upsertProjectSchedule(targetId, payload)
         : upsertSbomSchedule(targetId, payload),
-    onSuccess: () => {
+    onSuccess: async () => {
       // Invalidate both project + sbom schedule queries; cheaper than
       // computing the precise key for every dependent panel.
-      queryClient.invalidateQueries({ queryKey: ['schedule'] });
-      queryClient.invalidateQueries({ queryKey: ['schedules'] });
+      await invalidateScheduleLists(queryClient);
       showToast(existing ? 'Schedule updated' : 'Schedule created', 'success');
       onClose();
     },

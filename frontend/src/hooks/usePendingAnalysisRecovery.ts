@@ -1,63 +1,54 @@
 'use client';
-
 import { useEffect } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getRuns } from '@/lib/api';
-import { canonicalRunStatus } from '@/lib/analysisRunStatusLabels';
-import { getStillPendingAnalyses, removePendingAnalysis } from '@/lib/pendingAnalysis';
-import type { AnalysisStatus } from '@/hooks/useBackgroundAnalysis';
+import { isActiveAnalysis, isTerminalAnalysis, reconcileAnalysisTerminal } from '@/lib/analysisSync';
+import { addPendingAnalysis, clearStalePendingAnalyses, getStillPendingAnalyses, pendingAnalysisExpired, removePendingAnalysis } from '@/lib/pendingAnalysis';
+import { invalidateSbomLists } from '@/lib/queryInvalidation';
 import type { SBOMSource } from '@/types';
+import { useSharedAnalysisPolling } from './useSharedAnalysisPolling';
+import { useAnalysisScope } from './useAnalysisScope';
 
-function runStatusToBadgeStatus(runStatus: string | undefined): AnalysisStatus {
-  const u = canonicalRunStatus(runStatus ?? 'ERROR');
-  if (u === 'RUNNING' || u === 'PENDING') return 'ANALYSING';
-  const allowed: AnalysisStatus[] = ['OK', 'FINDINGS', 'PARTIAL', 'ERROR'];
-  return allowed.includes(u as AnalysisStatus) ? (u as AnalysisStatus) : 'ERROR';
-}
-
-/**
- * On mount, checks sessionStorage for any analysis jobs that were in-flight
- * before a page refresh. For each:
- *   - If the server already has a completed run → update React Query SBOM cache
- *   - If no run found yet → clear the stale client marker without starting one
- */
-export function usePendingAnalysisRecovery() {
-  const queryClient = useQueryClient();
-
+export function usePendingAnalysisRecovery(enabled = true) {
+  const qc = useQueryClient(), scope = useAnalysisScope();
+  const pending = getStillPendingAnalyses(scope.key);
+  const identity = pending.map(entry => `${entry.sbomId}:${entry.startedAt}`).sort().join(',');
+  const queryKey = ['pending-analysis-recovery', scope.key, identity];
+  const recover = enabled && scope.ready && scope.canReadAnalysis && pending.length > 0;
+  const poll = useSharedAnalysisPolling(queryKey, recover);
+  const recovery = useQuery({
+    queryKey,
+    enabled: recover,
+    staleTime: 0, retry: false,
+    queryFn: async ({ signal }) => {
+      const isCurrent = scope.capture();
+      return Promise.all(getStillPendingAnalyses(scope.key).map(async entry => {
+        try {
+          const runs = await getRuns({ sbom_id: entry.sbomId, page: 1, page_size: 1 }, signal);
+          const run = runs[0];
+          // Never confuse a previous completed run with this pending submission.
+          const started = Date.parse(run?.started_on ?? '');
+          const matches = run && (entry.runId ? run.id === entry.runId : Number.isFinite(started) && started >= entry.startedAt - 1000);
+          return { entry, run: matches ? run : undefined, isCurrent };
+        } catch { return { entry, run: undefined, isCurrent }; }
+      }));
+    },
+    refetchInterval: query => getStillPendingAnalyses(scope.key).length > 0 && query.state.data?.some(item => !item.run || isActiveAnalysis(item.run.run_status)) ? poll(query) : false,
+  });
   useEffect(() => {
-    const pending = getStillPendingAnalyses();
-    if (pending.length === 0) return;
-
-    for (const { sbomId } of pending) {
-      getRuns({ sbom_id: sbomId, page: 1, page_size: 1 })
-        .then((runs) => {
-          if (runs.length > 0) {
-            const run = runs[0];
-            removePendingAnalysis(sbomId);
-            queryClient.setQueryData<SBOMSource[]>(['sboms'], (old) =>
-              old?.map((s) =>
-                s.id === sbomId
-                  ? {
-                      ...s,
-                      _analysisStatus: runStatusToBadgeStatus(run.run_status),
-                      _findingsCount: run.total_findings ?? 0,
-                    }
-                  : s,
-              ) ?? [],
-            );
-          } else {
-            removePendingAnalysis(sbomId);
-          }
-        })
-        .catch(() => {
-          removePendingAnalysis(sbomId);
-          queryClient.setQueryData<SBOMSource[]>(['sboms'], (old) =>
-            old?.map((s) =>
-              s.id === sbomId ? { ...s, _analysisStatus: 'ERROR', _findingsCount: undefined } : s,
-            ) ?? [],
-          );
-        });
+    clearStalePendingAnalyses();
+    for (const item of recovery.data ?? []) {
+      const { entry, run, isCurrent } = item;
+      if (!isCurrent()) continue;
+      if (run && isActiveAnalysis(run.run_status)) {
+        addPendingAnalysis(entry.sbomId, entry.sbomName, scope.key, run.id);
+        const outdated = qc.getQueriesData<SBOMSource[]>({ queryKey: ['sboms'] }).some(([, rows]) => rows?.some(row => row.id === entry.sbomId && (row.latest_analysis?.run_id !== run.id || !isActiveAnalysis(row.latest_analysis?.status))));
+        if (outdated) void invalidateSbomLists(qc);
+      }
+      else if (run && isTerminalAnalysis(run.run_status)) {
+        void reconcileAnalysisTerminal(qc, { scope: scope.key, runId: run.id, sbomId: entry.sbomId, status: run.run_status, isCurrent });
+        removePendingAnalysis(entry.sbomId, scope.key);
+      } else if (pendingAnalysisExpired(entry)) removePendingAnalysis(entry.sbomId, scope.key);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [recovery.data, qc, scope.key]);
 }

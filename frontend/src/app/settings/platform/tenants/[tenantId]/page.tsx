@@ -11,6 +11,7 @@ import { UserSearchCombobox } from '@/components/admin/UserSearchCombobox';
 import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog';
 import { getApiErrorMessage } from '@/lib/notifications';
 import { useNotifications } from '@/hooks/useNotifications';
+import { invalidatePlatformTenantSurfaces } from '@/lib/queryInvalidation';
 
 export default function PlatformTenantDetailPage({ params }: { params: Promise<{ tenantId: string }> }) {
   const { tenantId } = use(params);
@@ -26,19 +27,14 @@ export default function PlatformTenantDetailPage({ params }: { params: Promise<{
   const [candidate, setCandidate] = useState<UserSearchResult | null>(null);
   const [confirm, setConfirm] = useState(false);
   const tenant = useQuery({ queryKey: ['platform-tenant', id], queryFn: () => getPlatformTenant(id), enabled: !isLoading && canRead && valid, retry: false });
-  const invalidateTenantSummary = async () => {
-    await qc.invalidateQueries({ queryKey: ['platform-tenant', id] });
-    await qc.invalidateQueries({ queryKey: ['platform-tenants'] });
-    await qc.invalidateQueries({ queryKey: ['platform-summary'] });
-  };
   const recovery = useMutation({
     mutationFn: () => recoverPlatformTenantAdmin(id, candidate!.id),
-    onSuccess: async () => { setCandidate(null); showSuccess('Tenant Administrator recovery completed.'); await invalidateTenantSummary(); },
+    onSuccess: async () => { setCandidate(null); showSuccess('Tenant Administrator recovery completed.'); await invalidatePlatformTenantSurfaces(qc, id); },
     onError: error => showError(getApiErrorMessage(error, 'Administrator recovery failed.')),
   });
   const status = useMutation({
     mutationFn: () => updatePlatformTenantStatus(id, tenant.data?.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE'),
-    onSuccess: async () => { setConfirm(false); await invalidateTenantSummary(); },
+    onSuccess: async () => { setConfirm(false); await invalidatePlatformTenantSurfaces(qc, id); },
     onError: error => showError(getApiErrorMessage(error, 'Tenant status could not be updated.')),
   });
   if (!valid) return <p role="alert">Invalid tenant.</p>;

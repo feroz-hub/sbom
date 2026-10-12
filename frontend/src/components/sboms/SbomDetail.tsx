@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { Play, ArrowLeft, ExternalLink, Edit2, GitBranch, History, Layers, Download, Check, RefreshCw, Eye, ArrowRight, X } from 'lucide-react';
+import { SbomPostureNotice } from '@/components/sboms/SbomPostureNotice';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { PermissionButton as Button } from '@/components/ui/PermissionButton';
 import { SbomLifecycleControls } from './SbomLifecycleControls';
@@ -73,7 +74,7 @@ import {
   invalidateAnalysisCompletion,
   invalidateLifecycleOverrideSurfaces,
   invalidateProjectAssignmentSurfaces,
-  invalidateSbomVersionSurfaces,
+  invalidateSbomRevisionCreated,
   invalidateVexSurfaces,
 } from '@/lib/queryInvalidation';
 import { useTableSort } from '@/hooks/useTableSort';
@@ -355,16 +356,18 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
     setIsSavingAssign(true);
     setAssignError('');
     try {
-      await updateSbom(sbom.id, {
+      const updatedSbom = await updateSbom(sbom.id, {
         project_id: selectedProjectId,
         product_id: selectedProductId,
         change_reason: assignChangeReason || undefined,
       });
 
-      invalidateProjectAssignmentSurfaces(queryClient, {
+      await invalidateProjectAssignmentSurfaces(queryClient, {
         sbomId: sbom.id,
         previousProjectId: sbom.projectid,
-        nextProjectId: selectedProjectId,
+        nextProjectId: updatedSbom.projectid,
+        previousProductId: sbom.product_id,
+        nextProductId: updatedSbom.product_id,
       });
 
       setIsAssignModalOpen(false);
@@ -394,12 +397,14 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
         change_reason: detailChangeReason.trim() || undefined,
       };
 
-      await updateSbom(sbom.id, payload);
+      const updatedSbom = await updateSbom(sbom.id, payload);
 
-      invalidateProjectAssignmentSurfaces(queryClient, {
+      await invalidateProjectAssignmentSurfaces(queryClient, {
         sbomId: sbom.id,
         previousProjectId: sbom.projectid,
-        nextProjectId: detailProjectId,
+        nextProjectId: updatedSbom.projectid,
+        previousProductId: sbom.product_id,
+        nextProductId: updatedSbom.product_id,
       });
 
       setIsEditDetailsModalOpen(false);
@@ -810,7 +815,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
     try {
       const restoredVersion = await restoreSbomVersion(sbom.id, versionId, sbom.created_by ?? undefined);
       setRestoreMessage('Version restored successfully as a new revision. Refreshing...');
-      invalidateSbomVersionSurfaces(queryClient, sbom.id);
+      await invalidateSbomRevisionCreated(queryClient, sbom, restoredVersion);
       setTimeout(() => {
         setRestoreMessage('');
         router.push(`/sboms/${restoredVersion.id}`);
@@ -820,16 +825,14 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
     }
   };
 
-  const invalidateLifecycleQueries = () => {
-    invalidateLifecycleOverrideSurfaces(queryClient, sbom.id);
-  };
+  const invalidateLifecycleQueries = () => invalidateLifecycleOverrideSurfaces(queryClient, sbom.id);
 
   const handleRefreshLifecycle = async () => {
     setIsRefreshingLifecycle(true);
     setLifecycleMessage('');
     try {
       const result = await refreshSbomLifecycle(sbom.id, true);
-      invalidateLifecycleQueries();
+      await invalidateLifecycleQueries();
       setLifecycleMessage(
         `Lifecycle refreshed: ${result.updated_components} components, ${result.cache_hits} cache hits, ${result.provider_lookups} provider lookups.`,
       );
@@ -845,7 +848,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
     setLifecycleMessage('');
     try {
       await refreshComponentLifecycle(component.id, true);
-      invalidateLifecycleQueries();
+      await invalidateLifecycleQueries();
       setLifecycleMessage(`Lifecycle refreshed for ${component.name}.`);
     } catch (err: any) {
       setLifecycleMessage(err.message || 'Component lifecycle refresh failed.');
@@ -874,7 +877,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
         `Imported ${result.statements_imported} VEX statements; ${result.unmatched_statements ?? 0} unmatched.`,
       );
       setVexDocumentText('');
-      invalidateVexSurfaces(queryClient, sbom.id);
+      await invalidateVexSurfaces(queryClient, sbom.id);
     } catch (err: any) {
       setVexMessage(err.message || 'VEX import failed.');
     } finally {
@@ -887,7 +890,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
     setVexMessage('');
     try {
       const result = await discoverSbomVexDocuments(sbom.id, true);
-      invalidateVexSurfaces(queryClient, sbom.id);
+      await invalidateVexSurfaces(queryClient, sbom.id);
       const errorSuffix = result.errors?.length ? ` ${result.errors.length} provider error(s) recorded.` : '';
       setVexMessage(
         `Discovery imported ${result.statements_imported} statements from ${result.discovered_documents} document(s); ${result.unmatched_statements} unmatched.${errorSuffix}`,
@@ -937,6 +940,7 @@ export function SbomDetail({ sbom }: SbomDetailProps) {
 
   return (
     <div className="space-y-6">
+      {sbom.projectid && sbom.product_id && <SbomPostureNotice scope={{projectId: sbom.projectid, applicationId: sbom.product_id, sbomId: null}} />}
       {/* Back button */}
       <button
         onClick={() => router.back()}

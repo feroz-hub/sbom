@@ -26,6 +26,7 @@ import type {
 import { EmptyTrendState } from './EmptyTrendState';
 
 interface FindingsTrendChartProps {
+  compact?: boolean;
   data: DashboardTrend | undefined;
   isLoading: boolean;
 }
@@ -113,7 +114,7 @@ function formatXAxisDate(input: string): string {
  *
  * Spec: ``docs/dashboard-redesign.md`` §5.
  */
-export function FindingsTrendChart({ data, isLoading }: FindingsTrendChartProps) {
+export function FindingsTrendChart({ data, isLoading, compact = false }: FindingsTrendChartProps) {
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';
   const gradientPrefix = useId().replace(/[:.]/g, '-');
@@ -123,9 +124,8 @@ export function FindingsTrendChart({ data, isLoading }: FindingsTrendChartProps)
     high: false,
     medium: false,
     low: false,
-    // Unknown hidden by default — it's a data-quality signal, not a tier.
-    // The toggle is right there in the legend if the user wants it on.
-    unknown: true,
+    // Include unscored findings so the default legend reconciles with totals.
+    unknown: false,
   });
 
   // v2 reads `points`; falls back to legacy `series` for the deprecation window.
@@ -181,8 +181,8 @@ export function FindingsTrendChart({ data, isLoading }: FindingsTrendChartProps)
   }, [annotations]);
 
   return (
-    <Surface variant="elevated">
-      <SurfaceHeader>
+    <Surface variant="elevated" className={compact ? "min-w-0 border-0 shadow-none" : "h-full min-w-0"} elevation={compact ? 0 : 1}>
+      <SurfaceHeader className={compact ? "flex-wrap gap-2" : undefined}>
         <div>
           <h3 className="text-base font-semibold text-hcl-navy">
             Findings trend
@@ -193,7 +193,7 @@ export function FindingsTrendChart({ data, isLoading }: FindingsTrendChartProps)
             ) : null}
           </h3>
           <p className="mt-0.5 text-xs text-hcl-muted">
-            Daily severity counts across all analysis runs.
+            Distinct active findings as of each day.
             {avgTotal > 0 && (
               <>
                 {' '}
@@ -205,7 +205,7 @@ export function FindingsTrendChart({ data, isLoading }: FindingsTrendChartProps)
             )}
           </p>
         </div>
-        <div className="hidden items-center gap-1.5 sm:flex">
+        <div className={compact ? "flex flex-wrap items-center gap-1" : "hidden items-center gap-1.5 sm:flex"}>
           {SERIES.map((s) => (
             <button
               key={s.key}
@@ -227,21 +227,21 @@ export function FindingsTrendChart({ data, isLoading }: FindingsTrendChartProps)
               />
               {s.label}
               <span className="font-metric text-[10px] tabular-nums text-hcl-muted">
-                {totals[s.key].toLocaleString()}
+                {isLoading ? "—" : totals[s.key].toLocaleString()}
               </span>
             </button>
           ))}
         </div>
       </SurfaceHeader>
-      <SurfaceContent>
+      <SurfaceContent className={compact ? "px-5 py-3" : undefined}>
         {isLoading ? (
           <div className="flex h-80 items-center justify-center">
             <Spinner />
           </div>
         ) : showEmptyState ? (
-          <EmptyTrendState runsSoFar={runsTotal} />
+          compact ? <div className="flex h-36 flex-col items-center justify-center gap-2 text-center"><p className="text-sm font-medium text-hcl-navy">Trend will appear after a week of regular scanning</p><p className="text-xs text-hcl-muted">{runsTotal} {runsTotal === 1 ? "run" : "runs"} so far. No prior-period comparison available.</p></div> : <EmptyTrendState runsSoFar={runsTotal} />
         ) : (
-          <ResponsiveContainer width="100%" height={320}>
+          <ResponsiveContainer width="100%" height={compact ? 170 : 320}>
             <AreaChart
               data={points}
               margin={{ top: 12, right: 16, left: -16, bottom: 0 }}
@@ -327,7 +327,7 @@ export function FindingsTrendChart({ data, isLoading }: FindingsTrendChartProps)
                       strokeWidth: 2,
                       stroke: 'var(--color-surface)',
                     }}
-                    isAnimationActive
+                    isAnimationActive={false}
                     animationDuration={650}
                     animationEasing="ease-out"
                   />

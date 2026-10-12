@@ -50,6 +50,9 @@ class InvestigationRow(BaseModel):
     product_name: str | None = None
     sbom_id: int
     sbom_name: str | None = None
+    sbom_version: str | None = None
+    historical: bool = False
+    analysis_run_id: int | None = None
 
     analyzer_detection_state: str | None = None
     analyzer_sources: list[str] = Field(default_factory=list)
@@ -78,6 +81,8 @@ class InvestigationListResponse(BaseModel):
     limit: int
     offset: int
     items: list[InvestigationRow] = Field(default_factory=list)
+    version_scope: str = "current"
+    posture: list[dict] = Field(default_factory=list)
 
 
 class InvestigationSummaryResponse(BaseModel):
@@ -90,6 +95,7 @@ class InvestigationSummaryResponse(BaseModel):
     """
 
     scope: Literal["filtered"] = "filtered"
+    version_scope: str = "current"
     total: int
     mapped_total: int
     affected_count: int
@@ -196,6 +202,9 @@ class InvestigationDetail(BaseModel):
     project_name: str | None = None
     product_name: str | None = None
     sbom_name: str | None = None
+    sbom_version: str | None = None
+    historical: bool = False
+    analysis_run_id: int | None = None
 
     vulnerability: VulnerabilitySection
     component: ComponentSection
@@ -206,6 +215,7 @@ class InvestigationDetail(BaseModel):
     effective_status: str
     history: list[HistoryEntry] = Field(default_factory=list)
     capabilities: dict = Field(default_factory=dict)
+    previous_decisions: list[dict] = Field(default_factory=list)
     row_version: int = 1
 
 

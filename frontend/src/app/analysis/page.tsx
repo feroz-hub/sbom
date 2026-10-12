@@ -12,6 +12,7 @@ import {
   Layers,
   GitCompareArrows,
 } from 'lucide-react';
+import { SbomPostureNotice } from '@/components/sboms/SbomPostureNotice';
 import { TopBar } from '@/components/layout/TopBar';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
@@ -197,6 +198,7 @@ function AnalysisPageInner() {
         }
       />
       <div className="p-6 space-y-5">
+        <SbomPostureNotice scope={{projectId: projectFilter ? Number(projectFilter) : null, applicationId: productFilter ? Number(productFilter) : null, sbomId: productFilter && sbomFilter ? Number(sbomFilter) : null}} />
         <AnalysisHubTabs active={hubTab} onChange={setHubTab} />
 
         {hubTab === 'consolidated' && (

@@ -196,3 +196,17 @@ it('allows an approved directory identity without claiming mailbox verification'
   expect(isEligibleAdministrator({ ...candidate, status: 'PENDING' })).toBe(false);
   expect(isEligibleAdministrator({ ...candidate, providers: ['HCL_CS'] })).toBe(false);
 });
+
+it('refreshes candidate eligibility after a local mutation revision without clearing search text', async () => {
+  const candidate = { id: 55, display_name: 'New member', email: 'member@example.test', status: 'ACTIVE', email_verified: true, verification_required: false };
+  vi.mocked(api.searchTenantUserCandidates).mockResolvedValue([candidate]);
+  const view = render(<UserSearchCombobox tenantId={7} revision={0} onSelect={() => {}} selectedUser={null} />);
+  const input = screen.getByRole('textbox', { name: 'Search existing user' });
+  fireEvent.change(input, { target: { value: 'member' } });
+  await screen.findByText('New member');
+  vi.mocked(api.searchTenantUserCandidates).mockResolvedValue([]);
+  view.rerender(<UserSearchCombobox tenantId={7} revision={1} onSelect={() => {}} selectedUser={null} />);
+  await waitFor(() => expect(screen.queryByText('New member')).not.toBeInTheDocument());
+  expect(input).toHaveValue('member');
+  expect(api.searchTenantUserCandidates).toHaveBeenCalledTimes(2);
+});

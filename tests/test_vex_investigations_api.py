@@ -124,7 +124,9 @@ def fetch(client, **params):
 
 def test_returns_the_paginated_envelope__VEX_UI_001(client, seeded):
     payload = fetch(client)
-    assert sorted(payload) == ["items", "limit", "offset", "total"]
+    assert {"items", "limit", "offset", "total"} <= payload.keys()
+    assert payload["version_scope"] == "current"
+    assert isinstance(payload["posture"], list)
     assert payload["total"] == 2
     assert len(payload["items"]) == 2
 

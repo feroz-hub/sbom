@@ -1817,8 +1817,8 @@ export function applyValidationRepairPatch(
 export const getValidationRepairHistory = getValidationSessionHistory;
 
 // ─── Dashboard trend ─────────────────────────────────────────────────────────
-export function getDashboardTrend(days = 30, signal?: AbortSignal) {
-  return request<DashboardTrend>(`/dashboard/trend?days=${days}`, { signal });
+export function getDashboardTrend(days = 30, signal?: AbortSignal, scope?: DashboardFilterScope) {
+  return request<DashboardTrend>(withDashboardScope(`/dashboard/trend?days=${days}`, scope), { signal, authErrorMode: 'throw' });
 }
 
 /**
@@ -2968,6 +2968,7 @@ export function exportLifecycleVendorRecords(signal?: AbortSignal): Promise<{ re
 function vexInvestigationFilterParams(args: VexInvestigationListParams): URLSearchParams {
   const params = new URLSearchParams();
   const textParams: Array<keyof VexInvestigationListParams> = [
+    'version_scope',
     'effective_status',
     'reconciliation_status',
     'severity',
@@ -3244,4 +3245,47 @@ export function getLogicalSbomVersions(id: number, signal?: AbortSignal) {
 }
 export function createLogicalSbom(productId: number, payload: { name: string; description?: string }) {
   return request<import('@/types').LogicalSBOM>(`/api/products/${productId}/logical-sboms`, { method: 'POST', body: JSON.stringify(payload) });
+}
+
+
+export function getDashboardPostureVersions(scope?: DashboardFilterScope, signal?: AbortSignal) {
+  return request<import('@/types').SbomPostureResponse>(withDashboardScope('/dashboard/posture-versions', scope), {signal, authErrorMode: 'throw'});
+}
+export function getVexInvestigationVersions(scope?: DashboardFilterScope, signal?: AbortSignal) {
+  return request<{items: Array<{id: number; name: string; version: string | null; historical: boolean; active: boolean}>}>(withDashboardScope('/api/vex/investigations/versions', scope), {signal});
+}
+export function getVexVersionComparison(sbomId: number, signal?: AbortSignal) {
+  return request<import('@/types').VexVersionComparison>(`/api/vex/investigations/comparison?sbom_id=${sbomId}`, {signal});
+}
+
+
+export interface DashboardPriorityFinding {
+  component_id: number | null;
+  id: number;
+  analysis_run_id: number;
+  vuln_id: string;
+  component_name: string | null;
+  component_version: string | null;
+  severity: string | null;
+  score: number | null;
+  source: string | null;
+}
+
+export function getDashboardPriorityFindings(scope: DashboardFilterScope, signal?: AbortSignal) {
+  return request<{ items: DashboardPriorityFinding[] }>(
+    withDashboardScope('/dashboard/priority-findings?limit=5', scope), { signal, authErrorMode: 'throw' },
+  );
+}
+
+export function getVexAnalysisRuns(sbomId: number, signal?: AbortSignal) {
+  return request<{items: Array<{id: number; run_status: string; completed_on: string | null; is_current: boolean}>}>(
+    `/api/vex/investigations/analysis-runs?sbom_id=${sbomId}`, {signal});
+}
+
+export function getVexRunSnapshot(sbomId: number, runId: number, offset: number, signal?: AbortSignal) {
+  return request<{total: number; snapshot_available: boolean; obsolete: boolean; items: Array<{
+    investigation_id: number; canonical_vulnerability_id: string; component_name: string | null;
+    component_version: string | null; effective_status: string; reconciliation_status: string;
+    assigned_to: string | null; reviewed_by: string | null;
+  }>}>(`/api/vex/investigations/run-snapshot?sbom_id=${sbomId}&analysis_run_id=${runId}&offset=${offset}`, {signal});
 }

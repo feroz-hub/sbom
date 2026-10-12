@@ -266,6 +266,8 @@ describe('AuthProvider membership-based tenant context', () => {
   it('persists the choice, clears cached data, and becomes ready once selectTenant resolves', async () => {
     const queryClient = makeQueryClient();
     queryClient.setQueryData(['sboms'], [{ id: 1 }]);
+    queryClient.setQueryData(['platform-summary'], { total_tenants: 4 });
+    queryClient.setQueryData(['platform-administrators'], [{ user_id: 3 }]);
 
     const fetchMock = vi.spyOn(globalThis, 'fetch');
     fetchMock
@@ -288,6 +290,8 @@ describe('AuthProvider membership-based tenant context', () => {
     expect(sessionStorage.getItem('sbom_active_tenant_id')).toBe('7');
     expect(screen.getByTestId('active-tenant')).toHaveTextContent('7');
     expect(queryClient.getQueryData(['sboms'])).toBeUndefined();
+    expect(queryClient.getQueryData(['platform-summary'])).toBeUndefined();
+    expect(queryClient.getQueryData(['platform-administrators'])).toBeUndefined();
     // The re-resolved context was fetched with the selected tenant's header.
     expect(lastMeTenantHeader(fetchMock)).toBe('7');
   });
@@ -315,12 +319,15 @@ describe('AuthProvider membership-based tenant context', () => {
   });
 
   it('clears the active tenant on logout', async () => {
+    const queryClient = makeQueryClient();
+    queryClient.setQueryData(['platform-summary'], { total_tenants: 4 });
+    queryClient.setQueryData(['platform-administrators'], [{ user_id: 3 }]);
     const fetchMock = vi.spyOn(globalThis, 'fetch');
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ authenticated: true }))
       .mockResolvedValueOnce(jsonResponse(meBody('READY', [wellysis], 7)));
 
-    render(wrap(<Probe />));
+    render(wrap(<Probe />, queryClient));
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('authenticated'));
     expect(sessionStorage.getItem('sbom_active_tenant_id')).toBe('7');
 
@@ -333,6 +340,8 @@ describe('AuthProvider membership-based tenant context', () => {
     });
 
     expect(sessionStorage.getItem('sbom_active_tenant_id')).toBeNull();
+    expect(queryClient.getQueryData(['platform-summary'])).toBeUndefined();
+    expect(queryClient.getQueryData(['platform-administrators'])).toBeUndefined();
     await waitFor(() => expect(screen.getByTestId('bootstrap-state')).toHaveTextContent('logging-out'));
     expect(screen.getByTestId('status')).toHaveTextContent('loading');
     expect(screen.getByTestId('active-tenant')).toHaveTextContent('');
@@ -660,4 +669,21 @@ it.each(['USER_ACCESS_PENDING', 'ACCOUNT_PENDING_APPROVAL'])('keeps %s authentic
   await waitFor(() => expect(latestAuth?.user?.permissions).toEqual([]));
   expect(latestAuth?.tenants).toEqual([]);
   expect(fetcher.mock.calls.some(([url]) => url.endsWith('/api/tenants'))).toBe(false);
+});
+
+it('refreshSession discards privileged caches and resolves server permissions after a self mutation', async () => {
+  sessionStorage.clear(); latestAuth = null;
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(jsonResponse({ authenticated: true }))
+    .mockResolvedValueOnce(jsonResponse(meBody('ACTIVE', [defaultTenant], 1)))
+    .mockResolvedValueOnce(jsonResponse({ authenticated: true }))
+    .mockResolvedValueOnce(jsonResponse({ ...meBody('ACTIVE', [defaultTenant], 1), roles: ['VIEWER'], permissions: [] }));
+  vi.stubGlobal('fetch', fetchMock);
+  const qc = makeQueryClient(); render(wrap(<Probe />, qc));
+  await waitFor(() => expect(latestAuth?.bootstrapState).toBe('ready'));
+  qc.setQueryData(['tenant-users', 1], ['privileged']);
+  await act(async () => { await latestAuth!.refreshSession({ authorizationChanged: true }); });
+  expect(qc.getQueryData(['tenant-users', 1])).toBeUndefined();
+  expect(latestAuth!.hasPermission('tenant:user:read')).toBe(false);
+  expect(latestAuth!.user?.roles).toEqual(['VIEWER']);
 });

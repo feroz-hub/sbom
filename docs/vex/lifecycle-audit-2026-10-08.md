@@ -94,3 +94,11 @@ explanation is an inference, not a measurement.
 | Filtered metrics exactly match filters | ✅ (B4) |
 | Tenant overview distinguished | ✅ |
 | VEX-only reconciled independently | ✅ unchanged existing rules and tests |
+
+## Follow-up implementation
+
+B5, B6, M1, M2, M3 and page query batching are implemented in the [2026-10-09 lifecycle completion](lifecycle-completion-2026-10-09.md). This audit remains the baseline snapshot; the follow-up records the new manual-designation/fallback posture policy and executed evidence.
+
+## Follow-up implementation — 2026-10-09
+
+The remaining lifecycle work now includes persisted AUTO/MANUAL_PIN selection and auditable successful-analysis promotion, explicit no-posture/invalid-pin provenance, immutable historical run snapshots and read-only run browsing. The pre-existing B5/B6/M1/M2/M3 implementation was retained and strengthened. The authoritative policy, requirement mapping and actual final validation are in [lifecycle-implementation-2026-10-09.md](lifecycle-implementation-2026-10-09.md).

@@ -1,6 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useMutationScope } from '@/hooks/useMutationScope';
+import { isAiBatchTerminal, reconcileAiBatchTerminal } from '@/lib/aiBatchSync';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   HttpError,
@@ -23,10 +25,6 @@ const TERMINAL_LINGER_MS = 8_000;
 // silently never emits ``complete``). Force-unregister so the banner
 // row can't survive across an entire workday.
 const STALE_TRACKING_TIMEOUT_MS = 60 * 60_000;
-
-function isTerminal(status: AiBatchProgress['status']): boolean {
-  return status === 'complete' || status === 'failed' || status === 'cancelled';
-}
 
 /** TanStack Query cache key. ``batchId === null`` is the legacy run-only
  *  variant; the new multi-batch flow keys by ``[run_id, batch_id]`` so
@@ -55,165 +53,71 @@ function BatchStreamSubscription({
   onTerminal(): void;
 }) {
   const qc = useQueryClient();
+  const { key: scopeKey, ready: scopeReady, capture } = useMutationScope();
   const onTerminalRef = useRef(onTerminal);
   onTerminalRef.current = onTerminal;
-
   const { runId, batchId } = entry;
 
-  // Initial snapshot. Without this the cache stays empty until the
-  // first SSE message arrives, which can be several seconds for a
-  // slow batch.
   useEffect(() => {
-    let cancelled = false;
-    const fetchInitial = async () => {
-      try {
-        if (batchId == null) {
-          const snap = await getRunAiFixProgress(runId);
-          if (cancelled) return;
-          qc.setQueryData(batchProgressQueryKey(runId, null), snap);
-          // ``null`` = backend 204 (run exists, no batch — idle). Treat it
-          // like a terminal status so the provider unregisters this phantom
-          // subscriber instead of holding a stream open against nothing.
-          if (snap == null || isTerminal(snap.status)) onTerminalRef.current();
-          return;
-        }
-        const detail = await getRunAiBatch(runId, batchId);
-        if (cancelled) return;
-        if (detail.progress) {
-          qc.setQueryData(batchProgressQueryKey(runId, batchId), detail.progress);
-          if (isTerminal(detail.progress.status)) onTerminalRef.current();
-        }
-      } catch (err) {
-        if (cancelled) return;
-        // 404 = phantom subscriber (registered for a run with no batch).
-        // Treat as terminal so the provider's linger timer unregisters
-        // the entry and the banner row goes away.
-        if (err instanceof HttpError && err.status === 404) {
-          onTerminalRef.current();
-          return;
-        }
-        /* other errors: SSE/poll loop fills in once the network recovers. */
-      }
-    };
-    fetchInitial();
-    return () => {
-      cancelled = true;
-    };
-  }, [runId, batchId, qc]);
-
-  // SSE first; polling fallback when EventSource isn't supported or
-  // the stream errors. The poll loop only runs after SSE has failed
-  // at least once, so we don't double-subscribe.
-  useEffect(() => {
-    let stopped = false;
+    if (!scopeReady) return;
+    const isCurrent = capture();
+    const controller = new AbortController();
+    let stopped = false, reading = false, revision = 0;
     let pollTimer: ReturnType<typeof setInterval> | null = null;
     let es: EventSource | null = null;
-
     const queryKey = batchProgressQueryKey(runId, batchId);
-    const streamUrl = batchId == null
-      ? aiFixStreamUrl(runId)
-      : aiFixBatchStreamUrl(runId, batchId);
-
-    const fetchSnapshot = async (): Promise<AiBatchProgress | null> => {
-      if (batchId == null) return getRunAiFixProgress(runId);
-      try {
-        const detail = await getRunAiBatch(runId, batchId);
-        return detail.progress;
-      } catch {
-        return null;
-      }
+    const stop = () => {
+      stopped = true; es?.close(); es = null;
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
     };
-
-    const startPolling = () => {
-      if (stopped || pollTimer) return;
-      pollTimer = setInterval(async () => {
-        if (stopped) return;
-        try {
-          const snap = await fetchSnapshot();
-          if (snap == null) {
-            // Legacy run-scoped null = 204 idle → stop polling a dead
-            // endpoint. (Batch-scoped null is a transient fetch error;
-            // keep polling so SSE/next tick can recover.)
-            if (batchId == null) {
-              stopped = true;
-              if (pollTimer) clearInterval(pollTimer);
-              onTerminalRef.current();
-            }
-            return;
-          }
-          qc.setQueryData(queryKey, snap);
-          if (isTerminal(snap.status)) {
-            stopped = true;
-            if (pollTimer) clearInterval(pollTimer);
-            onTerminalRef.current();
-          }
-        } catch {
-          /* keep polling */
-        }
-      }, POLL_FALLBACK_MS);
-    };
-
-    if (typeof window === 'undefined' || typeof EventSource === 'undefined') {
-      startPolling();
-      return () => {
-        stopped = true;
-        if (pollTimer) clearInterval(pollTimer);
-      };
-    }
-
-    try {
-      es = new EventSource(streamUrl, { withCredentials: true });
-    } catch {
-      startPolling();
-      return () => {
-        stopped = true;
-        if (pollTimer) clearInterval(pollTimer);
-      };
-    }
-
-    es.addEventListener('progress', (event: MessageEvent) => {
-      try {
-        const parsed = JSON.parse(event.data) as AiBatchProgress;
-        qc.setQueryData(queryKey, parsed);
-        if (isTerminal(parsed.status)) {
-          es?.close();
-          es = null;
-          stopped = true;
-          onTerminalRef.current();
-        }
-      } catch {
-        /* drop malformed event; the next one or poll fallback recovers */
-      }
-    });
-
-    es.addEventListener('end', () => {
-      es?.close();
-      es = null;
-      // Server signalled "no more events." Whether the run reached a
-      // terminal status or the legacy phantom-fast-path fired, the
-      // subscriber should unregister rather than sit on a closed
-      // socket. Without this, prior to the fix, an `end` after a
-      // synthesised `pending` envelope left the entry tracked forever.
-      if (!stopped) {
-        stopped = true;
+    const accept = (snap: AiBatchProgress) => {
+      if (stopped || !isCurrent() || snap.run_id !== runId || (batchId != null && snap.batch_id != null && snap.batch_id !== batchId)) return;
+      revision += 1;
+      qc.setQueryData(queryKey, snap);
+      if (isAiBatchTerminal(snap)) {
+        stop();
+        void reconcileAiBatchTerminal(qc, { progress: snap, batchId, scope: scopeKey, isCurrent });
         onTerminalRef.current();
       }
-    });
-
-    es.onerror = () => {
-      // Connection lost — switch to polling so the banner doesn't go
-      // stale during a deploy or transient outage.
-      es?.close();
-      es = null;
-      if (!stopped) startPolling();
     };
-
-    return () => {
-      stopped = true;
-      es?.close();
-      if (pollTimer) clearInterval(pollTimer);
+    const read = async () => {
+      if (stopped || reading || !isCurrent()) return;
+      reading = true; const before = revision;
+      try {
+        const snap = batchId == null ? await getRunAiFixProgress(runId, controller.signal)
+          : (await getRunAiBatch(runId, batchId, controller.signal)).progress;
+        if (stopped || !isCurrent() || before !== revision) return;
+        if (snap) accept(snap);
+        else if (batchId == null) { qc.setQueryData(queryKey, null); stop(); onTerminalRef.current(); }
+      } catch (err) {
+        if (!stopped && isCurrent() && err instanceof HttpError && err.status === 404) { stop(); onTerminalRef.current(); }
+        // Network/server failures retain tracking and use the existing fallback.
+      } finally { reading = false; }
     };
-  }, [runId, batchId, qc]);
+    const startPolling = () => {
+      if (!stopped && !pollTimer && isCurrent()) pollTimer = setInterval(() => { void read(); }, POLL_FALLBACK_MS);
+    };
+    // Registration commonly follows an authoritative query/trigger snapshot.
+    // Reuse it rather than immediately issuing the same HTTP read again.
+    const cached = qc.getQueryData<AiBatchProgress | null>(queryKey);
+    if (cached) accept(cached);
+    else if (cached === null) { stop(); onTerminalRef.current(); }
+    else void read();
+    if (stopped) return () => { controller.abort(); };
+    const url = batchId == null ? aiFixStreamUrl(runId) : aiFixBatchStreamUrl(runId, batchId);
+    if (typeof window === 'undefined' || typeof EventSource === 'undefined') startPolling();
+    else {
+      try {
+        es = new EventSource(url, { withCredentials: true });
+        es.addEventListener('progress', (event: MessageEvent) => {
+          try { accept(JSON.parse(event.data) as AiBatchProgress); } catch { /* malformed events are ignored */ }
+        });
+        es.addEventListener('end', () => { es?.close(); es = null; startPolling(); });
+        es.onerror = () => { es?.close(); es = null; startPolling(); };
+      } catch { startPolling(); }
+    }
+    return () => { stop(); controller.abort(); };
+  }, [runId, batchId, qc, scopeKey, scopeReady, capture]);
 
   return null;
 }
@@ -229,9 +133,27 @@ interface ProviderProps {
  * independent rows in the global banner.
  */
 export function AiBatchProgressProvider({ children }: ProviderProps) {
-  const [tracked, setTracked] = useState<Map<string, AiBatchTrackingKey>>(
-    () => new Map(),
-  );
+  const { key: scopeKey, ready: scopeReady } = useMutationScope();
+  return <ScopedAiBatchProgressProvider identity={`${scopeKey}:${scopeReady}`} enabled={scopeReady}>{children}</ScopedAiBatchProgressProvider>;
+}
+
+function ScopedAiBatchProgressProvider({ children, enabled, identity }: ProviderProps & { enabled: boolean; identity: string }) {
+  const [tracking, setTracking] = useState<{ identity: string; entries: Map<string, AiBatchTrackingKey> }>(() => ({ identity, entries: new Map() }));
+  const tracked = tracking.identity === identity && enabled ? tracking.entries : null;
+  const identityRef = useRef(identity);
+  identityRef.current = identity;
+  const setTracked = useCallback((update: (previous: Map<string, AiBatchTrackingKey>) => Map<string, AiBatchTrackingKey>) => {
+    if (identityRef.current !== identity || !enabled) return;
+    setTracking(previous => {
+      if (identityRef.current !== identity) return previous;
+      const entries = previous.identity === identity ? previous.entries : new Map<string, AiBatchTrackingKey>();
+      const next = update(entries);
+      return previous.identity === identity && next === entries ? previous : { identity, entries: next };
+    });
+  }, [identity, enabled]);
+  useEffect(() => {
+    setTracking(previous => previous.identity === identity ? previous : { identity, entries: new Map() });
+  }, [identity]);
   // Hold timeouts that auto-unregister terminal batches after a brief
   // linger so the banner can flash a "complete" state.
   const lingerTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(
@@ -242,6 +164,7 @@ export function AiBatchProgressProvider({ children }: ProviderProps) {
   );
 
   const register = useCallback((entry: AiBatchTrackingKey) => {
+    if (!enabled || identityRef.current !== identity) return;
     const id = trackingKeyId(entry);
     setTracked((prev) => {
       const existing = prev.get(id);
@@ -282,7 +205,7 @@ export function AiBatchProgressProvider({ children }: ProviderProps) {
       }, STALE_TRACKING_TIMEOUT_MS);
       staleTimers.current.set(id, t);
     }
-  }, []);
+  }, [enabled, identity, setTracked]);
 
   const unregister = useCallback((runId: number, batchId: string | null) => {
     const id = trackingKeyId({ runId, batchId });
@@ -302,7 +225,7 @@ export function AiBatchProgressProvider({ children }: ProviderProps) {
       clearTimeout(stale);
       staleTimers.current.delete(id);
     }
-  }, []);
+  }, [setTracked]);
 
   const handleTerminal = useCallback(
     (entry: AiBatchTrackingKey) => {
@@ -328,9 +251,9 @@ export function AiBatchProgressProvider({ children }: ProviderProps) {
       stale.forEach((t) => clearTimeout(t));
       stale.clear();
     };
-  }, []);
+  }, [identity]);
 
-  const trackedArray = useMemo(() => Array.from(tracked.values()), [tracked]);
+  const trackedArray = useMemo(() => tracked ? Array.from(tracked.values()) : [], [tracked]);
 
   const contextValue = useMemo(
     () => ({
