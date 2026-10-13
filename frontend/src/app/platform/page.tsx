@@ -22,6 +22,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { getPlatformSummary, listPlatformTenants } from '@/lib/api';
 import { TopBar } from '@/components/layout/TopBar';
 import { TenantStatusBadge } from '@/components/admin/StatusBadges';
+import { InfoTooltip } from '@/components/ui/InfoTooltip';
 import { cn } from '@/lib/utils';
 
 const tenantsHref = '/settings/platform/tenants';
@@ -34,12 +35,15 @@ const accents = {
   amber: 'bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300',
   neutral: 'bg-surface-muted text-foreground/70',
 };
+// Mirrors verification_complete_clause(), shared by both administrator counts.
+const verificationHelp = 'Verification must be complete: a verified email or Microsoft Entra identity, with no verification still required.';
 const metrics: Array<{
   key: string;
   title: string;
   icon: LucideIcon;
   tone: keyof typeof accents;
   description: string;
+  tooltip: string;
   zero?: string;
   permission?: string;
 }> = [
@@ -49,6 +53,7 @@ const metrics: Array<{
     icon: Building2,
     tone: 'blue',
     description: 'Across the platform',
+    tooltip: 'All tenants across the platform, including active, disabled, and pending tenants.',
   },
   {
     key: 'active_tenants',
@@ -56,6 +61,7 @@ const metrics: Array<{
     icon: CheckCircle2,
     tone: 'green',
     description: 'Enabled tenant workspaces',
+    tooltip: 'Tenants whose status is Active.',
     zero: 'No active tenants yet',
   },
   {
@@ -64,6 +70,7 @@ const metrics: Array<{
     icon: CirclePause,
     tone: 'neutral',
     description: 'Tenant access disabled',
+    tooltip: 'Tenants whose status is Disabled.',
     zero: 'No disabled tenants',
   },
   {
@@ -72,6 +79,7 @@ const metrics: Array<{
     icon: Clock3,
     tone: 'amber',
     description: 'Awaiting administrator activation',
+    tooltip: 'Tenants whose status is Pending, awaiting setup completion.',
     zero: 'No pending tenant setup',
   },
   {
@@ -80,13 +88,15 @@ const metrics: Array<{
     icon: UsersRound,
     tone: 'blue',
     description: 'Explicit tenant memberships',
+    tooltip: 'All tenant memberships, including active, pending, and disabled memberships. A user belonging to multiple tenants is counted once per tenant.',
   },
   {
     key: 'tenants_without_admin',
-    title: 'Tenants Without Admin',
+    title: 'Tenants Without Active Admin',
     icon: ShieldAlert,
     tone: 'amber',
     description: 'Administrator attention required',
+    tooltip: `Tenants of any status with no active, verified user who has an active membership and an active assignment to the active Tenant Administrator role. ${verificationHelp}`,
     zero: 'All tenants have active administrators',
   },
   {
@@ -95,6 +105,7 @@ const metrics: Array<{
     icon: ShieldCheck,
     tone: 'blue',
     description: 'Platform governance access',
+    tooltip: `Active, verified users with an active Platform Administrator grant. Disabled grants and inactive or unverified users are excluded. ${verificationHelp}`,
     permission: 'platform:administrator:read',
   },
 ];
@@ -271,9 +282,12 @@ export default function PlatformDashboard() {
                     >
                       <Icon className="h-[18px] w-[18px]" aria-hidden />
                     </span>
-                    <h2 className="text-sm font-medium text-foreground/70">
-                      {metric.title}
-                    </h2>
+                    <div className="flex min-w-0 items-center gap-1">
+                      <h2 className="text-sm font-medium text-foreground/70">
+                        {metric.title}
+                      </h2>
+                      <InfoTooltip label={metric.title} description={metric.tooltip} />
+                    </div>
                   </div>
                   <p
                     className="mt-4 text-3xl font-semibold tracking-tight text-foreground tabular-nums"

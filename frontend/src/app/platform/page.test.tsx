@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, expect, it, vi } from 'vitest';
 import PlatformDashboard from './page';
 
@@ -107,6 +108,51 @@ it('renders meaningful zero states and all seven metrics', async () => {
       screen.getByRole('region', { name: 'Platform metrics' }),
     ).getAllByRole('article'),
   ).toHaveLength(7);
+});
+it.each([
+  ['Total Tenants', 2, 'All tenants across the platform, including active, disabled, and pending tenants.'],
+  ['Active Tenants', 2, 'Tenants whose status is Active.'],
+  ['Disabled Tenants', 0, 'Tenants whose status is Disabled.'],
+  ['Pending Setup', 0, 'Tenants whose status is Pending, awaiting setup completion.'],
+  ['Total Memberships', 4, 'All tenant memberships, including active, pending, and disabled memberships. A user belonging to multiple tenants is counted once per tenant.'],
+  ['Tenants Without Active Admin', 0, 'Tenants of any status with no active, verified user who has an active membership and an active assignment to the active Tenant Administrator role.'],
+  ['Platform Administrators', 1, 'Active, verified users with an active Platform Administrator grant. Disabled grants and inactive or unverified users are excluded.'],
+])('provides consistent hover, keyboard and tap help for %s', async (title, value, description) => {
+  const user = userEvent.setup();
+  show();
+  const metric = await screen.findByLabelText(`${title}: ${value}`);
+  const card = metric.closest('article')!;
+  expect(within(card).getByRole('heading', { name: title })).toBeInTheDocument();
+  const info = within(card).getByRole('button', { name: `About ${title}` });
+  expect(info).toHaveClass('h-8', 'w-8', 'shrink-0');
+  expect(info.querySelector('svg')).toHaveClass('h-4', 'w-4');
+  expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+
+  await user.hover(info);
+  const help = screen.getByRole('tooltip');
+  expect(help).toHaveTextContent(description);
+  if (title === 'Tenants Without Active Admin' || title === 'Platform Administrators') {
+    expect(help).toHaveTextContent('Verification must be complete: a verified email or Microsoft Entra identity, with no verification still required.');
+  }
+  expect(help.parentElement).toBe(document.body);
+  expect(help).toHaveClass('fixed', 'bg-surface', 'border-border', 'text-foreground');
+  expect(info).toHaveAccessibleDescription(help.textContent!);
+  await user.keyboard('{Escape}');
+  expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+
+  fireEvent.focus(info);
+  expect(screen.getByRole('tooltip')).toHaveTextContent(description);
+  fireEvent.blur(info);
+  expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+
+  await user.pointer({ keys: '[TouchA]', target: info });
+  expect(screen.getByRole('tooltip')).toHaveTextContent(description);
+  await user.pointer({ keys: '[TouchA]', target: info });
+  expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  await user.pointer({ keys: '[TouchA]', target: info });
+  expect(screen.getByRole('tooltip')).toBeInTheDocument();
+  await user.pointer({ keys: '[TouchA]', target: document.body });
+  expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
 });
 it('links creation to the existing form and tenant overview to governance details', async () => {
   show();
