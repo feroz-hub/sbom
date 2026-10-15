@@ -3,6 +3,8 @@ from app.models import TenantUserRoleAssignment, TenantUserRoleAssignmentHistory
 from app.services.tenant_service import create_tenant_with_initial_admin
 from sqlalchemy import select
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 from .phase7_helpers import seed_eligible_admin, seed_requester
 
 
@@ -18,16 +20,17 @@ def test_tenant_creation_atomically_creates_initial_primary_assignment():
             external_iam_tenant_id="phase-nine-tenant",
             initial_admin_user_id=admin.id,
         )
-        assignment = db.scalar(
-            select(TenantUserRoleAssignment).where(
-                TenantUserRoleAssignment.tenant_user_id == result.membership.id
+        with verified_fixture_tenant(db, result.tenant.id):
+            assignment = db.scalar(
+                select(TenantUserRoleAssignment).where(
+                    TenantUserRoleAssignment.tenant_user_id == result.membership.id
+                )
             )
-        )
-        history = db.scalar(
-            select(TenantUserRoleAssignmentHistory).where(
-                TenantUserRoleAssignmentHistory.assignment_id == assignment.id
+            history = db.scalar(
+                select(TenantUserRoleAssignmentHistory).where(
+                    TenantUserRoleAssignmentHistory.assignment_id == assignment.id
+                )
             )
-        )
     assert assignment.status == "ACTIVE"
     assert assignment.is_primary is True
     assert assignment.assignment_source == "TENANT_CREATION"

@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query, Request, Response, status
 from sqlalchemy.orm import Session
 
 from ..core.context import CurrentContext
-from ..core.security import require_permission
+from ..core.security import require_permission, require_platform_permission
 from ..db import get_db
 from ..schemas_lifecycle_admin import (
     LifecycleProviderConfigResponse,
@@ -201,7 +201,7 @@ def create_lifecycle_vendor_record(
     payload: LifecycleVendorRecordRequest,
     request: Request,
     db: Session = Depends(get_db),
-    context: CurrentContext = Depends(require_permission("lifecycle:vendor-record:write")),
+    context: CurrentContext = Depends(require_platform_permission("platform:admin")),
 ):
     service = LifecycleVendorRecordService()
     row = service.create_record(db, payload.model_dump(exclude_unset=True), context=context, request=request)
@@ -219,7 +219,7 @@ def update_lifecycle_vendor_record(
     payload: LifecycleVendorRecordRequest,
     request: Request,
     db: Session = Depends(get_db),
-    context: CurrentContext = Depends(require_permission("lifecycle:vendor-record:write")),
+    context: CurrentContext = Depends(require_platform_permission("platform:admin")),
 ):
     service = LifecycleVendorRecordService()
     row = service.update_record(db, record_id, payload.model_dump(exclude_unset=True), context=context, request=request)
@@ -236,7 +236,7 @@ def delete_lifecycle_vendor_record(
     record_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    context: CurrentContext = Depends(require_permission("lifecycle:vendor-record:delete")),
+    context: CurrentContext = Depends(require_platform_permission("platform:admin")),
 ):
     LifecycleVendorRecordService().disable_record(db, record_id, context=context, request=request)
     db.commit()
@@ -251,7 +251,7 @@ def import_lifecycle_vendor_records(
     payload: LifecycleVendorRecordImportRequest,
     request: Request,
     db: Session = Depends(get_db),
-    context: CurrentContext = Depends(require_permission("lifecycle:vendor-record:write")),
+    context: CurrentContext = Depends(require_platform_permission("platform:admin")),
 ):
     result = LifecycleVendorRecordService().import_records(db, payload.records, context=context, request=request)
     db.commit()

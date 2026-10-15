@@ -21,6 +21,8 @@ from pathlib import Path
 import pytest
 from app.models import AnalysisRun
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 from ._normalize import normalize
 
 SNAPSHOT_DIR = Path(__file__).parent / "snapshots"
@@ -99,20 +101,21 @@ def test_post_sbom_analyze_returns_existing_active_run(client, seeded_sbom):
 
     db = SessionLocal()
     try:
-        active = AnalysisRun(
-            sbom_id=seeded_sbom["id"],
-            run_status="RUNNING",
-            sbom_name=seeded_sbom["sbom_name"],
-            source="NVD,OSV,GITHUB",
-            trigger_source="manual",
-            started_on="2026-07-01T00:00:00Z",
-            completed_on="2026-07-01T00:00:00Z",
-            duration_ms=0,
-        )
-        db.add(active)
-        db.commit()
-        db.refresh(active)
-        active_id = active.id
+        with verified_fixture_tenant(db, 1):
+            active = AnalysisRun(
+                sbom_id=seeded_sbom["id"],
+                run_status="RUNNING",
+                sbom_name=seeded_sbom["sbom_name"],
+                source="NVD,OSV,GITHUB",
+                trigger_source="manual",
+                started_on="2026-07-01T00:00:00Z",
+                completed_on="2026-07-01T00:00:00Z",
+                duration_ms=0,
+            )
+            db.add(active)
+            db.commit()
+            db.refresh(active)
+            active_id = active.id
     finally:
         db.close()
 
@@ -125,10 +128,11 @@ def test_post_sbom_analyze_returns_existing_active_run(client, seeded_sbom):
 
     db = SessionLocal()
     try:
-        runs = db.query(AnalysisRun).filter(AnalysisRun.sbom_id == seeded_sbom["id"]).all()
-        assert [run.id for run in runs].count(active_id) == 1
-        assert sum(1 for run in runs if run.run_status == "RUNNING") == 1
-        db.query(AnalysisRun).filter(AnalysisRun.id == active_id).delete()
-        db.commit()
+        with verified_fixture_tenant(db, 1):
+            runs = db.query(AnalysisRun).filter(AnalysisRun.sbom_id == seeded_sbom["id"]).all()
+            assert [run.id for run in runs].count(active_id) == 1
+            assert sum(1 for run in runs if run.run_status == "RUNNING") == 1
+            db.query(AnalysisRun).filter(AnalysisRun.id == active_id).delete()
+            db.commit()
     finally:
         db.close()

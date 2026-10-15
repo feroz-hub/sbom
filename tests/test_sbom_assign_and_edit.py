@@ -5,6 +5,8 @@ import json
 from app.db import SessionLocal
 from app.models import AnalysisRun, AuditLog, SBOMComponent
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 CLEAN_CYCLONEDX = {
     "bomFormat": "CycloneDX",
     "specVersion": "1.6",
@@ -83,10 +85,11 @@ def test_patch_sbom_valid_project_assigns_project(client):
     # Verify generic audit trail
     db = SessionLocal()
     try:
-        audit = db.query(AuditLog).filter_by(target_kind="sbom", target_id=sbom["id"], action="sbom.update").first()
-        assert audit is not None
-        assert audit.metadata_json["old_project_id"] is None
-        assert audit.metadata_json["new_project_id"] == project["id"]
+        with verified_fixture_tenant(db, 1):
+            audit = db.query(AuditLog).filter_by(target_kind="sbom", target_id=sbom["id"], action="sbom.update").first()
+            assert audit is not None
+            assert audit.metadata_json["old_project_id"] is None
+            assert audit.metadata_json["new_project_id"] == project["id"]
     finally:
         db.close()
 
@@ -166,10 +169,11 @@ def test_project_assignment_preserves_components_and_runs(client):
 
     db = SessionLocal()
     try:
-        comp_count_before = db.query(SBOMComponent).filter_by(sbom_id=sbom["id"]).count()
-        runs_count_before = db.query(AnalysisRun).filter_by(sbom_id=sbom["id"]).count()
-        assert comp_count_before > 0
-        assert runs_count_before > 0
+        with verified_fixture_tenant(db, 1):
+            comp_count_before = db.query(SBOMComponent).filter_by(sbom_id=sbom["id"]).count()
+            runs_count_before = db.query(AnalysisRun).filter_by(sbom_id=sbom["id"]).count()
+            assert comp_count_before > 0
+            assert runs_count_before > 0
     finally:
         db.close()
 
@@ -179,15 +183,16 @@ def test_project_assignment_preserves_components_and_runs(client):
 
     db = SessionLocal()
     try:
-        comp_count_after = db.query(SBOMComponent).filter_by(sbom_id=sbom["id"]).count()
-        runs_count_after = db.query(AnalysisRun).filter_by(sbom_id=sbom["id"]).count()
-        assert comp_count_after == comp_count_before
-        assert runs_count_after == runs_count_before
+        with verified_fixture_tenant(db, 1):
+            comp_count_after = db.query(SBOMComponent).filter_by(sbom_id=sbom["id"]).count()
+            runs_count_after = db.query(AnalysisRun).filter_by(sbom_id=sbom["id"]).count()
+            assert comp_count_after == comp_count_before
+            assert runs_count_after == runs_count_before
 
-        # Verify AnalysisRuns project_id cascaded
-        runs = db.query(AnalysisRun).filter_by(sbom_id=sbom["id"]).all()
-        for r in runs:
-            assert r.project_id == project["id"]
+            # Verify AnalysisRuns project_id cascaded
+            runs = db.query(AnalysisRun).filter_by(sbom_id=sbom["id"]).all()
+            for r in runs:
+                assert r.project_id == project["id"]
     finally:
         db.close()
 

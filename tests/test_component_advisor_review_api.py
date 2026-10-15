@@ -10,16 +10,32 @@ advisor endpoint.
 import logging
 
 import pytest
-from sqlalchemy import select, text
-
 from app.core.context import CurrentContext
 from app.core.permissions import ROLE_PERMISSIONS
 from app.core.security import get_current_tenant_context
 from app.db import SessionLocal
 from app.metrics.cache import reset_cache
-from app.models import ComponentRecommendationEvent
+from app.models import (
+    AnalysisFinding,
+    AnalysisRun,
+    ComponentRecommendationEvent,
+    Product,
+    Projects,
+    SBOMComponent,
+    SBOMSource,
+    VexInvestigation,
+    VexStatement,
+)
 from app.services.component_advisor import sources
-from tests.component_advisor_support import NOW, World, purl_key
+from sqlalchemy import func, select
+
+from tests.component_advisor_support import World, purl_key
+from tests.tenant_fixture_scope import (
+    declare_fixture_tenant,
+    fixture_business_snapshot,
+    scoped_context_override,
+    verified_fixture_tenant,
+)
 from tests.test_vex_scoped_authorization import make_member
 
 BASE = "/api/component-advisor"
@@ -31,7 +47,8 @@ LODASH = purl_key("pkg:npm/lodash@3.10.1")
 def db():
     session = SessionLocal()
     try:
-        yield session
+        with verified_fixture_tenant(session, 1):
+            yield session
     finally:
         session.close()
 
@@ -46,9 +63,7 @@ def no_external_sources():
 @pytest.fixture()
 def seeded(db):
     reset_cache()
-    db.execute(text(
-        "INSERT INTO tenants (id, name, slug, external_iam_tenant_id, status, created_at, updated_at) "
-        "VALUES (2, 'Other', 'other', 'other', 'ACTIVE', :now, :now) ON CONFLICT (id) DO NOTHING"), {"now": NOW})
+    declare_fixture_tenant(db, 2)
     world = World(db)
     products = [world.product(name=f"app-{i}") for i in range(2)]
     s1, s2 = (world.sbom(p) for p in products)
@@ -70,10 +85,10 @@ def as_role(client, role, tenant_id=1):
     with SessionLocal() as session:
         member = make_member(session, role, tenant_id=tenant_id)
         user_id, label = member.user_id, f"{role.lower()}-{member.user_id}@test"
-    client.app.dependency_overrides[get_current_tenant_context] = lambda: CurrentContext(
+    client.app.dependency_overrides[get_current_tenant_context] = scoped_context_override(lambda: CurrentContext(
         user_id=user_id, external_user_id=label, email=label, display_name=role, tenant_id=tenant_id,
         external_tenant_id=str(tenant_id), roles=frozenset({role}), permissions=ROLE_PERMISSIONS[role],
-    )
+    ))
     return label
 
 
@@ -101,10 +116,8 @@ def candidate(item, version):
 
 
 def checksums(db):
-    tables = ("sbom_source", "sbom_component", "analysis_run", "analysis_finding", "vex_investigation",
-              "vex_statements", "products", "projects")
-    return {t: db.execute(text(f"SELECT count(*), coalesce(md5(string_agg(t::text, '|' ORDER BY t::text)), '') FROM {t} t")).one()
-            for t in tables}
+    return fixture_business_snapshot(db, (SBOMSource, SBOMComponent, AnalysisRun, AnalysisFinding,
+                                          VexInvestigation, VexStatement, Product, Projects), (1, 2))
 
 
 # ---------------------------------------------------------------------------
@@ -218,10 +231,10 @@ def test_unauthorized_accept_leaves_no_trace(client, seeded, db, reset_overrides
     as_role(client, "TENANT_ADMIN")
     item = new_item(client)
     item = decide(client, item, "RECOMMEND", candidate_id=candidate(item, "2.17.1")["id"]).json()
-    before = db.scalar(select(text("count(*)")).select_from(ComponentRecommendationEvent))
+    before = db.scalar(select(func.count()).select_from(ComponentRecommendationEvent))
     as_role(client, "SECURITY_ANALYST")
     assert decide(client, item, "ACCEPT").status_code == 403
-    assert db.scalar(select(text("count(*)")).select_from(ComponentRecommendationEvent)) == before
+    assert db.scalar(select(func.count()).select_from(ComponentRecommendationEvent)) == before
     assert client.get(f"{BASE}/recommendations/{item['id']}").json()["status"] == "RECOMMENDED"
 
 
@@ -319,7 +332,7 @@ def test_T12_every_advisor_endpoint_rejects_foreign_ids_without_leaking__FR_SCA_
     as_role(client, "TENANT_ADMIN")
     item = new_item(client)
     cid = item["candidates"][0]["id"]
-    project_id = db.execute(text("SELECT id FROM projects WHERE tenant_id = 1 ORDER BY id LIMIT 1")).scalar()
+    project_id = db.scalar(select(Projects.id).order_by(Projects.id).limit(1))
     as_role(client, "TENANT_ADMIN", tenant_id=2)
     caplog.set_level(logging.DEBUG)
     rid = item["id"]

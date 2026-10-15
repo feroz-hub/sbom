@@ -20,6 +20,8 @@ class CurrentContext:
     identity_roles: frozenset[str] = frozenset()
 
     def has_permission(self, permission: str) -> bool:
+        if permission.startswith("platform:") and (not self.is_platform_admin or self.tenant_id is not None):
+            return False
         return permission in self.permissions
 
     def actor_label(self) -> str:

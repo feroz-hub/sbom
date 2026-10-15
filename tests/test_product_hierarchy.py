@@ -8,6 +8,8 @@ from app.models import AnalysisRun, Product, Projects, SBOMSource
 from app.services.analysis_service import persist_analysis_run
 from scripts.backfill_products_for_existing_sboms import run_backfill
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 
 def _name(prefix: str) -> str:
     return f"{prefix}-{uuid.uuid4().hex[:8]}"
@@ -174,7 +176,7 @@ def test_analysis_run_inherits_product_id(client):
     project = _project(client)
     product = _product(client, project["id"], "Run Product")
     accepted = _upload(client, project_id=project["id"], product_id=product["id"])
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         sbom = db.get(SBOMSource, accepted["sbom_id"])
         run = persist_analysis_run(
             db,
@@ -206,7 +208,7 @@ def test_product_sbom_list_carries_latest_analysis(client):
     assert listed.status_code == 200, listed.text
     assert listed.json()[0]["latest_analysis"] is None
 
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         sbom = db.get(SBOMSource, sbom_id)
         run = AnalysisRun(
             sbom_id=sbom.id,
@@ -249,7 +251,7 @@ def test_product_sbom_list_delete_policy_and_backfill_idempotent(client):
     delete_blocked = client.delete(f"/api/products/{product['id']}")
     assert delete_blocked.status_code == 409
 
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         legacy_project = Projects(
             tenant_id=1,
             project_name=_name("legacy-project"),
@@ -270,11 +272,16 @@ def test_product_sbom_list_delete_policy_and_backfill_idempotent(client):
         legacy_id = legacy.id
         legacy_project_id = legacy_project.id
 
-    first = run_backfill(apply=True)
-    second = run_backfill(apply=True)
+    from app.services.maintenance_scope import maintenance_tenant
+
+    # This fixture owns tenant 1; exercise maintenance separately in that
+    # verified owner, rather than invoking a global unscoped backfill.
+    with maintenance_tenant(1, "test.product_backfill"):
+        first = run_backfill(apply=True)
+        second = run_backfill(apply=True)
     assert first.sboms_linked >= 1
     assert second.sboms_linked == 0
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         legacy = db.get(SBOMSource, legacy_id)
         assert legacy.projectid == legacy_project_id
         assert legacy.product_id is not None

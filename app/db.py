@@ -15,9 +15,9 @@ try:
 except ImportError:
     pass
 
-from sqlalchemy import MetaData, create_engine, event
+from sqlalchemy import MetaData, create_engine, event, inspect
 from sqlalchemy.engine import make_url
-from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
 NAMING_CONVENTION = {
     "ix": "ix_%(column_0_label)s",
@@ -136,7 +136,66 @@ def _set_sqlite_pragma(dbapi_connection, connection_record):
     cursor.close()
 
 
-SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+class TenantContextRequired(RuntimeError):
+    pass
+
+
+def _required_tenant_id():
+    from .core.context import get_bound_context
+
+    context = get_bound_context()
+    if context is None or type(context.tenant_id) is not int or context.tenant_id <= 0:
+        raise TenantContextRequired("Tenant context is required for tenant-owned data")
+    return context.tenant_id
+
+
+class TenantSession(Session):
+    def _identity_lookup(self, mapper, primary_key_identity, **kwargs):
+        from .models_mixins import TenantOwnedMixin
+
+        owned = issubclass(mapper.class_, TenantOwnedMixin)
+        tenant_id = _required_tenant_id() if owned else None
+        row = super()._identity_lookup(mapper, primary_key_identity, **kwargs)
+        if owned and isinstance(row, TenantOwnedMixin) and row.tenant_id != tenant_id:
+            return None
+        return row
+
+    def _get_impl(self, entity, primary_key_identity, db_load_fn, **kwargs):
+        from .models_mixins import TenantOwnedMixin
+
+        mapper = inspect(entity)
+        owned = issubclass(mapper.class_, TenantOwnedMixin)
+        tenant_id = _required_tenant_id() if owned else None
+        row = super()._get_impl(entity, primary_key_identity, db_load_fn, **kwargs)
+        # Session.get / Query.get can use an identity-map hit without SQL.
+        if owned and row is not None and row.tenant_id != tenant_id:
+            return None
+        return row
+
+    def bulk_save_objects(self, objects, **kwargs):
+        from .models_mixins import TenantOwnedMixin
+
+        objects = list(objects)
+        if any(isinstance(row, TenantOwnedMixin) for row in objects):
+            raise RuntimeError("Use tenant-scoped ORM operations for tenant-owned bulk writes")
+        return super().bulk_save_objects(objects, **kwargs)
+
+    def bulk_insert_mappings(self, mapper, mappings, **kwargs):
+        from .models_mixins import TenantOwnedMixin
+
+        if issubclass(inspect(mapper).class_, TenantOwnedMixin):
+            raise RuntimeError("Use tenant-scoped ORM operations for tenant-owned bulk writes")
+        return super().bulk_insert_mappings(mapper, mappings, **kwargs)
+
+    def bulk_update_mappings(self, mapper, mappings):
+        from .models_mixins import TenantOwnedMixin
+
+        if issubclass(inspect(mapper).class_, TenantOwnedMixin):
+            raise RuntimeError("Use tenant-scoped ORM operations for tenant-owned bulk writes")
+        return super().bulk_update_mappings(mapper, mappings)
+
+
+SessionLocal = sessionmaker(bind=engine, class_=TenantSession, autoflush=False, autocommit=False)
 Base = declarative_base(metadata=MetaData(naming_convention=NAMING_CONVENTION))
 
 
@@ -177,25 +236,125 @@ from sqlalchemy.orm import Session as _OrmSession  # noqa: E402
 from sqlalchemy.orm import with_loader_criteria  # noqa: E402
 
 
+def _tenant_table_names():
+    from .models_mixins import TenantOwnedMixin
+
+    return {mapper.local_table.name for mapper in Base.registry.mappers if issubclass(mapper.class_, TenantOwnedMixin)}
+
+
+def _tenant_dml_target(target, names):
+    from sqlalchemy.sql.selectable import Alias
+
+    base = target
+    while isinstance(base, Alias):
+        base = base.original
+    return getattr(base, "name", None) in names
+
+
+def _scope_core_select(statement, tenant_id, names, *, stop_on=()):
+    from sqlalchemy import Table
+    from sqlalchemy.sql import visitors
+    from sqlalchemy.sql.selectable import Alias, Join
+
+    def clauses(source, nullable=False):
+        if isinstance(source, Join):
+            yield from clauses(source.left, nullable or source.full)
+            yield from clauses(source.right, nullable or source.isouter or source.full)
+        elif isinstance(source, Table) and source.name in names:
+            clause = source.c.tenant_id == tenant_id
+            yield clause | source.c.tenant_id.is_(None) if nullable else clause
+        elif isinstance(source, Alias) and isinstance(source.original, Table) and source.original.name in names:
+            clause = source.c.tenant_id == tenant_id
+            yield clause | source.c.tenant_id.is_(None) if nullable else clause
+
+    def scope_select(clone):
+        predicates = tuple(clause for source in clone.get_final_froms() for clause in clauses(source))
+        # Modify only the newly cloned Select. A single traversal memo preserves
+        # shared/recursive CTE identity, unlike independently cloning subqueries.
+        clone._where_criteria += predicates
+
+    options = tuple(option for node in visitors.iterate(statement) for option in getattr(node, "_with_options", ()))
+    return visitors.cloned_traverse(statement, {"stop_on": (*stop_on, *options)}, {"select": scope_select})
+
+
+@event.listens_for(_OrmSession, "do_orm_execute")
+def _enforce_statement_tenant(execute_state):
+    from sqlalchemy import Table
+    from sqlalchemy.sql import visitors
+    from sqlalchemy.sql.elements import TextClause
+
+    statement = execute_state.statement
+    names = _tenant_table_names()
+    nodes = list(visitors.iterate(statement))
+    tables = [node for node in nodes if isinstance(node, Table) and node.name in names]
+    # Raw SQL cannot be safely rewritten or verified by the ORM. Migrations
+    # use explicit operator connections, outside this application Session.
+    # The existing Native bootstrap lock is the only application raw-SQL
+    # entry point. Exact matching avoids identifier-encoding/parser bypasses.
+    trusted_bootstrap_lock = "SELECT pg_advisory_xact_lock(734621062)"
+    if any(isinstance(node, TextClause) and node.text != trusted_bootstrap_lock for node in nodes):
+        raise RuntimeError("Raw SQL requires a scoped SQLAlchemy statement or an explicit operator connection")
+    if not tables:
+        return
+    tenant_id = _required_tenant_id()
+    if execute_state.is_select:
+        execute_state.statement = _scope_core_select(statement, tenant_id, names)
+    elif execute_state.is_update or execute_state.is_delete:
+        target = statement.table
+        if _tenant_dml_target(target, names):
+            values = getattr(statement, "_values", {}) or {}
+            assignments = list(values.items()) + list(getattr(statement, "_ordered_values", ()) or ())
+            for key, value in assignments:
+                if getattr(key, "key", key) == "tenant_id" and getattr(value, "value", None) != tenant_id:
+                    raise RuntimeError("Cross-tenant owner update blocked")
+            scoped = statement.where(target.c.tenant_id == tenant_id)
+            execute_state.statement = _scope_core_select(scoped, tenant_id, names, stop_on=(target,))
+    elif execute_state.is_insert:
+        if _tenant_dml_target(statement.table, names):
+            if getattr(statement, "_post_values_clause", None) is not None:
+                raise RuntimeError("Tenant-owned upsert requires an explicit scoped service")
+            if getattr(statement, "select", None) is not None:
+                raise RuntimeError("Tenant-owned INSERT SELECT requires an explicit scoped service")
+            values = getattr(statement, "_values", {}) or {}
+            for key, value in values.items():
+                if getattr(key, "key", key) == "tenant_id" and getattr(value, "value", None) != tenant_id:
+                    raise RuntimeError("Cross-tenant insert blocked")
+            multi_values = getattr(statement, "_multi_values", ())
+            if multi_values:
+                for batch in multi_values:
+                    for values in batch:
+                        if not isinstance(values, dict) or values.get("tenant_id") != tenant_id:
+                            raise RuntimeError("Cross-tenant or unscoped multi-row insert blocked")
+            else:
+                execute_state.statement = statement.values(tenant_id=tenant_id)
+            execute_state.statement = _scope_core_select(
+                execute_state.statement, tenant_id, names, stop_on=(statement.table,)
+            )
+    parameters = execute_state.parameters
+    mappings = parameters if isinstance(parameters, list) else [parameters]
+    for values in mappings:
+        if isinstance(values, dict) and "tenant_id" in values and values["tenant_id"] != tenant_id:
+            raise RuntimeError("Cross-tenant bulk operation blocked")
+
+
 @event.listens_for(_OrmSession, "do_orm_execute")
 def _filter_soft_deleted(execute_state) -> None:
     if not execute_state.is_select:
         return
-    if execute_state.execution_options.get("include_deleted"):
-        return
-
     # Local import so app.db can be imported without a circular hit on
     # app.models_mixins during initial bootstrap.
     from .core.context import get_bound_context
     from .models_mixins import SoftDeleteMixin, TenantOwnedMixin
 
-    execute_state.statement = execute_state.statement.options(
-        with_loader_criteria(
-            SoftDeleteMixin,
-            lambda cls: cls.is_active.is_(True),
-            include_aliases=True,
+    # Tombstone visibility must never change tenant or resource scope.
+    if not execute_state.execution_options.get("include_deleted"):
+        execute_state.statement = execute_state.statement.options(
+            with_loader_criteria(
+                SoftDeleteMixin,
+                lambda cls: cls.is_active.is_(True),
+                include_aliases=True,
+            )
         )
-    )
     context = get_bound_context()
     if context is not None and context.tenant_id is not None:
         tenant_id = context.tenant_id
@@ -243,9 +402,11 @@ def _filter_soft_deleted(execute_state) -> None:
             (VulnerabilityRemediation, VulnerabilityRemediation.tenant_id == scope.tenant_id),
         ]
         if scope.project_id is not None:
-            criteria.extend([
-                (VulnerabilityRemediation, VulnerabilityRemediation.project_id == scope.project_id),
-            ])
+            criteria.extend(
+                [
+                    (VulnerabilityRemediation, VulnerabilityRemediation.project_id == scope.project_id),
+                ]
+            )
             criteria.append((Projects, Projects.id == scope.project_id))
         if scope.product_id is not None:
             criteria.append((Product, (Product.id == scope.product_id) & (Product.tenant_id == scope.tenant_id)))
@@ -268,32 +429,40 @@ def _enforce_tenant_on_writes(session, _flush_context, _instances) -> None:
     from .models_mixins import TenantOwnedMixin
 
     context = get_bound_context()
-    if context is not None and context.tenant_id is not None:
-        tenant_id = context.tenant_id
-    else:
-        from .settings import get_settings
-
-        if get_settings().auth_enabled:
-            tenant_id = None
-        else:
-            tenant_id = 1
+    owned = [
+        instance for instance in session.new | session.dirty | session.deleted if isinstance(instance, TenantOwnedMixin)
+    ]
+    if not owned:
+        return
+    tenant_id = _required_tenant_id()
 
     for instance in session.new:
         if not isinstance(instance, TenantOwnedMixin):
             continue
         current = getattr(instance, "tenant_id", None)
         if current is None:
-            if tenant_id is None:
-                raise RuntimeError("Tenant context is required for tenant-owned writes")
             instance.tenant_id = tenant_id
         elif tenant_id is not None and current != tenant_id:
             raise RuntimeError("Cross-tenant insert blocked")
 
-    if context is None or context.tenant_id is None:
-        return
     for instance in session.dirty | session.deleted:
-        if isinstance(instance, TenantOwnedMixin) and instance.tenant_id != context.tenant_id:
-            raise RuntimeError("Cross-tenant mutation blocked")
+        if isinstance(instance, TenantOwnedMixin):
+            previous = inspect(instance).attrs.tenant_id.history.deleted
+            if instance.tenant_id != tenant_id or any(value != tenant_id for value in previous):
+                raise RuntimeError("Cross-tenant mutation blocked")
+            state = inspect(instance)
+            if state.persistent and state.attrs.tenant_id.history.has_changes():
+                from sqlalchemy import select
+
+                table = state.mapper.local_table
+                predicates = [
+                    column == value for column, value in zip(table.primary_key.columns, state.identity, strict=True)
+                ]
+                original_owner = session.scalar(
+                    select(table.c.tenant_id).where(*predicates, table.c.tenant_id == tenant_id)
+                )
+                if original_owner != tenant_id:
+                    raise RuntimeError("Cross-tenant owner reassignment blocked")
 
 
 @event.listens_for(_OrmSession, "do_orm_execute")
@@ -310,7 +479,9 @@ def _scope_ai_configuration(execute_state):
     tenant_id = execute_state.session.info["ai_configuration_tenant"]
     for model in (AiProviderCredential, AiSettings, AiCredentialAuditLog):
         clause = model.tenant_id.is_(None) if tenant_id is None else model.tenant_id == tenant_id
-        execute_state.statement = execute_state.statement.options(with_loader_criteria(model, clause, include_aliases=True))
+        execute_state.statement = execute_state.statement.options(
+            with_loader_criteria(model, clause, include_aliases=True)
+        )
 
 
 @event.listens_for(_OrmSession, "before_flush")

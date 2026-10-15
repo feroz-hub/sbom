@@ -8,7 +8,7 @@ Supports both pydantic v2 with pydantic-settings and standalone pydantic v2.
 """
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
 
@@ -213,14 +213,9 @@ class Settings(BaseSettings):
         ),
     )
 
-    # Authentication Configuration (Finding A — opt-in bearer token auth)
-    #
-    # `api_auth_mode` is "none" by default so existing dev environments are
-    # not broken. Set it to "bearer" in production to require an
-    # `Authorization: Bearer <token>` header on every state-touching or
-    # data-exposing endpoint. `api_auth_tokens` is a comma-separated allowlist
-    # of valid tokens — multiple values let you rotate per-client without
-    # downtime.
+    # Legacy binary-auth fields are retained for local configuration compatibility.
+    # Protected operations use AUTH_ENABLED and the database-authorized HCL,
+    # Native or Entra context; these fields cannot substitute for production IAM.
     api_auth_mode: str = Field(
         default="none",
         description="Auth: none | bearer (allowlist) | jwt (HS256 via JWT_SECRET_KEY).",
@@ -236,9 +231,10 @@ class Settings(BaseSettings):
     jwt_audience: str = Field(default="", description="Optional expected aud claim")
     jwt_issuer: str = Field(default="", description="Optional expected iss claim")
 
-    # HCL IAM / OIDC. AUTH_ENABLED=false is restricted to local development
-    # and tests; production validation uses asymmetric JWTs from JWKS.
-    auth_enabled: bool = Field(default=False, description="Require HCL IAM authentication")
+    # Authentication is enabled by default. AUTH_ENABLED=false requires explicit
+    # local development/test configuration; providers remain individually selectable.
+    app_environment: Literal["development", "test", "staging", "production"] = "development"
+    auth_enabled: bool = Field(default=True, description="Require authenticated database authorization (HCL IAM, Native or Entra)")
     hcl_auth_enabled: bool = True
     # One workforce directory; application tenants remain database-owned.
     entra_enabled: bool = False

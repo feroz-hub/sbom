@@ -215,18 +215,23 @@ def test_concurrent_promotion_writes_one_designation_audit(app_line, db):
 
     from app.db import SessionLocal
     from app.models import AnalysisRun
+
+    from tests.tenant_fixture_scope import verified_fixture_tenant
     a = app_line.version("1")
     run = app_line.run(a, [], status="OK")
     run_id = run.id
+    # Trusted owner read from this fixture's persisted run, before threading.
+    tenant_id = run.tenant_id
     barrier = Barrier(2)
 
     def promote():
         with SessionLocal() as session:
-            candidate = session.get(AnalysisRun, run_id)
-            barrier.wait(timeout=30)
-            result = promote_successful_analysis(session, candidate)
-            session.commit()
-            return result
+            with verified_fixture_tenant(session, tenant_id):
+                candidate = session.get(AnalysisRun, run_id)
+                barrier.wait(timeout=30)
+                result = promote_successful_analysis(session, candidate)
+                session.commit()
+                return result
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         futures = [pool.submit(promote) for _ in range(2)]

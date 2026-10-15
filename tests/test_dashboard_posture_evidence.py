@@ -16,6 +16,15 @@ pytest_plugins = ["tests.test_vex_version_lifecycle"]
 URL = "/dashboard/posture-versions"
 
 
+@pytest.fixture
+def db(client):
+    from app.core.context import minimal_background_context, tenant_scope
+    from app.db import SessionLocal
+
+    with tenant_scope(minimal_background_context(1)), SessionLocal() as session:
+        yield session
+
+
 def response(client, **params):
     r = client.get(URL, params=params)
     assert r.status_code == 200, r.text

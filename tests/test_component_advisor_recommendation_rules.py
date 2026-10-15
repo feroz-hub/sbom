@@ -8,10 +8,6 @@ Prompt §10: T17–T19 (triggers), T21 (same-family versions evaluated first).
 from datetime import UTC, datetime
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session
-from sqlalchemy.pool import StaticPool
-
 from app.db import Base
 from app.models import Tenant
 from app.services.component_advisor.intelligence_service import build_snapshot
@@ -29,7 +25,12 @@ from app.services.component_advisor.recommendations.workflow import (
     trigger_evidence,
 )
 from app.services.dashboard_scope import DashboardScope
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
+from sqlalchemy.pool import StaticPool
+
 from tests.component_advisor_support import World
+from tests.tenant_fixture_scope import verified_fixture_tenant
 
 
 @pytest.fixture
@@ -40,7 +41,8 @@ def world():
         now = datetime.now(UTC)
         db.add(Tenant(id=1, name="One", slug="one", status="ACTIVE", created_at=now, updated_at=now))
         db.flush()
-        yield World(db)
+        with verified_fixture_tenant(db, 1):
+            yield World(db)
     engine.dispose()
 
 
@@ -69,7 +71,7 @@ def log4j_world(world):
 
 def test_happy_path_transitions_follow_the_spec_state_machine__FR_SCA_011():
     path = ["OPEN", "EVALUATING", "REVIEW_REQUIRED", "RECOMMENDED", "ACCEPTED", "CLOSED"]
-    for current, target in zip(path, path[1:]):
+    for current, target in zip(path, path[1:], strict=False):
         assert require_transition(current, target) is RecommendationStatus(target)
 
 
@@ -126,8 +128,14 @@ def test_T19_eol_eos_and_manual_triggers__FR_SCA_011(world):
 
 
 def test_T19_policy_violation_requires_a_failing_configured_policy__FR_SCA_011(world):
-    from app.services.component_advisor.policy import PolicyKind, PolicyStatus, PolicyVersionRef, evaluate_trust, validate_trust_rules
     from app.services.component_advisor.intelligence_service import component_facts
+    from app.services.component_advisor.policy import (
+        PolicyKind,
+        PolicyStatus,
+        PolicyVersionRef,
+        evaluate_trust,
+        validate_trust_rules,
+    )
 
     sbom = world.sbom(world.product())
     world.component(sbom, "gpl-lib", "1.0", license="AGPL-3.0", lifecycle_status="Supported")

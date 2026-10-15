@@ -1,3 +1,5 @@
+from tests.tenant_fixture_scope import scoped_context_override
+
 """Operational lifecycle contracts: historical preservation and current-state fences."""
 from datetime import UTC, datetime, timedelta
 
@@ -23,14 +25,18 @@ from fastapi import HTTPException
 from sqlalchemy import func, select, text
 
 from tests.component_advisor_support import NOW, World
+from tests.tenant_fixture_scope import declare_fixture_tenant, verified_fixture_tenant
 
 
 @pytest.fixture
 def db(client):
     session = SessionLocal()
-    yield session
-    session.rollback()
-    session.close()
+    try:
+        with verified_fixture_tenant(session, 1):
+            yield session
+    finally:
+        session.rollback()
+        session.close()
 
 
 @pytest.fixture
@@ -39,7 +45,7 @@ def admin(db, client):
     context = CurrentContext(user_id=user.id, external_user_id="lifecycle-admin", email=None, display_name="Admin",
                              tenant_id=1, external_tenant_id="1", roles=frozenset({"TENANT_ADMIN"}),
                              permissions=ROLE_PERMISSIONS["TENANT_ADMIN"])
-    client.app.dependency_overrides[get_current_tenant_context] = lambda: context
+    client.app.dependency_overrides[get_current_tenant_context] = scoped_context_override(lambda: context)
     yield context
     client.app.dependency_overrides.pop(get_current_tenant_context, None)
 
@@ -116,20 +122,23 @@ def test_only_administrator_can_change_lifecycle(client, admin, world, role):
     _, sbom, _ = world
     from dataclasses import replace
     context = replace(admin, roles=frozenset({role}), permissions=ROLE_PERMISSIONS[role])
-    client.app.dependency_overrides[get_current_tenant_context] = lambda: context
+    client.app.dependency_overrides[get_current_tenant_context] = scoped_context_override(lambda: context)
     assert change(client, sbom, "INACTIVE").status_code == 403
     assert client.get(f"/api/sboms/{sbom.id}/lifecycle-history").status_code == 200
 
 
 def test_cross_tenant_transition_and_history_denied(client, db, world):
     builder, _, _ = world
-    db.execute(text("INSERT INTO tenants (id,name,slug,external_iam_tenant_id,status,created_at,updated_at) VALUES (2,'Other','other','other','ACTIVE',:now,:now)"), {"now": NOW})
+    declare_fixture_tenant(db, 2)
     other = builder.sbom(builder.product(tenant_id=2, name="other"))
-    db.commit()
-    assert change(client, other, "INACTIVE").status_code == 404
-    assert client.get(f"/api/sboms/{other.id}/lifecycle-history").status_code == 404
-    db.refresh(other)
-    assert other.lifecycle_status == "ACTIVE"
+    with verified_fixture_tenant(db, 2):
+        db.commit()
+        other_id = other.id
+    assert client.post(f"/api/sboms/{other_id}/lifecycle", json={"status": "INACTIVE", "reason": "foreign"}).status_code == 404
+    assert client.get(f"/api/sboms/{other_id}/lifecycle-history").status_code == 404
+    with verified_fixture_tenant(db, 2):
+        db.refresh(other)
+        assert other.lifecycle_status == "ACTIVE"
 
 
 def test_audit_failure_rolls_back_status(client, db, admin, world, monkeypatch):
@@ -280,15 +289,21 @@ def test_scheduled_inactive_and_old_generation_jobs_skipped(client, db, world):
     schedule = AnalysisSchedule(tenant_id=1, scope="SBOM", cadence="DAILY", sbom_id=sbom.id)
     db.add(schedule)
     db.commit()
+    # Materialize queue metadata while this fixture's verified owner is bound.
+    # The task independently checks these identifiers against trusted rows.
+    queued_sbom_id, queued_schedule_id = sbom.id, schedule.id
     assert sbom.id in [item.id for item in _eligible_sboms(db)]
     assert change(client, sbom, "INACTIVE").status_code == 200
     db.expire_all()
     assert sbom.id not in [item.id for item in _eligible_sboms(db)]
-    result = analyze_sbom_async.run(sbom_id=sbom.id, schedule_id=schedule.id, lifecycle_revision=0)
+    # A Celery invocation starts outside the test setup/request context.
+    with tenant_scope(None):
+        result = analyze_sbom_async.run(sbom_id=queued_sbom_id, schedule_id=queued_schedule_id, lifecycle_revision=0)
     assert result == {"status": "SKIPPED", "reason": "SBOM_INACTIVE"}
     assert change(client, sbom, "ACTIVE").status_code == 200
     for generation in (0, None):
-        result = analyze_sbom_async.run(sbom_id=sbom.id, schedule_id=schedule.id, lifecycle_revision=generation)
+        with tenant_scope(None):
+            result = analyze_sbom_async.run(sbom_id=queued_sbom_id, schedule_id=queued_schedule_id, lifecycle_revision=generation)
         assert result == {"status": "SKIPPED", "reason": "SBOM_LIFECYCLE_OBSOLETE"}
 
 @pytest.mark.parametrize("endpoint", ["/analyze-sbom-nvd", "/analyze-sbom-github", "/analyze-sbom-osv", "/analyze-sbom-vulndb", "/analyze-sbom-consolidated"])
@@ -310,7 +325,8 @@ def test_scheduler_tick_and_run_now_do_not_enqueue_inactive(client, db, world, m
     queued = []
     monkeypatch.setattr(analyze_sbom_async, "apply_async", lambda **kwargs: queued.append(kwargs))
     assert change(client, sbom, "INACTIVE").status_code == 200
-    result = tick_scheduled_analyses.run()
+    with tenant_scope(None):
+        result = tick_scheduled_analyses.run()
     assert result["enqueued"] == 0 and not queued
     response = client.post(f"/api/schedules/{schedule.id}/run-now")
     assert response.status_code == 409 and "SBOM_INACTIVE" in response.text

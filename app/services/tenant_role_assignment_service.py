@@ -32,7 +32,7 @@ from .identity_verification_policy import verification_complete, verification_co
 log = logging.getLogger("sbom.tenant.roles")
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass
 class AssignmentProblem(Exception):
     code: IdentityErrorCode
     message: str
@@ -1192,13 +1192,21 @@ def get_history(
 
 
 def active_assignment_count(db: Session, membership_id: int) -> int:
-    return len(
-        list(
-            db.scalars(
-                select(TenantUserRoleAssignment.id).where(
-                    TenantUserRoleAssignment.tenant_user_id == membership_id,
-                    TenantUserRoleAssignment.status == "ACTIVE",
+    from ..core.context import get_bound_context, minimal_background_context, tenant_scope
+    membership = db.get(TenantUser, membership_id)
+    if membership is None:
+        return 0
+    context = get_bound_context()
+    if context is not None and context.tenant_id != membership.tenant_id and not context.is_platform_admin:
+        raise RuntimeError("Cross-tenant authorization metadata access blocked")
+    with tenant_scope(minimal_background_context(membership.tenant_id)):
+        return len(
+            list(
+                db.scalars(
+                    select(TenantUserRoleAssignment.id).where(
+                        TenantUserRoleAssignment.tenant_user_id == membership_id,
+                        TenantUserRoleAssignment.status == "ACTIVE",
+                    )
                 )
             )
         )
-    )

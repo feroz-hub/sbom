@@ -39,8 +39,8 @@ def invalidation_key(db: Session) -> tuple[int, ...]:
     sbom_count = db.execute(select(func.count(SBOMSource.id))).scalar() or 0
     max_finding_id = db.execute(select(func.max(AnalysisFinding.id))).scalar() or 0
     finding_count = db.execute(select(func.count(AnalysisFinding.id))).scalar() or 0
-    # Read core rows outside the effective scope so transitions always change
-    # the key, even when equal-sized SBOM datasets are swapped across workers.
+    # Include all selected-tenant revisions outside the dashboard's resource
+    # scope. The Session guard still enforces the mandatory tenant boundary.
     s = SBOMSource.__table__.c
     revision = db.execute(select(func.coalesce(func.sum(s.lifecycle_revision), 0))).scalar() or 0
     return (int(max_run_id), int(run_count), int(sbom_count), int(max_finding_id), int(finding_count), int(revision))
@@ -61,7 +61,9 @@ def memoize_with_ttl(
     """
     inv = invalidation_key(db)
     scope = db.info.get("dashboard_scope")
-    key = (name, inv, scope.key if scope is not None else None, *key_extra)
+    from ..core.context import get_bound_context
+    context = get_bound_context()
+    key = (context.tenant_id if context else None, name, inv, scope.key if scope is not None else None, *key_extra)
     now = time.time()
     with _cache_lock:
         cached = _cache.get(key)

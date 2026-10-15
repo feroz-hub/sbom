@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import ssl
 import threading
 import time
@@ -167,11 +166,30 @@ def validate_hcl_token(token: str) -> dict[str, Any]:
     return claims
 
 
+def validate_auth_mode(settings=None) -> None:
+    """Local identities are allowed only in explicitly configured development."""
+    settings = settings or get_settings()
+    if not settings.auth_enabled and (
+        settings.app_environment not in {"development", "test"}
+        or settings.native_iam_production
+        or settings.native_auth_enabled
+        or settings.entra_enabled
+        or not settings.dev_default_tenant
+    ):
+        raise RuntimeError("AUTH_ENABLED must be true outside local development without enabled providers")
+    if settings.app_environment in {"staging", "production"} and (
+        settings.authorization_catalog_mode != "DATABASE"
+        or settings.tenant_role_assignment_mode != "DATABASE"
+    ):
+        raise RuntimeError("Production authorization modes must use DATABASE")
+
+
 def get_current_claims(
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any]:
     settings = get_settings()
     if not settings.auth_enabled:
+        validate_auth_mode(settings)
         return {
             "iss": "https://local-dev.invalid",
             "sub": "dev-user",
@@ -423,8 +441,11 @@ def _resolve_context(
     )
 
 
-def _platform_configuration_path(path: str) -> bool:
-    return path.startswith("/api/nvd-mirror")
+def _platform_configuration_path(path: str, method: str = "GET") -> bool:
+    from .route_policy import lookup_policy
+
+    policy = lookup_policy(method, path)
+    return policy is not None and policy.startswith("platform:")
 
 
 async def get_current_tenant_context(
@@ -437,7 +458,7 @@ async def get_current_tenant_context(
     method = request.method.upper() if request is not None else "GET"
     allow_platform_context = (
         path.startswith("/api/platform/")
-        or _platform_configuration_path(path)
+        or _platform_configuration_path(path, method)
         or path in {"/api/auth/me", "/api/v1/auth/me", "/api/tenants", "/api/analysis/config"}
         or (path == "/api/tenants" and method == "POST")
     )
@@ -446,7 +467,7 @@ async def get_current_tenant_context(
     context = _resolve_context(
         db,
         claims,
-        None if path.startswith("/api/platform/") or _platform_configuration_path(path) or (path == "/api/tenants" and method == "POST") else x_tenant_id,
+        None if path.startswith("/api/platform/") or _platform_configuration_path(path, method) or (path == "/api/tenants" and method == "POST") else x_tenant_id,
         allow_platform_context=allow_platform_context,
         request=request,
     )
@@ -461,6 +482,10 @@ async def get_current_tenant_context(
 
 
 def require_permission(permission: str) -> Callable:
+    from .permissions import ALL_PERMISSIONS
+
+    if permission not in ALL_PERMISSIONS:
+        raise ValueError("Unknown authorization permission")
     def dependency(
         context: CurrentContext = Depends(get_current_tenant_context),
     ) -> CurrentContext:
@@ -473,6 +498,10 @@ def require_permission(permission: str) -> Callable:
 
 def require_platform_permission(permission: str) -> Callable:
     """Require current-request database platform authority and audit denials."""
+    from .permissions import ALL_PERMISSIONS
+
+    if permission not in ALL_PERMISSIONS or not permission.startswith("platform:"):
+        raise ValueError("Unknown platform authorization permission")
 
     def dependency(
         request: Request,
@@ -517,148 +546,9 @@ def require_role(*roles: str) -> Callable:
 
 
 def permission_for_request(request: Request) -> str:
-    path = request.url.path
-    method = request.method.upper()
-    platform_config = path.startswith("/api/platform/configuration/")
-    ai_config = path.startswith("/api/v1/ai/") and any(
-        path.startswith(f"/api/v1/ai/{part}") for part in ("credentials", "settings", "effective-config", "override", "providers/available")
-    )
-    lifecycle_config = path.startswith("/api/admin/lifecycle-providers")
-    if path.startswith("/api/platform/configuration/advisor-policies"):
-        return "platform:advisor-policy:read" if method == "GET" else "platform:advisor-policy:update"
-    if platform_config or ai_config or lifecycle_config:
-        family = "ai" if ai_config or "/configuration/ai" in path else "lifecycle-provider"
-        action = "read" if method == "GET" else "test" if path.endswith(("/test", "/refresh")) else "sync" if path.endswith("/sync") else "update"
-        return f"{'platform' if platform_config else 'tenant'}:{family}:{action}"
-    if path.startswith("/api/platform/authorization"):
-        return (
-            "platform:authorization:read"
-            if method == "GET"
-            else "platform:authorization:manage"
-        )
-    if path.startswith("/api/platform/administrators"):
-        if method == "GET":
-            return "platform:administrator:read"
-        if method == "POST":
-            return "platform:administrator:grant"
-        return "platform:administrator:revoke"
-    if path.startswith("/api/platform/users") and path.endswith("/profile") and method == "PATCH":
-        return "platform:user:write"
-    if path.startswith("/api/platform/users"):
-        return (
-            "platform:user:read"
-            if method == "GET"
-            else "platform:user:manage_status"
-        )
-    if path.startswith("/api/platform/tenants"):
-        if path.endswith("/recover-admin"):
-            return "platform:tenant:recover_admin"
-        if "/native-users/" in path:
-            return "platform:tenant:bootstrap_admin"
-        return "platform:tenant:read" if method == "GET" else "platform:tenant:update_status"
-    if path in {"/api/platform/summary", "/api/platform/tenant-admin-candidates"}:
-        return "platform:tenant:read" if path.endswith("/summary") else "platform:tenant:bootstrap_admin"
-    if path == "/api/platform/iam/operations":
-        return "platform:health:read"
-    if path == "/api/tenants" and method == "POST":
-        return "platform:tenant:create"
-    if _platform_configuration_path(path):
-        return "platform:admin"
-    if path.startswith("/api/logical-sboms"):
-        return "sbom:read" if method == "GET" else "sbom:upload"
-    if path.startswith("/api/component-advisor/policies"):
-        return "tenant:advisor-policy:read" if method == "GET" else "tenant:advisor-policy:update"
-    if path.startswith("/api/component-advisor/recommendations/") and path.endswith(("/decisions", "/candidates")) and method == "POST":
-        # Decisions and manual candidates are permission-checked per action at the
-        # route (review / accept), so a role holding only "accept" is not refused here.
-        return "component_advisor:read"
-    if path.startswith("/api/component-advisor/purpose") and method != "GET":
-        # Curated purpose metadata reuses the existing component edit right.
-        return "component:update"
-    if path.startswith("/api/component-advisor"):
-        # Coarse gate only. Write routes (Step 5+) re-check the specific
-        # create / review / accept permission at the route.
-        return "component_advisor:read" if method == "GET" else "component_advisor:recommendation:create"
-    if path.startswith("/dashboard"):
-        return "dashboard:read"
-    if path.startswith(("/api/report-subscriptions", "/api/report-deliveries", "/api/report-notifications")):
-        # These are per-user preferences, not tenant settings administration.
-        # The report router enforces owner/admin and scope checks separately.
-        return "sbom:read"
-    # Only the investigation decision route has a scoped Developer exception.
-    # Its service guard checks live ownership; import/override/mapping stay broad-write.
-    import re
-    if method == "PUT" and re.fullmatch(r"/api/vex/investigations/[0-9]+/decision", path):
-        return "vex:read"
-    if "/vex" in path or (path.startswith("/api/sboms/") and "/components/" in path and path.endswith("/vulnerabilities")):
-        return "vex:read" if method == "GET" else "vex:write"
-    if path.startswith("/api/remediation"):
-        return "remediation:read" if method == "GET" else "remediation:write"
-    if re.fullmatch(r"/api/sboms/[0-9]+/lifecycle(?:-history)?", path):
-        return "sbom:read" if method == "GET" else "sbom:delete"
-    if "lifecycle" in path:
-        return "lifecycle:read" if method == "GET" else "lifecycle:override"
-    if "schedule" in path:
-        return "schedule:read" if method == "GET" else "schedule:write"
-    if path.startswith("/api/projects"):
-        return {
-            "GET": "project:read",
-            "POST": "project:create",
-            "PATCH": "project:update",
-            "PUT": "project:update",
-            "DELETE": "project:delete",
-        }.get(method, "project:read")
-    if path.startswith("/api/products/") and path.endswith("/logical-sboms"):
-        return "product:read" if method == "GET" else "sbom:upload"
-    if path.startswith("/api/products"):
-        return {
-            "GET": "product:read",
-            "POST": "product:create",
-            "PATCH": "product:update",
-            "PUT": "product:update",
-            "DELETE": "product:delete",
-        }.get(method, "product:read")
-    if path.startswith("/api/components"):
-        return "component:read" if method == "GET" else "component:update"
-    if (
-        path.startswith("/api/sbom-validation-sessions")
-        or path.startswith("/api/validation-sessions")
-        or path.startswith("/api/sbom-workspaces")
-    ):
-        if path.endswith("/repair/analyze"):
-            return "sbom:repair:read"
-        if "/repair/" in path and path.endswith("/approve"):
-            return "sbom:repair:revalidate"
-        if method == "GET":
-            if "/repair/" in path and path.endswith(("/download", "/report")):
-                return "sbom:repair:download"
-            if path.endswith("/download-original") or path.endswith("/download-repair-draft"):
-                return "sbom:repair:download"
-            if path.endswith("/search"):
-                return "sbom:repair:search"
-            return "sbom:repair:read"
-        if path.endswith("/validate") or path.endswith("/revalidate") or path.endswith("/import"):
-            return "sbom:repair:revalidate"
-        return "sbom:repair:update"
-    if path.startswith("/api/sboms"):
-        if method == "GET":
-            return "sbom:export" if any(part in path for part in ("/export", "/reports/")) else "sbom:read"
-        if method == "DELETE":
-            return "sbom:delete"
-        if path.endswith("/workspace"):
-            return "sbom:repair:update"
-        if method == "POST" and (path.endswith("/upload") or path == "/api/sboms"):
-            return "sbom:upload"
-        if "/analyze" in path:
-            return "analysis:run"
-        return "sbom:update"
-    if path.startswith("/api/runs") or path.startswith("/api/analysis"):
-        return "analysis:read" if method == "GET" else "analysis:run"
-    if path in {"/api/auth/me", "/api/v1/auth/me", "/api/tenants"}:
-        return "dashboard:read" if method == "GET" else "tenant:settings:update"
-    if path.startswith("/api/tenants"):
-        return "tenant:user:read" if method == "GET" else "tenant:user:update"
-    return "dashboard:read" if method == "GET" else "tenant:settings:update"
+    from .route_policy import permission_for_registered_request
+
+    return permission_for_registered_request(request)
 
 
 def enforce_request_access(
@@ -694,6 +584,7 @@ def enforce_request_access(
 
 def validate_hcl_auth_setup() -> None:
     settings = get_settings()
+    validate_auth_mode(settings)
     if not settings.auth_enabled:
         log.warning("AUTH_ENABLED=false: using explicit local development identity")
         return
@@ -716,7 +607,7 @@ def validate_hcl_auth_setup() -> None:
         "HCL_IAM_DISCOVERY_URL": settings.hcl_iam_discovery_url,
         "HCL_IAM_JWKS_URL": settings.hcl_iam_jwks_url,
     }.items():
-        if value and not value.lower().startswith("https://") and not os.getenv("PYTEST_CURRENT_TEST"):
+        if value and not value.lower().startswith("https://"):
             raise RuntimeError(f"{name} must use HTTPS")
     algorithms = [item.strip().upper() for item in settings.hcl_iam_allowed_algorithms.split(",") if item.strip()]
     if algorithms != ["RS256"]:

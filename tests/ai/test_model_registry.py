@@ -98,43 +98,47 @@ async def test_registry_upserts_marks_missing_and_never_switches_active(session_
 
 @pytest.mark.asyncio
 async def test_config_loader_and_registry_stamp_selected_model_on_runtime_request(session_factory):
-    with session_factory() as db:
-        credential = AiProviderCredential(
-            provider_name="openai", label="default", default_model="legacy-model",
-            enabled=True, tier="paid", is_default=True, is_fallback=False,
-            is_local=False, cost_per_1k_input_usd=0, cost_per_1k_output_usd=0,
-            created_at=_now(), updated_at=_now(),
-        )
-        db.add(credential)
-        db.commit()
-        db.add(AiProviderModel(
-            provider_credential_id=credential.id, provider_name="openai",
-            provider_model_id="live-model", runtime_model_id="live-model",
-            is_available=True, is_enabled=True, is_selected=True,
-            discovery_source="live", created_at=_now(), updated_at=_now(),
-        ))
-        db.commit()
+    from app.core.context import tenant_scope
 
-    loader = AiConfigLoader(session_factory, version_counter=_VersionCounter())
-    config = next(item for item in loader.resolve_configs() if item.credential_id == credential.id)
-    assert config.default_model == "live-model"
-
-    captured: list[str | None] = []
-
-    class RuntimeProvider(FakeDiscoveryProvider):
-        async def generate(self, request: LlmRequest):
-            captured.append(request.model)
-            return LlmResponse(
-                text="ok", provider=self.name, model=request.model or "",
-                latency_ms=1, usage=LlmUsage(input_tokens=1, output_tokens=1, cost_usd=0),
+    # This isolated SQLite fixture contains only global provider configuration.
+    with tenant_scope(None):
+        with session_factory() as db:
+            credential = AiProviderCredential(
+                provider_name="openai", label="default", default_model="legacy-model",
+                enabled=True, tier="paid", is_default=True, is_fallback=False,
+                is_local=False, cost_per_1k_input_usd=0, cost_per_1k_output_usd=0,
+                created_at=_now(), updated_at=_now(),
             )
+            db.add(credential)
+            db.commit()
+            db.add(AiProviderModel(
+                provider_credential_id=credential.id, provider_name="openai",
+                provider_model_id="live-model", runtime_model_id="live-model",
+                is_available=True, is_enabled=True, is_selected=True,
+                discovery_source="live", created_at=_now(), updated_at=_now(),
+            ))
+            db.commit()
 
-    registry = ProviderRegistry([config], default_provider=config.selection_key)
-    runtime_provider = RuntimeProvider([])
-    runtime_provider.default_model = config.default_model
-    registry.register_instance(runtime_provider, selector=config.selection_key)
-    await registry.generate_with_fallback(LlmRequest(system="s", user="u", request_id="r"))
-    assert captured == ["live-model"]
+        loader = AiConfigLoader(session_factory, version_counter=_VersionCounter())
+        config = next(item for item in loader.resolve_configs() if item.credential_id == credential.id)
+        assert config.default_model == "live-model"
+
+        captured: list[str | None] = []
+
+        class RuntimeProvider(FakeDiscoveryProvider):
+            async def generate(self, request: LlmRequest):
+                captured.append(request.model)
+                return LlmResponse(
+                    text="ok", provider=self.name, model=request.model or "",
+                    latency_ms=1, usage=LlmUsage(input_tokens=1, output_tokens=1, cost_usd=0),
+                )
+
+        registry = ProviderRegistry([config], default_provider=config.selection_key)
+        runtime_provider = RuntimeProvider([])
+        runtime_provider.default_model = config.default_model
+        registry.register_instance(runtime_provider, selector=config.selection_key)
+        await registry.generate_with_fallback(LlmRequest(system="s", user="u", request_id="r"))
+        assert captured == ["live-model"]
 
 
 @pytest.mark.asyncio

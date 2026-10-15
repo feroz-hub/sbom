@@ -52,7 +52,8 @@ def test_cross_tenant_assignment_is_rejected_by_composite_foreign_key():
 
 
 def test_final_role_of_active_membership_cannot_be_revoked():
-    with SessionLocal() as db:
+    from app.core.context import minimal_background_context, tenant_scope
+    with tenant_scope(minimal_background_context(1)), SessionLocal() as db:
         user, _membership, _ = seed_role_membership(db)
         with pytest.raises(service.AssignmentProblem) as caught:
             service.revoke_role(

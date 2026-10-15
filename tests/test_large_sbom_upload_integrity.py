@@ -10,6 +10,8 @@ from app.models import SBOMSource
 from app.parsing.extract import extract_components
 from app.services.sbom_document_service import content_sha256, verify_upload_integrity
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 
 def _large_cyclonedx(component_count: int) -> dict:
     components = [
@@ -41,7 +43,8 @@ def _large_cyclonedx(component_count: int) -> dict:
 def db(client):
     session = SessionLocal()
     try:
-        yield session
+        with verified_fixture_tenant(session, 1):
+            yield session
     finally:
         session.rollback()
         session.close()

@@ -1,3 +1,5 @@
+from tests.tenant_fixture_scope import scoped_context_override
+
 """Deterministic repair uses real vendored schemas and the full validator."""
 
 import copy
@@ -8,6 +10,8 @@ import pytest
 from app.services.sbom.repair.engine import RepairEngine
 from app.services.sbom.repair.policy import RepairPolicy
 from app.validation import run as validate
+
+from tests.tenant_fixture_scope import verified_fixture_tenant
 
 
 def document():
@@ -223,7 +227,7 @@ def test_api_approval_imports_only_candidate_and_keeps_original(client):
     from app.db import SessionLocal
     from app.models import SBOMRepairJob, SBOMSource, SBOMValidationSessionEvent
 
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         assert db.get(SBOMSource, approved.json()["imported_sbom_id"]).sbom_data == candidate
         assert db.get(SBOMRepairJob, job["repair_job_id"]).approval_status == "APPROVED"
         events = [e.event_type for e in db.query(SBOMValidationSessionEvent).filter_by(session_id=session)]
@@ -292,7 +296,7 @@ def test_tenant_isolation_all_repair_surfaces(client, monkeypatch):
         roles=frozenset(),
         permissions=frozenset(),
     )
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         service = AutoRepairService(db, context)
         for call in (
             lambda: service.analyze(session),
@@ -324,7 +328,7 @@ def test_http_tenant_isolation_and_permission_denials(client):
         roles=frozenset({"TENANT_ADMIN"}),
         permissions=frozenset(ROLE_PERMISSIONS["TENANT_ADMIN"]),
     )
-    client.app.dependency_overrides[get_current_tenant_context] = lambda: foreign
+    client.app.dependency_overrides[get_current_tenant_context] = scoped_context_override(lambda: foreign)
     try:
         for method, suffix in [
             ("POST", "/analyze"),
@@ -348,7 +352,7 @@ def test_http_tenant_isolation_and_permission_denials(client):
             roles=frozenset({"VIEWER"}),
             permissions=frozenset({"sbom:repair:read"}),
         )
-        client.app.dependency_overrides[get_current_tenant_context] = lambda: viewer
+        client.app.dependency_overrides[get_current_tenant_context] = scoped_context_override(lambda: viewer)
         for suffix in ["", f"/{job['repair_job_id']}/approve", f"/{job['repair_job_id']}/reject"]:
             assert client.post(base + suffix).status_code == 403
     finally:
@@ -362,7 +366,7 @@ def test_candidate_hash_checked_even_if_database_content_is_tampered(client):
 
     session = upload_invalid(client)
     job = run_job(client, session)
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         db.execute(update(SBOMRepairJob).where(SBOMRepairJob.id == job["repair_job_id"]).values(candidate_content="{}"))
         db.commit()
     response = client.post(f"/api/sbom-validation-sessions/{session}/repair/{job['repair_job_id']}/approve")
@@ -376,7 +380,7 @@ def test_candidate_is_immutable_through_orm(client):
 
     session = upload_invalid(client)
     job = run_job(client, session)
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         row = db.get(SBOMRepairJob, job["repair_job_id"])
         row.candidate_content = "{}"
         with pytest.raises(RuntimeError, match="immutable"):
@@ -399,7 +403,7 @@ def test_upload_strict_ntia_policy_is_preserved(client):
     from app.db import SessionLocal
     from app.models import SBOMRepairJob
 
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         assert db.get(SBOMRepairJob, job["repair_job_id"]).validation_options_json["strict_ntia"] is True
 
 
@@ -423,7 +427,7 @@ def test_existing_accepted_artifact_is_preserved_on_approval(client):
     from app.db import SessionLocal
     from app.models import SBOMSource
 
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         assert json.loads(db.get(SBOMSource, source_id).sbom_data) == document()
     assert (
         client.get(base + "/download-repair-draft").content
@@ -497,7 +501,7 @@ def test_permanent_delete_handles_new_repair_job_foreign_keys(client):
     from app.models import SBOMRepairJob
     from app.services.sbom_delete_service import SBOMDeleteService
 
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         service = SBOMDeleteService(db, tenant_id=1)
         impact = service.get_delete_impact(approved["imported_sbom_id"])
         assert impact["can_delete"]
@@ -512,7 +516,7 @@ def test_original_hash_is_verified_against_upload_metadata(client):
 
     session = upload_invalid(client)
     job = run_job(client, session)
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         row = db.get(SBOMValidationSession, session)
         row.raw_content_blob = b"altered-original"
         db.commit()

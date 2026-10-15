@@ -13,8 +13,6 @@ enforcement is PR-6's hardening pass.
 """
 
 import pytest
-from sqlalchemy import select, text
-
 from app.db import SessionLocal
 from app.models import (
     AnalysisFinding,
@@ -27,6 +25,10 @@ from app.models import (
 )
 from app.services.lifecycle.vex_provider import vex_dashboard_summary
 from app.services.vex.reconciliation import recompute_for_sbom
+from sqlalchemy import select
+
+from tests.tenant_fixture_scope import verified_fixture_tenant
+from tests.vex_foreign_fixture import foreign_vex_fixture, foreign_vex_snapshot
 
 NOW = "2026-09-24T00:00:00Z"
 BASE = "/api/vex/investigations"
@@ -36,8 +38,10 @@ BASE = "/api/vex/investigations"
 def db():
     session = SessionLocal()
     try:
-        yield session
+        with verified_fixture_tenant(session, 1):
+            yield session
     finally:
+        session.rollback()
         session.close()
 
 
@@ -258,27 +262,10 @@ def test_unknown_id_is_404(client, seeded):
 
 
 def test_cross_tenant_detail_is_404_not_403__VEX_SEC_002(client, seeded, db):
-    """404 rather than 403: 403 would confirm the row exists elsewhere."""
-    db.execute(
-        text(
-            "INSERT INTO tenants (id, name, slug, external_iam_tenant_id, status, "
-            "created_at, updated_at) VALUES (2, 'Other', 'other', 'other', 'ACTIVE', "
-            ":now, :now) ON CONFLICT (id) DO NOTHING"
-        ),
-        {"now": NOW},
-    )
-    context = context_for(db, "CVE-2026-5001")
-    db.execute(
-        text("UPDATE vex_investigation SET tenant_id = 2 WHERE id = :id"),
-        {"id": context.id},
-    )
-    db.commit()
-    assert client.get(f"{BASE}/{context.id}").status_code == 404
-    db.execute(
-        text("UPDATE vex_investigation SET tenant_id = 1 WHERE id = :id"),
-        {"id": context.id},
-    )
-    db.commit()
+    foreign = foreign_vex_fixture(db)
+    before = foreign_vex_snapshot(db, 2, foreign["context_id"])
+    assert client.get(f"{BASE}/{foreign['context_id']}").status_code == 404
+    assert foreign_vex_snapshot(db, 2, foreign["context_id"]) == before
 
 
 # ---------------------------------------------------------------------------
@@ -424,24 +411,11 @@ def test_resolve_matches_an_alias__VEX_CTX_002(client, seeded, db):
 
 
 def test_resolve_is_tenant_scoped__VEX_SEC_002(client, seeded, db):
-    db.execute(
-        text(
-            "INSERT INTO tenants (id, name, slug, external_iam_tenant_id, status, "
-            "created_at, updated_at) VALUES (2, 'Other', 'other', 'other', 'ACTIVE', "
-            ":now, :now) ON CONFLICT (id) DO NOTHING"
-        ),
-        {"now": NOW},
-    )
-    context = context_for(db, "CVE-2026-5002")
-    db.execute(
-        text("UPDATE vex_investigation SET tenant_id = 2 WHERE id = :id"), {"id": context.id}
-    )
-    db.commit()
-    assert resolve(client, seeded, "CVE-2026-5002").status_code == 404
-    db.execute(
-        text("UPDATE vex_investigation SET tenant_id = 1 WHERE id = :id"), {"id": context.id}
-    )
-    db.commit()
+    foreign = foreign_vex_fixture(db, vuln_id="CVE-2026-5002")
+    before = foreign_vex_snapshot(db, 2, foreign["context_id"])
+    assert client.get(f"{BASE}/resolve", params={"sbom_id": foreign["sbom_id"],
+                      "component_id": foreign["component_id"], "vulnerability_id": "CVE-2026-5002"}).status_code == 404
+    assert foreign_vex_snapshot(db, 2, foreign["context_id"]) == before
 
 
 def test_resolve_does_not_create_a_context(client, seeded, db):

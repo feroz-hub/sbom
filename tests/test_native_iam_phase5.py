@@ -297,10 +297,17 @@ def administration_setup():
 
 
 def test_operational_endpoints_are_platform_only(administration_setup, monkeypatch):
+    from dataclasses import replace
+
+    from app.core.permissions import ROLE_PERMISSIONS
+
     from tests.test_native_iam_phase3 import tenant_actor
 
     client, current, uid, _, _ = administration_setup
     monkeypatch.setattr(native_operations, "readiness", lambda db: {"ready": True, "checks": {}})
+    assert client.get("/api/platform/iam/operations").status_code == 403
+    assert "platform:health:read" in ROLE_PERMISSIONS["PLATFORM_ADMIN"]
+    current["actor"] = replace(current["actor"], permissions=current["actor"].permissions | {"platform:health:read"})
     assert client.get("/api/platform/iam/operations").status_code == 200
     tenant_actor(current)
     assert client.get("/api/platform/iam/operations").status_code == 403

@@ -16,8 +16,7 @@ from sqlalchemy import literal, select
 from sqlalchemy.orm import Session
 
 from ..analysis import get_analysis_settings_multi
-from ..auth import require_auth
-from ..core.security import get_current_tenant_context
+from ..core.security import enforce_request_access
 from ..db import get_db
 from ..models import SBOMType
 from ..schemas import SBOMTypeOut
@@ -205,7 +204,7 @@ def _nvd_mirror_health(db: Session) -> dict:
 # Finding A: `/api/analysis/config` and `/api/types` carry route-level
 # auth so they are protected while the sibling `/` and `/health` routes
 # in this same router stay open for liveness probes and FastAPI `/docs`.
-@router.get("/api/analysis/config", dependencies=[Depends(require_auth), Depends(get_current_tenant_context)])
+@router.get("/api/analysis/config", dependencies=[Depends(enforce_request_access)])
 def get_analysis_config() -> dict:
     return public_analysis_config()
 
@@ -213,7 +212,7 @@ def get_analysis_config() -> dict:
 @router.get(
     "/api/types",
     response_model=list[SBOMTypeOut],
-    dependencies=[Depends(require_auth)],
+    dependencies=[Depends(enforce_request_access)],
 )
 def list_sbom_types(db: Session = Depends(get_db)):
     """List SBOM types (e.g. CycloneDX, SPDX) for upload/edit dropdowns."""

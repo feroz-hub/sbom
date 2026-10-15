@@ -787,32 +787,38 @@ def get_tenant_membership(db: Session, tenant_id: int, membership_id: int) -> tu
 
 
 def _active_tenant_admin_count(db: Session, tenant_id: int, *, excluding: int | None = None) -> int:
-    statement = (
-        select(TenantUser.id)
-        .join(IAMUser, IAMUser.id == TenantUser.user_id)
-        .join(
-            TenantUserRoleAssignment,
-            TenantUserRoleAssignment.tenant_user_id == TenantUser.id,
+    from ..core.context import get_bound_context, minimal_background_context, tenant_scope
+    context = get_bound_context()
+    if context is not None and context.tenant_id != tenant_id and not context.is_platform_admin:
+        raise RuntimeError("Cross-tenant authorization metadata access blocked")
+    with tenant_scope(minimal_background_context(tenant_id)):
+        statement = (
+            select(TenantUser.id)
+            .join(IAMUser, IAMUser.id == TenantUser.user_id)
+            .join(
+                TenantUserRoleAssignment,
+                TenantUserRoleAssignment.tenant_user_id == TenantUser.id,
+            )
+            .join(
+                AuthorizationRole,
+                AuthorizationRole.id == TenantUserRoleAssignment.role_id,
+            )
+            .where(
+                TenantUser.tenant_id == tenant_id,
+                TenantUser.status == "ACTIVE",
+                IAMUser.status == "ACTIVE",
+                verification_complete_clause(),
+                TenantUserRoleAssignment.tenant_id == tenant_id,
+                TenantUserRoleAssignment.status == "ACTIVE",
+                AuthorizationRole.code == "TENANT_ADMIN",
+                AuthorizationRole.scope == "TENANT",
+                AuthorizationRole.status == "ACTIVE",
+            )
+            .distinct()
         )
-        .join(
-            AuthorizationRole,
-            AuthorizationRole.id == TenantUserRoleAssignment.role_id,
-        )
-        .where(
-            TenantUser.tenant_id == tenant_id,
-            TenantUser.status == "ACTIVE",
-            IAMUser.status == "ACTIVE",
-            verification_complete_clause(),
-            TenantUserRoleAssignment.status == "ACTIVE",
-            AuthorizationRole.code == "TENANT_ADMIN",
-            AuthorizationRole.scope == "TENANT",
-            AuthorizationRole.status == "ACTIVE",
-        )
-        .distinct()
-    )
-    if excluding is not None:
-        statement = statement.where(TenantUser.id != excluding)
-    return len(db.execute(statement).scalars().all())
+        if excluding is not None:
+            statement = statement.where(TenantUser.id != excluding)
+        return len(db.execute(statement).scalars().all())
 
 
 def ensure_not_last_active_tenant_admin(

@@ -4,11 +4,13 @@ from app.models import TenantUserRoleAssignment, TenantUserRoleAssignmentHistory
 from app.services import tenant_role_assignment_service as service
 from sqlalchemy import func, select
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 from .phase9_helpers import seed_role_membership
 
 
 def test_invalid_complete_replacement_rolls_back_assignments_and_history():
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         user, membership, _ = seed_role_membership(db)
         before_assignments = db.scalar(
             select(func.count(TenantUserRoleAssignment.id)).where(

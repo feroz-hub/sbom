@@ -415,7 +415,8 @@ def convert_spdx_to_cyclonedx(spdx_data: dict[str, Any], *, validate: bool = Tru
     doc_bom_ref = _sanitize_bom_ref(doc_spdx_id, state)
     state.bom_refs[doc_spdx_id] = doc_bom_ref
 
-    # Document-level metadata component (also added to components[] for integrity)
+    # The document is represented once by metadata.component. Dependency
+    # references may point to it without duplicating its bom-ref in components.
     doc_name = spdx_data.get("name") or "converted-spdx-document"
     creation_info = spdx_data.get("creationInfo") or {}
     created = creation_info.get("created") if isinstance(creation_info.get("created"), str) else _now_iso()
@@ -459,19 +460,6 @@ def convert_spdx_to_cyclonedx(spdx_data: dict[str, Any], *, validate: bool = Tru
 
     # Map packages to components
     components: list[dict[str, Any]] = []
-    # Document component first (required for dependency integrity)
-    components.append(
-        {
-            "type": "application",
-            "bom-ref": doc_bom_ref,
-            "name": doc_name,
-            "properties": [
-                {"name": "spdx:SPDXID", "value": doc_spdx_id},
-                {"name": "spdx:documentNamespace", "value": spdx_data.get("documentNamespace") or ""},
-            ],
-        }
-    )
-
     for index, pkg in enumerate(packages):
         if not isinstance(pkg, dict):
             state.warnings.append(f"Non-object entry at packages[{index}]; skipped.")
@@ -696,7 +684,7 @@ def convert_and_persist_spdx_to_cyclonedx(
     return converted, result, report
 
 
-def run_post_conversion_enrichment(converted_sbom_id: int, source_sbom_id: int | None = None) -> None:
+def run_post_conversion_enrichment(converted_sbom_id: int, source_sbom_id: int | None = None, *, tenant_id: int | None = None) -> None:
     """Background enrichment: lifecycle providers, VEX, completeness.
 
     Uses its own DB session. Failures are recorded on the converted SBOM row
@@ -711,54 +699,57 @@ def run_post_conversion_enrichment(converted_sbom_id: int, source_sbom_id: int |
     from ..services.lifecycle_service import sync_lifecycle_for_sbom
 
     log = logging.getLogger(__name__)
-    db = SessionLocal()
-    try:
-        converted = db.get(SBOMSource, converted_sbom_id)
-        if converted is None:
-            return
+    from .maintenance_scope import background_tenant
 
-        started = _now_iso()
-        converted.enrichment_status = "running"
-        converted.enrichment_started_at = started
-        converted.enrichment_error = None
-        if source_sbom_id is not None:
-            source = db.get(SBOMSource, source_sbom_id)
-            if source is not None:
-                source.enrichment_status = "running"
-                source.enrichment_started_at = started
-                source.enrichment_error = None
-        db.commit()
+    with background_tenant(tenant_id):
+        db = SessionLocal()
+        try:
+            converted = db.get(SBOMSource, converted_sbom_id)
+            if converted is None:
+                return
 
-        sync_lifecycle_for_sbom(db, converted_sbom_id)
-        process_embedded_vex_for_sbom(db, converted_sbom_id)
-        compute_and_save_completeness(db, converted)
-
-        completed = _now_iso()
-        converted.enrichment_status = "completed"
-        converted.enrichment_completed_at = completed
-        if source_sbom_id is not None:
-            source = db.get(SBOMSource, source_sbom_id)
-            if source is not None:
-                source.enrichment_status = "completed"
-                source.enrichment_completed_at = completed
-        db.commit()
-    except Exception as exc:
-        log.exception(
-            "Post-conversion enrichment failed for converted_sbom_id=%s",
-            converted_sbom_id,
-        )
-        db.rollback()
-        converted = db.get(SBOMSource, converted_sbom_id)
-        if converted is not None:
-            converted.enrichment_status = "failed"
-            converted.enrichment_error = str(exc)[:2000]
-            converted.enrichment_completed_at = _now_iso()
+            started = _now_iso()
+            converted.enrichment_status = "running"
+            converted.enrichment_started_at = started
+            converted.enrichment_error = None
             if source_sbom_id is not None:
                 source = db.get(SBOMSource, source_sbom_id)
                 if source is not None:
-                    source.enrichment_status = "failed"
-                    source.enrichment_error = str(exc)[:2000]
-                    source.enrichment_completed_at = converted.enrichment_completed_at
+                    source.enrichment_status = "running"
+                    source.enrichment_started_at = started
+                    source.enrichment_error = None
             db.commit()
-    finally:
-        db.close()
+
+            sync_lifecycle_for_sbom(db, converted_sbom_id)
+            process_embedded_vex_for_sbom(db, converted_sbom_id)
+            compute_and_save_completeness(db, converted)
+
+            completed = _now_iso()
+            converted.enrichment_status = "completed"
+            converted.enrichment_completed_at = completed
+            if source_sbom_id is not None:
+                source = db.get(SBOMSource, source_sbom_id)
+                if source is not None:
+                    source.enrichment_status = "completed"
+                    source.enrichment_completed_at = completed
+            db.commit()
+        except Exception as exc:
+            log.exception(
+                "Post-conversion enrichment failed for converted_sbom_id=%s",
+                converted_sbom_id,
+            )
+            db.rollback()
+            converted = db.get(SBOMSource, converted_sbom_id)
+            if converted is not None:
+                converted.enrichment_status = "failed"
+                converted.enrichment_error = str(exc)[:2000]
+                converted.enrichment_completed_at = _now_iso()
+                if source_sbom_id is not None:
+                    source = db.get(SBOMSource, source_sbom_id)
+                    if source is not None:
+                        source.enrichment_status = "failed"
+                        source.enrichment_error = str(exc)[:2000]
+                        source.enrichment_completed_at = converted.enrichment_completed_at
+                db.commit()
+        finally:
+            db.close()

@@ -145,7 +145,8 @@ def test_migration_script_copies_rows_and_resets_sequences(
         connection.execute(sa.text("CREATE TABLE alembic_version (version_num VARCHAR(128) NOT NULL)"))
         connection.execute(sa.text("INSERT INTO alembic_version(version_num) VALUES ('032_postgres_compat')"))
     session_factory = sa.orm.sessionmaker(bind=source_engine)
-    with session_factory() as session:
+    from app.core.context import minimal_background_context, tenant_scope
+    with tenant_scope(minimal_background_context(1)), session_factory() as session:
         now = datetime.now(UTC)
         tenant = Tenant(
             id=1,
@@ -250,6 +251,12 @@ def test_postgresql_feature_smoke(
     mock_external_sources,
     monkeypatch,
 ) -> None:
+    # clean_postgres deliberately removes every table, including the catalog.
+    # Restore mandatory roles before testing application startup.
+    from tests.conftest import _reset_authorization_catalog, _seed_postgres_test_tenant
+    _reset_authorization_catalog(postgres_url)
+    _seed_postgres_test_tenant(postgres_url)
+
     async def _skip_enrichment(*_args, **_kwargs):
         return None
 
@@ -297,10 +304,10 @@ def test_postgresql_feature_smoke(
         assert analysis.status_code == 201, analysis.text
         assert client.get(f"/api/sboms/{sbom_id}/risk-summary").status_code == 200
 
+        from app.core.context import minimal_background_context, tenant_scope
         from app.db import SessionLocal
         from app.models import SBOMComponent
-
-        with SessionLocal() as session:
+        with tenant_scope(minimal_background_context(1)), SessionLocal() as session:
             component = (
                 session.execute(sa.select(SBOMComponent).where(SBOMComponent.sbom_id == sbom_id)).scalars().first()
             )

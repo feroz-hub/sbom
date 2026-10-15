@@ -8,10 +8,12 @@ import logging
 from datetime import UTC, date, datetime
 from typing import Any
 
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..models import VulnerabilityRemediation, VulnerabilityRemediationAudit
+from ..core.context import get_bound_context
+from ..models import Projects, VulnerabilityRemediation, VulnerabilityRemediationAudit
 
 log = logging.getLogger(__name__)
 
@@ -93,6 +95,14 @@ def create_or_update_remediation(
     """
     Create or update a remediation tracking record.
     """
+    context = get_bound_context()
+    if context is None or context.tenant_id is None or not context.has_permission("remediation:write"):
+        raise HTTPException(status_code=403, detail="Insufficient permission")
+    if _clean_optional(data.get("status")) == "Closed" and not context.has_permission("remediation:close"):
+        raise HTTPException(status_code=403, detail="Insufficient permission")
+    if db.scalar(select(Projects.id).where(Projects.id == project_id, Projects.tenant_id == context.tenant_id)) is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    changed_by = context.actor_label()
     vuln_id = (data.get("vuln_id") or "").strip()
     component_name = (data.get("component_name") or "").strip()
     component_version = (data.get("component_version") or "").strip()
@@ -104,6 +114,7 @@ def create_or_update_remediation(
     record = db.execute(
         select(VulnerabilityRemediation).where(
             VulnerabilityRemediation.project_id == project_id,
+            VulnerabilityRemediation.tenant_id == context.tenant_id,
             VulnerabilityRemediation.vuln_id == vuln_id,
             VulnerabilityRemediation.component_name == component_name,
             VulnerabilityRemediation.component_version == component_version,
@@ -123,6 +134,8 @@ def create_or_update_remediation(
         else (record.resolution_date if record else None),
         "fix_notes": _candidate_value(data, "fix_notes", record.fix_notes if record else None),
     }
+    if candidate["status"] == "Closed" and not context.has_permission("remediation:close"):
+        raise HTTPException(status_code=403, detail="Insufficient permission")
     _validate_payload(candidate, old_status)
 
     old_values = None

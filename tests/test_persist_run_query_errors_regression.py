@@ -21,6 +21,8 @@ import json
 
 import pytest
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 
 async def _fake_nvd_with_error(components, settings, nvd_api_key=None, lookup_service=None):
     return (
@@ -57,24 +59,25 @@ def test_persist_analysis_run_records_query_error_count_and_raw_report(
 
     db = SessionLocal()
     try:
-        run = db.get(AnalysisRun, run_id)
-        assert run is not None, f"AnalysisRun id={run_id} should exist"
+        with verified_fixture_tenant(db, 1):
+            run = db.get(AnalysisRun, run_id)
+            assert run is not None, f"AnalysisRun id={run_id} should exist"
 
-        assert run.query_error_count >= 1, (
-            f"query_error_count was {run.query_error_count}; "
-            "synthetic NVD error should have been counted (router-side "
-            "persist_analysis_run is dropping the field)"
-        )
+            assert run.query_error_count >= 1, (
+                f"query_error_count was {run.query_error_count}; "
+                "synthetic NVD error should have been counted (router-side "
+                "persist_analysis_run is dropping the field)"
+            )
 
-        assert run.raw_report is not None, (
-            "raw_report was NULL; router-side persist_analysis_run is "
-            "dropping the field — entire details payload is lost"
-        )
-        parsed = json.loads(run.raw_report)
-        assert isinstance(parsed, dict), "raw_report must parse as a JSON object"
-        errors = parsed.get("query_errors") or []
-        assert any((e or {}).get("message") == "synthetic error for r2 regression" for e in errors), (
-            f"raw_report.query_errors did not include synthetic error; got {errors!r}"
-        )
+            assert run.raw_report is not None, (
+                "raw_report was NULL; router-side persist_analysis_run is "
+                "dropping the field — entire details payload is lost"
+            )
+            parsed = json.loads(run.raw_report)
+            assert isinstance(parsed, dict), "raw_report must parse as a JSON object"
+            errors = parsed.get("query_errors") or []
+            assert any((e or {}).get("message") == "synthetic error for r2 regression" for e in errors), (
+                f"raw_report.query_errors did not include synthetic error; got {errors!r}"
+            )
     finally:
         db.close()

@@ -315,7 +315,10 @@ def test_pause_then_resume_cycles_next_run_at(client, project_id):
     assert resumed.json()["next_run_at"] is not None
 
 
-def test_run_now_for_project_fans_out_to_member_sboms(client, project_id, sbom_id, _stub_celery):
+def test_run_now_for_project_fans_out_to_member_sboms(client, project_id, product_id, sample_sbom_dict, _stub_celery):
+    sbom_id = _product_sbom(client, project_id, product_id, sample_sbom_dict)
+    selected = client.patch(f"/api/products/{product_id}", json={"current_sbom_id": sbom_id})
+    assert selected.status_code == 200, selected.text
     create = client.post(
         f"/api/projects/{project_id}/schedule",
         json={"cadence": "DAILY"},
@@ -351,6 +354,8 @@ def test_run_now_for_product_fans_out_to_product_sboms(
     _stub_celery,
 ):
     sbom_id = _product_sbom(client, project_id, product_id, sample_sbom_dict)
+    selected = client.patch(f"/api/products/{product_id}", json={"current_sbom_id": sbom_id})
+    assert selected.status_code == 200, selected.text
     create = client.post(
         f"/api/products/{product_id}/schedule",
         json={"cadence": "DAILY"},

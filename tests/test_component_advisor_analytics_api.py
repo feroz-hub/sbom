@@ -9,15 +9,15 @@ correlation ids.
 import logging
 
 import pytest
-from sqlalchemy import text
-
 from app.core.context import CurrentContext
 from app.core.permissions import ROLE_PERMISSIONS
 from app.core.security import get_current_tenant_context
 from app.db import SessionLocal
 from app.metrics.cache import reset_cache
 from app.services.component_advisor import sources
-from tests.component_advisor_support import NOW, World, purl_key
+
+from tests.component_advisor_support import World, purl_key
+from tests.tenant_fixture_scope import declare_fixture_tenant, scoped_context_override, verified_fixture_tenant
 from tests.test_vex_scoped_authorization import make_member
 
 BASE = "/api/component-advisor"
@@ -29,7 +29,8 @@ LODASH = purl_key("pkg:npm/lodash@3.10.1")
 def db():
     session = SessionLocal()
     try:
-        yield session
+        with verified_fixture_tenant(session, 1):
+            yield session
     finally:
         session.close()
 
@@ -44,9 +45,7 @@ def no_external_sources():
 @pytest.fixture()
 def seeded(db):
     reset_cache()
-    db.execute(text(
-        "INSERT INTO tenants (id, name, slug, external_iam_tenant_id, status, created_at, updated_at) "
-        "VALUES (2, 'Other', 'other', 'other', 'ACTIVE', :now, :now) ON CONFLICT (id) DO NOTHING"), {"now": NOW})
+    declare_fixture_tenant(db, 2)
     world = World(db)
     s1, s2 = world.sbom(world.product(name="app-1")), world.sbom(world.product(name="app-2"))
     log4j = world.component(s1, "log4j-core", "2.14.1", ecosystem="maven", license="Apache-2.0", created_on="2026-09-15T00:00:00Z")
@@ -104,10 +103,10 @@ def test_analytics_are_tenant_isolated__FR_SCA_023(client, seeded):
     client.post(f"{BASE}/recommendations", json={"canonical_key": LOG4J, "trigger_type": "CRITICAL_FINDING"})
     with SessionLocal() as session:
         user_id = make_member(session, "TENANT_ADMIN", tenant_id=2).user_id
-    client.app.dependency_overrides[get_current_tenant_context] = lambda: CurrentContext(
+    client.app.dependency_overrides[get_current_tenant_context] = scoped_context_override(lambda: CurrentContext(
         user_id=user_id, external_user_id=str(user_id), email=None, display_name="b", tenant_id=2,
         external_tenant_id="2", roles=frozenset({"TENANT_ADMIN"}), permissions=ROLE_PERMISSIONS["TENANT_ADMIN"],
-    )
+    ))
     try:
         body = client.get(f"{BASE}/analytics").json()
         assert body["recommendations"]["generated"] == 0

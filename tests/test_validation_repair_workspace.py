@@ -7,6 +7,8 @@ from pathlib import Path
 
 from app.models import AuditLog, SBOMSource, SBOMValidationSession, SBOMValidationSessionEvent
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 BAD_PURL_CYCLONEDX = {
     "bomFormat": "CycloneDX",
     "specVersion": "1.6",
@@ -67,16 +69,17 @@ def test_upload_invalid_sbom_creates_validation_session_not_normal_sbom(client):
 
     db = SessionLocal()
     try:
-        assert db.query(SBOMSource).filter(SBOMSource.sbom_name == name).first() is None
-        session = db.get(SBOMValidationSession, session_id)
-        assert session is not None
-        assert session.validation_status == "failed"
-        assert session.imported_sbom_id is None
-        assert session.raw_content_text == json.dumps(BAD_PURL_CYCLONEDX)
-        assert session.repair_content_text == json.dumps(BAD_PURL_CYCLONEDX)
-        assert session.original_size_bytes == len(json.dumps(BAD_PURL_CYCLONEDX).encode("utf-8"))
-        assert session.original_sha256 == sha256(json.dumps(BAD_PURL_CYCLONEDX).encode("utf-8")).hexdigest()
-        assert db.query(SBOMValidationSessionEvent).filter_by(session_id=session_id, event_type="created").count() == 1
+        with verified_fixture_tenant(db, 1):
+            assert db.query(SBOMSource).filter(SBOMSource.sbom_name == name).first() is None
+            session = db.get(SBOMValidationSession, session_id)
+            assert session is not None
+            assert session.validation_status == "failed"
+            assert session.imported_sbom_id is None
+            assert session.raw_content_text == json.dumps(BAD_PURL_CYCLONEDX)
+            assert session.repair_content_text == json.dumps(BAD_PURL_CYCLONEDX)
+            assert session.original_size_bytes == len(json.dumps(BAD_PURL_CYCLONEDX).encode("utf-8"))
+            assert session.original_sha256 == sha256(json.dumps(BAD_PURL_CYCLONEDX).encode("utf-8")).hexdigest()
+            assert db.query(SBOMValidationSessionEvent).filter_by(session_id=session_id, event_type="created").count() == 1
     finally:
         db.close()
 
@@ -152,14 +155,15 @@ def test_validation_session_content_chunks_and_download_preserve_original_bytes(
 
     db = SessionLocal()
     try:
-        actions = {
-            row.action
-            for row in db.query(AuditLog)
-            .filter(AuditLog.entity_id == session_id)
-            .all()
-        }
-        assert "sbom.validation_session.created" in actions
-        assert "sbom.validation_session.download_original" in actions
+        with verified_fixture_tenant(db, 1):
+            actions = {
+                row.action
+                for row in db.query(AuditLog)
+                .filter(AuditLog.entity_id == session_id)
+                .all()
+            }
+            assert "sbom.validation_session.created" in actions
+            assert "sbom.validation_session.download_original" in actions
     finally:
         db.close()
 
@@ -314,11 +318,12 @@ def test_workspace_metadata_endpoint_allows_all_repair_workspace_statuses(client
     ]:
         db = SessionLocal()
         try:
-            session = db.get(SBOMValidationSession, session_id)
-            assert session is not None
-            session.validation_status = status
-            db.add(session)
-            db.commit()
+            with verified_fixture_tenant(db, 1):
+                session = db.get(SBOMValidationSession, session_id)
+                assert session is not None
+                session.validation_status = status
+                db.add(session)
+                db.commit()
         finally:
             db.close()
 
@@ -371,11 +376,12 @@ def test_sbom_detail_marks_legacy_record_without_original_content_unavailable(cl
 
     db = SessionLocal()
     try:
-        sbom = db.get(SBOMSource, sbom_id)
-        assert sbom is not None
-        sbom.sbom_data = None
-        db.add(sbom)
-        db.commit()
+        with verified_fixture_tenant(db, 1):
+            sbom = db.get(SBOMSource, sbom_id)
+            assert sbom is not None
+            sbom.sbom_data = None
+            db.add(sbom)
+            db.commit()
     finally:
         db.close()
 
@@ -427,37 +433,38 @@ def test_cross_tenant_workspace_backfill_denied(client):
 
     db = SessionLocal()
     try:
-        now_dt = datetime.now(UTC)
-        tenant = Tenant(
-            name="Other Workspace Tenant",
-            slug=_unique("other-workspace-tenant"),
-            external_iam_tenant_id=_unique("other-workspace-tenant-ext"),
-            status="ACTIVE",
-            created_at=now_dt,
-            updated_at=now_dt,
-        )
-        db.add(tenant)
-        db.flush()
-        with tenant_scope(minimal_background_context(tenant.id, tenant.external_iam_tenant_id)):
-            sbom = SBOMSource(
-                sbom_name=_unique("other-tenant-sbom"),
-                sbom_data=json.dumps(
-                    {
-                        "bomFormat": "CycloneDX",
-                        "specVersion": "1.5",
-                        "version": 1,
-                        "components": [],
-                    }
-                ),
-                status="validated",
-                error_count=0,
-                warning_count=0,
-                created_on=now_dt.isoformat(),
-                created_by="other",
+        with verified_fixture_tenant(db, 1):
+            now_dt = datetime.now(UTC)
+            tenant = Tenant(
+                name="Other Workspace Tenant",
+                slug=_unique("other-workspace-tenant"),
+                external_iam_tenant_id=_unique("other-workspace-tenant-ext"),
+                status="ACTIVE",
+                created_at=now_dt,
+                updated_at=now_dt,
             )
-            db.add(sbom)
-            db.commit()
-            sbom_id = sbom.id
+            db.add(tenant)
+            db.flush()
+            with tenant_scope(minimal_background_context(tenant.id, tenant.external_iam_tenant_id)):
+                sbom = SBOMSource(
+                    sbom_name=_unique("other-tenant-sbom"),
+                    sbom_data=json.dumps(
+                        {
+                            "bomFormat": "CycloneDX",
+                            "specVersion": "1.5",
+                            "version": 1,
+                            "components": [],
+                        }
+                    ),
+                    status="validated",
+                    error_count=0,
+                    warning_count=0,
+                    created_on=now_dt.isoformat(),
+                    created_by="other",
+                )
+                db.add(sbom)
+                db.commit()
+                sbom_id = sbom.id
     finally:
         db.close()
 
@@ -560,10 +567,11 @@ def test_valid_repaired_draft_revalidates_then_imports_trusted_sbom(client):
 
     db = SessionLocal()
     try:
-        trusted = db.get(SBOMSource, sbom_id)
-        assert trusted is not None
-        assert trusted.sbom_name == name
-        assert "pkg:generic/x@1.0.0" in trusted.sbom_data
+        with verified_fixture_tenant(db, 1):
+            trusted = db.get(SBOMSource, sbom_id)
+            assert trusted is not None
+            assert trusted.sbom_name == name
+            assert "pkg:generic/x@1.0.0" in trusted.sbom_data
     finally:
         db.close()
 
@@ -575,39 +583,40 @@ def test_validation_session_cross_tenant_access_denied(client):
 
     db = SessionLocal()
     try:
-        now_dt = datetime.now(UTC)
-        now = now_dt.isoformat()
-        tenant = Tenant(
-            name="Other Tenant",
-            slug=_unique("other-tenant"),
-            external_iam_tenant_id=_unique("other-tenant-ext"),
-            status="ACTIVE",
-            created_at=now_dt,
-            updated_at=now_dt,
-        )
-        db.add(tenant)
-        db.flush()
-        with tenant_scope(minimal_background_context(tenant.id, tenant.external_iam_tenant_id)):
-            session = SBOMValidationSession(
-                id=_unique("cross-tenant-session"),
-                original_filename="other.json",
-                sbom_name="other",
-                sanitized_content="{}",
-                current_content="{}",
-                raw_content_text="{}",
-                repair_content_text="{}",
-                validation_status="failed",
-                latest_error_report_json={"entries": [], "error_count": 0, "warning_count": 0},
-                can_edit=True,
-                can_ai_fix=True,
-                content_sha256=sha256(b"{}").hexdigest(),
-                created_at=now,
-                updated_at=now,
-                expires_at=now,
+        with verified_fixture_tenant(db, 1):
+            now_dt = datetime.now(UTC)
+            now = now_dt.isoformat()
+            tenant = Tenant(
+                name="Other Tenant",
+                slug=_unique("other-tenant"),
+                external_iam_tenant_id=_unique("other-tenant-ext"),
+                status="ACTIVE",
+                created_at=now_dt,
+                updated_at=now_dt,
             )
-            db.add(session)
-            db.commit()
-            session_id = session.id
+            db.add(tenant)
+            db.flush()
+            with tenant_scope(minimal_background_context(tenant.id, tenant.external_iam_tenant_id)):
+                session = SBOMValidationSession(
+                    id=_unique("cross-tenant-session"),
+                    original_filename="other.json",
+                    sbom_name="other",
+                    sanitized_content="{}",
+                    current_content="{}",
+                    raw_content_text="{}",
+                    repair_content_text="{}",
+                    validation_status="failed",
+                    latest_error_report_json={"entries": [], "error_count": 0, "warning_count": 0},
+                    can_edit=True,
+                    can_ai_fix=True,
+                    content_sha256=sha256(b"{}").hexdigest(),
+                    created_at=now,
+                    updated_at=now,
+                    expires_at=now,
+                )
+                db.add(session)
+                db.commit()
+                session_id = session.id
     finally:
         db.close()
 
@@ -763,19 +772,20 @@ def test_db_kill_switch_blocks_validation_repair_ai(client):
     session_id, _ = _create_failed_session(client)
     db = SessionLocal()
     try:
-        db.query(AiSettings).delete()
-        db.add(
-            AiSettings(
-                id=1,
-                feature_enabled=True,
-                kill_switch_active=True,
-                budget_per_request_usd=0.10,
-                budget_per_scan_usd=5.0,
-                budget_daily_usd=5.0,
-                updated_at="2026-09-06T00:00:00+00:00",
+        with verified_fixture_tenant(db, 1):
+            db.query(AiSettings).delete()
+            db.add(
+                AiSettings(
+                    id=1,
+                    feature_enabled=True,
+                    kill_switch_active=True,
+                    budget_per_request_usd=0.10,
+                    budget_per_scan_usd=5.0,
+                    budget_daily_usd=5.0,
+                    updated_at="2026-09-06T00:00:00+00:00",
+                )
             )
-        )
-        db.commit()
+            db.commit()
     finally:
         db.close()
     reset_loader()
@@ -834,20 +844,21 @@ def test_validation_repair_ai_uses_shared_registry_budget_and_review_contract(cl
     session_id, _ = _create_failed_session(client)
     db = SessionLocal()
     try:
-        db.query(AiUsageLog).delete()
-        db.query(AiSettings).delete()
-        db.add(
-            AiSettings(
-                id=1,
-                feature_enabled=True,
-                kill_switch_active=False,
-                budget_per_request_usd=1.0,
-                budget_per_scan_usd=2.0,
-                budget_daily_usd=3.0,
-                updated_at="2026-09-06T00:00:00+00:00",
+        with verified_fixture_tenant(db, 1):
+            db.query(AiUsageLog).delete()
+            db.query(AiSettings).delete()
+            db.add(
+                AiSettings(
+                    id=1,
+                    feature_enabled=True,
+                    kill_switch_active=False,
+                    budget_per_request_usd=1.0,
+                    budget_per_scan_usd=2.0,
+                    budget_daily_usd=3.0,
+                    updated_at="2026-09-06T00:00:00+00:00",
+                )
             )
-        )
-        db.commit()
+            db.commit()
     finally:
         db.close()
     reset_loader()
@@ -866,7 +877,8 @@ def test_validation_repair_ai_uses_shared_registry_budget_and_review_contract(cl
     assert provider.requested_models == [provider.default_model]
     db = SessionLocal()
     try:
-        assert db.query(AiUsageLog).filter(AiUsageLog.purpose == "sbom_validation_repair").count() == 1
+        with verified_fixture_tenant(db, 1):
+            assert db.query(AiUsageLog).filter(AiUsageLog.purpose == "sbom_validation_repair").count() == 1
     finally:
         db.close()
 
@@ -907,13 +919,14 @@ def test_lazy_session_creation_and_inplace_import(client):
 
     db = SessionLocal()
     try:
-        sbom = db.get(SBOMSource, sbom_id)
-        assert sbom is not None
-        sbom.sbom_data = json.dumps(BAD_PURL_CYCLONEDX)
-        sbom.status = "failed"
-        sbom.error_count = 1
-        db.add(sbom)
-        db.commit()
+        with verified_fixture_tenant(db, 1):
+            sbom = db.get(SBOMSource, sbom_id)
+            assert sbom is not None
+            sbom.sbom_data = json.dumps(BAD_PURL_CYCLONEDX)
+            sbom.status = "failed"
+            sbom.error_count = 1
+            db.add(sbom)
+            db.commit()
     finally:
         db.close()
 
@@ -938,8 +951,9 @@ def test_lazy_session_creation_and_inplace_import(client):
 
     db = SessionLocal()
     try:
-        updated_sbom = db.get(SBOMSource, sbom_id)
-        assert updated_sbom.status == "validated"
-        assert "pkg:generic/x@1.0.0" in updated_sbom.sbom_data
+        with verified_fixture_tenant(db, 1):
+            updated_sbom = db.get(SBOMSource, sbom_id)
+            assert updated_sbom.status == "validated"
+            assert "pkg:generic/x@1.0.0" in updated_sbom.sbom_data
     finally:
         db.close()

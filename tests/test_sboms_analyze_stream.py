@@ -26,7 +26,9 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from app.models import AnalysisRun, SBOMComponent, SBOMSource
-from sqlalchemy import text
+from sqlalchemy import literal, select
+
+from tests.tenant_fixture_scope import verified_fixture_tenant
 
 
 def _parse_sse_events(body: str) -> list[dict]:
@@ -60,7 +62,8 @@ def db(client):
 
     session = SessionLocal()
     try:
-        yield session
+        with verified_fixture_tenant(session, 1):
+            yield session
     finally:
         session.rollback()
         session.close()
@@ -135,7 +138,10 @@ def test_analyze_stream_uses_registry_emits_progress_and_persists_run(client, se
     assert persisted.critical_count == final["critical"]
     assert persisted.high_count == final["high"]
 
-    list_body = client.get(f"/api/sboms?user_id={seeded_sbom['created_by']}&page_size=500").json()
+    listed = client.get("/api/sboms", params={"page_size": 500})
+    assert listed.status_code == 200, listed.text
+    list_body = listed.json()
+    assert isinstance(list_body, list)
     row = next(item for item in list_body if item["id"] == sbom_id)
     assert row["latest_analysis"]["run_id"] == persisted.id
     assert row["latest_analysis"]["status"] == "completed"
@@ -342,7 +348,8 @@ def test_analyze_stream_data_error_rolls_back_and_marks_failed_with_clean_sessio
             session.close()
 
     def fail_with_aborted_transaction(*, db, **kwargs):
-        db.execute(text("SELECT 1 / 0"))
+        # Produce a real PostgreSQL DataError without escaping the SQL guard.
+        db.execute(select(literal(1).op("/")(literal(0))))
 
     client.app.dependency_overrides[get_db] = override_get_db
     monkeypatch.setattr("app.services.analysis_orchestrator.persist_analysis_run", fail_with_aborted_transaction)
@@ -405,7 +412,7 @@ def test_analyze_stream_still_ends_cleanly_when_failed_status_cannot_be_persiste
             raise RuntimeError("forced failed-status commit failure")
 
     def fail_with_aborted_transaction(*, db, **kwargs):
-        db.execute(text("SELECT 1 / 0"))
+        db.execute(select(literal(1).op("/")(literal(0))))
 
     caplog.set_level("ERROR", logger="app.routers.sboms_crud")
     monkeypatch.setattr("app.services.analysis_orchestrator.persist_analysis_run", fail_with_aborted_transaction)

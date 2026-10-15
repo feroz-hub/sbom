@@ -27,9 +27,11 @@ from app.routers import sboms_crud
 from app.services.sbom_delete_service import SBOMDeleteConflict, SBOMDeleteService
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, event, func, select, text
+from sqlalchemy import Column, ForeignKey, Integer, MetaData, Table, create_engine, event, func, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
+
+from tests.tenant_fixture_scope import scoped_context_override, verified_fixture_tenant
 
 
 @pytest.fixture()
@@ -64,7 +66,8 @@ def delete_db() -> Iterator[Session]:
     )
     session.commit()
     try:
-        yield session
+        with verified_fixture_tenant(session, 1):
+            yield session
     finally:
         session.close()
         engine.dispose()
@@ -87,7 +90,7 @@ def delete_client(delete_db: Session) -> Iterator[TestClient]:
             session.close()
 
     api.dependency_overrides[get_db] = _override_db
-    api.dependency_overrides[get_current_tenant_context] = lambda: minimal_background_context(1, "default")
+    api.dependency_overrides[get_current_tenant_context] = scoped_context_override(lambda: minimal_background_context(1, "default"))
     with TestClient(api) as client:
         yield client
 
@@ -396,17 +399,7 @@ def test_fk_failure_rolls_back_and_api_returns_409_with_blocker(
 ) -> None:
     sbom = _sbom(delete_db)
     _component(delete_db, sbom.id)
-    delete_db.execute(
-        text(
-            "CREATE TABLE legacy_sbom_child ("
-            "id INTEGER PRIMARY KEY, sbom_id INTEGER NOT NULL, "
-            "FOREIGN KEY(sbom_id) REFERENCES sbom_source(id))"
-        )
-    )
-    delete_db.execute(
-        text("INSERT INTO legacy_sbom_child (sbom_id) VALUES (:sbom_id)"),
-        {"sbom_id": sbom.id},
-    )
+    _seed_unmapped_fk(delete_db, sbom.id, "legacy_sbom_child", "sbom_id")
     delete_db.commit()
 
     original = SBOMDeleteService._unknown_fk_dependencies
@@ -446,7 +439,7 @@ def test_no_orphans_remain_and_global_lifecycle_cache_is_preserved(delete_db: Se
 
     SBOMDeleteService(delete_db).permanently_delete_sbom(sbom.id, "Feroze", True)
 
-    assert delete_db.execute(text("PRAGMA foreign_key_check")).all() == []
+    assert _foreign_key_violations(delete_db) == []
     assert _count(delete_db, ComponentLifecycleCache) == 1
 
 
@@ -486,17 +479,7 @@ def test_delete_impact_endpoint_returns_full_contract(
 
 def test_service_rejects_unmapped_fk_dependencies(delete_db: Session) -> None:
     sbom = _sbom(delete_db)
-    delete_db.execute(
-        text(
-            "CREATE TABLE future_feature ("
-            "id INTEGER PRIMARY KEY, source_id INTEGER NOT NULL, "
-            "FOREIGN KEY(source_id) REFERENCES sbom_source(id))"
-        )
-    )
-    delete_db.execute(
-        text("INSERT INTO future_feature (source_id) VALUES (:sbom_id)"),
-        {"sbom_id": sbom.id},
-    )
+    _seed_unmapped_fk(delete_db, sbom.id, "future_feature", "source_id")
     delete_db.commit()
 
     impact = SBOMDeleteService(delete_db).get_delete_impact(sbom.id)
@@ -506,3 +489,24 @@ def test_service_rejects_unmapped_fk_dependencies(delete_db: Session) -> None:
     with pytest.raises(SBOMDeleteConflict) as raised:
         SBOMDeleteService(delete_db).permanently_delete_sbom(sbom.id, "Feroze", True)
     assert raised.value.blocking_dependencies == {"future_feature": 1}
+
+
+def _assert_private_sqlite(db):
+    # This fixture owns a newly created in-memory database, never an app engine.
+    assert db.bind.url.drivername == "sqlite" and db.bind.url.database in (None, "", ":memory:")
+
+
+def _seed_unmapped_fk(db, sbom_id, name, column):
+    _assert_private_sqlite(db)
+    assert (name, column) in {("legacy_sbom_child", "sbom_id"), ("future_feature", "source_id")}
+    assert db.get(SBOMSource, sbom_id) is not None  # guarded owner verification before setup
+    table = Table(name, MetaData(), Column("id", Integer, primary_key=True),
+                  Column(column, Integer, ForeignKey(SBOMSource.__table__.c.id), nullable=False))
+    table.create(db.connection())  # schema DDL, on the test transaction only
+    db.execute(table.insert().values({column: sbom_id}))
+
+
+def _foreign_key_violations(db):
+    _assert_private_sqlite(db)
+    # Fixed SQLite integrity metadata query; no application rows or arbitrary SQL input.
+    return db.connection().exec_driver_sql("PRAGMA foreign_key_check").all()

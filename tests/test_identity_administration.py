@@ -18,6 +18,8 @@ from app.services.tenant_role_assignment_service import create_initial_assignmen
 from fastapi import HTTPException
 from sqlalchemy import select
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 
 def _now():
     return datetime.now(UTC)
@@ -59,7 +61,7 @@ def test_membership_lifecycle_validation_and_audit(client):
     from app.db import SessionLocal
 
     with SessionLocal() as db:
-        user = _seed_user(db)
+        user = _seed_user(db, status="ACTIVE")
         external_id = user.external_iam_user_id
 
     created = client.post(
@@ -93,7 +95,7 @@ def test_membership_lifecycle_validation_and_audit(client):
     removed = client.delete(f"/api/tenants/1/users/{membership_id}")
     assert removed.status_code == 204
 
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         assert db.get(TenantUser, membership_id) is None
         actions = set(db.execute(select(AuthorizationAuditLog.action)).scalars())
         assert {
@@ -108,7 +110,7 @@ def test_membership_lifecycle_validation_and_audit(client):
 def test_membership_creation_writes_multiple_migration_049_role_assignments(client):
     from app.db import SessionLocal
 
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         user = _seed_user(db, status="ACTIVE")
         user_id = user.id
 
@@ -123,7 +125,7 @@ def test_membership_creation_writes_multiple_migration_049_role_assignments(clie
     assert set(created.json()["roles"]) == {"VIEWER", "SECURITY_ANALYST"}
     assert created.json()["role"] == "VIEWER"
 
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         role_codes = set(
             db.execute(
                 select(AuthorizationRole.code)
@@ -191,19 +193,46 @@ def test_membership_identifier_is_tenant_scoped(client):
 def test_last_active_tenant_admin_is_protected(client):
     from app.db import SessionLocal
 
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
+        membership = db.get(TenantUser, 1)
+        before = (membership.role, membership.status, membership.role_assignment_version)
+        assignments = list(db.execute(select(TenantUserRoleAssignment.__table__)))
     response = client.post("/api/tenants/1/users/1/deactivate")
     assert response.status_code == 409
-    response = client.patch("/api/tenants/1/users/1", json={"role": "VIEWER"})
+    # Tenant Admin may manage membership status, but cannot delegate/remove
+    # TENANT_ADMIN roles. Exercise this invariant through authorized status work.
+    response = client.patch("/api/tenants/1/users/1", json={"status": "DISABLED"})
     assert response.status_code == 409
     response = client.delete("/api/tenants/1/users/1")
     assert response.status_code == 409
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
+        membership = db.get(TenantUser, 1)
+        assert (membership.role, membership.status, membership.role_assignment_version) == before
+        assert list(db.execute(select(TenantUserRoleAssignment.__table__))) == assignments
         denied = set(
             db.execute(
                 select(AuthorizationAuditLog.action).where(AuthorizationAuditLog.outcome == "DENIED")
             ).scalars()
         )
         assert {"membership.update_denied", "membership.status_change_denied", "membership.remove_denied"} <= denied
+
+
+def test_tenant_admin_cannot_remove_tenant_admin_role(client):
+    from app.db import SessionLocal
+
+    from tests.tenant_fixture_scope import fixture_business_snapshot
+
+    models = (TenantUser, TenantUserRoleAssignment)
+    with SessionLocal() as db:
+        before = fixture_business_snapshot(db, models, (1,))
+    response = client.patch("/api/tenants/1/users/1", json={"role": "VIEWER"})
+    assert response.status_code == 403, response.text
+    with SessionLocal() as db:
+        assert fixture_business_snapshot(db, models, (1,)) == before
+        assert db.scalar(select(AuthorizationAuditLog.id).where(
+            AuthorizationAuditLog.action == "membership.update_denied",
+            AuthorizationAuditLog.outcome == "DENIED",
+        )) is not None
 
 
 def test_tenant_admin_cannot_use_platform_routes_or_create_tenant(client):
@@ -481,7 +510,7 @@ def test_authorization_audit_metadata_contains_no_secrets(client):
     from app.db import SessionLocal
 
     with SessionLocal() as db:
-        user = _seed_user(db)
+        user = _seed_user(db, status="ACTIVE")
 
     response = client.post(
         "/api/tenants/1/users",

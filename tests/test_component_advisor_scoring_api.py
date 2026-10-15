@@ -1,3 +1,5 @@
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 """Secure Component Advisor — scoring, confidence, history and evidence over HTTP (spec Step 7).
 
 FR-SCA-016..020. End-to-end through evaluation: every candidate is scored
@@ -11,13 +13,13 @@ from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
-from sqlalchemy import select, text
-
 from app.db import SessionLocal
 from app.metrics.cache import reset_cache
 from app.models import ComponentRecommendationFactor
 from app.services.component_advisor import sources
-from tests.component_advisor_support import NOW, World, purl_key
+from sqlalchemy import func, select
+
+from tests.component_advisor_support import World, purl_key
 
 BASE = "/api/component-advisor"
 LOG4J = purl_key("pkg:maven/log4j-core@2.14.1")
@@ -27,8 +29,10 @@ LOG4J = purl_key("pkg:maven/log4j-core@2.14.1")
 def db():
     session = SessionLocal()
     try:
-        yield session
+        with verified_fixture_tenant(session, 1):
+            yield session
     finally:
+        session.rollback()
         session.close()
 
 
@@ -81,7 +85,7 @@ def test_T29_candidates_carry_score_factors_and_policy_version__FR_SCA_017(clien
     assert {f["policy_version_label"] for f in evidence["factors"]} == {"builtin-default-2026-10-01"}
     assert evidence["scoring_policy"]["rules"]["weights"]["current_risk"] == 0.30
     assert evidence["explanation"]["generated_from"] == "STRUCTURED_EVIDENCE"
-    assert db.scalar(select(text("count(*)")).select_from(ComponentRecommendationFactor)) == 8 * len(item["candidates"])
+    assert db.scalar(select(func.count()).select_from(ComponentRecommendationFactor)) == 8 * len(item["candidates"])
 
 
 def test_T29_tenant_scoring_policy_is_used_and_traceable__FR_SCA_017(client, seeded):

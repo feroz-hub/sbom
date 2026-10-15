@@ -12,6 +12,8 @@ from app.models import AnalysisFinding, AnalysisRun
 from app.services.dashboard_scope import DashboardScope, dashboard_scope
 from fastapi.testclient import TestClient
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 pytest_plugins = ["tests.test_dashboard_scope"]
 
 
@@ -42,7 +44,7 @@ def test_priority_order_limit_and_current_run(scoped_db):
     (DashboardScope(2), ["CVE-4"]),
 ])
 def test_priority_scope_matches_metrics(scoped_db, scope, expected):
-    with dashboard_scope(scoped_db, scope):
+    with verified_fixture_tenant(scoped_db, scope.tenant_id), dashboard_scope(scoped_db, scope):
         assert [r["vuln_id"] for r in dashboard_priority_findings(scoped_db)] == expected
         assert len(expected) == findings_latest_per_sbom_total(scoped_db)
 

@@ -7,7 +7,6 @@ cross-tenant write guard stays active (no Core bypass).
 
 import hashlib
 
-from app.core.context import minimal_background_context, tenant_scope
 from app.models import (
     AnalysisFinding,
     AnalysisRun,
@@ -17,6 +16,8 @@ from app.models import (
     SBOMSource,
     VexInvestigation,
 )
+
+from tests.tenant_fixture_scope import verified_fixture_tenant
 
 NOW = "2026-09-30T00:00:00Z"
 
@@ -34,7 +35,7 @@ class World:
         self._ids = iter(range(1, 10_000))
 
     def _add(self, tenant_id, *rows):
-        with tenant_scope(minimal_background_context(tenant_id)):
+        with verified_fixture_tenant(self.db, tenant_id):
             self.db.add_all(rows)
             self.db.flush()
         return rows[0] if len(rows) == 1 else rows
@@ -57,9 +58,7 @@ class World:
                 parent_id=parent.id if parent else None,
             ),
         )
-        sbom.run = self.run(sbom) if analysed else None
-        if analysed and run_status != "FINDINGS":
-            sbom.run.run_status = run_status
+        sbom.run = self.run(sbom, status=run_status) if analysed else None
         return sbom
 
     def run(self, sbom, status="FINDINGS"):
@@ -85,8 +84,11 @@ class World:
         )
 
     def finding(self, component, vuln_id, severity, *, run=None, aliases=None, score=None):
-        sbom = self.db.get(SBOMSource, component.sbom_id)
-        run = run or sbom.run
+        with verified_fixture_tenant(self.db, component.tenant_id):
+            # Historical fixture rows are needed for exclusion tests. Tenant
+            # filtering still applies when soft-delete visibility is expanded.
+            sbom = self.db.query(SBOMSource).filter(SBOMSource.id == component.sbom_id).execution_options(include_deleted=True).one()
+            run = run or sbom.run
         return self._add(
             component.tenant_id,
             AnalysisFinding(

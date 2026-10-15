@@ -1,19 +1,31 @@
 """Focused VEX decision regressions (unittest; no application server required)."""
 import unittest
+from datetime import UTC, datetime
 from unittest.mock import Mock, patch
 
+from app.models import (
+    AnalysisFinding,
+    AnalysisRun,
+    Base,
+    SBOMComponent,
+    SBOMSource,
+    Tenant,
+    VexInvestigation,
+    VexOverrideAudit,
+    VexStatement,
+)
+from app.services.lifecycle.vex_provider import (
+    apply_vex_override,
+    effective_vex_statements,
+    list_vex_statements,
+    vex_report,
+)
+from app.services.vex.reconciliation import recompute_for_sbom
 from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from app.models import (
-    Base, AnalysisRun, AnalysisFinding, SBOMSource, SBOMComponent, VexStatement,
-    VexInvestigation, VexOverrideAudit,
-)
-from app.services.lifecycle.vex_provider import (
-    apply_vex_override, effective_vex_statements, list_vex_statements, vex_report,
-)
-from app.services.vex.reconciliation import recompute_for_sbom
+from tests.tenant_fixture_scope import verified_fixture_tenant
 
 
 class VexDecisionTests(unittest.TestCase):
@@ -22,16 +34,18 @@ class VexDecisionTests(unittest.TestCase):
         self.engine = create_engine('sqlite:///:memory:')
         Base.metadata.create_all(self.engine)
         self.db = Session(self.engine)
+        self.addCleanup(self.engine.dispose)
+        self.addCleanup(self.db.close)
+        now = datetime.now(UTC)
+        self.db.add(Tenant(id=1, name="VEX fixture", slug="vex-fixture", status="ACTIVE", created_at=now, updated_at=now))
+        self.db.flush()
+        self.enterContext(verified_fixture_tenant(self.db, 1))
         sbom = SBOMSource(sbom_name='vex-test', sbom_data='{}', tenant_id=1)
         self.db.add(sbom)
         self.db.flush()
         self.component = SBOMComponent(sbom_id=sbom.id, name='demo', version='1', tenant_id=1)
         self.db.add(self.component)
         self.db.commit()
-
-    def tearDown(self):
-        self.db.close()
-        self.engine.dispose()
 
     def override(self, vuln, status='affected', **kwargs):
         return apply_vex_override(self.db, self.component.id, vuln,
@@ -162,7 +176,7 @@ class VexDecisionTests(unittest.TestCase):
         self.assertEqual(summary['affected_count'], 1)
 
     def test_scoped_api_rejects_wrong_tenant_or_sbom(self):
-        from app.routers.vex import get_component_vulnerabilities, patch_vex_override, get_vex_override_history
+        from app.routers.vex import get_vex_override_history, patch_vex_override
         from app.services.lifecycle.vex_provider import component_vulnerabilities
         self.override('CVE-2026-0001')
         for tenant, sbom in [(2, self.component.sbom_id), (1, 999)]:
@@ -197,12 +211,13 @@ class VexDecisionTests(unittest.TestCase):
         import csv
         import io
         import json
+
+        from app.metrics.base import COMPLETED_RUN_STATUSES
+        from app.metrics.reporting import latest_snapshots
         from app.routers.analysis import export_csv, export_sarif
         from app.routers.runs import list_run_findings, list_run_findings_enriched
-        from app.services.lifecycle.vex_provider import vex_report_csv
-        from app.metrics.reporting import latest_snapshots
-        from app.metrics.base import COMPLETED_RUN_STATUSES
         from app.services.fda_510k_excel_report_service import Fda510kExcelReportService
+        from app.services.lifecycle.vex_provider import vex_report_csv
         run = AnalysisRun(sbom_id=self.component.sbom_id, tenant_id=1, run_status=next(iter(COMPLETED_RUN_STATUSES)),
                           started_on='2026-01-01T00:00:00Z', completed_on='2026-01-01T00:01:00Z')
         self.db.add(run)

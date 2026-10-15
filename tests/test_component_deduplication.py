@@ -11,6 +11,8 @@ from app.models import SBOMComponent, SBOMSource
 from app.services.component_deduplication_service import ComponentDeduplicationService
 from app.validation.errors import W120_DUPLICATE_COMPONENT_DETECTED
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 # Test fixtures for CycloneDX SBOMs with duplicate components
 _DUPLICATE_CYCLONEDX = {
     "bomFormat": "CycloneDX",
@@ -21,7 +23,7 @@ _DUPLICATE_CYCLONEDX = {
         "timestamp": "2026-04-30T12:00:00Z",
         "component": {
             "type": "application",
-            "bom-ref": "pkg:generic/phase2-valid@1.0.0",
+            "bom-ref": "dedupe-document-root",
             "name": "phase2-valid",
             "version": "1.0.0",
         },
@@ -69,6 +71,22 @@ def unique_name(request) -> str:
     import uuid
 
     return f"dedupe-{request.node.name}-{uuid.uuid4().hex[:8]}"
+
+
+def test_duplicate_document_root_ref_is_rejected_without_import(client, unique_name):
+    from copy import deepcopy
+
+    from app.db import SessionLocal
+    from app.models import SBOMSource
+    from sqlalchemy import select
+
+    invalid = deepcopy(_DUPLICATE_CYCLONEDX)
+    invalid["metadata"]["component"]["bom-ref"] = invalid["components"][0]["bom-ref"]
+    response = client.post("/api/sboms", json={"sbom_name": unique_name, "sbom_data": json.dumps(invalid)})
+    assert response.status_code == 422, response.text
+    assert "BOM_REF_DUPLICATE" in response.text
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
+        assert db.scalar(select(SBOMSource.id).where(SBOMSource.sbom_name == unique_name)) is None
 
 
 def test_deduplication_service_logic():
@@ -243,26 +261,27 @@ def test_component_list_does_not_modify_stored_sbom(client, unique_name):
 def test_component_list_includes_dynamic_eol_eos_status(client, unique_name):
     db = SessionLocal()
     try:
-        sbom = SBOMSource(sbom_name=unique_name, sbom_data="{}", status="validated")
-        db.add(sbom)
-        db.commit()
-        db.refresh(sbom)
+        with verified_fixture_tenant(db, 1):
+            sbom = SBOMSource(sbom_name=unique_name, sbom_data="{}", status="validated")
+            db.add(sbom)
+            db.commit()
+            db.refresh(sbom)
 
-        today = datetime.now(UTC).date()
-        rows = [
-            SBOMComponent(
-                sbom_id=sbom.id,
-                name="expired",
-                eol_date=(today - timedelta(days=1)).isoformat(),
-                lifecycle_source="endoflife.date",
-            ),
-            SBOMComponent(sbom_id=sbom.id, name="soon", eos_date=(today + timedelta(days=30)).isoformat()),
-            SBOMComponent(sbom_id=sbom.id, name="future", eol_date=(today + timedelta(days=220)).isoformat()),
-            SBOMComponent(sbom_id=sbom.id, name="unknown"),
-        ]
-        db.add_all(rows)
-        db.commit()
-        sbom_id = sbom.id
+            today = datetime.now(UTC).date()
+            rows = [
+                SBOMComponent(
+                    sbom_id=sbom.id,
+                    name="expired",
+                    eol_date=(today - timedelta(days=1)).isoformat(),
+                    lifecycle_source="endoflife.date",
+                ),
+                SBOMComponent(sbom_id=sbom.id, name="soon", eos_date=(today + timedelta(days=30)).isoformat()),
+                SBOMComponent(sbom_id=sbom.id, name="future", eol_date=(today + timedelta(days=220)).isoformat()),
+                SBOMComponent(sbom_id=sbom.id, name="unknown"),
+            ]
+            db.add_all(rows)
+            db.commit()
+            sbom_id = sbom.id
     finally:
         db.close()
 

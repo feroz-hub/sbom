@@ -24,12 +24,15 @@ from app.services.lifecycle.xeol_provider import XeolProvider
 from app.settings import reset_settings
 from sqlalchemy import select
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 
 @pytest.fixture()
 def db(client):
     session = SessionLocal()
     try:
-        yield session
+        with verified_fixture_tenant(session, 1):
+            yield session
     finally:
         session.rollback()
         session.close()

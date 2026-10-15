@@ -72,24 +72,11 @@ def failed_sbom_id(client) -> int:
     but the validation-report endpoint still has to support already-existing
     rows that fail revalidation.
     """
-    from app.db import SessionLocal
-    from sqlalchemy import text
+    from tests.test_sbom_revalidate_endpoint import _seed_legacy_row, _set_pending
 
     name = _unique("phase3-fail")
-    db = SessionLocal()
-    try:
-        db.execute(
-            text(
-                "INSERT INTO sbom_source (sbom_name, sbom_data, status, tenant_id) VALUES (:name, :data, 'pending', 1)"
-            ),
-            {"name": name, "data": json.dumps(_BAD_PURL_CYCLONEDX)},
-        )
-        db.commit()
-        row = db.execute(text("SELECT id FROM sbom_source WHERE sbom_name = :name"), {"name": name}).first()
-        assert row is not None
-        sbom_id = int(row[0])
-    finally:
-        db.close()
+    sbom_id = _seed_legacy_row(client, name, json.dumps(_BAD_PURL_CYCLONEDX))
+    _set_pending(client, sbom_id)
 
     resp = client.post(f"/api/sboms/{sbom_id}/revalidate")
     assert resp.status_code == 422, resp.text

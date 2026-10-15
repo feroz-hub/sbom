@@ -45,30 +45,35 @@ def profile(db: Session, user: IAMUser) -> dict:
 
 
 def membership_summary(db: Session, member: TenantUser, tenant: Tenant) -> dict:
-    # Show assigned roles even when membership is disabled; these are not
-    # effective permissions and cannot grant access until reactivation.
-    assignments = db.scalars(
-        select(AuthorizationRole.code)
-        .join(TenantUserRoleAssignment.__table__, TenantUserRoleAssignment.__table__.c.role_id == AuthorizationRole.id)
-        .where(
-            TenantUserRoleAssignment.__table__.c.tenant_user_id == member.id,
-            TenantUserRoleAssignment.__table__.c.tenant_id == member.tenant_id,
-            TenantUserRoleAssignment.__table__.c.status == "ACTIVE",
-            AuthorizationRole.status == "ACTIVE",
+    from ..core.context import get_bound_context, minimal_background_context, tenant_scope
+    context = get_bound_context()
+    if context is not None and context.tenant_id != member.tenant_id and not context.is_platform_admin:
+        raise RuntimeError("Cross-tenant authorization metadata access blocked")
+    with tenant_scope(minimal_background_context(member.tenant_id)):
+        # Show assigned roles even when membership is disabled; these are not
+        # effective permissions and cannot grant access until reactivation.
+        assignments = db.scalars(
+            select(AuthorizationRole.code)
+            .join(TenantUserRoleAssignment.__table__, TenantUserRoleAssignment.__table__.c.role_id == AuthorizationRole.id)
+            .where(
+                TenantUserRoleAssignment.__table__.c.tenant_user_id == member.id,
+                TenantUserRoleAssignment.__table__.c.tenant_id == member.tenant_id,
+                TenantUserRoleAssignment.__table__.c.status == "ACTIVE",
+                AuthorizationRole.status == "ACTIVE",
+            )
+        ).all()
+        return dict(
+            membership_id=member.id,
+            tenant_id=tenant.id,
+            tenant_name=tenant.name,
+            tenant_slug=tenant.slug,
+            tenant_status=tenant.status,
+            membership_status=member.status,
+            current_role=member.role,
+            primary_role=member.role,
+            roles=sorted(assignments),
+            role_assignment_version=member.role_assignment_version,
         )
-    ).all()
-    return dict(
-        membership_id=member.id,
-        tenant_id=tenant.id,
-        tenant_name=tenant.name,
-        tenant_slug=tenant.slug,
-        tenant_status=tenant.status,
-        membership_status=member.status,
-        current_role=member.role,
-        primary_role=member.role,
-        roles=sorted(assignments),
-        role_assignment_version=member.role_assignment_version,
-    )
 
 
 def role_filter(code: str, tenant_id: int | None = None):

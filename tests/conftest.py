@@ -453,25 +453,25 @@ def sample_sbom_dict() -> dict[str, Any]:
 
 
 @pytest.fixture()
-def seeded_sbom(app, sample_sbom_dict) -> dict[str, Any]:
+def seeded_sbom(client, sample_sbom_dict) -> dict[str, Any]:
     """
     Upload the fixture SBOM exactly once per test session and return the row.
 
     Session scope + deterministic name = stable `sbom_id` and `sbom_name` in
     every snapshot, so the snapshot diff doesn't trip on the upload echo.
     """
-    from fastapi.testclient import TestClient
-
     name = "snapshot-fixture"
     payload = {
         "sbom_name": name,
         "sbom_data": json.dumps(sample_sbom_dict),
         "created_by": "snapshot-test",
     }
-    with TestClient(app) as c:
-        resp = c.post("/api/sboms", json=payload)
-        assert resp.status_code == 201, resp.text
-        return resp.json()
+    # Reuse the running client. A second lifespan can otherwise inherit a
+    # direct-service fixture's tenant context and incorrectly enter internal
+    # startup discovery as an authenticated tenant operation.
+    resp = client.post("/api/sboms", json=payload)
+    assert resp.status_code == 201, resp.text
+    return resp.json()
 
 
 # ---------------------------------------------------------------------------

@@ -17,6 +17,7 @@ from app.services.lifecycle.normalizer import (
 from app.services.lifecycle.osv_provider import OSVProvider
 from app.services.lifecycle.package_registry_provider import PackageRegistryProvider
 from app.services.lifecycle.provider_base import LifecycleProvider
+from app.services.lifecycle.provider_config_service import configuration_cache_namespace
 from app.services.lifecycle.repository_health_provider import RepositoryHealthProvider
 from app.services.lifecycle.types import (
     DEPRECATED,
@@ -34,12 +35,15 @@ from app.services.lifecycle.types import (
 )
 from sqlalchemy import select
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 
 @pytest.fixture()
 def db(client):
     session = SessionLocal()
     try:
-        yield session
+        with verified_fixture_tenant(session, 1):
+            yield session
     finally:
         session.rollback()
         session.close()
@@ -439,6 +443,7 @@ def test_lifecycle_cache_hit_avoids_provider_call(db):
     db.add(component)
     db.add(
         ComponentLifecycleCache(
+            configuration_namespace=configuration_cache_namespace(db),
             lookup_key="fallback:generic:cache-package:1.0.0:",
             normalized_name="cache-package",
             normalized_version="1.0.0",
@@ -480,6 +485,7 @@ def test_unknown_distro_package_cache_is_rechecked(db):
     normalized = normalize_component(component)
     db.add(
         ComponentLifecycleCache(
+            configuration_namespace=configuration_cache_namespace(db),
             lookup_key=build_lifecycle_lookup_key(normalized),
             normalized_name=normalized.normalized_name,
             normalized_version=normalized.normalized_version,
@@ -524,6 +530,7 @@ def test_expired_cache_is_kept_as_stale_when_providers_have_no_data(db):
     db.add(component)
     db.add(
         ComponentLifecycleCache(
+            configuration_namespace=configuration_cache_namespace(db),
             lookup_key="fallback:generic:stale-package:1.0.0:",
             normalized_name="stale-package",
             normalized_version="1.0.0",

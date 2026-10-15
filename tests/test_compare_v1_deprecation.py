@@ -18,6 +18,8 @@ from datetime import UTC, datetime
 
 import pytest
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 
 @pytest.fixture
 def db(client):
@@ -25,7 +27,8 @@ def db(client):
 
     s = SessionLocal()
     try:
-        yield s
+        with verified_fixture_tenant(s, 1):
+            yield s
     finally:
         s.rollback()
         s.close()

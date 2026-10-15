@@ -56,7 +56,7 @@ def upload_vex_document(
         source_name=str(payload.get("source_name") or "Uploaded VEX"),
         source_url=payload.get("source_url"),
         author=payload.get("author"),
-        uploaded_by=payload.get("uploaded_by") or context.actor_label(),
+        uploaded_by=context.actor_label(),
     )
 
 

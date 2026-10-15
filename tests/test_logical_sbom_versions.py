@@ -6,6 +6,7 @@ from app.db import SessionLocal
 from app.models import AnalysisRun, SBOMComponent, SBOMSource
 from sqlalchemy import select
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
 from tests.test_sbom_upload_version_lineage import _product, _project
 
 
@@ -102,7 +103,7 @@ def test_versions_keep_distinct_components_and_analysis_results(client, mock_ext
     for value in (first, second):
         analyzed = client.post(f"/api/sboms/{value['sbom_id']}/analyze")
         assert analyzed.status_code in (200, 201), analyzed.text
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         assert {c.name for c in db.scalars(select(SBOMComponent).where(SBOMComponent.sbom_id == first["sbom_id"]))} == {
             "alpha"
         }
@@ -134,7 +135,7 @@ def test_database_constraint_enforces_duplicates_even_when_bypassing_api(client)
     project = _project(client)
     product = _product(client, project["id"])
     first = upload(client, project, product, "1.0").json()
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         original = db.get(SBOMSource, first["sbom_id"])
         db.add(
             SBOMSource(

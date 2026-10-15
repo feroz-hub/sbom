@@ -17,6 +17,8 @@ from pathlib import Path
 import pytest
 from app.models import AnalysisRun
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 from ._normalize import normalize
 
 SNAPSHOT_DIR = Path(__file__).parent / "snapshots"
@@ -97,21 +99,22 @@ def test_legacy_consolidated_returns_existing_active_run(client, seeded_sbom):
 
     db = SessionLocal()
     try:
-        active = AnalysisRun(
-            sbom_id=seeded_sbom["id"],
-            run_status="RUNNING",
-            sbom_name=seeded_sbom["sbom_name"],
-            source="NVD,OSV,GITHUB,VULNDB",
-            trigger_source="api",
-            started_on="2026-07-01T00:00:00Z",
-            completed_on="2026-07-01T00:00:00Z",
-            duration_ms=0,
-        )
-        db.add(active)
-        db.commit()
-        db.refresh(active)
-        active_id = active.id
-        before_count = db.query(AnalysisRun).filter(AnalysisRun.sbom_id == seeded_sbom["id"]).count()
+        with verified_fixture_tenant(db, 1):
+            active = AnalysisRun(
+                sbom_id=seeded_sbom["id"],
+                run_status="RUNNING",
+                sbom_name=seeded_sbom["sbom_name"],
+                source="NVD,OSV,GITHUB,VULNDB",
+                trigger_source="api",
+                started_on="2026-07-01T00:00:00Z",
+                completed_on="2026-07-01T00:00:00Z",
+                duration_ms=0,
+            )
+            db.add(active)
+            db.commit()
+            db.refresh(active)
+            active_id = active.id
+            before_count = db.query(AnalysisRun).filter(AnalysisRun.sbom_id == seeded_sbom["id"]).count()
     finally:
         db.close()
 
@@ -129,9 +132,10 @@ def test_legacy_consolidated_returns_existing_active_run(client, seeded_sbom):
 
     db = SessionLocal()
     try:
-        after_count = db.query(AnalysisRun).filter(AnalysisRun.sbom_id == seeded_sbom["id"]).count()
-        assert after_count == before_count
-        db.query(AnalysisRun).filter(AnalysisRun.id == active_id).delete()
-        db.commit()
+        with verified_fixture_tenant(db, 1):
+            after_count = db.query(AnalysisRun).filter(AnalysisRun.sbom_id == seeded_sbom["id"]).count()
+            assert after_count == before_count
+            db.query(AnalysisRun).filter(AnalysisRun.id == active_id).delete()
+            db.commit()
     finally:
         db.close()

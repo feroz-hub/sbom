@@ -15,7 +15,9 @@ from sqlalchemy.engine import make_url
 def test_repair_migration_postgres_round_trip(tmp_path):
     root = Path(__file__).resolve().parents[1]
     scripts = ScriptDirectory.from_config(Config(str(root / "alembic.ini")))
-    assert scripts.get_heads() == ["074_sbom_repair_jobs"]
+    heads = scripts.get_heads()
+    assert heads == ["077_sbom_selection_mode"]
+    assert "074_sbom_repair_jobs" in {revision.revision for revision in scripts.walk_revisions()}
     assert scripts.get_revision("074_sbom_repair_jobs").down_revision == "073_sbom_operational_lifecycle"
     template = make_url(os.environ["TEST_POSTGRES_DATABASE_URL"])
     name = "sbom_repair_migration_test_" + uuid.uuid4().hex[:10]
@@ -59,7 +61,7 @@ def test_repair_migration_postgres_round_trip(tmp_path):
         assert foreign["source_sbom_id"]["referred_table"] == "sbom_source"
         assert foreign["imported_sbom_id"]["referred_table"] == "sbom_source"
         with engine.connect() as connection:
-            assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "074_sbom_repair_jobs"
+            assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == heads[0]
     finally:
         engine.dispose()
         with control.connect() as connection:

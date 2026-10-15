@@ -191,7 +191,15 @@ def list_platform_users(
     from ..models import UserIdentity
     from .user_management_service import role_filter
     if role:
-        conditions.append(role_filter(role, tenant_id))
+        from ..core.context import minimal_background_context, tenant_scope
+        tenant_ids = [tenant_id] if tenant_id is not None else list(db.scalars(select(Tenant.id)))
+        matching_users = set()
+        # Approved identity administration processes each selected owner;
+        # it does not bypass the tenant data-access guard.
+        for owner_id in tenant_ids:
+            with tenant_scope(minimal_background_context(owner_id)):
+                matching_users.update(db.scalars(select(IAMUser.id).where(role_filter(role, owner_id))))
+        conditions.append(IAMUser.id.in_(matching_users))
     if provider:
         provider_match = exists(select(UserIdentity.id).where(UserIdentity.user_id == IAMUser.id,
                                                             UserIdentity.provider_type == provider))

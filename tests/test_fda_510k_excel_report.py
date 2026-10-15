@@ -9,6 +9,8 @@ from app.db import SessionLocal
 from app.models import AnalysisFinding, AnalysisRun, Projects, SBOMComponent, SBOMSource
 from openpyxl import load_workbook
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 EXCEL_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
@@ -16,7 +18,8 @@ EXCEL_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.
 def db(client):
     session = SessionLocal()
     try:
-        yield session
+        with verified_fixture_tenant(session, 1):
+            yield session
     finally:
         session.close()
 

@@ -16,11 +16,13 @@ triggers. It wraps the same idempotent service function:
 from __future__ import annotations
 
 from celery import shared_task
+from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
 
 from ..core.context import minimal_background_context, tenant_scope
 from ..db import SessionLocal
 from ..logger import get_logger, log_context, log_event
+from ..models import Tenant
 from ..services.component_advisor.recommendations.service import RecommendationNotFound, evaluate_recommendation
 
 log = get_logger("sbom.component_advisor.tasks")
@@ -39,6 +41,8 @@ log = get_logger("sbom.component_advisor.tasks")
 def evaluate_recommendation_task(self, recommendation_id: int, tenant_id: int, correlation_id: str | None = None) -> str:
     with tenant_scope(minimal_background_context(tenant_id)), log_context(tenant_id=tenant_id, request_id=correlation_id):
         with SessionLocal() as db:
+            if not db.scalar(select(Tenant.id).where(Tenant.id == tenant_id, Tenant.status == "ACTIVE")):
+                return "NOT_FOUND"
             try:
                 item = evaluate_recommendation(
                     db, tenant_id=tenant_id, recommendation_id=recommendation_id, correlation_id=correlation_id

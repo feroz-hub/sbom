@@ -14,6 +14,8 @@ from sqlalchemy import create_engine, delete
 from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.orm import sessionmaker
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 
 def _now_iso() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat()
@@ -211,9 +213,10 @@ def test_dashboard_endpoints_do_not_trigger_multiple_kev_writes(monkeypatch, cli
 
     db = SessionLocal()
     try:
-        db.execute(delete(KevEntry))
-        db.commit()
-        _seed_dashboard_finding(db)
+        with verified_fixture_tenant(db, 1):
+            db.execute(delete(KevEntry))
+            db.commit()
+            _seed_dashboard_finding(db)
     finally:
         db.close()
 

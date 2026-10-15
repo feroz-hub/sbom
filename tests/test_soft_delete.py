@@ -48,12 +48,14 @@ def _now_iso() -> str:
 
 @pytest.fixture()
 def db(client):  # client fixture sets DATABASE_URL + creates schema
-    session = SessionLocal()
-    try:
-        yield session
-    finally:
-        session.rollback()
-        session.close()
+    from app.core.context import minimal_background_context, tenant_scope
+    with tenant_scope(minimal_background_context(1)):
+        session = SessionLocal()
+        try:
+            yield session
+        finally:
+            session.rollback()
+            session.close()
 
 
 def _build_tree(db) -> dict:

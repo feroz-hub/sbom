@@ -30,11 +30,12 @@ from app.settings import Settings, get_settings
 from argon2 import PasswordHasher
 from fastapi import HTTPException
 from scripts.check_native_identity_data import duplicate_email_user_ids
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 
 from tests.phase6_helpers import identity_claims, seed_user
 from tests.phase9_helpers import seed_role_membership
+from tests.tenant_fixture_scope import verified_fixture_tenant
 
 
 def native_user(db, email="native@example.test", *, status="PENDING_EMAIL_VERIFICATION"):
@@ -356,7 +357,7 @@ def test_tenant_admin_cannot_delegate_admin_roles(role):
 
 
 def test_platform_admin_can_delegate_tenant_admin():
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         user, membership, _ = seed_role_membership(db)
         grant_role(
             db,
@@ -373,7 +374,7 @@ def test_platform_admin_can_delegate_tenant_admin():
 
 @pytest.mark.parametrize("operation", ["grant", "replace"])
 def test_service_enforces_delegation_without_frontend(operation):
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         user, _, _ = seed_role_membership(db)
         with pytest.raises(AssignmentProblem) as caught:
             if operation == "grant":
@@ -426,12 +427,10 @@ def test_database_checks_reject_unknown_status_and_noncanonical_native_identifie
     with SessionLocal() as db:
         user = native_user(db)
         with pytest.raises(IntegrityError), db.begin_nested():
-            db.execute(
-                text("UPDATE user_identities SET provider_identifier='Foo@Example.com' WHERE user_id=:id"),
-                {"id": user.id},
-            )
+            db.execute(update(UserIdentity).where(UserIdentity.user_id == user.id)
+                       .values(provider_identifier="Foo@Example.com"))
         with pytest.raises(IntegrityError), db.begin_nested():
-            db.execute(text("UPDATE iam_users SET status='UNKNOWN' WHERE id=:id"), {"id": user.id})
+            db.execute(update(IAMUser).where(IAMUser.id == user.id).values(status="UNKNOWN"))
 
 
 def test_native_security_state_mutations_are_audited_and_revoke_versions():

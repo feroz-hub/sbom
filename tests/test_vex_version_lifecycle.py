@@ -16,8 +16,6 @@ where it is not.
 """
 
 import pytest
-from sqlalchemy import select, text
-
 from app.db import SessionLocal
 from app.models import (
     AnalysisFinding,
@@ -31,6 +29,10 @@ from app.models import (
     VexStatement,
 )
 from app.services.vex.reconciliation import MANUAL_SOURCE_NAME, recompute_for_sbom
+from sqlalchemy import select
+
+from tests.tenant_fixture_scope import verified_fixture_tenant
+from tests.vex_foreign_fixture import foreign_vex_fixture, foreign_vex_snapshot
 
 NOW = "2026-10-08T00:00:00Z"
 QUEUE = "/api/vex/investigations"
@@ -40,8 +42,10 @@ QUEUE = "/api/vex/investigations"
 def db():
     session = SessionLocal()
     try:
-        yield session
+        with verified_fixture_tenant(session, 1):
+            yield session
     finally:
+        session.rollback()
         session.close()
 
 
@@ -244,23 +248,14 @@ def test_tenant_overview_is_unaffected_by_queue_filters__VEX_DASH_004(client, ap
 
 
 def test_summary_is_tenant_scoped__VEX_SEC_002(client, app_line, db):
-    """A context moved to another tenant vanishes from both queue and cards."""
+    """Foreign contexts never appear in tenant one's queue or summary."""
+    foreign = foreign_vex_fixture(db)
+    before = foreign_vex_snapshot(db, 2, foreign["context_id"])
+    assert summary(client)["total"] == queue(client)["total"] == 0
     two_versions(app_line)
-    db.execute(
-        text(
-            "INSERT INTO tenants (id, name, slug, external_iam_tenant_id, status, "
-            "created_at, updated_at) VALUES (2, 'Other', 'other', 'other', 'ACTIVE', "
-            ":now, :now) ON CONFLICT (id) DO NOTHING"
-        ),
-        {"now": NOW},
-    )
-    db.execute(text("UPDATE vex_investigation SET tenant_id = 2"))
-    db.commit()
-    try:
-        assert summary(client)["total"] == queue(client)["total"] == 0
-    finally:
-        db.execute(text("UPDATE vex_investigation SET tenant_id = 1"))
-        db.commit()
+    assert summary(client)["total"] == queue(client)["total"] == 2
+    assert foreign["context_id"] not in {item["id"] for item in queue(client)["items"]}
+    assert foreign_vex_snapshot(db, 2, foreign["context_id"]) == before
 
 
 # ---------------------------------------------------------------------------

@@ -1,3 +1,5 @@
+from tests.tenant_fixture_scope import scoped_context_override
+
 """Phase 2 API/hash/history/role boundaries over the existing PostgreSQL fixtures."""
 
 import hashlib
@@ -13,6 +15,7 @@ from app.models import SBOMRepairJob, SBOMSource, SBOMValidationSessionEvent
 from app.services.sbom.quality.service import EVENT
 from sqlalchemy import select
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
 from tests.test_sbom_auto_repair import document, run_job, upload_invalid
 
 
@@ -30,7 +33,7 @@ def test_upload_quality_history_is_immutable_hash_bound_and_deduplicated(client)
     assert all(e["artifact_hash"] == e["assessment"]["artifact_hash"] for e in result["history"])
     second = client.get(url(session)).json()
     assert result == second
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         event = db.scalar(select(SBOMValidationSessionEvent).where(SBOMValidationSessionEvent.event_type == EVENT))
         event.metadata_json = {"artifact_hash": "tampered"}
         with pytest.raises(RuntimeError, match="immutable"):
@@ -61,7 +64,7 @@ def test_quality_comparison_and_accepted_snapshot_use_actual_candidate(client):
         **original,
         "calculated_at": next(e for e in history if e["artifact_role"] == "ORIGINAL")["assessment"]["calculated_at"],
     }
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         stored = db.get(SBOMRepairJob, job["repair_job_id"])
         source = db.get(SBOMSource, accepted_id)
         assert hashlib.sha256(source.sbom_data.encode()).hexdigest() == stored.candidate_sha256
@@ -80,7 +83,7 @@ def test_quality_read_matches_existing_role_permissions(client, role):
         roles=frozenset({role}),
         permissions=ROLE_PERMISSIONS[role],
     )
-    client.app.dependency_overrides[get_current_tenant_context] = lambda: context
+    client.app.dependency_overrides[get_current_tenant_context] = scoped_context_override(lambda: context)
     try:
         assert client.get(url(session)).status_code == 200
     finally:
@@ -99,7 +102,7 @@ def test_cross_tenant_and_invalid_ids_do_not_expose_quality(client):
         roles=frozenset({"TENANT_ADMIN"}),
         permissions=ROLE_PERMISSIONS["TENANT_ADMIN"],
     )
-    client.app.dependency_overrides[get_current_tenant_context] = lambda: context
+    client.app.dependency_overrides[get_current_tenant_context] = scoped_context_override(lambda: context)
     try:
         response = client.get(url(session))
         assert response.status_code == 404
@@ -122,7 +125,7 @@ def test_no_quality_read_permission_is_denied(client):
         roles=frozenset(),
         permissions=frozenset(),
     )
-    client.app.dependency_overrides[get_current_tenant_context] = lambda: context
+    client.app.dependency_overrides[get_current_tenant_context] = scoped_context_override(lambda: context)
     try:
         assert client.get(url(session)).status_code == 403
     finally:
@@ -212,7 +215,7 @@ def test_quality_disabled_preserves_upload_and_does_not_create_quality_events(cl
     assert client.get(url(session)).json() == {"enabled": False, "assessment": None, "history": []}
     job = run_job(client, session)
     assert job["validation_status"] == "PASSED" and "quality" not in job
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         assert (
             db.scalar(select(SBOMValidationSessionEvent.id).where(SBOMValidationSessionEvent.event_type == EVENT))
             is None
@@ -244,7 +247,7 @@ def test_snapshot_cannot_bind_another_artifact_assessment(client):
 
     session = upload_invalid(client)
     existing = client.get(url(session)).json()["assessment"]
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         workspace = db.get(SBOMValidationSession, session)
         with pytest.raises(HTTPException) as exc:
             persist_snapshot(db, workspace, b"{}", assessment=existing)
@@ -280,7 +283,7 @@ def test_snapshot_rejects_policy_evidence_that_does_not_match_hash(client):
     session = upload_invalid(client)
     existing = copy.deepcopy(client.get(url(session)).json()['assessment'])
     existing['configuration']['max_findings'] += 1
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         workspace = db.get(SBOMValidationSession, session)
         with pytest.raises(HTTPException) as exc:
             persist_snapshot(db, workspace, session_repair_text(workspace).encode(), assessment=existing)
@@ -325,7 +328,7 @@ def test_deletion_cascades_quality_history_and_denies_deleted_quality_without_to
     job = run_job(client, deleted)
     approved = client.post(f"/api/sbom-validation-sessions/{deleted}/repair/{job['repair_job_id']}/approve").json()
     sbom_id = approved['imported_sbom_id']
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         SBOMDeleteService(db, tenant_id=1).permanently_delete_sbom(sbom_id, 'phase2-release', True)
         assert db.get(SBOMValidationSession, deleted) is None
         assert db.scalar(select(SBOMValidationSessionEvent.id).where(
@@ -338,24 +341,22 @@ def test_deletion_cascades_quality_history_and_denies_deleted_quality_without_to
 
 
 def test_corrupted_candidate_cannot_be_presented_with_stale_quality_or_approved(client):
-    from sqlalchemy import text
+    from sqlalchemy import update
 
     session = upload_invalid(client)
     job = run_job(client, session)
     endpoint = f"/api/sbom-validation-sessions/{session}/repair/{job['repair_job_id']}"
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         candidate = db.get(SBOMRepairJob, job['repair_job_id']).candidate_content
         # Simulate storage corruption below the normal immutable ORM/API boundary.
-        db.execute(text('UPDATE sbom_repair_jobs SET candidate_content=:value WHERE id=:id'),
-                   {'value': candidate + ' ', 'id': job['repair_job_id']})
+        db.execute(update(SBOMRepairJob).where(SBOMRepairJob.id == job['repair_job_id']).values(candidate_content=candidate + ' '))
         db.commit()
     response = client.get(endpoint)
     assert response.status_code == 409
     assert 'overall_score' not in response.text
     assert client.post(endpoint + '/approve', json={'candidate_sha256': job['candidate_sha256']}).status_code == 409
-    with SessionLocal() as db:
-        db.execute(text('UPDATE sbom_repair_jobs SET candidate_content=:value WHERE id=:id'),
-                   {'value': candidate, 'id': job['repair_job_id']})
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
+        db.execute(update(SBOMRepairJob).where(SBOMRepairJob.id == job['repair_job_id']).values(candidate_content=candidate))
         db.commit()
     assert client.get(endpoint).status_code == 200
     assert client.post(endpoint + '/approve', json={'candidate_sha256': job['candidate_sha256']}).status_code == 200

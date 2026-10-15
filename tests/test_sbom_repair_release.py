@@ -1,3 +1,5 @@
+from tests.tenant_fixture_scope import scoped_context_override
+
 """Phase 1 application release boundaries, using the normal API and Postgres fixture."""
 
 import hashlib
@@ -14,6 +16,7 @@ from app.models import AuditLog, SBOMRepairJob, SBOMSource, SBOMValidationSessio
 from app.services.sbom.repair.engine import RepairEngine
 from sqlalchemy import func, select, update
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
 from tests.test_sbom_auto_repair import document, run_job, upload_invalid
 from tests.test_sbom_upload_version_lineage import _product, _project
 
@@ -38,7 +41,7 @@ def test_repair_approval_preserves_upload_selected_application(client):
     job = run_job(client, session)
     response = client.post(base(session) + f"/{job['repair_job_id']}/approve")
     assert response.status_code == 200, response.text
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         accepted = db.get(SBOMSource, response.json()["imported_sbom_id"])
         assert accepted.product_id == product["id"]
         assert accepted.projectid == project["id"]
@@ -57,7 +60,7 @@ def test_valid_upload_does_not_create_repair_job_or_candidate(client, mock_exter
         files={"file": ("valid.cdx.json", raw, "application/json")},
     )
     assert response.status_code == 202
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         assert db.scalar(select(func.count()).select_from(SBOMRepairJob)) == 0
         accepted = db.get(SBOMSource, response.json()["sbom_id"])
         assert accepted.sbom_data.encode() == raw
@@ -67,7 +70,7 @@ def test_valid_upload_does_not_create_repair_job_or_candidate(client, mock_exter
     analysis = client.post(f"/api/sboms/{response.json()['sbom_id']}/analyze")
     assert analysis.status_code == 201, analysis.text
     assert analysis.json()["sbom_id"] == response.json()["sbom_id"]
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         assert db.scalar(select(func.count()).select_from(SBOMRepairJob)) == 0
         assert db.get(SBOMSource, response.json()["sbom_id"]).sbom_data.encode() == raw
 
@@ -78,7 +81,7 @@ def test_review_hash_mismatch_rejected_then_correct_hash_accepted(client):
     url = base(session) + f"/{job['repair_job_id']}/approve"
     wrong = client.post(url, json={"candidate_sha256": "0" * 64})
     assert wrong.status_code == 409
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         row = db.get(SBOMRepairJob, job["repair_job_id"])
         assert row.approval_status == "PENDING"
         assert row.imported_sbom_id is None
@@ -91,14 +94,14 @@ def test_review_hash_mismatch_rejected_then_correct_hash_accepted(client):
 def test_candidate_content_tamper_is_rejected_then_restored_candidate_can_be_approved(client):
     session = upload_invalid(client)
     job = run_job(client, session)
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         row = db.get(SBOMRepairJob, job["repair_job_id"])
         original_candidate = row.candidate_content
         db.execute(update(SBOMRepairJob).where(SBOMRepairJob.id == row.id).values(candidate_content="{}"))
         db.commit()
     url = base(session) + f"/{job['repair_job_id']}/approve"
     assert client.post(url).status_code == 409
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         db.execute(
             update(SBOMRepairJob)
             .where(SBOMRepairJob.id == job["repair_job_id"])
@@ -122,7 +125,7 @@ def test_existing_role_matrix_agrees_with_capabilities_and_backend(client, role)
         roles=frozenset({role}),
         permissions=ROLE_PERMISSIONS[role],
     )
-    client.app.dependency_overrides[get_current_tenant_context] = lambda: ctx
+    client.app.dependency_overrides[get_current_tenant_context] = scoped_context_override(lambda: ctx)
     try:
         response = client.get(base(session) + f"/{job['repair_job_id']}")
         assert response.status_code == 200
@@ -154,7 +157,7 @@ def test_approval_requires_normal_upload_assignment_permission(client):
         roles=frozenset({"TENANT_ADMIN"}),
         permissions=ROLE_PERMISSIONS["TENANT_ADMIN"] - {"product:assign_sbom"},
     )
-    client.app.dependency_overrides[get_current_tenant_context] = lambda: ctx
+    client.app.dependency_overrides[get_current_tenant_context] = scoped_context_override(lambda: ctx)
     try:
         result = client.get(base(session) + f"/{job['repair_job_id']}").json()
         assert not result["capabilities"]["can_approve"]
@@ -169,7 +172,7 @@ def test_concurrent_repair_is_idempotent(client):
         results = list(pool.map(lambda _: client.post(base(session)), range(2)))
     assert [r.status_code for r in results] == [200, 200]
     assert len({r.json()["repair_job_id"] for r in results}) == 1
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         assert (
             db.scalar(select(func.count()).select_from(SBOMRepairJob).where(SBOMRepairJob.session_id == session)) == 1
         )
@@ -182,7 +185,7 @@ def test_concurrent_approval_imports_exactly_one_candidate(client):
         results = list(pool.map(lambda _: client.post(base(session) + f"/{job['repair_job_id']}/approve"), range(2)))
     assert [r.status_code for r in results] == [200, 200]
     assert len({r.json()["imported_sbom_id"] for r in results}) == 1
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         assert (
             db.scalar(
                 select(func.count())
@@ -203,7 +206,7 @@ def test_concurrent_approve_reject_has_one_terminal_decision(client):
             )
         )
     assert sorted(r.status_code for r in results) == [200, 409]
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         row = db.get(SBOMRepairJob, job["repair_job_id"])
         assert row.approval_status in {"APPROVED", "REJECTED"}
         events = db.scalars(
@@ -226,7 +229,7 @@ def test_rollback_retains_original_and_records_attempt(client):
     assert job["status"] == "REPAIR_FAILED"
     assert job["rollback"]
     assert job["rolled_back_changes"][0]["rule_name"] == "dangling_dependency_ref"
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         row = db.get(SBOMRepairJob, job["repair_job_id"])
         assert row.candidate_content == json.dumps(source)
         assert (
@@ -331,7 +334,7 @@ def test_repair_preserves_declared_versions_parent_and_explicit_current_selectio
     job = run_job(client, session)
     approved = client.post(base(session) + f"/{job['repair_job_id']}/approve")
     assert approved.status_code == 200, approved.text
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         candidate = db.get(SBOMSource, approved.json()["imported_sbom_id"])
         assert candidate.sbom_version == "2.0"
         assert candidate.productver == "Release-2"
@@ -419,7 +422,7 @@ def test_deletion_removes_job_metadata_but_preserves_unrelated_repair_and_origin
         result = client.post(base(session) + f"/{job['repair_job_id']}/approve").json()
         approved.append((session, job, result["imported_sbom_id"]))
     deleted, kept = approved
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         workspace = db.get(SBOMValidationSession, deleted[0])
         paths = [Path(p) for p in (workspace.raw_storage_path, workspace.repair_storage_path) if p]
         assert len(paths) == 2

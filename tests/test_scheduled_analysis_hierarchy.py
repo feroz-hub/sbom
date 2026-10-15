@@ -7,14 +7,16 @@ import pytest
 
 @pytest.fixture
 def db(client):
-    from app.db import SessionLocal
+    from app.core.context import minimal_background_context, tenant_scope
+    with tenant_scope(minimal_background_context(1)):
+        from app.db import SessionLocal
 
-    session = SessionLocal()
-    try:
-        yield session
-    finally:
-        session.rollback()
-        session.close()
+        session = SessionLocal()
+        try:
+            yield session
+        finally:
+            session.rollback()
+            session.close()
 
 
 def _now(offset_minutes: int = 0) -> str:
@@ -71,7 +73,9 @@ def test_due_schedule_without_current_target_advances_its_cursor(db):
     db.commit()
     schedule_id = schedule.id
 
-    result = tick_scheduled_analyses.run()
+    from app.core.context import tenant_scope
+    with tenant_scope(None):
+        result = tick_scheduled_analyses.run()
     db.expire_all()
     refreshed = db.get(AnalysisSchedule, schedule_id)
     assert result == {"due": 1, "targets": 0, "enqueued": 0}
@@ -111,7 +115,10 @@ def test_worker_rechecks_override_before_external_analysis(db, monkeypatch):
         raise AssertionError("analysis must not run after the target is excluded")
 
     monkeypatch.setattr("app.services.analysis_orchestrator.AnalysisOrchestrator.run", _must_not_run)
-    result = analyze_sbom_async.run(sbom_id=sbom.id, schedule_id=parent.id)
+    from app.core.context import tenant_scope
+    sbom_id, schedule_id = sbom.id, parent.id
+    with tenant_scope(None):
+        result = analyze_sbom_async.run(sbom_id=sbom_id, schedule_id=schedule_id)
     assert result == {"status": "SKIPPED", "reason": "EXCLUDED"}
 
 

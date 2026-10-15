@@ -7,6 +7,8 @@ from app.services.lifecycle.normalizer import build_vulnerability_lookup_key, no
 from app.services.lifecycle.types import DEPRECATED
 from sqlalchemy import select
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 
 def _db_session():
     return SessionLocal()
@@ -15,49 +17,50 @@ def _db_session():
 def test_vex_import_list_and_dashboard(client):
     db = _db_session()
     try:
-        sbom = SBOMSource(sbom_name="vex-sbom", sbom_data="{}", status="validated")
-        db.add(sbom)
-        db.flush()
-        component = SBOMComponent(
-            sbom_id=sbom.id,
-            bom_ref="pkg:npm/lodash@4.17.20",
-            name="lodash",
-            version="4.17.20",
-            purl="pkg:npm/lodash@4.17.20",
-        )
-        db.add(component)
-        db.commit()
+        with verified_fixture_tenant(db, 1):
+            sbom = SBOMSource(sbom_name="vex-sbom", sbom_data="{}", status="validated")
+            db.add(sbom)
+            db.flush()
+            component = SBOMComponent(
+                sbom_id=sbom.id,
+                bom_ref="pkg:npm/lodash@4.17.20",
+                name="lodash",
+                version="4.17.20",
+                purl="pkg:npm/lodash@4.17.20",
+            )
+            db.add(component)
+            db.commit()
 
-        payload = {
-            "document": {
-                "bomFormat": "CycloneDX",
-                "vulnerabilities": [
-                    {
-                        "id": "CVE-2020-8203",
-                        "analysis": {
-                            "state": "not_affected",
-                            "justification": "vulnerable_code_not_in_execute_path",
-                            "detail": "The vulnerable function is not shipped in this product profile.",
-                        },
-                        "affects": [{"ref": "pkg:npm/lodash@4.17.20"}],
-                    }
-                ],
+            payload = {
+                "document": {
+                    "bomFormat": "CycloneDX",
+                    "vulnerabilities": [
+                        {
+                            "id": "CVE-2020-8203",
+                            "analysis": {
+                                "state": "not_affected",
+                                "justification": "vulnerable_code_not_in_execute_path",
+                                "detail": "The vulnerable function is not shipped in this product profile.",
+                            },
+                            "affects": [{"ref": "pkg:npm/lodash@4.17.20"}],
+                        }
+                    ],
+                }
             }
-        }
-        response = client.post(f"/api/sboms/{sbom.id}/vex", json=payload)
-        assert response.status_code == 200
-        assert response.json()["statements_imported"] == 1
+            response = client.post(f"/api/sboms/{sbom.id}/vex", json=payload)
+            assert response.status_code == 200
+            assert response.json()["statements_imported"] == 1
 
-        listed = client.get(f"/api/sboms/{sbom.id}/vex")
-        assert listed.status_code == 200
-        statements = listed.json()["statements"]
-        assert statements[0]["status"] == "not_affected"
-        assert statements[0]["component_id"] == component.id
+            listed = client.get(f"/api/sboms/{sbom.id}/vex")
+            assert listed.status_code == 200
+            statements = listed.json()["statements"]
+            assert statements[0]["status"] == "not_affected"
+            assert statements[0]["component_id"] == component.id
 
-        dashboard = client.get("/dashboard/vex")
-        assert dashboard.status_code == 200
-        assert dashboard.json()["not_affected_count"] >= 1
-        assert dashboard.json()["vulnerabilities_reduced_by_vex"] >= 1
+            dashboard = client.get("/dashboard/vex")
+            assert dashboard.status_code == 200
+            assert dashboard.json()["not_affected_count"] >= 1
+            assert dashboard.json()["vulnerabilities_reduced_by_vex"] >= 1
     finally:
         db.rollback()
         db.close()
@@ -66,20 +69,21 @@ def test_vex_import_list_and_dashboard(client):
 def test_vex_not_affected_requires_justification(client):
     db = _db_session()
     try:
-        sbom = SBOMSource(sbom_name="bad-vex-sbom", sbom_data="{}", status="validated")
-        db.add(sbom)
-        db.commit()
+        with verified_fixture_tenant(db, 1):
+            sbom = SBOMSource(sbom_name="bad-vex-sbom", sbom_data="{}", status="validated")
+            db.add(sbom)
+            db.commit()
 
-        response = client.post(
-            f"/api/sboms/{sbom.id}/vex",
-            json={
-                "document": {
-                    "bomFormat": "CycloneDX",
-                    "vulnerabilities": [{"id": "CVE-2024-0001", "analysis": {"state": "not_affected"}}],
-                }
-            },
-        )
-        assert response.status_code == 422
+            response = client.post(
+                f"/api/sboms/{sbom.id}/vex",
+                json={
+                    "document": {
+                        "bomFormat": "CycloneDX",
+                        "vulnerabilities": [{"id": "CVE-2024-0001", "analysis": {"state": "not_affected"}}],
+                    }
+                },
+            )
+            assert response.status_code == 422
     finally:
         db.rollback()
         db.close()
@@ -88,32 +92,33 @@ def test_vex_not_affected_requires_justification(client):
 def test_manual_vex_override_is_audited(client):
     db = _db_session()
     try:
-        sbom = SBOMSource(sbom_name="override-vex-sbom", sbom_data="{}", status="validated")
-        db.add(sbom)
-        db.flush()
-        component = SBOMComponent(sbom_id=sbom.id, name="openssl", version="1.1.1")
-        db.add(component)
-        db.commit()
+        with verified_fixture_tenant(db, 1):
+            sbom = SBOMSource(sbom_name="override-vex-sbom", sbom_data="{}", status="validated")
+            db.add(sbom)
+            db.flush()
+            component = SBOMComponent(sbom_id=sbom.id, name="openssl", version="1.1.1")
+            db.add(component)
+            db.commit()
 
-        response = client.patch(
-            f"/api/components/{component.id}/vulnerabilities/CVE-2023-1234/vex-override",
-            json={
-                "status": "affected",
-                "reason": "Confirmed by product security review.",
-                "impact_statement": "The vulnerable code path is reachable.",
-                "updated_by": "security@example.test",
-            },
-        )
-        assert response.status_code == 200
-        assert response.json()["status"] == "affected"
+            response = client.patch(
+                f"/api/components/{component.id}/vulnerabilities/CVE-2023-1234/vex-override",
+                json={
+                    "status": "affected",
+                    "reason": "Confirmed by product security review.",
+                    "impact_statement": "The vulnerable code path is reachable.",
+                    "updated_by": "security@example.test",
+                },
+            )
+            assert response.status_code == 200
+            assert response.json()["status"] == "affected"
 
-        statement = db.execute(select(VexStatement).where(VexStatement.component_id == component.id)).scalars().first()
-        audit = (
-            db.execute(select(VexOverrideAudit).where(VexOverrideAudit.component_id == component.id)).scalars().first()
-        )
-        assert statement is not None
-        assert audit is not None
-        assert audit.reason == "Confirmed by product security review."
+            statement = db.execute(select(VexStatement).where(VexStatement.component_id == component.id)).scalars().first()
+            audit = (
+                db.execute(select(VexOverrideAudit).where(VexOverrideAudit.component_id == component.id)).scalars().first()
+            )
+            assert statement is not None
+            assert audit is not None
+            assert audit.reason == "Confirmed by product security review."
     finally:
         db.rollback()
         db.close()

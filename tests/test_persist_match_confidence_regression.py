@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import pytest
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 _NVD_FINDING_WITH_CONFIDENCE = {
     "vuln_id": "CVE-MATCH-CONFIDENCE-REGRESSION",
     "aliases": [],
@@ -68,23 +70,24 @@ def test_persist_analysis_run_forwards_match_confidence(client, seeded_sbom, moc
 
     db = SessionLocal()
     try:
-        rows = (
-            db.execute(
-                select(AnalysisFinding).where(
-                    AnalysisFinding.analysis_run_id == run_id,
-                    AnalysisFinding.vuln_id == "CVE-MATCH-CONFIDENCE-REGRESSION",
+        with verified_fixture_tenant(db, 1):
+            rows = (
+                db.execute(
+                    select(AnalysisFinding).where(
+                        AnalysisFinding.analysis_run_id == run_id,
+                        AnalysisFinding.vuln_id == "CVE-MATCH-CONFIDENCE-REGRESSION",
+                    )
                 )
+                .scalars()
+                .all()
             )
-            .scalars()
-            .all()
-        )
-        assert len(rows) == 1
-        row = rows[0]
-        assert row.match_confidence == pytest.approx(0.825, abs=1e-6), (
-            f"match_confidence was {row.match_confidence!r}; "
-            "persist_analysis_run is dropping the field — the explicit-"
-            "kwarg constructor at analysis_service.py needs the kwarg"
-        )
+            assert len(rows) == 1
+            row = rows[0]
+            assert row.match_confidence == pytest.approx(0.825, abs=1e-6), (
+                f"match_confidence was {row.match_confidence!r}; "
+                "persist_analysis_run is dropping the field — the explicit-"
+                "kwarg constructor at analysis_service.py needs the kwarg"
+            )
     finally:
         db.close()
 
@@ -116,17 +119,18 @@ def test_persist_analysis_run_tolerates_missing_match_confidence(client, seeded_
 
     db = SessionLocal()
     try:
-        rows = (
-            db.execute(
-                select(AnalysisFinding).where(
-                    AnalysisFinding.analysis_run_id == run_id,
-                    AnalysisFinding.vuln_id == "CVE-PRE-PR-D-SHAPE",
+        with verified_fixture_tenant(db, 1):
+            rows = (
+                db.execute(
+                    select(AnalysisFinding).where(
+                        AnalysisFinding.analysis_run_id == run_id,
+                        AnalysisFinding.vuln_id == "CVE-PRE-PR-D-SHAPE",
+                    )
                 )
+                .scalars()
+                .all()
             )
-            .scalars()
-            .all()
-        )
-        assert len(rows) == 1
-        assert rows[0].match_confidence is None
+            assert len(rows) == 1
+            assert rows[0].match_confidence is None
     finally:
         db.close()

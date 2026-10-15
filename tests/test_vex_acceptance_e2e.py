@@ -1,3 +1,5 @@
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 """PR-7 — end-to-end acceptance suite for the VEX workstream.
 
 Spec sections 47-48. These drive the *public* entry points (import a VEX
@@ -17,8 +19,6 @@ import json
 from pathlib import Path
 
 import pytest
-from sqlalchemy import select, text
-
 from app.db import SessionLocal
 from app.models import (
     AnalysisFinding,
@@ -36,6 +36,7 @@ from app.services.lifecycle.vex_provider import (
     vex_report_csv,
 )
 from app.services.vex.reconciliation import recompute_for_sbom
+from sqlalchemy import select
 
 FIXTURES = Path(__file__).parent / "fixtures" / "vex"
 NOW = "2026-09-24T00:00:00Z"
@@ -49,8 +50,10 @@ def load(name: str) -> dict:
 def db():
     session = SessionLocal()
     try:
-        yield session
+        with verified_fixture_tenant(session, 1):
+            yield session
     finally:
+        session.rollback()
         session.close()
 
 

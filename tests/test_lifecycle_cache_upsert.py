@@ -15,6 +15,7 @@ from app.services.lifecycle.lifecycle_cache_repository import (
     upsert_lifecycle_cache_entries,
 )
 from app.services.lifecycle.provider_base import LifecycleProvider
+from app.services.lifecycle.provider_config_service import configuration_cache_namespace
 from app.services.lifecycle.types import (
     EOL,
     HIGH,
@@ -24,12 +25,15 @@ from app.services.lifecycle.types import (
 )
 from sqlalchemy import func, select
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 
 @pytest.fixture()
 def db(client):
     session = SessionLocal()
     try:
-        yield session
+        with verified_fixture_tenant(session, 1):
+            yield session
     finally:
         session.rollback()
         session.close()
@@ -275,6 +279,7 @@ def test_force_refresh_updates_existing_cache_row(db):
     db.add(component)
     db.add(
         ComponentLifecycleCache(
+            configuration_namespace=configuration_cache_namespace(db),
             lookup_key="purl:pkg:generic/force-refresh-package@1.0.0",
             normalized_name="force-refresh-package",
             normalized_version="1.0.0",
@@ -366,6 +371,7 @@ def test_read_cache_finds_row_when_cpe_differs(db):
     db.add(component)
     db.add(
         ComponentLifecycleCache(
+            configuration_namespace=configuration_cache_namespace(db),
             lookup_key="purl:pkg:generic/cpe-mismatch-package@1.0.0",
             normalized_name="cpe-mismatch-package",
             normalized_version="1.0.0",
@@ -497,3 +503,42 @@ def test_enrich_component_writes_cache_via_upsert(db, monkeypatch):
 
     assert len(calls) == 1
     assert calls[0][0]["normalized_name"] == normalize_component(component).normalized_name
+
+
+def test_foreign_tenant_cache_namespace_is_not_reused_or_updated(db):
+    from app.models import Tenant
+
+    now = datetime.now(UTC)
+    other = Tenant(name="Cache owner B", slug="cache-owner-b", status="ACTIVE", created_at=now, updated_at=now)
+    db.add(other)
+    db.flush()
+    with verified_fixture_tenant(db, other.id):
+        foreign_namespace = configuration_cache_namespace(db)
+        foreign = ComponentLifecycleCache(
+            configuration_namespace=foreign_namespace,
+            lookup_key="purl:pkg:generic/namespace-package@1.0.0",
+            normalized_name="namespace-package", normalized_version="1.0.0", ecosystem="generic",
+            purl="pkg:generic/namespace-package@1.0.0", lifecycle_status=UNKNOWN,
+            source_name="Foreign cache", confidence=HIGH, checked_at="2026-06-01T00:00:00+00:00",
+            expires_at=_future_iso(), evidence_json={}, is_stale=False,
+        )
+        db.add(foreign)
+        db.flush()
+    own_namespace = configuration_cache_namespace(db)
+    assert own_namespace != foreign_namespace
+    sbom = SBOMSource(sbom_name="namespace-sbom", status="validated")
+    db.add(sbom)
+    db.flush()
+    component = SBOMComponent(sbom_id=sbom.id, name="namespace-package", version="1.0.0",
+                              purl="pkg:generic/namespace-package@1.0.0", component_type="library")
+    db.add(component)
+    db.commit()
+    result = LifecycleEnrichmentService(providers=[StaticProvider(source_name="Own provider")]).enrich_component(db, component)
+    db.commit()
+    assert result.source_name == "Own provider"
+    assert db.scalar(select(ComponentLifecycleCache.source_name).where(
+        ComponentLifecycleCache.configuration_namespace == foreign_namespace,
+    )) == "Foreign cache"
+    assert db.scalar(select(ComponentLifecycleCache.source_name).where(
+        ComponentLifecycleCache.configuration_namespace == own_namespace,
+    )) == "Own provider"

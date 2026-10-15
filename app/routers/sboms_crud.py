@@ -722,7 +722,7 @@ def create_sbom(
         tenant_id=context.tenant_id,
         project_id=payload.projectid,
         product_id=payload.product_id,
-        actor=payload.created_by or context.actor_label(),
+        actor=context.actor_label(),
         require_project=True,
     )
     payload.projectid = resolved_project_id
@@ -763,7 +763,7 @@ def create_sbom(
             original_filename=payload.sbom_name,
             project_id=payload.projectid,
             sbom_type=payload.sbom_type,
-            user_id=payload.created_by or context.actor_label(),
+            user_id=context.actor_label(),
             product_id=product.id if product else None,
             upload_options={"logical_sbom_id": payload.logical_sbom_id, "sbom_version": payload.sbom_version, "product_version": payload.productver, "used_default_product": _used_default_product},
         )
@@ -800,7 +800,7 @@ def create_sbom(
         if set_as_current and not context.has_permission("product:update"):
             raise HTTPException(403, "Current SBOM pinning requires product:update")
         data["sbom_data"] = raw_text or None
-        data["created_by"] = data.get("created_by") or context.actor_label()
+        data["created_by"] = context.actor_label()
         data["product_id"] = product.id if product else None
         data["product_name"] = product.name if product else data.get("product_name")
         obj = SBOMSource(

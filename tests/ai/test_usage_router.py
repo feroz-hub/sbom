@@ -204,5 +204,12 @@ def test_list_pricing_endpoint(client):
 
 
 def test_reset_registry_endpoint(client):
+    from tests.phase6_helpers import seed_dev_platform_admin
+    with SessionLocal() as db:
+        seed_dev_platform_admin(db)
     resp = client.post("/api/v1/ai/registry/reset")
     assert resp.status_code == 204
+
+
+def test_tenant_admin_cannot_reset_global_registry(client):
+    assert client.post("/api/v1/ai/registry/reset").status_code == 403

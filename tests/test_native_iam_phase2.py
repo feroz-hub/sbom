@@ -56,8 +56,8 @@ def context(db, platform=True):
         actor.external_iam_user_id,
         actor.email,
         actor.display_name,
-        1,
-        "default",
+        None if platform else 1,
+        None if platform else "default",
         frozenset({"PLATFORM_ADMIN"} if platform else {"TENANT_ADMIN"}),
         frozenset({"platform:user:manage_status", "tenant:user:invite"}),
         platform,
@@ -147,7 +147,8 @@ def test_activation_single_use_and_audit():
 
 
 def test_same_token_tenant_isolation_and_live_roles():
-    with SessionLocal() as db:
+    from app.core.context import minimal_background_context, tenant_scope
+    with tenant_scope(minimal_background_context(1)), SessionLocal() as db:
         user = enrolled(db)
         actor = context(db)
         now = datetime.now(UTC)

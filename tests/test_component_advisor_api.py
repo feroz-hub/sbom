@@ -13,15 +13,21 @@ pattern from ``tests/test_vex_scoped_authorization.py``.
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import text
-
 from app.core.context import CurrentContext
 from app.core.permissions import ROLE_PERMISSIONS
 from app.core.security import get_current_tenant_context
 from app.db import SessionLocal
 from app.metrics.cache import reset_cache
-from app.models import VexInvestigation
+from app.models import (
+    AnalysisFinding,
+    SBOMComponent,
+    SBOMSource,
+    VexInvestigation,
+)
+from sqlalchemy import func, select
+
 from tests.component_advisor_support import NOW, World, purl_key
+from tests.tenant_fixture_scope import declare_fixture_tenant, scoped_context_override, verified_fixture_tenant
 
 BASE = "/api/component-advisor"
 
@@ -30,7 +36,8 @@ BASE = "/api/component-advisor"
 def db():
     session = SessionLocal()
     try:
-        yield session
+        with verified_fixture_tenant(session, 1):
+            yield session
     finally:
         session.close()
 
@@ -47,13 +54,7 @@ def seeded(db):
       react 18.2.0        NO_KNOWN_ACTIONABLE, Supported
     """
     reset_cache()
-    db.execute(
-        text(
-            "INSERT INTO tenants (id, name, slug, external_iam_tenant_id, status, created_at, updated_at) "
-            "VALUES (2, 'Other', 'other', 'other', 'ACTIVE', :now, :now) ON CONFLICT (id) DO NOTHING"
-        ),
-        {"now": NOW},
-    )
+    declare_fixture_tenant(db, 2)
     world = World(db)
     p1, p2, p3 = world.product(name="alpha"), world.product(name="beta"), world.product(name="gamma")
     s1, s2, s3 = world.sbom(p1), world.sbom(p2), world.sbom(p3)
@@ -83,7 +84,9 @@ def seeded(db):
     world.finding(secret, "CVE-2026-9999", "CRITICAL")
     world.component(s_other, "react", "18.2.0")
     db.commit()
-    yield {"products": (p1, p2, p3), "sboms": (s1, s2, s3), "other_product": other, "other_sbom": s_other, "log4j": log4j}
+    with verified_fixture_tenant(db, 2):
+        foreign_scope = {"project_id": other.project_id, "product_id": other.id}
+    yield {"products": (p1, p2, p3), "sboms": (s1, s2, s3), "foreign_scope": foreign_scope, "log4j": log4j}
     reset_cache()
 
 
@@ -303,11 +306,11 @@ def test_T12_unknown_component_key_is_indistinguishable_from_foreign(client, see
 
 @pytest.mark.parametrize("path", ["/summary", "/components", "/search?q=react"])
 def test_T12_cross_tenant_scope_ids_are_404__FR_SCA_006(client, seeded, path):
-    other = seeded["other_product"]
+    other = seeded["foreign_scope"]
     sep = "&" if "?" in path else "?"
-    assert client.get(f"{BASE}{path}{sep}project_id={other.project_id}").status_code == 404
+    assert client.get(f"{BASE}{path}{sep}project_id={other['project_id']}").status_code == 404
     assert (
-        client.get(f"{BASE}{path}{sep}project_id={other.project_id}&product_id={other.id}").status_code == 404
+        client.get(f"{BASE}{path}{sep}project_id={other['project_id']}&product_id={other['product_id']}").status_code == 404
     )
 
 
@@ -336,7 +339,7 @@ def _context(role, tenant_id=1, permissions=None):
 
 @pytest.mark.parametrize("role", ["TENANT_ADMIN", "SECURITY_ANALYST", "DEVELOPER", "VIEWER"])
 def test_every_tenant_role_can_read_the_advisor__spec_s9(client, seeded, role):
-    client.app.dependency_overrides[get_current_tenant_context] = lambda: _context(role)
+    client.app.dependency_overrides[get_current_tenant_context] = scoped_context_override(lambda: _context(role))
     try:
         for path in ("/summary", "/components", "/search?q=react"):
             assert client.get(f"{BASE}{path}").status_code == 200, (role, path)
@@ -346,7 +349,7 @@ def test_every_tenant_role_can_read_the_advisor__spec_s9(client, seeded, role):
 
 def test_missing_read_permission_is_403__NFR_SCA_001(client, seeded):
     permissions = ROLE_PERMISSIONS["VIEWER"] - {"component_advisor:read"}
-    client.app.dependency_overrides[get_current_tenant_context] = lambda: _context("VIEWER", permissions=permissions)
+    client.app.dependency_overrides[get_current_tenant_context] = scoped_context_override(lambda: _context("VIEWER", permissions=permissions))
     try:
         for path in ("/summary", "/components", f"/components/{'0' * 64}", "/search?q=react"):
             assert client.get(f"{BASE}{path}").status_code == 403, path
@@ -355,7 +358,7 @@ def test_missing_read_permission_is_403__NFR_SCA_001(client, seeded):
 
 
 def test_tenant_b_actor_sees_only_tenant_b__FR_SCA_023(client, seeded):
-    client.app.dependency_overrides[get_current_tenant_context] = lambda: _context("VIEWER", tenant_id=2)
+    client.app.dependency_overrides[get_current_tenant_context] = scoped_context_override(lambda: _context("VIEWER", tenant_id=2))
     try:
         rows = client.get(f"{BASE}/components").json()
         assert names(rows) == ["react", "tenant-b-secret-lib"]
@@ -367,11 +370,11 @@ def test_tenant_b_actor_sees_only_tenant_b__FR_SCA_023(client, seeded):
 
 def test_read_endpoints_never_write(client, seeded, db):
     """Spec §1.1 advisory-only: reads leave every advisor input table unchanged."""
-    tables = ("sbom_component", "analysis_finding", "vex_investigation", "sbom_source")
-    before = {t: db.execute(text(f"SELECT count(*) FROM {t}")).scalar() for t in tables}
+    models = (SBOMComponent, AnalysisFinding, VexInvestigation, SBOMSource)
+    before = {m.__tablename__: db.scalar(select(func.count()).select_from(m)) for m in models}
     client.get(f"{BASE}/summary")
     client.get(f"{BASE}/components")
     client.get(f"{BASE}/search", params={"q": "log4j"})
     db.expire_all()
-    assert {t: db.execute(text(f"SELECT count(*) FROM {t}")).scalar() for t in tables} == before
+    assert {m.__tablename__: db.scalar(select(func.count()).select_from(m)) for m in models} == before
     assert db.query(VexInvestigation).count() == before["vex_investigation"]

@@ -3,11 +3,13 @@ from app.models import TenantUserRoleAssignmentHistory
 from app.services import tenant_role_assignment_service as service
 from sqlalchemy import select
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 from .phase9_helpers import seed_role_membership
 
 
 def test_grant_and_revoke_append_history_with_versions():
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         user, membership, _ = seed_role_membership(db)
         service.grant_role(
             db,

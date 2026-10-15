@@ -9,14 +9,15 @@ from sqlalchemy import text
 
 @pytest.fixture()
 def db(client):
+    from app.core.context import minimal_background_context, tenant_scope
     from app.db import SessionLocal
-
-    session = SessionLocal()
-    try:
-        yield session
-    finally:
-        session.rollback()
-        session.close()
+    with tenant_scope(minimal_background_context(1)):
+        session = SessionLocal()
+        try:
+            yield session
+        finally:
+            session.rollback()
+            session.close()
 
 
 def _now() -> str:
@@ -197,7 +198,9 @@ def test_analysis_finding_orm_lengths_match_postgres_schema(client, db):
         elif isinstance(column.type, String):
             orm_columns[column.name] = column.type.length
 
-    rows = db.execute(
+    # Trusted test-schema inspection uses an operator connection, not a
+    # tenant business Session's raw-SQL entry point.
+    rows = db.connection().execute(
         text(
             """
             SELECT column_name, data_type, character_maximum_length

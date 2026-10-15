@@ -1,6 +1,7 @@
 """Platform defaults, independent tenant overrides, and runtime isolation."""
 
 import asyncio
+import json
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
@@ -10,7 +11,17 @@ from app.ai.registry import get_registry, reset_registry
 from app.core.context import get_bound_context, minimal_background_context, tenant_scope
 from app.core.security import get_current_user
 from app.db import SessionLocal
-from app.models import AiProviderCredential, AuthorizationAuditLog, Tenant
+from app.models import (
+    AiFixCache,
+    AiProviderCredential,
+    AiSettings,
+    AiUsageLog,
+    AnalysisFinding,
+    AnalysisRun,
+    AuthorizationAuditLog,
+    SBOMSource,
+    Tenant,
+)
 from app.security.secrets import generate_master_key
 from app.services.lifecycle.provider_config_service import (
     configuration_cache_namespace,
@@ -21,6 +32,7 @@ from app.settings import reset_settings
 from sqlalchemy import select
 
 from tests.phase6_helpers import identity_claims, seed_membership, seed_platform_grant, seed_user
+from tests.tenant_fixture_scope import fixture_business_snapshot, verified_fixture_tenant
 
 
 @pytest.fixture
@@ -507,9 +519,11 @@ def test_dashboard_effective_inheritance_override_reset_and_isolation(configured
     viewer = _dashboard_ai(call, "viewer")
     assert viewer["state"] == "AVAILABLE"
     assert not viewer["can_configure"] and not viewer["can_view_settings"]
-    platform = _dashboard_ai(call, "platform")
-    assert platform["settings_scope"] == "platform"
-    assert platform["can_view_settings"]
+    # Platform configuration authority does not grant tenant analysis:read.
+    assert call("platform", "GET", "/api/analysis/config").status_code == 403
+    platform = call("platform", "GET", "/api/platform/configuration/ai/effective-config")
+    assert platform.status_code == 200, platform.text
+    assert platform.json()["source"] == "PLATFORM_DEFAULT"
     assert set(inherited) == {
         "configured",
         "source",
@@ -648,6 +662,9 @@ def test_read_only_roles_share_effective_status_without_configuration_authority(
     assert status["state"] == "AVAILABLE" and status["source"] == "PLATFORM"
     assert not status["can_configure"] and not status["can_view_settings"]
     assert "platform-fixture-secret" not in str(status)
+    models = (AiProviderCredential, AiSettings, AiFixCache, AiUsageLog)
+    with SessionLocal() as db:
+        before = fixture_business_snapshot(db, models, (1, 2))
     assert call(role_actor, "GET", "/api/v1/ai/credentials").status_code == 403
     assert call(role_actor, "GET", "/api/v1/ai/effective-config").status_code == 403
     assert call(role_actor, "POST", "/api/v1/ai/credentials", json={"provider_name": "openai"}).status_code == 403
@@ -657,8 +674,80 @@ def test_read_only_roles_share_effective_status_without_configuration_authority(
     assert call(role_actor, "DELETE", "/api/v1/ai/override").status_code == 403
     assert call(role_actor, "GET", "/api/platform/configuration/ai/credentials").status_code == 403
     assert call(role_actor, "GET", "/api/analysis/config", headers={"X-Tenant-ID": "2"}).status_code == 403
-    assert call(role_actor, "POST", "/api/v1/findings/0/ai-fix", json={}).status_code == 403
-    assert not status["can_invoke_ai"]
+    # Analysis execution is independent of credential/configuration authority.
+    can_run = role_actor == "analyst"
+    result = call(role_actor, "POST", "/api/v1/findings/0/ai-fix", json={})
+    assert result.status_code == (404 if can_run else 403), result.text
+    if can_run:
+        assert result.json()["detail"] == "Finding 0 not found."
+    assert status["can_invoke_ai"] is can_run
+    with SessionLocal() as db:
+        assert fixture_business_snapshot(db, models, (1, 2)) == before
+
+
+def test_analyst_generates_fix_without_configuration_authority(configured_actors, monkeypatch):
+    from app.ai import registry
+    from app.ai.cache_lock import InMemoryCacheLock
+
+    from tests.ai.test_ai_fixes_router import _RouterFakeProvider
+
+    call = configured_actors
+    pid = add_provider(call)
+    _set_verification(pid, True)
+    finding_ids = {}
+    for tenant_id in (1, 2):
+        with SessionLocal() as db, verified_fixture_tenant(db, tenant_id):
+            sbom = SBOMSource(sbom_name="analyst-fix", status="validated")
+            db.add(sbom)
+            db.flush()
+            run = AnalysisRun(sbom_id=sbom.id, run_status="OK", source="NVD",
+                              started_on="2026-10-15T00:00:00Z", completed_on="2026-10-15T00:00:01Z")
+            db.add(run)
+            db.flush()
+            finding = AnalysisFinding(analysis_run_id=run.id, vuln_id="CVE-2021-44832", source="NVD",
+                                      severity="CRITICAL", score=9.0, component_name="log4j-core",
+                                      component_version="2.16.0", fixed_versions=json.dumps(["2.17.1"]))
+            db.add(finding)
+            db.commit()
+            finding_ids[tenant_id] = finding.id
+    finding_id = finding_ids[1]
+    with SessionLocal() as db:
+        before = fixture_business_snapshot(db, (AiFixCache, AiUsageLog), (1, 2))
+    fake = _RouterFakeProvider()
+    # Substitute only the external provider and Redis lock; keep route RBAC,
+    # tenant guards, grounding, budgets, schema validation and persistence real.
+    monkeypatch.setattr(registry, "build_provider", lambda config: fake)
+    monkeypatch.setattr("app.ai.fix_generator.get_cache_lock", lambda: InMemoryCacheLock())
+    path = f"/api/v1/findings/{finding_id}/ai-fix"
+    for actor in ("viewer", "developer", "platform"):
+        assert call(actor, "POST", path).status_code == 403
+    assert call("astra", "POST", path).status_code == 404
+    assert fake.calls == 0
+    with SessionLocal() as db:
+        assert fixture_business_snapshot(db, (AiFixCache, AiUsageLog), (1, 2)) == before
+    generated = call("analyst", "POST", path)
+    assert generated.status_code == 200, generated.text
+    assert generated.json()["error"] is None
+    assert generated.json()["result"]["finding_id"] == finding_id
+    assert generated.json()["result"]["metadata"]["cache_hit"] is False
+    assert fake.calls == 1
+    cached = call("analyst", "POST", path)
+    assert cached.status_code == 200, cached.text
+    assert cached.json()["result"]["metadata"]["cache_hit"] is True
+    assert fake.calls == 1
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
+        assert len(db.scalars(select(AiFixCache)).all()) == 1
+        assert len(db.scalars(select(AiUsageLog)).all()) == 2
+        assert db.get(AiProviderCredential, pid).enabled
+    # Cache storage is shared; tenant/configuration-derived keys isolate the
+    # results. An identical CVE/component in another tenant must miss that cache.
+    assert call("astra", "GET", path).status_code == 404
+    own = call("astra", "GET", f"/api/v1/findings/{finding_ids[2]}/ai-fix")
+    assert own.status_code == 404, own.text
+    assert own.json()["detail"] == "No cached AI fix for this finding."
+    assert fake.calls == 1
+    with SessionLocal() as db, verified_fixture_tenant(db, 2):
+        assert db.scalars(select(AiUsageLog)).all() == []
 
 
 def test_settings_only_override_explains_actual_aegismed_state_without_bypassing_policy(configured_actors):

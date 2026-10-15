@@ -21,6 +21,8 @@ from __future__ import annotations
 
 import pytest
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 _NVD_FINDING_WITH_MATCH_TAGS = {
     "vuln_id": "CVE-MATCH-REASON-REGRESSION",
     "aliases": [],
@@ -79,26 +81,27 @@ def test_persist_analysis_run_forwards_match_reason_and_range(client, seeded_sbo
 
     db = SessionLocal()
     try:
-        rows = (
-            db.execute(
-                select(AnalysisFinding).where(
-                    AnalysisFinding.analysis_run_id == run_id,
-                    AnalysisFinding.vuln_id == "CVE-MATCH-REASON-REGRESSION",
+        with verified_fixture_tenant(db, 1):
+            rows = (
+                db.execute(
+                    select(AnalysisFinding).where(
+                        AnalysisFinding.analysis_run_id == run_id,
+                        AnalysisFinding.vuln_id == "CVE-MATCH-REASON-REGRESSION",
+                    )
                 )
+                .scalars()
+                .all()
             )
-            .scalars()
-            .all()
-        )
-        assert len(rows) == 1, f"expected exactly one row for the synthetic finding, got {len(rows)}"
-        row = rows[0]
-        assert row.match_reason == "matched", (
-            f"match_reason was {row.match_reason!r}; "
-            "persist_analysis_run is dropping the field — "
-            "PR3's follow-up note #5 hit"
-        )
-        assert row.matched_range == ">= 2.0.0, < 2.17.0", (
-            f"matched_range was {row.matched_range!r}; persist_analysis_run is dropping the field"
-        )
+            assert len(rows) == 1, f"expected exactly one row for the synthetic finding, got {len(rows)}"
+            row = rows[0]
+            assert row.match_reason == "matched", (
+                f"match_reason was {row.match_reason!r}; "
+                "persist_analysis_run is dropping the field — "
+                "PR3's follow-up note #5 hit"
+            )
+            assert row.matched_range == ">= 2.0.0, < 2.17.0", (
+                f"matched_range was {row.matched_range!r}; persist_analysis_run is dropping the field"
+            )
     finally:
         db.close()
 
@@ -134,19 +137,20 @@ def test_persist_analysis_run_tolerates_missing_match_keys(client, seeded_sbom, 
 
     db = SessionLocal()
     try:
-        rows = (
-            db.execute(
-                select(AnalysisFinding).where(
-                    AnalysisFinding.analysis_run_id == run_id,
-                    AnalysisFinding.vuln_id == "CVE-PRE-PR3-SHAPE",
+        with verified_fixture_tenant(db, 1):
+            rows = (
+                db.execute(
+                    select(AnalysisFinding).where(
+                        AnalysisFinding.analysis_run_id == run_id,
+                        AnalysisFinding.vuln_id == "CVE-PRE-PR3-SHAPE",
+                    )
                 )
+                .scalars()
+                .all()
             )
-            .scalars()
-            .all()
-        )
-        assert len(rows) == 1
-        row = rows[0]
-        assert row.match_reason is None
-        assert row.matched_range is None
+            assert len(rows) == 1
+            row = rows[0]
+            assert row.match_reason is None
+            assert row.matched_range is None
     finally:
         db.close()

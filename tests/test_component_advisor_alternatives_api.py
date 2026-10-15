@@ -10,16 +10,20 @@ the recommendation without breaking it or core SBOM viewing.
 from datetime import UTC, datetime
 
 import pytest
-from sqlalchemy import text
-
 from app.core.context import CurrentContext
 from app.core.permissions import ROLE_PERMISSIONS
 from app.core.security import get_current_tenant_context
 from app.db import SessionLocal
 from app.metrics.cache import reset_cache
-from app.models import ComponentPurposeMetadata
+from app.models import (
+    ComponentPurposeMetadata,
+    ComponentRecommendation,
+)
 from app.services.component_advisor import sources
-from tests.component_advisor_support import NOW, World, purl_key
+from sqlalchemy import update
+
+from tests.component_advisor_support import World, purl_key
+from tests.tenant_fixture_scope import declare_fixture_tenant, scoped_context_override, verified_fixture_tenant
 from tests.test_vex_scoped_authorization import make_member
 
 BASE = "/api/component-advisor"
@@ -30,7 +34,8 @@ LOG4J = purl_key("pkg:maven/log4j-core@2.14.1")
 def db():
     session = SessionLocal()
     try:
-        yield session
+        with verified_fixture_tenant(session, 1):
+            yield session
     finally:
         session.close()
 
@@ -45,13 +50,7 @@ def no_external_sources():
 @pytest.fixture()
 def seeded(db):
     reset_cache()
-    db.execute(
-        text(
-            "INSERT INTO tenants (id, name, slug, external_iam_tenant_id, status, created_at, updated_at) "
-            "VALUES (2, 'Other', 'other', 'other', 'ACTIVE', :now, :now) ON CONFLICT (id) DO NOTHING"
-        ),
-        {"now": NOW},
-    )
+    declare_fixture_tenant(db, 2)
     world = World(db)
     p1, p2 = world.product(name="app-1"), world.product(name="app-2")
     s1, s2 = world.sbom(p1), world.sbom(p2)
@@ -66,8 +65,10 @@ def seeded(db):
     now = datetime.now(UTC)
     for tenant_id, family, category in ((1, "maven:log4j-core", "logging"), (1, "maven:logback-classic", "logging"),
                                         (1, "maven:pdfbox", "pdf"), (2, "maven:tinylog", "logging")):
-        db.add(ComponentPurposeMetadata(tenant_id=tenant_id, family_key=family, source="CURATED", category=category,
-                                        confidence="HIGH", created_at=now, updated_at=now))
+        with verified_fixture_tenant(db, tenant_id):
+            db.add(ComponentPurposeMetadata(tenant_id=tenant_id, family_key=family, source="CURATED", category=category,
+                                            confidence="HIGH", created_at=now, updated_at=now))
+            db.flush()
     db.commit()
     yield
     reset_cache()
@@ -82,10 +83,10 @@ def evaluate(client):
 def as_role(client, role, tenant_id=1):
     with SessionLocal() as session:
         user_id = make_member(session, role, tenant_id=tenant_id).user_id
-    client.app.dependency_overrides[get_current_tenant_context] = lambda: CurrentContext(
+    client.app.dependency_overrides[get_current_tenant_context] = scoped_context_override(lambda: CurrentContext(
         user_id=user_id, external_user_id=str(user_id), email=None, display_name=role, tenant_id=tenant_id,
         external_tenant_id=str(tenant_id), roles=frozenset({role}), permissions=ROLE_PERMISSIONS[role],
-    )
+    ))
 
 
 @pytest.fixture()
@@ -165,7 +166,7 @@ def test_manual_candidate_requires_review_permission_and_review_state(client, se
     assert client.post(f"{BASE}/recommendations/{item['id']}/candidates", json=payload).status_code == 403
     as_role(client, "SECURITY_ANALYST")
     assert client.post(f"{BASE}/recommendations/{item['id']}/candidates", json=payload).status_code == 201
-    db.execute(text("UPDATE component_recommendation SET status = 'REJECTED' WHERE id = :id"), {"id": item["id"]})
+    db.execute(update(ComponentRecommendation).where(ComponentRecommendation.id == item["id"]).values(status="REJECTED"))
     db.commit()
     assert client.post(f"{BASE}/recommendations/{item['id']}/candidates", json=payload).status_code == 409
 

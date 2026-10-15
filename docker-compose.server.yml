@@ -5,6 +5,7 @@ x-backend-environment: &backend-environment
   HOST: 0.0.0.0
   PORT: "8000"
   CORS_ORIGINS: ${CORS_ORIGINS:?Set CORS_ORIGINS in .env.server}
+  APP_ENVIRONMENT: ${APP_ENVIRONMENT:-production}
   AUTH_ENABLED: ${AUTH_ENABLED:-true}
   DEV_DEFAULT_TENANT: ${DEV_DEFAULT_TENANT:-false}
   API_AUTH_MODE: ${API_AUTH_MODE:-none}

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 import pytest
+from app.core.context import tenant_scope
 from app.db import SessionLocal
 from app.models import Projects, SBOMComponent, SBOMSource
 from app.services.completeness_service import compute_and_save_completeness
@@ -15,12 +16,16 @@ from app.services.remediation_service import create_or_update_remediation, get_r
 from app.services.version_control_service import compare_versions, edit_sbom, restore_version
 from sqlalchemy import select
 
+from tests.functional_security_support import authenticated_actor_label, tenant_actor_from_database
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 
 @pytest.fixture()
 def db(client):
     session = SessionLocal()
     try:
-        yield session
+        with verified_fixture_tenant(session, 1):
+            yield session
     finally:
         session.rollback()
         session.close()
@@ -122,9 +127,11 @@ def test_sbom_editing_and_versioning(db):
     sbom_data = {
         "bomFormat": "CycloneDX",
         "specVersion": "1.4",
-        "metadata": {"component": {"name": "test-app", "version": "1.0.0"}},
+        "version": 1,
+        "metadata": {"component": {"type": "application", "name": "test-app", "version": "1.0.0"}},
         "components": [
             {
+                "type": "library",
                 "bom-ref": "pkg:maven/org.apache.logging.log4j/log4j-core@2.15.0",
                 "name": "log4j-core",
                 "version": "2.15.0",
@@ -164,7 +171,7 @@ def test_sbom_editing_and_versioning(db):
                 "version": "2.16.0",
                 "supplier": "Apache Foundation",
                 "license": "Apache-2.0",
-                "hashes": "sha256hashvalue",
+                "hashes": "0" * 64,
                 "lifecycle": {
                     "lifecycle_status": "deprecated",
                     "eos_date": "2026-12-31",
@@ -177,6 +184,7 @@ def test_sbom_editing_and_versioning(db):
     }
 
     new_version = edit_sbom(db, parent_sbom.id, user_id="bob", updates=updates, change_summary="Updated log4j version")
+    assert new_version.status == "validated" and new_version.error_count == 0
     assert new_version.parent_id == parent_sbom.id
     assert new_version.sbom_version == "1.0.1"
     assert new_version.productver == "1.0.0"
@@ -436,7 +444,22 @@ def test_remediation_tracking(db):
         "fix_notes": "Mitigating via JVM parameter until patch is verified",
     }
 
-    record = create_or_update_remediation(db, proj.id, remediation_data)
+    from app.models import VulnerabilityRemediation, VulnerabilityRemediationAudit
+    from fastapi import HTTPException
+    from sqlalchemy import func
+
+    # A tenant data scope supplies ownership, not user authority.
+    with pytest.raises(HTTPException) as denied:
+        create_or_update_remediation(db, proj.id, remediation_data)
+    assert denied.value.status_code == 403
+    assert db.scalar(select(func.count()).select_from(VulnerabilityRemediation)) == 0
+    assert db.scalar(select(func.count()).select_from(VulnerabilityRemediationAudit)) == 0
+
+    actor = tenant_actor_from_database(db, "DEVELOPER")
+    assert actor.has_permission("remediation:write")
+    assert not actor.has_permission("remediation:close")
+    with tenant_scope(actor):
+        record = create_or_update_remediation(db, proj.id, remediation_data, changed_by="spoofed-admin")
     assert record.id is not None
     assert record.status == "In Progress"
 
@@ -444,9 +467,11 @@ def test_remediation_tracking(db):
     fetched = get_remediation_for_finding(db, proj.id, "CVE-2021-44228", "log4j-core", "2.14.0")
     assert fetched is not None
     assert fetched.owner == "security-lead@org.com"
+    assert db.scalar(select(VulnerabilityRemediationAudit.changed_by)) == actor.actor_label()
 
 
 def test_remediation_validation_and_audit_history(client, db):
+    expected_actor = authenticated_actor_label(client)
     proj = Projects(project_name="remediation-validation-project", created_by="alice")
     db.add(proj)
     db.commit()
@@ -522,5 +547,6 @@ def test_remediation_validation_and_audit_history(client, db):
         ("Open", "In Progress"),
         ("In Progress", "Fixed"),
     ]
-    assert rows[-1]["changed_by"] == "carol"
+    assert all(row["changed_by"] == expected_actor for row in rows)
+    assert expected_actor not in {"alice", "bob", "carol"}
     assert rows[-1]["note"] == "Patched and verified in staging"

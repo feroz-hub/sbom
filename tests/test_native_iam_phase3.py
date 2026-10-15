@@ -19,8 +19,10 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
+from tests.functional_security_support import tenant_actor_from_database
 from tests.phase6_helpers import seed_platform_grant, seed_user
 from tests.phase9_helpers import seed_role_membership
+from tests.tenant_fixture_scope import scoped_context_override, verified_fixture_tenant
 from tests.test_native_iam_phase2 import PASSWORD, context, credential, enrolled
 from tests.test_native_iam_phase2 import native_config as native_config
 
@@ -49,7 +51,7 @@ def setup(native_config):
     api.include_router(tenant_router)
     api.include_router(native_router)
     current = {"actor": actor}
-    api.dependency_overrides[get_current_tenant_context] = lambda: current["actor"]
+    api.dependency_overrides[get_current_tenant_context] = scoped_context_override(lambda: current["actor"])
     with TestClient(api) as client:
         yield client, current, target_id, members, token
 
@@ -62,6 +64,11 @@ def tenant_actor(current, tenant_id=1):
         roles=frozenset({"TENANT_ADMIN"}),
         permissions=frozenset({"tenant:user:read", "tenant:user:update", "tenant:user:invite"}),
     )
+
+
+def verified_tenant_admin(current, tenant_id=1):
+    with SessionLocal() as db:
+        current["actor"] = tenant_actor_from_database(db, "TENANT_ADMIN", tenant_id=tenant_id)
 
 
 @pytest.mark.parametrize("role", ["DEVELOPER", "SECURITY_ANALYST", "VIEWER"])
@@ -216,7 +223,14 @@ def test_membership_deactivate_preserves_global_and_other_tenant(setup):
 
 def test_global_disable_and_reenable_preserve_memberships(setup):
     client, current, uid, members, token = setup
-    client.post(f"/api/tenants/1/users/{members[1]}/deactivate")
+    platform_actor = current["actor"]
+    # Global account authority does not authorize tenant membership changes.
+    assert client.post(f"/api/tenants/1/users/{members[1]}/deactivate").status_code == 404
+    with SessionLocal() as db:
+        assert db.get(TenantUser, members[1]).status == "ACTIVE"
+    verified_tenant_admin(current)
+    assert client.post(f"/api/tenants/1/users/{members[1]}/deactivate").status_code == 200
+    current["actor"] = platform_actor
     response = client.patch(f"/api/platform/users/{uid}/status", json={"status": "DISABLED"})
     assert response.status_code == 200, response.text
     with SessionLocal() as db:
@@ -307,13 +321,16 @@ def test_roles_version_and_same_jwt(setup):
 
 def test_hcl_membership_lifecycle_no_native_credentials(setup):
     client, current, _, _, _ = setup
+    platform_actor = current["actor"]
     with SessionLocal() as db:
         user, member, _ = seed_role_membership(db)
         uid, mid = user.id, member.id
     response = client.post(f"/api/platform/users/{uid}/force-password-change")
     assert response.status_code == 409
+    verified_tenant_admin(current)
     assert client.post(f"/api/tenants/1/users/{mid}/deactivate").status_code == 200
     assert client.post(f"/api/tenants/1/users/{mid}/activate").status_code == 200
+    current["actor"] = platform_actor
     assert client.patch(f"/api/platform/users/{uid}/status", json={"status": "DISABLED"}).status_code == 200
     assert client.patch(f"/api/platform/users/{uid}/status", json={"status": "ACTIVE"}).status_code == 200
     with SessionLocal() as db:
@@ -468,17 +485,30 @@ def test_concurrent_unlock_vs_login(setup):
             _resolve_context(db, tokens.validate_token(token), "2")
 
 
-def test_platform_assigns_admin_tenant_cannot_remove_it(setup):
+def test_platform_cannot_assign_admin_and_tenant_cannot_remove_existing_admin(setup):
     client, current, uid, members, token = setup
     response = client.post(
         f"/api/tenants/1/users/{uid}/roles", json={"role_code": "TENANT_ADMIN", "expected_version": 1}
     )
-    assert response.status_code == 200, response.text
-    tenant_actor(current)
-    response = client.put(f"/api/tenants/1/users/{uid}/roles", json={"role_codes": ["VIEWER"], "expected_version": 2})
+    # V2 permits bootstrap/recovery, not generic customer-role assignment by PA.
+    assert response.status_code == 404, response.text
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
+        assert "TENANT_ADMIN" not in _resolve_context(db, tokens.validate_token(token), "1").roles
+        assert db.get(TenantUser, members[1]).role_assignment_version == 1
+        # Explicit trusted fixture setup models an already approved administrator.
+        admin, membership, _ = seed_role_membership(db, role="TENANT_ADMIN")
+        admin_id, membership_id = admin.id, membership.id
+    verified_tenant_admin(current)
+    response = client.put(
+        f"/api/tenants/1/users/{admin_id}/roles", json={"role_codes": ["VIEWER"], "expected_version": 1}
+    )
     assert response.status_code == 403, response.text
-    with SessionLocal() as db:
-        assert "TENANT_ADMIN" in _resolve_context(db, tokens.validate_token(token), "1").roles
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
+        from app.services.tenant_role_assignment_service import effective_role_codes
+
+        membership = db.get(TenantUser, membership_id)
+        assert effective_role_codes(db, membership) == {"TENANT_ADMIN"}
+        assert membership.role_assignment_version == 1
         assert _resolve_context(db, tokens.validate_token(token), "2").roles == frozenset({"VIEWER"})
 
 
@@ -505,6 +535,7 @@ def test_profile_payload_scope_and_role_assignment_tampering(setup):
 
 def test_hcl_same_principal_obeys_membership_roles_and_global_status(setup):
     client, current, _, _, _ = setup
+    platform_actor = current["actor"]
     with SessionLocal() as db:
         user, a, _ = seed_role_membership(db, role="DEVELOPER")
         user, b, _ = seed_role_membership(db, tenant_id=2, user=user)
@@ -528,6 +559,12 @@ def test_hcl_same_principal_obeys_membership_roles_and_global_status(setup):
     current["actor"] = replace(
         current["actor"], is_platform_admin=True, permissions=frozenset({"platform:user:manage_status"})
     )
+    # A platform-looking flag/grant cannot confer authority in tenant context.
+    assert client.patch(f"/api/platform/users/{uid}/status", json={"status": "DISABLED"}).status_code == 403
+    with SessionLocal() as db:
+        assert db.get(IAMUser, uid).status == "ACTIVE"
+        assert db.get(TenantUser, aid).status == "DISABLED"
+    current["actor"] = platform_actor
     assert client.patch(f"/api/platform/users/{uid}/status", json={"status": "DISABLED"}).status_code == 200
     with SessionLocal() as db:
         for tenant_id in ["1", "2"]:
@@ -583,7 +620,7 @@ def test_two_administrators_cannot_silently_overwrite_role_replacement(setup):
         second_id = second.id
 
     def replace_as(actor_id, code):
-        with SessionLocal() as db:
+        with SessionLocal() as db, verified_fixture_tenant(db, 1):
             try:
                 roles.replace_roles(
                     db,

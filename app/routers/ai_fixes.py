@@ -398,6 +398,7 @@ async def trigger_run_fixes(
             kwargs={
                 "run_id": run_id,
                 "tenant_id": current_context.tenant_id,
+                "actor_user_id": current_context.user_id,
                 "provider_name": payload.provider_name,
                 "force_refresh": payload.force_refresh,
                 "budget_usd": payload.budget_usd,

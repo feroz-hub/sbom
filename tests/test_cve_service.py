@@ -30,7 +30,7 @@ from app.models import (
     SBOMSource,
 )
 from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session
 
 # Per-source ``accepted_kinds`` mirrors the production declarations on the
 # real client classes — kept in one place so test fakes don't drift.
@@ -52,11 +52,28 @@ from app.services.cve_service import (
 
 @pytest.fixture()
 def db() -> Session:
+    from datetime import UTC, datetime
+
     import app.models  # noqa: F401
+    from app.models import Tenant
+
+    from tests.tenant_fixture_scope import verified_fixture_tenant
 
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
-    return sessionmaker(bind=engine)()
+    try:
+        with Session(engine) as session:
+            now = datetime.now(UTC)
+            session.add_all([
+                Tenant(id=tid, name=f"Dataset {tid}", slug=f"dataset-{tid}", status="ACTIVE", created_at=now, updated_at=now)
+                for tid in (1, 2)
+            ])
+            session.flush()
+            with verified_fixture_tenant(session, 1):
+                yield session
+    finally:
+        engine.dispose()
+
 
 
 class _FakeSource:
@@ -614,9 +631,9 @@ async def test_scan_context_selects_exact_component_and_never_falls_back(db):
     ]
     db.add_all([sbom, other_sbom, run, *components, *findings])
     db.commit()
-    from app.core.context import minimal_background_context, tenant_scope
+    from tests.tenant_fixture_scope import verified_fixture_tenant
 
-    with tenant_scope(minimal_background_context(2)):
+    with verified_fixture_tenant(db, 2):
         db.add(SBOMSource(id=3, tenant_id=2, sbom_name="foreign"))
         db.add(SBOMComponent(id=4, sbom_id=3, tenant_id=2, name="other-tenant", version="4.0"))
         db.commit()

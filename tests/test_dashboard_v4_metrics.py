@@ -13,6 +13,8 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 pytestmark = pytest.mark.metric_consistency
 
 
@@ -35,7 +37,8 @@ def db(client):
 
     s = SessionLocal()
     try:
-        yield s
+        with verified_fixture_tenant(s, 1):
+            yield s
     finally:
         s.rollback()
         s.close()

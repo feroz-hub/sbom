@@ -15,6 +15,8 @@ from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..core.context import CurrentContext
+from ..core.security import get_current_tenant_context
 from ..db import get_db
 from ..models import SBOMComponent, SBOMSource
 from ..schemas import SbomConversionReportResponse, SbomConversionResponse, SbomEditPayload, SBOMSourceOut
@@ -229,6 +231,7 @@ def edit_sbom_endpoint(
     payload: SbomEditPayload,
     background_tasks: BackgroundTasks,
     user_id: str | None = Query(None),
+    context: CurrentContext = Depends(get_current_tenant_context),
     db: Session = Depends(get_db),
 ):
     """
@@ -244,15 +247,15 @@ def edit_sbom_endpoint(
         new_version = edit_sbom(
             db=db,
             sbom_id=id,
-            user_id=user_id,
+            user_id=context.actor_label(),
             updates=payload.model_dump(exclude_none=True),
             change_summary=payload.change_summary,
             defer_enrichment=True,
         )
         if override_map:
-            background_tasks.add_task(run_post_edit_enrichment, new_version.id, override_map)
+            background_tasks.add_task(run_post_edit_enrichment, new_version.id, override_map, tenant_id=context.tenant_id)
         else:
-            background_tasks.add_task(run_post_edit_enrichment, new_version.id)
+            background_tasks.add_task(run_post_edit_enrichment, new_version.id, tenant_id=context.tenant_id)
         return new_version
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -297,6 +300,7 @@ def restore_sbom_version(
     id: int,
     version_id: int,
     user_id: str | None = Query(None),
+    context: CurrentContext = Depends(get_current_tenant_context),
     db: Session = Depends(get_db),
 ):
     """
@@ -304,7 +308,7 @@ def restore_sbom_version(
     Clones the target version and saves it as the current head version.
     """
     try:
-        restored = restore_version(db, id, version_id, user_id)
+        restored = restore_version(db, id, version_id, context.actor_label())
         return restored
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -491,6 +495,7 @@ def convert_spdx_to_cyclonedx_endpoint(
     id: int,
     background_tasks: BackgroundTasks,
     user_id: str | None = Query(None),
+    context: CurrentContext = Depends(get_current_tenant_context),
     db: Session = Depends(get_db),
 ):
     """Convert a validated SPDX SBOM to CycloneDX and persist as a related record."""
@@ -509,11 +514,11 @@ def convert_spdx_to_cyclonedx_endpoint(
             detail="SBOM must pass validation before conversion.",
         )
     try:
-        converted, result, report = convert_and_persist_spdx_to_cyclonedx(db, sbom, user_id=user_id)
+        converted, result, report = convert_and_persist_spdx_to_cyclonedx(db, sbom, user_id=context.actor_label())
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
-    background_tasks.add_task(run_post_conversion_enrichment, converted.id, id)
+    background_tasks.add_task(run_post_conversion_enrichment, converted.id, id, tenant_id=context.tenant_id)
 
     conv_status = "completed_with_warnings" if result.conversion_warnings else "completed"
     return SbomConversionResponse(

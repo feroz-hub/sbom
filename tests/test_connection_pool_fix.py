@@ -49,105 +49,55 @@ def test_db_session_closes_on_success_and_error(app):
 
 
 def test_upsert_user_no_dirty_commits(app):
-    from app.core.security import _upsert_user
-    from app.db import Base, SessionLocal, engine
-    from sqlalchemy import text
+    """Current provisioning API reports real profile changes and owns no commit."""
+    from unittest.mock import patch
 
-    # Ensure tables are created in the test database
-    Base.metadata.create_all(bind=engine)
+    from app.db import SessionLocal
+    from app.services.identity_service import provision_local_identity
 
-    # Verify that _upsert_user only marks needs_commit if fields actually changed
     claims = {
-        "sub": "test-user-concurrency-1",
-        "email": "test-concurrency-1@example.com",
-        "name": "Test Concurrency 1",
+        "iss": "https://hcl-cs.test", "sub": "test-user-concurrency-1",
+        "email": "test-concurrency-1@example.test", "name": "Test Concurrency 1",
+        "preferred_username": "test-concurrency-1@example.test", "employee_id": "POOL-1",
     }
-
-    db = SessionLocal()
-    try:
-        # Clear existing test user if any
-        db.execute(text("DELETE FROM iam_users WHERE external_iam_user_id = :id"), {"id": claims["sub"]})
+    with SessionLocal() as db, patch.object(db, "commit", wraps=db.commit) as commit:
+        first = provision_local_identity(db, claims)
+        assert first.created and first.changed
+        assert commit.call_count == 0
         db.commit()
-
-        # 1st upsert: User is created, needs_commit should be True
-        user1, needs_commit1 = _upsert_user(db, claims)
-        assert needs_commit1 is True
+        second = provision_local_identity(db, claims)
+        assert second.user.id == first.user.id
+        assert not second.created and not second.changed
+        assert commit.call_count == 1
+        changed = provision_local_identity(db, claims | {"email": "changed@example.test"})
+        assert changed.user.id == first.user.id
+        assert changed.email_changed and "email" in changed.changed_fields
+        assert commit.call_count == 1
         db.commit()
-
-        # 2nd upsert: User is identical, needs_commit should be False
-        user2, needs_commit2 = _upsert_user(db, claims)
-        assert needs_commit2 is False
-
-        # 3rd upsert: Email changed, needs_commit should be True
-        claims["email"] = "test-concurrency-changed@example.com"
-        user3, needs_commit3 = _upsert_user(db, claims)
-        assert needs_commit3 is True
-        db.commit()
-    finally:
-        db.close()
+        assert commit.call_count == 2
 
 
 def test_auth_context_is_re_resolved_for_immediate_revocation(app):
     import asyncio
-    from datetime import UTC, datetime
 
-    from app.core.security import _resolve_context, _upsert_user, get_current_tenant_context
-    from app.db import Base, SessionLocal, engine
-    from app.models import Tenant, TenantUser
+    from app.core.context import get_bound_context
+    from app.core.security import _resolve_context, get_current_tenant_context
+    from app.db import SessionLocal
     from fastapi import HTTPException
-    from sqlalchemy import select
 
-    # Ensure tables are created in the test database
-    Base.metadata.create_all(bind=engine)
+    from tests.phase6_helpers import identity_claims, seed_membership, seed_user
+    from tests.tenant_fixture_scope import verified_fixture_tenant
 
-    # Authorization must be re-read from the database on every request.
-    claims = {
-        "sub": "test-user-cache-1",
-        "email": "test-cache-1@example.com",
-        "name": "Test Cache 1",
-        "exp": time.time() + 300,
-        "iat": 123456,
-    }
-
-    db = SessionLocal()
-    try:
-        # Seed default tenant and membership for the test user to allow tenant validation to pass
-        now = datetime.now(UTC)
-        tenant = db.execute(select(Tenant).where(Tenant.slug == "default")).scalar_one_or_none()
-        if tenant is None:
-            tenant = Tenant(
-                name="Default Tenant",
-                slug="default",
-                external_iam_tenant_id="local-default",
-                status="ACTIVE",
-                created_at=now,
-                updated_at=now,
-            )
-            db.add(tenant)
-            db.flush()
-
-        user, _ = _upsert_user(db, claims)
-        user.status = "ACTIVE"
-        membership = db.execute(
-            select(TenantUser).where(TenantUser.tenant_id == tenant.id, TenantUser.user_id == user.id)
-        ).scalar_one_or_none()
-        if membership is None:
-            membership = TenantUser(
-                tenant_id=tenant.id,
-                user_id=user.id,
-                role="TENANT_ADMIN",
-                status="ACTIVE",
-                created_at=now,
-                updated_at=now,
-            )
-            db.add(membership)
-            db.flush()
+    prior_context = get_bound_context()
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
+        user = seed_user(db)
+        membership = seed_membership(db, user, role="TENANT_ADMIN")
         db.commit()
+        claims = identity_claims(user, exp=time.time() + 300, iat=int(time.time()))
+        context = _resolve_context(db, claims, "1")
 
-        # Resolve once, then revoke the membership in the database.
-        context = _resolve_context(db, claims, None)
         async def resolve_context():
-            generator = get_current_tenant_context(request=None, claims=claims, x_tenant_id=None, db=db)
+            generator = get_current_tenant_context(request=None, claims=claims, x_tenant_id="1", db=db)
             try:
                 return await anext(generator)
             finally:
@@ -155,14 +105,14 @@ def test_auth_context_is_re_resolved_for_immediate_revocation(app):
 
         resolved_context = asyncio.run(resolve_context())
         assert resolved_context.user_id == context.user_id
-
+        assert resolved_context.tenant_id == 1
+        assert resolved_context.has_permission("project:read")
         membership.status = "DISABLED"
         db.commit()
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(HTTPException) as denied:
             asyncio.run(resolve_context())
-        assert getattr(exc_info.value, "status_code", None) == 403
-    finally:
-        db.close()
+        assert denied.value.status_code == 403
+    assert get_bound_context() is prior_context
 
 
 def test_dashboard_summary_endpoint(app):

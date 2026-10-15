@@ -19,7 +19,6 @@ import json
 import uuid
 
 import pytest
-from sqlalchemy import text
 
 _VALID_CYCLONEDX = {
     "bomFormat": "CycloneDX",
@@ -58,47 +57,32 @@ def _unique(prefix: str) -> str:
     return f"{prefix}-{uuid.uuid4().hex[:8]}"
 
 
-def _seed_legacy_row(client, name: str, body: str) -> int:
-    """Simulate a pre-validator row: insert directly with the legacy
-    column shape (status default fires; validated_at NULL)."""
+def _seed_legacy_row(client, name: str, body: str | None) -> int:
+    """Seed legacy validation state while preserving current logical-SBOM relationships."""
     from app.db import SessionLocal
+    from app.models import SBOMSource
 
-    db = SessionLocal()
-    try:
-        db.execute(
-            text(
-                "INSERT INTO sbom_source (sbom_name, sbom_data, status, tenant_id) "
-                "VALUES (:name, :data, 'validated', 1)"
-            ),
-            {"name": name, "data": body},
-        )
+    from tests.tenant_fixture_scope import verified_fixture_tenant
+
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
+        sbom = SBOMSource(sbom_name=name, sbom_data=body, status="validated", tenant_id=1)
+        db.add(sbom)
         db.commit()
-        row = db.execute(
-            text("SELECT id FROM sbom_source WHERE sbom_name = :name"),
-            {"name": name},
-        ).first()
-        assert row is not None
-        return int(row[0])
-    finally:
-        db.close()
+        return sbom.id
 
 
 def _set_pending(client, sbom_id: int) -> None:
-    """Apply migration 013's reclassification to a single row."""
     from app.db import SessionLocal
+    from app.models import SBOMSource
+    from sqlalchemy import update
 
-    db = SessionLocal()
-    try:
-        db.execute(
-            text(
-                "UPDATE sbom_source SET status = 'pending' "
-                "WHERE id = :id AND validated_at IS NULL AND status = 'validated'"
-            ),
-            {"id": sbom_id},
-        )
+    from tests.tenant_fixture_scope import verified_fixture_tenant
+
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
+        assert db.get(SBOMSource, sbom_id) is not None
+        db.execute(update(SBOMSource).where(SBOMSource.id == sbom_id,
+                   SBOMSource.validated_at.is_(None), SBOMSource.status == "validated").values(status="pending"))
         db.commit()
-    finally:
-        db.close()
 
 
 def test_revalidate_legacy_snyk_row_becomes_failed(client):
@@ -161,24 +145,8 @@ def test_revalidate_400_when_sbom_data_missing(client):
     """A row whose body is NULL cannot be revalidated — 400 with a clear
     message, not a crash."""
     name = _unique("no-body")
-    from app.db import SessionLocal
-
-    db = SessionLocal()
-    try:
-        db.execute(
-            text(
-                "INSERT INTO sbom_source (sbom_name, sbom_data, status, tenant_id) VALUES (:name, NULL, 'pending', 1)"
-            ),
-            {"name": name},
-        )
-        db.commit()
-        row = db.execute(
-            text("SELECT id FROM sbom_source WHERE sbom_name = :name"),
-            {"name": name},
-        ).first()
-        sbom_id = int(row[0])
-    finally:
-        db.close()
+    sbom_id = _seed_legacy_row(client, name, None)
+    _set_pending(client, sbom_id)
 
     resp = client.post(f"/api/sboms/{sbom_id}/revalidate")
     assert resp.status_code == 400

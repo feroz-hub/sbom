@@ -846,6 +846,11 @@ class LifecycleProviderConfigService:
 class LifecycleVendorRecordService:
     """CRUD helpers for UI-managed vendor lifecycle records."""
 
+    @staticmethod
+    def _require_platform_mutation(context: CurrentContext | None) -> None:
+        if context is None or not context.is_platform_admin or not context.has_permission("platform:admin"):
+            raise HTTPException(status_code=403, detail="Platform permission is required for this action")
+
     def list_records(
         self,
         db: Session,
@@ -884,6 +889,7 @@ class LifecycleVendorRecordService:
     def create_record(
         self, db: Session, payload: dict[str, Any], *, context: CurrentContext | None, request: Request | None = None
     ) -> LifecycleVendorRecord:
+        self._require_platform_mutation(context)
         row = LifecycleVendorRecord(
             **self._validated_payload(payload),
             created_at=now_iso(),
@@ -913,6 +919,7 @@ class LifecycleVendorRecordService:
         context: CurrentContext | None,
         request: Request | None = None,
     ) -> LifecycleVendorRecord:
+        self._require_platform_mutation(context)
         row = db.get(LifecycleVendorRecord, record_id)
         if row is None:
             raise HTTPException(status_code=404, detail="Vendor record not found")
@@ -938,6 +945,7 @@ class LifecycleVendorRecordService:
     def disable_record(
         self, db: Session, record_id: int, *, context: CurrentContext | None, request: Request | None = None
     ) -> bool:
+        self._require_platform_mutation(context)
         row = db.get(LifecycleVendorRecord, record_id)
         if row is None:
             return False
@@ -975,6 +983,7 @@ class LifecycleVendorRecordService:
         context: CurrentContext | None,
         request: Request | None = None,
     ) -> dict[str, Any]:
+        self._require_platform_mutation(context)
         created = 0
         errors: list[str] = []
         for index, record in enumerate(records):

@@ -153,11 +153,18 @@ def _ensure_seed_data() -> None:
         )
 
         now = datetime.now(UTC)
-        db.execute(
-            update(SBOMSource)
-            .where(SBOMSource.validated_at.is_(None), SBOMSource.status == "validated")
-            .values(status="pending")
-        )
+        from .services.maintenance_scope import active_tenant_ids, maintenance_tenant
+
+        for tenant_id in active_tenant_ids():
+            with maintenance_tenant(tenant_id, "startup.sbom_status_repair"):
+                db.execute(
+                    update(SBOMSource)
+                    .where(SBOMSource.tenant_id == tenant_id, SBOMSource.validated_at.is_(None), SBOMSource.status == "validated")
+                    .values(status="pending")
+                )
+                # Release this tenant's write transaction before the separate
+                # completion-audit session (also required by SQLite).
+                db.commit()
         if not get_settings().auth_enabled:
             tenant = db.get(Tenant, 1)
             if tenant is None:
@@ -227,12 +234,15 @@ def _ensure_seed_data() -> None:
             else:
                 membership.role = "TENANT_ADMIN"
                 membership.status = "ACTIVE"
-            assignment_exists = db.scalar(
-                select(TenantUserRoleAssignment.id).where(
-                    TenantUserRoleAssignment.tenant_user_id == membership.id,
-                    TenantUserRoleAssignment.status == "ACTIVE",
+            from .core.context import minimal_background_context, tenant_scope
+            with tenant_scope(minimal_background_context(membership.tenant_id)):
+                assignment_exists = db.scalar(
+                    select(TenantUserRoleAssignment.id).where(
+                        TenantUserRoleAssignment.tenant_id == membership.tenant_id,
+                        TenantUserRoleAssignment.tenant_user_id == membership.id,
+                        TenantUserRoleAssignment.status == "ACTIVE",
+                    )
                 )
-            )
             if assignment_exists is None:
                 create_initial_assignment(
                     db,
@@ -554,6 +564,9 @@ async def lifespan(app: FastAPI):
     # re-apply step, our formatter and rotating file handler would be lost
     # for the remainder of the process.
     setup_logging()
+    from .core.route_policy import validate_route_policies
+    validate_route_policies(app)
+    validate_auth_setup()
     await init_async_http_client()
     log.info("SBOM Analyzer starting up — initialising database …")
 
@@ -580,7 +593,6 @@ async def lifespan(app: FastAPI):
     log.info("reports.startup enabled=%s authenticated=%s smtp_enabled=%s diagnostics=%s",
              settings.report_notifications_enabled, settings.auth_enabled, settings.email_delivery_enabled,
              ",".join(configuration_errors(settings)) or "ready")
-    validate_auth_setup()
     log.info("Startup complete. API ready.")
     yield
     await close_async_http_client()
@@ -698,13 +710,9 @@ error_handlers.install(app)
 # Routers already declare their own prefixes where appropriate, so we
 # include them here without overriding.
 #
-# Finding A: every router below carries `dependencies=[Depends(require_auth)]`
-# so the bearer-token check runs on every request before the route handler.
-# `health.router` is the deliberate exception — it serves the unauthenticated
-# `/`, `/health`, `/api/analysis/config`, and `/api/types` endpoints used by
-# liveness probes and the FastAPI `/docs` page. When `API_AUTH_MODE=none`
-# (the default) the dependency is a cheap no-op, so applying it everywhere
-# costs essentially nothing in dev but makes production a one-env-var flip.
+# Every business router inherits the explicit method/path policy guard.
+# Health/account/proof-token routes declare their own reviewed policies and
+# dependencies; startup validates coverage before database initialization.
 
 _protected = [Depends(enforce_request_access)]
 
@@ -782,6 +790,5 @@ app.include_router(
     dependencies=_protected,
 )
 
-# NVD mirror admin router. Auth via require_auth (binary none/bearer/jwt
-# per app.auth). Admin-role split is a TODO (see app/nvd_mirror/api.py).
+# NVD mirror operations require explicit platform authority in the route catalog.
 app.include_router(nvd_mirror_admin_router, dependencies=_protected)

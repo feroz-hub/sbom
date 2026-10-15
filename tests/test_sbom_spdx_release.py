@@ -16,6 +16,7 @@ from app.services.sbom.repair.engine import RepairEngine
 from app.validation import run
 from sqlalchemy import func, select
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
 from tests.test_sbom_spdx_integration import base, job, upload
 from tests.test_sbom_spdx_quality_repair import document, raw
 
@@ -131,7 +132,7 @@ def test_spdx_concurrent_terminal_decisions(client, action):
     with ThreadPoolExecutor(max_workers=2) as pool:
         responses = list(pool.map(lambda a: client.post(endpoint + '/' + a, json={'candidate_sha256': result['candidate_sha256']}), actions))
     assert sorted(r.status_code for r in responses) == ([200, 200] if action == 'approve' else [200, 409])
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         events = db.scalars(select(SBOMValidationSessionEvent).where(SBOMValidationSessionEvent.session_id == session, SBOMValidationSessionEvent.event_type.in_(['SBOM_REPAIR_APPROVED', 'SBOM_REPAIR_REJECTED']))).all()
         assert len(events) == 1
         accepted = db.scalar(select(func.count()).select_from(SBOMSource))
@@ -142,12 +143,12 @@ def test_spdx_tamper_restore_and_quality_during_approval(client):
     session = upload(client)
     result = job(client, session)
     endpoint = base(session) + f"/repair/{result['repair_job_id']}"
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         saved = db.get(SBOMRepairJob, result['repair_job_id']).candidate_content
         db.connection().exec_driver_sql('UPDATE sbom_repair_jobs SET candidate_content = %s WHERE id = %s', (saved + ' ', result['repair_job_id']))
         db.commit()
     assert client.get(endpoint).status_code == 409
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         db.connection().exec_driver_sql('UPDATE sbom_repair_jobs SET candidate_content = %s WHERE id = %s', (saved, result['repair_job_id']))
         db.commit()
     with ThreadPoolExecutor(max_workers=2) as pool:
@@ -170,7 +171,7 @@ def test_spdx_deletion_cascades_evidence_retains_original_files(client, monkeypa
         accepted = client.post(base(session) + f"/repair/{result['repair_job_id']}/approve", json={'candidate_sha256': result['candidate_sha256']}).json()['imported_sbom_id']
         items.append((session, result['repair_job_id'], accepted))
     deleted, kept = items
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         workspace = db.get(SBOMValidationSession, deleted[0])
         paths = [Path(p) for p in (workspace.raw_storage_path, workspace.repair_storage_path) if p]
         originals = {p: p.read_bytes() for p in paths}

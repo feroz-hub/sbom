@@ -10,7 +10,7 @@ import pytest
 
 
 def test_sync_project_create_receives_async_tenant_context(app, client):
-    from app.core.context import minimal_background_context
+    from app.core.context import minimal_background_context, tenant_scope
     from app.core.security import get_current_tenant_context
     from app.db import SessionLocal
     from app.models import IAMUser, Projects
@@ -48,7 +48,8 @@ def test_sync_project_create_receives_async_tenant_context(app, client):
         assert response.status_code == 201, response.text
         db = SessionLocal()
         try:
-            project = db.query(Projects).filter(Projects.project_name == name).one()
+            with tenant_scope(minimal_background_context(tenant_id)):
+                project = db.query(Projects).filter(Projects.project_name == name).one()
             assert project.tenant_id == tenant_id
         finally:
             db.close()
@@ -65,7 +66,7 @@ def test_missing_tenant_context_still_blocks_tenant_owned_write(monkeypatch):
     db = SessionLocal()
     try:
         db.add(Projects(project_name=f"Blocked {uuid4().hex}", project_status=1))
-        with pytest.raises(RuntimeError, match="Tenant context is required for tenant-owned writes"):
+        with pytest.raises(RuntimeError, match="Tenant context is required for tenant-owned data"):
             db.flush()
         db.rollback()
     finally:

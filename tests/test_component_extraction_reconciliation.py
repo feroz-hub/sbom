@@ -9,7 +9,10 @@ import pytest
 from app.db import SessionLocal
 from app.models import SBOMComponent, SBOMSource
 from app.services.analysis_service import backfill_analytics_tables
-from sqlalchemy import select, text
+from app.services.maintenance_scope import maintenance_tenant
+from sqlalchemy import select
+
+from tests.tenant_fixture_scope import verified_fixture_tenant
 
 
 @pytest.fixture(autouse=True)
@@ -50,11 +53,12 @@ def _spdx_doc() -> dict:
 def _seed_sbom(name: str, data: str | None, *, status: str = "validated") -> int:
     db = SessionLocal()
     try:
-        sbom = SBOMSource(sbom_name=name, sbom_data=data, status=status)
-        db.add(sbom)
-        db.commit()
-        db.refresh(sbom)
-        return int(sbom.id)
+        with verified_fixture_tenant(db, 1):
+            sbom = SBOMSource(sbom_name=name, sbom_data=data, status=status)
+            db.add(sbom)
+            db.commit()
+            db.refresh(sbom)
+            return int(sbom.id)
     finally:
         db.close()
 
@@ -62,10 +66,11 @@ def _seed_sbom(name: str, data: str | None, *, status: str = "validated") -> int
 def _get_sbom(sbom_id: int) -> SBOMSource:
     db = SessionLocal()
     try:
-        sbom = db.get(SBOMSource, sbom_id)
-        assert sbom is not None
-        db.expunge(sbom)
-        return sbom
+        with verified_fixture_tenant(db, 1):
+            sbom = db.get(SBOMSource, sbom_id)
+            assert sbom is not None
+            db.expunge(sbom)
+            return sbom
     finally:
         db.close()
 
@@ -73,7 +78,8 @@ def _get_sbom(sbom_id: int) -> SBOMSource:
 def _component_count(sbom_id: int) -> int:
     db = SessionLocal()
     try:
-        return int(db.scalar(select(SBOMComponent.id).where(SBOMComponent.sbom_id == sbom_id).limit(1)) is not None)
+        with verified_fixture_tenant(db, 1):
+            return int(db.scalar(select(SBOMComponent.id).where(SBOMComponent.sbom_id == sbom_id).limit(1)) is not None)
     finally:
         db.close()
 
@@ -81,8 +87,9 @@ def _component_count(sbom_id: int) -> int:
 def _run_backfill() -> None:
     db = SessionLocal()
     try:
-        backfill_analytics_tables(db, tenant_id=1)
-        db.commit()
+        with maintenance_tenant(1, "test.analytics_backfill"):
+            backfill_analytics_tables(db, tenant_id=1)
+            db.commit()
     finally:
         db.close()
 
@@ -187,31 +194,22 @@ def test_reprocess_endpoint_returns_clear_error_for_unsupported_format(client):
 
 
 def test_reprocess_endpoint_preserves_tenant_isolation(client):
-    name = _unique("tenant2-sbom")
-    db = SessionLocal()
-    try:
-        db.execute(
-            text(
-                "INSERT INTO tenants (id, name, slug, external_iam_tenant_id, status, created_at, updated_at) "
-                "VALUES (2, 'Tenant Two', 'tenant-two', 'tenant-two', 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) "
-                "ON CONFLICT(id) DO NOTHING"
-            )
-        )
-        db.execute(
-            text(
-                "INSERT INTO sbom_source (sbom_name, sbom_data, status, tenant_id) "
-                "VALUES (:name, :data, 'validated', 2)"
-            ),
-            {"name": name, "data": json.dumps(_cyclonedx_doc())},
-        )
+    from tests.tenant_fixture_scope import declare_fixture_tenant
+
+    with SessionLocal() as db:
+        declare_fixture_tenant(db, 2)
         db.commit()
-        sbom_id = int(db.execute(text("SELECT id FROM sbom_source WHERE sbom_name = :name"), {"name": name}).scalar_one())
-    finally:
-        db.close()
-
-    response = client.post(f"/api/sboms/{sbom_id}/components/reprocess")
-
-    assert response.status_code == 404
+        with verified_fixture_tenant(db, 2):
+            sbom = SBOMSource(sbom_name=_unique("tenant2-sbom"), sbom_data=json.dumps(_cyclonedx_doc()),
+                              status="validated", tenant_id=2)
+            db.add(sbom)
+            db.commit()
+            sbom_id = sbom.id
+            before = sbom.component_extraction_status
+        assert client.post(f"/api/sboms/{sbom_id}/components/reprocess").status_code == 404
+        with verified_fixture_tenant(db, 2):
+            db.refresh(sbom)
+            assert sbom.component_extraction_status == before
 
 
 def test_list_api_still_returns_skipped_extraction_records(client):

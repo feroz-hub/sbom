@@ -17,6 +17,8 @@ import pytest
 from app.db import SessionLocal
 from app.models import AnalysisRun, SBOMComponent, SBOMSource
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 _VALID_CYCLONEDX = {
     "bomFormat": "CycloneDX",
     "specVersion": "1.5",
@@ -146,12 +148,16 @@ def test_upload_with_project_id_assigns_project_and_syncs_details(client, unique
 
     db = SessionLocal()
     try:
-        assert db.query(SBOMComponent).filter(SBOMComponent.sbom_id == accepted["sbom_id"]).count() >= 1
+        with verified_fixture_tenant(db, 1):
+            assert db.query(SBOMComponent).filter(SBOMComponent.sbom_id == accepted["sbom_id"]).count() >= 1
     finally:
         db.close()
 
 
 def test_upload_persists_manual_sbom_and_product_versions_independently(client, unique_name):
+    from tests.functional_security_support import authenticated_actor_label
+
+    expected_actor = authenticated_actor_label(client)
     document = json.loads(json.dumps(_VALID_CYCLONEDX))
     document["version"] = 77
     document["metadata"]["component"]["version"] = "9.9.9"
@@ -173,11 +179,13 @@ def test_upload_persists_manual_sbom_and_product_versions_independently(client, 
 
     db = SessionLocal()
     try:
-        row = db.get(SBOMSource, accepted["sbom_id"])
-        assert row is not None
-        assert row.sbom_version == "1.1.1"
-        assert row.productver == "1.0.0"
-        assert row.created_by == "Feroze"
+        with verified_fixture_tenant(db, 1):
+            row = db.get(SBOMSource, accepted["sbom_id"])
+            assert row is not None
+            assert row.sbom_version == "1.1.1"
+            assert row.productver == "1.0.0"
+            assert row.created_by == expected_actor
+            assert row.created_by != "Feroze"
     finally:
         db.close()
 
@@ -276,7 +284,8 @@ def test_upload_schedules_background_enrichment_without_inline_provider_calls(cl
 
     db = SessionLocal()
     try:
-        assert db.query(AnalysisRun).filter(AnalysisRun.sbom_id == accepted["sbom_id"]).count() == 0
+        with verified_fixture_tenant(db, 1):
+            assert db.query(AnalysisRun).filter(AnalysisRun.sbom_id == accepted["sbom_id"]).count() == 0
     finally:
         db.close()
 
@@ -299,25 +308,26 @@ def test_post_upload_background_enrichment_updates_status(client, monkeypatch):
 
     db = SessionLocal()
     try:
-        unique_bg_name = f"background-status-{uuid.uuid4().hex[:8]}"
-        sbom = SBOMSource(
-            sbom_name=unique_bg_name,
-            sbom_data=json.dumps(_VALID_CYCLONEDX),
-            status="validated",
-        )
-        mark_enrichment_pending(sbom)
-        db.add(sbom)
-        db.commit()
-        db.refresh(sbom)
+        with verified_fixture_tenant(db, 1):
+            unique_bg_name = f"background-status-{uuid.uuid4().hex[:8]}"
+            sbom = SBOMSource(
+                sbom_name=unique_bg_name,
+                sbom_data=json.dumps(_VALID_CYCLONEDX),
+                status="validated",
+            )
+            mark_enrichment_pending(sbom)
+            db.add(sbom)
+            db.commit()
+            db.refresh(sbom)
 
-        run_post_upload_enrichment(sbom.id, sbom.tenant_id)
+            run_post_upload_enrichment(sbom.id, sbom.tenant_id)
 
-        db.refresh(sbom)
-        assert sbom.sbom_name == unique_bg_name
-        assert sbom.enrichment_status == "completed"
-        assert sbom.enrichment_started_at is not None
-        assert sbom.enrichment_completed_at is not None
-        assert sbom.enrichment_error is None
+            db.refresh(sbom)
+            assert sbom.sbom_name == unique_bg_name
+            assert sbom.enrichment_status == "completed"
+            assert sbom.enrichment_started_at is not None
+            assert sbom.enrichment_completed_at is not None
+            assert sbom.enrichment_error is None
     finally:
         db.rollback()
         db.close()
@@ -393,7 +403,8 @@ def test_invalid_purl_creates_repair_session_not_trusted_sbom(client, unique_nam
 
     db = SessionLocal()
     try:
-        assert db.query(SBOMSource).filter(SBOMSource.sbom_name == unique_name).first() is None
+        with verified_fixture_tenant(db, 1):
+            assert db.query(SBOMSource).filter(SBOMSource.sbom_name == unique_name).first() is None
     finally:
         db.close()
 

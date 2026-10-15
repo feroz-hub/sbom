@@ -8,9 +8,7 @@ Spec: docs/requirements/vex-dashboard-investigation.md sections 4, 11, 14-20.
 """
 
 import unittest
-
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session
+from datetime import UTC, datetime
 
 from app.models import (
     AnalysisFinding,
@@ -18,6 +16,7 @@ from app.models import (
     Base,
     SBOMComponent,
     SBOMSource,
+    Tenant,
     VexDocument,
     VexInvestigation,
     VexStatement,
@@ -25,6 +24,10 @@ from app.models import (
 from app.services.lifecycle.vex_provider import is_vex_assertion
 from app.services.vex.matching import match_component, version_applies
 from app.services.vex.reconciliation import recompute_for_sbom
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
+
+from tests.tenant_fixture_scope import verified_fixture_tenant
 
 NOW = "2026-09-24T00:00:00Z"
 
@@ -36,6 +39,12 @@ class _EngineTestCase(unittest.TestCase):
         self.engine = create_engine("sqlite:///:memory:")
         Base.metadata.create_all(self.engine)
         self.db = Session(self.engine)
+        self.addCleanup(self.engine.dispose)
+        self.addCleanup(self.db.close)
+        now = datetime.now(UTC)
+        self.db.add(Tenant(id=1, name="VEX fixture", slug="vex-fixture", status="ACTIVE", created_at=now, updated_at=now))
+        self.db.flush()
+        self.enterContext(verified_fixture_tenant(self.db, 1))
         self.sbom = SBOMSource(sbom_name="engine-test", sbom_data="{}", tenant_id=1)
         self.db.add(self.sbom)
         self.db.flush()
@@ -43,10 +52,6 @@ class _EngineTestCase(unittest.TestCase):
         self.openssl_308 = self._component("openssl", "3.0.8", purl="pkg:generic/openssl@3.0.8")
         self.zlib = self._component("zlib", "1.2.11", purl="pkg:generic/zlib@1.2.11")
         self.db.commit()
-
-    def tearDown(self):
-        self.db.close()
-        self.engine.dispose()
 
     def _component(self, name, version, **kwargs):
         component = SBOMComponent(

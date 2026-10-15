@@ -5,8 +5,9 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
-from app.core.context import minimal_background_context, tenant_scope
 from app.models import AnalysisFinding, AnalysisRun, SBOMSource, Tenant
+
+from tests.tenant_fixture_scope import verified_fixture_tenant
 
 
 def _now(offset_seconds: int = 0) -> str:
@@ -19,7 +20,8 @@ def db(client):
 
     session = SessionLocal()
     try:
-        yield session
+        with verified_fixture_tenant(session, 1):
+            yield session
     finally:
         session.rollback()
         session.close()
@@ -182,7 +184,7 @@ def test_sbom_list_latest_analysis_preserves_tenant_isolation(client, db):
     )
     db.add(other_tenant)
     db.flush()
-    with tenant_scope(minimal_background_context(other_tenant.id, other_tenant.external_iam_tenant_id)):
+    with verified_fixture_tenant(db, other_tenant.id):
         other_sbom = _seed_sbom(db, name=f"other-{created_by}", tenant_id=other_tenant.id, created_by=created_by)
         _seed_run(db, sbom=other_sbom, status="ERROR", raw_report={"error_message": "cross tenant"})
     db.commit()

@@ -1,3 +1,5 @@
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 """Secure Component Advisor — policies, purpose and adoption over HTTP (spec Step 4).
 
 FR-SCA-004/005/009/010, NFR-SCA-007, US-SCA-03/04/07/08. Prompt §10:
@@ -10,15 +12,22 @@ and role checks.
 from datetime import UTC, datetime
 
 import pytest
-from sqlalchemy import select, text
-
 from app.core.context import CurrentContext
 from app.core.permissions import ROLE_PERMISSIONS
 from app.core.security import get_current_tenant_context
 from app.db import SessionLocal
 from app.metrics.cache import reset_cache
-from app.models import AdvisorPolicy, AdvisorPolicyVersion, AuditLog
-from tests.component_advisor_support import NOW, World, purl_key
+from app.models import (
+    AdvisorPolicy,
+    AdvisorPolicyVersion,
+    AuditLog,
+    SBOMComponent,
+    SBOMSource,
+)
+from sqlalchemy import select
+
+from tests.component_advisor_support import World, purl_key
+from tests.tenant_fixture_scope import declare_fixture_tenant, scoped_context_override
 from tests.test_vex_scoped_authorization import make_member
 
 BASE = "/api/component-advisor"
@@ -30,8 +39,10 @@ SLF4J = purl_key("pkg:maven/slf4j-api@2.0.9")
 def db():
     session = SessionLocal()
     try:
-        yield session
+        with verified_fixture_tenant(session, 1):
+            yield session
     finally:
+        session.rollback()
         session.close()
 
 
@@ -39,13 +50,7 @@ def db():
 def seeded(db):
     """Tenant 1: a MEDIUM version, a clean version used by 3 products, an EOL one."""
     reset_cache()
-    db.execute(
-        text(
-            "INSERT INTO tenants (id, name, slug, external_iam_tenant_id, status, created_at, updated_at) "
-            "VALUES (2, 'Other', 'other', 'other', 'ACTIVE', :now, :now) ON CONFLICT (id) DO NOTHING"
-        ),
-        {"now": NOW},
-    )
+    declare_fixture_tenant(db, 2)
     world = World(db)
     products = [world.product(name=f"app-{i}") for i in range(3)]
     sboms = [world.sbom(p) for p in products]
@@ -78,11 +83,11 @@ def as_role(client, role, tenant_id=1):
     with SessionLocal() as session:
         member = make_member(session, role, tenant_id=tenant_id)
         user_id = member.user_id
-    client.app.dependency_overrides[get_current_tenant_context] = lambda: CurrentContext(
+    client.app.dependency_overrides[get_current_tenant_context] = scoped_context_override(lambda: CurrentContext(
         user_id=user_id, external_user_id=str(user_id), email=None, display_name=role,
         tenant_id=tenant_id, external_tenant_id=str(tenant_id), roles=frozenset({role}),
         permissions=ROLE_PERMISSIONS[role],
-    )
+    ))
 
 
 @pytest.fixture()
@@ -342,7 +347,6 @@ def test_adoption_view_lists_products_and_observed_versions__FR_SCA_010(client, 
 def test_backfill_fills_only_missing_descriptions_from_stored_sbom(db):
     import json
 
-    from app.models import SBOMComponent, SBOMSource
     from scripts.backfill_component_descriptions import backfill
 
     document = {"bomFormat": "CycloneDX", "components": [

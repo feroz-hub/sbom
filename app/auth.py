@@ -1,9 +1,7 @@
-"""
-Authentication dependency: none | bearer allowlist | JWT (HS256).
+"""Compatibility authentication adapters backed by the main security context.
 
-Reads ``API_AUTH_MODE`` from the environment each request so tests can
-monkeypatch without cache issues. JWT parameters also come from
-``get_settings()`` (pydantic-settings / .env).
+Legacy binary configuration validation remains for explicit local development;
+protected operations use database-authorized HCL, Native, or Entra identities.
 """
 
 from __future__ import annotations
@@ -16,8 +14,11 @@ from dataclasses import dataclass
 from typing import Any
 
 import jwt
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, HTTPException, status
 from jwt import InvalidTokenError
+
+from .core.context import CurrentContext
+from .core.security import get_current_tenant_context
 
 log = logging.getLogger(__name__)
 
@@ -41,10 +42,8 @@ class AuthConfigError(RuntimeError):
 class Principal:
     """Authenticated caller identity used for narrow role checks.
 
-    The project historically had binary auth only. This principal is a
-    lightweight bridge: JWT deployments can carry roles in claims, bearer
-    deployments can pass trusted gateway role headers, and local
-    ``API_AUTH_MODE=none`` remains permissive for developer/test parity.
+    Identity and canonical role names are supplied by the main authenticated
+    database context. Client identity and role headers are never trusted.
     """
 
     user_id: str | None
@@ -66,9 +65,10 @@ def _jwt_settings() -> tuple[str, str, str | None, str | None]:
 
 
 def validate_auth_setup() -> None:
+    from .core.security import validate_auth_mode
     from .services.entra_auth_service import validate_configuration
     from .settings import get_settings
-
+    validate_auth_mode()
     validate_configuration()
     if get_settings().native_auth_enabled:
         from .services.native_jwt_service import signing_key
@@ -82,7 +82,7 @@ def validate_auth_setup() -> None:
     mode = _read_mode()
     if mode == "none":
         log.warning(
-            "API_AUTH_MODE=none — protected routes are open. Use bearer or jwt in production.",
+            "AUTH_ENABLED=false — explicit local development identity enabled; production requires AUTH_ENABLED=true.",
         )
         return
     if mode == "bearer":
@@ -92,13 +92,13 @@ def validate_auth_setup() -> None:
                 "API_AUTH_MODE='bearer' is set but API_AUTH_TOKENS is empty. "
                 "Configure at least one token or set API_AUTH_MODE='none'."
             )
-        log.info("Bearer authentication enabled (%d token(s)).", len(tokens))
+        log.info("Legacy bearer configuration validated (%d token(s)); main context governs protected routes.", len(tokens))
         return
     if mode == "jwt":
         secret, _, _, _ = _jwt_settings()
         if not secret:
             raise AuthConfigError("API_AUTH_MODE='jwt' but jwt_secret_key / JWT_SECRET_KEY is empty.")
-        log.info("JWT authentication enabled (algorithm from settings).")
+        log.info("Legacy JWT configuration validated; main context governs protected routes.")
         return
     raise AuthConfigError(
         f"Unsupported API_AUTH_MODE='{os.getenv('API_AUTH_MODE')}'. Expected 'none', 'bearer', or 'jwt'."
@@ -121,7 +121,7 @@ def _decode_jwt(token: str) -> dict[str, Any]:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Server auth misconfigured",
         )
-    options = {"verify_signature": True, "verify_exp": True}
+    options = {"verify_signature": True, "verify_exp": True, "require": ["sub", "exp"]}
     kwargs: dict[str, Any] = {
         "algorithms": [alg],
         "options": options,
@@ -140,56 +140,11 @@ def _decode_jwt(token: str) -> dict[str, Any]:
         ) from None
 
 
-def require_auth(authorization: str | None = Header(default=None)) -> None:
-    mode = _read_mode()
-    if mode == "none":
-        return
-
-    challenge_bearer = {"WWW-Authenticate": 'Bearer realm="sbom-analyzer"'}
-
-    if mode == "bearer":
-        if not authorization:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Authentication required",
-                headers=challenge_bearer,
-            )
-        if not authorization.lower().startswith(_BEARER_PREFIX):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Authentication required",
-                headers=challenge_bearer,
-            )
-        presented = authorization[len(_BEARER_PREFIX) :].strip()
-        if not presented or not _token_in_allowlist(presented, _read_tokens()):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Authentication required",
-                headers=challenge_bearer,
-            )
-        return
-
-    if mode == "jwt":
-        if not authorization or not authorization.lower().startswith(_BEARER_PREFIX):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Authentication required",
-                headers=challenge_bearer,
-            )
-        token = authorization[len(_BEARER_PREFIX) :].strip()
-        if not token:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Authentication required",
-                headers=challenge_bearer,
-            )
-        _decode_jwt(token)
-        return
-
-    raise HTTPException(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        detail="Server auth misconfigured",
-    )
+def require_auth(
+    context: CurrentContext = Depends(get_current_tenant_context),
+) -> None:
+    """Compatibility dependency: always use the main authenticated database context."""
+    return None
 
 
 def _roles_from_value(value: Any) -> frozenset[str]:
@@ -207,48 +162,10 @@ def _roles_from_value(value: Any) -> frozenset[str]:
 
 
 def get_current_principal(
-    authorization: str | None = Header(default=None),
-    x_sbom_user: str | None = Header(default=None, alias="X-SBOM-User"),
-    x_sbom_roles: str | None = Header(default=None, alias="X-SBOM-Roles"),
+    context: CurrentContext = Depends(get_current_tenant_context),
 ) -> Principal:
-    """Return the current caller with best-effort role information.
-
-    ``require_auth`` remains the global guard. This helper is intentionally
-    additive and is only wired to sensitive routes that need role semantics.
-    """
-
-    mode = _read_mode()
-    header_roles = _roles_from_value(x_sbom_roles)
-
-    if mode == "none":
-        return Principal(
-            user_id=x_sbom_user or "local-dev",
-            roles=header_roles or frozenset({"admin", "security"}),
-        )
-
-    if mode == "bearer":
-        if not authorization or not authorization.lower().startswith(_BEARER_PREFIX):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
-        presented = authorization[len(_BEARER_PREFIX) :].strip()
-        if not presented or not _token_in_allowlist(presented, _read_tokens()):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
-        return Principal(user_id=x_sbom_user or "bearer", roles=header_roles or frozenset({"viewer"}))
-
-    if mode == "jwt":
-        if not authorization or not authorization.lower().startswith(_BEARER_PREFIX):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
-        claims = _decode_jwt(authorization[len(_BEARER_PREFIX) :].strip())
-        claim_roles = (
-            _roles_from_value(claims.get("roles"))
-            or _roles_from_value(claims.get("role"))
-            or _roles_from_value(claims.get("scope"))
-        )
-        return Principal(
-            user_id=str(claims.get("sub") or claims.get("email") or x_sbom_user or "jwt"),
-            roles=claim_roles or header_roles or frozenset({"viewer"}),
-        )
-
-    raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Server auth misconfigured")
+    """Legacy principal adapter; identity and roles come only from trusted context."""
+    return Principal(user_id=context.actor_label(), roles=frozenset(role.lower() for role in context.roles))
 
 
 def require_roles(*allowed_roles: str) -> Callable[[Principal], Principal]:

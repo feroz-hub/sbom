@@ -74,6 +74,18 @@ def _recent_run_exists(db: Session, sbom_id: int, gap_minutes: int) -> bool:
 
 @shared_task(name="scheduled_analysis.tick", bind=True, ignore_result=True)
 def tick_scheduled_analyses(self) -> dict:
+    from ..services.maintenance_scope import active_tenant_ids, maintenance_tenant
+
+    totals = {"due": 0, "targets": 0, "enqueued": 0}
+    for tenant_id in active_tenant_ids():
+        with maintenance_tenant(tenant_id, "scheduled_analysis.tick"):
+            result = _tick_for_tenant()
+        for key in totals:
+            totals[key] += result.get(key, 0)
+    return totals
+
+
+def _tick_for_tenant() -> dict:
     """Find due schedules, fan out per-SBOM analyze tasks, advance next_run_at."""
     from app.db import SessionLocal
 
@@ -198,17 +210,15 @@ def analyze_sbom_async(
     completion = {"status": "ERROR"}
     tenant_id = None
     try:
+        from ..services.maintenance_scope import schedule_tenant_id
+        tenant_id = schedule_tenant_id(schedule_id, sbom_id=sbom_id)
+        if tenant_id is None:
+            return {"status": "SKIPPED", "reason": "schedule_scope_invalid"}
+        context_token = bind_context(minimal_background_context(tenant_id))
         sched = db.get(AnalysisSchedule, schedule_id)
         sbom = db.get(SBOMSource, sbom_id)
-
-        if sched is None or sbom is not None and sbom.tenant_id != sched.tenant_id:
+        if sched is None or sched.tenant_id != tenant_id or sbom is not None and sbom.tenant_id != tenant_id:
             return {"status": "SKIPPED", "reason": "schedule_scope_invalid"}
-        tenant_id = sched.tenant_id
-        from ..models import Tenant
-        tenant = db.get(Tenant, tenant_id)
-        if tenant is None or tenant.status != "ACTIVE":
-            return {"status": "SKIPPED", "reason": "tenant_disabled"}
-        context_token = bind_context(minimal_background_context(tenant_id))
 
         if sbom is None:
             log.warning("scheduled_analysis_sbom_missing", extra={"sbom_id": sbom_id})
@@ -307,16 +317,18 @@ def analyze_sbom_async(
         }
         return completion
     finally:
-        db.close()
-        if report_cycle and tenant_id and completion["status"] != "RETRYING":
-            try:
-                from ..services.report_cycles import record_run_completion
-                from ..workers.report_notifications import dispatch_pending
-                with SessionLocal() as report_db:
-                    record_run_completion(report_db, tenant_id=tenant_id, sbom_id=sbom_id, cycle=report_cycle,
-                                          status=completion["status"], run_id=completion.get("run_id"))
-                dispatch_pending.delay()
-            except Exception:
-                log.warning("scheduled_report_completion_deferred sbom_id=%s", sbom_id)
-        if context_token is not None:
-            reset_context(context_token)
+        try:
+            db.close()
+            if report_cycle and tenant_id and completion["status"] != "RETRYING":
+                try:
+                    from ..services.report_cycles import record_run_completion
+                    from ..workers.report_notifications import dispatch_pending
+                    with SessionLocal() as report_db:
+                        record_run_completion(report_db, tenant_id=tenant_id, sbom_id=sbom_id, cycle=report_cycle,
+                                              status=completion["status"], run_id=completion.get("run_id"))
+                    dispatch_pending.delay()
+                except Exception:
+                    log.warning("scheduled_report_completion_deferred sbom_id=%s", sbom_id)
+        finally:
+            if context_token is not None:
+                reset_context(context_token)

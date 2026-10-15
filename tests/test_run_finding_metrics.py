@@ -7,6 +7,8 @@ import sys
 
 import pytest
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 
 @pytest.fixture()
 def db(client):
@@ -14,7 +16,8 @@ def db(client):
 
     session = SessionLocal()
     try:
-        yield session
+        with verified_fixture_tenant(session, 1):
+            yield session
     finally:
         session.rollback()
         session.close()

@@ -18,7 +18,7 @@ retrigger the SSLContext TypeError by construction, and it makes NVD work
 on Windows (venv / corporate network) where the plain ``verify=True``
 lookup fails with "unable to get local issuer certificate".
 
-Things that are still FORBIDDEN in the NVD path (what the deletion guards
+Things that are still FORBIDDEN in the requests path (what the guards
 below pin):
 
     * ``ssl.SSLContext`` — any form, any helper (``tls_ssl_context``,
@@ -49,57 +49,85 @@ from requests.adapters import HTTPAdapter
 # ---------------------------------------------------------------------------
 
 
+def _requests_tls_nodes(source):
+    """Inspect requests calls/session verification, excluding HTTPX's valid TLS API."""
+    import ast
+
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            receiver = ast.unparse(node.func.value)
+            if receiver in {"requests", "_nvd_session"}:
+                yield node
+        elif isinstance(node, ast.Assign) and any(
+            ast.unparse(target) == "_nvd_session.verify" for target in node.targets
+        ):
+            yield node
+
+
 def test_nvd_analysis_module_has_no_sslcontext_references():
-    """
-    SSLContext in the NVD path is what caused the 10+ failed fixes. Keep the
-    module's EXECUTABLE code free of it so the bug cannot regress.
+    import ast
 
-    We scan non-comment lines only — the module is allowed (and encouraged)
-    to mention SSLContext in comments that document why we avoid it.
-    """
-    src_path = pathlib.Path(__file__).resolve().parents[1] / "app" / "analysis.py"
-    text = src_path.read_text()
-
-    forbidden = (
-        ("SSLContext", "NVD client must not use SSLContext"),
-        (
-            "create_default_context",
-            "NVD client must not build a custom SSL context — certifi.where() is all we need",
-        ),
-        ("truststore", "NVD client must not depend on truststore"),
-        (
-            "tls_ssl_context",
-            "tls_ssl_context() returns an SSLContext — it must never reach the NVD code path",
-        ),
-    )
-
-    def _is_executable(line: str) -> bool:
-        stripped = line.lstrip()
-        return bool(stripped) and not stripped.startswith("#")
-
-    for needle, message in forbidden:
-        offenders = [(i + 1, ln) for i, ln in enumerate(text.splitlines()) if needle in ln and _is_executable(ln)]
-        assert not offenders, f"{message}. Offending executable line(s):\n  " + "\n  ".join(
-            f"{n}: {ln}" for n, ln in offenders
-        )
+    source = (pathlib.Path(__file__).resolve().parents[1] / "app" / "analysis.py").read_text()
+    forbidden = ("SSLContext", "create_default_context", "truststore", "tls_ssl_context")
+    offenders = [ast.unparse(node) for node in _requests_tls_nodes(source)
+                 if any(name in ast.unparse(node) for name in forbidden)]
+    assert not offenders, offenders
 
 
 def test_nvd_analysis_module_has_no_verify_kwargs():
-    """
-    Scan the executable lines (not comments) for any ``verify=``. The whole
-    point of this fix is that default requests/httpx SSL is correct — any
-    ``verify=`` in analysis.py is additive config and forbidden.
-    """
-    src = pathlib.Path(__file__).resolve().parents[1] / "app" / "analysis.py"
-    text = src.read_text()
+    import ast
 
-    bad_lines = [
-        (i + 1, ln) for i, ln in enumerate(text.splitlines()) if "verify=" in ln and not ln.lstrip().startswith("#")
-    ]
-    assert not bad_lines, (
-        "verify= found in executable code in analysis.py — the NVD path must "
-        "use default SSL. Offending lines:\n  " + "\n  ".join(f"{n}: {ln}" for n, ln in bad_lines)
-    )
+    source = (pathlib.Path(__file__).resolve().parents[1] / "app" / "analysis.py").read_text()
+    offenders = [ast.unparse(node) for node in _requests_tls_nodes(source)
+                 if isinstance(node, ast.Call)
+                 and any(keyword.arg in {None, "verify", "ssl_context"} for keyword in node.keywords)]
+    assert not offenders, offenders
+
+
+@pytest.mark.parametrize("source", [
+    "requests.get(url, verify=tls_ssl_context())",
+    "_nvd_session.get(url, verify=False)",
+    "_nvd_session.verify = ssl.create_default_context()",
+])
+def test_requests_guard_detects_unsafe_tls_changes(source):
+    import ast
+
+    nodes = list(_requests_tls_nodes(source))
+    assert nodes
+    assert any("verify" in ast.unparse(node) for node in nodes)
+
+
+@pytest.mark.parametrize("operation", ["get", "post"])
+def test_httpx_fallback_preserves_verified_tls_context(monkeypatch, operation):
+    import asyncio
+    from types import SimpleNamespace
+
+    from app import analysis, http_client
+
+    context = http_client.tls_ssl_context()
+    assert context.verify_mode == ssl.CERT_REQUIRED and context.check_hostname
+    captured = []
+
+    def no_lifespan():
+        raise RuntimeError("no lifespan")
+
+    class Client:
+        def __init__(self, **kwargs):
+            captured.append(kwargs)
+            assert kwargs["verify"] is context
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *args):
+            return None
+        async def get(self, *args, **kwargs):
+            return SimpleNamespace(raise_for_status=lambda: None, json=lambda: {"ok": True})
+        post = get
+
+    monkeypatch.setattr(http_client, "get_async_http_client", no_lifespan)
+    monkeypatch.setattr(analysis.httpx, "AsyncClient", Client)
+    coroutine = analysis._async_get("https://provider.test") if operation == "get" else analysis._async_post("https://provider.test", {})
+    assert asyncio.run(coroutine) == {"ok": True}
+    assert len(captured) == 1
 
 
 def test_nvd_session_verify_is_certifi_path_string():

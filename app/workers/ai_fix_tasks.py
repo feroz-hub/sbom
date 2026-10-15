@@ -17,12 +17,16 @@ import asyncio
 import logging
 
 from celery import shared_task
+from fastapi import HTTPException
+from sqlalchemy import select
 
 from ..ai.batch import AiFixBatchPipeline
 from ..ai.progress import BatchProgress, get_progress_store
 from ..ai.rollout import evaluate_access
 from ..ai.runtime_config import build_budget_guard
 from ..core.context import minimal_background_context, tenant_scope
+from ..models import AnalysisRun
+from ..services.job_authorization import authorize_job_actor
 
 log = logging.getLogger("sbom.ai.tasks")
 
@@ -47,6 +51,7 @@ def generate_run_fixes(
     run_id: int,
     *,
     tenant_id: int | None = None,
+    actor_user_id: int | None = None,
     provider_name: str | None = None,
     force_refresh: bool = False,
     budget_usd: float | None = None,
@@ -82,7 +87,6 @@ def generate_run_fixes(
     )
 
     if tenant_id is None:
-        store = get_progress_store()
         prog = BatchProgress(
             run_id=run_id,
             batch_id=batch_id,
@@ -90,52 +94,54 @@ def generate_run_fixes(
             status="failed",
             last_error="AI batch is missing its tenant context",
         )
-        store.write(prog)
-        return prog.model_dump(mode="json")
-
-    with tenant_scope(minimal_background_context(tenant_id)):
-        access = evaluate_access(rollout_key=f"run:{run_id}")
-    if not access.allowed:
-        store = get_progress_store()
-        prog = BatchProgress(
-            run_id=run_id,
-            batch_id=batch_id,
-            scope_label=scope_label,
-            status="failed",
-            last_error=access.message,
-        )
-        store.write(prog)
         return prog.model_dump(mode="json")
 
     with tenant_scope(minimal_background_context(tenant_id)):
         db = SessionLocal()
+        ownership_confirmed = False
         try:
-            pipeline = AiFixBatchPipeline(
-                db,
-                budget=build_budget_guard(per_scan_override_usd=budget_usd),
-            )
-            summary = asyncio.run(
-                _run_pipeline_with_http_client(
-                    pipeline,
-                    run_id=run_id,
-                    provider_name=provider_name,
-                    force_refresh=force_refresh,
-                    finding_ids=finding_ids,
-                    batch_id=batch_id,
-                    scope_label=scope_label,
+            # Revalidate the requesting actor before run/finding access or provider calls.
+            context = authorize_job_actor(db, actor_user_id=actor_user_id,
+                                          tenant_id=tenant_id, permission="analysis:run")
+            if db.scalar(select(AnalysisRun.id).where(
+                AnalysisRun.id == run_id, AnalysisRun.tenant_id == context.tenant_id
+            )) is None:
+                raise HTTPException(404, "Analysis run not found")
+            ownership_confirmed = True
+            with tenant_scope(context):
+                access = evaluate_access(rollout_key=f"run:{run_id}")
+                if not access.allowed:
+                    prog = BatchProgress(run_id=run_id, batch_id=batch_id, scope_label=scope_label,
+                                         status="failed", last_error=access.message)
+                    get_progress_store().write(prog)
+                    return prog.model_dump(mode="json")
+                pipeline = AiFixBatchPipeline(
+                    db,
+                    budget=build_budget_guard(per_scan_override_usd=budget_usd),
                 )
-            )
+                summary = asyncio.run(
+                    _run_pipeline_with_http_client(
+                        pipeline,
+                        run_id=run_id,
+                        provider_name=provider_name,
+                        force_refresh=force_refresh,
+                        finding_ids=finding_ids,
+                        batch_id=batch_id,
+                        scope_label=scope_label,
+                    )
+                )
         except Exception as exc:  # noqa: BLE001
             log.exception("ai.task.generate_run_fixes.failed: run=%s batch=%s err=%s", run_id, batch_id, exc)
-            store = get_progress_store()
             prog = BatchProgress(
                 run_id=run_id,
                 batch_id=batch_id,
                 scope_label=scope_label,
                 status="failed",
-                last_error=str(exc)[:240],
+                last_error="Background job authorization denied" if isinstance(exc, HTTPException) else "AI batch execution failed",
             )
-            store.write(prog)
+            # Rejected/foreign jobs must not overwrite another run's progress key.
+            if ownership_confirmed:
+                get_progress_store().write(prog)
             return prog.model_dump(mode="json")
         finally:
             db.close()

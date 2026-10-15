@@ -8,9 +8,7 @@ totals are deliberately different (VEX-DASH-001).
 """
 
 import unittest
-
-from sqlalchemy import create_engine, select
-from sqlalchemy.orm import Session
+from datetime import UTC, datetime
 
 from app.metrics.vex import vex_context_counts
 from app.models import (
@@ -19,12 +17,17 @@ from app.models import (
     Base,
     SBOMComponent,
     SBOMSource,
+    Tenant,
     VexDocument,
     VexInvestigation,
     VexStatement,
 )
 from app.services.lifecycle.vex_provider import vex_dashboard_summary, vex_report
 from app.services.vex.reconciliation import recompute_for_sbom
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import Session
+
+from tests.tenant_fixture_scope import verified_fixture_tenant
 
 NOW = "2026-09-24T00:00:00Z"
 
@@ -34,6 +37,12 @@ class _MetricsTestCase(unittest.TestCase):
         self.engine = create_engine("sqlite:///:memory:")
         Base.metadata.create_all(self.engine)
         self.db = Session(self.engine)
+        self.addCleanup(self.engine.dispose)
+        self.addCleanup(self.db.close)
+        now = datetime.now(UTC)
+        self.db.add(Tenant(id=1, name="VEX fixture", slug="vex-fixture", status="ACTIVE", created_at=now, updated_at=now))
+        self.db.flush()
+        self.enterContext(verified_fixture_tenant(self.db, 1))
         self.sbom = SBOMSource(sbom_name="metrics-test", sbom_data="{}", tenant_id=1, is_active=True)
         self.db.add(self.sbom)
         self.db.flush()
@@ -42,10 +51,6 @@ class _MetricsTestCase(unittest.TestCase):
         )
         self.db.add(self.component)
         self.db.commit()
-
-    def tearDown(self):
-        self.db.close()
-        self.engine.dispose()
 
     def _run(self, status="OK"):
         run = AnalysisRun(

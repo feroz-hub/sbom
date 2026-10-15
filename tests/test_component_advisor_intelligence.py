@@ -13,17 +13,18 @@ depending on reconciliation timing. One test runs the real
 from datetime import UTC, datetime
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session
-from sqlalchemy.pool import StaticPool
-
 from app.core.context import minimal_background_context, tenant_scope
 from app.db import Base
 from app.metrics.component_advisor import component_advisor_bucket_counts
 from app.models import AnalysisFinding, Tenant, VexInvestigation
 from app.services.component_advisor.intelligence_service import build_snapshot, get_component_version
 from app.services.dashboard_scope import DashboardScope
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
+from sqlalchemy.pool import StaticPool
+
 from tests.component_advisor_support import NOW, World, purl_key
+from tests.tenant_fixture_scope import verified_fixture_tenant
 
 
 @pytest.fixture
@@ -37,12 +38,14 @@ def world():
             Tenant(id=2, name="Two", slug="two", status="ACTIVE", created_at=now, updated_at=now),
         ])
         db.flush()
-        yield World(db)
+        with verified_fixture_tenant(db, 1):
+            yield World(db)
     engine.dispose()
 
 
 def snapshot(world, tenant_id=1, **scope):
-    return build_snapshot(world.db, DashboardScope(tenant_id, **scope))
+    with verified_fixture_tenant(world.db, tenant_id):
+        return build_snapshot(world.db, DashboardScope(tenant_id, **scope))
 
 
 def by_name(snap):
@@ -312,7 +315,8 @@ def test_T11_cross_tenant_canonical_key_is_not_found__FR_SCA_023(world):
     theirs = world.sbom(world.product(tenant_id=2))
     world.component(theirs, "only-in-b", "1.0.0")
     key = purl_key("pkg:npm/only-in-b@1.0.0")
-    assert get_component_version(world.db, DashboardScope(2), key) is not None
+    with verified_fixture_tenant(world.db, 2):
+        assert get_component_version(world.db, DashboardScope(2), key) is not None
     assert get_component_version(world.db, DashboardScope(1), key) is None
 
 

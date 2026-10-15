@@ -7,7 +7,7 @@ from threading import Barrier
 import jwt
 import pytest
 from app.db import SessionLocal
-from app.models import AccountActionToken, AuthorizationAuditLog, IAMUser
+from app.models import AccountActionToken, AuthorizationAuditLog, IAMUser, SecurityMailOutbox
 from app.routers.native_auth import router
 from app.services import audit_service, native_abuse_service, password_service
 from app.services import native_auth_service as auth
@@ -20,7 +20,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from tests.functional_security_support import tenant_actor_from_database
 from tests.phase6_helpers import seed_user
+from tests.tenant_fixture_scope import scoped_context_override
 from tests.test_native_iam_phase2 import PASSWORD, credential, enrolled
 from tests.test_native_iam_phase2 import native_config as native_config
 
@@ -388,19 +390,61 @@ def test_forgot_normalizes_hash_cost_for_all_account_classes(account, monkeypatc
 
 def test_resend_route_is_throttled_before_token_or_email_work(account, client, monkeypatch):
     from app.core.security import get_current_tenant_context
-
-    from tests.test_native_iam_phase2 import context
+    from app.services import native_enrollment_service as enrollment
 
     with SessionLocal() as db:
-        actor = context(db)
-        db.commit()
-    client.app.dependency_overrides[get_current_tenant_context] = lambda: actor
+        actor = tenant_actor_from_database(db, "TENANT_ADMIN")
+        before = [list(db.execute(select(model.__table__))) for model in (AccountActionToken, SecurityMailOutbox)]
+    monkeypatch.setitem(client.app.dependency_overrides, get_current_tenant_context,
+                        scoped_context_override(lambda: actor))
+    calls = []
+    resend = enrollment.resend
+
+    def counted_resend(*args, **kwargs):
+        calls.append(1)
+        return resend(*args, **kwargs)
+
+    monkeypatch.setattr(enrollment, "resend", counted_resend)
+    monkeypatch.setattr(enrollment.tokens, "issue_activation_token",
+                        lambda *a, **k: pytest.fail("Ineligible or throttled request must not issue a token"))
+    monkeypatch.setattr(enrollment, "deliver_activation",
+                        lambda *a, **k: pytest.fail("Ineligible or throttled request must not send email"))
     monkeypatch.setenv("API_RATE_LIMIT_ENABLED", "true")
     monkeypatch.setattr(get_settings(), "native_auth_ip_limit_per_minute", 1)
     native_abuse_service.limiter.cache_clear()
     path = f"/api/tenants/1/native-users/{account[0]}/resend-activation"
-    assert client.post(path).status_code == 404  # Already active, ineligible.
-    assert client.post(path).status_code == 429
+    try:
+        assert client.post(path).status_code == 404  # Already active, ineligible.
+        assert len(calls) == 1
+        assert client.post(path).status_code == 429
+        assert len(calls) == 1  # Throttled before enrollment work.
+        with SessionLocal() as db:
+            assert [list(db.execute(select(model.__table__)))
+                    for model in (AccountActionToken, SecurityMailOutbox)] == before
+    finally:
+        native_abuse_service.limiter.cache_clear()
+
+
+def test_resend_without_invitation_authority_has_no_side_effects(account, client, monkeypatch):
+    from app.core.security import get_current_tenant_context
+    from app.services import native_enrollment_service as enrollment
+
+    with SessionLocal() as db:
+        actor = tenant_actor_from_database(db, "VIEWER")
+        before = [list(db.execute(select(model.__table__))) for model in (AccountActionToken, SecurityMailOutbox)]
+        status = db.get(IAMUser, account[0]).status
+    monkeypatch.setitem(client.app.dependency_overrides, get_current_tenant_context,
+                        scoped_context_override(lambda: actor))
+    monkeypatch.setattr(enrollment, "resend",
+                        lambda *a, **k: pytest.fail("Unauthorized request must not enter enrollment"))
+    monkeypatch.setattr(enrollment, "deliver_activation",
+                        lambda *a, **k: pytest.fail("Unauthorized request must not send email"))
+    response = client.post(f"/api/tenants/1/native-users/{account[0]}/resend-activation")
+    assert response.status_code == 403, response.text
+    with SessionLocal() as db:
+        assert db.get(IAMUser, account[0]).status == status
+        assert [list(db.execute(select(model.__table__)))
+                for model in (AccountActionToken, SecurityMailOutbox)] == before
 
 
 def test_account_limit_is_normalized_and_independent_of_source(native_config, monkeypatch):

@@ -17,6 +17,8 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
+from ..core.context import CurrentContext
+from ..core.security import require_platform_permission
 from ..db import get_db
 from ..models import KevEntry
 from ..services.kev_service import parse_date_string, sync_kev
@@ -227,6 +229,7 @@ def _serialize(row: KevEntry) -> dict[str, Any]:
 
 @router.post("/sync", response_model=KevSyncResponse)
 def sync_kev_catalog(
+    context: CurrentContext = Depends(require_platform_permission("platform:admin")),
     payload: KevSyncRequest | None = Body(default=None),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:

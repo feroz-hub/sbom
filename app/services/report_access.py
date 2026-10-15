@@ -49,8 +49,8 @@ def recipient_context(db, subscription):
 def authorize_preferences(db, preferences, context):
     if context.tenant_id is None:
         raise report_error("TENANT_REQUIRED", "Select a tenant first.")
-    if not {"sbom:read", "analysis:read", "project:read", "product:read"} <= context.permissions:
-        raise report_error("REPORT_READ_REVOKED", "Read access to the report scope is required.")
+    if not {"sbom:read", "sbom:export", "analysis:read", "project:read", "product:read"} <= context.permissions:
+        raise report_error("REPORT_READ_REVOKED", "Read and export access to the report scope is required.")
     if preferences.scope == "TENANT" and not {"TENANT_ADMIN", "SECURITY_ANALYST"} & {
         normalize_role(r) for r in context.roles
     }:

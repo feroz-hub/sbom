@@ -103,6 +103,8 @@ def upsert_remediation(
     db: Session = Depends(get_db),
 ):
     """Create or update a remediation tracking record for a vulnerability."""
+    if payload.status == "Closed" and not context.has_permission("remediation:close"):
+        raise HTTPException(status_code=403, detail="Insufficient permission")
     try:
         if get_project_for_tenant(db, project_id, context.tenant_id) is None:
             raise HTTPException(status_code=404, detail="Project not found")
@@ -110,7 +112,7 @@ def upsert_remediation(
             db,
             project_id,
             payload.model_dump(exclude_unset=True),
-            changed_by=user_id,
+            changed_by=context.actor_label(),
         )
         return record
     except ValueError as e:

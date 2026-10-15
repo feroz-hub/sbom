@@ -4,13 +4,15 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import inspect, text
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 
 def test_report_migrations_round_trip_preserves_inventory(client):
     from app.db import SessionLocal, engine
     from app.models import Projects
 
     assert "test" in engine.url.database.lower()
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         project = Projects(project_name="migration-preservation", project_status=1, tenant_id=1)
         db.add(project)
         db.commit()

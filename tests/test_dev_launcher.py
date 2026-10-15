@@ -599,6 +599,11 @@ def test_startup_commands_use_solo_only_for_windows_worker(monkeypatch, tmp_path
     monkeypatch.setattr(dev, "docker_available", lambda: False)
     monkeypatch.setattr(dev, "select_service", lambda service, port, *args, **kwargs: ("Docker", port))
     monkeypatch.setattr(dev, "mailpit_ready", lambda: True)
+    # This test constructs commands; service readiness has its own tests.
+    monkeypatch.setattr(dev, "select_mailpit", lambda **kwargs: "Docker")
+    def unexpected_network_probe(*args, **kwargs):
+        pytest.fail("Command-generation test must not probe a live service")
+    monkeypatch.setattr(dev, "reachable", unexpected_network_probe)
     for name in ("ensure_virtualenv", "ensure_dependencies", "generate_keys", "check_application_ports",
                  "ensure_database", "write_config", "validate_existing_schema", "acquire_beat_lock", "stop_processes"):
         monkeypatch.setattr(dev, name, lambda *args, **kwargs: None)

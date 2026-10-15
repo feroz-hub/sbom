@@ -11,10 +11,6 @@ import time
 from datetime import UTC, datetime
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session
-from sqlalchemy.pool import StaticPool
-
 from app.db import Base
 from app.models import ComponentPurposeMetadata, Tenant
 from app.services.component_advisor import sources
@@ -36,7 +32,12 @@ from app.services.component_advisor.recommendations.compatibility import (
 )
 from app.services.component_advisor.recommendations.workflow import CandidateKind
 from app.services.dashboard_scope import DashboardScope
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
+from sqlalchemy.pool import StaticPool
+
 from tests.component_advisor_support import World
+from tests.tenant_fixture_scope import verified_fixture_tenant
 
 
 @pytest.fixture
@@ -47,7 +48,8 @@ def world():
         now = datetime.now(UTC)
         db.add(Tenant(id=1, name="One", slug="one", status="ACTIVE", created_at=now, updated_at=now))
         db.flush()
-        yield World(db)
+        with verified_fixture_tenant(db, 1):
+            yield World(db)
     engine.dispose()
 
 

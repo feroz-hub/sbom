@@ -35,7 +35,7 @@ def session():
 
 @pytest.fixture
 def sbom():
-    return SBOMSource(id=12, tenant_id=4, projectid=3, sbom_name="private SBOM name")
+    return SBOMSource(id=12, tenant_id=4, projectid=3, sbom_name="private SBOM name", status="validated")
 
 
 @pytest.fixture
@@ -57,6 +57,8 @@ def test_analysis_lifecycle_has_one_terminal_event_and_aggregates(session, sbom,
     monkeypatch.setattr(orchestrator, "active_run", lambda _id: None)
     component = SBOMComponent(id=9, sbom_id=sbom.id, name="private-package", version="1")
     session.execute.return_value.scalars.return_value = [component]
+    session.scalar.return_value = sbom  # Trusted owner returned by the row lock.
+    session.execute.return_value.one.return_value = (0, None, None)
 
     def refresh(run):
         run.id, run.tenant_id = 21, sbom.tenant_id

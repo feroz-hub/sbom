@@ -16,6 +16,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
+
 
 @pytest.fixture
 def scoped_db():
@@ -26,45 +28,54 @@ def scoped_db():
         db.add_all([
             Tenant(id=1, name="One", slug="one", status="ACTIVE", created_at=now, updated_at=now),
             Tenant(id=2, name="Two", slug="two", status="ACTIVE", created_at=now, updated_at=now),
-            Projects(id=1, tenant_id=1, project_name="A", project_status=1),
-            Projects(id=2, tenant_id=1, project_name="B", project_status=1),
-            Product(id=1, tenant_id=1, project_id=1, name="A1", normalized_name="a1", slug="a1", created_at="2026-01-01"),
-            Product(id=2, tenant_id=1, project_id=2, name="B1", normalized_name="b1", slug="b1", created_at="2026-01-01"),
-            SBOMSource(id=1, tenant_id=1, projectid=1, product_id=1, sbom_name="active-a", is_active=True),
-            SBOMSource(id=2, tenant_id=1, projectid=1, product_id=1, sbom_name="inactive-a", is_active=False),
-            SBOMSource(id=3, tenant_id=1, projectid=2, product_id=2, sbom_name="active-b", is_active=True),
         ])
         db.flush()
-        # Direct Core inserts simulate a second tenant without bypassing the
-        # production ORM's cross-tenant write guard for application writes.
-        db.execute(Projects.__table__.insert().values(id=3, tenant_id=2, project_name="Other tenant", project_status=1))
-        db.execute(Product.__table__.insert().values(id=3, tenant_id=2, project_id=3, name="T2", normalized_name="t2", slug="t2", created_at="2026-01-01"))
-        db.execute(LogicalSBOM.__table__.insert().values(id=4, tenant_id=2, product_id=3, name="Other tenant", created_at="2026-01-01", updated_at="2026-01-01"))
-        db.execute(SBOMSource.__table__.insert().values(id=4, tenant_id=2, projectid=3, product_id=3, logical_sbom_id=4, sbom_name="other-tenant", is_active=True))
+        with verified_fixture_tenant(db, 1):
+            db.add_all([
+                Projects(id=1, tenant_id=1, project_name="A", project_status=1),
+                Projects(id=2, tenant_id=1, project_name="B", project_status=1),
+                Product(id=1, tenant_id=1, project_id=1, name="A1", normalized_name="a1", slug="a1", created_at="2026-01-01"),
+                Product(id=2, tenant_id=1, project_id=2, name="B1", normalized_name="b1", slug="b1", created_at="2026-01-01"),
+                SBOMSource(id=1, tenant_id=1, projectid=1, product_id=1, sbom_name="active-a", is_active=True),
+                SBOMSource(id=2, tenant_id=1, projectid=1, product_id=1, sbom_name="inactive-a", is_active=False),
+                SBOMSource(id=3, tenant_id=1, projectid=2, product_id=2, sbom_name="active-b", is_active=True),
+            ])
+            db.flush()
+        # Foreign fixture rows use their independently verified owner.
+        with verified_fixture_tenant(db, 2):
+            # Direct Core inserts simulate a second tenant without bypassing the
+            # production ORM's cross-tenant write guard for application writes.
+            db.execute(Projects.__table__.insert().values(id=3, tenant_id=2, project_name="Other tenant", project_status=1))
+            db.execute(Product.__table__.insert().values(id=3, tenant_id=2, project_id=3, name="T2", normalized_name="t2", slug="t2", created_at="2026-01-01"))
+            db.execute(LogicalSBOM.__table__.insert().values(id=4, tenant_id=2, product_id=3, name="Other tenant", created_at="2026-01-01", updated_at="2026-01-01"))
+            db.execute(SBOMSource.__table__.insert().values(id=4, tenant_id=2, projectid=3, product_id=3, logical_sbom_id=4, sbom_name="other-tenant", is_active=True))
         for run_id, sbom_id, project_id, product_id, tenant_id in [
             (1, 1, 1, 1, 1), (2, 2, 1, 1, 1), (3, 3, 2, 2, 1), (4, 4, 3, 3, 2),
         ]:
-            run = AnalysisRun(
-                id=run_id, tenant_id=tenant_id, sbom_id=sbom_id,
-                project_id=project_id, product_id=product_id,
-                run_status="FINDINGS", started_on="2026-01-01", completed_on="2026-01-01",
-                total_findings=1,
-            )
-            finding = AnalysisFinding(
-                tenant_id=tenant_id, analysis_run_id=run_id,
-                vuln_id=f"CVE-{run_id}", severity="high",
-            )
-            if tenant_id == 1:
-                db.add_all([run, finding])
-            else:
-                db.execute(AnalysisRun.__table__.insert().values(**{
-                    column: value for column, value in run.__dict__.items() if column != "_sa_instance_state"
-                }))
-                db.execute(AnalysisFinding.__table__.insert().values(**{
-                    column: value for column, value in finding.__dict__.items() if column != "_sa_instance_state"
-                }))
-        db.commit()
-        yield db
+            with verified_fixture_tenant(db, tenant_id):
+                run = AnalysisRun(
+                    id=run_id, tenant_id=tenant_id, sbom_id=sbom_id,
+                    project_id=project_id, product_id=product_id,
+                    run_status="FINDINGS", started_on="2026-01-01", completed_on="2026-01-01",
+                    total_findings=1,
+                )
+                finding = AnalysisFinding(
+                    tenant_id=tenant_id, analysis_run_id=run_id,
+                    vuln_id=f"CVE-{run_id}", severity="high",
+                )
+                if tenant_id == 1:
+                    db.add_all([run, finding])
+                else:
+                    db.execute(AnalysisRun.__table__.insert().values(**{
+                        column: value for column, value in run.__dict__.items() if column != "_sa_instance_state"
+                    }))
+                    db.execute(AnalysisFinding.__table__.insert().values(**{
+                        column: value for column, value in finding.__dict__.items() if column != "_sa_instance_state"
+                    }))
+                db.flush()
+        with verified_fixture_tenant(db, 1):
+            db.commit()
+            yield db
     engine.dispose()
 
 

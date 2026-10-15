@@ -1,3 +1,5 @@
+from tests.tenant_fixture_scope import scoped_context_override
+
 """SPDX uses the existing tenant-scoped session/job/approval API and native storage."""
 import json
 import uuid
@@ -10,6 +12,7 @@ from app.core.security import get_current_tenant_context
 from app.db import SessionLocal
 from app.models import SBOMRepairJob, SBOMSource, SBOMValidationSession
 
+from tests.tenant_fixture_scope import verified_fixture_tenant
 from tests.test_sbom_spdx_quality_repair import document, raw
 
 
@@ -49,7 +52,7 @@ def test_native_spdx_approve_quality_history_and_original(client, version):
     accepted = client.post(approve, json={'candidate_sha256': result['candidate_sha256']})
     assert accepted.status_code == 200, accepted.text
     accepted_id = accepted.json()['imported_sbom_id']
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         stored = db.get(SBOMSource, accepted_id)
         assert stored.sbom_data.encode() == candidate
         assert json.loads(stored.sbom_data)['spdxVersion'] == 'SPDX-' + version
@@ -76,7 +79,7 @@ def test_spdx_candidate_tampering_hides_quality_and_denies_approval(client):
     session = upload(client)
     result = job(client, session)
     endpoint = base(session) + f"/repair/{result['repair_job_id']}"
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         db.connection().exec_driver_sql('UPDATE sbom_repair_jobs SET candidate_content = candidate_content || %s WHERE id = %s', (' ', result['repair_job_id']))
         db.commit()
     response = client.get(endpoint)
@@ -89,7 +92,7 @@ def test_spdx_cross_tenant_every_artifact_endpoint(client):
     result = job(client, session)
     context = CurrentContext(user_id=2, external_user_id='foreign', email=None, display_name='Foreign', tenant_id=2,
                              external_tenant_id='foreign', roles=frozenset({'TENANT_ADMIN'}), permissions=ROLE_PERMISSIONS['TENANT_ADMIN'])
-    client.app.dependency_overrides[get_current_tenant_context] = lambda: context
+    client.app.dependency_overrides[get_current_tenant_context] = scoped_context_override(lambda: context)
     try:
         for suffix in ('/quality', f"/repair/{result['repair_job_id']}", f"/repair/{result['repair_job_id']}/changes", f"/repair/{result['repair_job_id']}/download"):
             response = client.get(base(session) + suffix)
@@ -106,7 +109,7 @@ def test_spdx_permission_matrix(client, role):
     session = upload(client)
     context = CurrentContext(user_id=1, external_user_id='role-test', email=None, display_name='Role', tenant_id=1,
                              external_tenant_id='default', roles=frozenset({role}), permissions=ROLE_PERMISSIONS[role])
-    client.app.dependency_overrides[get_current_tenant_context] = lambda: context
+    client.app.dependency_overrides[get_current_tenant_context] = scoped_context_override(lambda: context)
     try:
         assert client.get(base(session) + '/quality').status_code == 200
         response = client.post(base(session) + '/repair')
@@ -119,7 +122,7 @@ def test_valid_spdx_stays_native_and_creates_no_repair_job(client):
     source = raw(document())
     response = client.post('/api/sboms', json={'sbom_name': 'valid-spdx-' + str(uuid.uuid4()), 'sbom_data': source.decode()})
     assert response.status_code == 201, response.text
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         stored = db.get(SBOMSource, response.json()['id'])
         assert stored.sbom_data.encode() == source
         from sqlalchemy import func, select
@@ -154,7 +157,7 @@ def test_spdx_policy_changes_append_history(client, monkeypatch):
 def test_legacy_spdx_job_is_preserved_and_does_not_block_native_run(client):
     session = upload(client)
     original = job(client, session)
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         stored = db.get(SBOMRepairJob, original['repair_job_id'])
         report = dict(stored.report_json)
         report.pop('format')
@@ -163,7 +166,7 @@ def test_legacy_spdx_job_is_preserved_and_does_not_block_native_run(client):
     fresh = job(client, session)
     assert fresh['repair_job_id'] != original['repair_job_id']
     assert fresh['format'] == 'SPDX_JSON'
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         assert db.get(SBOMRepairJob, original['repair_job_id']) is not None
 
 
@@ -177,7 +180,7 @@ def test_historical_unsupported_spdx_quality_remains_readable(client):
     legacy = deepcopy(previous['assessment'])
     legacy.update(engine_version='2.0.0', supported=False, grade='NOT_ASSESSED', overall_score=0, dimensions=[], findings=[])
     legacy.pop('format', None)
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         workspace = db.get(SBOMValidationSession, session_id)
         ValidationRepairService(db, tenant_id=workspace.tenant_id)._record_event(
             workspace, 'SBOM_QUALITY_CALCULATED', summary='Historical Phase 2 fixture',
@@ -187,6 +190,6 @@ def test_historical_unsupported_spdx_quality_remains_readable(client):
     current = client.get(base(session_id) + '/quality').json()
     assert current['assessment']['engine_version'] == '3.0.0'
     assert any(e['assessment'] == legacy for e in current['history'])
-    with SessionLocal() as db:
+    with SessionLocal() as db, verified_fixture_tenant(db, 1):
         retained = db.query(SBOMValidationSessionEvent).filter_by(session_id=session_id, event_type='SBOM_QUALITY_CALCULATED').all()
         assert any(e.metadata_json.get('assessment') == legacy for e in retained)

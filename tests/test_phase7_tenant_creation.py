@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 from app.core.identity_states import IdentityAuditEvent
 from app.models import (
-    AuthorizationRole,
     AuthorizationAuditLog,
+    AuthorizationRole,
     EmailVerificationToken,
     PlatformUserRole,
     Tenant,
@@ -12,6 +12,8 @@ from app.models import (
     TenantUserRoleAssignment,
 )
 from sqlalchemy import func, select
+
+from tests.tenant_fixture_scope import verified_fixture_tenant
 
 from .phase7_helpers import seed_eligible_admin, seed_requester, tenant_payload
 
@@ -57,49 +59,50 @@ def test_atomic_api_creation_returns_safe_nested_contract(client):
         tenant = db.scalar(
             select(Tenant).where(Tenant.id == body["tenant"]["id"])
         )
-        memberships = db.scalars(
-            select(TenantUser).where(TenantUser.tenant_id == tenant.id)
-        ).all()
-        assert len(memberships) == 1
-        assert memberships[0].user_id == initial_admin.id
-        assert memberships[0].role == "TENANT_ADMIN"
-        assert memberships[0].status == "ACTIVE"
-        assignment_role = db.scalar(
-            select(AuthorizationRole.code)
-            .join(
-                TenantUserRoleAssignment,
-                TenantUserRoleAssignment.role_id == AuthorizationRole.id,
-            )
-            .where(
-                TenantUserRoleAssignment.tenant_user_id == memberships[0].id,
-                TenantUserRoleAssignment.status == "ACTIVE",
-            )
-        )
-        assert assignment_role == "TENANT_ADMIN"
-        assert db.scalar(
-            select(func.count(PlatformUserRole.id)).where(
-                PlatformUserRole.user_id == initial_admin.id
-            )
-        ) == 0
-        assert db.scalar(
-            select(func.count(EmailVerificationToken.id)).where(
-                EmailVerificationToken.user_id == initial_admin.id
-            )
-        ) == 0
-        actions = set(
-            db.scalars(
-                select(AuthorizationAuditLog.action).where(
-                    AuthorizationAuditLog.correlation_id == "phase7-create"
+        with verified_fixture_tenant(db, tenant.id):
+            memberships = db.scalars(
+                select(TenantUser).where(TenantUser.tenant_id == tenant.id)
+            ).all()
+            assert len(memberships) == 1
+            assert memberships[0].user_id == initial_admin.id
+            assert memberships[0].role == "TENANT_ADMIN"
+            assert memberships[0].status == "ACTIVE"
+            assignment_role = db.scalar(
+                select(AuthorizationRole.code)
+                .join(
+                    TenantUserRoleAssignment,
+                    TenantUserRoleAssignment.role_id == AuthorizationRole.id,
+                )
+                .where(
+                    TenantUserRoleAssignment.tenant_user_id == memberships[0].id,
+                    TenantUserRoleAssignment.status == "ACTIVE",
                 )
             )
-        )
-        assert {
-            str(IdentityAuditEvent.PLATFORM_TENANT_CREATE_REQUESTED),
-            str(IdentityAuditEvent.TENANT_INITIAL_ADMIN_VALIDATED),
-            str(IdentityAuditEvent.PLATFORM_TENANT_CREATED),
-            str(IdentityAuditEvent.TENANT_INITIAL_ADMIN_ASSIGNED),
-        } <= actions
-        assert requester_id != initial_admin.id
+            assert assignment_role == "TENANT_ADMIN"
+            assert db.scalar(
+                select(func.count(PlatformUserRole.id)).where(
+                    PlatformUserRole.user_id == initial_admin.id
+                )
+            ) == 0
+            assert db.scalar(
+                select(func.count(EmailVerificationToken.id)).where(
+                    EmailVerificationToken.user_id == initial_admin.id
+                )
+            ) == 0
+            actions = set(
+                db.scalars(
+                    select(AuthorizationAuditLog.action).where(
+                        AuthorizationAuditLog.correlation_id == "phase7-create"
+                    )
+                )
+            )
+            assert {
+                str(IdentityAuditEvent.PLATFORM_TENANT_CREATE_REQUESTED),
+                str(IdentityAuditEvent.TENANT_INITIAL_ADMIN_VALIDATED),
+                str(IdentityAuditEvent.PLATFORM_TENANT_CREATED),
+                str(IdentityAuditEvent.TENANT_INITIAL_ADMIN_ASSIGNED),
+            } <= actions
+            assert requester_id != initial_admin.id
 
 
 def test_missing_initial_admin_is_stable_422_and_creates_no_tenant(client):

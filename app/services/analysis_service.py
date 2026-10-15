@@ -95,7 +95,9 @@ def _validate_analysis_finding_rows(
             string_limits[column.name] = int(column.type.length)
 
     try:
-        for column in inspect(db.get_bind()).get_columns(AnalysisFinding.__tablename__):
+        # Reflect metadata in the caller's transaction. Opening an engine
+        # connection can roll back an in-memory SQLite session's pending run.
+        for column in inspect(db.connection()).get_columns(AnalysisFinding.__tablename__):
             length = getattr(column["type"], "length", None)
             if not length:
                 continue
@@ -645,7 +647,7 @@ def persist_analysis_run(
     db.flush()
 
     if existing_run is not None:
-        db.execute(delete(AnalysisFinding).where(AnalysisFinding.analysis_run_id == run.id))
+        db.execute(delete(AnalysisFinding).where(AnalysisFinding.analysis_run_id == run.id, AnalysisFinding.tenant_id == run.tenant_id))
         db.flush()
 
     # Persist canonical findings. Metrics are written after the actual rows

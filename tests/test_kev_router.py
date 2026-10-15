@@ -43,6 +43,14 @@ def kev_client(db_session: Session):
     def override_get_db():
         yield db_session
 
+    from app.core.context import CurrentContext
+    from app.core.security import get_current_tenant_context
+    # This fixture exercises catalog behavior as an authenticated platform caller.
+    # Security regression tests separately verify tenant and anonymous rejection.
+    app.dependency_overrides[get_current_tenant_context] = lambda: CurrentContext(
+        1, "test-platform", None, None, None, None,
+        frozenset({"PLATFORM_ADMIN"}), frozenset({"platform:admin"}), True,
+    )
     app.dependency_overrides[get_db] = override_get_db
     with TestClient(app) as client:
         yield client

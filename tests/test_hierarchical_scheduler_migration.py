@@ -8,7 +8,9 @@ from sqlalchemy import inspect, text
 
 def test_hierarchical_scheduler_is_single_head():
     scripts = ScriptDirectory.from_config(Config("alembic.ini"))
-    assert scripts.get_heads() == ["055_ai_model_registry"]
+    heads = scripts.get_heads()
+    assert heads == ["077_sbom_selection_mode"]
+    assert "054_hierarchical_scheduler" in {revision.revision for revision in scripts.walk_revisions()}
 
 
 def test_hierarchical_scheduler_columns_indexes_and_fk_are_installed():

@@ -7,16 +7,33 @@ guarantee (nothing outside recommendation state is written).
 """
 
 import pytest
-from sqlalchemy import select, text
-
 from app.core.context import CurrentContext
 from app.core.permissions import ROLE_PERMISSIONS
 from app.core.security import get_current_tenant_context
 from app.db import SessionLocal
 from app.metrics.cache import reset_cache
-from app.models import AuditLog, ComponentRecommendation
+from app.models import (
+    AnalysisFinding,
+    AnalysisRun,
+    AuditLog,
+    ComponentRecommendation,
+    Product,
+    Projects,
+    SBOMComponent,
+    SBOMSource,
+    VexInvestigation,
+    VexStatement,
+)
 from app.workers.component_advisor_tasks import evaluate_recommendation_task
-from tests.component_advisor_support import NOW, World, purl_key
+from sqlalchemy import func, select, update
+
+from tests.component_advisor_support import World, purl_key
+from tests.tenant_fixture_scope import (
+    declare_fixture_tenant,
+    fixture_business_snapshot,
+    scoped_context_override,
+    verified_fixture_tenant,
+)
 from tests.test_vex_scoped_authorization import make_member
 
 BASE = "/api/component-advisor"
@@ -30,7 +47,8 @@ THEIRS = purl_key("pkg:npm/tenant-b-lib@1.0.0")
 def db():
     session = SessionLocal()
     try:
-        yield session
+        with verified_fixture_tenant(session, 1):
+            yield session
     finally:
         session.close()
 
@@ -38,13 +56,7 @@ def db():
 @pytest.fixture()
 def seeded(db):
     reset_cache()
-    db.execute(
-        text(
-            "INSERT INTO tenants (id, name, slug, external_iam_tenant_id, status, created_at, updated_at) "
-            "VALUES (2, 'Other', 'other', 'other', 'ACTIVE', :now, :now) ON CONFLICT (id) DO NOTHING"
-        ),
-        {"now": NOW},
-    )
+    declare_fixture_tenant(db, 2)
     world = World(db)
     products = [world.product(name=f"app-{i}") for i in range(3)]
     s1, s2, s3 = (world.sbom(p) for p in products)
@@ -52,8 +64,7 @@ def seeded(db):
                             latest_version="2.24.1", recommended_version="2.17.1")
     world.finding(log4j, "CVE-2021-44228", "CRITICAL", score=10.0)
     db.flush()
-    db.execute(text("UPDATE analysis_finding SET fixed_versions = :f WHERE vuln_id = 'CVE-2021-44228'"),
-               {"f": '["2.15.0"]'})
+    db.execute(update(AnalysisFinding).where(AnalysisFinding.vuln_id == "CVE-2021-44228").values(fixed_versions='["2.15.0"]'))
     world.component(s2, "log4j-core", "2.17.1", ecosystem="maven", license="Apache-2.0", lifecycle_status="Supported")
     jackson = world.component(s2, "jackson-databind", "2.9.0", ecosystem="maven")
     world.finding(jackson, "CVE-2026-2000", "HIGH")
@@ -73,10 +84,10 @@ def create(client, key, trigger, params=None, **extra):
 def as_role(client, role, tenant_id=1):
     with SessionLocal() as session:
         user_id = make_member(session, role, tenant_id=tenant_id).user_id
-    client.app.dependency_overrides[get_current_tenant_context] = lambda: CurrentContext(
+    client.app.dependency_overrides[get_current_tenant_context] = scoped_context_override(lambda: CurrentContext(
         user_id=user_id, external_user_id=str(user_id), email=None, display_name=role, tenant_id=tenant_id,
         external_tenant_id=str(tenant_id), roles=frozenset({role}), permissions=ROLE_PERMISSIONS[role],
-    )
+    ))
 
 
 @pytest.fixture()
@@ -86,8 +97,8 @@ def reset_overrides(client):
 
 
 def table_counts(db):
-    tables = ("sbom_source", "sbom_component", "analysis_run", "analysis_finding", "vex_investigation", "vex_statements")
-    return {t: db.execute(text(f"SELECT count(*), coalesce(sum(length(t::text)), 0) FROM {t} t")).one() for t in tables}
+    return fixture_business_snapshot(db, (SBOMSource, SBOMComponent, AnalysisRun, AnalysisFinding,
+                                          VexInvestigation, VexStatement, Product, Projects), (1, 2))
 
 
 # ---------------------------------------------------------------------------
@@ -95,7 +106,9 @@ def table_counts(db):
 # ---------------------------------------------------------------------------
 
 
-def test_T17_critical_component_creates_and_evaluates_a_work_item__FR_SCA_011(client, seeded):
+def test_T17_critical_component_creates_and_evaluates_a_work_item__FR_SCA_011(client, seeded, reset_overrides):
+    # A developer may create work for review but cannot make the review decision.
+    as_role(client, "DEVELOPER")
     response = create(client, LOG4J, "CRITICAL_FINDING")
     assert response.status_code == 201, response.text
     body = response.json()
@@ -107,6 +120,11 @@ def test_T17_critical_component_creates_and_evaluates_a_work_item__FR_SCA_011(cl
     assert body["correlation_id"]
     assert body["advisory_only"] is True
     assert body["capabilities"]["can_decide"] is False
+    denied = client.post(f"{BASE}/recommendations/{body['id']}/decisions", json={
+        "decision": "REJECT", "reason": "creator cannot review", "row_version": body["row_version"],
+    })
+    assert denied.status_code == 403
+    assert client.get(f"{BASE}/recommendations/{body['id']}").json()["status"] == "REVIEW_REQUIRED"
 
 
 def test_T18_high_component_can_trigger__FR_SCA_011(client, seeded):
@@ -152,7 +170,7 @@ def test_T20_rerun_returns_the_existing_open_item__FR_SCA_011(client, seeded, db
     again = create(client, LOG4J, "CRITICAL_FINDING")
     assert again.status_code == 200
     assert again.json()["created"] is False and again.json()["id"] == first["id"]
-    assert db.scalar(select(text("count(*)")).select_from(ComponentRecommendation)) == 1
+    assert db.scalar(select(func.count()).select_from(ComponentRecommendation)) == 1
 
 
 def test_T20_different_context_or_trigger_is_a_separate_item__D10(client, seeded):
@@ -168,7 +186,7 @@ def test_T20_different_context_or_trigger_is_a_separate_item__D10(client, seeded
 
 def test_T20_a_closed_item_does_not_block_a_new_one(client, seeded, db):
     first = create(client, LOG4J, "CRITICAL_FINDING").json()
-    db.execute(text("UPDATE component_recommendation SET status = 'REJECTED' WHERE id = :id"), {"id": first["id"]})
+    db.execute(update(ComponentRecommendation).where(ComponentRecommendation.id == first["id"]).values(status="REJECTED"))
     db.commit()
     second = create(client, LOG4J, "CRITICAL_FINDING")
     assert second.status_code == 201 and second.json()["id"] != first["id"]
@@ -236,7 +254,7 @@ def test_re_evaluate_is_idempotent_and_blocked_after_decisions(client, seeded, d
     again = client.post(f"{BASE}/recommendations/{item['id']}/evaluate").json()
     assert again["status"] == "REVIEW_REQUIRED" and len(again["candidates"]) == len(item["candidates"])
     assert again["row_version"] == item["row_version"] + 1
-    db.execute(text("UPDATE component_recommendation SET status = 'ACCEPTED' WHERE id = :id"), {"id": item["id"]})
+    db.execute(update(ComponentRecommendation).where(ComponentRecommendation.id == item["id"]).values(status="ACCEPTED"))
     db.commit()
     blocked = client.post(f"{BASE}/recommendations/{item['id']}/evaluate")
     assert blocked.status_code == 409 and blocked.json()["detail"]["code"] == "INVALID_STATE"
@@ -250,7 +268,7 @@ def test_create_without_evaluation_stays_open(client, seeded):
 def test_background_task_evaluates_once_and_is_retry_safe__NFR_SCA_004(client, seeded, db):
     item = create(client, LOG4J, "CRITICAL_FINDING", evaluate=False).json()
     assert evaluate_recommendation_task(item["id"], 1, "task-corr") == "REVIEW_REQUIRED"
-    db.execute(text("UPDATE component_recommendation SET status = 'REJECTED' WHERE id = :id"), {"id": item["id"]})
+    db.execute(update(ComponentRecommendation).where(ComponentRecommendation.id == item["id"]).values(status="REJECTED"))
     db.commit()
     assert evaluate_recommendation_task(item["id"], 1, "task-corr") == "REJECTED"  # unchanged
     assert evaluate_recommendation_task(item["id"], 2, "task-corr") == "NOT_FOUND"  # wrong tenant
@@ -270,9 +288,9 @@ def test_background_task_evaluates_a_non_default_tenant__NFR_SCA_004(client, see
         item_id = item.id
     assert created
     assert evaluate_recommendation_task(item_id, 2, "task-tenant-2") == "REVIEW_REQUIRED"
-    rows = db.execute(text(
-        "SELECT DISTINCT tenant_id, user_id FROM audit_log WHERE entity_type = 'component_recommendation' AND entity_id = :id"
-    ), {"id": str(item_id)}).all()
+    with verified_fixture_tenant(db, 2):
+        rows = db.execute(select(AuditLog.tenant_id, AuditLog.user_id).where(
+            AuditLog.entity_type == "component_recommendation", AuditLog.entity_id == str(item_id)).distinct()).all()
     assert [tuple(r) for r in rows] == [(2, "system")]
 
 

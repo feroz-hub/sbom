@@ -182,7 +182,7 @@ async def upload_sbom(
             },
         )
 
-    actor = (created_by or "").strip() or context.actor_label()
+    actor = context.actor_label()
     manual_sbom_version = (sbom_version or "").strip() or None
     manual_product_version = (product_version or productver or "").strip() or None
 
