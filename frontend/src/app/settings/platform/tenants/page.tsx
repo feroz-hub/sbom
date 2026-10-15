@@ -854,6 +854,7 @@ export default function PlatformTenantsPage() {
                           {canStatus && (
                             <Button
                               variant="ghost"
+                              className="!transform-none !transition-colors !will-change-auto"
                               disabled={changeStatus.isPending}
                               aria-label={`${tenant.status === 'ACTIVE' ? 'Disable' : 'Enable'} ${tenant.name}`}
                               onClick={() =>
