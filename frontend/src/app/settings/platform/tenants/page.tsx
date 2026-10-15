@@ -847,14 +847,18 @@ export default function PlatformTenantsPage() {
                           <Link
                             href={`/settings/platform/tenants/${tenant.id}`}
                             aria-label={`Manage ${tenant.name}`}
-                            className="inline-flex min-h-10 items-center rounded-lg border border-border px-3 font-medium text-hcl-navy hover:bg-surface-muted"
+                            className="inline-flex h-10 items-center justify-center rounded-lg border border-border px-3 text-sm font-medium text-hcl-navy transition-colors hover:bg-surface-muted"
                           >
                             Manage
                           </Link>
                           {canStatus && (
-                            <Button
-                              variant="ghost"
-                              className="!transform-none !transition-colors !will-change-auto"
+                            <button
+                              type="button"
+                              className={`inline-flex h-10 transform-none items-center justify-center rounded-lg border bg-surface px-3 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                                tenant.status === 'ACTIVE'
+                                  ? 'border-red-300 text-red-700 hover:bg-red-50 active:bg-red-100 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950 dark:active:bg-red-900'
+                                  : 'border-emerald-300 text-emerald-700 hover:bg-emerald-50 active:bg-emerald-100 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950 dark:active:bg-emerald-900'
+                              }`}
                               disabled={changeStatus.isPending}
                               aria-label={`${tenant.status === 'ACTIVE' ? 'Disable' : 'Enable'} ${tenant.name}`}
                               onClick={() =>
@@ -873,7 +877,7 @@ export default function PlatformTenantsPage() {
                               {tenant.status === 'ACTIVE'
                                 ? 'Disable'
                                 : 'Enable'}
-                            </Button>
+                            </button>
                           )}
                         </div>
                       </td>
