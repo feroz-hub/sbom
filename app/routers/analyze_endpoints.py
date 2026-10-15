@@ -200,7 +200,7 @@ async def _run_legacy_analysis(
 # ---- NVD ------------------------------------------------------------------
 
 
-@router.post("/analyze-sbom-nvd", deprecated=True)
+@router.post("/analyze-sbom-nvd", deprecated=True, include_in_schema=False)
 @analyze_route_limit
 async def analyze_sbom_nvd(
     request: Request,
@@ -243,7 +243,7 @@ async def analyze_sbom_nvd(
 # ---- GitHub Advisories ----------------------------------------------------
 
 
-@router.post("/analyze-sbom-github", deprecated=True)
+@router.post("/analyze-sbom-github", deprecated=True, include_in_schema=False)
 @analyze_route_limit
 async def analyze_sbom_github(
     request: Request,
@@ -285,7 +285,7 @@ async def analyze_sbom_github(
 # ---- OSV ------------------------------------------------------------------
 
 
-@router.post("/analyze-sbom-osv", deprecated=True)
+@router.post("/analyze-sbom-osv", deprecated=True, include_in_schema=False)
 @analyze_route_limit
 async def analyze_sbom_osv(
     request: Request,
@@ -327,7 +327,7 @@ async def analyze_sbom_osv(
 # ---- VulDB / VulnDB --------------------------------------------------------
 
 
-@router.post("/analyze-sbom-vulndb", deprecated=True)
+@router.post("/analyze-sbom-vulndb", deprecated=True, include_in_schema=False)
 @analyze_route_limit
 async def analyze_sbom_vulndb(
     request: Request,
@@ -371,7 +371,7 @@ async def analyze_sbom_vulndb(
 # ---- Consolidated (NVD + GHSA + OSV + VulDB) -------------------------------
 
 
-@router.post("/analyze-sbom-consolidated", deprecated=True)
+@router.post("/analyze-sbom-consolidated", deprecated=True, include_in_schema=False)
 @analyze_route_limit
 async def analyze_sbom_consolidated(
     request: Request,
