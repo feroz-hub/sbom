@@ -759,6 +759,7 @@ def update_iam_user_status(
     "/users/{user_id}",
     response_model=PlatformUserStatusResponse,
     deprecated=True,
+    include_in_schema=False,
 )
 def update_iam_user_status_compatibility(
     user_id: int,
