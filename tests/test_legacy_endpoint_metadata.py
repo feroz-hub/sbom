@@ -19,14 +19,43 @@ def test_legacy_json_sbom_creation_has_successor_metadata(client, sample_sbom_di
     assert deprecated_call_count("POST /api/sboms") == before + 1
 
 
-def test_legacy_routes_are_marked_deprecated_in_openapi(client):
+def test_deprecated_compatibility_routes_are_hidden_from_swagger_but_still_registered(client):
+    """Hide superseded routes from Swagger without breaking older API clients."""
+    from app.core.route_policy import iter_api_routes
+
     paths = client.get("/openapi.json").json()["paths"]
-    for path in (
-        "/api/sboms",
-        "/analyze-sbom-nvd",
-        "/analyze-sbom-github",
-        "/analyze-sbom-osv",
-        "/analyze-sbom-vulndb",
-        "/analyze-sbom-consolidated",
-    ):
-        assert paths[path]["post"]["deprecated"] is True
+    registered = {
+        (method.lower(), path): route
+        for path, route, _ in iter_api_routes(client.app)
+        for method in route.methods
+    }
+    legacy_operations = [
+        ("post", "/api/sboms"),
+        ("post", "/analyze-sbom-nvd"),
+        ("post", "/analyze-sbom-github"),
+        ("post", "/analyze-sbom-osv"),
+        ("post", "/analyze-sbom-vulndb"),
+        ("post", "/analyze-sbom-consolidated"),
+        ("get", "/api/v1/runs/{run_id}/ai-fixes/estimate"),
+        ("get", "/api/v1/runs/{run_id}/ai-fixes/progress"),
+        ("post", "/api/v1/runs/{run_id}/ai-fixes/cancel"),
+        ("get", "/api/v1/runs/{run_id}/ai-fixes/stream"),
+        ("patch", "/api/platform/users/{user_id}"),
+    ]
+    for method, path in legacy_operations:
+        assert (method, path) in registered, f"Compatibility route removed: {method} {path}"
+        assert registered[(method, path)].deprecated is True
+        assert method not in paths.get(path, {}), f"Deprecated route still in Swagger: {method} {path}"
+
+    successors = [
+        ("post", "/api/sboms/upload"),
+        ("post", "/api/sboms/{sbom_id}/analyze"),
+        ("post", "/api/v1/runs/{run_id}/ai-fixes/estimate"),
+        ("get", "/api/v1/runs/{run_id}/ai-fixes/batches/{batch_id}"),
+        ("post", "/api/v1/runs/{run_id}/ai-fixes/batches/{batch_id}/cancel"),
+        ("get", "/api/v1/runs/{run_id}/ai-fixes/batches/{batch_id}/stream"),
+        ("patch", "/api/platform/users/{user_id}/status"),
+    ]
+    for method, path in successors:
+        assert method in paths.get(path, {}), f"Supported successor missing: {method} {path}"
+    assert "get" in paths["/api/sboms"]
