@@ -9,7 +9,6 @@ from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urlparse
 
-import httpx
 from fastapi import HTTPException, Request
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
@@ -19,6 +18,7 @@ from ...models import LifecycleProviderConfig, LifecycleProviderSecret, Lifecycl
 from ...services.audit_service import write_authorization_audit
 from ...services.configuration_scope import current_configuration_tenant, require_active_configuration_tenant
 from .endoflife_date_provider import END_OF_LIFE_API_V1, END_OF_LIFE_LEGACY_API
+from .provider_capabilities import provider_capabilities
 from .secret_service import LifecycleProviderSecretService
 from .types import ALLOWED_CONFIDENCE_VALUES, ALLOWED_LIFECYCLE_STATUSES, canonical_confidence, canonical_status
 from .xeol_db_provider import clear_xeol_db_cache, validate_xeol_db_path
@@ -159,14 +159,22 @@ def configuration_cache_namespace(db):
     import hashlib
 
     tenant_id = current_configuration_tenant()
-    if tenant_id is None:
-        return "legacy"
     rows = LifecycleProviderConfigService().list_configs(db)
-    values = [
+    values = [{"policy_version": 2}] + [
         {
             column.name: getattr(row, column.name)
             for column in row.__table__.columns
-            if column.name not in {"last_success_at", "last_failure_at", "last_failure_message", "health_status"}
+            if column.name
+            not in {
+                "last_success_at",
+                "last_failure_at",
+                "last_failure_message",
+                "health_status",
+                "last_probe_json",
+                "last_lookup_at",
+                "updated_at",
+                "updated_by_user_id",
+            }
         }
         for row in rows
     ]
@@ -181,6 +189,24 @@ def configuration_cache_namespace(db):
         {"key": row.provider_key, "owner": row.tenant_id, "version": row.encrypted_value}
         for row in secrets
         if row.tenant_id == owners.get(row.provider_key)
+    )
+    values.extend(LifecycleVendorRecordService().active_provider_records(db))
+    from ...settings import get_settings
+
+    settings = get_settings()
+    values.append(
+        {
+            key: getattr(settings, key)
+            for key in (
+                "lifecycle_vendor_records_json",
+                "lifecycle_xeol_api_key",
+                "lifecycle_egress_allowed_hosts",
+                "lifecycle_cache_ttl_known_days",
+                "lifecycle_cache_ttl_unknown_hours",
+                "lifecycle_cache_ttl_provider_failure_minutes",
+                "lifecycle_cache_ttl_deprecated_days",
+            )
+        }
     )
     digest = hashlib.sha256(json.dumps(values, sort_keys=True, default=str).encode()).hexdigest()
     return f"tenant:{tenant_id}:{digest}"
@@ -479,6 +505,7 @@ class LifecycleProviderConfigService:
             row.health_status = "unknown"
         elif row.health_status not in HEALTH_VALUES:
             row.health_status = "unknown"
+        row.last_probe_json = None
         row.updated_at = now_iso()
         row.updated_by_user_id = context.user_id if context else None
         db.flush()
@@ -499,10 +526,33 @@ class LifecycleProviderConfigService:
         has_secret, preview = LifecycleProviderSecretService(tenant_id=row.tenant_id).metadata_for_provider(
             db, row.provider_key
         )
+        caps = provider_capabilities(row.provider_key)
+        if row.provider_key == "xeol_api" and row.tenant_id is None:
+            from ...settings import get_settings
+
+            has_secret = has_secret or bool(get_settings().lifecycle_xeol_api_key)
+        from .provider_status import get_provider_status_tracker
+
+        tracker = get_provider_status_tracker(configuration_cache_namespace(db))
+        runtime = next(
+            (item for item in tracker.list_sources() if item["name"] == (caps["runtime_name"] or row.display_name)),
+            None,
+        )
+        configuration_status = "unsupported" if not caps["implemented"] else "configured"
+        if (row.provider_key == "openeox" and not _json_list(row.feed_urls_json)) or (
+            row.provider_key == "xeol_db" and not _json_dict(row.config_json).get("db_path")
+        ):
+            configuration_status = "missing_source"
+        health = _effective_health_status(bool(row.enabled), row.health_status)
+        if health == "healthy" and not (row.last_probe_json or {}).get("success"):
+            health = "unknown"
         return {
             "source": "TENANT_OVERRIDE" if row.tenant_id is not None else "PLATFORM_DEFAULT",
             "override_enabled": row.tenant_id is not None,
             "provider_key": row.provider_key,
+            "capabilities": caps,
+            "configuration_status": configuration_status,
+            "runtime_status": {"state_scope": "process-local", **(runtime or {})},
             "display_name": row.display_name,
             "provider_type": row.provider_type,
             "enabled": bool(row.enabled),
@@ -519,8 +569,17 @@ class LifecycleProviderConfigService:
                 "failure_minutes": row.cache_ttl_failure_minutes,
                 "deprecated_days": row.cache_ttl_deprecated_days,
             },
-            "health_status": _effective_health_status(bool(row.enabled), row.health_status),
-            "last_success_at": row.last_success_at,
+            "health_status": health,
+            "last_success_at": (row.last_probe_json or {}).get("checked_at")
+            if (row.last_probe_json or {}).get("connection_verified") and (row.last_probe_json or {}).get("success")
+            else None,
+            "last_verification_at": (row.last_probe_json or {}).get("checked_at"),
+            "last_lookup_at": row.last_lookup_at
+            or max(
+                [v for v in ((runtime or {}).get("last_success"), (runtime or {}).get("last_failure")) if v],
+                default=None,
+            ),
+            "last_probe": _safe_metadata(row.last_probe_json),
             "last_failure_at": row.last_failure_at,
             "last_failure_message": "Provider connection failed." if row.last_failure_message else None,
             "has_secret": has_secret,
@@ -538,8 +597,12 @@ class LifecycleProviderConfigService:
         context: CurrentContext | None,
         request: Request | None = None,
     ) -> LifecycleProviderSecret:
+        if secret_name != provider_capabilities(provider_key)["secret_name"]:
+            raise HTTPException(422, "Unsupported credential field for this provider")
         old_metadata = self.safe_config_dict(db, self.get_config(db, provider_key))
-        self.writable_config(db, provider_key)
+        config_row = self.writable_config(db, provider_key)
+        config_row.health_status = "unknown" if config_row.enabled else "disabled"
+        config_row.last_probe_json = None
         row = LifecycleProviderSecretService().upsert_secret(
             db,
             provider_key,
@@ -573,6 +636,9 @@ class LifecycleProviderConfigService:
         self.get_config(db, provider_key)
         deleted = LifecycleProviderSecretService().delete_secret(db, provider_key, secret_name)
         if deleted:
+            config_row = self.get_config(db, provider_key)
+            config_row.health_status = "unknown" if config_row.enabled else "disabled"
+            config_row.last_probe_json = None
             invalidate_provider_config_cache()
             write_audit_log(
                 db,
@@ -606,7 +672,13 @@ class LifecycleProviderConfigService:
             else:
                 snapshot = _row_snapshot(row)
                 success, message, sample_result = self._run_provider_probe(snapshot, db=db)
-                status_value = "healthy" if success else "degraded"
+                status_value = (
+                    "unknown"
+                    if sample_result and sample_result.get("probe_type") == "unsupported"
+                    else "healthy"
+                    if success
+                    else "degraded"
+                )
         except Exception as exc:  # noqa: BLE001
             message = f"Provider connection failed ({type(exc).__name__})."
             status_value = "degraded"
@@ -624,13 +696,18 @@ class LifecycleProviderConfigService:
         db.flush()
         invalidate_provider_config_cache()
         result = {
+            **(sample_result or {}),
+            "provider_key": provider_key,
             "success": success,
-            "status": status_value,
+            "status": "unknown" if sample_result and sample_result.get("probe_type") == "unsupported" else status_value,
             "latency_ms": latency_ms,
             "message": message,
             "sample_result": _safe_metadata(sample_result),
             "checked_at": checked_at,
         }
+        if row.tenant_id == current_configuration_tenant():
+            row.last_probe_json = _safe_metadata(result)
+            db.flush()
         write_audit_log(
             db,
             context,
@@ -662,17 +739,28 @@ class LifecycleProviderConfigService:
                         "message": "Provider is disabled; no synchronization performed.",
                         "triggered_at": triggered_at,
                     }
+                clear_xeol_db_cache()
                 success, message, _sample = self._run_provider_probe(_row_snapshot(row))
                 return {
                     "job_id": None,
                     "status": "completed" if success else "failed",
-                    "message": message,
+                    "message": "Current process local DB cache reloaded. " + message,
                     "triggered_at": triggered_at,
                 }
             clear_xeol_db_cache()
             if row.enabled:
                 success, probe_message, _sample = self._run_provider_probe(_row_snapshot(row))
                 row.health_status = "healthy" if success else "degraded"
+                row.last_probe_json = _safe_metadata(
+                    {
+                        **(_sample or {}),
+                        "success": success,
+                        "checked_at": triggered_at,
+                        "status": row.health_status,
+                        "message": probe_message,
+                        "latency_ms": 0,
+                    }
+                )
                 if success:
                     row.last_success_at = triggered_at
                     row.last_failure_message = None
@@ -690,12 +778,9 @@ class LifecycleProviderConfigService:
                 db.flush()
                 invalidate_provider_config_cache()
                 message = "Local Xeol DB cache cleared; provider is disabled."
-        elif row.provider_type == "openeox":
-            message = "OpenEoX feeds are loaded during lifecycle refresh/test with configured timeout."
-        elif row.provider_type == "custom_vendor":
-            message = "Custom vendor records are database-backed and available immediately."
         else:
-            message = "Provider does not require a sync action."
+            result_status = "unsupported"
+            message = "Provider does not support synchronization."
         result = {"job_id": None, "status": result_status, "message": message, "triggered_at": triggered_at}
         write_audit_log(
             db,
@@ -724,6 +809,30 @@ class LifecycleProviderConfigService:
                 for item in value:
                     reject_secrets(item)
 
+        from .provider_capabilities import provider_capabilities
+        from .provider_http import ProviderRequestError, validate_url
+
+        caps = provider_capabilities(row.provider_key)
+        if not caps["network"] and any(
+            key in payload and payload[key] != getattr(row, key)
+            for key in ("timeout_seconds", "max_retries", "circuit_breaker_enabled")
+        ):
+            raise HTTPException(422, "Network policy settings do not apply to this local provider")
+        if payload.get("base_url") and not caps["editable_endpoint"]:
+            raise HTTPException(422, "This provider uses built-in endpoints")
+        if payload.get("feed_urls_json") and not caps["feed_urls"]:
+            raise HTTPException(422, "This provider does not consume feed URLs")
+        if "config_json" in payload and set(payload["config_json"] or {}) - set(caps["config_fields"]):
+            raise HTTPException(422, "Unsupported provider configuration fields")
+        for endpoint in [payload.get("base_url"), *(payload.get("feed_urls_json") or [])]:
+            if endpoint:
+                try:
+                    validate_url(endpoint)
+                except ProviderRequestError:
+                    raise HTTPException(
+                        422,
+                        "Endpoint must be HTTPS and use an approved destination without credentials or query parameters",
+                    ) from None
         reject_secrets(payload.get("config_json", {}))
         if "provider_key" in payload and payload["provider_key"] != row.provider_key:
             raise HTTPException(status_code=422, detail="provider_key cannot be changed")
@@ -760,87 +869,9 @@ class LifecycleProviderConfigService:
     def _run_provider_probe(
         self, snapshot: ProviderConfigSnapshot, *, db: Session | None = None
     ) -> tuple[bool, str, dict[str, Any] | None]:
-        if snapshot.provider_type in {
-            "official_vendor",
-            "package_registry",
-            "deps_dev",
-            "osv",
-            "repository_health",
-            "custom_vendor",
-        }:
-            return (
-                True,
-                "Provider configuration is valid and will be exercised during lifecycle refresh.",
-                {"provider": snapshot.display_name},
-            )
-        if snapshot.provider_type == "xeol_db":
-            db_path = str(snapshot.config.get("db_path") or "")
-            return validate_xeol_db_path(db_path)
-        if snapshot.provider_type == "endoflife_date":
-            return self._probe_endoflife_date(snapshot)
-        urls = (
-            snapshot.feed_urls
-            if snapshot.provider_type == "openeox"
-            else [snapshot.base_url]
-            if snapshot.base_url
-            else []
-        )
-        if not urls:
-            return False, "No URL configured for provider.", None
-        url = urls[0]
-        with httpx.Client(timeout=max(1, snapshot.timeout_seconds), follow_redirects=True) as client:
-            if snapshot.provider_type == "xeol_api" and db is not None:
-                key = LifecycleProviderSecretService(tenant_id=snapshot.tenant_id).get_secret(
-                    db, snapshot.provider_key, "api_key"
-                )
-                if not key and snapshot.tenant_id is None:
-                    from ...settings import get_settings
+        from .provider_probe import run_probe
 
-                    key = get_settings().lifecycle_xeol_api_key
-                headers = {"Authorization": f"Bearer {key}"} if key else {}
-                response = client.post(
-                    url,
-                    json={"component": {"name": "debian", "version": "12", "ecosystem": "generic"}},
-                    headers=headers,
-                )
-            else:
-                response = client.get(url)
-            if response.status_code >= 400:
-                return False, f"HTTP {response.status_code} from provider.", {"url": _safe_metadata(url)}
-            return (
-                True,
-                f"Provider responded with HTTP {response.status_code}.",
-                {"url": _safe_metadata(url), "status_code": response.status_code},
-            )
-
-    def _probe_endoflife_date(self, snapshot: ProviderConfigSnapshot) -> tuple[bool, str, dict[str, Any] | None]:
-        urls = _endoflife_probe_urls(snapshot.base_url)
-        last_failure: tuple[bool, str, dict[str, Any] | None] | None = None
-        with httpx.Client(timeout=max(1, snapshot.timeout_seconds), follow_redirects=True) as client:
-            for url in urls:
-                try:
-                    response = client.get(url)
-                    if response.status_code == 404:
-                        last_failure = (False, "HTTP 404 from provider.", {"url": url})
-                        continue
-                    if response.status_code >= 400:
-                        return False, f"HTTP {response.status_code} from provider.", {"url": url}
-                    response.json()
-                    return (
-                        True,
-                        f"Provider responded with HTTP {response.status_code}.",
-                        {
-                            "url": url,
-                            "status_code": response.status_code,
-                        },
-                    )
-                except (httpx.HTTPError, ValueError, TypeError) as exc:
-                    last_failure = (
-                        False,
-                        f"Provider connection failed ({type(exc).__name__}).",
-                        {"url": _safe_metadata(url)},
-                    )
-        return last_failure or (False, "Provider did not return a lifecycle payload.", None)
+        return run_probe(snapshot, db)
 
 
 class LifecycleVendorRecordService:

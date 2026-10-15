@@ -23,6 +23,8 @@ describe('lifecycle configuration active-context boundary', () => {
     state.permissions = ['platform:lifecycle-provider:read', 'platform:lifecycle-provider:update'];
     render(<ScopedLifecycleConfiguration scope="platform" />);
     expect(screen.getByText('Platform defaults')).toBeInTheDocument();
+    expect(screen.getByText('Manage component lifecycle intelligence sources and their operational configuration.')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Configuration scope' })).toHaveTextContent('Existing tenant overrides retain their own configuration');
     expect(screen.getByText('Configuration editor: platform, editable')).toBeInTheDocument();
   });
 
@@ -30,7 +32,9 @@ describe('lifecycle configuration active-context boundary', () => {
     state.tenantId = '1';
     state.permissions = ['tenant:lifecycle-provider:read', 'tenant:lifecycle-provider:update'];
     render(<ScopedLifecycleConfiguration scope="tenant" />);
-    expect(screen.getByText('Configuration for Olympus')).toBeInTheDocument();
+    expect(screen.getByText('Tenant configuration · Olympus')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Configuration scope' })).toHaveTextContent('Providers inherit platform settings unless customized here');
+    expect(screen.getByRole('link', { name: 'About lifecycle sources' })).toHaveAttribute('href', '#lifecycle-help');
     expect(screen.getByText('Configuration editor: tenant, editable')).toBeInTheDocument();
   });
 

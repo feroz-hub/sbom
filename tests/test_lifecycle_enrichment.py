@@ -175,7 +175,10 @@ def test_endoflife_date_provider_marks_eol_from_matching_cycle():
     assert result.eol_date == "2027-10-31"
     assert result.eos_date == "2027-04-01"
     assert result.source_name == "endoflife.date"
-    assert result.recommended_version == "3.11.9"
+    assert result.latest_version == "3.11.9"
+    assert result.recommended_version is None
+    assert result.latest_supported_version is None
+    assert "supported version 3.11.9" not in (result.recommendation or "")
 
 
 def test_endoflife_date_provider_uses_debian_distro_qualifier_for_package_rows():
@@ -465,6 +468,9 @@ def test_lifecycle_cache_hit_avoids_provider_call(db):
 
     assert result.lifecycle_status == DEPRECATED
     assert component.lifecycle_source == "Cached Provider"
+    assert result.evidence["cache_hit"] is True
+    assert result.evidence["stale_cache"] is False
+    assert result.evidence["cache_expires_at"]
     assert component.lifecycle_is_stale is False
     assert component.latest_version == "2.0.0"
 

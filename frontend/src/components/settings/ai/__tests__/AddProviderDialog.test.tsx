@@ -259,3 +259,21 @@ it('ignores a late rejected result after the candidate key changes', async () =>
   await waitFor(() => expect(screen.getByRole('button', { name: /save provider/i })).toBeEnabled());
   expect(screen.queryByText('Authentication failed')).not.toBeInTheDocument();
 });
+
+describe('provider dialog accessibility and unsaved changes', () => {
+  it('keeps a changed form open until discarding is deliberate', async () => {
+    const close = vi.fn();
+    renderWithProviders(<AddProviderDialog open onClose={close} />);
+    const key = await screen.findByLabelText('API key');
+    await userEvent.type(key, 'fixture-secret');
+    expect(key).toHaveAttribute('type', 'password');
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(close).not.toHaveBeenCalled();
+    expect(screen.getByText('Discard unsaved provider changes?')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Keep editing' }));
+    expect(key).toHaveValue('fixture-secret');
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(screen.getByRole('button', { name: 'Discard changes' }));
+    expect(close).toHaveBeenCalledOnce();
+  });
+});

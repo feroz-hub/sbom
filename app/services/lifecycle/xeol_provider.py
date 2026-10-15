@@ -10,6 +10,7 @@ import httpx
 
 from .provider_base import LifecycleProvider
 from .provider_chain import PRIORITY_XEOL
+from .provider_http import request_json
 from .types import (
     DEPRECATED,
     EOL,
@@ -96,7 +97,7 @@ class XeolProvider(LifecycleProvider):
                 "provider": "xeol",
                 "reason": parsed["reason"],
                 "authority": "vendor-derived" if parsed["reason"] == "vendor_announced" else "aggregator",
-                "raw": result,
+                "match_found": parsed["matched"],
             },
         ).canonicalized()
 
@@ -110,12 +111,7 @@ class XeolProvider(LifecycleProvider):
                     return self._http_post(self.api_url, request, headers)
                 except TypeError:
                     return self._http_post(self.api_url, request)
-            with httpx.Client(timeout=self.timeout_seconds, follow_redirects=True) as client:
-                response = client.post(self.api_url, json=request, headers=headers)
-                if response.status_code in {400, 401, 404, 429}:
-                    return None
-                response.raise_for_status()
-                return response.json()
+            return request_json("POST", self.api_url, payload=request, headers=headers, timeout=self.timeout_seconds)
         except (httpx.HTTPError, TypeError, ValueError):
             return None
 
@@ -155,7 +151,7 @@ def _parse_xeol_result(result: dict[str, Any], *, today: date | None = None) -> 
         status = EOL
     elif eol_date and eol_date <= current_date + timedelta(days=EOL_SOON_DAYS):
         status = EOL_SOON
-    elif matched:
+    elif matched and (eol_date or result.get("supported") is True):
         status = SUPPORTED
     else:
         status = UNKNOWN

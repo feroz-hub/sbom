@@ -55,7 +55,10 @@ def choose_lifecycle_result(results: list[LifecycleResult]) -> LifecycleResult |
         (
             result
             for result in actionable
-            if isinstance(result.evidence, dict) and result.evidence.get("authority") == "vendor"
+            if result.lifecycle_status != UNKNOWN
+            and result.confidence == "High"
+            and isinstance(result.evidence, dict)
+            and result.evidence.get("authority") == "vendor"
         ),
         None,
     )
@@ -65,8 +68,9 @@ def choose_lifecycle_result(results: list[LifecycleResult]) -> LifecycleResult |
     chosen = max(
         actionable,
         key=lambda result: (
-            LIFECYCLE_PRIORITY.get(result.lifecycle_status, 0),
+            result.lifecycle_status != UNKNOWN,
             CONFIDENCE_PRIORITY.get(result.confidence, 0),
+            LIFECYCLE_PRIORITY.get(result.lifecycle_status, 0),
         ),
     )
     return _merge_recommendations(chosen, actionable)

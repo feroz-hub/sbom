@@ -16,6 +16,7 @@ import httpx
 
 from .provider_base import LifecycleProvider
 from .provider_chain import PRIORITY_REPO_HEALTH
+from .provider_http import request_json
 from .types import (
     LOW,
     MEDIUM,
@@ -42,7 +43,9 @@ class RepositoryHealthProvider(LifecycleProvider):
         http_get: Callable[[str], Any] | None = None,
         timeout_seconds: float = 5.0,
         today: datetime | None = None,
+        github_token: str | None = None,
     ) -> None:
+        self._github_token = github_token
         self._http_get = http_get
         self._timeout_seconds = timeout_seconds
         self._today = today
@@ -271,16 +274,17 @@ class RepositoryHealthProvider(LifecycleProvider):
             confidence=LOW,
         ).canonicalized()
 
+    def _headers(self, url):
+        headers = {"Accept": "application/json"}
+        if self._github_token and urlparse(url).hostname == "api.github.com":
+            headers["Authorization"] = f"Bearer {self._github_token}"
+        return headers
+
     def _get_json(self, url: str) -> Any | None:
         try:
             if self._http_get is not None:
                 return self._http_get(url)
-            with httpx.Client(timeout=self._timeout_seconds, follow_redirects=True) as client:
-                response = client.get(url, headers={"Accept": "application/vnd.github+json"})
-                if response.status_code == 404:
-                    return None
-                response.raise_for_status()
-                return response.json()
+            return request_json("GET", url, timeout=self._timeout_seconds, headers=self._headers(url))
         except (httpx.HTTPError, ValueError, TypeError):
             return None
 

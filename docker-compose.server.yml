@@ -72,6 +72,8 @@ x-backend-environment: &backend-environment
   GEMINI_API_KEY: ${GEMINI_API_KEY:-}
   GROK_API_KEY: ${GROK_API_KEY:-}
   SARVAM_API_KEY: ${SARVAM_API_KEY:-}
+  LIFECYCLE_EGRESS_ALLOWED_HOSTS: ${LIFECYCLE_EGRESS_ALLOWED_HOSTS:-}
+  LIFECYCLE_CACHE_MAX_STALE_DAYS: ${LIFECYCLE_CACHE_MAX_STALE_DAYS:-7}
   XEOL_ENABLED: ${XEOL_ENABLED:-false}
   XEOL_DB_PATH: ${XEOL_DB_PATH:-}
   # Disable the local-development default unless an operator explicitly

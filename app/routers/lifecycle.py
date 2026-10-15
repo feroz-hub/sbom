@@ -16,7 +16,6 @@ from ..models import SBOMComponent
 from ..schemas import LifecycleInfoUpdate, SBOMComponentOut
 from ..services.lifecycle import LifecycleEnrichmentService, refresh_component_lifecycle
 from ..services.lifecycle.provider_config_service import LifecycleProviderConfigService
-from ..services.lifecycle.provider_status import get_provider_status_tracker
 
 log = logging.getLogger(__name__)
 
@@ -47,9 +46,8 @@ def list_lifecycle_sources(db: Session = Depends(get_db)):
             ]
         }
     except Exception as exc:  # noqa: BLE001
-        log.warning("lifecycle.provider_status_db_failed: %s", exc)
-    tracker = get_provider_status_tracker()
-    return {"sources": tracker.list_sources()}
+        log.warning("lifecycle.provider_status_db_failed: %s", type(exc).__name__)
+    return {"sources": [], "status": "unavailable", "error_code": "configuration_unavailable"}
 
 
 @router.get("/api/lifecycle/provider-status")
@@ -74,12 +72,12 @@ def lifecycle_provider_status(db: Session = Depends(get_db)):
         ]
         degraded = [row for row in providers if row["status"] == "degraded"]
         return {
-            "overall_status": "degraded" if degraded else "healthy",
+            "overall_status": "degraded" if degraded else "healthy" if any(row["enabled"] for row in providers) and all(row["status"] == "healthy" for row in providers if row["enabled"]) else "unknown",
             "degraded_count": len(degraded),
             "providers": providers,
         }
     except Exception:
-        return get_provider_status_tracker().provider_status_summary()
+        return {"overall_status": "unknown", "degraded_count": 0, "providers": [], "error_code": "configuration_unavailable"}
 
 
 @router.get("/api/lifecycle/component/{component_id}", response_model=SBOMComponentOut)

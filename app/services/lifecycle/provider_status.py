@@ -27,7 +27,11 @@ class ProviderHealthRecord:
             "name": self.name,
             "priority": self.priority,
             "enabled": self.enabled,
-            "status": "degraded" if self.degraded or self.is_circuit_open() else "healthy",
+            "status": "degraded"
+            if self.degraded or self.is_circuit_open()
+            else "healthy"
+            if self.last_success
+            else "unknown",
             "last_success": self.last_success,
             "last_failure": self.last_failure,
             "consecutive_failures": self.consecutive_failures,
@@ -98,7 +102,12 @@ class LifecycleProviderStatusTracker:
         sources = self.list_sources()
         degraded = [row for row in sources if row["status"] == "degraded"]
         return {
-            "overall_status": "degraded" if degraded else "healthy",
+            "overall_status": "degraded"
+            if degraded
+            else "healthy"
+            if sources and all(row["status"] == "healthy" for row in sources)
+            else "unknown",
+            "state_scope": "process-local",
             "degraded_count": len(degraded),
             "providers": sources,
         }
@@ -109,6 +118,7 @@ class LifecycleProviderStatusTracker:
 
 
 _provider_status_tracker = LifecycleProviderStatusTracker()
+_platform_status_namespace: str | None = None
 _scope_lock = Lock()
 _tenant_status_trackers: dict[int, tuple[str | None, LifecycleProviderStatusTracker]] = {}
 
@@ -116,9 +126,14 @@ _tenant_status_trackers: dict[int, tuple[str | None, LifecycleProviderStatusTrac
 def get_provider_status_tracker(configuration_namespace: str | None = None) -> LifecycleProviderStatusTracker:
     from ...services.configuration_scope import current_configuration_tenant
 
+    global _provider_status_tracker, _platform_status_namespace
     tenant_id = current_configuration_tenant()
     if tenant_id is None:
-        return _provider_status_tracker
+        with _scope_lock:
+            if configuration_namespace is not None and configuration_namespace != _platform_status_namespace:
+                _provider_status_tracker = LifecycleProviderStatusTracker()
+                _platform_status_namespace = configuration_namespace
+            return _provider_status_tracker
     with _scope_lock:
         cached = _tenant_status_trackers.get(tenant_id)
         if cached is None or (configuration_namespace is not None and cached[0] != configuration_namespace):

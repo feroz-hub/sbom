@@ -67,19 +67,22 @@ def lifecycle_cache_identity_key(
 def _cache_ttl_for_result(result: LifecycleResult) -> timedelta:
     settings = get_settings()
     evidence = result.evidence if isinstance(result.evidence, dict) else {}
+    policy = evidence.get("cache_policy") or {}
     if evidence.get("provider_failure") or evidence.get("provider_error") or evidence.get("provider_errors"):
-        minutes = int(getattr(settings, "lifecycle_cache_ttl_provider_failure_minutes", 30))
+        minutes = int(
+            policy.get("failure_minutes") or getattr(settings, "lifecycle_cache_ttl_provider_failure_minutes", 30)
+        )
         return timedelta(minutes=minutes)
     if result.lifecycle_status == UNKNOWN:
-        hours = int(getattr(settings, "lifecycle_cache_ttl_unknown_hours", 24))
+        hours = int(policy.get("unknown_hours") or getattr(settings, "lifecycle_cache_ttl_unknown_hours", 24))
         return timedelta(hours=hours)
     if result.lifecycle_status == DEPRECATED or result.deprecated:
-        days = int(getattr(settings, "lifecycle_cache_ttl_deprecated_days", 7))
+        days = int(policy.get("deprecated_days") or getattr(settings, "lifecycle_cache_ttl_deprecated_days", 7))
         return timedelta(days=days)
     if result.eol_date or result.eos_date or result.eof_date or result.lifecycle_status not in {UNKNOWN}:
-        days = int(getattr(settings, "lifecycle_cache_ttl_known_days", 14))
+        days = int(policy.get("known_days") or getattr(settings, "lifecycle_cache_ttl_known_days", 14))
         return timedelta(days=days)
-    hours = int(getattr(settings, "lifecycle_cache_ttl_unknown_hours", 24))
+    hours = int(policy.get("unknown_hours") or getattr(settings, "lifecycle_cache_ttl_unknown_hours", 24))
     return timedelta(hours=hours)
 
 
@@ -93,7 +96,12 @@ def lifecycle_cache_row_from_result(
     """Serialize a provider result into a cache row payload."""
     name, version, ecosystem, purl, cpe = component.cache_identity
     ttl = _cache_ttl_for_result(result)
-    if cache_ttl_days is not None and result.lifecycle_status != UNKNOWN:
+    if (
+        cache_ttl_days is not None
+        and result.lifecycle_status != UNKNOWN
+        and not result.evidence.get("cache_policy")
+        and not any(result.evidence.get(k) for k in ("provider_error", "provider_errors", "provider_failure"))
+    ):
         ttl = timedelta(days=cache_ttl_days)
     expires_at = (datetime.now(UTC).replace(microsecond=0) + ttl).isoformat()
     return {

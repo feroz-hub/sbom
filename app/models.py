@@ -1212,6 +1212,8 @@ class LifecycleProviderConfig(Base):
     cache_ttl_unknown_hours = Column(Integer, nullable=True)
     cache_ttl_failure_minutes = Column(Integer, nullable=True)
     cache_ttl_deprecated_days = Column(Integer, nullable=True)
+    last_probe_json = Column(JSON, nullable=True)
+    last_lookup_at = Column(String, nullable=True)
     last_success_at = Column(String, nullable=True)
     last_failure_at = Column(String, nullable=True)
     last_failure_message = Column(Text, nullable=True)

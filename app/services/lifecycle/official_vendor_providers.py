@@ -68,7 +68,8 @@ class RedHatLifecycleProvider(LifecycleProvider):
             "8": {"eol": "2029-05-31", "eos": "2029-05-31"},
             "9": {"eol": "2032-05-31", "eos": "2032-05-31"},
         }
-        if major not in rhel_cycles:
+        name = component.normalized_name.casefold()
+        if name not in {"rhel", "redhat", "red hat enterprise linux", "redhat enterprise linux"} or major not in rhel_cycles:
             return unknown_result(component, self.name)
         cycle = rhel_cycles[major]
         current = self.today or datetime.now(UTC).date()
@@ -90,7 +91,7 @@ class RedHatLifecycleProvider(LifecycleProvider):
             source_name=self.name,
             source_url="https://access.redhat.com/support/policy/updates/errata",
             confidence=HIGH,
-            evidence={"authority": "vendor", "vendor": "Red Hat", "major": major, "cycle": cycle},
+            evidence={"authority": "static-reference", "data_source_type": "static-reference", "freshness": "unverified", "vendor": "Red Hat", "major": major, "cycle": cycle},
         ).canonicalized()
 
 

@@ -181,6 +181,8 @@ class Settings(BaseSettings):
         default=None,
         description="Xeol CLI path for scheduled sync jobs only (not used in request path).",
     )
+    lifecycle_cache_max_stale_days: int = Field(default=7, ge=0, description="Maximum stale retention after expiry; refresh does not extend it.")
+    lifecycle_egress_allowed_hosts: str = Field(default="", description="Operator-approved exact enterprise lifecycle hosts; private addresses allowed except metadata/loopback.")
     lifecycle_cache_ttl_known_days: int = Field(default=14, ge=1, description="Cache TTL for known EOL/EOS dates.")
     lifecycle_cache_ttl_unknown_hours: int = Field(default=24, ge=1, description="Cache TTL for unknown lifecycle results.")
     lifecycle_cache_ttl_provider_failure_minutes: int = Field(

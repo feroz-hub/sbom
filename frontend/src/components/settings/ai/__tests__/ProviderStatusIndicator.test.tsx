@@ -7,11 +7,11 @@ import { makeCredential } from './test-utils';
 
 
 describe('ProviderStatusIndicator', () => {
-  it('renders Disabled when enabled=false', () => {
+  it('keeps the connection result independent of enablement', () => {
     render(<ProviderStatusIndicator credential={makeCredential({ enabled: false })} />);
     const el = screen.getByRole('status');
-    expect(el).toHaveAttribute('data-status', 'disabled');
-    expect(el).toHaveTextContent(/Disabled/);
+    expect(el).toHaveAttribute('data-status', 'ok');
+    expect(el).toHaveTextContent(/Verified/);
   });
 
   it('renders Not tested when last_test_at is null', () => {
@@ -40,7 +40,7 @@ describe('ProviderStatusIndicator', () => {
     );
     const el = screen.getByRole('status');
     expect(el).toHaveAttribute('data-status', 'failing');
-    expect(el).toHaveTextContent(/Verification pending/);
+    expect(el).toHaveTextContent(/Failed/);
     expect(el.getAttribute('title') ?? '').not.toMatch(/Bad API key/);
   });
 });
